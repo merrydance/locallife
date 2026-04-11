@@ -1,21 +1,24 @@
 package api
 
 import (
-	"crypto/rand"
+	"context"
+	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/token"
+	"github.com/merrydance/locallife/util"
 	"github.com/merrydance/locallife/wechat"
 	"github.com/merrydance/locallife/worker"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hibiken/asynq"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/rs/zerolog/log"
 )
 
 // ==================== 支付订单管理 ====================
@@ -24,18 +27,24 @@ import (
 const (
 	PaymentTypeNative      = "native"      // 扫码支付
 	PaymentTypeMiniProgram = "miniprogram" // 小程序支付
+	PaymentTypeProfitShare = "profit_sharing"
 )
 
 // 业务类型常量
 const (
-	BusinessTypeOrder       = "order"       // 订单支付
-	BusinessTypeReservation = "reservation" // 预定押金
+	BusinessTypeOrder              = "order"               // 订单支付
+	BusinessTypeReservation        = "reservation"         // 预定押金
+	BusinessTypeReservationAddon   = "reservation_addon"   // 预定加菜补差
+	BusinessTypeMembershipRecharge = "membership_recharge" // 会员充值
+	BusinessTypeRiderDeposit       = "rider_deposit"       // 骑手押金
+	BusinessTypeClaimRecovery      = "claim_recovery"      // 索赔追偿支付
 )
 
 // 支付状态常量
 const (
 	PaymentStatusPending  = "pending"  // 待支付
 	PaymentStatusPaid     = "paid"     // 已支付
+	PaymentStatusFailed   = "failed"   // 支付失败
 	PaymentStatusRefunded = "refunded" // 已退款
 	PaymentStatusClosed   = "closed"   // 已关闭
 )
@@ -44,7 +53,7 @@ const (
 
 type createPaymentOrderRequest struct {
 	OrderID      int64  `json:"order_id" binding:"required,min=1"`
-	PaymentType  string `json:"payment_type" binding:"required,oneof=native miniprogram"`
+	PaymentType  string `json:"payment_type" binding:"omitempty,oneof=native miniprogram"`
 	BusinessType string `json:"business_type" binding:"required,oneof=order reservation"`
 }
 
@@ -61,6 +70,56 @@ type paymentOrderResponse struct {
 	PayParams    *miniProgramPayParams `json:"pay_params,omitempty"` // 小程序调起支付参数
 	PaidAt       *time.Time            `json:"paid_at,omitempty"`
 	CreatedAt    time.Time             `json:"created_at"`
+}
+
+type createCombinedPaymentOrderRequest struct {
+	OrderIDs []int64 `json:"order_ids" binding:"required,min=1,max=50"`
+}
+
+type combinedPaymentSubOrderResponse struct {
+	OrderID             int64  `json:"order_id"`
+	PaymentOrderID      int64  `json:"payment_order_id"`
+	MerchantID          int64  `json:"merchant_id"`
+	SubMchID            string `json:"sub_mch_id"`
+	Amount              int64  `json:"amount"`
+	OutTradeNo          string `json:"out_trade_no"`
+	Description         string `json:"description"`
+	ProfitSharingStatus string `json:"profit_sharing_status,omitempty"`
+	MerchantName        string `json:"merchant_name,omitempty"`
+	MerchantLogo        string `json:"merchant_logo,omitempty"`
+	OrderNo             string `json:"order_no,omitempty"`
+}
+
+type combinedPaymentOrderResponse struct {
+	ID                int64                             `json:"id"`
+	CombineOutTradeNo string                            `json:"combine_out_trade_no"`
+	TotalAmount       int64                             `json:"total_amount"`
+	Status            string                            `json:"status"`
+	PrepayID          *string                           `json:"prepay_id,omitempty"`
+	PayParams         *miniProgramPayParams             `json:"pay_params,omitempty"`
+	ExpiresAt         *time.Time                        `json:"expires_at,omitempty"`
+	WechatQuery       *combinedPaymentWechatQueryResult `json:"wechat_query,omitempty"`
+	SubOrders         []combinedPaymentSubOrderResponse `json:"sub_orders"`
+}
+
+type combinedPaymentWechatQueryResult struct {
+	CombineOutTradeNo   string                                `json:"combine_out_trade_no"`
+	AggregateTradeState string                                `json:"aggregate_trade_state"`
+	SubOrders           []combinedPaymentWechatSubOrderResult `json:"sub_orders"`
+}
+
+type combinedPaymentWechatSubOrderResult struct {
+	OutTradeNo  string                            `json:"out_trade_no"`
+	TradeState  string                            `json:"trade_state"`
+	SuccessTime string                            `json:"success_time,omitempty"`
+	Amount      combinedPaymentWechatAmountResult `json:"amount"`
+}
+
+type combinedPaymentWechatAmountResult struct {
+	TotalAmount   int64  `json:"total_amount"`
+	PayerAmount   int64  `json:"payer_amount"`
+	Currency      string `json:"currency"`
+	PayerCurrency string `json:"payer_currency,omitempty"`
 }
 
 // miniProgramPayParams 小程序调起支付所需参数
@@ -97,28 +156,120 @@ func newPaymentOrderResponse(p db.PaymentOrder) paymentOrderResponse {
 	return resp
 }
 
+func newMiniProgramPayParams(payParams *wechat.JSAPIPayParams) *miniProgramPayParams {
+	if payParams == nil {
+		return nil
+	}
+	return &miniProgramPayParams{
+		TimeStamp: payParams.TimeStamp,
+		NonceStr:  payParams.NonceStr,
+		Package:   payParams.Package,
+		SignType:  payParams.SignType,
+		PaySign:   payParams.PaySign,
+	}
+}
+
+func buildCombinedPaymentOrderResponse(combinedRow db.GetCombinedPaymentOrderWithSubOrdersRow, payParams *wechat.JSAPIPayParams) (combinedPaymentOrderResponse, error) {
+	var subOrders []combinedPaymentSubOrderResponse
+	if err := json.Unmarshal(combinedRow.SubOrders, &subOrders); err != nil {
+		return combinedPaymentOrderResponse{}, err
+	}
+
+	resp := combinedPaymentOrderResponse{
+		ID:                combinedRow.ID,
+		CombineOutTradeNo: combinedRow.CombineOutTradeNo,
+		TotalAmount:       combinedRow.TotalAmount,
+		Status:            combinedRow.Status,
+		SubOrders:         subOrders,
+		PayParams:         newMiniProgramPayParams(payParams),
+	}
+	if combinedRow.PrepayID.Valid {
+		resp.PrepayID = &combinedRow.PrepayID.String
+	}
+	if combinedRow.ExpiresAt.Valid {
+		expires := combinedRow.ExpiresAt.Time
+		resp.ExpiresAt = &expires
+	}
+	return resp, nil
+}
+
+func newCombinedPaymentWechatQueryResult(query *logic.QueryCombinedPaymentWechatOrder) *combinedPaymentWechatQueryResult {
+	if query == nil {
+		return nil
+	}
+
+	subOrders := make([]combinedPaymentWechatSubOrderResult, 0, len(query.SubOrders))
+	for _, subOrder := range query.SubOrders {
+		subOrders = append(subOrders, combinedPaymentWechatSubOrderResult{
+			OutTradeNo:  subOrder.OutTradeNo,
+			TradeState:  subOrder.TradeState,
+			SuccessTime: subOrder.SuccessTime,
+			Amount: combinedPaymentWechatAmountResult{
+				TotalAmount:   subOrder.Amount.TotalAmount,
+				PayerAmount:   subOrder.Amount.PayerAmount,
+				Currency:      subOrder.Amount.Currency,
+				PayerCurrency: subOrder.Amount.PayerCurrency,
+			},
+		})
+	}
+
+	return &combinedPaymentWechatQueryResult{
+		CombineOutTradeNo:   query.CombineOutTradeNo,
+		AggregateTradeState: query.AggregateTradeState,
+		SubOrders:           subOrders,
+	}
+}
+
 // generateOutTradeNo 生成商户订单号
-func generateOutTradeNo() string {
-	now := time.Now()
-	dateStr := now.Format("20060102150405")
+// 格式：P + yyyyMMddHHmmss(14位) + hex随机(8位) = 23位
+func generateOutTradeNo() (string, error) {
+	return util.GenerateOutTradeNo("P")
+}
 
-	// 生成8位随机数
-	b := make([]byte, 4)
-	rand.Read(b)
-	randomNum := fmt.Sprintf("%08d", int(b[0])*1000000+int(b[1])*10000+int(b[2])*100+int(b[3]))
+func generateOutTradeNoWithPrefix(prefix string) (string, error) {
+	return util.GenerateOutTradeNo(prefix)
+}
 
-	return "P" + dateStr + randomNum[:8]
+const (
+	outTradeNoMaxRetry      = 3
+	outTradeNoRetryBaseBack = 50 * time.Millisecond
+)
+
+func isOutTradeNoConflict(err error) bool {
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) {
+		return false
+	}
+	if pgErr.Code != "23505" {
+		return false
+	}
+	if strings.Contains(pgErr.ConstraintName, "out_trade_no") {
+		return true
+	}
+	return strings.Contains(pgErr.Detail, "out_trade_no")
+}
+
+func sleepWithContext(ctx context.Context, d time.Duration) bool {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-t.C:
+		return true
+	case <-ctx.Done():
+		return false
+	}
 }
 
 // ==================== 支付订单API ====================
 
 // createPaymentOrder godoc
 // @Summary 创建支付订单
-// @Description 为订单或预定创建支付订单，调用微信支付统一下单接口。
+// @Description 为订单或预定创建支付订单，当前主路径会按业务类型自动选择真实支付链路。
 // @Description
-// @Description **支付类型：**
-// @Description - native: 扫码支付(商户端扫用户付款码)
-// @Description - miniprogram: 小程序支付(返回调起支付所需参数)
+// @Description **兼容字段：**
+// @Description - `payment_type` 仅作为兼容保留字段，可不传。
+// @Description - 对 `order` 和 `reservation` 主支付，系统已统一走平台收付通普通支付。
+// @Description - 旧客户端即使传入 `native` 或 `miniprogram`，也不会再改变底层支付物理链路。
 // @Description
 // @Description **业务类型：**
 // @Description - order: 订单支付
@@ -133,7 +284,7 @@ func generateOutTradeNo() string {
 // @Accept json
 // @Produce json
 // @Param request body createPaymentOrderRequest true "支付订单参数"
-// @Success 200 {object} paymentOrderResponse "支付订单(含小程序支付参数)"
+// @Success 201 {object} paymentOrderResponse "支付订单(含小程序支付参数)"
 // @Failure 400 {object} ErrorResponse "订单状态不允许支付"
 // @Failure 401 {object} ErrorResponse "未授权"
 // @Failure 403 {object} ErrorResponse "订单不属于当前用户"
@@ -149,129 +300,399 @@ func (server *Server) createPaymentOrder(ctx *gin.Context) {
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	server.normalizeCreatePaymentOrderRequest(&req, authPayload.UserID)
 
-	// 获取订单
-	order, err := server.store.GetOrder(ctx, req.OrderID)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("order not found")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
+	facade := server.paymentFacade
+	if facade == nil {
+		facade = server.buildPaymentFacade()
 	}
 
-	// 验证订单属于当前用户
-	if order.UserID != authPayload.UserID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("order does not belong to you")))
-		return
-	}
-
-	// 验证订单状态
-	if order.Status != OrderStatusPending {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("order is not in pending status")))
-		return
-	}
-
-	// 检查是否已存在待支付的支付订单
-	existingPayment, err := server.store.GetLatestPaymentOrderByOrder(ctx, pgtype.Int8{Int64: req.OrderID, Valid: true})
-	if err == nil && existingPayment.Status == PaymentStatusPending {
-		// 已存在待支付订单，直接返回
-		ctx.JSON(http.StatusOK, newPaymentOrderResponse(existingPayment))
-		return
-	}
-
-	// 生成商户订单号
-	outTradeNo := generateOutTradeNo()
-
-	// 设置支付过期时间（30分钟）
-	expiresAt := time.Now().Add(30 * time.Minute)
-
-	// 创建支付订单
-	paymentOrder, err := server.store.CreatePaymentOrder(ctx, db.CreatePaymentOrderParams{
-		OrderID:      pgtype.Int8{Int64: req.OrderID, Valid: true},
+	result, err := facade.CreatePaymentOrder(ctx, logic.CreatePaymentOrderInput{
 		UserID:       authPayload.UserID,
+		OrderID:      req.OrderID,
 		PaymentType:  req.PaymentType,
 		BusinessType: req.BusinessType,
-		Amount:       order.TotalAmount,
-		OutTradeNo:   outTradeNo,
-		ExpiresAt:    pgtype.Timestamptz{Time: expiresAt, Valid: true},
+		ClientIP:     ctx.ClientIP(),
 	})
+	if err != nil {
+		if writeLogicRequestError(ctx, err) {
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	resp := newPaymentOrderResponse(result.PaymentOrder)
+	if result.PayParams != nil {
+		resp.PayParams = &miniProgramPayParams{
+			TimeStamp: result.PayParams.TimeStamp,
+			NonceStr:  result.PayParams.NonceStr,
+			Package:   result.PayParams.Package,
+			SignType:  result.PayParams.SignType,
+			PaySign:   result.PayParams.PaySign,
+		}
+	}
+
+	server.scheduleTimeoutForPaymentOrder(ctx, result.PaymentOrder)
+
+	ctx.JSON(http.StatusCreated, resp)
+}
+
+func (server *Server) normalizeCreatePaymentOrderRequest(req *createPaymentOrderRequest, userID int64) {
+	if req.PaymentType == "" {
+		req.PaymentType = PaymentTypeMiniProgram
+		return
+	}
+
+	entry := log.Info()
+	message := "legacy payment_type accepted for create payment order api"
+	if req.PaymentType == PaymentTypeNative {
+		entry = log.Warn()
+		message = "legacy native payment_type ignored for create payment order api"
+	}
+
+	entry.
+		Int64("user_id", userID).
+		Int64("order_id", req.OrderID).
+		Str("business_type", req.BusinessType).
+		Str("payment_type", req.PaymentType).
+		Bool("legacy_client_compat", true).
+		Msg(message)
+
+	req.PaymentType = PaymentTypeMiniProgram
+}
+
+func (server *Server) scheduleTimeoutForPaymentOrder(ctx context.Context, paymentOrder db.PaymentOrder) {
+	if server.taskDistributor == nil || !paymentOrder.ExpiresAt.Valid {
+		return
+	}
+	if _, ok := server.taskDistributor.(worker.NoopTaskDistributor); ok {
+		return
+	}
+
+	if paymentOrder.CombinedPaymentID.Valid {
+		combinedPaymentOrder, getErr := server.store.GetCombinedPaymentOrder(ctx, paymentOrder.CombinedPaymentID.Int64)
+		if getErr != nil {
+			log.Error().Err(getErr).Int64("combined_payment_id", paymentOrder.CombinedPaymentID.Int64).Msg("failed to load combined payment order for timeout scheduling")
+			return
+		}
+		if enqErr := server.taskDistributor.DistributeTaskCombinedPaymentOrderTimeout(
+			ctx,
+			&worker.PayloadCombinedPaymentOrderTimeout{CombineOutTradeNo: combinedPaymentOrder.CombineOutTradeNo},
+			asynq.ProcessAt(paymentOrder.ExpiresAt.Time),
+		); enqErr != nil {
+			log.Error().Err(enqErr).Str("combine_out_trade_no", combinedPaymentOrder.CombineOutTradeNo).Msg("failed to enqueue combined payment order timeout task")
+		}
+		return
+	}
+
+	if enqErr := server.taskDistributor.DistributeTaskPaymentOrderTimeout(
+		ctx,
+		&worker.PayloadPaymentOrderTimeout{PaymentOrderNo: paymentOrder.OutTradeNo},
+		asynq.ProcessAt(paymentOrder.ExpiresAt.Time),
+	); enqErr != nil {
+		log.Error().Err(enqErr).Str("out_trade_no", paymentOrder.OutTradeNo).Msg("⚠️ failed to enqueue payment order timeout task")
+	}
+}
+
+func writeLogicRequestError(ctx *gin.Context, err error) bool {
+	var reqErr *logic.RequestError
+	if !errors.As(err, &reqErr) {
+		return false
+	}
+	ctx.JSON(reqErr.Status, errorResponse(reqErr.Err))
+	return true
+}
+
+func isEcommerceClientNotConfigured(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "ecommerce client") && strings.Contains(msg, "not configured")
+}
+
+// createCombinedPaymentOrder 创建平台收付通多订单合单支付订单
+// @Summary 创建多订单合单支付订单
+// @Description 为单次结算中的多个订单创建平台收付通合单支付订单，当前主要用于多商户外卖一起结算
+// @Tags 支付管理
+// @Accept json
+// @Produce json
+// @Param request body createCombinedPaymentOrderRequest true "多订单合单支付参数"
+// @Success 201 {object} combinedPaymentOrderResponse "多订单合单支付订单(含小程序支付参数)"
+// @Failure 400 {object} ErrorResponse "请求参数错误"
+// @Failure 401 {object} ErrorResponse "未授权"
+// @Failure 403 {object} ErrorResponse "订单不属于当前用户"
+// @Failure 404 {object} ErrorResponse "订单不存在"
+// @Failure 503 {object} ErrorResponse "支付服务不可用"
+// @Router /v1/payments/combined [post]
+// @Security BearerAuth
+func (server *Server) createCombinedPaymentOrder(ctx *gin.Context) {
+	var req createCombinedPaymentOrderRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
+	facade := server.paymentFacade
+	if facade == nil {
+		facade = server.buildPaymentFacade()
+	}
+
+	result, err := facade.CreateCombinedPaymentOrder(ctx, logic.CreateCombinedPaymentOrderInput{
+		UserID:   authPayload.UserID,
+		OrderIDs: req.OrderIDs,
+		ClientIP: ctx.ClientIP(),
+	})
+	if err != nil {
+		if isEcommerceClientNotConfigured(err) {
+			ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "payment service unavailable", "combined payment ecommerce client not configured"))
+			return
+		}
+		if writeLogicRequestError(ctx, err) {
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	subOrders := make([]combinedPaymentSubOrderResponse, 0, len(result.SubOrders))
+	for _, sub := range result.SubOrders {
+		subOrders = append(subOrders, combinedPaymentSubOrderResponse{
+			OrderID:        sub.OrderID,
+			PaymentOrderID: sub.PaymentOrderID,
+			MerchantID:     sub.MerchantID,
+			SubMchID:       sub.SubMchID,
+			Amount:         sub.Amount,
+			OutTradeNo:     sub.OutTradeNo,
+			Description:    sub.Description,
+		})
+	}
+
+	combinedPayment := result.CombinedPayment
+	resp := combinedPaymentOrderResponse{
+		ID:                combinedPayment.ID,
+		CombineOutTradeNo: combinedPayment.CombineOutTradeNo,
+		TotalAmount:       combinedPayment.TotalAmount,
+		Status:            combinedPayment.Status,
+		SubOrders:         subOrders,
+	}
+	if combinedPayment.PrepayID.Valid {
+		resp.PrepayID = &combinedPayment.PrepayID.String
+	}
+	if combinedPayment.ExpiresAt.Valid {
+		expires := combinedPayment.ExpiresAt.Time
+		resp.ExpiresAt = &expires
+	}
+	if result.PayParams != nil {
+		resp.PayParams = &miniProgramPayParams{
+			TimeStamp: result.PayParams.TimeStamp,
+			NonceStr:  result.PayParams.NonceStr,
+			Package:   result.PayParams.Package,
+			SignType:  result.PayParams.SignType,
+			PaySign:   result.PayParams.PaySign,
+		}
+	}
+
+	if server.taskDistributor != nil && combinedPayment.ExpiresAt.Valid {
+		if enqErr := server.taskDistributor.DistributeTaskCombinedPaymentOrderTimeout(
+			ctx,
+			&worker.PayloadCombinedPaymentOrderTimeout{CombineOutTradeNo: combinedPayment.CombineOutTradeNo},
+			asynq.ProcessAt(combinedPayment.ExpiresAt.Time),
+		); enqErr != nil {
+			log.Error().Err(enqErr).Str("combine_out_trade_no", combinedPayment.CombineOutTradeNo).Msg("⚠️ failed to enqueue combined payment timeout task")
+		}
+	}
+
+	ctx.JSON(http.StatusCreated, resp)
+}
+
+// getCombinedPaymentOrder 获取多订单合单支付订单详情
+type getCombinedPaymentOrderRequest struct {
+	ID int64 `uri:"id" binding:"required,min=1"`
+}
+
+// getCombinedPaymentOrder godoc
+// @Summary 获取多订单合单支付订单详情
+// @Description 根据ID获取多订单合单支付订单详情
+// @Tags 支付管理
+// @Accept json
+// @Produce json
+// @Param id path int true "合单支付订单ID"
+// @Success 200 {object} combinedPaymentOrderResponse "多订单合单支付订单详情"
+// @Failure 400 {object} ErrorResponse "请求参数错误"
+// @Failure 401 {object} ErrorResponse "未授权"
+// @Failure 403 {object} ErrorResponse "合单支付订单不属于当前用户"
+// @Failure 404 {object} ErrorResponse "合单支付订单不存在"
+// @Failure 500 {object} ErrorResponse "服务器内部错误"
+// @Router /v1/payments/combined/{id} [get]
+// @Security BearerAuth
+func (server *Server) getCombinedPaymentOrder(ctx *gin.Context) {
+	var req getCombinedPaymentOrderRequest
+	if err := ctx.ShouldBindUri(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	facade := server.paymentFacade
+	if facade == nil {
+		facade = server.buildPaymentFacade()
+	}
+
+	result, err := facade.GetCombinedPaymentOrder(ctx, logic.GetCombinedPaymentOrderInput{
+		UserID:            authPayload.UserID,
+		CombinedPaymentID: req.ID,
+	})
+	if err != nil {
+		if writeLogicRequestError(ctx, err) {
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	resp, err := buildCombinedPaymentOrderResponse(result.CombinedPayment, result.PayParams)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	// 构建响应
-	resp := newPaymentOrderResponse(paymentOrder)
+	ctx.JSON(http.StatusOK, resp)
+}
 
-	// 调用微信支付 API 创建预支付订单
-	if server.paymentClient != nil && req.PaymentType == PaymentTypeMiniProgram {
-		// 获取用户 OpenID
-		user, err := server.store.GetUser(ctx, authPayload.UserID)
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get user: %w", err)))
-			return
-		}
-
-		// 获取商户名称作为商品描述
-		merchantName := "订单支付"
-		if order.MerchantID > 0 {
-			merchant, err := server.store.GetMerchant(ctx, order.MerchantID)
-			if err == nil {
-				merchantName = merchant.Name + " - 订单支付"
-			}
-		}
-
-		// 调用微信支付 JSAPI 下单
-		wxResp, payParams, err := server.paymentClient.CreateJSAPIOrder(ctx, &wechat.JSAPIOrderRequest{
-			OutTradeNo:    outTradeNo,
-			Description:   merchantName,
-			TotalAmount:   order.TotalAmount,
-			OpenID:        user.WechatOpenid,
-			ExpireTime:    expiresAt,
-			Attach:        fmt.Sprintf("order_id:%d", order.ID), // 传递订单ID用于回调关联
-			PayerClientIP: ctx.ClientIP(),                       // 用户终端IP（用于风控）
-		})
-		if err != nil {
-			// 微信支付失败，关闭支付订单
-			server.store.UpdatePaymentOrderToClosed(ctx, paymentOrder.ID)
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("wechat pay: %w", err)))
-			return
-		}
-
-		// 更新支付订单的 prepay_id
-		updatedPayment, err := server.store.UpdatePaymentOrderPrepayId(ctx, db.UpdatePaymentOrderPrepayIdParams{
-			ID:       paymentOrder.ID,
-			PrepayID: pgtype.Text{String: wxResp.PrepayID, Valid: true},
-		})
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-
-		// 更新响应
-		resp = newPaymentOrderResponse(updatedPayment)
-		resp.PayParams = &miniProgramPayParams{
-			TimeStamp: payParams.TimeStamp,
-			NonceStr:  payParams.NonceStr,
-			Package:   payParams.Package,
-			SignType:  payParams.SignType,
-			PaySign:   payParams.PaySign,
-		}
+// queryCombinedPaymentOrder godoc
+// @Summary 查询多订单合单支付远端状态
+// @Description 查询本地多订单合单详情，并拉取微信侧最新支付状态，供小程序恢复支付或判断后续动作
+// @Tags 支付管理
+// @Accept json
+// @Produce json
+// @Param id path int true "合单支付订单ID"
+// @Success 200 {object} combinedPaymentOrderResponse "多订单合单支付订单详情(含微信远端状态)"
+// @Failure 400 {object} ErrorResponse "请求参数错误"
+// @Failure 401 {object} ErrorResponse "未授权"
+// @Failure 403 {object} ErrorResponse "合单支付订单不属于当前用户"
+// @Failure 404 {object} ErrorResponse "合单支付订单不存在"
+// @Failure 503 {object} ErrorResponse "支付服务不可用"
+// @Router /v1/payments/combined/{id}/query [get]
+// @Security BearerAuth
+func (server *Server) queryCombinedPaymentOrder(ctx *gin.Context) {
+	var req getCombinedPaymentOrderRequest
+	if err := ctx.ShouldBindUri(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
 	}
 
-	// 分发支付超时任务
-	if server.taskDistributor != nil {
-		err = server.taskDistributor.DistributeTaskPaymentOrderTimeout(
-			ctx,
-			&worker.PayloadPaymentOrderTimeout{PaymentOrderNo: outTradeNo},
-			asynq.ProcessAt(expiresAt),
-		)
-		if err != nil {
-			// 任务分发失败不影响主流程，记录日志即可
-			// 可以通过定时任务轮询处理超时订单作为兜底
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	facade := server.paymentFacade
+	if facade == nil {
+		facade = server.buildPaymentFacade()
+	}
+
+	result, err := facade.QueryCombinedPaymentOrder(ctx, logic.QueryCombinedPaymentOrderInput{
+		UserID:            authPayload.UserID,
+		CombinedPaymentID: req.ID,
+	})
+	if err != nil {
+		if isEcommerceClientNotConfigured(err) {
+			ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "payment service unavailable", "query combined payment ecommerce client not configured"))
+			return
 		}
+		if writeLogicRequestError(ctx, err) {
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	resp, err := buildCombinedPaymentOrderResponse(result.CombinedPayment, result.PayParams)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	resp.WechatQuery = newCombinedPaymentWechatQueryResult(result.WechatOrder)
+
+	ctx.JSON(http.StatusOK, resp)
+}
+
+// closeCombinedPaymentOrder 关闭多订单合单支付订单
+type closeCombinedPaymentOrderRequest struct {
+	ID int64 `uri:"id" binding:"required,min=1"`
+}
+
+// closeCombinedPaymentOrder godoc
+// @Summary 关闭多订单合单支付订单
+// @Description 关闭待支付的多订单合单支付订单
+// @Tags 支付管理
+// @Accept json
+// @Produce json
+// @Param id path int true "合单支付订单ID"
+// @Success 200 {object} combinedPaymentOrderResponse "关闭成功的多订单合单支付订单"
+// @Failure 400 {object} ErrorResponse "请求参数错误或订单状态不允许关闭"
+// @Failure 401 {object} ErrorResponse "未授权"
+// @Failure 403 {object} ErrorResponse "合单支付订单不属于当前用户"
+// @Failure 404 {object} ErrorResponse "合单支付订单不存在"
+// @Failure 503 {object} ErrorResponse "支付服务不可用"
+// @Router /v1/payments/combined/{id}/close [post]
+// @Security BearerAuth
+func (server *Server) closeCombinedPaymentOrder(ctx *gin.Context) {
+	var req closeCombinedPaymentOrderRequest
+	if err := ctx.ShouldBindUri(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	facade := server.paymentFacade
+	if facade == nil {
+		facade = server.buildPaymentFacade()
+	}
+
+	result, err := facade.CloseCombinedPaymentOrder(ctx, logic.CloseCombinedPaymentOrderInput{
+		UserID:            authPayload.UserID,
+		CombinedPaymentID: req.ID,
+	})
+	if err != nil {
+		if isEcommerceClientNotConfigured(err) {
+			ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "payment service unavailable", "close combined payment ecommerce client not configured"))
+			return
+		}
+		if writeLogicRequestError(ctx, err) {
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	updatedCombined := result.CombinedPayment
+	subOrders := make([]combinedPaymentSubOrderResponse, 0, len(result.SubOrders))
+	for _, sub := range result.SubOrders {
+		subOrders = append(subOrders, combinedPaymentSubOrderResponse{
+			OrderID:        sub.OrderID,
+			PaymentOrderID: sub.PaymentOrderID,
+			MerchantID:     sub.MerchantID,
+			SubMchID:       sub.SubMchID,
+			Amount:         sub.Amount,
+			OutTradeNo:     sub.OutTradeNo,
+			Description:    sub.Description,
+		})
+	}
+
+	resp := combinedPaymentOrderResponse{
+		ID:                updatedCombined.ID,
+		CombineOutTradeNo: updatedCombined.CombineOutTradeNo,
+		TotalAmount:       updatedCombined.TotalAmount,
+		Status:            updatedCombined.Status,
+		SubOrders:         subOrders,
+	}
+	if updatedCombined.PrepayID.Valid {
+		resp.PrepayID = &updatedCombined.PrepayID.String
+	}
+	if updatedCombined.ExpiresAt.Valid {
+		expires := updatedCombined.ExpiresAt.Time
+		resp.ExpiresAt = &expires
 	}
 
 	ctx.JSON(http.StatusOK, resp)
@@ -306,21 +727,24 @@ func (server *Server) getPaymentOrder(ctx *gin.Context) {
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-	paymentOrder, err := server.store.GetPaymentOrder(ctx, req.ID)
+	facade := server.paymentFacade
+	if facade == nil {
+		facade = server.buildPaymentFacade()
+	}
+
+	result, err := facade.GetPaymentOrder(ctx, logic.GetPaymentOrderInput{
+		UserID:         authPayload.UserID,
+		PaymentOrderID: req.ID,
+	})
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("payment order not found")))
+		if writeLogicRequestError(ctx, err) {
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	// 验证支付订单属于当前用户
-	if paymentOrder.UserID != authPayload.UserID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("payment order does not belong to you")))
-		return
-	}
+	paymentOrder := result.PaymentOrder
 
 	ctx.JSON(http.StatusOK, newPaymentOrderResponse(paymentOrder))
 }
@@ -332,6 +756,13 @@ type listPaymentOrdersRequest struct {
 	OrderID  *int64 `form:"order_id" binding:"omitempty,min=1"` // 可选：按订单ID筛选
 }
 
+type listPaymentOrdersResponse struct {
+	PaymentOrders []paymentOrderResponse `json:"payment_orders"`
+	Total         int64                  `json:"total"`
+	PageID        int32                  `json:"page_id"`
+	PageSize      int32                  `json:"page_size"`
+}
+
 // listPaymentOrders godoc
 // @Summary 获取支付订单列表
 // @Description 分页获取当前用户的支付订单列表，或按订单ID查询
@@ -341,7 +772,7 @@ type listPaymentOrdersRequest struct {
 // @Param page_id query int false "页码" minimum(1)
 // @Param page_size query int false "每页条数" minimum(1) maximum(20)
 // @Param order_id query int false "订单ID（按订单查询时使用）"
-// @Success 200 {array} paymentOrderResponse "支付订单列表"
+// @Success 200 {object} listPaymentOrdersResponse "支付订单列表"
 // @Failure 400 {object} ErrorResponse "请求参数错误"
 // @Failure 401 {object} ErrorResponse "未授权"
 // @Failure 500 {object} ErrorResponse "服务器内部错误"
@@ -356,53 +787,47 @@ func (server *Server) listPaymentOrders(ctx *gin.Context) {
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-	// 如果指定了 order_id，直接查询该订单的支付记录
-	if req.OrderID != nil {
-		payment, err := server.store.GetLatestPaymentOrderByOrder(ctx, pgtype.Int8{Int64: *req.OrderID, Valid: true})
-		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				ctx.JSON(http.StatusOK, []paymentOrderResponse{})
-				return
-			}
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-		// 验证支付订单属于当前用户
-		if payment.UserID != authPayload.UserID {
-			ctx.JSON(http.StatusOK, []paymentOrderResponse{})
-			return
-		}
-		ctx.JSON(http.StatusOK, []paymentOrderResponse{newPaymentOrderResponse(payment)})
-		return
-	}
-
-	// 默认分页查询
 	pageID := req.PageID
-	pageSize := req.PageSize
 	if pageID == 0 {
 		pageID = 1
 	}
+	pageSize := req.PageSize
 	if pageSize == 0 {
 		pageSize = 10
 	}
-	offset := (pageID - 1) * pageSize
 
-	paymentOrders, err := server.store.ListPaymentOrdersByUser(ctx, db.ListPaymentOrdersByUserParams{
-		UserID: authPayload.UserID,
-		Limit:  pageSize,
-		Offset: offset,
+	facade := server.paymentFacade
+	if facade == nil {
+		facade = server.buildPaymentFacade()
+	}
+
+	result, err := facade.ListPaymentOrders(ctx, logic.ListPaymentOrdersInput{
+		UserID:   authPayload.UserID,
+		OrderID:  req.OrderID,
+		PageID:   pageID,
+		PageSize: pageSize,
 	})
 	if err != nil {
+		if writeLogicRequestError(ctx, err) {
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
+
+	paymentOrders := result.PaymentOrders
 
 	resp := make([]paymentOrderResponse, len(paymentOrders))
 	for i, p := range paymentOrders {
 		resp[i] = newPaymentOrderResponse(p)
 	}
 
-	ctx.JSON(http.StatusOK, resp)
+	ctx.JSON(http.StatusOK, listPaymentOrdersResponse{
+		PaymentOrders: resp,
+		Total:         result.TotalCount,
+		PageID:        pageID,
+		PageSize:      pageSize,
+	})
 }
 
 // closePaymentOrder 关闭支付订单
@@ -434,45 +859,24 @@ func (server *Server) closePaymentOrder(ctx *gin.Context) {
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-	paymentOrder, err := server.store.GetPaymentOrder(ctx, req.ID)
+	facade := server.paymentFacade
+	if facade == nil {
+		facade = server.buildPaymentFacade()
+	}
+
+	result, err := facade.ClosePaymentOrder(ctx, logic.ClosePaymentOrderInput{
+		UserID:         authPayload.UserID,
+		PaymentOrderID: req.ID,
+	})
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("payment order not found")))
+		if writeLogicRequestError(ctx, err) {
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	// 验证支付订单属于当前用户
-	if paymentOrder.UserID != authPayload.UserID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("payment order does not belong to you")))
-		return
-	}
-
-	// 验证状态
-	if paymentOrder.Status != PaymentStatusPending {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("only pending payment orders can be closed")))
-		return
-	}
-
-	// 关闭支付订单
-	updatedPayment, err := server.store.UpdatePaymentOrderToClosed(ctx, req.ID)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 调用微信关单 API（如果有 prepay_id）
-	if server.paymentClient != nil && paymentOrder.PrepayID.Valid {
-		err = server.paymentClient.CloseOrder(ctx, paymentOrder.OutTradeNo)
-		if err != nil {
-			// 关单失败不影响本地状态，微信支付订单会在超时后自动关闭
-			// 记录日志即可
-		}
-	}
-
-	ctx.JSON(http.StatusOK, newPaymentOrderResponse(updatedPayment))
+	ctx.JSON(http.StatusOK, newPaymentOrderResponse(result.PaymentOrder))
 }
 
 // ==================== 退款订单API ====================
@@ -487,6 +891,66 @@ type refundOrderResponse struct {
 	Status         string     `json:"status"`
 	RefundedAt     *time.Time `json:"refunded_at,omitempty"`
 	CreatedAt      time.Time  `json:"created_at"`
+}
+
+type profitSharingReturnResponse struct {
+	ID            int64      `json:"id"`
+	RefundOrderID int64      `json:"refund_order_id"`
+	OutOrderNo    string     `json:"out_order_no"`
+	OutReturnNo   string     `json:"out_return_no"`
+	ReturnMchID   string     `json:"return_mchid"`
+	Amount        int64      `json:"amount"`
+	Status        string     `json:"status"`
+	ReturnID      *string    `json:"return_id,omitempty"`
+	FailReason    *string    `json:"fail_reason,omitempty"`
+	FinishedAt    *time.Time `json:"finished_at,omitempty"`
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
+}
+
+type applyAbnormalRefundURIRequest struct {
+	ID int64 `uri:"id" binding:"required,min=1"`
+}
+
+type applyAbnormalRefundBodyRequest struct {
+	Type        string `json:"type" binding:"required,oneof=USER_BANK_CARD MERCHANT_BANK_CARD"`
+	BankType    string `json:"bank_type,omitempty" binding:"omitempty,max=32"`
+	BankAccount string `json:"bank_account,omitempty" binding:"omitempty,max=128"`
+	RealName    string `json:"real_name,omitempty" binding:"omitempty,max=128"`
+}
+
+type abnormalRefundWechatResponse struct {
+	RefundID string `json:"refund_id,omitempty"`
+	Status   string `json:"status"`
+}
+
+type applyAbnormalRefundResponse struct {
+	RefundOrder refundOrderResponse          `json:"refund_order"`
+	Wechat      abnormalRefundWechatResponse `json:"wechat"`
+}
+
+func newProfitSharingReturnResponse(r db.ProfitSharingReturn) profitSharingReturnResponse {
+	resp := profitSharingReturnResponse{
+		ID:            r.ID,
+		RefundOrderID: r.RefundOrderID,
+		OutOrderNo:    r.OutOrderNo,
+		OutReturnNo:   r.OutReturnNo,
+		ReturnMchID:   r.ReturnMchid,
+		Amount:        r.Amount,
+		Status:        r.Status,
+		CreatedAt:     r.CreatedAt,
+		UpdatedAt:     r.UpdatedAt,
+	}
+	if r.ReturnID.Valid {
+		resp.ReturnID = &r.ReturnID.String
+	}
+	if r.FailReason.Valid {
+		resp.FailReason = &r.FailReason.String
+	}
+	if r.FinishedAt.Valid {
+		resp.FinishedAt = &r.FinishedAt.Time
+	}
+	return resp
 }
 
 func newRefundOrderResponse(r db.RefundOrder) refundOrderResponse {
@@ -510,17 +974,62 @@ func newRefundOrderResponse(r db.RefundOrder) refundOrderResponse {
 	return resp
 }
 
-// generateOutRefundNo 生成退款单号
-func generateOutRefundNo() string {
-	now := time.Now()
-	dateStr := now.Format("20060102150405")
+// applyPlatformAbnormalRefund 平台人工发起异常退款处理
+// @Summary 平台人工发起异常退款处理
+// @Description 平台管理员对微信返回 ABNORMAL 的收付通退款单发起人工异常退款处理。
+// @Tags 平台退款管理
+// @Accept json
+// @Produce json
+// @Param id path int true "退款订单ID"
+// @Param request body applyAbnormalRefundBodyRequest true "异常退款处理参数"
+// @Success 200 {object} applyAbnormalRefundResponse "异常退款处理结果"
+// @Failure 400 {object} ErrorResponse "请求参数错误或退款状态不允许处理"
+// @Failure 401 {object} ErrorResponse "未授权"
+// @Failure 403 {object} ErrorResponse "非平台管理员"
+// @Failure 404 {object} ErrorResponse "退款订单不存在"
+// @Failure 500 {object} ErrorResponse "服务器内部错误"
+// @Router /v1/platform/refunds/{id}/apply-abnormal-refund [post]
+// @Security BearerAuth
+func (server *Server) applyPlatformAbnormalRefund(ctx *gin.Context) {
+	var uriReq applyAbnormalRefundURIRequest
+	if err := ctx.ShouldBindUri(&uriReq); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
 
-	// 生成8位随机数
-	b := make([]byte, 4)
-	rand.Read(b)
-	randomNum := fmt.Sprintf("%08d", int(b[0])*1000000+int(b[1])*10000+int(b[2])*100+int(b[3]))
+	var bodyReq applyAbnormalRefundBodyRequest
+	if err := ctx.ShouldBindJSON(&bodyReq); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
 
-	return "R" + dateStr + randomNum[:8]
+	orchestrator := server.refundOrchestrator
+	if orchestrator == nil {
+		orchestrator = server.buildRefundOrchestrator()
+	}
+
+	result, err := orchestrator.ApplyAbnormalRefund(ctx, logic.ApplyAbnormalRefundInput{
+		RefundID:    uriReq.ID,
+		Type:        bodyReq.Type,
+		BankType:    bodyReq.BankType,
+		BankAccount: bodyReq.BankAccount,
+		RealName:    bodyReq.RealName,
+	})
+	if err != nil {
+		if writeLogicRequestError(ctx, err) {
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, applyAbnormalRefundResponse{
+		RefundOrder: newRefundOrderResponse(result.RefundOrder),
+		Wechat: abnormalRefundWechatResponse{
+			RefundID: result.WechatRefund.RefundID,
+			Status:   result.WechatRefund.Status,
+		},
+	})
 }
 
 // createRefundOrder 创建退款订单（商户端）
@@ -554,109 +1063,81 @@ func (server *Server) createRefundOrder(ctx *gin.Context) {
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-
-	// 获取当前用户的商户
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("you are not a merchant")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
+	orchestrator := server.refundOrchestrator
+	if orchestrator == nil {
+		orchestrator = server.buildRefundOrchestrator()
 	}
 
-	// 获取支付订单
-	paymentOrder, err := server.store.GetPaymentOrder(ctx, req.PaymentOrderID)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("payment order not found")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 验证支付订单已支付
-	if paymentOrder.Status != PaymentStatusPaid {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("payment order is not paid")))
-		return
-	}
-
-	// 获取订单验证归属
-	if !paymentOrder.OrderID.Valid {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("payment order has no associated order")))
-		return
-	}
-
-	order, err := server.store.GetOrder(ctx, paymentOrder.OrderID.Int64)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	if order.MerchantID != merchant.ID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("order does not belong to your merchant")))
-		return
-	}
-
-	// 验证退款金额
-	if req.RefundAmount > paymentOrder.Amount {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("refund amount exceeds payment amount")))
-		return
-	}
-
-	// 生成退款单号
-	outRefundNo := generateOutRefundNo()
-
-	// 创建退款订单
-	refundOrder, err := server.store.CreateRefundOrder(ctx, db.CreateRefundOrderParams{
-		PaymentOrderID: req.PaymentOrderID,
-		RefundType:     req.RefundType,
-		RefundAmount:   req.RefundAmount,
-		RefundReason:   pgtype.Text{String: req.RefundReason, Valid: req.RefundReason != ""},
-		OutRefundNo:    outRefundNo,
-		Status:         "pending",
+	result, err := orchestrator.CreateRefundOrder(ctx, logic.CreateRefundOrderInput{
+		ActorUserID:                      authPayload.UserID,
+		PaymentOrderID:                   req.PaymentOrderID,
+		RefundType:                       req.RefundType,
+		RefundAmount:                     req.RefundAmount,
+		RefundReason:                     req.RefundReason,
+		ProfitSharingReturnRetryInterval: server.config.ProfitSharingReturnRetryInterval,
 	})
 	if err != nil {
+		if writeLogicRequestError(ctx, err) {
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	// 调用微信退款 API
-	if server.paymentClient != nil {
-		wxRefund, err := server.paymentClient.CreateRefund(ctx, &wechat.RefundRequest{
-			OutTradeNo:   paymentOrder.OutTradeNo,
-			OutRefundNo:  outRefundNo,
-			Reason:       req.RefundReason,
-			RefundAmount: req.RefundAmount,
-			TotalAmount:  paymentOrder.Amount,
-		})
-		if err != nil {
-			// 退款失败，更新退款订单状态
-			server.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("wechat refund: %w", err)))
-			return
-		}
+	ctx.JSON(http.StatusCreated, newRefundOrderResponse(result.RefundOrder))
+}
 
-		// 根据微信返回状态更新退款订单
-		switch wxRefund.Status {
-		case wechat.RefundStatusSuccess:
-			server.store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID)
-			// 更新支付订单状态为已退款
-			server.store.UpdatePaymentOrderToRefunded(ctx, paymentOrder.ID)
-		case wechat.RefundStatusProcessing:
-			server.store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
-				ID:       refundOrder.ID,
-				RefundID: pgtype.Text{String: wxRefund.RefundID, Valid: true},
-			})
-		}
+// listProfitSharingReturnsByRefund 获取退款关联的分账回退记录
+type listProfitSharingReturnsByRefundRequest struct {
+	ID int64 `uri:"id" binding:"required,min=1"`
+}
+
+// listProfitSharingReturnsByRefund godoc
+// @Summary 查询退款的分账回退记录
+// @Description 查询指定退款订单的分账回退记录
+// @Tags 退款管理
+// @Accept json
+// @Produce json
+// @Param id path int true "退款订单ID"
+// @Success 201 {array} profitSharingReturnResponse "分账回退记录列表"
+// @Failure 400 {object} ErrorResponse "请求参数错误"
+// @Failure 401 {object} ErrorResponse "未授权"
+// @Failure 403 {object} ErrorResponse "非商户用户"
+// @Failure 404 {object} ErrorResponse "退款订单不存在"
+// @Failure 500 {object} ErrorResponse "服务器内部错误"
+// @Router /v1/refunds/{id}/returns [get]
+// @Security BearerAuth
+func (server *Server) listProfitSharingReturnsByRefund(ctx *gin.Context) {
+	var req listProfitSharingReturnsByRefundRequest
+	if err := ctx.ShouldBindUri(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
 	}
 
-	// 重新获取退款订单以返回最新状态
-	refundOrder, _ = server.store.GetRefundOrder(ctx, refundOrder.ID)
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	orchestrator := server.refundOrchestrator
+	if orchestrator == nil {
+		orchestrator = server.buildRefundOrchestrator()
+	}
 
-	ctx.JSON(http.StatusOK, newRefundOrderResponse(refundOrder))
+	result, err := orchestrator.ListProfitSharingReturnsByRefund(ctx, logic.ListProfitSharingReturnsByRefundInput{
+		ActorUserID: authPayload.UserID,
+		RefundID:    req.ID,
+	})
+	if err != nil {
+		if writeLogicRequestError(ctx, err) {
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	resp := make([]profitSharingReturnResponse, 0, len(result.Returns))
+	for _, r := range result.Returns {
+		resp = append(resp, newProfitSharingReturnResponse(r))
+	}
+
+	ctx.JSON(http.StatusOK, resp)
 }
 
 // getRefundOrder 获取退款订单详情
@@ -687,48 +1168,34 @@ func (server *Server) getRefundOrder(ctx *gin.Context) {
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	orchestrator := server.refundOrchestrator
+	if orchestrator == nil {
+		orchestrator = server.buildRefundOrchestrator()
+	}
 
-	refundOrder, err := server.store.GetRefundOrder(ctx, req.ID)
+	result, err := orchestrator.GetRefundOrder(ctx, logic.GetRefundOrderInput{
+		ActorUserID: authPayload.UserID,
+		RefundID:    req.ID,
+	})
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("refund order not found")))
+		if writeLogicRequestError(ctx, err) {
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	// 获取支付订单和订单，验证权限
-	paymentOrder, err := server.store.GetPaymentOrder(ctx, refundOrder.PaymentOrderID)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 用户可以查看
-	if paymentOrder.UserID == authPayload.UserID {
-		ctx.JSON(http.StatusOK, newRefundOrderResponse(refundOrder))
-		return
-	}
-
-	// 检查是否是商户
-	if paymentOrder.OrderID.Valid {
-		order, err := server.store.GetOrder(ctx, paymentOrder.OrderID.Int64)
-		if err == nil {
-			merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
-			if err == nil && order.MerchantID == merchant.ID {
-				ctx.JSON(http.StatusOK, newRefundOrderResponse(refundOrder))
-				return
-			}
-		}
-	}
-
-	ctx.JSON(http.StatusForbidden, errorResponse(errors.New("access denied")))
+	ctx.JSON(http.StatusOK, newRefundOrderResponse(result.RefundOrder))
 }
 
 // listRefundOrdersByPayment 获取支付订单的退款列表
 type listRefundOrdersByPaymentRequest struct {
 	ID int64 `uri:"id" binding:"required,min=1"`
+}
+
+type listRefundOrdersByPaymentResponse struct {
+	RefundOrders []refundOrderResponse `json:"refund_orders"`
+	Total        int64                 `json:"total"`
 }
 
 // listRefundOrdersByPayment godoc
@@ -738,7 +1205,7 @@ type listRefundOrdersByPaymentRequest struct {
 // @Accept json
 // @Produce json
 // @Param id path int true "支付订单ID"
-// @Success 200 {array} refundOrderResponse "退款订单列表"
+// @Success 200 {object} listRefundOrdersByPaymentResponse "退款订单列表"
 // @Failure 400 {object} ErrorResponse "请求参数错误"
 // @Failure 401 {object} ErrorResponse "未授权"
 // @Failure 403 {object} ErrorResponse "无访问权限"
@@ -754,47 +1221,30 @@ func (server *Server) listRefundOrdersByPayment(ctx *gin.Context) {
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	orchestrator := server.refundOrchestrator
+	if orchestrator == nil {
+		orchestrator = server.buildRefundOrchestrator()
+	}
 
-	// 获取支付订单
-	paymentOrder, err := server.store.GetPaymentOrder(ctx, req.ID)
+	result, err := orchestrator.ListRefundOrdersByPayment(ctx, logic.ListRefundOrdersByPaymentInput{
+		ActorUserID:    authPayload.UserID,
+		PaymentOrderID: req.ID,
+	})
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("payment order not found")))
+		if writeLogicRequestError(ctx, err) {
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	// 验证权限
-	if paymentOrder.UserID != authPayload.UserID {
-		if paymentOrder.OrderID.Valid {
-			order, err := server.store.GetOrder(ctx, paymentOrder.OrderID.Int64)
-			if err != nil {
-				ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-				return
-			}
-			merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
-			if err != nil || order.MerchantID != merchant.ID {
-				ctx.JSON(http.StatusForbidden, errorResponse(errors.New("access denied")))
-				return
-			}
-		} else {
-			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("access denied")))
-			return
-		}
-	}
-
-	refundOrders, err := server.store.ListRefundOrdersByPaymentOrder(ctx, req.ID)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	resp := make([]refundOrderResponse, len(refundOrders))
-	for i, r := range refundOrders {
+	resp := make([]refundOrderResponse, len(result.RefundOrders))
+	for i, r := range result.RefundOrders {
 		resp[i] = newRefundOrderResponse(r)
 	}
 
-	ctx.JSON(http.StatusOK, resp)
+	ctx.JSON(http.StatusOK, listRefundOrdersByPaymentResponse{
+		RefundOrders: resp,
+		Total:        int64(len(resp)),
+	})
 }

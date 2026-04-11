@@ -5,13 +5,14 @@ import (
 	"fmt"
 	"net/http"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/casbin/casbin/v2"
 	"github.com/casbin/casbin/v2/model"
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
 	"github.com/rs/zerolog/log"
@@ -158,11 +159,16 @@ func (ce *CasbinEnforcer) GetEnforcer() *casbin.Enforcer {
 
 // ==================== Server 集成 ====================
 
-// casbinEnforcer 是 server 级别的 enforcer 实例
-var globalCasbinEnforcer *CasbinEnforcer
+// globalCasbinEnforcer holds the process-wide Casbin enforcer.
+// atomic.Pointer gives lock-free, race-free reads and writes so that
+// concurrent requests and the initialisation path do not require an
+// explicit mutex around the pointer itself.
+var globalCasbinEnforcer atomic.Pointer[CasbinEnforcer]
 
-// InitCasbin 初始化 Casbin enforcer
-// 应在 server 启动时调用
+// InitCasbin initialises the global Casbin enforcer.
+// It is safe to call from multiple goroutines; only the first successful
+// initialisation takes effect because NewServer calls this once at startup
+// before serving requests.
 func InitCasbin(casbinDir string) error {
 	modelPath := filepath.Join(casbinDir, "model.conf")
 	policyPath := filepath.Join(casbinDir, "policy.csv")
@@ -172,18 +178,21 @@ func InitCasbin(casbinDir string) error {
 		return err
 	}
 
-	globalCasbinEnforcer = enforcer
+	globalCasbinEnforcer.Store(enforcer)
 	return nil
 }
 
-// SetGlobalCasbinEnforcer 设置全局 enforcer（用于测试）
+// SetGlobalCasbinEnforcer replaces the global enforcer atomically.
+// Intended for use in tests only.
 func SetGlobalCasbinEnforcer(enforcer *CasbinEnforcer) {
-	globalCasbinEnforcer = enforcer
+	globalCasbinEnforcer.Store(enforcer)
 }
 
-// GetGlobalCasbinEnforcer 获取全局 enforcer
+// GetGlobalCasbinEnforcer returns the current global enforcer.
+// The returned pointer is valid for the lifetime of the process or until
+// the next SetGlobalCasbinEnforcer call.
 func GetGlobalCasbinEnforcer() *CasbinEnforcer {
-	return globalCasbinEnforcer
+	return globalCasbinEnforcer.Load()
 }
 
 // ==================== Casbin 中间件 ====================
@@ -197,24 +206,31 @@ func GetGlobalCasbinEnforcer() *CasbinEnforcer {
 // 注意：此中间件必须在 authMiddleware 之后使用
 func (server *Server) CasbinMiddleware() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		if globalCasbinEnforcer == nil {
-			log.Warn().Msg("Casbin enforcer not initialized, skipping permission check")
-			ctx.Next()
+		enforcer := globalCasbinEnforcer.Load()
+		if enforcer == nil {
+			log.Error().Msg("Casbin enforcer not initialized, denying request")
+			ctx.AbortWithStatusJSON(http.StatusServiceUnavailable, errorResponse(
+				errors.New("permission system unavailable"),
+			))
 			return
 		}
 
 		// 从 context 获取 auth payload
 		authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-		// 查询用户角色
-		userRoles, err := server.store.ListUserRoles(ctx, authPayload.UserID)
-		if err != nil {
-			ctx.AbortWithStatusJSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
+		// 查询用户角色（优先复用已缓存的角色）
+		userRoles, ok := GetUserRolesFromContext(ctx)
+		if !ok {
+			var err error
+			userRoles, err = server.store.ListUserRoles(ctx, authPayload.UserID)
+			if err != nil {
+				ctx.AbortWithStatusJSON(http.StatusInternalServerError, internalError(ctx, err))
+				return
+			}
 
-		// 缓存角色到 context
-		ctx.Set(userRolesKey, userRoles)
+			// 缓存角色到 context
+			ctx.Set(userRolesKey, userRoles)
+		}
 
 		// 提取活跃角色列表
 		activeRoles := make([]string, 0, len(userRoles))
@@ -234,7 +250,7 @@ func (server *Server) CasbinMiddleware() gin.HandlerFunc {
 		act := ctx.Request.Method
 
 		// 使用 Casbin 检查权限
-		allowed, matchedRole, err := globalCasbinEnforcer.EnforceWithRoles(activeRoles, obj, act)
+		allowed, matchedRole, err := enforcer.EnforceWithRoles(activeRoles, obj, act)
 		if err != nil {
 			log.Error().Err(err).
 				Str("path", obj).
@@ -273,9 +289,12 @@ func (server *Server) CasbinMiddleware() gin.HandlerFunc {
 // 适用于需要特定角色的路由组
 func (server *Server) CasbinRoleMiddleware(requiredRole string) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		if globalCasbinEnforcer == nil {
-			log.Warn().Msg("Casbin enforcer not initialized, skipping permission check")
-			ctx.Next()
+		enforcer := globalCasbinEnforcer.Load()
+		if enforcer == nil {
+			log.Error().Msg("Casbin enforcer not initialized, denying request")
+			ctx.AbortWithStatusJSON(http.StatusServiceUnavailable, errorResponse(
+				errors.New("permission system unavailable"),
+			))
 			return
 		}
 
@@ -313,7 +332,7 @@ func (server *Server) CasbinRoleMiddleware(requiredRole string) gin.HandlerFunc 
 		act := ctx.Request.Method
 
 		// 使用 Casbin 检查权限
-		allowed, err := globalCasbinEnforcer.Enforce(requiredRole, obj, act)
+		allowed, err := enforcer.Enforce(requiredRole, obj, act)
 		if err != nil {
 			log.Error().Err(err).
 				Str("path", obj).
@@ -348,7 +367,7 @@ func (server *Server) LoadOperatorMiddleware() gin.HandlerFunc {
 		// 加载 operator 信息
 		operator, err := server.store.GetOperatorByUser(ctx, authPayload.UserID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if isNotFoundError(err) {
 				ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
 					errors.New("operator profile not found"),
 				))
@@ -358,10 +377,10 @@ func (server *Server) LoadOperatorMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		// 检查 operator 状态
-		if operator.Status != "active" {
+		// 检查 operator 状态：审核通过后即可访问运营商页面；仅资金能力依赖微信开户
+		if !isOperatorConsoleAccessibleStatus(operator.Status) {
 			ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
-				errors.New("operator account is not active"),
+				errors.New("operator account is not available"),
 			))
 			return
 		}
@@ -369,6 +388,17 @@ func (server *Server) LoadOperatorMiddleware() gin.HandlerFunc {
 		// 缓存到 context
 		ctx.Set(operatorKey, operator)
 		ctx.Next()
+	}
+}
+
+func isOperatorConsoleAccessibleStatus(status string) bool {
+	switch status {
+	case "active", "bindbank_submitted":
+		// active: 正常入驻后的状态
+		// bindbank_submitted: 绑卡进件进行中（瞬时状态），不影响运营商控制台访问
+		return true
+	default:
+		return false
 	}
 }
 
@@ -384,7 +414,7 @@ func (server *Server) LoadMerchantMiddleware() gin.HandlerFunc {
 			Role:   RoleMerchantOwner,
 		})
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if isNotFoundError(err) {
 				ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
 					errors.New("merchant owner role not found"),
 				))
@@ -404,7 +434,7 @@ func (server *Server) LoadMerchantMiddleware() gin.HandlerFunc {
 		// 加载商户信息
 		merchant, err := server.store.GetMerchant(ctx, userRole.RelatedEntityID.Int64)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if isNotFoundError(err) {
 				ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
 					errors.New("merchant not found"),
 				))
@@ -438,7 +468,7 @@ func (server *Server) LoadRiderMiddleware() gin.HandlerFunc {
 		// 加载骑手信息
 		rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if isNotFoundError(err) {
 				ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
 					errors.New("rider profile not found"),
 				))
@@ -480,23 +510,18 @@ func (server *Server) ValidateOperatorRegionMiddleware(regionParamName string) g
 		}
 
 		// 从 URL 获取区域 ID
-		var uri struct {
-			RegionID int64 `uri:"region_id"`
-			ID       int64 `uri:"id"`
-		}
-		if err := ctx.ShouldBindUri(&uri); err != nil {
-			ctx.AbortWithStatusJSON(http.StatusBadRequest, errorResponse(err))
+		regionParam := ctx.Param(regionParamName)
+		if regionParam == "" {
+			ctx.AbortWithStatusJSON(http.StatusBadRequest, errorResponse(
+				fmt.Errorf("%s is required", regionParamName),
+			))
 			return
 		}
 
-		regionID := uri.RegionID
-		if regionParamName == "id" {
-			regionID = uri.ID
-		}
-
-		if regionID == 0 {
+		regionID, err := strconv.ParseInt(regionParam, 10, 64)
+		if err != nil || regionID <= 0 {
 			ctx.AbortWithStatusJSON(http.StatusBadRequest, errorResponse(
-				errors.New("region_id is required"),
+				fmt.Errorf("invalid %s", regionParamName),
 			))
 			return
 		}
@@ -512,6 +537,19 @@ func (server *Server) ValidateOperatorRegionMiddleware(regionParamName string) g
 		}
 
 		if !manages {
+			attemptRegionID := regionID
+			server.writeAuditLog(ctx, AuditLogInput{
+				ActorUserID: operator.UserID,
+				ActorRole:   "operator",
+				Action:      "region_access_denied",
+				TargetType:  "region",
+				TargetID:    &attemptRegionID,
+				RegionID:    &attemptRegionID,
+				Metadata: map[string]any{
+					"path":   ctx.Request.URL.Path,
+					"method": ctx.Request.Method,
+				},
+			})
 			ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
 				errors.New("you don't have permission to manage this region"),
 			))

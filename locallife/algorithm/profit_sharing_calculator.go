@@ -2,7 +2,6 @@ package algorithm
 
 import (
 	"errors"
-	"math"
 )
 
 // ProfitSharingConfig 分账配置
@@ -152,11 +151,12 @@ func (c *ProfitSharingCalculator) getConfigByOrderSource(orderSource string) Pro
 }
 
 // calculateShare 计算分成金额（向下取整，确保商户利益）
+// 使用纯整数运算避免浮点精度问题：Go 整数除法自然向下取整。
 func (c *ProfitSharingCalculator) calculateShare(amount int64, rate int) int64 {
 	if rate <= 0 || amount <= 0 {
 		return 0
 	}
-	return int64(math.Floor(float64(amount) * float64(rate) / 100))
+	return amount * int64(rate) / 100
 }
 
 // validate 验证分账结果

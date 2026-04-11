@@ -7,7 +7,7 @@ INSERT INTO riders (
     region_id,
     status
 ) VALUES (
-    $1, $2, $3, $4, $5, 'pending'
+    $1, $2, $3, $4, $5, 'approved'
 ) RETURNING *;
 
 -- name: GetRider :one
@@ -162,24 +162,7 @@ LIMIT $3 OFFSET $4;
 SELECT COUNT(*) FROM riders
 WHERE region_id = $1 AND status = $2;
 
--- name: ListOnlineRidersByRegion :many
--- 列出区域内在线骑手
-SELECT * FROM riders
-WHERE region_id = $1 
-    AND is_online = true 
-    AND status = 'active'
-ORDER BY location_updated_at DESC;
-
--- name: UpdateRiderSubMchID :one
--- 更新骑手的微信二级商户号
-UPDATE riders
-SET 
-    sub_mch_id = $2,
-    updated_at = now()
-WHERE id = $1
-RETURNING *;
-
--- name: GetRiderBySubMchID :one
--- 通过二级商户号查找骑手
-SELECT * FROM riders
-WHERE sub_mch_id = $1 LIMIT 1;
+-- name: CountOnlineRidersByRegion :one
+-- 统计区域内当前在线骑手数量
+SELECT COUNT(*) FROM riders
+WHERE region_id = $1 AND is_online = true;

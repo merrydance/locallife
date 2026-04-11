@@ -59,6 +59,54 @@ func (q *Queries) DeleteTag(ctx context.Context, id int64) error {
 	return err
 }
 
+const getActiveCategoriesByRegion = `-- name: GetActiveCategoriesByRegion :many
+SELECT t.id, t.name, t.sort_order, COUNT(DISTINCT mt.merchant_id)::int AS merchant_count
+FROM tags t
+INNER JOIN merchant_tags mt ON t.id = mt.tag_id
+INNER JOIN merchants m ON mt.merchant_id = m.id
+WHERE m.region_id = $1
+  AND m.status = 'active'
+  AND m.deleted_at IS NULL
+  AND t.type = 'merchant'
+  AND t.status = 'active'
+GROUP BY t.id, t.name, t.sort_order
+HAVING COUNT(DISTINCT mt.merchant_id) > 0
+ORDER BY COUNT(DISTINCT mt.merchant_id) DESC, t.sort_order ASC
+`
+
+type GetActiveCategoriesByRegionRow struct {
+	ID            int64  `json:"id"`
+	Name          string `json:"name"`
+	SortOrder     int16  `json:"sort_order"`
+	MerchantCount int32  `json:"merchant_count"`
+}
+
+// 返回指定区域内有商户覆盖的品类标签，按商户数量降序
+func (q *Queries) GetActiveCategoriesByRegion(ctx context.Context, regionID int64) ([]GetActiveCategoriesByRegionRow, error) {
+	rows, err := q.db.Query(ctx, getActiveCategoriesByRegion, regionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetActiveCategoriesByRegionRow{}
+	for rows.Next() {
+		var i GetActiveCategoriesByRegionRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.SortOrder,
+			&i.MerchantCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getTag = `-- name: GetTag :one
 SELECT id, name, type, sort_order, status, created_at FROM tags
 WHERE id = $1 LIMIT 1

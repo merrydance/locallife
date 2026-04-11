@@ -1,4 +1,10 @@
 {
-    "usingComponents": {},
+    "usingComponents": {
+        "custom-navbar": "/components/custom-navbar/index",
+        "t-button": "tdesign-miniprogram/button/button",
+        "t-input": "tdesign-miniprogram/input/input",
+        "t-icon": "tdesign-miniprogram/icon/icon",
+        "t-result": "tdesign-miniprogram/result/result"
+    },
     "navigationBarTitleText": "加入商户"
 }

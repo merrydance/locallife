@@ -1,0 +1,82 @@
+<custom-navbar title="客服中心" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px;">
+  <!-- 快捷入口网格 -->
+  <view class="quick-entry-section">
+    <view class="section-title">我要反馈</view>
+    <view class="entry-grid">
+      <view class="entry-item" bindtap="onQuickEntry" data-type="foreign-object">
+        <view class="entry-icon entry-icon--foreign">
+          <t-icon name="search" size="48rpx" />
+        </view>
+        <text class="entry-label">异物问题</text>
+      </view>
+      <view class="entry-item" bindtap="onQuickEntry" data-type="damage">
+        <view class="entry-icon entry-icon--damage">
+          <t-icon name="heart-filled" size="48rpx" />
+        </view>
+        <text class="entry-label">餐品损坏</text>
+      </view>
+      <view class="entry-item" bindtap="onQuickEntry" data-type="timeout">
+        <view class="entry-icon entry-icon--timeout">
+          <t-icon name="time" size="48rpx" />
+        </view>
+        <text class="entry-label">配送超时</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 我的工单列表 -->
+  <view class="claims-section">
+    <view class="section-title">我的工单</view>
+
+    <!-- 加载中 -->
+    <view wx:if="{{loading}}" class="loading-container">
+      <t-loading theme="circular" size="40rpx" text="加载中..." />
+    </view>
+
+    <!-- 工单列表 -->
+    <view wx:elif="{{claims.length > 0}}" class="claims-list">
+      <view
+        wx:for="{{claims}}"
+        wx:key="id"
+        class="claim-card"
+        bindtap="onClaimDetail"
+        data-id="{{item.id}}"
+      >
+        <view class="claim-header">
+          <t-tag
+            size="small"
+            variant="dark"
+            theme="{{item.statusTheme}}"
+          >{{item.statusText}}</t-tag>
+          <text class="claim-time">{{item.createTimeDisplay}}</text>
+        </view>
+        <view class="claim-body">
+          <view class="claim-type-row">
+            <t-tag size="small" variant="dark">{{item.claimTypeText}}</t-tag>
+            <text class="claim-amount">¥{{item.claimAmountDisplay}}</text>
+          </view>
+          <text class="claim-desc">{{item.statusSummary}}</text>
+          <text wx:if="{{item.description}}" class="claim-desc">{{item.description}}</text>
+        </view>
+        <view wx:if="{{item.approvedAmountDisplay}}" class="claim-footer">
+          <text class="claim-approved">赔付金额：¥{{item.approvedAmountDisplay}}</text>
+        </view>
+        <view wx:if="{{item.payoutEta}}" class="claim-footer">
+          <text class="claim-approved">预计赔付时间：{{item.payoutEta}}</text>
+        </view>
+      </view>
+
+      <!-- 加载更多 -->
+      <view wx:if="{{hasMore}}" class="load-more" bindtap="loadMore">
+        <text>加载更多</text>
+      </view>
+    </view>
+
+    <!-- 空状态 -->
+    <view wx:else class="empty-container">
+      <t-empty icon="info-circle" description="暂无工单记录" />
+    </view>
+  </view>
+</view>

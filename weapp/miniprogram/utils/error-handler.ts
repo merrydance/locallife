@@ -4,6 +4,7 @@
  */
 
 import { logger } from './logger'
+import { getErrorDebugMessage } from './user-facing'
 
 declare const __wxConfig: { envVersion?: string } | undefined
 
@@ -20,6 +21,8 @@ interface ErrorConfig {
   type: ErrorType
   message: string
   userMessage?: string  // 用户友好的提示信息
+  code?: string | number
+  statusCode?: number
   showToast?: boolean   // 是否显示Toast
   duration?: number     // Toast显示时长
   reportError?: boolean // 是否上报错误
@@ -28,13 +31,20 @@ interface ErrorConfig {
 export class AppError extends Error {
   type: ErrorType
   userMessage: string
+  detailMessage: string
+  code?: string | number
+  statusCode?: number
   originalError?: unknown
 
   constructor(config: ErrorConfig, originalError?: unknown) {
-    super(config.message)
+    const displayMessage = config.userMessage || config.message
+    super(displayMessage)
     this.name = 'AppError'
     this.type = config.type
-    this.userMessage = config.userMessage || config.message
+    this.userMessage = displayMessage
+    this.detailMessage = config.message
+    this.code = config.code
+    this.statusCode = config.statusCode
     this.originalError = originalError
   }
 }
@@ -71,9 +81,9 @@ export class ErrorHandler {
 
     // 记录日志(后端服务不可用时使用简洁日志)
     if (ErrorHandler.isBackendUnavailable(appError)) {
-      logger.warn(`[后端服务不可用] ${appError.message}`, undefined, context)
+      logger.warn(`[后端服务不可用] ${appError.detailMessage || appError.message}`, undefined, context)
     } else {
-      logger.error(appError.message, appError.originalError, context)
+      logger.error(appError.detailMessage || appError.message, appError.originalError, context)
     }
 
     // 显示用户提示
@@ -87,19 +97,35 @@ export class ErrorHandler {
      */
   static handleNetworkError(error: unknown, context?: string): AppError {
     const detail = this.resolveErrorText(error) || '未知错误'
+    const normalized = detail.toLowerCase()
+
+    // 根据错误特征提供更精准的用户提示
+    let userMessage = '服务暂时不可用,请稍后重试'
+    if (normalized.includes('timeout') || normalized.includes('timed out')) {
+      userMessage = '服务响应较慢,请稍后重试'
+    } else if (normalized.includes('abort')) {
+      userMessage = '请求已取消'
+    } else if (normalized.includes('offline') || normalized.includes('dns')) {
+      userMessage = '网络不可用,请检查网络设置'
+    } else if (
+      normalized.includes('fail') ||
+      normalized.includes('network')
+    ) {
+      userMessage = '服务暂时不可用,请稍后重试'
+    }
+
     const appError = new AppError({
       type: ErrorType.NETWORK,
       message: `网络请求失败: ${detail}`,
-      userMessage: '网络连接失败,请检查网络设置'
+      userMessage
     }, error)
 
-    // 后端不可用时使用简洁日志
+    // 仅记录日志,不主动弹 Toast（由调用方决定是否展示，避免双重 Toast）
     if (this.isBackendUnavailable(appError)) {
-      logger.warn(`[后端服务不可用] ${appError.message}`, undefined, context)
+      logger.warn(`[后端服务不可用] ${appError.detailMessage || appError.message}`, undefined, context)
     } else {
-      logger.error(appError.message, error, context)
+      logger.error(appError.detailMessage || appError.message, error, context)
     }
-    this.showUserMessage(appError)
 
     return appError
   }
@@ -165,16 +191,7 @@ export class ErrorHandler {
   static isBackendUnavailable(error: unknown): boolean {
     if (!error) return false
 
-    let msg = ''
-    if (error instanceof AppError) {
-      msg = error.message
-    } else if (error instanceof Error) {
-      msg = error.message
-    } else if (typeof error === 'string') {
-      msg = error
-    } else if (typeof error === 'object' && 'message' in error) {
-      msg = String(error.message)
-    }
+        const msg = getErrorDebugMessage(error)
 
     const lowerMsg = msg.toLowerCase()
     return (
@@ -245,7 +262,7 @@ export class ErrorHandler {
       // 开发环境显示详细的网络错误
       wx.showModal({
         title: '开发环境 - 网络错误',
-        content: `${error.userMessage}\n\n技术详情: ${error.message}`,
+        content: `${error.userMessage}\n\n技术详情: ${error.detailMessage || error.message}`,
         showCancel: false,
         confirmText: '知道了'
       })
@@ -287,7 +304,7 @@ export class ErrorHandler {
     } = {}
   ): Promise<T> {
     const { maxRetries = 3, retryDelay = 1000, context } = options
-    let lastError: any
+    let lastError: unknown
 
     for (let i = 0; i < maxRetries; i++) {
       try {

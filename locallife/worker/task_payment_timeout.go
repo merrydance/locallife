@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq"
+	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/rs/zerolog/log"
 )
 
@@ -31,7 +32,7 @@ func (d *RedisTaskDistributor) DistributeTaskPaymentOrderTimeout(
 	}
 
 	task := asynq.NewTask(TaskPaymentOrderTimeout, jsonPayload, opts...)
-	info, err := d.client.EnqueueContext(ctx, task)
+	info, err := d.enqueueTask(ctx, task)
 	if err != nil {
 		return fmt.Errorf("enqueue task: %w", err)
 	}
@@ -64,16 +65,7 @@ func (p *RedisTaskProcessor) ProcessTaskPaymentOrderTimeout(ctx context.Context,
 		return fmt.Errorf("get payment order: %w", err)
 	}
 
-	// 只处理未支付状态的订单
-	if paymentOrder.Status != "pending" {
-		log.Info().
-			Str("payment_order_no", payload.PaymentOrderNo).
-			Str("status", paymentOrder.Status).
-			Msg("payment order is not pending, skip timeout processing")
-		return nil
-	}
-
-	// 检查是否已超时
+	// 检查是否已超时（在关闭之前先检查，避免尚未到期就被错误触发）
 	if paymentOrder.ExpiresAt.Valid && time.Now().Before(paymentOrder.ExpiresAt.Time) {
 		log.Info().
 			Str("payment_order_no", payload.PaymentOrderNo).
@@ -82,16 +74,54 @@ func (p *RedisTaskProcessor) ProcessTaskPaymentOrderTimeout(ctx context.Context,
 		return nil
 	}
 
-	// 更新支付订单状态为超时关闭
-	_, err = p.store.UpdatePaymentOrderToClosed(ctx, paymentOrder.ID)
-	if err != nil {
-		return fmt.Errorf("update payment order status: %w", err)
+	// 状态机：
+	// - pending  → 关闭支付单，然后取消业务订单
+	// - closed   → 支付单已关闭（可能是上次失败后重试），直接检查业务订单并继续
+	// - 其他状态 → 已由其他流程处理，幂等退出
+	switch paymentOrder.Status {
+	case "pending":
+		if _, err := p.store.UpdatePaymentOrderToClosed(ctx, paymentOrder.ID); err != nil {
+			return fmt.Errorf("update payment order to closed: %w", err)
+		}
+	case "closed":
+		// 支付单已经关闭，可能是上次任务执行到一半后失败重试进来的
+		// 继续向下检查业务订单是否也已取消
+		log.Info().
+			Str("payment_order_no", payload.PaymentOrderNo).
+			Msg("payment order already closed, checking business order state")
+	default:
+		log.Info().
+			Str("payment_order_no", payload.PaymentOrderNo).
+			Str("status", paymentOrder.Status).
+			Msg("payment order in terminal state, skip timeout processing")
+		return nil
 	}
 
-	// 如果有微信支付 prepay_id，需要调用微信关单 API
-	// 注意：这里需要注入 PaymentClient，或者通过其他方式调用
-	// 由于关单操作可以延后，这里只更新数据库状态
-	// 微信支付订单会在超时后自动关闭
+	// 取消关联的业务订单（无论是本次刚关闭还是上次已关闭）
+	if paymentOrder.OrderID.Valid {
+		order, err := p.store.GetOrderForUpdate(ctx, paymentOrder.OrderID.Int64)
+		if err != nil {
+			return fmt.Errorf("get order for timeout cancel: %w", err)
+		}
+
+		if order.Status == db.OrderStatusPending {
+			_, err = p.store.CancelOrderTx(ctx, db.CancelOrderTxParams{
+				OrderID:      order.ID,
+				OldStatus:    order.Status,
+				CancelReason: "支付超时未完成",
+				OperatorID:   order.UserID,
+				OperatorType: "system",
+			})
+			if err != nil {
+				return fmt.Errorf("cancel order after payment timeout: %w", err)
+			}
+		} else {
+			log.Info().
+				Int64("order_id", order.ID).
+				Str("status", order.Status).
+				Msg("order already moved past pending, skip timeout cancel")
+		}
+	}
 
 	log.Info().
 		Str("payment_order_no", payload.PaymentOrderNo).

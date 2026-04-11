@@ -24,12 +24,12 @@ SELECT
                 'quantity', ci.quantity,
                 'customizations', ci.customizations,
                 'dish_name', d.name,
-                'dish_image_url', d.image_url,
+                'dish_image_media_asset_id', d.image_media_asset_id,
                 'dish_price', d.price,
                 'dish_member_price', d.member_price,
                 'dish_is_available', d.is_available,
                 'combo_name', cs.name,
-                'combo_image_url', cs.image_url,
+                'combo_image_media_asset_id', cs.image_media_asset_id,
                 'combo_original_price', cs.original_price,
                 'combo_price', cs.combo_price,
                 'combo_is_available', cs.is_online
@@ -38,8 +38,8 @@ SELECT
     )::json AS items
 FROM carts c
 LEFT JOIN cart_items ci ON ci.cart_id = c.id
-LEFT JOIN dishes d ON d.id = ci.dish_id
-LEFT JOIN combo_sets cs ON cs.id = ci.combo_id
+LEFT JOIN dishes d ON d.id = ci.dish_id AND d.deleted_at IS NULL
+LEFT JOIN combo_sets cs ON cs.id = ci.combo_id AND cs.deleted_at IS NULL
 WHERE c.user_id = $1 AND c.merchant_id = $2 AND c.order_type = $3 AND c.table_id IS NOT DISTINCT FROM $4 AND c.reservation_id IS NOT DISTINCT FROM $5
 GROUP BY c.id;
 
@@ -80,26 +80,26 @@ SELECT
     cs.combo_price AS combo_price,
     cs.is_online AS combo_is_available
 FROM cart_items ci
-LEFT JOIN dishes d ON d.id = ci.dish_id
-LEFT JOIN combo_sets cs ON cs.id = ci.combo_id
+LEFT JOIN dishes d ON d.id = ci.dish_id AND d.deleted_at IS NULL
+LEFT JOIN combo_sets cs ON cs.id = ci.combo_id AND cs.deleted_at IS NULL
 WHERE ci.id = $1;
 
 -- name: ListCartItems :many
 SELECT 
     ci.*,
     d.name AS dish_name,
-    d.image_url AS dish_image_url,
+    d.image_media_asset_id AS dish_image_media_asset_id,
     d.price AS dish_price,
     d.member_price AS dish_member_price,
     d.is_available AS dish_is_available,
     cs.name AS combo_name,
-    cs.image_url AS combo_image_url,
+    cs.image_media_asset_id AS combo_image_media_asset_id,
     cs.original_price AS combo_original_price,
     cs.combo_price AS combo_price,
     cs.is_online AS combo_is_available
 FROM cart_items ci
-LEFT JOIN dishes d ON d.id = ci.dish_id
-LEFT JOIN combo_sets cs ON cs.id = ci.combo_id
+LEFT JOIN dishes d ON d.id = ci.dish_id AND d.deleted_at IS NULL
+LEFT JOIN combo_sets cs ON cs.id = ci.combo_id AND cs.deleted_at IS NULL
 WHERE ci.cart_id = $1
 ORDER BY ci.created_at;
 
@@ -107,7 +107,7 @@ ORDER BY ci.created_at;
 SELECT 
     c.*,
     m.name AS merchant_name,
-    m.logo_url AS merchant_logo,
+    m.logo_media_asset_id AS merchant_logo_media_asset_id,
     COUNT(ci.id) AS item_count
 FROM carts c
 JOIN merchants m ON m.id = c.merchant_id
@@ -141,8 +141,8 @@ SELECT
     ), 0)::bigint AS total_amount
 FROM carts c
 LEFT JOIN cart_items ci ON ci.cart_id = c.id
-LEFT JOIN dishes d ON d.id = ci.dish_id
-LEFT JOIN combo_sets cs ON cs.id = ci.combo_id
+LEFT JOIN dishes d ON d.id = ci.dish_id AND d.deleted_at IS NULL
+LEFT JOIN combo_sets cs ON cs.id = ci.combo_id AND cs.deleted_at IS NULL
 WHERE c.user_id = $1 AND (c.order_type = sqlc.narg('order_type') OR sqlc.narg('order_type') IS NULL);
 
 -- name: GetUserCartsWithDetails :many
@@ -154,7 +154,7 @@ SELECT
     c.table_id,
     c.reservation_id,
     m.name AS merchant_name,
-    m.logo_url AS merchant_logo,
+    m.logo_media_asset_id AS merchant_logo_media_asset_id,
     mpc.sub_mch_id AS sub_mchid,
     COUNT(ci.id)::int AS item_count,
     COALESCE(SUM(
@@ -177,8 +177,8 @@ FROM carts c
 JOIN merchants m ON m.id = c.merchant_id
 LEFT JOIN merchant_payment_configs mpc ON mpc.merchant_id = m.id
 LEFT JOIN cart_items ci ON ci.cart_id = c.id
-LEFT JOIN dishes d ON d.id = ci.dish_id
-LEFT JOIN combo_sets cs ON cs.id = ci.combo_id
+LEFT JOIN dishes d ON d.id = ci.dish_id AND d.deleted_at IS NULL
+LEFT JOIN combo_sets cs ON cs.id = ci.combo_id AND cs.deleted_at IS NULL
 WHERE c.user_id = $1 AND (c.order_type = sqlc.narg('order_type') OR sqlc.narg('order_type') IS NULL)
 GROUP BY c.id, c.merchant_id, c.order_type, c.table_id, c.reservation_id, m.id, mpc.sub_mch_id
 HAVING COUNT(ci.id) > 0  -- 只返回有商品的购物车
@@ -202,20 +202,20 @@ ORDER BY c.updated_at DESC;
 SELECT 
     ci.*,
     d.name AS dish_name,
-    d.image_url AS dish_image_url,
+    d.image_media_asset_id AS dish_image_media_asset_id,
     d.price AS dish_price,
     d.member_price AS dish_member_price,
     d.is_available AS dish_is_available,
     d.is_online AS dish_is_online,
     d.merchant_id AS dish_merchant_id,
     cs.name AS combo_name,
-    cs.image_url AS combo_image_url,
+    cs.image_media_asset_id AS combo_image_media_asset_id,
     cs.combo_price AS combo_price,
     cs.is_online AS combo_is_online,
     cs.merchant_id AS combo_merchant_id
 FROM cart_items ci
-LEFT JOIN dishes d ON d.id = ci.dish_id
-LEFT JOIN combo_sets cs ON cs.id = ci.combo_id
+LEFT JOIN dishes d ON d.id = ci.dish_id AND d.deleted_at IS NULL
+LEFT JOIN combo_sets cs ON cs.id = ci.combo_id AND cs.deleted_at IS NULL
 WHERE ci.cart_id = ANY($1::bigint[])
 ORDER BY ci.cart_id, ci.created_at;
 
@@ -233,7 +233,7 @@ SELECT
     c.updated_at,
     c.created_at,
     m.name AS merchant_name,
-    m.logo_url AS merchant_logo,
+    m.logo_media_asset_id AS merchant_logo_media_asset_id,
     m.region_id AS region_id,
     mpc.sub_mch_id AS sub_mchid,
     m.status AS merchant_status,
@@ -244,3 +244,15 @@ JOIN merchants m ON m.id = c.merchant_id
 LEFT JOIN merchant_payment_configs mpc ON mpc.merchant_id = m.id
 WHERE c.user_id = $1 AND c.id = ANY($2::bigint[])
 ORDER BY c.updated_at DESC;
+
+-- name: UpdateCartItemQuantityRelative :one
+-- P1-016 修复：在数据库层确保数量不超过上限（原子性保证）
+UPDATE cart_items
+SET quantity = quantity + sqlc.arg('amount')
+WHERE id = sqlc.arg('id') AND quantity + sqlc.arg('amount') <= 99
+RETURNING *;
+
+-- name: CleanupOldCarts :exec
+-- P1-026: 清理长期未更新的购物车及其商品（ON DELETE CASCADE）
+DELETE FROM carts
+WHERE updated_at < $1;

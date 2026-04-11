@@ -1,74 +1,250 @@
 <custom-navbar title="运营中心" showBack="{{true}}" bind:navheight="onNavHeight" />
 
 <view class="page-container" style="padding-top: {{navBarHeight}}px;">
-  <t-loading wx:if="{{loading}}" theme="circular" size="40rpx" class="loading" />
-
-  <view wx:if="{{!loading}}" class="content responsive-container">
-    <!-- 核心指标 -->
-    <view class="stats-grid responsive-grid-4">
-      <view class="stat-card">
-        <text class="label">总GMV</text>
-        <text class="value">¥{{stats.total_gmv_display}}</text>
-      </view>
-      <view class="stat-card">
-        <text class="label">总订单</text>
-        <text class="value">{{stats.total_orders}}</text>
-      </view>
-      <view class="stat-card">
-        <text class="label">活跃商户</text>
-        <text class="value">{{stats.active_merchants}}</text>
-      </view>
-      <view class="stat-card">
-        <text class="label">活跃骑手</text>
-        <text class="value">{{stats.active_riders}}</text>
-      </view>
+  <view wx:if="{{error && !initialLoading}}" class="console-error-banner">
+    <view class="console-error-banner__body">
+      <t-icon name="error-circle" size="32rpx" color="var(--td-warning-color-7)" />
+      <text class="console-error-banner__text">{{error}}</text>
     </view>
+    <view class="console-error-banner__actions">
+      <t-button wx:if="{{errorCanRetry}}" theme="primary" size="small" bindtap="onRetry" shape="round">重新加载</t-button>
+      <t-button wx:if="{{showApplymentEntry}}" theme="primary" variant="outline" size="small" bindtap="onOpenApplyment" shape="round">去微信开户</t-button>
+    </view>
+  </view>
 
-    <!-- 待办事项 -->
-    <view class="todo-section">
-      <view class="section-title">待办审批</view>
-      <view wx:if="{{pending_approvals.length === 0}}" class="empty">
-        <t-empty description="暂无待办事项" />
-      </view>
+  <!-- Loading (Skeleton) -->
+  <view wx:if="{{initialLoading}}" class="skeleton-container animate-fade-in">
+    <view class="skeleton-header-card"></view>
+    <view class="stats-skeleton">
+      <card-skeleton wx:for="{{4}}" wx:key="index" t-class="stat-skeleton-item" />
+    </view>
+    <list-skeleton row="3" t-class="section-skeleton" />
+  </view>
+
+  <view wx:else class="content animate-fade-in">
       
-      <view wx:else class="approval-list">
-        <view wx:for="{{pending_approvals}}" wx:key="id" class="approval-item">
-          <view class="item-info">
-            <t-tag theme="primary" variant="light" size="small" class="tag">
-              {{item.type === 'MERCHANT_JOIN' ? '商户' : '骑手'}}
-            </t-tag>
-            <text class="item-name">{{item.name}}</text>
-            <text class="item-time">{{item.created_at}}</text>
+      <!-- 1. 资产/收入概览卡片 (Premium Glassmorphism Style) -->
+      <view class="finance-section">
+        <view class="finance-card">
+          <view class="finance-header">
+            <view class="balance-title">可提现余额 (元)</view>
+            <!-- 多区域时显示区域切换器 -->
+            <picker wx:if="{{regions.length > 1}}" mode="selector" range="{{regions}}" range-key="name" value="{{selectedRegionIdx}}" bindchange="onRegionChange">
+              <view class="region-pill">
+                <t-icon name="map" size="26rpx" color="rgba(255,255,255,0.85)" />
+                <text class="region-pill-name">{{regions[selectedRegionIdx].name}}</text>
+                <t-icon name="chevron-down" size="22rpx" color="rgba(255,255,255,0.85)" />
+              </view>
+            </picker>
+            <view wx:elif="{{regions.length === 1}}" class="region-pill region-pill--static">
+              <t-icon name="map" size="26rpx" color="rgba(255,255,255,0.8)" />
+              <text class="region-pill-name">{{regions[0].name}}</text>
+            </view>
           </view>
-          <view class="item-actions">
-            <t-button size="small" theme="danger" variant="text" data-id="{{item.id}}" bindtap="onReject">拒绝</t-button>
-            <t-button size="small" theme="primary" data-id="{{item.id}}" bindtap="onApprove">通过</t-button>
+          <view class="balance-value">{{finance.balance_display}}</view>
+          <view class="income-row">
+            <view class="income-item">
+              <text class="income-label">今日收入</text>
+              <text class="income-value">+{{stats.today_income_display}}</text>
+            </view>
+            <view class="divider-v"></view>
+            <view class="income-item">
+              <text class="income-label">本月收入</text>
+              <text class="income-value">{{finance.current_month_income_display}}</text>
+            </view>
+          </view>
+          <view class="finance-actions">
+            <navigator url="/pages/operator/finance/withdraw/index" class="finance-link-pill">佣金明细</navigator>
+            <navigator url="/pages/operator/applyment/index" class="finance-link-pill finance-link-pill--ghost">开户状态</navigator>
           </view>
         </view>
       </view>
-    </view>
 
-    <!-- 快捷入口 -->
-    <view class="shortcuts-section">
-      <view class="section-title">快捷管理</view>
-      <view class="shortcuts-grid">
-        <navigator url="/pages/operator/merchants/index" class="shortcut-item">
-          <t-icon name="shop" size="48rpx" color="#0052D9" />
-          <text>商户管理</text>
-        </navigator>
-        <navigator url="/pages/operator/rules/index" class="shortcut-item">
-          <t-icon name="setting" size="48rpx" color="#00A870" />
-          <text>规则配置</text>
-        </navigator>
-        <navigator url="/pages/operator/automation/index" class="shortcut-item">
-          <t-icon name="control-platform" size="48rpx" color="#ED7B2F" />
-          <text>自动化</text>
-        </navigator>
-        <navigator url="/pages/operator/claims/index" class="shortcut-item">
-          <t-icon name="error-circle" size="48rpx" color="#E34D59" />
-          <text>异常仲裁</text>
-        </navigator>
+      <!-- 2. 数据维度切换与核心指标 -->
+      <view class="data-section">
+        <view class="section-header">
+          <view class="section-title">核心体检</view>
+          <navigator url="/pages/operator/analytics/index" class="section-link">查看分析</navigator>
+          <t-tabs t-class="dimension-tabs" value="{{timeDimension}}" bindchange="onTimeDimensionChange" theme="tag" space-evenly="{{false}}">
+            <t-tab-panel label="今日" value="day" />
+            <t-tab-panel label="近7天" value="week" />
+            <t-tab-panel label="近30天" value="month" />
+          </t-tabs>
+        </view>
+
+        <view class="stats-grid">
+          <view class="stat-item">
+            <text class="stat-label">GMV (元)</text>
+            <text class="stat-value">{{timeDimension === 'day' ? stats.today_gmv_display : stats.total_gmv_display}}</text>
+          </view>
+          <view class="stat-item">
+            <text class="stat-label">订单量 (单)</text>
+            <text class="stat-value">{{timeDimension === 'day' ? stats.today_orders : stats.total_orders}}</text>
+          </view>
+          <view class="stat-item">
+            <text class="stat-label">活跃商户</text>
+            <text class="stat-value">{{stats.active_merchants}}</text>
+          </view>
+          <view class="stat-item">
+            <text class="stat-label">活跃骑手</text>
+            <text class="stat-value">{{stats.active_riders}}</text>
+          </view>
+        </view>
       </view>
-    </view>
+
+      <!-- 3. 待办事项 (Critical Actions) -->
+      <view class="todo-section" wx:if="{{pending_count > 0}}">
+        <view class="section-header">
+          <view class="section-title">待办审批 <t-badge count="{{pending_count}}" t-class="badge-custom" /></view>
+          <view class="view-all" bindtap="onPendingViewAll">查看全部</view>
+        </view>
+        <view class="approval-list">
+          <view wx:for="{{pending_approvals}}" wx:key="id" class="approval-item" bindtap="onPendingTap" data-id="{{item.id}}" data-type="{{item.type}}">
+            <view class="item-icon-box type-{{item.type}}">
+              <t-icon name="{{item.type === 'MERCHANT' ? 'shop' : (item.type === 'RIDER' ? 'user-circle' : 'chat')}}" size="32rpx" color="#fff" />
+            </view>
+            <view class="item-content">
+              <view class="item-name">{{item.name}}</view>
+              <view class="item-time">申请时间: {{item.time}}</view>
+            </view>
+            <t-icon name="chevron-right" size="32rpx" color="#BBBBBB" />
+          </view>
+        </view>
+      </view>
+
+      <view class="alert-section">
+        <view class="section-header">
+          <view class="section-title">异常退款人工处理</view>
+          <view class="alert-section-note">实时告警</view>
+        </view>
+
+        <view class="alert-panel">
+          <t-empty wx:if="{{alertFeedReady && abnormalRefundAlerts.length === 0}}" description="当前没有待人工介入的异常退款" />
+          <view
+            wx:for="{{abnormalRefundAlerts}}"
+            wx:key="refundOrderId"
+            class="alert-item"
+            bindtap="onAbnormalRefundAlertTap"
+            data-index="{{index}}"
+          >
+            <view class="alert-item__head">
+              <view class="alert-item__title-wrap">
+                <text class="alert-item__title">{{item.title}}</text>
+                <t-tag theme="danger" variant="dark">需平台管理员</t-tag>
+              </view>
+              <text class="alert-item__time">{{item.timeDisplay}}</text>
+            </view>
+            <view class="alert-item__message">{{item.message}}</view>
+            <view class="alert-item__meta">
+              <text class="alert-item__meta-text">退款单 #{{item.refundOrderId}}</text>
+              <text class="alert-item__meta-text">微信退款ID {{item.refundId}}</text>
+              <text class="alert-item__meta-text">默认 {{item.defaultType}}</text>
+            </view>
+            <view class="alert-item__footer">点按查看说明或复制处理参数</view>
+          </view>
+        </view>
+      </view>
+
+      <!-- 4. 快捷功能矩阵 (Premium Icons) -->
+      <view class="menu-section">
+        <view class="section-header">
+          <view class="section-title">业务管理</view>
+        </view>
+        <view class="menu-grid">
+          <navigator url="/pages/operator/analytics/index" class="menu-item">
+            <view class="menu-icon-bg color-primary">
+              <t-icon name="chart-bar" size="48rpx" />
+            </view>
+            <text>数据分析</text>
+          </navigator>
+          <navigator url="/pages/operator/merchants/index?region_id={{selectedRegionId}}" class="menu-item">
+            <view class="menu-icon-bg color-info">
+              <t-icon name="shop" size="48rpx" />
+            </view>
+            <text>商户管理</text>
+          </navigator>
+          <navigator url="/pages/operator/riders/index?region_id={{selectedRegionId}}" class="menu-item">
+            <view class="menu-icon-bg color-warning">
+              <t-icon name="user-circle" size="48rpx" />
+            </view>
+            <text>骑手管理</text>
+          </navigator>
+          <navigator url="/pages/operator/appeal/list/index?region_id={{selectedRegionId}}" class="menu-item">
+            <view class="menu-icon-bg color-error">
+              <t-icon name="chat" size="48rpx" />
+            </view>
+            <text>客诉处理</text>
+          </navigator>
+          <navigator url="/pages/operator/safety/report/index" class="menu-item">
+            <view class="menu-icon-bg color-danger">
+              <t-icon name="error-circle" size="48rpx" />
+            </view>
+            <text>食安熔断</text>
+          </navigator>
+          <navigator url="/pages/operator/finance/withdraw/index" class="menu-item">
+            <view class="menu-icon-bg color-success">
+              <t-icon name="chart-bar" size="48rpx" />
+            </view>
+            <text>提现管理</text>
+          </navigator>
+          <navigator url="/pages/operator/applyment/index" class="menu-item">
+            <view class="menu-icon-bg color-default">
+              <t-icon name="secured" size="48rpx" />
+            </view>
+            <text>微信开户</text>
+          </navigator>
+          <navigator url="/pages/operator/rules/index?region_id={{selectedRegionId}}&region_name={{regions[selectedRegionIdx].name}}" class="menu-item">
+            <view class="menu-icon-bg color-default">
+              <t-icon name="setting" size="48rpx" />
+            </view>
+            <text>规则配置</text>
+          </navigator>
+          <navigator url="/pages/operator/region-expansion/index" class="menu-item">
+            <view class="menu-icon-bg color-primary">
+              <t-icon name="location" size="48rpx" />
+            </view>
+            <text>申请更多区域</text>
+          </navigator>
+        </view>
+      </view>
+      
+      <!-- 5. 榜单统计 (Comparison) -->
+      <view class="ranking-section">
+        <view class="section-header">
+          <t-tabs value="{{rankingType}}" bindchange="onRankingTypeChange" theme="tag" t-class="ranking-tabs">
+            <t-tab-panel label="商家榜" value="merchant" />
+            <t-tab-panel label="骑手榜" value="rider" />
+          </t-tabs>
+          <view class="ranking-label">{{timeDimension === 'day' ? '今日' : (timeDimension === 'week' ? '本周' : '本月')}}排行</view>
+        </view>
+
+        <!-- Merchant Rankings -->
+        <view wx:if="{{rankingType === 'merchant'}}" class="ranking-list">
+          <t-empty wx:if="{{merchantRankings.length === 0}}" description="暂无排行数据" />
+          <view wx:for="{{merchantRankings}}" wx:key="merchant_id" class="ranking-item">
+            <view class="rank-num {{index < 3 ? 'top-' + (index + 1) : ''}}">{{index + 1}}</view>
+            <view class="rank-main">
+              <view class="rank-name">{{item.merchant_name}}</view>
+              <view class="rank-sub">订单 {{item.order_count}} | 佣金 ¥{{item.total_commission / 100}}</view>
+            </view>
+            <view class="rank-val">¥{{item.total_sales / 100}}</view>
+          </view>
+        </view>
+
+        <!-- Rider Rankings -->
+        <view wx:if="{{rankingType === 'rider'}}" class="ranking-list">
+          <t-empty wx:if="{{riderRankings.length === 0}}" description="暂无排行数据" />
+          <view wx:for="{{riderRankings}}" wx:key="rider_id" class="ranking-item">
+            <view class="rank-num {{index < 3 ? 'top-' + (index + 1) : ''}}">{{index + 1}}</view>
+            <view class="rank-main">
+              <view class="rank-name">{{item.rider_name}}</view>
+              <view class="rank-sub">配送 {{item.delivery_count}}单 | 准时率 {{item.completion_rate}}%</view>
+            </view>
+            <view class="rank-val">¥{{item.total_earnings / 100}}</view>
+          </view>
+        </view>
+      </view>
+
+      <view class="safe-bottom"></view>
   </view>
 </view>

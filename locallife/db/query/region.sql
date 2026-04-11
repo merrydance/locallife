@@ -18,11 +18,40 @@ WHERE id = $1 LIMIT 1;
 SELECT * FROM regions
 WHERE code = $1 LIMIT 1;
 
+-- name: GetRegionByProviderCode :one
+SELECT r.* FROM region_external_mappings rem
+JOIN regions r ON r.id = rem.region_id
+WHERE rem.provider = $1 AND rem.external_code = $2
+LIMIT 1;
+
+-- name: UpsertRegionExternalMapping :one
+INSERT INTO region_external_mappings (
+  region_id,
+  provider,
+  external_code,
+  external_name
+) VALUES (
+  $1, $2, $3, $4
+)
+ON CONFLICT (provider, external_code)
+DO UPDATE SET
+  region_id = EXCLUDED.region_id,
+  external_name = EXCLUDED.external_name
+RETURNING *;
+
+-- name: GetRegionByNameAndLevel :one
+SELECT * FROM regions
+WHERE name = $1 AND level = $2 LIMIT 1;
+
+-- name: GetRegionByNameAndParent :one
+SELECT * FROM regions
+WHERE name = $1 AND parent_id = $2 LIMIT 1;
+
 -- name: ListRegions :many
 SELECT * FROM regions
 WHERE 
   CASE 
-    WHEN sqlc.narg(parent_id)::bigint IS NULL THEN parent_id IS NULL
+    WHEN sqlc.narg(parent_id)::bigint IS NULL THEN TRUE
     ELSE parent_id = sqlc.narg(parent_id)
   END
   AND CASE
@@ -76,7 +105,7 @@ SET qweather_location_id = $2
 WHERE id = $1;
 
 -- name: ListAvailableRegions :many
--- 获取未被运营商占用的区域列表（优化：避免 N+1 查询）
+-- 获取可申请区域列表：排除已被有效运营商占用，且排除已提交/已通过的申请占坑
 SELECT 
   r.*,
   p.name as parent_name
@@ -84,7 +113,23 @@ FROM regions r
 LEFT JOIN regions p ON r.parent_id = p.id
 WHERE 
   NOT EXISTS (
+    SELECT 1
+    FROM operator_regions or_t
+    JOIN operators o ON o.id = or_t.operator_id
+    WHERE or_t.region_id = r.id
+      AND or_t.status = 'active'
+      AND o.status = 'active'
+  )
+  AND
+  NOT EXISTS (
     SELECT 1 FROM operators o WHERE o.region_id = r.id
+  )
+  AND
+  NOT EXISTS (
+    SELECT 1
+    FROM operator_applications oa
+    WHERE oa.region_id = r.id
+      AND oa.status IN ('submitted', 'approved')
   )
   AND CASE 
     WHEN sqlc.narg(parent_id)::bigint IS NULL THEN TRUE
@@ -101,7 +146,9 @@ OFFSET $2;
 -- name: GetClosestRegion :one
 -- 根据经纬度获取最近的区县级区域
 SELECT * FROM regions
-WHERE level = 3
+WHERE level IN (3, 4)
+  AND longitude IS NOT NULL
+  AND latitude IS NOT NULL
 ORDER BY (
     6371000 * acos(
         cos(radians(sqlc.arg(lat)::float8)) * cos(radians(latitude)) * 

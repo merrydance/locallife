@@ -1,14 +1,6 @@
 /// <reference path="./types/index.d.ts" />
 
-/** 设备平台信息（用于跨平台适配） */
-interface DevicePlatformInfo {
-    type: string          // platform 原始值：android, ios, ohos, windows, mac, ohos_pc, devtools
-    isAndroid: boolean    // Android 手机
-    isIos: boolean        // iOS 设备
-    isOhos: boolean       // 鸿蒙 Next 手机
-    isPc: boolean         // PC 端（Windows/Mac/鸿蒙PC）
-    isDevtools: boolean   // 开发者工具
-}
+
 
 interface IAppOption {
     globalData: {
@@ -24,8 +16,12 @@ interface IAppOption {
         latitude: number | null
         longitude: number | null
         userRole: 'guest' | 'customer' | 'merchant' | 'rider' | 'operator'
+        // 完整角色列表（小写），由 user_center 首次拉取后缓存，用于 onShow 快速恢复工作台
+        userRoles?: string[]
+        userWorkbenches?: import('../miniprogram/api/auth').UserWorkbenchResponse[]
         userId?: number
         merchantId?: string
+        merchantName?: string
         // 多店铺切换支持
         currentMerchantId?: number
         merchantInfo?: {
@@ -35,8 +31,7 @@ interface IAppOption {
             is_open: boolean
             status: string
         }
-        // 设备平台信息（用于跨平台适配）
-        devicePlatform: DevicePlatformInfo | null
+
         // (内部使用) 上次定位上下文
         _lastLocationContext?: {
             lat: number
@@ -45,9 +40,11 @@ interface IAppOption {
             name: string
             address?: string
         } | null
+        // 微信发货信息管理：等待确认收货的订单ID
+        pendingConfirmOrderId?: number
     }
     userInfoReadyCallback?: WechatMiniprogram.GetUserInfoSuccessCallback
-    silentLogin(): void
+    silentLogin(attempt?: number): void
     getLocation(): void
     getLocationCoordinates(): void
     reverseGeocodeWhenReady(retryCount?: number): Promise<void>
@@ -55,7 +52,11 @@ interface IAppOption {
     bootstrapDemoUser(): void
     reportErrorToMonitor(error: any, type: string): void
     clearApiCache(): void
-    initDevicePlatform(): void
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    _applyUserInfo(user: any): void
+    _refreshThenLoadUser(max: number, delays: number[]): void
+    _doWxLogin(attempt: number, max: number, delays: number[]): void
+
 }
 
 // 微信小程序 Performance API 扩展

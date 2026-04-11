@@ -24,6 +24,19 @@ func (q *Queries) CountOnlineRiders(ctx context.Context) (int64, error) {
 	return count, err
 }
 
+const countOnlineRidersByRegion = `-- name: CountOnlineRidersByRegion :one
+SELECT COUNT(*) FROM riders
+WHERE region_id = $1 AND is_online = true
+`
+
+// 统计区域内当前在线骑手数量
+func (q *Queries) CountOnlineRidersByRegion(ctx context.Context, regionID pgtype.Int8) (int64, error) {
+	row := q.db.QueryRow(ctx, countOnlineRidersByRegion, regionID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countRidersByRegion = `-- name: CountRidersByRegion :one
 SELECT COUNT(*) FROM riders
 WHERE region_id = $1
@@ -76,8 +89,8 @@ INSERT INTO riders (
     region_id,
     status
 ) VALUES (
-    $1, $2, $3, $4, $5, 'pending'
-) RETURNING id, user_id, real_name, id_card_no, phone, deposit_amount, frozen_deposit, status, is_online, credit_score, current_longitude, current_latitude, location_updated_at, total_orders, total_earnings, online_duration, created_at, updated_at, region_id, application_id, sub_mch_id
+    $1, $2, $3, $4, $5, 'approved'
+) RETURNING id, user_id, real_name, id_card_no, phone, deposit_amount, frozen_deposit, status, is_online, credit_score, current_longitude, current_latitude, location_updated_at, total_orders, total_earnings, online_duration, created_at, updated_at, region_id, application_id
 `
 
 type CreateRiderParams struct {
@@ -118,7 +131,6 @@ func (q *Queries) CreateRider(ctx context.Context, arg CreateRiderParams) (Rider
 		&i.UpdatedAt,
 		&i.RegionID,
 		&i.ApplicationID,
-		&i.SubMchID,
 	)
 	return i, err
 }
@@ -130,7 +142,7 @@ SET
     updated_at = now()
 WHERE id = $1
   AND deposit_amount >= $2  -- 确保余额充足
-RETURNING id, user_id, real_name, id_card_no, phone, deposit_amount, frozen_deposit, status, is_online, credit_score, current_longitude, current_latitude, location_updated_at, total_orders, total_earnings, online_duration, created_at, updated_at, region_id, application_id, sub_mch_id
+RETURNING id, user_id, real_name, id_card_no, phone, deposit_amount, frozen_deposit, status, is_online, credit_score, current_longitude, current_latitude, location_updated_at, total_orders, total_earnings, online_duration, created_at, updated_at, region_id, application_id
 `
 
 type DeductRiderDepositParams struct {
@@ -163,13 +175,12 @@ func (q *Queries) DeductRiderDeposit(ctx context.Context, arg DeductRiderDeposit
 		&i.UpdatedAt,
 		&i.RegionID,
 		&i.ApplicationID,
-		&i.SubMchID,
 	)
 	return i, err
 }
 
 const getRider = `-- name: GetRider :one
-SELECT id, user_id, real_name, id_card_no, phone, deposit_amount, frozen_deposit, status, is_online, credit_score, current_longitude, current_latitude, location_updated_at, total_orders, total_earnings, online_duration, created_at, updated_at, region_id, application_id, sub_mch_id FROM riders
+SELECT id, user_id, real_name, id_card_no, phone, deposit_amount, frozen_deposit, status, is_online, credit_score, current_longitude, current_latitude, location_updated_at, total_orders, total_earnings, online_duration, created_at, updated_at, region_id, application_id FROM riders
 WHERE id = $1 LIMIT 1
 `
 
@@ -197,48 +208,12 @@ func (q *Queries) GetRider(ctx context.Context, id int64) (Rider, error) {
 		&i.UpdatedAt,
 		&i.RegionID,
 		&i.ApplicationID,
-		&i.SubMchID,
-	)
-	return i, err
-}
-
-const getRiderBySubMchID = `-- name: GetRiderBySubMchID :one
-SELECT id, user_id, real_name, id_card_no, phone, deposit_amount, frozen_deposit, status, is_online, credit_score, current_longitude, current_latitude, location_updated_at, total_orders, total_earnings, online_duration, created_at, updated_at, region_id, application_id, sub_mch_id FROM riders
-WHERE sub_mch_id = $1 LIMIT 1
-`
-
-// 通过二级商户号查找骑手
-func (q *Queries) GetRiderBySubMchID(ctx context.Context, subMchID pgtype.Text) (Rider, error) {
-	row := q.db.QueryRow(ctx, getRiderBySubMchID, subMchID)
-	var i Rider
-	err := row.Scan(
-		&i.ID,
-		&i.UserID,
-		&i.RealName,
-		&i.IDCardNo,
-		&i.Phone,
-		&i.DepositAmount,
-		&i.FrozenDeposit,
-		&i.Status,
-		&i.IsOnline,
-		&i.CreditScore,
-		&i.CurrentLongitude,
-		&i.CurrentLatitude,
-		&i.LocationUpdatedAt,
-		&i.TotalOrders,
-		&i.TotalEarnings,
-		&i.OnlineDuration,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.RegionID,
-		&i.ApplicationID,
-		&i.SubMchID,
 	)
 	return i, err
 }
 
 const getRiderByUserID = `-- name: GetRiderByUserID :one
-SELECT id, user_id, real_name, id_card_no, phone, deposit_amount, frozen_deposit, status, is_online, credit_score, current_longitude, current_latitude, location_updated_at, total_orders, total_earnings, online_duration, created_at, updated_at, region_id, application_id, sub_mch_id FROM riders
+SELECT id, user_id, real_name, id_card_no, phone, deposit_amount, frozen_deposit, status, is_online, credit_score, current_longitude, current_latitude, location_updated_at, total_orders, total_earnings, online_duration, created_at, updated_at, region_id, application_id FROM riders
 WHERE user_id = $1 LIMIT 1
 `
 
@@ -266,7 +241,6 @@ func (q *Queries) GetRiderByUserID(ctx context.Context, userID int64) (Rider, er
 		&i.UpdatedAt,
 		&i.RegionID,
 		&i.ApplicationID,
-		&i.SubMchID,
 	)
 	return i, err
 }
@@ -293,7 +267,7 @@ func (q *Queries) GetRiderForDeposit(ctx context.Context, id int64) (GetRiderFor
 }
 
 const getRiderForUpdate = `-- name: GetRiderForUpdate :one
-SELECT id, user_id, real_name, id_card_no, phone, deposit_amount, frozen_deposit, status, is_online, credit_score, current_longitude, current_latitude, location_updated_at, total_orders, total_earnings, online_duration, created_at, updated_at, region_id, application_id, sub_mch_id FROM riders
+SELECT id, user_id, real_name, id_card_no, phone, deposit_amount, frozen_deposit, status, is_online, credit_score, current_longitude, current_latitude, location_updated_at, total_orders, total_earnings, online_duration, created_at, updated_at, region_id, application_id FROM riders
 WHERE id = $1 LIMIT 1
 FOR UPDATE
 `
@@ -322,13 +296,12 @@ func (q *Queries) GetRiderForUpdate(ctx context.Context, id int64) (Rider, error
 		&i.UpdatedAt,
 		&i.RegionID,
 		&i.ApplicationID,
-		&i.SubMchID,
 	)
 	return i, err
 }
 
 const listNearbyRiders = `-- name: ListNearbyRiders :many
-SELECT id, user_id, real_name, id_card_no, phone, deposit_amount, frozen_deposit, status, is_online, credit_score, current_longitude, current_latitude, location_updated_at, total_orders, total_earnings, online_duration, created_at, updated_at, region_id, application_id, sub_mch_id, 
+SELECT id, user_id, real_name, id_card_no, phone, deposit_amount, frozen_deposit, status, is_online, credit_score, current_longitude, current_latitude, location_updated_at, total_orders, total_earnings, online_duration, created_at, updated_at, region_id, application_id, 
     (6371000 * acos(
         LEAST(1::float8, GREATEST(-1::float8,
             cos(radians($1::float8)) * cos(radians(current_latitude::float8)) * 
@@ -380,7 +353,6 @@ type ListNearbyRidersRow struct {
 	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
 	RegionID          pgtype.Int8        `json:"region_id"`
 	ApplicationID     pgtype.Int8        `json:"application_id"`
-	SubMchID          pgtype.Text        `json:"sub_mch_id"`
 	Distance          int32              `json:"distance"`
 }
 
@@ -419,7 +391,6 @@ func (q *Queries) ListNearbyRiders(ctx context.Context, arg ListNearbyRidersPara
 			&i.UpdatedAt,
 			&i.RegionID,
 			&i.ApplicationID,
-			&i.SubMchID,
 			&i.Distance,
 		); err != nil {
 			return nil, err
@@ -433,7 +404,7 @@ func (q *Queries) ListNearbyRiders(ctx context.Context, arg ListNearbyRidersPara
 }
 
 const listOnlineRiders = `-- name: ListOnlineRiders :many
-SELECT id, user_id, real_name, id_card_no, phone, deposit_amount, frozen_deposit, status, is_online, credit_score, current_longitude, current_latitude, location_updated_at, total_orders, total_earnings, online_duration, created_at, updated_at, region_id, application_id, sub_mch_id FROM riders
+SELECT id, user_id, real_name, id_card_no, phone, deposit_amount, frozen_deposit, status, is_online, credit_score, current_longitude, current_latitude, location_updated_at, total_orders, total_earnings, online_duration, created_at, updated_at, region_id, application_id FROM riders
 WHERE is_online = true AND status = 'active'
 ORDER BY location_updated_at DESC
 `
@@ -468,58 +439,6 @@ func (q *Queries) ListOnlineRiders(ctx context.Context) ([]Rider, error) {
 			&i.UpdatedAt,
 			&i.RegionID,
 			&i.ApplicationID,
-			&i.SubMchID,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listOnlineRidersByRegion = `-- name: ListOnlineRidersByRegion :many
-SELECT id, user_id, real_name, id_card_no, phone, deposit_amount, frozen_deposit, status, is_online, credit_score, current_longitude, current_latitude, location_updated_at, total_orders, total_earnings, online_duration, created_at, updated_at, region_id, application_id, sub_mch_id FROM riders
-WHERE region_id = $1 
-    AND is_online = true 
-    AND status = 'active'
-ORDER BY location_updated_at DESC
-`
-
-// 列出区域内在线骑手
-func (q *Queries) ListOnlineRidersByRegion(ctx context.Context, regionID pgtype.Int8) ([]Rider, error) {
-	rows, err := q.db.Query(ctx, listOnlineRidersByRegion, regionID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []Rider{}
-	for rows.Next() {
-		var i Rider
-		if err := rows.Scan(
-			&i.ID,
-			&i.UserID,
-			&i.RealName,
-			&i.IDCardNo,
-			&i.Phone,
-			&i.DepositAmount,
-			&i.FrozenDeposit,
-			&i.Status,
-			&i.IsOnline,
-			&i.CreditScore,
-			&i.CurrentLongitude,
-			&i.CurrentLatitude,
-			&i.LocationUpdatedAt,
-			&i.TotalOrders,
-			&i.TotalEarnings,
-			&i.OnlineDuration,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.RegionID,
-			&i.ApplicationID,
-			&i.SubMchID,
 		); err != nil {
 			return nil, err
 		}
@@ -532,7 +451,7 @@ func (q *Queries) ListOnlineRidersByRegion(ctx context.Context, regionID pgtype.
 }
 
 const listRidersByRegion = `-- name: ListRidersByRegion :many
-SELECT id, user_id, real_name, id_card_no, phone, deposit_amount, frozen_deposit, status, is_online, credit_score, current_longitude, current_latitude, location_updated_at, total_orders, total_earnings, online_duration, created_at, updated_at, region_id, application_id, sub_mch_id FROM riders
+SELECT id, user_id, real_name, id_card_no, phone, deposit_amount, frozen_deposit, status, is_online, credit_score, current_longitude, current_latitude, location_updated_at, total_orders, total_earnings, online_duration, created_at, updated_at, region_id, application_id FROM riders
 WHERE region_id = $1
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3
@@ -575,7 +494,6 @@ func (q *Queries) ListRidersByRegion(ctx context.Context, arg ListRidersByRegion
 			&i.UpdatedAt,
 			&i.RegionID,
 			&i.ApplicationID,
-			&i.SubMchID,
 		); err != nil {
 			return nil, err
 		}
@@ -588,7 +506,7 @@ func (q *Queries) ListRidersByRegion(ctx context.Context, arg ListRidersByRegion
 }
 
 const listRidersByRegionWithStatus = `-- name: ListRidersByRegionWithStatus :many
-SELECT id, user_id, real_name, id_card_no, phone, deposit_amount, frozen_deposit, status, is_online, credit_score, current_longitude, current_latitude, location_updated_at, total_orders, total_earnings, online_duration, created_at, updated_at, region_id, application_id, sub_mch_id FROM riders
+SELECT id, user_id, real_name, id_card_no, phone, deposit_amount, frozen_deposit, status, is_online, credit_score, current_longitude, current_latitude, location_updated_at, total_orders, total_earnings, online_duration, created_at, updated_at, region_id, application_id FROM riders
 WHERE region_id = $1 AND status = $2
 ORDER BY created_at DESC
 LIMIT $3 OFFSET $4
@@ -637,7 +555,6 @@ func (q *Queries) ListRidersByRegionWithStatus(ctx context.Context, arg ListRide
 			&i.UpdatedAt,
 			&i.RegionID,
 			&i.ApplicationID,
-			&i.SubMchID,
 		); err != nil {
 			return nil, err
 		}
@@ -650,7 +567,7 @@ func (q *Queries) ListRidersByRegionWithStatus(ctx context.Context, arg ListRide
 }
 
 const listRidersByStatus = `-- name: ListRidersByStatus :many
-SELECT id, user_id, real_name, id_card_no, phone, deposit_amount, frozen_deposit, status, is_online, credit_score, current_longitude, current_latitude, location_updated_at, total_orders, total_earnings, online_duration, created_at, updated_at, region_id, application_id, sub_mch_id FROM riders
+SELECT id, user_id, real_name, id_card_no, phone, deposit_amount, frozen_deposit, status, is_online, credit_score, current_longitude, current_latitude, location_updated_at, total_orders, total_earnings, online_duration, created_at, updated_at, region_id, application_id FROM riders
 WHERE status = $1
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3
@@ -692,7 +609,6 @@ func (q *Queries) ListRidersByStatus(ctx context.Context, arg ListRidersByStatus
 			&i.UpdatedAt,
 			&i.RegionID,
 			&i.ApplicationID,
-			&i.SubMchID,
 		); err != nil {
 			return nil, err
 		}
@@ -711,7 +627,7 @@ SET
     frozen_deposit = $3,
     updated_at = now()
 WHERE id = $1
-RETURNING id, user_id, real_name, id_card_no, phone, deposit_amount, frozen_deposit, status, is_online, credit_score, current_longitude, current_latitude, location_updated_at, total_orders, total_earnings, online_duration, created_at, updated_at, region_id, application_id, sub_mch_id
+RETURNING id, user_id, real_name, id_card_no, phone, deposit_amount, frozen_deposit, status, is_online, credit_score, current_longitude, current_latitude, location_updated_at, total_orders, total_earnings, online_duration, created_at, updated_at, region_id, application_id
 `
 
 type UpdateRiderDepositParams struct {
@@ -744,7 +660,6 @@ func (q *Queries) UpdateRiderDeposit(ctx context.Context, arg UpdateRiderDeposit
 		&i.UpdatedAt,
 		&i.RegionID,
 		&i.ApplicationID,
-		&i.SubMchID,
 	)
 	return i, err
 }
@@ -757,7 +672,7 @@ SET
     location_updated_at = now(),
     updated_at = now()
 WHERE id = $1
-RETURNING id, user_id, real_name, id_card_no, phone, deposit_amount, frozen_deposit, status, is_online, credit_score, current_longitude, current_latitude, location_updated_at, total_orders, total_earnings, online_duration, created_at, updated_at, region_id, application_id, sub_mch_id
+RETURNING id, user_id, real_name, id_card_no, phone, deposit_amount, frozen_deposit, status, is_online, credit_score, current_longitude, current_latitude, location_updated_at, total_orders, total_earnings, online_duration, created_at, updated_at, region_id, application_id
 `
 
 type UpdateRiderLocationParams struct {
@@ -790,7 +705,6 @@ func (q *Queries) UpdateRiderLocation(ctx context.Context, arg UpdateRiderLocati
 		&i.UpdatedAt,
 		&i.RegionID,
 		&i.ApplicationID,
-		&i.SubMchID,
 	)
 	return i, err
 }
@@ -801,7 +715,7 @@ SET
     online_duration = online_duration + $2,
     updated_at = now()
 WHERE id = $1
-RETURNING id, user_id, real_name, id_card_no, phone, deposit_amount, frozen_deposit, status, is_online, credit_score, current_longitude, current_latitude, location_updated_at, total_orders, total_earnings, online_duration, created_at, updated_at, region_id, application_id, sub_mch_id
+RETURNING id, user_id, real_name, id_card_no, phone, deposit_amount, frozen_deposit, status, is_online, credit_score, current_longitude, current_latitude, location_updated_at, total_orders, total_earnings, online_duration, created_at, updated_at, region_id, application_id
 `
 
 type UpdateRiderOnlineDurationParams struct {
@@ -833,7 +747,6 @@ func (q *Queries) UpdateRiderOnlineDuration(ctx context.Context, arg UpdateRider
 		&i.UpdatedAt,
 		&i.RegionID,
 		&i.ApplicationID,
-		&i.SubMchID,
 	)
 	return i, err
 }
@@ -842,7 +755,7 @@ const updateRiderOnlineStatus = `-- name: UpdateRiderOnlineStatus :one
 UPDATE riders
 SET is_online = $2, updated_at = now()
 WHERE id = $1
-RETURNING id, user_id, real_name, id_card_no, phone, deposit_amount, frozen_deposit, status, is_online, credit_score, current_longitude, current_latitude, location_updated_at, total_orders, total_earnings, online_duration, created_at, updated_at, region_id, application_id, sub_mch_id
+RETURNING id, user_id, real_name, id_card_no, phone, deposit_amount, frozen_deposit, status, is_online, credit_score, current_longitude, current_latitude, location_updated_at, total_orders, total_earnings, online_duration, created_at, updated_at, region_id, application_id
 `
 
 type UpdateRiderOnlineStatusParams struct {
@@ -874,7 +787,6 @@ func (q *Queries) UpdateRiderOnlineStatus(ctx context.Context, arg UpdateRiderOn
 		&i.UpdatedAt,
 		&i.RegionID,
 		&i.ApplicationID,
-		&i.SubMchID,
 	)
 	return i, err
 }
@@ -883,7 +795,7 @@ const updateRiderRegion = `-- name: UpdateRiderRegion :one
 UPDATE riders
 SET region_id = $2, updated_at = now()
 WHERE id = $1
-RETURNING id, user_id, real_name, id_card_no, phone, deposit_amount, frozen_deposit, status, is_online, credit_score, current_longitude, current_latitude, location_updated_at, total_orders, total_earnings, online_duration, created_at, updated_at, region_id, application_id, sub_mch_id
+RETURNING id, user_id, real_name, id_card_no, phone, deposit_amount, frozen_deposit, status, is_online, credit_score, current_longitude, current_latitude, location_updated_at, total_orders, total_earnings, online_duration, created_at, updated_at, region_id, application_id
 `
 
 type UpdateRiderRegionParams struct {
@@ -916,7 +828,6 @@ func (q *Queries) UpdateRiderRegion(ctx context.Context, arg UpdateRiderRegionPa
 		&i.UpdatedAt,
 		&i.RegionID,
 		&i.ApplicationID,
-		&i.SubMchID,
 	)
 	return i, err
 }
@@ -928,7 +839,7 @@ SET
     total_earnings = total_earnings + $3,
     updated_at = now()
 WHERE id = $1
-RETURNING id, user_id, real_name, id_card_no, phone, deposit_amount, frozen_deposit, status, is_online, credit_score, current_longitude, current_latitude, location_updated_at, total_orders, total_earnings, online_duration, created_at, updated_at, region_id, application_id, sub_mch_id
+RETURNING id, user_id, real_name, id_card_no, phone, deposit_amount, frozen_deposit, status, is_online, credit_score, current_longitude, current_latitude, location_updated_at, total_orders, total_earnings, online_duration, created_at, updated_at, region_id, application_id
 `
 
 type UpdateRiderStatsParams struct {
@@ -961,7 +872,6 @@ func (q *Queries) UpdateRiderStats(ctx context.Context, arg UpdateRiderStatsPara
 		&i.UpdatedAt,
 		&i.RegionID,
 		&i.ApplicationID,
-		&i.SubMchID,
 	)
 	return i, err
 }
@@ -970,7 +880,7 @@ const updateRiderStatus = `-- name: UpdateRiderStatus :one
 UPDATE riders
 SET status = $2, updated_at = now()
 WHERE id = $1
-RETURNING id, user_id, real_name, id_card_no, phone, deposit_amount, frozen_deposit, status, is_online, credit_score, current_longitude, current_latitude, location_updated_at, total_orders, total_earnings, online_duration, created_at, updated_at, region_id, application_id, sub_mch_id
+RETURNING id, user_id, real_name, id_card_no, phone, deposit_amount, frozen_deposit, status, is_online, credit_score, current_longitude, current_latitude, location_updated_at, total_orders, total_earnings, online_duration, created_at, updated_at, region_id, application_id
 `
 
 type UpdateRiderStatusParams struct {
@@ -1002,51 +912,6 @@ func (q *Queries) UpdateRiderStatus(ctx context.Context, arg UpdateRiderStatusPa
 		&i.UpdatedAt,
 		&i.RegionID,
 		&i.ApplicationID,
-		&i.SubMchID,
-	)
-	return i, err
-}
-
-const updateRiderSubMchID = `-- name: UpdateRiderSubMchID :one
-UPDATE riders
-SET 
-    sub_mch_id = $2,
-    updated_at = now()
-WHERE id = $1
-RETURNING id, user_id, real_name, id_card_no, phone, deposit_amount, frozen_deposit, status, is_online, credit_score, current_longitude, current_latitude, location_updated_at, total_orders, total_earnings, online_duration, created_at, updated_at, region_id, application_id, sub_mch_id
-`
-
-type UpdateRiderSubMchIDParams struct {
-	ID       int64       `json:"id"`
-	SubMchID pgtype.Text `json:"sub_mch_id"`
-}
-
-// 更新骑手的微信二级商户号
-func (q *Queries) UpdateRiderSubMchID(ctx context.Context, arg UpdateRiderSubMchIDParams) (Rider, error) {
-	row := q.db.QueryRow(ctx, updateRiderSubMchID, arg.ID, arg.SubMchID)
-	var i Rider
-	err := row.Scan(
-		&i.ID,
-		&i.UserID,
-		&i.RealName,
-		&i.IDCardNo,
-		&i.Phone,
-		&i.DepositAmount,
-		&i.FrozenDeposit,
-		&i.Status,
-		&i.IsOnline,
-		&i.CreditScore,
-		&i.CurrentLongitude,
-		&i.CurrentLatitude,
-		&i.LocationUpdatedAt,
-		&i.TotalOrders,
-		&i.TotalEarnings,
-		&i.OnlineDuration,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.RegionID,
-		&i.ApplicationID,
-		&i.SubMchID,
 	)
 	return i, err
 }

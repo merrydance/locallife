@@ -1,0 +1,103 @@
+# Mini Program Standards Index
+
+本目录是 LocalLife 小程序相关长期标准的权威入口。
+
+## 目标
+
+本目录中的文档用于回答三个问题：
+
+- 小程序页面和组件交付默认到底该以哪份标准为准。
+- 视觉与非视觉规则分别由哪份标准承担。
+- 哪些文档只是专题补充、历史背景或运行时实现参考，而不是默认权威入口。
+
+## 默认权威入口
+
+- 页面与组件交付的默认主标准：`.github/standards/weapp/PAGE_DELIVERY_BASELINE.md`
+- 顾客侧视觉、token、页面壳、触控热区和组件视觉模式：`.github/standards/weapp/DESIGN_SYSTEM.md`
+- 非顾客侧视觉、page shell、克制型 TDesign-first 表达与组件视觉模式：`.github/standards/weapp/NON_CONSUMER_DESIGN_SYSTEM.md`
+- 审查时可直接复用的检查清单：`.github/standards/weapp/REVIEW_CHECKLIST.md`
+
+默认执行规则：
+
+- 不再把交互、性能、反馈、API 契约拆成多个默认必读标准。
+- `PAGE_DELIVERY_BASELINE.md` 是小程序页面与组件交付的单一默认权威来源。
+- `DESIGN_SYSTEM.md` 负责顾客侧视觉与组件视觉基线；`NON_CONSUMER_DESIGN_SYSTEM.md` 负责非顾客侧视觉与组件视觉基线；两者都不得削弱 `PAGE_DELIVERY_BASELINE.md` 的硬性要求。
+- 若同一问题在多份 weapp 标准中出现冲突，以 `PAGE_DELIVERY_BASELINE.md` 为准；视觉 token 和组件视觉细节按页面角色侧选择对应设计文档。
+
+## 默认实现热路径
+
+- 页面与组件的非视觉交付，默认先读 `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md`。
+- 顾客侧页面 UI 结构、小屏手感、品牌化视觉与组件视觉基线，读 `.github/standards/weapp/DESIGN_SYSTEM.md`。
+- 商户、运营、平台、骑手等非顾客侧页面的 UI 结构、小屏手感、page shell 与克制型 TDesign-first 表达，读 `.github/standards/weapp/NON_CONSUMER_DESIGN_SYSTEM.md`。
+- 页面审查与复审时，配合 `.github/standards/weapp/REVIEW_CHECKLIST.md` 使用。
+
+## 专题补充与历史参考
+
+- `.github/standards/frontend/USER_FEEDBACK_STANDARDS.md`
+- `.github/standards/weapp/INTERACTION_STANDARDS.md`
+- `.github/standards/weapp/PERFORMANCE_PRELOAD_STANDARDS.md`
+- `.github/standards/weapp/API_INTERACTION_CONTRACT.md`
+
+作用：
+
+- 保留为分主题背景材料、历史拆分规则来源或专项深挖参考。
+- 不再作为默认实现、默认 review 或 app-wide instruction 的并行权威入口。
+- 若这些文档与 `PAGE_DELIVERY_BASELINE.md` 的执行口径冲突，以 `PAGE_DELIVERY_BASELINE.md` 为准。
+
+## 审查辅助清单
+
+- `.github/standards/weapp/REVIEW_CHECKLIST.md`
+
+作用：
+
+- 提供可直接贴进 PR review 的压缩版审查清单。
+- 它不是新的权威层，也不再是默认审查热路径入口。
+- 做整体升级型 review 时，可配合历史蓝图文档一起使用。
+
+## 当前运行时实现参考
+
+- `weapp/miniprogram/utils/user-facing.ts`
+- `weapp/miniprogram/utils/prompt-feedback.ts`
+
+作用：
+
+- 提供小程序当前运行时的错误映射、用户文案提取、Toast/Modal 去重与全局提示守卫实现。
+
+说明：
+
+- 运行时实现用于回答“现在代码里具体怎么接”，不替代 `PAGE_DELIVERY_BASELINE.md`、`DESIGN_SYSTEM.md` 和 `NON_CONSUMER_DESIGN_SYSTEM.md` 的长期标准地位。
+
+## 历史材料说明
+
+以下文档仍可作为历史参考，但不再应被视为当前长期标准的首选入口：
+
+- `.github/standards/weapp/api/README.md`
+- `weapp/docs/MERCHANT_BACKEND_WEAPP_MAPPING_MATRIX_2026-04-06.md`
+- `weapp/docs/RIDER_BACKEND_WEAPP_MAPPING_MATRIX_2026-04-07.md`
+
+这些文档主要记录 API 结构说明、角色侧映射关系与阶段性治理背景。后续如需查阅历史背景、治理脉络或角色到后端契约的映射，可以继续参考；但新增长期规则不应继续落在这些文档中。
+
+## 整体升级审计的使用方式
+
+- 常规实现和常规 review 先按 `PAGE_DELIVERY_BASELINE.md` 与角色侧对应的设计文档判断是否合规。
+- 如果任务目标是“整体升级”“统一体验”“把页面做得更友好更一致”，再叠加历史蓝图材料做升级审计。
+- 历史蓝图只用于补充升级方向和旧问题模式，不再作为默认执行标准。
+
+## 推荐阅读顺序
+
+当任务涉及 `weapp/` 时，建议按以下顺序读取：
+
+1. `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md`
+2. 顾客侧任务读 `.github/standards/weapp/DESIGN_SYSTEM.md`；非顾客侧任务读 `.github/standards/weapp/NON_CONSUMER_DESIGN_SYSTEM.md`
+3. `.github/standards/weapp/REVIEW_CHECKLIST.md`（当任务是 review 或复审时读取）
+4. `.github/standards/weapp/README.md`
+5. `weapp/miniprogram/utils/user-facing.ts`（仅在需要核对错误对象与用户文案映射实现时读取）
+6. `weapp/miniprogram/utils/prompt-feedback.ts`（仅在需要核对 Toast/Modal 去重守卫时读取）
+
+## 维护规则
+
+- 新增小程序长期规则时，优先放入本目录下已有权威文档，而不是在 instructions 或 prompts 中重复复制。
+- instructions 只应保留执行约束和 Read First 入口，不应重复本目录中的完整正文。
+- prompts 只应组织任务输入和验收方式，不应承载长期标准正文。
+- 运行时实现参考只保留守卫、错误对象、接入工具、例外项和当前实现细节，不再重复页面交互或 API contract 的主规范。
+- 阶段性改造说明、评分计划、任务卡与迁移纪要应放在 `weapp/docs/` 或 historical 目录，不应出现在默认热路径中。

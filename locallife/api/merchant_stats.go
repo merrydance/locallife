@@ -1,15 +1,16 @@
 package api
 
 import (
-	"database/sql"
 	"errors"
 	"net/http"
 	"time"
 
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/media"
 	"github.com/merrydance/locallife/token"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // ==================== 商户日报 ====================
@@ -26,6 +27,10 @@ type dailyStatRow struct {
 	Commission    int64  `json:"commission"`
 	TakeoutOrders int32  `json:"takeout_orders"`
 	DineInOrders  int32  `json:"dine_in_orders"`
+}
+
+func normalizeEndOfDay(endDate time.Time) time.Time {
+	return endDate.AddDate(0, 0, 1).Add(-time.Nanosecond)
 }
 
 // getMerchantDailyStats 获取商户日报
@@ -51,31 +56,21 @@ func (server *Server) getMerchantDailyStats(ctx *gin.Context) {
 	}
 
 	// 解析日期
-	startDate, err := time.Parse("2006-01-02", req.StartDate)
+	startDate, endDate, err := parseDateRange(req.StartDate, req.EndDate, 365)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid start_date format, expected YYYY-MM-DD")))
-		return
-	}
-
-	endDate, err := time.Parse("2006-01-02", req.EndDate)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid end_date format, expected YYYY-MM-DD")))
-		return
-	}
-
-	// 验证日期范围 (最长365天)
-	if err := validateDateRange(startDate, endDate, 365); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
+
+	endDate = normalizeEndOfDay(endDate)
 
 	// 获取认证信息
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户信息
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.resolveMerchantForUser(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -85,9 +80,9 @@ func (server *Server) getMerchantDailyStats(ctx *gin.Context) {
 
 	// 查询日报统计
 	stats, err := server.store.GetMerchantDailyStats(ctx, db.GetMerchantDailyStatsParams{
-		MerchantID:  merchant.ID,
-		CreatedAt:   startDate,
-		CreatedAt_2: endDate,
+		MerchantID: merchant.ID,
+		StartAt:    startDate,
+		EndAt:      endDate,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -123,6 +118,7 @@ type merchantOverviewResponse struct {
 	TotalSales      int64 `json:"total_sales"`
 	TotalCommission int64 `json:"total_commission"`
 	AvgDailySales   int64 `json:"avg_daily_sales"`
+	PrintAnomalies  int64 `json:"print_anomalies_count"`
 }
 
 // getMerchantOverview 获取商户概览
@@ -148,31 +144,21 @@ func (server *Server) getMerchantOverview(ctx *gin.Context) {
 	}
 
 	// 解析日期
-	startDate, err := time.Parse("2006-01-02", req.StartDate)
+	startDate, endDate, err := parseDateRange(req.StartDate, req.EndDate, 365)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid start_date format")))
-		return
-	}
-
-	endDate, err := time.Parse("2006-01-02", req.EndDate)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid end_date format")))
-		return
-	}
-
-	// 验证日期范围 (最长365天)
-	if err := validateDateRange(startDate, endDate, 365); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
+
+	endDate = normalizeEndOfDay(endDate)
 
 	// 获取认证信息
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户信息
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.resolveMerchantForUser(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -182,9 +168,18 @@ func (server *Server) getMerchantOverview(ctx *gin.Context) {
 
 	// 查询概览统计
 	overview, err := server.store.GetMerchantOverview(ctx, db.GetMerchantOverviewParams{
-		MerchantID:  merchant.ID,
-		CreatedAt:   startDate,
-		CreatedAt_2: endDate,
+		MerchantID: merchant.ID,
+		StartAt:    startDate,
+		EndAt:      endDate,
+	})
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	printAnomaliesCount, err := server.store.CountMerchantPrintAnomalies(ctx, db.CountMerchantPrintAnomaliesParams{
+		MerchantID: merchant.ID,
+		Status:     pgtype.Text{},
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -197,6 +192,7 @@ func (server *Server) getMerchantOverview(ctx *gin.Context) {
 		TotalSales:      overview.TotalSales,
 		TotalCommission: overview.TotalCommission,
 		AvgDailySales:   int64(overview.AvgDailySales),
+		PrintAnomalies:  printAnomaliesCount,
 	})
 }
 
@@ -245,31 +241,21 @@ func (server *Server) getTopSellingDishes(ctx *gin.Context) {
 	}
 
 	// 解析日期
-	startDate, err := time.Parse("2006-01-02", req.StartDate)
+	startDate, endDate, err := parseDateRange(req.StartDate, req.EndDate, 365)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid start_date format")))
-		return
-	}
-
-	endDate, err := time.Parse("2006-01-02", req.EndDate)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid end_date format")))
-		return
-	}
-
-	// 验证日期范围 (最长365天)
-	if err := validateDateRange(startDate, endDate, 365); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
+
+	endDate = normalizeEndOfDay(endDate)
 
 	// 获取认证信息
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户信息
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.resolveMerchantForUser(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -279,10 +265,10 @@ func (server *Server) getTopSellingDishes(ctx *gin.Context) {
 
 	// 查询销量排行
 	dishes, err := server.store.GetTopSellingDishes(ctx, db.GetTopSellingDishesParams{
-		MerchantID:  merchant.ID,
-		CreatedAt:   startDate,
-		CreatedAt_2: endDate,
-		Limit:       req.Limit,
+		MerchantID: merchant.ID,
+		StartAt:    startDate,
+		EndAt:      endDate,
+		Limit:      req.Limit,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -324,6 +310,13 @@ type customerStatRow struct {
 	LastOrderAt    string `json:"last_order_at"`
 }
 
+type customerStatsListResponse struct {
+	Data  []customerStatRow `json:"data"`
+	Total int32             `json:"total"`
+	Page  int32             `json:"page"`
+	Limit int32             `json:"limit"`
+}
+
 // listMerchantCustomers 获取商户的顾客列表
 // @Summary 获取商户顾客列表
 // @Description 商户获取所有曾在本店消费的顾客统计信息，支持按总订单数、总金额、最后下单时间排序
@@ -358,15 +351,15 @@ func (server *Server) listMerchantCustomers(ctx *gin.Context) {
 		req.OrderBy = "last_order_at"
 	}
 
-	offset := (req.Page - 1) * req.Limit
+	offset := pageOffset(req.Page, req.Limit)
 
 	// 获取认证信息
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户信息
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.resolveMerchantForUser(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -406,11 +399,15 @@ func (server *Server) listMerchantCustomers(ctx *gin.Context) {
 			lastOrderAt = t.Format(time.RFC3339)
 		}
 
+		avatarURL := ""
+		if customer.AvatarMediaAssetID.Valid {
+			avatarURL = server.publicImageURL(ctx, &customer.AvatarMediaAssetID.Int64, media.VariantOriginal)
+		}
 		result[i] = customerStatRow{
 			UserID:         customer.UserID,
 			FullName:       customer.FullName,
 			Phone:          customer.Phone.String,
-			AvatarURL:      normalizeUploadURLForClient(customer.AvatarUrl.String),
+			AvatarURL:      avatarURL,
 			TotalOrders:    customer.TotalOrders,
 			TotalAmount:    customer.TotalAmount,
 			AvgOrderAmount: int64(customer.AvgOrderAmount),
@@ -419,11 +416,11 @@ func (server *Server) listMerchantCustomers(ctx *gin.Context) {
 		}
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"data":        result,
-		"total_count": totalCount,
-		"page":        req.Page,
-		"limit":       req.Limit,
+	ctx.JSON(http.StatusOK, customerStatsListResponse{
+		Data:  result,
+		Total: totalCount,
+		Page:  req.Page,
+		Limit: req.Limit,
 	})
 }
 
@@ -478,9 +475,9 @@ func (server *Server) getCustomerDetail(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户信息
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.resolveMerchantForUser(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -494,7 +491,7 @@ func (server *Server) getCustomerDetail(ctx *gin.Context) {
 		UserID:     req.UserID,
 	})
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("customer not found")))
 			return
 		}
@@ -534,11 +531,15 @@ func (server *Server) getCustomerDetail(ctx *gin.Context) {
 		lastOrderAt = t.Format(time.RFC3339)
 	}
 
+	avatarURL := ""
+	if customer.AvatarMediaAssetID.Valid {
+		avatarURL = server.publicImageURL(ctx, &customer.AvatarMediaAssetID.Int64, media.VariantOriginal)
+	}
 	ctx.JSON(http.StatusOK, customerDetailResponse{
 		UserID:         customer.UserID,
 		FullName:       customer.FullName,
 		Phone:          customer.Phone.String,
-		AvatarURL:      normalizeUploadURLForClient(customer.AvatarUrl.String),
+		AvatarURL:      avatarURL,
 		TotalOrders:    customer.TotalOrders,
 		TotalAmount:    customer.TotalAmount,
 		AvgOrderAmount: int64(customer.AvgOrderAmount),
@@ -587,9 +588,9 @@ func (server *Server) getMerchantHourlyStats(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取当前用户的商户
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.resolveMerchantForUser(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -597,29 +598,18 @@ func (server *Server) getMerchantHourlyStats(ctx *gin.Context) {
 		return
 	}
 
-	// 解析日期
-	startDate, err := time.Parse("2006-01-02", req.StartDate)
+	startDate, endDate, err := parseDateRange(req.StartDate, req.EndDate, 365)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid start_date format")))
-		return
-	}
-
-	endDate, err := time.Parse("2006-01-02", req.EndDate)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid end_date format")))
-		return
-	}
-
-	// 验证日期范围 (最长365天)
-	if err := validateDateRange(startDate, endDate, 365); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
 
+	endDate = normalizeEndOfDay(endDate)
+
 	stats, err := server.store.GetMerchantHourlyStats(ctx, db.GetMerchantHourlyStatsParams{
-		MerchantID:  merchant.ID,
-		CreatedAt:   startDate,
-		CreatedAt_2: endDate,
+		MerchantID: merchant.ID,
+		StartAt:    startDate,
+		EndAt:      endDate,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -672,9 +662,9 @@ func (server *Server) getMerchantOrderSourceStats(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取当前用户的商户
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.resolveMerchantForUser(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -682,29 +672,18 @@ func (server *Server) getMerchantOrderSourceStats(ctx *gin.Context) {
 		return
 	}
 
-	// 解析日期
-	startDate, err := time.Parse("2006-01-02", req.StartDate)
+	startDate, endDate, err := parseDateRange(req.StartDate, req.EndDate, 365)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid start_date format")))
-		return
-	}
-
-	endDate, err := time.Parse("2006-01-02", req.EndDate)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid end_date format")))
-		return
-	}
-
-	// 验证日期范围 (最长365天)
-	if err := validateDateRange(startDate, endDate, 365); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
 
+	endDate = normalizeEndOfDay(endDate)
+
 	stats, err := server.store.GetMerchantOrderSourceStats(ctx, db.GetMerchantOrderSourceStatsParams{
-		MerchantID:  merchant.ID,
-		CreatedAt:   startDate,
-		CreatedAt_2: endDate,
+		MerchantID: merchant.ID,
+		StartAt:    startDate,
+		EndAt:      endDate,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -758,9 +737,9 @@ func (server *Server) getMerchantRepurchaseRate(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取当前用户的商户
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.resolveMerchantForUser(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -768,29 +747,18 @@ func (server *Server) getMerchantRepurchaseRate(ctx *gin.Context) {
 		return
 	}
 
-	// 解析日期
-	startDate, err := time.Parse("2006-01-02", req.StartDate)
+	startDate, endDate, err := parseDateRange(req.StartDate, req.EndDate, 365)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid start_date format")))
-		return
-	}
-
-	endDate, err := time.Parse("2006-01-02", req.EndDate)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid end_date format")))
-		return
-	}
-
-	// 验证日期范围 (最长365天)
-	if err := validateDateRange(startDate, endDate, 365); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
 
+	endDate = normalizeEndOfDay(endDate)
+
 	stats, err := server.store.GetMerchantRepurchaseRate(ctx, db.GetMerchantRepurchaseRateParams{
-		MerchantID:  merchant.ID,
-		CreatedAt:   startDate,
-		CreatedAt_2: endDate,
+		MerchantID: merchant.ID,
+		StartAt:    startDate,
+		EndAt:      endDate,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -840,9 +808,9 @@ func (server *Server) getMerchantDishCategoryStats(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取当前用户的商户
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.resolveMerchantForUser(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -850,24 +818,13 @@ func (server *Server) getMerchantDishCategoryStats(ctx *gin.Context) {
 		return
 	}
 
-	// 解析日期
-	startDate, err := time.Parse("2006-01-02", req.StartDate)
+	startDate, endDate, err := parseDateRange(req.StartDate, req.EndDate, 365)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid start_date format")))
-		return
-	}
-
-	endDate, err := time.Parse("2006-01-02", req.EndDate)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid end_date format")))
-		return
-	}
-
-	// 验证日期范围 (最长365天)
-	if err := validateDateRange(startDate, endDate, 365); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
+
+	endDate = normalizeEndOfDay(endDate)
 
 	stats, err := server.store.GetDishCategoryStats(ctx, db.GetDishCategoryStatsParams{
 		MerchantID: merchant.ID,
@@ -883,7 +840,7 @@ func (server *Server) getMerchantDishCategoryStats(ctx *gin.Context) {
 	for i, stat := range stats {
 		result[i] = dishCategoryStatsRow{
 			CategoryName:  stat.CategoryName,
-			OrderCount:    stat.DishCount,
+			OrderCount:    stat.OrderCount,
 			TotalSales:    stat.TotalRevenue,
 			TotalQuantity: stat.TotalQuantity,
 		}

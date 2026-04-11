@@ -1,0 +1,94 @@
+<custom-navbar title="菜品分类管理" showBack="{{true}}" />
+
+<view
+  class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
+  style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: 64rpx;"
+>
+  <view wx:if="{{initialLoading}}" class="state-block">
+    <t-loading theme="circular" size="40rpx" text="加载分类中..." vertical />
+  </view>
+
+  <view wx:elif="{{initialError}}" class="state-block">
+    <t-empty icon="error-circle" description="{{initialErrorMessage || '分类列表加载失败，请重试'}}" />
+    <t-button theme="primary" size="small" shape="round" bind:tap="onRetry">重新加载</t-button>
+  </view>
+
+  <block wx:else>
+    <view class="page-content">
+      <view wx:if="{{refreshErrorMessage}}" class="warning-banner">
+        <text class="warning-banner-text">{{refreshErrorMessage}}</text>
+        <t-button size="small" theme="default" shape="round" bind:tap="onRetryRefresh">重新同步</t-button>
+      </view>
+
+      <view class="action-strip">
+        <t-button block size="medium" theme="default" shape="round" bind:tap="onOpenLinkPopup">关联已有分类</t-button>
+        <t-button block size="medium" theme="primary" shape="round" bind:tap="onCreateCategory">新建分类</t-button>
+      </view>
+
+      <view class="list-section">
+        <view class="list-header">
+          <text class="list-title">当前分类列表</text>
+          <t-button size="small" theme="default" shape="round" bind:tap="onRetryRefresh">刷新</t-button>
+        </view>
+
+        <view wx:if="{{!categories.length}}" class="section-empty">
+          <t-empty icon="info-circle" description="还没有可用分类，先关联一个全局分类或新建本店分类" />
+        </view>
+
+        <view wx:else class="category-list">
+          <view class="category-row" wx:for="{{categories}}" wx:key="id">
+            <view class="category-row-main">
+              <view class="category-row-copy">
+                <text class="category-name">{{item.name}}</text>
+                <view class="category-meta-row">
+                  <text class="category-meta">排序 {{item.sort_order || index + 1}}</text>
+                  <t-tag size="small" theme="default" variant="light">本店可用</t-tag>
+                </view>
+              </view>
+
+              <view class="category-actions">
+                <t-button size="small" theme="default" shape="round" data-id="{{item.id}}" data-name="{{item.name}}" bind:tap="onEditCategory">编辑</t-button>
+                <t-button size="small" theme="danger" variant="text" data-id="{{item.id}}" loading="{{pendingDeleteId === item.id}}" disabled="{{pendingDeleteId === item.id}}" bind:tap="onDeleteCategory">删除</t-button>
+              </view>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <t-fab icon="add" bind:click="onCreateCategory" />
+
+      <t-popup visible="{{linkPopupVisible}}" placement="bottom" bind:visible-change="onCloseLinkPopup">
+        <view class="popup-panel">
+          <view class="popup-copy">
+            <text class="popup-title">关联已有分类</text>
+          </view>
+
+          <view wx:if="{{pickerOptions.length}}" class="popup-body">
+            <t-cell title="目标分类" note="{{selectedCategoryName || '请选择已有分类'}}" arrow bind:tap="onOpenPicker" />
+            <text class="popup-hint">当前还有 {{linkableGlobalCategories.length}} 个全局分类可直接关联。</text>
+
+            <view class="popup-actions">
+              <t-button block size="large" theme="default" shape="round" bind:tap="onCloseLinkPopup">取消</t-button>
+              <t-button block size="large" theme="primary" shape="round" loading="{{submitting}}" bind:tap="onConfirmLinkCategory">关联分类</t-button>
+            </view>
+          </view>
+
+          <view wx:else class="popup-empty">
+            <t-empty icon="info-circle" description="没有可关联的全局分类了，可以直接新建一个本店分类" />
+            <t-button block size="large" theme="primary" shape="round" bind:tap="onCreateCategory">新建分类</t-button>
+          </view>
+        </view>
+      </t-popup>
+
+      <t-picker
+        visible="{{pickerVisible}}"
+        value="{{[selectedCategoryId || (pickerOptions.length ? pickerOptions[0].value : '')]}}"
+        title="选择已有分类"
+        bind:confirm="onPickerConfirm"
+        bind:cancel="onPickerCancel"
+      >
+        <t-picker-item options="{{pickerOptions}}" />
+      </t-picker>
+    </view>
+  </block>
+</view>

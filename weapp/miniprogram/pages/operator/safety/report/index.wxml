@@ -1,0 +1,68 @@
+<custom-navbar title="食安事件" showBack="{{true}}" bind:navheight="onNavHeight" />
+<view
+  class="page-container page-shell page-shell--with-nav page-shell--bottom-safe"
+  style="--page-shell-nav-height: {{navBarHeight}}px"
+>
+  <view class="toolbar">
+    <t-button theme="primary" size="small" bindtap="onToggleSubmit" shape="round">
+      {{submitVisible ? '收起提交' : '新建事件'}}
+    </t-button>
+  </view>
+
+  <view wx:if="{{submitVisible}}" class="card form-card">
+    <view class="section-title">提交食安事件</view>
+    <t-input label="事件标题" placeholder="输入事件标题" value="{{submitTitle}}" bindchange="onSubmitTitleChange" />
+    <t-textarea label="事件描述" placeholder="说明触发原因与风险" value="{{submitDescription}}" bindchange="onSubmitDescriptionChange" maxlength="300" />
+    <view class="level-group">
+      <text class="field-label">风险等级</text>
+      <t-radio-group value="{{submitLevel}}" bindchange="onSubmitLevelChange">
+        <t-radio value="low" label="低" />
+        <t-radio value="medium" label="中" />
+        <t-radio value="high" label="高" />
+        <t-radio value="critical" label="严重" />
+      </t-radio-group>
+    </view>
+    <t-input label="关联商户ID" placeholder="可选，多个用英文逗号分隔" value="{{submitMerchantIdsRaw}}" bindchange="onSubmitMerchantIdsChange" />
+    <t-button theme="primary" block bindtap="onSubmitReport" loading="{{submitLoading}}" shape="round">提交事件</t-button>
+  </view>
+
+  <t-tabs value="{{status}}" bind:change="onTabChange" t-class="sticky-tabs">
+    <t-tab-panel label="全部" value="" />
+    <t-tab-panel label="待处理" value="pending" />
+    <t-tab-panel label="已处理" value="resolved" />
+    <t-tab-panel label="已驳回" value="rejected" />
+  </t-tabs>
+
+  <view wx:if="{{error && !initialLoading}}" class="error-wrap">
+    <t-empty icon="info-circle" description="{{error}}" />
+  </view>
+
+  <view wx:elif="{{initialLoading}}" class="list">
+    <list-skeleton row="4" />
+  </view>
+
+  <view wx:elif="{{reports.length > 0}}" class="list">
+    <view class="card" wx:for="{{reports}}" wx:key="id" bindtap="onDetail" data-id="{{item.id}}">
+      <view class="card-header">
+        <text class="title">{{item.title}}</text>
+        <t-tag theme="{{item.status_theme}}" variant="dark" size="small">
+          {{item.status_label}}
+        </t-tag>
+      </view>
+      <view class="card-body">
+        <text class="body-text">风险等级：{{item.level_label}}</text>
+      </view>
+      <view class="card-footer">
+        <text>ID: {{item.id}}</text>
+        <text>{{item.created_at}}</text>
+      </view>
+    </view>
+
+    <view class="load-more">
+      <t-button wx:if="{{hasMore}}" size="small" bindtap="onLoadMore" loading="{{loadingMore}}" shape="round">加载更多</t-button>
+      <text wx:elif="{{!hasMore}}" class="no-more-text">没有更多事件了</text>
+    </view>
+  </view>
+
+  <t-empty wx:else icon="info-circle" description="暂无食安事件" />
+</view>

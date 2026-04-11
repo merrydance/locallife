@@ -1,0 +1,137 @@
+<custom-navbar title="主体申请" showBack="{{true}}" />
+
+<view
+  class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
+  style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: 32rpx;"
+>
+  <view wx:if="{{accessReady && accessDenied}}" class="state-block">
+    <t-empty icon="error-circle" description="当前账号无商户权限，请返回“我的”切换身份" />
+  </view>
+
+  <view wx:elif="{{accessReady && accessErrorMessage}}" class="state-block">
+    <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
+    <t-button theme="primary" shape="round" bindtap="onRetryAccess">重新校验</t-button>
+  </view>
+
+  <block wx:else>
+    <view wx:if="{{initialLoading}}" class="state-block">
+      <t-loading theme="circular" size="40rpx" text="加载申请资料中..." vertical />
+    </view>
+
+    <view wx:elif="{{initialError}}" class="state-block">
+      <t-empty description="{{initialErrorMessage || '申请资料加载失败，请重试'}}" />
+      <t-button theme="primary" shape="round" bindtap="onRetry">重新加载</t-button>
+    </view>
+
+    <block wx:else>
+      <view class="page-content">
+        <view wx:if="{{refreshErrorMessage}}" class="notice-card notice-card-error">
+          <text class="notice-text notice-text-flex">{{refreshErrorMessage}}</text>
+          <text class="notice-action" bindtap="onRetryRefresh">重新同步</text>
+        </view>
+
+        <t-badge
+          count="{{statusBadgeText}}"
+          shape="ribbon-right"
+          size="large"
+          style="--td-badge-bg-color: {{statusBadgeColor}}; --td-badge-large-height: 68rpx; --td-line-height-mark-small: 68rpx;"
+          t-class="status-badge"
+          t-class-content="status-badge__content"
+          t-class-count="status-badge__count"
+        >
+          <view class="section-panel section-panel--status">
+            <t-cell-group theme="card">
+              <t-cell title="资质信息" bordered="{{false}}" />
+              <t-cell wx:if="{{rejectReason}}" title="驳回原因" description="{{rejectReason}}" align="top" />
+              <t-cell title="店铺名" note="{{form.merchantName}}" />
+              <t-cell title="电话" note="{{form.contactPhone}}" />
+              <t-cell title="地图定位" note="{{locationLabel}}" />
+              <t-cell title="信用代码" note="{{form.businessLicenseNumber}}" />
+              <t-cell title="法人姓名" note="{{form.legalPersonName}}" />
+              <t-cell title="法人证件号" note="{{form.legalPersonIdNumber}}" />
+              <t-cell title="经营范围" description="{{form.businessScope}}" align="top" />
+            </t-cell-group>
+          </view>
+        </t-badge>
+
+        <view class="section-panel">
+          <view class="section-head section-head-tight">
+            <text class="section-title">必要证照</text>
+          </view>
+
+          <view class="certificate-card">
+            <view class="certificate-head">
+              <text class="certificate-title">营业执照</text>
+              <t-tag shape="mark" theme="{{licenseOcrTheme}}" variant="light" size="small">{{licenseOcrText}}</t-tag>
+            </view>
+            <t-image
+              wx:if="{{licenseImageUrl}}"
+              class="certificate-image"
+              src="{{licenseImageUrl}}"
+              mode="aspectFit"
+              lazy
+              shape="round"
+              data-url="{{licenseImageUrl}}"
+              data-urls="{{[licenseImageUrl]}}"
+              bindtap="onPreviewImage"
+            />
+          </view>
+
+          <view class="certificate-card">
+            <view class="certificate-head">
+              <text class="certificate-title">食品经营许可证</text>
+              <t-tag shape="mark" theme="{{foodPermitOcrTheme}}" variant="light" size="small">{{foodPermitOcrText}}</t-tag>
+            </view>
+            <t-image
+              wx:if="{{foodPermitImageUrl}}"
+              class="certificate-image"
+              src="{{foodPermitImageUrl}}"
+              mode="aspectFit"
+              lazy
+              shape="round"
+              data-url="{{foodPermitImageUrl}}"
+              data-urls="{{[foodPermitImageUrl]}}"
+              bindtap="onPreviewImage"
+            />
+          </view>
+
+          <view class="certificate-card">
+            <view class="certificate-head">
+              <text class="certificate-title">身份证正面</text>
+              <t-tag shape="mark" theme="{{idCardFrontOcrTheme}}" variant="light" size="small">{{idCardFrontOcrText}}</t-tag>
+            </view>
+            <t-image
+              wx:if="{{idCardFrontImageUrl}}"
+              class="certificate-image"
+              src="{{idCardFrontImageUrl}}"
+              mode="aspectFit"
+              lazy
+              shape="round"
+              data-url="{{idCardFrontImageUrl}}"
+              data-urls="{{[idCardFrontImageUrl]}}"
+              bindtap="onPreviewImage"
+            />
+          </view>
+
+          <view class="certificate-card certificate-card-last">
+            <view class="certificate-head">
+              <text class="certificate-title">身份证背面</text>
+              <t-tag shape="mark" theme="{{idCardBackOcrTheme}}" variant="light" size="small">{{idCardBackOcrText}}</t-tag>
+            </view>
+            <t-image
+              wx:if="{{idCardBackImageUrl}}"
+              class="certificate-image"
+              src="{{idCardBackImageUrl}}"
+              mode="aspectFit"
+              lazy
+              shape="round"
+              data-url="{{idCardBackImageUrl}}"
+              data-urls="{{[idCardBackImageUrl]}}"
+              bindtap="onPreviewImage"
+            />
+          </view>
+        </view>
+      </view>
+    </block>
+  </block>
+</view>

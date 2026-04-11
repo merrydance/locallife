@@ -1,7 +1,4 @@
-
-import { getToken } from '../../utils/auth'
-import { API_BASE } from '../../utils/request'
-import { resolveImageURL } from '../../utils/image-security'
+import { getMediaDisplayUrl } from '../../utils/media'
 
 Component({
     externalClasses: ['class', 'custom-class'],
@@ -54,8 +51,10 @@ Component({
             this.setData({ loading: true, error: false })
 
             try {
-                // Determine if we need to sign it
-                const resolvedUrl = await resolveImageURL(url)
+                const resolvedUrl = getMediaDisplayUrl(url)
+                if (!resolvedUrl) {
+                    throw new Error('invalid public media url')
+                }
 
                 this.setData({
                     localPath: resolvedUrl, // Use localPath to store the displayable URL
@@ -63,10 +62,10 @@ Component({
                 })
                 this.triggerEvent('load', { path: resolvedUrl })
 
-            } catch (e) {
-                console.error('Failed to resolve image URL', e)
+            } catch (error) {
+                console.error('Failed to resolve image URL', error)
                 this.setData({ loading: false, error: true })
-                this.triggerEvent('error', e)
+                this.triggerEvent('error', error)
             }
         },
 
@@ -76,11 +75,11 @@ Component({
             }
         },
 
-        onError(e: any) {
+        onError(e: unknown) {
             this.triggerEvent('error', e)
         },
 
-        onLoad(e: any) {
+        onLoad(e: unknown) {
             this.triggerEvent('load', e)
         }
     }

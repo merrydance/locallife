@@ -1,0 +1,67 @@
+<custom-navbar title="集团申请审核" show-back="{{true}}" show-location="{{false}}" bind:navheight="onNavHeight" />
+
+<view
+  class="groups-page page-shell page-shell--with-nav page-shell--bottom-safe"
+  style="--page-shell-nav-height: {{navBarHeight}}px"
+>
+  <scroll-view
+    class="list-scroll"
+    scroll-y
+    refresher-enabled
+    refresher-triggered="{{refreshing}}"
+    bindrefresherrefresh="onRefresh"
+    bindscrolltolower="onLoadMore"
+  >
+    <view class="groups-container">
+      <view class="summary-card">
+        <text class="summary-title">集团申请总数</text>
+        <text class="summary-value">{{total}}</text>
+      </view>
+
+      <view wx:if="{{loading}}" class="section-card">
+        <view wx:for="{{3}}" wx:key="index" class="skeleton-item skeleton-shimmer"></view>
+      </view>
+
+      <view wx:if="{{error}}" class="section-card status-wrap">
+        <t-empty icon="error-circle" description="{{error}}">
+          <t-button slot="action" theme="primary" shape="round" size="small" bind:tap="onRetry">重试</t-button>
+        </t-empty>
+      </view>
+
+      <view wx:if="{{!loading && !error && applications.length === 0}}" class="section-card status-wrap">
+        <t-empty description="暂无集团申请" />
+      </view>
+
+      <view wx:for="{{applications}}" wx:key="id" class="section-card app-card">
+        <view class="title-row">
+          <view class="name">{{item.group_name || ('申请#' + item.id)}}</view>
+          <t-tag theme="{{item.statusTheme}}" variant="dark">{{item.statusLabel}}</t-tag>
+        </view>
+        <view class="meta-row">
+          <text class="meta-label">联系人电话</text>
+          <text class="meta-value">{{item.contact_phone || '-'}}</text>
+        </view>
+        <view class="meta-row">
+          <text class="meta-label">营业执照号</text>
+          <text class="meta-value">{{item.license_number || '-'}}</text>
+        </view>
+        <view class="meta-row">
+          <text class="meta-label">申请时间</text>
+          <text class="meta-value">{{item.created_at}}</text>
+        </view>
+
+        <view class="actions">
+          <t-button
+            theme="primary"
+            shape="round"
+            size="small"
+            bind:tap="onDetailTap"
+            data-id="{{item.id}}"
+          >详情</t-button>
+        </view>
+      </view>
+
+      <view wx:if="{{!loading && !hasMore && applications.length > 0}}" class="no-more">没有更多了</view>
+    </view>
+  </scroll-view>
+</view>

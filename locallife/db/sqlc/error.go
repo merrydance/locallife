@@ -14,6 +14,10 @@ const (
 
 var ErrRecordNotFound = pgx.ErrNoRows
 
+// ErrPaymentMissingOrderID indicates a payment_order with business_type=order has no order_id.
+// Callers should skip retry and alert for manual intervention.
+var ErrPaymentMissingOrderID = errors.New("payment_order.order_id is NULL for business_type=order")
+
 var ErrUniqueViolation = &pgconn.PgError{
 	Code: UniqueViolation,
 }

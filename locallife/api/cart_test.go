@@ -47,20 +47,20 @@ func randomCartItem(cartID int64, dish db.Dish) db.CartItem {
 
 func randomListCartItemsRow(cartItem db.CartItem, dish db.Dish) db.ListCartItemsRow {
 	return db.ListCartItemsRow{
-		ID:               cartItem.ID,
-		CartID:           cartItem.CartID,
-		DishID:           cartItem.DishID,
-		ComboID:          cartItem.ComboID,
-		Quantity:         cartItem.Quantity,
-		Customizations:   cartItem.Customizations,
-		DishName:         pgtype.Text{String: dish.Name, Valid: true},
-		DishPrice:        pgtype.Int8{Int64: dish.Price, Valid: true},
-		DishImageUrl:     dish.ImageUrl,
-		DishIsAvailable:  pgtype.Bool{Bool: dish.IsOnline, Valid: true},
-		ComboName:        pgtype.Text{Valid: false},
-		ComboPrice:       pgtype.Int8{Valid: false},
-		ComboImageUrl:    pgtype.Text{Valid: false},
-		ComboIsAvailable: pgtype.Bool{Valid: false},
+		ID:                     cartItem.ID,
+		CartID:                 cartItem.CartID,
+		DishID:                 cartItem.DishID,
+		ComboID:                cartItem.ComboID,
+		Quantity:               cartItem.Quantity,
+		Customizations:         cartItem.Customizations,
+		DishName:               pgtype.Text{String: dish.Name, Valid: true},
+		DishPrice:              pgtype.Int8{Int64: dish.Price, Valid: true},
+		DishImageMediaAssetID:  dish.ImageMediaAssetID,
+		DishIsAvailable:        pgtype.Bool{Bool: dish.IsOnline, Valid: true},
+		ComboName:              pgtype.Text{Valid: false},
+		ComboPrice:             pgtype.Int8{Valid: false},
+		ComboImageMediaAssetID: pgtype.Int8{},
+		ComboIsAvailable:       pgtype.Bool{Valid: false},
 	}
 }
 
@@ -92,6 +92,7 @@ func TestGetCartAPI(t *testing.T) {
 					GetCartByUserAndMerchant(gomock.Any(), gomock.Eq(db.GetCartByUserAndMerchantParams{
 						UserID:     user.ID,
 						MerchantID: merchant.ID,
+						OrderType:  "takeout",
 					})).
 					Times(1).
 					Return(cart, nil)
@@ -105,8 +106,7 @@ func TestGetCartAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response cartResponse
-				err := json.NewDecoder(recorder.Body).Decode(&response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, cart.ID, response.ID)
 				require.Equal(t, merchant.ID, response.MerchantID)
 				require.Len(t, response.Items, 1)
@@ -120,16 +120,19 @@ func TestGetCartAPI(t *testing.T) {
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
-					GetCartByUserAndMerchant(gomock.Any(), gomock.Any()).
+					GetCartByUserAndMerchant(gomock.Any(), gomock.Eq(db.GetCartByUserAndMerchantParams{
+						UserID:     user.ID,
+						MerchantID: merchant.ID,
+						OrderType:  "takeout",
+					})).
 					Times(1).
-					Return(db.Cart{}, sql.ErrNoRows)
+					Return(db.Cart{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response cartResponse
-				err := json.NewDecoder(recorder.Body).Decode(&response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Empty(t, response.Items)
 				require.Equal(t, int64(0), response.Subtotal)
 			},
@@ -190,6 +193,7 @@ func TestAddCartItemAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchant(user.ID)
 	merchant.Status = "active"
+	merchant.IsOpen = true
 	cart := randomCart(user.ID, merchant.ID)
 	dish := randomDish(merchant.ID, nil)
 	cartItem := randomCartItem(cart.ID, dish)
@@ -214,6 +218,11 @@ func TestAddCartItemAPI(t *testing.T) {
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
+					GetDishWithCustomizations(gomock.Any(), dish.ID).
+					Times(1).
+					Return(db.GetDishWithCustomizationsRow{CustomizationGroups: nil}, nil)
+
+				store.EXPECT().
 					GetMerchant(gomock.Any(), merchant.ID).
 					Times(1).
 					Return(merchant, nil)
@@ -224,6 +233,15 @@ func TestAddCartItemAPI(t *testing.T) {
 					Return(dish, nil)
 
 				store.EXPECT().
+					GetCartByUserAndMerchant(gomock.Any(), gomock.Eq(db.GetCartByUserAndMerchantParams{
+						UserID:     user.ID,
+						MerchantID: merchant.ID,
+						OrderType:  "takeout",
+					})).
+					Times(1).
+					Return(db.Cart{}, db.ErrRecordNotFound)
+
+				store.EXPECT().
 					CreateCart(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(cart, nil)
@@ -231,7 +249,7 @@ func TestAddCartItemAPI(t *testing.T) {
 				store.EXPECT().
 					GetCartItemByDishAndCustomizations(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.CartItem{}, sql.ErrNoRows)
+					Return(db.CartItem{}, db.ErrRecordNotFound)
 
 				store.EXPECT().
 					AddCartItem(gomock.Any(), gomock.Any()).
@@ -244,7 +262,7 @@ func TestAddCartItemAPI(t *testing.T) {
 					Return([]db.ListCartItemsRow{listRow}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
+				require.Equal(t, http.StatusCreated, recorder.Code)
 			},
 		},
 		{
@@ -259,9 +277,14 @@ func TestAddCartItemAPI(t *testing.T) {
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
+					GetDishWithCustomizations(gomock.Any(), dish.ID).
+					Times(1).
+					Return(db.GetDishWithCustomizationsRow{CustomizationGroups: nil}, nil)
+
+				store.EXPECT().
 					GetMerchant(gomock.Any(), merchant.ID).
 					Times(1).
-					Return(db.Merchant{}, sql.ErrNoRows)
+					Return(db.Merchant{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -279,17 +302,16 @@ func TestAddCartItemAPI(t *testing.T) {
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
-					GetMerchant(gomock.Any(), merchant.ID).
+					GetDishWithCustomizations(gomock.Any(), dish.ID).
 					Times(1).
-					Return(merchant, nil)
+					Return(db.GetDishWithCustomizationsRow{}, db.ErrRecordNotFound)
 
 				store.EXPECT().
-					GetDish(gomock.Any(), dish.ID).
-					Times(1).
-					Return(db.Dish{}, sql.ErrNoRows)
+					GetMerchant(gomock.Any(), gomock.Any()).
+					Times(0)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusNotFound, recorder.Code)
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
 			},
 		},
 		{
@@ -303,6 +325,11 @@ func TestAddCartItemAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetDishWithCustomizations(gomock.Any(), dish.ID).
+					Times(1).
+					Return(db.GetDishWithCustomizationsRow{CustomizationGroups: nil}, nil)
+
 				store.EXPECT().
 					GetMerchant(gomock.Any(), merchant.ID).
 					Times(1).
@@ -454,6 +481,11 @@ func TestUpdateCartItemAPI(t *testing.T) {
 					Return(cart, nil)
 
 				store.EXPECT().
+					GetDish(gomock.Any(), dish.ID).
+					Times(1).
+					Return(dish, nil)
+
+				store.EXPECT().
 					UpdateCartItem(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(cartItem, nil)
@@ -480,7 +512,7 @@ func TestUpdateCartItemAPI(t *testing.T) {
 				store.EXPECT().
 					GetCartItem(gomock.Any(), int64(99999)).
 					Times(1).
-					Return(db.GetCartItemRow{}, sql.ErrNoRows)
+					Return(db.GetCartItemRow{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -637,7 +669,7 @@ func TestDeleteCartItemAPI(t *testing.T) {
 				store.EXPECT().
 					GetCartItem(gomock.Any(), int64(99999)).
 					Times(1).
-					Return(db.GetCartItemRow{}, sql.ErrNoRows)
+					Return(db.GetCartItemRow{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -729,6 +761,7 @@ func TestClearCartAPI(t *testing.T) {
 					GetCartByUserAndMerchant(gomock.Any(), db.GetCartByUserAndMerchantParams{
 						UserID:     user.ID,
 						MerchantID: merchant.ID,
+						OrderType:  "takeout",
 					}).
 					Times(1).
 					Return(cart, nil)
@@ -752,7 +785,7 @@ func TestClearCartAPI(t *testing.T) {
 				store.EXPECT().
 					GetCartByUserAndMerchant(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.Cart{}, sql.ErrNoRows)
+					Return(db.Cart{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				// 购物车不存在时返回成功，表示购物车已清空
@@ -820,6 +853,7 @@ func TestCalculateCartAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchant(user.ID)
 	merchant.Status = "active"
+	merchant.IsOpen = true
 	cart := randomCart(user.ID, merchant.ID)
 	dish := randomDish(merchant.ID, nil)
 	cartItem := randomCartItem(cart.ID, dish)
@@ -845,9 +879,15 @@ func TestCalculateCartAPI(t *testing.T) {
 					Return(merchant, nil)
 
 				store.EXPECT().
+					ListActiveDiscountRules(gomock.Any(), merchant.ID).
+					Times(1).
+					Return([]db.DiscountRule{}, nil)
+
+				store.EXPECT().
 					GetCartByUserAndMerchant(gomock.Any(), db.GetCartByUserAndMerchantParams{
 						UserID:     user.ID,
 						MerchantID: merchant.ID,
+						OrderType:  "takeout",
 					}).
 					Times(1).
 					Return(cart, nil)
@@ -856,6 +896,23 @@ func TestCalculateCartAPI(t *testing.T) {
 					ListCartItems(gomock.Any(), cart.ID).
 					Times(1).
 					Return([]db.ListCartItemsRow{listRow}, nil)
+
+				store.EXPECT().
+					ListUserAvailableVouchersForMerchant(gomock.Any(), db.ListUserAvailableVouchersForMerchantParams{
+						UserID:         user.ID,
+						MerchantID:     merchant.ID,
+						MinOrderAmount: int64(cartItem.Quantity) * dish.Price,
+					}).
+					Times(1).
+					Return([]db.ListUserAvailableVouchersForMerchantRow{}, nil)
+
+				store.EXPECT().
+					GetMembershipByMerchantAndUser(gomock.Any(), db.GetMembershipByMerchantAndUserParams{
+						MerchantID: merchant.ID,
+						UserID:     user.ID,
+					}).
+					Times(1).
+					Return(db.MerchantMembership{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -876,7 +933,7 @@ func TestCalculateCartAPI(t *testing.T) {
 				store.EXPECT().
 					GetCartByUserAndMerchant(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.Cart{}, sql.ErrNoRows)
+					Return(db.Cart{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -943,6 +1000,20 @@ func TestGetAllCartsAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant1 := randomMerchant(user.ID)
 	merchant2 := randomMerchant(user.ID)
+	summaryArg := db.GetUserCartsSummaryParams{
+		UserID: user.ID,
+		OrderType: pgtype.Text{
+			String: "",
+			Valid:  false,
+		},
+	}
+	detailsArg := db.GetUserCartsWithDetailsParams{
+		UserID: user.ID,
+		OrderType: pgtype.Text{
+			String: "",
+			Valid:  false,
+		},
+	}
 	merchant2.ID = merchant1.ID + 1
 
 	// 创建两个商户的购物车摘要数据
@@ -954,26 +1025,26 @@ func TestGetAllCartsAPI(t *testing.T) {
 
 	cartsWithDetails := []db.GetUserCartsWithDetailsRow{
 		{
-			CartID:       1,
-			MerchantID:   merchant1.ID,
-			MerchantName: merchant1.Name,
-			MerchantLogo: pgtype.Text{String: "https://example.com/logo1.png", Valid: true},
-			SubMchid:     pgtype.Text{String: "sub_mch_001", Valid: true},
-			ItemCount:    3,
-			Subtotal:     8800,
-			AllAvailable: true,
-			UpdatedAt:    time.Now(),
+			CartID:                   1,
+			MerchantID:               merchant1.ID,
+			MerchantName:             merchant1.Name,
+			MerchantLogoMediaAssetID: pgtype.Int8{},
+			SubMchid:                 pgtype.Text{String: "sub_mch_001", Valid: true},
+			ItemCount:                3,
+			Subtotal:                 8800,
+			AllAvailable:             true,
+			UpdatedAt:                time.Now(),
 		},
 		{
-			CartID:       2,
-			MerchantID:   merchant2.ID,
-			MerchantName: merchant2.Name,
-			MerchantLogo: pgtype.Text{String: "https://example.com/logo2.png", Valid: true},
-			SubMchid:     pgtype.Text{String: "sub_mch_002", Valid: true},
-			ItemCount:    2,
-			Subtotal:     6200,
-			AllAvailable: true,
-			UpdatedAt:    time.Now(),
+			CartID:                   2,
+			MerchantID:               merchant2.ID,
+			MerchantName:             merchant2.Name,
+			MerchantLogoMediaAssetID: pgtype.Int8{},
+			SubMchid:                 pgtype.Text{String: "sub_mch_002", Valid: true},
+			ItemCount:                2,
+			Subtotal:                 6200,
+			AllAvailable:             true,
+			UpdatedAt:                time.Now(),
 		},
 	}
 
@@ -990,12 +1061,12 @@ func TestGetAllCartsAPI(t *testing.T) {
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
-					GetUserCartsSummary(gomock.Any(), gomock.Eq(user.ID)).
+					GetUserCartsSummary(gomock.Any(), gomock.Eq(summaryArg)).
 					Times(1).
 					Return(cartsSummary, nil)
 
 				store.EXPECT().
-					GetUserCartsWithDetails(gomock.Any(), gomock.Eq(user.ID)).
+					GetUserCartsWithDetails(gomock.Any(), gomock.Eq(detailsArg)).
 					Times(1).
 					Return(cartsWithDetails, nil)
 			},
@@ -1003,8 +1074,7 @@ func TestGetAllCartsAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response userCartsResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 
 				require.Equal(t, 2, response.Summary.CartCount)
 				require.Equal(t, 5, response.Summary.TotalItems)
@@ -1024,7 +1094,7 @@ func TestGetAllCartsAPI(t *testing.T) {
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
-					GetUserCartsSummary(gomock.Any(), gomock.Eq(user.ID)).
+					GetUserCartsSummary(gomock.Any(), gomock.Eq(summaryArg)).
 					Times(1).
 					Return(db.GetUserCartsSummaryRow{
 						CartCount:   0,
@@ -1033,7 +1103,7 @@ func TestGetAllCartsAPI(t *testing.T) {
 					}, nil)
 
 				store.EXPECT().
-					GetUserCartsWithDetails(gomock.Any(), gomock.Eq(user.ID)).
+					GetUserCartsWithDetails(gomock.Any(), gomock.Eq(detailsArg)).
 					Times(1).
 					Return([]db.GetUserCartsWithDetailsRow{}, nil)
 			},
@@ -1041,8 +1111,7 @@ func TestGetAllCartsAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response userCartsResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 
 				require.Equal(t, 0, response.Summary.CartCount)
 				require.Len(t, response.Carts, 0)
@@ -1067,7 +1136,7 @@ func TestGetAllCartsAPI(t *testing.T) {
 				}
 
 				store.EXPECT().
-					GetUserCartsSummary(gomock.Any(), gomock.Eq(user.ID)).
+					GetUserCartsSummary(gomock.Any(), gomock.Eq(summaryArg)).
 					Times(1).
 					Return(db.GetUserCartsSummaryRow{
 						CartCount:   1,
@@ -1076,7 +1145,7 @@ func TestGetAllCartsAPI(t *testing.T) {
 					}, nil)
 
 				store.EXPECT().
-					GetUserCartsWithDetails(gomock.Any(), gomock.Eq(user.ID)).
+					GetUserCartsWithDetails(gomock.Any(), gomock.Eq(detailsArg)).
 					Times(1).
 					Return(unavailableCarts, nil)
 			},
@@ -1084,8 +1153,7 @@ func TestGetAllCartsAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response userCartsResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 
 				require.False(t, response.Carts[0].AllAvailable)
 			},
@@ -1107,7 +1175,7 @@ func TestGetAllCartsAPI(t *testing.T) {
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
-					GetUserCartsSummary(gomock.Any(), gomock.Any()).
+					GetUserCartsSummary(gomock.Any(), gomock.Eq(summaryArg)).
 					Times(1).
 					Return(db.GetUserCartsSummaryRow{}, sql.ErrConnDone)
 			},
@@ -1147,6 +1215,8 @@ func TestCombinedCheckoutAPI(t *testing.T) {
 	merchant1 := randomMerchant(user.ID)
 	merchant2 := randomMerchant(user.ID)
 	merchant2.ID = merchant1.ID + 1
+	merchant1.IsOpen = true
+	merchant2.IsOpen = true
 
 	cart1ID := int64(1)
 	cart2ID := int64(2)
@@ -1202,6 +1272,16 @@ func TestCombinedCheckoutAPI(t *testing.T) {
 					Times(1).
 					Return(cartsWithMerchants, nil)
 
+				store.EXPECT().
+					GetCart(gomock.Any(), cart1ID).
+					Times(1).
+					Return(db.Cart{ID: cart1ID, UserID: user.ID, MerchantID: merchant1.ID, OrderType: "dine_in"}, nil)
+
+				store.EXPECT().
+					GetCart(gomock.Any(), cart2ID).
+					Times(1).
+					Return(db.Cart{ID: cart2ID, UserID: user.ID, MerchantID: merchant2.ID, OrderType: "dine_in"}, nil)
+
 				// Mock: 获取购物车商品
 				store.EXPECT().
 					ListCartItems(gomock.Any(), gomock.Any()).
@@ -1223,7 +1303,7 @@ func TestCombinedCheckoutAPI(t *testing.T) {
 				store.EXPECT().
 					GetDeliveryFeeConfigByRegion(gomock.Any(), gomock.Any()).
 					AnyTimes().
-					Return(db.DeliveryFeeConfig{}, sql.ErrNoRows)
+					Return(db.DeliveryFeeConfig{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				// 接受成功或尚未完全实现的响应

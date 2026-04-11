@@ -20,7 +20,7 @@ INSERT INTO users (
   avatar_url
 ) VALUES (
   $1, $2, $3, $4, $5
-) RETURNING id, wechat_openid, wechat_unionid, full_name, phone, avatar_url, created_at
+) RETURNING id, wechat_openid, wechat_unionid, full_name, phone, avatar_url, created_at, avatar_media_asset_id
 `
 
 type CreateUserParams struct {
@@ -48,12 +48,13 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.Phone,
 		&i.AvatarUrl,
 		&i.CreatedAt,
+		&i.AvatarMediaAssetID,
 	)
 	return i, err
 }
 
 const getUser = `-- name: GetUser :one
-SELECT id, wechat_openid, wechat_unionid, full_name, phone, avatar_url, created_at FROM users
+SELECT id, wechat_openid, wechat_unionid, full_name, phone, avatar_url, created_at, avatar_media_asset_id FROM users
 WHERE id = $1 LIMIT 1
 `
 
@@ -68,12 +69,13 @@ func (q *Queries) GetUser(ctx context.Context, id int64) (User, error) {
 		&i.Phone,
 		&i.AvatarUrl,
 		&i.CreatedAt,
+		&i.AvatarMediaAssetID,
 	)
 	return i, err
 }
 
 const getUserByPhone = `-- name: GetUserByPhone :one
-SELECT id, wechat_openid, wechat_unionid, full_name, phone, avatar_url, created_at FROM users
+SELECT id, wechat_openid, wechat_unionid, full_name, phone, avatar_url, created_at, avatar_media_asset_id FROM users
 WHERE phone = $1 LIMIT 1
 `
 
@@ -88,12 +90,13 @@ func (q *Queries) GetUserByPhone(ctx context.Context, phone pgtype.Text) (User, 
 		&i.Phone,
 		&i.AvatarUrl,
 		&i.CreatedAt,
+		&i.AvatarMediaAssetID,
 	)
 	return i, err
 }
 
 const getUserByWechatOpenID = `-- name: GetUserByWechatOpenID :one
-SELECT id, wechat_openid, wechat_unionid, full_name, phone, avatar_url, created_at FROM users
+SELECT id, wechat_openid, wechat_unionid, full_name, phone, avatar_url, created_at, avatar_media_asset_id FROM users
 WHERE wechat_openid = $1 LIMIT 1
 `
 
@@ -108,12 +111,13 @@ func (q *Queries) GetUserByWechatOpenID(ctx context.Context, wechatOpenid string
 		&i.Phone,
 		&i.AvatarUrl,
 		&i.CreatedAt,
+		&i.AvatarMediaAssetID,
 	)
 	return i, err
 }
 
 const listUsers = `-- name: ListUsers :many
-SELECT id, wechat_openid, wechat_unionid, full_name, phone, avatar_url, created_at FROM users
+SELECT id, wechat_openid, wechat_unionid, full_name, phone, avatar_url, created_at, avatar_media_asset_id FROM users
 ORDER BY id
 LIMIT $1
 OFFSET $2
@@ -141,6 +145,7 @@ func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]User, e
 			&i.Phone,
 			&i.AvatarUrl,
 			&i.CreatedAt,
+			&i.AvatarMediaAssetID,
 		); err != nil {
 			return nil, err
 		}
@@ -158,17 +163,19 @@ SET
   full_name = COALESCE($1, full_name),
   phone = COALESCE($2, phone),
   avatar_url = COALESCE($3, avatar_url),
-  wechat_unionid = COALESCE($4, wechat_unionid)
-WHERE id = $5
-RETURNING id, wechat_openid, wechat_unionid, full_name, phone, avatar_url, created_at
+  avatar_media_asset_id = COALESCE($4, avatar_media_asset_id),
+  wechat_unionid = COALESCE($5, wechat_unionid)
+WHERE id = $6
+RETURNING id, wechat_openid, wechat_unionid, full_name, phone, avatar_url, created_at, avatar_media_asset_id
 `
 
 type UpdateUserParams struct {
-	FullName      pgtype.Text `json:"full_name"`
-	Phone         pgtype.Text `json:"phone"`
-	AvatarUrl     pgtype.Text `json:"avatar_url"`
-	WechatUnionid pgtype.Text `json:"wechat_unionid"`
-	ID            int64       `json:"id"`
+	FullName           pgtype.Text `json:"full_name"`
+	Phone              pgtype.Text `json:"phone"`
+	AvatarUrl          pgtype.Text `json:"avatar_url"`
+	AvatarMediaAssetID pgtype.Int8 `json:"avatar_media_asset_id"`
+	WechatUnionid      pgtype.Text `json:"wechat_unionid"`
+	ID                 int64       `json:"id"`
 }
 
 func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error) {
@@ -176,6 +183,7 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, e
 		arg.FullName,
 		arg.Phone,
 		arg.AvatarUrl,
+		arg.AvatarMediaAssetID,
 		arg.WechatUnionid,
 		arg.ID,
 	)
@@ -188,6 +196,7 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, e
 		&i.Phone,
 		&i.AvatarUrl,
 		&i.CreatedAt,
+		&i.AvatarMediaAssetID,
 	)
 	return i, err
 }

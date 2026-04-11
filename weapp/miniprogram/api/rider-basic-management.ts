@@ -1,7 +1,7 @@
 /**
  * 骑手基础管理接口重构 (Task 3.1)
  * 基于swagger.json完全重构，移除所有没有后端支持的旧功能
- * 包含：骑手信息、上下线管理、位置上报、积分管理
+ * 包含：骑手信息、上下线管理、位置上报
  */
 
 import { request } from '../utils/request'
@@ -75,42 +75,6 @@ export interface LocationUpdateResponse {
     message: string
 }
 
-// ==================== 积分管理相关类型 ====================
-
-/** 骑手积分响应 */
-export interface RiderScoreResponse {
-    rider_id: number
-    current_score: number
-    can_take_high_value_orders: boolean
-    score_level: string
-    next_level_threshold?: number
-    score_rules: {
-        complete_normal_order: number
-        complete_high_value_order: number
-        timeout_penalty: number
-        damage_penalty: number
-    }
-}
-
-/** 积分历史记录 */
-export interface ScoreHistoryItem {
-    id: number
-    rider_id: number
-    order_id?: number
-    score_change: number
-    reason: string
-    description?: string
-    created_at: string
-}
-
-/** 积分历史查询参数 */
-export interface ScoreHistoryParams extends Record<string, unknown> {
-    page_id: number
-    page_size: number
-    start_date?: string
-    end_date?: string
-}
-
 // ==================== 骑手基础管理服务类 ====================
 
 /**
@@ -170,33 +134,6 @@ export class RiderBasicManagementService {
         })
     }
 
-    /**
-     * 获取骑手积分信息
-     */
-    async getRiderScore(): Promise<RiderScoreResponse> {
-        return request({
-            url: '/v1/rider/score',
-            method: 'GET'
-        })
-    }
-
-    /**
-     * 获取积分历史记录
-     * @param params 查询参数
-     */
-    async getScoreHistory(params: ScoreHistoryParams): Promise<{
-        history: ScoreHistoryItem[]
-        total: number
-        page_id: number
-        page_size: number
-        has_more: boolean
-    }> {
-        return request({
-            url: '/v1/rider/score/history',
-            method: 'GET',
-            data: params
-        })
-    }
 }
 
 // ==================== 位置管理服务类 ====================
@@ -341,28 +278,6 @@ export class RiderBasicManagementAdapter {
         }
     }
 
-    /**
-     * 适配积分历史记录
-     */
-    static adaptScoreHistoryItem(data: ScoreHistoryItem): {
-        id: number
-        riderId: number
-        orderId?: number
-        scoreChange: number
-        reason: string
-        description?: string
-        createdAt: string
-    } {
-        return {
-            id: data.id,
-            riderId: data.rider_id,
-            orderId: data.order_id,
-            scoreChange: data.score_change,
-            reason: data.reason,
-            description: data.description,
-            createdAt: data.created_at
-        }
-    }
 }
 
 // ==================== 导出服务实例 ====================
@@ -378,17 +293,15 @@ export const locationManagementService = new LocationManagementService()
 export async function getRiderDashboard(): Promise<{
     riderInfo: RiderResponse
     riderStatus: RiderStatusResponse
-    scoreInfo: RiderScoreResponse
     todayStats: {
         onlineDuration: number
         completedOrders: number
         earnings: number
     }
 }> {
-    const [riderInfo, riderStatus, scoreInfo] = await Promise.all([
+    const [riderInfo, riderStatus] = await Promise.all([
         riderBasicManagementService.getRiderInfo(),
-        riderBasicManagementService.getRiderStatus(),
-        riderBasicManagementService.getRiderScore()
+        riderBasicManagementService.getRiderStatus()
     ])
 
     // 今日统计数据需要根据实际接口调整
@@ -401,7 +314,6 @@ export async function getRiderDashboard(): Promise<{
     return {
         riderInfo,
         riderStatus,
-        scoreInfo,
         todayStats
     }
 }
@@ -447,10 +359,10 @@ export async function smartOnlineManagement(action: 'online' | 'offline'): Promi
                 riderInfo
             }
         }
-    } catch (error: any) {
+    } catch (error: unknown) {
         return {
             success: false,
-            message: error?.message || `${action === 'online' ? '上线' : '下线'}失败`
+            message: error instanceof Error ? error.message : `${action === 'online' ? '上线' : '下线'}失败`
         }
     }
 }
@@ -460,7 +372,7 @@ export async function smartOnlineManagement(action: 'online' | 'offline'): Promi
  */
 export class LocationReportManager {
     private reportInterval: number = 30000 // 30秒上报一次
-    private intervalId: NodeJS.Timeout | null = null
+    private intervalId: ReturnType<typeof setInterval> | null = null
     private lastLocation: LocationPoint | null = null
 
     /**
@@ -518,13 +430,14 @@ export class LocationReportManager {
             wx.getLocation({
                 type: 'gcj02',
                 success: (res) => {
+                    const heading = (res as unknown as { heading?: number }).heading
                     resolve({
                         latitude: res.latitude,
                         longitude: res.longitude,
                         recorded_at: new Date().toISOString(),
                         accuracy: res.accuracy,
                         speed: res.speed,
-                        heading: res.heading
+                        heading
                     })
                 },
                 fail: () => {
@@ -539,100 +452,6 @@ export class LocationReportManager {
      */
     getLastLocation(): LocationPoint | null {
         return this.lastLocation
-    }
-}
-
-/**
- * 积分管理工具
- */
-export class ScoreManagementUtils {
-    /**
-     * 计算积分等级
-     * @param score 当前积分
-     */
-    static calculateScoreLevel(score: number): {
-        level: string
-        levelName: string
-        canTakeHighValueOrders: boolean
-        nextLevelThreshold?: number
-    } {
-        if (score >= 100) {
-            return {
-                level: 'excellent',
-                levelName: '优秀骑手',
-                canTakeHighValueOrders: true
-            }
-        } else if (score >= 50) {
-            return {
-                level: 'good',
-                levelName: '良好骑手',
-                canTakeHighValueOrders: true,
-                nextLevelThreshold: 100
-            }
-        } else if (score >= 0) {
-            return {
-                level: 'normal',
-                levelName: '普通骑手',
-                canTakeHighValueOrders: true,
-                nextLevelThreshold: 50
-            }
-        } else {
-            return {
-                level: 'restricted',
-                levelName: '受限骑手',
-                canTakeHighValueOrders: false,
-                nextLevelThreshold: 0
-            }
-        }
-    }
-
-    /**
-     * 格式化积分变化原因
-     * @param reason 原因代码
-     */
-    static formatScoreChangeReason(reason: string): string {
-        const reasonMap: Record<string, string> = {
-            'complete_normal_order': '完成普通订单',
-            'complete_high_value_order': '完成高值订单',
-            'timeout': '订单超时',
-            'damage': '餐损',
-            'complaint': '投诉',
-            'praise': '表扬',
-            'manual_adjustment': '人工调整'
-        }
-        return reasonMap[reason] || reason
-    }
-
-    /**
-     * 预测积分变化影响
-     * @param currentScore 当前积分
-     * @param scoreChange 积分变化
-     */
-    static predictScoreImpact(currentScore: number, scoreChange: number): {
-        newScore: number
-        levelChange: boolean
-        newLevel: string
-        canTakeHighValueOrders: boolean
-        warning?: string
-    } {
-        const newScore = currentScore + scoreChange
-        const currentLevel = this.calculateScoreLevel(currentScore)
-        const newLevel = this.calculateScoreLevel(newScore)
-
-        let warning: string | undefined
-        if (newScore < 0 && currentScore >= 0) {
-            warning = '积分将变为负数，将无法接高值单'
-        } else if (newScore < -50) {
-            warning = '积分过低，可能面临账号限制'
-        }
-
-        return {
-            newScore,
-            levelChange: currentLevel.level !== newLevel.level,
-            newLevel: newLevel.levelName,
-            canTakeHighValueOrders: newLevel.canTakeHighValueOrders,
-            warning
-        }
     }
 }
 
@@ -692,7 +511,7 @@ export function formatEarnings(amount: number, showUnit: boolean = true): string
  * 验证位置数据
  * @param location 位置数据
  */
-export function validateLocationPoint(location: LocationPoint): { valid: boolean; message?: string } {
+export function validateLocationPoint(location: LocationPoint): { valid: boolean, message?: string } {
     if (!location.latitude || !location.longitude) {
         return { valid: false, message: '经纬度不能为空' }
     }

@@ -1,154 +1,94 @@
 /* 外卖首页 */
 @import '../../styles/customer.wxss';
 
-/* Skyline 滚动容器 - 继承 customer-scroll */
+/* Skyline 滚动容器 */
 .page-scroll {
-  background: #FAFAFA;
+  background: var(--td-bg-color-page);
   box-sizing: border-box;
 }
 
 /* ========== 搜索区域 ========== */
 .search-section {
-  padding: 20rpx;
-  background: #fff;
+  padding: 0 var(--spacer-md) var(--spacer-md);
+  background: var(--td-bg-color-page);
+  position: sticky;
+  top: 0;
+  z-index: var(--z-index-sticky);
 }
 
-/* ========== Tabs区域 ========== */
-.tabs-section {
-  background: #fff;
-  margin-bottom: 12rpx;
-}
-
-/* ========== 分类导航 ========== */
-.category-section {
-  background: #fff;
-  margin-bottom: 12rpx;
-}
-
-/* ========== 内容区域 ========== */
+/* ========== 内容区域 ==========*/
 .content-section {
   display: flex;
   flex-direction: column;
-  padding: 12rpx 20rpx 24rpx;
+  padding: var(--spacer-sm) var(--spacer-md) var(--spacer-lg); /* 上16, 左右24, 下32 */
+  gap: var(--spacer-sm);
 }
 
-/* ========== 套餐卡片 - 使用统一设计 Token ========== */
-.package-card {
+/* ========== 发现页增强样式 ========== */
+.section-title {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: var(--td-text-color-primary);
+  margin-bottom: var(--spacer-md);
+  padding: 0 8rpx;
+}
+
+.special-offers-section {
+  margin-bottom: var(--spacer-lg);
+}
+
+.offers-scroll {
+  width: 100%;
+}
+
+.offers-list {
   display: flex;
-  gap: var(--customer-card-gap);
-  padding: var(--customer-card-padding);
-  background: #fff;
-  border-radius: var(--customer-card-radius);
-  margin-bottom: var(--customer-card-margin);
-  box-shadow: var(--customer-card-shadow);
-  transition: all 0.2s ease;
+  flex-wrap: nowrap;
+  gap: var(--spacer-md);
+  padding: 4rpx; /* for shadow clipping */
+  padding-bottom: var(--spacer-sm);
 }
 
-.package-card:active {
-  transform: scale(0.98);
-  box-shadow: var(--customer-card-shadow-active);
-}
-
-.package-image {
-  width: var(--customer-image-size);
-  height: var(--customer-image-size);
-  border-radius: var(--customer-image-radius);
+.offer-item {
+  width: 540rpx;
   flex-shrink: 0;
 }
 
-.package-info {
-  flex: 1;
+.feed-section {
   display: flex;
   flex-direction: column;
-  gap: 8rpx;
-  min-width: 0;
-}
-
-/* 行布局 - 与 dish-card 保持一致 */
-.package-card .row-1 {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16rpx;
-}
-
-.package-card .row-2,
-.package-card .row-3,
-.package-card .row-4,
-.package-card .row-5 {
-  display: flex;
-  align-items: center;
-  gap: 12rpx;
-  flex-wrap: wrap;
-}
-
-.package-card .shop-dish-name {
-  flex: 1;
-  font-size: var(--customer-title-size);
-  font-weight: 500;
-  color: #333;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.package-card .price {
-  font-size: var(--customer-title-size);
-  font-weight: bold;
-  color: var(--brand-coral);
-}
-
-.package-card .separator {
-  color: #ddd;
-  margin: 0 4rpx;
-}
-
-.package-card .sales {
-  color: #666;
-  font-size: var(--customer-subtitle-size);
-}
-
-.package-card .distance {
-  color: #999;
-  font-size: var(--customer-caption-size);
-}
-
-.package-card .delivery-fee {
-  font-size: 20rpx;
-  color: #666;
-  padding: 4rpx 12rpx;
-  background: #f5f5f5;
-  border-radius: 6rpx;
-}
-
-.package-card .discount {
-  font-size: 20rpx;
-  color: var(--brand-coral);
-  padding: 4rpx 12rpx;
-  background: #FFF5F3;
-  border-radius: 6rpx;
-}
-
-.package-card .add-btn {
-  align-self: flex-end;
-  transition: transform 0.2s ease;
-}
-
-.package-card .add-btn:active {
-  transform: scale(0.9);
+  gap: var(--spacer-sm);
 }
 
 .loading-wrapper {
   display: flex;
   justify-content: center;
-  padding: 32rpx 0;
+  padding: var(--spacer-lg) 0;
 }
 
 .no-more {
   text-align: center;
-  padding: 32rpx 0;
-  color: #999;
-  font-size: 24rpx;
+  padding: var(--spacer-lg) 0;
+  color: var(--td-text-color-placeholder);
+  font-size: var(--font-size-xs);
+}
+
+.empty-entry {
+  padding: 40rpx 0 20rpx;
+}
+
+.empty-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+  padding: 16rpx 48rpx 0;
+}
+
+.error-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 100rpx 0;
 }
 
 /* ========== 位置引导提示 ========== */
@@ -157,34 +97,95 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 120rpx 48rpx;
+  padding: 120rpx var(--spacer-xl);
   text-align: center;
 }
 
 .location-guide-icon {
   font-size: 96rpx;
-  margin-bottom: 32rpx;
+  margin-bottom: var(--spacer-lg);
 }
 
 .location-guide-title {
-  font-size: 36rpx;
+  font-size: var(--font-size-title);
   font-weight: 600;
-  color: #333;
-  margin-bottom: 16rpx;
+  color: var(--td-text-color-primary);
+  margin-bottom: var(--spacer-sm);
 }
 
 .location-guide-desc {
-  font-size: 28rpx;
-  color: #666;
-  margin-bottom: 48rpx;
+  font-size: var(--font-size-base);
+  color: var(--td-text-color-secondary);
+  margin-bottom: var(--spacer-xl);
   line-height: 1.6;
 }
 
 .location-guide-buttons {
   display: flex;
-  gap: 24rpx;
+  gap: var(--spacer-md);
 }
 
 .location-guide-buttons .t-button {
   min-width: 180rpx;
+}
+
+/* ========== 菜系品类网格 ========== */
+.cuisine-grid-section {
+  background: transparent;
+  padding: 0 var(--spacer-md) var(--spacer-sm);
+  margin-bottom: var(--spacer-xs);
+}
+
+.cuisine-grid {
+  --td-grid-bg-color: transparent;
+  --td-grid-item-padding: 16rpx 8rpx;
+}
+
+.cuisine-grid-item {
+  border-radius: 24rpx;
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 10rpx 24rpx rgba(15, 23, 42, 0.05);
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+.cuisine-grid-item--active {
+  background: linear-gradient(180deg, rgba(255, 250, 240, 0.98) 0%, rgba(255, 243, 220, 0.98) 100%);
+  box-shadow: 0 14rpx 28rpx rgba(180, 95, 0, 0.12);
+}
+
+.cuisine-grid-item-content {
+  min-height: 120rpx;
+}
+
+.cuisine-icon-wrap {
+  width: 76rpx;
+  height: 76rpx;
+  border-radius: 24rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto;
+  box-shadow: inset 0 0 0 1rpx rgba(255, 255, 255, 0.35);
+}
+
+.cuisine-icon-wrap--active {
+  transform: translateY(-2rpx);
+}
+
+.cuisine-icon-text {
+  font-size: 22rpx;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 1rpx;
+}
+
+.cuisine-grid-item-text {
+  font-size: 22rpx;
+  color: var(--td-text-color-primary);
+  font-weight: 500;
+  text-align: center;
+}
+
+.cuisine-grid-item-text--active {
+  color: #7a3a00;
 }

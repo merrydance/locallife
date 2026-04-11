@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -54,6 +55,60 @@ func randomRoom(merchantID int64) db.Table {
 	}
 }
 
+func tableToListTablesByMerchantRow(table db.Table, primaryImageAssetID int64) db.ListTablesByMerchantRow {
+	return db.ListTablesByMerchantRow{
+		ID:                   table.ID,
+		MerchantID:           table.MerchantID,
+		TableNo:              table.TableNo,
+		TableType:            table.TableType,
+		Capacity:             table.Capacity,
+		Description:          table.Description,
+		MinimumSpend:         table.MinimumSpend,
+		QrCodeUrl:            table.QrCodeUrl,
+		Status:               table.Status,
+		CurrentReservationID: table.CurrentReservationID,
+		CreatedAt:            table.CreatedAt,
+		UpdatedAt:            table.UpdatedAt,
+		AccessCodeHash:       table.AccessCodeHash,
+		PrimaryImageAssetID:  primaryImageAssetID,
+	}
+}
+
+func tableToListTablesByMerchantAndTypeRow(table db.Table, primaryImageAssetID int64) db.ListTablesByMerchantAndTypeRow {
+	return db.ListTablesByMerchantAndTypeRow{
+		ID:                   table.ID,
+		MerchantID:           table.MerchantID,
+		TableNo:              table.TableNo,
+		TableType:            table.TableType,
+		Capacity:             table.Capacity,
+		Description:          table.Description,
+		MinimumSpend:         table.MinimumSpend,
+		QrCodeUrl:            table.QrCodeUrl,
+		Status:               table.Status,
+		CurrentReservationID: table.CurrentReservationID,
+		CreatedAt:            table.CreatedAt,
+		UpdatedAt:            table.UpdatedAt,
+		AccessCodeHash:       table.AccessCodeHash,
+		PrimaryImageAssetID:  primaryImageAssetID,
+	}
+}
+
+func TestNewTableResponse_RewritesLegacyQRCodeURLInOSSMode(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	server, _ := newTestServerForMedia(t, store)
+	server.config.FileStorageProvider = "oss"
+
+	table := randomTable(util.RandomInt(1, 1000))
+	table.QrCodeUrl = pgtype.Text{String: "uploads/public/merchants/12/qrcodes/qrcode_m12_t3_labeled.png", Valid: true}
+
+	resp := server.newTableResponse(table)
+	require.NotNil(t, resp.QrCodeUrl)
+	require.Contains(t, *resp.QrCodeUrl, "cdn.test.example.com/uploads/public/merchants/12/qrcodes/qrcode_m12_t3_labeled.png")
+}
+
 // ==================== 创建桌台测试 ====================
 
 func TestCreateTableAPI(t *testing.T) {
@@ -81,10 +136,7 @@ func TestCreateTableAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					GetTableByMerchantAndNo(gomock.Any(), gomock.Any()).
@@ -97,7 +149,7 @@ func TestCreateTableAPI(t *testing.T) {
 					Return(table, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
+				require.Equal(t, http.StatusCreated, recorder.Code)
 				requireBodyMatchTable(t, recorder.Body, table)
 			},
 		},
@@ -111,11 +163,7 @@ func TestCreateTableAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				// No authorization
 			},
-			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Any()).
-					Times(0)
-			},
+			buildStubs: func(store *mockdb.MockStore) {},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusUnauthorized, recorder.Code)
 			},
@@ -131,10 +179,35 @@ func TestCreateTableAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveNoAccessibleMerchants(store, user.ID)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusForbidden, recorder.Code)
+			},
+		},
+		{
+			name: "CashierForbidden",
+			body: gin.H{
+				"table_no":   table.TableNo,
+				"table_type": table.TableType,
+				"capacity":   table.Capacity,
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				staffMerchant := merchant
+				staffMerchant.OwnerUserID = user.ID + 100
+
+				expectResolveSingleStaffMerchant(store, user.ID, staffMerchant)
+
 				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
+					GetUserMerchantRole(gomock.Any(), db.GetUserMerchantRoleParams{
+						MerchantID: merchant.ID,
+						UserID:     user.ID,
+					}).
 					Times(1).
-					Return(db.Merchant{}, db.ErrRecordNotFound)
+					Return("cashier", nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -151,10 +224,7 @@ func TestCreateTableAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					GetTableByMerchantAndNo(gomock.Any(), gomock.Any()).
@@ -176,9 +246,7 @@ func TestCreateTableAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Any()).
-					Times(0)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -195,9 +263,7 @@ func TestCreateTableAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Any()).
-					Times(0)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -253,10 +319,7 @@ func TestGetTableAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					GetTable(gomock.Any(), gomock.Eq(table.ID)).
@@ -280,10 +343,7 @@ func TestGetTableAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					GetTable(gomock.Any(), gomock.Eq(table.ID)).
@@ -301,6 +361,8 @@ func TestGetTableAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
 				store.EXPECT().
 					GetTable(gomock.Any(), gomock.Any()).
 					Times(0)
@@ -343,8 +405,12 @@ func TestListTablesAPI(t *testing.T) {
 
 	n := 5
 	tables := make([]db.Table, n)
+	tableRows := make([]db.ListTablesByMerchantRow, n)
+	tableTypeRows := make([]db.ListTablesByMerchantAndTypeRow, n)
 	for i := 0; i < n; i++ {
 		tables[i] = randomTable(merchant.ID)
+		tableRows[i] = tableToListTablesByMerchantRow(tables[i], 0)
+		tableTypeRows[i] = tableToListTablesByMerchantAndTypeRow(tables[i], 0)
 	}
 
 	testCases := []struct {
@@ -361,15 +427,17 @@ func TestListTablesAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					ListTablesByMerchant(gomock.Any(), gomock.Eq(merchant.ID)).
 					Times(1).
-					Return(tables, nil)
+					Return(tableRows, nil)
+
+				store.EXPECT().
+					ListTableTags(gomock.Any(), gomock.Any()).
+					Times(len(tableRows)).
+					Return([]db.ListTableTagsRow{}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -382,15 +450,17 @@ func TestListTablesAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					ListTablesByMerchantAndType(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(tables, nil)
+					Return(tableTypeRows, nil)
+
+				store.EXPECT().
+					ListTableTags(gomock.Any(), gomock.Any()).
+					Times(len(tableTypeRows)).
+					Return([]db.ListTableTagsRow{}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -403,10 +473,7 @@ func TestListTablesAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(db.Merchant{}, db.ErrRecordNotFound)
+				expectResolveNoAccessibleMerchants(store, user.ID)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -438,6 +505,53 @@ func TestListTablesAPI(t *testing.T) {
 	}
 }
 
+func TestListTablesAPI_IncludesImageURL(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	table := randomTable(merchant.ID)
+	assetID := int64(42)
+	rows := []db.ListTablesByMerchantRow{tableToListTablesByMerchantRow(table, assetID)}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+	store.EXPECT().
+		ListTablesByMerchant(gomock.Any(), gomock.Eq(merchant.ID)).
+		Times(1).
+		Return(rows, nil)
+	store.EXPECT().
+		ListMediaAssetsByIDs(gomock.Any(), gomock.Eq([]int64{assetID})).
+		Times(1).
+		Return([]db.ListMediaAssetsByIDsRow{approvedAssetRow(assetID, "merchant/table/cover.jpg")}, nil)
+	store.EXPECT().
+		ListTableTags(gomock.Any(), gomock.Eq(table.ID)).
+		Times(1).
+		Return([]db.ListTableTagsRow{}, nil)
+
+	server, _ := newTestServerForMedia(t, store)
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodGet, "/v1/tables", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp struct {
+		Code    int                `json:"code"`
+		Message string             `json:"message"`
+		Data    listTablesResponse `json:"data"`
+	}
+	err = json.Unmarshal(recorder.Body.Bytes(), &resp)
+	require.NoError(t, err)
+	require.Len(t, resp.Data.Tables, 1)
+	require.NotEmpty(t, resp.Data.Tables[0].ImageURL)
+	require.Contains(t, resp.Data.Tables[0].ImageURL, "cdn.test.example.com")
+	require.Contains(t, resp.Data.Tables[0].ImageURL, "merchant/table/cover.jpg")
+}
+
 // ==================== 更新桌台测试 ====================
 
 func TestUpdateTableAPI(t *testing.T) {
@@ -467,10 +581,7 @@ func TestUpdateTableAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					GetTable(gomock.Any(), gomock.Eq(table.ID)).
@@ -480,11 +591,48 @@ func TestUpdateTableAPI(t *testing.T) {
 				updatedTable := table
 				updatedTable.TableNo = newTableNo
 				updatedTable.Capacity = newCapacity
+				updatedTable.QrCodeUrl = pgtype.Text{}
 
 				store.EXPECT().
-					UpdateTable(gomock.Any(), gomock.Any()).
+					UpdateTable(gomock.Any(), gomock.AssignableToTypeOf(db.UpdateTableParams{})).
+					DoAndReturn(func(_ context.Context, arg db.UpdateTableParams) (db.Table, error) {
+						require.True(t, arg.QrCodeUrl.Valid)
+						require.Empty(t, arg.QrCodeUrl.String)
+						return updatedTable, nil
+					}).
+					Times(1)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+			},
+		},
+		{
+			name:    "KeepsQRCodeWhenTableNoUnchanged",
+			tableID: table.ID,
+			body: gin.H{
+				"capacity": newCapacity,
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetTable(gomock.Any(), gomock.Eq(table.ID)).
 					Times(1).
-					Return(updatedTable, nil)
+					Return(table, nil)
+
+				updatedTable := table
+				updatedTable.Capacity = newCapacity
+
+				store.EXPECT().
+					UpdateTable(gomock.Any(), gomock.AssignableToTypeOf(db.UpdateTableParams{})).
+					DoAndReturn(func(_ context.Context, arg db.UpdateTableParams) (db.Table, error) {
+						require.False(t, arg.QrCodeUrl.Valid)
+						return updatedTable, nil
+					}).
+					Times(1)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -500,10 +648,7 @@ func TestUpdateTableAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					GetTable(gomock.Any(), gomock.Eq(table.ID)).
@@ -524,10 +669,7 @@ func TestUpdateTableAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				// 桌台属于另一个商户
 				otherTable := table
@@ -592,10 +734,7 @@ func TestDeleteTableAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					GetTable(gomock.Any(), gomock.Eq(table.ID)).
@@ -620,10 +759,7 @@ func TestDeleteTableAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				tableWithReservation := table
 				tableWithReservation.CurrentReservationID = pgtype.Int8{Int64: 123, Valid: true}
@@ -644,10 +780,7 @@ func TestDeleteTableAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					GetTable(gomock.Any(), gomock.Eq(table.ID)).
@@ -672,10 +805,7 @@ func TestDeleteTableAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					GetTable(gomock.Any(), gomock.Eq(table.ID)).
@@ -737,10 +867,47 @@ func TestUpdateTableStatusAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
 				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
+					GetTable(gomock.Any(), gomock.Eq(table.ID)).
 					Times(1).
-					Return(merchant, nil)
+					Return(table, nil)
+
+				updatedTable := table
+				updatedTable.Status = "occupied"
+
+				store.EXPECT().
+					UpdateTableStatus(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(updatedTable, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+			},
+		},
+		{
+			name:    "CashierAllowed",
+			tableID: table.ID,
+			body: gin.H{
+				"status": "occupied",
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				staffMerchant := merchant
+				staffMerchant.OwnerUserID = user.ID + 100
+
+				expectResolveSingleStaffMerchant(store, user.ID, staffMerchant)
+
+				store.EXPECT().
+					GetUserMerchantRole(gomock.Any(), db.GetUserMerchantRoleParams{
+						MerchantID: merchant.ID,
+						UserID:     user.ID,
+					}).
+					Times(1).
+					Return("cashier", nil)
 
 				store.EXPECT().
 					GetTable(gomock.Any(), gomock.Eq(table.ID)).
@@ -768,7 +935,9 @@ func TestUpdateTableStatusAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
 			},
@@ -783,10 +952,7 @@ func TestUpdateTableStatusAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					GetTable(gomock.Any(), gomock.Eq(table.ID)).
@@ -807,10 +973,7 @@ func TestUpdateTableStatusAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				otherTable := table
 				otherTable.MerchantID = merchant.ID + 1 // 不同商户
@@ -879,10 +1042,7 @@ func TestAddTableTagAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					GetTable(gomock.Any(), gomock.Eq(table.ID)).
@@ -917,10 +1077,7 @@ func TestAddTableTagAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					GetTable(gomock.Any(), gomock.Eq(table.ID)).
@@ -940,7 +1097,9 @@ func TestAddTableTagAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
 			},
@@ -999,10 +1158,7 @@ func TestRemoveTableTagAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					GetTable(gomock.Any(), gomock.Eq(table.ID)).
@@ -1026,10 +1182,7 @@ func TestRemoveTableTagAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					GetTable(gomock.Any(), gomock.Eq(table.ID)).
@@ -1047,7 +1200,9 @@ func TestRemoveTableTagAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
 			},
@@ -1099,6 +1254,13 @@ func TestListTableTagsAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetTable(gomock.Any(), gomock.Eq(table.ID)).
+					Times(1).
+					Return(table, nil)
+
 				store.EXPECT().
 					ListTableTags(gomock.Any(), gomock.Eq(table.ID)).
 					Times(1).
@@ -1114,7 +1276,9 @@ func TestListTableTagsAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
 			},
@@ -1334,15 +1498,39 @@ func TestGetRoomAvailabilityAPI(t *testing.T) {
 					ListReservationsByTableAndDate(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return([]db.TableReservation{}, nil)
+
+				// 商户营业时间：午餐 11:00-13:00，晚餐 17:00-20:00（30分钟间隔将产生 12 个 time slots）
+				store.EXPECT().
+					ListMerchantBusinessHours(gomock.Any(), gomock.Eq(room.MerchantID)).
+					Times(1).
+					Return([]db.MerchantBusinessHour{
+						{
+							MerchantID:  room.MerchantID,
+							DayOfWeek:   3, // 2025-01-15 是周三
+							OpenTime:    pgtype.Time{Microseconds: 11 * 60 * 60 * 1_000_000, Valid: true},
+							CloseTime:   pgtype.Time{Microseconds: 13 * 60 * 60 * 1_000_000, Valid: true},
+							IsClosed:    false,
+							SpecialDate: pgtype.Date{Valid: false},
+						},
+						{
+							MerchantID:  room.MerchantID,
+							DayOfWeek:   3,
+							OpenTime:    pgtype.Time{Microseconds: 17 * 60 * 60 * 1_000_000, Valid: true},
+							CloseTime:   pgtype.Time{Microseconds: 20 * 60 * 60 * 1_000_000, Valid: true},
+							IsClosed:    false,
+							SpecialDate: pgtype.Date{Valid: false},
+						},
+					}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
-				// 验证返回的时间段数量 (11:00-21:00, 每30分钟)
-				var resp roomAvailabilityResponse
-				err := json.NewDecoder(recorder.Body).Decode(&resp)
+				// 验证返回的时间段数量 (午餐 11:00-13:00 + 晚餐 17:00-20:00, 每30分钟；按可用“开始时间”生成，不包含关店时刻)
+				data, err := io.ReadAll(recorder.Body)
 				require.NoError(t, err)
-				require.Equal(t, 21, len(resp.TimeSlots)) // 11:00, 11:30, ..., 21:00 = 21个
+				var resp roomAvailabilityResponse
+				requireUnmarshalAPIResponseData(t, data, &resp)
+				require.Equal(t, 10, len(resp.TimeSlots)) // 11:00-13:00 共4个，17:00-20:00 共6个
 				require.Equal(t, "2025-01-15", resp.Date)
 			},
 		},
@@ -1423,8 +1611,7 @@ func requireBodyMatchTable(t *testing.T, body *bytes.Buffer, table db.Table) {
 	require.NoError(t, err)
 
 	var gotTable tableResponse
-	err = json.Unmarshal(data, &gotTable)
-	require.NoError(t, err)
+	requireUnmarshalAPIResponseData(t, data, &gotTable)
 
 	require.Equal(t, table.ID, gotTable.ID)
 	require.Equal(t, table.MerchantID, gotTable.MerchantID)
@@ -1453,18 +1640,16 @@ func TestAddTableImageAPI(t *testing.T) {
 			name:    "OK",
 			tableID: table.ID,
 			body: gin.H{
-				"image_url":  fmt.Sprintf("uploads/public/merchants/%d/tables/room1.jpg", merchant.ID),
-				"sort_order": 1,
-				"is_primary": true,
+				"media_asset_id": 1,
+				"sort_order":     1,
+				"is_primary":     true,
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), user.ID).
-					Times(1).
-					Return(merchant, nil)
+				asset := randomMediaAsset(1, user.ID, "public", "merchant/table/1/table_detail.jpg")
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					GetTable(gomock.Any(), table.ID).
@@ -1481,33 +1666,39 @@ func TestAddTableImageAPI(t *testing.T) {
 					AddTableImage(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(db.TableImage{
-						ID:        1,
-						TableID:   table.ID,
-						ImageUrl:  fmt.Sprintf("uploads/public/merchants/%d/tables/room1.jpg", merchant.ID),
-						SortOrder: 1,
-						IsPrimary: true,
+						ID:           1,
+						TableID:      table.ID,
+						MediaAssetID: pgtype.Int8{Int64: asset.ID, Valid: true},
+						SortOrder:    1,
+						IsPrimary:    true,
 					}, nil)
+
+				store.EXPECT().
+					GetMediaAssetByID(gomock.Any(), asset.ID).
+					Times(1).
+					Return(asset, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusCreated, recorder.Code)
+				body := recorder.Body.String()
+				require.Contains(t, body, "image_url")
+				require.Contains(t, body, "merchant/table/1/table_detail.jpg")
 			},
 		},
 		{
 			name:    "OK_NotPrimary",
 			tableID: table.ID,
 			body: gin.H{
-				"image_url":  fmt.Sprintf("uploads/public/merchants/%d/tables/room2.jpg", merchant.ID),
-				"sort_order": 2,
-				"is_primary": false,
+				"media_asset_id": 2,
+				"sort_order":     2,
+				"is_primary":     false,
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), user.ID).
-					Times(1).
-					Return(merchant, nil)
+				asset := randomMediaAsset(2, user.ID, "public", "merchant/table/2/table_detail.jpg")
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					GetTable(gomock.Any(), table.ID).
@@ -1520,31 +1711,34 @@ func TestAddTableImageAPI(t *testing.T) {
 					AddTableImage(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(db.TableImage{
-						ID:        2,
-						TableID:   table.ID,
-						ImageUrl:  fmt.Sprintf("uploads/public/merchants/%d/tables/room2.jpg", merchant.ID),
-						SortOrder: 2,
-						IsPrimary: false,
+						ID:           2,
+						TableID:      table.ID,
+						MediaAssetID: pgtype.Int8{Int64: asset.ID, Valid: true},
+						SortOrder:    2,
+						IsPrimary:    false,
 					}, nil)
+
+				store.EXPECT().
+					GetMediaAssetByID(gomock.Any(), asset.ID).
+					Times(1).
+					Return(asset, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusCreated, recorder.Code)
+				require.Contains(t, recorder.Body.String(), "merchant/table/2/table_detail.jpg")
 			},
 		},
 		{
 			name:    "NotMerchant",
 			tableID: table.ID,
 			body: gin.H{
-				"image_url": "https://example.com/room1.jpg",
+				"media_asset_id": 1,
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), user.ID).
-					Times(1).
-					Return(db.Merchant{}, db.ErrRecordNotFound)
+				expectResolveNoAccessibleMerchants(store, user.ID)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -1554,16 +1748,13 @@ func TestAddTableImageAPI(t *testing.T) {
 			name:    "TableNotFound",
 			tableID: 99999,
 			body: gin.H{
-				"image_url": "https://example.com/room1.jpg",
+				"media_asset_id": 1,
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), user.ID).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					GetTable(gomock.Any(), int64(99999)).
@@ -1575,15 +1766,17 @@ func TestAddTableImageAPI(t *testing.T) {
 			},
 		},
 		{
-			name:    "InvalidImageURL",
+			name:    "InvalidMediaAssetID",
 			tableID: table.ID,
 			body: gin.H{
-				"image_url": "",
+				"media_asset_id": 0,
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
 			},
@@ -1619,7 +1812,8 @@ func TestAddTableImageAPI(t *testing.T) {
 
 func TestListTableImagesAPI(t *testing.T) {
 	user, _ := randomUser(t)
-	table := randomRoom(int64(123))
+	merchant := randomMerchant(user.ID)
+	table := randomRoom(merchant.ID)
 
 	testCases := []struct {
 		name          string
@@ -1635,17 +1829,44 @@ func TestListTableImagesAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				// listTableImages 是公开API，不需要验证商户权限
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetTable(gomock.Any(), gomock.Eq(table.ID)).
+					Times(1).
+					Return(table, nil)
+
+				assetRows := []db.ListMediaAssetsByIDsRow{
+					{
+						ID:               11,
+						ObjectKey:        "merchant/table/11/table_1.jpg",
+						Visibility:       "public",
+						ModerationStatus: "approved",
+					},
+					{
+						ID:               12,
+						ObjectKey:        "merchant/table/12/table_2.jpg",
+						Visibility:       "public",
+						ModerationStatus: "approved",
+					},
+				}
 				store.EXPECT().
 					ListTableImages(gomock.Any(), table.ID).
 					Times(1).
 					Return([]db.TableImage{
-						{ID: 1, TableID: table.ID, ImageUrl: "https://example.com/img1.jpg", IsPrimary: true},
-						{ID: 2, TableID: table.ID, ImageUrl: "https://example.com/img2.jpg", IsPrimary: false},
+						{ID: 1, TableID: table.ID, MediaAssetID: pgtype.Int8{Int64: 11, Valid: true}, IsPrimary: true},
+						{ID: 2, TableID: table.ID, MediaAssetID: pgtype.Int8{Int64: 12, Valid: true}, IsPrimary: false},
 					}, nil)
+				store.EXPECT().
+					ListMediaAssetsByIDs(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(assetRows, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
+				body := recorder.Body.String()
+				require.Contains(t, body, "merchant/table/11/table_1.jpg")
+				require.Contains(t, body, "merchant/table/12/table_2.jpg")
 			},
 		},
 		{
@@ -1654,7 +1875,9 @@ func TestListTableImagesAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
 			},
@@ -1666,6 +1889,13 @@ func TestListTableImagesAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetTable(gomock.Any(), gomock.Eq(table.ID)).
+					Times(1).
+					Return(table, nil)
+
 				store.EXPECT().
 					ListTableImages(gomock.Any(), table.ID).
 					Times(1).
@@ -1722,10 +1952,7 @@ func TestDeleteTableImageAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), user.ID).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					GetTable(gomock.Any(), table.ID).
@@ -1749,10 +1976,7 @@ func TestDeleteTableImageAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), user.ID).
-					Times(1).
-					Return(db.Merchant{}, db.ErrRecordNotFound)
+				expectResolveNoAccessibleMerchants(store, user.ID)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -1766,10 +1990,7 @@ func TestDeleteTableImageAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), user.ID).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					GetTable(gomock.Any(), int64(99999)).
@@ -1827,10 +2048,8 @@ func TestSetTableImagePrimaryAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), user.ID).
-					Times(1).
-					Return(merchant, nil)
+				asset := randomMediaAsset(1, user.ID, "public", "merchant/table/1/primary.jpg")
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					GetTable(gomock.Any(), table.ID).
@@ -1848,14 +2067,20 @@ func TestSetTableImagePrimaryAPI(t *testing.T) {
 					SetTableImagePrimary(gomock.Any(), int64(1)).
 					Times(1).
 					Return(db.TableImage{
-						ID:        1,
-						TableID:   table.ID,
-						ImageUrl:  "https://example.com/img1.jpg",
-						IsPrimary: true,
+						ID:           1,
+						TableID:      table.ID,
+						MediaAssetID: pgtype.Int8{Int64: asset.ID, Valid: true},
+						IsPrimary:    true,
 					}, nil)
+
+				store.EXPECT().
+					GetMediaAssetByID(gomock.Any(), asset.ID).
+					Times(1).
+					Return(asset, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
+				require.Contains(t, recorder.Body.String(), "merchant/table/1/primary.jpg")
 			},
 		},
 		{
@@ -1866,10 +2091,7 @@ func TestSetTableImagePrimaryAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), user.ID).
-					Times(1).
-					Return(db.Merchant{}, db.ErrRecordNotFound)
+				expectResolveNoAccessibleMerchants(store, user.ID)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -1883,10 +2105,7 @@ func TestSetTableImagePrimaryAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), user.ID).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					GetTable(gomock.Any(), table.ID).
@@ -2006,4 +2225,66 @@ func TestListMerchantRoomsForCustomerAPI(t *testing.T) {
 			tc.checkResponse(t, recorder)
 		})
 	}
+}
+
+// TestGetRoomDetailAPI_WithImages 回归测试（Phase 5.2）：
+// 当包间存在关联图片资产时，GET /v1/rooms/{id} 响应中应包含 CDN image_urls。
+func TestGetRoomDetailAPI_WithImages(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	room := randomTable(merchant.ID)
+
+	const imageAssetID int64 = 77
+	tableImage := db.TableImage{
+		TableID:      room.ID,
+		MediaAssetID: pgtype.Int8{Int64: imageAssetID, Valid: true},
+	}
+	imageAsset := db.ListMediaAssetsByIDsRow{
+		ID:               imageAssetID,
+		ObjectKey:        "table/room/77/room_photo.jpg",
+		Visibility:       "public",
+		ModerationStatus: "approved",
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetRoomDetailForCustomer(gomock.Any(), gomock.Eq(room.ID)).
+		Times(1).
+		Return(db.GetRoomDetailForCustomerRow{
+			ID:           room.ID,
+			MerchantID:   room.MerchantID,
+			TableNo:      room.TableNo,
+			Capacity:     room.Capacity,
+			Status:       room.Status,
+			MerchantName: "Test Merchant",
+		}, nil)
+	store.EXPECT().
+		ListTableTags(gomock.Any(), gomock.Eq(room.ID)).
+		Times(1).Return([]db.ListTableTagsRow{}, nil)
+	store.EXPECT().
+		ListTableImages(gomock.Any(), gomock.Eq(room.ID)).
+		Times(1).Return([]db.TableImage{tableImage}, nil)
+	store.EXPECT().
+		ListMediaAssetsByIDs(gomock.Any(), gomock.Any()).
+		Times(1).Return([]db.ListMediaAssetsByIDsRow{imageAsset}, nil)
+
+	server, _ := newTestServerForMedia(t, store)
+
+	url := fmt.Sprintf("/v1/rooms/%d", room.ID)
+	request, err := http.NewRequest(http.MethodGet, url, nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp roomDetailResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Len(t, resp.ImageURLs, 1, "包间应有 1 条 image_url")
+	require.Contains(t, resp.ImageURLs[0], "https://cdn.test.example.com", "image_url 应指向 CDN 域名")
+	require.Contains(t, resp.ImageURLs[0], imageAsset.ObjectKey, "image_url 应包含 object key")
 }

@@ -1,36 +1,45 @@
 package api
 
 import (
-	"encoding/json"
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
-
-	db "github.com/merrydance/locallife/db/sqlc"
-	"github.com/merrydance/locallife/maps"
-	"github.com/merrydance/locallife/token"
+	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/rs/zerolog/log"
+
+	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/logic"
+	"github.com/merrydance/locallife/maps"
+	"github.com/merrydance/locallife/media"
+	"github.com/merrydance/locallife/token"
 )
 
 // ==================== 购物车 API ====================
-
 type cartItemResponse struct {
 	ID             int64                  `json:"id"`
 	DishID         *int64                 `json:"dish_id,omitempty"`
 	ComboID        *int64                 `json:"combo_id,omitempty"`
 	Quantity       int16                  `json:"quantity"`
 	Customizations map[string]interface{} `json:"customizations,omitempty"`
+	// 解析后的定制规格详情
+	CustomizationDetails []orderCustomizationItem `json:"customization_details,omitempty"`
+	// 聚合好的规格描述文字 (如 "不辣/大份")
+	SpecText string `json:"spec_text,omitempty"`
+	// 套餐成员图片 CDN URL 列表
+	ComboMemberImageURLs []string `json:"combo_member_image_urls,omitempty"`
 	// 商品信息
-	Name        string `json:"name"`
-	ImageURL    string `json:"image_url,omitempty"`
-	UnitPrice   int64  `json:"unit_price"`
-	MemberPrice *int64 `json:"member_price,omitempty"`
-	IsAvailable bool   `json:"is_available"`
-	Subtotal    int64  `json:"subtotal"`
+	Name         string `json:"name"`
+	ImageAssetID *int64 `json:"-"`
+	ImageURL     string `json:"image_url,omitempty"`
+	UnitPrice    int64  `json:"unit_price"`
+	MemberPrice  *int64 `json:"member_price,omitempty"`
+	IsAvailable  bool   `json:"is_available"`
+	Subtotal     int64  `json:"subtotal"`
 }
 
 type cartResponse struct {
@@ -94,7 +103,7 @@ func (server *Server) getCart(ctx *gin.Context) {
 		ReservationID: reservationID,
 	})
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			// 购物车不存在，返回空购物车
 			ctx.JSON(http.StatusOK, cartResponse{
 				MerchantID: merchantID,
@@ -116,89 +125,41 @@ func (server *Server) getCart(ctx *gin.Context) {
 		return
 	}
 
-	response := buildCartResponse(cart, items)
-	ctx.JSON(http.StatusOK, response)
+	logicResp := logic.BuildCartResponse(cart, items)
+	resp := toCartResponse(logicResp)
+	server.enrichCartItems(ctx, resp.Items)
+	server.enrichCartImageURLs(ctx, resp.Items)
+	server.enrichComboImages(ctx, resp.Items)
+	ctx.JSON(http.StatusOK, resp)
 }
 
-func buildCartResponse(cart db.Cart, items []db.ListCartItemsRow) cartResponse {
-	var cartItems []cartItemResponse
-	var subtotal int64
-	var totalCount int
-
-	for _, item := range items {
-		var unitPrice int64
-		var name string
-		var imageURL string
-		var memberPrice *int64
-		var isAvailable bool
-
-		if item.DishID.Valid {
-			name = item.DishName.String
-			imageURL = normalizeUploadURLForClient(item.DishImageUrl.String)
-			unitPrice = item.DishPrice.Int64
-			if item.DishMemberPrice.Valid {
-				memberPrice = &item.DishMemberPrice.Int64
-			}
-			isAvailable = item.DishIsAvailable.Bool
-		} else if item.ComboID.Valid {
-			name = item.ComboName.String
-			imageURL = normalizeUploadURLForClient(item.ComboImageUrl.String)
-			unitPrice = item.ComboPrice.Int64
-			isAvailable = item.ComboIsAvailable.Bool
-		}
-
-		itemSubtotal := unitPrice * int64(item.Quantity)
-		subtotal += itemSubtotal
-		totalCount += int(item.Quantity)
-
-		cartItem := cartItemResponse{
-			ID:          item.ID,
-			Quantity:    item.Quantity,
-			Name:        name,
-			ImageURL:    imageURL,
-			UnitPrice:   unitPrice,
-			MemberPrice: memberPrice,
-			IsAvailable: isAvailable,
-			Subtotal:    itemSubtotal,
-		}
-
-		if item.DishID.Valid {
-			dishID := item.DishID.Int64
-			cartItem.DishID = &dishID
-		}
-		if item.ComboID.Valid {
-			comboID := item.ComboID.Int64
-			cartItem.ComboID = &comboID
-		}
-
-		// 解析定制选项
-		if len(item.Customizations) > 0 {
-			var customizations map[string]interface{}
-			if err := json.Unmarshal(item.Customizations, &customizations); err == nil {
-				cartItem.Customizations = customizations
-			}
-		}
-
-		cartItems = append(cartItems, cartItem)
+func toCartResponse(logicResp logic.CartResponse) cartResponse {
+	resp := cartResponse{
+		ID:            logicResp.ID,
+		MerchantID:    logicResp.MerchantID,
+		OrderType:     logicResp.OrderType,
+		TableID:       logicResp.TableID,
+		ReservationID: logicResp.ReservationID,
+		TotalCount:    logicResp.TotalCount,
+		Subtotal:      logicResp.Subtotal,
 	}
-
-	return cartResponse{
-		ID:            cart.ID,
-		MerchantID:    cart.MerchantID,
-		OrderType:     cart.OrderType,
-		TableID:       nullableInt64(cart.TableID),
-		ReservationID: nullableInt64(cart.ReservationID),
-		Items:         cartItems,
-		TotalCount:    totalCount,
-		Subtotal:      subtotal,
+	resp.Items = make([]cartItemResponse, 0, len(logicResp.Items))
+	for _, item := range logicResp.Items {
+		resp.Items = append(resp.Items, cartItemResponse{
+			ID:             item.ID,
+			DishID:         item.DishID,
+			ComboID:        item.ComboID,
+			Quantity:       item.Quantity,
+			Customizations: item.Customizations,
+			Name:           item.Name,
+			ImageAssetID:   item.ImageAssetID,
+			UnitPrice:      item.UnitPrice,
+			MemberPrice:    item.MemberPrice,
+			IsAvailable:    item.IsAvailable,
+			Subtotal:       item.Subtotal,
+		})
 	}
-}
-
-func nullableInt64(v pgtype.Int8) *int64 {
-	if v.Valid {
-		return &v.Int64
-	}
-	return nil
+	return resp
 }
 
 type addCartItemRequest struct {
@@ -251,184 +212,55 @@ func (server *Server) addCartItem(ctx *gin.Context) {
 		return
 	}
 
-	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-
-	// 验证商户存在
-	_, err := server.store.GetMerchant(ctx, req.MerchantID)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get merchant: %w", err)))
-		return
-	}
-
-	// 验证菜品/套餐存在且属于该商户
-	if req.DishID != nil {
-		dish, err := server.store.GetDish(ctx, *req.DishID)
-		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				ctx.JSON(http.StatusNotFound, errorResponse(errors.New("dish not found")))
-				return
-			}
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get dish: %w", err)))
-			return
-		}
-		if dish.MerchantID != req.MerchantID {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("dish does not belong to this merchant")))
-			return
-		}
-		if !dish.IsOnline || !dish.IsAvailable {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("dish is not available")))
-			return
-		}
-	}
-
-	if req.ComboID != nil {
-		combo, err := server.store.GetComboSet(ctx, *req.ComboID)
-		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				ctx.JSON(http.StatusNotFound, errorResponse(errors.New("combo not found")))
-				return
-			}
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get combo: %w", err)))
-			return
-		}
-		if combo.MerchantID != req.MerchantID {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("combo does not belong to this merchant")))
-			return
-		}
-		if !combo.IsOnline {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("combo is not available")))
-			return
-		}
-	}
-
-	// 获取或创建购物车
 	if req.OrderType == "" {
 		req.OrderType = "takeout"
 	}
 
-	var tableID, reservationID pgtype.Int8
-	if req.TableID != nil {
-		tableID = pgtype.Int8{Int64: *req.TableID, Valid: true}
-	}
-	if req.ReservationID != nil {
-		reservationID = pgtype.Int8{Int64: *req.ReservationID, Valid: true}
-	}
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-	// 先尝试获取现有购物车
-	cart, err := server.store.GetCartByUserAndMerchant(ctx, db.GetCartByUserAndMerchantParams{
-		UserID:        authPayload.UserID,
-		MerchantID:    req.MerchantID,
-		OrderType:     req.OrderType,
-		TableID:       tableID,
-		ReservationID: reservationID,
-	})
-
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			// 不存在，则创建新购物车
-			cart, err = server.store.CreateCart(ctx, db.CreateCartParams{
-				UserID:        authPayload.UserID,
-				MerchantID:    req.MerchantID,
-				OrderType:     req.OrderType,
-				TableID:       tableID,
-				ReservationID: reservationID,
-			})
-			if err != nil {
-				ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("create cart: %w", err)))
-				return
-			}
-		} else {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get existing cart: %w", err)))
-			return
-		}
-	}
-
-	// 处理定制选项
-	var customizations []byte
-	if req.Customizations != nil {
-		customizations, _ = json.Marshal(req.Customizations)
-	}
-
-	// 检查是否已有相同商品（同菜品+同定制选项）
-	if req.DishID != nil {
-		existingItem, err := server.store.GetCartItemByDishAndCustomizations(ctx, db.GetCartItemByDishAndCustomizationsParams{
-			CartID:         cart.ID,
-			DishID:         pgtype.Int8{Int64: *req.DishID, Valid: true},
-			Customizations: customizations,
-		})
-		if err == nil {
-			// 已存在相同商品，更新数量
-			newQuantity := existingItem.Quantity + req.Quantity
-			_, err = server.store.UpdateCartItem(ctx, db.UpdateCartItemParams{
-				ID:       existingItem.ID,
-				Quantity: pgtype.Int2{Int16: newQuantity, Valid: true},
-			})
-			if err != nil {
-				ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("update cart item quantity: %w", err)))
-				return
-			}
-			server.returnUpdatedCart(ctx, cart)
-			return
-		}
-	}
-
-	if req.ComboID != nil {
-		existingItem, err := server.store.GetCartItemByCombo(ctx, db.GetCartItemByComboParams{
-			CartID:  cart.ID,
-			ComboID: pgtype.Int8{Int64: *req.ComboID, Valid: true},
-		})
-		if err == nil {
-			// 已存在相同套餐，更新数量
-			newQuantity := existingItem.Quantity + req.Quantity
-			_, err = server.store.UpdateCartItem(ctx, db.UpdateCartItemParams{
-				ID:       existingItem.ID,
-				Quantity: pgtype.Int2{Int16: newQuantity, Valid: true},
-			})
-			if err != nil {
-				ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("update cart item quantity: %w", err)))
-				return
-			}
-			server.returnUpdatedCart(ctx, cart)
-			return
-		}
-	}
-
-	// 添加新商品到购物车
-	var dishID, comboID pgtype.Int8
-	if req.DishID != nil {
-		dishID = pgtype.Int8{Int64: *req.DishID, Valid: true}
-	}
-	if req.ComboID != nil {
-		comboID = pgtype.Int8{Int64: *req.ComboID, Valid: true}
-	}
-
-	_, err = server.store.AddCartItem(ctx, db.AddCartItemParams{
-		CartID:         cart.ID,
-		DishID:         dishID,
-		ComboID:        comboID,
+	result, err := logic.AddCartItem(ctx, server.store, logic.AddCartItemInput{
+		UserID:         authPayload.UserID,
+		MerchantID:     req.MerchantID,
+		OrderType:      req.OrderType,
+		TableID:        req.TableID,
+		ReservationID:  req.ReservationID,
+		DishID:         req.DishID,
+		ComboID:        req.ComboID,
 		Quantity:       req.Quantity,
-		Customizations: customizations,
+		Customizations: req.Customizations,
+		MaxQuantity:    CartItemMaxQuantity,
+		NormalizeCustomizings: func(ctx context.Context, dishID int64, customizations map[string]interface{}) (map[string]interface{}, error) {
+			ginCtx, ok := ctx.(*gin.Context)
+			if !ok {
+				return nil, errors.New("invalid context")
+			}
+			_, _, normalized, err := server.normalizeDishCustomizations(ginCtx, dishID, customizations)
+			return normalized, err
+		},
 	})
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("add cart item: %w", err)))
+		if writeLogicRequestError(ctx, err) {
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	server.returnUpdatedCart(ctx, cart)
+	server.returnUpdatedCart(ctx, result.Cart, http.StatusCreated)
 }
 
-func (server *Server) returnUpdatedCart(ctx *gin.Context, cart db.Cart) {
+func (server *Server) returnUpdatedCart(ctx *gin.Context, cart db.Cart, statusCode int) {
 	items, err := server.store.ListCartItems(ctx, cart.ID)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("list cart items: %w", err)))
 		return
 	}
-	response := buildCartResponse(cart, items)
-	ctx.JSON(http.StatusOK, response)
+	logicResp := logic.BuildCartResponse(cart, items)
+	response := toCartResponse(logicResp)
+	server.enrichCartItems(ctx, response.Items)
+	server.enrichCartImageURLs(ctx, response.Items)
+	server.enrichComboImages(ctx, response.Items)
+	ctx.JSON(statusCode, response)
 }
 
 type updateCartItemRequest struct {
@@ -470,58 +302,25 @@ func (server *Server) updateCartItem(ctx *gin.Context) {
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-	// 获取购物车商品信息
-	cartItem, err := server.store.GetCartItem(ctx, itemID)
+	result, err := logic.UpdateCartItem(ctx, server.store, logic.UpdateCartItemInput{
+		UserID:         authPayload.UserID,
+		ItemID:         itemID,
+		Quantity:       req.Quantity,
+		Customizations: req.Customizations,
+		MaxQuantity:    CartItemMaxQuantity,
+	})
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("cart item not found")))
+		if writeLogicRequestError(ctx, err) {
 			return
 		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get cart item: %w", err)))
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	// P0安全：通过cart_id获取购物车，验证所有权
-	cart, err := server.store.GetCart(ctx, cartItem.CartID)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("cart not found")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get cart: %w", err)))
-		return
-	}
-
-	// P0安全：验证购物车属于当前用户
-	if cart.UserID != authPayload.UserID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("cart item does not belong to you")))
-		return
-	}
-
-	// 构建更新参数
-	updateParams := db.UpdateCartItemParams{
-		ID: itemID,
-	}
-
-	if req.Quantity != nil {
-		updateParams.Quantity = pgtype.Int2{Int16: *req.Quantity, Valid: true}
-	}
-
-	if req.Customizations != nil {
-		customizations, _ := json.Marshal(req.Customizations)
-		updateParams.Customizations = customizations
-	}
-
-	_, err = server.store.UpdateCartItem(ctx, updateParams)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("update cart item: %w", err)))
-		return
-	}
-
-	server.returnUpdatedCart(ctx, cart)
+	// updateCartItem
+	server.returnUpdatedCart(ctx, result.Cart, http.StatusOK)
 }
 
-// deleteCartItem godoc
 // @Summary 删除购物车商品
 // @Description 从购物车中移除指定商品
 // @Tags 购物车
@@ -549,7 +348,7 @@ func (server *Server) deleteCartItem(ctx *gin.Context) {
 	// 获取购物车商品
 	cartItem, err := server.store.GetCartItem(ctx, itemID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("cart item not found")))
 			return
 		}
@@ -560,7 +359,7 @@ func (server *Server) deleteCartItem(ctx *gin.Context) {
 	// P0安全：通过cart_id获取购物车，验证所有权
 	cart, err := server.store.GetCart(ctx, cartItem.CartID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("cart not found")))
 			return
 		}
@@ -581,7 +380,7 @@ func (server *Server) deleteCartItem(ctx *gin.Context) {
 	}
 
 	// 返回更新后的购物车
-	server.returnUpdatedCart(ctx, cart)
+	server.returnUpdatedCart(ctx, cart, http.StatusOK)
 }
 
 type clearCartRequest struct {
@@ -637,7 +436,7 @@ func (server *Server) clearCart(ctx *gin.Context) {
 		ReservationID: reservationID,
 	})
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			// 购物车不存在，返回空购物车
 			ctx.JSON(http.StatusOK, cartResponse{
 				MerchantID: req.MerchantID,
@@ -696,16 +495,41 @@ type calculateCartResponse struct {
 	DeliveryFee int64 `json:"delivery_fee"`
 	// 配送费满返减免（分）
 	DeliveryFeeDiscount int64 `json:"delivery_fee_discount"`
+	// 配送距离（米），仅当成功计算时返回
+	DeliveryDistance int32 `json:"delivery_distance,omitempty"`
+	// 预计送达总时长（分钟），包含出餐、骑手到店、配送、缓冲
+	DeliveryEtaMinutes int32 `json:"delivery_eta_minutes,omitempty"`
+	// 出餐时间（分钟）
+	PrepareMinutes int32 `json:"prepare_minutes,omitempty"`
+	// 骑手到店时间（分钟）
+	RiderToStoreMinutes int32 `json:"rider_to_store_minutes,omitempty"`
+	// 店到用户路网时间（分钟）
+	StoreToUserMinutes int32 `json:"store_to_user_minutes,omitempty"`
+	// 额外缓冲时间（分钟）
+	BufferMinutes int32 `json:"buffer_minutes,omitempty"`
 	// 优惠券减免金额（分）
 	DiscountAmount int64 `json:"discount_amount"`
 	// 实付金额（分）
 	TotalAmount int64 `json:"total_amount"`
 	// 优惠说明
-	DiscountInfo string `json:"discount_info"`
-	// 最小起送金额（分），0表示无限制
-	MinOrderAmount int64 `json:"min_order_amount"`
-	// 是否满足起送金额
-	MeetsMinOrder bool `json:"meets_min_order"`
+	DiscountInfo string `json:"discount_info,omitempty"`
+	// 已应用的优惠明细
+	AppliedPromotions []logic.AppliedPromotion `json:"applied_promotions,omitempty"`
+	// 推荐可用优惠券（仅试算，不自动使用）
+	SuggestedVoucher *logic.SuggestedVoucher `json:"suggested_voucher,omitempty"`
+	// 阶梯优惠试算信息
+	LadderPromotions []logic.LadderPromotion `json:"ladder_promotions,omitempty"`
+	// 代金券试算信息
+	VoucherTrials []logic.VoucherTrial `json:"voucher_trials,omitempty"`
+	// 会员余额支付能力评估
+	PaymentAssessment logic.PaymentAssessment `json:"payment_assessment"`
+	// 最小起送金额（分）。0 表示无起送限制，或该商户尚未配置起送金额。
+	// 商户级起送金额配置上线后此字段将从商户配置读取；
+	// 当前前端不应依赖此字段阻止下单——订单创建服务端会再次校验。
+	// omitempty：值为 0 时不序列化，前端收不到 0 即视为无限制。
+	MinOrderAmount int64 `json:"min_order_amount,omitempty"`
+	// 是否满足起送金额。MinOrderAmount 为 0（无限制）时该字段不返回。
+	MeetsMinOrder *bool `json:"meets_min_order,omitempty"`
 }
 
 // calculateCart godoc
@@ -729,13 +553,21 @@ func (server *Server) calculateCart(ctx *gin.Context) {
 		return
 	}
 
+	log.Info().
+		Int64("merchant_id", req.MerchantID).
+		Str("order_type", req.OrderType).
+		Interface("address_id", req.AddressID).
+		Interface("lat", req.Latitude).
+		Interface("lng", req.Longitude).
+		Msg("calculateCart called")
+
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-	// 获取商户信息（用于获取region_id和min_order_amount）
+	// Fetch merchant first so we can validate status before doing any expensive work.
 	merchant, err := server.store.GetMerchant(ctx, req.MerchantID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("商户不存在")))
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrMerchantNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get merchant: %w", err)))
@@ -746,168 +578,81 @@ func (server *Server) calculateCart(ctx *gin.Context) {
 		req.OrderType = "takeout"
 	}
 
-	var tableID, reservationID pgtype.Int8
-	if req.TableID != nil {
-		tableID = pgtype.Int8{Int64: *req.TableID, Valid: true}
-	}
-	if req.ReservationID != nil {
-		reservationID = pgtype.Int8{Int64: *req.ReservationID, Valid: true}
+	if req.OrderType == "takeout" && (merchant.Status != "active" || !merchant.IsOpen) {
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrMerchantClosed))
+		return
 	}
 
-	cart, err := server.store.GetCartByUserAndMerchant(ctx, db.GetCartByUserAndMerchantParams{
+	// Bridge the server-layer delivery fee calculator to the logic.DeliveryFeeCalculator signature.
+	feeFn := func(feeCtx context.Context, regionID, merchantID int64, distance int32, orderAmount int64) (logic.DeliveryFeeComputation, error) {
+		res, err := server.calculateDeliveryFeeInternal(feeCtx, regionID, merchantID, distance, orderAmount)
+		if err != nil {
+			return logic.DeliveryFeeComputation{}, err
+		}
+		if res == nil {
+			return logic.DeliveryFeeComputation{}, nil
+		}
+		return logic.DeliveryFeeComputation{
+			Fee:           res.FinalFee,
+			Discount:      res.PromotionDiscount,
+			Suspended:     res.DeliverySuspended,
+			SuspendReason: res.SuspendReason,
+		}, nil
+	}
+
+	preview, err := logic.CalculateCartPreview(ctx, server.store, server.mapClient, merchant, feeFn, logic.CartPreviewInput{
 		UserID:        authPayload.UserID,
 		MerchantID:    req.MerchantID,
 		OrderType:     req.OrderType,
-		TableID:       tableID,
-		ReservationID: reservationID,
+		TableID:       req.TableID,
+		ReservationID: req.ReservationID,
+		AddressID:     req.AddressID,
+		Latitude:      req.Latitude,
+		Longitude:     req.Longitude,
+		VoucherID:     req.VoucherID,
 	})
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("购物车为空")))
+		if writeLogicRequestError(ctx, err) {
 			return
 		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get cart by user and merchant: %w", err)))
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("calculate cart preview: %w", err)))
 		return
 	}
 
-	items, err := server.store.ListCartItems(ctx, cart.ID)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("list cart items: %w", err)))
-		return
+	calcResult := preview.Promotion
+	log.Info().
+		Int64("merchant_id", req.MerchantID).
+		Str("order_type", req.OrderType).
+		Int32("delivery_distance", preview.DeliveryDistance).
+		Int64("total_amount", calcResult.TotalAmount).
+		Msg("calculateCart result from engine")
+
+	resp := calculateCartResponse{
+		Subtotal:            calcResult.Subtotal,
+		DeliveryFee:         calcResult.DeliveryFee,
+		DeliveryFeeDiscount: calcResult.DeliveryFeeDiscount,
+		DeliveryDistance:    preview.DeliveryDistance,
+		DeliveryEtaMinutes:  preview.ETA.DeliveryEtaMinutes,
+		PrepareMinutes:      preview.ETA.PrepareMinutes,
+		RiderToStoreMinutes: preview.ETA.RiderToStoreMinutes,
+		StoreToUserMinutes:  preview.ETA.StoreToUserMinutes,
+		BufferMinutes:       preview.ETA.BufferMinutes,
+		DiscountAmount:      calcResult.VoucherDiscount + calcResult.MerchantDiscount,
+		TotalAmount:         calcResult.TotalAmount,
+		DiscountInfo:        "",
+		AppliedPromotions:   calcResult.AppliedPromotions,
+		SuggestedVoucher:    calcResult.SuggestedVoucher,
+		LadderPromotions:    calcResult.LadderPromotions,
+		VoucherTrials:       calcResult.VoucherTrials,
+		PaymentAssessment:   calcResult.PaymentAssessment,
+		MinOrderAmount:      preview.MinOrderAmount,
 	}
-
-	if len(items) == 0 {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("购物车为空")))
-		return
+	// 仅当商户配置了起送金额时才填充 meets_min_order，避免恒 true 误导前端
+	if preview.MinOrderAmount > 0 {
+		v := preview.MeetsMinOrder
+		resp.MeetsMinOrder = &v
 	}
-
-	// 计算商品小计
-	var subtotal int64
-	for _, item := range items {
-		var unitPrice int64
-		if item.DishID.Valid {
-			unitPrice = item.DishPrice.Int64
-		} else if item.ComboID.Valid {
-			unitPrice = item.ComboPrice.Int64
-		}
-		subtotal += unitPrice * int64(item.Quantity)
-	}
-
-	// 获取起送金额（从配送费配置中获取，或使用默认值0表示无限制）
-	var minOrderAmount int64
-	meetsMinOrder := true
-	// 起送金额暂不实现，后续可从商户配置或配送费配置中获取
-
-	// 计算配送费（如果提供了地址或坐标）
-	var deliveryFee int64
-	var deliveryFeeDiscount int64
-	if req.AddressID != nil {
-		address, err := server.store.GetUserAddress(ctx, *req.AddressID)
-		if err == nil && address.UserID == authPayload.UserID {
-			// 计算距离：优先调用地图API，失败则使用默认值
-			distance := int32(3000) // 默认3公里
-			if address.Latitude.Valid && address.Longitude.Valid &&
-				merchant.Latitude.Valid && merchant.Longitude.Valid {
-				// 调用腾讯地图API计算骑行距离
-				fromLoc := maps.Location{
-					Lat: numericToFloat64(merchant.Latitude),
-					Lng: numericToFloat64(merchant.Longitude),
-				}
-				toLoc := maps.Location{
-					Lat: numericToFloat64(address.Latitude),
-					Lng: numericToFloat64(address.Longitude),
-				}
-				if server.mapClient != nil {
-					routeResult, err := server.mapClient.GetBicyclingRoute(ctx, fromLoc, toLoc)
-					if err == nil && routeResult != nil {
-						distance = int32(routeResult.Distance)
-					}
-				}
-			}
-
-			// 调用配送费计算
-			feeResult, err := server.calculateDeliveryFeeInternal(
-				ctx,
-				merchant.RegionID,
-				merchant.ID,
-				distance,
-				subtotal,
-			)
-			if err == nil && feeResult != nil && !feeResult.DeliverySuspended {
-				deliveryFee = feeResult.FinalFee
-				deliveryFeeDiscount = feeResult.PromotionDiscount
-			}
-		}
-	} else if req.Latitude != nil && req.Longitude != nil {
-		// 用户未选择地址但传入了当前位置坐标，使用坐标计算配送费
-		distance := int32(3000) // 默认3公里
-		if merchant.Latitude.Valid && merchant.Longitude.Valid {
-			fromLoc := maps.Location{
-				Lat: numericToFloat64(merchant.Latitude),
-				Lng: numericToFloat64(merchant.Longitude),
-			}
-			toLoc := maps.Location{
-				Lat: *req.Latitude,
-				Lng: *req.Longitude,
-			}
-			if server.mapClient != nil {
-				routeResult, err := server.mapClient.GetBicyclingRoute(ctx, fromLoc, toLoc)
-				if err == nil && routeResult != nil {
-					distance = int32(routeResult.Distance)
-				}
-			}
-		}
-
-		// 调用配送费计算
-		feeResult, err := server.calculateDeliveryFeeInternal(
-			ctx,
-			merchant.RegionID,
-			merchant.ID,
-			distance,
-			subtotal,
-		)
-		if err == nil && feeResult != nil && !feeResult.DeliverySuspended {
-			deliveryFee = feeResult.FinalFee
-			deliveryFeeDiscount = feeResult.PromotionDiscount
-		}
-	}
-
-	// 计算优惠券减免（如果提供了优惠券）
-	var discountAmount int64
-	var discountInfo string
-	if req.VoucherID != nil {
-		voucher, err := server.store.GetUserVoucher(ctx, *req.VoucherID)
-		if err == nil && voucher.UserID == authPayload.UserID &&
-			voucher.Status == "unused" {
-			// 检查优惠券是否适用于该商户和订单金额
-			if voucher.MerchantID == req.MerchantID && subtotal >= voucher.MinOrderAmount {
-				discountAmount = voucher.Amount
-				discountInfo = voucher.Name
-			} else if subtotal < voucher.MinOrderAmount {
-				discountInfo = "未达到优惠券使用门槛"
-			} else {
-				discountInfo = "优惠券不适用于该商户"
-			}
-		} else {
-			discountInfo = "优惠券不可用"
-		}
-	}
-
-	totalAmount := subtotal + deliveryFee - deliveryFeeDiscount - discountAmount
-	if totalAmount < 0 {
-		totalAmount = 0
-	}
-
-	ctx.JSON(http.StatusOK, calculateCartResponse{
-		Subtotal:            subtotal,
-		DeliveryFee:         deliveryFee,
-		DeliveryFeeDiscount: deliveryFeeDiscount,
-		DiscountAmount:      discountAmount,
-		TotalAmount:         totalAmount,
-		DiscountInfo:        discountInfo,
-		MinOrderAmount:      minOrderAmount,
-		MeetsMinOrder:       meetsMinOrder,
-	})
+	ctx.JSON(http.StatusOK, resp)
 }
 
 // ==================== 浏览历史 API ====================
@@ -933,7 +678,9 @@ type listBrowseHistoryResponse struct {
 	// 浏览记录列表
 	Items []browseHistoryItem `json:"items"`
 	// 总数
-	Total int64 `json:"total"`
+	Total    int64 `json:"total"`
+	PageID   int   `json:"page_id"`
+	PageSize int   `json:"page_size"`
 }
 
 // listBrowseHistory godoc
@@ -957,7 +704,7 @@ func (server *Server) listBrowseHistory(ctx *gin.Context) {
 	targetType := ctx.Query("type")
 	// 验证type参数
 	if targetType != "" && targetType != "merchant" && targetType != "dish" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("type参数只能是merchant或dish")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidTypeParam))
 		return
 	}
 
@@ -979,7 +726,7 @@ func (server *Server) listBrowseHistory(ctx *gin.Context) {
 			UserID:     authPayload.UserID,
 			TargetType: targetType,
 			Limit:      int32(pageSize),
-			Offset:     int32((page - 1) * pageSize),
+			Offset:     pageOffset(int32(page), int32(pageSize)),
 		})
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("list browse history by type: %w", err)))
@@ -993,7 +740,7 @@ func (server *Server) listBrowseHistory(ctx *gin.Context) {
 		items, err = server.store.ListBrowseHistory(ctx, db.ListBrowseHistoryParams{
 			UserID: authPayload.UserID,
 			Limit:  int32(pageSize),
-			Offset: int32((page - 1) * pageSize),
+			Offset: pageOffset(int32(page), int32(pageSize)),
 		})
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("list browse history: %w", err)))
@@ -1006,7 +753,58 @@ func (server *Server) listBrowseHistory(ctx *gin.Context) {
 		return
 	}
 
-	// 获取详细信息
+	// 批量收集各类型 ID，避免 N+1 查询
+	var merchantIDs, dishIDs []int64
+	for _, item := range items {
+		switch item.TargetType {
+		case "merchant":
+			merchantIDs = append(merchantIDs, item.TargetID)
+		case "dish":
+			dishIDs = append(dishIDs, item.TargetID)
+		}
+	}
+
+	// 批量获取商户信息（最多 1 次 DB 调用）
+	merchantMap := make(map[int64]db.GetMerchantsByIDsRow, len(merchantIDs))
+	if len(merchantIDs) > 0 {
+		merchants, err := server.store.GetMerchantsByIDs(ctx, merchantIDs)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("batch get merchants for history: %w", err)))
+			return
+		}
+		for _, m := range merchants {
+			merchantMap[m.ID] = m
+		}
+	}
+
+	// 批量获取菜品信息（最多 1 次 DB 调用）
+	dishMap := make(map[int64]db.GetDishesByIDsRow, len(dishIDs))
+	if len(dishIDs) > 0 {
+		dishes, err := server.store.GetDishesByIDs(ctx, dishIDs)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("batch get dishes for history: %w", err)))
+			return
+		}
+		for _, d := range dishes {
+			dishMap[d.ID] = d
+		}
+	}
+
+	// 批量解析图片 URL（利用已查询的 dishMap / merchantMap，单次 DB 调用）
+	historyAssetIDs := make([]int64, 0, len(merchantMap)+len(dishMap))
+	for _, m := range merchantMap {
+		if m.LogoMediaAssetID.Valid {
+			historyAssetIDs = append(historyAssetIDs, m.LogoMediaAssetID.Int64)
+		}
+	}
+	for _, d := range dishMap {
+		if d.ImageMediaAssetID.Valid {
+			historyAssetIDs = append(historyAssetIDs, d.ImageMediaAssetID.Int64)
+		}
+	}
+	historyImgURLs := server.batchPublicImageURLs(ctx, historyAssetIDs, media.VariantCard)
+
+	// 组装响应
 	result := make([]browseHistoryItem, len(items))
 	for i, item := range items {
 		historyItem := browseHistoryItem{
@@ -1016,29 +814,30 @@ func (server *Server) listBrowseHistory(ctx *gin.Context) {
 			ViewCount:    item.ViewCount,
 			LastViewedAt: item.LastViewedAt.Format("2006-01-02 15:04:05"),
 		}
-
-		// 根据类型获取名称和图片
 		switch item.TargetType {
 		case "merchant":
-			merchant, err := server.store.GetMerchant(ctx, item.TargetID)
-			if err == nil {
-				historyItem.Name = merchant.Name
-				historyItem.ImageURL = normalizeUploadURLForClient(merchant.LogoUrl.String)
+			if m, ok := merchantMap[item.TargetID]; ok {
+				historyItem.Name = m.Name
+				if m.LogoMediaAssetID.Valid {
+					historyItem.ImageURL = historyImgURLs[m.LogoMediaAssetID.Int64]
+				}
 			}
 		case "dish":
-			dish, err := server.store.GetDish(ctx, item.TargetID)
-			if err == nil {
-				historyItem.Name = dish.Name
-				historyItem.ImageURL = normalizeUploadURLForClient(dish.ImageUrl.String)
+			if d, ok := dishMap[item.TargetID]; ok {
+				historyItem.Name = d.Name
+				if d.ImageMediaAssetID.Valid {
+					historyItem.ImageURL = historyImgURLs[d.ImageMediaAssetID.Int64]
+				}
 			}
 		}
-
 		result[i] = historyItem
 	}
 
 	ctx.JSON(http.StatusOK, listBrowseHistoryResponse{
-		Items: result,
-		Total: total,
+		Items:    result,
+		Total:    total,
+		PageID:   page,
+		PageSize: pageSize,
 	})
 }
 
@@ -1066,8 +865,9 @@ type merchantCartResponse struct {
 	ReservationID int64 `json:"reservation_id,omitempty"`
 	// 商户名称
 	MerchantName string `json:"merchant_name"`
-	// 商户Logo URL
-	MerchantLogo string `json:"merchant_logo,omitempty"`
+	// 商户 Logo CDN URL
+	MerchantLogoAssetID *int64 `json:"-"`
+	MerchantLogoURL     string `json:"merchant_logo_url,omitempty"`
 	// 商品数量
 	ItemCount int `json:"item_count"`
 	// 商品小计（分）
@@ -1097,7 +897,6 @@ type userCartsResponse struct {
 func (server *Server) getUserCartsSummary(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 	orderType := ctx.Query("order_type")
-	fmt.Printf("[DEBUG] getUserCartsSummary: user_id=%d, order_type=%s\n", authPayload.UserID, orderType)
 
 	argSummary := db.GetUserCartsSummaryParams{
 		UserID: authPayload.UserID,
@@ -1139,10 +938,29 @@ func (server *Server) getUserCartsSummary(ctx *gin.Context) {
 			TableID:       cart.TableID.Int64,
 			ReservationID: cart.ReservationID.Int64,
 			MerchantName:  cart.MerchantName,
-			MerchantLogo:  normalizeUploadURLForClient(cart.MerchantLogo.String),
 			ItemCount:     int(cart.ItemCount),
 			Subtotal:      cart.Subtotal,
 			AllAvailable:  cart.AllAvailable,
+		}
+		if cart.MerchantLogoMediaAssetID.Valid {
+			v := cart.MerchantLogoMediaAssetID.Int64
+			cartList[i].MerchantLogoAssetID = &v
+		}
+	}
+
+	// 批量解析商户 Logo URL
+	logoAssetIDs := make([]int64, 0, len(cartList))
+	for _, c := range cartList {
+		if c.MerchantLogoAssetID != nil {
+			logoAssetIDs = append(logoAssetIDs, *c.MerchantLogoAssetID)
+		}
+	}
+	if len(logoAssetIDs) > 0 {
+		logoURLs := server.batchPublicImageURLs(ctx, logoAssetIDs, media.VariantCard)
+		for i := range cartList {
+			if cartList[i].MerchantLogoAssetID != nil {
+				cartList[i].MerchantLogoURL = logoURLs[*cartList[i].MerchantLogoAssetID]
+			}
 		}
 	}
 
@@ -1181,28 +999,22 @@ type combinedCheckoutItem struct {
 }
 
 type combinedCheckoutResponse struct {
-	// 各商户订单
-	Items []combinedCheckoutItem `json:"items"`
-	// 商品合计（分）
-	TotalSubtotal int64 `json:"total_subtotal"`
-	// 配送费合计（分）
-	TotalDeliveryFee int64 `json:"total_delivery_fee"`
-	// 支付总额（分）
-	TotalAmount int64 `json:"total_amount"`
-	// 是否可以合单支付
-	CanCombinePay bool `json:"can_combine_pay"`
-	// 提示信息
-	Message string `json:"message,omitempty"`
+	Items            []combinedCheckoutItem `json:"items"`
+	TotalSubtotal    int64                  `json:"total_subtotal"`
+	TotalDeliveryFee int64                  `json:"total_delivery_fee"`
+	TotalAmount      int64                  `json:"total_amount"`
+	CanCombinePay    bool                   `json:"can_combine_pay"`
+	Message          string                 `json:"message,omitempty"`
 }
 
 // previewCombinedCheckout godoc
-// @Summary 预览合单结算
-// @Description 预览多商户合单结算金额，返回各商户子单和合计金额
+// @Summary 合单结算预览
+// @Description 预览多购物车合单结算信息
 // @Tags 购物车
 // @Accept json
 // @Produce json
-// @Param request body combinedCheckoutRequest true "结算请求"
-// @Success 200 {object} combinedCheckoutResponse "结算预览"
+// @Param request body combinedCheckoutRequest true "合单结算预览请求"
+// @Success 200 {object} combinedCheckoutResponse "合单结算预览结果"
 // @Failure 400 {object} ErrorResponse "请求参数错误"
 // @Failure 401 {object} ErrorResponse "未授权"
 // @Failure 500 {object} ErrorResponse "服务器内部错误"
@@ -1217,42 +1029,38 @@ func (server *Server) previewCombinedCheckout(ctx *gin.Context) {
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-	// 获取用户指定的购物车（使用正确的查询：根据cart_id而非merchant_id）
 	carts, err := server.store.GetUserCartsByCartIDs(ctx, db.GetUserCartsByCartIDsParams{
 		UserID:  authPayload.UserID,
 		Column2: req.CartIDs,
 	})
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get user carts by cart ids: %w", err)))
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
-
 	if len(carts) == 0 {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("未找到有效的购物车")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrCartEmpty))
 		return
 	}
 
-	// 检查所有商户是否支持合单支付（需要有微信子商户号）
-	var canCombinePay = true
-	var message string
-	var items []combinedCheckoutItem
-	var totalSubtotal, totalDeliveryFee, totalAmount int64
+	items := make([]combinedCheckoutItem, 0, len(carts))
+	var totalSubtotal int64
+	var totalDeliveryFee int64
+	var totalAmount int64
+	canCombinePay := true
+	message := ""
 
 	for _, cart := range carts {
-		// 检查商户状态
-		if cart.MerchantStatus != "active" {
-			canCombinePay = false
-			message = "部分商户暂停营业"
-			continue
-		}
-
-		// 检查子商户号
-		if !cart.SubMchid.Valid || cart.SubMchid.String == "" {
+		if cart.MerchantStatus != "active" || !cart.SubMchid.Valid || cart.SubMchid.String == "" {
 			canCombinePay = false
 			message = "部分商户暂不支持在线支付"
 		}
 
-		// 获取购物车商品计算金额
+		cartDetail, err := server.store.GetCart(ctx, cart.ID)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+
 		cartItems, err := server.store.ListCartItems(ctx, cart.ID)
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("list cart items: %w", err)))
@@ -1270,51 +1078,43 @@ func (server *Server) previewCombinedCheckout(ctx *gin.Context) {
 			subtotal += unitPrice * int64(item.Quantity)
 		}
 
-		// 计算配送费（调用真实的配送费计算逻辑）
-		var deliveryFee int64 = 0
-		if req.AddressID != nil {
-			// 获取地址信息用于距离计算
+		var deliveryFee int64
+		if cartDetail.OrderType == "takeout" {
+			if req.AddressID == nil {
+				ctx.JSON(http.StatusBadRequest, errorResponse(ErrDeliveryAddressRequired))
+				return
+			}
 			address, err := server.store.GetUserAddress(ctx, *req.AddressID)
-			if err == nil && address.UserID == authPayload.UserID {
-				// 计算距离：优先调用地图API，失败则使用默认值
-				distance := int32(3000) // 默认3公里
-				if address.Latitude.Valid && address.Longitude.Valid &&
-					cart.MerchantLatitude.Valid && cart.MerchantLongitude.Valid {
-					// 调用腾讯地图API计算骑行距离
-					fromLoc := maps.Location{
-						Lat: numericToFloat64(cart.MerchantLatitude),
-						Lng: numericToFloat64(cart.MerchantLongitude),
-					}
-					toLoc := maps.Location{
-						Lat: numericToFloat64(address.Latitude),
-						Lng: numericToFloat64(address.Longitude),
-					}
-					if server.mapClient != nil {
-						routeResult, err := server.mapClient.GetBicyclingRoute(ctx, fromLoc, toLoc)
-						if err == nil && routeResult != nil {
-							distance = int32(routeResult.Distance)
-						}
-					}
-				}
-
-				// 调用配送费计算
-				feeResult, err := server.calculateDeliveryFeeInternal(
-					ctx,
-					cart.RegionID,
-					cart.MerchantID,
-					distance,
-					subtotal,
-				)
-				if err == nil && feeResult != nil && !feeResult.DeliverySuspended {
-					deliveryFee = feeResult.FinalFee
-				}
+			if err != nil || address.UserID != authPayload.UserID {
+				ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidAddress))
+				return
+			}
+			if !address.Latitude.Valid || !address.Longitude.Valid || !cart.MerchantLatitude.Valid || !cart.MerchantLongitude.Valid {
+				ctx.JSON(http.StatusBadRequest, errorResponse(ErrDeliveryDistanceUnavailable))
+				return
+			}
+			if server.mapClient == nil {
+				ctx.JSON(http.StatusBadRequest, errorResponse(ErrDeliveryDistanceCalcFailed))
+				return
+			}
+			fromLoc := maps.Location{Lat: pgNumericToFloat64(cart.MerchantLatitude), Lng: pgNumericToFloat64(cart.MerchantLongitude)}
+			toLoc := maps.Location{Lat: pgNumericToFloat64(address.Latitude), Lng: pgNumericToFloat64(address.Longitude)}
+			routeResult, err := server.mapClient.GetBicyclingRoute(ctx, fromLoc, toLoc)
+			if err != nil || routeResult == nil {
+				ctx.JSON(http.StatusBadRequest, errorResponse(ErrDeliveryDistanceUnavailable))
+				return
+			}
+			distance := int32(routeResult.Distance)
+			feeResult, err := server.calculateDeliveryFeeInternal(ctx, cart.RegionID, cart.MerchantID, distance, subtotal)
+			if err == nil && feeResult != nil && !feeResult.DeliverySuspended {
+				deliveryFee = feeResult.FinalFee
 			}
 		}
 
 		items = append(items, combinedCheckoutItem{
 			MerchantID:   cart.MerchantID,
 			MerchantName: cart.MerchantName,
-			OrderType:    "takeout",
+			OrderType:    cartDetail.OrderType,
 			Subtotal:     subtotal,
 			DeliveryFee:  deliveryFee,
 			TotalAmount:  subtotal + deliveryFee,
@@ -1333,4 +1133,145 @@ func (server *Server) previewCombinedCheckout(ctx *gin.Context) {
 		CanCombinePay:    canCombinePay,
 		Message:          message,
 	})
+}
+
+// enrichCartItems 从数据库解析定制选项的 ID 并填充显示文字
+func (server *Server) enrichCartItems(ctx context.Context, items []cartItemResponse) {
+	if len(items) == 0 {
+		return
+	}
+
+	// 收集所有需要解析的选项 ID
+	optionIDMap := make(map[int64]bool)
+	for _, item := range items {
+		for _, val := range item.Customizations {
+			var id int64
+			switch v := val.(type) {
+			case string:
+				id, _ = strconv.ParseInt(v, 10, 64)
+			case float64:
+				id = int64(v)
+			case int64:
+				id = v
+			case int:
+				id = int64(v)
+			}
+			if id > 0 {
+				optionIDMap[id] = true
+			}
+		}
+	}
+
+	if len(optionIDMap) == 0 {
+		return
+	}
+
+	uniqueIDs := make([]int64, 0, len(optionIDMap))
+	for id := range optionIDMap {
+		uniqueIDs = append(uniqueIDs, id)
+	}
+
+	// 批量查询库中的名称和价格
+	details, err := server.store.GetCustomizationDetailsByIDs(ctx, uniqueIDs)
+	if err != nil {
+		log.Error().Err(err).Msg("failed to get customization details for cart items")
+		return
+	}
+
+	// 映射结果
+	detailLookup := make(map[int64]db.GetCustomizationDetailsByIDsRow)
+	for _, d := range details {
+		detailLookup[d.OptionID] = d
+	}
+
+	// 填充详情
+	for i := range items {
+		var specNames []string
+		// 为了保持顺序，我们按原 Customizations 的 key 排序（或保持原顺序）
+		// 不过 Customizations 是 map，本身无序。
+
+		// 收集并转换
+		for _, val := range items[i].Customizations {
+			var id int64
+			switch v := val.(type) {
+			case string:
+				id, _ = strconv.ParseInt(v, 10, 64)
+			case float64:
+				id = int64(v)
+			case int64:
+				id = v
+			}
+
+			if d, ok := detailLookup[id]; ok {
+				items[i].CustomizationDetails = append(items[i].CustomizationDetails, orderCustomizationItem{
+					GroupID:    d.GroupID,
+					OptionID:   d.OptionID,
+					Name:       d.GroupName,
+					Value:      d.TagName,
+					ExtraPrice: d.ExtraPrice,
+				})
+				specNames = append(specNames, d.TagName)
+			}
+		}
+
+		if len(specNames) > 0 {
+			items[i].SpecText = strings.Join(specNames, "/")
+		} else {
+			items[i].SpecText = "" // 明确为空，方便前端判断
+		}
+	}
+}
+
+// enrichComboImages 为套餐商品批量填充成员图片 CDN URL
+func (server *Server) enrichComboImages(ctx context.Context, items []cartItemResponse) {
+	if len(items) == 0 {
+		return
+	}
+
+	comboIDs := make([]int64, 0)
+	for _, item := range items {
+		if item.ComboID != nil {
+			comboIDs = append(comboIDs, *item.ComboID)
+		}
+	}
+
+	if len(comboIDs) == 0 {
+		return
+	}
+
+	// 批量查询成员图片
+	memberImages, err := server.store.GetComboMemberImagesByCombos(ctx, comboIDs)
+	if err != nil {
+		log.Error().Err(err).Msg("failed to get combo member images")
+		return
+	}
+
+	// 收集所有 asset ID 并按 combo_id 分组
+	imgMap := make(map[int64][]int64)
+	var allAssetIDs []int64
+	for _, row := range memberImages {
+		if row.ImageMediaAssetID.Valid {
+			id := row.ImageMediaAssetID.Int64
+			imgMap[row.ComboID] = append(imgMap[row.ComboID], id)
+			allAssetIDs = append(allAssetIDs, id)
+		}
+	}
+
+	// 批量解析 CDN URL
+	imgURLs := server.batchPublicImageURLs(ctx, allAssetIDs, media.VariantCard)
+
+	// 回填到 items
+	for i := range items {
+		if items[i].ComboID != nil {
+			if ids, ok := imgMap[*items[i].ComboID]; ok {
+				urls := make([]string, 0, len(ids))
+				for _, id := range ids {
+					if u, ok2 := imgURLs[id]; ok2 {
+						urls = append(urls, u)
+					}
+				}
+				items[i].ComboMemberImageURLs = urls
+			}
+		}
+	}
 }

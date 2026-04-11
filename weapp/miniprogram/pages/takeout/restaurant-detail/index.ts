@@ -3,39 +3,94 @@
  * 使用真实后端API
  */
 
-import { getPublicMerchantDetail, getPublicMerchantDishes, getPublicMerchantCombos, PublicMerchantDetail, PublicDishCategory } from '../../../api/merchant'
+import { getPublicMerchantDetail, getPublicMerchantDishes, getPublicMerchantCombos, PublicMerchantDetail, PublicDishCategory, PublicDish, PublicCombo } from '../../../api/merchant'
 import { getPublicMerchantRooms, PublicRoom } from '../../../api/room'
 import { getUserCarts } from '../../../api/cart'
+import CartService from '../../../services/cart'
+import ConsumerMerchantDetailAdapter, { type ConsumerMerchantDetailViewModel } from '../../../adapters/consumer-merchant-detail'
 import { getPublicImageUrl } from '../../../utils/image'
-import { resolveImageURL } from '../../../utils/image-security'
 import { formatPriceNoSymbol } from '../../../utils/util'
+import Navigation from '../../../utils/navigation'
+import { getErrorUserMessage } from '../../../utils/user-facing'
+
+type RestaurantViewModel = ConsumerMerchantDetailViewModel
+
+interface DishView {
+  id: number
+  name: string
+  image_url: string
+  price: number
+  priceDisplay: string
+  member_price?: number
+  memberPriceDisplay: string | null
+  original_price?: number
+  originalPriceDisplay: string | null
+  category_id: number
+  category_name: string
+  monthly_sales: number
+  prepare_time: number
+  tags: string[]
+  is_available: boolean
+  hasCustomizations: boolean
+}
+
+interface ComboView {
+  id: number
+  name: string
+  description: string
+  image_url: string
+  combo_price: number
+  comboPriceDisplay: string
+  original_price: number
+  originalPriceDisplay: string
+  savingsDisplay: string
+  dishes: PublicCombo['dishes']
+  dish_images: string[] // 新增：包含菜品的图片列表
+}
+
+const getErrorMessage = getErrorUserMessage
+
+const ORDERING_SUSPENDED_MESSAGE = '当前商户暂停接单，请稍后再试'
 
 Page({
   data: {
     restaurantId: '',
-    restaurant: null as any,
-    activeTab: 'dishes' as 'dishes' | 'combos' | 'rooms' | 'info',
+    restaurant: null as RestaurantViewModel | null,
+    activeTab: 'dishes' as 'dishes' | 'combos' | 'rooms',
     activeCategoryId: '' as string | number,
     categories: [] as PublicDishCategory[],
-    dishes: [] as any[],
-    filteredDishes: [] as any[],
-    combos: [] as any[],
+    dishes: [] as DishView[],
+    filteredDishes: [] as DishView[],
+    combos: [] as ComboView[],
     rooms: [] as PublicRoom[],
     cartCount: 0,
     cartPrice: 0,
     cartPriceDisplay: '0.00',
     navBarHeight: 88,
-    loading: true
+    loading: true,
+    isError: false,
+    errorMsg: '',
+    headerCollapsed: false
   },
 
-  onLoad(options: any) {
+  onLoad(options: { id?: string, activeTab?: 'dishes' | 'combos' | 'rooms' }) {
+    wx.showShareMenu({
+      withShareTicket: true,
+      menus: ['shareAppMessage', 'shareTimeline']
+    })
+
     const restaurantId = options.id
     if (!restaurantId) {
       wx.showToast({ title: '商家ID缺失', icon: 'error' })
       setTimeout(() => wx.navigateBack(), 1500)
       return
     }
-    this.setData({ restaurantId })
+    this.setData({
+      restaurantId,
+      activeTab: options.activeTab && ['dishes', 'combos', 'rooms'].includes(options.activeTab)
+        ? options.activeTab
+        : 'dishes'
+    })
     this.loadRestaurantDetail()
   },
 
@@ -43,18 +98,24 @@ Page({
     this.updateCartDisplay()
   },
 
+  onMerchantInfoTap() {
+    const { restaurantId } = this.data
+    if (!restaurantId) return
+    wx.navigateTo({ url: `/pages/takeout/merchant-info/index?id=${restaurantId}` })
+  },
+
   onNavHeight(e: WechatMiniprogram.CustomEvent) {
     this.setData({ navBarHeight: e.detail.navBarHeight })
   },
 
   async loadRestaurantDetail() {
-    this.setData({ loading: true })
+    this.setData({ loading: true, isError: false })
 
     try {
       const merchantId = parseInt(this.data.restaurantId)
 
       // 并行加载商户信息、菜品、套餐和包间
-      const [merchantResult, dishesResult, combosResult, roomsResult] = await Promise.all([
+      const [merchantResult, dishesResult, combosResultFirstPass, roomsResult] = await Promise.all([
         this.loadMerchantInfo(merchantId),
         this.loadDishes(merchantId),
         this.loadCombos(merchantId),
@@ -62,10 +123,21 @@ Page({
       ])
 
       if (!merchantResult) {
-        wx.showToast({ title: '商家不存在', icon: 'error' })
-        this.setData({ loading: false })
+        this.setData({ 
+          loading: false, 
+          isError: true, 
+          errorMsg: '商家信息不存在或已下架' 
+        })
         return
       }
+
+      // 第二次处理套餐，注入菜品图片
+      const combosResult = combosResultFirstPass.map((combo) => {
+        const dishImages = (combo.dishes || [])
+          .map((cd) => dishesResult.dishes.find((d) => d.id === cd.dish_id)?.image_url)
+          .filter(Boolean) as string[]
+        return { ...combo, dish_images: dishImages }
+      })
 
       // 从菜品中提取分类
       const categories = this.extractCategories(dishesResult)
@@ -82,79 +154,30 @@ Page({
       })
 
       this.filterDishes()
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('加载商户详情失败:', error)
-      wx.showToast({ title: '加载失败', icon: 'error' })
-      this.setData({ loading: false })
+      this.setData({ 
+        loading: false, 
+        isError: true, 
+        errorMsg: getErrorMessage(error, '数据请求失败，请检查网络')
+      })
     }
   },
 
-  async loadMerchantInfo(merchantId: number): Promise<any> {
+  async loadMerchantInfo(merchantId: number): Promise<RestaurantViewModel | null> {
     try {
       const merchant: PublicMerchantDetail = await getPublicMerchantDetail(merchantId)
-
-      if (merchant) {
-        // 私有图片需要签名（营业执照、食品许可证）
-        const [coverImage, businessLicense, foodPermit] = await Promise.all([
-          resolveImageURL(merchant.cover_image || merchant.logo_url || ''),
-          resolveImageURL(merchant.business_license_image_url || ''),
-          resolveImageURL(merchant.food_permit_url || '')
-        ])
-
-        // 格式化营业时间
-        let businessHoursDisplay = ''
-        if (merchant.business_hours && merchant.business_hours.length > 0) {
-          const today = new Date().getDay()
-          const todayHours = merchant.business_hours.find(h => h.day_of_week === today)
-          if (todayHours) {
-            businessHoursDisplay = `${todayHours.open_time} - ${todayHours.close_time}`
-          } else if (merchant.business_hours[0]) {
-            const first = merchant.business_hours[0]
-            businessHoursDisplay = `${first.open_time} - ${first.close_time}`
-          }
-        }
-
-        // 格式化所有营业时间
-        const dayNames = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
-        const formattedHours = (merchant.business_hours || []).map(h => ({
-          ...h,
-          day_name: dayNames[h.day_of_week]
-        }));
-
-        return {
-          id: merchant.id,
-          name: merchant.name,
-          cover_image: coverImage,
-          logo_url: getPublicImageUrl(merchant.logo_url || ''),
-          address: merchant.address,
-          phone: merchant.phone,
-          latitude: merchant.latitude,
-          longitude: merchant.longitude,
-          tags: merchant.tags || [],
-          monthly_sales: merchant.monthly_sales || 0,
-          avg_prep_minutes: merchant.avg_prep_minutes || 15,
-          biz_status: merchant.is_open ? 'OPEN' : 'CLOSED',
-          description: merchant.description || '',
-          business_license_image_url: businessLicense,
-          food_permit_url: foodPermit,
-          business_hours: formattedHours,
-          business_hours_display: businessHoursDisplay,
-          discount_rules: merchant.discount_rules || [],
-          vouchers: merchant.vouchers || [],
-          delivery_promotions: merchant.delivery_promotions || []
-        }
-      }
-      return null
+      return merchant ? ConsumerMerchantDetailAdapter.toViewModel(merchant) : null
     } catch (error) {
       console.error('加载商户信息失败:', error)
       return null
     }
   },
 
-  async loadDishes(merchantId: number): Promise<{ dishes: any[], categories: PublicDishCategory[] }> {
+  async loadDishes(merchantId: number): Promise<{ dishes: DishView[], categories: PublicDishCategory[] }> {
     try {
       const result = await getPublicMerchantDishes(merchantId)
-      const dishes = (result.dishes || []).map((dish: any) => ({
+      const dishes: DishView[] = (result.dishes || []).map((dish: PublicDish) => ({
         id: dish.id,
         name: dish.name,
         image_url: getPublicImageUrl(dish.image_url || ''),
@@ -169,7 +192,8 @@ Page({
         monthly_sales: dish.monthly_sales || 0,
         prepare_time: dish.prepare_time || 10,
         tags: dish.tags || [],
-        is_available: true
+        is_available: true,
+        hasCustomizations: Array.isArray(dish.customization_groups) && dish.customization_groups.length > 0
       }))
       return { dishes, categories: result.categories || [] }
     } catch (error) {
@@ -178,21 +202,30 @@ Page({
     }
   },
 
-  async loadCombos(merchantId: number): Promise<any[]> {
+  async loadCombos(merchantId: number): Promise<ComboView[]> {
     try {
       const result = await getPublicMerchantCombos(merchantId)
-      return (result.combos || []).map((combo: any) => ({
-        id: combo.id,
-        name: combo.name,
-        description: combo.description || '',
-        image_url: getPublicImageUrl(combo.image_url || ''),
-        combo_price: combo.combo_price,
-        comboPriceDisplay: formatPriceNoSymbol(combo.combo_price || 0),
-        original_price: combo.original_price,
-        originalPriceDisplay: formatPriceNoSymbol(combo.original_price || 0),
-        savingsDisplay: formatPriceNoSymbol((combo.original_price || 0) - (combo.combo_price || 0)),
-        dishes: combo.dishes || []
-      }))
+      return (result.combos || []).map((combo: PublicCombo) => {
+        // 优先使用后端返回的图片列表，如果没有则回退到前端拼接逻辑(兼容旧数据)
+        let dishImages: string[] = []
+        if (combo.dish_images && combo.dish_images.length > 0) {
+           dishImages = combo.dish_images.map((url) => getPublicImageUrl(url))
+        }
+
+        return {
+          id: combo.id,
+          name: combo.name,
+          description: combo.description || '',
+          image_url: getPublicImageUrl(combo.image_url || ''),
+          combo_price: combo.combo_price,
+          comboPriceDisplay: formatPriceNoSymbol(combo.combo_price || 0),
+          original_price: combo.original_price,
+          originalPriceDisplay: formatPriceNoSymbol(combo.original_price || 0),
+          savingsDisplay: formatPriceNoSymbol((combo.original_price || 0) - (combo.combo_price || 0)),
+          dishes: combo.dishes || [],
+          dish_images: dishImages 
+        }
+      })
     } catch (error) {
       console.error('加载套餐失败:', error)
       return []
@@ -205,7 +238,9 @@ Page({
       // 包间图片是公共图片，使用getPublicImageUrl处理
       return (result.rooms || []).map((room: PublicRoom) => ({
         ...room,
-        primary_image: room.primary_image ? getPublicImageUrl(room.primary_image) : ''
+        primary_image: room.primary_image ? getPublicImageUrl(room.primary_image) : '',
+        minimum_spend: room.minimum_spend || 0,
+        minimumSpendDisplay: formatPriceNoSymbol(room.minimum_spend || 0)
       }))
     } catch (error) {
       console.error('加载包间失败:', error)
@@ -213,20 +248,20 @@ Page({
     }
   },
 
-  extractCategories(dishesResult: { dishes: any[], categories: PublicDishCategory[] }): PublicDishCategory[] {
+  extractCategories(dishesResult: { dishes: DishView[], categories: PublicDishCategory[] }): PublicDishCategory[] {
     const categoryMap = new Map<number, PublicDishCategory>()
     categoryMap.set(0, { id: 0, name: '全部', sort_order: -1 })
 
     // 优先使用API返回的分类
     if (dishesResult.categories && dishesResult.categories.length > 0) {
-      dishesResult.categories.forEach(cat => {
+      dishesResult.categories.forEach((cat) => {
         if (!categoryMap.has(cat.id)) {
           categoryMap.set(cat.id, cat)
         }
       })
     } else {
       // 回退：从菜品中提取分类
-      dishesResult.dishes.forEach(dish => {
+      dishesResult.dishes.forEach((dish) => {
         if (dish.category_id && !categoryMap.has(dish.category_id)) {
           categoryMap.set(dish.category_id, {
             id: dish.category_id,
@@ -255,36 +290,52 @@ Page({
     if (activeCategoryId === 0 || activeCategoryId === '0' || !activeCategoryId) {
       this.setData({ filteredDishes: dishes })
     } else {
-      const filtered = dishes.filter((d: any) => d.category_id == activeCategoryId)
+      const filtered = dishes.filter((d) => String(d.category_id) === String(activeCategoryId))
       this.setData({ filteredDishes: filtered })
     }
   },
 
   onDishTap(e: WechatMiniprogram.CustomEvent) {
+    if (this.data.restaurant?.is_ordering_suspended) {
+      this.showOrderingSuspendedToast()
+      return
+    }
     const id = e.currentTarget.dataset.id
     wx.navigateTo({ url: `/pages/takeout/dish-detail/index?id=${id}&merchant_id=${this.data.restaurantId}` })
   },
 
   onComboTap(e: WechatMiniprogram.CustomEvent) {
+    if (this.data.restaurant?.is_ordering_suspended) {
+      this.showOrderingSuspendedToast()
+      return
+    }
     const id = e.currentTarget.dataset.id
-    wx.showToast({ title: '套餐详情开发中', icon: 'none' })
+    const combo = this.data.combos.find((c) => String(c.id) === String(id))
+
+    if (combo && this.data.restaurant) {
+      Navigation.toComboDetail(String(id), {
+        shopName: this.data.restaurant.name,
+        monthSales: this.data.restaurant.monthly_sales,
+        estimatedDeliveryTime: this.data.restaurant.avg_prep_minutes
+      })
+    } else {
+      Navigation.toComboDetail(String(id))
+    }
   },
 
   async onAddCart(e: WechatMiniprogram.CustomEvent) {
     const id = e.currentTarget.dataset.id
-    const dish = this.data.dishes.find((d: any) => d.id === id)
+    const { restaurant } = this.data
+    if (restaurant?.is_ordering_suspended) {
+      this.showOrderingSuspendedToast()
+      return
+    }
+    const dish = this.data.dishes.find((d) => d.id === id)
 
-    if (dish) {
-      const CartService = require('../../../services/cart').default
+    if (dish && restaurant) {
       const success = await CartService.addItem({
-        merchantId: this.data.restaurant.id,
-        dishId: dish.id,
-        dishName: dish.name,
-        shopName: this.data.restaurant.name,
-        imageUrl: dish.image_url,
-        price: dish.price,
-        priceDisplay: `¥${(dish.price / 100).toFixed(2)}`,
-        quantity: 1
+        merchantId: restaurant.id,
+        dishId: dish.id
       })
 
       if (success) {
@@ -296,20 +347,17 @@ Page({
 
   async onAddComboCart(e: WechatMiniprogram.CustomEvent) {
     const id = e.currentTarget.dataset.id
-    const combo = this.data.combos.find((c: any) => c.id === id)
+    const { restaurant } = this.data
+    if (restaurant?.is_ordering_suspended) {
+      this.showOrderingSuspendedToast()
+      return
+    }
+    const combo = this.data.combos.find((c) => c.id === id)
 
-    if (combo) {
-      const CartService = require('../../../services/cart').default
+    if (combo && restaurant) {
       const success = await CartService.addItem({
-        merchantId: this.data.restaurant.id,
-        comboId: combo.id,
-        dishName: combo.name,
-        shopName: this.data.restaurant.name,
-        imageUrl: combo.image_url,
-        price: combo.combo_price,
-        priceDisplay: `¥${(combo.combo_price / 100).toFixed(2)}`,
-        quantity: 1,
-        isCombo: true
+        merchantId: restaurant.id,
+        comboId: combo.id
       })
 
       if (success) {
@@ -342,12 +390,20 @@ Page({
   },
 
   onCheckout() {
-    wx.navigateTo({ url: '/pages/takeout/cart/index' })
+    if (this.data.restaurant?.is_ordering_suspended) {
+      this.showOrderingSuspendedToast()
+      return
+    }
+    Navigation.toCart()
   },
 
   onCartTap() {
+    if (this.data.restaurant?.is_ordering_suspended) {
+      this.showOrderingSuspendedToast()
+      return
+    }
     // 点击购物车栏跳转到购物车页面
-    wx.navigateTo({ url: '/pages/takeout/cart/index' })
+    Navigation.toCart()
   },
 
   onCall() {
@@ -363,8 +419,8 @@ Page({
     const restaurant = this.data.restaurant
     if (restaurant && restaurant.latitude && restaurant.longitude) {
       wx.openLocation({
-        latitude: parseFloat(restaurant.latitude),
-        longitude: parseFloat(restaurant.longitude),
+        latitude: Number(restaurant.latitude),
+        longitude: Number(restaurant.longitude),
         name: restaurant.name,
         address: restaurant.address
       })
@@ -384,11 +440,57 @@ Page({
   },
 
   onRoomTap(e: WechatMiniprogram.CustomEvent) {
+    if (this.data.restaurant?.is_ordering_suspended) {
+      this.showOrderingSuspendedToast()
+      return
+    }
     const roomId = e.currentTarget.dataset.id
     if (roomId) {
-      wx.navigateTo({
-        url: `/pages/reservation/room-detail/index?id=${roomId}`
-      })
+      Navigation.toRoomDetail(String(roomId))
+    }
+  },
+
+  onScroll(e: WechatMiniprogram.CustomEvent) {
+    const { scrollTop } = e.detail
+    const { headerCollapsed } = this.data
+    const threshold = 50 // 滚动阈值
+
+    if (scrollTop > threshold && !headerCollapsed) {
+      this.setData({ headerCollapsed: true })
+    } else if (scrollTop <= threshold && headerCollapsed) {
+      this.setData({ headerCollapsed: false })
+    }
+  },
+
+  stopPropagation() {
+    // 仅用于阻止冒泡
+  },
+
+  showOrderingSuspendedToast() {
+    wx.showToast({ title: ORDERING_SUSPENDED_MESSAGE, icon: 'none' })
+  },
+
+  // Gap 8: 分享给朋友
+  onShareAppMessage(): WechatMiniprogram.Page.ICustomShareContent {
+    const { restaurantId, restaurant } = this.data as {
+      restaurantId: number | string
+      restaurant?: { name?: string, cover_image?: string }
+    }
+    return {
+      title: restaurant?.name ? `${restaurant.name} — 一起来吃！` : '发现一家好店，快来看看！',
+      path: `/pages/takeout/restaurant-detail/index?id=${restaurantId}`,
+      imageUrl: restaurant?.cover_image || ''
+    }
+  },
+
+  // Gap 8: 分享到朋友圈
+  onShareTimeline(): WechatMiniprogram.Page.ICustomTimelineContent {
+    const { restaurant } = this.data as {
+      restaurant?: { name?: string, cover_image?: string }
+    }
+    return {
+      title: restaurant?.name ? `${restaurant.name} — 美食推荐` : '发现一家好店',
+      imageUrl: restaurant?.cover_image || ''
     }
   }
 })

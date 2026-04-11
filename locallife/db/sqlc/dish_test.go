@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// 辅助函数：创建随机商户（依赖merchant相关代码）
+// 创建用于菜品测试的商户
 func createRandomMerchantForDish(t *testing.T) Merchant {
 	user := createRandomUser(t)
 	region := createRandomRegion(t)
@@ -22,18 +22,26 @@ func createRandomMerchantForDish(t *testing.T) Merchant {
 		Description: pgtype.Text{String: util.RandomString(20), Valid: true},
 		Phone:       util.RandomString(11),
 		Address:     util.RandomString(30),
-		Status:      "approved", // 必须是approved才能被推荐流查询到
+		Status:      "active",
 		RegionID:    region.ID,
+		Latitude:    numericFromFloat(39.9282),
+		Longitude:   numericFromFloat(116.4507),
 	}
 
 	merchant, err := testStore.CreateMerchant(context.Background(), arg)
+	require.NoError(t, err)
+
+	merchant, err = testStore.UpdateMerchantStatus(context.Background(), UpdateMerchantStatusParams{
+		ID:     merchant.ID,
+		Status: "active",
+	})
 	require.NoError(t, err)
 	require.NotEmpty(t, merchant)
 
 	return merchant
 }
 
-// 辅助函数：创建随机菜品分类
+// 创建随机菜品分类
 func createRandomDishCategory(t *testing.T) DishCategory {
 	name := util.RandomString(8)
 	category, err := testStore.CreateDishCategory(context.Background(), name)
@@ -74,7 +82,6 @@ func createRandomDish(t *testing.T, merchantID, categoryID int64) Dish {
 		CategoryID:  pgtype.Int8{Int64: categoryID, Valid: true},
 		Name:        util.RandomString(10),
 		Description: pgtype.Text{String: util.RandomString(50), Valid: true},
-		ImageUrl:    pgtype.Text{String: "https://example.com/dish.jpg", Valid: true},
 		Price:       util.RandomMoney(),
 		MemberPrice: pgtype.Int8{Int64: util.RandomMoney(), Valid: true},
 		IsAvailable: true,
@@ -189,6 +196,54 @@ func TestCreateDish(t *testing.T) {
 	merchant := createRandomMerchantForDish(t)
 	category := createRandomDishCategory(t)
 	createRandomDish(t, merchant.ID, category.ID)
+}
+
+func TestCreateDishTxRollbackOnCustomizationFailure(t *testing.T) {
+	merchant := createRandomMerchantForDish(t)
+	category := createRandomDishCategory(t)
+
+	beforeCount, err := testStore.CountDishesByMerchant(context.Background(), CountDishesByMerchantParams{
+		MerchantID: merchant.ID,
+	})
+	require.NoError(t, err)
+
+	result, err := testStore.CreateDishTx(context.Background(), CreateDishTxParams{
+		MerchantID:  merchant.ID,
+		CategoryID:  pgtype.Int8{Int64: category.ID, Valid: true},
+		Name:        util.RandomString(10),
+		Description: pgtype.Text{String: util.RandomString(20), Valid: true},
+		Price:       util.RandomMoney(),
+		IsAvailable: true,
+		IsOnline:    true,
+		SortOrder:   int16(util.RandomInt(1, 100)),
+		PrepareTime: 10,
+		CustomizationGroups: []CustomizationGroupInput{
+			{
+				Name:       "辣度",
+				IsRequired: true,
+				SortOrder:  1,
+				Options: []CustomizationOptionInput{
+					{
+						TagID:      -1,
+						ExtraPrice: 100,
+						SortOrder:  1,
+					},
+				},
+			},
+		},
+	})
+	require.Error(t, err)
+
+	afterCount, countErr := testStore.CountDishesByMerchant(context.Background(), CountDishesByMerchantParams{
+		MerchantID: merchant.ID,
+	})
+	require.NoError(t, countErr)
+	require.Equal(t, beforeCount, afterCount)
+
+	if result.Dish.ID != 0 {
+		_, getErr := testStore.GetDish(context.Background(), result.Dish.ID)
+		require.Error(t, getErr)
+	}
 }
 
 func TestGetDish(t *testing.T) {
@@ -599,14 +654,14 @@ func TestGetDishWithDetails(t *testing.T) {
 // ============================================
 
 func TestSearchDishesGlobal(t *testing.T) {
-	// 创建已批准的商户
+	// 创建已激活的商户
 	owner := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, owner.ID)
 
-	// 将商户状态改为 approved
+	// 将商户状态改为 active
 	_, err := testStore.UpdateMerchantStatus(context.Background(), UpdateMerchantStatusParams{
 		ID:     merchant.ID,
-		Status: "approved",
+		Status: "active",
 	})
 	require.NoError(t, err)
 
@@ -630,6 +685,13 @@ func TestSearchDishesGlobal(t *testing.T) {
 		Column1: pgtype.Text{String: uniqueName, Valid: true},
 		Limit:   10,
 		Offset:  0,
+		Column4: 39.9282,
+		Column5: 116.4507,
+		RegionID: pgtype.Int8{
+			Int64: merchant.RegionID,
+			Valid: true,
+		},
+		TagID: pgtype.Int8{Valid: false},
 	})
 	require.NoError(t, err)
 	require.NotEmpty(t, dishes)
@@ -681,18 +743,76 @@ func TestSearchDishesGlobal_OnlyApprovedMerchants(t *testing.T) {
 		Column1: pgtype.Text{String: uniqueName, Valid: true},
 		Limit:   10,
 		Offset:  0,
+		Column4: 39.9282,
+		Column5: 116.4507,
+		RegionID: pgtype.Int8{
+			Int64: merchant.RegionID,
+			Valid: true,
+		},
+		TagID: pgtype.Int8{Valid: false},
 	})
 	require.NoError(t, err)
 	require.Empty(t, dishes, "Dishes from pending merchant should not appear in global search")
 }
 
+func TestSearchDishesGlobal_ExcludesTakeoutSuspendedMerchants(t *testing.T) {
+	merchant := createRandomMerchantForDish(t)
+	category := createRandomDishCategory(t)
+	uniqueName := "SuspendedDish_" + util.RandomString(8)
+
+	_, err := testStore.CreateDish(context.Background(), CreateDishParams{
+		MerchantID:  merchant.ID,
+		CategoryID:  pgtype.Int8{Int64: category.ID, Valid: true},
+		Name:        uniqueName,
+		Price:       util.RandomMoney(),
+		IsAvailable: true,
+		IsOnline:    true,
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.CreateMerchantProfile(context.Background(), merchant.ID)
+	require.NoError(t, err)
+
+	err = testStore.SuspendMerchantTakeout(context.Background(), SuspendMerchantTakeoutParams{
+		MerchantID:           merchant.ID,
+		TakeoutSuspendReason: pgtype.Text{String: "claim recovery overdue", Valid: true},
+	})
+	require.NoError(t, err)
+
+	dishes, err := testStore.SearchDishesGlobal(context.Background(), SearchDishesGlobalParams{
+		Column1: pgtype.Text{String: uniqueName, Valid: true},
+		Limit:   10,
+		Offset:  0,
+		Column4: 39.9282,
+		Column5: 116.4507,
+		RegionID: pgtype.Int8{
+			Int64: merchant.RegionID,
+			Valid: true,
+		},
+		TagID: pgtype.Int8{Valid: false},
+	})
+	require.NoError(t, err)
+	require.Empty(t, dishes)
+
+	count, err := testStore.CountSearchDishesGlobal(context.Background(), CountSearchDishesGlobalParams{
+		Column1: pgtype.Text{String: uniqueName, Valid: true},
+		RegionID: pgtype.Int8{
+			Int64: merchant.RegionID,
+			Valid: true,
+		},
+		TagID: pgtype.Int8{Valid: false},
+	})
+	require.NoError(t, err)
+	require.Zero(t, count)
+}
+
 func TestSearchDishesGlobal_Pagination(t *testing.T) {
-	// 创建已批准的商户
+	// 创建已激活的商户
 	owner := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, owner.ID)
 	_, err := testStore.UpdateMerchantStatus(context.Background(), UpdateMerchantStatusParams{
 		ID:     merchant.ID,
-		Status: "approved",
+		Status: "active",
 	})
 	require.NoError(t, err)
 
@@ -717,6 +837,13 @@ func TestSearchDishesGlobal_Pagination(t *testing.T) {
 		Column1: pgtype.Text{String: prefix, Valid: true},
 		Limit:   2,
 		Offset:  0,
+		Column4: 39.9282,
+		Column5: 116.4507,
+		RegionID: pgtype.Int8{
+			Int64: merchant.RegionID,
+			Valid: true,
+		},
+		TagID: pgtype.Int8{Valid: false},
 	})
 	require.NoError(t, err)
 	require.Len(t, page1, 2)
@@ -726,6 +853,13 @@ func TestSearchDishesGlobal_Pagination(t *testing.T) {
 		Column1: pgtype.Text{String: prefix, Valid: true},
 		Limit:   2,
 		Offset:  2,
+		Column4: 39.9282,
+		Column5: 116.4507,
+		RegionID: pgtype.Int8{
+			Int64: merchant.RegionID,
+			Valid: true,
+		},
+		TagID: pgtype.Int8{Valid: false},
 	})
 	require.NoError(t, err)
 	require.Len(t, page2, 2)
@@ -739,12 +873,12 @@ func TestSearchDishesGlobal_Pagination(t *testing.T) {
 }
 
 func TestCountSearchDishesGlobal(t *testing.T) {
-	// 创建已批准的商户
+	// 创建已激活的商户
 	owner := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, owner.ID)
 	_, err := testStore.UpdateMerchantStatus(context.Background(), UpdateMerchantStatusParams{
 		ID:     merchant.ID,
-		Status: "approved",
+		Status: "active",
 	})
 	require.NoError(t, err)
 
@@ -766,7 +900,14 @@ func TestCountSearchDishesGlobal(t *testing.T) {
 	}
 
 	// 计数
-	count, err := testStore.CountSearchDishesGlobal(context.Background(), pgtype.Text{String: prefix, Valid: true})
+	count, err := testStore.CountSearchDishesGlobal(context.Background(), CountSearchDishesGlobalParams{
+		Column1: pgtype.Text{String: prefix, Valid: true},
+		RegionID: pgtype.Int8{
+			Int64: merchant.RegionID,
+			Valid: true,
+		},
+		TagID: pgtype.Int8{Valid: false},
+	})
 	require.NoError(t, err)
 	require.Equal(t, int64(3), count)
 }

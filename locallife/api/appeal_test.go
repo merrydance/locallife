@@ -2,7 +2,9 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -10,12 +12,13 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/util"
+	mockwechat "github.com/merrydance/locallife/wechat/mock"
+	"github.com/merrydance/locallife/worker"
 	mockwk "github.com/merrydance/locallife/worker/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -30,7 +33,6 @@ func randomAppeal(claimID, appellantID, regionID int64, appellantType string) db
 		AppellantType: appellantType,
 		AppellantID:   appellantID,
 		Reason:        "订单包装完好，顾客收货时已当面核对",
-		EvidenceUrls:  []string{"https://example.com/appeal_evidence.jpg"},
 		Status:        "pending",
 		RegionID:      regionID,
 		CreatedAt:     time.Now(),
@@ -76,18 +78,19 @@ func TestListMerchantClaimsAPI(t *testing.T) {
 	merchant.RegionID = region.ID
 
 	claim := db.ListMerchantClaimsForMerchantRow{
-		ID:          1,
-		OrderID:     100,
-		UserID:      200,
-		ClaimType:   "missing-item",
-		Description: "缺少饮料",
-		ClaimAmount: 500,
-		Status:      "approved",
-		OrderNo:     "20240101120000123456",
-		OrderAmount: 3000,
-		UserPhone:   pgtype.Text{String: "13800138000", Valid: true},
-		UserName:    "张三",
-		CreatedAt:   time.Now(),
+		ID:             1,
+		OrderID:        100,
+		UserID:         200,
+		ClaimType:      "missing-item",
+		Description:    "缺少饮料",
+		ClaimAmount:    500,
+		Status:         "approved",
+		OrderNo:        "20240101120000123456",
+		OrderAmount:    3000,
+		UserPhone:      pgtype.Text{String: "13800138000", Valid: true},
+		UserName:       "张三",
+		RecoveryStatus: "pending",
+		CreatedAt:      time.Now(),
 	}
 
 	testCases := []struct {
@@ -104,14 +107,12 @@ func TestListMerchantClaimsAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), user.ID).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					ListMerchantClaimsForMerchant(gomock.Any(), db.ListMerchantClaimsForMerchantParams{
 						MerchantID: merchant.ID,
+						Bucket:     pgtype.Text{},
 						Limit:      10,
 						Offset:     0,
 					}).
@@ -119,7 +120,10 @@ func TestListMerchantClaimsAPI(t *testing.T) {
 					Return([]db.ListMerchantClaimsForMerchantRow{claim}, nil)
 
 				store.EXPECT().
-					CountMerchantClaimsForMerchant(gomock.Any(), merchant.ID).
+					CountMerchantClaimsForMerchant(gomock.Any(), db.CountMerchantClaimsForMerchantParams{
+						MerchantID: merchant.ID,
+						Bucket:     pgtype.Text{},
+					}).
 					Times(1).
 					Return(int64(1), nil)
 			},
@@ -132,6 +136,46 @@ func TestListMerchantClaimsAPI(t *testing.T) {
 				claims := response["claims"].([]interface{})
 				require.Len(t, claims, 1)
 				require.Equal(t, float64(1), response["total"])
+				require.Equal(t, false, response["has_more"])
+			},
+		},
+		{
+			name:  "OKWithBucketFilter",
+			query: "?page_id=1&page_size=10&bucket=pending_action",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					ListMerchantClaimsForMerchant(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ context.Context, arg db.ListMerchantClaimsForMerchantParams) ([]db.ListMerchantClaimsForMerchantRow, error) {
+						require.Equal(t, merchant.ID, arg.MerchantID)
+						require.True(t, arg.Bucket.Valid)
+						require.Equal(t, "pending_action", arg.Bucket.String)
+						require.Equal(t, int32(10), arg.Limit)
+						require.Equal(t, int32(0), arg.Offset)
+						return []db.ListMerchantClaimsForMerchantRow{claim}, nil
+					})
+
+				store.EXPECT().
+					CountMerchantClaimsForMerchant(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ context.Context, arg db.CountMerchantClaimsForMerchantParams) (int64, error) {
+						require.Equal(t, merchant.ID, arg.MerchantID)
+						require.True(t, arg.Bucket.Valid)
+						require.Equal(t, "pending_action", arg.Bucket.String)
+						return int64(1), nil
+					})
+			},
+			checkResponse: func(recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var response map[string]interface{}
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+
+				claims := response["claims"].([]interface{})
+				require.Len(t, claims, 1)
 			},
 		},
 		{
@@ -141,10 +185,7 @@ func TestListMerchantClaimsAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), user.ID).
-					Times(1).
-					Return(db.Merchant{}, pgx.ErrNoRows)
+				expectResolveNoAccessibleMerchants(store, user.ID)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -214,6 +255,7 @@ func TestCreateMerchantAppealAPI(t *testing.T) {
 		Status:      "approved",
 		MerchantID:  merchant.ID,
 		RegionID:    region.ID,
+		CreatedAt:   time.Now(),
 	}
 
 	appeal := randomAppeal(claim.ID, merchant.ID, region.ID, "merchant")
@@ -228,18 +270,14 @@ func TestCreateMerchantAppealAPI(t *testing.T) {
 		{
 			name: "OK",
 			body: gin.H{
-				"claim_id":      claim.ID,
-				"reason":        "订单包装完好，顾客收货时已当面核对",
-				"evidence_urls": []string{"https://example.com/evidence.jpg"},
+				"claim_id": claim.ID,
+				"reason":   "订单包装完好，顾客收货时已当面核对",
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), user.ID).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					GetClaimForAppeal(gomock.Any(), claim.ID).
@@ -247,7 +285,10 @@ func TestCreateMerchantAppealAPI(t *testing.T) {
 					Return(claim, nil)
 
 				store.EXPECT().
-					CheckAppealExists(gomock.Any(), claim.ID).
+					CheckAppealExists(gomock.Any(), db.CheckAppealExistsParams{
+						ClaimID:       claim.ID,
+						AppellantType: "merchant",
+					}).
 					Times(1).
 					Return(false, nil)
 
@@ -255,6 +296,11 @@ func TestCreateMerchantAppealAPI(t *testing.T) {
 					CreateAppeal(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(appeal, nil)
+
+				store.EXPECT().
+					GetClaimRecoveryByClaimID(gomock.Any(), claim.ID).
+					Times(1).
+					Return(db.ClaimRecovery{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusCreated, recorder.Code)
@@ -268,23 +314,19 @@ func TestCreateMerchantAppealAPI(t *testing.T) {
 		{
 			name: "ClaimNotFound",
 			body: gin.H{
-				"claim_id":      99999,
-				"reason":        "这是一个充分的测试申诉理由",
-				"evidence_urls": []string{"https://example.com/e.jpg"},
+				"claim_id": 99999,
+				"reason":   "这是一个充分的测试申诉理由",
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), user.ID).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					GetClaimForAppeal(gomock.Any(), int64(99999)).
 					Times(1).
-					Return(db.GetClaimForAppealRow{}, pgx.ErrNoRows)
+					Return(db.GetClaimForAppealRow{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -293,18 +335,14 @@ func TestCreateMerchantAppealAPI(t *testing.T) {
 		{
 			name: "AppealAlreadyExists",
 			body: gin.H{
-				"claim_id":      claim.ID,
-				"reason":        "这是一个充分的测试申诉理由",
-				"evidence_urls": []string{"https://example.com/e.jpg"},
+				"claim_id": claim.ID,
+				"reason":   "这是一个充分的测试申诉理由",
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), user.ID).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					GetClaimForAppeal(gomock.Any(), claim.ID).
@@ -312,7 +350,10 @@ func TestCreateMerchantAppealAPI(t *testing.T) {
 					Return(claim, nil)
 
 				store.EXPECT().
-					CheckAppealExists(gomock.Any(), claim.ID).
+					CheckAppealExists(gomock.Any(), db.CheckAppealExistsParams{
+						ClaimID:       claim.ID,
+						AppellantType: "merchant",
+					}).
 					Times(1).
 					Return(true, nil)
 			},
@@ -323,18 +364,14 @@ func TestCreateMerchantAppealAPI(t *testing.T) {
 		{
 			name: "ClaimNotBelongToMerchant",
 			body: gin.H{
-				"claim_id":      claim.ID,
-				"reason":        "这是一个充分的测试申诉理由",
-				"evidence_urls": []string{"https://example.com/e.jpg"},
+				"claim_id": claim.ID,
+				"reason":   "这是一个充分的测试申诉理由",
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), user.ID).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				// 返回属于其他商户的索赔
 				otherClaim := claim
@@ -351,24 +388,8 @@ func TestCreateMerchantAppealAPI(t *testing.T) {
 		{
 			name: "ReasonTooShort",
 			body: gin.H{
-				"claim_id":      claim.ID,
-				"reason":        "短",
-				"evidence_urls": []string{"https://example.com/e.jpg"},
-			},
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {},
-			checkResponse: func(recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusBadRequest, recorder.Code)
-			},
-		},
-		{
-			name: "InvalidEvidenceURL",
-			body: gin.H{
-				"claim_id":      claim.ID,
-				"reason":        "这是一个有效的申诉理由",
-				"evidence_urls": []string{"not-a-valid-url"},
+				"claim_id": claim.ID,
+				"reason":   "短",
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
@@ -445,10 +466,7 @@ func TestListMerchantAppealsAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), user.ID).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					ListMerchantAppealsForMerchant(gomock.Any(), db.ListMerchantAppealsForMerchantParams{
@@ -460,9 +478,52 @@ func TestListMerchantAppealsAPI(t *testing.T) {
 					Return([]db.ListMerchantAppealsForMerchantRow{appeal}, nil)
 
 				store.EXPECT().
-					CountMerchantAppealsForMerchant(gomock.Any(), merchant.ID).
+					CountMerchantAppealsForMerchant(gomock.Any(), db.CountMerchantAppealsForMerchantParams{
+						AppellantID: merchant.ID,
+						Status:      pgtype.Text{},
+					}).
 					Times(1).
 					Return(int64(1), nil)
+			},
+			checkResponse: func(recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var response map[string]interface{}
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+
+				appeals := response["appeals"].([]interface{})
+				require.Len(t, appeals, 1)
+				require.Equal(t, false, response["has_more"])
+			},
+		},
+		{
+			name:  "OKWithStatusFilter",
+			query: "?page_id=1&page_size=10&status=pending",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					ListMerchantAppealsForMerchant(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ context.Context, arg db.ListMerchantAppealsForMerchantParams) ([]db.ListMerchantAppealsForMerchantRow, error) {
+						require.Equal(t, merchant.ID, arg.AppellantID)
+						require.True(t, arg.Status.Valid)
+						require.Equal(t, "pending", arg.Status.String)
+						require.Equal(t, int32(10), arg.Limit)
+						require.Equal(t, int32(0), arg.Offset)
+						return []db.ListMerchantAppealsForMerchantRow{appeal}, nil
+					})
+
+				store.EXPECT().
+					CountMerchantAppealsForMerchant(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ context.Context, arg db.CountMerchantAppealsForMerchantParams) (int64, error) {
+						require.Equal(t, merchant.ID, arg.AppellantID)
+						require.True(t, arg.Status.Valid)
+						require.Equal(t, "pending", arg.Status.String)
+						return int64(1), nil
+					})
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -516,6 +577,7 @@ func TestCreateRiderAppealAPI(t *testing.T) {
 		MerchantID:  200,
 		RegionID:    region.ID,
 		RiderID:     pgtype.Int8{Int64: rider.ID, Valid: true},
+		CreatedAt:   time.Now(),
 	}
 
 	appeal := randomAppeal(claim.ID, rider.ID, region.ID, "rider")
@@ -530,9 +592,8 @@ func TestCreateRiderAppealAPI(t *testing.T) {
 		{
 			name: "OK",
 			body: gin.H{
-				"claim_id":      claim.ID,
-				"reason":        "因恶劣天气导致配送延迟，非骑手原因",
-				"evidence_urls": []string{"https://example.com/weather.jpg"},
+				"claim_id": claim.ID,
+				"reason":   "因恶劣天气导致配送延迟，非骑手原因",
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
@@ -549,7 +610,10 @@ func TestCreateRiderAppealAPI(t *testing.T) {
 					Return(claim, nil)
 
 				store.EXPECT().
-					CheckAppealExists(gomock.Any(), claim.ID).
+					CheckAppealExists(gomock.Any(), db.CheckAppealExistsParams{
+						ClaimID:       claim.ID,
+						AppellantType: "rider",
+					}).
 					Times(1).
 					Return(false, nil)
 
@@ -557,6 +621,11 @@ func TestCreateRiderAppealAPI(t *testing.T) {
 					CreateAppeal(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(appeal, nil)
+
+				store.EXPECT().
+					GetClaimRecoveryByClaimID(gomock.Any(), claim.ID).
+					Times(1).
+					Return(db.ClaimRecovery{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusCreated, recorder.Code)
@@ -565,9 +634,8 @@ func TestCreateRiderAppealAPI(t *testing.T) {
 		{
 			name: "NotRider",
 			body: gin.H{
-				"claim_id":      claim.ID,
-				"reason":        "因恶劣天气导致配送延迟，非骑手原因",
-				"evidence_urls": []string{"https://example.com/weather.jpg"},
+				"claim_id": claim.ID,
+				"reason":   "因恶劣天气导致配送延迟，非骑手原因",
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
@@ -576,7 +644,7 @@ func TestCreateRiderAppealAPI(t *testing.T) {
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), user.ID).
 					Times(1).
-					Return(db.Rider{}, pgx.ErrNoRows)
+					Return(db.Rider{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -585,9 +653,8 @@ func TestCreateRiderAppealAPI(t *testing.T) {
 		{
 			name: "ClaimNotRelatedToRider",
 			body: gin.H{
-				"claim_id":      claim.ID,
-				"reason":        "因恶劣天气导致配送延迟，非骑手原因",
-				"evidence_urls": []string{"https://example.com/weather.jpg"},
+				"claim_id": claim.ID,
+				"reason":   "因恶劣天气导致配送延迟，非骑手原因",
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
@@ -664,7 +731,6 @@ func TestReviewAppealAPI(t *testing.T) {
 	reviewedAppeal.ReviewNotes = pgtype.Text{String: "申诉理由充分，予以批准", Valid: true}
 	reviewedAppeal.CompensationAmount = pgtype.Int8{Int64: 500, Valid: true}
 	reviewedAppeal.ReviewedAt = pgtype.Timestamptz{Time: time.Now(), Valid: true}
-	reviewedAppeal.CompensatedAt = pgtype.Timestamptz{Time: time.Now(), Valid: true}
 
 	appealForPostProcess := db.GetAppealForPostProcessRow{
 		AppealID:       appeal.ID,
@@ -676,11 +742,25 @@ func TestReviewAppealAPI(t *testing.T) {
 		ClaimAmount:    500,
 		OrderNo:        "20240101120000123456",
 	}
+	reviewResult := db.ReviewAppealWithCompensationTxResult{
+		Appeal:      reviewedAppeal,
+		PostProcess: appealForPostProcess,
+		CompensationAction: &db.BehaviorAction{
+			ID: 88,
+		},
+	}
+	approvedWithoutCompensation := reviewedAppeal
+	approvedWithoutCompensation.CompensationAmount = pgtype.Int8{}
+	approvedWithoutCompensationResult := db.ReviewAppealWithCompensationTxResult{
+		Appeal:      approvedWithoutCompensation,
+		PostProcess: appealForPostProcess,
+	}
 
 	testCases := []struct {
 		name          string
 		appealID      int64
 		body          gin.H
+		withPayment   bool
 		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
 		buildStubs    func(store *mockdb.MockStore, taskDistributor *mockwk.MockTaskDistributor)
 		checkResponse func(recorder *httptest.ResponseRecorder)
@@ -693,36 +773,23 @@ func TestReviewAppealAPI(t *testing.T) {
 				"review_notes":        "申诉理由充分，予以批准",
 				"compensation_amount": 500,
 			},
+			withPayment: true,
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore, taskDistributor *mockwk.MockTaskDistributor) {
-				// Mock for CasbinRoleMiddleware
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Times(1).
-					Return([]db.UserRole{{UserID: user.ID, Role: "operator", Status: "active", RelatedEntityID: pgtype.Int8{Int64: region.ID, Valid: true}}}, nil)
-
-				// Mock for LoadOperatorMiddleware
-				store.EXPECT().
-					GetOperatorByUser(gomock.Any(), user.ID).
-					Times(2).
-					Return(operator, nil)
+				expectActiveOperatorAuth(store, user.ID, operator)
 
 				store.EXPECT().
 					GetAppeal(gomock.Any(), appeal.ID).
 					Times(1).
 					Return(appeal, nil)
+				expectOperatorManagesRegion(store, operator, appeal.RegionID, true)
 
 				store.EXPECT().
-					ReviewAppeal(gomock.Any(), gomock.Any()).
+					ReviewAppealWithCompensationTx(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(reviewedAppeal, nil)
-
-				store.EXPECT().
-					GetAppealForPostProcess(gomock.Any(), appeal.ID).
-					Times(1).
-					Return(appealForPostProcess, nil)
+					Return(reviewResult, nil)
 
 				taskDistributor.EXPECT().
 					DistributeTaskProcessAppealResult(gomock.Any(), gomock.Any()).
@@ -738,6 +805,50 @@ func TestReviewAppealAPI(t *testing.T) {
 			},
 		},
 		{
+			name:     "ApproveWithoutCompensationOK",
+			appealID: appeal.ID,
+			body: gin.H{
+				"status":       "approved",
+				"review_notes": "申诉成立，撤销判责与追偿",
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore, taskDistributor *mockwk.MockTaskDistributor) {
+				expectActiveOperatorAuth(store, user.ID, operator)
+
+				store.EXPECT().
+					GetAppeal(gomock.Any(), appeal.ID).
+					Times(1).
+					Return(appeal, nil)
+				expectOperatorManagesRegion(store, operator, appeal.RegionID, true)
+
+				store.EXPECT().
+					ReviewAppealWithCompensationTx(gomock.Any(), db.ReviewAppealWithCompensationTxParams{
+						ID:                 appeal.ID,
+						Status:             "approved",
+						ReviewerID:         pgtype.Int8{Int64: operator.ID, Valid: true},
+						ReviewNotes:        pgtype.Text{String: "申诉成立，撤销判责与追偿", Valid: true},
+						CompensationAmount: pgtype.Int8{},
+					}).
+					Times(1).
+					Return(approvedWithoutCompensationResult, nil)
+
+				taskDistributor.EXPECT().
+					DistributeTaskProcessAppealResult(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(nil)
+			},
+			checkResponse: func(recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var response appealResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Equal(t, "approved", response.Status)
+				require.Nil(t, response.CompensationAmount)
+			},
+		},
+		{
 			name:     "RejectOK",
 			appealID: appeal.ID,
 			body: gin.H{
@@ -748,22 +859,13 @@ func TestReviewAppealAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore, taskDistributor *mockwk.MockTaskDistributor) {
-				// Mock for CasbinRoleMiddleware
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Times(1).
-					Return([]db.UserRole{{UserID: user.ID, Role: "operator", Status: "active", RelatedEntityID: pgtype.Int8{Int64: region.ID, Valid: true}}}, nil)
-
-				// Mock for LoadOperatorMiddleware
-				store.EXPECT().
-					GetOperatorByUser(gomock.Any(), user.ID).
-					Times(2).
-					Return(operator, nil)
+				expectActiveOperatorAuth(store, user.ID, operator)
 
 				store.EXPECT().
 					GetAppeal(gomock.Any(), appeal.ID).
 					Times(1).
 					Return(appeal, nil)
+				expectOperatorManagesRegion(store, operator, appeal.RegionID, true)
 
 				rejectedAppeal := appeal
 				rejectedAppeal.Status = "rejected"
@@ -772,14 +874,9 @@ func TestReviewAppealAPI(t *testing.T) {
 				rejectedAppeal.ReviewedAt = pgtype.Timestamptz{Time: time.Now(), Valid: true}
 
 				store.EXPECT().
-					ReviewAppeal(gomock.Any(), gomock.Any()).
+					ReviewAppealWithCompensationTx(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(rejectedAppeal, nil)
-
-				store.EXPECT().
-					GetAppealForPostProcess(gomock.Any(), appeal.ID).
-					Times(1).
-					Return(appealForPostProcess, nil)
+					Return(db.ReviewAppealWithCompensationTxResult{Appeal: rejectedAppeal, PostProcess: appealForPostProcess}, nil)
 
 				taskDistributor.EXPECT().
 					DistributeTaskProcessAppealResult(gomock.Any(), gomock.Any()).
@@ -801,22 +898,12 @@ func TestReviewAppealAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore, taskDistributor *mockwk.MockTaskDistributor) {
-				// Mock for CasbinRoleMiddleware
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Times(1).
-					Return([]db.UserRole{{UserID: user.ID, Role: "operator", Status: "active", RelatedEntityID: pgtype.Int8{Int64: region.ID, Valid: true}}}, nil)
-
-				// Mock for LoadOperatorMiddleware
-				store.EXPECT().
-					GetOperatorByUser(gomock.Any(), user.ID).
-					Times(2).
-					Return(operator, nil)
+				expectActiveOperatorAuth(store, user.ID, operator)
 
 				store.EXPECT().
 					GetAppeal(gomock.Any(), int64(99999)).
 					Times(1).
-					Return(db.Appeal{}, pgx.ErrNoRows)
+					Return(db.Appeal{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -833,17 +920,7 @@ func TestReviewAppealAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore, taskDistributor *mockwk.MockTaskDistributor) {
-				// Mock for CasbinRoleMiddleware
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Times(1).
-					Return([]db.UserRole{{UserID: user.ID, Role: "operator", Status: "active", RelatedEntityID: pgtype.Int8{Int64: region.ID, Valid: true}}}, nil)
-
-				// Mock for LoadOperatorMiddleware
-				store.EXPECT().
-					GetOperatorByUser(gomock.Any(), user.ID).
-					Times(2).
-					Return(operator, nil)
+				expectActiveOperatorAuth(store, user.ID, operator)
 
 				// 返回属于其他区域的申诉
 				otherRegionAppeal := appeal
@@ -852,6 +929,7 @@ func TestReviewAppealAPI(t *testing.T) {
 					GetAppeal(gomock.Any(), appeal.ID).
 					Times(1).
 					Return(otherRegionAppeal, nil)
+				expectOperatorManagesRegion(store, operator, otherRegionAppeal.RegionID, false)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -869,17 +947,7 @@ func TestReviewAppealAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore, taskDistributor *mockwk.MockTaskDistributor) {
-				// Mock for CasbinRoleMiddleware
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Times(1).
-					Return([]db.UserRole{{UserID: user.ID, Role: "operator", Status: "active", RelatedEntityID: pgtype.Int8{Int64: region.ID, Valid: true}}}, nil)
-
-				// Mock for LoadOperatorMiddleware
-				store.EXPECT().
-					GetOperatorByUser(gomock.Any(), user.ID).
-					Times(2).
-					Return(operator, nil)
+				expectActiveOperatorAuth(store, user.ID, operator)
 
 				alreadyReviewedAppeal := appeal
 				alreadyReviewedAppeal.Status = "approved"
@@ -887,39 +955,25 @@ func TestReviewAppealAPI(t *testing.T) {
 					GetAppeal(gomock.Any(), appeal.ID).
 					Times(1).
 					Return(alreadyReviewedAppeal, nil)
+				expectOperatorManagesRegion(store, operator, alreadyReviewedAppeal.RegionID, true)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
 			},
 		},
 		{
-			name:     "ApproveWithoutCompensation",
+			name:     "ApproveWithZeroCompensationInvalid",
 			appealID: appeal.ID,
 			body: gin.H{
-				"status":       "approved",
-				"review_notes": "申诉理由充分，予以批准",
-				// missing compensation_amount
+				"status":              "approved",
+				"review_notes":        "申诉理由充分，予以批准",
+				"compensation_amount": 0,
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore, taskDistributor *mockwk.MockTaskDistributor) {
-				// Mock for CasbinRoleMiddleware
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Times(1).
-					Return([]db.UserRole{{UserID: user.ID, Role: "operator", Status: "active", RelatedEntityID: pgtype.Int8{Int64: region.ID, Valid: true}}}, nil)
-
-				// Mock for LoadOperatorMiddleware
-				store.EXPECT().
-					GetOperatorByUser(gomock.Any(), user.ID).
-					Times(2).
-					Return(operator, nil)
-
-				store.EXPECT().
-					GetAppeal(gomock.Any(), appeal.ID).
-					Times(1).
-					Return(appeal, nil)
+				expectActiveOperatorAuth(store, user.ID, operator)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -957,17 +1011,7 @@ func TestReviewAppealAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore, taskDistributor *mockwk.MockTaskDistributor) {
-				// Mock for CasbinRoleMiddleware
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Times(1).
-					Return([]db.UserRole{{UserID: user.ID, Role: "operator", Status: "active", RelatedEntityID: pgtype.Int8{Int64: region.ID, Valid: true}}}, nil)
-
-				// Mock for LoadOperatorMiddleware
-				store.EXPECT().
-					GetOperatorByUser(gomock.Any(), user.ID).
-					Times(1).
-					Return(operator, nil)
+				expectActiveOperatorAuth(store, user.ID, operator)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -987,6 +1031,9 @@ func TestReviewAppealAPI(t *testing.T) {
 			tc.buildStubs(store, taskDistributor)
 
 			server := newTestServerWithTaskDistributor(t, store, taskDistributor)
+			if tc.withPayment {
+				server.SetPaymentClientForTest(mockwechat.NewMockPaymentClientInterface(ctrl))
+			}
 			recorder := httptest.NewRecorder()
 
 			data, err := json.Marshal(tc.body)
@@ -1002,6 +1049,209 @@ func TestReviewAppealAPI(t *testing.T) {
 			tc.checkResponse(recorder)
 		})
 	}
+}
+
+func TestReviewAppealAPI_ApprovedCompensationRequiresPaymentClient(t *testing.T) {
+	user, _ := randomUser(t)
+	region := randomRegion()
+	operator := randomAppealOperator(user.ID, region.ID)
+	appeal := db.Appeal{
+		ID:            1,
+		ClaimID:       100,
+		AppellantType: "merchant",
+		AppellantID:   200,
+		Reason:        "测试申诉理由",
+		Status:        "pending",
+		RegionID:      region.ID,
+		CreatedAt:     time.Now(),
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectActiveOperatorAuth(store, user.ID, operator)
+	store.EXPECT().GetAppeal(gomock.Any(), appeal.ID).
+		Times(1).
+		Return(appeal, nil)
+	expectOperatorManagesRegion(store, operator, appeal.RegionID, true)
+
+	server := newTestServer(t, store)
+
+	body, err := json.Marshal(gin.H{
+		"status":              "approved",
+		"review_notes":        "申诉理由充分，予以批准",
+		"compensation_amount": 500,
+	})
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPost, "/v1/operator/appeals/1/review", bytes.NewReader(body))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusServiceUnavailable, recorder.Code)
+
+	var resp ErrorResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, ErrAppealCompensationUnavailable.Code, resp.Code)
+	require.Equal(t, ErrAppealCompensationUnavailable.Message, resp.Error)
+}
+
+func TestReviewAppealAPI_NoopDistributorFallsBackInline(t *testing.T) {
+	user, _ := randomUser(t)
+	region := randomRegion()
+	operator := randomAppealOperator(user.ID, region.ID)
+	appeal := db.Appeal{
+		ID:            1,
+		ClaimID:       100,
+		AppellantType: "merchant",
+		AppellantID:   200,
+		Reason:        "测试申诉理由",
+		Status:        "pending",
+		RegionID:      region.ID,
+		CreatedAt:     time.Now(),
+	}
+	approvedAppeal := appeal
+	approvedAppeal.Status = "approved"
+	approvedAppeal.ReviewerID = pgtype.Int8{Int64: operator.ID, Valid: true}
+	approvedAppeal.ReviewNotes = pgtype.Text{String: "申诉成立，撤销判责与追偿", Valid: true}
+	approvedAppeal.ReviewedAt = pgtype.Timestamptz{Time: time.Now(), Valid: true}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectActiveOperatorAuth(store, user.ID, operator)
+	store.EXPECT().GetAppeal(gomock.Any(), appeal.ID).
+		Times(1).
+		Return(appeal, nil)
+	expectOperatorManagesRegion(store, operator, appeal.RegionID, true)
+	store.EXPECT().ReviewAppealWithCompensationTx(gomock.Any(), db.ReviewAppealWithCompensationTxParams{
+		ID:                 appeal.ID,
+		Status:             "approved",
+		ReviewerID:         pgtype.Int8{Int64: operator.ID, Valid: true},
+		ReviewNotes:        pgtype.Text{String: "申诉成立，撤销判责与追偿", Valid: true},
+		CompensationAmount: pgtype.Int8{},
+	}).
+		Times(1).
+		Return(db.ReviewAppealWithCompensationTxResult{
+			Appeal: approvedAppeal,
+			PostProcess: db.GetAppealForPostProcessRow{
+				AppealID:       appeal.ID,
+				ClaimID:        0,
+				AppellantType:  "merchant",
+				AppellantID:    appeal.AppellantID,
+				ClaimantUserID: 300,
+				ClaimType:      "missing-item",
+				ClaimAmount:    500,
+				OrderNo:        "20240101120000123456",
+			},
+		}, nil)
+	store.EXPECT().GetMerchant(gomock.Any(), appeal.AppellantID).
+		Times(1).
+		Return(db.Merchant{ID: appeal.AppellantID, OwnerUserID: 901}, nil)
+
+	server := newTestServer(t, store)
+
+	body, err := json.Marshal(gin.H{
+		"status":       "approved",
+		"review_notes": "申诉成立，撤销判责与追偿",
+	})
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPost, "/v1/operator/appeals/1/review", bytes.NewReader(body))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var response appealResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+	require.Equal(t, "approved", response.Status)
+	require.Nil(t, response.CompensationAmount)
+}
+
+func TestReviewAppealAPI_InlineCompensationFailureReturns500(t *testing.T) {
+	user, _ := randomUser(t)
+	region := randomRegion()
+	operator := randomAppealOperator(user.ID, region.ID)
+	appeal := db.Appeal{
+		ID:            1,
+		ClaimID:       100,
+		AppellantType: "merchant",
+		AppellantID:   200,
+		Reason:        "测试申诉理由",
+		Status:        "pending",
+		RegionID:      region.ID,
+		CreatedAt:     time.Now(),
+	}
+	reviewedAppeal := appeal
+	reviewedAppeal.Status = "approved"
+	reviewedAppeal.ReviewerID = pgtype.Int8{Int64: operator.ID, Valid: true}
+	reviewedAppeal.ReviewNotes = pgtype.Text{String: "申诉理由充分，予以批准", Valid: true}
+	reviewedAppeal.CompensationAmount = pgtype.Int8{Int64: 500, Valid: true}
+	reviewedAppeal.ReviewedAt = pgtype.Timestamptz{Time: time.Now(), Valid: true}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	taskDistributor := mockwk.NewMockTaskDistributor(ctrl)
+	expectActiveOperatorAuth(store, user.ID, operator)
+	store.EXPECT().GetAppeal(gomock.Any(), appeal.ID).
+		Times(1).
+		Return(appeal, nil)
+	expectOperatorManagesRegion(store, operator, appeal.RegionID, true)
+	store.EXPECT().ReviewAppealWithCompensationTx(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(db.ReviewAppealWithCompensationTxResult{
+			Appeal: reviewedAppeal,
+			PostProcess: db.GetAppealForPostProcessRow{
+				AppealID:       appeal.ID,
+				ClaimID:        0,
+				AppellantType:  "merchant",
+				AppellantID:    appeal.AppellantID,
+				ClaimantUserID: 300,
+				ClaimType:      "missing-item",
+				ClaimAmount:    500,
+				OrderNo:        "20240101120000123456",
+			},
+			CompensationAction: &db.BehaviorAction{ID: 88},
+		}, nil)
+	taskDistributor.EXPECT().DistributeTaskProcessAppealResult(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(errors.New("queue unavailable"))
+	store.EXPECT().GetBehaviorAction(gomock.Any(), int64(88)).
+		Times(1).
+		Return(db.BehaviorAction{}, errors.New("load action failed"))
+
+	server := newTestServerWithTaskDistributor(t, store, taskDistributor)
+	server.SetPaymentClientForTest(mockwechat.NewMockPaymentClientInterface(ctrl))
+
+	body, err := json.Marshal(gin.H{
+		"status":              "approved",
+		"review_notes":        "申诉理由充分，予以批准",
+		"compensation_amount": 500,
+	})
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPost, "/v1/operator/appeals/1/review", bytes.NewReader(body))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusInternalServerError, recorder.Code)
 }
 
 // ====================== List Operator Appeals Tests ======================
@@ -1043,17 +1293,8 @@ func TestListOperatorAppealsAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				// Mock for CasbinRoleMiddleware
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Times(1).
-					Return([]db.UserRole{{UserID: user.ID, Role: "operator", Status: "active", RelatedEntityID: pgtype.Int8{Int64: region.ID, Valid: true}}}, nil)
-
-				// Mock for LoadOperatorMiddleware
-				store.EXPECT().
-					GetOperatorByUser(gomock.Any(), user.ID).
-					Times(2).
-					Return(operator, nil)
+				expectActiveOperatorAuth(store, user.ID, operator)
+				expectOperatorManagesRegion(store, operator, region.ID, true)
 
 				store.EXPECT().
 					ListOperatorAppeals(gomock.Any(), db.ListOperatorAppealsParams{
@@ -1090,17 +1331,8 @@ func TestListOperatorAppealsAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				// Mock for CasbinRoleMiddleware
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Times(1).
-					Return([]db.UserRole{{UserID: user.ID, Role: "operator", Status: "active", RelatedEntityID: pgtype.Int8{Int64: region.ID, Valid: true}}}, nil)
-
-				// Mock for LoadOperatorMiddleware
-				store.EXPECT().
-					GetOperatorByUser(gomock.Any(), user.ID).
-					Times(2).
-					Return(operator, nil)
+				expectActiveOperatorAuth(store, user.ID, operator)
+				expectOperatorManagesRegion(store, operator, region.ID, true)
 
 				store.EXPECT().
 					ListOperatorAppeals(gomock.Any(), db.ListOperatorAppealsParams{
@@ -1131,17 +1363,7 @@ func TestListOperatorAppealsAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				// Mock for CasbinRoleMiddleware
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Times(1).
-					Return([]db.UserRole{{UserID: user.ID, Role: "operator", Status: "active", RelatedEntityID: pgtype.Int8{Int64: region.ID, Valid: true}}}, nil)
-
-				// Mock for LoadOperatorMiddleware
-				store.EXPECT().
-					GetOperatorByUser(gomock.Any(), user.ID).
-					Times(1).
-					Return(operator, nil)
+				expectActiveOperatorAuth(store, user.ID, operator)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -1210,10 +1432,7 @@ func TestGetMerchantClaimDetailAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), user.ID).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					GetMerchantClaimDetailForMerchant(gomock.Any(), db.GetMerchantClaimDetailForMerchantParams{
@@ -1234,15 +1453,12 @@ func TestGetMerchantClaimDetailAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), user.ID).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					GetMerchantClaimDetailForMerchant(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.GetMerchantClaimDetailForMerchantRow{}, pgx.ErrNoRows)
+					Return(db.GetMerchantClaimDetailForMerchantRow{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -1255,10 +1471,7 @@ func TestGetMerchantClaimDetailAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), user.ID).
-					Times(1).
-					Return(db.Merchant{}, pgx.ErrNoRows)
+				expectResolveNoAccessibleMerchants(store, user.ID)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -1329,10 +1542,7 @@ func TestGetMerchantAppealDetailAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), user.ID).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					GetMerchantAppealDetail(gomock.Any(), db.GetMerchantAppealDetailParams{
@@ -1353,15 +1563,12 @@ func TestGetMerchantAppealDetailAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), user.ID).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					GetMerchantAppealDetail(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.GetMerchantAppealDetailRow{}, pgx.ErrNoRows)
+					Return(db.GetMerchantAppealDetailRow{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -1401,18 +1608,19 @@ func TestListRiderClaimsAPI(t *testing.T) {
 	rider := randomAppealRider(user.ID, region.ID)
 
 	claim := db.ListRiderClaimsForRiderRow{
-		ID:          1,
-		OrderID:     100,
-		UserID:      200,
-		ClaimType:   "delay",
-		Description: "配送延迟",
-		ClaimAmount: 300,
-		Status:      "approved",
-		OrderNo:     "20240101120000123456",
-		OrderAmount: 3000,
-		UserPhone:   pgtype.Text{String: "13800138000", Valid: true},
-		UserName:    "张三",
-		CreatedAt:   time.Now(),
+		ID:             1,
+		OrderID:        100,
+		UserID:         200,
+		ClaimType:      "delay",
+		Description:    "配送延迟",
+		ClaimAmount:    300,
+		Status:         "approved",
+		RecoveryStatus: "pending",
+		OrderNo:        "20240101120000123456",
+		OrderAmount:    3000,
+		UserPhone:      pgtype.Text{String: "13800138000", Valid: true},
+		UserName:       "张三",
+		CreatedAt:      time.Now(),
 	}
 
 	testCases := []struct {
@@ -1446,6 +1654,46 @@ func TestListRiderClaimsAPI(t *testing.T) {
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var response merchantClaimsListResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Len(t, response.Claims, 1)
+				require.NotNil(t, response.Claims[0].RecoveryStatus)
+				require.Equal(t, claim.RecoveryStatus, *response.Claims[0].RecoveryStatus)
+			},
+		},
+		{
+			name:  "WithBucket",
+			query: "?page_id=2&page_size=5&bucket=pending_action",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetRiderByUserID(gomock.Any(), user.ID).
+					Times(1).
+					Return(rider, nil)
+
+				store.EXPECT().
+					ListRiderClaimsForRider(gomock.Any(), gomock.Eq(db.ListRiderClaimsForRiderParams{
+						RiderID: pgtype.Int8{Int64: rider.ID, Valid: true},
+						Limit:   5,
+						Offset:  5,
+						Bucket:  pgtype.Text{String: "pending_action", Valid: true},
+					})).
+					Times(1).
+					Return([]db.ListRiderClaimsForRiderRow{claim}, nil)
+
+				store.EXPECT().
+					CountRiderClaimsForRider(gomock.Any(), gomock.Eq(db.CountRiderClaimsForRiderParams{
+						RiderID: pgtype.Int8{Int64: rider.ID, Valid: true},
+						Bucket:  pgtype.Text{String: "pending_action", Valid: true},
+					})).
+					Times(1).
+					Return(int64(1), nil)
+			},
+			checkResponse: func(recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
 			},
 		},
 		{
@@ -1458,7 +1706,7 @@ func TestListRiderClaimsAPI(t *testing.T) {
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), user.ID).
 					Times(1).
-					Return(db.Rider{}, pgx.ErrNoRows)
+					Return(db.Rider{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -1618,16 +1866,12 @@ func TestGetOperatorAppealDetailAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
+				expectActiveOperatorAuth(store, user.ID, operator)
 				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
+					GetAppeal(gomock.Any(), appeal.ID).
 					Times(1).
-					Return([]db.UserRole{{UserID: user.ID, Role: "operator", Status: "active", RelatedEntityID: pgtype.Int8{Int64: region.ID, Valid: true}}}, nil)
-
-				store.EXPECT().
-					GetOperatorByUser(gomock.Any(), user.ID).
-					Times(2).
-					Return(operator, nil)
-
+					Return(db.Appeal{ID: appeal.ID, RegionID: operator.RegionID}, nil)
+				expectOperatorManagesRegion(store, operator, operator.RegionID, true)
 				store.EXPECT().
 					GetOperatorAppealDetail(gomock.Any(), db.GetOperatorAppealDetailParams{
 						ID:       appeal.ID,
@@ -1647,20 +1891,11 @@ func TestGetOperatorAppealDetailAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
+				expectActiveOperatorAuth(store, user.ID, operator)
 				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
+					GetAppeal(gomock.Any(), int64(99999)).
 					Times(1).
-					Return([]db.UserRole{{UserID: user.ID, Role: "operator", Status: "active", RelatedEntityID: pgtype.Int8{Int64: region.ID, Valid: true}}}, nil)
-
-				store.EXPECT().
-					GetOperatorByUser(gomock.Any(), user.ID).
-					Times(2).
-					Return(operator, nil)
-
-				store.EXPECT().
-					GetOperatorAppealDetail(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.GetOperatorAppealDetailRow{}, pgx.ErrNoRows)
+					Return(db.Appeal{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -1742,8 +1977,7 @@ func TestGetRiderClaimDetailAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response map[string]interface{}
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, float64(claim.ID), response["id"])
 				require.Equal(t, claim.ClaimType, response["claim_type"])
 			},
@@ -1763,7 +1997,7 @@ func TestGetRiderClaimDetailAPI(t *testing.T) {
 				store.EXPECT().
 					GetRiderClaimDetailForRider(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.GetRiderClaimDetailForRiderRow{}, pgx.ErrNoRows)
+					Return(db.GetRiderClaimDetailForRiderRow{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -1779,7 +2013,7 @@ func TestGetRiderClaimDetailAPI(t *testing.T) {
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), user.ID).
 					Times(1).
-					Return(db.Rider{}, pgx.ErrNoRows)
+					Return(db.Rider{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -1800,7 +2034,7 @@ func TestGetRiderClaimDetailAPI(t *testing.T) {
 				store.EXPECT().
 					GetRiderClaimDetailForRider(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.GetRiderClaimDetailForRiderRow{}, pgx.ErrNoRows)
+					Return(db.GetRiderClaimDetailForRiderRow{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -1830,6 +2064,255 @@ func TestGetRiderClaimDetailAPI(t *testing.T) {
 			tc.checkResponse(recorder)
 		})
 	}
+}
+
+func TestGetRiderClaimDecisionAPI(t *testing.T) {
+	user, _ := randomUser(t)
+	region := randomRegion()
+	rider := randomAppealRider(user.ID, region.ID)
+
+	claim := db.GetRiderClaimDetailForRiderRow{
+		ID:          1,
+		OrderID:     100,
+		UserID:      200,
+		ClaimType:   "damage",
+		Description: "餐损",
+		ClaimAmount: 300,
+		Status:      "approved",
+		OrderNo:     "20240101120000123456",
+		OrderAmount: 3000,
+		UserPhone:   pgtype.Text{String: "13800138000", Valid: true},
+		UserName:    "张三",
+		CreatedAt:   time.Now(),
+	}
+
+	decision := db.BehaviorDecision{
+		ID:                 11,
+		ResponsibleParty:   "rider",
+		CompensationSource: "rider",
+		DecisionStatus:     "decided",
+		ReasonCodes:        []string{"instant", "normal"},
+		TraceSummary:       pgtype.Text{String: "骑手责任，平台已先赔", Valid: true},
+		CreatedAt:          time.Now(),
+		UpdatedAt:          time.Now(),
+	}
+
+	testCases := []struct {
+		name          string
+		claimID       int64
+		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
+		buildStubs    func(store *mockdb.MockStore)
+		checkResponse func(recorder *httptest.ResponseRecorder)
+	}{
+		{
+			name:    "OK",
+			claimID: claim.ID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetRiderByUserID(gomock.Any(), user.ID).
+					Times(1).
+					Return(rider, nil)
+
+				store.EXPECT().
+					GetRiderClaimDetailForRider(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(claim, nil)
+
+				store.EXPECT().
+					ListBehaviorDecisionsByOrder(gomock.Any(), pgtype.Int8{Int64: claim.OrderID, Valid: true}).
+					Times(1).
+					Return([]db.BehaviorDecision{decision}, nil)
+			},
+			checkResponse: func(recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var response merchantClaimDecisionResult
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.NotNil(t, response.Decision)
+				require.Equal(t, decision.ID, response.Decision.DecisionID)
+				require.Equal(t, decision.ResponsibleParty, response.Decision.ResponsibleParty)
+			},
+		},
+		{
+			name:    "ClaimNotFound",
+			claimID: 99999,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetRiderByUserID(gomock.Any(), user.ID).
+					Times(1).
+					Return(rider, nil)
+
+				store.EXPECT().
+					GetRiderClaimDetailForRider(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.GetRiderClaimDetailForRiderRow{}, db.ErrRecordNotFound)
+			},
+			checkResponse: func(recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusNotFound, recorder.Code)
+			},
+		},
+		{
+			name:    "NotRider",
+			claimID: claim.ID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetRiderByUserID(gomock.Any(), user.ID).
+					Times(1).
+					Return(db.Rider{}, db.ErrRecordNotFound)
+			},
+			checkResponse: func(recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusForbidden, recorder.Code)
+			},
+		},
+	}
+
+	for i := range testCases {
+		tc := testCases[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			tc.buildStubs(store)
+
+			server := newTestServer(t, store)
+			recorder := httptest.NewRecorder()
+
+			url := fmt.Sprintf("/v1/rider/claims/%d/decision", tc.claimID)
+			request, err := http.NewRequest(http.MethodGet, url, nil)
+			require.NoError(t, err)
+
+			tc.setupAuth(t, request, server.tokenMaker)
+			server.router.ServeHTTP(recorder, request)
+			tc.checkResponse(recorder)
+		})
+	}
+}
+
+func TestGetRiderClaimDecisionAPI_ReadOnlyConsumerDoesNotCreateBehaviorAction(t *testing.T) {
+	user, _ := randomUser(t)
+	region := randomRegion()
+	rider := randomAppealRider(user.ID, region.ID)
+
+	claim := db.GetRiderClaimDetailForRiderRow{
+		ID:          1,
+		OrderID:     100,
+		UserID:      200,
+		ClaimType:   "damage",
+		Description: "餐损",
+		ClaimAmount: 300,
+		Status:      "approved",
+		OrderNo:     "20240101120000123456",
+		OrderAmount: 3000,
+		UserPhone:   pgtype.Text{String: "13800138000", Valid: true},
+		UserName:    "张三",
+		CreatedAt:   time.Now(),
+	}
+
+	decision := db.BehaviorDecision{
+		ID:                 11,
+		ResponsibleParty:   "rider",
+		CompensationSource: "rider",
+		DecisionStatus:     "decided",
+		ReasonCodes:        []string{"rider_recovery"},
+		TraceSummary:       pgtype.Text{String: "骑手责任，平台已先赔", Valid: true},
+		CreatedAt:          time.Now(),
+		UpdatedAt:          time.Now(),
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().GetRiderByUserID(gomock.Any(), user.ID).Times(1).Return(rider, nil)
+	store.EXPECT().GetRiderClaimDetailForRider(gomock.Any(), gomock.Any()).Times(1).Return(claim, nil)
+	store.EXPECT().ListBehaviorDecisionsByOrder(gomock.Any(), pgtype.Int8{Int64: claim.OrderID, Valid: true}).Times(1).Return([]db.BehaviorDecision{decision}, nil)
+	store.EXPECT().CreateBehaviorAction(gomock.Any(), gomock.Any()).Times(0)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	url := fmt.Sprintf("/v1/rider/claims/%d/decision", claim.ID)
+	request, err := http.NewRequest(http.MethodGet, url, nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var response merchantClaimDecisionResult
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+	require.NotNil(t, response.Decision)
+	require.Equal(t, decision.ID, response.Decision.DecisionID)
+}
+
+func TestGetMerchantClaimDecisionAPI_ReadOnlyConsumerDoesNotCreateBehaviorAction(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+
+	claim := db.GetMerchantClaimDetailForMerchantRow{
+		ID:          1,
+		OrderID:     100,
+		UserID:      200,
+		ClaimType:   "foreign-object",
+		Description: "异物",
+		ClaimAmount: 300,
+		Status:      "approved",
+		OrderNo:     "20240101120000123456",
+		OrderAmount: 3000,
+		UserPhone:   pgtype.Text{String: "13800138000", Valid: true},
+		UserName:    "张三",
+		CreatedAt:   time.Now(),
+	}
+
+	decision := db.BehaviorDecision{
+		ID:                 21,
+		ResponsibleParty:   "merchant",
+		CompensationSource: "merchant",
+		DecisionStatus:     "decided",
+		ReasonCodes:        []string{"merchant_recovery"},
+		TraceSummary:       pgtype.Text{String: "商户责任，平台已先赔", Valid: true},
+		CreatedAt:          time.Now(),
+		UpdatedAt:          time.Now(),
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+	store.EXPECT().GetMerchantClaimDetailForMerchant(gomock.Any(), db.GetMerchantClaimDetailForMerchantParams{
+		ID:         claim.ID,
+		MerchantID: merchant.ID,
+	}).Times(1).Return(claim, nil)
+	store.EXPECT().ListBehaviorDecisionsByOrder(gomock.Any(), pgtype.Int8{Int64: claim.OrderID, Valid: true}).Times(1).Return([]db.BehaviorDecision{decision}, nil)
+	store.EXPECT().CreateBehaviorAction(gomock.Any(), gomock.Any()).Times(0)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	url := fmt.Sprintf("/v1/merchant/claims/%d/decision", claim.ID)
+	request, err := http.NewRequest(http.MethodGet, url, nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var response merchantClaimDecisionResult
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+	require.NotNil(t, response.Decision)
+	require.Equal(t, decision.ID, response.Decision.DecisionID)
 }
 
 // ====================== Get Rider Appeal Detail Tests ======================
@@ -1887,8 +2370,7 @@ func TestGetRiderAppealDetailAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response map[string]interface{}
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, float64(appeal.ID), response["id"])
 				require.Equal(t, "rider", response["appellant_type"])
 			},
@@ -1908,7 +2390,7 @@ func TestGetRiderAppealDetailAPI(t *testing.T) {
 				store.EXPECT().
 					GetRiderAppealDetail(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.GetRiderAppealDetailRow{}, pgx.ErrNoRows)
+					Return(db.GetRiderAppealDetailRow{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -1924,7 +2406,7 @@ func TestGetRiderAppealDetailAPI(t *testing.T) {
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), user.ID).
 					Times(1).
-					Return(db.Rider{}, pgx.ErrNoRows)
+					Return(db.Rider{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -1945,7 +2427,7 @@ func TestGetRiderAppealDetailAPI(t *testing.T) {
 				store.EXPECT().
 					GetRiderAppealDetail(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.GetRiderAppealDetailRow{}, pgx.ErrNoRows)
+					Return(db.GetRiderAppealDetailRow{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -1975,4 +2457,16 @@ func TestGetRiderAppealDetailAPI(t *testing.T) {
 			tc.checkResponse(recorder)
 		})
 	}
+}
+
+func TestBuildAppealNotificationContent_ApprovedClaimantKeepsExistingPayout(t *testing.T) {
+	title, content := buildAppealNotificationContent(&worker.ProcessAppealResultPayload{
+		Status:    "approved",
+		OrderNo:   "20240101120000123456",
+		ClaimType: "damage",
+	}, false)
+
+	require.Equal(t, "索赔申诉结果通知", title)
+	require.Contains(t, content, "已发放赔付不再向您追回")
+	require.NotContains(t, content, "相关赔付已撤回")
 }

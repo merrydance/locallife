@@ -10,9 +10,9 @@ import (
 func registerCustomValidators() {
 	if v, ok := binding.Validator.Engine().(*validator.Validate); ok {
 		// 注册身份证验证器
-		v.RegisterValidation("validIDCard", validIDCard)
+		_ = v.RegisterValidation("validIDCard", validIDCard)
 		// 注册手机号验证器
-		v.RegisterValidation("validPhone", validPhone)
+		_ = v.RegisterValidation("validPhone", validPhone)
 	}
 }
 

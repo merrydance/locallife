@@ -78,12 +78,83 @@ var (
 		[]string{"status"}, // success, failed
 	)
 
+	paymentCallbackFailuresTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "payment_callback_failures_total",
+			Help: "Total number of payment callback failures",
+		},
+		[]string{"type", "reason"}, // payment/refund/ecommerce_refund/profit_sharing
+	)
+
 	alertsSentTotal = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "alerts_sent_total",
 			Help: "Total number of alerts sent",
 		},
 		[]string{"type", "level"},
+	)
+
+	wsMessagesTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "websocket_messages_total",
+			Help: "Total number of WebSocket messages",
+		},
+		[]string{"type", "result"}, // rider/merchant/platform, sent/queued/dropped/replayed/skipped
+	)
+
+	wsAcksTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "websocket_acks_total",
+			Help: "Total number of WebSocket message acknowledgements",
+		},
+		[]string{"type"},
+	)
+
+	wsRetriesTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "websocket_retries_total",
+			Help: "Total number of WebSocket message retries",
+		},
+		[]string{"type"},
+	)
+
+	wsReplaysTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "websocket_replays_total",
+			Help: "Total number of WebSocket message replays",
+		},
+		[]string{"type"},
+	)
+
+	wsAckLatency = promauto.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "websocket_ack_latency_seconds",
+			Help:    "WebSocket ack latency in seconds",
+			Buckets: []float64{0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10},
+		},
+		[]string{"type"},
+	)
+
+	// 后台队列丢弃计数器
+	searchKeywordsDroppedTotal = promauto.NewCounter(
+		prometheus.CounterOpts{
+			Name: "search_keywords_dropped_total",
+			Help: "Total number of search keyword record jobs dropped due to full queue",
+		},
+	)
+
+	imageDeleteDroppedTotal = promauto.NewCounter(
+		prometheus.CounterOpts{
+			Name: "image_delete_dropped_total",
+			Help: "Total number of image delete jobs dropped due to full queue",
+		},
+	)
+
+	auditLogDroppedTotal = promauto.NewCounter(
+		prometheus.CounterOpts{
+			Name: "audit_log_dropped_total",
+			Help: "Total number of audit log writes dropped due to full queue",
+		},
 	)
 )
 
@@ -97,9 +168,9 @@ func PrometheusMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		// 如果路径为空（404），使用实际路径
+		// 如果路径为空（404），使用统一标签以避免高基数
 		if path == "" {
-			path = ctx.Request.URL.Path
+			path = "not_found"
 		}
 
 		httpRequestsInFlight.Inc()
@@ -159,4 +230,29 @@ func RecordPaymentProcessed(success bool) {
 // RecordAlertSent 记录告警发送
 func RecordAlertSent(alertType, level string) {
 	alertsSentTotal.WithLabelValues(alertType, level).Inc()
+}
+
+// RecordWSMessage records WebSocket message delivery outcomes.
+func RecordWSMessage(clientType, result string) {
+	wsMessagesTotal.WithLabelValues(clientType, result).Inc()
+}
+
+// RecordWSAck records WebSocket acknowledgements.
+func RecordWSAck(clientType string) {
+	wsAcksTotal.WithLabelValues(clientType).Inc()
+}
+
+// RecordWSRetry records WebSocket retries.
+func RecordWSRetry(clientType string) {
+	wsRetriesTotal.WithLabelValues(clientType).Inc()
+}
+
+// RecordWSReplay records WebSocket replays.
+func RecordWSReplay(clientType string) {
+	wsReplaysTotal.WithLabelValues(clientType).Inc()
+}
+
+// RecordWSAckLatency records WebSocket ack latency.
+func RecordWSAckLatency(clientType string, seconds float64) {
+	wsAckLatency.WithLabelValues(clientType).Observe(seconds)
 }

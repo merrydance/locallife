@@ -2,7 +2,10 @@ package db
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"sort"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -15,8 +18,10 @@ type UpdateOrderStatusTxParams struct {
 	NewStatus    string
 	OldStatus    string // 用于日志记录
 	OperatorID   int64
-	OperatorType string // "user", "merchant", "system"
+	OperatorType string // "user", "merchant", "system", "rider"
 	Notes        string // 可选备注
+	// 可选履约状态变更，nil 表示不变
+	NewFulfillmentStatus *string
 }
 
 // UpdateOrderStatusTxResult contains the result of the update order status transaction
@@ -33,9 +38,16 @@ func (store *SQLStore) UpdateOrderStatusTx(ctx context.Context, arg UpdateOrderS
 		var err error
 
 		// 1. 更新订单状态
+		var fulfillment pgtype.Text
+		if arg.NewFulfillmentStatus != nil {
+			fulfillment = pgtype.Text{String: *arg.NewFulfillmentStatus, Valid: true}
+		}
+
 		result.Order, err = q.UpdateOrderStatus(ctx, UpdateOrderStatusParams{
-			ID:     arg.OrderID,
-			Status: arg.NewStatus,
+			ID:                arg.OrderID,
+			Status:            arg.NewStatus,
+			FulfillmentStatus: fulfillment,
+			ExpectedStatus:    arg.OldStatus,
 		})
 		if err != nil {
 			return fmt.Errorf("update order status: %w", err)
@@ -135,6 +147,27 @@ func (store *SQLStore) CancelOrderTx(ctx context.Context, arg CancelOrderTxParam
 
 	err := store.execTx(ctx, func(q *Queries) error {
 		var err error
+		var delivery Delivery
+		hasDelivery := false
+
+		// 0. 如果订单已扣减库存（paid状态），先准备恢复库存
+		var orderItems []OrderItem
+		if arg.OldStatus == OrderStatusPaid {
+			orderItems, err = q.ListOrderItemsByOrder(ctx, arg.OrderID)
+			if err != nil {
+				return fmt.Errorf("list order items for cancel: %w", err)
+			}
+		}
+
+		if delivery, err = q.GetDeliveryByOrderID(ctx, arg.OrderID); err == nil {
+			hasDelivery = true
+		} else if !errors.Is(err, ErrRecordNotFound) {
+			return fmt.Errorf("get delivery by order id: %w", err)
+		}
+
+		if hasDelivery && deliveryBlocksOrderCancellation(delivery.Status) {
+			return ErrOrderCancellationBlockedByDeliveryState
+		}
 
 		// 1. 更新订单为已取消
 		var cancelReason pgtype.Text
@@ -143,8 +176,9 @@ func (store *SQLStore) CancelOrderTx(ctx context.Context, arg CancelOrderTxParam
 		}
 
 		result.Order, err = q.UpdateOrderToCancelled(ctx, UpdateOrderToCancelledParams{
-			ID:           arg.OrderID,
-			CancelReason: cancelReason,
+			ID:             arg.OrderID,
+			CancelReason:   cancelReason,
+			ExpectedStatus: arg.OldStatus,
 		})
 		if err != nil {
 			return fmt.Errorf("update order to cancelled: %w", err)
@@ -161,6 +195,188 @@ func (store *SQLStore) CancelOrderTx(ctx context.Context, arg CancelOrderTxParam
 		})
 		if err != nil {
 			return fmt.Errorf("create order status log: %w", err)
+		}
+
+		if hasDelivery && delivery.Status != "cancelled" && delivery.Status != "completed" {
+			lockedDelivery, lockErr := q.GetDeliveryForUpdate(ctx, delivery.ID)
+			if lockErr != nil {
+				return fmt.Errorf("lock delivery for cancel: %w", lockErr)
+			}
+
+			if _, lockErr = q.UpdateDeliveryToCancelled(ctx, lockedDelivery.ID); lockErr != nil {
+				return fmt.Errorf("update delivery to cancelled: %w", lockErr)
+			}
+
+			if lockedDelivery.RiderID.Valid && deliveryRequiresRiderDepositUnfreeze(lockedDelivery.Status) {
+				rider, riderErr := q.GetRiderForUpdate(ctx, lockedDelivery.RiderID.Int64)
+				if riderErr != nil {
+					return fmt.Errorf("get rider for cancel unfreeze: %w", riderErr)
+				}
+
+				unfreezeAmount := orderFreezeAmount(result.Order)
+				if rider.FrozenDeposit < unfreezeAmount {
+					return fmt.Errorf("rider frozen deposit insufficient for order cancel unfreeze")
+				}
+
+				_, riderErr = q.UpdateRiderDeposit(ctx, UpdateRiderDepositParams{
+					ID:            rider.ID,
+					DepositAmount: rider.DepositAmount,
+					FrozenDeposit: rider.FrozenDeposit - unfreezeAmount,
+				})
+				if riderErr != nil {
+					return fmt.Errorf("unfreeze rider deposit on order cancel: %w", riderErr)
+				}
+
+				_, riderErr = q.CreateRiderDeposit(ctx, CreateRiderDepositParams{
+					RiderID:        rider.ID,
+					Amount:         unfreezeAmount,
+					Type:           "unfreeze",
+					RelatedOrderID: pgtype.Int8{Int64: result.Order.ID, Valid: true},
+					BalanceAfter:   rider.DepositAmount - rider.FrozenDeposit + unfreezeAmount,
+					Remark:         pgtype.Text{String: "订单取消解冻押金", Valid: true},
+				})
+				if riderErr != nil {
+					return fmt.Errorf("create rider unfreeze log on order cancel: %w", riderErr)
+				}
+			}
+
+			if lockedDelivery.RiderID.Valid {
+				rider, riderErr := q.GetRiderForUpdate(ctx, lockedDelivery.RiderID.Int64)
+				if riderErr != nil {
+					return fmt.Errorf("get rider for cancel offline check: %w", riderErr)
+				}
+				if rider.Status != RiderStatusActive && rider.IsOnline {
+					if _, riderErr = maybeSetRiderOfflineWhenNotEligible(ctx, q, rider); riderErr != nil {
+						return riderErr
+					}
+				}
+			}
+		}
+
+		// 2.1 取消订单时回滚优惠券使用状态（幂等）
+		if result.Order.UserVoucherID.Valid {
+			userVoucher, err := q.GetUserVoucherForUpdate(ctx, result.Order.UserVoucherID.Int64)
+			if err != nil {
+				if !errors.Is(err, ErrRecordNotFound) {
+					return fmt.Errorf("get user voucher for rollback: %w", err)
+				}
+			} else if userVoucher.Status == "used" && userVoucher.OrderID.Valid && userVoucher.OrderID.Int64 == result.Order.ID {
+				orderID := pgtype.Int8{Int64: result.Order.ID, Valid: true}
+				if time.Now().After(userVoucher.ExpiresAt) {
+					if _, err := q.MarkUserVoucherAsExpiredOnRollback(ctx, MarkUserVoucherAsExpiredOnRollbackParams{
+						ID:      userVoucher.ID,
+						OrderID: orderID,
+					}); err != nil && !errors.Is(err, ErrRecordNotFound) {
+						return fmt.Errorf("mark voucher expired on rollback: %w", err)
+					}
+				} else {
+					if _, err := q.MarkUserVoucherAsUnused(ctx, MarkUserVoucherAsUnusedParams{
+						ID:      userVoucher.ID,
+						OrderID: orderID,
+					}); err != nil && !errors.Is(err, ErrRecordNotFound) {
+						return fmt.Errorf("mark voucher unused on rollback: %w", err)
+					}
+				}
+
+				if _, err := q.DecrementVoucherUsedQuantity(ctx, userVoucher.VoucherID); err != nil {
+					return fmt.Errorf("decrement voucher used quantity: %w", err)
+				}
+			}
+		}
+
+		// 2.2 P1-059 修复：取消订单时回滚会员余额支付（原子性保证）
+		if result.Order.BalancePaid > 0 && result.Order.MembershipID.Valid {
+			membership, err := q.GetMembershipForUpdate(ctx, result.Order.MembershipID.Int64)
+			if err != nil {
+				if !errors.Is(err, ErrRecordNotFound) {
+					return fmt.Errorf("get membership for balance rollback: %w", err)
+				}
+				// 会员卡已删除，记录日志但不阻塞取消流程
+			} else {
+				// 回滚余额：加回已支付金额
+				newBalance := membership.Balance + result.Order.BalancePaid
+				newTotalConsumed := membership.TotalConsumed - result.Order.BalancePaid
+				if newTotalConsumed < 0 {
+					newTotalConsumed = 0
+				}
+
+				_, err = q.UpdateMembershipBalance(ctx, UpdateMembershipBalanceParams{
+					ID:             membership.ID,
+					Balance:        newBalance,
+					TotalRecharged: membership.TotalRecharged,
+					TotalConsumed:  newTotalConsumed,
+				})
+				if err != nil {
+					return fmt.Errorf("rollback membership balance: %w", err)
+				}
+
+				// 创建退款流水记录
+				_, err = q.CreateMembershipTransaction(ctx, CreateMembershipTransactionParams{
+					MembershipID:   membership.ID,
+					Type:           "refund",
+					Amount:         result.Order.BalancePaid,
+					BalanceAfter:   newBalance,
+					RelatedOrderID: pgtype.Int8{Int64: result.Order.ID, Valid: true},
+					RechargeRuleID: pgtype.Int8{},
+					Notes:          pgtype.Text{String: fmt.Sprintf("订单取消退回余额: %s", result.Order.OrderNo), Valid: true},
+				})
+				if err != nil {
+					return fmt.Errorf("create membership refund transaction: %w", err)
+				}
+			}
+		}
+
+		// 3. 若订单之前处于已支付状态，恢复已售库存
+		if arg.OldStatus == OrderStatusPaid {
+			inventoryDate := pgtype.Date{Time: time.Now(), Valid: true}
+			if result.Order.OrderType == OrderTypeReservation && result.Order.ReservationID.Valid {
+				reservation, invErr := q.GetTableReservation(ctx, result.Order.ReservationID.Int64)
+				if invErr != nil && !errors.Is(invErr, ErrRecordNotFound) {
+					return fmt.Errorf("get reservation for inventory restore: %w", invErr)
+				}
+				if reservation.ReservationDate.Valid {
+					inventoryDate = reservation.ReservationDate
+				}
+			}
+
+			// P1-028 修复：按 DishID 排序防止并发死锁
+			sort.Slice(orderItems, func(i, j int) bool {
+				return orderItems[i].DishID.Int64 < orderItems[j].DishID.Int64
+			})
+
+			for _, item := range orderItems {
+				if !item.DishID.Valid {
+					continue
+				}
+
+				inv, invErr := q.GetDailyInventoryForUpdate(ctx, GetDailyInventoryForUpdateParams{
+					MerchantID: result.Order.MerchantID,
+					DishID:     item.DishID.Int64,
+					Date:       inventoryDate,
+				})
+				if invErr != nil {
+					if errors.Is(invErr, ErrRecordNotFound) {
+						continue
+					}
+					return fmt.Errorf("get inventory for restore: %w", invErr)
+				}
+
+				newSold := inv.SoldQuantity - int32(item.Quantity)
+				if newSold < 0 {
+					newSold = 0
+				}
+
+				_, invErr = q.UpdateDailyInventory(ctx, UpdateDailyInventoryParams{
+					TotalQuantity: pgtype.Int4{Int32: inv.TotalQuantity, Valid: true},
+					SoldQuantity:  pgtype.Int4{Int32: newSold, Valid: true},
+					MerchantID:    inv.MerchantID,
+					DishID:        inv.DishID,
+					Date:          inv.Date,
+				})
+				if invErr != nil {
+					return fmt.Errorf("restore inventory for dish %d: %w", item.DishID.Int64, invErr)
+				}
+			}
 		}
 
 		return nil

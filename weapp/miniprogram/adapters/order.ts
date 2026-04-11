@@ -16,14 +16,27 @@ const ORDER_TYPE_MAP: Record<string, string> = {
 /**
  * 订单状态映射 - 对齐swagger枚举值
  */
-const ORDER_STATUS_MAP: Record<string, { text: string; color: string }> = {
+const ORDER_STATUS_MAP: Record<string, { text: string, color: string }> = {
   'pending': { text: '待支付', color: '#E34D59' },
   'paid': { text: '已支付', color: '#ED7B2F' },
   'preparing': { text: '制作中', color: '#0052D9' },
   'ready': { text: '待配送', color: '#0052D9' },
+  'courier_accepted': { text: '骑手已接单', color: '#0052D9' },
+  'picked': { text: '骑手已取餐', color: '#0052D9' },
   'delivering': { text: '配送中', color: '#0052D9' },
+  'rider_delivered': { text: '已送达待确认', color: '#0052D9' },
+  'user_delivered': { text: '已送达', color: '#00A870' },
   'completed': { text: '已完成', color: '#00A870' },
   'cancelled': { text: '已取消', color: '#999999' }
+}
+
+const FULFILLMENT_STATUS_TEXT: Record<string, string> = {
+  'scheduled': '已预约',
+  'pending_kitchen': '待出餐',
+  'preparing': '制作中',
+  'ready': '待取/待配送',
+  'completed': '已完成',
+  'cancelled': '已取消'
 }
 
 export class OrderAdapter {
@@ -32,6 +45,8 @@ export class OrderAdapter {
    */
   static toViewModel(dto: OrderResponse): Order {
     const statusInfo = ORDER_STATUS_MAP[dto.status] || { text: dto.status, color: '#999999' }
+    const statusHint = dto.status_hint?.trim()
+    const badgeTexts = normalizeBadges(dto.badges)
 
     return {
       id: dto.id,
@@ -41,8 +56,15 @@ export class OrderAdapter {
       type: dto.order_type,
       typeText: ORDER_TYPE_MAP[dto.order_type] || '订单',
       status: dto.status,
-      statusText: statusInfo.text,
+      statusText: statusHint || statusInfo.text,
       statusColor: statusInfo.color,
+      statusHint: statusHint || undefined,
+      badges: badgeTexts,
+      actions: dto.actions,
+      paymentContext: dto.payment_context,
+      pickupCodeMasked: dto.pickup_code_masked,
+      overtime: dto.overtime,
+      fulfillmentStatus: dto.fulfillment_status,
       totalAmount: dto.total_amount,
       totalAmountDisplay: `¥${(dto.total_amount / 100).toFixed(2)}`,
       itemCount: dto.items ? dto.items.reduce((sum, item) => sum + item.quantity, 0) : 0,
@@ -57,7 +79,7 @@ export class OrderAdapter {
     const base = OrderAdapter.toViewModel(dto)
     const payableAmount = getPayableAmount(dto)
 
-    const items: OrderItem[] = dto.items.map((item) => ({
+    const items: OrderItem[] = (dto.items ?? []).map((item) => ({
       id: item.id,
       dishId: item.dish_id,
       comboId: item.combo_id,
@@ -68,8 +90,10 @@ export class OrderAdapter {
       subtotal: item.subtotal,
       unitPriceDisplay: `¥${(item.unit_price / 100).toFixed(2)}`,
       subtotalDisplay: `¥${(item.subtotal / 100).toFixed(2)}`,
-      customizations: item.customizations?.map(c => `${c.name}: ${c.value}`) || []
+      customizations: item.customizations?.map((c) => `${c.name}: ${c.value}`) || []
     }))
+
+    const expectDeliverTime = formatDeliveryWindow(dto.estimated_delivery_at, dto.delivery_eta_minutes)
 
     return {
       ...base,
@@ -90,7 +114,49 @@ export class OrderAdapter {
       contactName: dto.delivery_contact_name,
       contactPhone: dto.delivery_contact_phone,
       // 商户电话
-      merchantPhone: dto.merchant_phone
+      merchantPhone: dto.merchant_phone,
+      estimatedDeliveryAt: dto.estimated_delivery_at,
+      deliveryEtaMinutes: dto.delivery_eta_minutes,
+      expectDeliverTime,
+      tableId: dto.table_id,
+      reservationId: dto.reservation_id,
+      replacedByOrderId: dto.replaced_by_order_id,
+      fulfillmentStatus: dto.fulfillment_status,
+      paymentContext: dto.payment_context,
+      timeline: dto.fulfillment_status ? [{
+        time: dto.updated_at || dto.created_at,
+        title: FULFILLMENT_STATUS_TEXT[dto.fulfillment_status] || dto.fulfillment_status
+      }] : undefined
     }
   }
+}
+
+function normalizeBadges(badges?: Array<{ text: string }> | string[]): string[] {
+  if (!badges || badges.length === 0) return []
+  if (typeof badges[0] === 'string') {
+    return badges as string[]
+  }
+  return (badges as Array<{ text: string }>).map((badge) => badge.text).filter(Boolean)
+}
+
+// 生成送达时间段文案（例如 12:40-12:50）
+function formatDeliveryWindow(estimatedAt?: string, etaMinutes?: number): string | undefined {
+  const paddingMinutes = 5
+
+  if (estimatedAt) {
+    const target = dayjs(estimatedAt)
+    if (!target.isValid()) return undefined
+    const start = target.subtract(paddingMinutes, 'minute')
+    const end = target.add(paddingMinutes, 'minute')
+    return `${start.format('HH:mm')}-${end.format('HH:mm')}`
+  }
+
+  if (etaMinutes && etaMinutes > 0) {
+    const now = dayjs()
+    const start = now.add(Math.max(etaMinutes - paddingMinutes, 0), 'minute')
+    const end = now.add(etaMinutes + paddingMinutes, 'minute')
+    return `${start.format('HH:mm')}-${end.format('HH:mm')}`
+  }
+
+  return undefined
 }

@@ -1,9 +1,7 @@
-<view class="container">
-  <view class="header">
-    <text class="title">预订 - {{merchantName}}</text>
-  </view>
+<custom-navbar title="预订 - {{merchantName}}" showBack="{{true}}" bind:navheight="onNavHeight" />
 
-  <view class="form-group">
+<view class="page-container" style="padding-top: {{navBarHeight}}px; padding-bottom: calc(120rpx + env(safe-area-inset-bottom));">
+  <view class="form-group" style="padding-top: 20rpx;">
     <t-cell-group title="基本信息">
       <t-cell title="预订日期" note="{{date || '请选择日期'}}" arrow bind:tap="showDatePicker" />
       <t-cell title="预订时间" note="{{time || '请选择时间'}}" arrow bind:tap="showTimePicker" />
@@ -21,7 +19,7 @@
   </view>
 
   <view class="footer-action">
-    <t-button theme="primary" size="large" block bind:tap="onSubmit">提交预订</t-button>
+    <t-button theme="primary" size="large" block loading="{{submitting}}" disabled="{{submitting}}" bind:tap="onSubmit" shape="round">提交预订</t-button>
   </view>
 
   <!-- Pickers -->

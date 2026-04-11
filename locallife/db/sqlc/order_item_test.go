@@ -147,12 +147,16 @@ func createRandomPaymentOrder(t *testing.T, userID int64) PaymentOrder {
 
 func createRandomPaymentOrderWithOrder(t *testing.T, userID int64, orderID *int64) PaymentOrder {
 	outTradeNo := util.RandomString(32)
+	amount := util.RandomMoney()
+	if amount <= 0 {
+		amount = 1
+	}
 
 	arg := CreatePaymentOrderParams{
 		UserID:       userID,
 		PaymentType:  "miniprogram",
 		BusinessType: "order",
-		Amount:       util.RandomMoney(),
+		Amount:       amount,
 		OutTradeNo:   outTradeNo,
 		ExpiresAt:    pgtype.Timestamptz{Time: time.Now().Add(15 * time.Minute), Valid: true},
 	}
@@ -313,7 +317,10 @@ func TestGetLatestPaymentOrderByOrder(t *testing.T) {
 		time.Sleep(10 * time.Millisecond) // 确保时间不同
 	}
 
-	latestPayment, err := testStore.GetLatestPaymentOrderByOrder(context.Background(), pgtype.Int8{Int64: order.ID, Valid: true})
+	latestPayment, err := testStore.GetLatestPaymentOrderByOrder(context.Background(), GetLatestPaymentOrderByOrderParams{
+		OrderID:      pgtype.Int8{Int64: order.ID, Valid: true},
+		BusinessType: "order",
+	})
 	require.NoError(t, err)
 	require.NotEmpty(t, latestPayment)
 

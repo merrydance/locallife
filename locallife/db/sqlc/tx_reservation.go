@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -16,6 +17,8 @@ type CancelReservationTxParams struct {
 	CancelReason  string
 	// 用于检查是否需要释放桌台
 	CurrentReservationID pgtype.Int8
+	// P1-029 修复：是否在事务中同时释放库存
+	ReleaseInventory bool
 }
 
 // CancelReservationTxResult contains the result of the cancel reservation transaction
@@ -27,6 +30,7 @@ type CancelReservationTxResult struct {
 // CancelReservationTx cancels a reservation and releases the table in a single transaction:
 // 1. Update reservation status to cancelled
 // 2. Release table if it was assigned to this reservation
+// 3. P1-029 修复：释放已预订的库存（同一事务内，确保原子性）
 func (store *SQLStore) CancelReservationTx(ctx context.Context, arg CancelReservationTxParams) (CancelReservationTxResult, error) {
 	var result CancelReservationTxResult
 
@@ -58,6 +62,39 @@ func (store *SQLStore) CancelReservationTx(ctx context.Context, arg CancelReserv
 				return fmt.Errorf("update table status: %w", err)
 			}
 			result.TableUpdated = true
+		}
+
+		// 3. P1-029 修复：在同一事务中释放已预订的库存
+		if arg.ReleaseInventory {
+			reservation, err := q.GetTableReservation(ctx, arg.ReservationID)
+			if err != nil {
+				return fmt.Errorf("get reservation for inventory release: %w", err)
+			}
+
+			entries, err := q.ListReservationInventoryByReservation(ctx, arg.ReservationID)
+			if err != nil {
+				return fmt.Errorf("list reservation inventory: %w", err)
+			}
+
+			for _, e := range entries {
+				if e.Quantity <= 0 {
+					continue
+				}
+				if _, err := q.ReleaseReservedInventory(ctx, ReleaseReservedInventoryParams{
+					MerchantID:       reservation.MerchantID,
+					DishID:           e.DishID,
+					Date:             reservation.ReservationDate,
+					ReservedQuantity: e.Quantity,
+				}); err != nil {
+					return fmt.Errorf("release reserved inventory for dish %d: %w", e.DishID, err)
+				}
+				if err := q.DeleteReservationInventoryByDish(ctx, DeleteReservationInventoryByDishParams{
+					ReservationID: arg.ReservationID,
+					DishID:        e.DishID,
+				}); err != nil {
+					return fmt.Errorf("delete reservation inventory for dish %d: %w", e.DishID, err)
+				}
+			}
 		}
 
 		return nil
@@ -109,6 +146,24 @@ func (store *SQLStore) MarkNoShowTx(ctx context.Context, arg MarkNoShowTxParams)
 			result.TableUpdated = true
 		}
 
+		// 3. P1-064 记录用户未到店风险行为
+		_, err = q.CreateBehaviorDecision(ctx, CreateBehaviorDecisionParams{
+			OrderID:            pgtype.Int8{}, // null
+			ReservationID:      pgtype.Int8{Int64: arg.ReservationID, Valid: true},
+			UserID:             pgtype.Int8{Int64: result.Reservation.UserID, Valid: true},
+			MerchantID:         pgtype.Int8{Int64: result.Reservation.MerchantID, Valid: true},
+			RiderID:            pgtype.Int8{},
+			DecisionVersion:    "v1",
+			ReasonCodes:        []string{"reservation_no_show"},
+			ResponsibleParty:   "user",
+			CompensationSource: "unknown",
+			DecisionStatus:     "decided",
+			TraceSummary:       pgtype.Text{String: "User failed to show up for reservation", Valid: true},
+		})
+		if err != nil {
+			return fmt.Errorf("create behavior decision: %w", err)
+		}
+
 		return nil
 	})
 
@@ -129,9 +184,9 @@ type ConfirmReservationTxResult struct {
 	Table       Table
 }
 
-// ConfirmReservationTx confirms a reservation and updates the table status in a single transaction:
+// ConfirmReservationTx confirms a reservation without occupying the table:
 // 1. Update reservation status to confirmed
-// 2. Update table to reserved with current reservation ID
+// 2. Return the current table snapshot for callers that need it
 func (store *SQLStore) ConfirmReservationTx(ctx context.Context, arg ConfirmReservationTxParams) (ConfirmReservationTxResult, error) {
 	var result ConfirmReservationTxResult
 
@@ -144,14 +199,10 @@ func (store *SQLStore) ConfirmReservationTx(ctx context.Context, arg ConfirmRese
 			return fmt.Errorf("update reservation to confirmed: %w", err)
 		}
 
-		// 2. 更新桌台状态为已预定
-		result.Table, err = q.UpdateTableStatus(ctx, UpdateTableStatusParams{
-			ID:                   arg.TableID,
-			Status:               "reserved",
-			CurrentReservationID: pgtype.Int8{Int64: arg.ReservationID, Valid: true},
-		})
+		// 2. 返回当前桌台快照；占桌动作由后续到店/开台流程负责
+		result.Table, err = q.GetTable(ctx, arg.TableID)
 		if err != nil {
-			return fmt.Errorf("update table status: %w", err)
+			return fmt.Errorf("get table: %w", err)
 		}
 
 		return nil
@@ -209,6 +260,224 @@ func (store *SQLStore) CompleteReservationTx(ctx context.Context, arg CompleteRe
 	return result, err
 }
 
+// ==================== 预订菜品替换事务 ====================
+
+// ReplaceReservationItemsTxParams contains the input parameters for replacing reservation items
+type ReplaceReservationItemsTxParams struct {
+	ReservationID int64
+	Items         []CreateReservationItemParams
+}
+
+// ReplaceReservationItemsTxResult contains the result of replacing reservation items
+type ReplaceReservationItemsTxResult struct {
+	Items       []ReservationItem
+	TotalAmount int64
+}
+
+// ReplaceReservationItemsTx replaces all reservation items in a single transaction
+func (store *SQLStore) ReplaceReservationItemsTx(ctx context.Context, arg ReplaceReservationItemsTxParams) (ReplaceReservationItemsTxResult, error) {
+	var result ReplaceReservationItemsTxResult
+
+	err := store.execTx(ctx, func(q *Queries) error {
+		if err := q.DeleteReservationItems(ctx, arg.ReservationID); err != nil {
+			return fmt.Errorf("delete reservation items: %w", err)
+		}
+
+		result.Items = make([]ReservationItem, 0, len(arg.Items))
+		for _, item := range arg.Items {
+			created, err := q.CreateReservationItem(ctx, item)
+			if err != nil {
+				return fmt.Errorf("create reservation item: %w", err)
+			}
+			result.Items = append(result.Items, created)
+			result.TotalAmount += created.TotalPrice
+		}
+
+		return nil
+	})
+
+	return result, err
+}
+
+// ==================== 预订库存同步事务 ====================
+
+// SyncReservationInventoryTxParams contains the input parameters for syncing reservation inventory
+type SyncReservationInventoryTxParams struct {
+	ReservationID int64
+}
+
+// SyncReservationInventoryTxResult captures the sync result
+type SyncReservationInventoryTxResult struct {
+	Reservation TableReservation
+}
+
+// SyncReservationInventoryTx syncs reserved inventory with current reservation items
+func (store *SQLStore) SyncReservationInventoryTx(ctx context.Context, arg SyncReservationInventoryTxParams) (SyncReservationInventoryTxResult, error) {
+	var result SyncReservationInventoryTxResult
+
+	err := store.execTx(ctx, func(q *Queries) error {
+		reservation, err := syncReservationInventoryWithQueries(ctx, q, arg.ReservationID)
+		if err != nil {
+			return err
+		}
+		result.Reservation = reservation
+		return nil
+	})
+
+	return result, err
+}
+
+func syncReservationInventoryWithQueries(ctx context.Context, q *Queries, reservationID int64) (TableReservation, error) {
+	reservation, err := q.GetTableReservation(ctx, reservationID)
+	if err != nil {
+		return reservation, fmt.Errorf("get reservation: %w", err)
+	}
+
+	items, err := q.ListReservationDishSummary(ctx, reservationID)
+	if err != nil {
+		return reservation, fmt.Errorf("list reservation dish summary: %w", err)
+	}
+	existing, err := q.ListReservationInventoryByReservation(ctx, reservationID)
+	if err != nil {
+		return reservation, fmt.Errorf("list reservation inventory: %w", err)
+	}
+
+	existingMap := make(map[int64]int32, len(existing))
+	for _, e := range existing {
+		existingMap[e.DishID] = e.Quantity
+	}
+
+	for _, it := range items {
+		if !it.DishID.Valid {
+			continue
+		}
+		dishID := it.DishID.Int64
+		desired := it.Quantity
+		current := existingMap[dishID]
+		delta := desired - current
+
+		if delta > 0 {
+			_, err := q.ReserveInventory(ctx, ReserveInventoryParams{
+				MerchantID:       reservation.MerchantID,
+				DishID:           dishID,
+				Date:             reservation.ReservationDate,
+				ReservedQuantity: delta,
+			})
+			if err != nil {
+				if !errors.Is(err, ErrRecordNotFound) {
+					return reservation, fmt.Errorf("reserve inventory: %w", err)
+				}
+				// No inventory record means unlimited; otherwise insufficient stock
+				if _, getErr := q.GetDailyInventory(ctx, GetDailyInventoryParams{
+					MerchantID: reservation.MerchantID,
+					DishID:     dishID,
+					Date:       reservation.ReservationDate,
+				}); getErr != nil && !errors.Is(getErr, ErrRecordNotFound) {
+					return reservation, fmt.Errorf("get daily inventory: %w", getErr)
+				}
+				if _, getErr := q.GetDailyInventory(ctx, GetDailyInventoryParams{
+					MerchantID: reservation.MerchantID,
+					DishID:     dishID,
+					Date:       reservation.ReservationDate,
+				}); getErr == nil {
+					return reservation, fmt.Errorf("insufficient inventory for reservation")
+				}
+			}
+		} else if delta < 0 {
+			_, err := q.ReleaseReservedInventory(ctx, ReleaseReservedInventoryParams{
+				MerchantID:       reservation.MerchantID,
+				DishID:           dishID,
+				Date:             reservation.ReservationDate,
+				ReservedQuantity: -delta,
+			})
+			if err != nil {
+				return reservation, fmt.Errorf("release reserved inventory: %w", err)
+			}
+		}
+
+		if _, err := q.UpsertReservationInventory(ctx, UpsertReservationInventoryParams{
+			ReservationID: reservationID,
+			DishID:        dishID,
+			Quantity:      desired,
+		}); err != nil {
+			return reservation, fmt.Errorf("upsert reservation inventory: %w", err)
+		}
+		delete(existingMap, dishID)
+	}
+
+	for dishID, qty := range existingMap {
+		if qty <= 0 {
+			if err := q.DeleteReservationInventoryByDish(ctx, DeleteReservationInventoryByDishParams{
+				ReservationID: reservationID,
+				DishID:        dishID,
+			}); err != nil {
+				return reservation, fmt.Errorf("delete reservation inventory: %w", err)
+			}
+			continue
+		}
+		if _, err := q.ReleaseReservedInventory(ctx, ReleaseReservedInventoryParams{
+			MerchantID:       reservation.MerchantID,
+			DishID:           dishID,
+			Date:             reservation.ReservationDate,
+			ReservedQuantity: qty,
+		}); err != nil {
+			return reservation, fmt.Errorf("release reserved inventory: %w", err)
+		}
+		if err := q.DeleteReservationInventoryByDish(ctx, DeleteReservationInventoryByDishParams{
+			ReservationID: reservationID,
+			DishID:        dishID,
+		}); err != nil {
+			return reservation, fmt.Errorf("delete reservation inventory: %w", err)
+		}
+	}
+
+	return reservation, nil
+}
+
+// ==================== 预订库存释放事务 ====================
+
+// ReleaseReservationInventoryTxParams contains the input parameters for releasing reservation inventory
+type ReleaseReservationInventoryTxParams struct {
+	ReservationID int64
+}
+
+// ReleaseReservationInventoryTx releases all reserved inventory for a reservation
+func (store *SQLStore) ReleaseReservationInventoryTx(ctx context.Context, arg ReleaseReservationInventoryTxParams) error {
+	return store.execTx(ctx, func(q *Queries) error {
+		reservation, err := q.GetTableReservation(ctx, arg.ReservationID)
+		if err != nil {
+			return fmt.Errorf("get reservation: %w", err)
+		}
+
+		entries, err := q.ListReservationInventoryByReservation(ctx, arg.ReservationID)
+		if err != nil {
+			return fmt.Errorf("list reservation inventory: %w", err)
+		}
+
+		for _, e := range entries {
+			if e.Quantity <= 0 {
+				continue
+			}
+			if _, err := q.ReleaseReservedInventory(ctx, ReleaseReservedInventoryParams{
+				MerchantID:       reservation.MerchantID,
+				DishID:           e.DishID,
+				Date:             reservation.ReservationDate,
+				ReservedQuantity: e.Quantity,
+			}); err != nil {
+				return fmt.Errorf("release reserved inventory: %w", err)
+			}
+			if err := q.DeleteReservationInventoryByDish(ctx, DeleteReservationInventoryByDishParams{
+				ReservationID: arg.ReservationID,
+				DishID:        e.DishID,
+			}); err != nil {
+				return fmt.Errorf("delete reservation inventory: %w", err)
+			}
+		}
+
+		return nil
+	})
+}
+
 // ==================== 创建预定事务 ====================
 
 // ReservationItemInput 预定菜品项输入
@@ -222,7 +491,8 @@ type ReservationItemInput struct {
 // CreateReservationTxParams contains the input parameters for creating a reservation
 type CreateReservationTxParams struct {
 	CreateTableReservationParams
-	Items []ReservationItemInput // 全款模式的预点菜品
+	Items     []ReservationItemInput // 全款模式的预点菜品
+	AfterLock func(context.Context, *Queries) error
 }
 
 // CreateReservationTxResult contains the result of the create reservation transaction
@@ -239,6 +509,19 @@ func (store *SQLStore) CreateReservationTx(ctx context.Context, arg CreateReserv
 
 	err := store.execTx(ctx, func(q *Queries) error {
 		var err error
+
+		// 0. 锁定桌台，防止并发预订（P0-002 修复）
+		_, err = q.GetTableForUpdate(ctx, arg.CreateTableReservationParams.TableID)
+		if err != nil {
+			return fmt.Errorf("get table check lock: %w", err)
+		}
+
+		// 0.1 执行自定义校验 (如再次检查冲突)
+		if arg.AfterLock != nil {
+			if err := arg.AfterLock(ctx, q); err != nil {
+				return err
+			}
+		}
 
 		// 1. 创建预定
 		result.Reservation, err = q.CreateTableReservation(ctx, arg.CreateTableReservationParams)

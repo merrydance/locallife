@@ -2,10 +2,13 @@ package db
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+var ErrDeliveryStateTransitionConflict = errors.New("delivery state changed concurrently")
 
 // ==================== 骑手抢单事务 ====================
 
@@ -13,6 +16,7 @@ import (
 type GrabOrderTxParams struct {
 	DeliveryID   int64
 	RiderID      int64
+	RiderUserID  int64
 	OrderID      int64
 	FreezeAmount int64 // 需要冻结的押金金额
 }
@@ -20,7 +24,146 @@ type GrabOrderTxParams struct {
 // GrabOrderTxResult contains the result of the grab order transaction
 type GrabOrderTxResult struct {
 	Delivery   Delivery
+	Order      Order
 	DepositLog RiderDeposit
+	StatusLog  OrderStatusLog
+}
+
+// ==================== 配送状态同步事务 ====================
+
+// UpdateDeliveryToPickedTxParams contains the input parameters for updating delivery to picked
+type UpdateDeliveryToPickedTxParams struct {
+	DeliveryID int64
+	RiderID    int64
+	OrderID    int64
+}
+
+// UpdateDeliveryToPickedTxResult contains the result of the picked transaction
+type UpdateDeliveryToPickedTxResult struct {
+	Delivery Delivery
+	Order    Order
+}
+
+// UpdateDeliveryToPickupTxParams contains the input parameters for updating delivery to picking
+type UpdateDeliveryToPickupTxParams struct {
+	DeliveryID int64
+	RiderID    int64
+	OrderID    int64
+}
+
+// UpdateDeliveryToPickupTxResult contains the result of the picking transaction
+type UpdateDeliveryToPickupTxResult struct {
+	Delivery Delivery
+	Order    Order
+}
+
+// UpdateDeliveryToPickupTx updates delivery to picking and syncs order status in a single transaction
+func (store *SQLStore) UpdateDeliveryToPickupTx(ctx context.Context, arg UpdateDeliveryToPickupTxParams) (UpdateDeliveryToPickupTxResult, error) {
+	var result UpdateDeliveryToPickupTxResult
+
+	err := store.execTx(ctx, func(q *Queries) error {
+		var err error
+
+		result.Delivery, err = q.UpdateDeliveryToPickup(ctx, UpdateDeliveryToPickupParams{
+			ID:      arg.DeliveryID,
+			RiderID: pgtype.Int8{Int64: arg.RiderID, Valid: true},
+		})
+		if err != nil {
+			if errors.Is(err, ErrRecordNotFound) {
+				return ErrDeliveryStateTransitionConflict
+			}
+			return fmt.Errorf("update delivery to picking: %w", err)
+		}
+
+		result.Order, err = q.UpdateOrderToCourierAccepted(ctx, arg.OrderID)
+		if err != nil {
+			if errors.Is(err, ErrRecordNotFound) {
+				return ErrDeliveryStateTransitionConflict
+			}
+			return fmt.Errorf("update order to courier_accepted: %w", err)
+		}
+
+		return nil
+	})
+
+	return result, err
+}
+
+// UpdateDeliveryToPickedTx updates delivery to picked and syncs order status in a single transaction
+func (store *SQLStore) UpdateDeliveryToPickedTx(ctx context.Context, arg UpdateDeliveryToPickedTxParams) (UpdateDeliveryToPickedTxResult, error) {
+	var result UpdateDeliveryToPickedTxResult
+
+	err := store.execTx(ctx, func(q *Queries) error {
+		var err error
+
+		result.Delivery, err = q.UpdateDeliveryToPicked(ctx, UpdateDeliveryToPickedParams{
+			ID:      arg.DeliveryID,
+			RiderID: pgtype.Int8{Int64: arg.RiderID, Valid: true},
+		})
+		if err != nil {
+			if errors.Is(err, ErrRecordNotFound) {
+				return ErrDeliveryStateTransitionConflict
+			}
+			return fmt.Errorf("update delivery to picked: %w", err)
+		}
+
+		result.Order, err = q.UpdateOrderToPicked(ctx, arg.OrderID)
+		if err != nil {
+			if errors.Is(err, ErrRecordNotFound) {
+				return ErrDeliveryStateTransitionConflict
+			}
+			return fmt.Errorf("update order to picked: %w", err)
+		}
+
+		return nil
+	})
+
+	return result, err
+}
+
+// UpdateDeliveryToDeliveringTxParams contains the input parameters for updating delivery to delivering
+type UpdateDeliveryToDeliveringTxParams struct {
+	DeliveryID int64
+	RiderID    int64
+	OrderID    int64
+}
+
+// UpdateDeliveryToDeliveringTxResult contains the result of the delivering transaction
+type UpdateDeliveryToDeliveringTxResult struct {
+	Delivery Delivery
+	Order    Order
+}
+
+// UpdateDeliveryToDeliveringTx updates delivery to delivering and syncs order status in a single transaction
+func (store *SQLStore) UpdateDeliveryToDeliveringTx(ctx context.Context, arg UpdateDeliveryToDeliveringTxParams) (UpdateDeliveryToDeliveringTxResult, error) {
+	var result UpdateDeliveryToDeliveringTxResult
+
+	err := store.execTx(ctx, func(q *Queries) error {
+		var err error
+
+		result.Delivery, err = q.UpdateDeliveryToDelivering(ctx, UpdateDeliveryToDeliveringParams{
+			ID:      arg.DeliveryID,
+			RiderID: pgtype.Int8{Int64: arg.RiderID, Valid: true},
+		})
+		if err != nil {
+			if errors.Is(err, ErrRecordNotFound) {
+				return ErrDeliveryStateTransitionConflict
+			}
+			return fmt.Errorf("update delivery to delivering: %w", err)
+		}
+
+		result.Order, err = q.UpdateOrderToDelivering(ctx, arg.OrderID)
+		if err != nil {
+			if errors.Is(err, ErrRecordNotFound) {
+				return ErrDeliveryStateTransitionConflict
+			}
+			return fmt.Errorf("update order to delivering: %w", err)
+		}
+
+		return nil
+	})
+
+	return result, err
 }
 
 // GrabOrderTx executes all operations for grabbing an order in a single transaction:
@@ -36,13 +179,27 @@ func (store *SQLStore) GrabOrderTx(ctx context.Context, arg GrabOrderTxParams) (
 	err := store.execTx(ctx, func(q *Queries) error {
 		var err error
 
+		order, err := q.GetOrderForUpdate(ctx, arg.OrderID)
+		if err != nil {
+			return fmt.Errorf("get order for update: %w", err)
+		}
+
 		// 1. 使用 FOR UPDATE 锁定骑手行，获取最新押金数据
 		rider, err := q.GetRiderForUpdate(ctx, arg.RiderID)
 		if err != nil {
 			return fmt.Errorf("get rider for update: %w", err)
 		}
 
-		// 2. 再次检查押金是否充足（在事务内检查，确保并发安全）
+		// 2. 锁定并检查订单池（关键修复 P0-001：防止并发抢单）
+		_, err = q.GetDeliveryPoolByOrderIDForUpdate(ctx, arg.OrderID)
+		if err != nil {
+			if errors.Is(err, ErrRecordNotFound) {
+				return fmt.Errorf("手慢了，订单已被抢走")
+			}
+			return fmt.Errorf("lock delivery pool: %w", err)
+		}
+
+		// 3. 再次检查押金是否充足（在事务内检查，确保并发安全）
 		availableDeposit := rider.DepositAmount - rider.FrozenDeposit
 		if availableDeposit < arg.FreezeAmount {
 			return fmt.Errorf("押金余额不足，无法接单")
@@ -86,6 +243,25 @@ func (store *SQLStore) GrabOrderTx(ctx context.Context, arg GrabOrderTxParams) (
 			return fmt.Errorf("create deposit log: %w", err)
 		}
 
+		result.Order, err = q.UpdateOrderToCourierAccepted(ctx, arg.OrderID)
+		if err != nil {
+			return fmt.Errorf("update order to courier_accepted: %w", err)
+		}
+
+		if order.Status != OrderStatusCourierAccepted {
+			result.StatusLog, err = q.CreateOrderStatusLog(ctx, CreateOrderStatusLogParams{
+				OrderID:      arg.OrderID,
+				FromStatus:   pgtype.Text{String: order.Status, Valid: true},
+				ToStatus:     OrderStatusCourierAccepted,
+				OperatorID:   pgtype.Int8{Int64: arg.RiderUserID, Valid: true},
+				OperatorType: pgtype.Text{String: "rider", Valid: true},
+				Notes:        pgtype.Text{String: "骑手接单", Valid: true},
+			})
+			if err != nil {
+				return fmt.Errorf("create order status log: %w", err)
+			}
+		}
+
 		return nil
 	})
 
@@ -100,25 +276,15 @@ type CompleteDeliveryTxParams struct {
 	RiderID        int64
 	OrderID        int64
 	UnfreezeAmount int64 // 需要解冻的押金金额
-	DeliveryFee    int64 // 配送费（分）：用于判断高值单和更新收益
+	DeliveryFee    int64 // 配送费（分）：用于更新收益
 }
 
 // CompleteDeliveryTxResult contains the result of the complete delivery transaction
 type CompleteDeliveryTxResult struct {
-	Delivery              Delivery
-	DepositLog            RiderDeposit
-	PremiumScoreLog       *RiderPremiumScoreLog // 高值单资格积分变更记录
-	NewPremiumScore       int16                 // 更新后的高值单资格积分
+	Delivery   Delivery
+	DepositLog RiderDeposit
+	Order      Order
 }
-
-// 高值单阈值：运费 >= 10 元（1000分）
-const HighValueOrderThreshold = int64(1000)
-
-// 积分变更规则
-const (
-	PremiumScoreNormalOrder  = int16(1)  // 完成普通单 +1
-	PremiumScorePremiumOrder = int16(-3) // 完成高值单 -3
-)
 
 // CompleteDeliveryTx executes all operations for completing a delivery in a single transaction:
 // 1. Lock rider row with FOR UPDATE
@@ -126,7 +292,6 @@ const (
 // 3. Unfreeze rider's deposit
 // 4. Create deposit log
 // 5. Update rider stats
-// 6. Update premium score and create log
 func (store *SQLStore) CompleteDeliveryTx(ctx context.Context, arg CompleteDeliveryTxParams) (CompleteDeliveryTxResult, error) {
 	var result CompleteDeliveryTxResult
 
@@ -146,6 +311,14 @@ func (store *SQLStore) CompleteDeliveryTx(ctx context.Context, arg CompleteDeliv
 		})
 		if err != nil {
 			return fmt.Errorf("update delivery to delivered: %w", err)
+		}
+
+		// 2.1 同步订单状态为 rider_delivered（允许幂等）
+		result.Order, err = q.UpdateOrderToRiderDelivered(ctx, arg.OrderID)
+		if err != nil {
+			if !errors.Is(err, ErrRecordNotFound) {
+				return fmt.Errorf("update order to rider_delivered: %w", err)
+			}
 		}
 
 		// 3. 解冻押金（使用事务内获取的最新值）
@@ -181,53 +354,11 @@ func (store *SQLStore) CompleteDeliveryTx(ctx context.Context, arg CompleteDeliv
 			return fmt.Errorf("update rider stats: %w", err)
 		}
 
-		// 6. 更新高值单资格积分
-		// 获取当前积分
-		oldScore, err := q.GetRiderPremiumScore(ctx, arg.RiderID)
-		if err != nil {
-			// 如果rider_profiles不存在，默认为0
-			oldScore = 0
+		if rider.Status != RiderStatusActive && rider.IsOnline {
+			if _, err := maybeSetRiderOfflineWhenNotEligible(ctx, q, rider); err != nil {
+				return err
+			}
 		}
-
-		// 判断是高值单还是普通单，计算积分变更
-		var changeAmount int16
-		var changeType string
-		var remark string
-		if arg.DeliveryFee >= HighValueOrderThreshold {
-			changeAmount = PremiumScorePremiumOrder
-			changeType = "premium_order"
-			remark = "完成高值单（运费≥10元）"
-		} else {
-			changeAmount = PremiumScoreNormalOrder
-			changeType = "normal_order"
-			remark = "完成普通单"
-		}
-
-		// 更新积分
-		newScore, err := q.UpdateRiderPremiumScore(ctx, UpdateRiderPremiumScoreParams{
-			RiderID:      arg.RiderID,
-			PremiumScore: changeAmount,
-		})
-		if err != nil {
-			return fmt.Errorf("update premium score: %w", err)
-		}
-		result.NewPremiumScore = newScore
-
-		// 创建积分变更日志
-		scoreLog, err := q.CreateRiderPremiumScoreLog(ctx, CreateRiderPremiumScoreLogParams{
-			RiderID:           arg.RiderID,
-			ChangeAmount:      changeAmount,
-			OldScore:          oldScore,
-			NewScore:          newScore,
-			ChangeType:        changeType,
-			RelatedOrderID:    pgtype.Int8{Int64: arg.OrderID, Valid: true},
-			RelatedDeliveryID: pgtype.Int8{Int64: arg.DeliveryID, Valid: true},
-			Remark:            pgtype.Text{String: remark, Valid: true},
-		})
-		if err != nil {
-			return fmt.Errorf("create premium score log: %w", err)
-		}
-		result.PremiumScoreLog = &scoreLog
 
 		return nil
 	})

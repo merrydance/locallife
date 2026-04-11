@@ -13,9 +13,16 @@ import type {
     RegionStatsResponse
 } from '@/api/operator-basic-management'
 
+interface QuickActionDataset {
+    url?: string
+}
+
 Page({
     data: {
-        loading: true,
+        loading: false,
+        initialLoading: true,
+        error: null as string | null,
+        navBarHeight: 88,
         refreshing: false,
 
         // 运营商信息
@@ -26,7 +33,8 @@ Page({
 
         // 区域统计
         regionStats: [] as RegionStatsResponse[],
-        selectedRegionId: 0,
+        selectedRegionIdx: 0,   // picker 用 index
+        selectedRegionId: 0,    // 实际 region_id，传给 API
 
         // 商户摘要
         merchantSummary: {
@@ -55,15 +63,19 @@ Page({
 
         // 快捷入口
         quickActions: [
-            { id: 'merchants', icon: 'shop', label: '商户管理', url: '/pages/operator/merchants/list/list' },
-            { id: 'riders', icon: 'user', label: '骑手管理', url: '/pages/operator/riders/list/list' },
-            { id: 'analytics', icon: 'chart', label: '数据分析', url: '/pages/operator/analytics/dashboard/dashboard' },
-            { id: 'appeals', icon: 'service', label: '客诉处理', url: '/pages/operator/appeals/list/list' }
+            { id: 'merchants', icon: 'shop', label: '商户管理', url: '/pages/operator/merchants/index' },
+            { id: 'riders', icon: 'user', label: '骑手管理', url: '/pages/operator/riders/index' },
+            { id: 'analytics', icon: 'chart', label: '数据分析', url: '/pages/operator/analytics/index' },
+            { id: 'appeals', icon: 'service', label: '客诉处理', url: '/pages/operator/appeal/list/index' }
         ]
     },
 
     onLoad() {
         this.loadDashboardData()
+    },
+
+    onNavHeight(e: WechatMiniprogram.CustomEvent<{ navBarHeight: number }>) {
+        this.setData({ navBarHeight: e.detail.navBarHeight })
     },
 
     onPullDownRefresh() {
@@ -78,9 +90,10 @@ Page({
      * 加载工作台数据
      */
     async loadDashboardData() {
-        try {
-            this.setData({ loading: true })
+        if (this.data.loading && !this.data.initialLoading) return
+        this.setData({ loading: true, error: null })
 
+        try {
             // 并行加载所有数据
             const [
                 dashboardData,
@@ -98,29 +111,36 @@ Page({
                 operatorInfo: dashboardData.operatorInfo,
                 financeOverview: dashboardData.financeOverview,
                 regionStats: dashboardData.regionStats,
-                selectedRegionId: dashboardData.regionStats[0]?.id || 0,
+                selectedRegionIdx: 0,
+                selectedRegionId: dashboardData.regionStats[0]?.region_id || 0,
                 merchantSummary: merchantData.merchantSummary,
                 riderSummary: riderData.riderSummary,
-                appealSummary: analyticsData.appealSummary
+                appealSummary: analyticsData.appealSummary,
+                loading: false,
+                initialLoading: false
             })
         } catch (error) {
             console.error('加载工作台数据失败:', error)
-            wx.showToast({
-                title: '加载失败',
-                icon: 'none'
+            this.setData({ 
+                loading: false, 
+                initialLoading: false,
+                error: '加载工作台数据失败'
             })
-        } finally {
-            this.setData({ loading: false })
         }
     },
 
+    onRetry() {
+        this.loadDashboardData()
+    },
+
     /**
-     * 切换区域
+     * 切换区域（e.detail.value 是 picker 选中的数组下标）
      */
-    onRegionChange(e: any) {
-        const regionId = parseInt(e.detail.value)
-        this.setData({ selectedRegionId: regionId })
-        this.loadRegionData(regionId)
+    onRegionChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
+        const idx = parseInt(e.detail.value)
+        const regionId = this.data.regionStats[idx]?.region_id || 0
+        this.setData({ selectedRegionIdx: idx, selectedRegionId: regionId })
+        if (regionId) this.loadRegionData(regionId)
     },
 
     /**
@@ -153,8 +173,9 @@ Page({
     /**
      * 快捷入口点击
      */
-    onQuickActionTap(e: any) {
-        const { url } = e.currentTarget.dataset
+    onQuickActionTap(e: WechatMiniprogram.TouchEvent) {
+        const { url } = e.currentTarget.dataset as QuickActionDataset
+        if (!url) return
         wx.navigateTo({ url })
     },
 
@@ -163,7 +184,7 @@ Page({
      */
     onFinanceDetailTap() {
         wx.navigateTo({
-            url: '/pages/operator/finance/overview/overview'
+            url: '/pages/operator/finance/withdraw/index'
         })
     },
 
@@ -174,7 +195,7 @@ Page({
         const { selectedRegionId } = this.data
         if (selectedRegionId) {
             wx.navigateTo({
-                url: `/pages/operator/regions/detail/detail?id=${selectedRegionId}`
+                url: `/pages/operator/region/config?id=${selectedRegionId}`
             })
         }
     },

@@ -1,0 +1,187 @@
+.page-container {
+  min-height: 100vh;
+  padding: 24rpx;
+  box-sizing: border-box;
+  background: var(--td-bg-color-page);
+}
+
+.state-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24rpx;
+  padding: 140rpx 24rpx;
+}
+
+.hero-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10rpx;
+  padding: 28rpx;
+  margin-bottom: 24rpx;
+  border-radius: 20rpx;
+  background: var(--td-bg-color-container);
+  box-shadow: var(--shadow-sm);
+}
+
+.hero-title {
+  font-size: 32rpx;
+  font-weight: 700;
+  color: var(--td-text-color-primary);
+}
+
+.hero-subtitle {
+  font-size: 24rpx;
+  line-height: 1.6;
+  color: var(--td-text-color-secondary);
+}
+
+.inline-banner {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16rpx;
+  margin-bottom: 24rpx;
+  padding: 20rpx 24rpx;
+  border-radius: 18rpx;
+}
+
+.inline-banner-danger {
+  background: var(--td-error-color-1);
+}
+
+.inline-banner-info {
+  background: var(--td-brand-color-1);
+}
+
+.inline-banner-text {
+  flex: 1;
+  font-size: 24rpx;
+  line-height: 1.6;
+  color: var(--td-text-color-primary);
+}
+
+.inline-banner-action {
+  flex-shrink: 0;
+  font-size: 24rpx;
+  line-height: 1.6;
+  color: var(--td-brand-color);
+  font-weight: 600;
+}
+
+.filter-row {
+  display: flex;
+  gap: 16rpx;
+  flex-wrap: wrap;
+  margin-bottom: 24rpx;
+}
+
+.filter-chip {
+  padding: 14rpx 28rpx;
+  border-radius: 999rpx;
+  background: var(--td-bg-color-container);
+  color: var(--td-text-color-secondary);
+  font-size: 24rpx;
+  box-shadow: var(--shadow-sm);
+}
+
+.filter-chip-active {
+  background: var(--td-brand-color);
+  color: var(--td-text-color-anti);
+}
+
+.anomaly-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+}
+
+.anomaly-card {
+  border-radius: 20rpx;
+  background: var(--td-bg-color-container);
+  box-shadow: var(--shadow-sm);
+  padding: 24rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+.anomaly-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.anomaly-main {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.anomaly-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  flex-wrap: wrap;
+}
+
+.anomaly-order-no {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+}
+
+.anomaly-printer {
+  font-size: 24rpx;
+  color: var(--td-text-color-secondary);
+}
+
+.anomaly-summary {
+  font-size: 24rpx;
+  line-height: 1.6;
+  color: var(--td-text-color-secondary);
+}
+
+.anomaly-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.anomaly-row-top {
+  align-items: flex-start;
+}
+
+.anomaly-label {
+  font-size: 24rpx;
+  color: var(--td-text-color-placeholder);
+}
+
+.anomaly-value {
+  font-size: 24rpx;
+  color: var(--td-text-color-primary);
+}
+
+.anomaly-value-break {
+  flex: 1;
+  text-align: right;
+  word-break: break-all;
+  white-space: pre-wrap;
+  line-height: 1.6;
+}
+
+.anomaly-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 16rpx;
+  flex-wrap: wrap;
+}
+
+.load-more-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 12rpx 0 36rpx;
+}

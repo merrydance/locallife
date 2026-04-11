@@ -23,7 +23,6 @@ func authMiddleware(tokenMaker token.Maker) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		var accessToken string
 		authorizationHeader := ctx.GetHeader(authorizationHeaderKey)
-
 		if len(authorizationHeader) != 0 {
 			fields := strings.Fields(authorizationHeader)
 			if len(fields) >= 2 && strings.ToLower(fields[0]) == authorizationTypeBearer {
@@ -31,7 +30,8 @@ func authMiddleware(tokenMaker token.Maker) gin.HandlerFunc {
 			}
 		}
 
-		if len(accessToken) == 0 && isWebSocketUpgrade(ctx) {
+		// Support WebSocket upgrades where headers cannot be set easily
+		if len(accessToken) == 0 && (isWebSocketUpgrade(ctx) || strings.HasSuffix(ctx.Request.URL.Path, "/ws")) {
 			accessToken = ctx.Query("token")
 		}
 
@@ -61,6 +61,10 @@ func authMiddleware(tokenMaker token.Maker) gin.HandlerFunc {
 // 防止慢查询、外部API卡死导致goroutine泄漏
 func TimeoutMiddleware(timeout time.Duration) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if strings.Contains(c.GetHeader("Accept"), "text/event-stream") {
+			c.Next()
+			return
+		}
 		// ⚠️ 注意：不要在 goroutine 里调用 c.Next()。
 		// Gin 的 Context/ResponseWriter 不是并发安全的；并发写响应会导致
 		// "Headers were already written" 以及在压力下的异常行为。
@@ -74,7 +78,7 @@ func TimeoutMiddleware(timeout time.Duration) gin.HandlerFunc {
 
 		// 如果已超时且还未写响应，兜底返回 504。
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) && !c.Writer.Written() {
-			c.AbortWithStatusJSON(http.StatusGatewayTimeout, gin.H{"error": "request timeout"})
+			c.AbortWithStatusJSON(http.StatusGatewayTimeout, errorResponse(errors.New("request timeout")))
 		}
 	}
 }

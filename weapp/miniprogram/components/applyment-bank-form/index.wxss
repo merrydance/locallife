@@ -1,0 +1,79 @@
+.bank-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-md);
+}
+
+.section-panel,
+.popup-panel {
+  background: var(--td-bg-color-container);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.section-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-md);
+  padding: var(--spacer-md);
+}
+
+.section-top {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.section-title {
+  font-size: var(--font-size-base);
+  line-height: 1.5;
+  font-weight: 700;
+  color: var(--td-text-color-primary);
+}
+
+.tag-check-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacer-sm);
+}
+
+.form-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-sm);
+}
+
+.popup-panel {
+  padding: var(--spacer-md);
+  padding-bottom: var(--popup-bottom-padding-md);
+}
+
+.selector-popup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-md);
+}
+
+.popup-state {
+  min-height: 260rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.selector-scroll {
+  max-height: 56vh;
+}
+
+.selector-scroll--branch {
+  max-height: 52vh;
+}
+
+.popup-actions {
+  display: grid;
+  gap: var(--spacer-sm);
+}
+
+.popup-actions--single {
+  grid-template-columns: 1fr;
+}

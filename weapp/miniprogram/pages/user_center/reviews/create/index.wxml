@@ -1,80 +1,88 @@
-<custom-navbar title="发表评价" showBack="{{true}}" bind:navheight="onNavHeight" />
+<custom-navbar title="发表评价" showBack="{{true}}" />
 
-<view class="page" style="padding-top: {{navBarHeight}}px;">
-  <!-- 商家信息 -->
-  <view class="merchant-card" wx:if="{{merchantName}}">
-    <text class="merchant-name">{{merchantName}}</text>
-  </view>
-
-  <!-- 评分选择 -->
-  <view class="rating-section">
-    <view class="section-title">整体评分</view>
-    <view class="rating-options">
-      <view 
-        wx:for="{{ratingOptions}}" 
-        wx:key="value"
-        class="rating-item {{rating === item.value ? 'active' : ''}}"
-        data-rating="{{item.value}}"
-        bindtap="onRatingChange"
-      >
-        <text class="rating-icon">{{item.icon}}</text>
-        <text class="rating-label">{{item.label}}</text>
+<view class="page-container" style="padding-top: {{navBarHeight}}px">
+  <view class="review-create-wrap">
+    
+    <!-- 1. 商家概览 -->
+    <view class="merchant-header animate-slide-up">
+      <view class="shop-icon">
+        <t-icon name="shop" size="48rpx" color="#0052D9" />
+      </view>
+      <view class="shop-info">
+        <view class="shop-name">{{merchantName || '餐饮商家'}}</view>
+        <view class="order-no">订单号：{{orderNo || '--'}}</view>
       </view>
     </view>
-  </view>
 
-  <!-- 评价内容 -->
-  <view class="content-section">
-    <view class="section-title">评价内容</view>
-    <textarea 
-      class="content-input"
-      placeholder="分享您的用餐体验，帮助其他用户做出选择（至少10个字）"
-      maxlength="{{maxContentLength}}"
-      value="{{content}}"
-      bindinput="onContentInput"
-    />
-    <view class="content-count">{{content.length}}/{{maxContentLength}}</view>
-  </view>
+    <!-- 1.5 星级评分 -->
+    <view class="content-card animate-slide-up" style="animation-delay: 0.02s">
+      <view class="card-title">总体评分</view>
+      <view class="rate-wrap" style="padding: 24rpx 0;">
+        <t-rate value="{{rating}}" size="28" bind:change="onRatingChange" />
+      </view>
+    </view>
 
-  <!-- 图片上传 -->
-  <view class="images-section">
-    <view class="section-title">添加图片（可选）</view>
-    <view class="images-grid">
-      <view 
-        wx:for="{{images}}" 
-        wx:key="*this" 
-        class="image-item"
-      >
-        <image 
-          src="{{item}}" 
-          mode="aspectFill" 
-          data-url="{{item}}"
-          bindtap="onPreviewImage"
+    <!-- 2. 快捷标签 -->
+    <view class="content-card animate-slide-up" style="animation-delay: 0.05s">
+      <view class="card-title">快捷评价 <text class="subtitle">(可多选)</text></view>
+      <view class="tag-grid">
+        <view
+          wx:for="{{quickTags}}"
+          wx:key="*this"
+          class="tag-chip {{selectedTags.indexOf(item) !== -1 ? 'selected' : ''}}"
+          bindtap="onTagTap"
+          data-tag="{{item}}"
+        >{{item}}</view>
+      </view>
+    </view>
+
+    <!-- 3. 评价内容 -->
+    <view class="content-card animate-slide-up" style="animation-delay: 0.1s">
+      <view class="card-title">评价内容</view>
+      <t-textarea
+        t-class="external-textarea"
+        placeholder="这一刻的想法...（至少10个字）"
+        maxlength="{{maxContentLength}}"
+        disableDefaultPadding="{{true}}"
+        indicator
+        bordered
+        value="{{content}}"
+        bind:change="onContentChange"
+      />
+    </view>
+
+    <!-- 3. 媒体上传 -->
+    <view class="content-card animate-slide-up" style="animation-delay: 0.2s">
+      <view class="card-title">添加图片 <text class="subtitle">(可选，最多9张)</text></view>
+      <view class="upload-wrapper">
+        <t-upload
+          mediaType="{{['image']}}"
+          files="{{fileList}}"
+          gridConfig="{{ { column: 3, width: 180, height: 180 } }}"
+          max="{{maxImages}}"
+          bind:add="onAddImage"
+          bind:remove="onRemoveImage"
+          bind:complete="onUploadComplete"
         />
-        <view class="remove-btn" data-index="{{index}}" bindtap="onRemoveImage">
-          <t-icon name="close" size="24rpx" color="#fff" />
-        </view>
-      </view>
-      <view 
-        wx:if="{{images.length < maxImages}}" 
-        class="add-image"
-        bindtap="onChooseImage"
-      >
-        <t-icon name="add" size="48rpx" color="#9aa4c2" />
-        <text>添加图片</text>
       </view>
     </view>
-    <view class="images-tip">最多上传{{maxImages}}张图片</view>
-  </view>
 
-  <!-- 提交按钮 -->
-  <view class="submit-section">
-    <t-button 
-      theme="primary" 
-      block 
-      loading="{{submitting}}"
-      disabled="{{submitting || content.length < 10}}"
-      bindtap="onSubmit"
-    >提交评价</t-button>
+    <!-- 4. 提交按钮 -->
+    <view class="footer-btn-wrap animate-slide-up" style="animation-delay: 0.3s">
+      <t-button 
+        theme="primary" 
+        size="large" 
+        block 
+        disabled="{{content.length < 10 || rating === 0 || submitting}}"
+        loading="{{submitting}}"
+        bindtap="onSubmit"
+       shape="round">
+        发布评价
+      </t-button>
+      <view class="policy-tip">发布内容将经过系统安全审核</view>
+    </view>
+
   </view>
 </view>
+
+<t-message id="t-message" />

@@ -1,4 +1,4 @@
-﻿import { CartResponse, CartItemResponse, AddCartItemRequest, UpdateCartItemRequest } from '../api/cart'
+﻿import { CartResponse, AddCartItemRequest, UpdateCartItemRequest } from '../api/cart'
 import * as CartAPI from '../api/cart'
 import { logger } from '../utils/logger'
 import { globalStore } from '../utils/global-store'
@@ -14,6 +14,19 @@ class CartService {
   // Cache the current cart to avoid excessive network requests
   private currentCart: CartResponse | null = null
   private currentMerchantId: number | null = null
+  private currentOrderType: string | null = null
+  private currentTableId: number | null = null
+  private currentReservationId: number | null = null
+
+  private getErrorUserMessage(error: unknown, fallback: string): string {
+    if (typeof error === 'object' && error !== null && 'userMessage' in error) {
+      const candidate = (error as { userMessage?: unknown }).userMessage
+      if (typeof candidate === 'string' && candidate.trim()) {
+        return candidate
+      }
+    }
+    return fallback
+  }
 
   static getInstance(): CartService {
     if (!CartService.instance) {
@@ -40,8 +53,11 @@ class CartService {
   /**
    * Initialize or switch to a specific merchant's cart
    */
-  async loadCart(merchantId: number): Promise<CartResponse> {
+  async loadCart(merchantId: number, options?: { orderType?: string, tableId?: number, reservationId?: number }): Promise<CartResponse> {
     this.currentMerchantId = merchantId
+    this.currentOrderType = options?.orderType ?? this.currentOrderType ?? 'takeout'
+    this.currentTableId = options?.tableId ?? this.currentTableId ?? null
+    this.currentReservationId = options?.reservationId ?? this.currentReservationId ?? null
     return this.refreshCart()
   }
 
@@ -55,7 +71,12 @@ class CartService {
 
     try {
       logger.debug('Refreshing cart from backend', { merchantId: this.currentMerchantId }, 'CartService.refreshCart')
-      const cart = await CartAPI.getCart({ merchant_id: this.currentMerchantId })
+      const cart = await CartAPI.getCart({
+        merchant_id: this.currentMerchantId,
+        order_type: this.currentOrderType ?? undefined,
+        table_id: this.currentTableId ?? undefined,
+        reservation_id: this.currentReservationId ?? undefined
+      })
       this.currentCart = cart
 
       this.notifyListeners()
@@ -70,26 +91,32 @@ class CartService {
    * Add item to backend cart
    */
   async addItem(item: {
-    merchantId: string | number,
-    dishId?: string | number,
-    comboId?: string | number,
-    quantity?: number,
+    merchantId: string | number
+    dishId?: string | number
+    comboId?: string | number
+    quantity?: number
     customizations?: Record<string, unknown>
-  }): Promise<boolean> {
+  }, options?: { loading?: boolean }): Promise<boolean> {
     try {
       const merchantId = Number(item.merchantId)
       const quantity = item.quantity || 1
 
+      // 确保有明确的订单类型，避免传递 undefined
+      this.currentOrderType = this.currentOrderType ?? 'takeout'
+
       const req: AddCartItemRequest = {
         merchant_id: merchantId,
+        order_type: this.currentOrderType ?? undefined,
+        table_id: this.currentTableId ?? undefined,
+        reservation_id: this.currentReservationId ?? undefined,
         dish_id: item.dishId ? Number(item.dishId) : undefined,
         combo_id: item.comboId ? Number(item.comboId) : undefined,
-        quantity: quantity,
+        quantity,
         customizations: item.customizations
       }
 
       logger.info('Adding item to backend cart', req, 'CartService.addItem')
-      const updatedCart = await CartAPI.addToCart(req)
+      const updatedCart = await CartAPI.addToCart(req, { loading: options?.loading ?? false })
 
       // Update local state
       this.currentMerchantId = merchantId
@@ -97,12 +124,12 @@ class CartService {
       this.notifyListeners()
 
       return true
-    } catch (error) {
+    } catch (error: unknown) {
       logger.error('Failed to add item to cart', error, 'CartService.addItem')
 
-      // Handle simple error reporting
+      // Handle simple error reporting - 优先展示后端返回的友好提示
       wx.showToast({
-        title: '添加失败，请重试',
+        title: this.getErrorUserMessage(error, '添加失败，请重试'),
         icon: 'none'
       })
       return false
@@ -112,9 +139,9 @@ class CartService {
   /**
    * Update item quantity or specs
    */
-  async updateItem(itemId: number, updates: UpdateCartItemRequest): Promise<boolean> {
+  async updateItem(itemId: number, updates: UpdateCartItemRequest, options?: { loading?: boolean }): Promise<boolean> {
     try {
-      const updatedCart = await CartAPI.updateCartItem(itemId, updates)
+      const updatedCart = await CartAPI.updateCartItem(itemId, updates, { loading: options?.loading ?? false })
       this.currentCart = updatedCart
       this.notifyListeners()
       return true
@@ -127,9 +154,9 @@ class CartService {
   /**
    * Remove item from cart
    */
-  async removeItem(itemId: number): Promise<boolean> {
+  async removeItem(itemId: number, options?: { loading?: boolean }): Promise<boolean> {
     try {
-      const updatedCart = await CartAPI.removeFromCart(itemId)
+      const updatedCart = await CartAPI.removeFromCart(itemId, { loading: options?.loading ?? false })
       this.currentCart = updatedCart
       this.notifyListeners()
       return true
@@ -156,7 +183,12 @@ class CartService {
     if (!this.currentMerchantId) return false
 
     try {
-      await CartAPI.clearCart(this.currentMerchantId)
+      await CartAPI.clearCart({
+        merchant_id: this.currentMerchantId,
+        order_type: this.currentOrderType ?? undefined,
+        table_id: this.currentTableId ?? undefined,
+        reservation_id: this.currentReservationId ?? undefined
+      })
 
       // Reset local state to empty structure manually or refetch
       // Refetching is safer to ensure backend state

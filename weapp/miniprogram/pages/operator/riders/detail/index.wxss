@@ -1,0 +1,174 @@
+.page {
+  min-height: 100vh;
+  background: var(--td-bg-color-page);
+  padding: var(--spacer-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-md);
+}
+
+.card {
+  background: var(--td-bg-color-container);
+  border-radius: var(--radius-md);
+  padding: var(--spacer-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.center {
+  display: flex;
+  justify-content: center;
+}
+
+.skeleton {
+  height: 360rpx;
+}
+
+/* 骑手头部 */
+.rider-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacer-md);
+  margin-bottom: var(--spacer-md);
+}
+
+.avatar {
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: 50%;
+  background: var(--td-brand-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.avatar-text {
+  color: #fff;
+  font-size: var(--font-size-heading);
+  font-weight: 600;
+}
+
+.header-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.rider-name {
+  font-size: var(--font-size-heading);
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+  display: block;
+  margin-bottom: 8rpx;
+}
+
+.tag-row {
+  display: flex;
+  gap: 8rpx;
+  flex-wrap: wrap;
+}
+
+.action-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacer-sm);
+  margin-bottom: var(--spacer-md);
+}
+
+/* 分区标题 */
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacer-sm);
+  margin-bottom: var(--spacer-sm);
+}
+
+.section-title {
+  font-size: var(--font-size-body);
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+  margin-bottom: var(--spacer-sm);
+  display: block;
+}
+
+.sub-title {
+  font-size: var(--font-size-sm);
+  color: var(--td-text-color-secondary);
+  margin-bottom: var(--spacer-sm);
+}
+
+/* 数据行 */
+.row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--spacer-sm);
+  margin-bottom: var(--spacer-xs);
+}
+
+.label {
+  color: var(--td-text-color-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.value {
+  color: var(--td-text-color-primary);
+  font-size: var(--font-size-xs);
+  text-align: right;
+  word-break: break-all;
+}
+
+/* 统计格 */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--spacer-sm);
+  margin-bottom: var(--spacer-sm);
+}
+
+.stat-item {
+  background: var(--td-bg-color-page);
+  border-radius: var(--radius-sm);
+  padding: var(--spacer-sm);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4rpx;
+}
+
+.stat-value {
+  font-size: var(--font-size-heading);
+  font-weight: 700;
+  color: var(--td-brand-color);
+}
+
+.stat-label {
+  font-size: var(--font-size-xs);
+  color: var(--td-text-color-secondary);
+}
+
+/* 加载状态 */
+.stats-loading {
+  display: flex;
+  align-items: center;
+  gap: var(--spacer-xs);
+  padding: var(--spacer-sm) 0;
+}
+
+.loading-text {
+  font-size: var(--font-size-xs);
+  color: var(--td-text-color-secondary);
+}
+
+/* 分割线 */
+.divider {
+  height: 1rpx;
+  background: var(--td-component-stroke);
+  margin: var(--spacer-sm) 0;
+}
+
+.dialog-content {
+  padding: 32rpx;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-md);
+}
+

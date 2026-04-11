@@ -1,88 +1,207 @@
-import { ReservationService, ReservationResponse, ReservationStatus } from '../../../api/reservation';
-import ReservationAdapter from '../../../adapters/reservation';
+import { ReservationService } from '../../../api/reservation'
+import { processPayment, PaymentCancelledError } from '../../../api/payment'
+import Navigation from '../../../utils/navigation'
+import { ReservationCardAdapter, ReservationDetailViewModel } from '../../../adapters/reservation-card'
+import { logger } from '../../../utils/logger'
+import { getErrorUserMessage } from '../../../utils/user-facing'
+
+const getErrorMessage = getErrorUserMessage
+
+// 取消原因
+const CANCEL_REASONS = [
+    '行程改变',
+    '订错了',
+    '不想去了',
+    '其他原因'
+]
 
 Page({
     data: {
         id: 0,
-        reservation: null as (ReservationResponse & { _statusText: string, _statusTheme: string, _timeText: string }) | null,
+        reservation: null as ReservationDetailViewModel | null,
         loading: true,
+        isError: false,
+        errorMessage: '',
+        refreshErrorMessage: '',
+        navBarHeight: 88,
+        paying: false,
+        
+        // Dialog State
         showCancelDialog: false,
         cancelReason: '',
-        cancelReasons: ['行程改变', '订错了', '不想去了', '其他原因']
+        cancelReasons: CANCEL_REASONS
     },
 
-    onLoad(options: any) {
+    onLoad(options: { id?: string }) {
         if (options.id) {
-            this.setData({ id: parseInt(options.id) });
-            this.loadDetail();
+            this.setData({ id: parseInt(options.id) })
+            this.loadDetail()
         }
+    },
+
+    onShow() {
+        if (this.data.id && this.data.reservation) {
+            this.loadDetail()
+        }
+    },
+
+    onNavHeight(e: WechatMiniprogram.CustomEvent) {
+        this.setData({ navBarHeight: e.detail.navBarHeight || 88 })
+    },
+
+    onRetry() {
+        this.loadDetail()
     },
 
     async loadDetail() {
-        this.setData({ loading: true });
+        // Only show full page loading if no data yet (first load or retry)
+        const isFirstLoad = !this.data.reservation
+        if (isFirstLoad) {
+              this.setData({ loading: true, isError: false, refreshErrorMessage: '' })
+          } else {
+              this.setData({ refreshErrorMessage: '' })
+        }
+        
         try {
-            const res = await ReservationService.getReservationDetail(this.data.id);
+            const res = await ReservationService.getReservationDetail(this.data.id)
+            const viewModel = ReservationCardAdapter.toDetailViewModel(res)
 
-            const formatted = {
-                ...res,
-                _statusText: ReservationAdapter.formatStatus(res.status),
-                _statusTheme: ReservationAdapter.getStatusTheme(res.status),
-                _timeText: ReservationAdapter.formatFullDateTime(res.reservation_time)
-            };
-
-            this.setData({ reservation: formatted, loading: false });
-        } catch (error) {
-            console.error(error);
-            wx.showToast({ title: '加载失败', icon: 'none' });
-            this.setData({ loading: false });
+            this.setData({
+                reservation: viewModel,
+                loading: false,
+                refreshErrorMessage: ''
+            })
+        } catch (error: unknown) {
+            logger.error('Load reservation detail failed', error)
+            
+            if (isFirstLoad) {
+                this.setData({ 
+                    loading: false,
+                    isError: true,
+                    errorMessage: getErrorMessage(error, '加载失败'),
+                    refreshErrorMessage: ''
+                })
+            } else {
+                this.setData({
+                    refreshErrorMessage: `${getErrorMessage(error, '刷新失败，请稍后重试')}，当前已保留上次结果`
+                })
+            }
         }
     },
 
+    onRetryRefresh() {
+        this.loadDetail()
+    },
+
+    // Navigation
+    onEnterMerchant() {
+        const mid = this.data.reservation?.merchantId
+        if (mid) {
+            Navigation.toRestaurantDetail(mid)
+        }
+    },
+
+    onNavMerchant() {
+        const address = this.data.reservation?.merchantAddress
+        if (!address) {
+             wx.showToast({ title: '暂无地址信息', icon: 'none' })
+             return
+        }
+        wx.showToast({ title: '暂不支持地图导航，请联系商家确认位置', icon: 'none' })
+    },
+
+    onCallMerchant() {
+        const phone = this.data.reservation?.merchantPhone || this.data.reservation?.contactPhone
+        if (phone) {
+            wx.makePhoneCall({ phoneNumber: phone })
+        } else {
+            wx.showToast({ title: '暂无电话', icon: 'none' })
+        }
+    },
+
+    // Actions
     onCancel() {
-        this.setData({ showCancelDialog: true });
+        this.setData({ showCancelDialog: true })
     },
-
+    
     closeCancelDialog() {
-        this.setData({ showCancelDialog: false });
+        this.setData({ showCancelDialog: false })
     },
 
-    onReasonChange(e: any) {
-        this.setData({ cancelReason: e.detail.value });
+    onReasonChange(e: WechatMiniprogram.CustomEvent) {
+        this.setData({ cancelReason: e.detail.value })
     },
 
     async confirmCancel() {
         if (!this.data.cancelReason) {
-            wx.showToast({ title: '请选择取消原因', icon: 'none' });
-            return;
+             wx.showToast({ title: '请选择原因', icon: 'none' })
+             return
         }
-
+        
+        wx.showLoading({ title: '提交中' })
         try {
-            wx.showLoading({ title: '提交中...' });
-            await ReservationService.cancelReservation(this.data.id, this.data.cancelReason);
-            wx.showToast({ title: '已取消', icon: 'success' });
-            this.closeCancelDialog();
-            this.loadDetail();
-        } catch (error: any) {
-            wx.showToast({ title: error.message || '取消失败', icon: 'none' });
+            await ReservationService.cancelReservation(this.data.id, this.data.cancelReason)
+            this.closeCancelDialog()
+            this.loadDetail()
+        } catch (e) {
+            logger.error('Cancel failed', e)
+            wx.showToast({ title: '取消失败', icon: 'none' })
         } finally {
-            wx.hideLoading();
+            wx.hideLoading()
         }
     },
 
-    onCallMerchant() {
-        // Placeholder for calling merchant
-        wx.makePhoneCall({ phoneNumber: '13800000000' });
+    async onPay() {
+        if (!this.data.reservation || this.data.paying) return
+        this.setData({ paying: true })
+        try {
+            const paymentResult = await processPayment(this.data.reservation.id, 'reservation')
+
+            Navigation.toReservationPaymentResult({
+                reservationId: String(this.data.id),
+                amount: this.data.reservation.depositDisplay?.replace('¥', '') || '0.00',
+                result: paymentResult.status === 'paid' ? 'success' : paymentResult.status,
+                source: 'detail'
+            })
+        } catch (e) {
+            logger.error('Pay failed', e)
+            Navigation.toReservationPaymentResult({
+                reservationId: String(this.data.id),
+                amount: this.data.reservation.depositDisplay?.replace('¥', '') || '0.00',
+                result: e instanceof PaymentCancelledError ? 'cancelled' : 'unknown',
+                source: 'detail'
+            })
+        } finally {
+            this.setData({ paying: false })
+        }
+    },
+    
+    // 跳转到点菜页面进行加菜/修改 (Reservation Context)
+    onModifyDishes() {
+         const res = this.data.reservation
+         if (!res) return
+
+         // 传递 reservation_id 让 menu 页面识别是预订点餐
+         wx.navigateTo({
+             url: `/pages/dine-in/menu/menu?reservation_id=${res.id}&merchant_id=${res.merchantId}`
+         })
     },
 
-    /**
-     * 跳转到点菜页面（定金模式顾客到店后点菜）
-     */
-    onGoToOrder() {
-        const { reservation } = this.data;
-        if (!reservation) return;
+    // 再次预订 (跳转预订表单)
+    onRebook() {
+        const res = this.data.reservation
+        if (!res) return
+        Navigation.toReservationCreate({
+            merchantId: res.merchantId,
+            merchantName: res.merchantName || ''
+        })
+    },
 
-        wx.navigateTo({
-            url: `/pages/dine-in/menu/menu?reservation_id=${reservation.id}&merchant_id=${reservation.merchant_id}`
-        });
+    // Copy ID
+    onCopy(e: WechatMiniprogram.BaseEvent) {
+        const text = e.currentTarget.dataset.text
+        if (text) {
+            wx.setClipboardData({ data: String(text) })
+        }
     }
-});
+})

@@ -7,9 +7,48 @@ package db
 
 import (
 	"context"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+const closeExpiredPaymentOrders = `-- name: CloseExpiredPaymentOrders :execrows
+UPDATE payment_orders
+SET status = 'closed'
+WHERE status = 'pending' AND expires_at < now()
+`
+
+// 批量关闭过期的 pending 支付订单
+func (q *Queries) CloseExpiredPaymentOrders(ctx context.Context) (int64, error) {
+	result, err := q.db.Exec(ctx, closeExpiredPaymentOrders)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const countPaymentLedgerEntriesByUser = `-- name: CountPaymentLedgerEntriesByUser :one
+SELECT COUNT(*)::bigint
+FROM (
+    SELECT po.id
+    FROM payment_orders po
+    WHERE po.user_id = $1
+
+    UNION ALL
+
+    SELECT ro.id
+    FROM refund_orders ro
+    JOIN payment_orders po ON po.id = ro.payment_order_id
+    WHERE po.user_id = $1
+) AS ledger_entries
+`
+
+func (q *Queries) CountPaymentLedgerEntriesByUser(ctx context.Context, userID int64) (int64, error) {
+	row := q.db.QueryRow(ctx, countPaymentLedgerEntriesByUser, userID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
 
 const createPaymentOrder = `-- name: CreatePaymentOrder :one
 INSERT INTO payment_orders (
@@ -24,7 +63,7 @@ INSERT INTO payment_orders (
     attach
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9
-) RETURNING id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id
+) RETURNING id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at
 `
 
 type CreatePaymentOrderParams struct {
@@ -69,19 +108,64 @@ func (q *Queries) CreatePaymentOrder(ctx context.Context, arg CreatePaymentOrder
 		&i.ExpiresAt,
 		&i.Attach,
 		&i.CombinedPaymentID,
+		&i.ProcessedAt,
+	)
+	return i, err
+}
+
+const getLatestPaymentOrderByBusinessTypeAndAttach = `-- name: GetLatestPaymentOrderByBusinessTypeAndAttach :one
+SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at FROM payment_orders
+WHERE business_type = $1
+    AND attach = $2
+ORDER BY created_at DESC
+LIMIT 1
+`
+
+type GetLatestPaymentOrderByBusinessTypeAndAttachParams struct {
+	BusinessType string      `json:"business_type"`
+	Attach       pgtype.Text `json:"attach"`
+}
+
+func (q *Queries) GetLatestPaymentOrderByBusinessTypeAndAttach(ctx context.Context, arg GetLatestPaymentOrderByBusinessTypeAndAttachParams) (PaymentOrder, error) {
+	row := q.db.QueryRow(ctx, getLatestPaymentOrderByBusinessTypeAndAttach, arg.BusinessType, arg.Attach)
+	var i PaymentOrder
+	err := row.Scan(
+		&i.ID,
+		&i.OrderID,
+		&i.ReservationID,
+		&i.UserID,
+		&i.PaymentType,
+		&i.BusinessType,
+		&i.Amount,
+		&i.OutTradeNo,
+		&i.TransactionID,
+		&i.PrepayID,
+		&i.Status,
+		&i.PaidAt,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.Attach,
+		&i.CombinedPaymentID,
+		&i.ProcessedAt,
 	)
 	return i, err
 }
 
 const getLatestPaymentOrderByOrder = `-- name: GetLatestPaymentOrderByOrder :one
-SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id FROM payment_orders
+SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at FROM payment_orders
 WHERE order_id = $1
+    AND business_type = $2
 ORDER BY created_at DESC
 LIMIT 1
 `
 
-func (q *Queries) GetLatestPaymentOrderByOrder(ctx context.Context, orderID pgtype.Int8) (PaymentOrder, error) {
-	row := q.db.QueryRow(ctx, getLatestPaymentOrderByOrder, orderID)
+type GetLatestPaymentOrderByOrderParams struct {
+	OrderID      pgtype.Int8 `json:"order_id"`
+	BusinessType string      `json:"business_type"`
+}
+
+func (q *Queries) GetLatestPaymentOrderByOrder(ctx context.Context, arg GetLatestPaymentOrderByOrderParams) (PaymentOrder, error) {
+	row := q.db.QueryRow(ctx, getLatestPaymentOrderByOrder, arg.OrderID, arg.BusinessType)
 	var i PaymentOrder
 	err := row.Scan(
 		&i.ID,
@@ -100,19 +184,26 @@ func (q *Queries) GetLatestPaymentOrderByOrder(ctx context.Context, orderID pgty
 		&i.ExpiresAt,
 		&i.Attach,
 		&i.CombinedPaymentID,
+		&i.ProcessedAt,
 	)
 	return i, err
 }
 
 const getLatestPaymentOrderByReservation = `-- name: GetLatestPaymentOrderByReservation :one
-SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id FROM payment_orders
+SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at FROM payment_orders
 WHERE reservation_id = $1
+    AND business_type = $2
 ORDER BY created_at DESC
 LIMIT 1
 `
 
-func (q *Queries) GetLatestPaymentOrderByReservation(ctx context.Context, reservationID pgtype.Int8) (PaymentOrder, error) {
-	row := q.db.QueryRow(ctx, getLatestPaymentOrderByReservation, reservationID)
+type GetLatestPaymentOrderByReservationParams struct {
+	ReservationID pgtype.Int8 `json:"reservation_id"`
+	BusinessType  string      `json:"business_type"`
+}
+
+func (q *Queries) GetLatestPaymentOrderByReservation(ctx context.Context, arg GetLatestPaymentOrderByReservationParams) (PaymentOrder, error) {
+	row := q.db.QueryRow(ctx, getLatestPaymentOrderByReservation, arg.ReservationID, arg.BusinessType)
 	var i PaymentOrder
 	err := row.Scan(
 		&i.ID,
@@ -131,12 +222,13 @@ func (q *Queries) GetLatestPaymentOrderByReservation(ctx context.Context, reserv
 		&i.ExpiresAt,
 		&i.Attach,
 		&i.CombinedPaymentID,
+		&i.ProcessedAt,
 	)
 	return i, err
 }
 
 const getPaymentOrder = `-- name: GetPaymentOrder :one
-SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id FROM payment_orders
+SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at FROM payment_orders
 WHERE id = $1 LIMIT 1
 `
 
@@ -160,12 +252,13 @@ func (q *Queries) GetPaymentOrder(ctx context.Context, id int64) (PaymentOrder, 
 		&i.ExpiresAt,
 		&i.Attach,
 		&i.CombinedPaymentID,
+		&i.ProcessedAt,
 	)
 	return i, err
 }
 
 const getPaymentOrderByOutTradeNo = `-- name: GetPaymentOrderByOutTradeNo :one
-SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id FROM payment_orders
+SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at FROM payment_orders
 WHERE out_trade_no = $1 LIMIT 1
 `
 
@@ -189,12 +282,13 @@ func (q *Queries) GetPaymentOrderByOutTradeNo(ctx context.Context, outTradeNo st
 		&i.ExpiresAt,
 		&i.Attach,
 		&i.CombinedPaymentID,
+		&i.ProcessedAt,
 	)
 	return i, err
 }
 
 const getPaymentOrderByTransactionId = `-- name: GetPaymentOrderByTransactionId :one
-SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id FROM payment_orders
+SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at FROM payment_orders
 WHERE transaction_id = $1 LIMIT 1
 `
 
@@ -218,12 +312,13 @@ func (q *Queries) GetPaymentOrderByTransactionId(ctx context.Context, transactio
 		&i.ExpiresAt,
 		&i.Attach,
 		&i.CombinedPaymentID,
+		&i.ProcessedAt,
 	)
 	return i, err
 }
 
 const getPaymentOrderForUpdate = `-- name: GetPaymentOrderForUpdate :one
-SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id FROM payment_orders
+SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at FROM payment_orders
 WHERE id = $1 LIMIT 1
 FOR UPDATE
 `
@@ -248,12 +343,13 @@ func (q *Queries) GetPaymentOrderForUpdate(ctx context.Context, id int64) (Payme
 		&i.ExpiresAt,
 		&i.Attach,
 		&i.CombinedPaymentID,
+		&i.ProcessedAt,
 	)
 	return i, err
 }
 
 const getPaymentOrdersByOrder = `-- name: GetPaymentOrdersByOrder :many
-SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id FROM payment_orders
+SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at FROM payment_orders
 WHERE order_id = $1
 ORDER BY created_at DESC
 `
@@ -284,6 +380,7 @@ func (q *Queries) GetPaymentOrdersByOrder(ctx context.Context, orderID pgtype.In
 			&i.ExpiresAt,
 			&i.Attach,
 			&i.CombinedPaymentID,
+			&i.ProcessedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -296,7 +393,7 @@ func (q *Queries) GetPaymentOrdersByOrder(ctx context.Context, orderID pgtype.In
 }
 
 const getPaymentOrdersByReservation = `-- name: GetPaymentOrdersByReservation :many
-SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id FROM payment_orders
+SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at FROM payment_orders
 WHERE reservation_id = $1
 ORDER BY created_at DESC
 `
@@ -327,6 +424,7 @@ func (q *Queries) GetPaymentOrdersByReservation(ctx context.Context, reservation
 			&i.ExpiresAt,
 			&i.Attach,
 			&i.CombinedPaymentID,
+			&i.ProcessedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -338,8 +436,50 @@ func (q *Queries) GetPaymentOrdersByReservation(ctx context.Context, reservation
 	return items, nil
 }
 
+const getPendingPaymentOrderByUserAndBusinessType = `-- name: GetPendingPaymentOrderByUserAndBusinessType :one
+SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at FROM payment_orders
+WHERE user_id = $1
+    AND business_type = $2
+    AND amount = $3
+    AND status = 'pending'
+    AND expires_at > now()
+ORDER BY created_at DESC
+LIMIT 1
+`
+
+type GetPendingPaymentOrderByUserAndBusinessTypeParams struct {
+	UserID       int64  `json:"user_id"`
+	BusinessType string `json:"business_type"`
+	Amount       int64  `json:"amount"`
+}
+
+func (q *Queries) GetPendingPaymentOrderByUserAndBusinessType(ctx context.Context, arg GetPendingPaymentOrderByUserAndBusinessTypeParams) (PaymentOrder, error) {
+	row := q.db.QueryRow(ctx, getPendingPaymentOrderByUserAndBusinessType, arg.UserID, arg.BusinessType, arg.Amount)
+	var i PaymentOrder
+	err := row.Scan(
+		&i.ID,
+		&i.OrderID,
+		&i.ReservationID,
+		&i.UserID,
+		&i.PaymentType,
+		&i.BusinessType,
+		&i.Amount,
+		&i.OutTradeNo,
+		&i.TransactionID,
+		&i.PrepayID,
+		&i.Status,
+		&i.PaidAt,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.Attach,
+		&i.CombinedPaymentID,
+		&i.ProcessedAt,
+	)
+	return i, err
+}
+
 const listExpiredPaymentOrders = `-- name: ListExpiredPaymentOrders :many
-SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id FROM payment_orders
+SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at FROM payment_orders
 WHERE status = 'pending' AND expires_at < now()
 ORDER BY created_at
 LIMIT $1
@@ -371,6 +511,312 @@ func (q *Queries) ListExpiredPaymentOrders(ctx context.Context, limit int32) ([]
 			&i.ExpiresAt,
 			&i.Attach,
 			&i.CombinedPaymentID,
+			&i.ProcessedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMiniprogramPaymentOrdersForReconciliation = `-- name: ListMiniprogramPaymentOrdersForReconciliation :many
+SELECT id, out_trade_no, transaction_id, amount, status
+FROM payment_orders
+WHERE payment_type = 'miniprogram'
+  AND status IN ('paid', 'refunded')
+  AND paid_at >= $1
+  AND paid_at < $2
+`
+
+type ListMiniprogramPaymentOrdersForReconciliationParams struct {
+	PaidAt   pgtype.Timestamptz `json:"paid_at"`
+	PaidAt_2 pgtype.Timestamptz `json:"paid_at_2"`
+}
+
+type ListMiniprogramPaymentOrdersForReconciliationRow struct {
+	ID            int64       `json:"id"`
+	OutTradeNo    string      `json:"out_trade_no"`
+	TransactionID pgtype.Text `json:"transaction_id"`
+	Amount        int64       `json:"amount"`
+	Status        string      `json:"status"`
+}
+
+// 获取指定日期范围内所有小程序直连支付订单（用于每日对账）
+func (q *Queries) ListMiniprogramPaymentOrdersForReconciliation(ctx context.Context, arg ListMiniprogramPaymentOrdersForReconciliationParams) ([]ListMiniprogramPaymentOrdersForReconciliationRow, error) {
+	rows, err := q.db.Query(ctx, listMiniprogramPaymentOrdersForReconciliation, arg.PaidAt, arg.PaidAt_2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListMiniprogramPaymentOrdersForReconciliationRow{}
+	for rows.Next() {
+		var i ListMiniprogramPaymentOrdersForReconciliationRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OutTradeNo,
+			&i.TransactionID,
+			&i.Amount,
+			&i.Status,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPaidUnprocessedPaymentOrders = `-- name: ListPaidUnprocessedPaymentOrders :many
+SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at FROM payment_orders
+WHERE status = 'paid'
+    AND processed_at IS NULL
+    AND paid_at <= $1
+    AND NOT EXISTS (
+            SELECT 1 FROM refund_orders ro
+            WHERE ro.payment_order_id = payment_orders.id
+    )
+ORDER BY paid_at
+LIMIT $2
+`
+
+type ListPaidUnprocessedPaymentOrdersParams struct {
+	PaidAt pgtype.Timestamptz `json:"paid_at"`
+	Limit  int32              `json:"limit"`
+}
+
+func (q *Queries) ListPaidUnprocessedPaymentOrders(ctx context.Context, arg ListPaidUnprocessedPaymentOrdersParams) ([]PaymentOrder, error) {
+	rows, err := q.db.Query(ctx, listPaidUnprocessedPaymentOrders, arg.PaidAt, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PaymentOrder{}
+	for rows.Next() {
+		var i PaymentOrder
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrderID,
+			&i.ReservationID,
+			&i.UserID,
+			&i.PaymentType,
+			&i.BusinessType,
+			&i.Amount,
+			&i.OutTradeNo,
+			&i.TransactionID,
+			&i.PrepayID,
+			&i.Status,
+			&i.PaidAt,
+			&i.CreatedAt,
+			&i.ExpiresAt,
+			&i.Attach,
+			&i.CombinedPaymentID,
+			&i.ProcessedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPaidUnrefundedPaymentOrders = `-- name: ListPaidUnrefundedPaymentOrders :many
+SELECT po.id, po.order_id, po.reservation_id, po.user_id, po.payment_type, po.business_type, po.amount, po.out_trade_no, po.transaction_id, po.prepay_id, po.status, po.paid_at, po.created_at, po.expires_at, po.attach, po.combined_payment_id, po.processed_at
+FROM payment_orders po
+JOIN orders o ON po.order_id = o.id
+WHERE 
+    po.status = 'paid' 
+    AND po.business_type = 'order' 
+    AND o.status = 'cancelled'
+    AND po.created_at > now() - INTERVAL '7 days'
+    AND NOT EXISTS (
+        SELECT 1 FROM refund_orders ro 
+        WHERE ro.payment_order_id = po.id 
+        AND ro.status IN ('pending', 'processing', 'success')
+    )
+ORDER BY po.created_at
+LIMIT $1
+`
+
+func (q *Queries) ListPaidUnrefundedPaymentOrders(ctx context.Context, limit int32) ([]PaymentOrder, error) {
+	rows, err := q.db.Query(ctx, listPaidUnrefundedPaymentOrders, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PaymentOrder{}
+	for rows.Next() {
+		var i PaymentOrder
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrderID,
+			&i.ReservationID,
+			&i.UserID,
+			&i.PaymentType,
+			&i.BusinessType,
+			&i.Amount,
+			&i.OutTradeNo,
+			&i.TransactionID,
+			&i.PrepayID,
+			&i.Status,
+			&i.PaidAt,
+			&i.CreatedAt,
+			&i.ExpiresAt,
+			&i.Attach,
+			&i.CombinedPaymentID,
+			&i.ProcessedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPaidUnrefundedReservationPaymentOrders = `-- name: ListPaidUnrefundedReservationPaymentOrders :many
+SELECT po.id, po.order_id, po.reservation_id, po.user_id, po.payment_type, po.business_type, po.amount, po.out_trade_no, po.transaction_id, po.prepay_id, po.status, po.paid_at, po.created_at, po.expires_at, po.attach, po.combined_payment_id, po.processed_at
+FROM payment_orders po
+JOIN table_reservations r ON po.reservation_id = r.id
+WHERE 
+    po.status = 'paid' 
+    AND po.business_type = 'reservation' 
+    AND r.status = 'cancelled'
+    AND po.created_at > now() - INTERVAL '7 days'
+    AND NOT EXISTS (
+        SELECT 1 FROM refund_orders ro 
+        WHERE ro.payment_order_id = po.id 
+        AND ro.status IN ('pending', 'processing', 'success')
+    )
+ORDER BY po.created_at
+LIMIT $1
+`
+
+func (q *Queries) ListPaidUnrefundedReservationPaymentOrders(ctx context.Context, limit int32) ([]PaymentOrder, error) {
+	rows, err := q.db.Query(ctx, listPaidUnrefundedReservationPaymentOrders, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PaymentOrder{}
+	for rows.Next() {
+		var i PaymentOrder
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrderID,
+			&i.ReservationID,
+			&i.UserID,
+			&i.PaymentType,
+			&i.BusinessType,
+			&i.Amount,
+			&i.OutTradeNo,
+			&i.TransactionID,
+			&i.PrepayID,
+			&i.Status,
+			&i.PaidAt,
+			&i.CreatedAt,
+			&i.ExpiresAt,
+			&i.Attach,
+			&i.CombinedPaymentID,
+			&i.ProcessedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPaymentLedgerEntriesByUser = `-- name: ListPaymentLedgerEntriesByUser :many
+SELECT id, entry_type, payment_order_id, refund_order_id, order_id, business_type, amount, status, occurred_at, created_at
+FROM (
+    SELECT
+        po.id AS id,
+        'payment'::text AS entry_type,
+        po.id AS payment_order_id,
+        NULL::bigint AS refund_order_id,
+        po.order_id,
+        po.business_type,
+        po.amount,
+        po.status,
+        COALESCE(po.paid_at, po.created_at) AS occurred_at,
+        po.created_at
+    FROM payment_orders po
+    WHERE po.user_id = $1
+
+    UNION ALL
+
+    SELECT
+        ro.id AS id,
+        'refund'::text AS entry_type,
+        ro.payment_order_id,
+        ro.id AS refund_order_id,
+        po.order_id,
+        po.business_type,
+        ro.refund_amount AS amount,
+        ro.status,
+        COALESCE(ro.refunded_at, ro.created_at) AS occurred_at,
+        ro.created_at
+    FROM refund_orders ro
+    JOIN payment_orders po ON po.id = ro.payment_order_id
+    WHERE po.user_id = $1
+) AS ledger_entries
+ORDER BY occurred_at DESC, created_at DESC, id DESC
+LIMIT $2 OFFSET $3
+`
+
+type ListPaymentLedgerEntriesByUserParams struct {
+	UserID int64 `json:"user_id"`
+	Limit  int32 `json:"limit"`
+	Offset int32 `json:"offset"`
+}
+
+type ListPaymentLedgerEntriesByUserRow struct {
+	ID             int64       `json:"id"`
+	EntryType      string      `json:"entry_type"`
+	PaymentOrderID int64       `json:"payment_order_id"`
+	RefundOrderID  pgtype.Int8 `json:"refund_order_id"`
+	OrderID        pgtype.Int8 `json:"order_id"`
+	BusinessType   string      `json:"business_type"`
+	Amount         int64       `json:"amount"`
+	Status         string      `json:"status"`
+	OccurredAt     time.Time   `json:"occurred_at"`
+	CreatedAt      time.Time   `json:"created_at"`
+}
+
+func (q *Queries) ListPaymentLedgerEntriesByUser(ctx context.Context, arg ListPaymentLedgerEntriesByUserParams) ([]ListPaymentLedgerEntriesByUserRow, error) {
+	rows, err := q.db.Query(ctx, listPaymentLedgerEntriesByUser, arg.UserID, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListPaymentLedgerEntriesByUserRow{}
+	for rows.Next() {
+		var i ListPaymentLedgerEntriesByUserRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.EntryType,
+			&i.PaymentOrderID,
+			&i.RefundOrderID,
+			&i.OrderID,
+			&i.BusinessType,
+			&i.Amount,
+			&i.Status,
+			&i.OccurredAt,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -383,7 +829,7 @@ func (q *Queries) ListExpiredPaymentOrders(ctx context.Context, limit int32) ([]
 }
 
 const listPaymentOrdersByUser = `-- name: ListPaymentOrdersByUser :many
-SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id FROM payment_orders
+SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at FROM payment_orders
 WHERE user_id = $1
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3
@@ -421,6 +867,7 @@ func (q *Queries) ListPaymentOrdersByUser(ctx context.Context, arg ListPaymentOr
 			&i.ExpiresAt,
 			&i.Attach,
 			&i.CombinedPaymentID,
+			&i.ProcessedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -433,7 +880,7 @@ func (q *Queries) ListPaymentOrdersByUser(ctx context.Context, arg ListPaymentOr
 }
 
 const listPaymentOrdersByUserAndStatus = `-- name: ListPaymentOrdersByUserAndStatus :many
-SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id FROM payment_orders
+SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at FROM payment_orders
 WHERE user_id = $1 AND status = $2
 ORDER BY created_at DESC
 LIMIT $3 OFFSET $4
@@ -477,6 +924,7 @@ func (q *Queries) ListPaymentOrdersByUserAndStatus(ctx context.Context, arg List
 			&i.ExpiresAt,
 			&i.Attach,
 			&i.CombinedPaymentID,
+			&i.ProcessedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -488,12 +936,51 @@ func (q *Queries) ListPaymentOrdersByUserAndStatus(ctx context.Context, arg List
 	return items, nil
 }
 
+const setPaymentOrderCombinedID = `-- name: SetPaymentOrderCombinedID :one
+UPDATE payment_orders
+SET combined_payment_id = $2
+WHERE id = $1
+RETURNING id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at
+`
+
+type SetPaymentOrderCombinedIDParams struct {
+	ID                int64       `json:"id"`
+	CombinedPaymentID pgtype.Int8 `json:"combined_payment_id"`
+}
+
+func (q *Queries) SetPaymentOrderCombinedID(ctx context.Context, arg SetPaymentOrderCombinedIDParams) (PaymentOrder, error) {
+	row := q.db.QueryRow(ctx, setPaymentOrderCombinedID, arg.ID, arg.CombinedPaymentID)
+	var i PaymentOrder
+	err := row.Scan(
+		&i.ID,
+		&i.OrderID,
+		&i.ReservationID,
+		&i.UserID,
+		&i.PaymentType,
+		&i.BusinessType,
+		&i.Amount,
+		&i.OutTradeNo,
+		&i.TransactionID,
+		&i.PrepayID,
+		&i.Status,
+		&i.PaidAt,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.Attach,
+		&i.CombinedPaymentID,
+		&i.ProcessedAt,
+	)
+	return i, err
+}
+
 const updatePaymentOrderPrepayId = `-- name: UpdatePaymentOrderPrepayId :one
 UPDATE payment_orders
 SET
     prepay_id = $2
 WHERE id = $1
-RETURNING id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id
+    AND status = 'pending'
+    AND prepay_id IS NULL
+RETURNING id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at
 `
 
 type UpdatePaymentOrderPrepayIdParams struct {
@@ -521,6 +1008,40 @@ func (q *Queries) UpdatePaymentOrderPrepayId(ctx context.Context, arg UpdatePaym
 		&i.ExpiresAt,
 		&i.Attach,
 		&i.CombinedPaymentID,
+		&i.ProcessedAt,
+	)
+	return i, err
+}
+
+const updatePaymentOrderProcessedAt = `-- name: UpdatePaymentOrderProcessedAt :one
+UPDATE payment_orders
+SET
+    processed_at = now()
+WHERE id = $1 AND status = 'paid' AND processed_at IS NULL
+RETURNING id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at
+`
+
+func (q *Queries) UpdatePaymentOrderProcessedAt(ctx context.Context, id int64) (PaymentOrder, error) {
+	row := q.db.QueryRow(ctx, updatePaymentOrderProcessedAt, id)
+	var i PaymentOrder
+	err := row.Scan(
+		&i.ID,
+		&i.OrderID,
+		&i.ReservationID,
+		&i.UserID,
+		&i.PaymentType,
+		&i.BusinessType,
+		&i.Amount,
+		&i.OutTradeNo,
+		&i.TransactionID,
+		&i.PrepayID,
+		&i.Status,
+		&i.PaidAt,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.Attach,
+		&i.CombinedPaymentID,
+		&i.ProcessedAt,
 	)
 	return i, err
 }
@@ -530,7 +1051,7 @@ UPDATE payment_orders
 SET
     status = 'closed'
 WHERE id = $1 AND status = 'pending'
-RETURNING id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id
+RETURNING id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at
 `
 
 func (q *Queries) UpdatePaymentOrderToClosed(ctx context.Context, id int64) (PaymentOrder, error) {
@@ -553,6 +1074,7 @@ func (q *Queries) UpdatePaymentOrderToClosed(ctx context.Context, id int64) (Pay
 		&i.ExpiresAt,
 		&i.Attach,
 		&i.CombinedPaymentID,
+		&i.ProcessedAt,
 	)
 	return i, err
 }
@@ -562,7 +1084,7 @@ UPDATE payment_orders
 SET
     status = 'failed'
 WHERE id = $1 AND status = 'pending'
-RETURNING id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id
+RETURNING id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at
 `
 
 func (q *Queries) UpdatePaymentOrderToFailed(ctx context.Context, id int64) (PaymentOrder, error) {
@@ -585,6 +1107,7 @@ func (q *Queries) UpdatePaymentOrderToFailed(ctx context.Context, id int64) (Pay
 		&i.ExpiresAt,
 		&i.Attach,
 		&i.CombinedPaymentID,
+		&i.ProcessedAt,
 	)
 	return i, err
 }
@@ -596,7 +1119,7 @@ SET
     transaction_id = $2,
     paid_at = now()
 WHERE id = $1 AND status = 'pending'
-RETURNING id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id
+RETURNING id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at
 `
 
 type UpdatePaymentOrderToPaidParams struct {
@@ -624,6 +1147,7 @@ func (q *Queries) UpdatePaymentOrderToPaid(ctx context.Context, arg UpdatePaymen
 		&i.ExpiresAt,
 		&i.Attach,
 		&i.CombinedPaymentID,
+		&i.ProcessedAt,
 	)
 	return i, err
 }
@@ -633,7 +1157,7 @@ UPDATE payment_orders
 SET
     status = 'refunded'
 WHERE id = $1
-RETURNING id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id
+RETURNING id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at
 `
 
 func (q *Queries) UpdatePaymentOrderToRefunded(ctx context.Context, id int64) (PaymentOrder, error) {
@@ -656,6 +1180,7 @@ func (q *Queries) UpdatePaymentOrderToRefunded(ctx context.Context, id int64) (P
 		&i.ExpiresAt,
 		&i.Attach,
 		&i.CombinedPaymentID,
+		&i.ProcessedAt,
 	)
 	return i, err
 }

@@ -1,8 +1,0 @@
-{
-    "navigationBarTitleText": "菜品分析",
-    "usingComponents": {
-        "custom-navbar": "/components/custom-navbar/index",
-        "ec-canvas": "../../components/ec-canvas/index",
-        "t-icon": "tdesign-miniprogram/icon/icon"
-    }
-}

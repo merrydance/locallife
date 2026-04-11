@@ -1,8 +1,9 @@
 /* 堂食支付成功页面样式 */
-.payment-success-container {
+.page-container {
   min-height: 100vh;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  padding: 40rpx 30rpx;
+  padding-top: var(--spacer-sm);
+  padding-bottom: 40rpx;
   display: flex;
   flex-direction: column;
 }

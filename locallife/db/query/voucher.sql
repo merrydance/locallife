@@ -80,6 +80,14 @@ SET
 WHERE id = $1
 RETURNING *;
 
+-- name: DecrementVoucherUsedQuantity :one
+UPDATE vouchers
+SET
+    used_quantity = CASE WHEN used_quantity > 0 THEN used_quantity - 1 ELSE 0 END,
+    updated_at = NOW()
+WHERE id = $1
+RETURNING *;
+
 -- name: DeleteVoucher :exec
 -- 软删除代金券模板
 UPDATE vouchers SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL;
@@ -151,7 +159,25 @@ SET
 WHERE id = $1 AND status = 'unused'
 RETURNING *;
 
--- name: MarkExpiredVouchers :exec
+-- name: MarkUserVoucherAsUnused :one
+UPDATE user_vouchers
+SET
+    status = 'unused',
+    order_id = NULL,
+    used_at = NULL
+WHERE id = $1 AND status = 'used' AND order_id = $2
+RETURNING *;
+
+-- name: MarkUserVoucherAsExpiredOnRollback :one
+UPDATE user_vouchers
+SET
+    status = 'expired',
+    order_id = NULL,
+    used_at = NULL
+WHERE id = $1 AND status = 'used' AND order_id = $2
+RETURNING *;
+
+-- name: ExpireUnusedVouchers :execrows
 UPDATE user_vouchers
 SET status = 'expired'
 WHERE status = 'unused' 

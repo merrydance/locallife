@@ -2,10 +2,24 @@ import * as CartAPI from '../../../api/cart'
 import { CartItemResponse } from '../../../api/cart'
 import { logger } from '../../../utils/logger'
 import AddressService, { Address } from '../../../api/address'
-import { createOrder, CreateOrderRequest } from '../../../api/order'
+import { createOrder, CreateOrderRequest, OrderItemRequest, OrderType } from '../../../api/order'
+import {
+  CombinedPaymentOrderResponse,
+  createCombinedPaymentOrder,
+  createOrderPayment,
+  getCombinedPaymentFollowupMessage,
+  isPaymentStatusSuccessful,
+  isCombinedPaymentSuccessful,
+  recoverCombinedPaymentOrder,
+  shouldRecreateCombinedPayment,
+  invokeWechatPay
+} from '../../../api/payment'
 import { formatPriceNoSymbol } from '../../../utils/util'
 import { getPublicImageUrl } from '../../../utils/image'
-import { request } from '../../../utils/request'
+import { getMyMemberships, MembershipResponse } from '../../../api/personal'
+import Navigation from '../../../utils/navigation'
+import { getErrorUserMessage } from '../../../utils/user-facing'
+import { globalStore } from '../../../utils/global-store'
 
 interface CartItemView {
   id: number
@@ -18,49 +32,322 @@ interface CartItemView {
   priceDisplay: string
   subtotal: number
   subtotalDisplay: string
+  specText?: string
+  customizations?: Record<string, unknown>
+  dishImages?: string[]
 }
 
-interface CartData {
-  items: CartItemView[]
+interface MerchantCartView {
   merchantId: number
   merchantName: string
+  orderType: OrderType
+  tableId?: number
+  reservationId?: number
+  items: CartItemView[]
   totalCount: number
-  totalPrice: number
-  totalPriceDisplay: string
+  subtotal: number
+  subtotalDisplay: string
+  deliveryFee: number
+  deliveryFeeDisplay: string
+  deliveryFeeDiscount: number
+  deliveryDistance: number
+  deliveryEtaMinutes: number
+  deliveryEtaDisplay: string
+  orderTotal: number
+  orderTotalDisplay: string
+  originalTotalDisplay: string // 原价（不含优惠）
+  hasDiscount: boolean         // 是否有优惠
+  appliedPromotions: Array<{ title: string, amount: number, amountDisplay: string, type: string }>
+  ladderPromotions: Array<{ name: string, thresholdDisplay: string, discountDisplay: string, currentHit: boolean, missingNeedDisplay: string }>
+  voucherTrials: Array<{ voucherName: string, amountDisplay: string, trialPayableDisplay: string }>
+  paymentHint: string
+}
+
+interface CheckoutSnapshotItem {
+  id: number
+  dishId?: number
+  comboId?: number
+  name: string
+  imageUrl: string
+  quantity: number
+  unitPrice: number
+  subtotal: number
+  specText?: string
+  customizations?: Record<string, unknown>
+  dishImages?: string[]
+}
+
+interface CheckoutSnapshotCart {
+  cartId?: number
+  merchantId: number
+  merchantName: string
+  orderType?: OrderType
+  tableId?: number
+  reservationId?: number
+  items: CheckoutSnapshotItem[]
+  subtotal: number
+  totalCount?: number
+}
+
+interface CheckoutSnapshotPayload {
+  cartIds?: number[]
+  carts?: CheckoutSnapshotCart[]
+}
+
+const ORDER_CONFIRM_CONCURRENCY = 3
+
+const isWechatPayCancelled = (error: unknown): boolean => {
+  const wxError = error as { errMsg?: string }
+  return !!wxError?.errMsg?.includes('cancel')
+}
+
+const navigateToCombinedPaymentSuccess = (combinedPayment: CombinedPaymentOrderResponse, orderIds: number[]) => {
+  const firstOrderId = combinedPayment.sub_orders?.[0]?.order_id || orderIds[0]
+  const amount = (combinedPayment.total_amount / 100).toFixed(2)
+  const orderNo = combinedPayment.combine_out_trade_no || String(firstOrderId)
+
+  Navigation.toPaymentSuccess({
+    orderId: String(firstOrderId),
+    orderNo,
+    amount,
+    isCombined: true,
+    orderCount: orderIds.length
+  })
+}
+
+const getCombinedPaymentPageMessage = (combinedPayment: CombinedPaymentOrderResponse): string => {
+  const baseMessage = getCombinedPaymentFollowupMessage(combinedPayment)
+  if (shouldRecreateCombinedPayment(combinedPayment)) {
+    return '订单已创建，但当前合单已失效，请在订单列表重新发起支付。'
+  }
+
+  if (baseMessage.includes('支付状态正在同步')) {
+    return '订单支付状态正在同步，请在订单列表刷新后确认。'
+  }
+
+  return '订单已创建，可在订单列表继续完成合单支付。'
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  worker: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+  if (items.length === 0) {
+    return []
+  }
+
+  const results = new Array<R>(items.length)
+  const workerCount = Math.max(1, Math.min(limit, items.length))
+  let nextIndex = 0
+
+  async function consumeQueue() {
+    while (nextIndex < items.length) {
+      const currentIndex = nextIndex
+      nextIndex += 1
+      results[currentIndex] = await worker(items[currentIndex], currentIndex)
+    }
+  }
+
+  await Promise.all(Array.from({ length: workerCount }, () => consumeQueue()))
+
+  return results
 }
 
 Page({
   data: {
-    cart: null as CartData | null,
+    carts: [] as MerchantCartView[],
     cartIds: [] as number[],
     address: null as Address | null,
-    remark: '',
-    deliveryTime: 'ASAP',
+    remarks: {} as Record<number, string>,
     navBarHeight: 88,
-    loading: false,
+    initLoading: true, // 页面初始化加载标志（用于骨架屏）
+    loading: false,    // 按钮提交加载标志
+    loadError: '',
+    pricingError: '',
     orderTotalDisplay: '0.00',
-    deliveryFee: 500,  // 配送费（分）
-    deliveryFeeDisplay: '5.00'
+    summarySubtotalDisplay: '0.00',
+    summaryDeliveryDisplay: '待计算',
+    
+    // 支付及会员相关
+    selectedPaymentMethod: 'wechat', // 'wechat' | 'balance'
+    memberBalances: {} as Record<number, number>, // merchantId -> balance
+    memberBalanceDisplays: {} as Record<number, string>,
+    membershipIds: {} as Record<number, number>
   },
 
-  onLoad(options: { cart_ids?: string }) {
+  _pricingRequestVersion: 0,
+  _pricingInFlight: false,
+  _activePricingKey: '',
+  _pricingRefreshPending: false,
+  _pendingPricingSilent: true,
+  _defaultAddressLoaded: false,
+  _snapshotFallbackTimer: 0 as number | 0,
+
+  onLoad(options: { cart_ids?: string, data?: string }) {
     // 解析URL中的cart_ids参数
     if (options.cart_ids) {
-      const cartIds = options.cart_ids.split(',').map(Number).filter(id => !isNaN(id))
+      const cartIds = options.cart_ids.split(',').map(Number).filter((id) => !isNaN(id))
       this.setData({ cartIds })
     }
-    this.loadCart()
+
+    let hasSnapshot = false
+    const openerEventChannel = this.getOpenerEventChannel()
+    if (openerEventChannel?.on) {
+      openerEventChannel.on('checkoutContext', (payload: CheckoutSnapshotPayload) => {
+        if (this.applyCheckoutSnapshot(payload)) {
+          hasSnapshot = true
+        }
+      })
+    }
+
+    if (options.data) {
+      try {
+        const payload = JSON.parse(decodeURIComponent(options.data)) as CheckoutSnapshotPayload
+        hasSnapshot = this.applyCheckoutSnapshot(payload) || hasSnapshot
+      } catch (error) {
+        logger.warn('Parse checkout snapshot failed', error, 'Order-confirm')
+      }
+    }
+
+    if (!hasSnapshot) {
+      this._snapshotFallbackTimer = setTimeout(() => {
+        if (!this.data.carts.length && !this.data.loadError) {
+          this.loadCart()
+        }
+        this._snapshotFallbackTimer = 0
+      }, 120)
+    }
+
     this.loadDefaultAddress()
+  },
+
+  onUnload() {
+    if (this._snapshotFallbackTimer) {
+      clearTimeout(this._snapshotFallbackTimer)
+      this._snapshotFallbackTimer = 0
+    }
   },
 
   onShow() {
     // If returning from address selection, we might have a selectedAddressId
     const pages = getCurrentPages()
-    const currPage = pages[pages.length - 1]
-    if ((currPage as any).data.selectedAddressId) {
-      this.loadAddressById((currPage as any).data.selectedAddressId)
-        ; (currPage as any).setData({ selectedAddressId: null })
+    const currPage = pages[pages.length - 1] as WechatMiniprogram.Page.Instance<WechatMiniprogram.IAnyObject, WechatMiniprogram.IAnyObject> & {
+      data: { selectedAddressId?: number | string | null }
     }
+    if (currPage.data?.selectedAddressId) {
+      this.loadAddressById(currPage.data.selectedAddressId)
+      currPage.setData({ selectedAddressId: null })
+    }
+  },
+
+  buildAddressSyncKey(address: Address | null | undefined) {
+    if (!address) {
+      return ''
+    }
+
+    return [
+      String(address.id || ''),
+      String(address.region_id || ''),
+      address.contact_name || '',
+      address.contact_phone || '',
+      address.detail_address || '',
+      address.latitude || '',
+      address.longitude || '',
+      address.is_default ? '1' : '0'
+    ].join('|')
+  },
+
+  updateAddress(address: Address | null) {
+    const currentAddressKey = this.buildAddressSyncKey(this.data.address)
+    const nextAddressKey = this.buildAddressSyncKey(address)
+
+    if (currentAddressKey === nextAddressKey) {
+      return
+    }
+
+    this.setData({ address })
+    this.requestPricingRefresh()
+  },
+
+  applyCheckoutSnapshot(payload?: CheckoutSnapshotPayload | null) {
+    if (!payload?.carts || payload.carts.length === 0) {
+      return false
+    }
+
+    if (this._snapshotFallbackTimer) {
+      clearTimeout(this._snapshotFallbackTimer)
+      this._snapshotFallbackTimer = 0
+    }
+
+    const carts = payload.carts.map((cart) => {
+      const items: CartItemView[] = (cart.items || []).map((item) => ({
+        id: item.id,
+        dishId: item.dishId,
+        comboId: item.comboId,
+        name: item.name,
+        imageUrl: item.imageUrl,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        priceDisplay: formatPriceNoSymbol(item.unitPrice),
+        subtotal: item.subtotal,
+        subtotalDisplay: formatPriceNoSymbol(item.subtotal),
+        specText: item.specText || '',
+        customizations: item.customizations || undefined,
+        dishImages: item.dishImages || []
+      }))
+      const totalCount = cart.totalCount || items.reduce((sum, item) => sum + item.quantity, 0)
+
+      return {
+        merchantId: cart.merchantId,
+        merchantName: cart.merchantName || '商家',
+        orderType: cart.orderType || 'takeout',
+        tableId: cart.tableId || undefined,
+        reservationId: cart.reservationId || undefined,
+        items,
+        totalCount,
+        subtotal: cart.subtotal,
+        subtotalDisplay: formatPriceNoSymbol(cart.subtotal),
+        deliveryFee: 0,
+        deliveryFeeDisplay: '待计算',
+        deliveryFeeDiscount: 0,
+        deliveryDistance: 0,
+        deliveryEtaMinutes: 0,
+        deliveryEtaDisplay: '',
+        orderTotal: cart.subtotal,
+        orderTotalDisplay: formatPriceNoSymbol(cart.subtotal),
+        originalTotalDisplay: formatPriceNoSymbol(cart.subtotal),
+        hasDiscount: false,
+        appliedPromotions: [],
+        ladderPromotions: [],
+        voucherTrials: [],
+        paymentHint: ''
+      }
+    })
+
+    this.setData({
+      cartIds: payload.cartIds || this.data.cartIds,
+      carts,
+      initLoading: false,
+      loadError: '',
+      pricingError: ''
+    })
+
+    this.requestPricingRefresh(true)
+    void this.loadMemberships()
+    return true
+  },
+
+  syncGlobalCartSummary(carts: MerchantCartView[]) {
+    const totalCount = carts.reduce((sum, cart) => sum + (cart.totalCount || 0), 0)
+    const totalPrice = carts.reduce((sum, cart) => sum + (cart.subtotal || 0), 0)
+
+    globalStore.set('cart', {
+      items: [],
+      totalCount,
+      totalPrice,
+      totalPriceDisplay: `¥${formatPriceNoSymbol(totalPrice)}`
+    })
   },
 
   onNavHeight(e: WechatMiniprogram.CustomEvent) {
@@ -69,242 +356,660 @@ Page({
 
   async loadCart() {
     try {
-      this.setData({ loading: true })
-      console.log('[Order-confirm] Loading takeout cart...')
+      this.setData({ initLoading: true, loadError: '', pricingError: '' })
 
       // Step 1: 获取外卖类型的购物车列表
       const userCarts = await CartAPI.getUserCarts('takeout')
-      console.log('[Order-confirm] userCarts:', JSON.stringify(userCarts))
-
+      
       if (!userCarts.carts || userCarts.carts.length === 0) {
-        console.log('[Order-confirm] No carts found, navigating back')
         wx.showToast({ title: '购物车为空', icon: 'none' })
         setTimeout(() => wx.navigateBack(), 1500)
         return
       }
 
-      // 如果有指定的cart_ids，只使用这些购物车
       const { cartIds } = this.data
       let selectedCarts = userCarts.carts
       if (cartIds.length > 0) {
-        selectedCarts = userCarts.carts.filter(c => cartIds.includes(c.cart_id || 0))
+        selectedCarts = userCarts.carts.filter((c) => cartIds.includes(c.cart_id || 0))
       }
+      if (selectedCarts.length === 0) selectedCarts = [userCarts.carts[0]]
 
-      if (selectedCarts.length === 0) {
-        // 如果没有匹配的cart_ids，使用第一个购物车
-        selectedCarts = [userCarts.carts[0]]
-      }
-
-      // 目前只支持单商户结算
-      const merchantCart = selectedCarts[0]
-      const merchantId = merchantCart.merchant_id
-
-      if (!merchantId) {
-        wx.showToast({ title: '商户信息缺失', icon: 'none' })
-        setTimeout(() => wx.navigateBack(), 1500)
-        return
-      }
-
-      // Step 2: 获取购物车商品详情
-      const cartDetail = await CartAPI.getCart({
-        merchant_id: merchantId,
-        order_type: 'takeout'
+      const merchantCarts = selectedCarts.filter((mc) => !!mc.merchant_id)
+      const rawResults = await mapWithConcurrency(merchantCarts, ORDER_CONFIRM_CONCURRENCY, async (merchantCart) => {
+        const merchantId = merchantCart.merchant_id as number
+        const cartDetail = await CartAPI.getCart({
+          merchant_id: merchantId,
+          order_type: (merchantCart.order_type || 'takeout') as OrderType,
+          table_id: merchantCart.table_id || undefined,
+          reservation_id: merchantCart.reservation_id || undefined
+        })
+        return { merchantCart, merchantId, cartDetail }
       })
 
-      if (!cartDetail.items || cartDetail.items.length === 0) {
-        wx.showToast({ title: '购物车为空', icon: 'none' })
-        setTimeout(() => wx.navigateBack(), 1500)
-        return
-      }
+      const cartViews: MerchantCartView[] = rawResults
+        .filter(({ cartDetail }) => cartDetail.items && cartDetail.items.length > 0)
+        .map(({ merchantCart, merchantId, cartDetail }) => {
+          const items: CartItemView[] = cartDetail.items.map((item: CartItemResponse) => ({
+            id: item.id,
+            dishId: item.dish_id,
+            comboId: item.combo_id,
+            name: item.name,
+            imageUrl: getPublicImageUrl(item.image_url || ''),
+            quantity: item.quantity,
+            unitPrice: item.unit_price,
+            priceDisplay: formatPriceNoSymbol(item.unit_price),
+            subtotal: item.subtotal,
+            subtotalDisplay: formatPriceNoSymbol(item.subtotal),
+            specText: item.spec_text || '',
+            customizations: item.customizations || undefined,
+            dishImages: (item.combo_member_images || []).map((url: string) => getPublicImageUrl(url))
+          }))
+          return {
+            merchantId,
+            merchantName: merchantCart.merchant_name || '商家',
+            orderType: (merchantCart.order_type || 'takeout') as OrderType,
+            tableId: merchantCart.table_id || undefined,
+            reservationId: merchantCart.reservation_id || undefined,
+            items,
+            totalCount: items.reduce((sum, item) => sum + item.quantity, 0),
+            subtotal: cartDetail.subtotal,
+            subtotalDisplay: formatPriceNoSymbol(cartDetail.subtotal),
+            deliveryFee: 0,
+            deliveryFeeDisplay: '待计算',
+            deliveryFeeDiscount: 0,
+            deliveryDistance: 0,
+            deliveryEtaMinutes: 0,
+            deliveryEtaDisplay: '',
+            orderTotal: cartDetail.subtotal,
+            orderTotalDisplay: formatPriceNoSymbol(cartDetail.subtotal),
+            originalTotalDisplay: formatPriceNoSymbol(cartDetail.subtotal),
+            hasDiscount: false,
+            appliedPromotions: [],
+            ladderPromotions: [],
+            voucherTrials: [],
+            paymentHint: ''
+          }
+        })
 
-      // 转换为页面数据格式
-      const items: CartItemView[] = cartDetail.items.map((item: CartItemResponse) => ({
-        id: item.id,
-        dishId: item.dish_id,
-        comboId: item.combo_id,
-        name: item.name,
-        imageUrl: getPublicImageUrl(item.image_url || ''),
-        quantity: item.quantity,
-        unitPrice: item.unit_price,
-        priceDisplay: formatPriceNoSymbol(item.unit_price),
-        subtotal: item.subtotal,
-        subtotalDisplay: formatPriceNoSymbol(item.subtotal)
-      }))
+      this.setData({ carts: cartViews, initLoading: false })
 
-      const totalCount = items.reduce((sum, item) => sum + item.quantity, 0)
-      const totalPrice = cartDetail.subtotal
-
-      const cart: CartData = {
-        items,
-        merchantId,
-        merchantName: merchantCart.merchant_name || '商家',
-        totalCount,
-        totalPrice,
-        totalPriceDisplay: formatPriceNoSymbol(totalPrice)
-      }
-
-      // 计算订单总价（商品金额 + 配送费）
-      const { deliveryFee } = this.data
-      const orderTotal = totalPrice + deliveryFee
-
-      this.setData({
-        cart,
-        orderTotalDisplay: formatPriceNoSymbol(orderTotal),
-        loading: false
-      })
+      // 根据地址计算每个商户配送费。通过 key 去重，避免 onLoad 并发加载购物车与默认地址时重复试算。
+      this.requestPricingRefresh(true)
+      
+      // 加载会员信息
+      await this.loadMemberships()
     } catch (error) {
       logger.error('Load cart failed', error, 'Order-confirm')
-      wx.showToast({ title: '加载购物车失败', icon: 'error' })
-      this.setData({ loading: false })
+      this.setData({
+        initLoading: false,
+        loadError: getErrorUserMessage(error, '购物车加载失败，请重试')
+      })
+    }
+  },
+
+  onRetryLoad() {
+    this.loadCart()
+  },
+
+  async loadMemberships() {
+    const { carts } = this.data
+    if (!carts || carts.length === 0) return
+
+    try {
+      const result = await getMyMemberships()
+      const memberBalances: Record<number, number> = {}
+      const memberBalanceDisplays: Record<number, string> = {}
+      const membershipIds: Record<number, number> = {}
+
+      carts.forEach((cart) => {
+        const membership = result.memberships?.find(
+          (m: MembershipResponse) => m.merchant_id === cart.merchantId
+        )
+        if (membership) {
+          memberBalances[cart.merchantId] = membership.balance
+          memberBalanceDisplays[cart.merchantId] = formatPriceNoSymbol(membership.balance)
+          membershipIds[cart.merchantId] = membership.id
+        }
+      })
+
+      this.setData({
+        memberBalances,
+        memberBalanceDisplays,
+        membershipIds
+      })
+    } catch (error) {
+      logger.error('Load memberships failed', error, 'Order-confirm')
     }
   },
 
   async loadDefaultAddress() {
+    if (this._defaultAddressLoaded) {
+      return
+    }
+
     try {
-      const addresses = await AddressService.getAddresses()
-      if (addresses && addresses.length > 0) {
-        const defaultAddr = addresses.find((a: Address) => a.is_default) || addresses[0]
-        this.setData({ address: defaultAddr })
+      this._defaultAddressLoaded = true
+      const defaultAddr = await AddressService.getDefaultAddress()
+      if (defaultAddr) {
+        this.updateAddress(defaultAddr)
       }
     } catch (error) {
+      this._defaultAddressLoaded = false
       logger.error('Load address failed', error, 'Order-confirm')
     }
   },
 
   async loadAddressById(id: number | string) {
+    const nextAddressId = Number(id)
+    if (!nextAddressId) {
+      return
+    }
+
     try {
-      const addresses = await AddressService.getAddresses()
-      const addr = addresses.find((a: Address) => String(a.id) === String(id))
-      if (addr) {
-        this.setData({ address: addr })
-      }
+      const addr = await AddressService.getAddressDetail(nextAddressId)
+      this.updateAddress(addr)
     } catch (error) {
       logger.error('Load address failed', error, 'Order-confirm')
     }
   },
 
   onSelectAddress() {
-    wx.navigateTo({ url: '/pages/user_center/addresses/index?select=true' })
+    Navigation.toAddressSelector()
   },
 
   onRemarkInput(e: WechatMiniprogram.CustomEvent) {
-    this.setData({ remark: e.detail.value })
+    const { merchantId } = e.currentTarget.dataset as { merchantId?: number | string }
+    const merchantIdNum = Number(merchantId)
+    if (!merchantIdNum) return
+    const remarks = { ...(this.data.remarks || {}), [merchantIdNum]: e.detail.value }
+    this.setData({ remarks })
   },
 
-  onDeliveryTimeChange(e: WechatMiniprogram.CustomEvent) {
-    this.setData({ deliveryTime: e.detail.value })
+  onDeliveryTimeChange() {},
+
+  /**
+   * 选择预约时间（仅当天，默认营业时段 10:00-22:00，30 分钟粒度）
+   */
+  async chooseScheduleSlot() {
+    const slots = this.buildTodaySlots(10, 22, 30)
+    if (slots.length === 0) {
+      wx.showToast({ title: '今日无可选时间', icon: 'none' })
+      this.setData({ deliveryTime: 'ASAP', scheduleSlot: '' })
+      return
+    }
+
+    try {
+      const res = await wx.showActionSheet({ itemList: slots })
+      const picked = slots[res.tapIndex]
+      this.setData({ deliveryTime: 'SCHEDULED', scheduleSlot: picked })
+    } catch (err) {
+      // 取消选择则回退到尽快送达
+      this.setData({ deliveryTime: 'ASAP', scheduleSlot: '' })
+    }
+  },
+
+  /**
+   * 构建当天可选时间段
+   */
+  buildTodaySlots(startHour: number, endHour: number, stepMinutes: number): string[] {
+    const now = new Date()
+    const slots: string[] = []
+    for (let h = startHour; h < endHour; h++) {
+      for (let m = 0; m < 60; m += stepMinutes) {
+        const slot = new Date(now)
+        slot.setHours(h, m, 0, 0)
+        if (slot.getTime() > now.getTime()) {
+          const hh = String(slot.getHours()).padStart(2, '0')
+          const mm = String(slot.getMinutes()).padStart(2, '0')
+          slots.push(`${hh}:${mm}`)
+        }
+      }
+    }
+    return slots
+  },
+
+  buildPricingKey() {
+    const { address, carts } = this.data
+    if (!address?.id || !carts || carts.length === 0) {
+      return ''
+    }
+
+    const cartKey = carts
+      .map((cart) => `${cart.merchantId}:${cart.items.map((item) => item.id).join('-')}`)
+      .join('|')
+
+    return `${address.id}:${cartKey}`
+  },
+
+  requestPricingRefresh(silent: boolean = false) {
+    const pricingKey = this.buildPricingKey()
+    if (pricingKey && this._pricingInFlight && pricingKey === this._activePricingKey) {
+      if (!this._pricingRefreshPending) {
+        this._pendingPricingSilent = silent
+      } else {
+        this._pendingPricingSilent = this._pendingPricingSilent && silent
+      }
+      this._pricingRefreshPending = true
+      return
+    }
+
+    if (pricingKey) {
+      this._activePricingKey = pricingKey
+    }
+
+    void this.calculateDeliveryFee(silent)
+  },
+
+  /**
+   * 计算配送费并更新应付总额
+   */
+  async calculateDeliveryFee(_silent: boolean = false) {
+    const { address } = this.data
+    const currentCarts = this.data.carts
+    if (!currentCarts || currentCarts.length === 0) {
+      this._pricingInFlight = false
+      this._activePricingKey = ''
+      return
+    }
+
+    const requestVersion = ++this._pricingRequestVersion
+    const pricingKey = this.buildPricingKey()
+    this._pricingInFlight = !!pricingKey
+
+    if (!address) {
+      if (requestVersion !== this._pricingRequestVersion) return
+      this.setData({
+        pricingError: '',
+        summaryDeliveryDisplay: '待选择地址',
+        orderTotalDisplay: formatPriceNoSymbol(currentCarts.reduce((s, c) => s + (c.subtotal || 0), 0))
+      })
+      this._pricingInFlight = false
+      this._activePricingKey = ''
+      return
+    }
+
+    try {
+      const calcResults = await mapWithConcurrency(currentCarts, ORDER_CONFIRM_CONCURRENCY, async (cart) => {
+        const result = await CartAPI.calculateCart({
+          merchant_id: cart.merchantId,
+          order_type: cart.orderType,
+          address_id: address.id,
+          latitude: address.latitude ? Number(address.latitude) : undefined,
+          longitude: address.longitude ? Number(address.longitude) : undefined
+        }, { loading: false })
+        return { cart, result }
+      })
+
+      const updated = calcResults
+        .filter(({ result }) => !!result)
+        .map(({ cart, result }) => {
+          const deliveryFee = result.delivery_fee || 0
+          const deliveryFeeDiscount = result.delivery_fee_discount || 0
+          const finalDeliveryFee = Math.max(0, deliveryFee - deliveryFeeDiscount)
+          const deliveryDistance = result.delivery_distance || 0
+          const orderTotal = result.total_amount || 0
+          const originalTotal = (cart.subtotal || 0) + deliveryFee
+          const hasDiscount = orderTotal < originalTotal
+
+          const deliveryEtaMinutes = result.delivery_eta_minutes || 0
+          const deliveryEtaDisplay = this.formatEtaWindow(deliveryEtaMinutes)
+          const appliedPromotions = (result.applied_promotions || []).map((p) => ({
+            title: p.title || '优惠',
+            amount: p.amount || 0,
+            amountDisplay: formatPriceNoSymbol(p.amount || 0),
+            type: p.type || 'merchant'
+          }))
+          const ladderPromotions = (result.ladder_promotions || []).map((rule) => ({
+            name: rule.name || '满减活动',
+            thresholdDisplay: formatPriceNoSymbol(rule.threshold || 0),
+            discountDisplay: formatPriceNoSymbol(rule.discount || 0),
+            currentHit: !!rule.current_hit,
+            missingNeedDisplay: formatPriceNoSymbol(rule.missing_need || 0)
+          }))
+          const voucherTrials = (result.voucher_trials || []).map((trial) => ({
+            voucherName: trial.voucher_name || '优惠券',
+            amountDisplay: formatPriceNoSymbol(trial.amount || 0),
+            trialPayableDisplay: formatPriceNoSymbol(trial.trial_payable || 0)
+          }))
+          return {
+            ...cart,
+            deliveryFee,
+            deliveryFeeDisplay: finalDeliveryFee > 0 ? '¥' + formatPriceNoSymbol(finalDeliveryFee) : '免代取费',
+            deliveryFeeDiscount,
+            deliveryDistance,
+            orderTotal,
+            orderTotalDisplay: formatPriceNoSymbol(orderTotal),
+            originalTotalDisplay: formatPriceNoSymbol(originalTotal),
+            hasDiscount,
+            deliveryEtaMinutes,
+            deliveryEtaDisplay,
+            appliedPromotions: appliedPromotions || [],
+            ladderPromotions,
+            voucherTrials,
+            paymentHint: result.payment_assessment?.payment_hint || ''
+          }
+        })
+
+      const summarySubtotal = updated.reduce((sum, c) => {
+        const merchDiscount = (c.appliedPromotions || [])
+          .filter((p) => p.type === 'merchant' || p.type === 'voucher')
+          .reduce((s, p) => s + (p.amount || 0), 0)
+        return sum + (c.subtotal || 0) - merchDiscount
+      }, 0)
+      const summaryDelivery = updated.reduce((sum, c) => sum + Math.max(0, (c.deliveryFee || 0) - (c.deliveryFeeDiscount || 0)), 0)
+      const totalOrderAmount = updated.reduce((sum, c) => sum + (c.orderTotal || 0), 0)
+
+      if (requestVersion !== this._pricingRequestVersion) {
+        return
+      }
+
+      this.setData({
+        carts: updated,
+        pricingError: '',
+        summarySubtotalDisplay: formatPriceNoSymbol(summarySubtotal),
+        summaryDeliveryDisplay: summaryDelivery > 0 ? '¥' + formatPriceNoSymbol(summaryDelivery) : '免代取费',
+        orderTotalDisplay: formatPriceNoSymbol(totalOrderAmount)
+      })
+    } catch (error) {
+      logger.error('Calculate delivery fee failed', error, 'Order-confirm')
+      if (requestVersion !== this._pricingRequestVersion) {
+        return
+      }
+      const pricingError = getErrorUserMessage(error, '配送费计算失败，请重试')
+      this.setData({ pricingError })
+    } finally {
+      if (requestVersion === this._pricingRequestVersion) {
+        this._pricingInFlight = false
+        this._activePricingKey = this.buildPricingKey()
+        if (this._pricingRefreshPending) {
+          const rerunSilent = this._pendingPricingSilent
+          this._pricingRefreshPending = false
+          this._pendingPricingSilent = true
+          this.requestPricingRefresh(rerunSilent)
+        }
+      }
+    }
+  },
+
+  onRetryPricing() {
+    this.requestPricingRefresh()
+  },
+
+  formatEtaWindow(etaMinutes: number): string {
+    if (!etaMinutes || etaMinutes <= 0) return ''
+    const padding = 5
+    const now = new Date()
+    const start = new Date(now.getTime() + Math.max(etaMinutes - padding, 0) * 60 * 1000)
+    const end = new Date(now.getTime() + (etaMinutes + padding) * 60 * 1000)
+    return `${this.formatTime(start)}-${this.formatTime(end)}`
+  },
+
+  formatTime(date: Date): string {
+    const hh = String(date.getHours()).padStart(2, '0')
+    const mm = String(date.getMinutes()).padStart(2, '0')
+    return `${hh}:${mm}`
+  },
+
+  normalizeCustomizations(customizations: Record<string, unknown>): Record<string, number | string> {
+    const normalized: Record<string, number | string> = {}
+    Object.entries(customizations).forEach(([key, value]) => {
+      if (typeof value === 'number' || typeof value === 'string') {
+        normalized[key] = value
+      } else if (value !== null && value !== undefined) {
+        normalized[key] = String(value)
+      }
+    })
+    return normalized
   },
 
   async onSubmitOrder() {
-    const { cart, address, remark } = this.data
+    const { carts, address, remarks, loadError, pricingError } = this.data
+
+    if (loadError) {
+      wx.showToast({ title: '请先重试加载购物车', icon: 'none' })
+      return
+    }
+
+    if (pricingError) {
+      wx.showToast({ title: '请先重试配送费计算', icon: 'none' })
+      return
+    }
 
     if (!address || !address.id) {
       wx.showToast({ title: '请选择收货地址', icon: 'none' })
       return
     }
 
-    if (!cart || cart.totalCount === 0) {
+    if (!carts || carts.length === 0) {
       wx.showToast({ title: '购物车为空', icon: 'none' })
       return
     }
 
-    if (!cart.merchantId) {
-      wx.showToast({ title: '商户信息丢失', icon: 'none' })
-      return
-    }
-
     this.setData({ loading: true })
+    const ordersCreated: number[] = []
 
     try {
-      // Step 1: 创建订单
-      const requestData: CreateOrderRequest = {
-        merchant_id: cart.merchantId,
-        items: cart.items.map((item) => {
-          const orderItem: { dish_id?: number; combo_id?: number; quantity: number } = {
-            quantity: item.quantity
-          }
-          if (item.dishId) {
-            orderItem.dish_id = item.dishId
-          }
-          if (item.comboId) {
-            orderItem.combo_id = item.comboId
-          }
-          return orderItem
-        }),
-        order_type: 'takeout',
-        address_id: address.id,
-        notes: remark
+      for (const cart of carts) {
+        const requestData: CreateOrderRequest = {
+          merchant_id: cart.merchantId,
+          items: cart.items.map((item) => {
+            const orderItem: OrderItemRequest = {
+              quantity: item.quantity
+            }
+            if (item.dishId) orderItem.dish_id = item.dishId
+            if (item.comboId) orderItem.combo_id = item.comboId
+            if (item.customizations) {
+              orderItem.customizations = this.normalizeCustomizations(item.customizations as Record<string, unknown>)
+            }
+            return orderItem
+          }),
+          order_type: cart.orderType,
+          address_id: address.id,
+          notes: remarks[cart.merchantId] || '',
+          delivery_fee: cart.deliveryFee,
+          delivery_fee_discount: cart.deliveryFeeDiscount,
+          delivery_distance: cart.deliveryDistance,
+          // 仅在单商户下单时启用余额支付选择
+          use_balance: carts.length === 1 && this.data.selectedPaymentMethod === 'balance'
+        }
+
+        const order = await createOrder(requestData)
+        ordersCreated.push(order.id)
+
+        // 按商户清空购物车，避免下单后按商品逐个删除导致请求数线性放大。
+        try {
+          await CartAPI.clearCart({
+            merchant_id: cart.merchantId,
+            order_type: cart.orderType,
+            table_id: cart.tableId,
+            reservation_id: cart.reservationId
+          })
+        } catch (clearErr) {
+          logger.error('Clear merchant cart after order failed', clearErr, 'Order-confirm')
+          // 清理失败不阻断支付流程，仅记录日志
+        }
       }
 
-      const order = await createOrder(requestData)
-      console.log('[Order-confirm] Order created:', order.id)
+      // 无论购物车项清理是否成功，都立即使 globalStore 缓存失效，
+      // 确保外卖首页 / 购物车页的下次 onShow 拿到空购物车，而不是脏缓存。
+      this.syncGlobalCartSummary([])
 
-      // Step 2: 创建支付订单
-      try {
-        // 调用后端 /v1/payments API (对应 createPaymentOrder)
-        const paymentResult = await request({
-          url: '/v1/payments',
-          method: 'POST',
-          data: {
-            order_id: order.id,
-            payment_type: 'miniprogram',  // 小程序支付
-            business_type: 'order'         // 订单支付
-          }
-        }) as { pay_params?: { timeStamp: string; nonceStr: string; package: string; signType: string; paySign: string } }
-
-        console.log('[Order-confirm] Payment created:', paymentResult)
-
-        // Step 3: 检查是否返回了支付参数 (后端返回 pay_params)
-        if (paymentResult.pay_params) {
-          // 调用微信支付
-          const params = paymentResult.pay_params
-          wx.requestPayment({
-            timeStamp: params.timeStamp,
-            nonceStr: params.nonceStr,
-            package: params.package,
-            signType: (params.signType || 'RSA') as 'RSA' | 'MD5' | 'HMAC-SHA256',
-            paySign: params.paySign,
-            success: () => {
-              wx.showToast({ title: '支付成功', icon: 'success' })
-              setTimeout(() => {
-                wx.redirectTo({ url: `/pages/orders/detail/index?id=${order.id}` })
-              }, 1500)
-            },
-            fail: (err) => {
-              console.log('[Order-confirm] Payment cancelled or failed:', err)
-              wx.showToast({ title: '支付取消', icon: 'none' })
-              // 支付取消/失败，跳转到订单详情（状态为待支付）
-              setTimeout(() => {
-                wx.redirectTo({ url: `/pages/orders/detail/index?id=${order.id}` })
-              }, 1500)
-            }
-          })
-        } else {
-          // 支付参数未返回（可能是后端未配置微信支付）
-          this.showPaymentDevModal(order.id)
-        }
-      } catch (paymentError) {
-        console.error('[Order-confirm] Payment creation failed:', paymentError)
-        // 支付订单创建失败，提示开发中
-        this.showPaymentDevModal(order.id)
+      if (ordersCreated.length === 1) {
+        await this.handlePayment(ordersCreated[0])
+      } else {
+        await this.handleCombinedPayment(ordersCreated)
       }
     } catch (error) {
       logger.error('Create order failed:', error, 'Order-confirm')
-      wx.showToast({ title: '下单失败', icon: 'error' })
+
+      if (ordersCreated.length > 0) {
+        this.handlePartialOrderCreationFailure(carts, ordersCreated)
+        return
+      }
+
+      wx.showToast({ title: getErrorUserMessage(error, '下单失败，请稍后重试'), icon: 'none' })
       this.setData({ loading: false })
     }
   },
 
-  showPaymentDevModal(orderId: number) {
+  handlePartialOrderCreationFailure(carts: MerchantCartView[], orderIds: number[]) {
+    this.setData({ loading: false })
+
+    const remainingCarts = carts.slice(orderIds.length)
+    this.syncGlobalCartSummary(remainingCarts)
+
+    const createdCount = orderIds.length
+    const remainingCount = remainingCarts.length
+    const content = remainingCount > 0
+      ? `已有${createdCount}笔订单创建成功，剩余${remainingCount}笔未创建。请先到订单列表查看已创建订单并继续支付，未创建部分再返回重试。`
+      : `已有${createdCount}笔订单创建成功，请先到订单列表继续支付。`
+
+    wx.showModal({
+      title: '部分订单已创建',
+      content,
+      showCancel: false,
+      confirmText: '查看订单',
+      success: () => Navigation.redirectToOrderList({ orderType: 'takeout' })
+    })
+  },
+
+  async handlePayment(orderId: number) {
+    try {
+      const paymentResult = await createOrderPayment(orderId)
+      const amount = (paymentResult.amount / 100).toFixed(2)
+      const orderNo = paymentResult.out_trade_no || String(orderId)
+
+      if (paymentResult.pay_params) {
+        try {
+          await invokeWechatPay(paymentResult.pay_params)
+          Navigation.toPaymentSuccess({
+            orderId: String(orderId),
+            orderNo,
+            amount
+          })
+        } catch {
+          // 用户取消支付或唤起失败：订单已创建，引导用户前往订单详情重新支付
+          wx.showModal({
+            title: '支付未完成',
+            content: '订单已创建，可在订单详情页重新发起支付。',
+            showCancel: false,
+            confirmText: '查看订单',
+            success: () => wx.redirectTo({ url: `/pages/orders/detail/index?id=${orderId}` })
+          })
+        }
+      } else if (isPaymentStatusSuccessful(paymentResult.status)) {
+        Navigation.toPaymentSuccess({
+          orderId: String(orderId),
+          orderNo,
+          amount
+        })
+      } else {
+        this.showPaymentCreateFailed(orderId)
+      }
+    } catch (paymentError) {
+      logger.error('Payment creation failed', paymentError, 'Order-confirm')
+      this.showPaymentCreateFailed(orderId)
+    } finally {
+      this.setData({ loading: false })
+    }
+  },
+
+  async handleCombinedPayment(orderIds: number[]) {
+    try {
+      let combinedPayment = await createCombinedPaymentOrder({ order_ids: orderIds })
+
+      if (combinedPayment.pay_params) {
+        try {
+          await invokeWechatPay(combinedPayment.pay_params)
+          navigateToCombinedPaymentSuccess(combinedPayment, orderIds)
+          return
+        } catch (error: unknown) {
+          if (isWechatPayCancelled(error)) {
+            wx.showModal({
+              title: '支付未完成',
+              content: '订单已创建，可在订单列表继续完成合单支付。',
+              showCancel: false,
+              confirmText: '查看订单',
+              success: () => Navigation.redirectToOrderList({ orderType: 'takeout' })
+            })
+            return
+          }
+
+          combinedPayment = await recoverCombinedPaymentOrder(combinedPayment.id)
+          if (isCombinedPaymentSuccessful(combinedPayment)) {
+            navigateToCombinedPaymentSuccess(combinedPayment, orderIds)
+            return
+          }
+
+          wx.showModal({
+            title: '订单已创建',
+            content: getCombinedPaymentPageMessage(combinedPayment),
+            showCancel: false,
+            confirmText: '查看订单',
+            success: () => Navigation.redirectToOrderList({ orderType: 'takeout' })
+          })
+          return
+        }
+      }
+
+      if (isCombinedPaymentSuccessful(combinedPayment)) {
+        navigateToCombinedPaymentSuccess(combinedPayment, orderIds)
+        return
+      }
+
+      wx.showModal({
+        title: '订单已创建',
+        content: getCombinedPaymentPageMessage(combinedPayment),
+        showCancel: false,
+        success: () => Navigation.redirectToOrderList({ orderType: 'takeout' })
+      })
+    } catch (paymentError) {
+      logger.error('Combined payment creation failed', paymentError, 'Order-confirm')
+      wx.showModal({
+        title: '订单已创建',
+        content: '支付创建失败，请在订单列表继续完成合单支付。',
+        showCancel: false,
+        success: () => Navigation.redirectToOrderList({ orderType: 'takeout' })
+      })
+    } finally {
+      this.setData({ loading: false })
+    }
+  },
+
+  showPaymentCreateFailed(orderId: number) {
     this.setData({ loading: false })
     wx.showModal({
-      title: '支付功能开发中',
-      content: '微信支付功能正在开发中，订单已创建成功。',
+      title: '订单已创建',
+      content: '支付创建失败，请在订单详情页重新发起支付。',
       showCancel: false,
       confirmText: '查看订单',
       success: () => {
         wx.redirectTo({ url: `/pages/orders/detail/index?id=${orderId}` })
       }
     })
+  },
+
+  /**
+   * 切换支付方式
+   */
+  onPaymentMethodChange(e: WechatMiniprogram.CustomEvent) {
+    this.setData({ selectedPaymentMethod: e.detail.value })
+  },
+
+  /**
+   * 充值成功回调
+   */
+  onRecharged() {
+    this.loadMemberships() // 重新加载余额
+  },
+
+  /**
+   * 领券成功回调
+   */
+  onVoucherClaimed() {
+    wx.showToast({ title: '领券完成', icon: 'success' })
+    // 重要：领券后立即重新计算优惠金额，让用户看到变化
+    this.requestPricingRefresh()
   }
+
 })

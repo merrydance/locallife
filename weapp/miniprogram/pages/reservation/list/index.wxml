@@ -1,5 +1,7 @@
-<view class="container">
-  <t-tabs value="{{currentTab}}" bind:change="onTabChange" sticky>
+<custom-navbar title="我的预订" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px;">
+  <t-tabs value="{{currentTab}}" bind:change="onTabChange" sticky sticky-props="{{ { offsetTop: navBarHeight } }}">
     <t-tab-panel wx:for="{{tabs}}" wx:key="value" label="{{item.label}}" value="{{item.value}}" />
   </t-tabs>
 
@@ -9,7 +11,16 @@
        loadingTexts="{{['下拉刷新', '松手刷新', '正在刷新', '刷新完成']}}"
        bind:refresh="onPullDownRefresh"
     >
-      <view wx:if="{{reservations.length === 0 && !loading}}" class="empty-state">
+      <block wx:if="{{loading && reservations.length === 0}}">
+         <card-skeleton wx:for="{{[1,2,3]}}" wx:key="*this" />
+      </block>
+
+      <view wx:elif="{{isError && reservations.length === 0}}" class="error-container" style="padding: 100rpx 0; text-align: center;">
+         <t-empty icon="error-circle" description="{{errorMessage}}" />
+         <t-button theme="primary" bindtap="onRetry" style="margin-top: 24rpx;" shape="round">重试</t-button>
+      </view>
+
+      <view wx:elif="{{reservations.length === 0 && !loading}}" class="empty-state">
         <t-empty icon="info-circle-filled" description="暂无预订记录" />
       </view>
 
@@ -23,7 +34,7 @@
         >
           <view class="card-header">
             <text class="merchant-name">{{item.merchant_name}}</text>
-            <t-tag theme="{{item._statusTheme}}" variant="light">{{item._statusText}}</t-tag>
+            <t-tag theme="{{item._statusTheme}}" variant="dark">{{item._statusText}}</t-tag>
           </view>
           
           <view class="card-body">
@@ -38,7 +49,10 @@
           </view>
         </view>
         
-        <t-load-more status="{{loading ? 'loading' : (hasMore ? 'loading' : 'nomore')}}" />
+        <view class="load-more-wrap">
+          <t-loading wx:if="{{loading && reservations.length > 0}}" theme="dots" size="40rpx" />
+          <text wx:elif="{{!hasMore && reservations.length > 0}}" class="load-more-text">没有更多预订了</text>
+        </view>
       </view>
     </t-pull-down-refresh>
   </view>

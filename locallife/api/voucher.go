@@ -1,7 +1,6 @@
 package api
 
 import (
-	"database/sql"
 	"errors"
 	"fmt"
 	"net/http"
@@ -45,6 +44,9 @@ type voucherResponse struct {
 	ValidFrom         time.Time `json:"valid_from"`
 	ValidUntil        time.Time `json:"valid_until"`
 	IsActive          bool      `json:"is_active"`
+	StatusCode        string    `json:"status_code"`
+	StatusLabel       string    `json:"status_label"`
+	StatusTheme       string    `json:"status_theme"`
 	AllowedOrderTypes []string  `json:"allowed_order_types"` // 允许的订单类型
 	CreatedAt         time.Time `json:"created_at"`
 }
@@ -82,18 +84,9 @@ func (server *Server) createVoucher(ctx *gin.Context) {
 		return
 	}
 
-	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-
-	// 验证商户权限
-	merchantID, err := server.getMerchantIDByUser(ctx, authPayload.UserID)
+	merchant, err := requireMerchantMatch(ctx, uriReq.MerchantID, "merchant context not found", "not authorized for this merchant")
 	if err != nil {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("merchant role required")))
-		return
-	}
-
-	// 验证URL中的商户ID与用户的商户ID一致
-	if merchantID != uriReq.MerchantID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not authorized for this merchant")))
+		ctx.JSON(http.StatusForbidden, errorResponse(err))
 		return
 	}
 
@@ -112,7 +105,7 @@ func (server *Server) createVoucher(ctx *gin.Context) {
 		validTypes := map[string]bool{"takeout": true, "dine_in": true, "takeaway": true, "reservation": true}
 		for _, t := range allowedTypes {
 			if !validTypes[t] {
-				ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("无效的订单类型: %s，允许的类型: takeout, dine_in, takeaway, reservation", t)))
+				ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("invalid order type: %s; allowed: takeout, dine_in, takeaway, reservation", t)))
 				return
 			}
 		}
@@ -125,7 +118,7 @@ func (server *Server) createVoucher(ctx *gin.Context) {
 	}
 
 	voucher, err := server.store.CreateVoucher(ctx, db.CreateVoucherParams{
-		MerchantID:        merchantID,
+		MerchantID:        merchant.ID,
 		Code:              voucherCode,
 		Name:              req.Name,
 		Description:       pgtype.Text{String: req.Description, Valid: req.Description != ""},
@@ -143,7 +136,7 @@ func (server *Server) createVoucher(ctx *gin.Context) {
 	}
 
 	rsp := convertVoucherResponse(voucher)
-	ctx.JSON(http.StatusOK, rsp)
+	ctx.JSON(http.StatusCreated, rsp)
 }
 
 // listMerchantVouchersRequest 获取商户代金券列表请求
@@ -156,6 +149,13 @@ type listMerchantVouchersQueryRequest struct {
 	PageSize int32 `form:"page_size" binding:"required,min=5,max=50"`
 }
 
+type listMerchantVouchersResponse struct {
+	Vouchers []voucherResponse `json:"vouchers"`
+	Total    int64             `json:"total"`
+	PageID   int32             `json:"page_id"`
+	PageSize int32             `json:"page_size"`
+}
+
 // listMerchantVouchers godoc
 // @Summary 获取商户代金券列表
 // @Description 获取指定商户的所有代金券（包含所有状态）
@@ -165,7 +165,7 @@ type listMerchantVouchersQueryRequest struct {
 // @Param id path int true "商户ID"
 // @Param page_id query int true "页码" minimum(1)
 // @Param page_size query int true "每页数量" minimum(5) maximum(50)
-// @Success 200 {array} voucherResponse "代金券列表"
+// @Success 201 {object} listMerchantVouchersResponse "代金券列表"
 // @Failure 400 {object} ErrorResponse "参数错误"
 // @Failure 401 {object} ErrorResponse "未认证"
 // @Failure 500 {object} ErrorResponse "服务器错误"
@@ -183,10 +183,16 @@ func (server *Server) listMerchantVouchers(ctx *gin.Context) {
 		return
 	}
 
+	merchant, err := requireMerchantMatch(ctx, uriReq.MerchantID, "merchant context not found", "not authorized for this merchant")
+	if err != nil {
+		ctx.JSON(http.StatusForbidden, errorResponse(err))
+		return
+	}
+
 	vouchers, err := server.store.ListMerchantVouchers(ctx, db.ListMerchantVouchersParams{
-		MerchantID: uriReq.MerchantID,
+		MerchantID: merchant.ID,
 		Limit:      queryReq.PageSize,
-		Offset:     (queryReq.PageID - 1) * queryReq.PageSize,
+		Offset:     pageOffset(queryReq.PageID, queryReq.PageSize),
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -198,7 +204,12 @@ func (server *Server) listMerchantVouchers(ctx *gin.Context) {
 		rsp[i] = convertVoucherResponse(v)
 	}
 
-	ctx.JSON(http.StatusOK, rsp)
+	ctx.JSON(http.StatusOK, listMerchantVouchersResponse{
+		Vouchers: rsp,
+		Total:    int64(len(rsp)),
+		PageID:   queryReq.PageID,
+		PageSize: queryReq.PageSize,
+	})
 }
 
 // listActiveVouchersRequest 获取可领取代金券请求
@@ -206,6 +217,13 @@ type listActiveVouchersRequest struct {
 	MerchantID int64 `uri:"id" binding:"required,min=1"`
 	PageID     int32 `form:"page_id" binding:"required,min=1"`
 	PageSize   int32 `form:"page_size" binding:"required,min=5,max=50"`
+}
+
+type listActiveVouchersResponse struct {
+	Vouchers []voucherResponse `json:"vouchers"`
+	Total    int64             `json:"total"`
+	PageID   int32             `json:"page_id"`
+	PageSize int32             `json:"page_size"`
 }
 
 // listActiveVouchers godoc
@@ -217,7 +235,7 @@ type listActiveVouchersRequest struct {
 // @Param id path int true "商户ID"
 // @Param page_id query int true "页码" minimum(1)
 // @Param page_size query int true "每页数量" minimum(5) maximum(50)
-// @Success 200 {array} voucherResponse "可领取代金券列表"
+// @Success 200 {object} listActiveVouchersResponse "可领取代金券列表"
 // @Failure 400 {object} ErrorResponse "参数错误"
 // @Failure 401 {object} ErrorResponse "未认证"
 // @Failure 500 {object} ErrorResponse "服务器错误"
@@ -234,10 +252,16 @@ func (server *Server) listActiveVouchers(ctx *gin.Context) {
 		return
 	}
 
+	merchant, err := requireMerchantMatch(ctx, req.MerchantID, "merchant context not found", "not authorized for this merchant")
+	if err != nil {
+		ctx.JSON(http.StatusForbidden, errorResponse(err))
+		return
+	}
+
 	vouchers, err := server.store.ListActiveVouchers(ctx, db.ListActiveVouchersParams{
-		MerchantID: req.MerchantID,
+		MerchantID: merchant.ID,
 		Limit:      req.PageSize,
-		Offset:     (req.PageID - 1) * req.PageSize,
+		Offset:     pageOffset(req.PageID, req.PageSize),
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -249,7 +273,12 @@ func (server *Server) listActiveVouchers(ctx *gin.Context) {
 		rsp[i] = convertVoucherResponse(v)
 	}
 
-	ctx.JSON(http.StatusOK, rsp)
+	ctx.JSON(http.StatusOK, listActiveVouchersResponse{
+		Vouchers: rsp,
+		Total:    int64(len(rsp)),
+		PageID:   req.PageID,
+		PageSize: req.PageSize,
+	})
 }
 
 // updateVoucherURIRequest 更新代金券URI参数
@@ -301,12 +330,16 @@ func (server *Server) updateVoucher(ctx *gin.Context) {
 		return
 	}
 
-	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	merchant, err := requireMerchantMatch(ctx, uriReq.MerchantID, "merchant context not found", "not authorized for this merchant")
+	if err != nil {
+		ctx.JSON(http.StatusForbidden, errorResponse(err))
+		return
+	}
 
 	// 获取原代金券验证权限
 	voucher, err := server.store.GetVoucher(ctx, uriReq.VoucherID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("voucher not found")))
 			return
 		}
@@ -321,8 +354,7 @@ func (server *Server) updateVoucher(ctx *gin.Context) {
 	}
 
 	// 验证商户权限
-	merchantID, err := server.getMerchantIDByUser(ctx, authPayload.UserID)
-	if err != nil || merchantID != voucher.MerchantID {
+	if merchant.ID != voucher.MerchantID {
 		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not authorized")))
 		return
 	}
@@ -361,7 +393,7 @@ func (server *Server) updateVoucher(ctx *gin.Context) {
 		validTypes := map[string]bool{"takeout": true, "dine_in": true, "takeaway": true, "reservation": true}
 		for _, t := range req.AllowedOrderTypes {
 			if !validTypes[t] {
-				ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("无效的订单类型: %s，允许的类型: takeout, dine_in, takeaway, reservation", t)))
+				ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("invalid order type: %s; allowed: takeout, dine_in, takeaway, reservation", t)))
 				return
 			}
 		}
@@ -422,12 +454,16 @@ func (server *Server) deleteVoucher(ctx *gin.Context) {
 		return
 	}
 
-	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	merchant, err := requireMerchantMatch(ctx, req.MerchantID, "merchant context not found", "not authorized for this merchant")
+	if err != nil {
+		ctx.JSON(http.StatusForbidden, errorResponse(err))
+		return
+	}
 
 	// 获取代金券验证权限
 	voucher, err := server.store.GetVoucher(ctx, req.VoucherID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("voucher not found")))
 			return
 		}
@@ -442,8 +478,7 @@ func (server *Server) deleteVoucher(ctx *gin.Context) {
 	}
 
 	// 验证商户权限
-	merchantID, err := server.getMerchantIDByUser(ctx, authPayload.UserID)
-	if err != nil || merchantID != voucher.MerchantID {
+	if merchant.ID != voucher.MerchantID {
 		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not authorized")))
 		return
 	}
@@ -465,7 +500,7 @@ func (server *Server) deleteVoucher(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"message": "voucher deleted successfully"})
+	ctx.JSON(http.StatusOK, successMessage("voucher deleted successfully"))
 }
 
 // ==================== 用户代金券管理 ====================
@@ -522,7 +557,7 @@ func (server *Server) claimVoucher(ctx *gin.Context) {
 		UserID:    authPayload.UserID,
 	})
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("voucher not found")))
 			return
 		}
@@ -553,6 +588,13 @@ type listUserVouchersRequest struct {
 	PageSize int32 `form:"page_size" binding:"required,min=5,max=50"`
 }
 
+type listUserVouchersResponse struct {
+	Vouchers []userVoucherResponse `json:"vouchers"`
+	Total    int64                 `json:"total"`
+	PageID   int32                 `json:"page_id"`
+	PageSize int32                 `json:"page_size"`
+}
+
 // listUserVouchers godoc
 // @Summary 获取我的代金券列表
 // @Description 获取当前用户拥有的所有代金券（包含所有状态）
@@ -561,7 +603,7 @@ type listUserVouchersRequest struct {
 // @Produce json
 // @Param page_id query int true "页码" minimum(1)
 // @Param page_size query int true "每页数量" minimum(5) maximum(50)
-// @Success 200 {array} userVoucherResponse "代金券列表"
+// @Success 200 {object} listUserVouchersResponse "代金券列表"
 // @Failure 400 {object} ErrorResponse "参数错误"
 // @Failure 401 {object} ErrorResponse "未认证"
 // @Failure 500 {object} ErrorResponse "服务器错误"
@@ -579,20 +621,37 @@ func (server *Server) listUserVouchers(ctx *gin.Context) {
 	vouchers, err := server.store.ListUserVouchers(ctx, db.ListUserVouchersParams{
 		UserID: authPayload.UserID,
 		Limit:  req.PageSize,
-		Offset: (req.PageID - 1) * req.PageSize,
+		Offset: pageOffset(req.PageID, req.PageSize),
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	ctx.JSON(http.StatusOK, vouchers)
+	rsp := make([]userVoucherResponse, len(vouchers))
+	for i, v := range vouchers {
+		rsp[i] = convertUserVoucherResponseFromList(v)
+	}
+
+	ctx.JSON(http.StatusOK, listUserVouchersResponse{
+		Vouchers: rsp,
+		Total:    int64(len(rsp)),
+		PageID:   req.PageID,
+		PageSize: req.PageSize,
+	})
 }
 
 // listUserAvailableVouchersRequest 获取用户可用代金券请求
 type listUserAvailableVouchersRequest struct {
 	PageID   int32 `form:"page_id" binding:"required,min=1"`
 	PageSize int32 `form:"page_size" binding:"required,min=5,max=50"`
+}
+
+type listUserAvailableVouchersResponse struct {
+	Vouchers []userVoucherResponse `json:"vouchers"`
+	Total    int64                 `json:"total"`
+	PageID   int32                 `json:"page_id"`
+	PageSize int32                 `json:"page_size"`
 }
 
 // listUserAvailableVouchers godoc
@@ -603,7 +662,7 @@ type listUserAvailableVouchersRequest struct {
 // @Produce json
 // @Param page_id query int true "页码" minimum(1)
 // @Param page_size query int true "每页数量" minimum(5) maximum(50)
-// @Success 200 {array} userVoucherResponse "可用代金券列表"
+// @Success 200 {object} listUserAvailableVouchersResponse "可用代金券列表"
 // @Failure 400 {object} ErrorResponse "参数错误"
 // @Failure 401 {object} ErrorResponse "未认证"
 // @Failure 500 {object} ErrorResponse "服务器错误"
@@ -621,14 +680,24 @@ func (server *Server) listUserAvailableVouchers(ctx *gin.Context) {
 	vouchers, err := server.store.ListUserAvailableVouchers(ctx, db.ListUserAvailableVouchersParams{
 		UserID: authPayload.UserID,
 		Limit:  req.PageSize,
-		Offset: (req.PageID - 1) * req.PageSize,
+		Offset: pageOffset(req.PageID, req.PageSize),
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	ctx.JSON(http.StatusOK, vouchers)
+	rsp := make([]userVoucherResponse, len(vouchers))
+	for i, v := range vouchers {
+		rsp[i] = convertUserVoucherResponseFromAvailable(v)
+	}
+
+	ctx.JSON(http.StatusOK, listUserAvailableVouchersResponse{
+		Vouchers: rsp,
+		Total:    int64(len(rsp)),
+		PageID:   req.PageID,
+		PageSize: req.PageSize,
+	})
 }
 
 // listUserAvailableVouchersForMerchant godoc
@@ -674,13 +743,40 @@ func (server *Server) listUserAvailableVouchersForMerchant(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, vouchers)
+	rsp := make([]userVoucherResponse, len(vouchers))
+	for i, v := range vouchers {
+		rsp[i] = convertUserVoucherResponseForMerchant(v, uriReq.MerchantID)
+	}
+
+	ctx.JSON(http.StatusOK, rsp)
 }
 
 // ==================== 辅助函数 ====================
 
+func buildVoucherStatusResponse(v db.Voucher, now time.Time) (string, string, string) {
+	if !v.IsActive {
+		return "inactive", "已停用", "default"
+	}
+
+	if now.After(v.ValidUntil) {
+		return "expired", "已过期", "danger"
+	}
+
+	if now.Before(v.ValidFrom) {
+		return "scheduled", "未开始", "warning"
+	}
+
+	if v.ClaimedQuantity >= v.TotalQuantity {
+		return "depleted", "已领完", "warning"
+	}
+
+	return "active", "发放中", "success"
+}
+
 // convertVoucherResponse 转换代金券为响应格式
 func convertVoucherResponse(v db.Voucher) voucherResponse {
+	statusCode, statusLabel, statusTheme := buildVoucherStatusResponse(v, time.Now())
+
 	rsp := voucherResponse{
 		ID:                v.ID,
 		MerchantID:        v.MerchantID,
@@ -694,6 +790,9 @@ func convertVoucherResponse(v db.Voucher) voucherResponse {
 		ValidFrom:         v.ValidFrom,
 		ValidUntil:        v.ValidUntil,
 		IsActive:          v.IsActive,
+		StatusCode:        statusCode,
+		StatusLabel:       statusLabel,
+		StatusTheme:       statusTheme,
 		AllowedOrderTypes: v.AllowedOrderTypes,
 		CreatedAt:         v.CreatedAt,
 	}
@@ -703,4 +802,60 @@ func convertVoucherResponse(v db.Voucher) voucherResponse {
 	}
 
 	return rsp
+
+}
+func convertUserVoucherResponseFromList(v db.ListUserVouchersRow) userVoucherResponse {
+	return userVoucherResponse{
+		ID:             v.ID,
+		VoucherID:      v.VoucherID,
+		UserID:         v.UserID,
+		MerchantID:     v.MerchantID,
+		MerchantName:   v.MerchantName,
+		Code:           v.Code,
+		Name:           v.Name,
+		Amount:         v.Amount,
+		MinOrderAmount: v.MinOrderAmount,
+		Status:         v.Status,
+		OrderID:        pgInt8ToPtr(v.OrderID),
+		ObtainedAt:     v.ObtainedAt,
+		ExpiresAt:      v.ExpiresAt,
+		UsedAt:         pgTimeToPtr(v.UsedAt),
+	}
+}
+
+func convertUserVoucherResponseFromAvailable(v db.ListUserAvailableVouchersRow) userVoucherResponse {
+	return userVoucherResponse{
+		ID:             v.ID,
+		VoucherID:      v.VoucherID,
+		UserID:         v.UserID,
+		MerchantID:     v.MerchantID,
+		MerchantName:   v.MerchantName,
+		Code:           v.Code,
+		Name:           v.Name,
+		Amount:         v.Amount,
+		MinOrderAmount: v.MinOrderAmount,
+		Status:         v.Status,
+		OrderID:        pgInt8ToPtr(v.OrderID),
+		ObtainedAt:     v.ObtainedAt,
+		ExpiresAt:      v.ExpiresAt,
+		UsedAt:         pgTimeToPtr(v.UsedAt),
+	}
+}
+
+func convertUserVoucherResponseForMerchant(v db.ListUserAvailableVouchersForMerchantRow, merchantID int64) userVoucherResponse {
+	return userVoucherResponse{
+		ID:             v.ID,
+		VoucherID:      v.VoucherID,
+		UserID:         v.UserID,
+		MerchantID:     merchantID,
+		Code:           v.Code,
+		Name:           v.Name,
+		Amount:         v.Amount,
+		MinOrderAmount: v.MinOrderAmount,
+		Status:         v.Status,
+		OrderID:        pgInt8ToPtr(v.OrderID),
+		ObtainedAt:     v.ObtainedAt,
+		ExpiresAt:      v.ExpiresAt,
+		UsedAt:         pgTimeToPtr(v.UsedAt),
+	}
 }

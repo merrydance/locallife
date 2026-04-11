@@ -167,7 +167,8 @@ const listMerchantStaffByMerchant = `-- name: ListMerchantStaffByMerchant :many
 SELECT 
     ms.id, ms.merchant_id, ms.user_id, ms.role, ms.status, ms.invited_by, ms.created_at, ms.updated_at,
     u.full_name,
-    u.avatar_url
+    u.avatar_url,
+    u.avatar_media_asset_id
 FROM merchant_staff ms
 JOIN users u ON ms.user_id = u.id
 WHERE ms.merchant_id = $1
@@ -186,16 +187,17 @@ ORDER BY
 `
 
 type ListMerchantStaffByMerchantRow struct {
-	ID         int64              `json:"id"`
-	MerchantID int64              `json:"merchant_id"`
-	UserID     int64              `json:"user_id"`
-	Role       string             `json:"role"`
-	Status     string             `json:"status"`
-	InvitedBy  pgtype.Int8        `json:"invited_by"`
-	CreatedAt  time.Time          `json:"created_at"`
-	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
-	FullName   string             `json:"full_name"`
-	AvatarUrl  pgtype.Text        `json:"avatar_url"`
+	ID                 int64              `json:"id"`
+	MerchantID         int64              `json:"merchant_id"`
+	UserID             int64              `json:"user_id"`
+	Role               string             `json:"role"`
+	Status             string             `json:"status"`
+	InvitedBy          pgtype.Int8        `json:"invited_by"`
+	CreatedAt          time.Time          `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	FullName           string             `json:"full_name"`
+	AvatarUrl          pgtype.Text        `json:"avatar_url"`
+	AvatarMediaAssetID pgtype.Int8        `json:"avatar_media_asset_id"`
 }
 
 // 显示所有员工，包括离职员工（软删除），按状态和角色排序
@@ -219,6 +221,7 @@ func (q *Queries) ListMerchantStaffByMerchant(ctx context.Context, merchantID in
 			&i.UpdatedAt,
 			&i.FullName,
 			&i.AvatarUrl,
+			&i.AvatarMediaAssetID,
 		); err != nil {
 			return nil, err
 		}
@@ -231,7 +234,7 @@ func (q *Queries) ListMerchantStaffByMerchant(ctx context.Context, merchantID in
 }
 
 const listMerchantsByStaff = `-- name: ListMerchantsByStaff :many
-SELECT m.id, m.owner_user_id, m.name, m.description, m.logo_url, m.phone, m.address, m.latitude, m.longitude, m.status, m.application_data, m.created_at, m.updated_at, m.version, m.region_id, m.is_open, m.auto_close_at, m.deleted_at, m.pending_owner_bind, m.bind_code, m.bind_code_expires_at, m.boss_bind_code, m.boss_bind_code_expires_at FROM merchants m
+SELECT m.id, m.owner_user_id, m.name, m.description, m.phone, m.address, m.latitude, m.longitude, m.status, m.application_data, m.created_at, m.updated_at, m.version, m.region_id, m.is_open, m.auto_close_at, m.deleted_at, m.pending_owner_bind, m.bind_code, m.bind_code_expires_at, m.group_id, m.brand_id, m.logo_media_asset_id, m.auto_open_by_business_hours FROM merchants m
 JOIN merchant_staff ms ON m.id = ms.merchant_id
 WHERE ms.user_id = $1 AND ms.status = 'active'
 ORDER BY m.created_at
@@ -251,7 +254,6 @@ func (q *Queries) ListMerchantsByStaff(ctx context.Context, userID int64) ([]Mer
 			&i.OwnerUserID,
 			&i.Name,
 			&i.Description,
-			&i.LogoUrl,
 			&i.Phone,
 			&i.Address,
 			&i.Latitude,
@@ -268,8 +270,10 @@ func (q *Queries) ListMerchantsByStaff(ctx context.Context, userID int64) ([]Mer
 			&i.PendingOwnerBind,
 			&i.BindCode,
 			&i.BindCodeExpiresAt,
-			&i.BossBindCode,
-			&i.BossBindCodeExpiresAt,
+			&i.GroupID,
+			&i.BrandID,
+			&i.LogoMediaAssetID,
+			&i.AutoOpenByBusinessHours,
 		); err != nil {
 			return nil, err
 		}

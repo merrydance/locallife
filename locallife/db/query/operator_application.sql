@@ -61,7 +61,7 @@ RETURNING *;
 -- 更新营业执照信息（图片URL、执照号和OCR结果）
 UPDATE operator_applications
 SET
-  business_license_url = COALESCE(sqlc.narg(business_license_url), business_license_url),
+  business_license_media_asset_id = COALESCE(sqlc.narg(business_license_media_asset_id), business_license_media_asset_id),
   business_license_number = COALESCE(sqlc.narg(business_license_number), business_license_number),
   business_license_ocr = COALESCE(sqlc.narg(business_license_ocr), business_license_ocr),
   name = COALESCE(sqlc.narg(name), name),
@@ -73,7 +73,7 @@ RETURNING *;
 -- 更新身份证正面信息（图片URL、姓名、身份证号和OCR结果）
 UPDATE operator_applications
 SET
-  id_card_front_url = COALESCE(sqlc.narg(id_card_front_url), id_card_front_url),
+  id_card_front_media_asset_id = COALESCE(sqlc.narg(id_card_front_media_asset_id), id_card_front_media_asset_id),
   legal_person_name = COALESCE(sqlc.narg(legal_person_name), legal_person_name),
   legal_person_id_number = COALESCE(sqlc.narg(legal_person_id_number), legal_person_id_number),
   id_card_front_ocr = COALESCE(sqlc.narg(id_card_front_ocr), id_card_front_ocr),
@@ -85,8 +85,41 @@ RETURNING *;
 -- 更新身份证背面信息（图片URL和OCR结果）
 UPDATE operator_applications
 SET
-  id_card_back_url = COALESCE(sqlc.narg(id_card_back_url), id_card_back_url),
+  id_card_back_media_asset_id = COALESCE(sqlc.narg(id_card_back_media_asset_id), id_card_back_media_asset_id),
   id_card_back_ocr = COALESCE(sqlc.narg(id_card_back_ocr), id_card_back_ocr),
+  updated_at = now()
+WHERE id = $1 AND status = 'draft'
+RETURNING *;
+
+-- name: ClearOperatorApplicationBusinessLicense :one
+-- 清空营业执照媒体与 OCR 结果
+UPDATE operator_applications
+SET
+  business_license_media_asset_id = NULL,
+  business_license_number = NULL,
+  business_license_ocr = NULL,
+  updated_at = now()
+WHERE id = $1 AND status = 'draft'
+RETURNING *;
+
+-- name: ClearOperatorApplicationIDCardFront :one
+-- 清空身份证正面媒体与对应 OCR 字段
+UPDATE operator_applications
+SET
+  id_card_front_media_asset_id = NULL,
+  legal_person_name = NULL,
+  legal_person_id_number = NULL,
+  id_card_front_ocr = NULL,
+  updated_at = now()
+WHERE id = $1 AND status = 'draft'
+RETURNING *;
+
+-- name: ClearOperatorApplicationIDCardBack :one
+-- 清空身份证背面媒体与 OCR 结果
+UPDATE operator_applications
+SET
+  id_card_back_media_asset_id = NULL,
+  id_card_back_ocr = NULL,
   updated_at = now()
 WHERE id = $1 AND status = 'draft'
 RETURNING *;
@@ -135,21 +168,24 @@ WHERE id = $1 AND status = 'rejected'
 RETURNING *;
 
 -- name: ListPendingOperatorApplications :many
--- 列出待审核的申请（平台管理员用）
+-- 列出申请（平台管理员用，包含 submitted/approved/rejected）
 SELECT 
   oa.*,
+  u.full_name as applicant_name,
+  u.phone as applicant_phone,
   r.name as region_name,
   r.code as region_code
 FROM operator_applications oa
+LEFT JOIN users u ON u.id = oa.user_id
 JOIN regions r ON r.id = oa.region_id
-WHERE oa.status = 'submitted'
-ORDER BY oa.submitted_at ASC
+WHERE oa.status IN ('submitted', 'approved', 'rejected')
+ORDER BY COALESCE(oa.submitted_at, oa.updated_at, oa.created_at) DESC
 LIMIT $1 OFFSET $2;
 
 -- name: CountPendingOperatorApplications :one
--- 统计待审核申请数量
+-- 统计申请数量（包含 submitted/approved/rejected）
 SELECT COUNT(*) FROM operator_applications
-WHERE status = 'submitted';
+WHERE status IN ('submitted', 'approved', 'rejected');
 
 -- name: ListOperatorApplications :many
 -- 列出所有申请（支持状态筛选）

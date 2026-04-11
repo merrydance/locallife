@@ -1,71 +1,165 @@
-import { getAvailableOrders, acceptOrder, RiderOrderDTO } from '../../api/rider'
+import { Delivery } from '../../../api/delivery'
 import { logger } from '../../../utils/logger'
-import { ErrorHandler } from '../../../utils/error-handler'
+import { locationService } from '../../../utils/location'
+import { getStableBarHeights } from '../../../utils/responsive'
+
+const PAGE_SIZE = 20
+
+type DeliveryHistoryView = Delivery & {
+  display_time: string
+  status_text: string
+  status_theme: 'success' | 'warning' | 'danger' | 'primary' | 'default'
+}
+
+interface DeliveryHistoryResponse {
+  deliveries?: Delivery[]
+  total_earnings?: number
+  completed_total?: number
+  total?: number
+  page_id?: number
+  page_size?: number
+}
+
+interface UserMessageError {
+  userMessage?: string
+}
+
+function getDeliveryStatusMeta(status?: Delivery['status']) {
+  switch (status) {
+    case 'completed':
+    case 'delivered':
+      return { text: '已送达', theme: 'success' as const }
+    case 'cancelled':
+      return { text: '已取消', theme: 'warning' as const }
+    case 'exception':
+      return { text: '异常结束', theme: 'danger' as const }
+    case 'delivering':
+      return { text: '配送中', theme: 'primary' as const }
+    case 'picked':
+      return { text: '待配送', theme: 'primary' as const }
+    case 'picking':
+      return { text: '取餐中', theme: 'primary' as const }
+    case 'assigned':
+      return { text: '已接单', theme: 'default' as const }
+    default:
+      return { text: status || '历史记录', theme: 'default' as const }
+  }
+}
+
+function decorateHistoryDelivery(delivery: Delivery): DeliveryHistoryView {
+  const statusMeta = getDeliveryStatusMeta(delivery.status)
+  return {
+    ...delivery,
+    display_time: delivery.completed_at || delivery.delivered_at || delivery.created_at || '',
+    status_text: statusMeta.text,
+    status_theme: statusMeta.theme
+  }
+}
 
 Page({
   data: {
-    tasks: [] as RiderOrderDTO[],
-    loading: false,
     navBarHeight: 88,
+    loading: false,
+    loadingMore: false,
+    errorMessage: '',
+    loadMoreError: '',
+    deliveries: [] as DeliveryHistoryView[],
+    pageID: 1,
     hasMore: true,
-    page: 1
+    
+    // 统计
+    totalEarnings: 0,
+    totalCount: 0
   },
 
   onLoad() {
-    this.loadTasks(true)
+    const { navBarHeight } = getStableBarHeights()
+    this.setData({ navBarHeight })
+    this.fetchHistory(1, true)
   },
 
-  onNavHeight(e: WechatMiniprogram.CustomEvent) {
-    this.setData({ navBarHeight: e.detail.navBarHeight })
-  },
-
-  onPullDownRefresh() {
-    this.loadTasks(true).then(() => {
-      wx.stopPullDownRefresh()
-    })
+  async fetchHistory(page: number = 1, reset: boolean = false) {
+    if ((reset && this.data.loading) || (!reset && this.data.loadingMore)) return
+    this.setData(reset ? { loading: true } : { loadingMore: true })
+    
+    try {
+        const resp = await (require('../../../utils/request').request({
+            url: '/v1/delivery/history',
+            method: 'GET',
+            data: {
+                page,
+                limit: PAGE_SIZE
+            }
+        })) as DeliveryHistoryResponse
+        
+        const list = (resp.deliveries || []).map(decorateHistoryDelivery)
+        const total = resp.total || 0
+        this.setData({
+            deliveries: reset ? list : [...this.data.deliveries, ...list],
+          hasMore: page * PAGE_SIZE < total,
+            totalEarnings: resp.total_earnings || 0,
+          totalCount: resp.completed_total || 0,
+          pageID: resp.page_id || page,
+            errorMessage: '',
+            loadMoreError: ''
+        })
+    } catch (err: unknown) {
+        logger.error('Fetch delivery history failed', err)
+        const userMessage = (err as UserMessageError).userMessage
+        const message = typeof userMessage === 'string' && userMessage ? userMessage : '历史任务加载失败，请稍后重试'
+        if (reset) {
+          this.setData({ errorMessage: message, loadMoreError: '', deliveries: [], hasMore: true })
+        } else {
+          this.setData({ loadMoreError: message })
+        }
+    } finally {
+        this.setData({ loading: false, loadingMore: false })
+    }
   },
 
   onReachBottom() {
-    if (this.data.hasMore && !this.data.loading) {
-      this.setData({ page: this.data.page + 1 })
-      this.loadTasks(false)
+    if (this.data.hasMore && !this.data.loading && !this.data.loadingMore) {
+        this.fetchHistory(this.data.pageID + 1)
     }
   },
 
-  async loadTasks(reset = false) {
-    if (this.data.loading) return
-    this.setData({ loading: true })
-
-    if (reset) {
-      this.setData({ page: 1, tasks: [], hasMore: true })
-    }
-
-    try {
-      const res = await getAvailableOrders(this.data.page)
-      const newTasks = res.items
-            
-      this.setData({
-        tasks: reset ? newTasks : [...this.data.tasks, ...newTasks],
-        hasMore: newTasks.length > 0, // Simple check
-        loading: false
-      })
-    } catch (error) {
-      logger.error('Load tasks failed', error, 'Tasks')
-      this.setData({ loading: false })
-      wx.showToast({ title: '加载失败', icon: 'none' })
-    }
+  onRetry() {
+    this.fetchHistory(1, true)
   },
 
-  async onTaskAction(e: WechatMiniprogram.CustomEvent) {
-    const { id, action } = e.detail
-    if (action === 'accept') {
-      try {
-        await acceptOrder(id)
-        wx.showToast({ title: '抢单成功', icon: 'success' })
-        this.loadTasks(true) // Refresh list
-      } catch (error) {
-        wx.showToast({ title: '抢单失败', icon: 'none' })
-      }
+  onRetryLoadMore() {
+    this.fetchHistory(this.data.pageID + 1, false)
+  },
+
+  onGoToDetail(e: WechatMiniprogram.TouchEvent) {
+    const { orderId } = e.currentTarget.dataset as { orderId?: number }
+    if (!orderId) return
+    wx.navigateTo({
+        url: `/pages/rider/task-detail/index?id=${orderId}`
+    })
+  },
+
+  async onOpenLocation(e: WechatMiniprogram.TouchEvent) {
+    const {
+      latitude,
+      longitude,
+      name,
+      address,
+      label
+    } = e.currentTarget.dataset as {
+      latitude?: number
+      longitude?: number
+      name?: string
+      address?: string
+      label?: string
     }
+
+    await locationService.openLocation({
+      latitude,
+      longitude,
+      name,
+      address,
+      failMessage: `打开${label || '导航'}失败，请稍后重试`
+    })
   }
 })

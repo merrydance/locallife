@@ -1,10 +1,10 @@
 package api
 
 import (
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -85,7 +85,80 @@ type listNotificationsRequest struct {
 
 type listNotificationsResponse struct {
 	Notifications []notificationResponse `json:"notifications"`
-	TotalCount    int64                  `json:"total_count"`
+	Total         int64                  `json:"total"`
+	PageID        int32                  `json:"page_id"`
+	PageSize      int32                  `json:"page_size"`
+}
+
+var errPlatformAlertAccessDenied = errors.New("only platform operators can access platform alerts")
+
+type listPlatformAlertsRequest struct {
+	PageID   int32 `form:"page_id" binding:"omitempty,min=1"`
+	PageSize int32 `form:"page_size" binding:"omitempty,min=1,max=100"`
+}
+
+type platformAlertEventResponse struct {
+	ID          int64          `json:"id"`
+	AlertType   string         `json:"alert_type"`
+	Level       string         `json:"level"`
+	Title       string         `json:"title"`
+	Message     string         `json:"message"`
+	RelatedID   int64          `json:"related_id"`
+	RelatedType string         `json:"related_type"`
+	Extra       map[string]any `json:"extra,omitempty"`
+	Timestamp   time.Time      `json:"timestamp"`
+}
+
+type listPlatformAlertsResponse struct {
+	Alerts   []platformAlertEventResponse `json:"alerts"`
+	Total    int64                        `json:"total"`
+	PageID   int32                        `json:"page_id"`
+	PageSize int32                        `json:"page_size"`
+	HasMore  bool                         `json:"has_more"`
+}
+
+func newPlatformAlertEventResponse(alert db.PlatformAlertEvent) platformAlertEventResponse {
+	resp := platformAlertEventResponse{
+		ID:          alert.ID,
+		AlertType:   alert.AlertType,
+		Level:       alert.Level,
+		Title:       alert.Title,
+		Message:     alert.Message,
+		RelatedID:   alert.RelatedID,
+		RelatedType: alert.RelatedType,
+		Timestamp:   alert.EmittedAt,
+	}
+	if len(alert.Extra) > 0 {
+		var extra map[string]any
+		if err := json.Unmarshal(alert.Extra, &extra); err == nil {
+			resp.Extra = extra
+		}
+	}
+	return resp
+}
+
+func hasPlatformAlertRole(roles []db.UserRole) bool {
+	for _, role := range roles {
+		if role.Status != "" && role.Status != "active" {
+			continue
+		}
+		switch role.Role {
+		case RoleAdmin, RoleOperator, "platform_admin", "platform_operator", "finance":
+			return true
+		}
+	}
+	return false
+}
+
+func (server *Server) ensurePlatformAlertAccess(ctx *gin.Context, userID int64) error {
+	roles, err := server.store.ListUserRoles(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if !hasPlatformAlertRole(roles) {
+		return errPlatformAlertAccessDenied
+	}
+	return nil
 }
 
 // listNotifications godoc
@@ -154,9 +227,16 @@ func (server *Server) listNotifications(ctx *gin.Context) {
 		responseList[i] = newNotificationResponse(n)
 	}
 
+	pageID := int32(1)
+	if req.Limit > 0 {
+		pageID = req.Offset/req.Limit + 1
+	}
+
 	ctx.JSON(http.StatusOK, listNotificationsResponse{
 		Notifications: responseList,
-		TotalCount:    totalCount,
+		Total:         totalCount,
+		PageID:        pageID,
+		PageSize:      req.Limit,
 	})
 }
 
@@ -220,7 +300,7 @@ func (server *Server) markNotificationAsRead(ctx *gin.Context) {
 		UserID: authPayload.UserID,
 	})
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("notification not found or already read")))
 			return
 		}
@@ -291,7 +371,7 @@ func (server *Server) deleteNotification(ctx *gin.Context) {
 		UserID: authPayload.UserID,
 	})
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("notification not found")))
 			return
 		}
@@ -457,12 +537,98 @@ func (server *Server) updateNotificationPreferences(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, newNotificationPreferencesResponse(prefs))
 }
 
-var upgrader = gorilla_websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-	CheckOrigin: func(r *http.Request) bool {
-		return true // 生产环境需要验证Origin
-	},
+// listPlatformAlerts godoc
+// @Summary 获取平台告警历史
+// @Description 获取平台运营告警历史，用于控制台断线后的回看与首屏恢复
+// @Tags 通知管理
+// @Accept json
+// @Produce json
+// @Param page_id query int false "页码" minimum(1)
+// @Param page_size query int false "每页条数" minimum(1) maximum(100)
+// @Success 200 {object} listPlatformAlertsResponse
+// @Failure 400 {object} ErrorResponse "参数错误"
+// @Failure 401 {object} ErrorResponse "未授权"
+// @Failure 403 {object} ErrorResponse "仅平台运营人员可访问"
+// @Failure 500 {object} ErrorResponse "服务器内部错误"
+// @Router /v1/platform/alerts [get]
+// @Security BearerAuth
+func (server *Server) listPlatformAlerts(ctx *gin.Context) {
+	var req listPlatformAlertsRequest
+	if err := ctx.ShouldBindQuery(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+	if req.PageID == 0 {
+		req.PageID = 1
+	}
+	if req.PageSize == 0 {
+		req.PageSize = 20
+	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	if err := server.ensurePlatformAlertAccess(ctx, authPayload.UserID); err != nil {
+		if errors.Is(err, errPlatformAlertAccessDenied) {
+			ctx.JSON(http.StatusForbidden, errorResponse(err))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	alerts, err := server.store.ListPlatformAlertEvents(ctx, db.ListPlatformAlertEventsParams{
+		Limit:  req.PageSize,
+		Offset: pageOffset(req.PageID, req.PageSize),
+	})
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	total, err := server.store.CountPlatformAlertEvents(ctx)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	items := make([]platformAlertEventResponse, len(alerts))
+	for i, alert := range alerts {
+		items[i] = newPlatformAlertEventResponse(alert)
+	}
+
+	ctx.JSON(http.StatusOK, listPlatformAlertsResponse{
+		Alerts:   items,
+		Total:    total,
+		PageID:   req.PageID,
+		PageSize: req.PageSize,
+		HasMore:  int64(req.PageID*req.PageSize) < total,
+	})
+}
+
+func (server *Server) isOriginAllowed(origin string) bool {
+	if origin == "" {
+		return true
+	}
+	allowed := server.config.AllowedOrigins
+	if len(allowed) == 0 {
+		return true
+	}
+	for _, item := range allowed {
+		if item == "*" || item == origin {
+			return true
+		}
+	}
+	return false
+}
+
+func (server *Server) upgradeWebSocket(ctx *gin.Context) (*gorilla_websocket.Conn, error) {
+	upgrader := gorilla_websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+		CheckOrigin: func(r *http.Request) bool {
+			return server.isOriginAllowed(r.Header.Get("Origin"))
+		},
+	}
+
+	return upgrader.Upgrade(ctx.Writer, ctx.Request, nil)
 }
 
 // handleWebSocket godoc
@@ -471,7 +637,6 @@ var upgrader = gorilla_websocket.Upgrader{
 // @Tags 通知管理
 // @Accept json
 // @Produce json
-// @Param token query string false "Authentication token (required if Authorization header is missing)"
 // @Success 101 "协议升级成功"
 // @Failure 401 {object} ErrorResponse "未授权"
 // @Failure 403 {object} ErrorResponse "仅骑手和商户可连接"
@@ -489,20 +654,7 @@ func (server *Server) handleWebSocket(ctx *gin.Context) {
 	}
 
 	// 检查是否为骑手或商户
-	var clientType websocket.ClientType
-	var entityID int64
-
-	for _, role := range roles {
-		if role.Role == "rider" && role.RelatedEntityID.Valid {
-			clientType = websocket.ClientTypeRider
-			entityID = role.RelatedEntityID.Int64
-			break
-		} else if role.Role == "merchant" && role.RelatedEntityID.Valid {
-			clientType = websocket.ClientTypeMerchant
-			entityID = role.RelatedEntityID.Int64
-			break
-		}
-	}
+	clientType, entityID := websocket.ResolveClientInfoFromRoles(roles)
 
 	if entityID == 0 {
 		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("only riders and merchants can establish WebSocket connection")))
@@ -517,30 +669,39 @@ func (server *Server) handleWebSocket(ctx *gin.Context) {
 			return
 		}
 		if !rider.IsOnline {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("请先上线才能接收实时订单推送")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrRiderNotOnlineForOrders))
 			return
 		}
 	}
 
 	// 升级到WebSocket
-	conn, err := upgrader.Upgrade(ctx.Writer, ctx.Request, nil)
+	conn, err := server.upgradeWebSocket(ctx)
 	if err != nil {
 		log.Error().Err(err).Msg("WebSocket upgrade failed")
 		return
 	}
 
-	// 创建客户端并注册
-	client := websocket.NewClient(server.wsHub, conn, websocket.ClientInfo{
+	clientInfo := websocket.ClientInfo{
 		UserID:     authPayload.UserID,
 		ClientType: clientType,
 		EntityID:   entityID,
-	})
+	}
+
+	// 创建客户端并注册
+	client := websocket.NewClient(server.wsHub, conn, clientInfo)
 
 	server.wsHub.Register(client)
 
 	// 启动读写协程
 	go client.WritePump()
 	go client.ReadPump()
+
+	// 可选：断线重连后的消息回放（客户端带 last_sequence）
+	if lastSeq := ctx.Query("last_sequence"); lastSeq != "" {
+		if seq, err := strconv.ParseUint(lastSeq, 10, 64); err == nil {
+			server.wsHub.ReplayToClient(clientInfo, seq, 200)
+		}
+	}
 }
 
 // handlePlatformWebSocket godoc
@@ -559,47 +720,41 @@ func (server *Server) handleWebSocket(ctx *gin.Context) {
 func (server *Server) handlePlatformWebSocket(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-	// 查询用户角色，检查是否为平台运营人员
-	roles, err := server.store.ListUserRoles(ctx, authPayload.UserID)
-	if err != nil {
+	if err := server.ensurePlatformAlertAccess(ctx, authPayload.UserID); err != nil {
+		if errors.Is(err, errPlatformAlertAccessDenied) {
+			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("only platform operators can establish this WebSocket connection")))
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	// 检查是否有平台角色（admin、operator、finance等）
-	isPlatformUser := false
-	for _, role := range roles {
-		switch role.Role {
-		case "admin", "operator", "platform_admin", "platform_operator", "finance":
-			isPlatformUser = true
-		}
-		if isPlatformUser {
-			break
-		}
-	}
-
-	if !isPlatformUser {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("only platform operators can establish this WebSocket connection")))
-		return
-	}
-
 	// 升级到WebSocket
-	conn, err := upgrader.Upgrade(ctx.Writer, ctx.Request, nil)
+	conn, err := server.upgradeWebSocket(ctx)
 	if err != nil {
 		log.Error().Err(err).Msg("Platform WebSocket upgrade failed")
 		return
 	}
 
-	// 创建客户端并注册（使用用户ID作为实体ID）
-	client := websocket.NewClient(server.wsHub, conn, websocket.ClientInfo{
+	clientInfo := websocket.ClientInfo{
 		UserID:     authPayload.UserID,
 		ClientType: websocket.ClientTypePlatform,
 		EntityID:   authPayload.UserID, // 平台用户使用 user_id 作为实体ID
-	})
+	}
+
+	// 创建客户端并注册（使用用户ID作为实体ID）
+	client := websocket.NewClient(server.wsHub, conn, clientInfo)
 
 	server.wsHub.Register(client)
 
 	// 启动读写协程
 	go client.WritePump()
 	go client.ReadPump()
+
+	// 可选：断线重连后的消息回放（客户端带 last_sequence）
+	if lastSeq := ctx.Query("last_sequence"); lastSeq != "" {
+		if seq, err := strconv.ParseUint(lastSeq, 10, 64); err == nil {
+			server.wsHub.ReplayToClient(clientInfo, seq, 200)
+		}
+	}
 }

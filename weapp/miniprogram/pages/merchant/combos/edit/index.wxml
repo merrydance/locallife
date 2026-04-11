@@ -1,0 +1,207 @@
+<custom-navbar title="{{isEdit ? '编辑套餐' : '新建套餐'}}" showBack="{{true}}" />
+
+<view
+  class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
+  style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: 220rpx;"
+>
+  <view wx:if="{{loading}}" class="loading-state">
+    <t-loading theme="circular" text="加载中..." vertical />
+  </view>
+
+  <view wx:elif="{{initialError}}" class="state-block">
+    <t-empty description="{{initialErrorMessage || '套餐编辑页加载失败，请重试'}}" />
+    <t-button theme="primary" size="small" shape="round" bind:tap="onRetry">重新加载</t-button>
+  </view>
+
+  <block wx:else>
+    <view class="page-content">
+      <view wx:if="{{loadWarningMessage}}" class="notice-card notice-card--warning">
+        <text class="notice-text">{{loadWarningMessage}}</text>
+      </view>
+
+      <view class="section-panel">
+        <view class="section-top-action">
+          <view class="section-top-main">
+            <text class="section-title">1. 选择菜品</text>
+            <text class="section-caption">仅展示上架且可售的菜品；已选但停售的菜品会保留，方便你安全编辑历史套餐。</text>
+          </view>
+          <view class="section-switch">
+            <text class="filter-label">套餐上架</text>
+            <t-switch value="{{isComboOnline}}" size="small" bind:change="onComboOnlineSwitchChange" />
+          </view>
+        </view>
+
+        <checkbox-group bindchange="onDishCheckChange">
+          <view class="dish-card" wx:for="{{dishes}}" wx:key="id">
+            <view class="dish-card__main">
+              <checkbox
+                value="{{item.id}}"
+                checked="{{item.checked}}"
+                color="var(--td-brand-color)"
+              />
+              <image wx:if="{{item.image_url}}" class="dish-thumb" src="{{item.image_url}}" mode="aspectFill" />
+              <view class="dish-meta">
+                <view class="dish-name">{{item.name}}</view>
+                <view class="dish-extra">¥{{item.price / 100}} · {{item.is_online ? (item.is_available ? '在售' : '暂停售卖') : '未上架'}}</view>
+              </view>
+              <view wx:if="{{item.checked}}" class="dish-qty-control">
+                <text class="dish-qty-label">份数</text>
+                <t-stepper
+                  value="{{item.quantity}}"
+                  min="{{1}}"
+                  max="{{99}}"
+                  theme="filled"
+                  data-id="{{item.id}}"
+                  bind:change="onDishQuantityChange"
+                />
+              </view>
+            </view>
+
+            <view wx:if="{{item.checked && item.customization_error_message}}" class="dish-inline-error">
+              <text class="dish-inline-error__text">{{item.customization_error_message}}</text>
+            </view>
+
+            <view wx:if="{{item.checked && item.customization_groups.length}}" class="dish-spec-panel">
+              <view class="dish-spec-group" wx:for="{{item.customization_groups}}" wx:for-item="group" wx:key="id">
+                <view class="dish-spec-group__header">
+                  <text class="dish-spec-group__title">{{group.name}}</text>
+                  <text wx:if="{{group.is_required}}" class="dish-spec-group__note">必选</text>
+                </view>
+                <view class="dish-spec-group__options">
+                  <t-check-tag
+                    wx:for="{{group.options}}"
+                    wx:for-item="option"
+                    wx:key="id"
+                    checked="{{item.customizations[group.id + ''] === (option.id + '')}}"
+                    content="{{option.tag_name}}{{option.extra_price ? ' +¥' + (option.extra_price / 100) : ''}}"
+                    shape="round"
+                    data-id="{{item.id}}"
+                    data-group-id="{{group.id}}"
+                    data-spec-id="{{option.id}}"
+                    data-required="{{group.is_required ? 1 : 0}}"
+                    bind:change="onDishSpecTagToggle"
+                  />
+                </view>
+              </view>
+            </view>
+          </view>
+        </checkbox-group>
+        <t-empty wx:if="{{!dishes.length}}" icon="info-circle" description="{{dishEmptyDescription}}" />
+      </view>
+
+      <view class="section-panel">
+        <view class="section-top-main">
+          <text class="section-title">2. 套餐价格</text>
+          <text class="section-caption">仅填写最终套餐价；原价会自动按已选菜品和规格实时计算。</text>
+        </view>
+        <t-input
+          label="套餐价 (元)"
+          placeholder="请输入最终套餐价"
+          type="digit"
+          value="{{customPriceValue}}"
+          bind:change="onComboPriceChange"
+        />
+      </view>
+
+      <view class="section-panel">
+        <view class="section-top-main">
+          <text class="section-title">3. 套餐信息</text>
+        </view>
+        <t-input
+          label="套餐名称"
+          placeholder="请输入套餐名称"
+          value="{{comboName}}"
+          maxlength="100"
+          bind:change="onComboNameChange"
+        />
+        <t-textarea
+          value="{{comboDescription}}"
+          placeholder="可填写套餐卖点、适用人群或搭配说明"
+          maxlength="500"
+          indicator
+          bind:change="onComboDescriptionChange"
+        />
+        <view class="summary-note summary-note-inline">默认会根据已选菜品生成名称，你也可以手动修改。</view>
+      </view>
+
+      <view class="section-panel">
+        <view class="section-top-action">
+          <view class="section-top-main">
+            <text class="section-title">4. 套餐标签</text>
+            <text wx:if="{{availableTags.length}}" class="section-caption">已选 {{selectedTagIds.length}} 个</text>
+          </view>
+          <view class="section-top-button">
+            <t-button size="small" shape="circle" theme="primary" icon="add" loading="{{tagSubmitting}}" bind:tap="onCreateTag" />
+          </view>
+        </view>
+
+        <view wx:if="{{availableTags.length}}" class="tag-check-list">
+          <t-check-tag
+            wx:for="{{availableTags}}"
+            wx:key="id"
+            checked="{{selectedTagState[item.id]}}"
+            content="{{item.name}}"
+            shape="round"
+            data-tag-id="{{item.id}}"
+            bind:change="onTagToggle"
+          />
+        </view>
+
+        <view wx:else class="inline-note-card">暂无套餐标签，可先新增标签。</view>
+      </view>
+
+      <view class="summary-card">
+        <view class="summary-previews" wx:if="{{selectedDishPreviews.length}}">
+          <image class="summary-preview-image" wx:for="{{selectedDishPreviews}}" wx:key="*this" src="{{item}}" mode="aspectFill" />
+        </view>
+        <view class="summary-row">
+          <text class="label">套餐名称</text>
+          <text class="value">{{comboName || autoName}}</text>
+        </view>
+        <view class="summary-row">
+          <text class="label">已选菜品</text>
+          <text class="value">{{selectedDishIds.length}} 款 / {{selectedDishQuantityTotal}} 份</text>
+        </view>
+        <view class="summary-row">
+          <text class="label">原价合计</text>
+          <text class="value">¥{{originalTotal / 100}}</text>
+        </view>
+        <view class="summary-row">
+          <text class="label">套餐价格</text>
+          <text class="value">¥{{comboPricePreview / 100}}</text>
+        </view>
+        <view class="summary-note">自动建议名称：{{autoName}}</view>
+      </view>
+
+      <view class="footer-bar">
+        <t-button
+          block
+          theme="primary"
+          loading="{{submitting}}"
+          disabled="{{selectedDishIds.length === 0}}"
+          bind:tap="onSubmit"
+          shape="round">
+          {{isEdit ? '保存套餐' : '创建套餐'}}
+        </t-button>
+      </view>
+    </view>
+
+    <t-dialog
+      visible="{{createPopupVisible}}"
+      title="新增套餐标签"
+      confirm-btn="{{ { content: '确定', loading: tagSubmitting } }}"
+      cancel-btn="取消"
+      bind:confirm="onConfirmCreatePopup"
+      bind:cancel="onCloseCreatePopup"
+    >
+      <view slot="content" class="dialog-form">
+        <t-input
+          label="标签名称"
+          placeholder="请输入标签名称"
+          value="{{createInputValue}}"
+          bind:change="onCreateInputChange"
+        />
+      </view>
+    </t-dialog>
+  </block>
+</view>

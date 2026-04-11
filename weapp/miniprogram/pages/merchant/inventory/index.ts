@@ -1,301 +1,482 @@
-/**
- * 库存管理页面
- * - 左侧：分类列表
- * - 右侧：菜品库存 Grid
- * - 交互：输入库存后，点击保存按钮批量提交
- */
-import { InventoryService } from '../../../api/inventory'
-import { DishManagementService, DishCategory } from '../../../api/dish'
-import { resolveImageURL } from '../../../utils/image-security'
+import dayjs from 'dayjs'
+import { Message } from 'tdesign-miniprogram'
+import { getStableBarHeights } from '../../../utils/responsive'
+import { DailyInventoryWithDishResponse, InventoryManagementService } from '../../../api/dish'
 import { logger } from '../../../utils/logger'
-import { formatPriceNoSymbol } from '../../../utils/util'
+import { getErrorUserMessage } from '../../../utils/user-facing'
+import { ensureMerchantConsoleAccess } from '../../../utils/console-access'
 
-const app = getApp<IAppOption>()
-
-interface DishWithInventory {
-    id: number
-    name: string
-    price: number
-    image_url: string
-    category_id: number
-    category_name: string
-    is_online: boolean
-    inventory: number  // -1 表示无限
+interface InventoryViewItem extends DailyInventoryWithDishResponse {
+  draft_total_quantity: number
+  draft_total_quantity_text: string
+  draft_available: number
+  save_disabled: boolean
+  submitting: boolean
 }
 
-// 格式化数字为两位
-function pad(n: number): string {
-    return n < 10 ? '0' + n : '' + n
+interface LoadInventoryOptions {
+  preserveCurrent?: boolean
+  usePageLoading?: boolean
+  keepVisibleData?: boolean
+}
+
+function toSafeNumber(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback
+}
+
+function calculateAvailable(totalQuantity: number, soldQuantity: number, reservedQuantity: number): number {
+  if (totalQuantity === -1) return -1
+  const available = totalQuantity - soldQuantity - reservedQuantity
+  return available < 0 ? 0 : available
+}
+
+function formatDraftQuantityText(totalQuantity: number): string {
+  if (totalQuantity === -1) {
+    return ''
+  }
+
+  return String(totalQuantity)
+}
+
+function normalizeDraftQuantity(rawValue: string): string {
+  return String(rawValue || '').replace(/\s+/g, '')
+}
+
+function buildInventoryLimitText(totalQuantity: number): string {
+  if (totalQuantity === -1) {
+    return '今日限售 不限'
+  }
+
+  return `今日限售 ${totalQuantity} 份`
+}
+
+function shouldDisableSave(item: Pick<InventoryViewItem, 'submitting' | 'draft_total_quantity' | 'total_quantity' | 'draft_total_quantity_text'>): boolean {
+  if (item.submitting) {
+    return true
+  }
+
+  if (item.draft_total_quantity === -1) {
+    return item.total_quantity === -1
+  }
+
+  const normalizedValue = normalizeDraftQuantity(item.draft_total_quantity_text)
+  if (!normalizedValue) {
+    return true
+  }
+
+  const parsed = Number(normalizedValue)
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    return true
+  }
+
+  return parsed === item.total_quantity
 }
 
 Page({
-    data: {
-        // 布局状态
-        sidebarCollapsed: false,
-        merchantName: '',
-        isOpen: true,
+  data: {
+    navBarHeight: 88,
+    accessReady: false,
+    accessDenied: false,
+    accessErrorMessage: '',
+    initialLoading: true,
+    initialError: false,
+    initialErrorMessage: '',
+    refreshErrorMessage: '',
+    loading: false,
+    switchingDate: false,
+    lastLoadedAt: 0,
+    date: '',
+    datePickerVisible: false,
+    hasInventories: false,
+    inventories: [] as InventoryViewItem[]
+  },
 
-        // 分类
-        categories: [] as DishCategory[],
-        activeCategoryId: 'all' as string | number,
+  async onLoad() {
+    const { navBarHeight } = getStableBarHeights()
+    const today = dayjs().format('YYYY-MM-DD')
+    this.setData({ navBarHeight, date: today })
 
-        // 菜品数据
-        allDishes: [] as DishWithInventory[],
-        filteredDishes: [] as DishWithInventory[],
+    const accessResult = await ensureMerchantConsoleAccess()
+    this.setData({
+      accessReady: true,
+      accessDenied: accessResult.status === 'denied',
+      accessErrorMessage: accessResult.status === 'error' ? accessResult.message : ''
+    })
 
-        // 日期
-        todayDate: '',
-
-        // 状态
-        loading: true,
-        saving: false,
-
-        // 修改追踪
-        changedDishIds: [] as number[],
-        hasChanges: false
-    },
-
-    onLoad() {
-        // 设置今日日期
-        const today = new Date()
-        const dateStr = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`
-        this.setData({ todayDate: dateStr })
-
-        this.initData()
-    },
-
-    onShow() {
-        // 如果有未保存的修改，不刷新
-        if (!this.data.loading && !this.data.hasChanges) {
-            // 可以选择刷新
-        }
-    },
-
-    async initData() {
-        const merchantId = app.globalData.merchantId
-
-        if (merchantId) {
-            this.setData({ merchantName: app.globalData.merchantName || '' })
-            await this.loadCategories()
-            await this.loadDishes()
-            await this.loadInventory()  // 加载已保存的库存
-            this.setData({ loading: false })
-        } else {
-            app.userInfoReadyCallback = async () => {
-                if (app.globalData.merchantId) {
-                    this.setData({ merchantName: app.globalData.merchantName || '' })
-                    await this.loadCategories()
-                    await this.loadDishes()
-                    await this.loadInventory()  // 加载已保存的库存
-                    this.setData({ loading: false })
-                }
-            }
-        }
-    },
-
-    async loadCategories() {
-        try {
-            const categories = await DishManagementService.getDishCategories()
-            this.setData({ categories: categories || [] })
-        } catch (error) {
-            logger.error('加载分类失败', error, 'Inventory')
-        }
-    },
-
-    async loadDishes() {
-        try {
-            const result = await DishManagementService.listDishes({
-                page_id: 1,
-                page_size: 50
-            })
-            const dishes = result.dishes || []
-
-            // 处理图片 URL 并初始化库存
-            const dishesWithInventory: DishWithInventory[] = await Promise.all(
-                dishes.map(async (d: any) => {
-                    let imageUrl = d.image_url
-                    if (imageUrl) {
-                        imageUrl = await resolveImageURL(imageUrl)
-                    }
-                    return {
-                        id: d.id,
-                        name: d.name,
-                        price: d.price,
-                        priceDisplay: formatPriceNoSymbol(d.price || 0),
-                        image_url: imageUrl,
-                        category_id: d.category_id,
-                        category_name: d.category_name || '',
-                        is_online: d.is_online,
-                        inventory: -1  // 默认无限
-                    }
-                })
-            )
-
-            this.setData({
-                allDishes: dishesWithInventory,
-                filteredDishes: dishesWithInventory
-            })
-
-            // 更新分类数量
-            this.updateCategoryCounts()
-        } catch (error) {
-            logger.error('加载菜品失败', error, 'Inventory')
-        }
-    },
-
-    // 计算每个分类的菜品数量
-    // 加载已保存的库存数据
-    async loadInventory() {
-        try {
-            const inventoryList = await InventoryService.listTodayInventory()
-            if (inventoryList && inventoryList.length > 0) {
-                const { allDishes } = this.data
-                // 将库存数据合并到菜品列表
-                const updatedDishes = allDishes.map(dish => {
-                    const inv = inventoryList.find(i => i.dish_id === dish.id)
-                    if (inv) {
-                        return { ...dish, inventory: inv.total_quantity }
-                    }
-                    return dish
-                })
-                this.setData({
-                    allDishes: updatedDishes,
-                    filteredDishes: updatedDishes
-                })
-                this.filterDishes()
-            }
-        } catch (error) {
-            // 库存加载失败不影响页面显示，静默处理
-            console.log('[Inventory] loadInventory failed:', error)
-        }
-    },
-
-    updateCategoryCounts() {
-        const { categories, allDishes } = this.data
-        const updatedCategories = categories.map(cat => {
-            const count = allDishes.filter(d => d.category_id === cat.id).length
-            return { ...cat, dish_count: count }
-        })
-        this.setData({ categories: updatedCategories })
-    },
-
-    // ========== 分类筛选 ==========
-    onSelectCategory(e: WechatMiniprogram.TouchEvent) {
-        const categoryId = e.currentTarget.dataset.id
-        this.setData({ activeCategoryId: categoryId })
-        this.filterDishes()
-    },
-
-    filterDishes() {
-        const { allDishes, activeCategoryId } = this.data
-        if (activeCategoryId === 'all') {
-            this.setData({ filteredDishes: allDishes })
-        } else {
-            const filtered = allDishes.filter(d => d.category_id === activeCategoryId)
-            this.setData({ filteredDishes: filtered })
-        }
-    },
-
-    // ========== 库存编辑 ==========
-    onInventoryInput(e: WechatMiniprogram.Input) {
-        const dishId = e.currentTarget.dataset.dishId as number
-        const inputValue = e.detail.value
-
-        // 解析库存值
-        let quantity: number
-        if (inputValue === '' || inputValue === '无限' || inputValue === '-1') {
-            quantity = -1  // 无限库存
-        } else {
-            quantity = parseInt(inputValue, 10)
-            if (isNaN(quantity) || quantity < 0) {
-                quantity = -1
-            }
-        }
-
-        // 更新本地数据
-        const { allDishes, changedDishIds } = this.data
-        const dish = allDishes.find(d => d.id === dishId)
-        if (!dish || dish.inventory === quantity) {
-            return
-        }
-
-        const updatedDishes = allDishes.map(d =>
-            d.id === dishId ? { ...d, inventory: quantity } : d
-        )
-
-        // 标记为已修改
-        const newChangedIds = changedDishIds.includes(dishId)
-            ? changedDishIds
-            : [...changedDishIds, dishId]
-
-        this.setData({
-            allDishes: updatedDishes,
-            changedDishIds: newChangedIds,
-            hasChanges: newChangedIds.length > 0
-        })
-        this.filterDishes()
-    },
-
-    // ========== 保存修改 ==========
-    async saveChanges() {
-        const { allDishes, changedDishIds } = this.data
-
-        if (changedDishIds.length === 0) {
-            wx.showToast({ title: '没有修改', icon: 'none' })
-            return
-        }
-
-        this.setData({ saving: true })
-
-        let successCount = 0
-        let failCount = 0
-        let lastError = ''
-
-        for (const dishId of changedDishIds) {
-            const dish = allDishes.find(d => d.id === dishId)
-            if (!dish) continue
-
-            try {
-                console.log(`[Inventory] Saving: dishId=${dishId}, inventory=${dish.inventory}`)
-                await InventoryService.setInventory(dishId, dish.inventory)
-                successCount++
-                console.log(`[Inventory] Success: ${dish.name}`)
-            } catch (error: any) {
-                const errMsg = error?.message || error?.userMessage || JSON.stringify(error)
-                console.error(`[Inventory] Failed: ${dish.name}`, errMsg)
-                logger.error(`保存库存失败: ${dish.name}`, error, 'Inventory')
-                lastError = errMsg
-                failCount++
-            }
-        }
-
-        this.setData({
-            saving: false,
-            changedDishIds: [],
-            hasChanges: false
-        })
-
-        if (failCount === 0) {
-            wx.showToast({
-                title: `已保存 ${successCount} 项`,
-                icon: 'success'
-            })
-        } else {
-            // 显示详细错误
-            wx.showModal({
-                title: `成功 ${successCount}，失败 ${failCount}`,
-                content: `错误详情: ${lastError.substring(0, 200)}`,
-                showCancel: false
-            })
-        }
-    },
-
-    // ========== 侧边栏 ==========
-    onSidebarCollapse(e: WechatMiniprogram.CustomEvent) {
-        this.setData({ sidebarCollapsed: e.detail.collapsed })
-    },
-
-    goBack() {
-        wx.navigateBack()
+    if (accessResult.status !== 'granted') {
+      this.setData({ initialLoading: false })
+      return
     }
+
+    void this.loadInventory(today)
+  },
+
+  onShow() {
+    if (
+      !this.data.accessReady ||
+      this.data.accessDenied ||
+      this.data.accessErrorMessage ||
+      this.data.initialLoading ||
+      this.data.loading ||
+      !Array.isArray(this.data.inventories)
+    ) {
+      if (!Array.isArray(this.data.inventories)) {
+        this.setData({
+          inventories: [],
+          hasInventories: false
+        })
+      }
+      return
+    }
+
+    const today = dayjs().format('YYYY-MM-DD')
+    if (this.data.date !== today) {
+      return
+    }
+
+    if (Date.now() - this.data.lastLoadedAt < 60 * 1000) {
+      return
+    }
+
+    void this.loadInventory(this.data.date, { preserveCurrent: true, usePageLoading: false })
+  },
+
+  async loadInventory(date: string, options?: LoadInventoryOptions) {
+    if (this.data.loading || !this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return
+
+    const preserveCurrent = !!options?.preserveCurrent && this.data.date === date && this.data.inventories.length > 0
+    const keepVisibleData = !!options?.keepVisibleData && this.data.inventories.length > 0
+    const usePageLoading = options?.usePageLoading !== false && !preserveCurrent && !keepVisibleData
+
+    this.setData({
+      loading: true,
+      ...(usePageLoading
+        ? {
+            initialLoading: true,
+            initialError: false,
+            initialErrorMessage: '',
+            refreshErrorMessage: ''
+          }
+        : preserveCurrent || keepVisibleData
+          ? {
+              refreshErrorMessage: ''
+            }
+        : {
+            initialLoading: false,
+            initialError: false,
+            initialErrorMessage: '',
+            refreshErrorMessage: ''
+          })
+    })
+    try {
+      const response = await InventoryManagementService.getDailyInventory(date)
+
+      const rawList = Array.isArray(response?.inventories)
+        ? (response.inventories as Array<DailyInventoryWithDishResponse | null>)
+        : []
+
+      const inventories = rawList
+        .filter((item): item is DailyInventoryWithDishResponse => !!item && typeof item === 'object')
+        .map((item) => {
+          const totalQuantity = toSafeNumber(item.total_quantity, -1)
+          const soldQuantity = toSafeNumber(item.sold_quantity, 0)
+          const reservedQuantity = toSafeNumber(item.reserved_quantity, 0)
+
+          return {
+            ...item,
+            total_quantity: totalQuantity,
+            sold_quantity: soldQuantity,
+            reserved_quantity: reservedQuantity,
+            draft_total_quantity: totalQuantity,
+            draft_total_quantity_text: formatDraftQuantityText(totalQuantity),
+            draft_available: calculateAvailable(totalQuantity, soldQuantity, reservedQuantity),
+            save_disabled: true,
+            submitting: false
+          }
+        })
+
+      this.setData({
+        date,
+        inventories,
+        hasInventories: inventories.length > 0,
+        initialLoading: false,
+        initialError: false,
+        initialErrorMessage: '',
+        refreshErrorMessage: '',
+        lastLoadedAt: Date.now()
+      })
+    } catch (err) {
+      logger.error('Load inventory failed', err)
+      const message = getErrorUserMessage(err, '加载库存失败，请稍后重试')
+
+      if (!preserveCurrent) {
+        if (keepVisibleData) {
+          this.setData({
+            initialLoading: false,
+            refreshErrorMessage: `${message}，当前已保留${this.data.date}的库存结果`
+          })
+        } else {
+          this.setData({
+            inventories: [],
+            hasInventories: false,
+            initialLoading: false,
+            initialError: true,
+            initialErrorMessage: message
+          })
+        }
+      } else {
+        this.setData({
+          initialLoading: false,
+          refreshErrorMessage: `${message}，当前已保留上次同步结果`
+        })
+      }
+    } finally {
+      this.setData({ loading: false, initialLoading: false, switchingDate: false })
+      wx.stopPullDownRefresh()
+    }
+  },
+
+  onPullDownRefresh() {
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) {
+      wx.stopPullDownRefresh()
+      return
+    }
+
+    void this.loadInventory(this.data.date, { preserveCurrent: true, usePageLoading: false })
+  },
+
+  onRetryAccess() {
+    this.setData({
+      accessReady: false,
+      accessDenied: false,
+      accessErrorMessage: '',
+      initialLoading: true,
+      initialError: false,
+      initialErrorMessage: ''
+    })
+    void this.onLoad()
+  },
+
+  onRetry() {
+    if (this.data.accessErrorMessage) {
+      this.onRetryAccess()
+      return
+    }
+
+    void this.loadInventory(this.data.date)
+  },
+
+  onRetryRefresh() {
+    void this.loadInventory(this.data.date, { preserveCurrent: true, usePageLoading: false })
+  },
+
+  onOpenDatePicker() {
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage || this.data.loading) {
+      return
+    }
+
+    this.setData({ datePickerVisible: true })
+  },
+
+  onCloseDatePicker() {
+    this.setData({ datePickerVisible: false })
+  },
+
+  applyDateSelection(date: string) {
+    if (!date || date === this.data.date || !this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) {
+      return
+    }
+
+    this.setData({
+      datePickerVisible: false,
+      switchingDate: true,
+      initialError: false,
+      initialErrorMessage: '',
+      refreshErrorMessage: ''
+    })
+    void this.loadInventory(date, { usePageLoading: false, keepVisibleData: true })
+  },
+
+  onDateConfirm(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
+    const date = e.detail?.value || ''
+    this.applyDateSelection(date)
+  },
+
+  commitQuantityDraft(index: number, rawValue?: string) {
+    const current = this.data.inventories[index]
+    if (!current) {
+      return false
+    }
+
+    const value = normalizeDraftQuantity(rawValue ?? current.draft_total_quantity_text)
+    if (!value) {
+      this.setData({
+        [`inventories[${index}].draft_total_quantity_text`]: '',
+        [`inventories[${index}].save_disabled`]: true
+      })
+      return false
+    }
+
+    const parsed = Number(value)
+    if (!Number.isInteger(parsed) || parsed < 0) {
+      wx.showToast({ title: '请输入0或正整数', icon: 'none' })
+      const fallbackText = formatDraftQuantityText(current.draft_total_quantity)
+      this.setData({
+        [`inventories[${index}].draft_total_quantity_text`]: fallbackText,
+        [`inventories[${index}].save_disabled`]: shouldDisableSave({
+          ...current,
+          draft_total_quantity_text: fallbackText,
+          submitting: current.submitting
+        })
+      })
+      return false
+    }
+
+    const draftAvailable = calculateAvailable(parsed, current.sold_quantity, current.reserved_quantity || 0)
+    const nextDraftText = String(parsed)
+    const nextDraftQuantity = parsed
+    this.setData({
+      [`inventories[${index}].draft_total_quantity`]: nextDraftQuantity,
+      [`inventories[${index}].draft_total_quantity_text`]: nextDraftText,
+      [`inventories[${index}].draft_available`]: draftAvailable,
+      [`inventories[${index}].save_disabled`]: shouldDisableSave({
+        ...current,
+        draft_total_quantity: nextDraftQuantity,
+        draft_total_quantity_text: nextDraftText,
+        submitting: current.submitting
+      })
+    })
+    return true
+  },
+
+  onQuantityDraftChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
+    const { index } = e.currentTarget.dataset as { index?: number }
+    if (index === undefined) return
+
+    const value = normalizeDraftQuantity(e.detail?.value || '')
+    const current = this.data.inventories[index]
+    if (!current) {
+      return
+    }
+
+    this.setData({
+      [`inventories[${index}].draft_total_quantity_text`]: value,
+      [`inventories[${index}].save_disabled`]: shouldDisableSave({
+        ...current,
+        draft_total_quantity_text: value,
+        submitting: current.submitting
+      })
+    })
+  },
+
+  onQuantityInput(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
+    const { index } = e.currentTarget.dataset as { index?: number }
+    if (index === undefined) return
+
+    this.commitQuantityDraft(index, e.detail?.value)
+  },
+
+  onUnlimitedChange(e: WechatMiniprogram.CustomEvent<{ value: boolean }>) {
+    const { index } = e.currentTarget.dataset as { index?: number }
+    if (index === undefined) return
+
+    const checked = !!e.detail?.value
+    const current = this.data.inventories[index]
+    if (checked) {
+      this.setData({
+        [`inventories[${index}].draft_total_quantity`]: -1,
+        [`inventories[${index}].draft_total_quantity_text`]: '',
+        [`inventories[${index}].draft_available`]: -1,
+        [`inventories[${index}].save_disabled`]: shouldDisableSave({
+          ...current,
+          draft_total_quantity: -1,
+          draft_total_quantity_text: '',
+          submitting: current.submitting
+        })
+      })
+      return
+    }
+
+    const fallback = current.total_quantity >= 0 ? current.total_quantity : 0
+    this.setData({
+      [`inventories[${index}].draft_total_quantity`]: fallback,
+      [`inventories[${index}].draft_total_quantity_text`]: String(fallback),
+      [`inventories[${index}].draft_available`]: calculateAvailable(fallback, current.sold_quantity, current.reserved_quantity || 0),
+      [`inventories[${index}].save_disabled`]: shouldDisableSave({
+        ...current,
+        draft_total_quantity: fallback,
+        draft_total_quantity_text: String(fallback),
+        submitting: current.submitting
+      })
+    })
+  },
+
+  async onSave(e: WechatMiniprogram.TouchEvent) {
+    const { index } = e.currentTarget.dataset as { index?: number }
+    if (index === undefined) return
+
+    this.commitQuantityDraft(index, this.data.inventories[index]?.draft_total_quantity_text)
+
+    const item = this.data.inventories[index]
+    if (item.draft_total_quantity !== -1 && !item.draft_total_quantity_text) {
+      wx.showToast({ title: '请输入库存数量', icon: 'none' })
+      return
+    }
+
+    if (item.draft_total_quantity === item.total_quantity) {
+      return
+    }
+
+    this.setData({
+      [`inventories[${index}].submitting`]: true,
+      [`inventories[${index}].save_disabled`]: true
+    })
+    try {
+      const updated = await InventoryManagementService.updateInventory({
+        date: this.data.date,
+        dish_id: item.dish_id,
+        total_quantity: item.draft_total_quantity
+      })
+
+      const soldQuantity = toSafeNumber(updated.sold_quantity, item.sold_quantity)
+      const reservedQuantity = toSafeNumber(updated.reserved_quantity, item.reserved_quantity)
+      const totalQuantity = toSafeNumber(updated.total_quantity, item.total_quantity)
+      const available = typeof updated.available === 'number' && Number.isFinite(updated.available)
+        ? updated.available
+        : calculateAvailable(totalQuantity, soldQuantity, reservedQuantity)
+
+      this.setData({
+        [`inventories[${index}].sold_quantity`]: soldQuantity,
+        [`inventories[${index}].reserved_quantity`]: reservedQuantity,
+        [`inventories[${index}].total_quantity`]: totalQuantity,
+        [`inventories[${index}].available`]: available,
+        [`inventories[${index}].draft_total_quantity`]: totalQuantity,
+        [`inventories[${index}].draft_total_quantity_text`]: formatDraftQuantityText(totalQuantity),
+        [`inventories[${index}].draft_available`]: available,
+        [`inventories[${index}].save_disabled`]: true,
+        [`inventories[${index}].submitting`]: false,
+        lastLoadedAt: Date.now()
+      })
+      Message.success({
+        context: this,
+        offset: [this.data.navBarHeight + 16, 24],
+        duration: 1800,
+        content: `${item.dish_name}已保存为${buildInventoryLimitText(totalQuantity)}`
+      })
+    } catch (err) {
+      logger.error('Update inventory failed', err)
+      wx.showToast({ title: getErrorUserMessage(err, '更新失败，请稍后重试'), icon: 'none' })
+    } finally {
+      const latest = this.data.inventories[index]
+      if (latest) {
+        this.setData({
+          [`inventories[${index}].submitting`]: false,
+          [`inventories[${index}].save_disabled`]: shouldDisableSave({
+            ...latest,
+            submitting: false
+          })
+        })
+      }
+    }
+  }
 })

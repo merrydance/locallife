@@ -8,6 +8,7 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha1"
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
@@ -18,6 +19,9 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -54,6 +58,7 @@ const (
 	closeOrderURL        = "/v3/pay/transactions/out-trade-no/%s/close"
 	refundURL            = "/v3/refund/domestic/refunds"
 	queryRefundURL       = "/v3/refund/domestic/refunds/%s"
+	queryTransferURL     = "/v3/transfer/batches/out-batch-no/%s?need_query_detail=false"
 )
 
 // PaymentClient 微信支付客户端
@@ -138,14 +143,54 @@ func NewPaymentClient(cfg PaymentClientConfig) (*PaymentClient, error) {
 		refundNotifyURL:     cfg.RefundNotifyURL,
 		httpClient: &http.Client{
 			Timeout: httpTimeout,
+			Transport: &http.Transport{
+				MaxIdleConns:        100,
+				MaxIdleConnsPerHost: 10,
+				IdleConnTimeout:     90 * time.Second,
+			},
 		},
 		httpTimeout: httpTimeout,
 	}, nil
 }
 
+// GetMchID 返回当前直连支付商户号，供回调归属校验使用。
+func (c *PaymentClient) GetMchID() string {
+	return c.mchID
+}
+
+// GetAppID 返回当前直连支付 AppID，供回调归属校验使用。
+func (c *PaymentClient) GetAppID() string {
+	return c.appID
+}
+
+func readBoundedConfigFile(path string) ([]byte, error) {
+	cleanedPath := filepath.Clean(path)
+	rootDir := filepath.Dir(cleanedPath)
+	fileName := filepath.Base(cleanedPath)
+
+	root, err := os.OpenRoot(rootDir)
+	if err != nil {
+		return nil, fmt.Errorf("open config root: %w", err)
+	}
+	defer root.Close()
+
+	file, err := root.Open(fileName)
+	if err != nil {
+		return nil, fmt.Errorf("read config file: %w", err)
+	}
+	defer file.Close()
+
+	data, err := io.ReadAll(file)
+	if err != nil {
+		return nil, fmt.Errorf("read config file: %w", err)
+	}
+
+	return data, nil
+}
+
 // loadPublicKey 从 PEM 文件加载 RSA 公钥
 func loadPublicKey(path string) (*rsa.PublicKey, error) {
-	data, err := os.ReadFile(path)
+	data, err := readBoundedConfigFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read public key file: %w", err)
 	}
@@ -171,7 +216,7 @@ func loadPublicKey(path string) (*rsa.PublicKey, error) {
 
 // loadPrivateKey 从 PEM 文件加载 RSA 私钥
 func loadPrivateKey(path string) (*rsa.PrivateKey, error) {
-	data, err := os.ReadFile(path)
+	data, err := readBoundedConfigFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read private key file: %w", err)
 	}
@@ -196,7 +241,7 @@ func loadPrivateKey(path string) (*rsa.PrivateKey, error) {
 
 // loadCertificate 从 PEM 文件加载证书
 func loadCertificate(path string) (*x509.Certificate, error) {
-	data, err := os.ReadFile(path)
+	data, err := readBoundedConfigFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read certificate file: %w", err)
 	}
@@ -290,9 +335,17 @@ func (c *PaymentClient) CreateJSAPIOrder(ctx context.Context, req *JSAPIOrderReq
 	return &resp, payParams, nil
 }
 
+// GenerateJSAPIPayParams 生成小程序调起支付的参数（公开方法，实现 PaymentClientInterface）
+func (c *PaymentClient) GenerateJSAPIPayParams(prepayID string) (*JSAPIPayParams, error) {
+	return c.generateJSAPIPayParams(prepayID)
+}
+
 // generateJSAPIPayParams 生成小程序调起支付的参数
 func (c *PaymentClient) generateJSAPIPayParams(prepayID string) (*JSAPIPayParams, error) {
-	nonceStr := generateNonceStr()
+	nonceStr, err := generateNonceStr()
+	if err != nil {
+		return nil, err
+	}
 	timeStamp := fmt.Sprintf("%d", time.Now().Unix())
 	packageStr := "prepay_id=" + prepayID
 
@@ -490,10 +543,23 @@ type TransferResponse struct {
 	BatchStatus string `json:"batch_status"`
 }
 
+// TransferQueryResponse 转账批次查询响应
+type TransferQueryResponse struct {
+	OutBatchNo  string `json:"out_batch_no"`
+	BatchID     string `json:"batch_id"`
+	BatchStatus string `json:"batch_status"`
+	CreateTime  string `json:"create_time"`
+	UpdateTime  string `json:"update_time"`
+	CloseReason string `json:"close_reason"`
+}
+
 // CreateTransfer 发起转账（商家转账到零钱）
 func (c *PaymentClient) CreateTransfer(ctx context.Context, req *TransferRequest) (*TransferResponse, error) {
 	// 生成商户明细单号
-	outDetailNo := generateNonceStr()
+	outDetailNo, err := generateNonceStr()
+	if err != nil {
+		return nil, err
+	}
 
 	// 加密敏感信息（用户真实姓名）
 	encryptedUserName, err := c.EncryptSensitiveData(req.UserName)
@@ -532,6 +598,21 @@ func (c *PaymentClient) CreateTransfer(ctx context.Context, req *TransferRequest
 	return &resp, nil
 }
 
+// QueryTransfer 按商户批次单号查询转账批次状态。
+func (c *PaymentClient) QueryTransfer(ctx context.Context, outBatchNo string) (*TransferQueryResponse, error) {
+	respBody, err := c.doRequestWithWechatSerial(ctx, http.MethodGet, fmt.Sprintf(queryTransferURL, outBatchNo), nil)
+	if err != nil {
+		return nil, fmt.Errorf("query transfer: %w", err)
+	}
+
+	var resp TransferQueryResponse
+	if err := json.Unmarshal(respBody, &resp); err != nil {
+		return nil, fmt.Errorf("unmarshal transfer query response: %w", err)
+	}
+
+	return &resp, nil
+}
+
 // EncryptSensitiveData 使用微信支付平台公钥或证书公钥加密敏感数据
 // 优先使用平台公钥（推荐方式），其次使用平台证书公钥（已弃用）
 // 用于加密身份证号、银行卡号、手机号等敏感信息
@@ -553,7 +634,8 @@ func (c *PaymentClient) EncryptSensitiveData(plaintext string) (string, error) {
 		return "", fmt.Errorf("neither platform public key nor platform certificate loaded")
 	}
 
-	ciphertext, err := rsa.EncryptOAEP(sha256.New(), rand.Reader, publicKey, []byte(plaintext), nil)
+	// 微信支付敏感字段加密要求使用 RSAES-OAEP with SHA-1。
+	ciphertext, err := rsa.EncryptOAEP(sha1.New(), rand.Reader, publicKey, []byte(plaintext), nil)
 	if err != nil {
 		return "", fmt.Errorf("encrypt: %w", err)
 	}
@@ -601,6 +683,8 @@ type PaymentNotificationResource struct {
 	TradeType      string `json:"trade_type"`
 	TradeState     string `json:"trade_state"`
 	TradeStateDesc string `json:"trade_state_desc"`
+	AppID          string `json:"appid"`
+	MchID          string `json:"mchid"`
 	BankType       string `json:"bank_type"`
 	SuccessTime    string `json:"success_time"`
 	Payer          struct {
@@ -680,10 +764,23 @@ func (c *PaymentClient) DecryptNotificationRaw(notification *PaymentNotification
 	)
 }
 
+// notifyTimestampWindow 微信回调时间戳允许偏差（±5 分钟），防重放攻击
+const notifyTimestampWindow = 5 * 60 // seconds
+
 // VerifyNotificationSignature 验证回调通知签名
 // 参考: https://pay.weixin.qq.com/wiki/doc/apiv3/wechatpay/wechatpay4_1.shtml
 // 优先使用平台公钥（推荐），其次使用平台证书公钥（已弃用）
 func (c *PaymentClient) VerifyNotificationSignature(signature, timestamp, nonce, body string) error {
+	// 0. 校验时间戳合法性，防止重放攻击（微信官方要求 ±5 分钟内）
+	ts, err := strconv.ParseInt(timestamp, 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid timestamp format: %w", err)
+	}
+	diff := time.Now().Unix() - ts
+	if diff > notifyTimestampWindow || diff < -notifyTimestampWindow {
+		return fmt.Errorf("timestamp out of allowed window: diff=%ds", diff)
+	}
+
 	// 获取用于验签的公钥
 	var publicKey *rsa.PublicKey
 	if c.platformPublicKey != nil {
@@ -722,6 +819,56 @@ func (c *PaymentClient) VerifyNotificationSignature(signature, timestamp, nonce,
 	}
 
 	return nil
+}
+
+func (c *PaymentClient) verifyResponseSignature(signature, timestamp, nonce, serial, body string) error {
+	if signature == "" || timestamp == "" || nonce == "" || serial == "" {
+		return fmt.Errorf("missing response signature headers")
+	}
+
+	expectedSerial := c.GetPlatformCertificateSerial()
+	if expectedSerial == "" {
+		return fmt.Errorf("neither platform public key ID nor platform certificate configured")
+	}
+	if !strings.EqualFold(serial, expectedSerial) {
+		return fmt.Errorf("unexpected response serial: got %q want %q", serial, expectedSerial)
+	}
+
+	var publicKey *rsa.PublicKey
+	if c.platformPublicKey != nil {
+		publicKey = c.platformPublicKey
+	} else if c.platformCertificate != nil {
+		var ok bool
+		publicKey, ok = c.platformCertificate.PublicKey.(*rsa.PublicKey)
+		if !ok {
+			return fmt.Errorf("invalid platform certificate public key type")
+		}
+	} else {
+		return fmt.Errorf("neither platform public key nor platform certificate configured")
+	}
+
+	message := fmt.Sprintf("%s\n%s\n%s\n", timestamp, nonce, body)
+	signatureBytes, err := base64.StdEncoding.DecodeString(signature)
+	if err != nil {
+		return fmt.Errorf("decode signature: %w", err)
+	}
+
+	hashed := sha256.Sum256([]byte(message))
+	if err := rsa.VerifyPKCS1v15(publicKey, crypto.SHA256, hashed[:], signatureBytes); err != nil {
+		return ErrInvalidSignature
+	}
+
+	return nil
+}
+
+func (c *PaymentClient) verifyHTTPResponseSignature(resp *http.Response, body []byte) error {
+	return c.verifyResponseSignature(
+		resp.Header.Get("Wechatpay-Signature"),
+		resp.Header.Get("Wechatpay-Timestamp"),
+		resp.Header.Get("Wechatpay-Nonce"),
+		resp.Header.Get("Wechatpay-Serial"),
+		string(body),
+	)
 }
 
 // decryptAESGCM 使用 AES-GCM 解密（APIv3 回调通知解密）
@@ -768,8 +915,16 @@ func (c *PaymentClient) doRequestWithWechatSerial(ctx context.Context, method, p
 	return c.doRequestWithSerial(ctx, method, path, body, wechatSerial)
 }
 
+func (c *PaymentClient) doRequestWithoutResponseVerification(ctx context.Context, method, path string, body interface{}) ([]byte, error) {
+	return c.doRequestWithOptions(ctx, method, path, body, "", false)
+}
+
 // doRequestWithSerial 发送请求，支持指定微信支付平台证书序列号
 func (c *PaymentClient) doRequestWithSerial(ctx context.Context, method, path string, body interface{}, wechatSerial string) ([]byte, error) {
+	return c.doRequestWithOptions(ctx, method, path, body, wechatSerial, true)
+}
+
+func (c *PaymentClient) doRequestWithOptions(ctx context.Context, method, path string, body interface{}, wechatSerial string, verifyResponse bool) ([]byte, error) {
 	var bodyBytes []byte
 	var err error
 
@@ -787,7 +942,10 @@ func (c *PaymentClient) doRequestWithSerial(ctx context.Context, method, path st
 	}
 
 	// 生成请求ID（用于追踪和问题排查）
-	requestID := generateNonceStr()
+	requestID, err := generateNonceStr()
+	if err != nil {
+		return nil, err
+	}
 
 	// 设置请求头
 	req.Header.Set("Content-Type", "application/json")
@@ -799,7 +957,10 @@ func (c *PaymentClient) doRequestWithSerial(ctx context.Context, method, path st
 
 	// 生成签名
 	timestamp := time.Now().Unix()
-	nonceStr := generateNonceStr()
+	nonceStr, err := generateNonceStr()
+	if err != nil {
+		return nil, err
+	}
 	signature, err := c.generateSignature(method, path, timestamp, nonceStr, bodyBytes)
 	if err != nil {
 		return nil, fmt.Errorf("generate signature: %w", err)
@@ -819,9 +980,14 @@ func (c *PaymentClient) doRequestWithSerial(ctx context.Context, method, path st
 	}
 	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20)) // 4MB上限，防止异常大响应耗尽内存
 	if err != nil {
 		return nil, fmt.Errorf("read response: %w", err)
+	}
+	if verifyResponse {
+		if err := c.verifyHTTPResponseSignature(resp, respBody); err != nil {
+			return nil, fmt.Errorf("verify response signature: %w", err)
+		}
 	}
 
 	// 检查状态码
@@ -865,9 +1031,11 @@ func (c *PaymentClient) signWithRSA(message string) (string, error) {
 	return base64.StdEncoding.EncodeToString(signature), nil
 }
 
-// generateNonceStr 生成随机字符串
-func generateNonceStr() string {
+// generateNonceStr 生成随机字符串。极少数情况下 crypto/rand 不可用时返回 error。
+func generateNonceStr() (string, error) {
 	b := make([]byte, 16)
-	_, _ = rand.Read(b)
-	return fmt.Sprintf("%x", b)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("crypto/rand.Read failed: %w", err)
+	}
+	return fmt.Sprintf("%x", b), nil
 }

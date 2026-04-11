@@ -2,7 +2,6 @@ package api
 
 import (
 	"bytes"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -86,7 +85,7 @@ func TestAddFavoriteMerchantAPI(t *testing.T) {
 				store.EXPECT().
 					GetMerchant(gomock.Any(), gomock.Eq(merchant.ID)).
 					Times(1).
-					Return(db.Merchant{}, sql.ErrNoRows)
+					Return(db.Merchant{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -262,6 +261,46 @@ func TestListFavoriteMerchantsAPI(t *testing.T) {
 	}
 }
 
+func TestListFavoriteMerchantsAPI_ReturnsOrderingSuspendedFlag(t *testing.T) {
+	user, _ := randomUser(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		ListFavoriteMerchants(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return([]db.ListFavoriteMerchantsRow{{
+			ID:                          1,
+			MerchantID:                  2,
+			MerchantName:                "测试商户",
+			MerchantAddress:             "测试地址",
+			MerchantStatus:              "active",
+			MerchantIsOrderingSuspended: true,
+			CreatedAt:                   time.Now(),
+		}}, nil)
+	store.EXPECT().
+		CountFavoriteMerchants(gomock.Any(), gomock.Eq(user.ID)).
+		Times(1).
+		Return(int64(1), nil)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	request, err := http.NewRequest(http.MethodGet, "/v1/favorites/merchants?page=1&page_size=20", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp listFavoriteMerchantsResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Len(t, resp.Merchants, 1)
+	require.True(t, resp.Merchants[0].IsOrderingSuspended)
+}
+
 func TestDeleteFavoriteMerchantAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchant(user.ID)
@@ -416,7 +455,7 @@ func TestAddFavoriteDishAPI(t *testing.T) {
 				store.EXPECT().
 					GetDish(gomock.Any(), gomock.Eq(dish.ID)).
 					Times(1).
-					Return(db.Dish{}, sql.ErrNoRows)
+					Return(db.Dish{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)

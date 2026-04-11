@@ -73,7 +73,7 @@ func (q *Queries) CountOperatorRegions(ctx context.Context, operatorID int64) (i
 }
 
 const getActiveOperatorByRegion = `-- name: GetActiveOperatorByRegion :one
-SELECT o.id, o.user_id, o.region_id, o.name, o.contact_name, o.contact_phone, o.wechat_mch_id, o.commission_rate, o.status, o.created_at, o.updated_at, o.contract_start_date, o.contract_end_date, o.contract_years, o.sub_mch_id FROM operators o
+SELECT o.id, o.user_id, o.region_id, o.name, o.contact_name, o.contact_phone, o.wechat_mch_id, o.commission_rate, o.status, o.created_at, o.updated_at, o.contract_start_date, o.contract_end_date, o.contract_years, o.sub_mch_id, o.balance, o.wallet_account, o.merchant_deposit, o.rider_deposit, o.weather_coeff_extreme, o.weather_coeff_heavy, o.weather_coeff_moderate, o.weather_coeff_light FROM operators o
 JOIN operator_regions or_t ON o.id = or_t.operator_id
 WHERE or_t.region_id = $1 
     AND or_t.status = 'active' 
@@ -101,6 +101,14 @@ func (q *Queries) GetActiveOperatorByRegion(ctx context.Context, regionID int64)
 		&i.ContractEndDate,
 		&i.ContractYears,
 		&i.SubMchID,
+		&i.Balance,
+		&i.WalletAccount,
+		&i.MerchantDeposit,
+		&i.RiderDeposit,
+		&i.WeatherCoeffExtreme,
+		&i.WeatherCoeffHeavy,
+		&i.WeatherCoeffModerate,
+		&i.WeatherCoeffLight,
 	)
 	return i, err
 }

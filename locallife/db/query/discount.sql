@@ -9,11 +9,12 @@ INSERT INTO discount_rules (
     discount_amount,
     can_stack_with_voucher,
     can_stack_with_membership,
+    stacking_group,
     valid_from,
     valid_until,
     is_active
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
 ) RETURNING *;
 
 -- name: GetDiscountRule :one
@@ -65,6 +66,7 @@ SET
     discount_amount = COALESCE(sqlc.narg('discount_amount'), discount_amount),
     can_stack_with_voucher = COALESCE(sqlc.narg('can_stack_with_voucher'), can_stack_with_voucher),
     can_stack_with_membership = COALESCE(sqlc.narg('can_stack_with_membership'), can_stack_with_membership),
+    stacking_group = COALESCE(sqlc.narg('stacking_group'), stacking_group),
     valid_from = COALESCE(sqlc.narg('valid_from'), valid_from),
     valid_until = COALESCE(sqlc.narg('valid_until'), valid_until),
     is_active = COALESCE(sqlc.narg('is_active'), is_active),

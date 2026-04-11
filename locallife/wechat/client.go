@@ -15,7 +15,7 @@ import (
 const (
 	// 微信API端点
 	code2SessionURL   = "https://api.weixin.qq.com/sns/jscode2session"
-	getAccessTokenURL = "https://api.weixin.qq.com/cgi-bin/token"
+	getAccessTokenURL = "https://api.weixin.qq.com/cgi-bin/token" // #nosec G101 -- WeChat public API endpoint URL, not a credential.
 
 	// Access Token提前刷新时间（5分钟）
 	accessTokenRefreshBuffer = 5 * time.Minute

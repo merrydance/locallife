@@ -3,6 +3,7 @@
  * 用于替代console.log/error,支持环境判断和日志上报
  */
 import { ErrorHandler } from './error-handler'
+import { getToken } from './auth'
 
 export enum LogLevel {
   DEBUG = 'DEBUG',
@@ -120,12 +121,26 @@ class Logger {
      */
   private reportError(message: string, error?: unknown, context?: string) {
     try {
+      const errorObject = error as {
+        name?: unknown
+        message?: unknown
+        userMessage?: unknown
+        detailMessage?: unknown
+        code?: unknown
+        statusCode?: unknown
+        stack?: unknown
+      } | undefined
+
       const errorData = {
         message,
         context,
         error: error instanceof Error ? {
           name: error.name,
           message: error.message,
+          userMessage: typeof errorObject?.userMessage === 'string' ? errorObject.userMessage : undefined,
+          detailMessage: typeof errorObject?.detailMessage === 'string' ? errorObject.detailMessage : undefined,
+          code: typeof errorObject?.code === 'string' || typeof errorObject?.code === 'number' ? errorObject.code : undefined,
+          statusCode: typeof errorObject?.statusCode === 'number' ? errorObject.statusCode : undefined,
           stack: error.stack
         } : error,
         timestamp: Date.now(),
@@ -150,13 +165,22 @@ class Logger {
 
       // 2. 上报到自己的后端(可选)
       if (!this.isDev) {
+        const token = getToken()
+        if (!token) {
+          return
+        }
+
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+          'X-Client-Platform': 'mp-wechat',
+          'Authorization': `Bearer ${token}`
+        }
+
         wx.request({
-          url: 'https://llapi.merrydance.cn/api/v1/logs/error',
+          url: 'https://llapi.merrydance.cn/v1/logs/error',
           method: 'POST',
           data: errorData,
-          header: {
-            'Content-Type': 'application/json'
-          },
+          header: headers,
           fail: () => {
             // 静默失败
           }

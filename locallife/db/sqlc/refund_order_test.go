@@ -136,35 +136,34 @@ func TestGetTotalRefundedByPaymentOrder(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// 创建成功的退款订单
-	refundAmount1 := int64(100)
-	refundAmount2 := int64(200)
+	refundPendingAmount := int64(100)
+	refundProcessingAmount := int64(200)
+	refundSuccessAmount := int64(300)
 
-	refund1 := createRandomRefundOrder(t, payment.ID, refundAmount1)
-	refund2 := createRandomRefundOrder(t, payment.ID, refundAmount2)
+	refundPending := createRandomRefundOrder(t, payment.ID, refundPendingAmount)
+	refundProcessing := createRandomRefundOrder(t, payment.ID, refundProcessingAmount)
+	refundSuccess := createRandomRefundOrder(t, payment.ID, refundSuccessAmount)
 
-	// 设置退款状态为 processing，然后 success
+	require.Equal(t, "pending", refundPending.Status)
+
 	_, err = testStore.UpdateRefundOrderToProcessing(context.Background(), UpdateRefundOrderToProcessingParams{
-		ID:       refund1.ID,
+		ID:       refundProcessing.ID,
 		RefundID: pgtype.Text{String: util.RandomString(32), Valid: true},
 	})
 	require.NoError(t, err)
 
-	_, err = testStore.UpdateRefundOrderToSuccess(context.Background(), refund1.ID)
-	require.NoError(t, err)
-
 	_, err = testStore.UpdateRefundOrderToProcessing(context.Background(), UpdateRefundOrderToProcessingParams{
-		ID:       refund2.ID,
+		ID:       refundSuccess.ID,
 		RefundID: pgtype.Text{String: util.RandomString(32), Valid: true},
 	})
 	require.NoError(t, err)
 
-	_, err = testStore.UpdateRefundOrderToSuccess(context.Background(), refund2.ID)
+	_, err = testStore.UpdateRefundOrderToSuccess(context.Background(), refundSuccess.ID)
 	require.NoError(t, err)
 
 	totalRefunded, err := testStore.GetTotalRefundedByPaymentOrder(context.Background(), payment.ID)
 	require.NoError(t, err)
-	require.Equal(t, refundAmount1+refundAmount2, totalRefunded)
+	require.Equal(t, refundPendingAmount+refundProcessingAmount+refundSuccessAmount, totalRefunded)
 }
 
 func TestUpdateRefundOrderToProcessing(t *testing.T) {

@@ -17,7 +17,8 @@ WHERE id = $1;
 SELECT 
     ms.*,
     u.full_name,
-    u.avatar_url
+    u.avatar_url,
+    u.avatar_media_asset_id
 FROM merchant_staff ms
 JOIN users u ON ms.user_id = u.id
 WHERE ms.merchant_id = $1

@@ -1,76 +1,119 @@
 <custom-navbar title="退款详情" showBack="{{true}}" bind:navheight="onNavHeight" />
 
-<view class="page" style="padding-top: {{navBarHeight}}px;">
-  <t-loading wx:if="{{loading}}" theme="circular" size="40rpx" class="loading" />
+<view class="page-container page-shell page-shell--with-nav page-shell--bottom-safe" style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: 40rpx;">
+  <!-- 错误状态 -->
+  <view wx:if="{{error && !initialLoading}}" class="error-container">
+    <t-empty icon="info-circle" description="{{error}}">
+      <t-button slot="action" theme="primary" size="small" bindtap="onRetry" shape="round">重试</t-button>
+    </t-empty>
+  </view>
 
-  <block wx:if="{{!loading && refund}}">
-    <!-- 退款状态卡片 -->
-    <view class="status-card {{statusClass}}">
-      <view class="status-icon">
-        <t-icon wx:if="{{refund.status === 'success'}}" name="check-circle-filled" size="80rpx" color="#1d7a32" />
-        <t-icon wx:elif="{{refund.status === 'pending' || refund.status === 'processing'}}" name="time-filled" size="80rpx" color="#ff9500" />
-        <t-icon wx:elif="{{refund.status === 'failed'}}" name="close-circle-filled" size="80rpx" color="#e34d59" />
-      </view>
-      <view class="status-text">{{statusText}}</view>
-      <view class="amount">{{amountDisplay}}</view>
+  <block wx:else>
+    <!-- Loading (Skeleton) -->
+    <view wx:if="{{initialLoading}}" class="detail-skeleton">
+      <card-skeleton t-class="skeleton-item" />
+      <list-skeleton row="6" t-class="skeleton-item" />
     </view>
 
-    <!-- 退款进度 -->
-    <view class="progress-card">
-      <view class="card-title">退款进度</view>
-      <view class="progress-list">
-        <view 
-          wx:for="{{progress}}" 
-          wx:key="title" 
-          class="progress-item {{item.done ? 'done' : ''}} {{item.active ? 'active' : ''}}"
-        >
-          <view class="progress-dot"></view>
-          <view class="progress-line" wx:if="{{index < progress.length - 1}}"></view>
-          <view class="progress-content">
-            <view class="progress-title">{{item.title}}</view>
-            <view class="progress-time" wx:if="{{item.time}}">{{item.time}}</view>
+    <view wx:elif="{{refund}}" class="detail-content animate-fade-in">
+      <!-- 退款状态卡片 -->
+      <view class="status-card {{statusClass}}">
+        <view class="status-content">
+          <view class="status-badge">
+            <t-icon name="{{statusIcon}}" size="48rpx" />
+          </view>
+          <view class="status-main">
+            <text class="status-text">{{statusText}}</text>
+            <view class="amount-display">
+              <text class="symbol">¥</text>
+              <text class="amount-val">{{amountDisplay}}</text>
+            </view>
           </view>
         </view>
       </view>
+
+      <!-- 退款进度展示 -->
+      <view class="section-container">
+        <view class="section-title">退款进度</view>
+        <view class="progress-box">
+          <view 
+            wx:for="{{progress}}" 
+            wx:key="title" 
+            class="step-item {{item.done ? 'is-done' : ''}} {{item.active ? 'is-active' : ''}}"
+          >
+            <view class="step-line" wx:if="{{index < progress.length - 1}}"></view>
+            <view class="step-node">
+              <view class="node-dot"></view>
+            </view>
+            <view class="step-content">
+              <view class="step-title">{{item.title}}</view>
+              <view class="step-desc" wx:if="{{item.time}}">{{item.time}}</view>
+            </view>
+          </view>
+        </view>
+      </view>
+
+        <!-- 分账回退记录 -->
+        <view class="section-container" wx:if="{{profitSharingReturns.length > 0}}">
+          <text class="section-title">分账回退</text>
+          <view class="refund-list">
+            <view class="refund-card" wx:for="{{profitSharingReturns}}" wx:key="id">
+              <view class="refund-card-header">
+                <text class="refund-card-amount">¥{{item.amount / 100}}</text>
+                <text class="refund-card-status">{{item.status}}</text>
+              </view>
+              <view class="refund-card-body">
+                <text class="refund-reason">回退单号：{{item.out_return_no}}</text>
+                <text class="refund-time">{{item.created_at}}</text>
+              </view>
+            </view>
+          </view>
+        </view>
+
+      <!-- 详细信息 -->
+      <view class="section-container">
+        <view class="section-title">详情信息</view>
+        <view class="info-card">
+          <view class="info-row">
+            <text class="label">退款类型</text>
+            <text class="value">{{refundTypeText}}</text>
+          </view>
+          <t-divider dashed />
+          <view class="info-row">
+            <text class="label">退款原因</text>
+            <text class="value">{{refund.reason || '无'}}</text>
+          </view>
+          <t-divider dashed />
+          <view class="info-row">
+            <text class="label">申请时间</text>
+            <text class="value">{{refund.created_at}}</text>
+          </view>
+          <block wx:if="{{refund.processed_at}}">
+            <t-divider dashed />
+            <view class="info-row">
+              <text class="label">处理时间</text>
+              <text class="value">{{refund.processed_at}}</text>
+            </view>
+          </block>
+          <block wx:if="{{refund.refund_transaction_id}}">
+            <t-divider dashed />
+            <view class="info-row">
+              <text class="label">退款单号</text>
+              <text class="value">{{refund.refund_transaction_id}}</text>
+            </view>
+          </block>
+        </view>
+      </view>
+
+      <!-- 温馨提示 -->
+      <view class="tips-box" wx:if="{{showPendingTip}}">
+        <t-icon name="info-circle" size="32rpx" color="var(--td-warning-color)" />
+        <text class="tips-text">钱款将原路退回您的支付账户，预计 1-3 个工作日到账</text>
+      </view>
     </view>
 
-    <!-- 退款信息 -->
-    <view class="info-card">
-      <view class="card-title">退款信息</view>
-      <view class="info-row">
-        <text class="label">退款类型</text>
-        <text class="value">{{refundTypeText}}</text>
-      </view>
-      <view class="info-row">
-        <text class="label">退款原因</text>
-        <text class="value">{{refund.reason}}</text>
-      </view>
-      <view class="info-row">
-        <text class="label">申请时间</text>
-        <text class="value">{{refund.created_at}}</text>
-      </view>
-      <view class="info-row" wx:if="{{refund.processed_at}}">
-        <text class="label">处理时间</text>
-        <text class="value">{{refund.processed_at}}</text>
-      </view>
-      <view class="info-row" wx:if="{{refund.refund_transaction_id}}">
-        <text class="label">退款单号</text>
-        <text class="value">{{refund.refund_transaction_id}}</text>
-      </view>
-      <view class="info-row" wx:if="{{refund.failed_reason}}">
-        <text class="label">失败原因</text>
-        <text class="value error">{{refund.failed_reason}}</text>
-      </view>
-    </view>
-
-    <!-- 提示信息 -->
-    <view class="tips-card" wx:if="{{refund.status === 'pending' || refund.status === 'processing'}}">
-      <t-icon name="info-circle" size="32rpx" color="#ff9500" />
-      <text>退款将在1-3个工作日内原路退回</text>
+    <view wx:else class="empty-center">
+      <t-empty description="未找到退款记录" />
     </view>
   </block>
-
-  <view wx:if="{{!loading && !refund}}" class="empty">
-    <t-empty description="未找到退款记录" />
-  </view>
 </view>

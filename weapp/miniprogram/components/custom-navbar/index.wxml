@@ -9,7 +9,10 @@
       <view wx:if="{{showBack}}" class="back-button" bindtap="onBackTap">
         <image class="back-icon" src="/assets/icons/arrow-left.svg" mode="aspectFit" />
       </view>
-      <view wx:elif="{{showLocation}}" class="location-wrapper" bindtap="onLocationTap">
+      <view wx:if="{{innerShowHome}}" class="home-button" bindtap="onHomeTap">
+        <image class="home-icon" src="/assets/icons/home.svg" mode="aspectFit" />
+      </view>
+      <view wx:if="{{!showBack && !innerShowHome && showLocation}}" class="location-wrapper" bindtap="onLocationTap">
         <text class="location-icon">📍</text>
         <text class="location-text {{displayLocation.length > 6 ? 'scroll' : ''}}">{{displayLocation || '点此获取位置'}}</text>
       </view>

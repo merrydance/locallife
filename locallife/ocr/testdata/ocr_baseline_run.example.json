@@ -1,0 +1,51 @@
+{
+  "provider": "aliyun",
+  "generated_at": "2026-03-25T19:30:00Z",
+  "queue_snapshot": {
+    "pending": 2,
+    "processing": 1
+  },
+  "samples": [
+    {
+      "sample_id": "merchant_bl_001",
+      "status": "succeeded",
+      "attempt_count": 1,
+      "latency_ms": 820,
+      "recognized_fields": {
+        "credit_code": "91310000123456789A",
+        "company_name": "示例餐饮有限公司",
+        "legal_person": "张三"
+      }
+    },
+    {
+      "sample_id": "merchant_id_front_001",
+      "status": "succeeded",
+      "attempt_count": 1,
+      "latency_ms": 540,
+      "recognized_fields": {
+        "name": "张三",
+        "id_number": "110101199001011234",
+        "address": "北京市朝阳区测试路"
+      }
+    },
+    {
+      "sample_id": "rider_health_001",
+      "status": "failed",
+      "error_code": "ocr_provider_forbidden",
+      "attempt_count": 1,
+      "latency_ms": 300,
+      "recognized_fields": {}
+    },
+    {
+      "sample_id": "merchant_food_001",
+      "status": "succeeded",
+      "attempt_count": 2,
+      "latency_ms": 960,
+      "recognized_fields": {
+        "permit_no": "JY12345678901234",
+        "company_name": "本地生活餐饮店",
+        "valid_to": "2027年01月08日"
+      }
+    }
+  ]
+}

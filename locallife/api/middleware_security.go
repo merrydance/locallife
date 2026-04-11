@@ -54,7 +54,9 @@ func HSTSMiddleware(maxAge int) gin.HandlerFunc {
 	}
 }
 
-// CORSMiddleware 跨域资源共享中间件
+// CORSMiddleware 跨域资源共享中间件。
+// 仅允许显式白名单中的 Origin，任何情况下均不接受空白名单或通配符 * 配合 Credentials。
+// 若 allowedOrigins 为空则对所有请求均不设置跨域头（最严格）。
 func CORSMiddleware(allowedOrigins []string) gin.HandlerFunc {
 	// 构建允许的源映射，用于快速查找
 	originsMap := make(map[string]bool)
@@ -65,13 +67,13 @@ func CORSMiddleware(allowedOrigins []string) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		origin := ctx.GetHeader("Origin")
 
-		// 检查是否为允许的源
-		if origin != "" && (len(allowedOrigins) == 0 || originsMap[origin] || originsMap["*"]) {
+		// 仅精确白名单匹配才设置跨域头；空列表、通配符 * 均不视为"允许所有"
+		if origin != "" && originsMap[origin] {
 			ctx.Header("Access-Control-Allow-Origin", origin)
 			ctx.Header("Access-Control-Allow-Credentials", "true")
 			ctx.Header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-			ctx.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization, X-Request-ID")
-			ctx.Header("Access-Control-Expose-Headers", "X-Request-ID")
+			ctx.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization, X-Request-ID, X-Response-Envelope")
+			ctx.Header("Access-Control-Expose-Headers", "X-Request-ID, X-Response-Envelope")
 			ctx.Header("Access-Control-Max-Age", "86400") // 预检请求缓存 24 小时
 		}
 

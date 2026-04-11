@@ -1,164 +1,191 @@
-/**
- * 创建评价页面
- */
-
-import { createReview, CreateReviewRequest } from '../../../../api/personal'
+import { ReviewService, CreateReviewParams } from '../../../../api/review'
 import { getOrderDetail } from '../../../../api/order'
 import { logger } from '../../../../utils/logger'
+import { getStableBarHeights } from '../../../../utils/responsive'
+import { getErrorUserMessage } from '../../../../utils/user-facing'
+
+interface ReviewUploadFile {
+  url: string
+  status?: 'loading' | 'done' | 'failed'
+  mediaId?: number
+}
 
 Page({
-    data: {
-        orderId: 0,
-        merchantId: 0,
-        merchantName: '',
-        navBarHeight: 88,
-        loading: false,
-        submitting: false,
-        // 表单数据
-        rating: 5,
-        content: '',
-        images: [] as string[],
-        // 评分选项
-        ratingOptions: [
-            { value: 5, label: '非常满意', icon: '😍' },
-            { value: 4, label: '满意', icon: '😊' },
-            { value: 3, label: '一般', icon: '😐' },
-            { value: 2, label: '不满意', icon: '😕' },
-            { value: 1, label: '非常不满意', icon: '😞' }
-        ],
-        maxImages: 9,
-        maxContentLength: 500
-    },
+  data: {
+    orderId: 0,
+    merchantId: 0,
+    merchantName: '',
+    orderNo: '',
+    navBarHeight: 88,
+    loading: false,
+    initialLoading: true,
+    submitting: false,
 
-    onLoad(options: { orderId?: string; merchantId?: string }) {
-        if (options.orderId) {
-            this.setData({ orderId: parseInt(options.orderId) })
-            this.loadOrderInfo()
-        }
-        if (options.merchantId) {
-            this.setData({ merchantId: parseInt(options.merchantId) })
-        }
-    },
+    // 快捷标签
+    quickTags: [
+      '山珍多汁', '卖相工整', '分量足', '干净卫生',
+      '服务好', '送餐快', '包装好', '性价比高', '值得复购'
+    ] as string[],
+    selectedTags: [] as string[],
 
-    onNavHeight(e: WechatMiniprogram.CustomEvent) {
-        this.setData({ navBarHeight: e.detail.navBarHeight })
-    },
+    // 表单数据
+    rating: 0,
+    content: '',
+    fileList: [] as ReviewUploadFile[],
+    maxImages: 9,
+    maxContentLength: 500
+  },
 
-    async loadOrderInfo() {
+  onLoad(options: { orderId?: string }) {
+    const { navBarHeight } = getStableBarHeights()
+    this.setData({ navBarHeight })
+
+    if (options.orderId) {
+      this.setData({ orderId: parseInt(options.orderId) })
+      this.loadOrderInfo()
+    } else {
+      wx.showToast({ title: '无效的任务订单', icon: 'none' })
+      setTimeout(() => wx.navigateBack(), 2000)
+    }
+  },
+
+  async loadOrderInfo() {
+    this.setData({ loading: true })
+    try {
+      const order = await getOrderDetail(this.data.orderId)
+      this.setData({
+        merchantId: order.merchant_id,
+        merchantName: order.merchant_name,
+        orderNo: order.order_no,
+        initialLoading: false,
+        loading: false
+      })
+    } catch (error) {
+      logger.error('加载订单信息失败', error, 'reviews/create')
+      this.setData({ initialLoading: false, loading: false })
+      wx.showToast({ title: '订单详情加载失败', icon: 'none' })
+    }
+  },
+
+  onContentChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
+    this.setData({ content: e.detail.value })
+  },
+
+  onRatingChange(e: WechatMiniprogram.CustomEvent<{ value: number }>) {
+    this.setData({ rating: e.detail.value })
+  },
+
+  onTagTap(e: WechatMiniprogram.TouchEvent) {
+    const { tag } = e.currentTarget.dataset as { tag: string }
+    const selected = [...this.data.selectedTags]
+    const idx = selected.indexOf(tag)
+    if (idx === -1) {
+      selected.push(tag)
+    } else {
+      selected.splice(idx, 1)
+    }
+    this.setData({ selectedTags: selected })
+  },
+
+  // 图片添加回调
+  async onAddImage(e: WechatMiniprogram.CustomEvent<{ files: Array<{ url: string }> }>) {
+    const { files } = e.detail
+    const { fileList } = this.data
+
+    // 先展示在界面上 (status: loading)
+    const newFiles: ReviewUploadFile[] = files.map((f) => ({
+      ...f,
+      status: 'loading'
+    }))
+
+    this.setData({
+      fileList: [...fileList, ...newFiles]
+    })
+
+    // 逐个开始上传
+    for (let i = 0; i < newFiles.length; i++) {
+        const file = newFiles[i]
+        const currentIndex = fileList.length + i
+        
         try {
-            const order = await getOrderDetail(this.data.orderId)
-            this.setData({
-                merchantId: order.merchant_id,
-                merchantName: order.merchant_name
-            })
-        } catch (error) {
-            logger.error('加载订单信息失败', error, 'reviews/create.loadOrderInfo')
-        }
-    },
-
-    onRatingChange(e: WechatMiniprogram.CustomEvent) {
-        const rating = e.currentTarget.dataset.rating
-        this.setData({ rating })
-    },
-
-    onContentInput(e: WechatMiniprogram.CustomEvent) {
-        this.setData({ content: e.detail.value })
-    },
-
-    async onChooseImage() {
-        const { images, maxImages } = this.data
-        const remaining = maxImages - images.length
-
-        if (remaining <= 0) {
-            wx.showToast({ title: `最多上传${maxImages}张图片`, icon: 'none' })
-            return
-        }
-
-        try {
-            const res = await wx.chooseMedia({
-                count: remaining,
-                mediaType: ['image'],
-                sourceType: ['album', 'camera']
-            })
-
-            // 上传图片到服务器
-            const uploadedUrls: string[] = []
-            for (const file of res.tempFiles) {
-                const url = await this.uploadImage(file.tempFilePath)
-                if (url) {
-                    uploadedUrls.push(url)
-                }
-            }
-
-            this.setData({
-                images: [...images, ...uploadedUrls]
-            })
-        } catch (error) {
-            logger.error('选择图片失败', error, 'reviews/create.onChooseImage')
-        }
-    },
-
-    async uploadImage(filePath: string): Promise<string | null> {
-        try {
-            // TODO: 实际上传到服务器，这里暂时返回本地路径
-            // const res = await wx.uploadFile({
-            //   url: 'YOUR_UPLOAD_URL',
-            //   filePath,
-            //   name: 'file'
-            // })
-            // return JSON.parse(res.data).url
-            return filePath
-        } catch (error) {
-            logger.error('上传图片失败', error, 'reviews/create.uploadImage')
-            return null
-        }
-    },
-
-    onRemoveImage(e: WechatMiniprogram.CustomEvent) {
-        const index = e.currentTarget.dataset.index
-        const images = [...this.data.images]
-        images.splice(index, 1)
-        this.setData({ images })
-    },
-
-    onPreviewImage(e: WechatMiniprogram.CustomEvent) {
-        const url = e.currentTarget.dataset.url
-        wx.previewImage({
-            current: url,
-            urls: this.data.images
-        })
-    },
-
-    async onSubmit() {
-        const { orderId, content, rating, images, submitting } = this.data
-
-        if (submitting) return
-
-        if (!content || content.length < 10) {
-            wx.showToast({ title: '评价内容至少10个字', icon: 'none' })
-            return
-        }
-
-        this.setData({ submitting: true })
-
-        try {
-            const reviewData: CreateReviewRequest = {
-                order_id: orderId,
-                content,
-                images: images.length > 0 ? images : undefined
-            }
-
-            await createReview(reviewData)
-
-            wx.showToast({ title: '评价成功', icon: 'success' })
-
-            setTimeout(() => {
-                wx.navigateBack()
-            }, 1500)
-        } catch (error) {
-            logger.error('提交评价失败', error, 'reviews/create.onSubmit')
-            wx.showToast({ title: '提交失败', icon: 'error' })
-            this.setData({ submitting: false })
+            const { mediaId } = await ReviewService.uploadReviewImage(file.url)
+            this.updateFileStatus(currentIndex, 'done', mediaId)
+        } catch (err) {
+            this.updateFileStatus(currentIndex, 'failed')
         }
     }
+  },
+
+  updateFileStatus(index: number, status: 'loading' | 'done' | 'failed', mediaId?: number) {
+    const { fileList } = this.data
+    if (!fileList[index]) return
+    
+    fileList[index].status = status
+    if (mediaId) {
+        fileList[index].mediaId = mediaId
+    }
+    
+    this.setData({ fileList })
+  },
+
+  onRemoveImage(e: WechatMiniprogram.CustomEvent<{ index: number }>) {
+    const { index } = e.detail
+    const { fileList } = this.data
+    fileList.splice(index, 1)
+    this.setData({ fileList })
+  },
+
+  async onSubmit() {
+    const { orderId, content, fileList, submitting } = this.data
+
+    if (submitting) return
+
+    if (!content || content.length < 10) {
+      wx.showToast({ title: '评价内容至少10个字', icon: 'none' })
+      return
+    }
+
+    // 检查上传状态
+    const uploading = fileList.some((f) => f.status === 'loading')
+    if (uploading) {
+      wx.showToast({ title: '正在上传图片中，请稍候', icon: 'none' })
+        return
+    }
+
+    this.setData({ submitting: true })
+
+    try {
+      // 提取成功上传的媒体资产 ID
+      const mediaAssetIds = fileList
+        .filter((f) => f.status === 'done' && f.mediaId)
+        .map((f) => f.mediaId as number)
+
+      const reviewData: CreateReviewParams = {
+        order_id: orderId,
+        rating: this.data.rating,
+        content,
+        tags: this.data.selectedTags.length > 0 ? this.data.selectedTags : undefined,
+        media_asset_ids: mediaAssetIds.length > 0 ? mediaAssetIds : undefined
+      }
+
+      await ReviewService.createReview(reviewData)
+
+      wx.showToast({ title: '发布成功！感谢您的评价', icon: 'none' })
+      
+      setTimeout(() => {
+        // 触发上级页面刷新
+        const pages = getCurrentPages()
+        const prevPage = pages[pages.length - 2]
+        if (prevPage && prevPage.route.includes('orders/detail')) {
+            // 如果是从订单详情来的，可能需要刷新详情
+        }
+        wx.navigateBack()
+      }, 1500)
+    } catch (error: unknown) {
+      logger.error('提交评价失败', error, 'reviews/create')
+      this.setData({ submitting: false })
+      const msg = getErrorUserMessage(error, '提交失败，请重试')
+      wx.showToast({ title: msg, icon: 'none' })
+    }
+  }
 })

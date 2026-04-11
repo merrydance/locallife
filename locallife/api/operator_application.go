@@ -1,19 +1,16 @@
 package api
 
 import (
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
-	"github.com/merrydance/locallife/util"
-	"github.com/merrydance/locallife/wechat"
 	"github.com/rs/zerolog/log"
 )
 
@@ -34,13 +31,13 @@ type operatorApplicationResponse struct {
 	Name                   string                  `json:"name,omitempty"`
 	ContactName            string                  `json:"contact_name,omitempty"`
 	ContactPhone           string                  `json:"contact_phone,omitempty"`
-	BusinessLicenseURL     string                  `json:"business_license_url,omitempty"`
+	BusinessLicenseAssetID *int64                  `json:"business_license_asset_id,omitempty"`
 	BusinessLicenseNumber  string                  `json:"business_license_number,omitempty"`
 	BusinessLicenseOCR     *BusinessLicenseOCRData `json:"business_license_ocr,omitempty"`
 	LegalPersonName        string                  `json:"legal_person_name,omitempty"`
 	LegalPersonIDNumber    string                  `json:"legal_person_id_number,omitempty"`
-	IDCardFrontURL         string                  `json:"id_card_front_url,omitempty"`
-	IDCardBackURL          string                  `json:"id_card_back_url,omitempty"`
+	IDCardFrontAssetID     *int64                  `json:"id_card_front_asset_id,omitempty"`
+	IDCardBackAssetID      *int64                  `json:"id_card_back_asset_id,omitempty"`
 	IDCardFrontOCR         *OperatorIDCardOCRData  `json:"id_card_front_ocr,omitempty"`
 	IDCardBackOCR          *OperatorIDCardBackOCR  `json:"id_card_back_ocr,omitempty"`
 	RequestedContractYears int32                   `json:"requested_contract_years"`
@@ -50,24 +47,48 @@ type operatorApplicationResponse struct {
 	UpdatedAt              time.Time               `json:"updated_at"`
 	SubmittedAt            *time.Time              `json:"submitted_at,omitempty"`
 	ReviewedAt             *time.Time              `json:"reviewed_at,omitempty"`
+	// IsOperator 表示申请已通过且运营商账号已建立（即用户已是正式运营商）
+	IsOperator bool `json:"is_operator,omitempty"`
 }
 
 // OperatorIDCardOCRData 运营商身份证正面OCR数据
 type OperatorIDCardOCRData struct {
-	Name     string `json:"name,omitempty"`
-	IDNumber string `json:"id_number,omitempty"`
-	Gender   string `json:"gender,omitempty"`
-	Nation   string `json:"nation,omitempty"`
-	Address  string `json:"address,omitempty"`
-	OCRAt    string `json:"ocr_at,omitempty"`
+	Status         string `json:"status,omitempty"`
+	Error          string `json:"error,omitempty"`
+	ErrorCode      string `json:"error_code,omitempty"`
+	AlertEmittedAt string `json:"alert_emitted_at,omitempty"`
+	QueuedAt       string `json:"queued_at,omitempty"`
+	StartedAt      string `json:"started_at,omitempty"`
+	OCRJobID       *int64 `json:"ocr_job_id,omitempty"`
+	Name           string `json:"name,omitempty"`
+	IDNumber       string `json:"id_number,omitempty"`
+	Gender         string `json:"gender,omitempty"`
+	Nation         string `json:"nation,omitempty"`
+	Address        string `json:"address,omitempty"`
+	OCRAt          string `json:"ocr_at,omitempty"`
 }
 
 // OperatorIDCardBackOCR 运营商身份证背面OCR数据
 type OperatorIDCardBackOCR struct {
-	ValidStart string `json:"valid_start,omitempty"`
-	ValidEnd   string `json:"valid_end,omitempty"`
-	OCRAt      string `json:"ocr_at,omitempty"`
+	Status         string `json:"status,omitempty"`
+	Error          string `json:"error,omitempty"`
+	ErrorCode      string `json:"error_code,omitempty"`
+	AlertEmittedAt string `json:"alert_emitted_at,omitempty"`
+	QueuedAt       string `json:"queued_at,omitempty"`
+	StartedAt      string `json:"started_at,omitempty"`
+	OCRJobID       *int64 `json:"ocr_job_id,omitempty"`
+	ValidStart     string `json:"valid_start,omitempty"`
+	ValidEnd       string `json:"valid_end,omitempty"`
+	OCRAt          string `json:"ocr_at,omitempty"`
 }
+
+type operatorApplicationDocumentType string
+
+const (
+	operatorApplicationDocumentBusinessLicense operatorApplicationDocumentType = "business_license"
+	operatorApplicationDocumentIDCardFront     operatorApplicationDocumentType = "id_card_front"
+	operatorApplicationDocumentIDCardBack      operatorApplicationDocumentType = "id_card_back"
+)
 
 func newOperatorApplicationResponse(app db.OperatorApplication, regionName string) operatorApplicationResponse {
 	resp := operatorApplicationResponse{
@@ -90,8 +111,9 @@ func newOperatorApplicationResponse(app db.OperatorApplication, regionName strin
 	if app.ContactPhone.Valid {
 		resp.ContactPhone = app.ContactPhone.String
 	}
-	if app.BusinessLicenseUrl.Valid {
-		resp.BusinessLicenseURL = app.BusinessLicenseUrl.String
+	if app.BusinessLicenseMediaAssetID.Valid {
+		v := app.BusinessLicenseMediaAssetID.Int64
+		resp.BusinessLicenseAssetID = &v
 	}
 	if app.BusinessLicenseNumber.Valid {
 		resp.BusinessLicenseNumber = app.BusinessLicenseNumber.String
@@ -102,11 +124,13 @@ func newOperatorApplicationResponse(app db.OperatorApplication, regionName strin
 	if app.LegalPersonIDNumber.Valid {
 		resp.LegalPersonIDNumber = app.LegalPersonIDNumber.String
 	}
-	if app.IDCardFrontUrl.Valid {
-		resp.IDCardFrontURL = app.IDCardFrontUrl.String
+	if app.IDCardFrontMediaAssetID.Valid {
+		v := app.IDCardFrontMediaAssetID.Int64
+		resp.IDCardFrontAssetID = &v
 	}
-	if app.IDCardBackUrl.Valid {
-		resp.IDCardBackURL = app.IDCardBackUrl.String
+	if app.IDCardBackMediaAssetID.Valid {
+		v := app.IDCardBackMediaAssetID.Int64
+		resp.IDCardBackAssetID = &v
 	}
 	if app.RejectReason.Valid {
 		resp.RejectReason = app.RejectReason.String
@@ -169,11 +193,11 @@ func (server *Server) getOrCreateOperatorApplicationDraft(ctx *gin.Context) {
 	existingApp, err := server.store.GetOperatorApplicationByUserID(ctx, authPayload.UserID)
 	if err == nil {
 		if existingApp.Status == "approved" {
-			ctx.JSON(http.StatusConflict, errorResponse(errors.New("您已是运营商，无需重复申请")))
+			ctx.JSON(http.StatusConflict, errorResponse(ErrAlreadyOperator))
 			return
 		}
 		if existingApp.Status == "submitted" {
-			ctx.JSON(http.StatusConflict, errorResponse(errors.New("您有待审核的申请，请等待审核结果")))
+			ctx.JSON(http.StatusConflict, errorResponse(ErrOperatorApplicationPending))
 			return
 		}
 		// 返回草稿或被拒绝的申请
@@ -181,7 +205,7 @@ func (server *Server) getOrCreateOperatorApplicationDraft(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, newOperatorApplicationResponse(existingApp, regionName))
 		return
 	}
-	if !errors.Is(err, pgx.ErrNoRows) {
+	if !isNotFoundError(err) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -189,10 +213,10 @@ func (server *Server) getOrCreateOperatorApplicationDraft(ctx *gin.Context) {
 	// 检查用户是否已经是运营商
 	_, err = server.store.GetOperatorByUser(ctx, authPayload.UserID)
 	if err == nil {
-		ctx.JSON(http.StatusConflict, errorResponse(errors.New("您已是运营商，无需重复申请")))
+		ctx.JSON(http.StatusConflict, errorResponse(ErrAlreadyOperator))
 		return
 	}
-	if !errors.Is(err, sql.ErrNoRows) {
+	if !isNotFoundError(err) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -200,15 +224,15 @@ func (server *Server) getOrCreateOperatorApplicationDraft(ctx *gin.Context) {
 	// 需要创建新草稿，必须提供区域ID
 	var req createOperatorApplicationRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("请选择要申请的区域")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrRegionSelectionRequired))
 		return
 	}
 
 	// 验证区域存在
 	region, err := server.store.GetRegion(ctx, req.RegionID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("指定的区域不存在")))
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrRegionNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -216,12 +240,12 @@ func (server *Server) getOrCreateOperatorApplicationDraft(ctx *gin.Context) {
 	}
 
 	// 检查区域是否已被其他运营商占用
-	_, err = server.store.GetOperatorByRegion(ctx, req.RegionID)
+	_, err = server.getRegionActiveOperator(ctx, req.RegionID)
 	if err == nil {
-		ctx.JSON(http.StatusConflict, errorResponse(errors.New("该区域已有运营商运营，请选择其他区域")))
+		ctx.JSON(http.StatusConflict, errorResponse(ErrRegionHasOperator))
 		return
 	}
-	if !errors.Is(err, sql.ErrNoRows) {
+	if !isNotFoundError(err) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -229,10 +253,10 @@ func (server *Server) getOrCreateOperatorApplicationDraft(ctx *gin.Context) {
 	// 检查是否有其他人正在申请该区域
 	_, err = server.store.GetPendingOperatorApplicationByRegion(ctx, req.RegionID)
 	if err == nil {
-		ctx.JSON(http.StatusConflict, errorResponse(errors.New("该区域已有待审核的申请，请选择其他区域")))
+		ctx.JSON(http.StatusConflict, errorResponse(ErrRegionHasPendingApplication))
 		return
 	}
-	if !errors.Is(err, pgx.ErrNoRows) {
+	if !isNotFoundError(err) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -257,7 +281,6 @@ func (server *Server) getOrCreateOperatorApplicationDraft(ctx *gin.Context) {
 // @Produce json
 // @Success 200 {object} operatorApplicationResponse "申请信息"
 // @Failure 401 {object} ErrorResponse "未登录"
-// @Failure 404 {object} ErrorResponse "没有申请记录"
 // @Failure 500 {object} ErrorResponse "服务器错误"
 // @Router /v1/operator/application [get]
 // @Security BearerAuth
@@ -266,16 +289,22 @@ func (server *Server) getOperatorApplication(ctx *gin.Context) {
 
 	app, err := server.store.GetOperatorApplicationByUserID(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("您还没有申请记录")))
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusOK, struct{}{})
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	regionName := server.getRegionName(ctx, app.RegionID)
-	ctx.JSON(http.StatusOK, newOperatorApplicationResponse(app, regionName))
+	resp := newOperatorApplicationResponse(app, server.getRegionName(ctx, app.RegionID))
+	// 若申请已通过，进一步检查运营商账号是否已建立
+	if app.Status == "approved" {
+		if _, opErr := server.store.GetOperatorByUser(ctx, authPayload.UserID); opErr == nil {
+			resp.IsOperator = true
+		}
+	}
+	ctx.JSON(http.StatusOK, resp)
 }
 
 // ==================== 更新区域 ====================
@@ -311,8 +340,8 @@ func (server *Server) updateOperatorApplicationRegion(ctx *gin.Context) {
 	// 获取申请
 	app, err := server.store.GetOperatorApplicationDraft(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("请先创建申请")))
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrApplicationNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -320,7 +349,7 @@ func (server *Server) updateOperatorApplicationRegion(ctx *gin.Context) {
 	}
 
 	if app.Status != "draft" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("只能修改草稿状态的申请")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrApplicationNotDraft))
 		return
 	}
 
@@ -334,8 +363,8 @@ func (server *Server) updateOperatorApplicationRegion(ctx *gin.Context) {
 	// 验证新区域存在
 	region, err := server.store.GetRegion(ctx, req.RegionID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("指定的区域不存在")))
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrRegionNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -343,12 +372,12 @@ func (server *Server) updateOperatorApplicationRegion(ctx *gin.Context) {
 	}
 
 	// 检查新区域是否已被占用
-	_, err = server.store.GetOperatorByRegion(ctx, req.RegionID)
+	_, err = server.getRegionActiveOperator(ctx, req.RegionID)
 	if err == nil {
-		ctx.JSON(http.StatusConflict, errorResponse(errors.New("该区域已有运营商运营，请选择其他区域")))
+		ctx.JSON(http.StatusConflict, errorResponse(ErrRegionHasOperator))
 		return
 	}
-	if !errors.Is(err, sql.ErrNoRows) {
+	if !isNotFoundError(err) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -356,10 +385,10 @@ func (server *Server) updateOperatorApplicationRegion(ctx *gin.Context) {
 	// 检查是否有其他人正在申请该区域
 	pendingApp, err := server.store.GetPendingOperatorApplicationByRegion(ctx, req.RegionID)
 	if err == nil && pendingApp.UserID != authPayload.UserID {
-		ctx.JSON(http.StatusConflict, errorResponse(errors.New("该区域已有待审核的申请，请选择其他区域")))
+		ctx.JSON(http.StatusConflict, errorResponse(ErrRegionHasPendingApplication))
 		return
 	}
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+	if err != nil && !isNotFoundError(err) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -380,7 +409,7 @@ func (server *Server) updateOperatorApplicationRegion(ctx *gin.Context) {
 // ==================== 更新基础信息 ====================
 
 type updateOperatorApplicationBasicRequest struct {
-	Name                   *string `json:"name" binding:"omitempty,min=2,max=50"`
+	Name                   *string `json:"name" binding:"omitempty,max=50"`
 	ContactName            *string `json:"contact_name" binding:"omitempty,min=2,max=20"`
 	ContactPhone           *string `json:"contact_phone" binding:"omitempty,len=11"`
 	RequestedContractYears *int32  `json:"requested_contract_years" binding:"omitempty,min=1,max=10"`
@@ -412,8 +441,8 @@ func (server *Server) updateOperatorApplicationBasicInfo(ctx *gin.Context) {
 	// 获取申请
 	app, err := server.store.GetOperatorApplicationDraft(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("请先创建申请")))
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrApplicationNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -421,7 +450,7 @@ func (server *Server) updateOperatorApplicationBasicInfo(ctx *gin.Context) {
 	}
 
 	if app.Status != "draft" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("只能修改草稿状态的申请")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrApplicationNotDraft))
 		return
 	}
 
@@ -452,275 +481,87 @@ func (server *Server) updateOperatorApplicationBasicInfo(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, newOperatorApplicationResponse(updatedApp, regionName))
 }
 
-// ==================== 上传营业执照并OCR识别 ====================
-
-// uploadOperatorBusinessLicenseOCR godoc
-// @Summary 上传营业执照并OCR识别
-// @Description 上传营业执照图片，调用微信OCR识别并保存结果，自动填充企业名称、信用代码等
-// @Tags 运营商申请
-// @Accept multipart/form-data
-// @Produce json
-// @Param image formData file true "营业执照图片"
-// @Success 200 {object} operatorApplicationResponse "识别结果"
-// @Failure 400 {object} ErrorResponse "参数错误或非草稿状态"
-// @Failure 401 {object} ErrorResponse "未登录"
-// @Failure 404 {object} ErrorResponse "申请不存在"
-// @Failure 500 {object} ErrorResponse "服务器错误"
-// @Router /v1/operator/application/license/ocr [post]
-// @Security BearerAuth
-func (server *Server) uploadOperatorBusinessLicenseOCR(ctx *gin.Context) {
+func (server *Server) deleteOperatorApplicationDocumentByType(ctx *gin.Context, documentType operatorApplicationDocumentType) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-	// 获取申请
+	switch documentType {
+	case operatorApplicationDocumentBusinessLicense, operatorApplicationDocumentIDCardFront, operatorApplicationDocumentIDCardBack:
+	default:
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid document type")))
+		return
+	}
+
 	app, err := server.store.GetOperatorApplicationDraft(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("请先创建申请")))
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrApplicationNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	if app.Status != "draft" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("只能修改草稿状态的申请")))
-		return
-	}
-
-	// 获取上传的文件
-	file, fileHeader, err := ctx.Request.FormFile("image")
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("请上传营业执照图片")))
-		return
-	}
-	defer file.Close()
-
-	// 上传前内容安全检测：不通过则不保存
-	if err := server.wechatClient.ImgSecCheck(ctx, file); err != nil {
-		if errors.Is(err, wechat.ErrRiskyContent) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("图片内容安全检测未通过")))
+	if app.Status == "rejected" {
+		app, err = server.store.ResetOperatorApplicationToDraft(ctx, app.ID)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}
-		if errors.Is(err, wechat.ErrImageTooLarge) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("图片过大，请压缩后再上传")))
-			return
-		}
-		ctx.JSON(http.StatusBadGateway, internalError(ctx, err))
-		return
-	}
-	if _, err := file.Seek(0, 0); err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
 	}
 
-	// 保存图片
-	uploader := util.NewFileUploader("uploads")
-	imageURL, err := uploader.UploadOperatorImage(authPayload.UserID, "license", file, fileHeader)
+	var (
+		updatedApp db.OperatorApplication
+		assetID    int64
+	)
+
+	switch documentType {
+	case operatorApplicationDocumentBusinessLicense:
+		if app.BusinessLicenseMediaAssetID.Valid {
+			assetID = app.BusinessLicenseMediaAssetID.Int64
+		}
+		updatedApp, err = server.store.ClearOperatorApplicationBusinessLicense(ctx, app.ID)
+	case operatorApplicationDocumentIDCardFront:
+		if app.IDCardFrontMediaAssetID.Valid {
+			assetID = app.IDCardFrontMediaAssetID.Int64
+		}
+		updatedApp, err = server.store.ClearOperatorApplicationIDCardFront(ctx, app.ID)
+	default:
+		if app.IDCardBackMediaAssetID.Valid {
+			assetID = app.IDCardBackMediaAssetID.Int64
+		}
+		updatedApp, err = server.store.ClearOperatorApplicationIDCardBack(ctx, app.ID)
+	}
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	// 重新回到文件开头用于OCR（微信支持 multipart 上传，不需要公网URL）
-	if _, err := file.Seek(0, 0); err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 调用微信OCR
-	ocrResult, err := server.wechatClient.OCRBusinessLicense(ctx, file)
-	if err != nil {
-		log.Error().Err(err).Msg("营业执照OCR识别失败")
-		// OCR失败不阻止保存，允许手动填写
-	}
-
-	// 构建更新参数
-	arg := db.UpdateOperatorApplicationBusinessLicenseParams{
-		ID:                 app.ID,
-		BusinessLicenseUrl: pgtype.Text{String: imageURL, Valid: true},
-	}
-
-	if ocrResult != nil {
-		// 保存OCR结果
-		ocrData := BusinessLicenseOCRData{
-			RegNum:              ocrResult.RegNum,
-			EnterpriseName:      ocrResult.EnterpriseEName,
-			LegalRepresentative: ocrResult.LegalRepresentative,
-			TypeOfEnterprise:    ocrResult.TypeOfEnterprise,
-			Address:             ocrResult.Address,
-			BusinessScope:       ocrResult.BusinessScope,
-			RegisteredCapital:   ocrResult.RegisteredCapital,
-			ValidPeriod:         ocrResult.ValidPeriod,
-			CreditCode:          ocrResult.CreditCode,
-			OCRAt:               time.Now().Format(time.RFC3339),
+	if assetID > 0 {
+		if err := server.mediaRegistry.SoftDelete(ctx, assetID, authPayload.UserID); err != nil {
+			log.Warn().Err(err).Int64("asset_id", assetID).Str("document_type", string(documentType)).Msg("delete operator application document: soft delete media failed")
 		}
-		ocrJSON, _ := json.Marshal(ocrData)
-		arg.BusinessLicenseOcr = ocrJSON
-
-		// 自动回填信息
-		if ocrResult.CreditCode != "" {
-			arg.BusinessLicenseNumber = pgtype.Text{String: ocrResult.CreditCode, Valid: true}
-		} else if ocrResult.RegNum != "" {
-			arg.BusinessLicenseNumber = pgtype.Text{String: ocrResult.RegNum, Valid: true}
-		}
-		if ocrResult.EnterpriseEName != "" {
-			arg.Name = pgtype.Text{String: ocrResult.EnterpriseEName, Valid: true}
-		}
-	}
-
-	updatedApp, err := server.store.UpdateOperatorApplicationBusinessLicense(ctx, arg)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
 	}
 
 	regionName := server.getRegionName(ctx, updatedApp.RegionID)
 	ctx.JSON(http.StatusOK, newOperatorApplicationResponse(updatedApp, regionName))
 }
 
-// ==================== 上传身份证并OCR识别 ====================
-
-// uploadOperatorIDCardOCR godoc
-// @Summary 上传法人身份证并OCR识别
-// @Description 上传法人身份证照片（正面或背面），调用微信OCR识别并保存结果
+// deleteOperatorApplicationDocument godoc
+// @Summary 删除运营商申请证照
+// @Description 删除运营商草稿中的单个证照绑定，并清空对应 OCR 结果。支持证照类型：business_license、id_card_front、id_card_back。
 // @Tags 运营商申请
-// @Accept multipart/form-data
 // @Produce json
-// @Param image formData file true "身份证图片"
-// @Param side formData string true "正面Front/背面Back"
-// @Success 200 {object} operatorApplicationResponse "识别结果"
-// @Failure 400 {object} ErrorResponse "参数错误或非草稿状态"
+// @Param document_type path string true "证照类型: business_license|id_card_front|id_card_back"
+// @Success 200 {object} operatorApplicationResponse "删除成功"
+// @Failure 400 {object} ErrorResponse "参数错误或状态不允许修改"
 // @Failure 401 {object} ErrorResponse "未登录"
 // @Failure 404 {object} ErrorResponse "申请不存在"
 // @Failure 500 {object} ErrorResponse "服务器错误"
-// @Router /v1/operator/application/idcard/ocr [post]
+// @Router /v1/operator/application/documents/{document_type} [delete]
 // @Security BearerAuth
-func (server *Server) uploadOperatorIDCardOCR(ctx *gin.Context) {
-	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-
-	// 获取申请
-	app, err := server.store.GetOperatorApplicationDraft(ctx, authPayload.UserID)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("请先创建申请")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	if app.Status != "draft" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("只能修改草稿状态的申请")))
-		return
-	}
-
-	// 获取上传的文件
-	file, fileHeader, err := ctx.Request.FormFile("image")
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("请上传身份证图片")))
-		return
-	}
-	defer file.Close()
-
-	side := ctx.PostForm("side")
-	if side != "Front" && side != "Back" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("side参数必须是Front或Back")))
-		return
-	}
-
-	// 上传前内容安全检测：不通过则不保存
-	if err := server.wechatClient.ImgSecCheck(ctx, file); err != nil {
-		if errors.Is(err, wechat.ErrRiskyContent) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("图片内容安全检测未通过")))
-			return
-		}
-		if errors.Is(err, wechat.ErrImageTooLarge) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("图片过大，请压缩后再上传")))
-			return
-		}
-		ctx.JSON(http.StatusBadGateway, internalError(ctx, err))
-		return
-	}
-	if _, err := file.Seek(0, 0); err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 保存图片
-	uploader := util.NewFileUploader("uploads")
-	imageURL, err := uploader.UploadOperatorImage(authPayload.UserID, "idcard_"+side, file, fileHeader)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 重新打开文件用于OCR
-	if _, err := file.Seek(0, 0); err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 调用微信OCR
-	ocrResult, err := server.wechatClient.OCRIDCard(ctx, file, side)
-	if err != nil {
-		log.Error().Err(err).Msg("身份证OCR识别失败")
-	}
-
-	var updatedApp db.OperatorApplication
-
-	if side == "Front" {
-		arg := db.UpdateOperatorApplicationIDCardFrontParams{
-			ID:             app.ID,
-			IDCardFrontUrl: pgtype.Text{String: imageURL, Valid: true},
-		}
-
-		if ocrResult != nil {
-			ocrData := OperatorIDCardOCRData{
-				Name:     ocrResult.Name,
-				IDNumber: ocrResult.ID,
-				Gender:   ocrResult.Gender,
-				Nation:   ocrResult.Nation,
-				Address:  ocrResult.Addr,
-				OCRAt:    time.Now().Format(time.RFC3339),
-			}
-			ocrJSON, _ := json.Marshal(ocrData)
-			arg.IDCardFrontOcr = ocrJSON
-
-			// 自动回填
-			if ocrResult.Name != "" {
-				arg.LegalPersonName = pgtype.Text{String: ocrResult.Name, Valid: true}
-			}
-			if ocrResult.ID != "" {
-				arg.LegalPersonIDNumber = pgtype.Text{String: ocrResult.ID, Valid: true}
-			}
-		}
-
-		updatedApp, err = server.store.UpdateOperatorApplicationIDCardFront(ctx, arg)
-	} else {
-		arg := db.UpdateOperatorApplicationIDCardBackParams{
-			ID:            app.ID,
-			IDCardBackUrl: pgtype.Text{String: imageURL, Valid: true},
-		}
-
-		if ocrResult != nil && ocrResult.ValidDate != "" {
-			ocrData := OperatorIDCardBackOCR{
-				ValidEnd: ocrResult.ValidDate,
-				OCRAt:    time.Now().Format(time.RFC3339),
-			}
-			ocrJSON, _ := json.Marshal(ocrData)
-			arg.IDCardBackOcr = ocrJSON
-		}
-
-		updatedApp, err = server.store.UpdateOperatorApplicationIDCardBack(ctx, arg)
-	}
-
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	regionName := server.getRegionName(ctx, updatedApp.RegionID)
-	ctx.JSON(http.StatusOK, newOperatorApplicationResponse(updatedApp, regionName))
+func (server *Server) deleteOperatorApplicationDocument(ctx *gin.Context) {
+	documentType := operatorApplicationDocumentType(strings.TrimSpace(ctx.Param("document_type")))
+	server.deleteOperatorApplicationDocumentByType(ctx, documentType)
 }
 
 // ==================== 提交申请 ====================
@@ -739,13 +580,19 @@ func (server *Server) uploadOperatorIDCardOCR(ctx *gin.Context) {
 // @Router /v1/operator/application/submit [post]
 // @Security BearerAuth
 func (server *Server) submitOperatorApplication(ctx *gin.Context) {
+	consentReq, err := parseAgreementConsentRequest(ctx)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取申请
 	app, err := server.store.GetOperatorApplicationDraft(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("请先创建申请")))
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrApplicationNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -753,8 +600,26 @@ func (server *Server) submitOperatorApplication(ctx *gin.Context) {
 	}
 
 	if app.Status != "draft" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("只能提交草稿状态的申请")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrApplicationSubmitDraft))
 		return
+	}
+
+	server.writeAgreementConsentAudit(ctx, authPayload.UserID, "operator_application_consent_confirmed", "operator_application", app.ID, consentReq)
+
+	// 个人运营商兜底：若运营商名称为空，自动使用法人/个人姓名
+	if (!app.Name.Valid || strings.TrimSpace(app.Name.String) == "") && app.LegalPersonName.Valid {
+		legalName := strings.TrimSpace(app.LegalPersonName.String)
+		if legalName != "" {
+			updatedApp, updateErr := server.store.UpdateOperatorApplicationBasicInfo(ctx, db.UpdateOperatorApplicationBasicInfoParams{
+				ID:   app.ID,
+				Name: pgtype.Text{String: legalName, Valid: true},
+			})
+			if updateErr != nil {
+				ctx.JSON(http.StatusInternalServerError, internalError(ctx, updateErr))
+				return
+			}
+			app = updatedApp
+		}
 	}
 
 	// 验证必填字段
@@ -764,12 +629,12 @@ func (server *Server) submitOperatorApplication(ctx *gin.Context) {
 	}
 
 	// 再次检查区域是否已被占用（防止竞态条件）
-	_, err = server.store.GetOperatorByRegion(ctx, app.RegionID)
+	_, err = server.getRegionActiveOperator(ctx, app.RegionID)
 	if err == nil {
-		ctx.JSON(http.StatusConflict, errorResponse(errors.New("该区域已有运营商运营，请修改申请区域")))
+		ctx.JSON(http.StatusConflict, errorResponse(ErrRegionHasOperator))
 		return
 	}
-	if !errors.Is(err, sql.ErrNoRows) {
+	if !isNotFoundError(err) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -777,10 +642,10 @@ func (server *Server) submitOperatorApplication(ctx *gin.Context) {
 	// 检查是否有其他已提交的申请
 	pendingApp, err := server.store.GetPendingOperatorApplicationByRegion(ctx, app.RegionID)
 	if err == nil && pendingApp.ID != app.ID {
-		ctx.JSON(http.StatusConflict, errorResponse(errors.New("该区域已有待审核的申请，请修改申请区域")))
+		ctx.JSON(http.StatusConflict, errorResponse(ErrRegionHasPendingApplication))
 		return
 	}
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+	if err != nil && !isNotFoundError(err) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -799,22 +664,19 @@ func (server *Server) submitOperatorApplication(ctx *gin.Context) {
 // validateOperatorApplicationRequired 验证必填字段
 func validateOperatorApplicationRequired(app db.OperatorApplication) error {
 	if !app.Name.Valid || app.Name.String == "" {
-		return errors.New("运营商名称不能为空")
+		return ErrOperatorNameRequired
 	}
 	if !app.ContactName.Valid || app.ContactName.String == "" {
-		return errors.New("联系人姓名不能为空")
+		return ErrContactNameRequired
 	}
 	if !app.ContactPhone.Valid || app.ContactPhone.String == "" {
-		return errors.New("联系电话不能为空")
+		return ErrPhoneRequired
 	}
-	if !app.BusinessLicenseUrl.Valid || app.BusinessLicenseUrl.String == "" {
-		return errors.New("请上传营业执照")
+	if !app.IDCardFrontMediaAssetID.Valid {
+		return ErrLegalRepIDCardFrontRequired
 	}
-	if !app.IDCardFrontUrl.Valid || app.IDCardFrontUrl.String == "" {
-		return errors.New("请上传法人身份证正面照")
-	}
-	if !app.IDCardBackUrl.Valid || app.IDCardBackUrl.String == "" {
-		return errors.New("请上传法人身份证背面照")
+	if !app.IDCardBackMediaAssetID.Valid {
+		return ErrLegalRepIDCardBackRequired
 	}
 	return nil
 }
@@ -838,8 +700,8 @@ func (server *Server) resetOperatorApplicationToDraft(ctx *gin.Context) {
 
 	app, err := server.store.GetOperatorApplicationByUserID(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("没有申请记录")))
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrApplicationNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -847,7 +709,7 @@ func (server *Server) resetOperatorApplicationToDraft(ctx *gin.Context) {
 	}
 
 	if app.Status != "rejected" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("只能重置被拒绝的申请")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrApplicationCannotReset))
 		return
 	}
 
@@ -867,6 +729,12 @@ func (server *Server) getRegionName(ctx *gin.Context, regionID int64) string {
 	region, err := server.store.GetRegion(ctx, regionID)
 	if err != nil {
 		return ""
+	}
+	if region.ParentID.Valid && region.ParentID.Int64 > 0 {
+		parent, parentErr := server.store.GetRegion(ctx, region.ParentID.Int64)
+		if parentErr == nil && strings.TrimSpace(parent.Name) != "" {
+			return parent.Name + " - " + region.Name
+		}
 	}
 	return region.Name
 }

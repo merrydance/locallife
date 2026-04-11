@@ -46,7 +46,7 @@ RETURNING *;
 UPDATE deliveries
 SET 
     status = 'picking'
-WHERE id = $1 AND rider_id = $2
+WHERE id = $1 AND rider_id = $2 AND status = 'assigned'
 RETURNING *;
 
 -- name: UpdateDeliveryToPicked :one
@@ -68,7 +68,8 @@ RETURNING *;
 UPDATE deliveries
 SET 
     status = 'delivered',
-    delivered_at = now()
+    delivered_at = now(),
+    rider_delivered_at = now()
 WHERE id = $1 AND rider_id = $2 AND status = 'delivering'
 RETURNING *;
 
@@ -142,10 +143,10 @@ WHERE rider_id = $1 AND status = 'completed';
 -- name: GetRiderDailyEarnings :one
 SELECT COALESCE(SUM(rider_earnings), 0) AS daily_earnings
 FROM deliveries
-WHERE rider_id = $1 
+WHERE rider_id = sqlc.arg('rider_id')
     AND status = 'completed'
-    AND completed_at >= $2
-    AND completed_at < $3;
+    AND completed_at >= sqlc.arg('start_at')
+    AND completed_at < sqlc.arg('end_at');
 
 -- name: UpdateDeliveryEstimatedTime :one
 UPDATE deliveries
@@ -153,3 +154,11 @@ SET
     estimated_delivery_at = $2
 WHERE id = $1
 RETURNING *;
+
+-- name: ListPendingDeliveriesBefore :many
+-- 获取超时未接单的配送单
+SELECT * FROM deliveries
+WHERE status = sqlc.arg('status')
+  AND created_at < sqlc.arg('created_at')
+ORDER BY created_at ASC
+LIMIT sqlc.arg('limit');

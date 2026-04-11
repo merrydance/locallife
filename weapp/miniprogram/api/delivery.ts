@@ -1,110 +1,245 @@
 import { request } from '../utils/request'
 
-/**
- * 配送单响应 - 对齐 api.deliveryResponse
- */
-export interface DeliveryResponse {
+export interface RecommendedOrder {
+    order_id: number
+    merchant_id: number
+    merchant_name?: string
+    merchant_address?: string
+    customer_address?: string
+    item_count?: number
+    total_score: number
+    distance_to_pickup: number
+    real_distance?: number
+    estimated_minutes: number
+    delivery_fee: number
+    distance: number // Merchant to Customer
+    pickup_longitude: number
+    pickup_latitude: number
+    delivery_longitude: number
+    delivery_latitude: number
+    expires_at: string
+}
+
+export interface Delivery {
     id: number
     order_id: number
+    order_no?: string
     rider_id?: number
-    status: string
+    merchant_name?: string
     pickup_address: string
-    pickup_contact: string
-    pickup_phone: string
-    pickup_latitude: number
     pickup_longitude: number
+    pickup_latitude: number
+    pickup_contact?: string
+    pickup_phone?: string
     delivery_address: string
-    delivery_contact: string
-    delivery_phone: string
-    delivery_latitude: number
     delivery_longitude: number
-    distance: number
+    delivery_latitude: number
+    delivery_contact?: string
+    delivery_phone?: string
+    status: 'pending' | 'assigned' | 'picking' | 'picked' | 'delivering' | 'delivered' | 'completed' | 'cancelled' | 'exception'
     delivery_fee: number
-    rider_earnings?: number
+    rider_earnings: number
+    freeze_amount?: number
+    item_count?: number
     estimated_pickup_at?: string
     estimated_delivery_at?: string
-    assigned_at?: string
     picked_at?: string
     delivered_at?: string
     completed_at?: string
-    created_at: string
+    created_at?: string
+    assigned_at?: string
+    location_updated_at?: string
+    notes?: string
+    items?: Array<{
+        name: string
+        quantity: number
+    }>
 }
 
-/**
- * 骑手位置响应 - 对齐 api.locationResponse
- */
-export interface LocationResponse {
+export interface DeliveryLocationPoint {
     latitude: number
     longitude: number
-    accuracy: number
-    speed: number
-    heading: number
+    accuracy?: number
+    speed?: number
+    heading?: number
     recorded_at: string
 }
 
-/**
- * 获取骑手最新位置
- * GET /v1/delivery/:delivery_id/rider-location
- */
-export function getRiderLocation(deliveryId: number) {
-    return request<LocationResponse>({
-        url: `/v1/delivery/${deliveryId}/rider-location`,
-        method: 'GET'
-    })
+export type DeliveryStatusTheme = 'success' | 'warning' | 'danger' | 'primary' | 'default'
+
+export interface DeliveryProgressView {
+    title: string
+    time: string
+    done: boolean
+    active: boolean
 }
 
-/**
- * 骑手确认取餐
- * POST /v1/delivery/:delivery_id/confirm-pickup
- */
-export function confirmPickup(deliveryId: number) {
-    return request<DeliveryResponse>({
-        url: `/v1/delivery/${deliveryId}/confirm-pickup`,
-        method: 'POST'
-    })
+export function getDeliveryStatusDisplay(status?: Delivery['status']) {
+    const isAssignedStage = status === 'assigned' || status === 'picking'
+    const isPickedStage = status === 'picked'
+    const isDeliveringStage = status === 'delivering'
+    const isDeliveredStage = status === 'delivered' || status === 'completed'
+
+    const statusMap: Record<string, { text: string, theme: DeliveryStatusTheme }> = {
+        pending: { text: '等待骑手接单', theme: 'default' },
+        assigned: { text: '骑手已接单', theme: 'primary' },
+        picking: { text: '骑手正在取餐', theme: 'primary' },
+        picked: { text: '骑手已取餐', theme: 'primary' },
+        delivering: { text: '骑手正在配送', theme: 'primary' },
+        delivered: { text: '已送达', theme: 'success' },
+        completed: { text: '已送达', theme: 'success' },
+        cancelled: { text: '配送已取消', theme: 'warning' },
+        exception: { text: '配送异常', theme: 'danger' }
+    }
+
+    const meta = statusMap[status || ''] || { text: status || '', theme: 'default' as const }
+
+    return {
+        text: meta.text,
+        theme: meta.theme,
+        isAssignedStage,
+        isPickedStage,
+        isDeliveringStage,
+        isDeliveredStage,
+        isLocationTracked: isPickedStage || isDeliveringStage,
+        canConfirmReceipt: status === 'delivered'
+    }
 }
 
-/**
- * 骑手确认送达
- * POST /v1/delivery/:delivery_id/confirm-delivery
- */
-export function confirmDelivery(deliveryId: number) {
-    return request<DeliveryResponse>({
-        url: `/v1/delivery/${deliveryId}/confirm-delivery`,
-        method: 'POST'
-    })
+export function buildDeliveryProgress(delivery: Delivery, formatTime: (timeStr: string) => string): DeliveryProgressView[] {
+    const statusDisplay = getDeliveryStatusDisplay(delivery.status)
+    const isAtLeastAssigned = statusDisplay.isAssignedStage || statusDisplay.isPickedStage || statusDisplay.isDeliveringStage || statusDisplay.isDeliveredStage
+    const isAtLeastPicked = statusDisplay.isPickedStage || statusDisplay.isDeliveringStage || statusDisplay.isDeliveredStage
+    const isAtLeastDelivering = statusDisplay.isDeliveringStage || statusDisplay.isDeliveredStage
+
+    return [
+        {
+            title: '商家已接单',
+            time: delivery.created_at ? formatTime(delivery.created_at) : '',
+            done: true,
+            active: false
+        },
+        {
+            title: '骑手已接单',
+            time: delivery.assigned_at ? formatTime(delivery.assigned_at) : '',
+            done: !!delivery.assigned_at || isAtLeastAssigned,
+            active: statusDisplay.isAssignedStage
+        },
+        {
+            title: '骑手已取餐',
+            time: delivery.picked_at ? formatTime(delivery.picked_at) : '',
+            done: !!delivery.picked_at || isAtLeastPicked,
+            active: statusDisplay.isPickedStage
+        },
+        {
+            title: '配送中',
+            time: '',
+            done: isAtLeastDelivering,
+            active: statusDisplay.isDeliveringStage
+        },
+        {
+            title: '已送达',
+            time: delivery.delivered_at ? formatTime(delivery.delivered_at) : '',
+            done: !!delivery.delivered_at || statusDisplay.isDeliveredStage,
+            active: statusDisplay.isDeliveredStage
+        }
+    ]
 }
 
-/**
- * 获取配送轨迹
- * GET /v1/delivery/:delivery_id/track
- */
-export function getDeliveryTrack(deliveryId: number, since?: string) {
-    return request<LocationResponse[]>({
-        url: `/v1/delivery/${deliveryId}/track`,
-        method: 'GET',
-        data: since ? { since } : undefined
-    })
+export class DeliveryService {
+    /**
+     * 获取推荐接单列表 (抢单池)
+     */
+    static async getRecommendedOrders(lng: number, lat: number): Promise<RecommendedOrder[]> {
+        return await request({
+            url: '/v1/delivery/recommend',
+            method: 'GET',
+            data: { longitude: lng, latitude: lat }
+        })
+    }
+
+    /**
+     * 抢单
+     */
+    static async grabOrder(orderId: number): Promise<Delivery> {
+        return await request({
+            url: `/v1/delivery/grab/${orderId}`,
+            method: 'POST'
+        })
+    }
+
+    /**
+     * 开始取餐 (前往商家)
+     */
+    static async startPickup(deliveryId: number): Promise<Delivery> {
+        return await request({
+            url: `/v1/delivery/${deliveryId}/start-pickup`,
+            method: 'POST'
+        })
+    }
+
+    /**
+     * 确认取餐 (已拿到餐品)
+     */
+    static async confirmPickup(deliveryId: number): Promise<Delivery> {
+        return await request({
+            url: `/v1/delivery/${deliveryId}/confirm-pickup`,
+            method: 'POST'
+        })
+    }
+
+    /**
+     * 开始送餐 (前往客户)
+     */
+    static async startDelivery(deliveryId: number): Promise<Delivery> {
+        return await request({
+            url: `/v1/delivery/${deliveryId}/start-delivery`,
+            method: 'POST'
+        })
+    }
+
+    /**
+     * 确认送达
+     */
+    static async confirmDelivery(deliveryId: number): Promise<Delivery> {
+        return await request({
+            url: `/v1/delivery/${deliveryId}/confirm-delivery`,
+            method: 'POST'
+        })
+    }
+
+    /**
+     * 获取详情 (通过订单ID)
+     */
+    static async getDeliveryByOrder(orderId: number): Promise<Delivery> {
+        return await request({
+            url: `/v1/delivery/order/${orderId}`,
+            method: 'GET'
+        })
+    }
+
+    /**
+     * 获取骑手位置
+     */
+    static async getRiderLocation(deliveryId: number): Promise<DeliveryLocationPoint> {
+        return await request({
+            url: `/v1/delivery/${deliveryId}/rider-location`,
+            method: 'GET'
+        })
+    }
+
+    /**
+     * 获取配送轨迹
+     */
+    static async getDeliveryTrack(deliveryId: number, since?: string): Promise<DeliveryLocationPoint[]> {
+        return await request({
+            url: `/v1/delivery/${deliveryId}/track`,
+            method: 'GET',
+            data: since ? { since } : undefined
+        })
+    }
 }
 
-/**
- * 获取配送单详情
- * GET /v1/delivery/:delivery_id
- */
-export function getDeliveryDetail(deliveryId: number) {
-    return request<DeliveryResponse>({
-        url: `/v1/delivery/${deliveryId}`,
-        method: 'GET'
-    })
-}
+export type DeliveryResponse = Delivery;
 
-/**
- * 根据订单ID获取配送信息
- * GET /v1/delivery/order/:order_id
- */
-export function getDeliveryByOrder(orderId: number) {
-    return request<DeliveryResponse>({
-        url: `/v1/delivery/order/${orderId}`,
-        method: 'GET'
-    })
-}
+export default DeliveryService

@@ -28,8 +28,8 @@ SET
 WHERE merchant_id = $1
   AND dish_id = $2
   AND date = $3
-  AND (total_quantity = -1 OR sold_quantity + $4 <= total_quantity)
-RETURNING id, merchant_id, dish_id, date, total_quantity, sold_quantity, created_at, updated_at
+  AND (total_quantity = -1 OR sold_quantity + reserved_quantity + $4 <= total_quantity)
+RETURNING id, merchant_id, dish_id, date, total_quantity, sold_quantity, created_at, updated_at, reserved_quantity
 `
 
 type CheckAndDecrementInventoryParams struct {
@@ -56,6 +56,7 @@ func (q *Queries) CheckAndDecrementInventory(ctx context.Context, arg CheckAndDe
 		&i.SoldQuantity,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ReservedQuantity,
 	)
 	return i, err
 }
@@ -70,7 +71,7 @@ INSERT INTO daily_inventory (
   sold_quantity
 ) VALUES (
   $1, $2, $3, $4, $5
-) RETURNING id, merchant_id, dish_id, date, total_quantity, sold_quantity, created_at, updated_at
+) RETURNING id, merchant_id, dish_id, date, total_quantity, sold_quantity, created_at, updated_at, reserved_quantity
 `
 
 type CreateDailyInventoryParams struct {
@@ -102,6 +103,7 @@ func (q *Queries) CreateDailyInventory(ctx context.Context, arg CreateDailyInven
 		&i.SoldQuantity,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ReservedQuantity,
 	)
 	return i, err
 }
@@ -133,7 +135,7 @@ func (q *Queries) DeleteOldInventory(ctx context.Context, date pgtype.Date) erro
 }
 
 const getDailyInventory = `-- name: GetDailyInventory :one
-SELECT id, merchant_id, dish_id, date, total_quantity, sold_quantity, created_at, updated_at FROM daily_inventory
+SELECT id, merchant_id, dish_id, date, total_quantity, sold_quantity, created_at, updated_at, reserved_quantity FROM daily_inventory
 WHERE merchant_id = $1 AND dish_id = $2 AND date = $3
 LIMIT 1
 `
@@ -156,12 +158,13 @@ func (q *Queries) GetDailyInventory(ctx context.Context, arg GetDailyInventoryPa
 		&i.SoldQuantity,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ReservedQuantity,
 	)
 	return i, err
 }
 
 const getDailyInventoryForUpdate = `-- name: GetDailyInventoryForUpdate :one
-SELECT id, merchant_id, dish_id, date, total_quantity, sold_quantity, created_at, updated_at FROM daily_inventory
+SELECT id, merchant_id, dish_id, date, total_quantity, sold_quantity, created_at, updated_at, reserved_quantity FROM daily_inventory
 WHERE merchant_id = $1 AND dish_id = $2 AND date = $3
 LIMIT 1
 FOR UPDATE
@@ -185,18 +188,23 @@ func (q *Queries) GetDailyInventoryForUpdate(ctx context.Context, arg GetDailyIn
 		&i.SoldQuantity,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ReservedQuantity,
 	)
 	return i, err
 }
 
 const getInventoryStats = `-- name: GetInventoryStats :one
 SELECT 
-  COUNT(*) as total_dishes,
-  COUNT(*) FILTER (WHERE total_quantity = -1) as unlimited_dishes,
-  COUNT(*) FILTER (WHERE total_quantity > 0 AND sold_quantity >= total_quantity) as sold_out_dishes,
-  COUNT(*) FILTER (WHERE total_quantity > 0 AND sold_quantity < total_quantity) as available_dishes
-FROM daily_inventory
-WHERE merchant_id = $1 AND date = $2
+  COUNT(d.id) as total_dishes,
+  COUNT(d.id) FILTER (WHERE di.total_quantity = -1 OR di.id IS NULL) as unlimited_dishes,
+  COUNT(d.id) FILTER (WHERE di.total_quantity = 0 OR (di.total_quantity > 0 AND di.sold_quantity >= di.total_quantity)) as sold_out_dishes,
+  COUNT(d.id) FILTER (
+    WHERE (di.total_quantity = -1 OR di.id IS NULL) -- 无限库存
+    OR (di.total_quantity > 0 AND di.sold_quantity < di.total_quantity) -- 有限库存且未卖完
+  ) as available_dishes
+FROM dishes d
+LEFT JOIN daily_inventory di ON d.id = di.dish_id AND di.date = $2
+WHERE d.merchant_id = $1 AND d.is_online = true
 `
 
 type GetInventoryStatsParams struct {
@@ -231,7 +239,7 @@ SET
 WHERE merchant_id = $1
   AND dish_id = $2
   AND date = $3
-RETURNING id, merchant_id, dish_id, date, total_quantity, sold_quantity, created_at, updated_at
+RETURNING id, merchant_id, dish_id, date, total_quantity, sold_quantity, created_at, updated_at, reserved_quantity
 `
 
 type IncrementSoldQuantityParams struct {
@@ -258,12 +266,13 @@ func (q *Queries) IncrementSoldQuantity(ctx context.Context, arg IncrementSoldQu
 		&i.SoldQuantity,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ReservedQuantity,
 	)
 	return i, err
 }
 
 const listDailyInventoryByDate = `-- name: ListDailyInventoryByDate :many
-SELECT id, merchant_id, dish_id, date, total_quantity, sold_quantity, created_at, updated_at FROM daily_inventory
+SELECT id, merchant_id, dish_id, date, total_quantity, sold_quantity, created_at, updated_at, reserved_quantity FROM daily_inventory
 WHERE date = $1
 ORDER BY merchant_id ASC, dish_id ASC
 `
@@ -286,6 +295,7 @@ func (q *Queries) ListDailyInventoryByDate(ctx context.Context, date pgtype.Date
 			&i.SoldQuantity,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ReservedQuantity,
 		); err != nil {
 			return nil, err
 		}
@@ -299,14 +309,25 @@ func (q *Queries) ListDailyInventoryByDate(ctx context.Context, date pgtype.Date
 
 const listDailyInventoryByMerchant = `-- name: ListDailyInventoryByMerchant :many
 SELECT 
-  di.id, di.merchant_id, di.dish_id, di.date, di.total_quantity, di.sold_quantity, di.created_at, di.updated_at,
+  COALESCE(di.id, 0) as id,
+  d.merchant_id as merchant_id,
+  d.id as dish_id,
+  $2::date as date,
+  COALESCE(di.total_quantity, -1) as total_quantity,
+  COALESCE(di.sold_quantity, 0) as sold_quantity,
+  COALESCE(di.created_at, now()) as created_at,
+  COALESCE(di.updated_at, now()) as updated_at,
+  COALESCE(di.reserved_quantity, 0) as reserved_quantity,
   d.name as dish_name,
   d.price as dish_price
-FROM daily_inventory di
-JOIN dishes d ON di.dish_id = d.id
-WHERE 
-  di.merchant_id = $1
+FROM dishes d
+LEFT JOIN daily_inventory di ON di.dish_id = d.id
+  AND di.merchant_id = d.merchant_id
   AND di.date = $2
+WHERE 
+  d.merchant_id = $1
+  AND d.is_online = true
+  AND d.deleted_at IS NULL
 ORDER BY d.name ASC
 `
 
@@ -316,16 +337,17 @@ type ListDailyInventoryByMerchantParams struct {
 }
 
 type ListDailyInventoryByMerchantRow struct {
-	ID            int64              `json:"id"`
-	MerchantID    int64              `json:"merchant_id"`
-	DishID        int64              `json:"dish_id"`
-	Date          pgtype.Date        `json:"date"`
-	TotalQuantity int32              `json:"total_quantity"`
-	SoldQuantity  int32              `json:"sold_quantity"`
-	CreatedAt     time.Time          `json:"created_at"`
-	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
-	DishName      string             `json:"dish_name"`
-	DishPrice     int64              `json:"dish_price"`
+	ID               int64              `json:"id"`
+	MerchantID       int64              `json:"merchant_id"`
+	DishID           int64              `json:"dish_id"`
+	Date             pgtype.Date        `json:"date"`
+	TotalQuantity    int32              `json:"total_quantity"`
+	SoldQuantity     int32              `json:"sold_quantity"`
+	CreatedAt        time.Time          `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	ReservedQuantity int32              `json:"reserved_quantity"`
+	DishName         string             `json:"dish_name"`
+	DishPrice        int64              `json:"dish_price"`
 }
 
 func (q *Queries) ListDailyInventoryByMerchant(ctx context.Context, arg ListDailyInventoryByMerchantParams) ([]ListDailyInventoryByMerchantRow, error) {
@@ -346,6 +368,7 @@ func (q *Queries) ListDailyInventoryByMerchant(ctx context.Context, arg ListDail
 			&i.SoldQuantity,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ReservedQuantity,
 			&i.DishName,
 			&i.DishPrice,
 		); err != nil {
@@ -359,30 +382,114 @@ func (q *Queries) ListDailyInventoryByMerchant(ctx context.Context, arg ListDail
 	return items, nil
 }
 
+const releaseReservedInventory = `-- name: ReleaseReservedInventory :one
+UPDATE daily_inventory
+SET
+  reserved_quantity = GREATEST(reserved_quantity - $4, 0),
+  updated_at = now()
+WHERE merchant_id = $1
+  AND dish_id = $2
+  AND date = $3
+RETURNING id, merchant_id, dish_id, date, total_quantity, sold_quantity, created_at, updated_at, reserved_quantity
+`
+
+type ReleaseReservedInventoryParams struct {
+	MerchantID       int64       `json:"merchant_id"`
+	DishID           int64       `json:"dish_id"`
+	Date             pgtype.Date `json:"date"`
+	ReservedQuantity int32       `json:"reserved_quantity"`
+}
+
+func (q *Queries) ReleaseReservedInventory(ctx context.Context, arg ReleaseReservedInventoryParams) (DailyInventory, error) {
+	row := q.db.QueryRow(ctx, releaseReservedInventory,
+		arg.MerchantID,
+		arg.DishID,
+		arg.Date,
+		arg.ReservedQuantity,
+	)
+	var i DailyInventory
+	err := row.Scan(
+		&i.ID,
+		&i.MerchantID,
+		&i.DishID,
+		&i.Date,
+		&i.TotalQuantity,
+		&i.SoldQuantity,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ReservedQuantity,
+	)
+	return i, err
+}
+
+const reserveInventory = `-- name: ReserveInventory :one
+UPDATE daily_inventory
+SET
+  reserved_quantity = reserved_quantity + $4,
+  updated_at = now()
+WHERE merchant_id = $1
+  AND dish_id = $2
+  AND date = $3
+  AND (total_quantity = -1 OR sold_quantity + reserved_quantity + $4 <= total_quantity)
+RETURNING id, merchant_id, dish_id, date, total_quantity, sold_quantity, created_at, updated_at, reserved_quantity
+`
+
+type ReserveInventoryParams struct {
+	MerchantID       int64       `json:"merchant_id"`
+	DishID           int64       `json:"dish_id"`
+	Date             pgtype.Date `json:"date"`
+	ReservedQuantity int32       `json:"reserved_quantity"`
+}
+
+func (q *Queries) ReserveInventory(ctx context.Context, arg ReserveInventoryParams) (DailyInventory, error) {
+	row := q.db.QueryRow(ctx, reserveInventory,
+		arg.MerchantID,
+		arg.DishID,
+		arg.Date,
+		arg.ReservedQuantity,
+	)
+	var i DailyInventory
+	err := row.Scan(
+		&i.ID,
+		&i.MerchantID,
+		&i.DishID,
+		&i.Date,
+		&i.TotalQuantity,
+		&i.SoldQuantity,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ReservedQuantity,
+	)
+	return i, err
+}
+
 const updateDailyInventory = `-- name: UpdateDailyInventory :one
 UPDATE daily_inventory
 SET
   total_quantity = COALESCE($1, total_quantity),
   sold_quantity = COALESCE($2, sold_quantity),
+  reserved_quantity = COALESCE($3, reserved_quantity),
   updated_at = now()
-WHERE merchant_id = $3
-  AND dish_id = $4
-  AND date = $5
-RETURNING id, merchant_id, dish_id, date, total_quantity, sold_quantity, created_at, updated_at
+WHERE merchant_id = $4
+  AND dish_id = $5
+  AND date = $6
+RETURNING id, merchant_id, dish_id, date, total_quantity, sold_quantity, created_at, updated_at, reserved_quantity
 `
 
 type UpdateDailyInventoryParams struct {
-	TotalQuantity pgtype.Int4 `json:"total_quantity"`
-	SoldQuantity  pgtype.Int4 `json:"sold_quantity"`
-	MerchantID    int64       `json:"merchant_id"`
-	DishID        int64       `json:"dish_id"`
-	Date          pgtype.Date `json:"date"`
+	TotalQuantity    pgtype.Int4 `json:"total_quantity"`
+	SoldQuantity     pgtype.Int4 `json:"sold_quantity"`
+	ReservedQuantity pgtype.Int4 `json:"reserved_quantity"`
+	MerchantID       int64       `json:"merchant_id"`
+	DishID           int64       `json:"dish_id"`
+	Date             pgtype.Date `json:"date"`
 }
 
 func (q *Queries) UpdateDailyInventory(ctx context.Context, arg UpdateDailyInventoryParams) (DailyInventory, error) {
 	row := q.db.QueryRow(ctx, updateDailyInventory,
 		arg.TotalQuantity,
 		arg.SoldQuantity,
+		arg.ReservedQuantity,
 		arg.MerchantID,
 		arg.DishID,
 		arg.Date,
@@ -397,6 +504,7 @@ func (q *Queries) UpdateDailyInventory(ctx context.Context, arg UpdateDailyInven
 		&i.SoldQuantity,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ReservedQuantity,
 	)
 	return i, err
 }

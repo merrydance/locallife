@@ -31,8 +31,18 @@ export interface UserResponse {
   full_name?: string  // 全名
   phone?: string  // 手机号
   roles: string[]  // 用户角色数组
+  workbenches?: UserWorkbenchResponse[]
   wechat_openid?: string  // 微信OpenID
   created_at?: string  // 创建时间
+}
+
+export interface UserWorkbenchResponse {
+	id: string
+	status: string
+	merchant_id?: number
+	merchant_name?: string
+	staff_role?: string
+	message?: string
 }
 
 /**
@@ -108,6 +118,17 @@ export interface RoleAccessResponse {
   generated_at: string  // 生成时间
 }
 
+/**
+ * Web 登录会话状态 - 对齐 api.webLoginSessionStatusResponse
+ */
+export interface WebLoginSessionStatus {
+  code: string
+  status: string
+  expires_at: string
+  confirmed_at?: string
+  consumed_at?: string
+}
+
 // 兼容性别名
 export type RefreshTokenRequest = RenewAccessTokenRequest
 
@@ -121,7 +142,7 @@ export function wechatLogin(data: WechatLoginRequest) {
     method: 'POST',
     data,
     skipAuth: true // 登录接口不需要认证，跳过 token 验证和刷新
-  }).then(res => {
+  }).then((res) => {
     if (res.user) {
       normalizeUser(res.user)
     }
@@ -130,7 +151,7 @@ export function wechatLogin(data: WechatLoginRequest) {
 }
 
 /**
- * 刷新访问令牌 - 基于 /v1/auth/renew-access
+ * 刷新访问令牌 - 基于 /v1/auth/refresh
  * 后端已启用统一响应信封（X-Response-Envelope: 1），返回 { code, message, data } 格式
  */
 export function renewAccessToken(data: RefreshTokenRequest) {
@@ -155,12 +176,34 @@ export function getUserInfo() {
 /**
  * 更新用户信息 - 基于 PATCH /v1/users/me
  */
-export function updateUserInfo(data: { avatar_url?: string; full_name?: string }) {
+export function updateUserInfo(data: { avatar_url?: string, avatar_media_asset_id?: number, full_name?: string }) {
   return request<UserResponse>({
     url: '/v1/users/me',
     method: 'PATCH',
     data
   }).then(normalizeUser)
+}
+
+/**
+ * 查询 Web 登录会话状态
+ */
+export function getWebLoginSessionStatus(code: string) {
+  return request<WebLoginSessionStatus>({
+    url: `/v1/auth/web-login/sessions/${encodeURIComponent(code)}`,
+    method: 'GET',
+    skipAuth: true
+  })
+}
+
+/**
+ * 小程序确认 Web 登录
+ */
+export function confirmWebLoginSession(code: string, sig?: string, ts?: number) {
+  return request<WebLoginSessionStatus>({
+    url: '/v1/auth/web-login/confirm',
+    method: 'POST',
+    data: { code, sig, ts }
+  })
 }
 
 // 兼容性：保留旧接口名称，但使用新的实现

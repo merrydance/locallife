@@ -1,0 +1,179 @@
+<custom-navbar title="搜索" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view class="page-container" style="padding-top: calc({{navBarHeight}}px + var(--spacer-sm)); padding-bottom: env(safe-area-inset-bottom)">
+
+  <!-- 搜索框 -->
+  <view class="search-bar">
+    <t-search
+      model:value="{{keyword}}"
+      placeholder="搜索菜品、商家"
+      focus="{{true}}"
+      bind:change="onKeywordChange"
+      bind:clear="onClear"
+      bind:submit="onSearch"
+      bind:cancel="onCancel"
+    />
+  </view>
+
+  <!-- ======= 初始态：历史 + 热搜 ======= -->
+  <view wx:if="{{showInitial}}" class="initial-section">
+
+    <view wx:if="{{initialLoading}}" class="initial-loading">
+      <t-loading theme="circular" size="40rpx" text="加载搜索记录..." />
+    </view>
+
+    <view wx:elif="{{initialError}}" class="initial-error">
+      <t-empty description="{{initialErrorMessage || '搜索记录加载失败，请重试'}}" />
+      <t-button theme="primary" size="small" shape="round" bindtap="onRetryInitial">重新加载</t-button>
+    </view>
+
+    <block wx:else>
+
+    <!-- 搜索历史 -->
+    <view class="block-section" wx:if="{{history.length > 0}}">
+      <view class="block-header">
+        <text class="block-title">搜索历史</text>
+        <view bindtap="onClearHistory" class="clear-btn">
+          <t-icon name="delete" size="32rpx" color="#999" />
+        </view>
+      </view>
+      <view class="chip-row">
+        <view
+          class="chip"
+          wx:for="{{history}}"
+          wx:key="id"
+          bindtap="onHistoryTap"
+          data-keyword="{{item.keyword}}"
+        >
+          <text>{{item.keyword}}</text>
+          <t-icon name="close" size="24rpx" color="#999" bindtap="onDeleteHistory" data-id="{{item.id}}" catchtap="stopPropagation" />
+        </view>
+      </view>
+    </view>
+
+    <!-- 热门搜索 -->
+    <view class="block-section" wx:if="{{hotWords.length > 0}}">
+      <view class="block-header">
+        <text class="block-title">热门搜索</text>
+        <t-icon name="fire" size="32rpx" color="#FF6B00" />
+      </view>
+      <view class="chip-row">
+        <view
+          class="chip hot {{index < 3 ? 'hot-top' : ''}}"
+          wx:for="{{hotWords}}"
+          wx:key="keyword"
+          bindtap="onHotTap"
+          data-keyword="{{item.keyword}}"
+        >
+          {{item.keyword}}
+        </view>
+      </view>
+    </view>
+
+    <t-empty wx:if="{{history.length === 0 && hotWords.length === 0}}" description="输入关键词开始搜索" />
+
+    </block>
+
+  </view>
+
+  <!-- ======= 建议态：实时搜索建议 ======= -->
+  <view wx:elif="{{showSuggestions}}" class="suggest-list">
+    <view wx:if="{{suggestionsError}}" class="suggest-empty">
+      <text class="suggest-empty-text">{{suggestionsErrorMessage || '建议加载失败，直接搜索试试'}}</text>
+    </view>
+    <view wx:elif="{{suggestions.length === 0}}" class="suggest-empty">
+      <text class="suggest-empty-text">没有相关搜索建议，直接搜索试试</text>
+    </view>
+    <block wx:else>
+      <view
+        class="suggest-item"
+        wx:for="{{suggestions}}"
+        wx:key="keyword"
+        bindtap="onSuggestionTap"
+        data-keyword="{{item.keyword}}"
+      >
+        <t-icon name="search" size="32rpx" color="#aaa" />
+        <text class="suggest-text">{{item.keyword}}</text>
+        <text class="suggest-type">{{item.type === 'dish' ? '菜品' : (item.type === 'merchant' ? '商家' : '分类')}}</text>
+      </view>
+    </block>
+  </view>
+
+  <!-- ======= 结果态：搜索结果 ======= -->
+  <view wx:elif="{{showResults}}" class="results-section">
+
+    <!-- 结果 Tabs -->
+    <view class="result-tabs">
+      <t-tabs value="{{activeResultTab}}" bind:change="onResultTabChange">
+        <t-tab-panel label="菜品 ({{resultDishCount}})" value="dishes" />
+        <t-tab-panel label="商家 ({{resultMerchantCount}})" value="merchants" />
+      </t-tabs>
+    </view>
+
+    <!-- 加載中 -->
+    <view wx:if="{{searching}}" class="searching-wrap">
+      <t-loading theme="circular" size="40rpx" text="搜索中..." />
+    </view>
+
+    <view wx:elif="{{resultsError}}" class="result-error">
+      <t-empty description="{{resultsErrorMessage || '搜索失败，请稍后重试'}}" />
+      <t-button theme="primary" size="small" shape="round" bindtap="onRetrySearch">重试</t-button>
+    </view>
+
+    <block wx:else>
+      <!-- 空结果 -->
+      <view wx:if="{{activeResultTab === 'dishes' && resultDishes.length === 0}}"  class="empty-state">
+        <t-empty description="没有找到相关菜品" />
+      </view>
+      <view wx:elif="{{activeResultTab === 'merchants' && resultMerchants.length === 0}}" class="empty-state">
+        <t-empty description="没有找到相关商家" />
+      </view>
+
+      <!-- 菜品结果 -->
+      <scroll-view scroll-y class="result-scroll" wx:if="{{activeResultTab === 'dishes'}}">
+        <view
+          class="dish-row"
+          wx:for="{{resultDishes}}"
+          wx:key="id"
+          bindtap="onDishTap"
+          data-id="{{item.id}}"
+          data-merchant-id="{{item.merchant_id}}"
+        >
+          <t-image class="dish-img" src="{{item.imageUrl}}" mode="aspectFill" width="120rpx" height="120rpx" shape="round" />
+          <view class="dish-info">
+            <view class="dish-name-row">
+              <text class="dish-name">{{item.name}}</text>
+              <t-tag wx:if="{{item.merchant_is_open === false}}" size="small" variant="dark" theme="warning" shape="round">休息中</t-tag>
+            </view>
+            <view class="dish-shop">{{item.merchant_name}}</view>
+            <view class="dish-price">¥{{item.priceDisplay}}</view>
+          </view>
+        </view>
+      </scroll-view>
+
+      <!-- 商家结果 -->
+      <scroll-view scroll-y class="result-scroll" wx:elif="{{activeResultTab === 'merchants'}}">
+        <view
+          class="merchant-row"
+          wx:for="{{resultMerchants}}"
+          wx:key="id"
+          bindtap="onMerchantTap"
+          data-id="{{item.id}}"
+        >
+          <t-image class="merchant-logo" src="{{item.logo_url}}" mode="aspectFill" width="100rpx" height="100rpx" shape="round" />
+          <view class="merchant-info">
+            <view class="merchant-name-row">
+              <text class="merchant-name">{{item.name}}</text>
+              <t-tag wx:if="{{item.is_open === false}}" size="small" variant="dark" theme="warning" shape="round">休息中</t-tag>
+            </view>
+            <view class="merchant-meta">{{item.address}}</view>
+            <view class="tag-row" wx:if="{{item.displayTags.length > 0}}">
+              <t-tag wx:for="{{item.displayTags}}" wx:for-item="tag" wx:key="*this" size="small" variant="dark" theme="default" shape="round">{{tag}}</t-tag>
+            </view>
+          </view>
+        </view>
+      </scroll-view>
+    </block>
+  </view>
+
+</view>

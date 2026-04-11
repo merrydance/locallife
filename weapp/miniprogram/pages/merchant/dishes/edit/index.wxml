@@ -1,100 +1,204 @@
-<wxs module="utils">
-module.exports = {
-  getCategoryName: function(categories, categoryId) {
-    if (!categories || categories.length === 0 || !categoryId) {
-      return '请选择分类';
-    }
-    for (var i = 0; i < categories.length; i++) {
-      if (categories[i].id === categoryId) {
-        return categories[i].name;
-      }
-    }
-    return '请选择分类';
-  }
-}
-</wxs>
+<custom-navbar title="{{isEdit ? '编辑菜品' : '新增菜品'}}" showBack="{{true}}" />
 
-<custom-navbar title="{{isEdit ? '编辑菜品' : '新增菜品'}}" showBack="{{true}}" bind:navheight="onNavHeight" />
-
-<view class="page-container" style="padding-top: {{navBarHeight}}px; padding-bottom: 120rpx;">
-  <t-loading wx:if="{{loading}}" theme="circular" size="40rpx" class="loading" />
-
-  <view wx:if="{{!loading}}" class="form-container">
-    <t-cell-group>
-      <t-cell title="菜品名称" required>
-        <input 
-          class="input" 
-          placeholder="请输入菜品名称" 
-          value="{{form.name}}"
-          data-field="name"
-          bindinput="onInputChange"
-        />
-      </t-cell>
-
-      <t-cell title="分类" required>
-        <picker 
-          mode="selector" 
-          range="{{categories}}" 
-          range-key="name"
-          value="{{utils.getCategoryIndex(categories, form.category_id)}}"
-          bindchange="onCategoryChange"
-        >
-          <view class="picker">
-            {{utils.getCategoryName(categories, form.category_id)}}
-          </view>
-        </picker>
-      </t-cell>
-
-      <t-cell title="价格(元)" required>
-        <input 
-          class="input" 
-          type="digit"
-          placeholder="0.00" 
-          value="{{form.price}}"
-          data-field="price"
-          bindinput="onInputChange"
-        />
-      </t-cell>
-
-      <t-cell title="库存">
-        <input 
-          class="input" 
-          type="number"
-          placeholder="0" 
-          value="{{form.stock}}"
-          data-field="stock"
-          bindinput="onInputChange"
-        />
-      </t-cell>
-
-      <t-cell title="描述">
-        <textarea 
-          class="textarea" 
-          placeholder="请输入菜品描述" 
-          value="{{form.description}}"
-          data-field="description"
-          bindinput="onInputChange"
-        />
-      </t-cell>
-
-      <t-cell title="图片">
-        <t-button size="small" bindtap="onChooseImage">选择图片</t-button>
-      </t-cell>
-    </t-cell-group>
-
-    <view wx:if="{{form.image_url}}" class="image-preview">
-      <t-image src="{{form.image_url}}" mode="aspectFill" />
-    </view>
+<view
+  class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
+  style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: 220rpx;"
+>
+  <view wx:if="{{initialLoading}}" class="state-block">
+    <t-loading theme="circular" size="40rpx" text="加载菜品编辑信息中..." vertical />
   </view>
-</view>
 
-<view class="submit-bar">
-  <t-button 
-    class="submit-btn" 
-    theme="primary" 
-    loading="{{submitting}}"
-    bindtap="onSubmit"
-  >
-    {{isEdit ? '保存' : '创建'}}
-  </t-button>
+  <view wx:elif="{{initialError}}" class="state-block">
+    <t-empty icon="error-circle" description="{{initialErrorMessage || '菜品编辑页加载失败，请重试'}}" />
+    <t-button theme="primary" size="small" shape="round" bind:tap="onRetry">重新加载</t-button>
+  </view>
+
+  <block wx:else>
+    <view class="page-content">
+      <view wx:if="{{loadWarningMessage}}" class="notice-card notice-card--warning">
+        <text class="notice-text">{{loadWarningMessage}}</text>
+      </view>
+
+      <view class="section-panel">
+        <view class="section-top">
+          <text class="section-title">基础信息</text>
+        </view>
+
+        <view class="cover-field">
+          <text class="cover-title">菜品封面</text>
+          <t-upload
+            mediaType="{{['image']}}"
+            max="{{1}}"
+            files="{{fileList}}"
+            gridConfig="{{ { column: 1, width: 240, height: 240 } }}"
+            bind:add="onImageAdd"
+            bind:remove="onImageRemove"
+            bind:preview="onImagePreview"
+          />
+          <view wx:if="{{imageUploading}}" class="uploading-row">
+            <t-loading theme="dots" size="28rpx" />
+            <text class="uploading-text">图片上传中...</text>
+          </view>
+        </view>
+
+        <t-cell-group theme="card">
+          <t-input
+            label="菜品名称"
+            placeholder="请输入菜品名称"
+            value="{{formData.name}}"
+            bind:change="onInputChange"
+            data-field="name"
+            required
+          />
+
+          <view class="field-action-row">
+            <view class="field-action-main">
+              <t-cell title="菜品分类" arrow bind:tap="showCategoryPicker" note="{{selectedCategoryName || (categoryOptions.length ? '请选择分类' : '请先创建分类')}}" />
+            </view>
+            <t-button size="small" shape="circle" theme="primary" icon="add" loading="{{categoryCreateSubmitting}}" bind:tap="onManageCategories" />
+          </view>
+
+          <text wx:if="{{!categoryOptions.length}}" class="section-caption">{{formData.category_id ? '当前分类不可调整' : '当前还没有可选分类'}}</text>
+
+          <t-input
+            label="价格(元)"
+            type="digit"
+            placeholder="0.00"
+            value="{{displayPrice}}"
+            bind:change="onPriceChange"
+            required
+          />
+
+          <t-input
+            label="会员价(元)"
+            type="digit"
+            placeholder="{{isEdit ? '留空则清除会员价' : '可选'}}"
+            value="{{displayMemberPrice}}"
+            bind:change="onMemberPriceChange"
+          />
+        </t-cell-group>
+
+        <t-textarea
+          placeholder="请输入菜品详细介绍..."
+          value="{{formData.description}}"
+          bind:change="onInputChange"
+          data-field="description"
+          bordered
+          maxlength="200"
+          indicator
+        />
+      </view>
+
+      <view class="section-panel">
+        <view class="section-top">
+          <text class="section-title">售卖与展示</text>
+        </view>
+
+        <view wx:if="{{formData.is_packaging}}" class="inline-note-card inline-note-card--warning">
+          包装菜品会固定用于外卖与自取订单的包装方式选择，并强制保持上架、可售。
+        </view>
+
+        <t-cell-group theme="card">
+          <t-cell title="包装菜品" description="开启后，该菜品会作为包装方式参与外卖与自取下单校验">
+            <t-switch slot="note" value="{{formData.is_packaging}}" bind:change="onSwitchChange" data-field="is_packaging" />
+          </t-cell>
+          <t-cell title="是否上架">
+            <t-switch slot="note" value="{{formData.is_online}}" disabled="{{formData.is_packaging}}" bind:change="onSwitchChange" data-field="is_online" />
+          </t-cell>
+          <t-input
+            label="预估出餐"
+            suffix="分钟"
+            type="number"
+            placeholder="15"
+            value="{{formData.prepare_time}}"
+            bind:change="onInputChange"
+            data-field="prepare_time"
+            align="right"
+          />
+          <t-cell title="推荐标签">
+            <t-switch slot="note" value="{{isFeatured}}" bind:change="onFeaturedTagToggle" data-tag="推荐" />
+          </t-cell>
+          <t-cell title="热卖标签">
+            <t-switch slot="note" value="{{isHotSelling}}" bind:change="onFeaturedTagToggle" data-tag="热卖" />
+          </t-cell>
+        </t-cell-group>
+
+      </view>
+
+      <view class="section-panel">
+        <view class="section-top-action">
+          <view class="section-top-main">
+            <text class="section-title">普通标签</text>
+            <text wx:if="{{availableDishTags.length}}" class="section-caption">已选 {{selectedDishTagIds.length}} 个</text>
+          </view>
+          <view class="section-top-button">
+            <t-button size="small" shape="circle" theme="primary" icon="add" bind:tap="onCreateDishTag" loading="{{tagSubmitting}}" />
+          </view>
+        </view>
+
+        <view wx:if="{{availableDishTags.length}}" class="tag-check-list">
+          <t-check-tag
+            wx:for="{{availableDishTags}}"
+            wx:key="id"
+            checked="{{selectedDishTagState[item.id]}}"
+            content="{{item.name}}"
+            shape="round"
+            data-tag-id="{{item.id}}"
+            bind:change="onDishTagToggle"
+          />
+        </view>
+
+        <view wx:else class="inline-note-card">暂无普通菜品标签，可先新增标签。</view>
+      </view>
+
+      <view class="section-panel">
+        <view class="section-top-action">
+          <view class="section-top-main">
+            <text class="section-title">规格与加价</text>
+            <text wx:if="{{customizationGroups.length}}" class="section-caption">默认必选，共 {{customizationGroups.length}} 组</text>
+          </view>
+          <view class="section-top-button">
+            <t-button size="small" shape="circle" theme="primary" icon="add" bind:tap="onAddCustomizationGroup" />
+          </view>
+        </view>
+
+        <customization-editor id="customizationEditor" value="{{customizationGroups}}" bind:change="onCustomizationGroupsChange" />
+      </view>
+    </view>
+
+    <view class="footer-bar">
+      <t-button block size="large" shape="round" theme="primary" loading="{{submitting}}" disabled="{{!categoryOptions.length && !formData.category_id}}" bind:tap="onSubmit">{{isEdit ? '保存菜品' : '创建菜品'}}</t-button>
+    </view>
+
+    <t-picker
+      visible="{{categoryVisible}}"
+      value="{{[selectedCategoryValue || (categoryOptions.length ? categoryOptions[0].value : '')]}}"
+      title="选择菜品分类"
+      cancelBtn="取消"
+      confirmBtn="确定"
+      bind:confirm="onCategoryConfirm"
+      bind:cancel="onCategoryCancel"
+    >
+      <t-picker-item options="{{categoryOptions}}" />
+    </t-picker>
+
+    <t-dialog
+      visible="{{createPopupVisible}}"
+      title="{{createPopupMode === 'category' ? '新增菜品分类' : '新增菜品标签'}}"
+      confirm-btn="{{ { content: '确定', loading: createPopupMode === 'category' ? categoryCreateSubmitting : tagSubmitting } }}"
+      cancel-btn="取消"
+      bind:confirm="onConfirmCreatePopup"
+      bind:cancel="onCloseCreatePopup"
+    >
+      <view slot="content" class="dialog-form">
+        <t-input
+          label="{{createPopupMode === 'category' ? '分类名称' : '标签名称'}}"
+          placeholder="{{createPopupMode === 'category' ? '请输入分类名称' : '请输入标签名称'}}"
+          value="{{createInputValue}}"
+          bind:change="onCreateInputChange"
+        />
+      </view>
+    </t-dialog>
+
+  </block>
 </view>

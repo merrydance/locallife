@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/merrydance/locallife/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -72,6 +74,198 @@ func TestUpdateOrderStatusTx_MerchantAccept(t *testing.T) {
 
 	require.Equal(t, "preparing", result.Order.Status)
 	require.Equal(t, "merchant", result.StatusLog.OperatorType.String)
+}
+
+func TestAcceptTakeoutOrderTx_DoesNotAddOrderToDeliveryPool(t *testing.T) {
+	user := createRandomUser(t)
+	merchantOwner := createRandomUser(t)
+	merchant := createMerchantWithLocation(t, merchantOwner.ID)
+	address := createRandomUserAddress(t, user)
+
+	createResult, err := testStore.CreateOrderTx(context.Background(), CreateOrderTxParams{
+		CreateOrderParams: CreateOrderParams{
+			OrderNo:          util.RandomString(20),
+			UserID:           user.ID,
+			MerchantID:       merchant.ID,
+			OrderType:        OrderTypeTakeout,
+			AddressID:        pgtype.Int8{Int64: address.ID, Valid: true},
+			DeliveryFee:      1500,
+			DeliveryDistance: pgtype.Int4{Int32: 3600, Valid: true},
+			Subtotal:         5000,
+			TotalAmount:      6500,
+			Status:           OrderStatusPending,
+		},
+		Items: []CreateOrderItemParams{{
+			DishID:    pgtype.Int8{Int64: 1, Valid: true},
+			Name:      "外卖接单测试菜品",
+			UnitPrice: 5000,
+			Quantity:  1,
+			Subtotal:  5000,
+		}},
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.ProcessOrderPaymentTx(context.Background(), ProcessOrderPaymentTxParams{OrderID: createResult.Order.ID})
+	require.NoError(t, err)
+
+	_, err = testStore.GetDeliveryByOrderID(context.Background(), createResult.Order.ID)
+	require.ErrorIs(t, err, ErrRecordNotFound)
+
+	_, err = testStore.GetDeliveryPoolByOrderID(context.Background(), createResult.Order.ID)
+	require.ErrorIs(t, err, ErrRecordNotFound)
+
+	result, err := testStore.AcceptTakeoutOrderTx(context.Background(), AcceptTakeoutOrderTxParams{
+		OrderID:      createResult.Order.ID,
+		OldStatus:    OrderStatusPaid,
+		OperatorID:   merchantOwner.ID,
+		OperatorType: "merchant",
+	})
+	require.NoError(t, err)
+	require.Equal(t, OrderStatusPreparing, result.Order.Status)
+
+	_, err = testStore.GetDeliveryByOrderID(context.Background(), createResult.Order.ID)
+	require.ErrorIs(t, err, ErrRecordNotFound)
+
+	_, err = testStore.GetDeliveryPoolByOrderID(context.Background(), createResult.Order.ID)
+	require.ErrorIs(t, err, ErrRecordNotFound)
+}
+
+func TestMarkTakeoutOrderReadyTx_AddsOrderToDeliveryPool(t *testing.T) {
+	user := createRandomUser(t)
+	merchantOwner := createRandomUser(t)
+	merchant := createMerchantWithLocation(t, merchantOwner.ID)
+	address := createRandomUserAddress(t, user)
+
+	createResult, err := testStore.CreateOrderTx(context.Background(), CreateOrderTxParams{
+		CreateOrderParams: CreateOrderParams{
+			OrderNo:          util.RandomString(20),
+			UserID:           user.ID,
+			MerchantID:       merchant.ID,
+			OrderType:        OrderTypeTakeout,
+			AddressID:        pgtype.Int8{Int64: address.ID, Valid: true},
+			DeliveryFee:      1500,
+			DeliveryDistance: pgtype.Int4{Int32: 3600, Valid: true},
+			Subtotal:         5000,
+			TotalAmount:      6500,
+			Status:           OrderStatusPending,
+		},
+		Items: []CreateOrderItemParams{{
+			DishID:    pgtype.Int8{Int64: 1, Valid: true},
+			Name:      "外卖出餐测试菜品",
+			UnitPrice: 5000,
+			Quantity:  1,
+			Subtotal:  5000,
+		}},
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.ProcessOrderPaymentTx(context.Background(), ProcessOrderPaymentTxParams{OrderID: createResult.Order.ID})
+	require.NoError(t, err)
+
+	_, err = testStore.GetDeliveryByOrderID(context.Background(), createResult.Order.ID)
+	require.ErrorIs(t, err, ErrRecordNotFound)
+
+	_, err = testStore.AcceptTakeoutOrderTx(context.Background(), AcceptTakeoutOrderTxParams{
+		OrderID:      createResult.Order.ID,
+		OldStatus:    OrderStatusPaid,
+		OperatorID:   merchantOwner.ID,
+		OperatorType: "merchant",
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.GetDeliveryPoolByOrderID(context.Background(), createResult.Order.ID)
+	require.ErrorIs(t, err, ErrRecordNotFound)
+
+	result, err := testStore.MarkTakeoutOrderReadyTx(context.Background(), MarkTakeoutOrderReadyTxParams{
+		OrderID:      createResult.Order.ID,
+		OldStatus:    OrderStatusPreparing,
+		OperatorID:   merchantOwner.ID,
+		OperatorType: "merchant",
+	})
+	require.NoError(t, err)
+	require.Equal(t, OrderStatusReady, result.Order.Status)
+	require.Equal(t, createResult.Order.ID, result.Delivery.OrderID)
+	require.Equal(t, createResult.Order.ID, result.PoolItem.OrderID)
+	require.Equal(t, merchant.ID, result.PoolItem.MerchantID)
+	require.Equal(t, int32(2), result.PoolItem.Priority)
+	require.Equal(t, merchant.Address, result.Delivery.PickupAddress)
+	require.Equal(t, address.DetailAddress, result.Delivery.DeliveryAddress)
+
+	poolItem, err := testStore.GetDeliveryPoolByOrderID(context.Background(), createResult.Order.ID)
+	require.NoError(t, err)
+	require.Equal(t, result.PoolItem.ID, poolItem.ID)
+}
+
+func TestMarkTakeoutOrderReadyTx_UsesOrderDeliverySnapshotAfterAddressUpdate(t *testing.T) {
+	user := createRandomUser(t)
+	merchantOwner := createRandomUser(t)
+	merchant := createMerchantWithLocation(t, merchantOwner.ID)
+	address := createRandomUserAddress(t, user)
+
+	createResult, err := testStore.CreateOrderTx(context.Background(), CreateOrderTxParams{
+		CreateOrderParams: CreateOrderParams{
+			OrderNo:                      util.RandomString(20),
+			UserID:                       user.ID,
+			MerchantID:                   merchant.ID,
+			OrderType:                    OrderTypeTakeout,
+			AddressID:                    pgtype.Int8{Int64: address.ID, Valid: true},
+			DeliveryContactNameSnapshot:  pgtype.Text{String: address.ContactName, Valid: true},
+			DeliveryContactPhoneSnapshot: pgtype.Text{String: address.ContactPhone, Valid: true},
+			DeliveryAddressSnapshot:      pgtype.Text{String: address.DetailAddress, Valid: true},
+			DeliveryLongitudeSnapshot:    address.Longitude,
+			DeliveryLatitudeSnapshot:     address.Latitude,
+			DeliveryFee:                  1500,
+			DeliveryDistance:             pgtype.Int4{Int32: 3600, Valid: true},
+			Subtotal:                     5000,
+			TotalAmount:                  6500,
+			Status:                       OrderStatusPending,
+		},
+		Items: []CreateOrderItemParams{{
+			DishID:    pgtype.Int8{Int64: 1, Valid: true},
+			Name:      "外卖出餐快照测试菜品",
+			UnitPrice: 5000,
+			Quantity:  1,
+			Subtotal:  5000,
+		}},
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.ProcessOrderPaymentTx(context.Background(), ProcessOrderPaymentTxParams{OrderID: createResult.Order.ID})
+	require.NoError(t, err)
+
+	_, err = testStore.AcceptTakeoutOrderTx(context.Background(), AcceptTakeoutOrderTxParams{
+		OrderID:      createResult.Order.ID,
+		OldStatus:    OrderStatusPaid,
+		OperatorID:   merchantOwner.ID,
+		OperatorType: "merchant",
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.UpdateUserAddress(context.Background(), UpdateUserAddressParams{
+		ID:            address.ID,
+		UserID:        user.ID,
+		ContactName:   pgtype.Text{String: "修改后的联系人", Valid: true},
+		ContactPhone:  pgtype.Text{String: "13999990000", Valid: true},
+		DetailAddress: pgtype.Text{String: "北京市朝阳区修改后的地址", Valid: true},
+		Longitude:     numericFromFloat(116.512345),
+		Latitude:      numericFromFloat(39.923456),
+	})
+	require.NoError(t, err)
+
+	result, err := testStore.MarkTakeoutOrderReadyTx(context.Background(), MarkTakeoutOrderReadyTxParams{
+		OrderID:      createResult.Order.ID,
+		OldStatus:    OrderStatusPreparing,
+		OperatorID:   merchantOwner.ID,
+		OperatorType: "merchant",
+	})
+	require.NoError(t, err)
+	require.Equal(t, address.DetailAddress, result.Delivery.DeliveryAddress)
+	require.True(t, result.Delivery.DeliveryContact.Valid)
+	require.Equal(t, address.ContactName, result.Delivery.DeliveryContact.String)
+	require.True(t, result.Delivery.DeliveryPhone.Valid)
+	require.Equal(t, address.ContactPhone, result.Delivery.DeliveryPhone.String)
+	require.Equal(t, address.Longitude, result.Delivery.DeliveryLongitude)
+	require.Equal(t, address.Latitude, result.Delivery.DeliveryLatitude)
 }
 
 func TestUpdateOrderStatusTx_MarkReady(t *testing.T) {
@@ -186,17 +380,6 @@ func TestCompleteOrderTx_ByUser(t *testing.T) {
 	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
 	order := createRandomOrderWithStatus(t, user.ID, merchant.ID, "delivering")
 
-	// 先将状态改为 delivering（模拟配送中）
-	_, err := testStore.UpdateOrderStatus(context.Background(), UpdateOrderStatusParams{
-		ID:     order.ID,
-		Status: "delivering",
-	})
-	require.NoError(t, err)
-
-	// 获取更新后的订单
-	order, err = testStore.GetOrder(context.Background(), order.ID)
-	require.NoError(t, err)
-
 	arg := CompleteOrderTxParams{
 		OrderID:      order.ID,
 		OldStatus:    "delivering",
@@ -254,6 +437,68 @@ func TestCancelOrderTx(t *testing.T) {
 	require.True(t, dbOrder.CancelledAt.Valid)
 }
 
+func TestCancelOrderTx_RollbackVoucher(t *testing.T) {
+	user := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
+	voucher := createRandomVoucher(t, merchant.ID)
+	userVoucher := createRandomUserVoucher(t, voucher.ID, user.ID)
+
+	order, err := testStore.CreateOrder(context.Background(), CreateOrderParams{
+		OrderNo:             util.RandomString(20),
+		UserID:              user.ID,
+		MerchantID:          merchant.ID,
+		OrderType:           "takeaway",
+		AddressID:           pgtype.Int8{},
+		DeliveryFee:         0,
+		DeliveryDistance:    pgtype.Int4{},
+		TableID:             pgtype.Int8{},
+		ReservationID:       pgtype.Int8{},
+		Subtotal:            10000,
+		DiscountAmount:      0,
+		DeliveryFeeDiscount: 0,
+		TotalAmount:         9000,
+		Status:              "pending",
+		FulfillmentStatus:   "",
+		Notes:               pgtype.Text{String: "test voucher order", Valid: true},
+		UserVoucherID:       pgtype.Int8{Int64: userVoucher.ID, Valid: true},
+		VoucherAmount:       1000,
+		BalancePaid:         0,
+		MembershipID:        pgtype.Int8{},
+		ReplacedByOrderID:   pgtype.Int8{},
+		PickupCode:          pgtype.Text{},
+	})
+	require.NoError(t, err)
+	require.NotZero(t, order.ID)
+
+	_, err = testStore.MarkUserVoucherAsUsed(context.Background(), MarkUserVoucherAsUsedParams{
+		ID:      userVoucher.ID,
+		OrderID: pgtype.Int8{Int64: order.ID, Valid: true},
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.IncrementVoucherUsedQuantity(context.Background(), voucher.ID)
+	require.NoError(t, err)
+
+	_, err = testStore.CancelOrderTx(context.Background(), CancelOrderTxParams{
+		OrderID:      order.ID,
+		OldStatus:    "pending",
+		CancelReason: "用户取消",
+		OperatorID:   user.ID,
+		OperatorType: "user",
+	})
+	require.NoError(t, err)
+
+	updatedUserVoucher, err := testStore.GetUserVoucherForUpdate(context.Background(), userVoucher.ID)
+	require.NoError(t, err)
+	require.Equal(t, "unused", updatedUserVoucher.Status)
+	require.False(t, updatedUserVoucher.OrderID.Valid)
+	require.False(t, updatedUserVoucher.UsedAt.Valid)
+
+	updatedVoucher, err := testStore.GetVoucher(context.Background(), voucher.ID)
+	require.NoError(t, err)
+	require.Equal(t, int32(0), updatedVoucher.UsedQuantity)
+}
+
 func TestCancelOrderTx_PaidOrder(t *testing.T) {
 	user := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
@@ -273,6 +518,164 @@ func TestCancelOrderTx_PaidOrder(t *testing.T) {
 
 	require.Equal(t, "cancelled", result.Order.Status)
 	require.Equal(t, "商户未接单，用户取消", result.Order.CancelReason.String)
+}
+
+func TestCancelOrderTx_UnfreezesAssignedDeliveryDeposit(t *testing.T) {
+	user := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
+	rider := createOnlineRider(t)
+	order := createRandomOrderWithStatus(t, user.ID, merchant.ID, "paid")
+	delivery := createRandomDeliveryWithOrder(t, order.ID)
+
+	delivery, err := testStore.AssignDelivery(context.Background(), AssignDeliveryParams{
+		ID:      delivery.ID,
+		RiderID: pgtype.Int8{Int64: rider.ID, Valid: true},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "assigned", delivery.Status)
+
+	freezeAmount := orderFreezeAmount(order)
+	_, err = testStore.UpdateRiderDeposit(context.Background(), UpdateRiderDepositParams{
+		ID:            rider.ID,
+		DepositAmount: freezeAmount + 10000,
+		FrozenDeposit: freezeAmount,
+	})
+	require.NoError(t, err)
+
+	result, err := testStore.CancelOrderTx(context.Background(), CancelOrderTxParams{
+		OrderID:      order.ID,
+		OldStatus:    "paid",
+		CancelReason: "用户取消已接单订单",
+		OperatorID:   user.ID,
+		OperatorType: "user",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "cancelled", result.Order.Status)
+
+	updatedDelivery, err := testStore.GetDelivery(context.Background(), delivery.ID)
+	require.NoError(t, err)
+	require.Equal(t, "cancelled", updatedDelivery.Status)
+
+	updatedRider, err := testStore.GetRider(context.Background(), rider.ID)
+	require.NoError(t, err)
+	require.Equal(t, int64(0), updatedRider.FrozenDeposit)
+	require.Equal(t, freezeAmount+10000, updatedRider.DepositAmount)
+
+	deposits, err := testStore.ListRiderDeposits(context.Background(), ListRiderDepositsParams{
+		RiderID: rider.ID,
+		Limit:   20,
+		Offset:  0,
+	})
+	require.NoError(t, err)
+
+	found := false
+	for _, deposit := range deposits {
+		if deposit.Type == "unfreeze" && deposit.RelatedOrderID.Valid && deposit.RelatedOrderID.Int64 == order.ID {
+			found = true
+			require.Equal(t, freezeAmount, deposit.Amount)
+			break
+		}
+	}
+	require.True(t, found, "should create unfreeze rider deposit log when cancelling assigned order")
+}
+
+func TestCancelOrderTx_AutoOfflineNonActiveRiderAfterAssignedOrderCancelled(t *testing.T) {
+	user := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
+	rider := createOnlineRider(t)
+	order := createRandomOrderWithStatus(t, user.ID, merchant.ID, "paid")
+	delivery := createRandomDeliveryWithOrder(t, order.ID)
+
+	_, err := testStore.UpdateRiderStatus(context.Background(), UpdateRiderStatusParams{
+		ID:     rider.ID,
+		Status: RiderStatusApproved,
+	})
+	require.NoError(t, err)
+
+	delivery, err = testStore.AssignDelivery(context.Background(), AssignDeliveryParams{
+		ID:      delivery.ID,
+		RiderID: pgtype.Int8{Int64: rider.ID, Valid: true},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "assigned", delivery.Status)
+
+	freezeAmount := orderFreezeAmount(order)
+	_, err = testStore.UpdateRiderDeposit(context.Background(), UpdateRiderDepositParams{
+		ID:            rider.ID,
+		DepositAmount: freezeAmount + 10000,
+		FrozenDeposit: freezeAmount,
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.CancelOrderTx(context.Background(), CancelOrderTxParams{
+		OrderID:      order.ID,
+		OldStatus:    "paid",
+		CancelReason: "用户取消已接单订单",
+		OperatorID:   user.ID,
+		OperatorType: "user",
+	})
+	require.NoError(t, err)
+
+	updatedRider, err := testStore.GetRider(context.Background(), rider.ID)
+	require.NoError(t, err)
+	require.Equal(t, RiderStatusApproved, updatedRider.Status)
+	require.False(t, updatedRider.IsOnline)
+}
+
+func TestCancelOrderTx_BlocksPickedDeliveryCancellation(t *testing.T) {
+	user := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
+	rider := createOnlineRider(t)
+	order := createRandomOrderWithStatus(t, user.ID, merchant.ID, "paid")
+	delivery := createRandomDeliveryWithOrder(t, order.ID)
+
+	delivery, err := testStore.AssignDelivery(context.Background(), AssignDeliveryParams{
+		ID:      delivery.ID,
+		RiderID: pgtype.Int8{Int64: rider.ID, Valid: true},
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.UpdateDeliveryToPickup(context.Background(), UpdateDeliveryToPickupParams{
+		ID:      delivery.ID,
+		RiderID: pgtype.Int8{Int64: rider.ID, Valid: true},
+	})
+	require.NoError(t, err)
+
+	delivery, err = testStore.UpdateDeliveryToPicked(context.Background(), UpdateDeliveryToPickedParams{
+		ID:      delivery.ID,
+		RiderID: pgtype.Int8{Int64: rider.ID, Valid: true},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "picked", delivery.Status)
+
+	freezeAmount := orderFreezeAmount(order)
+	_, err = testStore.UpdateRiderDeposit(context.Background(), UpdateRiderDepositParams{
+		ID:            rider.ID,
+		DepositAmount: freezeAmount + 10000,
+		FrozenDeposit: freezeAmount,
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.CancelOrderTx(context.Background(), CancelOrderTxParams{
+		OrderID:      order.ID,
+		OldStatus:    "paid",
+		CancelReason: "用户取消已取餐订单",
+		OperatorID:   user.ID,
+		OperatorType: "user",
+	})
+	require.ErrorIs(t, err, ErrOrderCancellationBlockedByDeliveryState)
+
+	currentOrder, err := testStore.GetOrder(context.Background(), order.ID)
+	require.NoError(t, err)
+	require.Equal(t, "paid", currentOrder.Status)
+
+	updatedDelivery, err := testStore.GetDelivery(context.Background(), delivery.ID)
+	require.NoError(t, err)
+	require.Equal(t, "picked", updatedDelivery.Status)
+
+	updatedRider, err := testStore.GetRider(context.Background(), rider.ID)
+	require.NoError(t, err)
+	require.Equal(t, freezeAmount, updatedRider.FrozenDeposit)
 }
 
 func TestCancelOrderTx_ByMerchant(t *testing.T) {

@@ -67,6 +67,18 @@
   "packOptions": {
     "ignore": [
       {
+        "value": "node_modules",
+        "type": "folder"
+      },
+      {
+        "value": ".git",
+        "type": "folder"
+      },
+      {
+        "value": ".vscode",
+        "type": "folder"
+      },
+      {
         "value": "__tests__",
         "type": "folder"
       },
@@ -112,6 +124,10 @@
       },
       {
         "value": ".md",
+        "type": "suffix"
+      },
+      {
+        "value": ".map",
         "type": "suffix"
       }
     ],

@@ -1,0 +1,592 @@
+.page-container {
+  background-color: var(--td-bg-color-page);
+  min-height: 100vh;
+  padding-bottom: 200rpx;
+}
+
+/* 状态横幅 */
+.status-banner {
+  padding: 60rpx 40rpx;
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+.status-main {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.status-text {
+  font-size: 40rpx;
+  font-weight: bold;
+}
+
+.status-desc {
+  font-size: 26rpx;
+  opacity: 0.9;
+}
+
+.status-subdesc {
+  font-size: 24rpx;
+  line-height: 1.6;
+  opacity: 0.88;
+}
+
+/* 内容卡片 */
+.content-section {
+  padding: 32rpx;
+  margin-top: -30rpx;
+}
+
+.card-wrap {
+  background-color: #fff;
+  border-radius: 16rpx;
+  padding: 32rpx;
+  margin-bottom: 32rpx;
+  box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.03);
+}
+
+.card-title {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+  margin-bottom: 32rpx;
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.info-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 32rpx;
+}
+
+.info-label {
+  font-size: 26rpx;
+  color: var(--td-text-color-secondary);
+  width: 120rpx;
+  flex-shrink: 0;
+}
+
+.info-value {
+  flex: 1;
+}
+
+.contact-row {
+  margin-top: 20rpx;
+}
+
+.address-text {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+  margin-bottom: 8rpx;
+}
+
+.contact-text {
+  font-size: 26rpx;
+  color: var(--td-text-color-secondary);
+}
+
+.call-btn {
+  width: 80rpx;
+  height: 80rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--td-brand-color-light);
+  border-radius: 50%;
+}
+
+/* 商品项 */
+.dish-item {
+  display: flex;
+  gap: 24rpx;
+  margin-bottom: 24rpx;
+}
+
+.dish-info {
+  flex: 1;
+}
+
+.dish-name-row {
+  display: flex;
+  justify-content: space-between;
+}
+
+.dish-name {
+  font-size: 28rpx;
+  font-weight: 500;
+}
+
+.dish-price {
+  font-size: 28rpx;
+}
+
+.dish-specs {
+  font-size: 22rpx;
+  color: var(--td-text-color-placeholder);
+  margin-top: 4rpx;
+}
+
+.dish-qty {
+  font-size: 24rpx;
+  color: var(--td-text-color-secondary);
+  margin-top: 8rpx;
+}
+
+/* 价格小计 */
+.price-summary {
+  padding-top: 24rpx;
+}
+
+.summary-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 26rpx;
+  color: var(--td-text-color-secondary);
+  margin-bottom: 16rpx;
+}
+
+.total-row {
+  color: var(--td-text-color-primary);
+  font-weight: bold;
+  font-size: 30rpx;
+  margin-top: 8rpx;
+}
+
+.total-val {
+  color: var(--td-brand-color);
+  font-size: 36rpx;
+}
+
+.notes-text {
+  color: var(--td-warning-color) !important;
+}
+
+.card-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16rpx;
+  margin-bottom: 16rpx;
+}
+
+.print-card-hint {
+  margin-top: 8rpx;
+  font-size: 22rpx;
+  line-height: 1.6;
+  color: var(--td-text-color-secondary);
+}
+
+.refund-card-hint {
+  margin-top: 8rpx;
+  font-size: 22rpx;
+  line-height: 1.6;
+  color: var(--td-text-color-secondary);
+}
+
+.card-state-block {
+  min-height: 220rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacer-md);
+}
+
+.card-inline-hint {
+  margin-bottom: 24rpx;
+  border-radius: var(--radius-md);
+  padding: 16rpx 20rpx;
+  background: var(--td-error-color-1);
+  color: var(--td-text-color-primary);
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+}
+
+.card-inline-hint-success {
+  background: var(--td-success-color-1);
+}
+
+.refund-payment-summary {
+  border-radius: var(--radius-md);
+  background: var(--td-bg-color-secondarycontainer);
+  padding: 24rpx;
+  margin-bottom: 20rpx;
+}
+
+.refund-payment-main {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.refund-payment-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.refund-payment-no {
+  flex: 1;
+  font-size: 28rpx;
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+  word-break: break-all;
+}
+
+.refund-payment-meta {
+  font-size: 22rpx;
+  line-height: 1.6;
+  color: var(--td-text-color-secondary);
+}
+
+.refund-summary-strip {
+  display: flex;
+  margin-top: 20rpx;
+  border-top: 1rpx solid var(--td-component-stroke);
+  padding-top: 20rpx;
+}
+
+.refund-summary-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.refund-summary-value {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: var(--td-text-color-primary);
+}
+
+.refund-summary-label {
+  font-size: 22rpx;
+  color: var(--td-text-color-secondary);
+}
+
+.refund-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+}
+
+.refund-item-card {
+  border-radius: var(--radius-md);
+  background: var(--td-bg-color-secondarycontainer);
+  padding: 24rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+.refund-item-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.refund-item-main {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.refund-item-amount {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: var(--td-brand-color);
+}
+
+.refund-item-time {
+  font-size: 22rpx;
+  color: var(--td-text-color-secondary);
+}
+
+.refund-item-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.refund-item-row-top {
+  align-items: flex-start;
+}
+
+.refund-item-label {
+  font-size: 24rpx;
+  color: var(--td-text-color-placeholder);
+}
+
+.refund-item-value {
+  font-size: 24rpx;
+  color: var(--td-text-color-primary);
+}
+
+.refund-item-value-break {
+  flex: 1;
+  text-align: right;
+  word-break: break-all;
+  white-space: pre-wrap;
+  line-height: 1.6;
+}
+
+.refund-return-section {
+  margin-top: 8rpx;
+  padding-top: 20rpx;
+  border-top: 1rpx solid var(--td-component-stroke);
+}
+
+.refund-return-title {
+  margin-bottom: 16rpx;
+  font-size: 24rpx;
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+}
+
+.refund-return-card {
+  border-radius: 16rpx;
+  background: var(--td-bg-color-container);
+  padding: 20rpx;
+}
+
+.refund-return-card + .refund-return-card {
+  margin-top: 16rpx;
+}
+
+.refund-return-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16rpx;
+  margin-bottom: 16rpx;
+}
+
+.refund-return-amount {
+  font-size: 28rpx;
+  font-weight: 700;
+  color: var(--td-text-color-primary);
+}
+
+.print-job-card {
+  border-radius: var(--radius-md);
+  background: var(--td-bg-color-secondarycontainer);
+  padding: 24rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+  margin-bottom: 20rpx;
+}
+
+.print-job-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.print-job-main {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.print-job-name {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+}
+
+.print-job-time {
+  font-size: 22rpx;
+  color: var(--td-text-color-placeholder);
+}
+
+.print-job-summary {
+  font-size: 24rpx;
+  line-height: 1.6;
+  color: var(--td-text-color-secondary);
+}
+
+.print-job-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.print-job-row-top {
+  align-items: flex-start;
+}
+
+.print-job-label {
+  font-size: 24rpx;
+  color: var(--td-text-color-placeholder);
+}
+
+.print-job-value {
+  font-size: 24rpx;
+  color: var(--td-text-color-primary);
+}
+
+.print-job-value-break {
+  flex: 1;
+  text-align: right;
+  word-break: break-all;
+  white-space: pre-wrap;
+  line-height: 1.6;
+}
+
+.print-job-status-time {
+  display: block;
+  margin-top: 6rpx;
+  font-size: 22rpx;
+  color: var(--td-text-color-placeholder);
+}
+
+.print-job-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 16rpx;
+  flex-wrap: wrap;
+}
+
+/* 底部操作 */
+.footer-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background-color: #fff;
+  padding: 32rpx;
+  box-shadow: 0 -4rpx 12rpx rgba(0, 0, 0, 0.05);
+  z-index: 100;
+}
+
+.footer-action-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16rpx;
+}
+
+.footer-bar.iphone-x {
+  padding-bottom: 64rpx;
+}
+
+.status-footer {
+  text-align: center;
+  font-size: 28rpx;
+  color: var(--td-text-color-placeholder);
+}
+
+.loading-state {
+  padding: 200rpx 0;
+  display: flex;
+  justify-content: center;
+}
+
+.loading-state-page {
+  min-height: 100vh;
+  flex-direction: column;
+  align-items: center;
+  gap: 24rpx;
+}
+
+.retry-button {
+  padding: 18rpx 36rpx;
+  border-radius: 999rpx;
+  background: var(--td-brand-color);
+  color: var(--td-text-color-anti);
+  font-size: 26rpx;
+}
+
+.section-error-hint {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16rpx;
+  margin: 0 32rpx 16rpx;
+  padding: 18rpx 20rpx;
+  border-radius: 16rpx;
+  background: var(--td-error-color-1);
+  font-size: 24rpx;
+  line-height: 1.6;
+  color: var(--td-text-color-primary);
+}
+
+.section-error-action {
+  flex-shrink: 0;
+  color: var(--td-brand-color);
+  font-weight: 600;
+}
+
+.popup-sheet {
+  background: var(--td-bg-color-container);
+  border-top-left-radius: 20rpx;
+  border-top-right-radius: 20rpx;
+  padding: 32rpx 24rpx var(--popup-bottom-padding-md);
+}
+
+.popup-title {
+  font-size: 34rpx;
+  font-weight: 700;
+  color: var(--td-text-color-primary);
+}
+
+.popup-subtitle {
+  display: block;
+  margin-top: 12rpx;
+  margin-bottom: 24rpx;
+  font-size: 24rpx;
+  line-height: 1.6;
+  color: var(--td-text-color-secondary);
+}
+
+.popup-block {
+  margin-bottom: 24rpx;
+}
+
+.popup-label {
+  display: block;
+  margin-bottom: 12rpx;
+  font-size: 26rpx;
+  color: var(--td-text-color-primary);
+}
+
+.popup-tip,
+.refund-full-hint {
+  display: block;
+  margin-top: 12rpx;
+  font-size: 24rpx;
+  line-height: 1.6;
+  color: var(--td-brand-color);
+}
+
+.refund-type-options {
+  display: flex;
+  gap: 24rpx;
+  flex-wrap: wrap;
+}
+
+.refund-type-option {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  font-size: 26rpx;
+  color: var(--td-text-color-primary);
+}
+
+.popup-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16rpx;
+}

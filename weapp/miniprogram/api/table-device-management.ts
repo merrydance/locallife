@@ -5,6 +5,7 @@
  */
 
 import { request } from '../utils/request'
+import { uploadMedia } from '../utils/media'
 
 // ==================== 数据类型定义 ====================
 
@@ -17,6 +18,56 @@ export type TableStatus = 'available' | 'occupied' | 'reserved' | 'disabled'
 /** 打印机类型枚举 - 基于swagger定义 */
 export type PrinterType = 'feieyun' | 'yilianyun' | 'other'
 
+/** 打印机角色枚举 - 对齐后端 api.createPrinterRequest */
+export type PrinterRole = 'front' | 'kitchen'
+
+/** 打印机异常对账任务状态 */
+export type PrinterReconciliationJobStatus = 'pending' | 'resolved'
+
+export type PrinterReconciliationStatusTheme = 'success' | 'warning' | 'default'
+
+export interface PrinterReconciliationJobStatusView {
+    statusCode: string
+    label: string
+    theme: PrinterReconciliationStatusTheme
+    isResolved: boolean
+    isPending: boolean
+}
+
+export function buildPrinterReconciliationJobStatusView(
+    status?: PrinterReconciliationJobStatus | string
+): PrinterReconciliationJobStatusView {
+    const normalizedStatus = String(status || '').trim().toLowerCase()
+
+    if (normalizedStatus === 'resolved') {
+        return {
+            statusCode: normalizedStatus,
+            label: '已恢复',
+            theme: 'success',
+            isResolved: true,
+            isPending: false
+        }
+    }
+
+    if (normalizedStatus === 'pending') {
+        return {
+            statusCode: normalizedStatus,
+            label: '待恢复',
+            theme: 'warning',
+            isResolved: false,
+            isPending: true
+        }
+    }
+
+    return {
+        statusCode: normalizedStatus,
+        label: '同步中',
+        theme: 'default',
+        isResolved: false,
+        isPending: false
+    }
+}
+
 // ==================== 桌台管理相关类型 ====================
 
 /** 创建桌台请求 - 基于swagger api.createTableRequest */
@@ -24,6 +75,7 @@ export interface CreateTableRequest extends Record<string, unknown> {
     table_no: string
     table_type: TableType
     capacity: number
+    access_code?: string
     description?: string
     minimum_spend?: number
     qr_code_url?: string
@@ -33,11 +85,12 @@ export interface CreateTableRequest extends Record<string, unknown> {
 /** 更新桌台请求 - 基于swagger api.updateTableRequest */
 /** 更新桌台请求 - 对齐 api.updateTableRequest */
 export interface UpdateTableRequest extends Record<string, unknown> {
+    access_code?: string
     capacity?: number
     description?: string
     minimum_spend?: number
     qr_code_url?: string
-    status?: 'available' | 'occupied' | 'disabled'
+    status?: TableStatus
     table_no?: string
     tag_ids?: number[]  // 标签ID列表
 }
@@ -58,6 +111,7 @@ export interface TableResponse {
     description?: string
     minimum_spend?: number
     qr_code_url?: string
+    image_url?: string
     status: string
     tags?: TagInfo[]
     current_reservation_id?: number
@@ -74,6 +128,7 @@ export interface ListTablesResponse {
 /** 桌台图片响应 - 对齐 api.tableImageResponse */
 export interface TableImageResponse {
     id?: number
+    media_asset_id?: number
     image_url?: string
     is_primary?: boolean
     sort_order?: number
@@ -94,6 +149,7 @@ export interface CreatePrinterRequest extends Record<string, unknown> {
     printer_type: PrinterType
     printer_sn: string
     printer_key: string
+    printer_role?: PrinterRole
     print_takeout?: boolean
     print_dine_in?: boolean
     print_reservation?: boolean
@@ -107,6 +163,7 @@ export interface UpdatePrinterRequest extends Record<string, unknown> {
     print_takeout?: boolean
     printer_key?: string                         // 打印机密钥
     printer_name?: string
+    printer_role?: PrinterRole
 }
 
 /** 打印机响应 - 基于swagger api.printerResponse */
@@ -115,6 +172,7 @@ export interface PrinterResponse {
     merchant_id: number
     printer_name: string
     printer_type: PrinterType
+    printer_role: PrinterRole
     printer_sn: string
     is_active: boolean
     print_takeout: boolean
@@ -122,6 +180,57 @@ export interface PrinterResponse {
     print_reservation: boolean
     created_at: string
     updated_at: string
+}
+
+/** 打印机实时状态响应 - 对齐 api.printerLiveStatusResponse */
+export interface PrinterLiveStatusResponse {
+    printer_id: number
+    printer_name: string
+    printer_sn: string
+    printer_type: PrinterType
+    provider_status: string
+    online: boolean
+    working: boolean
+    model?: string
+    print_logo?: boolean
+    scan_switch?: boolean
+    checked_at: string
+    info_status?: string
+}
+
+/** 商户设备管理能力响应 */
+export interface MerchantDeviceAccessResponse {
+    merchant_id: number
+    merchant_name: string
+    staff_role: string
+    can_manage: boolean
+    allowed_roles: string[]
+    block_reason?: string
+}
+
+/** 打印机异常对账任务响应 */
+export interface PrinterReconciliationJobResponse {
+    id: number
+    printer_id?: number
+    printer_name: string
+    printer_sn: string
+    printer_type: PrinterType
+    desired_action: 'register' | 'remove' | string
+    source_action: string
+    status: PrinterReconciliationJobStatus | string
+    failure_reason: string
+    last_error: string
+    retry_count: number
+    can_retry: boolean
+    created_at: string
+    updated_at: string
+    resolved_at?: string
+}
+
+/** 打印机异常对账任务列表响应 */
+export interface PrinterReconciliationJobListResponse {
+    jobs: PrinterReconciliationJobResponse[]
+    total: number
 }
 
 /** 打印机测试请求 */
@@ -141,6 +250,8 @@ export interface DisplayConfigResponse {
     print_takeout: boolean
     print_dine_in: boolean
     print_reservation: boolean
+    print_dispatch_mode: 'single_full' | 'split' | string
+    print_trigger_mode: 'accepted' | 'ready' | 'manual' | string
     voice_takeout: boolean
     voice_dine_in: boolean
     kds_url?: string
@@ -156,6 +267,8 @@ export interface UpdateDisplayConfigRequest extends Record<string, unknown> {
     print_takeout?: boolean
     print_dine_in?: boolean
     print_reservation?: boolean
+    print_dispatch_mode?: 'single_full' | 'split' | string
+    print_trigger_mode?: 'accepted' | 'ready' | 'manual' | string
     voice_takeout?: boolean
     voice_dine_in?: boolean
     kds_url?: string
@@ -272,11 +385,22 @@ export class TableManagementService {
      * @param tableId 桌台ID
      * @param imageData 图片数据
      */
-    async uploadTableImage(tableId: number, imageData: { image_url: string; sort_order?: number }): Promise<TableImageResponse> {
+    async uploadTableImage(tableId: number, imageData: { media_asset_id: number, sort_order?: number, is_primary?: boolean }): Promise<TableImageResponse> {
         return request({
             url: `/v1/tables/${tableId}/images`,
             method: 'POST',
             data: imageData
+        })
+    }
+
+    /**
+     * 上传桌台图片文件（媒体服务三步流程）
+     * @returns { mediaId, displayUrl, urls }
+     */
+    async uploadTableImageFile(filePath: string): Promise<import('../utils/media').MediaUploadResult> {
+        return uploadMedia(filePath, {
+            businessType: 'merchant',
+            mediaCategory: 'table'
         })
     }
 
@@ -366,12 +490,47 @@ export class DeviceManagementService {
     }
 
     /**
+     * 获取打印机异常对账任务
+     * @param status 任务状态，默认 pending
+     */
+    async listPrinterReconciliationJobs(
+        status: PrinterReconciliationJobStatus = 'pending'
+    ): Promise<PrinterReconciliationJobListResponse> {
+        return request({
+            url: '/v1/merchant/devices/reconciliation-jobs',
+            method: 'GET',
+            data: { status }
+        })
+    }
+
+    /**
      * 获取打印机详情
      * @param printerId 打印机ID
      */
     async getPrinterDetail(printerId: number): Promise<PrinterResponse> {
         return request({
             url: `/v1/merchant/devices/${printerId}`,
+            method: 'GET'
+        })
+    }
+
+    /**
+     * 获取打印机实时状态
+     * @param printerId 打印机ID
+     */
+    async getPrinterLiveStatus(printerId: number): Promise<PrinterLiveStatusResponse> {
+        return request({
+            url: `/v1/merchant/devices/${printerId}/status`,
+            method: 'GET'
+        })
+    }
+
+    /**
+     * 获取设备管理能力
+     */
+    async getMerchantDeviceAccess(): Promise<MerchantDeviceAccessResponse> {
+        return request({
+            url: '/v1/merchant/devices/access',
             method: 'GET'
         })
     }
@@ -417,11 +576,22 @@ export class DeviceManagementService {
      * @param printerId 打印机ID
      * @param testData 测试数据
      */
-    async testPrinter(printerId: number, testData?: TestPrinterRequest): Promise<{ message: string; success: boolean }> {
+    async testPrinter(printerId: number, testData?: TestPrinterRequest): Promise<{ message: string, success: boolean }> {
         return request({
             url: `/v1/merchant/devices/${printerId}/test`,
             method: 'POST',
             data: testData || {}
+        })
+    }
+
+    /**
+     * 重试打印机异常对账任务
+     * @param jobId 对账任务ID
+     */
+    async retryPrinterReconciliationJob(jobId: number): Promise<PrinterReconciliationJobResponse> {
+        return request({
+            url: `/v1/merchant/devices/reconciliation-jobs/${jobId}/retry`,
+            method: 'POST'
         })
     }
 }
@@ -612,6 +782,7 @@ export class TableDeviceAdapter {
 export const tableManagementService = new TableManagementService()
 export const deviceManagementService = new DeviceManagementService()
 export const displayConfigService = new DisplayConfigService()
+export const getMerchantDeviceAccess = () => deviceManagementService.getMerchantDeviceAccess()
 
 // ==================== 便捷函数 ====================
 
@@ -620,7 +791,7 @@ export const displayConfigService = new DisplayConfigService()
  */
 export async function getAvailableTables(): Promise<TableResponse[]> {
     const response = await tableManagementService.listTables('table')
-    return response.tables.filter(table => table.status === 'available')
+    return (response.tables || []).filter((table) => table.status === 'available')
 }
 
 /**
@@ -628,7 +799,7 @@ export async function getAvailableTables(): Promise<TableResponse[]> {
  */
 export async function getPrivateRooms(): Promise<TableResponse[]> {
     const response = await tableManagementService.listTables('room')
-    return response.tables
+    return response.tables || []
 }
 
 /**
@@ -643,16 +814,16 @@ export async function getActivePrinters(): Promise<PrinterResponse[]> {
  * 批量测试打印机
  * @param printerIds 打印机ID列表
  */
-export async function batchTestPrinters(printerIds: number[]): Promise<{ printerId: number; success: boolean; message: string }[]> {
+export async function batchTestPrinters(printerIds: number[]): Promise<{ printerId: number, success: boolean, message: string }[]> {
     const promises = printerIds.map(async (printerId) => {
         try {
             const result = await deviceManagementService.testPrinter(printerId)
             return { printerId, success: result.success, message: result.message }
-        } catch (error: any) {
+        } catch (error: unknown) {
             return {
                 printerId,
                 success: false,
-                message: error?.message || '测试失败'
+                message: error instanceof Error ? error.message : '测试失败'
             }
         }
     })

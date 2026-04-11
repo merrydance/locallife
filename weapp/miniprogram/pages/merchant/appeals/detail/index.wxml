@@ -1,0 +1,112 @@
+<custom-navbar title="异议详情" showBack="{{true}}" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px;">
+  <view wx:if="{{loading && !detail}}" class="state-block">
+    <t-loading theme="circular" size="40rpx" text="加载异议详情中..." vertical />
+  </view>
+
+  <view wx:elif="{{initialError}}" class="state-block">
+    <t-empty description="{{initialErrorMessage || '异议详情加载失败，请重试'}}" />
+    <view class="retry-button" bindtap="onRetry">重新加载</view>
+  </view>
+
+  <view wx:elif="{{detail}}" class="content">
+    <view wx:if="{{refreshErrorMessage}}" class="inline-banner inline-banner-danger">
+      <text class="inline-banner-text">{{refreshErrorMessage}}</text>
+      <text class="inline-banner-action" bindtap="onRetryRefresh">重新同步</text>
+    </view>
+
+    <view class="hero-card">
+      <view class="hero-top">
+        <view class="hero-copy">
+          <text class="hero-title">订单 {{detail.orderNo}} 异议</text>
+          <text class="hero-subtitle">提交于 {{detail.createdAtLabel}}</text>
+        </view>
+        <t-tag size="small" variant="dark" theme="{{detail.statusTheme}}">{{detail.statusLabel}}</t-tag>
+      </view>
+
+      <view class="hero-summary">
+        <text class="hero-result-title">{{detail.resultTitle}}</text>
+        <text class="hero-result-desc">{{detail.resultDescription}}</text>
+      </view>
+    </view>
+
+    <view class="card">
+      <view class="card-title">处理进度</view>
+      <t-steps layout="vertical" current="{{detail.progressCurrent}}" theme="dot">
+        <t-step-item title="商户提交异议" content="{{detail.createdAtLabel}}" />
+        <t-step-item title="平台复核中" content="平台会结合责任判定与证据重新审核" />
+        <t-step-item title="结果生效" content="{{detail.reviewedAtLabel}}" />
+      </t-steps>
+    </view>
+
+    <view class="card">
+      <view class="card-title">异议内容</view>
+      <view class="row">
+        <text class="label">订单号</text>
+        <text class="value">{{detail.orderNo}}</text>
+      </view>
+      <view class="row">
+        <text class="label">订单金额</text>
+        <text class="value">{{detail.orderAmountText}}</text>
+      </view>
+      <view class="row">
+        <text class="label">发起方</text>
+        <text class="value">{{detail.appellantTypeLabel}}</text>
+      </view>
+      <view class="row">
+        <text class="label">索赔类型</text>
+        <text class="value">{{detail.claimTypeLabel}}</text>
+      </view>
+      <view class="row">
+        <text class="label">关联金额</text>
+        <text class="value">{{detail.claimAmountText}}</text>
+      </view>
+      <view class="row" wx:if="{{detail.hasApprovedAmount}}">
+        <text class="label">批准金额</text>
+        <text class="value">{{detail.approvedAmountText}}</text>
+      </view>
+      <view class="row" wx:if="{{detail.hasUserPhone}}">
+        <text class="label">顾客手机号</text>
+        <text class="value">{{detail.userPhone}}</text>
+      </view>
+      <view class="desc">
+        <text class="desc-label">索赔说明</text>
+        <text class="desc-value">{{detail.claimDescription}}</text>
+      </view>
+      <view class="desc">
+        <text class="desc-label">异议理由</text>
+        <text class="desc-value">{{detail.reason}}</text>
+      </view>
+    </view>
+
+    <view class="card">
+      <view class="card-title">平台处理结果</view>
+      <view class="row">
+        <text class="label">复核状态</text>
+        <text class="value">{{detail.statusLabel}}</text>
+      </view>
+      <view class="row">
+        <text class="label">复核时间</text>
+        <text class="value">{{detail.reviewedAtLabel}}</text>
+      </view>
+      <view class="row" wx:if="{{detail.hasCompensatedAt}}">
+        <text class="label">赔付生效时间</text>
+        <text class="value">{{detail.compensatedAtLabel}}</text>
+      </view>
+      <view class="row" wx:if="{{detail.hasCompensation}}">
+        <text class="label">复核补偿</text>
+        <text class="value">{{detail.compensationAmountText}}</text>
+      </view>
+      <view wx:if="{{detail.hasReviewNotes}}" class="desc">
+        <text class="desc-label">平台备注</text>
+        <text class="desc-value">{{detail.reviewNotes}}</text>
+      </view>
+      <view wx:else class="pending-tip">{{detail.statusLabel === '待审核' ? '平台还未给出正式复核备注，当前先保持原处理链路继续推进。' : '当前结果未返回额外备注。'}}</view>
+    </view>
+
+    <view class="action-bar">
+      <t-button theme="primary" shape="round" bindtap="onViewClaimDetail">查看关联索赔</t-button>
+    </view>
+  </view>
+</view>

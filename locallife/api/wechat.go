@@ -7,17 +7,19 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
+	"github.com/merrydance/locallife/util"
 	"github.com/merrydance/locallife/wechat"
+	"github.com/rs/zerolog/log"
 )
 
 type wechatLoginRequest struct {
-	Code       string `json:"code" binding:"required,min=1,max=256"`
-	DeviceID   string `json:"device_id" binding:"required,min=1,max=128"`
-	DeviceType string `json:"device_type" binding:"required,oneof=ios android miniprogram h5"`
+	Code              string `json:"code" binding:"required,min=1,max=256"`
+	DeviceID          string `json:"device_id" binding:"required,min=1,max=128"`
+	DeviceType        string `json:"device_type" binding:"required,oneof=ios android miniprogram h5"`
+	DeviceFingerprint string `json:"device_fingerprint,omitempty" binding:"omitempty,max=256"`
 }
 
 type wechatLoginResponse struct {
@@ -64,7 +66,7 @@ func (server *Server) wechatLogin(ctx *gin.Context) {
 	user, err := server.store.GetUserByWechatOpenID(ctx, wechatResp.OpenID)
 
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			// 用户不存在,创建新用户(使用事务确保原子性)
 			txResult, err := server.store.CreateUserTx(ctx, db.CreateUserTxParams{
 				WechatOpenid: wechatResp.OpenID,
@@ -72,26 +74,35 @@ func (server *Server) wechatLogin(ctx *gin.Context) {
 				DefaultRole:  "customer",
 			})
 			if err != nil {
-				ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("create user tx: %w", err)))
-				return
+				// 并发请求可能导致重复 key 冲突（TOCTOU），此时降级为查询已存在的用户
+				if isDuplicateKeyError(err) {
+					user, err = server.store.GetUserByWechatOpenID(ctx, wechatResp.OpenID)
+					if err != nil {
+						ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get user after duplicate: %w", err)))
+						return
+					}
+				} else {
+					ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("create user tx: %w", err)))
+					return
+				}
+			} else {
+				user = txResult.User
 			}
-			user = txResult.User
 		} else {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get user by openid: %w", err)))
 			return
 		}
 	}
 
-	// 记录设备信息（用于M9欺诈检测）
+	// 记录设备信息（用于M9欺诈检测）。此操作为辅助性安全增强，失败不应阻断登录主路径。
 	deviceArg := db.UpsertUserDeviceParams{
-		UserID:     user.ID,
-		DeviceID:   req.DeviceID,
-		DeviceType: req.DeviceType,
+		UserID:            user.ID,
+		DeviceID:          req.DeviceID,
+		DeviceFingerprint: pgtype.Text{String: req.DeviceFingerprint, Valid: req.DeviceFingerprint != ""},
+		DeviceType:        req.DeviceType,
 	}
-	_, err = server.store.UpsertUserDevice(ctx, deviceArg)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("failed to record device info: %w", err)))
-		return
+	if _, err = server.store.UpsertUserDevice(ctx, deviceArg); err != nil {
+		log.Warn().Err(err).Int64("user_id", user.ID).Msg("failed to record device info, non-fatal")
 	}
 
 	// 生成访问令牌
@@ -116,11 +127,23 @@ func (server *Server) wechatLogin(ctx *gin.Context) {
 		return
 	}
 
+	accessTokenHash, err := util.HashToken(accessToken, server.config.TokenSymmetricKey)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("hash access token: %w", err)))
+		return
+	}
+
+	refreshTokenHash, err := util.HashToken(refreshToken, server.config.TokenSymmetricKey)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("hash refresh token: %w", err)))
+		return
+	}
+
 	// 创建会话
 	session, err := server.store.CreateSession(ctx, db.CreateSessionParams{
 		UserID:                user.ID,
-		AccessToken:           accessToken,
-		RefreshToken:          refreshToken,
+		AccessToken:           accessTokenHash,
+		RefreshToken:          refreshTokenHash,
 		AccessTokenExpiresAt:  accessPayload.ExpiredAt,
 		RefreshTokenExpiresAt: refreshPayload.ExpiredAt,
 		UserAgent:             ctx.Request.UserAgent(),
@@ -138,9 +161,10 @@ func (server *Server) wechatLogin(ctx *gin.Context) {
 		return
 	}
 
-	roles := make([]string, len(userRoles))
-	for i, r := range userRoles {
-		roles[i] = r.Role
+	roles, workbenches, err := server.buildUserAccessProfile(ctx, user.ID, userRoles)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("build user access profile: %w", err)))
+		return
 	}
 
 	rsp := wechatLoginResponse{
@@ -149,63 +173,7 @@ func (server *Server) wechatLogin(ctx *gin.Context) {
 		AccessTokenExpiresAt:  accessPayload.ExpiredAt,
 		RefreshToken:          refreshToken,
 		RefreshTokenExpiresAt: refreshPayload.ExpiredAt,
-		User:                  newUserResponse(user, roles),
+		User:                  newUserResponse(user, roles, workbenches),
 	}
 	ctx.JSON(http.StatusOK, rsp)
-}
-
-type bindPhoneRequest struct {
-	Phone string `json:"phone" binding:"required"`
-}
-
-func (server *Server) bindPhone(ctx *gin.Context) {
-	var req bindPhoneRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
-		return
-	}
-
-	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-
-	// 检查手机号是否已被其他用户使用
-	existingUser, err := server.store.GetUserByPhone(ctx, pgtype.Text{
-		String: req.Phone,
-		Valid:  true,
-	})
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("failed to check phone availability: %w", err)))
-		return
-	}
-	if err == nil && existingUser.ID != authPayload.UserID {
-		ctx.JSON(http.StatusConflict, errorResponse(fmt.Errorf("phone number already in use")))
-		return
-	}
-
-	arg := db.UpdateUserParams{
-		ID: authPayload.UserID,
-		Phone: pgtype.Text{
-			String: req.Phone,
-			Valid:  true,
-		},
-	}
-
-	user, err := server.store.UpdateUser(ctx, arg)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("update user phone: %w", err)))
-		return
-	}
-
-	// 获取用户角色
-	userRoles, err := server.store.ListUserRoles(ctx, user.ID)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("list user roles: %w", err)))
-		return
-	}
-
-	roles := make([]string, len(userRoles))
-	for i, r := range userRoles {
-		roles[i] = r.Role
-	}
-
-	ctx.JSON(http.StatusOK, newUserResponse(user, roles))
 }

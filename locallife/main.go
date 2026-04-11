@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/go-redis/redis/v8"
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
@@ -17,8 +18,13 @@ import (
 	"github.com/merrydance/locallife/autotag"
 	db "github.com/merrydance/locallife/db/sqlc"
 	_ "github.com/merrydance/locallife/docs" // Swagger docs
+	"github.com/merrydance/locallife/logic"
+	"github.com/merrydance/locallife/media"
+	"github.com/merrydance/locallife/scheduler"
+	"github.com/merrydance/locallife/session"
 	"github.com/merrydance/locallife/util"
 	"github.com/merrydance/locallife/weather"
+	"github.com/merrydance/locallife/websocket"
 	"github.com/merrydance/locallife/wechat"
 	"github.com/merrydance/locallife/worker"
 	"github.com/rs/zerolog"
@@ -30,9 +36,9 @@ import (
 // @version         1.0
 // @description     本地生活服务平台 API 文档，包含用户、商户、订单、配送、支付等完整业务功能。
 // @description
-// @description     【图片URL约定】API 中的图片字段（如 image_url / avatar_url / logo_url）通常返回以 /uploads/ 开头的路径。
-// @description     - 公共展示素材（例如菜品/桌台/包间/评价图片、商户logo等）可直接通过 GET /uploads/... 访问。
-// @description     - 敏感材料（证照、身份证、健康证等）必须先调用 POST /v1/uploads/sign 获取短期签名URL，再用该URL下载。
+// @description     【图片URL约定】公共展示图片字段（如 image_url / avatar_url / logo_url）应返回可直接访问的绝对 URL（通常为 CDN 地址）。
+// @description     - 公共展示素材不应再依赖客户端拼接 /uploads/... 路径。
+// @description     - 敏感材料应使用 media_asset_id + POST /v1/media/private-access 获取短期访问地址。
 // @termsOfService  http://swagger.io/terms/
 
 // @contact.name   API Support
@@ -60,6 +66,15 @@ func main() {
 	if err != nil {
 		log.Fatal().Err(err).Msg("cannot load config")
 	}
+	if err := config.ValidateAliyunOCRConfig(); err != nil {
+		log.Fatal().Err(err).Msg("invalid aliyun ocr config")
+	}
+
+	level, err := zerolog.ParseLevel(config.LogLevel)
+	if err != nil {
+		level = zerolog.InfoLevel
+	}
+	zerolog.SetGlobalLevel(level)
 
 	if config.Environment == "development" {
 		log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
@@ -68,18 +83,34 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), interruptSignals...)
 	defer stop()
 
+	// Fail-fast: 生产环境必须配置显式 CORS 白名单，且不能包含通配符 *
+	if config.Environment == "production" {
+		if len(config.AllowedOrigins) == 0 {
+			log.Fatal().Msg("ALLOWED_ORIGINS must not be empty in production")
+		}
+		for _, origin := range config.AllowedOrigins {
+			if origin == "*" {
+				log.Fatal().Msg("ALLOWED_ORIGINS must not contain wildcard '*' in production")
+			}
+		}
+		// 生产环境资金流（赔付/退款/分账）依赖 Redis 任务队列，不允许降级为 NoopDistributor
+		if config.RedisAddress == "" {
+			log.Fatal().Msg("REDIS_ADDRESS is required in production (financial tasks require a real task queue)")
+		}
+	}
+
 	// ✅ P1-4: 优化数据库连接池配置
 	poolConfig, err := pgxpool.ParseConfig(config.DBSource)
 	if err != nil {
 		log.Fatal().Err(err).Msg("cannot parse db config")
 	}
 
-	// 连接池优化参数（根据生产环境调整）
-	poolConfig.MaxConns = 25                       // 最大连接数（默认4）
-	poolConfig.MinConns = 5                        // 最小空闲连接（默认0）
-	poolConfig.MaxConnLifetime = 1 * time.Hour     // 连接最大生命周期
-	poolConfig.MaxConnIdleTime = 30 * time.Minute  // 空闲连接超时
-	poolConfig.HealthCheckPeriod = 1 * time.Minute // 健康检查频率
+	// 连接池参数从配置读取，默认值在 util/config.go 中定义
+	poolConfig.MaxConns = config.DBMaxConns
+	poolConfig.MinConns = config.DBMinConns
+	poolConfig.MaxConnLifetime = config.DBMaxConnLifetime
+	poolConfig.MaxConnIdleTime = config.DBMaxConnIdleTime
+	poolConfig.HealthCheckPeriod = config.DBHealthCheckPeriod
 
 	connPool, err := pgxpool.NewWithConfig(ctx, poolConfig)
 	if err != nil {
@@ -96,34 +127,94 @@ func main() {
 		Int32("min_conns", poolConfig.MinConns).
 		Msg("✅ database connection pool configured")
 
-	runDBMigration(config.MigrationURL, config.DBSource)
+	if config.Environment == "production" {
+		if config.AutoMigrate {
+			runDBMigration(config.MigrationURL, config.DBSource)
+		} else {
+			log.Warn().Msg("AUTO_MIGRATE disabled in production, skipping migrations")
+		}
+	} else {
+		runDBMigration(config.MigrationURL, config.DBSource)
+	}
 
 	store := db.NewStore(connPool)
 
-	redisOpt := asynq.RedisClientOpt{
-		Addr: config.RedisAddress,
-		// Support authenticated Redis deployments
-		Password: config.RedisPassword,
-	}
-
-	// ✅ P1-1: 验证Redis连接
-	if config.RedisAddress == "" {
-		log.Fatal().Msg("REDIS_ADDRESS is not configured")
-	}
-
-	// 初始化天气缓存（用于测试Redis连接）
 	var weatherCache weather.WeatherCache
-	weatherCache, err = weather.NewWeatherCache(config.RedisAddress, config.RedisPassword)
-	if err != nil {
-		log.Fatal().Err(err).Msg("failed to connect to Redis - check REDIS_ADDRESS configuration")
+	var taskDistributor worker.TaskDistributor
+	var redisOpt asynq.RedisClientOpt
+
+	if config.RedisAddress == "" {
+		if config.RedisRequired {
+			log.Fatal().Msg("REDIS_ADDRESS is not configured but REDIS_REQUIRED is true")
+		}
+		log.Warn().Msg("REDIS_ADDRESS not configured, redis-dependent features disabled")
+		taskDistributor = worker.NewNoopTaskDistributor()
+	} else {
+		redec := asynq.RedisClientOpt{
+			Addr: config.RedisAddress,
+			// Support authenticated Redis deployments
+			Password: config.RedisPassword,
+		}
+		redisOpt = redec
+
+		// 初始化天气缓存（用于测试Redis连接）
+		weatherCache, err = weather.NewWeatherCache(config.RedisAddress, config.RedisPassword)
+		if err != nil {
+			log.Fatal().Err(err).Msg("failed to connect to Redis - check REDIS_ADDRESS configuration")
+		}
+		log.Info().Str("redis_address", config.RedisAddress).Msg("✅ Redis connection verified")
 	}
-	log.Info().Str("redis_address", config.RedisAddress).Msg("✅ Redis connection verified")
 
 	waitGroup, ctx := errgroup.WithContext(ctx)
 
-	taskDistributor := runTaskProcessor(ctx, waitGroup, config, redisOpt, store)
-	runWeatherScheduler(ctx, waitGroup, config, store, weatherCache)
-	runAutoTagScheduler(ctx, waitGroup, store)
+	runDBMetricsCollector(ctx, waitGroup, connPool)
+
+	var billClient wechat.BillClientInterface
+	var reconciliationPublisher websocket.PubSubPublisher
+	claimPayoutPaymentClient := buildClaimPayoutPaymentClient(config)
+	ecommerceClient := buildEcommerceClient(config)
+	if config.RedisAddress != "" {
+		// 初始化逻辑层
+		redisClient := redis.NewClient(&redis.Options{
+			Addr:     config.RedisAddress,
+			Password: config.RedisPassword,
+		})
+		deliveryBroadcast := logic.NewDeliveryBroadcastLogic(store, redisClient)
+		taskDistributor, billClient = runTaskProcessor(ctx, waitGroup, config, redisOpt, store, deliveryBroadcast)
+		reconciliationPublisher = websocket.NewRedisPublisher(redisClient)
+	}
+
+	schedulerManager := scheduler.NewManager()
+	if config.RedisAddress != "" {
+		if config.QweatherAPIKey == "" || config.QweatherAPIHost == "" {
+			log.Warn().Msg("qweather API not configured, weather scheduler disabled")
+		} else {
+			weatherClient := weather.NewQweatherClient(config.QweatherAPIKey, config.QweatherAPIHost)
+			schedulerManager.Register("weather", weather.NewScheduler(store, weatherClient, weatherCache))
+		}
+	}
+
+	schedulerManager.Register("auto-tag", autotag.NewScheduler(store))
+	schedulerManager.Register("session-cleanup", session.NewScheduler(store))
+	schedulerManager.Register("payment-recovery", worker.NewPaymentRecoveryScheduler(store, taskDistributor))
+	schedulerManager.Register("wechat-notification-recovery", worker.NewWechatNotificationRecoveryScheduler(store))
+	schedulerManager.Register("profit-sharing-recovery", worker.NewProfitSharingRecoveryScheduler(store, taskDistributor))
+	schedulerManager.Register("refund-recovery", worker.NewRefundRecoveryScheduler(store, taskDistributor, claimPayoutPaymentClient, ecommerceClient))
+	schedulerManager.Register("applyment-recovery", worker.NewApplymentRecoveryScheduler(store, taskDistributor, ecommerceClient))
+	schedulerManager.Register("merchant-withdraw-recovery", worker.NewMerchantWithdrawRecoveryScheduler(store, taskDistributor))
+	if claimPayoutPaymentClient != nil {
+		schedulerManager.Register("claim-payout-recovery", worker.NewClaimPayoutRecoveryScheduler(store, claimPayoutPaymentClient))
+	} else {
+		log.Warn().Msg("claim payout recovery scheduler disabled: payment client not configured")
+	}
+	schedulerManager.Register("claim-recovery", worker.NewClaimRecoveryScheduler(store))
+	schedulerManager.Register("merchant-open-status", scheduler.NewMerchantOpenStatusScheduler(store))
+	schedulerManager.Register("order-timeout", scheduler.NewOrderTimeoutScheduler(store))
+	schedulerManager.Register("takeout-auto-complete", scheduler.NewTakeoutAutoCompleteScheduler(store, taskDistributor))
+	schedulerManager.Register("data-cleanup", scheduler.NewDataCleanupScheduler(store, taskDistributor, reconciliationPublisher))
+	schedulerManager.Register("bill-reconciliation", worker.NewBillReconciliationScheduler(store, billClient, reconciliationPublisher))
+	schedulerManager.StartAll(ctx, waitGroup)
+
 	runGinServer(ctx, waitGroup, config, store, weatherCache, taskDistributor)
 
 	err = waitGroup.Wait()
@@ -145,46 +236,121 @@ func runDBMigration(migrationURL string, dbSource string) {
 	log.Info().Msg("db migrated successfully")
 }
 
+func buildClaimPayoutPaymentClient(config util.Config) wechat.PaymentClientInterface {
+	if config.WechatPayMchID == "" || config.WechatPayPrivateKeyPath == "" {
+		return nil
+	}
+
+	paymentClient, err := wechat.NewPaymentClient(wechat.PaymentClientConfig{
+		MchID:                   config.WechatPayMchID,
+		AppID:                   config.WechatMiniAppID,
+		SerialNumber:            config.WechatPaySerialNumber,
+		HTTPTimeout:             config.WechatPayHTTPTimeout,
+		PrivateKeyPath:          config.WechatPayPrivateKeyPath,
+		APIV3Key:                config.WechatPayAPIV3Key,
+		NotifyURL:               config.WechatPayNotifyURL,
+		RefundNotifyURL:         config.WechatPayRefundNotifyURL,
+		PlatformCertificatePath: config.WechatPayPlatformCertificatePath,
+		PlatformPublicKeyPath:   config.WechatPayPlatformPublicKeyPath,
+		PlatformPublicKeyID:     config.WechatPayPlatformPublicKeyID,
+	})
+	if err != nil {
+		log.Warn().Err(err).Msg("failed to create payment client, claim payout transfer disabled")
+		return nil
+	}
+
+	return paymentClient
+}
+
+func buildEcommerceClient(config util.Config) wechat.EcommerceClientInterface {
+	if config.WechatPayMchID == "" || config.WechatPayPrivateKeyPath == "" {
+		return nil
+	}
+
+	if err := config.ValidateWechatEcommerceConfig(); err != nil {
+		log.Warn().Err(err).Msg("invalid ecommerce config, profit sharing disabled")
+		return nil
+	}
+
+	client, err := wechat.NewEcommerceClient(wechat.EcommerceClientConfig{
+		PaymentClientConfig: wechat.PaymentClientConfig{
+			MchID:                   config.WechatEcommerceSpMchID,
+			AppID:                   config.WechatEcommerceSpAppID,
+			SerialNumber:            config.EffectiveWechatEcommerceSerialNumber(),
+			HTTPTimeout:             config.WechatPayHTTPTimeout,
+			PrivateKeyPath:          config.EffectiveWechatEcommercePrivateKeyPath(),
+			APIV3Key:                config.EffectiveWechatEcommerceAPIV3Key(),
+			NotifyURL:               config.EffectiveWechatEcommercePaymentNotifyURL(),
+			RefundNotifyURL:         config.EffectiveWechatEcommerceRefundNotifyURL(),
+			PlatformCertificatePath: config.WechatPayPlatformCertificatePath,
+			PlatformPublicKeyPath:   config.EffectiveWechatEcommercePlatformPublicKeyPath(),
+			PlatformPublicKeyID:     config.EffectiveWechatEcommercePlatformPublicKeyID(),
+		},
+		SpMchID:           config.WechatEcommerceSpMchID,
+		SpAppID:           config.WechatEcommerceSpAppID,
+		SpMchName:         config.WechatEcommerceSpName,
+		PartnerNotifyURL:  config.EffectiveWechatEcommercePaymentNotifyURL(),
+		CombineNotifyURL:  config.EffectiveWechatEcommerceCombineNotifyURL(),
+		WithdrawNotifyURL: config.EffectiveWechatEcommerceWithdrawNotifyURL(),
+	})
+	if err != nil {
+		log.Warn().Err(err).Msg("failed to create ecommerce client, profit sharing disabled")
+		return nil
+	}
+
+	return client
+}
+
 func runTaskProcessor(
 	ctx context.Context,
 	waitGroup *errgroup.Group,
 	config util.Config,
 	redisOpt asynq.RedisClientOpt,
 	store db.Store,
-) worker.TaskDistributor {
+	deliveryBroadcast *logic.DeliveryBroadcastLogic,
+) (worker.TaskDistributor, wechat.BillClientInterface) {
 	// 创建任务分发器
 	taskDistributor := worker.NewRedisTaskDistributor(redisOpt)
 
 	// 创建平台收付通客户端（用于分账）
 	wechatClient := wechat.NewClient(config.WechatMiniAppID, config.WechatMiniAppSecret, store)
 
-	var ecommerceClient wechat.EcommerceClientInterface
-	if config.WechatPayMchID != "" && config.WechatPayPrivateKeyPath != "" {
-		client, err := wechat.NewEcommerceClient(wechat.EcommerceClientConfig{
-			PaymentClientConfig: wechat.PaymentClientConfig{
-				MchID:                   config.WechatPayMchID,
-				AppID:                   config.WechatMiniAppID,
-				SerialNumber:            config.WechatPaySerialNumber,
-				HTTPTimeout:             config.WechatPayHTTPTimeout,
-				PrivateKeyPath:          config.WechatPayPrivateKeyPath,
-				APIV3Key:                config.WechatPayAPIV3Key,
-				NotifyURL:               config.WechatPayNotifyURL,
-				RefundNotifyURL:         config.WechatPayRefundNotifyURL,
-				PlatformCertificatePath: config.WechatPayPlatformCertificatePath,
-				PlatformPublicKeyPath:   config.WechatPayPlatformPublicKeyPath,
-				PlatformPublicKeyID:     config.WechatPayPlatformPublicKeyID,
-			},
-		})
-		if err != nil {
-			log.Warn().Err(err).Msg("failed to create ecommerce client, profit sharing disabled")
-		} else {
-			ecommerceClient = client
-			log.Info().Msg("ecommerce client created for profit sharing")
+	paymentClient := buildClaimPayoutPaymentClient(config)
+	ecommerceClient := buildEcommerceClient(config)
+	if ecommerceClient != nil {
+		log.Info().Msg("ecommerce client created for profit sharing")
+	}
+
+	// billClient 用于每日对账调度器；*EcommerceClient 同时满足 BillClientInterface
+	var billClient wechat.BillClientInterface
+	if ecommerceClient != nil {
+		if bc, ok := ecommerceClient.(wechat.BillClientInterface); ok {
+			billClient = bc
 		}
 	}
 
+	var mediaStorage media.ObjectStorage
+	if config.FileStorageProvider == "oss" {
+		storage, err := media.NewOSSStorage(
+			config.OSSEndpoint,
+			config.OSSRegion,
+			config.OSSAccessKeyID,
+			config.OSSAccessKeySecret,
+			config.OSSPublicBucket,
+			config.OSSPrivateBucket,
+		)
+		if err != nil {
+			log.Fatal().Err(err).Msg("cannot create media storage for task processor")
+		}
+		mediaStorage = storage
+	} else {
+		mediaStorage = media.NewLocalStorage(config.ExternalBaseURL, "uploads/dev")
+	}
+	mediaRegistry := media.NewRegistry(store, mediaStorage)
+
 	// 创建并启动任务处理器（传入 distributor 以支持任务链）
-	taskProcessor := worker.NewRedisTaskProcessor(redisOpt, store, taskDistributor, wechatClient, ecommerceClient)
+	taskProcessor := worker.NewRedisTaskProcessor(redisOpt, store, taskDistributor, wechatClient, ecommerceClient, deliveryBroadcast, mediaRegistry, config)
+	taskProcessor.SetPaymentClient(paymentClient)
 	log.Info().Msg("start task processor")
 
 	waitGroup.Go(func() error {
@@ -199,61 +365,23 @@ func runTaskProcessor(
 		return nil
 	})
 
-	return taskDistributor
-} // runWeatherScheduler starts the weather data fetching scheduler
-func runWeatherScheduler(
-	ctx context.Context,
-	waitGroup *errgroup.Group,
-	config util.Config,
-	store db.Store,
-	weatherCache weather.WeatherCache,
-) {
-	// 如果没有配置和风天气 API，跳过
-	if config.QweatherAPIKey == "" || config.QweatherAPIHost == "" {
-		log.Warn().Msg("qweather API not configured, weather scheduler disabled")
-		return
-	}
-
-	// 创建天气客户端
-	weatherClient := weather.NewQweatherClient(config.QweatherAPIKey, config.QweatherAPIHost)
-
-	// 创建调度器
-	scheduler := weather.NewScheduler(store, weatherClient, weatherCache)
-
-	// 启动调度器
-	if err := scheduler.Start(); err != nil {
-		log.Error().Err(err).Msg("failed to start weather scheduler")
-		return
-	}
-
-	waitGroup.Go(func() error {
-		<-ctx.Done()
-		log.Info().Msg("graceful shutdown weather scheduler")
-		scheduler.Stop()
-		return nil
-	})
+	return taskDistributor, billClient
 }
 
-// runAutoTagScheduler starts the auto-tagging scheduler
-func runAutoTagScheduler(
-	ctx context.Context,
-	waitGroup *errgroup.Group,
-	store db.Store,
-) {
-	// 创建自动标签调度器
-	scheduler := autotag.NewScheduler(store)
-
-	// 启动调度器
-	if err := scheduler.Start(); err != nil {
-		log.Error().Err(err).Msg("failed to start auto-tag scheduler")
-		return
-	}
-
+func runDBMetricsCollector(ctx context.Context, waitGroup *errgroup.Group, pool *pgxpool.Pool) {
 	waitGroup.Go(func() error {
-		<-ctx.Done()
-		log.Info().Msg("graceful shutdown auto-tag scheduler")
-		scheduler.Stop()
-		return nil
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-ticker.C:
+				stats := pool.Stat()
+				api.UpdateDBMetrics(int(stats.AcquiredConns()), int(stats.IdleConns()))
+			}
+		}
 	})
 }
 
@@ -267,7 +395,7 @@ func runGinServer(
 	weatherCache weather.WeatherCache,
 	taskDistributor worker.TaskDistributor,
 ) {
-	server, err := api.NewServer(config, store, weatherCache, taskDistributor)
+	server, err := api.NewServer(config, store, weatherCache, taskDistributor, nil)
 	if err != nil {
 		log.Fatal().Err(err).Msg("cannot create server")
 	}
@@ -312,6 +440,8 @@ func runGinServer(
 			log.Error().Err(err).Msg("HTTP server forced to shutdown")
 			return err
 		}
+
+		server.Shutdown()
 
 		log.Info().Msg("HTTP server is stopped")
 		return nil

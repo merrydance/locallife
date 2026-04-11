@@ -104,6 +104,12 @@ SELECT * FROM user_balance_logs
 WHERE related_type = $1 AND related_id = $2
 LIMIT 1;
 
+-- name: GetUserBalanceLogByRelatedAndType :one
+-- 根据关联信息和类型获取日志（用于幂等检查/回滚）
+SELECT * FROM user_balance_logs
+WHERE related_type = $1 AND related_id = $2 AND type = $3
+LIMIT 1;
+
 -- name: CountUserBalanceLogs :one
 -- 统计用户余额变动日志数量
 SELECT COUNT(*) FROM user_balance_logs

@@ -1,0 +1,2 @@
+ALTER TABLE payment_orders
+ADD COLUMN IF NOT EXISTS processed_at TIMESTAMPTZ;

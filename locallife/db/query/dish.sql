@@ -35,6 +35,11 @@ JOIN merchant_dish_categories mdc ON c.id = mdc.category_id
 WHERE mdc.merchant_id = $1
 ORDER BY mdc.sort_order ASC, c.name ASC;
 
+-- name: ListGlobalDishCategories :many
+SELECT id, name, deleted_at FROM dish_categories
+WHERE deleted_at IS NULL
+ORDER BY name ASC;
+
 -- name: UpdateMerchantDishCategoryOrder :one
 UPDATE merchant_dish_categories
 SET
@@ -65,11 +70,11 @@ INSERT INTO dishes (
   category_id,
   name,
   description,
-  image_url,
   price,
   member_price,
   is_available,
   is_online,
+  is_packaging,
   sort_order,
   prepare_time
 ) VALUES (
@@ -114,13 +119,45 @@ WHERE d.id = $1 AND d.deleted_at IS NULL
 GROUP BY d.id, dc.name;
 
 -- name: ListDishesByMerchant :many
-SELECT * FROM dishes
+SELECT 
+  d.*,
+  COALESCE(
+    (
+      SELECT json_agg(
+        json_build_object(
+          'id', dcg.id,
+          'name', dcg.name,
+          'is_required', dcg.is_required,
+          'sort_order', dcg.sort_order,
+          'options', (
+            SELECT json_agg(
+              json_build_object(
+                'id', dco.id,
+                'tag_id', dco.tag_id,
+                'tag_name', opt_tag.name,
+                'extra_price', dco.extra_price,
+                'sort_order', dco.sort_order
+              ) ORDER BY dco.sort_order
+            )
+            FROM dish_customization_options dco
+            JOIN tags opt_tag ON dco.tag_id = opt_tag.id
+            WHERE dco.group_id = dcg.id
+          )
+        ) ORDER BY dcg.sort_order
+      )
+      FROM dish_customization_groups dcg
+      WHERE dcg.dish_id = d.id
+    ),
+    '[]'
+  ) as customization_groups
+FROM dishes d
 WHERE 
-  merchant_id = $1
-  AND deleted_at IS NULL
-  AND (sqlc.narg('category_id')::bigint IS NULL OR category_id = sqlc.narg('category_id'))
-  AND (sqlc.narg('is_online')::boolean IS NULL OR is_online = sqlc.narg('is_online'))
-  AND (sqlc.narg('is_available')::boolean IS NULL OR is_available = sqlc.narg('is_available'))
+  d.merchant_id = $1
+  AND d.deleted_at IS NULL
+  AND (sqlc.narg('category_id')::bigint IS NULL OR d.category_id = sqlc.narg('category_id'))
+  AND (sqlc.narg('is_online')::boolean IS NULL OR d.is_online = sqlc.narg('is_online'))
+  AND (sqlc.narg('is_available')::boolean IS NULL OR d.is_available = sqlc.narg('is_available'))
+  AND (sqlc.narg('is_packaging')::boolean IS NULL OR d.is_packaging = sqlc.narg('is_packaging'))
 ORDER BY sort_order ASC, created_at DESC
 LIMIT $2 OFFSET $3;
 
@@ -145,27 +182,104 @@ WHERE
 
 -- name: SearchDishesGlobal :many
 -- 全局菜品搜索（跨商户），只搜索已激活商户的上架菜品
-SELECT d.* FROM dishes d
+SELECT 
+  d.*,
+  m.name AS merchant_name,
+  m.logo_media_asset_id AS merchant_logo_asset_id,
+  m.is_open AS merchant_is_open,
+  m.region_id AS merchant_region_id,
+  m.latitude AS merchant_latitude,
+  m.longitude AS merchant_longitude,
+  earth_distance(ll_to_earth(m.latitude::float8, m.longitude::float8), ll_to_earth($4::float8, $5::float8))::float8 AS distance,
+  COALESCE(
+    (SELECT json_agg(t.name)
+     FROM dish_tags dt
+     JOIN tags t ON dt.tag_id = t.id
+     WHERE dt.dish_id = d.id),
+    '[]'
+  ) as tags,
+  COALESCE(
+    (SELECT json_agg(
+      json_build_object(
+        'id', dcg.id,
+        'name', dcg.name,
+        'is_required', dcg.is_required,
+        'sort_order', dcg.sort_order,
+        'options', (
+          SELECT json_agg(
+            json_build_object(
+              'id', dco.id,
+              'tag_id', dco.tag_id,
+              'tag_name', opt_tag.name,
+              'extra_price', dco.extra_price,
+              'sort_order', dco.sort_order
+            ) ORDER BY dco.sort_order
+          )
+          FROM dish_customization_options dco
+          JOIN tags opt_tag ON dco.tag_id = opt_tag.id
+          WHERE dco.group_id = dcg.id
+        )
+      ) ORDER BY dcg.sort_order
+     )
+     FROM dish_customization_groups dcg
+     WHERE dcg.dish_id = d.id),
+    '[]'
+  ) as customization_groups
+FROM dishes d
 JOIN merchants m ON d.merchant_id = m.id
+LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
 WHERE 
   m.status = 'active'
   AND m.deleted_at IS NULL
+  AND COALESCE(mp.is_takeout_suspended, false) = false
+  AND m.latitude IS NOT NULL
+  AND m.longitude IS NOT NULL
+  AND m.region_id = sqlc.narg('region_id')
   AND d.deleted_at IS NULL
   AND d.is_online = true
+  AND d.is_online = true
   AND d.name ILIKE '%' || $1 || '%'
-ORDER BY d.sort_order ASC, d.name ASC
+  AND (sqlc.narg('tag_id')::bigint IS NULL OR EXISTS (
+    SELECT 1 FROM dish_tags dt WHERE dt.dish_id = d.id AND dt.tag_id = sqlc.narg('tag_id')
+  ))
+ORDER BY 
+    m.is_open DESC,
+    (d.monthly_sales * (1 + d.repurchase_rate)) DESC,
+    distance ASC,
+    d.sort_order ASC, 
+    d.name ASC
 LIMIT $2 OFFSET $3;
+
+-- name: UpdateDishStats :exec
+UPDATE dishes
+SET 
+  monthly_sales = $2,
+  repurchase_rate = COALESCE($3, 0),
+  updated_at = NOW()
+WHERE id = $1;
+
+-- name: ListAllDishIDs :many
+SELECT id FROM dishes WHERE deleted_at IS NULL;
 
 -- name: CountSearchDishesGlobal :one
 -- 统计全局菜品搜索结果总数
 SELECT COUNT(*) FROM dishes d
 JOIN merchants m ON d.merchant_id = m.id
+LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
 WHERE 
   m.status = 'active'
   AND m.deleted_at IS NULL
+  AND COALESCE(mp.is_takeout_suspended, false) = false
+  AND m.latitude IS NOT NULL
+  AND m.longitude IS NOT NULL
+  AND m.region_id = sqlc.narg('region_id')
   AND d.deleted_at IS NULL
   AND d.is_online = true
-  AND d.name ILIKE '%' || $1 || '%';
+  AND d.is_online = true
+  AND d.name ILIKE '%' || $1 || '%'
+  AND (sqlc.narg('tag_id')::bigint IS NULL OR EXISTS (
+    SELECT 1 FROM dish_tags dt WHERE dt.dish_id = d.id AND dt.tag_id = sqlc.narg('tag_id')
+  ));
 
 -- name: SearchDishIDsGlobal :many
 -- 全局菜品搜索，只返回菜品ID（用于推荐接口的关键词过滤）
@@ -185,11 +299,12 @@ SET
   category_id = COALESCE(sqlc.narg('category_id'), category_id),
   name = COALESCE(sqlc.narg('name'), name),
   description = COALESCE(sqlc.narg('description'), description),
-  image_url = COALESCE(sqlc.narg('image_url'), image_url),
+  image_media_asset_id = COALESCE(sqlc.narg('image_media_asset_id'), image_media_asset_id),
   price = COALESCE(sqlc.narg('price'), price),
   member_price = COALESCE(sqlc.narg('member_price'), member_price),
   is_available = COALESCE(sqlc.narg('is_available'), is_available),
   is_online = COALESCE(sqlc.narg('is_online'), is_online),
+  is_packaging = COALESCE(sqlc.narg('is_packaging'), is_packaging),
   sort_order = COALESCE(sqlc.narg('sort_order'), sort_order),
   prepare_time = COALESCE(sqlc.narg('prepare_time'), prepare_time),
   updated_at = now()
@@ -219,7 +334,16 @@ SELECT COUNT(*) FROM dishes
 WHERE 
   merchant_id = $1
   AND deleted_at IS NULL
-  AND (sqlc.narg('is_online')::boolean IS NULL OR is_online = sqlc.narg('is_online'));
+  AND (sqlc.narg('is_online')::boolean IS NULL OR is_online = sqlc.narg('is_online'))
+  AND (sqlc.narg('is_packaging')::boolean IS NULL OR is_packaging = sqlc.narg('is_packaging'));
+
+-- name: CountActivePackagingDishesByMerchant :one
+SELECT COUNT(*) FROM dishes
+WHERE merchant_id = $1
+  AND deleted_at IS NULL
+  AND is_packaging = true
+  AND is_online = true
+  AND is_available = true;
 
 -- ============================================
 -- 菜品食材关联查询 (Dish Ingredient Queries)
@@ -448,13 +572,13 @@ SELECT
     d.merchant_id,
     d.name,
     d.description,
-    d.image_url,
+    d.image_media_asset_id,
     d.price,
     d.member_price,
     COALESCE(SUM(oi.quantity), 0)::int AS total_sold
 FROM dishes d
 LEFT JOIN order_items oi ON d.id = oi.dish_id
-LEFT JOIN orders o ON o.id = oi.order_id AND o.status IN ('delivered', 'completed')
+LEFT JOIN orders o ON o.id = oi.order_id AND o.status IN ('user_delivered', 'completed')
 WHERE d.is_online = true 
   AND d.is_available = true
   AND d.deleted_at IS NULL
@@ -478,10 +602,10 @@ SELECT d.id FROM dishes d
 WHERE d.is_online = true 
   AND d.is_available = true
   AND d.deleted_at IS NULL
-  AND d.price >= $1
-  AND d.price <= $2
+  AND d.price >= sqlc.arg('min_price')
+  AND d.price <= sqlc.arg('max_price')
 ORDER BY d.created_at DESC
-LIMIT $3;
+LIMIT sqlc.arg('limit');
 
 -- name: GetUserPurchasedDishIDs :many
 -- 获取用户购买过的菜品ID（用于排除已购买）
@@ -489,7 +613,7 @@ SELECT DISTINCT oi.dish_id
 FROM order_items oi
 JOIN orders o ON o.id = oi.order_id
 WHERE o.user_id = $1
-  AND o.status IN ('delivered', 'completed')
+  AND o.status IN ('user_delivered', 'completed')
   AND o.created_at >= $2;
 
 -- name: GetExploreDishes :many
@@ -499,7 +623,7 @@ SELECT
     COALESCE(SUM(oi.quantity), 0)::int AS total_sold
 FROM dishes d
 LEFT JOIN order_items oi ON d.id = oi.dish_id
-LEFT JOIN orders o ON o.id = oi.order_id AND o.status IN ('delivered', 'completed')
+LEFT JOIN orders o ON o.id = oi.order_id AND o.status IN ('user_delivered', 'completed')
 WHERE d.is_online = true 
   AND d.is_available = true
   AND d.deleted_at IS NULL
@@ -508,7 +632,7 @@ WHERE d.is_online = true
     FROM order_items oi2
     JOIN orders o2 ON o2.id = oi2.order_id
     WHERE o2.user_id = $1
-      AND o2.status IN ('delivered', 'completed')
+      AND o2.status IN ('user_delivered', 'completed')
   )
 GROUP BY d.id
 ORDER BY total_sold DESC
@@ -521,11 +645,12 @@ SELECT
     merchant_id,
     name,
     description,
-    image_url,
+    image_media_asset_id,
     price,
     member_price,
     is_available,
-    is_online
+  is_online,
+  is_packaging
 FROM dishes
 WHERE id = ANY($1::bigint[])
   AND deleted_at IS NULL
@@ -539,13 +664,13 @@ SELECT
     d.merchant_id,
     d.name,
     d.description,
-    d.image_url,
+    d.image_media_asset_id,
     d.price,
     d.member_price,
     d.is_available,
     d.is_online,
     m.name AS merchant_name,
-    m.logo_url AS merchant_logo,
+    m.logo_media_asset_id AS merchant_logo_asset_id,
     m.latitude AS merchant_latitude,
     m.longitude AS merchant_longitude,
     m.region_id AS merchant_region_id,
@@ -555,7 +680,7 @@ SELECT
          FROM order_items oi 
          JOIN orders o ON o.id = oi.order_id 
          WHERE oi.dish_id = d.id 
-           AND o.status IN ('delivered', 'completed')
+           AND o.status IN ('user_delivered', 'completed')
            AND o.created_at >= NOW() - INTERVAL '30 days'
         ), 0
     )::int AS monthly_sales
@@ -573,11 +698,12 @@ SELECT
     merchant_id,
     name,
     description,
-    image_url,
+    image_media_asset_id,
     price,
     member_price,
     is_available,
-    is_online
+  is_online,
+  is_packaging
 FROM dishes
 WHERE id = ANY($1::bigint[])
   AND deleted_at IS NULL;
@@ -598,11 +724,45 @@ SELECT
     d.category_id,
     d.name,
     d.description,
-    d.image_url,
+    d.image_media_asset_id,
     d.price,
     d.member_price,
     d.is_available,
-    d.sort_order
+    d.sort_order,
+    COALESCE(
+      (SELECT json_agg(t.name)
+       FROM dish_tags dt
+       JOIN tags t ON dt.tag_id = t.id
+       WHERE dt.dish_id = d.id),
+      '[]'
+    ) as tags,
+    COALESCE(
+      (SELECT json_agg(
+        json_build_object(
+          'id', dcg.id,
+          'name', dcg.name,
+          'is_required', dcg.is_required,
+          'sort_order', dcg.sort_order,
+          'options', (
+            SELECT json_agg(
+              json_build_object(
+                'id', dco.id,
+                'tag_id', dco.tag_id,
+                'tag_name', opt_tag.name,
+                'extra_price', dco.extra_price,
+                'sort_order', dco.sort_order
+              ) ORDER BY dco.sort_order
+            )
+            FROM dish_customization_options dco
+            JOIN tags opt_tag ON dco.tag_id = opt_tag.id
+            WHERE dco.group_id = dcg.id
+          )
+        ) ORDER BY dcg.sort_order
+       )
+       FROM dish_customization_groups dcg
+       WHERE dcg.dish_id = d.id),
+      '[]'
+    ) as customization_groups
 FROM dishes d
 WHERE d.merchant_id = $1
   AND d.is_online = true
@@ -618,3 +778,16 @@ WHERE dt.tag_id = $1
   AND d.is_online = true
   AND d.is_available = true
   AND d.deleted_at IS NULL;
+
+-- name: GetCustomizationDetailsByIDs :many
+-- 根据自定义选项ID列表获取详细信息
+SELECT 
+    dco.id as option_id,
+    dco.group_id,
+    dcg.name as group_name,
+    t.name as tag_name,
+    dco.extra_price
+FROM dish_customization_options dco
+JOIN dish_customization_groups dcg ON dco.group_id = dcg.id
+JOIN tags t ON dco.tag_id = t.id
+WHERE dco.id = ANY($1::bigint[]);

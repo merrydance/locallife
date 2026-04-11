@@ -9,7 +9,7 @@ import { request } from '../utils/request'
 // ==================== 数据类型定义 ====================
 
 /** 骑手状态枚举 */
-export type RiderStatus = 'active' | 'suspended' | 'pending_approval' | 'rejected' | 'offline'
+export type RiderStatus = 'pending' | 'active' | 'suspended' | 'pending_approval' | 'rejected' | 'offline'
 
 /** 骑手在线状态枚举 */
 export type RiderOnlineStatus = 'online' | 'offline' | 'busy' | 'break'
@@ -26,6 +26,15 @@ export interface ListOperatorRidersResponse {
     page?: number                                // 页码
     riders?: OperatorRiderItem[]                 // 骑手列表
     total?: number                               // 总数
+}
+
+export interface OperatorRiderSummaryResponse {
+    total: number
+    pending_approval: number
+    active: number
+    rejected: number
+    suspended: number
+    online: number
 }
 
 /** 运营商骑手项 - 基于swagger api.operatorRiderItem */
@@ -143,6 +152,29 @@ export interface RiderQueryParams extends Record<string, unknown> {
     limit?: number
 }
 
+function normalizeRiderStatus(status?: RiderStatus): RiderStatus | undefined {
+    if (!status) {
+        return undefined
+    }
+
+    return status === 'pending' ? 'pending_approval' : status
+}
+
+function normalizeRiderQueryParams(params: RiderQueryParams): RiderQueryParams {
+    return {
+        ...params,
+        status: normalizeRiderStatus(params.status)
+    }
+}
+
+export function parseRiderStatusFilter(status?: string): RiderStatus | '' {
+    if (!status) {
+        return ''
+    }
+
+    return normalizeRiderStatus(status as RiderStatus) || ''
+}
+
 /** 骑手排行查询参数 */
 export interface RiderRankingParams extends Record<string, unknown> {
     region_id?: number
@@ -180,6 +212,17 @@ export interface ResumeOperatorRiderRequest extends Record<string, unknown> {
     reason: string                               // 恢复原因（5-500字符，必填）
 }
 
+/** 骑手配送统计响应 - 对齐 api.riderStatsResponse */
+export interface RiderStatsResponse {
+    days: number
+    total_deliveries: number
+    completed_deliveries: number
+    completion_rate_basis_points: number
+    avg_delivery_seconds: number
+    period_earnings: number
+    delayed_count: number
+}
+
 /** 骑手详情响应 - 对齐 api.riderDetailResponse */
 export interface RiderDetailResponse {
     id: number                                   // 骑手ID
@@ -193,7 +236,6 @@ export interface RiderDetailResponse {
     credit_score: number                         // 信用分
     deposit_amount: number                       // 押金金额（分）
     frozen_deposit: number                       // 冻结押金（分）
-    high_value_qualified: boolean                // 是否有高值单资格
     total_orders: number                         // 总订单数
     total_earnings: number                       // 总收入（分）
     current_latitude?: number                    // 当前纬度
@@ -218,35 +260,6 @@ export interface RiderListItem {
     created_at: string                           // 创建时间
 }
 
-/** 骑手高值单积分响应 - 对齐 api.riderPremiumScoreResponse */
-export interface RiderPremiumScoreResponse {
-    rider_id: number                             // 骑手ID
-    real_name: string                            // 真实姓名
-    premium_score: number                        // 高值单资格积分（可为负）
-    can_accept_premium_order: boolean            // 是否可以接高值单（积分≥0）
-}
-
-/** 高值单积分日志项 - 对齐 api.premiumScoreLogItem */
-export interface PremiumScoreLogItem {
-    id: number                                   // 日志ID
-    change_type: string                          // 变更类型：normal_order/premium_order/adjustment
-    change_type_name: string                     // 变更类型中文名
-    change_amount: number                        // 变更量（正数为增加，负数为减少）
-    old_score: number                            // 变更前积分
-    new_score: number                            // 变更后积分
-    related_order_id?: number                    // 关联订单ID
-    related_delivery_id?: number                 // 关联配送单ID
-    remark?: string                              // 备注
-    created_at: string                           // 变更时间
-}
-
-/** 骑手高值单积分历史响应 - 对齐 api.listRiderPremiumScoreHistoryResponse */
-export interface ListRiderPremiumScoreHistoryResponse {
-    current_score: number                        // 当前积分
-    logs: PremiumScoreLogItem[]                  // 历史记录
-    total: number                                // 总记录数
-}
-
 // ==================== 运营商骑手管理服务类 ====================
 
 /**
@@ -262,7 +275,15 @@ export class OperatorRiderManagementService {
         return request({
             url: '/v1/operator/riders',
             method: 'GET',
-            data: params
+            data: normalizeRiderQueryParams(params)
+        })
+    }
+
+    async getRiderSummary(regionId?: number): Promise<OperatorRiderSummaryResponse> {
+        return request({
+            url: '/v1/operator/riders/summary',
+            method: 'GET',
+            data: regionId ? { region_id: regionId } : undefined
         })
     }
 
@@ -292,26 +313,39 @@ export class OperatorRiderManagementService {
     /**
      * 暂停骑手
      * @param riderId 骑手ID
-     * @param actionData 操作数据
+     * @param data 操作参数
      */
-    async suspendRider(riderId: number, actionData: RiderActionRequest): Promise<void> {
+    async suspendRider(riderId: number, data: RiderActionRequest): Promise<void> {
         return request({
             url: `/v1/operator/riders/${riderId}/suspend`,
             method: 'POST',
-            data: actionData
+            data
         })
     }
 
     /**
      * 恢复骑手
      * @param riderId 骑手ID
-     * @param actionData 操作数据
+     * @param data 操作参数
      */
-    async resumeRider(riderId: number, actionData: RiderActionRequest): Promise<void> {
+    async resumeRider(riderId: number, data: RiderActionRequest): Promise<void> {
         return request({
             url: `/v1/operator/riders/${riderId}/resume`,
             method: 'POST',
-            data: actionData
+            data
+        })
+    }
+
+    /**
+     * 获取骑手配送统计
+     * @param riderId 骑手ID
+     * @param days 统计天数（默认30）
+     */
+    async getRiderStats(riderId: number, days = 30): Promise<RiderStatsResponse> {
+        return request({
+            url: `/v1/operator/riders/${riderId}/stats`,
+            method: 'GET',
+            data: { days }
         })
     }
 }
@@ -412,8 +446,8 @@ export class RiderAnalyticsService {
      * @param previousPeriod 上期数据
      */
     analyzeRiderGrowth(
-        currentPeriod: { deliveryCount: number; earnings: number; rating: number; onlineHours: number },
-        previousPeriod: { deliveryCount: number; earnings: number; rating: number; onlineHours: number }
+        currentPeriod: { deliveryCount: number, earnings: number, rating: number, onlineHours: number },
+        previousPeriod: { deliveryCount: number, earnings: number, rating: number, onlineHours: number }
     ): {
         deliveryGrowth: number
         earningsGrowth: number
@@ -487,7 +521,7 @@ export class RiderAnalyticsService {
         let averageCount = 0
         let poorCount = 0
 
-        riders.forEach(rider => {
+        riders.forEach((rider) => {
             // 状态分布
             statusDistribution.set(rider.status, (statusDistribution.get(rider.status) || 0) + 1)
             onlineDistribution.set(rider.online_status, (onlineDistribution.get(rider.online_status) || 0) + 1)
@@ -759,39 +793,35 @@ export async function getRiderManagementDashboard(regionId?: number): Promise<{
     const endDate = new Date().toISOString().split('T')[0]
     const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
 
-    const [riderList, riderRanking] = await Promise.all([
-        operatorRiderManagementService.getRiderList({
-            region_id: regionId,
-            limit: 100,
-            sort_by: 'created_at',
-            sort_order: 'desc'
-        }),
+    const [riderSummaryResult, riderRanking, riderSampleResult] = await Promise.all([
+        operatorRiderManagementService.getRiderSummary(regionId),
         operatorRiderManagementService.getRiderRanking({
             region_id: regionId,
             start_date: startDate,
             end_date: endDate,
             rank_by: 'efficiency_score',
             limit: 10
+        }),
+        operatorRiderManagementService.getRiderList({
+            region_id: regionId,
+            limit: 100,
+            sort_by: 'created_at',
+            sort_order: 'desc'
         })
     ])
 
-    // 统计骑手状态分布
     const riderSummary = {
-        total: riderList.total,
-        active: riderList.riders.filter(r => r.status === 'active').length,
-        online: riderList.riders.filter(r => r.online_status === 'online').length,
-        suspended: riderList.riders.filter(r => r.status === 'suspended').length,
-        pending: riderList.riders.filter(r => r.status === 'pending_approval').length
+        total: riderSummaryResult.total,
+        active: riderSummaryResult.active,
+        online: riderSummaryResult.online,
+        suspended: riderSummaryResult.suspended,
+        pending: riderSummaryResult.pending_approval
     }
 
-    // 分析骑手分布
-    const distribution = riderAnalyticsService.analyzeRiderDistribution(riderList.riders)
-
-    // 获取最近注册的骑手
-    const recentRiders = riderList.riders.slice(0, 10)
-
-    // 获取在线骑手
-    const onlineRiders = riderList.riders.filter(r => r.online_status === 'online').slice(0, 20)
+    const riders = riderSampleResult.riders || []
+    const distribution = riderAnalyticsService.analyzeRiderDistribution(riders)
+    const recentRiders = riders.slice(0, 10)
+    const onlineRiders = riders.filter((r) => r.online_status === 'online').slice(0, 20)
 
     return {
         riderSummary,
@@ -846,7 +876,7 @@ function generateRiderRecommendations(
     const recommendations: string[] = []
 
     // 基于绩效弱点的建议
-    performance.weaknesses.forEach(weakness => {
+    performance.weaknesses.forEach((weakness) => {
         switch (weakness) {
             case '完成率偏低':
                 recommendations.push('建议加强配送技能培训，提高订单完成率')
@@ -927,7 +957,7 @@ function assessRiderRisk(
     if (rider.stats.total_deliveries === 0) riskScore += 10
 
     // 基于文档完整性
-    const documentCount = Object.values(rider.documents).filter(doc => doc).length
+    const documentCount = Object.values(rider.documents).filter((doc) => doc).length
     if (documentCount < 2) riskScore += 10
 
     if (riskScore >= 50) return 'high'
@@ -992,10 +1022,10 @@ export async function batchRiderAction(
     actionData: RiderActionRequest
 ): Promise<{
     success: number[]
-    failed: Array<{ id: number; error: string }>
+    failed: Array<{ id: number, error: string }>
 }> {
     const success: number[] = []
-    const failed: Array<{ id: number; error: string }> = []
+    const failed: Array<{ id: number, error: string }> = []
 
     for (const riderId of riderIds) {
         try {
@@ -1028,12 +1058,35 @@ export async function batchRiderAction(
 export function formatRiderStatus(status: RiderStatus): string {
     const statusMap: Record<RiderStatus, string> = {
         active: '正常',
+        pending: '待处理',
         suspended: '暂停',
         pending_approval: '待审核',
         rejected: '审核拒绝',
         offline: '离线'
     }
     return statusMap[status] || status
+}
+
+export type RiderStatusTheme = 'success' | 'warning' | 'danger' | 'default'
+
+export function getRiderStatusDisplay(status: RiderStatus) {
+    const normalizedStatus = status === 'pending' ? 'pending_approval' : status
+    const themeMap: Record<RiderStatus, RiderStatusTheme> = {
+        active: 'success',
+        pending: 'warning',
+        pending_approval: 'warning',
+        suspended: 'danger',
+        rejected: 'danger',
+        offline: 'default'
+    }
+
+    return {
+        normalizedStatus,
+        label: formatRiderStatus(normalizedStatus),
+        theme: themeMap[normalizedStatus] || 'default',
+        canSuspend: normalizedStatus === 'active',
+        canResume: normalizedStatus === 'suspended'
+    }
 }
 
 /**
@@ -1089,53 +1142,4 @@ export function formatDistance(meters: number): string {
         const km = (meters / 1000).toFixed(1)
         return `${km}公里`
     }
-}
-
-/**
- * 验证骑手查询参数
- * @param params 查询参数
- */
-export function validateRiderQueryParams(params: RiderQueryParams): { valid: boolean; message?: string } {
-    if (params.rating_min && (params.rating_min < 0 || params.rating_min > 5)) {
-        return { valid: false, message: '最低评分必须在0-5之间' }
-    }
-
-    if (params.rating_max && (params.rating_max < 0 || params.rating_max > 5)) {
-        return { valid: false, message: '最高评分必须在0-5之间' }
-    }
-
-    if (params.rating_min && params.rating_max && params.rating_min > params.rating_max) {
-        return { valid: false, message: '最低评分不能高于最高评分' }
-    }
-
-    if (params.score_min && params.score_min < 0) {
-        return { valid: false, message: '最低积分不能小于0' }
-    }
-
-    if (params.score_max && params.score_max < 0) {
-        return { valid: false, message: '最高积分不能小于0' }
-    }
-
-    if (params.score_min && params.score_max && params.score_min > params.score_max) {
-        return { valid: false, message: '最低积分不能高于最高积分' }
-    }
-
-    if (params.start_date && params.end_date) {
-        const startDate = new Date(params.start_date)
-        const endDate = new Date(params.end_date)
-
-        if (startDate > endDate) {
-            return { valid: false, message: '开始日期不能晚于结束日期' }
-        }
-    }
-
-    if (params.page && params.page < 1) {
-        return { valid: false, message: '页码必须大于0' }
-    }
-
-    if (params.limit && (params.limit < 1 || params.limit > 100)) {
-        return { valid: false, message: '每页数量必须在1-100之间' }
-    }
-
-    return { valid: true }
 }

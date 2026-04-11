@@ -1,0 +1,11 @@
+{
+  "navigationBarTitleText": "骑手管理",
+  "usingComponents": {
+    "custom-navbar": "/components/custom-navbar/index",
+    "t-tag": "tdesign-miniprogram/tag/tag",
+    "t-empty": "tdesign-miniprogram/empty/empty",
+    "t-button": "tdesign-miniprogram/button/button",
+    "t-loading": "tdesign-miniprogram/loading/loading",
+    "card-skeleton": "/components/card-skeleton/index"
+  }
+}

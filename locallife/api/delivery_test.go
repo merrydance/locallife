@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -60,8 +59,10 @@ func TestGetRecommendedOrdersAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	rider := randomRider(user.ID)
 	rider.IsOnline = true
+	rider.CurrentLongitude = numericFromFloat(116.410)
+	rider.CurrentLatitude = numericFromFloat(39.920)
+	rider.LocationUpdatedAt = pgtype.Timestamptz{Time: time.Now(), Valid: true}
 	rider.Status = "active"
-	rider.RegionID = pgtype.Int8{Int64: 1, Valid: true} // 设置骑手区域
 
 	testCases := []struct {
 		name          string
@@ -79,20 +80,25 @@ func TestGetRecommendedOrdersAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					AnyTimes().
 					Return(rider, nil)
+
+				store.EXPECT().
+					GetRiderProfile(gomock.Any(), gomock.Eq(rider.ID)).
+					Times(1).
+					Return(db.RiderProfile{RiderID: rider.ID, IsSuspended: false}, nil)
 
 				// GetActiveRecommendConfig - may return error for default config
 				store.EXPECT().
 					GetActiveRecommendConfig(gomock.Any()).
 					Times(1).
-					Return(db.RecommendConfig{}, pgx.ErrNoRows)
+					Return(db.RecommendConfig{}, db.ErrRecordNotFound)
 
-				// ListDeliveryPoolNearbyByRegion - 按区域过滤
+				// ListDeliveryPoolNearby - 仅按位置过滤
 				store.EXPECT().
-					ListDeliveryPoolNearbyByRegion(gomock.Any(), gomock.Any()).
+					ListDeliveryPoolNearby(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return([]db.ListDeliveryPoolNearbyByRegionRow{}, nil)
+					Return([]db.ListDeliveryPoolNearbyRow{}, nil)
 
 				// ListRiderActiveDeliveries
 				store.EXPECT().
@@ -168,7 +174,6 @@ func TestGrabOrderAPI(t *testing.T) {
 	rider := randomRider(user.ID)
 	rider.IsOnline = true
 	rider.Status = "active"
-	rider.RegionID = pgtype.Int8{Int64: 1, Valid: true} // 设置骑手区域
 
 	orderID := util.RandomInt(1, 1000)
 	merchantID := util.RandomInt(1, 1000)
@@ -195,29 +200,28 @@ func TestGrabOrderAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					AnyTimes().
 					Return(rider, nil)
+
+				store.EXPECT().
+					GetRiderProfile(gomock.Any(), gomock.Eq(rider.ID)).
+					Times(1).
+					Return(db.RiderProfile{RiderID: rider.ID, IsSuspended: false}, nil)
 
 				store.EXPECT().
 					GetDeliveryPoolByOrderID(gomock.Any(), gomock.Eq(orderID)).
 					Times(1).
 					Return(pool, nil)
 
-				// 高值单资格积分检查
-				store.EXPECT().
-					GetRiderPremiumScore(gomock.Any(), rider.ID).
-					Times(1).
-					Return(int16(0), nil)
-
-				// 区域检查：获取商家确认区域匹配
 				merchant := db.Merchant{
 					ID:          merchantID,
 					OwnerUserID: util.RandomInt(1, 1000),
-					RegionID:    rider.RegionID.Int64, // 匹配骑手区域
+					RegionID:    util.RandomInt(1, 1000),
+					Name:        util.RandomString(10),
 				}
 				store.EXPECT().
 					GetMerchant(gomock.Any(), gomock.Eq(merchantID)).
-					Times(1).
+					Times(2).
 					Return(merchant, nil)
 
 				existingDelivery := randomDelivery(orderID, 0)
@@ -231,24 +235,34 @@ func TestGrabOrderAPI(t *testing.T) {
 				store.EXPECT().
 					GrabOrderTx(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.GrabOrderTxResult{Delivery: delivery}, nil)
+					Return(db.GrabOrderTxResult{Delivery: delivery, Order: db.Order{ID: orderID, Status: db.OrderStatusCourierAccepted}}, nil)
 
-				// Mock for notification - GetOrder and GetMerchant (second call)
+				// Mock for notification - GetOrder
 				order := db.Order{
 					ID:         orderID,
 					UserID:     util.RandomInt(1, 1000),
 					MerchantID: merchantID,
 					OrderNo:    util.RandomString(10),
+					Status:     db.OrderStatusReady,
 				}
 				store.EXPECT().
 					GetOrder(gomock.Any(), gomock.Eq(orderID)).
-					Times(1).
+					Times(2).
 					Return(order, nil)
 
 				store.EXPECT().
-					GetMerchant(gomock.Any(), gomock.Eq(merchantID)).
+					CountOrderItems(gomock.Any(), gomock.Eq(orderID)).
 					Times(1).
-					Return(merchant, nil)
+					Return(int64(0), nil)
+
+				store.EXPECT().
+					ListOrderItemsByOrder(gomock.Any(), gomock.Eq(orderID)).
+					Times(1).
+					Return([]db.OrderItem{}, nil)
+				store.EXPECT().
+					UpdateDeliveryEstimatedTime(gomock.Any(), gomock.Any()).
+					AnyTimes().
+					Return(db.Delivery{}, nil)
 
 				// Mock for final GetDelivery to return updated delivery
 				store.EXPECT().
@@ -273,16 +287,81 @@ func TestGrabOrderAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					AnyTimes().
 					Return(rider, nil)
+
+				store.EXPECT().
+					GetRiderProfile(gomock.Any(), gomock.Eq(rider.ID)).
+					Times(1).
+					Return(db.RiderProfile{RiderID: rider.ID, IsSuspended: false}, nil)
 
 				store.EXPECT().
 					GetDeliveryPoolByOrderID(gomock.Any(), gomock.Eq(orderID)).
 					Times(1).
-					Return(db.DeliveryPool{}, pgx.ErrNoRows)
+					Return(db.DeliveryPool{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
+			},
+		},
+		{
+			name:    "MerchantNotAccepted",
+			orderID: orderID,
+			body: map[string]interface{}{
+				"longitude": 116.404,
+				"latitude":  39.915,
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
+					AnyTimes().
+					Return(rider, nil)
+
+				store.EXPECT().
+					GetRiderProfile(gomock.Any(), gomock.Eq(rider.ID)).
+					Times(1).
+					Return(db.RiderProfile{RiderID: rider.ID, IsSuspended: false}, nil)
+
+				store.EXPECT().
+					GetDeliveryPoolByOrderID(gomock.Any(), gomock.Eq(orderID)).
+					Times(1).
+					Return(pool, nil)
+
+				merchant := db.Merchant{
+					ID:          merchantID,
+					OwnerUserID: util.RandomInt(1, 1000),
+					RegionID:    util.RandomInt(1, 1000),
+					Name:        util.RandomString(10),
+				}
+				store.EXPECT().
+					GetMerchant(gomock.Any(), gomock.Eq(merchantID)).
+					Times(1).
+					Return(merchant, nil)
+
+				existingDelivery := randomDelivery(orderID, 0)
+				existingDelivery.RiderID = pgtype.Int8{Valid: false}
+				store.EXPECT().
+					GetDeliveryByOrderID(gomock.Any(), gomock.Eq(orderID)).
+					Times(1).
+					Return(existingDelivery, nil)
+
+				store.EXPECT().
+					GetOrder(gomock.Any(), gomock.Eq(orderID)).
+					Times(1).
+					Return(db.Order{
+						ID:         orderID,
+						UserID:     util.RandomInt(1, 1000),
+						MerchantID: merchantID,
+						OrderNo:    util.RandomString(10),
+						Status:     db.OrderStatusPaid,
+					}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				require.Contains(t, recorder.Body.String(), "商户未接单，暂不可抢单")
 			},
 		},
 		{
@@ -373,22 +452,49 @@ func TestConfirmPickupAPI(t *testing.T) {
 					Times(1).
 					Return(delivery, nil)
 
-				store.EXPECT().
-					UpdateDeliveryToPicked(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(delivery, nil)
-
 				// Mock for notification
 				order := db.Order{
 					ID:         orderID,
 					UserID:     util.RandomInt(1, 1000),
 					MerchantID: util.RandomInt(1, 1000),
 					OrderNo:    util.RandomString(10),
+					Status:     "courier_accepted",
 				}
 				store.EXPECT().
 					GetOrder(gomock.Any(), gomock.Eq(orderID)).
-					Times(1).
+					Times(2).
 					Return(order, nil)
+
+				store.EXPECT().
+					GetMerchant(gomock.Any(), gomock.Eq(order.MerchantID)).
+					Times(1).
+					Return(db.Merchant{ID: order.MerchantID, Name: util.RandomString(10)}, nil)
+
+				store.EXPECT().
+					CountOrderItems(gomock.Any(), gomock.Eq(orderID)).
+					Times(1).
+					Return(int64(0), nil)
+
+				store.EXPECT().
+					ListOrderItemsByOrder(gomock.Any(), gomock.Eq(orderID)).
+					Times(1).
+					Return([]db.OrderItem{}, nil)
+				store.EXPECT().
+					UpdateDeliveryToPickedTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.UpdateDeliveryToPickedTxResult{Delivery: delivery}, nil)
+
+				store.EXPECT().
+					CreateOrderStatusLog(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.OrderStatusLog{}, nil)
+
+				// uploadShippingInfoAsync runs in a goroutine after handler returns;
+				// timing is non-deterministic so use AnyTimes to avoid mock controller panics.
+				store.EXPECT().
+					GetLatestPaymentOrderByOrder(gomock.Any(), gomock.Any()).
+					AnyTimes().
+					Return(db.PaymentOrder{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -457,7 +563,7 @@ func TestConfirmPickupAPI(t *testing.T) {
 				store.EXPECT().
 					GetDelivery(gomock.Any(), gomock.Eq(deliveryID)).
 					Times(1).
-					Return(db.Delivery{}, pgx.ErrNoRows)
+					Return(db.Delivery{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -528,7 +634,7 @@ func TestListMyActiveDeliveriesAPI(t *testing.T) {
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
-					Return(db.Rider{}, pgx.ErrNoRows)
+					Return(db.Rider{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -561,6 +667,8 @@ func TestListMyActiveDeliveriesAPI(t *testing.T) {
 }
 func TestGetDeliveryByOrderAPI(t *testing.T) {
 	user, _ := randomUser(t)
+	riderUser, _ := randomUser(t)
+	rider := randomRider(riderUser.ID)
 	orderID := util.RandomInt(1, 1000)
 	deliveryID := util.RandomInt(1, 1000)
 
@@ -571,7 +679,7 @@ func TestGetDeliveryByOrderAPI(t *testing.T) {
 		OrderNo:    util.RandomString(10),
 	}
 
-	delivery := randomDelivery(orderID, 0)
+	delivery := randomDelivery(orderID, rider.ID)
 	delivery.ID = deliveryID
 
 	testCases := []struct {
@@ -590,8 +698,23 @@ func TestGetDeliveryByOrderAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetOrder(gomock.Any(), gomock.Eq(orderID)).
-					Times(1).
+					Times(2).
 					Return(order, nil)
+
+				store.EXPECT().
+					GetMerchant(gomock.Any(), gomock.Eq(order.MerchantID)).
+					Times(1).
+					Return(db.Merchant{ID: order.MerchantID, Name: util.RandomString(10)}, nil)
+
+				store.EXPECT().
+					CountOrderItems(gomock.Any(), gomock.Eq(orderID)).
+					Times(1).
+					Return(int64(0), nil)
+
+				store.EXPECT().
+					ListOrderItemsByOrder(gomock.Any(), gomock.Eq(orderID)).
+					Times(1).
+					Return([]db.OrderItem{}, nil)
 
 				store.EXPECT().
 					GetDeliveryByOrderID(gomock.Any(), gomock.Eq(orderID)).
@@ -603,7 +726,48 @@ func TestGetDeliveryByOrderAPI(t *testing.T) {
 			},
 		},
 		{
-			name:    "NotOrderOwner",
+			name:    "OK_AssignedRider",
+			orderID: orderID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, riderUser.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetOrder(gomock.Any(), gomock.Eq(orderID)).
+					Times(2).
+					Return(order, nil)
+
+				store.EXPECT().
+					GetDeliveryByOrderID(gomock.Any(), gomock.Eq(orderID)).
+					Times(1).
+					Return(delivery, nil)
+
+				store.EXPECT().
+					GetRiderByUserID(gomock.Any(), gomock.Eq(riderUser.ID)).
+					Times(1).
+					Return(rider, nil)
+
+				store.EXPECT().
+					GetMerchant(gomock.Any(), gomock.Eq(order.MerchantID)).
+					Times(1).
+					Return(db.Merchant{ID: order.MerchantID, Name: util.RandomString(10)}, nil)
+
+				store.EXPECT().
+					CountOrderItems(gomock.Any(), gomock.Eq(orderID)).
+					Times(1).
+					Return(int64(0), nil)
+
+				store.EXPECT().
+					ListOrderItemsByOrder(gomock.Any(), gomock.Eq(orderID)).
+					Times(1).
+					Return([]db.OrderItem{}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+			},
+		},
+		{
+			name:    "NotOrderOwnerOrAssignedRider",
 			orderID: orderID,
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
@@ -616,6 +780,14 @@ func TestGetDeliveryByOrderAPI(t *testing.T) {
 					GetOrder(gomock.Any(), gomock.Eq(orderID)).
 					Times(1).
 					Return(otherUserOrder, nil)
+				store.EXPECT().
+					GetDeliveryByOrderID(gomock.Any(), gomock.Eq(orderID)).
+					Times(1).
+					Return(delivery, nil)
+				store.EXPECT().
+					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(db.Rider{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -631,7 +803,7 @@ func TestGetDeliveryByOrderAPI(t *testing.T) {
 				store.EXPECT().
 					GetOrder(gomock.Any(), gomock.Eq(orderID)).
 					Times(1).
-					Return(db.Order{}, pgx.ErrNoRows)
+					Return(db.Order{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -652,7 +824,7 @@ func TestGetDeliveryByOrderAPI(t *testing.T) {
 				store.EXPECT().
 					GetDeliveryByOrderID(gomock.Any(), gomock.Eq(orderID)).
 					Times(1).
-					Return(db.Delivery{}, pgx.ErrNoRows)
+					Return(db.Delivery{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -752,12 +924,10 @@ func TestGetDeliveryTrackAPI(t *testing.T) {
 					GetOrder(gomock.Any(), gomock.Eq(orderID)).
 					Times(1).
 					Return(otherUserOrder, nil)
-
-				// 当前用户也不是骑手
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
-					Return(db.Rider{}, pgx.ErrNoRows)
+					Return(db.Rider{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -773,7 +943,7 @@ func TestGetDeliveryTrackAPI(t *testing.T) {
 				store.EXPECT().
 					GetDelivery(gomock.Any(), gomock.Eq(deliveryID)).
 					Times(1).
-					Return(db.Delivery{}, pgx.ErrNoRows)
+					Return(db.Delivery{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -843,20 +1013,36 @@ func TestStartPickupAPI(t *testing.T) {
 				pickingDelivery := delivery
 				pickingDelivery.Status = "picking"
 				store.EXPECT().
-					UpdateDeliveryToPickup(gomock.Any(), gomock.Any()).
+					UpdateDeliveryToPickupTx(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(pickingDelivery, nil)
+					Return(db.UpdateDeliveryToPickupTxResult{Delivery: pickingDelivery}, nil)
 
 				order := db.Order{
 					ID:         orderID,
 					UserID:     util.RandomInt(1, 1000),
 					MerchantID: util.RandomInt(1, 1000),
 					OrderNo:    util.RandomString(10),
+					Status:     "courier_accepted",
 				}
 				store.EXPECT().
 					GetOrder(gomock.Any(), gomock.Eq(orderID)).
-					Times(1).
+					Times(2).
 					Return(order, nil)
+
+				store.EXPECT().
+					GetMerchant(gomock.Any(), gomock.Eq(order.MerchantID)).
+					Times(1).
+					Return(db.Merchant{ID: order.MerchantID, Name: util.RandomString(10)}, nil)
+
+				store.EXPECT().
+					CountOrderItems(gomock.Any(), gomock.Eq(orderID)).
+					Times(1).
+					Return(int64(0), nil)
+
+				store.EXPECT().
+					ListOrderItemsByOrder(gomock.Any(), gomock.Eq(orderID)).
+					Times(1).
+					Return([]db.OrderItem{}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -924,7 +1110,7 @@ func TestStartPickupAPI(t *testing.T) {
 				store.EXPECT().
 					GetDelivery(gomock.Any(), gomock.Eq(deliveryID)).
 					Times(1).
-					Return(db.Delivery{}, pgx.ErrNoRows)
+					Return(db.Delivery{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -940,7 +1126,7 @@ func TestStartPickupAPI(t *testing.T) {
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
-					Return(db.Rider{}, pgx.ErrNoRows)
+					Return(db.Rider{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -1009,21 +1195,41 @@ func TestStartDeliveryAPI(t *testing.T) {
 
 				deliveringDelivery := delivery
 				deliveringDelivery.Status = "delivering"
-				store.EXPECT().
-					UpdateDeliveryToDelivering(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(deliveringDelivery, nil)
-
 				order := db.Order{
 					ID:         orderID,
 					UserID:     util.RandomInt(1, 1000),
 					MerchantID: util.RandomInt(1, 1000),
 					OrderNo:    util.RandomString(10),
+					Status:     "picked",
 				}
 				store.EXPECT().
 					GetOrder(gomock.Any(), gomock.Eq(orderID)).
-					Times(1).
+					Times(2).
 					Return(order, nil)
+
+				store.EXPECT().
+					GetMerchant(gomock.Any(), gomock.Eq(order.MerchantID)).
+					Times(1).
+					Return(db.Merchant{ID: order.MerchantID, Name: util.RandomString(10)}, nil)
+
+				store.EXPECT().
+					CountOrderItems(gomock.Any(), gomock.Eq(orderID)).
+					Times(1).
+					Return(int64(0), nil)
+
+				store.EXPECT().
+					ListOrderItemsByOrder(gomock.Any(), gomock.Eq(orderID)).
+					Times(1).
+					Return([]db.OrderItem{}, nil)
+				store.EXPECT().
+					UpdateDeliveryToDeliveringTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.UpdateDeliveryToDeliveringTxResult{Delivery: deliveringDelivery}, nil)
+
+				store.EXPECT().
+					CreateOrderStatusLog(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.OrderStatusLog{}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -1075,6 +1281,29 @@ func TestStartDeliveryAPI(t *testing.T) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
 			},
 		},
+		{
+			name:       "BadRequest_InvalidStatus",
+			deliveryID: deliveryID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(rider, nil)
+
+				invalidDelivery := delivery
+				invalidDelivery.Status = "delivering"
+				store.EXPECT().
+					GetDelivery(gomock.Any(), gomock.Eq(deliveryID)).
+					Times(1).
+					Return(invalidDelivery, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
 	}
 
 	for i := range testCases {
@@ -1105,6 +1334,9 @@ func TestConfirmDeliveryAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	rider := randomRider(user.ID)
 	rider.IsOnline = true
+	rider.CurrentLongitude = numericFromFloat(116.410)
+	rider.CurrentLatitude = numericFromFloat(39.920)
+	rider.LocationUpdatedAt = pgtype.Timestamptz{Time: time.Now(), Valid: true}
 
 	deliveryID := util.RandomInt(1, 1000)
 	orderID := util.RandomInt(1, 1000)
@@ -1148,11 +1380,31 @@ func TestConfirmDeliveryAPI(t *testing.T) {
 					UserID:     util.RandomInt(1, 1000),
 					MerchantID: util.RandomInt(1, 1000),
 					OrderNo:    util.RandomString(10),
+					Status:     "delivering",
 				}
 				store.EXPECT().
 					GetOrder(gomock.Any(), gomock.Eq(orderID)).
-					Times(1).
+					Times(2).
 					Return(order, nil)
+
+				store.EXPECT().
+					GetMerchant(gomock.Any(), gomock.Eq(order.MerchantID)).
+					Times(1).
+					Return(db.Merchant{ID: order.MerchantID, Name: util.RandomString(10)}, nil)
+
+				store.EXPECT().
+					CountOrderItems(gomock.Any(), gomock.Eq(orderID)).
+					Times(1).
+					Return(int64(0), nil)
+
+				store.EXPECT().
+					ListOrderItemsByOrder(gomock.Any(), gomock.Eq(orderID)).
+					Times(1).
+					Return([]db.OrderItem{}, nil)
+				store.EXPECT().
+					CreateOrderStatusLog(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.OrderStatusLog{}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -1179,6 +1431,57 @@ func TestConfirmDeliveryAPI(t *testing.T) {
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
+			},
+		},
+		{
+			name:       "MissingRiderLocation",
+			deliveryID: deliveryID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				missingLocationRider := rider
+				missingLocationRider.CurrentLongitude = pgtype.Numeric{}
+				missingLocationRider.CurrentLatitude = pgtype.Numeric{}
+
+				store.EXPECT().
+					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(missingLocationRider, nil)
+
+				store.EXPECT().
+					GetDelivery(gomock.Any(), gomock.Eq(deliveryID)).
+					Times(1).
+					Return(delivery, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				require.Contains(t, recorder.Body.String(), "骑手定位缺失，无法确认送达，请先刷新定位")
+			},
+		},
+		{
+			name:       "StaleRiderLocation",
+			deliveryID: deliveryID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				staleRider := rider
+				staleRider.LocationUpdatedAt = pgtype.Timestamptz{Time: time.Now().Add(-3 * time.Minute), Valid: true}
+
+				store.EXPECT().
+					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(staleRider, nil)
+
+				store.EXPECT().
+					GetDelivery(gomock.Any(), gomock.Eq(deliveryID)).
+					Times(1).
+					Return(delivery, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				require.Contains(t, recorder.Body.String(), "骑手定位已过期，无法确认送达，请刷新定位后重试")
 			},
 		},
 	}
@@ -1212,8 +1515,7 @@ func TestGrabOrderAPI_EdgeCases(t *testing.T) {
 	rider := randomRider(user.ID)
 	rider.IsOnline = true
 	rider.Status = "active"
-	rider.RegionID = pgtype.Int8{Int64: 1, Valid: true}
-	rider.DepositAmount = 10000 // 100元
+	rider.DepositAmount = 100 * fenPerYuan
 	rider.FrozenDeposit = 0
 
 	orderID := util.RandomInt(1, 1000)
@@ -1240,75 +1542,51 @@ func TestGrabOrderAPI_EdgeCases(t *testing.T) {
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				lowDepositRider := rider
-				lowDepositRider.DepositAmount = 1000 // 只有10元
+				lowDepositRider.DepositAmount = 10 * fenPerYuan
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					AnyTimes().
 					Return(lowDepositRider, nil)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusBadRequest, recorder.Code)
-			},
-		},
-		{
-			name:    "RegionMismatch",
-			orderID: orderID,
-			body: map[string]interface{}{
-				"longitude": 116.404,
-				"latitude":  39.915,
-			},
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {
+
 				store.EXPECT().
-					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
+					GetRiderProfile(gomock.Any(), gomock.Eq(lowDepositRider.ID)).
 					Times(1).
-					Return(rider, nil)
+					Return(db.RiderProfile{RiderID: lowDepositRider.ID, IsSuspended: false}, nil)
 
 				store.EXPECT().
 					GetDeliveryPoolByOrderID(gomock.Any(), gomock.Eq(orderID)).
 					Times(1).
 					Return(pool, nil)
 
-				// 高值单资格积分检查
-				store.EXPECT().
-					GetRiderPremiumScore(gomock.Any(), rider.ID).
-					Times(1).
-					Return(int16(0), nil)
-
-				// 商户在不同区域
 				merchant := db.Merchant{
 					ID:          merchantID,
 					OwnerUserID: util.RandomInt(1, 1000),
-					RegionID:    rider.RegionID.Int64 + 1, // 不同区域
+					RegionID:    util.RandomInt(1, 1000),
 				}
 				store.EXPECT().
 					GetMerchant(gomock.Any(), gomock.Eq(merchantID)).
 					Times(1).
 					Return(merchant, nil)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusForbidden, recorder.Code)
-			},
-		},
-		{
-			name:    "NoRegionAssigned",
-			orderID: orderID,
-			body: map[string]interface{}{
-				"longitude": 116.404,
-				"latitude":  39.915,
-			},
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				noRegionRider := rider
-				noRegionRider.RegionID = pgtype.Int8{Valid: false}
+
+				existingDelivery := randomDelivery(orderID, 0)
+				existingDelivery.RiderID = pgtype.Int8{Valid: false}
 				store.EXPECT().
-					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
+					GetDeliveryByOrderID(gomock.Any(), gomock.Eq(orderID)).
 					Times(1).
-					Return(noRegionRider, nil)
+					Return(existingDelivery, nil)
+
+				order := db.Order{
+					ID:          orderID,
+					UserID:      util.RandomInt(1, 1000),
+					MerchantID:  merchantID,
+					OrderNo:     util.RandomString(10),
+					Status:      db.OrderStatusReady,
+					TotalAmount: 5000,
+				}
+				store.EXPECT().
+					GetOrder(gomock.Any(), gomock.Eq(orderID)).
+					Times(1).
+					Return(order, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)

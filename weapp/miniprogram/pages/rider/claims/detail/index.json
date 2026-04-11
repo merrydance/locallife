@@ -1,0 +1,13 @@
+{
+  "usingComponents": {
+    "custom-navbar": "/components/custom-navbar/index",
+    "t-button": "tdesign-miniprogram/button/button",
+    "t-empty": "tdesign-miniprogram/empty/empty",
+    "t-loading": "tdesign-miniprogram/loading/loading",
+    "t-steps": "tdesign-miniprogram/steps/steps",
+    "t-step-item": "tdesign-miniprogram/step-item/step-item",
+    "t-textarea": "tdesign-miniprogram/textarea/textarea"
+  },
+  "navigationStyle": "custom",
+  "enablePullDownRefresh": true
+}

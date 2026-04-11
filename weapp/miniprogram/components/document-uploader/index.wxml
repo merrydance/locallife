@@ -1,4 +1,4 @@
-<view class="uploader-container {{disabled ? 'disabled' : ''}}" bind:tap="onUpload">
+<view class="uploader-container {{disabled ? 'disabled' : ''}} {{feedbackState !== 'idle' ? 'has-feedback' : ''}}" bind:tap="onUpload">
   <!-- Corner Markers (Decoration) -->
   <view class="corner corner-tl"></view>
   <view class="corner corner-tr"></view>
@@ -8,8 +8,8 @@
   <!-- Content -->
   <view class="content">
     <!-- 1. Has Image -->
-    <block wx:if="{{value}}">
-      <image class="preview-image" src="{{value}}" mode="aspectFill" catch:tap="onPreview" binderror="onImageError" />
+    <block wx:if="{{displayValue}}">
+      <image class="preview-image" src="{{displayValue}}" mode="aspectFill" catch:tap="onPreview" binderror="onImageError" />
       <view class="remove-btn" catch:tap="onRemove" wx:if="{{!disabled}}">
         <t-icon name="close" size="32rpx" color="#fff" />
       </view>
@@ -47,6 +47,19 @@
       <t-icon wx:else name="add" size="64rpx" color="#B5C4D8" />
 
       <text class="placeholder-text">{{title || '点击上传'}}</text>
+    </view>
+  </view>
+
+  <view class="feedback-panel feedback-{{feedbackState}}" wx:if="{{feedbackTitle || feedbackDescription}}">
+    <view class="feedback-icon">
+      <t-loading wx:if="{{feedbackState === 'processing'}}" theme="circular" size="28rpx" />
+      <t-icon wx:elif="{{feedbackState === 'success'}}" name="check-circle-filled" size="32rpx" color="#2BA471" />
+      <t-icon wx:elif="{{feedbackState === 'error'}}" name="error-circle-filled" size="32rpx" color="#D54941" />
+      <t-icon wx:else name="info-circle-filled" size="32rpx" color="#0052D9" />
+    </view>
+    <view class="feedback-copy">
+      <text class="feedback-title feedback-title-{{feedbackState}}">{{feedbackTitle}}</text>
+      <text wx:if="{{feedbackDescription}}" class="feedback-desc">{{feedbackDescription}}</text>
     </view>
   </view>
 </view>

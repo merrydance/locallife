@@ -1,21 +1,36 @@
 package wechat
 
 import (
+	"bytes"
+	"context"
+	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha1"
 	"crypto/sha256"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/base64"
 	"encoding/pem"
+	"fmt"
+	"io"
 	"math/big"
+	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 )
+
+type paymentRoundTripFunc func(*http.Request) (*http.Response, error)
+
+func (fn paymentRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return fn(req)
+}
 
 // 生成测试用的 RSA 密钥对
 func generateTestKeyPair(t *testing.T) (*rsa.PrivateKey, *rsa.PublicKey) {
@@ -361,8 +376,136 @@ func decryptWithPrivateKey(t *testing.T, privateKey *rsa.PrivateKey, ciphertextB
 	ciphertext, err := base64.StdEncoding.DecodeString(ciphertextBase64)
 	require.NoError(t, err)
 
-	plaintext, err := rsa.DecryptOAEP(sha256.New(), rand.Reader, privateKey, ciphertext, nil)
+	plaintext, err := rsa.DecryptOAEP(sha1.New(), rand.Reader, privateKey, ciphertext, nil)
 	require.NoError(t, err)
 
 	return string(plaintext)
+}
+
+func signTestHTTPResponse(t *testing.T, privateKey *rsa.PrivateKey, serial string, resp *http.Response) *http.Response {
+	t.Helper()
+	require.NotNil(t, resp)
+	if resp.Header == nil {
+		resp.Header = make(http.Header)
+	}
+	if resp.Body == nil {
+		resp.Body = io.NopCloser(strings.NewReader(""))
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+
+	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
+	nonce := "test_response_nonce"
+	message := fmt.Sprintf("%s\n%s\n%s\n", timestamp, nonce, string(body))
+	hashed := sha256.Sum256([]byte(message))
+	signature, err := rsa.SignPKCS1v15(rand.Reader, privateKey, crypto.SHA256, hashed[:])
+	require.NoError(t, err)
+
+	resp.Body = io.NopCloser(bytes.NewReader(body))
+	resp.ContentLength = int64(len(body))
+	resp.Header.Set("Wechatpay-Timestamp", timestamp)
+	resp.Header.Set("Wechatpay-Nonce", nonce)
+	resp.Header.Set("Wechatpay-Signature", base64.StdEncoding.EncodeToString(signature))
+	resp.Header.Set("Wechatpay-Serial", serial)
+
+	return resp
+}
+
+func signedPaymentTransport(t *testing.T, privateKey *rsa.PrivateKey, serial string, fn paymentRoundTripFunc) http.RoundTripper {
+	t.Helper()
+	return paymentRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		resp, err := fn(req)
+		if err != nil {
+			return nil, err
+		}
+		return signTestHTTPResponse(t, privateKey, serial, resp), nil
+	})
+}
+
+func signedEcommerceTransport(t *testing.T, privateKey *rsa.PrivateKey, serial string, fn ecommerceRoundTripFunc) http.RoundTripper {
+	t.Helper()
+	return ecommerceRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		resp, err := fn(req)
+		if err != nil {
+			return nil, err
+		}
+		return signTestHTTPResponse(t, privateKey, serial, resp), nil
+	})
+}
+
+func TestQueryOrderByOutTradeNo_VerifiesResponseSignature(t *testing.T) {
+	merchantPrivateKey, _ := generateTestKeyPair(t)
+	platformPrivateKey, platformPublicKey := generateTestKeyPair(t)
+
+	tempDir := t.TempDir()
+	privateKeyPath := createTestPrivateKeyFile(t, tempDir, merchantPrivateKey)
+	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
+
+	client, err := NewPaymentClient(PaymentClientConfig{
+		MchID:                 "test_mch_id",
+		AppID:                 "test_app_id",
+		SerialNumber:          "test_serial",
+		APIV3Key:              "test_api_v3_key_32bytes_long__",
+		PrivateKeyPath:        privateKeyPath,
+		PlatformPublicKeyPath: publicKeyPath,
+		PlatformPublicKeyID:   "PUB_KEY_ID_0123456789",
+		NotifyURL:             "https://example.com/notify",
+	})
+	require.NoError(t, err)
+
+	client.httpClient = &http.Client{
+		Transport: signedPaymentTransport(t, platformPrivateKey, "PUB_KEY_ID_0123456789", func(req *http.Request) (*http.Response, error) {
+			require.Equal(t, http.MethodGet, req.Method)
+			require.Equal(t, "/v3/pay/transactions/out-trade-no/order-001", req.URL.Path)
+			require.Equal(t, "mchid=test_mch_id", req.URL.RawQuery)
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader(`{"appid":"test_app_id","mchid":"test_mch_id","out_trade_no":"order-001","transaction_id":"wx_txn_001","trade_state":"SUCCESS"}`)),
+			}, nil
+		}),
+	}
+
+	resp, err := client.QueryOrderByOutTradeNo(context.Background(), "order-001")
+	require.NoError(t, err)
+	require.Equal(t, "order-001", resp.OutTradeNo)
+	require.Equal(t, "wx_txn_001", resp.TransactionID)
+	require.Equal(t, TradeStateSuccess, resp.TradeState)
+}
+
+func TestQueryOrderByOutTradeNo_MissingResponseSignatureFails(t *testing.T) {
+	merchantPrivateKey, _ := generateTestKeyPair(t)
+	_, platformPublicKey := generateTestKeyPair(t)
+
+	tempDir := t.TempDir()
+	privateKeyPath := createTestPrivateKeyFile(t, tempDir, merchantPrivateKey)
+	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
+
+	client, err := NewPaymentClient(PaymentClientConfig{
+		MchID:                 "test_mch_id",
+		AppID:                 "test_app_id",
+		SerialNumber:          "test_serial",
+		APIV3Key:              "test_api_v3_key_32bytes_long__",
+		PrivateKeyPath:        privateKeyPath,
+		PlatformPublicKeyPath: publicKeyPath,
+		PlatformPublicKeyID:   "PUB_KEY_ID_0123456789",
+		NotifyURL:             "https://example.com/notify",
+	})
+	require.NoError(t, err)
+
+	client.httpClient = &http.Client{
+		Transport: paymentRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader(`{"appid":"test_app_id"}`)),
+			}, nil
+		}),
+	}
+
+	_, err = client.QueryOrderByOutTradeNo(context.Background(), "order-001")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "verify response signature")
 }

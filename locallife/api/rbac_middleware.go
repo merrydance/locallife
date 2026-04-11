@@ -5,7 +5,6 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
 )
@@ -42,15 +41,19 @@ func (server *Server) RoleMiddleware(allowedRoles ...string) gin.HandlerFunc {
 		// 从 context 获取 auth payload
 		authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-		// 查询用户角色
-		userRoles, err := server.store.ListUserRoles(ctx, authPayload.UserID)
-		if err != nil {
-			ctx.AbortWithStatusJSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
+		// 查询用户角色（优先复用已缓存的角色）
+		userRoles, ok := GetUserRolesFromContext(ctx)
+		if !ok {
+			var err error
+			userRoles, err = server.store.ListUserRoles(ctx, authPayload.UserID)
+			if err != nil {
+				ctx.AbortWithStatusJSON(http.StatusInternalServerError, internalError(ctx, err))
+				return
+			}
 
-		// 缓存角色到 context
-		ctx.Set(userRolesKey, userRoles)
+			// 缓存角色到 context
+			ctx.Set(userRolesKey, userRoles)
+		}
 
 		// 检查是否拥有允许的角色之一
 		hasRole := false
@@ -80,99 +83,6 @@ func (server *Server) RoleMiddleware(allowedRoles ...string) gin.HandlerFunc {
 	}
 }
 
-// OperatorMiddleware 创建运营商验证中间件
-// 验证用户是 operator 角色，并加载 operator 信息到 context
-// 必须在 RoleMiddleware(RoleOperator) 之后使用
-func (server *Server) OperatorMiddleware() gin.HandlerFunc {
-	return func(ctx *gin.Context) {
-		authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-
-		// 加载 operator 信息
-		operator, err := server.store.GetOperatorByUser(ctx, authPayload.UserID)
-		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
-					errors.New("operator profile not found"),
-				))
-				return
-			}
-			ctx.AbortWithStatusJSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-
-		// 检查 operator 状态
-		if operator.Status != "active" {
-			ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
-				errors.New("operator account is not active"),
-			))
-			return
-		}
-
-		// 缓存到 context
-		ctx.Set(operatorKey, operator)
-		ctx.Next()
-	}
-}
-
-// OperatorRegionMiddleware 创建运营商区域验证中间件
-// 验证 operator 是否管理 URL 参数中指定的区域
-// 必须在 OperatorMiddleware 之后使用
-// regionParamName 是 URL 参数名，如 "region_id" 或 "id"
-func (server *Server) OperatorRegionMiddleware(regionParamName string) gin.HandlerFunc {
-	return func(ctx *gin.Context) {
-		// 从 context 获取 operator
-		operatorVal, exists := ctx.Get(operatorKey)
-		if !exists {
-			ctx.AbortWithStatusJSON(http.StatusInternalServerError, internalError(ctx,
-				errors.New("operator not loaded, ensure OperatorMiddleware is applied"),
-			))
-			return
-		}
-		operator := operatorVal.(db.Operator)
-
-		// 从 URL 获取区域 ID
-		var uri struct {
-			RegionID int64 `uri:"region_id"`
-			ID       int64 `uri:"id"`
-		}
-		if err := ctx.ShouldBindUri(&uri); err != nil {
-			ctx.AbortWithStatusJSON(http.StatusBadRequest, errorResponse(err))
-			return
-		}
-
-		regionID := uri.RegionID
-		if regionParamName == "id" {
-			regionID = uri.ID
-		}
-
-		if regionID == 0 {
-			ctx.AbortWithStatusJSON(http.StatusBadRequest, errorResponse(
-				errors.New("region_id is required"),
-			))
-			return
-		}
-
-		// 检查 operator 是否管理该区域
-		manages, err := server.store.CheckOperatorManagesRegion(ctx, db.CheckOperatorManagesRegionParams{
-			OperatorID: operator.ID,
-			RegionID:   regionID,
-		})
-		if err != nil {
-			ctx.AbortWithStatusJSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-
-		if !manages {
-			ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
-				errors.New("you don't have permission to manage this region"),
-			))
-			return
-		}
-
-		ctx.Next()
-	}
-}
-
 // MerchantOwnerMiddleware 创建商户老板验证中间件
 // 验证用户是 merchant_owner 角色，并加载商户信息到 context
 // 必须在 RoleMiddleware(RoleMerchantOwner) 之后使用
@@ -180,35 +90,31 @@ func (server *Server) MerchantOwnerMiddleware() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-		// 通过 user_role 的 related_entity_id 获取商户 ID
-		userRole, err := server.store.GetUserRoleByType(ctx, db.GetUserRoleByTypeParams{
-			UserID: authPayload.UserID,
-			Role:   RoleMerchantOwner,
-		})
-		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+		if cachedMerchant, ok := GetMerchantFromContext(ctx); ok {
+			bindMerchantContext(ctx, cachedMerchant)
+			if cachedMerchant.Status != "active" && cachedMerchant.Status != "approved" {
 				ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
-					errors.New("merchant owner role not found"),
+					errors.New("merchant account is not active, please complete WeChat payment registration"),
 				))
 				return
 			}
-			ctx.AbortWithStatusJSON(http.StatusInternalServerError, internalError(ctx, err))
+			ctx.Next()
 			return
 		}
 
-		if !userRole.RelatedEntityID.Valid {
-			ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
-				errors.New("merchant not associated with this user"),
-			))
-			return
-		}
-
-		// 加载商户信息
-		merchant, err := server.store.GetMerchant(ctx, userRole.RelatedEntityID.Int64)
+		merchant, err := server.requireOwnedMerchantForUser(ctx, authPayload.UserID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if isMerchantSelectionRequiredError(err) {
+				ctx.AbortWithStatusJSON(http.StatusBadRequest, errorResponse(err))
+				return
+			}
+			if errors.Is(err, errMerchantOwnerRequired) {
+				ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(err))
+				return
+			}
+			if isNotFoundError(err) {
 				ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
-					errors.New("merchant not found"),
+					errors.New("merchant owner role not found"),
 				))
 				return
 			}
@@ -225,8 +131,43 @@ func (server *Server) MerchantOwnerMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		// 缓存到 context
-		ctx.Set(merchantKey, merchant)
+		bindMerchantContext(ctx, merchant)
+		ctx.Next()
+	}
+}
+
+// MerchantOwnerOnlyMiddleware validates that the current user is the merchant owner.
+// Unlike MerchantOwnerMiddleware and MerchantStaffMiddleware, it does not enforce
+// merchant active status or region checks so it can be used on onboarding flows.
+func (server *Server) MerchantOwnerOnlyMiddleware() gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
+		merchant, err := server.resolveMerchantForUser(ctx, authPayload.UserID)
+		if err != nil {
+			if isMerchantSelectionRequiredError(err) {
+				ctx.AbortWithStatusJSON(http.StatusBadRequest, errorResponse(err))
+				return
+			}
+			if isNotFoundError(err) {
+				ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
+					errors.New("you are not associated with any merchant"),
+				))
+				return
+			}
+			ctx.AbortWithStatusJSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+
+		if merchant.OwnerUserID != authPayload.UserID {
+			ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
+				errors.New("insufficient permissions for this operation"),
+			))
+			return
+		}
+
+		bindMerchantContext(ctx, merchant)
+		ctx.Set(merchantStaffRoleKey, "owner")
 		ctx.Next()
 	}
 }
@@ -238,10 +179,13 @@ func (server *Server) MerchantStaffMiddleware(allowedRoles ...string) gin.Handle
 	return func(ctx *gin.Context) {
 		authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-		// 1. 通过 GetMerchantByOwner 获取商户（已支持 merchant_staff 表）
-		merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+		merchant, staffRole, err := server.resolveMerchantStaffIdentity(ctx, authPayload.UserID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if isMerchantSelectionRequiredError(err) {
+				ctx.AbortWithStatusJSON(http.StatusBadRequest, errorResponse(err))
+				return
+			}
+			if isNotFoundError(err) {
 				ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
 					errors.New("you are not associated with any merchant"),
 				))
@@ -259,29 +203,23 @@ func (server *Server) MerchantStaffMiddleware(allowedRoles ...string) gin.Handle
 			return
 		}
 
-		// 2. 获取用户在该商户的角色
-		var staffRole string
-
-		// 先检查是否是 owner（owner_user_id 匹配）
-		if merchant.OwnerUserID == authPayload.UserID {
-			staffRole = "owner"
-		} else {
-			// 从 merchant_staff 表获取角色
-			role, err := server.store.GetUserMerchantRole(ctx, db.GetUserMerchantRoleParams{
-				MerchantID: merchant.ID,
-				UserID:     authPayload.UserID,
+		if merchant.RegionID == 0 {
+			server.writeAuditLog(ctx, AuditLogInput{
+				ActorUserID: authPayload.UserID,
+				ActorRole:   "merchant",
+				Action:      "region_access_denied",
+				TargetType:  "region",
+				RegionID:    nil,
+				Metadata: map[string]any{
+					"reason": "merchant_region_unset",
+					"path":   ctx.Request.URL.Path,
+					"method": ctx.Request.Method,
+				},
 			})
-			if err != nil {
-				if errors.Is(err, pgx.ErrNoRows) {
-					ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
-						errors.New("you are not a staff of this merchant"),
-					))
-					return
-				}
-				ctx.AbortWithStatusJSON(http.StatusInternalServerError, internalError(ctx, err))
-				return
-			}
-			staffRole = role
+			ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
+				errors.New("merchant region is not set"),
+			))
+			return
 		}
 
 		// 3. 检查角色权限
@@ -301,10 +239,34 @@ func (server *Server) MerchantStaffMiddleware(allowedRoles ...string) gin.Handle
 		}
 
 		// 4. 缓存到 context
-		ctx.Set(merchantKey, merchant)
+		bindMerchantContext(ctx, merchant)
 		ctx.Set(merchantStaffRoleKey, staffRole)
 		ctx.Next()
 	}
+}
+
+func (server *Server) resolveMerchantStaffIdentity(ctx *gin.Context, userID int64) (db.Merchant, string, error) {
+	merchant, err := server.resolveMerchantForUser(ctx, userID)
+	if err != nil {
+		return db.Merchant{}, "", err
+	}
+
+	if merchant.OwnerUserID == userID {
+		return merchant, "owner", nil
+	}
+
+	role, err := server.store.GetUserMerchantRole(ctx, db.GetUserMerchantRoleParams{
+		MerchantID: merchant.ID,
+		UserID:     userID,
+	})
+	if err != nil {
+		if isNotFoundError(err) {
+			return db.Merchant{}, "", errors.New("you are not a staff of this merchant")
+		}
+		return db.Merchant{}, "", err
+	}
+
+	return merchant, role, nil
 }
 
 // RiderMiddleware 创建骑手验证中间件
@@ -314,10 +276,21 @@ func (server *Server) RiderMiddleware() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
+		if cachedRider, ok := GetRiderFromContext(ctx); ok {
+			if cachedRider.Status != "approved" {
+				ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
+					errors.New("rider account is not approved"),
+				))
+				return
+			}
+			ctx.Next()
+			return
+		}
+
 		// 加载骑手信息
 		rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if isNotFoundError(err) {
 				ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
 					errors.New("rider profile not found"),
 				))

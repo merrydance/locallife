@@ -4,9 +4,9 @@
  */
 
 import {
-  voucherManagementService,
+  getAvailableVouchersForMerchant,
   VoucherResponse
-} from '../api/marketing-membership'
+} from '../api/personal'
 
 export interface Coupon {
   id: string
@@ -43,7 +43,10 @@ export class CouponService {
         return []
       }
 
-      const vouchers = await voucherManagementService.listActiveVouchers(merchantIdNum)
+      const response = await getAvailableVouchersForMerchant(merchantIdNum)
+      // 根据接口定义，getAvailableVouchersForMerchant 返回 ListAvailableVouchersResponse
+      // 其中包含 vouchers 数组
+      const vouchers = response.vouchers || []
       return this.convertVouchersToCoupons(vouchers)
     } catch (error) {
       console.error('获取优惠券失败:', error)
@@ -65,7 +68,7 @@ export class CouponService {
    * 领取优惠券
    * 注意：后端暂无领取优惠券接口
    */
-  async claimCoupon(couponId: string): Promise<boolean> {
+  async claimCoupon(_couponId: string): Promise<boolean> {
     // TODO: 后端需要实现 POST /v1/vouchers/{id}/claim 接口
     console.warn('claimCoupon: 后端暂无领取优惠券接口')
     return false
@@ -93,8 +96,7 @@ export class CouponService {
   private convertVouchersToCoupons(vouchers: VoucherResponse[]): Coupon[] {
     const now = new Date()
 
-    return vouchers.map(voucher => {
-      const validFrom = new Date(voucher.valid_from)
+    return vouchers.map((voucher) => {
       const validUntil = new Date(voucher.valid_until)
 
       let status: 'AVAILABLE' | 'USED' | 'EXPIRED' = 'AVAILABLE'

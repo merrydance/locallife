@@ -2,7 +2,6 @@ package api
 
 import (
 	"bytes"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -23,13 +22,16 @@ import (
 // ==================== 测试数据生成 ====================
 
 func randomDeliveryFeeConfig(regionID int64) db.DeliveryFeeConfig {
+	valueRatio := pgtype.Numeric{}
+	_ = valueRatio.Scan("0.01")
+
 	return db.DeliveryFeeConfig{
 		ID:            util.RandomInt(1, 1000),
 		RegionID:      regionID,
 		BaseFee:       500,
 		BaseDistance:  3000,
 		ExtraFeePerKm: 100,
-		ValueRatio:    pgtype.Numeric{Valid: true},
+		ValueRatio:    valueRatio,
 		MaxFee:        pgtype.Int8{Int64: 3000, Valid: true},
 		MinFee:        300,
 		IsActive:      true,
@@ -56,6 +58,7 @@ func randomDeliveryPromotion(merchantID int64) db.MerchantDeliveryPromotion {
 	return db.MerchantDeliveryPromotion{
 		ID:             util.RandomInt(1, 1000),
 		MerchantID:     merchantID,
+		Name:           util.RandomString(10),
 		MinOrderAmount: 2000,
 		DiscountAmount: 200,
 		ValidFrom:      time.Now(),
@@ -63,6 +66,71 @@ func randomDeliveryPromotion(merchantID int64) db.MerchantDeliveryPromotion {
 		IsActive:       true,
 		CreatedAt:      time.Now(),
 		UpdatedAt:      pgtype.Timestamptz{},
+	}
+}
+
+func TestNewDeliveryPromotionResponseStatus(t *testing.T) {
+	now := time.Now()
+	testCases := []struct {
+		name      string
+		promo     db.MerchantDeliveryPromotion
+		wantCode  string
+		wantLabel string
+		wantTheme string
+	}{
+		{
+			name: "Inactive",
+			promo: db.MerchantDeliveryPromotion{
+				IsActive:   false,
+				ValidFrom:  now.Add(-time.Hour),
+				ValidUntil: now.Add(time.Hour),
+			},
+			wantCode:  "inactive",
+			wantLabel: "已停用",
+			wantTheme: "default",
+		},
+		{
+			name: "Expired",
+			promo: db.MerchantDeliveryPromotion{
+				IsActive:   true,
+				ValidFrom:  now.Add(-2 * time.Hour),
+				ValidUntil: now.Add(-time.Hour),
+			},
+			wantCode:  "expired",
+			wantLabel: "已过期",
+			wantTheme: "danger",
+		},
+		{
+			name: "Scheduled",
+			promo: db.MerchantDeliveryPromotion{
+				IsActive:   true,
+				ValidFrom:  now.Add(time.Hour),
+				ValidUntil: now.Add(2 * time.Hour),
+			},
+			wantCode:  "scheduled",
+			wantLabel: "未开始",
+			wantTheme: "warning",
+		},
+		{
+			name: "Active",
+			promo: db.MerchantDeliveryPromotion{
+				IsActive:   true,
+				ValidFrom:  now.Add(-time.Hour),
+				ValidUntil: now.Add(time.Hour),
+			},
+			wantCode:  "active",
+			wantLabel: "生效中",
+			wantTheme: "success",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			statusCode, statusLabel, statusTheme := buildDeliveryPromotionStatusResponse(tc.promo, now)
+			require.Equal(t, tc.wantCode, statusCode)
+			require.Equal(t, tc.wantLabel, statusLabel)
+			require.Equal(t, tc.wantTheme, statusTheme)
+		})
 	}
 }
 
@@ -144,7 +212,7 @@ func TestCreateDeliveryFeeConfigAPI(t *testing.T) {
 					Times(1).
 					Return(operator, nil)
 
-				// OperatorRegionMiddleware 调用
+				// ValidateOperatorRegionMiddleware 调用
 				store.EXPECT().
 					CheckOperatorManagesRegion(gomock.Any(), db.CheckOperatorManagesRegionParams{
 						OperatorID: operator.ID,
@@ -160,6 +228,19 @@ func TestCreateDeliveryFeeConfigAPI(t *testing.T) {
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusCreated, recorder.Code)
+
+				var response deliveryFeeConfigResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Equal(t, config.ID, response.ID)
+				require.Equal(t, regionID, response.RegionID)
+				require.Equal(t, config.BaseFee, response.BaseFee)
+				require.Equal(t, config.BaseDistance, response.BaseDistance)
+				require.Equal(t, config.ExtraFeePerKm, response.ExtraFeePerKm)
+				require.Equal(t, config.MinFee, response.MinFee)
+				require.True(t, response.IsActive)
+				require.NotNil(t, response.MaxFee)
+				require.Equal(t, config.MaxFee.Int64, *response.MaxFee)
+				require.InDelta(t, 0.01, response.ValueRatio, 0.000001)
 			},
 		},
 		{
@@ -226,7 +307,46 @@ func TestCreateDeliveryFeeConfigAPI(t *testing.T) {
 					Times(1).
 					Return(operator, nil)
 
-				// OperatorRegionMiddleware 调用
+				// ValidateOperatorRegionMiddleware 调用
+				store.EXPECT().
+					CheckOperatorManagesRegion(gomock.Any(), db.CheckOperatorManagesRegionParams{
+						OperatorID: operator.ID,
+						RegionID:   regionID,
+					}).
+					Times(1).
+					Return(true, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
+			name: "InvalidMinMaxConflict",
+			body: gin.H{
+				"region_id":        regionID,
+				"base_fee":         config.BaseFee,
+				"base_distance":    config.BaseDistance,
+				"extra_fee_per_km": config.ExtraFeePerKm,
+				"max_fee":          int64(100),
+				"min_fee":          int64(200),
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				// RoleMiddleware 调用
+				store.EXPECT().
+					ListUserRoles(gomock.Any(), user.ID).
+					Times(1).
+					Return([]db.UserRole{{UserID: user.ID, Role: "operator", Status: "active"}}, nil)
+
+				// OperatorMiddleware 调用
+				store.EXPECT().
+					GetOperatorByUser(gomock.Any(), user.ID).
+					Times(1).
+					Return(operator, nil)
+
+				// ValidateOperatorRegionMiddleware 调用
 				store.EXPECT().
 					CheckOperatorManagesRegion(gomock.Any(), db.CheckOperatorManagesRegionParams{
 						OperatorID: operator.ID,
@@ -264,7 +384,7 @@ func TestCreateDeliveryFeeConfigAPI(t *testing.T) {
 					Times(1).
 					Return(operator, nil)
 
-				// OperatorRegionMiddleware 调用
+				// ValidateOperatorRegionMiddleware 调用
 				store.EXPECT().
 					CheckOperatorManagesRegion(gomock.Any(), db.CheckOperatorManagesRegionParams{
 						OperatorID: operator.ID,
@@ -351,7 +471,7 @@ func TestGetDeliveryFeeConfigAPI(t *testing.T) {
 				store.EXPECT().
 					GetDeliveryFeeConfigByRegion(gomock.Any(), regionID).
 					Times(1).
-					Return(db.DeliveryFeeConfig{}, sql.ErrNoRows)
+					Return(db.DeliveryFeeConfig{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -467,7 +587,7 @@ func TestCalculateDeliveryFeeAPI(t *testing.T) {
 				store.EXPECT().
 					GetDeliveryFeeConfigByRegion(gomock.Any(), regionID).
 					Times(1).
-					Return(db.DeliveryFeeConfig{}, sql.ErrNoRows)
+					Return(db.DeliveryFeeConfig{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -750,8 +870,7 @@ func TestListPeakHourConfigsAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response []peakHourConfigResponse
-				err := json.NewDecoder(recorder.Body).Decode(&response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Len(t, response, 2)
 			},
 		},
@@ -783,8 +902,7 @@ func TestListPeakHourConfigsAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response []peakHourConfigResponse
-				err := json.NewDecoder(recorder.Body).Decode(&response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Len(t, response, 0)
 			},
 		},
@@ -821,6 +939,7 @@ func randomMerchantForPromo(userID int64) db.Merchant {
 	return db.Merchant{
 		ID:          util.RandomInt(1, 1000),
 		OwnerUserID: userID,
+		RegionID:    util.RandomInt(1, 100),
 		Name:        util.RandomString(10),
 		Phone:       util.RandomString(11),
 		Address:     util.RandomString(20),
@@ -856,35 +975,7 @@ func TestCreateDeliveryPromotionAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				// CasbinRoleMiddleware 调用
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Times(1).
-					Return([]db.UserRole{{
-						UserID:          user.ID,
-						Role:            "merchant_owner",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true},
-					}}, nil)
-
-				// LoadMerchantMiddleware 调用
-				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), db.GetUserRoleByTypeParams{
-						UserID: user.ID,
-						Role:   "merchant_owner",
-					}).
-					Times(1).
-					Return(db.UserRole{
-						UserID:          user.ID,
-						Role:            "merchant_owner",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true},
-					}, nil)
-
-				store.EXPECT().
-					GetMerchant(gomock.Any(), merchant.ID).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					CreateDeliveryPromotion(gomock.Any(), gomock.Any()).
@@ -909,11 +1000,7 @@ func TestCreateDeliveryPromotionAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				// CasbinRoleMiddleware: 用户不是商户
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Times(1).
-					Return([]db.UserRole{{UserID: user.ID, Role: "customer", Status: "active"}}, nil)
+				expectResolveNoAccessibleMerchants(store, user.ID)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -933,35 +1020,7 @@ func TestCreateDeliveryPromotionAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				// CasbinRoleMiddleware 调用
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Times(1).
-					Return([]db.UserRole{{
-						UserID:          user.ID,
-						Role:            "merchant_owner",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true},
-					}}, nil)
-
-				// LoadMerchantMiddleware 调用
-				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), db.GetUserRoleByTypeParams{
-						UserID: user.ID,
-						Role:   "merchant_owner",
-					}).
-					Times(1).
-					Return(db.UserRole{
-						UserID:          user.ID,
-						Role:            "merchant_owner",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true},
-					}, nil)
-
-				store.EXPECT().
-					GetMerchant(gomock.Any(), merchant.ID).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -981,35 +1040,7 @@ func TestCreateDeliveryPromotionAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				// CasbinRoleMiddleware 调用
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Times(1).
-					Return([]db.UserRole{{
-						UserID:          user.ID,
-						Role:            "merchant_owner",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true},
-					}}, nil)
-
-				// LoadMerchantMiddleware 调用
-				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), db.GetUserRoleByTypeParams{
-						UserID: user.ID,
-						Role:   "merchant_owner",
-					}).
-					Times(1).
-					Return(db.UserRole{
-						UserID:          user.ID,
-						Role:            "merchant_owner",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true},
-					}, nil)
-
-				store.EXPECT().
-					GetMerchant(gomock.Any(), merchant.ID).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -1028,35 +1059,7 @@ func TestCreateDeliveryPromotionAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				// CasbinRoleMiddleware 调用
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Times(1).
-					Return([]db.UserRole{{
-						UserID:          user.ID,
-						Role:            "merchant_owner",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true},
-					}}, nil)
-
-				// LoadMerchantMiddleware 调用
-				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), db.GetUserRoleByTypeParams{
-						UserID: user.ID,
-						Role:   "merchant_owner",
-					}).
-					Times(1).
-					Return(db.UserRole{
-						UserID:          user.ID,
-						Role:            "merchant_owner",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true},
-					}, nil)
-
-				store.EXPECT().
-					GetMerchant(gomock.Any(), merchant.ID).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -1132,35 +1135,7 @@ func TestListDeliveryPromotionsAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				// CasbinRoleMiddleware 调用
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Times(1).
-					Return([]db.UserRole{{
-						UserID:          user.ID,
-						Role:            "merchant_owner",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true},
-					}}, nil)
-
-				// LoadMerchantMiddleware 调用
-				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), db.GetUserRoleByTypeParams{
-						UserID: user.ID,
-						Role:   "merchant_owner",
-					}).
-					Times(1).
-					Return(db.UserRole{
-						UserID:          user.ID,
-						Role:            "merchant_owner",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true},
-					}, nil)
-
-				store.EXPECT().
-					GetMerchant(gomock.Any(), merchant.ID).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					ListDeliveryPromotionsByMerchant(gomock.Any(), merchant.ID).
@@ -1171,9 +1146,11 @@ func TestListDeliveryPromotionsAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response []deliveryPromotionResponse
-				err := json.NewDecoder(recorder.Body).Decode(&response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Len(t, response, 2)
+				require.Equal(t, "active", response[0].StatusCode)
+				require.Equal(t, "生效中", response[0].StatusLabel)
+				require.Equal(t, "success", response[0].StatusTheme)
 			},
 		},
 		{
@@ -1183,35 +1160,7 @@ func TestListDeliveryPromotionsAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				// CasbinRoleMiddleware 调用
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Times(1).
-					Return([]db.UserRole{{
-						UserID:          user.ID,
-						Role:            "merchant_owner",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true},
-					}}, nil)
-
-				// LoadMerchantMiddleware 调用
-				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), db.GetUserRoleByTypeParams{
-						UserID: user.ID,
-						Role:   "merchant_owner",
-					}).
-					Times(1).
-					Return(db.UserRole{
-						UserID:          user.ID,
-						Role:            "merchant_owner",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true},
-					}, nil)
-
-				store.EXPECT().
-					GetMerchant(gomock.Any(), merchant.ID).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -1277,35 +1226,7 @@ func TestDeleteDeliveryPromotionAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				// CasbinRoleMiddleware 调用
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Times(1).
-					Return([]db.UserRole{{
-						UserID:          user.ID,
-						Role:            "merchant_owner",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true},
-					}}, nil)
-
-				// LoadMerchantMiddleware 调用
-				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), db.GetUserRoleByTypeParams{
-						UserID: user.ID,
-						Role:   "merchant_owner",
-					}).
-					Times(1).
-					Return(db.UserRole{
-						UserID:          user.ID,
-						Role:            "merchant_owner",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true},
-					}, nil)
-
-				store.EXPECT().
-					GetMerchant(gomock.Any(), merchant.ID).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					GetDeliveryPromotion(gomock.Any(), promo.ID).
@@ -1329,40 +1250,12 @@ func TestDeleteDeliveryPromotionAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				// CasbinRoleMiddleware 调用
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Times(1).
-					Return([]db.UserRole{{
-						UserID:          user.ID,
-						Role:            "merchant_owner",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true},
-					}}, nil)
-
-				// LoadMerchantMiddleware 调用
-				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), db.GetUserRoleByTypeParams{
-						UserID: user.ID,
-						Role:   "merchant_owner",
-					}).
-					Times(1).
-					Return(db.UserRole{
-						UserID:          user.ID,
-						Role:            "merchant_owner",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true},
-					}, nil)
-
-				store.EXPECT().
-					GetMerchant(gomock.Any(), merchant.ID).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					GetDeliveryPromotion(gomock.Any(), int64(999999)).
 					Times(1).
-					Return(db.MerchantDeliveryPromotion{}, sql.ErrNoRows)
+					Return(db.MerchantDeliveryPromotion{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -1376,35 +1269,7 @@ func TestDeleteDeliveryPromotionAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				// CasbinRoleMiddleware 调用
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Times(1).
-					Return([]db.UserRole{{
-						UserID:          user.ID,
-						Role:            "merchant_owner",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true},
-					}}, nil)
-
-				// LoadMerchantMiddleware 调用
-				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), db.GetUserRoleByTypeParams{
-						UserID: user.ID,
-						Role:   "merchant_owner",
-					}).
-					Times(1).
-					Return(db.UserRole{
-						UserID:          user.ID,
-						Role:            "merchant_owner",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true},
-					}, nil)
-
-				store.EXPECT().
-					GetMerchant(gomock.Any(), merchant.ID).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				// 促销属于另一个商户
 				otherPromo := promo

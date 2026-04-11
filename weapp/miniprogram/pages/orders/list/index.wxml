@@ -1,67 +1,95 @@
-<custom-navbar title="我的订单" showBack="{{true}}" bind:navheight="onNavHeight" />
+<custom-navbar title="{{pageTitle}}" showBack="{{true}}" bind:navheight="onNavHeight" />
 
-<view class="page" style="padding-top: {{navBarHeight}}px;">
-  <!-- 状态筛选Tab -->
-  <t-tabs value="{{currentStatus}}" bind:change="onStatusChange">
-    <t-tab-panel wx:for="{{statusTabs}}" wx:key="value" label="{{item.label}}" value="{{item.value}}" />
-  </t-tabs>
-
-  <!-- 骨架屏 -->
-  <view wx:if="{{loading && orders.length === 0}}" class="skeleton-container">
-    <view class="card skeleton" wx:for="{{[1,2,3]}}" wx:key="*this">
-      <view class="skeleton-line" style="width: 60%; height: 32rpx; margin-bottom: 12rpx;"></view>
-      <view class="skeleton-line" style="width: 40%; height: 24rpx; margin-bottom: 20rpx;"></view>
-      <view class="skeleton-line" style="width: 100%; height: 80rpx;"></view>
+<view
+  class="page page-shell page-shell--with-nav page-shell--bottom-safe"
+  style="--page-shell-nav-height: {{navBarHeight}}px"
+>
+  <!-- 顶部状态栏 -->
+  <view class="tabs-wrapper">
+    <t-tabs value="{{currentStatus}}" bind:change="onStatusChange" theme="tag" space-evenly="{{false}}" split="{{false}}">
+      <t-tab-panel wx:for="{{statusTabs}}" wx:key="value" label="{{item.label}}" value="{{item.value}}" />
+    </t-tabs>
+    <view wx:if="{{currentStatus === 'pending' && pendingPayableCount > 1}}" class="batch-toolbar">
+      <t-button size="small" shape="round" bindtap="onToggleSelectAllPending">
+        {{selectedPayCount === pendingPayableCount ? '取消全选' : '全选待支付'}}
+      </t-button>
+      <text class="batch-tip">已选{{selectedPayCount}}单</text>
+      <t-button size="small" theme="primary" shape="round" bindtap="onBatchPay" disabled="{{selectedPayCount === 0 || paying}}">
+        合并支付
+      </t-button>
     </view>
   </view>
 
-  <!-- 空状态 -->
-  <view wx:elif="{{orders.length === 0}}" class="empty">
-    <t-empty description="暂无订单" />
-  </view>
-
-  <!-- 订单列表 -->
-  <view wx:else class="order-list">
-    <view class="card" wx:for="{{orders}}" wx:key="id">
-      <view class="card-header">
-        <view>
-          <view class="merchant">{{item.merchantName}}</view>
-          <view class="order-id">#{{item.orderNo}}</view>
-        </view>
-        <t-tag variant="light" theme="{{item.statusClass === 'completed' ? 'success' : (item.statusClass === 'cancelled' ? 'default' : 'primary')}}">{{item.statusLabel}}</t-tag>
-      </view>
-
-      <view class="highlight" wx:if="{{item.highlight}}">{{item.highlight}}</view>
-
-      <view class="badge-row" wx:if="{{item.badges.length > 0}}">
-        <t-tag wx:for="{{item.badges}}" wx:for-item="badge" wx:key="*this" size="small" variant="light">{{badge}}</t-tag>
-      </view>
-
-      <view class="preview-list" wx:if="{{item.previewItems.length > 0}}">
-        <view class="preview-item" wx:for="{{item.previewItems}}" wx:for-item="preview" wx:key="dishId">
-          <image class="item-thumb" src="{{preview.imageUrl}}" mode="aspectFill" />
-          <view class="name">{{preview.dishName}}</view>
-          <text class="count">×{{preview.quantity}}</text>
-        </view>
-      </view>
-
-      <view class="meta-row">
-        <view class="created">{{item.createTimeDisplay}}</view>
-        <view class="total">{{item.totalDisplay}}</view>
-      </view>
-
-      <view class="btn-row">
-        <t-button wx:if="{{item.canCancel}}" size="small" theme="danger" variant="text" data-id="{{item.id}}" bindtap="onCancelOrder">取消</t-button>
-        <t-button wx:if="{{item.canPay}}" size="small" theme="primary" data-id="{{item.id}}" bindtap="onPayOrder">去支付</t-button>
-        <t-button size="small" variant="outline" data-id="{{item.id}}" bindtap="onViewOrder">查看详情</t-button>
-        <t-button wx:if="{{item.canReorder}}" size="small" theme="primary" variant="ghost" data-id="{{item.id}}" bindtap="onReorder">再次购买</t-button>
-      </view>
+  <!-- 列表内容 -->
+  <view class="order-list">
+    <!-- 1. 错误状态 -->
+    <view wx:if="{{isError}}" class="error-container">
+      <t-empty icon="info-circle" description="{{errorMsg}}" />
+      <t-button theme="primary" size="small" bindtap="loadOrders" data-retry="true" style="margin-top: 24rpx;" shape="round">重试</t-button>
     </view>
 
-    <!-- 加载状态 -->
-    <view class="loading-footer">
-      <t-loading wx:if="{{loading}}" theme="circular" size="40rpx" text="加载中..." />
-      <view wx:elif="{{!hasMore && orders.length > 0}}" class="no-more">没有更多了</view>
+    <!-- 2. 骨架屏加载 (App Shell + Skeleton) -->
+    <view wx:elif="{{loading && orders.length === 0}}">
+      <list-skeleton wx:for="{{[1,2,3,4,5]}}" wx:key="*this" showAvatar="{{false}}" />
     </view>
+
+    <!-- 3. 正常数据 -->
+    <block wx:else>
+      <view wx:if="{{refreshErrorMessage}}" class="inline-banner inline-banner-danger">
+        <text class="inline-banner-text">{{refreshErrorMessage}}</text>
+        <text class="inline-banner-action" bindtap="onRetryRefresh">重新同步</text>
+      </view>
+
+      <!-- 空状态 -->
+      <view wx:if="{{orders.length === 0}}" class="empty-state">
+        <t-empty icon="order-adjustment" description="暂无相关订单" />
+      </view>
+
+      <!-- 订单卡片 -->
+      <view class="order-card" wx:for="{{orders}}" wx:key="uniqueId" bindtap="onViewOrder" data-id="{{item.id}}" hover-class="order-card-hover">
+        <!-- 头部：商户信息 + 状态 -->
+        <view class="card-header">
+          <view class="merchant-info">
+            <text class="merchant-name">{{item.merchantName}}</text>
+            <t-icon name="chevron-right" size="32rpx" color="#999" />
+          </view>
+          <t-tag size="small" variant="dark" theme="default" shape="round" class="status-tag {{item.statusClass}}">{{item.statusLabel}}</t-tag>
+        </view>
+
+        <!-- 内容区：紧凑元信息 -->
+        <view class="card-meta">
+          <view class="meta-info">
+            <text wx:if="{{item.highlight}}" class="meta-highlight">{{item.highlight}}</text>
+            <text class="meta-time">{{item.createTimeDisplay}}</text>
+          </view>
+          <text class="meta-total">{{item.totalDisplay}}</text>
+        </view>
+
+        <!-- 底部：操作按钮 -->
+        <view class="card-footer" catchtap="preventBubble">
+          <view class="footer-actions">
+            <t-button wx:if="{{item.canCancel}}" size="small" shape="round" catchtap="onCancelOrder" data-id="{{item.id}}" t-class="action-btn">取消订单</t-button>
+
+            <t-button wx:if="{{orderType === 'dine_in' || orderType === 'reservation'}}" size="small" icon="call" shape="round" catchtap="onCallMerchant" data-phone="{{item.merchantPhone}}" t-class="action-btn">联系商家</t-button>
+
+            <t-button wx:if="{{item.canPay && currentStatus === 'pending' && pendingPayableCount > 1}}" size="small" shape="round" catchtap="onTogglePaySelect" data-id="{{item.id}}" t-class="action-btn">
+              {{selectedPayMap[item.id] ? '已选' : '选择'}}
+            </t-button>
+            
+            <t-button wx:if="{{item.canPay}}" size="small" theme="primary" shape="round" catchtap="onPayOrder" data-id="{{item.id}}" t-class="action-btn">去支付</t-button>
+            
+            <t-button wx:if="{{item.canReorder}}" size="small" shape="round" catchtap="onReorder" data-id="{{item.id}}" t-class="action-btn">再来一单</t-button>
+          </view>
+        </view>
+      </view>
+      
+      <!-- 加载更多提示 (Only show when loading more) -->
+       <view class="loading-footer" wx:if="{{loading && orders.length > 0}}">
+        <t-loading theme="circular" size="40rpx" text="加载中..." />
+      </view>
+      <view class="loading-footer" wx:elif="{{!hasMore && orders.length > 0}}">
+        <view class="no-more">没有更多了</view>
+      </view>
+    </block>
   </view>
 </view>

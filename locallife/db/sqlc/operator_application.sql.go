@@ -20,7 +20,7 @@ SET
   reviewed_at = now(),
   updated_at = now()
 WHERE id = $1 AND status = 'submitted'
-RETURNING id, user_id, region_id, name, contact_name, contact_phone, business_license_url, business_license_number, business_license_ocr, legal_person_name, legal_person_id_number, id_card_front_url, id_card_back_url, id_card_front_ocr, id_card_back_ocr, requested_contract_years, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at
+RETURNING id, user_id, region_id, name, contact_name, contact_phone, business_license_number, business_license_ocr, legal_person_name, legal_person_id_number, id_card_front_ocr, id_card_back_ocr, requested_contract_years, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, business_license_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id
 `
 
 type ApproveOperatorApplicationParams struct {
@@ -39,13 +39,10 @@ func (q *Queries) ApproveOperatorApplication(ctx context.Context, arg ApproveOpe
 		&i.Name,
 		&i.ContactName,
 		&i.ContactPhone,
-		&i.BusinessLicenseUrl,
 		&i.BusinessLicenseNumber,
 		&i.BusinessLicenseOcr,
 		&i.LegalPersonName,
 		&i.LegalPersonIDNumber,
-		&i.IDCardFrontUrl,
-		&i.IDCardBackUrl,
 		&i.IDCardFrontOcr,
 		&i.IDCardBackOcr,
 		&i.RequestedContractYears,
@@ -56,16 +53,148 @@ func (q *Queries) ApproveOperatorApplication(ctx context.Context, arg ApproveOpe
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.SubmittedAt,
+		&i.BusinessLicenseMediaAssetID,
+		&i.IDCardFrontMediaAssetID,
+		&i.IDCardBackMediaAssetID,
+	)
+	return i, err
+}
+
+const clearOperatorApplicationBusinessLicense = `-- name: ClearOperatorApplicationBusinessLicense :one
+UPDATE operator_applications
+SET
+  business_license_media_asset_id = NULL,
+  business_license_number = NULL,
+  business_license_ocr = NULL,
+  updated_at = now()
+WHERE id = $1 AND status = 'draft'
+RETURNING id, user_id, region_id, name, contact_name, contact_phone, business_license_number, business_license_ocr, legal_person_name, legal_person_id_number, id_card_front_ocr, id_card_back_ocr, requested_contract_years, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, business_license_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id
+`
+
+// 清空营业执照媒体与 OCR 结果
+func (q *Queries) ClearOperatorApplicationBusinessLicense(ctx context.Context, id int64) (OperatorApplication, error) {
+	row := q.db.QueryRow(ctx, clearOperatorApplicationBusinessLicense, id)
+	var i OperatorApplication
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.RegionID,
+		&i.Name,
+		&i.ContactName,
+		&i.ContactPhone,
+		&i.BusinessLicenseNumber,
+		&i.BusinessLicenseOcr,
+		&i.LegalPersonName,
+		&i.LegalPersonIDNumber,
+		&i.IDCardFrontOcr,
+		&i.IDCardBackOcr,
+		&i.RequestedContractYears,
+		&i.Status,
+		&i.RejectReason,
+		&i.ReviewedBy,
+		&i.ReviewedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.SubmittedAt,
+		&i.BusinessLicenseMediaAssetID,
+		&i.IDCardFrontMediaAssetID,
+		&i.IDCardBackMediaAssetID,
+	)
+	return i, err
+}
+
+const clearOperatorApplicationIDCardBack = `-- name: ClearOperatorApplicationIDCardBack :one
+UPDATE operator_applications
+SET
+  id_card_back_media_asset_id = NULL,
+  id_card_back_ocr = NULL,
+  updated_at = now()
+WHERE id = $1 AND status = 'draft'
+RETURNING id, user_id, region_id, name, contact_name, contact_phone, business_license_number, business_license_ocr, legal_person_name, legal_person_id_number, id_card_front_ocr, id_card_back_ocr, requested_contract_years, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, business_license_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id
+`
+
+// 清空身份证背面媒体与 OCR 结果
+func (q *Queries) ClearOperatorApplicationIDCardBack(ctx context.Context, id int64) (OperatorApplication, error) {
+	row := q.db.QueryRow(ctx, clearOperatorApplicationIDCardBack, id)
+	var i OperatorApplication
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.RegionID,
+		&i.Name,
+		&i.ContactName,
+		&i.ContactPhone,
+		&i.BusinessLicenseNumber,
+		&i.BusinessLicenseOcr,
+		&i.LegalPersonName,
+		&i.LegalPersonIDNumber,
+		&i.IDCardFrontOcr,
+		&i.IDCardBackOcr,
+		&i.RequestedContractYears,
+		&i.Status,
+		&i.RejectReason,
+		&i.ReviewedBy,
+		&i.ReviewedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.SubmittedAt,
+		&i.BusinessLicenseMediaAssetID,
+		&i.IDCardFrontMediaAssetID,
+		&i.IDCardBackMediaAssetID,
+	)
+	return i, err
+}
+
+const clearOperatorApplicationIDCardFront = `-- name: ClearOperatorApplicationIDCardFront :one
+UPDATE operator_applications
+SET
+  id_card_front_media_asset_id = NULL,
+  legal_person_name = NULL,
+  legal_person_id_number = NULL,
+  id_card_front_ocr = NULL,
+  updated_at = now()
+WHERE id = $1 AND status = 'draft'
+RETURNING id, user_id, region_id, name, contact_name, contact_phone, business_license_number, business_license_ocr, legal_person_name, legal_person_id_number, id_card_front_ocr, id_card_back_ocr, requested_contract_years, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, business_license_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id
+`
+
+// 清空身份证正面媒体与对应 OCR 字段
+func (q *Queries) ClearOperatorApplicationIDCardFront(ctx context.Context, id int64) (OperatorApplication, error) {
+	row := q.db.QueryRow(ctx, clearOperatorApplicationIDCardFront, id)
+	var i OperatorApplication
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.RegionID,
+		&i.Name,
+		&i.ContactName,
+		&i.ContactPhone,
+		&i.BusinessLicenseNumber,
+		&i.BusinessLicenseOcr,
+		&i.LegalPersonName,
+		&i.LegalPersonIDNumber,
+		&i.IDCardFrontOcr,
+		&i.IDCardBackOcr,
+		&i.RequestedContractYears,
+		&i.Status,
+		&i.RejectReason,
+		&i.ReviewedBy,
+		&i.ReviewedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.SubmittedAt,
+		&i.BusinessLicenseMediaAssetID,
+		&i.IDCardFrontMediaAssetID,
+		&i.IDCardBackMediaAssetID,
 	)
 	return i, err
 }
 
 const countPendingOperatorApplications = `-- name: CountPendingOperatorApplications :one
 SELECT COUNT(*) FROM operator_applications
-WHERE status = 'submitted'
+WHERE status IN ('submitted', 'approved', 'rejected')
 `
 
-// 统计待审核申请数量
+// 统计申请数量（包含 submitted/approved/rejected）
 func (q *Queries) CountPendingOperatorApplications(ctx context.Context) (int64, error) {
 	row := q.db.QueryRow(ctx, countPendingOperatorApplications)
 	var count int64
@@ -82,7 +211,7 @@ INSERT INTO operator_applications (
 ) VALUES (
   $1, $2, 'draft'
 )
-RETURNING id, user_id, region_id, name, contact_name, contact_phone, business_license_url, business_license_number, business_license_ocr, legal_person_name, legal_person_id_number, id_card_front_url, id_card_back_url, id_card_front_ocr, id_card_back_ocr, requested_contract_years, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at
+RETURNING id, user_id, region_id, name, contact_name, contact_phone, business_license_number, business_license_ocr, legal_person_name, legal_person_id_number, id_card_front_ocr, id_card_back_ocr, requested_contract_years, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, business_license_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id
 `
 
 type CreateOperatorApplicationDraftParams struct {
@@ -102,13 +231,10 @@ func (q *Queries) CreateOperatorApplicationDraft(ctx context.Context, arg Create
 		&i.Name,
 		&i.ContactName,
 		&i.ContactPhone,
-		&i.BusinessLicenseUrl,
 		&i.BusinessLicenseNumber,
 		&i.BusinessLicenseOcr,
 		&i.LegalPersonName,
 		&i.LegalPersonIDNumber,
-		&i.IDCardFrontUrl,
-		&i.IDCardBackUrl,
 		&i.IDCardFrontOcr,
 		&i.IDCardBackOcr,
 		&i.RequestedContractYears,
@@ -119,12 +245,15 @@ func (q *Queries) CreateOperatorApplicationDraft(ctx context.Context, arg Create
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.SubmittedAt,
+		&i.BusinessLicenseMediaAssetID,
+		&i.IDCardFrontMediaAssetID,
+		&i.IDCardBackMediaAssetID,
 	)
 	return i, err
 }
 
 const getOperatorApplicationByID = `-- name: GetOperatorApplicationByID :one
-SELECT id, user_id, region_id, name, contact_name, contact_phone, business_license_url, business_license_number, business_license_ocr, legal_person_name, legal_person_id_number, id_card_front_url, id_card_back_url, id_card_front_ocr, id_card_back_ocr, requested_contract_years, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at FROM operator_applications
+SELECT id, user_id, region_id, name, contact_name, contact_phone, business_license_number, business_license_ocr, legal_person_name, legal_person_id_number, id_card_front_ocr, id_card_back_ocr, requested_contract_years, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, business_license_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id FROM operator_applications
 WHERE id = $1
 `
 
@@ -139,13 +268,10 @@ func (q *Queries) GetOperatorApplicationByID(ctx context.Context, id int64) (Ope
 		&i.Name,
 		&i.ContactName,
 		&i.ContactPhone,
-		&i.BusinessLicenseUrl,
 		&i.BusinessLicenseNumber,
 		&i.BusinessLicenseOcr,
 		&i.LegalPersonName,
 		&i.LegalPersonIDNumber,
-		&i.IDCardFrontUrl,
-		&i.IDCardBackUrl,
 		&i.IDCardFrontOcr,
 		&i.IDCardBackOcr,
 		&i.RequestedContractYears,
@@ -156,12 +282,15 @@ func (q *Queries) GetOperatorApplicationByID(ctx context.Context, id int64) (Ope
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.SubmittedAt,
+		&i.BusinessLicenseMediaAssetID,
+		&i.IDCardFrontMediaAssetID,
+		&i.IDCardBackMediaAssetID,
 	)
 	return i, err
 }
 
 const getOperatorApplicationByUserID = `-- name: GetOperatorApplicationByUserID :one
-SELECT id, user_id, region_id, name, contact_name, contact_phone, business_license_url, business_license_number, business_license_ocr, legal_person_name, legal_person_id_number, id_card_front_url, id_card_back_url, id_card_front_ocr, id_card_back_ocr, requested_contract_years, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at FROM operator_applications
+SELECT id, user_id, region_id, name, contact_name, contact_phone, business_license_number, business_license_ocr, legal_person_name, legal_person_id_number, id_card_front_ocr, id_card_back_ocr, requested_contract_years, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, business_license_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id FROM operator_applications
 WHERE user_id = $1
 ORDER BY created_at DESC
 LIMIT 1
@@ -178,13 +307,10 @@ func (q *Queries) GetOperatorApplicationByUserID(ctx context.Context, userID int
 		&i.Name,
 		&i.ContactName,
 		&i.ContactPhone,
-		&i.BusinessLicenseUrl,
 		&i.BusinessLicenseNumber,
 		&i.BusinessLicenseOcr,
 		&i.LegalPersonName,
 		&i.LegalPersonIDNumber,
-		&i.IDCardFrontUrl,
-		&i.IDCardBackUrl,
 		&i.IDCardFrontOcr,
 		&i.IDCardBackOcr,
 		&i.RequestedContractYears,
@@ -195,12 +321,15 @@ func (q *Queries) GetOperatorApplicationByUserID(ctx context.Context, userID int
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.SubmittedAt,
+		&i.BusinessLicenseMediaAssetID,
+		&i.IDCardFrontMediaAssetID,
+		&i.IDCardBackMediaAssetID,
 	)
 	return i, err
 }
 
 const getOperatorApplicationDraft = `-- name: GetOperatorApplicationDraft :one
-SELECT id, user_id, region_id, name, contact_name, contact_phone, business_license_url, business_license_number, business_license_ocr, legal_person_name, legal_person_id_number, id_card_front_url, id_card_back_url, id_card_front_ocr, id_card_back_ocr, requested_contract_years, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at FROM operator_applications
+SELECT id, user_id, region_id, name, contact_name, contact_phone, business_license_number, business_license_ocr, legal_person_name, legal_person_id_number, id_card_front_ocr, id_card_back_ocr, requested_contract_years, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, business_license_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id FROM operator_applications
 WHERE user_id = $1 AND status IN ('draft', 'rejected')
 ORDER BY created_at DESC
 LIMIT 1
@@ -217,13 +346,10 @@ func (q *Queries) GetOperatorApplicationDraft(ctx context.Context, userID int64)
 		&i.Name,
 		&i.ContactName,
 		&i.ContactPhone,
-		&i.BusinessLicenseUrl,
 		&i.BusinessLicenseNumber,
 		&i.BusinessLicenseOcr,
 		&i.LegalPersonName,
 		&i.LegalPersonIDNumber,
-		&i.IDCardFrontUrl,
-		&i.IDCardBackUrl,
 		&i.IDCardFrontOcr,
 		&i.IDCardBackOcr,
 		&i.RequestedContractYears,
@@ -234,12 +360,15 @@ func (q *Queries) GetOperatorApplicationDraft(ctx context.Context, userID int64)
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.SubmittedAt,
+		&i.BusinessLicenseMediaAssetID,
+		&i.IDCardFrontMediaAssetID,
+		&i.IDCardBackMediaAssetID,
 	)
 	return i, err
 }
 
 const getPendingOperatorApplicationByRegion = `-- name: GetPendingOperatorApplicationByRegion :one
-SELECT id, user_id, region_id, name, contact_name, contact_phone, business_license_url, business_license_number, business_license_ocr, legal_person_name, legal_person_id_number, id_card_front_url, id_card_back_url, id_card_front_ocr, id_card_back_ocr, requested_contract_years, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at FROM operator_applications
+SELECT id, user_id, region_id, name, contact_name, contact_phone, business_license_number, business_license_ocr, legal_person_name, legal_person_id_number, id_card_front_ocr, id_card_back_ocr, requested_contract_years, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, business_license_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id FROM operator_applications
 WHERE region_id = $1 AND status IN ('submitted', 'approved')
 LIMIT 1
 `
@@ -255,13 +384,10 @@ func (q *Queries) GetPendingOperatorApplicationByRegion(ctx context.Context, reg
 		&i.Name,
 		&i.ContactName,
 		&i.ContactPhone,
-		&i.BusinessLicenseUrl,
 		&i.BusinessLicenseNumber,
 		&i.BusinessLicenseOcr,
 		&i.LegalPersonName,
 		&i.LegalPersonIDNumber,
-		&i.IDCardFrontUrl,
-		&i.IDCardBackUrl,
 		&i.IDCardFrontOcr,
 		&i.IDCardBackOcr,
 		&i.RequestedContractYears,
@@ -272,13 +398,16 @@ func (q *Queries) GetPendingOperatorApplicationByRegion(ctx context.Context, reg
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.SubmittedAt,
+		&i.BusinessLicenseMediaAssetID,
+		&i.IDCardFrontMediaAssetID,
+		&i.IDCardBackMediaAssetID,
 	)
 	return i, err
 }
 
 const listOperatorApplications = `-- name: ListOperatorApplications :many
 SELECT 
-  oa.id, oa.user_id, oa.region_id, oa.name, oa.contact_name, oa.contact_phone, oa.business_license_url, oa.business_license_number, oa.business_license_ocr, oa.legal_person_name, oa.legal_person_id_number, oa.id_card_front_url, oa.id_card_back_url, oa.id_card_front_ocr, oa.id_card_back_ocr, oa.requested_contract_years, oa.status, oa.reject_reason, oa.reviewed_by, oa.reviewed_at, oa.created_at, oa.updated_at, oa.submitted_at,
+  oa.id, oa.user_id, oa.region_id, oa.name, oa.contact_name, oa.contact_phone, oa.business_license_number, oa.business_license_ocr, oa.legal_person_name, oa.legal_person_id_number, oa.id_card_front_ocr, oa.id_card_back_ocr, oa.requested_contract_years, oa.status, oa.reject_reason, oa.reviewed_by, oa.reviewed_at, oa.created_at, oa.updated_at, oa.submitted_at, oa.business_license_media_asset_id, oa.id_card_front_media_asset_id, oa.id_card_back_media_asset_id,
   r.name as region_name,
   r.code as region_code
 FROM operator_applications oa
@@ -295,31 +424,31 @@ type ListOperatorApplicationsParams struct {
 }
 
 type ListOperatorApplicationsRow struct {
-	ID                     int64              `json:"id"`
-	UserID                 int64              `json:"user_id"`
-	RegionID               int64              `json:"region_id"`
-	Name                   pgtype.Text        `json:"name"`
-	ContactName            pgtype.Text        `json:"contact_name"`
-	ContactPhone           pgtype.Text        `json:"contact_phone"`
-	BusinessLicenseUrl     pgtype.Text        `json:"business_license_url"`
-	BusinessLicenseNumber  pgtype.Text        `json:"business_license_number"`
-	BusinessLicenseOcr     []byte             `json:"business_license_ocr"`
-	LegalPersonName        pgtype.Text        `json:"legal_person_name"`
-	LegalPersonIDNumber    pgtype.Text        `json:"legal_person_id_number"`
-	IDCardFrontUrl         pgtype.Text        `json:"id_card_front_url"`
-	IDCardBackUrl          pgtype.Text        `json:"id_card_back_url"`
-	IDCardFrontOcr         []byte             `json:"id_card_front_ocr"`
-	IDCardBackOcr          []byte             `json:"id_card_back_ocr"`
-	RequestedContractYears int32              `json:"requested_contract_years"`
-	Status                 string             `json:"status"`
-	RejectReason           pgtype.Text        `json:"reject_reason"`
-	ReviewedBy             pgtype.Int8        `json:"reviewed_by"`
-	ReviewedAt             pgtype.Timestamptz `json:"reviewed_at"`
-	CreatedAt              time.Time          `json:"created_at"`
-	UpdatedAt              time.Time          `json:"updated_at"`
-	SubmittedAt            pgtype.Timestamptz `json:"submitted_at"`
-	RegionName             string             `json:"region_name"`
-	RegionCode             string             `json:"region_code"`
+	ID                          int64              `json:"id"`
+	UserID                      int64              `json:"user_id"`
+	RegionID                    int64              `json:"region_id"`
+	Name                        pgtype.Text        `json:"name"`
+	ContactName                 pgtype.Text        `json:"contact_name"`
+	ContactPhone                pgtype.Text        `json:"contact_phone"`
+	BusinessLicenseNumber       pgtype.Text        `json:"business_license_number"`
+	BusinessLicenseOcr          []byte             `json:"business_license_ocr"`
+	LegalPersonName             pgtype.Text        `json:"legal_person_name"`
+	LegalPersonIDNumber         pgtype.Text        `json:"legal_person_id_number"`
+	IDCardFrontOcr              []byte             `json:"id_card_front_ocr"`
+	IDCardBackOcr               []byte             `json:"id_card_back_ocr"`
+	RequestedContractYears      int32              `json:"requested_contract_years"`
+	Status                      string             `json:"status"`
+	RejectReason                pgtype.Text        `json:"reject_reason"`
+	ReviewedBy                  pgtype.Int8        `json:"reviewed_by"`
+	ReviewedAt                  pgtype.Timestamptz `json:"reviewed_at"`
+	CreatedAt                   time.Time          `json:"created_at"`
+	UpdatedAt                   time.Time          `json:"updated_at"`
+	SubmittedAt                 pgtype.Timestamptz `json:"submitted_at"`
+	BusinessLicenseMediaAssetID pgtype.Int8        `json:"business_license_media_asset_id"`
+	IDCardFrontMediaAssetID     pgtype.Int8        `json:"id_card_front_media_asset_id"`
+	IDCardBackMediaAssetID      pgtype.Int8        `json:"id_card_back_media_asset_id"`
+	RegionName                  string             `json:"region_name"`
+	RegionCode                  string             `json:"region_code"`
 }
 
 // 列出所有申请（支持状态筛选）
@@ -339,13 +468,10 @@ func (q *Queries) ListOperatorApplications(ctx context.Context, arg ListOperator
 			&i.Name,
 			&i.ContactName,
 			&i.ContactPhone,
-			&i.BusinessLicenseUrl,
 			&i.BusinessLicenseNumber,
 			&i.BusinessLicenseOcr,
 			&i.LegalPersonName,
 			&i.LegalPersonIDNumber,
-			&i.IDCardFrontUrl,
-			&i.IDCardBackUrl,
 			&i.IDCardFrontOcr,
 			&i.IDCardBackOcr,
 			&i.RequestedContractYears,
@@ -356,6 +482,9 @@ func (q *Queries) ListOperatorApplications(ctx context.Context, arg ListOperator
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.SubmittedAt,
+			&i.BusinessLicenseMediaAssetID,
+			&i.IDCardFrontMediaAssetID,
+			&i.IDCardBackMediaAssetID,
 			&i.RegionName,
 			&i.RegionCode,
 		); err != nil {
@@ -371,13 +500,16 @@ func (q *Queries) ListOperatorApplications(ctx context.Context, arg ListOperator
 
 const listPendingOperatorApplications = `-- name: ListPendingOperatorApplications :many
 SELECT 
-  oa.id, oa.user_id, oa.region_id, oa.name, oa.contact_name, oa.contact_phone, oa.business_license_url, oa.business_license_number, oa.business_license_ocr, oa.legal_person_name, oa.legal_person_id_number, oa.id_card_front_url, oa.id_card_back_url, oa.id_card_front_ocr, oa.id_card_back_ocr, oa.requested_contract_years, oa.status, oa.reject_reason, oa.reviewed_by, oa.reviewed_at, oa.created_at, oa.updated_at, oa.submitted_at,
+  oa.id, oa.user_id, oa.region_id, oa.name, oa.contact_name, oa.contact_phone, oa.business_license_number, oa.business_license_ocr, oa.legal_person_name, oa.legal_person_id_number, oa.id_card_front_ocr, oa.id_card_back_ocr, oa.requested_contract_years, oa.status, oa.reject_reason, oa.reviewed_by, oa.reviewed_at, oa.created_at, oa.updated_at, oa.submitted_at, oa.business_license_media_asset_id, oa.id_card_front_media_asset_id, oa.id_card_back_media_asset_id,
+  u.full_name as applicant_name,
+  u.phone as applicant_phone,
   r.name as region_name,
   r.code as region_code
 FROM operator_applications oa
+LEFT JOIN users u ON u.id = oa.user_id
 JOIN regions r ON r.id = oa.region_id
-WHERE oa.status = 'submitted'
-ORDER BY oa.submitted_at ASC
+WHERE oa.status IN ('submitted', 'approved', 'rejected')
+ORDER BY COALESCE(oa.submitted_at, oa.updated_at, oa.created_at) DESC
 LIMIT $1 OFFSET $2
 `
 
@@ -387,34 +519,36 @@ type ListPendingOperatorApplicationsParams struct {
 }
 
 type ListPendingOperatorApplicationsRow struct {
-	ID                     int64              `json:"id"`
-	UserID                 int64              `json:"user_id"`
-	RegionID               int64              `json:"region_id"`
-	Name                   pgtype.Text        `json:"name"`
-	ContactName            pgtype.Text        `json:"contact_name"`
-	ContactPhone           pgtype.Text        `json:"contact_phone"`
-	BusinessLicenseUrl     pgtype.Text        `json:"business_license_url"`
-	BusinessLicenseNumber  pgtype.Text        `json:"business_license_number"`
-	BusinessLicenseOcr     []byte             `json:"business_license_ocr"`
-	LegalPersonName        pgtype.Text        `json:"legal_person_name"`
-	LegalPersonIDNumber    pgtype.Text        `json:"legal_person_id_number"`
-	IDCardFrontUrl         pgtype.Text        `json:"id_card_front_url"`
-	IDCardBackUrl          pgtype.Text        `json:"id_card_back_url"`
-	IDCardFrontOcr         []byte             `json:"id_card_front_ocr"`
-	IDCardBackOcr          []byte             `json:"id_card_back_ocr"`
-	RequestedContractYears int32              `json:"requested_contract_years"`
-	Status                 string             `json:"status"`
-	RejectReason           pgtype.Text        `json:"reject_reason"`
-	ReviewedBy             pgtype.Int8        `json:"reviewed_by"`
-	ReviewedAt             pgtype.Timestamptz `json:"reviewed_at"`
-	CreatedAt              time.Time          `json:"created_at"`
-	UpdatedAt              time.Time          `json:"updated_at"`
-	SubmittedAt            pgtype.Timestamptz `json:"submitted_at"`
-	RegionName             string             `json:"region_name"`
-	RegionCode             string             `json:"region_code"`
+	ID                          int64              `json:"id"`
+	UserID                      int64              `json:"user_id"`
+	RegionID                    int64              `json:"region_id"`
+	Name                        pgtype.Text        `json:"name"`
+	ContactName                 pgtype.Text        `json:"contact_name"`
+	ContactPhone                pgtype.Text        `json:"contact_phone"`
+	BusinessLicenseNumber       pgtype.Text        `json:"business_license_number"`
+	BusinessLicenseOcr          []byte             `json:"business_license_ocr"`
+	LegalPersonName             pgtype.Text        `json:"legal_person_name"`
+	LegalPersonIDNumber         pgtype.Text        `json:"legal_person_id_number"`
+	IDCardFrontOcr              []byte             `json:"id_card_front_ocr"`
+	IDCardBackOcr               []byte             `json:"id_card_back_ocr"`
+	RequestedContractYears      int32              `json:"requested_contract_years"`
+	Status                      string             `json:"status"`
+	RejectReason                pgtype.Text        `json:"reject_reason"`
+	ReviewedBy                  pgtype.Int8        `json:"reviewed_by"`
+	ReviewedAt                  pgtype.Timestamptz `json:"reviewed_at"`
+	CreatedAt                   time.Time          `json:"created_at"`
+	UpdatedAt                   time.Time          `json:"updated_at"`
+	SubmittedAt                 pgtype.Timestamptz `json:"submitted_at"`
+	BusinessLicenseMediaAssetID pgtype.Int8        `json:"business_license_media_asset_id"`
+	IDCardFrontMediaAssetID     pgtype.Int8        `json:"id_card_front_media_asset_id"`
+	IDCardBackMediaAssetID      pgtype.Int8        `json:"id_card_back_media_asset_id"`
+	ApplicantName               pgtype.Text        `json:"applicant_name"`
+	ApplicantPhone              pgtype.Text        `json:"applicant_phone"`
+	RegionName                  string             `json:"region_name"`
+	RegionCode                  string             `json:"region_code"`
 }
 
-// 列出待审核的申请（平台管理员用）
+// 列出申请（平台管理员用，包含 submitted/approved/rejected）
 func (q *Queries) ListPendingOperatorApplications(ctx context.Context, arg ListPendingOperatorApplicationsParams) ([]ListPendingOperatorApplicationsRow, error) {
 	rows, err := q.db.Query(ctx, listPendingOperatorApplications, arg.Limit, arg.Offset)
 	if err != nil {
@@ -431,13 +565,10 @@ func (q *Queries) ListPendingOperatorApplications(ctx context.Context, arg ListP
 			&i.Name,
 			&i.ContactName,
 			&i.ContactPhone,
-			&i.BusinessLicenseUrl,
 			&i.BusinessLicenseNumber,
 			&i.BusinessLicenseOcr,
 			&i.LegalPersonName,
 			&i.LegalPersonIDNumber,
-			&i.IDCardFrontUrl,
-			&i.IDCardBackUrl,
 			&i.IDCardFrontOcr,
 			&i.IDCardBackOcr,
 			&i.RequestedContractYears,
@@ -448,6 +579,11 @@ func (q *Queries) ListPendingOperatorApplications(ctx context.Context, arg ListP
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.SubmittedAt,
+			&i.BusinessLicenseMediaAssetID,
+			&i.IDCardFrontMediaAssetID,
+			&i.IDCardBackMediaAssetID,
+			&i.ApplicantName,
+			&i.ApplicantPhone,
 			&i.RegionName,
 			&i.RegionCode,
 		); err != nil {
@@ -470,7 +606,7 @@ SET
   reviewed_at = now(),
   updated_at = now()
 WHERE id = $1 AND status = 'submitted'
-RETURNING id, user_id, region_id, name, contact_name, contact_phone, business_license_url, business_license_number, business_license_ocr, legal_person_name, legal_person_id_number, id_card_front_url, id_card_back_url, id_card_front_ocr, id_card_back_ocr, requested_contract_years, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at
+RETURNING id, user_id, region_id, name, contact_name, contact_phone, business_license_number, business_license_ocr, legal_person_name, legal_person_id_number, id_card_front_ocr, id_card_back_ocr, requested_contract_years, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, business_license_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id
 `
 
 type RejectOperatorApplicationParams struct {
@@ -490,13 +626,10 @@ func (q *Queries) RejectOperatorApplication(ctx context.Context, arg RejectOpera
 		&i.Name,
 		&i.ContactName,
 		&i.ContactPhone,
-		&i.BusinessLicenseUrl,
 		&i.BusinessLicenseNumber,
 		&i.BusinessLicenseOcr,
 		&i.LegalPersonName,
 		&i.LegalPersonIDNumber,
-		&i.IDCardFrontUrl,
-		&i.IDCardBackUrl,
 		&i.IDCardFrontOcr,
 		&i.IDCardBackOcr,
 		&i.RequestedContractYears,
@@ -507,6 +640,9 @@ func (q *Queries) RejectOperatorApplication(ctx context.Context, arg RejectOpera
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.SubmittedAt,
+		&i.BusinessLicenseMediaAssetID,
+		&i.IDCardFrontMediaAssetID,
+		&i.IDCardBackMediaAssetID,
 	)
 	return i, err
 }
@@ -518,7 +654,7 @@ SET
   reject_reason = NULL,
   updated_at = now()
 WHERE id = $1 AND status = 'rejected'
-RETURNING id, user_id, region_id, name, contact_name, contact_phone, business_license_url, business_license_number, business_license_ocr, legal_person_name, legal_person_id_number, id_card_front_url, id_card_back_url, id_card_front_ocr, id_card_back_ocr, requested_contract_years, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at
+RETURNING id, user_id, region_id, name, contact_name, contact_phone, business_license_number, business_license_ocr, legal_person_name, legal_person_id_number, id_card_front_ocr, id_card_back_ocr, requested_contract_years, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, business_license_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id
 `
 
 // 重置被拒绝的申请为草稿（允许重新编辑提交）
@@ -532,13 +668,10 @@ func (q *Queries) ResetOperatorApplicationToDraft(ctx context.Context, id int64)
 		&i.Name,
 		&i.ContactName,
 		&i.ContactPhone,
-		&i.BusinessLicenseUrl,
 		&i.BusinessLicenseNumber,
 		&i.BusinessLicenseOcr,
 		&i.LegalPersonName,
 		&i.LegalPersonIDNumber,
-		&i.IDCardFrontUrl,
-		&i.IDCardBackUrl,
 		&i.IDCardFrontOcr,
 		&i.IDCardBackOcr,
 		&i.RequestedContractYears,
@@ -549,6 +682,9 @@ func (q *Queries) ResetOperatorApplicationToDraft(ctx context.Context, id int64)
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.SubmittedAt,
+		&i.BusinessLicenseMediaAssetID,
+		&i.IDCardFrontMediaAssetID,
+		&i.IDCardBackMediaAssetID,
 	)
 	return i, err
 }
@@ -560,7 +696,7 @@ SET
   submitted_at = now(),
   updated_at = now()
 WHERE id = $1 AND status = 'draft'
-RETURNING id, user_id, region_id, name, contact_name, contact_phone, business_license_url, business_license_number, business_license_ocr, legal_person_name, legal_person_id_number, id_card_front_url, id_card_back_url, id_card_front_ocr, id_card_back_ocr, requested_contract_years, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at
+RETURNING id, user_id, region_id, name, contact_name, contact_phone, business_license_number, business_license_ocr, legal_person_name, legal_person_id_number, id_card_front_ocr, id_card_back_ocr, requested_contract_years, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, business_license_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id
 `
 
 // 提交运营商申请（从草稿变为已提交待审核）
@@ -574,13 +710,10 @@ func (q *Queries) SubmitOperatorApplication(ctx context.Context, id int64) (Oper
 		&i.Name,
 		&i.ContactName,
 		&i.ContactPhone,
-		&i.BusinessLicenseUrl,
 		&i.BusinessLicenseNumber,
 		&i.BusinessLicenseOcr,
 		&i.LegalPersonName,
 		&i.LegalPersonIDNumber,
-		&i.IDCardFrontUrl,
-		&i.IDCardBackUrl,
 		&i.IDCardFrontOcr,
 		&i.IDCardBackOcr,
 		&i.RequestedContractYears,
@@ -591,6 +724,9 @@ func (q *Queries) SubmitOperatorApplication(ctx context.Context, id int64) (Oper
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.SubmittedAt,
+		&i.BusinessLicenseMediaAssetID,
+		&i.IDCardFrontMediaAssetID,
+		&i.IDCardBackMediaAssetID,
 	)
 	return i, err
 }
@@ -604,7 +740,7 @@ SET
   requested_contract_years = COALESCE($5, requested_contract_years),
   updated_at = now()
 WHERE id = $1 AND status = 'draft'
-RETURNING id, user_id, region_id, name, contact_name, contact_phone, business_license_url, business_license_number, business_license_ocr, legal_person_name, legal_person_id_number, id_card_front_url, id_card_back_url, id_card_front_ocr, id_card_back_ocr, requested_contract_years, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at
+RETURNING id, user_id, region_id, name, contact_name, contact_phone, business_license_number, business_license_ocr, legal_person_name, legal_person_id_number, id_card_front_ocr, id_card_back_ocr, requested_contract_years, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, business_license_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id
 `
 
 type UpdateOperatorApplicationBasicInfoParams struct {
@@ -632,13 +768,10 @@ func (q *Queries) UpdateOperatorApplicationBasicInfo(ctx context.Context, arg Up
 		&i.Name,
 		&i.ContactName,
 		&i.ContactPhone,
-		&i.BusinessLicenseUrl,
 		&i.BusinessLicenseNumber,
 		&i.BusinessLicenseOcr,
 		&i.LegalPersonName,
 		&i.LegalPersonIDNumber,
-		&i.IDCardFrontUrl,
-		&i.IDCardBackUrl,
 		&i.IDCardFrontOcr,
 		&i.IDCardBackOcr,
 		&i.RequestedContractYears,
@@ -649,6 +782,9 @@ func (q *Queries) UpdateOperatorApplicationBasicInfo(ctx context.Context, arg Up
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.SubmittedAt,
+		&i.BusinessLicenseMediaAssetID,
+		&i.IDCardFrontMediaAssetID,
+		&i.IDCardBackMediaAssetID,
 	)
 	return i, err
 }
@@ -656,28 +792,28 @@ func (q *Queries) UpdateOperatorApplicationBasicInfo(ctx context.Context, arg Up
 const updateOperatorApplicationBusinessLicense = `-- name: UpdateOperatorApplicationBusinessLicense :one
 UPDATE operator_applications
 SET
-  business_license_url = COALESCE($2, business_license_url),
+  business_license_media_asset_id = COALESCE($2, business_license_media_asset_id),
   business_license_number = COALESCE($3, business_license_number),
   business_license_ocr = COALESCE($4, business_license_ocr),
   name = COALESCE($5, name),
   updated_at = now()
 WHERE id = $1 AND status = 'draft'
-RETURNING id, user_id, region_id, name, contact_name, contact_phone, business_license_url, business_license_number, business_license_ocr, legal_person_name, legal_person_id_number, id_card_front_url, id_card_back_url, id_card_front_ocr, id_card_back_ocr, requested_contract_years, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at
+RETURNING id, user_id, region_id, name, contact_name, contact_phone, business_license_number, business_license_ocr, legal_person_name, legal_person_id_number, id_card_front_ocr, id_card_back_ocr, requested_contract_years, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, business_license_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id
 `
 
 type UpdateOperatorApplicationBusinessLicenseParams struct {
-	ID                    int64       `json:"id"`
-	BusinessLicenseUrl    pgtype.Text `json:"business_license_url"`
-	BusinessLicenseNumber pgtype.Text `json:"business_license_number"`
-	BusinessLicenseOcr    []byte      `json:"business_license_ocr"`
-	Name                  pgtype.Text `json:"name"`
+	ID                          int64       `json:"id"`
+	BusinessLicenseMediaAssetID pgtype.Int8 `json:"business_license_media_asset_id"`
+	BusinessLicenseNumber       pgtype.Text `json:"business_license_number"`
+	BusinessLicenseOcr          []byte      `json:"business_license_ocr"`
+	Name                        pgtype.Text `json:"name"`
 }
 
 // 更新营业执照信息（图片URL、执照号和OCR结果）
 func (q *Queries) UpdateOperatorApplicationBusinessLicense(ctx context.Context, arg UpdateOperatorApplicationBusinessLicenseParams) (OperatorApplication, error) {
 	row := q.db.QueryRow(ctx, updateOperatorApplicationBusinessLicense,
 		arg.ID,
-		arg.BusinessLicenseUrl,
+		arg.BusinessLicenseMediaAssetID,
 		arg.BusinessLicenseNumber,
 		arg.BusinessLicenseOcr,
 		arg.Name,
@@ -690,13 +826,10 @@ func (q *Queries) UpdateOperatorApplicationBusinessLicense(ctx context.Context, 
 		&i.Name,
 		&i.ContactName,
 		&i.ContactPhone,
-		&i.BusinessLicenseUrl,
 		&i.BusinessLicenseNumber,
 		&i.BusinessLicenseOcr,
 		&i.LegalPersonName,
 		&i.LegalPersonIDNumber,
-		&i.IDCardFrontUrl,
-		&i.IDCardBackUrl,
 		&i.IDCardFrontOcr,
 		&i.IDCardBackOcr,
 		&i.RequestedContractYears,
@@ -707,6 +840,9 @@ func (q *Queries) UpdateOperatorApplicationBusinessLicense(ctx context.Context, 
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.SubmittedAt,
+		&i.BusinessLicenseMediaAssetID,
+		&i.IDCardFrontMediaAssetID,
+		&i.IDCardBackMediaAssetID,
 	)
 	return i, err
 }
@@ -714,22 +850,22 @@ func (q *Queries) UpdateOperatorApplicationBusinessLicense(ctx context.Context, 
 const updateOperatorApplicationIDCardBack = `-- name: UpdateOperatorApplicationIDCardBack :one
 UPDATE operator_applications
 SET
-  id_card_back_url = COALESCE($2, id_card_back_url),
+  id_card_back_media_asset_id = COALESCE($2, id_card_back_media_asset_id),
   id_card_back_ocr = COALESCE($3, id_card_back_ocr),
   updated_at = now()
 WHERE id = $1 AND status = 'draft'
-RETURNING id, user_id, region_id, name, contact_name, contact_phone, business_license_url, business_license_number, business_license_ocr, legal_person_name, legal_person_id_number, id_card_front_url, id_card_back_url, id_card_front_ocr, id_card_back_ocr, requested_contract_years, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at
+RETURNING id, user_id, region_id, name, contact_name, contact_phone, business_license_number, business_license_ocr, legal_person_name, legal_person_id_number, id_card_front_ocr, id_card_back_ocr, requested_contract_years, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, business_license_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id
 `
 
 type UpdateOperatorApplicationIDCardBackParams struct {
-	ID            int64       `json:"id"`
-	IDCardBackUrl pgtype.Text `json:"id_card_back_url"`
-	IDCardBackOcr []byte      `json:"id_card_back_ocr"`
+	ID                     int64       `json:"id"`
+	IDCardBackMediaAssetID pgtype.Int8 `json:"id_card_back_media_asset_id"`
+	IDCardBackOcr          []byte      `json:"id_card_back_ocr"`
 }
 
 // 更新身份证背面信息（图片URL和OCR结果）
 func (q *Queries) UpdateOperatorApplicationIDCardBack(ctx context.Context, arg UpdateOperatorApplicationIDCardBackParams) (OperatorApplication, error) {
-	row := q.db.QueryRow(ctx, updateOperatorApplicationIDCardBack, arg.ID, arg.IDCardBackUrl, arg.IDCardBackOcr)
+	row := q.db.QueryRow(ctx, updateOperatorApplicationIDCardBack, arg.ID, arg.IDCardBackMediaAssetID, arg.IDCardBackOcr)
 	var i OperatorApplication
 	err := row.Scan(
 		&i.ID,
@@ -738,13 +874,10 @@ func (q *Queries) UpdateOperatorApplicationIDCardBack(ctx context.Context, arg U
 		&i.Name,
 		&i.ContactName,
 		&i.ContactPhone,
-		&i.BusinessLicenseUrl,
 		&i.BusinessLicenseNumber,
 		&i.BusinessLicenseOcr,
 		&i.LegalPersonName,
 		&i.LegalPersonIDNumber,
-		&i.IDCardFrontUrl,
-		&i.IDCardBackUrl,
 		&i.IDCardFrontOcr,
 		&i.IDCardBackOcr,
 		&i.RequestedContractYears,
@@ -755,6 +888,9 @@ func (q *Queries) UpdateOperatorApplicationIDCardBack(ctx context.Context, arg U
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.SubmittedAt,
+		&i.BusinessLicenseMediaAssetID,
+		&i.IDCardFrontMediaAssetID,
+		&i.IDCardBackMediaAssetID,
 	)
 	return i, err
 }
@@ -762,28 +898,28 @@ func (q *Queries) UpdateOperatorApplicationIDCardBack(ctx context.Context, arg U
 const updateOperatorApplicationIDCardFront = `-- name: UpdateOperatorApplicationIDCardFront :one
 UPDATE operator_applications
 SET
-  id_card_front_url = COALESCE($2, id_card_front_url),
+  id_card_front_media_asset_id = COALESCE($2, id_card_front_media_asset_id),
   legal_person_name = COALESCE($3, legal_person_name),
   legal_person_id_number = COALESCE($4, legal_person_id_number),
   id_card_front_ocr = COALESCE($5, id_card_front_ocr),
   updated_at = now()
 WHERE id = $1 AND status = 'draft'
-RETURNING id, user_id, region_id, name, contact_name, contact_phone, business_license_url, business_license_number, business_license_ocr, legal_person_name, legal_person_id_number, id_card_front_url, id_card_back_url, id_card_front_ocr, id_card_back_ocr, requested_contract_years, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at
+RETURNING id, user_id, region_id, name, contact_name, contact_phone, business_license_number, business_license_ocr, legal_person_name, legal_person_id_number, id_card_front_ocr, id_card_back_ocr, requested_contract_years, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, business_license_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id
 `
 
 type UpdateOperatorApplicationIDCardFrontParams struct {
-	ID                  int64       `json:"id"`
-	IDCardFrontUrl      pgtype.Text `json:"id_card_front_url"`
-	LegalPersonName     pgtype.Text `json:"legal_person_name"`
-	LegalPersonIDNumber pgtype.Text `json:"legal_person_id_number"`
-	IDCardFrontOcr      []byte      `json:"id_card_front_ocr"`
+	ID                      int64       `json:"id"`
+	IDCardFrontMediaAssetID pgtype.Int8 `json:"id_card_front_media_asset_id"`
+	LegalPersonName         pgtype.Text `json:"legal_person_name"`
+	LegalPersonIDNumber     pgtype.Text `json:"legal_person_id_number"`
+	IDCardFrontOcr          []byte      `json:"id_card_front_ocr"`
 }
 
 // 更新身份证正面信息（图片URL、姓名、身份证号和OCR结果）
 func (q *Queries) UpdateOperatorApplicationIDCardFront(ctx context.Context, arg UpdateOperatorApplicationIDCardFrontParams) (OperatorApplication, error) {
 	row := q.db.QueryRow(ctx, updateOperatorApplicationIDCardFront,
 		arg.ID,
-		arg.IDCardFrontUrl,
+		arg.IDCardFrontMediaAssetID,
 		arg.LegalPersonName,
 		arg.LegalPersonIDNumber,
 		arg.IDCardFrontOcr,
@@ -796,13 +932,10 @@ func (q *Queries) UpdateOperatorApplicationIDCardFront(ctx context.Context, arg 
 		&i.Name,
 		&i.ContactName,
 		&i.ContactPhone,
-		&i.BusinessLicenseUrl,
 		&i.BusinessLicenseNumber,
 		&i.BusinessLicenseOcr,
 		&i.LegalPersonName,
 		&i.LegalPersonIDNumber,
-		&i.IDCardFrontUrl,
-		&i.IDCardBackUrl,
 		&i.IDCardFrontOcr,
 		&i.IDCardBackOcr,
 		&i.RequestedContractYears,
@@ -813,6 +946,9 @@ func (q *Queries) UpdateOperatorApplicationIDCardFront(ctx context.Context, arg 
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.SubmittedAt,
+		&i.BusinessLicenseMediaAssetID,
+		&i.IDCardFrontMediaAssetID,
+		&i.IDCardBackMediaAssetID,
 	)
 	return i, err
 }
@@ -823,7 +959,7 @@ SET
   region_id = $2,
   updated_at = now()
 WHERE id = $1 AND status = 'draft'
-RETURNING id, user_id, region_id, name, contact_name, contact_phone, business_license_url, business_license_number, business_license_ocr, legal_person_name, legal_person_id_number, id_card_front_url, id_card_back_url, id_card_front_ocr, id_card_back_ocr, requested_contract_years, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at
+RETURNING id, user_id, region_id, name, contact_name, contact_phone, business_license_number, business_license_ocr, legal_person_name, legal_person_id_number, id_card_front_ocr, id_card_back_ocr, requested_contract_years, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, business_license_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id
 `
 
 type UpdateOperatorApplicationRegionParams struct {
@@ -842,13 +978,10 @@ func (q *Queries) UpdateOperatorApplicationRegion(ctx context.Context, arg Updat
 		&i.Name,
 		&i.ContactName,
 		&i.ContactPhone,
-		&i.BusinessLicenseUrl,
 		&i.BusinessLicenseNumber,
 		&i.BusinessLicenseOcr,
 		&i.LegalPersonName,
 		&i.LegalPersonIDNumber,
-		&i.IDCardFrontUrl,
-		&i.IDCardBackUrl,
 		&i.IDCardFrontOcr,
 		&i.IDCardBackOcr,
 		&i.RequestedContractYears,
@@ -859,6 +992,9 @@ func (q *Queries) UpdateOperatorApplicationRegion(ctx context.Context, arg Updat
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.SubmittedAt,
+		&i.BusinessLicenseMediaAssetID,
+		&i.IDCardFrontMediaAssetID,
+		&i.IDCardBackMediaAssetID,
 	)
 	return i, err
 }

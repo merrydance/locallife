@@ -85,7 +85,7 @@ export class ProductService {
         return await request({
             url: '/v1/merchant/products',
             method: 'POST',
-            data: data as any
+            data
         })
     }
 
@@ -97,7 +97,7 @@ export class ProductService {
         return await request({
             url: `/v1/merchant/products/${id}`,
             method: 'PUT',
-            data: data as any
+            data
         })
     }
 

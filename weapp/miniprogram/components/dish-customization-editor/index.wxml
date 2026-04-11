@@ -1,0 +1,34 @@
+<view class="spec-editor">
+  <view wx:if="{{!internalGroups.length}}" class="spec-editor__empty inline-note-card">
+    <text>还没有规格组</text>
+    <text>点击上方新增规格组开始添加</text>
+  </view>
+
+  <view wx:for="{{internalGroups}}" wx:key="key" wx:for-item="group" wx:for-index="groupIndex" class="spec-group-card">
+    <view class="spec-group-card__header">
+      <t-input
+        t-class="spec-group-card__name-input"
+        custom-style="--td-input-vertical-padding: 18rpx;"
+        borderless="{{false}}"
+        size="small"
+        placeholder="规格组名称，例如：辣度 / 加料"
+        value="{{group.name}}"
+        data-group-index="{{groupIndex}}"
+        bind:change="onGroupNameChange"
+      />
+      <view class="spec-group-card__actions">
+        <t-button
+          t-class="spec-group-card__action-button"
+          size="small"
+          shape="circle"
+          theme="danger"
+          icon="remove"
+          data-group-index="{{groupIndex}}"
+          bind:tap="onRemoveGroup"
+        />
+      </view>
+    </view>
+
+    <customization-options value="{{group.options}}" data-group-index="{{groupIndex}}" bind:change="onOptionsChange" />
+  </view>
+</view>

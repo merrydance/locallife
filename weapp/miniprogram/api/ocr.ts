@@ -4,7 +4,9 @@
  * 支持商户、骑手、运营商三种角色
  */
 
-import { uploadFile } from '../utils/request'
+import { uploadMedia } from '../utils/media'
+import { request } from '../utils/request'
+import { enqueueOCRJobAndRefresh } from './ocr-jobs'
 
 // ==================== 类型定义 ====================
 
@@ -54,72 +56,112 @@ export interface OCRResponse {
 
 // OCR上传返回结果，包含完整申请数据和OCR结果
 export interface OCRUploadResult {
-  applicationData: any          // 完整的申请数据（用于刷新页面）
+  applicationData: Record<string, unknown> // 完整的申请数据（用于刷新页面）
   ocrData: OCRResponse          // OCR识别结果
+}
+
+type OCRPayload = Record<string, unknown>
+
+interface OCRNestedPayload extends OCRPayload {
+  business_license_ocr?: OCRResponse
+  id_card_front_ocr?: OCRResponse
+  id_card_back_ocr?: OCRResponse
+  food_permit_ocr?: OCRResponse
+  id_card_ocr?: OCRResponse
+  health_cert_ocr?: OCRResponse
+}
+
+function toOCRResponse(payload: unknown): OCRResponse {
+  return payload as OCRResponse
 }
 
 // ==================== 角色端点映射 ====================
 
 const API_ENDPOINTS = {
   merchant: {
-    license: '/v1/merchant/application/license/ocr',
-    idcard: '/v1/merchant/application/idcard/ocr',
-    foodpermit: '/v1/merchant/application/foodpermit/ocr'
+    application: '/v1/merchant/application'
   },
   rider: {
-    idcard: '/v1/rider/application/idcard/ocr',
-    healthcert: '/v1/rider/application/healthcert'
+    application: '/v1/rider/application'
   },
   operator: {
-    license: '/v1/operator/application/license/ocr',
-    idcard: '/v1/operator/application/idcard/ocr'
+    application: '/v1/operator/application'
   }
 }
 
-// ==================== 证照上传功能 ====================
+interface OCRJobResponse {
+  ocr_job_id: number
+  status: string
+}
 
-/**
- * 通用文件上传（multipart/form-data）
- * @param url API路径
- * @param filePath 本地文件路径
- * @param formData 附加表单数据（如 side 参数）
- */
-function uploadOCR(url: string, filePath: string, formData: any = {}): Promise<any> {
-  return uploadFile(filePath, url, 'image', formData)
+async function uploadMerchantApplicationOCR(
+  filePath: string,
+  mediaCategory: 'business_license' | 'food_permit' | 'id_card_front' | 'id_card_back',
+  documentType: 'business_license' | 'food_permit' | 'id_card',
+  side?: 'Front' | 'Back'
+): Promise<OCRPayload> {
+  const { mediaId } = await uploadMedia(filePath, {
+    businessType: 'merchant',
+    mediaCategory
+  })
+
+  const draft = await request<{ id: number }>({
+    url: API_ENDPOINTS.merchant.application,
+    method: 'GET'
+  })
+
+  await request<OCRJobResponse>({
+    url: '/v1/ocr/jobs',
+    method: 'POST',
+    data: {
+      document_type: documentType,
+      media_asset_id: mediaId,
+      owner_type: 'merchant_application',
+      owner_id: draft.id,
+      side: side ? side.toLowerCase() : undefined
+    }
+  })
+
+  return request<OCRPayload>({
+    url: API_ENDPOINTS.merchant.application,
+    method: 'GET'
+  })
 }
 
 // ==================== 商户 OCR 接口 ====================
 
 /**
  * 商户营业执照OCR
- * POST /v1/merchant/application/license/ocr
+ * 统一走 POST /v1/ocr/jobs，owner_type=merchant_application，document_type=business_license
  */
 export function ocrBusinessLicense(filePath: string): Promise<OCRUploadResult> {
-  return uploadOCR(API_ENDPOINTS.merchant.license, filePath)
-    .then((res: any) => {
-      console.log('[OCR] Merchant Business License Response:', JSON.stringify(res))
+  return uploadMerchantApplicationOCR(filePath, 'business_license', 'business_license')
+    .then((res: OCRNestedPayload) => {
       return {
         applicationData: res,
-        ocrData: res.business_license_ocr || res
+        ocrData: toOCRResponse(res.business_license_ocr || res)
       }
     })
 }
 
 /**
  * 商户身份证OCR
- * POST /v1/merchant/application/idcard/ocr
+ * 统一走 POST /v1/ocr/jobs，owner_type=merchant_application，document_type=id_card
  * @param filePath 本地文件路径
  * @param side 'front' (正面/Front) 或 'back' (背面/Back)
  */
 export function ocrIdCard(filePath: string, side: 'front' | 'back' = 'front'): Promise<OCRUploadResult> {
-  // 商户接口使用 "Front"/"Back" 首字母大写
   const capitalizedSide = side === 'front' ? 'Front' : 'Back'
-  return uploadOCR(API_ENDPOINTS.merchant.idcard, filePath, { side: capitalizedSide })
-    .then((res: any) => {
-      console.log(`[OCR] Merchant ID Card ${side} Response:`, JSON.stringify(res))
+  return uploadMerchantApplicationOCR(
+    filePath,
+    side === 'front' ? 'id_card_front' : 'id_card_back',
+    'id_card',
+    capitalizedSide
+  )
+    .then((res: OCRNestedPayload) => {
       const ocrData = side === 'front'
-        ? (res.id_card_front_ocr || res)
-        : (res.id_card_back_ocr || res)
+        ? toOCRResponse(res.id_card_front_ocr || res)
+        : toOCRResponse(res.id_card_back_ocr || res)
       return {
         applicationData: res,
         ocrData
@@ -129,15 +171,14 @@ export function ocrIdCard(filePath: string, side: 'front' | 'back' = 'front'): P
 
 /**
  * 商户食品经营许可证OCR
- * POST /v1/merchant/application/foodpermit/ocr
+ * 统一走 POST /v1/ocr/jobs，owner_type=merchant_application，document_type=food_permit
  */
 export function ocrFoodLicense(filePath: string): Promise<OCRUploadResult> {
-  return uploadOCR(API_ENDPOINTS.merchant.foodpermit, filePath)
-    .then((res: any) => {
-      console.log('[OCR] Merchant Food License Response:', JSON.stringify(res))
+  return uploadMerchantApplicationOCR(filePath, 'food_permit', 'food_permit')
+    .then((res: OCRNestedPayload) => {
       return {
         applicationData: res,
-        ocrData: res.food_permit_ocr || res
+        ocrData: toOCRResponse(res.food_permit_ocr || res)
       }
     })
 }
@@ -146,34 +187,74 @@ export function ocrFoodLicense(filePath: string): Promise<OCRUploadResult> {
 
 /**
  * 骑手身份证OCR
- * POST /v1/rider/application/idcard/ocr
+ * 统一走 POST /v1/ocr/jobs，owner_type=rider_application，document_type=id_card
  * @param filePath 本地文件路径
  * @param side 'front' (正面) 或 'back' (背面)
  */
 export function ocrRiderIdCard(filePath: string, side: 'front' | 'back' = 'front'): Promise<OCRUploadResult> {
-  // 骑手接口使用小写 "front"/"back"
-  return uploadOCR(API_ENDPOINTS.rider.idcard, filePath, { side })
-    .then((res: any) => {
-      console.log(`[OCR] Rider ID Card ${side} Response:`, JSON.stringify(res))
+  return uploadMedia(filePath, {
+    businessType: 'rider',
+    mediaCategory: side === 'front' ? 'id_card_front' : 'id_card_back'
+  })
+    .then(async ({ mediaId }) => {
+      const draft = await request<{ id: number }>({
+        url: API_ENDPOINTS.rider.application,
+        method: 'GET'
+      })
+      return enqueueOCRJobAndRefresh(
+        {
+          document_type: 'id_card',
+          media_asset_id: mediaId,
+          owner_type: 'rider_application',
+          owner_id: draft.id,
+          side
+        },
+        () => request<OCRNestedPayload>({
+          url: API_ENDPOINTS.rider.application,
+          method: 'GET'
+        })
+      )
+    })
+    .then((res: OCRNestedPayload) => {
       const ocrData = res.id_card_ocr || res
       return {
         applicationData: res,
-        ocrData
+        ocrData: toOCRResponse(ocrData)
       }
     })
 }
 
 /**
  * 骑手健康证上传
- * POST /v1/rider/application/healthcert
+ * 统一走 POST /v1/ocr/jobs，owner_type=rider_application，document_type=health_cert
  */
 export function ocrRiderHealthCert(filePath: string): Promise<OCRUploadResult> {
-  return uploadOCR(API_ENDPOINTS.rider.healthcert, filePath)
-    .then((res: any) => {
-      console.log('[OCR] Rider Health Cert Response:', JSON.stringify(res))
+  return uploadMedia(filePath, {
+    businessType: 'rider',
+    mediaCategory: 'health_cert'
+  })
+    .then(async ({ mediaId }) => {
+      const draft = await request<{ id: number }>({
+        url: API_ENDPOINTS.rider.application,
+        method: 'GET'
+      })
+      return enqueueOCRJobAndRefresh(
+        {
+          document_type: 'health_cert',
+          media_asset_id: mediaId,
+          owner_type: 'rider_application',
+          owner_id: draft.id
+        },
+        () => request<OCRNestedPayload>({
+          url: API_ENDPOINTS.rider.application,
+          method: 'GET'
+        })
+      )
+    })
+    .then((res: OCRNestedPayload) => {
       return {
         applicationData: res,
-        ocrData: res.health_cert_ocr || res
+        ocrData: toOCRResponse(res.health_cert_ocr || res)
       }
     })
 }
@@ -182,34 +263,73 @@ export function ocrRiderHealthCert(filePath: string): Promise<OCRUploadResult> {
 
 /**
  * 运营商营业执照OCR
- * POST /v1/operator/application/license/ocr
+ * 统一走 POST /v1/ocr/jobs，owner_type=operator_application，document_type=business_license
  */
 export function ocrOperatorBusinessLicense(filePath: string): Promise<OCRUploadResult> {
-  return uploadOCR(API_ENDPOINTS.operator.license, filePath)
-    .then((res: any) => {
-      console.log('[OCR] Operator Business License Response:', JSON.stringify(res))
+  return uploadMedia(filePath, {
+    businessType: 'operator',
+    mediaCategory: 'business_license'
+  })
+    .then(async ({ mediaId }) => {
+      const draft = await request<{ id: number }>({
+        url: API_ENDPOINTS.operator.application,
+        method: 'GET'
+      })
+      return enqueueOCRJobAndRefresh(
+        {
+          document_type: 'business_license',
+          media_asset_id: mediaId,
+          owner_type: 'operator_application',
+          owner_id: draft.id
+        },
+        () => request<OCRNestedPayload>({
+          url: API_ENDPOINTS.operator.application,
+          method: 'GET'
+        })
+      )
+    })
+    .then((res: OCRNestedPayload) => {
       return {
         applicationData: res,
-        ocrData: res.business_license_ocr || res
+        ocrData: toOCRResponse(res.business_license_ocr || res)
       }
     })
 }
 
 /**
  * 运营商身份证OCR
- * POST /v1/operator/application/idcard/ocr
+ * 统一走 POST /v1/ocr/jobs，owner_type=operator_application，document_type=id_card
  * @param filePath 本地文件路径
  * @param side 'front' (正面/Front) 或 'back' (背面/Back)
  */
 export function ocrOperatorIdCard(filePath: string, side: 'front' | 'back' = 'front'): Promise<OCRUploadResult> {
-  // 运营商接口使用 "Front"/"Back" 首字母大写
-  const capitalizedSide = side === 'front' ? 'Front' : 'Back'
-  return uploadOCR(API_ENDPOINTS.operator.idcard, filePath, { side: capitalizedSide })
-    .then((res: any) => {
-      console.log(`[OCR] Operator ID Card ${side} Response:`, JSON.stringify(res))
+  return uploadMedia(filePath, {
+    businessType: 'operator',
+    mediaCategory: side === 'front' ? 'id_card_front' : 'id_card_back'
+  })
+    .then(async ({ mediaId }) => {
+      const draft = await request<{ id: number }>({
+        url: API_ENDPOINTS.operator.application,
+        method: 'GET'
+      })
+      return enqueueOCRJobAndRefresh(
+        {
+          document_type: 'id_card',
+          media_asset_id: mediaId,
+          owner_type: 'operator_application',
+          owner_id: draft.id,
+          side
+        },
+        () => request<OCRNestedPayload>({
+          url: API_ENDPOINTS.operator.application,
+          method: 'GET'
+        })
+      )
+    })
+    .then((res: OCRNestedPayload) => {
       const ocrData = side === 'front'
-        ? (res.id_card_front_ocr || res)
-        : (res.id_card_back_ocr || res)
+        ? toOCRResponse(res.id_card_front_ocr || res)
+        : toOCRResponse(res.id_card_back_ocr || res)
       return {
         applicationData: res,
         ocrData

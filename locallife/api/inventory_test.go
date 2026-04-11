@@ -2,7 +2,6 @@ package api
 
 import (
 	"bytes"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -62,10 +61,7 @@ func TestCreateDailyInventoryAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					CreateDailyInventory(gomock.Any(), gomock.Any()).
@@ -73,7 +69,7 @@ func TestCreateDailyInventoryAPI(t *testing.T) {
 					Return(inventory, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
+				require.Equal(t, http.StatusCreated, recorder.Code)
 			},
 		},
 		{
@@ -87,9 +83,7 @@ func TestCreateDailyInventoryAPI(t *testing.T) {
 				// No authorization
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Any()).
-					Times(0)
+				expectNoMerchantAccessResolution(store)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusUnauthorized, recorder.Code)
@@ -106,9 +100,7 @@ func TestCreateDailyInventoryAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Any()).
-					Times(0)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -181,10 +173,7 @@ func TestListDailyInventoryAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					ListDailyInventoryByMerchant(gomock.Any(), gomock.Any()).
@@ -202,9 +191,7 @@ func TestListDailyInventoryAPI(t *testing.T) {
 				// No authorization
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Any()).
-					Times(0)
+				expectNoMerchantAccessResolution(store)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusUnauthorized, recorder.Code)
@@ -217,9 +204,7 @@ func TestListDailyInventoryAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Any()).
-					Times(0)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -280,10 +265,7 @@ func TestUpdateDailyInventoryAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					GetDailyInventory(gomock.Any(), gomock.Any()).
@@ -310,16 +292,14 @@ func TestUpdateDailyInventoryAPI(t *testing.T) {
 				// No authorization
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Any()).
-					Times(0)
+				expectNoMerchantAccessResolution(store)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusUnauthorized, recorder.Code)
 			},
 		},
 		{
-			name: "NotFound",
+			name: "CreateWhenMissing",
 			body: gin.H{
 				"dish_id":        dishID,
 				"date":           "2025-11-25",
@@ -329,18 +309,30 @@ func TestUpdateDailyInventoryAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchant, nil)
+				dish := randomDish(merchant.ID, nil)
+				dish.ID = dishID
+				createdInventory := randomDailyInventory(merchant.ID, dishID)
+				createdInventory.TotalQuantity = 200
+
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					GetDailyInventory(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.DailyInventory{}, sql.ErrNoRows)
+					Return(db.DailyInventory{}, db.ErrRecordNotFound)
+
+				store.EXPECT().
+					GetDish(gomock.Any(), gomock.Eq(dishID)).
+					Times(1).
+					Return(dish, nil)
+
+				store.EXPECT().
+					CreateDailyInventory(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(createdInventory, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusNotFound, recorder.Code)
+				require.Equal(t, http.StatusOK, recorder.Code)
 			},
 		},
 	}
@@ -396,10 +388,7 @@ func TestCheckAndDecrementInventoryAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				inventory := randomDailyInventory(merchant.ID, 1)
 				store.EXPECT().
@@ -422,9 +411,7 @@ func TestCheckAndDecrementInventoryAPI(t *testing.T) {
 				// No authorization
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Any()).
-					Times(0)
+				expectNoMerchantAccessResolution(store)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusUnauthorized, recorder.Code)
@@ -441,22 +428,19 @@ func TestCheckAndDecrementInventoryAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				// CheckAndDecrementInventory返回ErrNoRows表示没有库存记录
 				store.EXPECT().
 					CheckAndDecrementInventory(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.DailyInventory{}, sql.ErrNoRows)
+					Return(db.DailyInventory{}, db.ErrRecordNotFound)
 
 				// GetDailyInventory也返回ErrNoRows表示无限库存
 				store.EXPECT().
 					GetDailyInventory(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.DailyInventory{}, sql.ErrNoRows)
+					Return(db.DailyInventory{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -473,16 +457,13 @@ func TestCheckAndDecrementInventoryAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				// CheckAndDecrementInventory返回ErrNoRows表示库存不足
 				store.EXPECT().
 					CheckAndDecrementInventory(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.DailyInventory{}, sql.ErrNoRows)
+					Return(db.DailyInventory{}, db.ErrRecordNotFound)
 
 				// GetDailyInventory返回库存记录，说明是库存不足而非无限库存
 				existingInventory := db.DailyInventory{
@@ -501,8 +482,7 @@ func TestCheckAndDecrementInventoryAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				// Verify response indicates insufficient inventory
 				var response checkInventoryResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.False(t, response.Available)
 				require.Equal(t, int32(20), response.CurrentStock) // 50 - 30 = 20
 				require.Equal(t, "insufficient inventory", response.Message)
@@ -519,9 +499,7 @@ func TestCheckAndDecrementInventoryAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Any()).
-					Times(0)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -583,10 +561,7 @@ func TestGetInventoryStatsAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					GetInventoryStats(gomock.Any(), gomock.Any()).
@@ -604,9 +579,7 @@ func TestGetInventoryStatsAPI(t *testing.T) {
 				// No authorization
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Any()).
-					Times(0)
+				expectNoMerchantAccessResolution(store)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusUnauthorized, recorder.Code)
@@ -619,9 +592,7 @@ func TestGetInventoryStatsAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Any()).
-					Times(0)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -683,10 +654,7 @@ func TestUpdateSingleInventoryAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					GetDailyInventory(gomock.Any(), gomock.Any()).
@@ -713,9 +681,7 @@ func TestUpdateSingleInventoryAPI(t *testing.T) {
 				// No authorization
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Any()).
-					Times(0)
+				expectNoMerchantAccessResolution(store)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusUnauthorized, recorder.Code)
@@ -732,16 +698,14 @@ func TestUpdateSingleInventoryAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Any()).
-					Times(0)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
 			},
 		},
 		{
-			name:   "NotFound",
+			name:   "CreateWhenMissing",
 			dishID: dishID,
 			body: gin.H{
 				"date":           "2025-11-25",
@@ -751,18 +715,30 @@ func TestUpdateSingleInventoryAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchant, nil)
+				dish := randomDish(merchant.ID, nil)
+				dish.ID = dishID
+				createdInventory := randomDailyInventory(merchant.ID, dishID)
+				createdInventory.TotalQuantity = 200
+
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					GetDailyInventory(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.DailyInventory{}, sql.ErrNoRows)
+					Return(db.DailyInventory{}, db.ErrRecordNotFound)
+
+				store.EXPECT().
+					GetDish(gomock.Any(), gomock.Eq(dishID)).
+					Times(1).
+					Return(dish, nil)
+
+				store.EXPECT().
+					CreateDailyInventory(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(createdInventory, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusNotFound, recorder.Code)
+				require.Equal(t, http.StatusOK, recorder.Code)
 			},
 		},
 		{
@@ -776,9 +752,7 @@ func TestUpdateSingleInventoryAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Any()).
-					Times(0)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)

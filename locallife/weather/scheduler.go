@@ -2,7 +2,10 @@ package weather
 
 import (
 	"context"
+	"errors"
 	"strconv"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -14,18 +17,33 @@ import (
 // Scheduler 天气数据定时抓取调度器
 type Scheduler struct {
 	cron          *cron.Cron
+	wg            sync.WaitGroup
+	stopCtx       context.Context
+	stopCancel    context.CancelFunc
 	store         db.Store
 	weatherClient QweatherClient
 	cache         WeatherCache
+	invalidRegion map[int64]time.Time
+	invalidMu     sync.RWMutex
+	runMu         sync.Mutex
 }
+
+var errWeatherNoSuchLocation = errors.New("weather: no such location")
 
 // NewScheduler 创建调度器
 func NewScheduler(store db.Store, weatherClient QweatherClient, cache WeatherCache) *Scheduler {
+	stopCtx, stopCancel := context.WithCancel(context.Background())
 	return &Scheduler{
-		cron:          cron.New(),
+		cron: cron.New(cron.WithChain(
+			cron.SkipIfStillRunning(cron.DefaultLogger),
+			cron.Recover(cron.DefaultLogger),
+		)),
+		stopCtx:       stopCtx,
+		stopCancel:    stopCancel,
 		store:         store,
 		weatherClient: weatherClient,
 		cache:         cache,
+		invalidRegion: make(map[int64]time.Time),
 	}
 }
 
@@ -33,12 +51,7 @@ func NewScheduler(store db.Store, weatherClient QweatherClient, cache WeatherCac
 func (s *Scheduler) Start() error {
 	// 每15分钟执行一次
 	_, err := s.cron.AddFunc("*/15 * * * *", func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-		defer cancel()
-
-		if err := s.FetchAllWeather(ctx); err != nil {
-			log.Error().Err(err).Msg("failed to fetch weather data")
-		}
+		s.runOnce(s.stopCtx)
 	})
 	if err != nil {
 		return err
@@ -47,14 +60,10 @@ func (s *Scheduler) Start() error {
 	s.cron.Start()
 	log.Info().Msg("weather scheduler started (every 15 minutes)")
 
-	// 启动时立即执行一次
+	s.wg.Add(1)
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-		defer cancel()
-
-		if err := s.FetchAllWeather(ctx); err != nil {
-			log.Error().Err(err).Msg("failed to fetch initial weather data")
-		}
+		defer s.wg.Done()
+		s.runOnce(s.stopCtx)
 	}()
 
 	return nil
@@ -62,8 +71,25 @@ func (s *Scheduler) Start() error {
 
 // Stop 停止调度器
 func (s *Scheduler) Stop() {
+	s.stopCancel()
 	s.cron.Stop()
+	s.wg.Wait()
 	log.Info().Msg("weather scheduler stopped")
+}
+
+func (s *Scheduler) runOnce(ctx context.Context) {
+	if !s.runMu.TryLock() {
+		log.Warn().Msg("weather scheduler already running, skipping concurrent execution")
+		return
+	}
+	defer s.runMu.Unlock()
+
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
+
+	if err := s.FetchAllWeather(ctx); err != nil {
+		log.Error().Err(err).Msg("failed to fetch weather data")
+	}
 }
 
 // FetchAllWeather 抓取所有已开通区域的天气数据
@@ -82,7 +108,25 @@ func (s *Scheduler) FetchAllWeather(ctx context.Context) error {
 	log.Info().Int("count", len(regions)).Msg("fetching weather for regions")
 
 	for _, region := range regions {
+		if s.shouldSkipRegion(region.ID) {
+			log.Warn().
+				Int64("region_id", region.ID).
+				Str("region_name", region.Name).
+				Msg("skip weather fetch for temporarily invalid region location")
+			continue
+		}
+
 		if err := s.fetchRegionWeather(ctx, region); err != nil {
+			if isNoSuchLocationError(err) {
+				s.markRegionInvalid(region.ID, 6*time.Hour)
+				log.Warn().
+					Err(err).
+					Int64("region_id", region.ID).
+					Str("region_name", region.Name).
+					Msg("region weather location invalid, marked temporarily skipped")
+				continue
+			}
+
 			log.Error().
 				Err(err).
 				Int64("region_id", region.ID).
@@ -122,7 +166,7 @@ func (s *Scheduler) fetchRegionWeather(ctx context.Context, region db.GetRegions
 	}
 
 	// 4. 计算天气系数
-	coef := CalculateCoefficient(&weatherResp.Now, warnings)
+	coef := CalculateCoefficient(ctx, s.store, region.ID, &weatherResp.Now, warnings)
 
 	// 5. 保存到数据库
 	if err := s.saveToDatabase(ctx, region.ID, weatherResp, coef); err != nil {
@@ -167,11 +211,14 @@ func (s *Scheduler) getLocationID(ctx context.Context, region db.GetRegionsWithD
 
 	cityResp, err := s.weatherClient.LookupCity(ctx, region.Name, cityName)
 	if err != nil {
+		if isNoSuchLocationError(err) {
+			return "", 0, 0, errWeatherNoSuchLocation
+		}
 		return "", 0, 0, err
 	}
 
 	if len(cityResp.Location) == 0 {
-		return "", 0, 0, nil
+		return "", 0, 0, errWeatherNoSuchLocation
 	}
 
 	loc := cityResp.Location[0]
@@ -188,6 +235,46 @@ func (s *Scheduler) getLocationID(ctx context.Context, region db.GetRegionsWithD
 	}
 
 	return locationID, lat, lon, nil
+}
+
+func isNoSuchLocationError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	if errors.Is(err, errWeatherNoSuchLocation) {
+		return true
+	}
+
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "no such location") ||
+		strings.Contains(message, "cannot find the location") ||
+		strings.Contains(message, "/no-such-location")
+}
+
+func (s *Scheduler) shouldSkipRegion(regionID int64) bool {
+	s.invalidMu.RLock()
+	until, ok := s.invalidRegion[regionID]
+	s.invalidMu.RUnlock()
+
+	if !ok {
+		return false
+	}
+
+	if time.Now().After(until) {
+		s.invalidMu.Lock()
+		delete(s.invalidRegion, regionID)
+		s.invalidMu.Unlock()
+		return false
+	}
+
+	return true
+}
+
+func (s *Scheduler) markRegionInvalid(regionID int64, duration time.Duration) {
+	s.invalidMu.Lock()
+	s.invalidRegion[regionID] = time.Now().Add(duration)
+	s.invalidMu.Unlock()
 }
 
 // saveToDatabase 保存天气数据到数据库

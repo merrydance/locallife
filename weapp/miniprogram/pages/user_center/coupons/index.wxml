@@ -1,54 +1,72 @@
 <custom-navbar title="优惠券" showBack="{{true}}" bind:navheight="onNavHeight" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px;">
-  <view class="tabs-section">
-    <t-tabs value="{{activeTab}}" bind:change="onTabChange">
-      <t-tab-panel label="可领取" value="AVAILABLE" />
-      <t-tab-panel label="我的" value="MY" />
-    </t-tabs>
+<view class="page-container" style="padding-top: {{navBarHeight}}px; padding-bottom: calc(120rpx + env(safe-area-inset-bottom));">
+  
+  <!-- Tabs -->
+  <t-tabs value="{{activeTab}}" bind:change="onTabChange" sticky offset-top="{{navBarHeight}}">
+    <t-tab-panel label="可用优惠券" value="AVAILABLE" />
+    <t-tab-panel label="全部优惠券" value="ALL" />
+  </t-tabs>
+
+  <!-- 错误状态 -->
+  <view wx:if="{{error && !initialLoading}}" class="error-container">
+    <t-empty icon="info-circle" description="{{error}}">
+      <t-button slot="action" theme="primary" size="small" bindtap="onRetry" shape="round">重试</t-button>
+    </t-empty>
   </view>
 
-  <!-- 骨架屏 -->
-  <view wx:if="{{loading && coupons.length === 0}}" class="skeleton-container">
-    <list-skeleton wx:for="{{[1,2,3,4]}}" wx:key="*this" show-avatar="{{false}}" show-arrow="{{false}}" />
-  </view>
+  <block wx:else>
+    <!-- Loading (Skeleton) -->
+    <view wx:if="{{initialLoading}}" class="coupon-skeleton-list">
+      <list-skeleton row="5" t-class="skeleton-item" />
+    </view>
 
-  <!-- 空状态 -->
-  <view wx:elif="{{coupons.length === 0}}" class="empty">
-    <t-empty description="暂无优惠券" />
-  </view>
+    <!-- Empty State -->
+    <view wx:elif="{{coupons.length === 0}}" class="empty-state animate-fade-in">
+      <t-empty image="/assets/icons/empty.svg" description="{{activeTab === 'AVAILABLE' ? '暂无可使用的优惠券' : '暂无优惠券'}}" />
+      <t-button wx:if="{{activeTab === 'ALL'}}" theme="primary" size="medium" shape="round" bindtap="onGoToAvailable" class="empty-btn">查看可用券</t-button>
+    </view>
 
-  <!-- 优惠券列表 -->
-  <view wx:else class="coupons-container">
-    <view class="coupons-list">
-      <view wx:for="{{coupons}}" wx:key="id" class="coupon-card">
-        <view class="coupon-left">
-          <text class="discount-amount">¥{{item.discountDisplay}}</text>
-          <text class="threshold">满{{item.thresholdDisplay}}可用</text>
-        </view>
-        <view class="coupon-right">
-          <text class="merchant-name">{{item.merchant_name}}</text>
-          <text class="coupon-name">{{item.name}}</text>
-          <text class="expire-date">有效期至 {{item.end_date}}</text>
-          <t-button 
-            wx:if="{{activeTab === 'AVAILABLE' && item.can_claim}}"
-            class="claim-btn"
-            size="small" 
-            theme="primary"
-            data-id="{{item.id}}"
-            bindtap="onClaimCoupon"
-          >
-            立即领取
-          </t-button>
-          <t-tag 
-            wx:if="{{activeTab === 'MY'}}"
-            size="small" 
-            theme="{{item.status === 'UNUSED' ? 'success' : 'default'}}"
-          >
-            {{item.status === 'UNUSED' ? '未使用' : '已使用'}}
-          </t-tag>
-        </view>
+    <!-- Coupon List -->
+    <view wx:else class="coupon-list animate-fade-in">
+      <block wx:for="{{coupons}}" wx:key="id">
+         <view class="coupon-card {{item.statusClass}}">
+            <!-- Left: Value -->
+            <view class="coupon-left">
+               <view class="price-box">
+                  <text class="symbol">¥</text>
+                  <text class="amount">{{item.valueDisplay}}</text>
+               </view>
+               <view class="condition">满{{item.minSpendDisplay}}可用</view>
+            </view>
+
+            <!-- Middle: Info -->
+            <view class="coupon-middle">
+               <view class="title">{{item.title}}</view>
+               <view class="merchant">
+                  <t-icon name="shop" size="24rpx" color="#666" style="margin-right: 4rpx;" />
+                  <text>{{item.merchantName}}</text>
+               </view>
+               <view class="date">{{item.timeRange}}</view>
+            </view>
+
+            <!-- Right: Action -->
+            <view class="coupon-right">
+              <view class="status-badge {{item.status}}">
+                  <text>{{item.statusText}}</text>
+               </view>
+            </view>
+
+            <!-- Decor: Circles -->
+            <view class="circle top"></view>
+            <view class="circle bottom"></view>
+         </view>
+      </block>
+      <!-- Bottom Loading -->
+      <view class="load-more-wrap" wx:if="{{loading}}">
+        <t-loading theme="circular" size="32rpx" text="正在加载..." />
       </view>
     </view>
-  </view>
+  </block>
+
 </view>

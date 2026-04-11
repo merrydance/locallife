@@ -13,7 +13,7 @@ import (
 
 const countUserAddresses = `-- name: CountUserAddresses :one
 SELECT COUNT(*) FROM user_addresses
-WHERE user_id = $1
+WHERE user_id = $1 AND deleted_at IS NULL
 `
 
 func (q *Queries) CountUserAddresses(ctx context.Context, userID int64) (int64, error) {
@@ -35,7 +35,7 @@ INSERT INTO user_addresses (
   is_default
 ) VALUES (
   $1, $2, $3, $4, $5, $6, $7, $8
-) RETURNING id, user_id, region_id, detail_address, contact_name, contact_phone, longitude, latitude, is_default, created_at
+) RETURNING id, user_id, region_id, detail_address, contact_name, contact_phone, longitude, latitude, is_default, created_at, deleted_at
 `
 
 type CreateUserAddressParams struct {
@@ -72,13 +72,15 @@ func (q *Queries) CreateUserAddress(ctx context.Context, arg CreateUserAddressPa
 		&i.Latitude,
 		&i.IsDefault,
 		&i.CreatedAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }
 
 const deleteUserAddress = `-- name: DeleteUserAddress :exec
-DELETE FROM user_addresses
-WHERE id = $1 AND user_id = $2
+UPDATE user_addresses
+SET deleted_at = now(), is_default = false
+WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL
 `
 
 type DeleteUserAddressParams struct {
@@ -92,8 +94,9 @@ func (q *Queries) DeleteUserAddress(ctx context.Context, arg DeleteUserAddressPa
 }
 
 const getUserAddress = `-- name: GetUserAddress :one
-SELECT id, user_id, region_id, detail_address, contact_name, contact_phone, longitude, latitude, is_default, created_at FROM user_addresses
-WHERE id = $1 LIMIT 1
+SELECT id, user_id, region_id, detail_address, contact_name, contact_phone, longitude, latitude, is_default, created_at, deleted_at FROM user_addresses
+WHERE id = $1 AND deleted_at IS NULL
+LIMIT 1
 `
 
 func (q *Queries) GetUserAddress(ctx context.Context, id int64) (UserAddress, error) {
@@ -110,13 +113,14 @@ func (q *Queries) GetUserAddress(ctx context.Context, id int64) (UserAddress, er
 		&i.Latitude,
 		&i.IsDefault,
 		&i.CreatedAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }
 
 const getUserDefaultAddress = `-- name: GetUserDefaultAddress :one
-SELECT id, user_id, region_id, detail_address, contact_name, contact_phone, longitude, latitude, is_default, created_at FROM user_addresses
-WHERE user_id = $1 AND is_default = true
+SELECT id, user_id, region_id, detail_address, contact_name, contact_phone, longitude, latitude, is_default, created_at, deleted_at FROM user_addresses
+WHERE user_id = $1 AND is_default = true AND deleted_at IS NULL
 LIMIT 1
 `
 
@@ -134,13 +138,14 @@ func (q *Queries) GetUserDefaultAddress(ctx context.Context, userID int64) (User
 		&i.Latitude,
 		&i.IsDefault,
 		&i.CreatedAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }
 
 const listUserAddresses = `-- name: ListUserAddresses :many
-SELECT id, user_id, region_id, detail_address, contact_name, contact_phone, longitude, latitude, is_default, created_at FROM user_addresses
-WHERE user_id = $1
+SELECT id, user_id, region_id, detail_address, contact_name, contact_phone, longitude, latitude, is_default, created_at, deleted_at FROM user_addresses
+WHERE user_id = $1 AND deleted_at IS NULL
 ORDER BY is_default DESC, created_at DESC
 `
 
@@ -164,6 +169,7 @@ func (q *Queries) ListUserAddresses(ctx context.Context, userID int64) ([]UserAd
 			&i.Latitude,
 			&i.IsDefault,
 			&i.CreatedAt,
+			&i.DeletedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -179,7 +185,7 @@ const setAddressAsDefault = `-- name: SetAddressAsDefault :one
 UPDATE user_addresses
 SET is_default = true
 WHERE id = $1 AND user_id = $2
-RETURNING id, user_id, region_id, detail_address, contact_name, contact_phone, longitude, latitude, is_default, created_at
+RETURNING id, user_id, region_id, detail_address, contact_name, contact_phone, longitude, latitude, is_default, created_at, deleted_at
 `
 
 type SetAddressAsDefaultParams struct {
@@ -202,6 +208,7 @@ func (q *Queries) SetAddressAsDefault(ctx context.Context, arg SetAddressAsDefau
 		&i.Latitude,
 		&i.IsDefault,
 		&i.CreatedAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }
@@ -229,7 +236,7 @@ SET
   latitude = COALESCE($6, latitude),
   is_default = COALESCE($7, is_default)
 WHERE id = $8 AND user_id = $9
-RETURNING id, user_id, region_id, detail_address, contact_name, contact_phone, longitude, latitude, is_default, created_at
+RETURNING id, user_id, region_id, detail_address, contact_name, contact_phone, longitude, latitude, is_default, created_at, deleted_at
 `
 
 type UpdateUserAddressParams struct {
@@ -268,6 +275,7 @@ func (q *Queries) UpdateUserAddress(ctx context.Context, arg UpdateUserAddressPa
 		&i.Latitude,
 		&i.IsDefault,
 		&i.CreatedAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }

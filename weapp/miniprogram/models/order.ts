@@ -1,4 +1,4 @@
-import type { OrderStatus, OrderType } from '../api/order'
+import type { OrderStatus, OrderType, FulfillmentStatus, OrderPaymentContext } from '../api/order'
 
 /**
  * 订单视图模型 - 用于UI展示
@@ -14,6 +14,13 @@ export interface Order {
     status: OrderStatus           // 使用API层的枚举类型
     statusText: string            // ViewModel: 待支付/已支付等
     statusColor: string           // ViewModel: 状态颜色
+    statusHint?: string           // 后端提示文案
+    badges?: string[]             // 徽章文本
+    actions?: string[]            // 可执行动作
+    paymentContext?: OrderPaymentContext
+    pickupCodeMasked?: string     // 取餐码（脱敏）
+    overtime?: boolean            // 是否超时
+    fulfillmentStatus?: FulfillmentStatus // 履约状态
     totalAmount: number           // 订单总金额（分）
     totalAmountDisplay: string    // ViewModel: ¥xx.xx
     itemCount: number
@@ -57,6 +64,17 @@ export interface OrderDetail extends Order {
     contactName?: string          // 配送联系人
     contactPhone?: string         // 配送联系电话
     merchantPhone?: string        // 商户电话
+    estimatedDeliveryAt?: string  // 预计送达时间戳
+    deliveryEtaMinutes?: number   // 预计送达总时长（分钟）
+    expectDeliverTime?: string    // 展示用的送达时间段
+    tableId?: number              // 堂食/预订 桌台ID
+    reservationId?: number        // 预订ID
+    replacedByOrderId?: number    // 被替换的新订单ID
+    fulfillmentStatus?: FulfillmentStatus
+    paymentContext?: OrderPaymentContext
+    reservationDate?: string
+    reservationTime?: string
+    guestCount?: number
     timeline?: OrderTimelineItem[]
 }
 

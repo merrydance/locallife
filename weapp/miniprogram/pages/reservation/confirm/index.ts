@@ -3,9 +3,12 @@
  * 支持定金模式和全款模式
  */
 
-import { formatTime, formatPriceNoSymbol } from '@/utils/util'
+import { formatPriceNoSymbol } from '@/utils/util'
 import { createReservation, CreateReservationRequest } from '../../../api/reservation'
 import { checkRoomAvailability } from '../../../api/room'
+import { processPayment, PaymentCancelledError } from '../../../api/payment'
+import Navigation from '../../../utils/navigation'
+import { getErrorUserMessage } from '../../../utils/user-facing'
 
 interface TimeSlot {
   time: string
@@ -22,6 +25,7 @@ Page({
     deposit: 0,
     depositDisplay: '0.00',
     paymentMode: 'deposit' as 'deposit' | 'full',
+
     form: {
       date: '',
       time: '',
@@ -37,20 +41,34 @@ Page({
     // 时段选择
     timeSlots: [] as TimeSlot[],
     availableTimeSlots: [] as Array<{ label: string, value: string }>,  // 可用时段列表（picker格式）
+    selectedTimeLabel: '',
     timePickerVisible: false,
     loadingSlots: false
   },
 
-  onLoad(options: any) {
+  onLoad(options: {
+    roomId?: string
+    merchantId?: string
+    roomName?: string
+    capacity?: string
+    deposit?: string
+    date?: string
+    time?: string
+  }) {
     if (options.roomId) {
+      const roomIdNum = parseInt(options.roomId || '0', 10) || 0
+      const merchantIdNum = parseInt(options.merchantId || '0', 10) || 0
+      const capacityNum = parseInt(options.capacity || '10', 10) || 10
+      const depositNum = Number(options.deposit || 0) || 0
       this.setData({
         roomId: options.roomId,
-        tableId: parseInt(options.roomId) || 0,
-        merchantId: parseInt(options.merchantId) || 0,
+        tableId: roomIdNum,
+        merchantId: merchantIdNum,
         roomName: decodeURIComponent(options.roomName || ''),
-        capacity: parseInt(options.capacity) || 10,
-        deposit: Number(options.deposit) || 10000,
-        depositDisplay: formatPriceNoSymbol(Number(options.deposit) || 10000)
+        capacity: capacityNum,
+        deposit: depositNum,
+        depositDisplay: formatPriceNoSymbol(depositNum),
+        paymentMode: depositNum > 0 ? 'deposit' : 'full'
       })
     }
 
@@ -58,18 +76,17 @@ Page({
     if (options.date) {
       this.setData({ 'form.date': options.date })
       if (options.time) {
-        this.setData({ 'form.time': options.time })
+        this.setData({ 'form.time': options.time, selectedTimeLabel: this.buildTimeLabel(options.time) })
       }
-      this.loadAvailability(options.date, parseInt(options.roomId))
+      this.loadAvailability(options.date, parseInt(options.roomId || '0', 10))
     } else {
-      // 默认日期为明天
-      const tomorrow = new Date()
-      tomorrow.setDate(tomorrow.getDate() + 1)
+      // 默认日期为当天
+      const today = new Date()
       const pad = (n: number) => n < 10 ? '0' + n : String(n)
-      const dateStr = `${tomorrow.getFullYear()}-${pad(tomorrow.getMonth() + 1)}-${pad(tomorrow.getDate())}`
+      const dateStr = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`
       this.setData({ 'form.date': dateStr })
       if (options.roomId) {
-        this.loadAvailability(dateStr, parseInt(options.roomId))
+        this.loadAvailability(dateStr, parseInt(options.roomId || '0', 10))
       }
     }
   },
@@ -119,16 +136,47 @@ Page({
       const response = await checkRoomAvailability(tableId, { date })
 
       const timeSlots = response.time_slots || []
-      // 转换为picker需要的格式：{label, value}
+      // 转换为picker需要的格式：{label, value}，并标记午餐/晚餐
       const availableTimeSlots = timeSlots
-        .filter(slot => slot.available)
-        .map(slot => ({ label: slot.time, value: slot.time }))
+        .filter((slot) => slot.available)
+        .map((slot) => {
+          const mealLabel = this.buildTimeLabel(slot.time, slot.period)
+          return { label: mealLabel, value: slot.time }
+        })
 
       this.setData({
         timeSlots,
         availableTimeSlots,
         loadingSlots: false
       })
+
+      // 验证当前选中的时间是否有效
+      if (this.data.form.time) {
+        const isStillAvailable = availableTimeSlots.some((slot) => slot.value === this.data.form.time)
+        if (!isStillAvailable) {
+          // 如果当前时间不可用，自动切换到第一个可用时段
+          if (availableTimeSlots.length > 0) {
+            const firstSlot = availableTimeSlots[0]
+            this.setData({
+              'form.time': firstSlot.value,
+              selectedTimeLabel: this.buildTimeLabel(firstSlot.value)
+            })
+            wx.showToast({ title: '已为您切换到最近可用时段', icon: 'none' })
+          } else {
+            this.setData({
+              'form.time': '',
+              selectedTimeLabel: ''
+            })
+          }
+        }
+      } else if (availableTimeSlots.length > 0) {
+        // 如果没选时间，默认选第一个
+        const firstSlot = availableTimeSlots[0]
+        this.setData({
+          'form.time': firstSlot.value,
+          selectedTimeLabel: this.buildTimeLabel(firstSlot.value)
+        })
+      }
 
       if (availableTimeSlots.length === 0) {
         wx.showToast({ title: '该日期暂无可用时段', icon: 'none' })
@@ -159,13 +207,22 @@ Page({
     if (selectedTime) {
       this.setData({
         'form.time': selectedTime,
+        selectedTimeLabel: this.buildTimeLabel(selectedTime),
         timePickerVisible: false
       })
     }
   },
 
-  onPaymentModeChange(e: WechatMiniprogram.CustomEvent) {
-    this.setData({ paymentMode: e.detail.value })
+  buildTimeLabel(time: string, period?: string) {
+    if (!time) return ''
+    let meal = ''
+    if (period) {
+      meal = period === 'lunch' ? '午餐' : (period === 'dinner' ? '晚餐' : '')
+    } else {
+      const hour = parseInt(time.split(':')[0])
+      meal = hour < 17 ? '午餐' : '晚餐'
+    }
+    return meal ? `${time} (${meal})` : time
   },
 
   async onSubmit() {
@@ -190,7 +247,7 @@ Page({
     this.setData({ submitting: true })
 
     try {
-      // 无论哪种模式，都先创建预订（锁定房间）
+      // 1. 创建预订
       const reservationData: CreateReservationRequest = {
         table_id: tableId,
         date: form.date,
@@ -202,29 +259,37 @@ Page({
         notes: form.remark || undefined
       }
 
-      console.log('[预订] 发送数据:', JSON.stringify(reservationData))
-
       const reservation = await createReservation(reservationData)
 
       if (paymentMode === 'full') {
-        // 全款模式：跳转到点菜页面（传入 reservation_id）
         wx.redirectTo({
           url: `/pages/dine-in/menu/menu?reservation_id=${reservation.id}&merchant_id=${merchantId}`
         })
       } else {
-        // 定金模式：跳转到支付页面
-        wx.showModal({
-          title: '预定创建成功',
-          content: '支付页面正在开发中，请稍后在预订列表中完成支付',
-          showCancel: false,
-          success: () => {
-            wx.navigateBack()
-          }
-        })
+        const resultAmount = formatPriceNoSymbol(reservation.deposit_amount || this.data.deposit)
+
+        try {
+          const paymentResult = await processPayment(reservation.id, 'reservation')
+          Navigation.toReservationPaymentResult({
+            reservationId: String(reservation.id),
+            amount: resultAmount,
+            result: paymentResult.status === 'paid' ? 'success' : paymentResult.status,
+            source: 'confirm'
+          })
+        } catch (payErr) {
+          console.error('[预订支付] 支付失败或取消:', payErr)
+          Navigation.toReservationPaymentResult({
+            reservationId: String(reservation.id),
+            amount: resultAmount,
+            result: payErr instanceof PaymentCancelledError ? 'cancelled' : 'unknown',
+            source: 'confirm'
+          })
+        }
       }
-    } catch (error: any) {
+    } catch (error) {
+      const errMessage = getErrorUserMessage(error, '提交失败，请稍后重试')
       console.error('预定提交失败:', error)
-      wx.showToast({ title: error?.message || '提交失败', icon: 'none' })
+      wx.showToast({ title: errMessage || '提交失败', icon: 'none' })
     } finally {
       this.setData({ submitting: false })
     }

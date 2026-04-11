@@ -1,16 +1,35 @@
 import { operatorBasicManagementService, OperatorBasicManagementAdapter } from '../../../api/operator-basic-management'
-import type { RegionResponse } from '../../../api/operator-basic-management'
+import { getErrorUserMessage } from '../../../utils/user-facing'
+
+type RegionListItem = ReturnType<typeof OperatorBasicManagementAdapter.adaptRegionResponse>
+type RegionPageTarget = 'delivery' | 'rules'
+
+interface RegionPageOptions {
+    target?: string
+}
 
 Page({
     data: {
-        regions: [] as any[],
-        loading: false,
+        regions: [] as RegionListItem[],
+        initialLoading: true,
+        loadingMore: false,
+        error: '',
         page: 1,
         pageSize: 20,
-        hasMore: true
+        hasMore: true,
+        navBarHeight: 0,
+        target: 'delivery' as RegionPageTarget,
+        pageTitle: '区域管理',
+        subtitle: '管理您所负责的区域及其配送运费规则'
     },
 
-    onLoad() {
+    onLoad(options: RegionPageOptions) {
+        const target: RegionPageTarget = options?.target === 'rules' ? 'rules' : 'delivery'
+        this.setData({
+            target,
+            pageTitle: target === 'rules' ? '选择规则配置区县' : '区域管理',
+            subtitle: target === 'rules' ? '请先选择要配置的区县，再进入规则配置页' : '管理您所负责的区域及其配送运费规则'
+        })
         this.loadRegions(true)
     },
 
@@ -19,17 +38,26 @@ Page({
     },
 
     onReachBottom() {
-        if (this.data.hasMore && !this.data.loading) {
+        if (this.data.hasMore && !this.data.loadingMore && !this.data.initialLoading) {
             this.loadRegions(false)
         }
     },
 
-    async loadRegions(reset = false) {
-        if (this.data.loading) return
+    onNavHeight(e: WechatMiniprogram.CustomEvent<{ navBarHeight: number }>) {
+        this.setData({
+            navBarHeight: e.detail.navBarHeight
+        })
+    },
 
-        this.setData({ loading: true })
+    onRetry() {
+        this.loadRegions(true)
+    },
+
+    async loadRegions(reset = false) {
         if (reset) {
-            this.setData({ page: 1, regions: [], hasMore: true })
+            this.setData({ initialLoading: true, error: '', page: 1, regions: [], hasMore: true })
+        } else {
+            this.setData({ loadingMore: true })
         }
 
         try {
@@ -38,33 +66,54 @@ Page({
                 limit: this.data.pageSize
             })
 
-            const newRegions = res.regions.map(r => OperatorBasicManagementAdapter.adaptRegionResponse(r))
+            const newRegions = (res.regions || []).map((r) => OperatorBasicManagementAdapter.adaptRegionResponse(r))
 
             this.setData({
                 regions: reset ? newRegions : [...this.data.regions, ...newRegions],
                 page: this.data.page + 1,
-                hasMore: res.has_more,
-                loading: false
+                hasMore: Boolean(res.has_more),
+                initialLoading: false,
+                loadingMore: false
             })
 
-        } catch (err) {
+        } catch (err: unknown) {
             console.error(err)
-            wx.showToast({ title: '加载失败', icon: 'error' })
-            this.setData({ loading: false })
+            const errorMsg = getErrorUserMessage(err, '加载区域列表失败，请稍后重试')
+            if (reset) {
+                this.setData({
+                    error: errorMsg,
+                    initialLoading: false,
+                    loadingMore: false
+                })
+            } else {
+                this.setData({ loadingMore: false })
+                wx.showToast({ title: errorMsg, icon: 'none' })
+            }
         } finally {
             if (reset) wx.stopPullDownRefresh()
         }
     },
 
     // 跳转到详细配置页
-    onRegionClick(e: any) {
-        const id = e.currentTarget.dataset.id
+    onRegionClick(e: WechatMiniprogram.TouchEvent) {
+        const { id, name } = e.currentTarget.dataset as { id?: number, name?: string }
+        if (!id) return
+
+        if (this.data.target === 'rules') {
+            const regionName = name ? encodeURIComponent(name) : ''
+            wx.navigateTo({
+                url: `/pages/operator/rules/index?region_id=${id}&region_name=${regionName}`
+            })
+            return
+        }
+
+        const regionName = name ? encodeURIComponent(name) : ''
         wx.navigateTo({
-            url: `/pages/operator/region/config?id=${id}`
+            url: `/pages/operator/region/config?id=${id}&region_name=${regionName}`
         })
     },
 
     onAddRegion() {
-        wx.showToast({ title: '添加功能暂未开放', icon: 'none' })
+        wx.navigateTo({ url: '/pages/operator/region-expansion/index' })
     }
 })

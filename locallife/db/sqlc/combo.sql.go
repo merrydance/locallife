@@ -17,29 +17,45 @@ const addComboDish = `-- name: AddComboDish :one
 INSERT INTO combo_dishes (
   combo_id,
   dish_id,
-  quantity
+  quantity,
+  dish_base_price_snapshot,
+  customizations,
+  customization_extra_price
 ) VALUES (
-  $1, $2, $3
-) RETURNING id, combo_id, dish_id, quantity
+  $1, $2, $3, $4, $5, $6
+) RETURNING id, combo_id, dish_id, quantity, customizations, customization_extra_price, dish_base_price_snapshot
 `
 
 type AddComboDishParams struct {
-	ComboID  int64 `json:"combo_id"`
-	DishID   int64 `json:"dish_id"`
-	Quantity int16 `json:"quantity"`
+	ComboID                 int64  `json:"combo_id"`
+	DishID                  int64  `json:"dish_id"`
+	Quantity                int16  `json:"quantity"`
+	DishBasePriceSnapshot   int64  `json:"dish_base_price_snapshot"`
+	Customizations          []byte `json:"customizations"`
+	CustomizationExtraPrice int64  `json:"customization_extra_price"`
 }
 
 // ============================================
 // 套餐菜品关联查询 (Combo Dish Queries)
 // ============================================
 func (q *Queries) AddComboDish(ctx context.Context, arg AddComboDishParams) (ComboDish, error) {
-	row := q.db.QueryRow(ctx, addComboDish, arg.ComboID, arg.DishID, arg.Quantity)
+	row := q.db.QueryRow(ctx, addComboDish,
+		arg.ComboID,
+		arg.DishID,
+		arg.Quantity,
+		arg.DishBasePriceSnapshot,
+		arg.Customizations,
+		arg.CustomizationExtraPrice,
+	)
 	var i ComboDish
 	err := row.Scan(
 		&i.ID,
 		&i.ComboID,
 		&i.DishID,
 		&i.Quantity,
+		&i.Customizations,
+		&i.CustomizationExtraPrice,
+		&i.DishBasePriceSnapshot,
 	)
 	return i, err
 }
@@ -94,29 +110,61 @@ func (q *Queries) CountComboSetsByMerchant(ctx context.Context, arg CountComboSe
 	return count, err
 }
 
+const countSearchCombosGlobal = `-- name: CountSearchCombosGlobal :one
+SELECT COUNT(*)
+FROM combo_sets cs
+JOIN merchants m ON cs.merchant_id = m.id
+LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
+WHERE 
+    m.status = 'active'
+    AND m.deleted_at IS NULL
+  AND COALESCE(mp.is_takeout_suspended, false) = false
+  AND m.region_id = $2
+    AND cs.deleted_at IS NULL
+    AND cs.is_online = true
+    AND (
+        $1::text = '' OR 
+        cs.name ILIKE '%' || $1 || '%' OR 
+        m.name ILIKE '%' || $1 || '%'
+    )
+`
+
+type CountSearchCombosGlobalParams struct {
+	Column1  string      `json:"column_1"`
+	RegionID pgtype.Int8 `json:"region_id"`
+}
+
+// Count for pagination
+func (q *Queries) CountSearchCombosGlobal(ctx context.Context, arg CountSearchCombosGlobalParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countSearchCombosGlobal, arg.Column1, arg.RegionID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createComboSet = `-- name: CreateComboSet :one
 
 INSERT INTO combo_sets (
   merchant_id,
   name,
   description,
-  image_url,
+  image_media_asset_id,
   original_price,
   combo_price,
   is_online
 ) VALUES (
   $1, $2, $3, $4, $5, $6, $7
-) RETURNING id, merchant_id, name, description, image_url, original_price, combo_price, is_online, created_at, updated_at, deleted_at
+) RETURNING id, merchant_id, name, description, original_price, combo_price, is_online, created_at, updated_at, deleted_at, image_media_asset_id
 `
 
 type CreateComboSetParams struct {
-	MerchantID    int64       `json:"merchant_id"`
-	Name          string      `json:"name"`
-	Description   pgtype.Text `json:"description"`
-	ImageUrl      pgtype.Text `json:"image_url"`
-	OriginalPrice int64       `json:"original_price"`
-	ComboPrice    int64       `json:"combo_price"`
-	IsOnline      bool        `json:"is_online"`
+	MerchantID        int64       `json:"merchant_id"`
+	Name              string      `json:"name"`
+	Description       pgtype.Text `json:"description"`
+	ImageMediaAssetID pgtype.Int8 `json:"image_media_asset_id"`
+	OriginalPrice     int64       `json:"original_price"`
+	ComboPrice        int64       `json:"combo_price"`
+	IsOnline          bool        `json:"is_online"`
 }
 
 // ============================================
@@ -127,7 +175,7 @@ func (q *Queries) CreateComboSet(ctx context.Context, arg CreateComboSetParams) 
 		arg.MerchantID,
 		arg.Name,
 		arg.Description,
-		arg.ImageUrl,
+		arg.ImageMediaAssetID,
 		arg.OriginalPrice,
 		arg.ComboPrice,
 		arg.IsOnline,
@@ -138,13 +186,13 @@ func (q *Queries) CreateComboSet(ctx context.Context, arg CreateComboSetParams) 
 		&i.MerchantID,
 		&i.Name,
 		&i.Description,
-		&i.ImageUrl,
 		&i.OriginalPrice,
 		&i.ComboPrice,
 		&i.IsOnline,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.ImageMediaAssetID,
 	)
 	return i, err
 }
@@ -159,8 +207,43 @@ func (q *Queries) DeleteComboSet(ctx context.Context, id int64) error {
 	return err
 }
 
+const getComboMemberImagesByCombos = `-- name: GetComboMemberImagesByCombos :many
+SELECT cd.combo_id, d.image_media_asset_id
+FROM combo_dishes cd
+JOIN dishes d ON cd.dish_id = d.id
+WHERE cd.combo_id = ANY($1::bigint[])
+  AND d.deleted_at IS NULL
+ORDER BY cd.combo_id, cd.id ASC
+`
+
+type GetComboMemberImagesByCombosRow struct {
+	ComboID           int64       `json:"combo_id"`
+	ImageMediaAssetID pgtype.Int8 `json:"image_media_asset_id"`
+}
+
+// 批量获取多个套餐的成员图片
+func (q *Queries) GetComboMemberImagesByCombos(ctx context.Context, dollar_1 []int64) ([]GetComboMemberImagesByCombosRow, error) {
+	rows, err := q.db.Query(ctx, getComboMemberImagesByCombos, dollar_1)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetComboMemberImagesByCombosRow{}
+	for rows.Next() {
+		var i GetComboMemberImagesByCombosRow
+		if err := rows.Scan(&i.ComboID, &i.ImageMediaAssetID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getComboSet = `-- name: GetComboSet :one
-SELECT id, merchant_id, name, description, image_url, original_price, combo_price, is_online, created_at, updated_at, deleted_at FROM combo_sets
+SELECT id, merchant_id, name, description, original_price, combo_price, is_online, created_at, updated_at, deleted_at, image_media_asset_id FROM combo_sets
 WHERE id = $1 AND deleted_at IS NULL LIMIT 1
 `
 
@@ -172,30 +255,33 @@ func (q *Queries) GetComboSet(ctx context.Context, id int64) (ComboSet, error) {
 		&i.MerchantID,
 		&i.Name,
 		&i.Description,
-		&i.ImageUrl,
 		&i.OriginalPrice,
 		&i.ComboPrice,
 		&i.IsOnline,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.ImageMediaAssetID,
 	)
 	return i, err
 }
 
 const getComboSetWithDetails = `-- name: GetComboSetWithDetails :one
 SELECT 
-  cs.id, cs.merchant_id, cs.name, cs.description, cs.image_url, cs.original_price, cs.combo_price, cs.is_online, cs.created_at, cs.updated_at, cs.deleted_at,
+  cs.id, cs.merchant_id, cs.name, cs.description, cs.original_price, cs.combo_price, cs.is_online, cs.created_at, cs.updated_at, cs.deleted_at, cs.image_media_asset_id,
   COALESCE(
     json_agg(DISTINCT
       jsonb_build_object(
         'dish_id', cd.dish_id,
         'dish_name', d.name,
-        'dish_price', d.price,
-        'dish_image_url', d.image_url,
-        'quantity', cd.quantity
+        'dish_price', COALESCE(cd.dish_base_price_snapshot, d.price) + COALESCE(cd.customization_extra_price, 0),
+        'dish_image_media_asset_id', d.image_media_asset_id,
+        'quantity', cd.quantity,
+        'customizations', COALESCE(cd.customizations, '{}'::jsonb),
+        'customization_extra_price', COALESCE(cd.customization_extra_price, 0),
+        'customization_summary', COALESCE(cd.customizations ->> 'meta_specs', '')
       )
-    ) FILTER (WHERE cd.dish_id IS NOT NULL),
+    ) FILTER (WHERE d.id IS NOT NULL),
     '[]'
   ) as dishes,
   COALESCE(
@@ -209,7 +295,7 @@ SELECT
   ) as tags
 FROM combo_sets cs
 LEFT JOIN combo_dishes cd ON cs.id = cd.combo_id
-LEFT JOIN dishes d ON cd.dish_id = d.id
+LEFT JOIN dishes d ON cd.dish_id = d.id AND d.deleted_at IS NULL
 LEFT JOIN combo_tags ct ON cs.id = ct.combo_id
 LEFT JOIN tags t ON ct.tag_id = t.id
 WHERE cs.id = $1 AND cs.deleted_at IS NULL
@@ -217,19 +303,19 @@ GROUP BY cs.id
 `
 
 type GetComboSetWithDetailsRow struct {
-	ID            int64              `json:"id"`
-	MerchantID    int64              `json:"merchant_id"`
-	Name          string             `json:"name"`
-	Description   pgtype.Text        `json:"description"`
-	ImageUrl      pgtype.Text        `json:"image_url"`
-	OriginalPrice int64              `json:"original_price"`
-	ComboPrice    int64              `json:"combo_price"`
-	IsOnline      bool               `json:"is_online"`
-	CreatedAt     time.Time          `json:"created_at"`
-	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
-	DeletedAt     pgtype.Timestamptz `json:"deleted_at"`
-	Dishes        interface{}        `json:"dishes"`
-	Tags          interface{}        `json:"tags"`
+	ID                int64              `json:"id"`
+	MerchantID        int64              `json:"merchant_id"`
+	Name              string             `json:"name"`
+	Description       pgtype.Text        `json:"description"`
+	OriginalPrice     int64              `json:"original_price"`
+	ComboPrice        int64              `json:"combo_price"`
+	IsOnline          bool               `json:"is_online"`
+	CreatedAt         time.Time          `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt         pgtype.Timestamptz `json:"deleted_at"`
+	ImageMediaAssetID pgtype.Int8        `json:"image_media_asset_id"`
+	Dishes            interface{}        `json:"dishes"`
+	Tags              interface{}        `json:"tags"`
 }
 
 func (q *Queries) GetComboSetWithDetails(ctx context.Context, id int64) (GetComboSetWithDetailsRow, error) {
@@ -240,13 +326,13 @@ func (q *Queries) GetComboSetWithDetails(ctx context.Context, id int64) (GetComb
 		&i.MerchantID,
 		&i.Name,
 		&i.Description,
-		&i.ImageUrl,
 		&i.OriginalPrice,
 		&i.ComboPrice,
 		&i.IsOnline,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.ImageMediaAssetID,
 		&i.Dishes,
 		&i.Tags,
 	)
@@ -259,7 +345,7 @@ SELECT
     merchant_id,
     name,
     description,
-    image_url,
+    image_media_asset_id,
     original_price,
     combo_price,
     is_online
@@ -270,14 +356,14 @@ WHERE id = ANY($1::bigint[])
 `
 
 type GetCombosByIDsRow struct {
-	ID            int64       `json:"id"`
-	MerchantID    int64       `json:"merchant_id"`
-	Name          string      `json:"name"`
-	Description   pgtype.Text `json:"description"`
-	ImageUrl      pgtype.Text `json:"image_url"`
-	OriginalPrice int64       `json:"original_price"`
-	ComboPrice    int64       `json:"combo_price"`
-	IsOnline      bool        `json:"is_online"`
+	ID                int64       `json:"id"`
+	MerchantID        int64       `json:"merchant_id"`
+	Name              string      `json:"name"`
+	Description       pgtype.Text `json:"description"`
+	ImageMediaAssetID pgtype.Int8 `json:"image_media_asset_id"`
+	OriginalPrice     int64       `json:"original_price"`
+	ComboPrice        int64       `json:"combo_price"`
+	IsOnline          bool        `json:"is_online"`
 }
 
 // 批量获取套餐详情
@@ -295,7 +381,7 @@ func (q *Queries) GetCombosByIDs(ctx context.Context, dollar_1 []int64) ([]GetCo
 			&i.MerchantID,
 			&i.Name,
 			&i.Description,
-			&i.ImageUrl,
+			&i.ImageMediaAssetID,
 			&i.OriginalPrice,
 			&i.ComboPrice,
 			&i.IsOnline,
@@ -317,21 +403,21 @@ SELECT
     cs.name,
     cs.description,
     COALESCE(
-        NULLIF(cs.image_url, ''),
-        (SELECT d.image_url 
+        NULLIF(cs.image_media_asset_id::text, ''),
+        (SELECT d.image_media_asset_id::text
          FROM combo_dishes cd 
          JOIN dishes d ON cd.dish_id = d.id 
          WHERE cd.combo_id = cs.id 
-           AND d.image_url IS NOT NULL 
-           AND d.image_url != ''
+           AND d.image_media_asset_id IS NOT NULL
+           AND d.deleted_at IS NULL
          ORDER BY cd.id ASC 
          LIMIT 1)
-    ) AS image_url,
+    ) AS image_media_asset_id,
     cs.original_price,
     cs.combo_price,
     cs.is_online,
     m.name AS merchant_name,
-    m.logo_url AS merchant_logo,
+    m.logo_media_asset_id AS merchant_logo_media_asset_id,
     m.latitude AS merchant_latitude,
     m.longitude AS merchant_longitude,
     m.region_id AS merchant_region_id,
@@ -341,7 +427,7 @@ SELECT
          FROM order_items oi 
          JOIN orders o ON o.id = oi.order_id 
          WHERE oi.combo_id = cs.id 
-           AND o.status IN ('delivered', 'completed')
+           AND o.status IN ('user_delivered', 'completed')
            AND o.created_at >= NOW() - INTERVAL '30 days'
         ), 0
     )::int AS monthly_sales
@@ -354,21 +440,21 @@ WHERE cs.id = ANY($1::bigint[])
 `
 
 type GetCombosWithMerchantByIDsRow struct {
-	ID                int64          `json:"id"`
-	MerchantID        int64          `json:"merchant_id"`
-	Name              string         `json:"name"`
-	Description       pgtype.Text    `json:"description"`
-	ImageUrl          interface{}    `json:"image_url"`
-	OriginalPrice     int64          `json:"original_price"`
-	ComboPrice        int64          `json:"combo_price"`
-	IsOnline          bool           `json:"is_online"`
-	MerchantName      string         `json:"merchant_name"`
-	MerchantLogo      pgtype.Text    `json:"merchant_logo"`
-	MerchantLatitude  pgtype.Numeric `json:"merchant_latitude"`
-	MerchantLongitude pgtype.Numeric `json:"merchant_longitude"`
-	MerchantRegionID  int64          `json:"merchant_region_id"`
-	MerchantIsOpen    bool           `json:"merchant_is_open"`
-	MonthlySales      int32          `json:"monthly_sales"`
+	ID                       int64          `json:"id"`
+	MerchantID               int64          `json:"merchant_id"`
+	Name                     string         `json:"name"`
+	Description              pgtype.Text    `json:"description"`
+	ImageMediaAssetID        interface{}    `json:"image_media_asset_id"`
+	OriginalPrice            int64          `json:"original_price"`
+	ComboPrice               int64          `json:"combo_price"`
+	IsOnline                 bool           `json:"is_online"`
+	MerchantName             string         `json:"merchant_name"`
+	MerchantLogoMediaAssetID pgtype.Int8    `json:"merchant_logo_media_asset_id"`
+	MerchantLatitude         pgtype.Numeric `json:"merchant_latitude"`
+	MerchantLongitude        pgtype.Numeric `json:"merchant_longitude"`
+	MerchantRegionID         int64          `json:"merchant_region_id"`
+	MerchantIsOpen           bool           `json:"merchant_is_open"`
+	MonthlySales             int32          `json:"monthly_sales"`
 }
 
 // 批量获取套餐详情及商户信息（用于推荐流展示）
@@ -387,12 +473,12 @@ func (q *Queries) GetCombosWithMerchantByIDs(ctx context.Context, dollar_1 []int
 			&i.MerchantID,
 			&i.Name,
 			&i.Description,
-			&i.ImageUrl,
+			&i.ImageMediaAssetID,
 			&i.OriginalPrice,
 			&i.ComboPrice,
 			&i.IsOnline,
 			&i.MerchantName,
-			&i.MerchantLogo,
+			&i.MerchantLogoMediaAssetID,
 			&i.MerchantLatitude,
 			&i.MerchantLongitude,
 			&i.MerchantRegionID,
@@ -416,36 +502,47 @@ SELECT
     cs.merchant_id,
     cs.name,
     cs.description,
-    cs.image_url,
+    cs.image_media_asset_id,
     cs.original_price,
     cs.combo_price,
     COALESCE(SUM(oi.quantity), 0)::int AS total_sold
 FROM combo_sets cs
 LEFT JOIN order_items oi ON cs.id = oi.combo_id
-LEFT JOIN orders o ON o.id = oi.order_id AND o.status IN ('delivered', 'completed')
-WHERE cs.is_online = true AND cs.deleted_at IS NULL
-GROUP BY cs.id
-ORDER BY total_sold DESC, cs.created_at DESC
+LEFT JOIN orders o ON o.id = oi.order_id AND o.status IN ('user_delivered', 'completed')
+LEFT JOIN merchants m ON cs.merchant_id = m.id
+WHERE cs.is_online = true AND cs.deleted_at IS NULL AND m.status = 'active'
+GROUP BY cs.id, m.is_open, m.latitude, m.longitude
+ORDER BY 
+    m.is_open DESC, 
+    total_sold DESC, 
+    cs.created_at DESC,
+    earth_distance(ll_to_earth(m.latitude::float8, m.longitude::float8), ll_to_earth($2::float8, $3::float8)) ASC
 LIMIT $1
 `
 
+type GetPopularCombosParams struct {
+	Limit   int32   `json:"limit"`
+	Column2 float64 `json:"column_2"`
+	Column3 float64 `json:"column_3"`
+}
+
 type GetPopularCombosRow struct {
-	ID            int64       `json:"id"`
-	MerchantID    int64       `json:"merchant_id"`
-	Name          string      `json:"name"`
-	Description   pgtype.Text `json:"description"`
-	ImageUrl      pgtype.Text `json:"image_url"`
-	OriginalPrice int64       `json:"original_price"`
-	ComboPrice    int64       `json:"combo_price"`
-	TotalSold     int32       `json:"total_sold"`
+	ID                int64       `json:"id"`
+	MerchantID        int64       `json:"merchant_id"`
+	Name              string      `json:"name"`
+	Description       pgtype.Text `json:"description"`
+	ImageMediaAssetID pgtype.Int8 `json:"image_media_asset_id"`
+	OriginalPrice     int64       `json:"original_price"`
+	ComboPrice        int64       `json:"combo_price"`
+	TotalSold         int32       `json:"total_sold"`
 }
 
 // ============================================
 // 套餐推荐查询
 // ============================================
 // 获取热门套餐（基于销量）
-func (q *Queries) GetPopularCombos(ctx context.Context, limit int32) ([]GetPopularCombosRow, error) {
-	rows, err := q.db.Query(ctx, getPopularCombos, limit)
+func (q *Queries) GetPopularCombos(ctx context.Context, arg GetPopularCombosParams) ([]GetPopularCombosRow, error) {
+	rows, err := q.db.Query(ctx, getPopularCombos, arg.Limit, arg.Column2, arg.Column3)
 	if err != nil {
 		return nil, err
 	}
@@ -458,7 +555,7 @@ func (q *Queries) GetPopularCombos(ctx context.Context, limit int32) ([]GetPopul
 			&i.MerchantID,
 			&i.Name,
 			&i.Description,
-			&i.ImageUrl,
+			&i.ImageMediaAssetID,
 			&i.OriginalPrice,
 			&i.ComboPrice,
 			&i.TotalSold,
@@ -475,31 +572,40 @@ func (q *Queries) GetPopularCombos(ctx context.Context, limit int32) ([]GetPopul
 
 const listComboDishes = `-- name: ListComboDishes :many
 SELECT 
-  d.id, d.merchant_id, d.category_id, d.name, d.description, d.image_url, d.price, d.member_price, d.is_available, d.is_online, d.sort_order, d.created_at, d.updated_at, d.prepare_time, d.deleted_at,
-  cd.quantity
+  d.id, d.merchant_id, d.category_id, d.name, d.description, d.price, d.member_price, d.is_available, d.is_online, d.sort_order, d.created_at, d.updated_at, d.prepare_time, d.deleted_at, d.monthly_sales, d.repurchase_rate, d.image_media_asset_id, d.is_packaging,
+  cd.quantity,
+  cd.dish_base_price_snapshot,
+  cd.customizations,
+  cd.customization_extra_price
 FROM dishes d
 JOIN combo_dishes cd ON d.id = cd.dish_id
-WHERE cd.combo_id = $1
+WHERE cd.combo_id = $1 AND d.deleted_at IS NULL
 ORDER BY cd.id ASC
 `
 
 type ListComboDishesRow struct {
-	ID          int64              `json:"id"`
-	MerchantID  int64              `json:"merchant_id"`
-	CategoryID  pgtype.Int8        `json:"category_id"`
-	Name        string             `json:"name"`
-	Description pgtype.Text        `json:"description"`
-	ImageUrl    pgtype.Text        `json:"image_url"`
-	Price       int64              `json:"price"`
-	MemberPrice pgtype.Int8        `json:"member_price"`
-	IsAvailable bool               `json:"is_available"`
-	IsOnline    bool               `json:"is_online"`
-	SortOrder   int16              `json:"sort_order"`
-	CreatedAt   time.Time          `json:"created_at"`
-	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
-	PrepareTime int16              `json:"prepare_time"`
-	DeletedAt   pgtype.Timestamptz `json:"deleted_at"`
-	Quantity    int16              `json:"quantity"`
+	ID                      int64              `json:"id"`
+	MerchantID              int64              `json:"merchant_id"`
+	CategoryID              pgtype.Int8        `json:"category_id"`
+	Name                    string             `json:"name"`
+	Description             pgtype.Text        `json:"description"`
+	Price                   int64              `json:"price"`
+	MemberPrice             pgtype.Int8        `json:"member_price"`
+	IsAvailable             bool               `json:"is_available"`
+	IsOnline                bool               `json:"is_online"`
+	SortOrder               int16              `json:"sort_order"`
+	CreatedAt               time.Time          `json:"created_at"`
+	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
+	PrepareTime             int16              `json:"prepare_time"`
+	DeletedAt               pgtype.Timestamptz `json:"deleted_at"`
+	MonthlySales            int32              `json:"monthly_sales"`
+	RepurchaseRate          pgtype.Numeric     `json:"repurchase_rate"`
+	ImageMediaAssetID       pgtype.Int8        `json:"image_media_asset_id"`
+	IsPackaging             bool               `json:"is_packaging"`
+	Quantity                int16              `json:"quantity"`
+	DishBasePriceSnapshot   int64              `json:"dish_base_price_snapshot"`
+	Customizations          []byte             `json:"customizations"`
+	CustomizationExtraPrice int64              `json:"customization_extra_price"`
 }
 
 func (q *Queries) ListComboDishes(ctx context.Context, comboID int64) ([]ListComboDishesRow, error) {
@@ -517,7 +623,6 @@ func (q *Queries) ListComboDishes(ctx context.Context, comboID int64) ([]ListCom
 			&i.CategoryID,
 			&i.Name,
 			&i.Description,
-			&i.ImageUrl,
 			&i.Price,
 			&i.MemberPrice,
 			&i.IsAvailable,
@@ -527,7 +632,14 @@ func (q *Queries) ListComboDishes(ctx context.Context, comboID int64) ([]ListCom
 			&i.UpdatedAt,
 			&i.PrepareTime,
 			&i.DeletedAt,
+			&i.MonthlySales,
+			&i.RepurchaseRate,
+			&i.ImageMediaAssetID,
+			&i.IsPackaging,
 			&i.Quantity,
+			&i.DishBasePriceSnapshot,
+			&i.Customizations,
+			&i.CustomizationExtraPrice,
 		); err != nil {
 			return nil, err
 		}
@@ -540,12 +652,45 @@ func (q *Queries) ListComboDishes(ctx context.Context, comboID int64) ([]ListCom
 }
 
 const listComboSetsByMerchant = `-- name: ListComboSetsByMerchant :many
-SELECT id, merchant_id, name, description, image_url, original_price, combo_price, is_online, created_at, updated_at, deleted_at FROM combo_sets
+SELECT
+  cs.id,
+  cs.name,
+  cs.description,
+  cs.original_price,
+  cs.combo_price,
+  cs.is_online,
+  COALESCE(dish_stats.dish_count, 0)::bigint AS dish_count,
+  COALESCE(dish_stats.dish_total_quantity, 0)::bigint AS dish_total_quantity,
+  COALESCE(tag_stats.tags, '[]'::json) AS tags
+FROM combo_sets cs
+LEFT JOIN LATERAL (
+  SELECT
+    COUNT(d.id)::bigint AS dish_count,
+    COALESCE(SUM(cd.quantity), 0)::bigint AS dish_total_quantity
+  FROM combo_dishes cd
+  JOIN dishes d ON d.id = cd.dish_id AND d.deleted_at IS NULL
+  WHERE cd.combo_id = cs.id
+) AS dish_stats ON TRUE
+LEFT JOIN LATERAL (
+  SELECT COALESCE(
+    json_agg(
+      jsonb_build_object(
+        'id', t.id,
+        'name', t.name
+      )
+      ORDER BY t.sort_order ASC, t.id ASC
+    ),
+    '[]'::json
+  ) AS tags
+  FROM combo_tags ct
+  JOIN tags t ON t.id = ct.tag_id
+  WHERE ct.combo_id = cs.id
+) AS tag_stats ON TRUE
 WHERE 
-  merchant_id = $1
-  AND deleted_at IS NULL
-  AND ($4::boolean IS NULL OR is_online = $4)
-ORDER BY created_at DESC
+  cs.merchant_id = $1
+  AND cs.deleted_at IS NULL
+  AND ($4::boolean IS NULL OR cs.is_online = $4)
+ORDER BY cs.created_at DESC
 LIMIT $2 OFFSET $3
 `
 
@@ -556,7 +701,19 @@ type ListComboSetsByMerchantParams struct {
 	IsOnline   pgtype.Bool `json:"is_online"`
 }
 
-func (q *Queries) ListComboSetsByMerchant(ctx context.Context, arg ListComboSetsByMerchantParams) ([]ComboSet, error) {
+type ListComboSetsByMerchantRow struct {
+	ID                int64       `json:"id"`
+	Name              string      `json:"name"`
+	Description       pgtype.Text `json:"description"`
+	OriginalPrice     int64       `json:"original_price"`
+	ComboPrice        int64       `json:"combo_price"`
+	IsOnline          bool        `json:"is_online"`
+	DishCount         int64       `json:"dish_count"`
+	DishTotalQuantity int64       `json:"dish_total_quantity"`
+	Tags              interface{} `json:"tags"`
+}
+
+func (q *Queries) ListComboSetsByMerchant(ctx context.Context, arg ListComboSetsByMerchantParams) ([]ListComboSetsByMerchantRow, error) {
 	rows, err := q.db.Query(ctx, listComboSetsByMerchant,
 		arg.MerchantID,
 		arg.Limit,
@@ -567,21 +724,19 @@ func (q *Queries) ListComboSetsByMerchant(ctx context.Context, arg ListComboSets
 		return nil, err
 	}
 	defer rows.Close()
-	items := []ComboSet{}
+	items := []ListComboSetsByMerchantRow{}
 	for rows.Next() {
-		var i ComboSet
+		var i ListComboSetsByMerchantRow
 		if err := rows.Scan(
 			&i.ID,
-			&i.MerchantID,
 			&i.Name,
 			&i.Description,
-			&i.ImageUrl,
 			&i.OriginalPrice,
 			&i.ComboPrice,
 			&i.IsOnline,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
+			&i.DishCount,
+			&i.DishTotalQuantity,
+			&i.Tags,
 		); err != nil {
 			return nil, err
 		}
@@ -636,15 +791,22 @@ func (q *Queries) ListComboTags(ctx context.Context, comboID int64) ([]Tag, erro
 
 const listOnlineCombosByMerchant = `-- name: ListOnlineCombosByMerchant :many
 SELECT 
-    id,
-    merchant_id,
-    name,
-    description,
-    image_url,
-    original_price,
-    combo_price AS price,
-    is_online
-FROM combo_sets
+    cs.id,
+    cs.merchant_id,
+    cs.name,
+    cs.description,
+    cs.image_media_asset_id,
+    cs.original_price,
+    cs.combo_price AS price,
+    cs.is_online,
+    COALESCE(
+      (SELECT json_agg(t.name)
+       FROM combo_tags ct
+       JOIN tags t ON ct.tag_id = t.id
+       WHERE ct.combo_id = cs.id),
+      '[]'
+    ) as tags
+FROM combo_sets cs
 WHERE merchant_id = $1
   AND deleted_at IS NULL
   AND is_online = true
@@ -652,14 +814,15 @@ ORDER BY created_at DESC
 `
 
 type ListOnlineCombosByMerchantRow struct {
-	ID            int64       `json:"id"`
-	MerchantID    int64       `json:"merchant_id"`
-	Name          string      `json:"name"`
-	Description   pgtype.Text `json:"description"`
-	ImageUrl      pgtype.Text `json:"image_url"`
-	OriginalPrice int64       `json:"original_price"`
-	Price         int64       `json:"price"`
-	IsOnline      bool        `json:"is_online"`
+	ID                int64       `json:"id"`
+	MerchantID        int64       `json:"merchant_id"`
+	Name              string      `json:"name"`
+	Description       pgtype.Text `json:"description"`
+	ImageMediaAssetID pgtype.Int8 `json:"image_media_asset_id"`
+	OriginalPrice     int64       `json:"original_price"`
+	Price             int64       `json:"price"`
+	IsOnline          bool        `json:"is_online"`
+	Tags              interface{} `json:"tags"`
 }
 
 // 获取商户上架套餐（用于扫码点餐菜单展示）
@@ -677,10 +840,11 @@ func (q *Queries) ListOnlineCombosByMerchant(ctx context.Context, merchantID int
 			&i.MerchantID,
 			&i.Name,
 			&i.Description,
-			&i.ImageUrl,
+			&i.ImageMediaAssetID,
 			&i.OriginalPrice,
 			&i.Price,
 			&i.IsOnline,
+			&i.Tags,
 		); err != nil {
 			return nil, err
 		}
@@ -742,6 +906,16 @@ func (q *Queries) RemoveComboTag(ctx context.Context, arg RemoveComboTagParams) 
 	return err
 }
 
+const removeDishFromAllCombos = `-- name: RemoveDishFromAllCombos :exec
+DELETE FROM combo_dishes
+WHERE dish_id = $1
+`
+
+func (q *Queries) RemoveDishFromAllCombos(ctx context.Context, dishID int64) error {
+	_, err := q.db.Exec(ctx, removeDishFromAllCombos, dishID)
+	return err
+}
+
 const searchComboIDsGlobal = `-- name: SearchComboIDsGlobal :many
 SELECT cs.id FROM combo_sets cs
 JOIN merchants m ON cs.merchant_id = m.id
@@ -775,35 +949,183 @@ func (q *Queries) SearchComboIDsGlobal(ctx context.Context, dollar_1 pgtype.Text
 	return items, nil
 }
 
+const searchCombosGlobal = `-- name: SearchCombosGlobal :many
+SELECT 
+    cs.id,
+    cs.merchant_id,
+    cs.name,
+    cs.description,
+    cs.image_media_asset_id,
+  dish_img.image_media_asset_id AS fallback_image_media_asset_id,
+    cs.original_price,
+    cs.combo_price,
+    cs.is_online,
+    m.name AS merchant_name,
+    m.logo_media_asset_id AS merchant_logo_media_asset_id,
+    m.latitude AS merchant_latitude,
+    m.longitude AS merchant_longitude,
+    m.region_id AS merchant_region_id,
+    m.is_open AS merchant_is_open,
+    -- Calculate Sales using Order Items (Last 30 days) for Relevance
+    COALESCE(
+        (SELECT SUM(oi.quantity)
+         FROM order_items oi 
+         JOIN orders o ON o.id = oi.order_id 
+         WHERE oi.combo_id = cs.id 
+           AND o.status IN ('user_delivered', 'completed')
+           AND o.created_at >= NOW() - INTERVAL '30 days'
+        ), 0
+    )::int AS monthly_sales,
+    -- Distance Calculation
+    COALESCE(earth_distance(ll_to_earth(m.latitude::float8, m.longitude::float8), ll_to_earth($4::float8, $5::float8)), 9999999)::float8 AS distance,
+    COALESCE(
+      (SELECT json_agg(t.name)
+       FROM combo_tags ct
+       JOIN tags t ON ct.tag_id = t.id
+       WHERE ct.combo_id = cs.id),
+      '[]'
+    ) as tags
+FROM combo_sets cs
+JOIN merchants m ON cs.merchant_id = m.id
+LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
+LEFT JOIN LATERAL (
+    SELECT d.image_media_asset_id
+    FROM combo_dishes cd
+    JOIN dishes d ON cd.dish_id = d.id
+    WHERE cd.combo_id = cs.id
+      AND d.image_media_asset_id IS NOT NULL
+      AND d.deleted_at IS NULL
+    ORDER BY cd.id ASC
+    LIMIT 1
+) AS dish_img ON TRUE
+WHERE 
+    m.status = 'active'
+    AND m.deleted_at IS NULL
+  AND COALESCE(mp.is_takeout_suspended, false) = false
+  AND m.region_id = $6
+    AND cs.deleted_at IS NULL
+    AND cs.is_online = true
+    AND (
+        $1::text = '' OR 
+        cs.name ILIKE '%' || $1 || '%' OR 
+        m.name ILIKE '%' || $1 || '%'
+    )
+ORDER BY 
+    m.is_open DESC, 
+    monthly_sales DESC,
+    distance ASC
+LIMIT $2 OFFSET $3
+`
+
+type SearchCombosGlobalParams struct {
+	Column1  string      `json:"column_1"`
+	Limit    int32       `json:"limit"`
+	Offset   int32       `json:"offset"`
+	Column4  float64     `json:"column_4"`
+	Column5  float64     `json:"column_5"`
+	RegionID pgtype.Int8 `json:"region_id"`
+}
+
+type SearchCombosGlobalRow struct {
+	ID                        int64          `json:"id"`
+	MerchantID                int64          `json:"merchant_id"`
+	Name                      string         `json:"name"`
+	Description               pgtype.Text    `json:"description"`
+	ImageMediaAssetID         pgtype.Int8    `json:"image_media_asset_id"`
+	FallbackImageMediaAssetID pgtype.Int8    `json:"fallback_image_media_asset_id"`
+	OriginalPrice             int64          `json:"original_price"`
+	ComboPrice                int64          `json:"combo_price"`
+	IsOnline                  bool           `json:"is_online"`
+	MerchantName              string         `json:"merchant_name"`
+	MerchantLogoMediaAssetID  pgtype.Int8    `json:"merchant_logo_media_asset_id"`
+	MerchantLatitude          pgtype.Numeric `json:"merchant_latitude"`
+	MerchantLongitude         pgtype.Numeric `json:"merchant_longitude"`
+	MerchantRegionID          int64          `json:"merchant_region_id"`
+	MerchantIsOpen            bool           `json:"merchant_is_open"`
+	MonthlySales              int32          `json:"monthly_sales"`
+	Distance                  float64        `json:"distance"`
+	Tags                      interface{}    `json:"tags"`
+}
+
+// Consumer-Facing Global Combo Search
+// Returns enriched data for the home feed or search page.
+// Strict filters: Online combos only, Active merchants only.
+// Sorting: Open Merchants First > Sales (Weighted) > Distance.
+func (q *Queries) SearchCombosGlobal(ctx context.Context, arg SearchCombosGlobalParams) ([]SearchCombosGlobalRow, error) {
+	rows, err := q.db.Query(ctx, searchCombosGlobal,
+		arg.Column1,
+		arg.Limit,
+		arg.Offset,
+		arg.Column4,
+		arg.Column5,
+		arg.RegionID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SearchCombosGlobalRow{}
+	for rows.Next() {
+		var i SearchCombosGlobalRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.MerchantID,
+			&i.Name,
+			&i.Description,
+			&i.ImageMediaAssetID,
+			&i.FallbackImageMediaAssetID,
+			&i.OriginalPrice,
+			&i.ComboPrice,
+			&i.IsOnline,
+			&i.MerchantName,
+			&i.MerchantLogoMediaAssetID,
+			&i.MerchantLatitude,
+			&i.MerchantLongitude,
+			&i.MerchantRegionID,
+			&i.MerchantIsOpen,
+			&i.MonthlySales,
+			&i.Distance,
+			&i.Tags,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateComboSet = `-- name: UpdateComboSet :one
 UPDATE combo_sets
 SET
   name = COALESCE($1, name),
   description = COALESCE($2, description),
-  image_url = COALESCE($3, image_url),
+  image_media_asset_id = COALESCE($3, image_media_asset_id),
   original_price = COALESCE($4, original_price),
   combo_price = COALESCE($5, combo_price),
   is_online = COALESCE($6, is_online),
   updated_at = now()
 WHERE id = $7 AND deleted_at IS NULL
-RETURNING id, merchant_id, name, description, image_url, original_price, combo_price, is_online, created_at, updated_at, deleted_at
+RETURNING id, merchant_id, name, description, original_price, combo_price, is_online, created_at, updated_at, deleted_at, image_media_asset_id
 `
 
 type UpdateComboSetParams struct {
-	Name          pgtype.Text `json:"name"`
-	Description   pgtype.Text `json:"description"`
-	ImageUrl      pgtype.Text `json:"image_url"`
-	OriginalPrice pgtype.Int8 `json:"original_price"`
-	ComboPrice    pgtype.Int8 `json:"combo_price"`
-	IsOnline      pgtype.Bool `json:"is_online"`
-	ID            int64       `json:"id"`
+	Name              pgtype.Text `json:"name"`
+	Description       pgtype.Text `json:"description"`
+	ImageMediaAssetID pgtype.Int8 `json:"image_media_asset_id"`
+	OriginalPrice     pgtype.Int8 `json:"original_price"`
+	ComboPrice        pgtype.Int8 `json:"combo_price"`
+	IsOnline          pgtype.Bool `json:"is_online"`
+	ID                int64       `json:"id"`
 }
 
 func (q *Queries) UpdateComboSet(ctx context.Context, arg UpdateComboSetParams) (ComboSet, error) {
 	row := q.db.QueryRow(ctx, updateComboSet,
 		arg.Name,
 		arg.Description,
-		arg.ImageUrl,
+		arg.ImageMediaAssetID,
 		arg.OriginalPrice,
 		arg.ComboPrice,
 		arg.IsOnline,
@@ -815,13 +1137,13 @@ func (q *Queries) UpdateComboSet(ctx context.Context, arg UpdateComboSetParams) 
 		&i.MerchantID,
 		&i.Name,
 		&i.Description,
-		&i.ImageUrl,
 		&i.OriginalPrice,
 		&i.ComboPrice,
 		&i.IsOnline,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.ImageMediaAssetID,
 	)
 	return i, err
 }

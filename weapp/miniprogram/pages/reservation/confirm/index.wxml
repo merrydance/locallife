@@ -12,10 +12,10 @@
     <t-cell-group title="预定信息">
       <t-cell title="日期" arrow hover note="{{form.date || '请选择日期'}}" bindtap="showDatePicker" />
       <t-cell 
-        title="时间" 
+        title="预计到店时间" 
         arrow 
         hover 
-        note="{{loadingSlots ? '加载中...' : (form.time || '请选择时间')}}" 
+        note="{{loadingSlots ? '加载中...' : (selectedTimeLabel || '请选择时间')}}" 
         bindtap="showTimePicker"
         disabled="{{loadingSlots || availableTimeSlots.length === 0}}"
       />
@@ -30,28 +30,41 @@
       <t-input label="备注" placeholder="如有特殊需求请备注" value="{{form.remark}}" data-field="remark" bindchange="onInputChange" />
     </t-cell-group>
 
-    <!-- 预订模式选择 -->
-    <t-cell-group title="预订方式" style="margin-top: 24rpx;">
-      <view class="mode-selector">
-        <t-radio-group value="{{paymentMode}}" bind:change="onPaymentModeChange">
-          <t-radio value="deposit" label="预缴定金（到店点菜）" icon="circle" />
-          <t-radio value="full" label="在线点菜（支付全款）" icon="circle" />
-        </t-radio-group>
+    <view class="task-summary-card">
+      <view class="task-summary-title">当前步骤</view>
+      <view class="task-summary-row">
+        <text class="task-summary-label">本步将完成</text>
+        <text class="task-summary-value">{{paymentMode === 'deposit' ? '提交预订并拉起定金支付' : '提交预订并进入点菜页'}}</text>
       </view>
-    </t-cell-group>
+      <view class="task-summary-row">
+        <text class="task-summary-label">下一步</text>
+        <text class="task-summary-desc">{{paymentMode === 'deposit' ? '支付结果会继续由结果页和预订详情页承接' : '进入点菜页后再确认菜品和后续支付'}}</text>
+      </view>
+    </view>
   </view>
+
+    <view class="price-section">
+      <view class="price-row">
+        <text class="price-row-label">{{paymentMode === 'deposit' ? '应付定金' : '本步费用'}}</text>
+        <text class="price-row-value">{{paymentMode === 'deposit' ? '¥' + depositDisplay : '无需支付'}}</text>
+      </view>
+      <view class="price-row" wx:if="{{paymentMode === 'deposit'}}">
+        <text class="price-row-label">支付方式</text>
+        <text class="price-row-value">提交后拉起微信支付</text>
+      </view>
+    </view>
 
   <!-- 支付提示 -->
   <view class="payment-tip">
     <t-icon name="info-circle" size="32rpx" color="#999" />
-    <text>提交预定后需在30分钟内完成支付，否则预定将自动取消。</text>
+    <text>{{paymentMode === 'deposit' ? '提交预订后需在30分钟内完成支付，否则预订将自动取消。' : '本页只负责提交预订并进入点菜，后续金额和支付以点菜链路为准。'}}</text>
   </view>
 </view>
 
 <!-- 底部提交栏 -->
 <view class="bottom-bar">
-  <t-button theme="primary" size="large" block loading="{{submitting}}" bindtap="onSubmit">
-    {{paymentMode === 'deposit' ? '支付定金 ¥' + depositDisplay : '选择菜品'}}
+  <t-button theme="primary" size="large" block loading="{{submitting}}" bindtap="onSubmit" shape="round">
+    {{paymentMode === 'deposit' ? '提交预订并支付定金' : '提交预订并去点菜'}}
   </t-button>
 </view>
 

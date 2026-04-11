@@ -21,7 +21,26 @@ WHERE access_token = $1 LIMIT 1;
 
 -- name: GetSessionByRefreshToken :one
 SELECT * FROM sessions
-WHERE refresh_token = $1 LIMIT 1;
+WHERE refresh_token = sqlc.arg('refresh_token')
+  OR refresh_token = sqlc.arg('refresh_token_fallback')
+LIMIT 1;
+
+-- name: GetSessionByRefreshTokenForUpdate :one
+-- P1-012 修复：加行锁防止并发刷新
+SELECT * FROM sessions
+WHERE refresh_token = sqlc.arg('refresh_token')
+  OR refresh_token = sqlc.arg('refresh_token_fallback')
+LIMIT 1
+FOR UPDATE;
+
+-- name: UpdateSessionTokens :one
+UPDATE sessions
+SET access_token = $2,
+    refresh_token = $3,
+    access_token_expires_at = $4,
+    refresh_token_expires_at = $5
+WHERE id = $1
+RETURNING *;
 
 -- name: RevokeSession :one
 UPDATE sessions

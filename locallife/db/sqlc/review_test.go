@@ -17,7 +17,6 @@ func createRandomReview(t *testing.T, orderID, userID, merchantID int64) Review 
 		UserID:     userID,
 		MerchantID: merchantID,
 		Content:    "服务很好，味道不错！",
-		Images:     []string{"https://example.com/img1.jpg", "https://example.com/img2.jpg"},
 		IsVisible:  true,
 	}
 
@@ -42,7 +41,6 @@ func TestCreateReview(t *testing.T) {
 	require.Equal(t, user.ID, review.UserID)
 	require.Equal(t, merchant.ID, review.MerchantID)
 	require.NotEmpty(t, review.Content)
-	require.Len(t, review.Images, 2)
 	require.True(t, review.IsVisible)
 	require.False(t, review.MerchantReply.Valid) // 初始没有回复
 }
@@ -59,7 +57,6 @@ func TestCreateReview_WithoutContent(t *testing.T) {
 		UserID:     user.ID,
 		MerchantID: merchant.ID,
 		Content:    "", // 无文字评价
-		Images:     nil,
 		IsVisible:  true,
 	}
 

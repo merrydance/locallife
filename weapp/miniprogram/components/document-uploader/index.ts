@@ -21,16 +21,62 @@ Component({
         disabled: {
             type: Boolean,
             value: false
+        },
+        feedbackState: {
+            type: String,
+            value: 'idle'
+        },
+        feedbackTitle: {
+            type: String,
+            value: ''
+        },
+        feedbackDescription: {
+            type: String,
+            value: ''
         }
     },
 
     data: {
         uploading: false,
         retryCount: 0,
-        maxRetries: 2
+        maxRetries: 2,
+        displayValue: ''
+    },
+
+    lifetimes: {
+        attached() {
+            this.updateDisplayValue(this.properties.value)
+        }
+    },
+
+    observers: {
+        value(nextValue: string) {
+            this.updateDisplayValue(nextValue)
+        }
     },
 
     methods: {
+        updateDisplayValue(value: string) {
+            const next = typeof value === 'string' ? value.trim() : ''
+            if (!next) {
+                this.setData({ displayValue: '' })
+                return
+            }
+
+            if (/^(https?:\/\/|wxfile:|data:)/.test(next)) {
+                this.setData({ displayValue: next })
+                return
+            }
+
+            // 兜底：对于未签名的旧 uploads 路径或 dev-only 公共调试路径，不直接渲染，避免误把私有材料当公开图展示
+            if (next.startsWith('uploads/') || next.startsWith('/uploads/') || next.startsWith('/dev/uploads/')) {
+                this.setData({ displayValue: '' })
+                return
+            }
+
+            this.setData({ displayValue: next })
+        },
+
         async onUpload() {
             if (this.data.disabled || this.data.value) return
 
@@ -61,9 +107,9 @@ Component({
         },
 
         onPreview() {
-            if (this.data.value) {
+            if (this.data.displayValue) {
                 wx.previewImage({
-                    urls: [this.data.value]
+                    urls: [this.data.displayValue]
                 })
             }
         },

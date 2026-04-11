@@ -6,16 +6,13 @@ INSERT INTO merchant_applications (
   user_id,
   merchant_name,
   business_license_number,
-  business_license_image_url,
   legal_person_name,
   legal_person_id_number,
-  legal_person_id_front_url,
-  legal_person_id_back_url,
   contact_phone,
   business_address,
   status
 ) VALUES (
-  $1, '', '', '', '', '', '', '', '', '', 'draft'
+  $1, '', '', '', '', '', '', 'draft'
 )
 RETURNING *;
 
@@ -27,12 +24,16 @@ ORDER BY created_at DESC
 LIMIT 1;
 
 -- name: UpdateMerchantApplicationBasicInfo :one
--- 更新基础信息（商户名、联系电话、地址、经纬度、区域）
+-- 更新基础信息（商户名、联系电话、地址、经纬度、区域、人工修正字段）
 UPDATE merchant_applications
 SET
   merchant_name = COALESCE(sqlc.narg(merchant_name), merchant_name),
   contact_phone = COALESCE(sqlc.narg(contact_phone), contact_phone),
   business_address = COALESCE(sqlc.narg(business_address), business_address),
+  business_license_number = COALESCE(sqlc.narg(business_license_number), business_license_number),
+  business_scope = COALESCE(sqlc.narg(business_scope), business_scope),
+  legal_person_name = COALESCE(sqlc.narg(legal_person_name), legal_person_name),
+  legal_person_id_number = COALESCE(sqlc.narg(legal_person_id_number), legal_person_id_number),
   longitude = COALESCE(sqlc.narg(longitude), longitude),
   latitude = COALESCE(sqlc.narg(latitude), latitude),
   region_id = COALESCE(sqlc.narg(region_id), region_id),
@@ -44,10 +45,20 @@ RETURNING *;
 -- 更新营业执照信息（图片URL和OCR结果）
 UPDATE merchant_applications
 SET
-  business_license_image_url = COALESCE(sqlc.narg(business_license_image_url), business_license_image_url),
+  business_license_media_asset_id = COALESCE(sqlc.narg(business_license_media_asset_id), business_license_media_asset_id),
   business_license_number = COALESCE(sqlc.narg(business_license_number), business_license_number),
   business_scope = COALESCE(sqlc.narg(business_scope), business_scope),
   business_license_ocr = COALESCE(sqlc.narg(business_license_ocr), business_license_ocr),
+  updated_at = now()
+WHERE id = $1 AND status = 'draft'
+RETURNING *;
+
+-- name: ClearMerchantApplicationBusinessLicense :one
+-- 清空营业执照关联和 OCR 结果
+UPDATE merchant_applications
+SET
+  business_license_media_asset_id = NULL,
+  business_license_ocr = NULL,
   updated_at = now()
 WHERE id = $1 AND status = 'draft'
 RETURNING *;
@@ -56,8 +67,18 @@ RETURNING *;
 -- 更新食品经营许可证信息（图片URL和OCR结果）
 UPDATE merchant_applications
 SET
-  food_permit_url = COALESCE(sqlc.narg(food_permit_url), food_permit_url),
+  food_permit_media_asset_id = COALESCE(sqlc.narg(food_permit_media_asset_id), food_permit_media_asset_id),
   food_permit_ocr = COALESCE(sqlc.narg(food_permit_ocr), food_permit_ocr),
+  updated_at = now()
+WHERE id = $1 AND status = 'draft'
+RETURNING *;
+
+-- name: ClearMerchantApplicationFoodPermit :one
+-- 清空食品经营许可证关联和 OCR 结果
+UPDATE merchant_applications
+SET
+  food_permit_media_asset_id = NULL,
+  food_permit_ocr = NULL,
   updated_at = now()
 WHERE id = $1 AND status = 'draft'
 RETURNING *;
@@ -66,10 +87,20 @@ RETURNING *;
 -- 更新身份证正面信息（图片URL和OCR结果）
 UPDATE merchant_applications
 SET
-  legal_person_id_front_url = COALESCE(sqlc.narg(legal_person_id_front_url), legal_person_id_front_url),
+  id_card_front_media_asset_id = COALESCE(sqlc.narg(id_card_front_media_asset_id), id_card_front_media_asset_id),
   legal_person_name = COALESCE(sqlc.narg(legal_person_name), legal_person_name),
   legal_person_id_number = COALESCE(sqlc.narg(legal_person_id_number), legal_person_id_number),
   id_card_front_ocr = COALESCE(sqlc.narg(id_card_front_ocr), id_card_front_ocr),
+  updated_at = now()
+WHERE id = $1 AND status = 'draft'
+RETURNING *;
+
+-- name: ClearMerchantApplicationIDCardFront :one
+-- 清空身份证正面关联和 OCR 结果
+UPDATE merchant_applications
+SET
+  id_card_front_media_asset_id = NULL,
+  id_card_front_ocr = NULL,
   updated_at = now()
 WHERE id = $1 AND status = 'draft'
 RETURNING *;
@@ -78,8 +109,18 @@ RETURNING *;
 -- 更新身份证背面信息（图片URL和OCR结果）
 UPDATE merchant_applications
 SET
-  legal_person_id_back_url = COALESCE(sqlc.narg(legal_person_id_back_url), legal_person_id_back_url),
+  id_card_back_media_asset_id = COALESCE(sqlc.narg(id_card_back_media_asset_id), id_card_back_media_asset_id),
   id_card_back_ocr = COALESCE(sqlc.narg(id_card_back_ocr), id_card_back_ocr),
+  updated_at = now()
+WHERE id = $1 AND status = 'draft'
+RETURNING *;
+
+-- name: ClearMerchantApplicationIDCardBack :one
+-- 清空身份证背面关联和 OCR 结果
+UPDATE merchant_applications
+SET
+  id_card_back_media_asset_id = NULL,
+  id_card_back_ocr = NULL,
   updated_at = now()
 WHERE id = $1 AND status = 'draft'
 RETURNING *;
@@ -141,6 +182,15 @@ SELECT EXISTS(
   WHERE address = $1 AND owner_user_id != $2 AND deleted_at IS NULL
 ) AS exists;
 
+-- name: ListMerchantAddressesByRegion :many
+SELECT address FROM merchants
+WHERE region_id = $1 AND deleted_at IS NULL;
+
+-- name: ListMerchantLocationsInRegion :many
+-- 获取区域内所有在营商户的坐标和地址，用于 GPS 距离去重检测
+SELECT owner_user_id, address, latitude, longitude FROM merchants
+WHERE region_id = $1 AND deleted_at IS NULL;
+
 -- name: UpdateMerchantApplicationImages :one
 -- 更新门头照和环境照（jsonb数组）
 UPDATE merchant_applications
@@ -150,3 +200,27 @@ SET
   updated_at = now()
 WHERE id = $1 AND status = 'draft'
 RETURNING *;
+
+-- name: UpdateMerchantApplicationShopImages :one
+-- 更新门头照和环境照（商户已审核通过后也可以更新）
+UPDATE merchant_applications
+SET
+  storefront_images = COALESCE(sqlc.narg(storefront_images), storefront_images),
+  environment_images = COALESCE(sqlc.narg(environment_images), environment_images),
+  updated_at = now()
+WHERE user_id = $1
+RETURNING *;
+
+-- name: ResetStaleMerchantOCRStatus :exec
+UPDATE merchant_applications
+SET 
+  business_license_ocr = CASE WHEN business_license_ocr->>'status' = 'processing' THEN jsonb_set(business_license_ocr, '{status}', '"failed"') ELSE business_license_ocr END,
+  food_permit_ocr = CASE WHEN food_permit_ocr->>'status' = 'processing' THEN jsonb_set(food_permit_ocr, '{status}', '"failed"') ELSE food_permit_ocr END,
+  id_card_front_ocr = CASE WHEN id_card_front_ocr->>'status' = 'processing' THEN jsonb_set(id_card_front_ocr, '{status}', '"failed"') ELSE id_card_front_ocr END,
+  id_card_back_ocr = CASE WHEN id_card_back_ocr->>'status' = 'processing' THEN jsonb_set(id_card_back_ocr, '{status}', '"failed"') ELSE id_card_back_ocr END
+WHERE 
+  (business_license_ocr->>'status' = 'processing' OR
+   food_permit_ocr->>'status' = 'processing' OR
+   id_card_front_ocr->>'status' = 'processing' OR
+   id_card_back_ocr->>'status' = 'processing')
+  AND updated_at < $1;

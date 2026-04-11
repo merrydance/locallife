@@ -2,6 +2,9 @@
  * 环境配置
  */
 
+// 应用版本号（展示给用户的版本，与 package.json 保持一致）
+export const APP_VERSION = '1.0.0'
+
 // 微信小程序全局配置类型声明
 declare const __wxConfig: {
   envVersion: 'develop' | 'trial' | 'release'

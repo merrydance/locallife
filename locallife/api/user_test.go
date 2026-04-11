@@ -40,6 +40,10 @@ func TestGetCurrentUserAPI(t *testing.T) {
 					ListUserRoles(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
 					Return([]db.UserRole{}, nil)
+				store.EXPECT().
+					ListMerchantsByStaff(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return([]db.Merchant{}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -68,7 +72,7 @@ func TestGetCurrentUserAPI(t *testing.T) {
 				store.EXPECT().
 					GetUser(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
-					Return(db.User{}, sql.ErrNoRows)
+					Return(db.User{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -128,8 +132,8 @@ func TestUpdateCurrentUserAPI(t *testing.T) {
 		{
 			name: "OK",
 			body: map[string]interface{}{
-				"full_name":  "New Name",
-				"avatar_url": "https://example.com/new-avatar.jpg",
+				"full_name":             "New Name",
+				"avatar_media_asset_id": int64(101),
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
@@ -137,7 +141,7 @@ func TestUpdateCurrentUserAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				updatedUser := user
 				updatedUser.FullName = "Updated Name"
-				updatedUser.AvatarUrl = pgtype.Text{String: "https://example.com/new-avatar.jpg", Valid: true}
+				updatedUser.AvatarMediaAssetID = pgtype.Int8{Int64: 101, Valid: true}
 
 				store.EXPECT().
 					UpdateUser(gomock.Any(), gomock.Any()).
@@ -147,6 +151,14 @@ func TestUpdateCurrentUserAPI(t *testing.T) {
 					ListUserRoles(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
 					Return([]db.UserRole{}, nil)
+				store.EXPECT().
+					ListMerchantsByStaff(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return([]db.Merchant{}, nil)
+				store.EXPECT().
+					GetMediaAssetByID(gomock.Any(), gomock.Eq(int64(101))).
+					Times(1).
+					Return(db.MediaAsset{ID: 101, ObjectKey: "user/avatar/101/profile.jpg", Visibility: "public", ModerationStatus: "approved"}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -172,6 +184,10 @@ func TestUpdateCurrentUserAPI(t *testing.T) {
 					ListUserRoles(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
 					Return([]db.UserRole{}, nil)
+				store.EXPECT().
+					ListMerchantsByStaff(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return([]db.Merchant{}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -213,6 +229,10 @@ func TestUpdateCurrentUserAPI(t *testing.T) {
 				store.EXPECT().
 					ListUserRoles(gomock.Any(), gomock.Any()).
 					Times(0)
+
+				store.EXPECT().
+					ListMerchantsByStaff(gomock.Any(), gomock.Any()).
+					Times(0)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -251,8 +271,214 @@ func requireBodyMatchUser(t *testing.T, body *bytes.Buffer, user db.User) {
 	data := body.Bytes()
 
 	var gotUser userResponse
-	err := json.Unmarshal(data, &gotUser)
-	require.NoError(t, err)
+	requireUnmarshalAPIResponseData(t, data, &gotUser)
 	require.Equal(t, user.ID, gotUser.ID)
 	require.Equal(t, user.WechatOpenid, gotUser.WechatOpenID)
+}
+
+// TestGetCurrentUserAPI_WithAvatarURL — Phase 5.5
+// 当用户 avatar_media_asset_id 有值时，GET /v1/users/me 应返回包含 CDN 地址的 avatar_url
+func TestGetCurrentUserAPI_WithAvatarURL(t *testing.T) {
+	user, _ := randomUser(t)
+	const avatarAssetID int64 = 55
+	user.AvatarMediaAssetID = pgtype.Int8{Int64: avatarAssetID, Valid: true}
+
+	avatarAsset := db.MediaAsset{
+		ID:               avatarAssetID,
+		ObjectKey:        "user/avatar/55/avatar.jpg",
+		Visibility:       "public",
+		ModerationStatus: "approved",
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetUser(gomock.Any(), gomock.Eq(user.ID)).
+		Times(1).
+		Return(user, nil)
+	store.EXPECT().
+		ListUserRoles(gomock.Any(), gomock.Eq(user.ID)).
+		Times(1).
+		Return([]db.UserRole{}, nil)
+	store.EXPECT().
+		ListMerchantsByStaff(gomock.Any(), gomock.Eq(user.ID)).
+		Times(1).
+		Return([]db.Merchant{}, nil)
+	store.EXPECT().
+		GetMediaAssetByID(gomock.Any(), gomock.Eq(avatarAssetID)).
+		Times(1).
+		Return(avatarAsset, nil)
+
+	server, _ := newTestServerForMedia(t, store)
+	recorder := httptest.NewRecorder()
+
+	request, err := http.NewRequest(http.MethodGet, "/v1/users/me", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp userResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.NotNil(t, resp.AvatarURL)
+	require.Contains(t, *resp.AvatarURL, "https://cdn.test.example.com")
+	require.Contains(t, *resp.AvatarURL, "user/avatar/55/avatar.jpg")
+}
+
+// TestUpdateCurrentUserAPI_WithAvatarAssetID — Phase 5.5
+// PATCH /v1/users/me 提交 avatar_media_asset_id 后，响应中 avatar_url 应指向 CDN 地址
+func TestUpdateCurrentUserAPI_WithAvatarAssetID(t *testing.T) {
+	user, _ := randomUser(t)
+	const avatarAssetID int64 = 88
+
+	updatedUser := user
+	updatedUser.AvatarMediaAssetID = pgtype.Int8{Int64: avatarAssetID, Valid: true}
+
+	avatarAsset := db.MediaAsset{
+		ID:               avatarAssetID,
+		ObjectKey:        "user/avatar/88/profile.jpg",
+		Visibility:       "public",
+		ModerationStatus: "approved",
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		UpdateUser(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(updatedUser, nil)
+	store.EXPECT().
+		ListUserRoles(gomock.Any(), gomock.Eq(user.ID)).
+		Times(1).
+		Return([]db.UserRole{}, nil)
+	store.EXPECT().
+		ListMerchantsByStaff(gomock.Any(), gomock.Eq(user.ID)).
+		Times(1).
+		Return([]db.Merchant{}, nil)
+	store.EXPECT().
+		GetMediaAssetByID(gomock.Any(), gomock.Eq(avatarAssetID)).
+		Times(1).
+		Return(avatarAsset, nil)
+
+	server, _ := newTestServerForMedia(t, store)
+	recorder := httptest.NewRecorder()
+
+	body := map[string]interface{}{"avatar_media_asset_id": avatarAssetID}
+	data, err := json.Marshal(body)
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPatch, "/v1/users/me", bytes.NewReader(data))
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp userResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.NotNil(t, resp.AvatarURL)
+	require.Contains(t, *resp.AvatarURL, "https://cdn.test.example.com")
+	require.Contains(t, *resp.AvatarURL, "user/avatar/88/profile.jpg")
+}
+
+func TestGetCurrentUserAPI_WithPendingAvatarVisibleToOwner(t *testing.T) {
+	user, _ := randomUser(t)
+	const avatarAssetID int64 = 109
+	user.AvatarMediaAssetID = pgtype.Int8{Int64: avatarAssetID, Valid: true}
+
+	avatarAsset := db.MediaAsset{
+		ID:               avatarAssetID,
+		ObjectKey:        "user/avatar/109/profile.jpg",
+		Visibility:       "public",
+		MediaCategory:    "avatar",
+		ModerationStatus: "pending",
+		UploadedBy:       user.ID,
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetUser(gomock.Any(), gomock.Eq(user.ID)).
+		Times(1).
+		Return(user, nil)
+	store.EXPECT().
+		ListUserRoles(gomock.Any(), gomock.Eq(user.ID)).
+		Times(1).
+		Return([]db.UserRole{}, nil)
+	store.EXPECT().
+		ListMerchantsByStaff(gomock.Any(), gomock.Eq(user.ID)).
+		Times(1).
+		Return([]db.Merchant{}, nil)
+	store.EXPECT().
+		GetMediaAssetByID(gomock.Any(), gomock.Eq(avatarAssetID)).
+		Times(1).
+		Return(avatarAsset, nil)
+
+	server, _ := newTestServerForMedia(t, store)
+	recorder := httptest.NewRecorder()
+
+	request, err := http.NewRequest(http.MethodGet, "/v1/users/me", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp userResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.NotNil(t, resp.AvatarURL)
+	require.Contains(t, *resp.AvatarURL, "https://cdn.test.example.com")
+	require.Contains(t, *resp.AvatarURL, "user/avatar/109/profile.jpg")
+}
+
+func TestGetCurrentUserAPI_WithPendingMerchantWorkbench(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID + 100)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetUser(gomock.Any(), gomock.Eq(user.ID)).
+		Times(1).
+		Return(user, nil)
+	store.EXPECT().
+		ListUserRoles(gomock.Any(), gomock.Eq(user.ID)).
+		Times(1).
+		Return([]db.UserRole{{UserID: user.ID, Role: RoleMerchantStaff, Status: "active"}}, nil)
+	store.EXPECT().
+		ListMerchantsByStaff(gomock.Any(), gomock.Eq(user.ID)).
+		Times(1).
+		Return([]db.Merchant{merchant}, nil)
+	store.EXPECT().
+		GetUserMerchantRole(gomock.Any(), gomock.Eq(db.GetUserMerchantRoleParams{MerchantID: merchant.ID, UserID: user.ID})).
+		Times(1).
+		Return("pending", nil)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	request, err := http.NewRequest(http.MethodGet, "/v1/users/me", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp userResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.NotContains(t, resp.Roles, RoleMerchantStaff)
+	require.Len(t, resp.Workbenches, 1)
+	require.Equal(t, "merchant", resp.Workbenches[0].ID)
+	require.Equal(t, "pending_assignment", resp.Workbenches[0].Status)
+	require.Equal(t, merchant.Name, resp.Workbenches[0].MerchantName)
+	require.Equal(t, "pending", resp.Workbenches[0].StaffRole)
 }

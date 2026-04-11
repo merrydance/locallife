@@ -16,26 +16,26 @@ const addTableImage = `-- name: AddTableImage :one
 
 INSERT INTO table_images (
     table_id,
-    image_url,
+    media_asset_id,
     sort_order,
     is_primary
 ) VALUES (
     $1, $2, $3, $4
-) RETURNING id, table_id, image_url, sort_order, is_primary, created_at
+) RETURNING id, table_id, sort_order, is_primary, created_at, media_asset_id
 `
 
 type AddTableImageParams struct {
-	TableID   int64  `json:"table_id"`
-	ImageUrl  string `json:"image_url"`
-	SortOrder int32  `json:"sort_order"`
-	IsPrimary bool   `json:"is_primary"`
+	TableID      int64       `json:"table_id"`
+	MediaAssetID pgtype.Int8 `json:"media_asset_id"`
+	SortOrder    int32       `json:"sort_order"`
+	IsPrimary    bool        `json:"is_primary"`
 }
 
 // ============ Table Images ============
 func (q *Queries) AddTableImage(ctx context.Context, arg AddTableImageParams) (TableImage, error) {
 	row := q.db.QueryRow(ctx, addTableImage,
 		arg.TableID,
-		arg.ImageUrl,
+		arg.MediaAssetID,
 		arg.SortOrder,
 		arg.IsPrimary,
 	)
@@ -43,10 +43,10 @@ func (q *Queries) AddTableImage(ctx context.Context, arg AddTableImageParams) (T
 	err := row.Scan(
 		&i.ID,
 		&i.TableID,
-		&i.ImageUrl,
 		&i.SortOrder,
 		&i.IsPrimary,
 		&i.CreatedAt,
+		&i.MediaAssetID,
 	)
 	return i, err
 }
@@ -95,17 +95,19 @@ func (q *Queries) CountAvailableTablesByMerchant(ctx context.Context, merchantID
 const countExploreNearbyRooms = `-- name: CountExploreNearbyRooms :one
 SELECT COUNT(*) FROM tables t
 INNER JOIN merchants m ON t.merchant_id = m.id
+LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
 WHERE t.table_type = 'room'
   AND t.status = 'available'
   AND m.status = 'active'
-  AND ($1::BIGINT IS NULL OR m.region_id = $1)
+  AND COALESCE(mp.is_takeout_suspended, false) = false
+  AND m.region_id = $1
   AND ($2::SMALLINT IS NULL OR t.capacity >= $2)
   AND ($3::SMALLINT IS NULL OR t.capacity <= $3)
   AND ($4::BIGINT IS NULL OR t.minimum_spend IS NULL OR t.minimum_spend <= $4)
 `
 
 type CountExploreNearbyRoomsParams struct {
-	RegionID        pgtype.Int8 `json:"region_id"`
+	RegionID        int64       `json:"region_id"`
 	MinCapacity     pgtype.Int2 `json:"min_capacity"`
 	MaxCapacity     pgtype.Int2 `json:"max_capacity"`
 	MaxMinimumSpend pgtype.Int8 `json:"max_minimum_spend"`
@@ -127,26 +129,30 @@ func (q *Queries) CountExploreNearbyRooms(ctx context.Context, arg CountExploreN
 const countSearchRooms = `-- name: CountSearchRooms :one
 SELECT COUNT(*) FROM tables t
 INNER JOIN merchants m ON t.merchant_id = m.id
+LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
 WHERE t.table_type = 'room'
   AND t.status = 'available'
   AND m.status = 'active'
-  AND ($1::BIGINT IS NULL OR m.region_id = $1)
+  AND COALESCE(mp.is_takeout_suspended, false) = false
+  AND m.region_id = $1
   AND ($2::SMALLINT IS NULL OR t.capacity >= $2)
   AND ($3::SMALLINT IS NULL OR t.capacity <= $3)
-  AND ($4::BIGINT IS NULL OR t.minimum_spend IS NULL OR t.minimum_spend <= $4)
+  AND ($4::BIGINT IS NULL OR t.minimum_spend IS NULL OR t.minimum_spend >= $4)
+  AND ($5::BIGINT IS NULL OR t.minimum_spend IS NULL OR t.minimum_spend <= $5)
   AND NOT EXISTS (
     SELECT 1 FROM table_reservations tr
     WHERE tr.table_id = t.id
-      AND tr.reservation_date = $5::DATE
-      AND tr.reservation_time = $6::TIME
+      AND tr.reservation_date = $6::DATE
+      AND tr.reservation_time = $7::TIME
       AND tr.status IN ('pending', 'paid', 'confirmed')
   )
 `
 
 type CountSearchRoomsParams struct {
-	RegionID        pgtype.Int8 `json:"region_id"`
+	RegionID        int64       `json:"region_id"`
 	MinCapacity     pgtype.Int2 `json:"min_capacity"`
 	MaxCapacity     pgtype.Int2 `json:"max_capacity"`
+	MinMinimumSpend pgtype.Int8 `json:"min_minimum_spend"`
 	MaxMinimumSpend pgtype.Int8 `json:"max_minimum_spend"`
 	ReservationDate pgtype.Date `json:"reservation_date"`
 	ReservationTime pgtype.Time `json:"reservation_time"`
@@ -158,6 +164,7 @@ func (q *Queries) CountSearchRooms(ctx context.Context, arg CountSearchRoomsPara
 		arg.RegionID,
 		arg.MinCapacity,
 		arg.MaxCapacity,
+		arg.MinMinimumSpend,
 		arg.MaxMinimumSpend,
 		arg.ReservationDate,
 		arg.ReservationTime,
@@ -188,21 +195,23 @@ INSERT INTO tables (
     description,
     minimum_spend,
     qr_code_url,
-    status
+  status,
+  access_code_hash
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8
-) RETURNING id, merchant_id, table_no, table_type, capacity, description, minimum_spend, qr_code_url, status, current_reservation_id, created_at, updated_at
+  $1, $2, $3, $4, $5, $6, $7, $8, $9
+) RETURNING id, merchant_id, table_no, table_type, capacity, description, minimum_spend, qr_code_url, status, current_reservation_id, created_at, updated_at, access_code_hash
 `
 
 type CreateTableParams struct {
-	MerchantID   int64       `json:"merchant_id"`
-	TableNo      string      `json:"table_no"`
-	TableType    string      `json:"table_type"`
-	Capacity     int16       `json:"capacity"`
-	Description  pgtype.Text `json:"description"`
-	MinimumSpend pgtype.Int8 `json:"minimum_spend"`
-	QrCodeUrl    pgtype.Text `json:"qr_code_url"`
-	Status       string      `json:"status"`
+	MerchantID     int64       `json:"merchant_id"`
+	TableNo        string      `json:"table_no"`
+	TableType      string      `json:"table_type"`
+	Capacity       int16       `json:"capacity"`
+	Description    pgtype.Text `json:"description"`
+	MinimumSpend   pgtype.Int8 `json:"minimum_spend"`
+	QrCodeUrl      pgtype.Text `json:"qr_code_url"`
+	Status         string      `json:"status"`
+	AccessCodeHash pgtype.Text `json:"access_code_hash"`
 }
 
 func (q *Queries) CreateTable(ctx context.Context, arg CreateTableParams) (Table, error) {
@@ -215,6 +224,7 @@ func (q *Queries) CreateTable(ctx context.Context, arg CreateTableParams) (Table
 		arg.MinimumSpend,
 		arg.QrCodeUrl,
 		arg.Status,
+		arg.AccessCodeHash,
 	)
 	var i Table
 	err := row.Scan(
@@ -230,6 +240,7 @@ func (q *Queries) CreateTable(ctx context.Context, arg CreateTableParams) (Table
 		&i.CurrentReservationID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AccessCodeHash,
 	)
 	return i, err
 }
@@ -274,16 +285,16 @@ SELECT
     t.status,
     t.created_at,
     m.name as merchant_name,
-    m.logo_url as merchant_logo,
+    m.logo_media_asset_id as merchant_logo_media_asset_id,
     m.address as merchant_address,
     m.latitude as merchant_latitude,
     m.longitude as merchant_longitude,
     m.phone as merchant_phone,
     COALESCE(
-        (SELECT ti.image_url FROM table_images ti WHERE ti.table_id = t.id AND ti.is_primary = true LIMIT 1),
-        (SELECT ti.image_url FROM table_images ti WHERE ti.table_id = t.id ORDER BY ti.sort_order ASC, ti.created_at ASC LIMIT 1),
-        ''
-    )::TEXT as primary_image,
+        (SELECT ti.media_asset_id FROM table_images ti WHERE ti.table_id = t.id AND ti.is_primary = true LIMIT 1),
+        (SELECT ti.media_asset_id FROM table_images ti WHERE ti.table_id = t.id ORDER BY ti.sort_order ASC, ti.created_at ASC LIMIT 1),
+        0
+    ) as primary_image_asset_id,
     (SELECT COUNT(*) FROM table_reservations tr 
      WHERE tr.table_id = t.id 
        AND tr.reservation_date >= CURRENT_DATE - INTERVAL '30 days'
@@ -291,48 +302,53 @@ SELECT
     )::INT as monthly_reservations
 FROM tables t
 INNER JOIN merchants m ON t.merchant_id = m.id
+LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
 WHERE t.table_type = 'room'
   AND t.status = 'available'
   AND m.status = 'active'
+  AND COALESCE(mp.is_takeout_suspended, false) = false
   -- 按区域筛选
-  AND ($1::BIGINT IS NULL OR m.region_id = $1)
+  AND m.region_id = $1
   -- 按人数筛选
   AND ($2::SMALLINT IS NULL OR t.capacity >= $2)
   AND ($3::SMALLINT IS NULL OR t.capacity <= $3)
+  -- 按最低消费下限筛选
+  AND ($4::BIGINT IS NULL OR t.minimum_spend IS NULL OR t.minimum_spend >= $4)
   -- 按最低消费筛选
-  AND ($4::BIGINT IS NULL OR t.minimum_spend IS NULL OR t.minimum_spend <= $4)
+  AND ($5::BIGINT IS NULL OR t.minimum_spend IS NULL OR t.minimum_spend <= $5)
 ORDER BY monthly_reservations DESC, t.capacity
-LIMIT $6
-OFFSET $5
+LIMIT $7
+OFFSET $6
 `
 
 type ExploreNearbyRoomsParams struct {
-	RegionID        pgtype.Int8 `json:"region_id"`
+	RegionID        int64       `json:"region_id"`
 	MinCapacity     pgtype.Int2 `json:"min_capacity"`
 	MaxCapacity     pgtype.Int2 `json:"max_capacity"`
+	MinMinimumSpend pgtype.Int8 `json:"min_minimum_spend"`
 	MaxMinimumSpend pgtype.Int8 `json:"max_minimum_spend"`
 	PageOffset      int32       `json:"page_offset"`
 	PageSize        int32       `json:"page_size"`
 }
 
 type ExploreNearbyRoomsRow struct {
-	ID                  int64          `json:"id"`
-	MerchantID          int64          `json:"merchant_id"`
-	TableNo             string         `json:"table_no"`
-	TableType           string         `json:"table_type"`
-	Capacity            int16          `json:"capacity"`
-	Description         pgtype.Text    `json:"description"`
-	MinimumSpend        pgtype.Int8    `json:"minimum_spend"`
-	Status              string         `json:"status"`
-	CreatedAt           time.Time      `json:"created_at"`
-	MerchantName        string         `json:"merchant_name"`
-	MerchantLogo        pgtype.Text    `json:"merchant_logo"`
-	MerchantAddress     string         `json:"merchant_address"`
-	MerchantLatitude    pgtype.Numeric `json:"merchant_latitude"`
-	MerchantLongitude   pgtype.Numeric `json:"merchant_longitude"`
-	MerchantPhone       string         `json:"merchant_phone"`
-	PrimaryImage        string         `json:"primary_image"`
-	MonthlyReservations int32          `json:"monthly_reservations"`
+	ID                       int64          `json:"id"`
+	MerchantID               int64          `json:"merchant_id"`
+	TableNo                  string         `json:"table_no"`
+	TableType                string         `json:"table_type"`
+	Capacity                 int16          `json:"capacity"`
+	Description              pgtype.Text    `json:"description"`
+	MinimumSpend             pgtype.Int8    `json:"minimum_spend"`
+	Status                   string         `json:"status"`
+	CreatedAt                time.Time      `json:"created_at"`
+	MerchantName             string         `json:"merchant_name"`
+	MerchantLogoMediaAssetID pgtype.Int8    `json:"merchant_logo_media_asset_id"`
+	MerchantAddress          string         `json:"merchant_address"`
+	MerchantLatitude         pgtype.Numeric `json:"merchant_latitude"`
+	MerchantLongitude        pgtype.Numeric `json:"merchant_longitude"`
+	MerchantPhone            string         `json:"merchant_phone"`
+	PrimaryImageAssetID      interface{}    `json:"primary_image_asset_id"`
+	MonthlyReservations      int32          `json:"monthly_reservations"`
 }
 
 // 探索附近包间（无需指定预订日期时段），用于本地包间浏览流
@@ -342,6 +358,7 @@ func (q *Queries) ExploreNearbyRooms(ctx context.Context, arg ExploreNearbyRooms
 		arg.RegionID,
 		arg.MinCapacity,
 		arg.MaxCapacity,
+		arg.MinMinimumSpend,
 		arg.MaxMinimumSpend,
 		arg.PageOffset,
 		arg.PageSize,
@@ -364,12 +381,12 @@ func (q *Queries) ExploreNearbyRooms(ctx context.Context, arg ExploreNearbyRooms
 			&i.Status,
 			&i.CreatedAt,
 			&i.MerchantName,
-			&i.MerchantLogo,
+			&i.MerchantLogoMediaAssetID,
 			&i.MerchantAddress,
 			&i.MerchantLatitude,
 			&i.MerchantLongitude,
 			&i.MerchantPhone,
-			&i.PrimaryImage,
+			&i.PrimaryImageAssetID,
 			&i.MonthlyReservations,
 		); err != nil {
 			return nil, err
@@ -383,7 +400,7 @@ func (q *Queries) ExploreNearbyRooms(ctx context.Context, arg ExploreNearbyRooms
 }
 
 const getPrimaryTableImage = `-- name: GetPrimaryTableImage :one
-SELECT id, table_id, image_url, sort_order, is_primary, created_at FROM table_images
+SELECT id, table_id, sort_order, is_primary, created_at, media_asset_id FROM table_images
 WHERE table_id = $1 AND is_primary = TRUE
 LIMIT 1
 `
@@ -394,10 +411,10 @@ func (q *Queries) GetPrimaryTableImage(ctx context.Context, tableID int64) (Tabl
 	err := row.Scan(
 		&i.ID,
 		&i.TableID,
-		&i.ImageUrl,
 		&i.SortOrder,
 		&i.IsPrimary,
 		&i.CreatedAt,
+		&i.MediaAssetID,
 	)
 	return i, err
 }
@@ -414,12 +431,12 @@ SELECT
     t.status,
     t.created_at,
     m.name as merchant_name,
-    m.logo_url as merchant_logo,
+    m.logo_media_asset_id as merchant_logo_media_asset_id,
     m.address as merchant_address,
     m.latitude as merchant_latitude,
     m.longitude as merchant_longitude,
     m.phone as merchant_phone,
-    COALESCE((SELECT image_url FROM table_images WHERE table_id = t.id AND is_primary = TRUE LIMIT 1), '')::TEXT as primary_image,
+    COALESCE((SELECT media_asset_id FROM table_images WHERE table_id = t.id AND is_primary = TRUE LIMIT 1), 0) as primary_image_asset_id,
     (SELECT COUNT(*) FROM table_reservations tr 
      WHERE tr.table_id = t.id 
        AND tr.status IN ('confirmed', 'completed')
@@ -432,22 +449,22 @@ WHERE t.id = $1
 `
 
 type GetRoomDetailForCustomerRow struct {
-	ID                  int64          `json:"id"`
-	MerchantID          int64          `json:"merchant_id"`
-	TableNo             string         `json:"table_no"`
-	Capacity            int16          `json:"capacity"`
-	Description         pgtype.Text    `json:"description"`
-	MinimumSpend        pgtype.Int8    `json:"minimum_spend"`
-	Status              string         `json:"status"`
-	CreatedAt           time.Time      `json:"created_at"`
-	MerchantName        string         `json:"merchant_name"`
-	MerchantLogo        pgtype.Text    `json:"merchant_logo"`
-	MerchantAddress     string         `json:"merchant_address"`
-	MerchantLatitude    pgtype.Numeric `json:"merchant_latitude"`
-	MerchantLongitude   pgtype.Numeric `json:"merchant_longitude"`
-	MerchantPhone       string         `json:"merchant_phone"`
-	PrimaryImage        string         `json:"primary_image"`
-	MonthlyReservations int64          `json:"monthly_reservations"`
+	ID                       int64          `json:"id"`
+	MerchantID               int64          `json:"merchant_id"`
+	TableNo                  string         `json:"table_no"`
+	Capacity                 int16          `json:"capacity"`
+	Description              pgtype.Text    `json:"description"`
+	MinimumSpend             pgtype.Int8    `json:"minimum_spend"`
+	Status                   string         `json:"status"`
+	CreatedAt                time.Time      `json:"created_at"`
+	MerchantName             string         `json:"merchant_name"`
+	MerchantLogoMediaAssetID pgtype.Int8    `json:"merchant_logo_media_asset_id"`
+	MerchantAddress          string         `json:"merchant_address"`
+	MerchantLatitude         pgtype.Numeric `json:"merchant_latitude"`
+	MerchantLongitude        pgtype.Numeric `json:"merchant_longitude"`
+	MerchantPhone            string         `json:"merchant_phone"`
+	PrimaryImageAssetID      interface{}    `json:"primary_image_asset_id"`
+	MonthlyReservations      int64          `json:"monthly_reservations"`
 }
 
 // ============ Customer-side Room Queries (C端包间查询) ============
@@ -465,19 +482,19 @@ func (q *Queries) GetRoomDetailForCustomer(ctx context.Context, id int64) (GetRo
 		&i.Status,
 		&i.CreatedAt,
 		&i.MerchantName,
-		&i.MerchantLogo,
+		&i.MerchantLogoMediaAssetID,
 		&i.MerchantAddress,
 		&i.MerchantLatitude,
 		&i.MerchantLongitude,
 		&i.MerchantPhone,
-		&i.PrimaryImage,
+		&i.PrimaryImageAssetID,
 		&i.MonthlyReservations,
 	)
 	return i, err
 }
 
 const getTable = `-- name: GetTable :one
-SELECT id, merchant_id, table_no, table_type, capacity, description, minimum_spend, qr_code_url, status, current_reservation_id, created_at, updated_at FROM tables
+SELECT id, merchant_id, table_no, table_type, capacity, description, minimum_spend, qr_code_url, status, current_reservation_id, created_at, updated_at, access_code_hash FROM tables
 WHERE id = $1 LIMIT 1
 `
 
@@ -497,12 +514,13 @@ func (q *Queries) GetTable(ctx context.Context, id int64) (Table, error) {
 		&i.CurrentReservationID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AccessCodeHash,
 	)
 	return i, err
 }
 
 const getTableByMerchantAndNo = `-- name: GetTableByMerchantAndNo :one
-SELECT id, merchant_id, table_no, table_type, capacity, description, minimum_spend, qr_code_url, status, current_reservation_id, created_at, updated_at FROM tables
+SELECT id, merchant_id, table_no, table_type, capacity, description, minimum_spend, qr_code_url, status, current_reservation_id, created_at, updated_at, access_code_hash FROM tables
 WHERE merchant_id = $1 AND table_no = $2 LIMIT 1
 `
 
@@ -527,12 +545,13 @@ func (q *Queries) GetTableByMerchantAndNo(ctx context.Context, arg GetTableByMer
 		&i.CurrentReservationID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AccessCodeHash,
 	)
 	return i, err
 }
 
 const getTableForUpdate = `-- name: GetTableForUpdate :one
-SELECT id, merchant_id, table_no, table_type, capacity, description, minimum_spend, qr_code_url, status, current_reservation_id, created_at, updated_at FROM tables
+SELECT id, merchant_id, table_no, table_type, capacity, description, minimum_spend, qr_code_url, status, current_reservation_id, created_at, updated_at, access_code_hash FROM tables
 WHERE id = $1 LIMIT 1
 FOR UPDATE
 `
@@ -553,12 +572,13 @@ func (q *Queries) GetTableForUpdate(ctx context.Context, id int64) (Table, error
 		&i.CurrentReservationID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AccessCodeHash,
 	)
 	return i, err
 }
 
 const listAvailableRooms = `-- name: ListAvailableRooms :many
-SELECT id, merchant_id, table_no, table_type, capacity, description, minimum_spend, qr_code_url, status, current_reservation_id, created_at, updated_at FROM tables
+SELECT id, merchant_id, table_no, table_type, capacity, description, minimum_spend, qr_code_url, status, current_reservation_id, created_at, updated_at, access_code_hash FROM tables
 WHERE merchant_id = $1 
   AND table_type = 'room' 
   AND status = 'available'
@@ -587,6 +607,7 @@ func (q *Queries) ListAvailableRooms(ctx context.Context, merchantID int64) ([]T
 			&i.CurrentReservationID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.AccessCodeHash,
 		); err != nil {
 			return nil, err
 		}
@@ -607,7 +628,7 @@ SELECT
     t.description,
     t.minimum_spend,
     t.status,
-    COALESCE((SELECT image_url FROM table_images WHERE table_id = t.id AND is_primary = TRUE LIMIT 1), '')::TEXT as primary_image
+    COALESCE((SELECT media_asset_id FROM table_images WHERE table_id = t.id AND is_primary = TRUE LIMIT 1), 0) as primary_image_asset_id
 FROM tables t
 WHERE t.merchant_id = $1 
   AND t.table_type = 'room'
@@ -616,14 +637,14 @@ ORDER BY t.capacity, t.table_no
 `
 
 type ListAvailableRoomsForCustomerRow struct {
-	ID           int64       `json:"id"`
-	MerchantID   int64       `json:"merchant_id"`
-	TableNo      string      `json:"table_no"`
-	Capacity     int16       `json:"capacity"`
-	Description  pgtype.Text `json:"description"`
-	MinimumSpend pgtype.Int8 `json:"minimum_spend"`
-	Status       string      `json:"status"`
-	PrimaryImage string      `json:"primary_image"`
+	ID                  int64       `json:"id"`
+	MerchantID          int64       `json:"merchant_id"`
+	TableNo             string      `json:"table_no"`
+	Capacity            int16       `json:"capacity"`
+	Description         pgtype.Text `json:"description"`
+	MinimumSpend        pgtype.Int8 `json:"minimum_spend"`
+	Status              string      `json:"status"`
+	PrimaryImageAssetID interface{} `json:"primary_image_asset_id"`
 }
 
 // 获取商户的可用包间列表（含主图）供顾客查看
@@ -644,7 +665,7 @@ func (q *Queries) ListAvailableRoomsForCustomer(ctx context.Context, merchantID 
 			&i.Description,
 			&i.MinimumSpend,
 			&i.Status,
-			&i.PrimaryImage,
+			&i.PrimaryImageAssetID,
 		); err != nil {
 			return nil, err
 		}
@@ -667,10 +688,10 @@ SELECT
     t.status,
     t.created_at,
     COALESCE(
-        (SELECT image_url FROM table_images WHERE table_id = t.id AND is_primary = TRUE LIMIT 1),
-        (SELECT image_url FROM table_images WHERE table_id = t.id ORDER BY sort_order ASC, created_at ASC LIMIT 1),
-        ''
-    )::TEXT as primary_image,
+        (SELECT media_asset_id FROM table_images WHERE table_id = t.id AND is_primary = TRUE LIMIT 1),
+        (SELECT media_asset_id FROM table_images WHERE table_id = t.id ORDER BY sort_order ASC, created_at ASC LIMIT 1),
+        0
+    ) as primary_image_asset_id,
     (SELECT COUNT(*) FROM table_reservations tr 
      WHERE tr.table_id = t.id 
        AND tr.status IN ('confirmed', 'completed')
@@ -690,7 +711,7 @@ type ListMerchantRoomsForCustomerRow struct {
 	MinimumSpend        pgtype.Int8 `json:"minimum_spend"`
 	Status              string      `json:"status"`
 	CreatedAt           time.Time   `json:"created_at"`
-	PrimaryImage        string      `json:"primary_image"`
+	PrimaryImageAssetID interface{} `json:"primary_image_asset_id"`
 	MonthlyReservations int64       `json:"monthly_reservations"`
 }
 
@@ -713,7 +734,7 @@ func (q *Queries) ListMerchantRoomsForCustomer(ctx context.Context, merchantID i
 			&i.MinimumSpend,
 			&i.Status,
 			&i.CreatedAt,
-			&i.PrimaryImage,
+			&i.PrimaryImageAssetID,
 			&i.MonthlyReservations,
 		); err != nil {
 			return nil, err
@@ -727,7 +748,7 @@ func (q *Queries) ListMerchantRoomsForCustomer(ctx context.Context, merchantID i
 }
 
 const listTableImages = `-- name: ListTableImages :many
-SELECT id, table_id, image_url, sort_order, is_primary, created_at FROM table_images
+SELECT id, table_id, sort_order, is_primary, created_at, media_asset_id FROM table_images
 WHERE table_id = $1
 ORDER BY is_primary DESC, sort_order ASC, created_at ASC
 `
@@ -744,10 +765,10 @@ func (q *Queries) ListTableImages(ctx context.Context, tableID int64) ([]TableIm
 		if err := rows.Scan(
 			&i.ID,
 			&i.TableID,
-			&i.ImageUrl,
 			&i.SortOrder,
 			&i.IsPrimary,
 			&i.CreatedAt,
+			&i.MediaAssetID,
 		); err != nil {
 			return nil, err
 		}
@@ -810,20 +831,56 @@ func (q *Queries) ListTableTags(ctx context.Context, tableID int64) ([]ListTable
 }
 
 const listTablesByMerchant = `-- name: ListTablesByMerchant :many
-SELECT id, merchant_id, table_no, table_type, capacity, description, minimum_spend, qr_code_url, status, current_reservation_id, created_at, updated_at FROM tables
-WHERE merchant_id = $1
-ORDER BY table_type, table_no
+SELECT
+    t.id,
+    t.merchant_id,
+    t.table_no,
+    t.table_type,
+    t.capacity,
+    t.description,
+    t.minimum_spend,
+    t.qr_code_url,
+    t.status,
+    t.current_reservation_id,
+    t.created_at,
+    t.updated_at,
+    t.access_code_hash,
+    COALESCE(
+        (SELECT ti.media_asset_id FROM table_images ti WHERE ti.table_id = t.id AND ti.is_primary = TRUE LIMIT 1),
+        (SELECT ti.media_asset_id FROM table_images ti WHERE ti.table_id = t.id ORDER BY ti.sort_order ASC, ti.created_at ASC LIMIT 1),
+        0
+    ) AS primary_image_asset_id
+FROM tables t
+WHERE t.merchant_id = $1
+ORDER BY t.table_type, t.table_no
 `
 
-func (q *Queries) ListTablesByMerchant(ctx context.Context, merchantID int64) ([]Table, error) {
+type ListTablesByMerchantRow struct {
+	ID                   int64              `json:"id"`
+	MerchantID           int64              `json:"merchant_id"`
+	TableNo              string             `json:"table_no"`
+	TableType            string             `json:"table_type"`
+	Capacity             int16              `json:"capacity"`
+	Description          pgtype.Text        `json:"description"`
+	MinimumSpend         pgtype.Int8        `json:"minimum_spend"`
+	QrCodeUrl            pgtype.Text        `json:"qr_code_url"`
+	Status               string             `json:"status"`
+	CurrentReservationID pgtype.Int8        `json:"current_reservation_id"`
+	CreatedAt            time.Time          `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+	AccessCodeHash       pgtype.Text        `json:"access_code_hash"`
+	PrimaryImageAssetID  interface{}        `json:"primary_image_asset_id"`
+}
+
+func (q *Queries) ListTablesByMerchant(ctx context.Context, merchantID int64) ([]ListTablesByMerchantRow, error) {
 	rows, err := q.db.Query(ctx, listTablesByMerchant, merchantID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []Table{}
+	items := []ListTablesByMerchantRow{}
 	for rows.Next() {
-		var i Table
+		var i ListTablesByMerchantRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.MerchantID,
@@ -837,6 +894,8 @@ func (q *Queries) ListTablesByMerchant(ctx context.Context, merchantID int64) ([
 			&i.CurrentReservationID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.AccessCodeHash,
+			&i.PrimaryImageAssetID,
 		); err != nil {
 			return nil, err
 		}
@@ -849,10 +908,29 @@ func (q *Queries) ListTablesByMerchant(ctx context.Context, merchantID int64) ([
 }
 
 const listTablesByMerchantAndType = `-- name: ListTablesByMerchantAndType :many
-SELECT id, merchant_id, table_no, table_type, capacity, description, minimum_spend, qr_code_url, status, current_reservation_id, created_at, updated_at FROM tables
-WHERE merchant_id = $1 
-  AND table_type = $2
-ORDER BY table_no
+SELECT
+    t.id,
+    t.merchant_id,
+    t.table_no,
+    t.table_type,
+    t.capacity,
+    t.description,
+    t.minimum_spend,
+    t.qr_code_url,
+    t.status,
+    t.current_reservation_id,
+    t.created_at,
+    t.updated_at,
+    t.access_code_hash,
+    COALESCE(
+        (SELECT ti.media_asset_id FROM table_images ti WHERE ti.table_id = t.id AND ti.is_primary = TRUE LIMIT 1),
+        (SELECT ti.media_asset_id FROM table_images ti WHERE ti.table_id = t.id ORDER BY ti.sort_order ASC, ti.created_at ASC LIMIT 1),
+        0
+    ) AS primary_image_asset_id
+FROM tables t
+WHERE t.merchant_id = $1
+  AND t.table_type = $2
+ORDER BY t.table_no
 `
 
 type ListTablesByMerchantAndTypeParams struct {
@@ -860,15 +938,32 @@ type ListTablesByMerchantAndTypeParams struct {
 	TableType  string `json:"table_type"`
 }
 
-func (q *Queries) ListTablesByMerchantAndType(ctx context.Context, arg ListTablesByMerchantAndTypeParams) ([]Table, error) {
+type ListTablesByMerchantAndTypeRow struct {
+	ID                   int64              `json:"id"`
+	MerchantID           int64              `json:"merchant_id"`
+	TableNo              string             `json:"table_no"`
+	TableType            string             `json:"table_type"`
+	Capacity             int16              `json:"capacity"`
+	Description          pgtype.Text        `json:"description"`
+	MinimumSpend         pgtype.Int8        `json:"minimum_spend"`
+	QrCodeUrl            pgtype.Text        `json:"qr_code_url"`
+	Status               string             `json:"status"`
+	CurrentReservationID pgtype.Int8        `json:"current_reservation_id"`
+	CreatedAt            time.Time          `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+	AccessCodeHash       pgtype.Text        `json:"access_code_hash"`
+	PrimaryImageAssetID  interface{}        `json:"primary_image_asset_id"`
+}
+
+func (q *Queries) ListTablesByMerchantAndType(ctx context.Context, arg ListTablesByMerchantAndTypeParams) ([]ListTablesByMerchantAndTypeRow, error) {
 	rows, err := q.db.Query(ctx, listTablesByMerchantAndType, arg.MerchantID, arg.TableType)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []Table{}
+	items := []ListTablesByMerchantAndTypeRow{}
 	for rows.Next() {
-		var i Table
+		var i ListTablesByMerchantAndTypeRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.MerchantID,
@@ -882,6 +977,8 @@ func (q *Queries) ListTablesByMerchantAndType(ctx context.Context, arg ListTable
 			&i.CurrentReservationID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.AccessCodeHash,
+			&i.PrimaryImageAssetID,
 		); err != nil {
 			return nil, err
 		}
@@ -894,7 +991,7 @@ func (q *Queries) ListTablesByMerchantAndType(ctx context.Context, arg ListTable
 }
 
 const listTablesByTag = `-- name: ListTablesByTag :many
-SELECT tb.id, tb.merchant_id, tb.table_no, tb.table_type, tb.capacity, tb.description, tb.minimum_spend, tb.qr_code_url, tb.status, tb.current_reservation_id, tb.created_at, tb.updated_at FROM tables tb
+SELECT tb.id, tb.merchant_id, tb.table_no, tb.table_type, tb.capacity, tb.description, tb.minimum_spend, tb.qr_code_url, tb.status, tb.current_reservation_id, tb.created_at, tb.updated_at, tb.access_code_hash FROM tables tb
 INNER JOIN table_tags tt ON tb.id = tt.table_id
 WHERE tt.tag_id = $1
 ORDER BY tb.table_no
@@ -922,6 +1019,7 @@ func (q *Queries) ListTablesByTag(ctx context.Context, tagID int64) ([]Table, er
 			&i.CurrentReservationID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.AccessCodeHash,
 		); err != nil {
 			return nil, err
 		}
@@ -972,39 +1070,44 @@ SELECT
     t.status,
     t.created_at,
     m.name as merchant_name,
-    m.logo_url as merchant_logo,
+    m.logo_media_asset_id as merchant_logo_media_asset_id,
     m.address as merchant_address,
     m.latitude as merchant_latitude,
     m.longitude as merchant_longitude
 FROM tables t
 INNER JOIN merchants m ON t.merchant_id = m.id
+LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
 WHERE t.table_type = 'room'
   AND t.status = 'available'
   AND m.status = 'active'
-  -- 按区域筛选（可选）
-  AND ($1::BIGINT IS NULL OR m.region_id = $1)
+  AND COALESCE(mp.is_takeout_suspended, false) = false
+  -- 按区域筛选（必选）
+  AND m.region_id = $1
   -- 按人数筛选
   AND ($2::SMALLINT IS NULL OR t.capacity >= $2)
   AND ($3::SMALLINT IS NULL OR t.capacity <= $3)
+  -- 按最低消费下限筛选
+  AND ($4::BIGINT IS NULL OR t.minimum_spend IS NULL OR t.minimum_spend >= $4)
   -- 按最低消费筛选
-  AND ($4::BIGINT IS NULL OR t.minimum_spend IS NULL OR t.minimum_spend <= $4)
+  AND ($5::BIGINT IS NULL OR t.minimum_spend IS NULL OR t.minimum_spend <= $5)
   -- 排除已在指定日期时段被预定的包间
   AND NOT EXISTS (
     SELECT 1 FROM table_reservations tr
     WHERE tr.table_id = t.id
-      AND tr.reservation_date = $5::DATE
-      AND tr.reservation_time = $6::TIME
+      AND tr.reservation_date = $6::DATE
+      AND tr.reservation_time = $7::TIME
       AND tr.status IN ('pending', 'paid', 'confirmed')
   )
 ORDER BY t.capacity, t.minimum_spend NULLS FIRST
-LIMIT $8
-OFFSET $7
+LIMIT $9
+OFFSET $8
 `
 
 type SearchRoomsParams struct {
-	RegionID        pgtype.Int8 `json:"region_id"`
+	RegionID        int64       `json:"region_id"`
 	MinCapacity     pgtype.Int2 `json:"min_capacity"`
 	MaxCapacity     pgtype.Int2 `json:"max_capacity"`
+	MinMinimumSpend pgtype.Int8 `json:"min_minimum_spend"`
 	MaxMinimumSpend pgtype.Int8 `json:"max_minimum_spend"`
 	ReservationDate pgtype.Date `json:"reservation_date"`
 	ReservationTime pgtype.Time `json:"reservation_time"`
@@ -1013,21 +1116,21 @@ type SearchRoomsParams struct {
 }
 
 type SearchRoomsRow struct {
-	ID                int64          `json:"id"`
-	MerchantID        int64          `json:"merchant_id"`
-	TableNo           string         `json:"table_no"`
-	TableType         string         `json:"table_type"`
-	Capacity          int16          `json:"capacity"`
-	Description       pgtype.Text    `json:"description"`
-	MinimumSpend      pgtype.Int8    `json:"minimum_spend"`
-	QrCodeUrl         pgtype.Text    `json:"qr_code_url"`
-	Status            string         `json:"status"`
-	CreatedAt         time.Time      `json:"created_at"`
-	MerchantName      string         `json:"merchant_name"`
-	MerchantLogo      pgtype.Text    `json:"merchant_logo"`
-	MerchantAddress   string         `json:"merchant_address"`
-	MerchantLatitude  pgtype.Numeric `json:"merchant_latitude"`
-	MerchantLongitude pgtype.Numeric `json:"merchant_longitude"`
+	ID                       int64          `json:"id"`
+	MerchantID               int64          `json:"merchant_id"`
+	TableNo                  string         `json:"table_no"`
+	TableType                string         `json:"table_type"`
+	Capacity                 int16          `json:"capacity"`
+	Description              pgtype.Text    `json:"description"`
+	MinimumSpend             pgtype.Int8    `json:"minimum_spend"`
+	QrCodeUrl                pgtype.Text    `json:"qr_code_url"`
+	Status                   string         `json:"status"`
+	CreatedAt                time.Time      `json:"created_at"`
+	MerchantName             string         `json:"merchant_name"`
+	MerchantLogoMediaAssetID pgtype.Int8    `json:"merchant_logo_media_asset_id"`
+	MerchantAddress          string         `json:"merchant_address"`
+	MerchantLatitude         pgtype.Numeric `json:"merchant_latitude"`
+	MerchantLongitude        pgtype.Numeric `json:"merchant_longitude"`
 }
 
 // ============ Room Search ============
@@ -1038,6 +1141,7 @@ func (q *Queries) SearchRooms(ctx context.Context, arg SearchRoomsParams) ([]Sea
 		arg.RegionID,
 		arg.MinCapacity,
 		arg.MaxCapacity,
+		arg.MinMinimumSpend,
 		arg.MaxMinimumSpend,
 		arg.ReservationDate,
 		arg.ReservationTime,
@@ -1063,7 +1167,7 @@ func (q *Queries) SearchRooms(ctx context.Context, arg SearchRoomsParams) ([]Sea
 			&i.Status,
 			&i.CreatedAt,
 			&i.MerchantName,
-			&i.MerchantLogo,
+			&i.MerchantLogoMediaAssetID,
 			&i.MerchantAddress,
 			&i.MerchantLatitude,
 			&i.MerchantLongitude,
@@ -1091,40 +1195,48 @@ SELECT
     t.status,
     t.created_at,
     m.name as merchant_name,
-    m.logo_url as merchant_logo,
+    m.logo_media_asset_id as merchant_logo_media_asset_id,
     m.address as merchant_address,
     m.latitude as merchant_latitude,
     m.longitude as merchant_longitude
 FROM tables t
 INNER JOIN merchants m ON t.merchant_id = m.id
 INNER JOIN merchant_tags mt ON m.id = mt.merchant_id
+LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
 WHERE t.table_type = 'room'
   AND t.status = 'available'
   AND m.status = 'active'
+  AND COALESCE(mp.is_takeout_suspended, false) = false
   AND mt.tag_id = $1
-  -- 按区域筛选（可选）
-  AND ($2::BIGINT IS NULL OR m.region_id = $2)
+  -- 按区域筛选（必选）
+  AND m.region_id = $2
   -- 按人数筛选
   AND ($3::SMALLINT IS NULL OR t.capacity >= $3)
   AND ($4::SMALLINT IS NULL OR t.capacity <= $4)
+  -- 按最低消费下限筛选
+  AND ($5::BIGINT IS NULL OR t.minimum_spend IS NULL OR t.minimum_spend >= $5)
+  -- 按最低消费上限筛选
+  AND ($6::BIGINT IS NULL OR t.minimum_spend IS NULL OR t.minimum_spend <= $6)
   -- 排除已在指定日期时段被预定的包间
   AND NOT EXISTS (
     SELECT 1 FROM table_reservations tr
     WHERE tr.table_id = t.id
-      AND tr.reservation_date = $5::DATE
-      AND tr.reservation_time = $6::TIME
+      AND tr.reservation_date = $7::DATE
+      AND tr.reservation_time = $8::TIME
       AND tr.status IN ('pending', 'paid', 'confirmed')
   )
 ORDER BY t.capacity, t.minimum_spend NULLS FIRST
-LIMIT $8
-OFFSET $7
+LIMIT $10
+OFFSET $9
 `
 
 type SearchRoomsByMerchantTagParams struct {
 	TagID           int64       `json:"tag_id"`
-	RegionID        pgtype.Int8 `json:"region_id"`
+	RegionID        int64       `json:"region_id"`
 	MinCapacity     pgtype.Int2 `json:"min_capacity"`
 	MaxCapacity     pgtype.Int2 `json:"max_capacity"`
+	MinMinimumSpend pgtype.Int8 `json:"min_minimum_spend"`
+	MaxMinimumSpend pgtype.Int8 `json:"max_minimum_spend"`
 	ReservationDate pgtype.Date `json:"reservation_date"`
 	ReservationTime pgtype.Time `json:"reservation_time"`
 	PageOffset      int32       `json:"page_offset"`
@@ -1132,21 +1244,21 @@ type SearchRoomsByMerchantTagParams struct {
 }
 
 type SearchRoomsByMerchantTagRow struct {
-	ID                int64          `json:"id"`
-	MerchantID        int64          `json:"merchant_id"`
-	TableNo           string         `json:"table_no"`
-	TableType         string         `json:"table_type"`
-	Capacity          int16          `json:"capacity"`
-	Description       pgtype.Text    `json:"description"`
-	MinimumSpend      pgtype.Int8    `json:"minimum_spend"`
-	QrCodeUrl         pgtype.Text    `json:"qr_code_url"`
-	Status            string         `json:"status"`
-	CreatedAt         time.Time      `json:"created_at"`
-	MerchantName      string         `json:"merchant_name"`
-	MerchantLogo      pgtype.Text    `json:"merchant_logo"`
-	MerchantAddress   string         `json:"merchant_address"`
-	MerchantLatitude  pgtype.Numeric `json:"merchant_latitude"`
-	MerchantLongitude pgtype.Numeric `json:"merchant_longitude"`
+	ID                       int64          `json:"id"`
+	MerchantID               int64          `json:"merchant_id"`
+	TableNo                  string         `json:"table_no"`
+	TableType                string         `json:"table_type"`
+	Capacity                 int16          `json:"capacity"`
+	Description              pgtype.Text    `json:"description"`
+	MinimumSpend             pgtype.Int8    `json:"minimum_spend"`
+	QrCodeUrl                pgtype.Text    `json:"qr_code_url"`
+	Status                   string         `json:"status"`
+	CreatedAt                time.Time      `json:"created_at"`
+	MerchantName             string         `json:"merchant_name"`
+	MerchantLogoMediaAssetID pgtype.Int8    `json:"merchant_logo_media_asset_id"`
+	MerchantAddress          string         `json:"merchant_address"`
+	MerchantLatitude         pgtype.Numeric `json:"merchant_latitude"`
+	MerchantLongitude        pgtype.Numeric `json:"merchant_longitude"`
 }
 
 // 按商户标签（菜系）搜索包间
@@ -1156,6 +1268,8 @@ func (q *Queries) SearchRoomsByMerchantTag(ctx context.Context, arg SearchRoomsB
 		arg.RegionID,
 		arg.MinCapacity,
 		arg.MaxCapacity,
+		arg.MinMinimumSpend,
+		arg.MaxMinimumSpend,
 		arg.ReservationDate,
 		arg.ReservationTime,
 		arg.PageOffset,
@@ -1180,7 +1294,7 @@ func (q *Queries) SearchRoomsByMerchantTag(ctx context.Context, arg SearchRoomsB
 			&i.Status,
 			&i.CreatedAt,
 			&i.MerchantName,
-			&i.MerchantLogo,
+			&i.MerchantLogoMediaAssetID,
 			&i.MerchantAddress,
 			&i.MerchantLatitude,
 			&i.MerchantLongitude,
@@ -1208,40 +1322,45 @@ SELECT
     t.status,
     t.created_at,
     m.name as merchant_name,
-    m.logo_url as merchant_logo,
+    m.logo_media_asset_id as merchant_logo_media_asset_id,
     m.address as merchant_address,
     m.latitude as merchant_latitude,
     m.longitude as merchant_longitude,
-    COALESCE((SELECT ti.image_url FROM table_images ti WHERE ti.table_id = t.id AND ti.is_primary = true LIMIT 1), '')::TEXT as primary_image
+    COALESCE((SELECT ti.media_asset_id FROM table_images ti WHERE ti.table_id = t.id AND ti.is_primary = true LIMIT 1), 0) as primary_image_asset_id
 FROM tables t
 INNER JOIN merchants m ON t.merchant_id = m.id
+LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
 WHERE t.table_type = 'room'
   AND t.status = 'available'
   AND m.status = 'active'
-  -- 按区域筛选（可选）
-  AND ($1::BIGINT IS NULL OR m.region_id = $1)
+  AND COALESCE(mp.is_takeout_suspended, false) = false
+  -- 按区域筛选（必选）
+  AND m.region_id = $1
   -- 按人数筛选
   AND ($2::SMALLINT IS NULL OR t.capacity >= $2)
   AND ($3::SMALLINT IS NULL OR t.capacity <= $3)
+  -- 按最低消费下限筛选
+  AND ($4::BIGINT IS NULL OR t.minimum_spend IS NULL OR t.minimum_spend >= $4)
   -- 按最低消费筛选
-  AND ($4::BIGINT IS NULL OR t.minimum_spend IS NULL OR t.minimum_spend <= $4)
+  AND ($5::BIGINT IS NULL OR t.minimum_spend IS NULL OR t.minimum_spend <= $5)
   -- 排除已在指定日期时段被预定的包间
   AND NOT EXISTS (
     SELECT 1 FROM table_reservations tr
     WHERE tr.table_id = t.id
-      AND tr.reservation_date = $5::DATE
-      AND tr.reservation_time = $6::TIME
+      AND tr.reservation_date = $6::DATE
+      AND tr.reservation_time = $7::TIME
       AND tr.status IN ('pending', 'paid', 'confirmed')
   )
 ORDER BY t.capacity, t.minimum_spend NULLS FIRST
-LIMIT $8
-OFFSET $7
+LIMIT $9
+OFFSET $8
 `
 
 type SearchRoomsWithImageParams struct {
-	RegionID        pgtype.Int8 `json:"region_id"`
+	RegionID        int64       `json:"region_id"`
 	MinCapacity     pgtype.Int2 `json:"min_capacity"`
 	MaxCapacity     pgtype.Int2 `json:"max_capacity"`
+	MinMinimumSpend pgtype.Int8 `json:"min_minimum_spend"`
 	MaxMinimumSpend pgtype.Int8 `json:"max_minimum_spend"`
 	ReservationDate pgtype.Date `json:"reservation_date"`
 	ReservationTime pgtype.Time `json:"reservation_time"`
@@ -1250,22 +1369,22 @@ type SearchRoomsWithImageParams struct {
 }
 
 type SearchRoomsWithImageRow struct {
-	ID                int64          `json:"id"`
-	MerchantID        int64          `json:"merchant_id"`
-	TableNo           string         `json:"table_no"`
-	TableType         string         `json:"table_type"`
-	Capacity          int16          `json:"capacity"`
-	Description       pgtype.Text    `json:"description"`
-	MinimumSpend      pgtype.Int8    `json:"minimum_spend"`
-	QrCodeUrl         pgtype.Text    `json:"qr_code_url"`
-	Status            string         `json:"status"`
-	CreatedAt         time.Time      `json:"created_at"`
-	MerchantName      string         `json:"merchant_name"`
-	MerchantLogo      pgtype.Text    `json:"merchant_logo"`
-	MerchantAddress   string         `json:"merchant_address"`
-	MerchantLatitude  pgtype.Numeric `json:"merchant_latitude"`
-	MerchantLongitude pgtype.Numeric `json:"merchant_longitude"`
-	PrimaryImage      string         `json:"primary_image"`
+	ID                       int64          `json:"id"`
+	MerchantID               int64          `json:"merchant_id"`
+	TableNo                  string         `json:"table_no"`
+	TableType                string         `json:"table_type"`
+	Capacity                 int16          `json:"capacity"`
+	Description              pgtype.Text    `json:"description"`
+	MinimumSpend             pgtype.Int8    `json:"minimum_spend"`
+	QrCodeUrl                pgtype.Text    `json:"qr_code_url"`
+	Status                   string         `json:"status"`
+	CreatedAt                time.Time      `json:"created_at"`
+	MerchantName             string         `json:"merchant_name"`
+	MerchantLogoMediaAssetID pgtype.Int8    `json:"merchant_logo_media_asset_id"`
+	MerchantAddress          string         `json:"merchant_address"`
+	MerchantLatitude         pgtype.Numeric `json:"merchant_latitude"`
+	MerchantLongitude        pgtype.Numeric `json:"merchant_longitude"`
+	PrimaryImageAssetID      interface{}    `json:"primary_image_asset_id"`
 }
 
 // 搜索包间（带主图），增强版 SearchRooms
@@ -1274,6 +1393,7 @@ func (q *Queries) SearchRoomsWithImage(ctx context.Context, arg SearchRoomsWithI
 		arg.RegionID,
 		arg.MinCapacity,
 		arg.MaxCapacity,
+		arg.MinMinimumSpend,
 		arg.MaxMinimumSpend,
 		arg.ReservationDate,
 		arg.ReservationTime,
@@ -1299,11 +1419,11 @@ func (q *Queries) SearchRoomsWithImage(ctx context.Context, arg SearchRoomsWithI
 			&i.Status,
 			&i.CreatedAt,
 			&i.MerchantName,
-			&i.MerchantLogo,
+			&i.MerchantLogoMediaAssetID,
 			&i.MerchantAddress,
 			&i.MerchantLatitude,
 			&i.MerchantLongitude,
-			&i.PrimaryImage,
+			&i.PrimaryImageAssetID,
 		); err != nil {
 			return nil, err
 		}
@@ -1326,7 +1446,7 @@ func (q *Queries) SetPrimaryTableImage(ctx context.Context, tableID int64) error
 }
 
 const setTableImagePrimary = `-- name: SetTableImagePrimary :one
-UPDATE table_images SET is_primary = TRUE WHERE id = $1 RETURNING id, table_id, image_url, sort_order, is_primary, created_at
+UPDATE table_images SET is_primary = TRUE WHERE id = $1 RETURNING id, table_id, sort_order, is_primary, created_at, media_asset_id
 `
 
 func (q *Queries) SetTableImagePrimary(ctx context.Context, id int64) (TableImage, error) {
@@ -1335,10 +1455,10 @@ func (q *Queries) SetTableImagePrimary(ctx context.Context, id int64) (TableImag
 	err := row.Scan(
 		&i.ID,
 		&i.TableID,
-		&i.ImageUrl,
 		&i.SortOrder,
 		&i.IsPrimary,
 		&i.CreatedAt,
+		&i.MediaAssetID,
 	)
 	return i, err
 }
@@ -1346,33 +1466,39 @@ func (q *Queries) SetTableImagePrimary(ctx context.Context, id int64) (TableImag
 const updateTable = `-- name: UpdateTable :one
 UPDATE tables
 SET table_no = COALESCE($1, table_no),
-    capacity = COALESCE($2, capacity),
-    description = COALESCE($3, description),
-    minimum_spend = COALESCE($4, minimum_spend),
-    qr_code_url = COALESCE($5, qr_code_url),
-    status = COALESCE($6, status),
+    table_type = COALESCE($2, table_type),
+    capacity = COALESCE($3, capacity),
+    description = COALESCE($4, description),
+    minimum_spend = COALESCE($5, minimum_spend),
+    qr_code_url = COALESCE($6, qr_code_url),
+  access_code_hash = COALESCE($7, access_code_hash),
+    status = COALESCE($8, status),
     updated_at = now()
-WHERE id = $7
-RETURNING id, merchant_id, table_no, table_type, capacity, description, minimum_spend, qr_code_url, status, current_reservation_id, created_at, updated_at
+WHERE id = $9
+RETURNING id, merchant_id, table_no, table_type, capacity, description, minimum_spend, qr_code_url, status, current_reservation_id, created_at, updated_at, access_code_hash
 `
 
 type UpdateTableParams struct {
-	TableNo      pgtype.Text `json:"table_no"`
-	Capacity     pgtype.Int2 `json:"capacity"`
-	Description  pgtype.Text `json:"description"`
-	MinimumSpend pgtype.Int8 `json:"minimum_spend"`
-	QrCodeUrl    pgtype.Text `json:"qr_code_url"`
-	Status       pgtype.Text `json:"status"`
-	ID           int64       `json:"id"`
+	TableNo        pgtype.Text `json:"table_no"`
+	TableType      pgtype.Text `json:"table_type"`
+	Capacity       pgtype.Int2 `json:"capacity"`
+	Description    pgtype.Text `json:"description"`
+	MinimumSpend   pgtype.Int8 `json:"minimum_spend"`
+	QrCodeUrl      pgtype.Text `json:"qr_code_url"`
+	AccessCodeHash pgtype.Text `json:"access_code_hash"`
+	Status         pgtype.Text `json:"status"`
+	ID             int64       `json:"id"`
 }
 
 func (q *Queries) UpdateTable(ctx context.Context, arg UpdateTableParams) (Table, error) {
 	row := q.db.QueryRow(ctx, updateTable,
 		arg.TableNo,
+		arg.TableType,
 		arg.Capacity,
 		arg.Description,
 		arg.MinimumSpend,
 		arg.QrCodeUrl,
+		arg.AccessCodeHash,
 		arg.Status,
 		arg.ID,
 	)
@@ -1390,6 +1516,7 @@ func (q *Queries) UpdateTable(ctx context.Context, arg UpdateTableParams) (Table
 		&i.CurrentReservationID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AccessCodeHash,
 	)
 	return i, err
 }
@@ -1399,7 +1526,7 @@ UPDATE table_images
 SET sort_order = COALESCE($1, sort_order),
     is_primary = COALESCE($2, is_primary)
 WHERE id = $3
-RETURNING id, table_id, image_url, sort_order, is_primary, created_at
+RETURNING id, table_id, sort_order, is_primary, created_at, media_asset_id
 `
 
 type UpdateTableImageParams struct {
@@ -1414,10 +1541,10 @@ func (q *Queries) UpdateTableImage(ctx context.Context, arg UpdateTableImagePara
 	err := row.Scan(
 		&i.ID,
 		&i.TableID,
-		&i.ImageUrl,
 		&i.SortOrder,
 		&i.IsPrimary,
 		&i.CreatedAt,
+		&i.MediaAssetID,
 	)
 	return i, err
 }
@@ -1428,7 +1555,7 @@ SET status = $2,
     current_reservation_id = $3,
     updated_at = now()
 WHERE id = $1
-RETURNING id, merchant_id, table_no, table_type, capacity, description, minimum_spend, qr_code_url, status, current_reservation_id, created_at, updated_at
+RETURNING id, merchant_id, table_no, table_type, capacity, description, minimum_spend, qr_code_url, status, current_reservation_id, created_at, updated_at, access_code_hash
 `
 
 type UpdateTableStatusParams struct {
@@ -1453,6 +1580,7 @@ func (q *Queries) UpdateTableStatus(ctx context.Context, arg UpdateTableStatusPa
 		&i.CurrentReservationID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AccessCodeHash,
 	)
 	return i, err
 }

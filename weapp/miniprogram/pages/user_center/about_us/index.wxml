@@ -1,0 +1,49 @@
+<custom-navbar title="关于我们" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<scroll-view 
+  scroll-y 
+  class="page-scroll page-shell page-shell--with-nav page-shell--bottom-safe"
+  style="height: {{scrollViewHeight}}px; --page-shell-nav-height: {{navBarHeight}}px;"
+  enhanced="{{true}}"
+  show-scrollbar="{{false}}"
+>
+  <view class="content-section">
+    <view class="about-card">
+      <view class="brand-section">
+        <view class="logo-wrapper">
+          <t-icon name="app" size="80rpx" color="#fff" />
+        </view>
+        <view class="brand-name">乐客来福</view>
+        <view class="version">Version {{version}}</view>
+      </view>
+
+      <view class="intro-section">
+        <view class="section-title">品牌介绍</view>
+        <view class="section-content">
+          <text user-select="{{true}}">乐客来福 是一个本地共享私域运营平台。\n通过重塑利润分配机制，使顾客获益。\n我们通过极低的佣金比例（5%封顶），把利润留给商户，商户有动力和能力把品质和实惠留给顾客。\n我们提供一个代取服务市场。顾客的外卖代取订单被发布到代取服务市场，由个人承运商承接并完成代取服务。顾客支付的运费全部由承运人获得，承运人有动力提供更好的代取服务。</text>
+        </view>
+      </view>
+
+      <t-divider />
+
+      <view class="company-section">
+        <view class="info-item">
+          <text class="label">运营主体</text>
+          <text class="value">来富网络（宁晋）有限公司</text>
+        </view>
+        <view class="info-item">
+          <text class="label">联系方式</text>
+          <text class="value">merrydance@foxmail.com</text>
+        </view>
+        <view class="info-item">
+          <text class="label">官方网站</text>
+          <text class="value">www.merrydance.cn</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="footer-info">
+      <view>品质生活 · 触手可及</view>
+    </view>
+  </view>
+</scroll-view>

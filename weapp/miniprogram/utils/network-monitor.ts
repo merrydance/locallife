@@ -39,7 +39,7 @@ class NetworkMonitor {
      */
   private init(): void {
     // 获取初始网络状态
-    this.checkNetworkStatus()
+    void this.refreshStatus(true)
 
     // 监听网络状态变化
     wx.onNetworkStatusChange((res) => {
@@ -74,18 +74,44 @@ class NetworkMonitor {
      * 检查当前网络状态
      */
   private checkNetworkStatus(): void {
-    wx.getNetworkType({
-      success: (res) => {
-        const networkType = res.networkType as NetworkType
-        this.networkState = {
-          isConnected: networkType !== 'none',
-          networkType,
-          isOfflineMode: networkType === 'none'
+    void this.refreshStatus(true)
+  }
+
+  /**
+     * 主动刷新网络状态（用于应用恢复前台/请求前预检）
+     */
+  async refreshStatus(silent: boolean = true): Promise<Readonly<NetworkState>> {
+    return new Promise((resolve) => {
+      wx.getNetworkType({
+        success: (res) => {
+          const previous = this.networkState
+          const networkType = res.networkType as NetworkType
+          const nextState: NetworkState = {
+            isConnected: networkType !== 'none',
+            networkType,
+            isOfflineMode: networkType === 'none'
+          }
+
+          this.networkState = nextState
+
+          const changed =
+            previous.isConnected !== nextState.isConnected ||
+            previous.networkType !== nextState.networkType ||
+            previous.isOfflineMode !== nextState.isOfflineMode
+
+          if (changed) {
+            this.notifyListeners()
+          }
+
+          resolve({ ...this.networkState })
+        },
+        fail: (err) => {
+          if (!silent) {
+            logger.warn('获取网络状态失败', err, 'NetworkMonitor.refreshStatus')
+          }
+          resolve({ ...this.networkState })
         }
-      },
-      fail: () => {
-        logger.warn('获取网络状态失败', undefined, 'NetworkMonitor')
-      }
+      })
     })
   }
 

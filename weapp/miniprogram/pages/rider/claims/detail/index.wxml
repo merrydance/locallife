@@ -1,0 +1,227 @@
+<custom-navbar title="索赔详情" showBack="{{true}}" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px;">
+  <view wx:if="{{loading && !detail}}" class="state-block">
+    <t-loading theme="circular" text="加载索赔详情中..." vertical />
+  </view>
+
+  <view wx:elif="{{initialError}}" class="state-block">
+    <t-empty description="{{initialErrorMessage || '索赔详情加载失败，请重试'}}" />
+    <view class="retry-button" bindtap="onRetry">重新加载</view>
+  </view>
+
+  <view wx:elif="{{detail}}" class="content">
+    <view class="page-head">
+      <view class="head-copy">查看索赔处理进度、责任判定、行为摘要，以及追偿和申诉的最终状态。</view>
+    </view>
+
+    <view wx:if="{{actionNoticeMessage}}" class="inline-banner inline-banner-warning">
+      <text class="inline-banner-text">{{actionNoticeMessage}}</text>
+    </view>
+
+    <view wx:if="{{refreshErrorMessage}}" class="inline-banner inline-banner-danger">
+      <text class="inline-banner-text">{{refreshErrorMessage}}</text>
+      <text class="inline-banner-action" bindtap="onRetryRefresh">重新同步</text>
+    </view>
+
+    <view class="hero-card">
+      <view class="hero-top">
+        <text class="hero-title">订单 {{detail.orderNo}}</text>
+        <text class="hero-status">{{detail.statusLabel}}</text>
+      </view>
+      <view class="hero-meta">
+        <view class="meta-chip">{{detail.claimTypeLabel}}</view>
+        <view class="meta-chip">{{detail.recoveryStatusLabel}}</view>
+        <view class="meta-chip">{{detail.appealStatusLabel}}</view>
+      </view>
+      <view class="hero-amounts">
+        <view>
+          <text class="amount-label">索赔金额</text>
+          <text class="amount-value">{{detail.claimAmountText}}</text>
+        </view>
+        <view>
+          <text class="amount-label">批准金额</text>
+          <text class="amount-value">{{detail.approvedAmountText}}</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="card">
+      <view class="card-title">处理进度</view>
+      <t-steps layout="vertical" current="{{detail.progressCurrent}}" theme="dot">
+        <t-step-item title="用户发起索赔" content="{{detail.progressClaimText}}" />
+        <t-step-item title="平台先行赔付与责任判定" content="{{detail.progressRecoveryText}}" />
+        <t-step-item title="骑手申诉或等待处理" content="{{detail.progressAppealText}}" />
+        <t-step-item title="追偿结案" content="已支付、已豁免或申诉处理完成" />
+      </t-steps>
+    </view>
+
+    <view class="card">
+      <view class="card-title">索赔基础信息</view>
+      <view class="row">
+        <text class="label">订单号</text>
+        <text class="value">{{detail.orderNo}}</text>
+      </view>
+      <view class="row">
+        <text class="label">索赔类型</text>
+        <text class="value">{{detail.claimTypeLabel}}</text>
+      </view>
+      <view class="row">
+        <text class="label">索赔状态</text>
+        <text class="value">{{detail.statusLabel}}</text>
+      </view>
+      <view class="row">
+        <text class="label">索赔金额</text>
+        <text class="value">{{detail.claimAmountText}}</text>
+      </view>
+      <view class="row">
+        <text class="label">批准金额</text>
+        <text class="value">{{detail.approvedAmountText}}</text>
+      </view>
+      <view class="row">
+        <text class="label">提交时间</text>
+        <text class="value">{{detail.createdAtLabel}}</text>
+      </view>
+      <view class="desc">
+        <text class="desc-label">索赔说明</text>
+        <text class="desc-value">{{detail.description}}</text>
+      </view>
+    </view>
+
+    <view class="card">
+      <view class="card-title">责任判定</view>
+      <view wx:if="{{decisionError}}" class="pending-tip pending-tip-danger">
+        {{decisionErrorMessage}}
+      </view>
+      <view class="row">
+        <text class="label">责任方</text>
+        <text class="value">{{detail.responsiblePartyLabel}}</text>
+      </view>
+      <view class="row">
+        <text class="label">赔付来源</text>
+        <text class="value">{{detail.compensationSourceLabel}}</text>
+      </view>
+      <view class="row">
+        <text class="label">原因码</text>
+        <text class="value">{{detail.reasonCodesText}}</text>
+      </view>
+      <view class="desc" wx:if="{{detail.traceSummary}}">
+        <text class="desc-label">判定说明</text>
+        <text class="desc-value">{{detail.traceSummary}}</text>
+      </view>
+      <view class="action-row" wx:if="{{decisionError}}">
+        <t-button theme="primary" variant="outline" shape="round" bindtap="onRetryDecision" loading="{{decisionLoading}}">重试责任判定</t-button>
+      </view>
+    </view>
+
+    <view class="card">
+      <view class="card-head">
+        <view>
+          <view class="card-title card-title-tight">行为回溯摘要</view>
+          <text class="card-subtitle">统计窗口 {{behaviorWindowLabel}}</text>
+        </view>
+      </view>
+
+      <view wx:if="{{behaviorLoading && !behaviorCards.length}}" class="pending-tip">
+        正在汇总用户、商户与骑手近窗履约和异常索赔数据...
+      </view>
+
+      <view wx:elif="{{behaviorError && !behaviorCards.length}}" class="pending-tip pending-tip-danger">
+        {{behaviorErrorMessage}}
+      </view>
+
+      <view wx:elif="{{behaviorCards.length > 0}}" class="behavior-grid">
+        <view wx:for="{{behaviorCards}}" wx:key="key" class="behavior-card">
+          <view class="behavior-head">
+            <text class="behavior-title">{{item.title}}</text>
+            <text class="behavior-rate behavior-rate-{{item.abnormalRateLevel}}">{{item.abnormalRateText}}</text>
+          </view>
+          <view class="behavior-stats">
+            <view class="behavior-stat">
+              <text class="behavior-label">有效订单</text>
+              <text class="behavior-value">{{item.totalOrders}}</text>
+            </view>
+            <view class="behavior-stat">
+              <text class="behavior-label">异常索赔</text>
+              <text class="behavior-value">{{item.abnormalClaims}}</text>
+            </view>
+          </view>
+          <view class="behavior-hint">{{item.hint}}</view>
+        </view>
+      </view>
+
+      <view wx:if="{{behaviorCards.length > 0 && behaviorError}}" class="pending-tip pending-tip-danger">
+        {{behaviorErrorMessage}}
+      </view>
+      <view wx:if="{{behaviorCards.length > 0 && !hasRiderBehavior}}" class="pending-tip">
+        当前订单暂无骑手履约数据，骑手行为摘要暂不可用。
+      </view>
+      <view class="action-row" wx:if="{{behaviorError}}">
+        <t-button theme="primary" variant="outline" shape="round" bindtap="onRetryBehavior" loading="{{behaviorLoading}}">重试摘要</t-button>
+      </view>
+    </view>
+
+    <view class="card">
+      <view class="card-title">追偿与申诉</view>
+      <view wx:if="{{recoveryError}}" class="pending-tip pending-tip-danger">
+        {{recoveryErrorMessage}}
+      </view>
+      <view class="row">
+        <text class="label">追偿状态</text>
+        <text class="value">{{detail.recoveryStatusLabel}}</text>
+      </view>
+      <view class="row" wx:if="{{detail.recoveryAmountText}}">
+        <text class="label">追偿金额</text>
+        <text class="value">{{detail.recoveryAmountText}}</text>
+      </view>
+      <view class="row" wx:if="{{detail.dueAtLabel}}">
+        <text class="label">最晚处理</text>
+        <text class="value">{{detail.dueAtLabel}}</text>
+      </view>
+      <view class="row">
+        <text class="label">申诉状态</text>
+        <text class="value">{{detail.appealStatusLabel}}</text>
+      </view>
+      <view class="action-row" wx:if="{{recoveryError}}">
+        <t-button theme="primary" variant="outline" shape="round" bindtap="onRetryRecovery" loading="{{recoveryLoading}}">重试追偿信息</t-button>
+      </view>
+      <view class="action-row" wx:if="{{detail.canPayRecovery}}">
+        <t-button theme="primary" shape="round" loading="{{recoveryPaying}}" bindtap="onPayRecovery">支付追偿款</t-button>
+      </view>
+    </view>
+
+    <view class="card" wx:if="{{detail.hasAppeal}}">
+      <view class="card-title">申诉详情</view>
+      <view class="row">
+        <text class="label">申诉状态</text>
+        <text class="value">{{detail.appealStatusLabel}}</text>
+      </view>
+      <view class="row" wx:if="{{detail.reviewedAtLabel}}">
+        <text class="label">复核时间</text>
+        <text class="value">{{detail.reviewedAtLabel}}</text>
+      </view>
+      <view class="desc" wx:if="{{detail.appealReasonText}}">
+        <text class="desc-label">申诉理由</text>
+        <text class="desc-value">{{detail.appealReasonText}}</text>
+      </view>
+      <view class="desc" wx:if="{{detail.reviewNotes}}">
+        <text class="desc-label">平台复核备注</text>
+        <text class="desc-value">{{detail.reviewNotes}}</text>
+      </view>
+    </view>
+
+    <view class="card" wx:if="{{detail.canSubmitAppeal}}">
+      <view class="card-title">提交申诉</view>
+      <t-textarea
+        value="{{appealReason}}"
+        placeholder="请输入申诉理由，需说明责任判定、赔付金额或证据点的争议"
+        maxlength="1000"
+        indicator
+        bindchange="onAppealInput"
+      />
+      <view class="action-row">
+        <t-button theme="warning" shape="round" loading="{{submitting}}" bindtap="onSubmitAppeal">提交申诉</t-button>
+      </view>
+    </view>
+  </view>
+</view>

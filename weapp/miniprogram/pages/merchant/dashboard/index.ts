@@ -1,514 +1,604 @@
-/**
- * 商户工作台 v4.0 - 全屏沉浸式设计
- * 简化版：专注当日经营，三栏布局，WebSocket实时更新
- */
-
-import { MerchantManagementService } from '../../../api/merchant'
-import { getTables, Table, updateTableStatus } from '../../../api/merchant-table-device-management'
-import { MerchantStatsService } from '../../../api/merchant-analytics'
+import dayjs from 'dayjs'
+import { getMerchantComplaintSummary } from '../../../api/merchant-complaints'
+import {
+  getMyMerchantOpenStatus,
+  getMyMerchantProfile,
+  type MerchantOperatorResponse,
+  updateMyMerchantOpenStatus
+} from '../../../api/merchant'
+import {
+  buildMerchantApplymentStatusView,
+  getMerchantApplymentStatus
+} from '../../../api/merchant-applyment'
+import { MerchantStatsService } from '../../../api/merchant-stats'
 import { MerchantOrderManagementService } from '../../../api/order-management'
-import { WebSocketUtils, RealtimeUtils, WebSocketMessage } from '../../../api/websocket-realtime'
+import {
+  canManageMerchantApplyment,
+  canUseMerchantDeviceManagementFallback,
+  ensureMerchantConsoleAccess,
+  getMerchantConsoleAccessErrorMessage,
+  getRecentMerchantDeviceAccess,
+  isMerchantConsoleAccessDenied,
+  isMerchantConsoleAccessGranted
+} from '../../../utils/console-access'
 import { logger } from '../../../utils/logger'
+import { getStableBarHeights } from '../../../utils/responsive'
+import { getErrorUserMessage } from '../../../utils/user-facing'
 
-const app = getApp<IAppOption>()
+interface OverviewMetric {
+  id: string
+  label: string
+  value: string
+  note: string
+}
+
+interface DashboardIconConfig {
+  name: string
+  color: string
+  size: string
+}
+
+interface DashboardBadgeConfig {
+  count: string
+  maxCount: number
+}
+
+interface DashboardEntryDefinition {
+  id: string
+  title: string
+  icon: DashboardIconConfig
+  path: string
+  badgeKey?: 'orders' | 'complaints'
+}
+
+interface DashboardEntryView extends DashboardEntryDefinition {
+  badgeText: string
+  badgeProps: DashboardBadgeConfig | null
+}
+
+interface DashboardSectionDefinition {
+  id: string
+  title: string
+  items: DashboardEntryDefinition[]
+}
+
+interface DashboardSectionView {
+  id: string
+  title: string
+  items: DashboardEntryView[]
+}
+
+type DashboardRequestResult<T> =
+  | { ok: true, value: T }
+  | { ok: false, error: unknown }
+
+const EMPTY_MERCHANT: MerchantOperatorResponse = {
+  id: 0,
+  owner_user_id: 0,
+  region_id: 0,
+  name: '',
+  description: '',
+  logo_url: '',
+  phone: '',
+  address: '',
+  latitude: '',
+  longitude: '',
+  status: '',
+  is_open: true,
+  version: 0,
+  created_at: '',
+  updated_at: ''
+}
+
+const SKELETON_ROWS = [
+  { width: '100%', height: '360rpx' },
+  { width: '100%', height: '920rpx', marginTop: '24rpx' }
+]
+
+const GRID_GUTTER = 16
+const DASHBOARD_STALE_MS = 60 * 1000
+
+const getErrorMessage = getErrorUserMessage
+
+function hasTrustedDashboardData(data: {
+  lastRefreshAt: number
+}) {
+  return data.lastRefreshAt > 0
+}
+
+function shouldAutoRefreshDashboard(data: {
+  lastRefreshAt: number
+}) {
+  return !data.lastRefreshAt || Date.now() - data.lastRefreshAt >= DASHBOARD_STALE_MS
+}
+
+function createIcon(name: string, color: string): DashboardIconConfig {
+  return {
+    name,
+    color,
+    size: '40rpx'
+  }
+}
+
+async function captureDashboardRequest<T>(request: Promise<T>): Promise<DashboardRequestResult<T>> {
+  try {
+    return { ok: true, value: await request }
+  } catch (error) {
+    return { ok: false, error }
+  }
+}
+
+function isDashboardRequestOk<T>(result: DashboardRequestResult<T>): result is { ok: true, value: T } {
+  return result.ok
+}
+
+const DASHBOARD_SECTIONS: DashboardSectionDefinition[] = [
+  {
+    id: 'operations',
+    title: '经营',
+    items: [
+      { id: 'orders', title: '订单管理', icon: createIcon('cart', 'var(--td-brand-color)'), path: '/pages/merchant/orders/list/index', badgeKey: 'orders' },
+      { id: 'kitchen', title: '后厨看板', icon: createIcon('task', 'var(--td-brand-color)'), path: '/pages/merchant/kitchen/index' },
+      { id: 'reservations', title: '预订管理', icon: createIcon('calendar-event', 'var(--td-brand-color)'), path: '/pages/merchant/reservations/index' }
+    ]
+  },
+  {
+    id: 'store',
+    title: '店铺信息',
+    items: [
+      { id: 'profile', title: '门店资料', icon: createIcon('shop', 'var(--td-success-color)'), path: '/pages/merchant/settings/profile/index' },
+      { id: 'business-hours', title: '营业时间', icon: createIcon('calendar-1', 'var(--td-success-color)'), path: '/pages/merchant/settings/business-hours/index' },
+      { id: 'staff', title: '员工管理', icon: createIcon('usergroup', 'var(--td-success-color)'), path: '/pages/merchant/staff/index' },
+      { id: 'dishes', title: '菜品管理', icon: createIcon('fork', 'var(--td-success-color)'), path: '/pages/merchant/dishes/index' },
+      { id: 'tables', title: '桌台房间', icon: createIcon('table', 'var(--td-success-color)'), path: '/pages/merchant/tables/index' },
+      { id: 'combos', title: '套餐管理', icon: createIcon('combination', 'var(--td-success-color)'), path: '/pages/merchant/combos/index' },
+      { id: 'inventory', title: '库存管理', icon: createIcon('system-storage', 'var(--td-success-color)'), path: '/pages/merchant/inventory/index' },
+      { id: 'display-config', title: '后厨协同', icon: createIcon('setting', 'var(--td-success-color)'), path: '/pages/merchant/settings/display-config/index' },
+      { id: 'printers', title: '打印设备', icon: createIcon('print', 'var(--td-success-color)'), path: '/pages/merchant/printers/index' },
+      { id: 'group-join', title: '申请加入集团', icon: createIcon('cooperate', 'var(--td-success-color)'), path: '/pages/merchant/group/join/index' }
+    ]
+  },
+  {
+    id: 'growth',
+    title: '会员与营销',
+    items: [
+      { id: 'membership', title: '叠加规则', icon: createIcon('cardmembership', 'var(--td-warning-color)'), path: '/pages/merchant/settings/membership/index' },
+      { id: 'members', title: '会员列表', icon: createIcon('usergroup', 'var(--td-warning-color)'), path: '/pages/merchant/settings/members/index' },
+      { id: 'recharge-rules', title: '充值规则', icon: createIcon('saving-pot', 'var(--td-warning-color)'), path: '/pages/merchant/settings/recharge-rules/index' },
+      { id: 'discount-rules', title: '满减活动', icon: createIcon('discount', 'var(--td-warning-color)'), path: '/pages/merchant/discount-rules/index' },
+      { id: 'delivery-promotions', title: '配送活动', icon: createIcon('vehicle', 'var(--td-warning-color)'), path: '/pages/merchant/delivery-promotions/index' },
+      { id: 'vouchers', title: '代金券', icon: createIcon('coupon', 'var(--td-warning-color)'), path: '/pages/merchant/vouchers/index' }
+    ]
+  },
+  // {
+  //   id: 'service',
+  //   title: '售后服务',
+  //   items: [
+  //     { id: 'complaints', title: '投诉处理', icon: createIcon('chat-message', 'var(--td-error-color)'), path: '/pages/merchant/complaints/index', badgeKey: 'complaints' },
+  //     { id: 'reviews', title: '评价管理', icon: createIcon('star', 'var(--td-error-color)'), path: '/pages/merchant/reviews/index' },
+  //     { id: 'claims', title: '索赔处理', icon: createIcon('fact-check', 'var(--td-error-color)'), path: '/pages/merchant/claims/index' }
+  //   ]
+  // },
+  {
+    id: 'finance',
+    title: '财务',
+    items: [
+      { id: 'finance', title: '资金账户', icon: createIcon('wallet', 'var(--td-brand-color)'), path: '/pages/merchant/finance/index' },
+      { id: 'settlement-account', title: '微信提现卡', icon: createIcon('creditcard', 'var(--td-brand-color)'), path: '/pages/merchant/finance/settlement-account/index' },
+      // { id: 'finance-analysis', title: '经营分析', icon: createIcon('chart-bar', 'var(--td-brand-color)'), path: '/pages/merchant/finance/bills/index' },
+      { id: 'application', title: '主体资料', icon: createIcon('personal-information', 'var(--td-brand-color)'), path: '/pages/merchant/settings/application/index' },
+      { id: 'applyment', title: '收付通进件', icon: createIcon('creditcard-add', 'var(--td-brand-color)'), path: '/pages/merchant/settings/applyment/index' }
+    ]
+  }
+]
+
+const DEVICE_MANAGE_ENTRY_IDS = new Set(['display-config', 'printers'])
+
+function formatMoney(fen: number | null | undefined) {
+  if (typeof fen !== 'number' || !Number.isFinite(fen)) return '--'
+  return `¥${(fen / 100).toFixed(0)}`
+}
+
+function formatCount(value: number | null | undefined) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '--'
+  return `${value}`
+}
+
+function buildOverviewMetrics(params: {
+  monthlyOrders: number | null
+  monthlySales: number | null
+  complaintBacklog: number | null
+}): OverviewMetric[] {
+  return [
+    {
+      id: 'orders',
+      label: '本月订单',
+      value: formatCount(params.monthlyOrders),
+      note: '已完成订单'
+    },
+    {
+      id: 'sales',
+      label: '本月成交额',
+      value: formatMoney(params.monthlySales),
+      note: '扣折后金额'
+    },
+    {
+      id: 'complaints',
+      label: '投诉待办',
+      value: formatCount(params.complaintBacklog),
+      note: '当前待跟进'
+    }
+  ]
+}
+
+function toBadgeText(value: number | null | undefined) {
+  if (typeof value !== 'number' || value <= 0) return ''
+  return value > 99 ? '99+' : `${value}`
+}
+
+function buildSections(params: {
+  pendingOrders: number | null
+  pendingComplaints: number | null
+  canManageDeviceSettings: boolean
+  canManageMerchantApplyment: boolean
+}): DashboardSectionView[] {
+  return DASHBOARD_SECTIONS.map((section) => ({
+    id: section.id,
+    title: section.title,
+    items: section.items.filter((item) => {
+      const passesDeviceGate = params.canManageDeviceSettings || !DEVICE_MANAGE_ENTRY_IDS.has(item.id)
+      const passesApplymentGate = params.canManageMerchantApplyment || item.id !== 'applyment'
+      return passesDeviceGate && passesApplymentGate
+    }).map((item) => {
+      let badgeText = ''
+      if (item.badgeKey === 'orders') {
+        badgeText = toBadgeText(params.pendingOrders)
+      }
+      if (item.badgeKey === 'complaints') {
+        badgeText = toBadgeText(params.pendingComplaints)
+      }
+
+      return {
+        ...item,
+        badgeText,
+        badgeProps: badgeText
+          ? {
+              count: badgeText,
+              maxCount: 99
+            }
+          : null
+      }
+    })
+  })).filter((section) => section.items.length > 0)
+}
 
 Page({
   data: {
-    // 商户信息
-    merchantName: '',
-    isOpen: false,
-    currentDate: '',
-
-    // WebSocket 状态
-    wsConnected: false,
-
-    // 统计数据
-    stats: {
-      todayRevenue: 0,
-      todayOrders: 0
-    },
-    revenueDisplay: '0.00',
-
-    // 订单标签
-    orderTab: 'all' as 'all' | 'paid' | 'preparing' | 'ready',
-
-    // 状态计数
-    statusCounts: {
-      paid: 0,
-      preparing: 0,
-      ready: 0
-    },
-
-    // 订单数据
-    pendingOrders: [] as any[],
-    filteredOrders: [] as any[],
-
-    // 桌台数据
-    tableGroups: [] as any[],
-    tableStats: {
-      total: 0,
-      available: 0,
-      occupied: 0
-    },
-
-    // 桌台弹窗
-    showTablePopup: false,
-    activeTable: null as any
+    navBarHeight: 88,
+    accessReady: false,
+    accessDenied: false,
+    accessErrorMessage: '',
+    initialLoading: true,
+    initialError: false,
+    initialErrorMessage: '',
+    refreshErrorMessage: '',
+    isPageSyncing: false,
+    openStatusSubmitting: false,
+    isOpen: true,
+    monthRangeLabel: '',
+    lastRefreshAt: 0,
+    activeMerchant: EMPTY_MERCHANT,
+    gridGutter: GRID_GUTTER,
+    monthlyOrdersValue: null as number | null,
+    monthlySalesValue: null as number | null,
+    complaintBacklogValue: null as number | null,
+    pendingOrdersValue: null as number | null,
+    pendingComplaintsValue: null as number | null,
+    canManageDeviceSettings: false,
+    canManageMerchantApplyment: false,
+    overviewMetrics: buildOverviewMetrics({
+      monthlyOrders: null,
+      monthlySales: null,
+      complaintBacklog: null
+    }) as OverviewMetric[],
+    sections: buildSections({
+      pendingOrders: null,
+      pendingComplaints: null,
+      canManageDeviceSettings: false,
+      canManageMerchantApplyment: false
+    }) as DashboardSectionView[],
+    skeletonRows: SKELETON_ROWS
   },
 
-  onLoad() {
-    this.updateDate()
-    this.loadData()
+  async onLoad() {
+    const { navBarHeight } = getStableBarHeights()
+    this.setData({ navBarHeight })
+    await this.bootstrapPage()
   },
 
-  onShow() {
-    if (this.data.merchantName) {
-      this.loadOrders()
-      this.loadTables()
-    }
-  },
-
-  onHide() {
-    // 页面隐藏时保持连接
-  },
-
-  onUnload() {
-    // 页面卸载时断开 WebSocket
-    WebSocketUtils.closeAll()
-  },
-
-  updateDate() {
-    const now = new Date()
-    const weekDays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六']
-    const dateStr = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日 ${weekDays[now.getDay()]}`
-    this.setData({ currentDate: dateStr })
-  },
-
-  async loadData() {
-    try {
-      await this.loadMerchantInfo()
-      await Promise.all([
-        this.loadStats(),
-        this.loadOrders(),
-        this.loadTables()
-      ])
-      // 营业中时连接 WebSocket
-      if (this.data.isOpen) {
-        this.connectWebSocket()
-      }
-    } catch (error) {
-      logger.error('加载数据失败', error, 'Dashboard')
-      wx.showToast({ title: '加载失败', icon: 'none' })
-    }
-  },
-
-  async loadMerchantInfo() {
-    try {
-      const info = await MerchantManagementService.getMerchantInfo();
-      if (info) {
-        this.setData({
-          merchantName: info.name,
-          isOpen: info.is_open
-        });
-        app.globalData.merchantId = String(info.id);
-        app.globalData.userRole = 'merchant';
-      }
-    } catch (error) {
-      wx.showToast({ title: '加载商户失败', icon: 'error' });
-      logger.error('加载商户信息失败', error, 'Dashboard');
-    }
-  },
-
-  async loadStats() {
-    try {
-      const today = new Date().toISOString().split('T')[0]
-      const stats = await MerchantStatsService.getStatsOverview({
-        start_date: today,
-        end_date: today
-      })
-      if (stats) {
-        const revenue = stats.total_revenue || 0
-        this.setData({
-          stats: {
-            todayRevenue: revenue,
-            todayOrders: stats.total_orders || 0
-          },
-          revenueDisplay: (revenue / 100).toFixed(2)
-        })
-      }
-    } catch (error) {
-      logger.error('加载统计失败', error, 'Dashboard')
-    }
-  },
-
-  async loadOrders() {
-    try {
-      const orders = await MerchantOrderManagementService.getOrderList({
-        page_id: 1,
-        page_size: 50
-      })
-
-      // 订单类型和状态映射
-      const typeMap: Record<string, string> = {
-        'takeout': '外卖',
-        'dine_in': '堂食',
-        'takeaway': '自取',
-        'reservation': '预订'
-      }
-      const statusMap: Record<string, string> = {
-        'paid': '待接单',
-        'preparing': '制作中',
-        'ready': '待取餐'
-      }
-
-      // 过滤和格式化
-      const pendingOrders = (orders || [])
-        .filter((o: any) => ['paid', 'preparing', 'ready'].includes(o.status))
-        .map((o: any) => {
-          let createdTime = ''
-          if (o.created_at) {
-            const d = new Date(o.created_at)
-            const h = d.getHours()
-            const m = d.getMinutes()
-            createdTime = (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m
-          }
-          return {
-            id: o.id,
-            order_no: o.order_no,
-            status: o.status,
-            status_text: statusMap[o.status] || o.status,
-            order_type: o.order_type,
-            order_type_text: typeMap[o.order_type] || o.order_type,
-            total_amount: o.total_amount,
-            amount_display: (o.total_amount / 100).toFixed(2),
-            items_summary: o.items?.slice(0, 2).map((i: any) => i.name).join('、') || '订单商品',
-            table_no: o.table_no,
-            created_at: o.created_at,
-            created_time: createdTime
-          }
-        })
-
-      const statusCounts = {
-        paid: pendingOrders.filter((o: any) => o.status === 'paid').length,
-        preparing: pendingOrders.filter((o: any) => o.status === 'preparing').length,
-        ready: pendingOrders.filter((o: any) => o.status === 'ready').length
-      }
-
-      this.setData({ pendingOrders, statusCounts })
-      this.filterOrders()
-    } catch (error) {
-      logger.error('加载订单失败', error, 'Dashboard')
-    }
-  },
-
-  // 切换订单标签
-  switchOrderTab(e: any) {
-    const tab = e.currentTarget.dataset.tab
-    this.setData({ orderTab: tab })
-    this.filterOrders()
-  },
-
-  // 筛选订单
-  filterOrders() {
-    const { pendingOrders, orderTab } = this.data
-    let filtered = pendingOrders
-    if (orderTab !== 'all') {
-      filtered = pendingOrders.filter((o: any) => o.status === orderTab)
-    }
-    this.setData({ filteredOrders: filtered })
-  },
-
-  async loadTables() {
-    try {
-      const response = await getTables({})
-      const tables = response.tables || []
-
-      const statusClassMap: Record<string, string> = {
-        'available': 'status-available',
-        'occupied': 'status-occupied',
-        'reserved': 'status-reserved',
-        'disabled': 'status-disabled'
-      }
-      const statusTextMap: Record<string, string> = {
-        'available': '空闲',
-        'occupied': '就餐中',
-        'reserved': '已预订',
-        'disabled': '停用'
-      }
-
-      const formattedTables = tables.map((t: Table) => ({
-        ...t,
-        status_class: statusClassMap[t.status] || '',
-        status_text: statusTextMap[t.status] || t.status
-      }))
-
-      // 分组：散台和包间
-      const tablesByType = new Map<string, any[]>()
-      formattedTables.forEach((table: any) => {
-        const type = table.table_type || 'table'
-        if (!tablesByType.has(type)) {
-          tablesByType.set(type, [])
-        }
-        tablesByType.get(type)!.push(table)
-      })
-
-      const tableGroups: any[] = []
-      if (tablesByType.has('table')) {
-        tableGroups.push({ name: '散台', type: 'table', tables: tablesByType.get('table')! })
-      }
-      if (tablesByType.has('room')) {
-        tableGroups.push({ name: '包间', type: 'room', tables: tablesByType.get('room')! })
-      }
-
-      const tableStats = {
-        total: tables.length,
-        available: tables.filter((t: Table) => t.status === 'available').length,
-        occupied: tables.filter((t: Table) => t.status === 'occupied').length
-      }
-
-      this.setData({ tableGroups, tableStats })
-    } catch (error) {
-      logger.error('加载桌台失败', error, 'Dashboard')
-    }
-  },
-
-  // WebSocket 连接
-  async connectWebSocket() {
-    const merchantId = app.globalData.merchantId
-    const userId = app.globalData.userId
-
-    if (!merchantId) {
-      logger.warn('商户ID不存在，跳过WebSocket连接', {}, 'Dashboard')
+  async onShow() {
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage || this.data.initialLoading) {
       return
     }
 
-    try {
-      await RealtimeUtils.initializeForMerchant(
-        Number(userId || 0),
-        Number(merchantId),
-        {
-          onOpen: () => {
-            logger.info('WebSocket 连接成功', { merchantId }, 'Dashboard')
-            this.setData({ wsConnected: true })
-          },
-          onMessage: (msg: WebSocketMessage) => {
-            this.handleWebSocketMessage(msg)
-          },
-          onNotification: (notif: any) => {
-            if (notif.title?.includes('订单') || notif.content?.includes('订单')) {
-              this.loadOrders()
-              wx.vibrateShort({ type: 'medium' })
-            }
-          },
-          onOrderUpdate: (orderData: any) => {
-            logger.info('收到订单更新', orderData, 'Dashboard')
-            this.loadOrders()
-            this.loadStats()
-            wx.vibrateShort({ type: 'medium' })
-          }
-        }
-      )
-    } catch (error) {
-      logger.error('WebSocket 连接失败', error, 'Dashboard')
-      this.setData({ wsConnected: false })
+    if (!shouldAutoRefreshDashboard(this.data)) {
+      return
     }
+
+    await this.loadDashboard({ silent: true })
   },
 
-  handleWebSocketMessage(msg: WebSocketMessage) {
-    if (msg.type === 'new_order' || msg.type === 'order_update') {
-      wx.vibrateShort({ type: 'medium' })
-      this.loadOrders()
-      this.loadStats()
-    } else if (msg.type === 'table_status_change') {
-      this.loadTables()
-    }
-  },
-
-  // 切换营业状态
-  async onToggleStatus() {
-    const newStatus = !this.data.isOpen
-    try {
-      await MerchantManagementService.updateMerchantStatus({ is_open: newStatus })
-      this.setData({ isOpen: newStatus })
-      wx.showToast({ title: newStatus ? '已开始营业' : '已暂停营业', icon: 'none' })
-
-      // 营业状态变化时管理 WebSocket
-      if (newStatus) {
-        this.connectWebSocket()
-      } else {
-        WebSocketUtils.closeAll()
-        this.setData({ wsConnected: false })
-
-        // 打烊时释放所有桌台
-        this.releaseAllTables()
-      }
-    } catch (error) {
-      wx.showToast({ title: '操作失败', icon: 'none' })
-    }
-  },
-
-  // 释放所有桌台（打烊时调用）
-  async releaseAllTables() {
-    try {
-      const response = await getTables()
-      const allTables = response.tables || []
-      const occupiedTables = allTables.filter((t: Table) => t.status === 'occupied')
-
-      if (occupiedTables.length > 0) {
-        // 批量更新所有占用的桌台为可用
-        for (const table of occupiedTables) {
-          await updateTableStatus(table.id, 'available')
-        }
-        logger.info(`打烊释放了 ${occupiedTables.length} 个桌台`, null, 'Dashboard')
-        this.loadTables()
-      }
-    } catch (error) {
-      logger.error('释放桌台失败', error, 'Dashboard')
-    }
-  },
-
-  // 订单操作
-  onOrderTap(e: any) {
-    const id = e.currentTarget.dataset.id
-    wx.navigateTo({ url: `/pages/merchant/orders/index?highlight=${id}` })
-  },
-
-  async onAcceptOrder(e: any) {
-    const id = e.currentTarget.dataset.id
-    try {
-      await MerchantOrderManagementService.acceptOrder(id)
-      wx.showToast({ title: '已接单', icon: 'success' })
-      this.loadOrders()
-    } catch (error) {
-      wx.showToast({ title: '接单失败', icon: 'none' })
-    }
-  },
-
-  async onRejectOrder(e: any) {
-    const id = e.currentTarget.dataset.id
-    wx.showModal({
-      title: '拒单原因',
-      editable: true,
-      placeholderText: '请输入拒单原因',
-      success: async (res) => {
-        if (res.confirm && res.content) {
-          try {
-            await MerchantOrderManagementService.rejectOrder(id, { reason: res.content })
-            wx.showToast({ title: '已拒单', icon: 'success' })
-            this.loadOrders()
-          } catch (error) {
-            wx.showToast({ title: '拒单失败', icon: 'none' })
-          }
-        }
-      }
-    })
-  },
-
-  async onReadyOrder(e: any) {
-    const id = e.currentTarget.dataset.id
-    try {
-      await MerchantOrderManagementService.markOrderReady(id)
-      wx.showToast({ title: '已出餐', icon: 'success' })
-      this.loadOrders()
-    } catch (error) {
-      wx.showToast({ title: '操作失败', icon: 'none' })
-    }
-  },
-
-  // 桌台操作 - 点击显示弹窗
-  onTableCardTap(e: any) {
-    const table = e.currentTarget.dataset.table
+  async bootstrapPage() {
     this.setData({
-      showTablePopup: true,
-      activeTable: table
+      accessReady: false,
+      accessDenied: false,
+      accessErrorMessage: '',
+      initialLoading: true,
+      initialError: false,
+      initialErrorMessage: '',
+      refreshErrorMessage: ''
     })
-  },
 
-  closeTablePopup() {
+    const accessResult = await ensureMerchantConsoleAccess()
+    if (!isMerchantConsoleAccessGranted(accessResult)) {
+      this.setData({
+        accessReady: true,
+        accessDenied: isMerchantConsoleAccessDenied(accessResult),
+        accessErrorMessage: getMerchantConsoleAccessErrorMessage(accessResult),
+        initialLoading: false
+      })
+      return
+    }
+
     this.setData({
-      showTablePopup: false,
-      activeTable: null
+      accessReady: true,
+      accessDenied: false,
+      accessErrorMessage: '',
+      canManageMerchantApplyment: canManageMerchantApplyment(accessResult.user?.roles || [])
     })
+
+    const grantedRoles = accessResult.user?.roles || []
+    let canManageDeviceSettings = false
+    try {
+      const deviceAccess = await getRecentMerchantDeviceAccess()
+      canManageDeviceSettings = canUseMerchantDeviceManagementFallback(grantedRoles, deviceAccess)
+    } catch (err) {
+      logger.warn('Merchant dashboard device access probe failed', err)
+      canManageDeviceSettings = canUseMerchantDeviceManagementFallback(grantedRoles)
+    }
+
+    this.setData({ canManageDeviceSettings })
+
+    await this.loadDashboard()
   },
 
-  async setTableStatus(e: any) {
-    const newStatus = e.currentTarget.dataset.status
-    const { activeTable } = this.data
-    if (!activeTable?.id) return
+  async loadDashboard(options: { silent?: boolean } = {}) {
+    const { silent = false } = options
+    if (this.data.isPageSyncing) return
+    const trustedDataAvailable = hasTrustedDashboardData(this.data)
+
+    const monthStart = dayjs().startOf('month').format('YYYY-MM-DD')
+    const monthEnd = dayjs().endOf('month').format('YYYY-MM-DD')
+
+    this.setData({
+      isPageSyncing: true,
+      ...(silent
+        ? { refreshErrorMessage: '' }
+        : {
+            initialLoading: true,
+            initialError: false,
+            initialErrorMessage: '',
+            refreshErrorMessage: ''
+          })
+    })
 
     try {
-      await updateTableStatus(activeTable.id, newStatus)
-      wx.showToast({ title: '状态已更新', icon: 'success' })
-      this.closeTablePopup()
-      this.loadTables()
-    } catch (error) {
-      logger.error('更新桌台状态失败', error, 'Dashboard')
-      wx.showToast({ title: '更新失败', icon: 'none' })
+      const [
+        profileResult,
+        openStatusResult,
+        overviewResult,
+        orderSummaryResult,
+        complaintSummaryResult
+      ] = await Promise.all([
+        captureDashboardRequest(getMyMerchantProfile()),
+        captureDashboardRequest(getMyMerchantOpenStatus()),
+        captureDashboardRequest(MerchantStatsService.getOverview({
+          start_date: monthStart,
+          end_date: monthEnd
+        })),
+        captureDashboardRequest(MerchantOrderManagementService.getOrderSummary()),
+        captureDashboardRequest(getMerchantComplaintSummary())
+      ] as const)
+
+      if (!isDashboardRequestOk(profileResult)) {
+        if (trustedDataAvailable) {
+          this.setData({
+            initialLoading: false,
+            initialError: false,
+            initialErrorMessage: '',
+            refreshErrorMessage: '页面同步失败，当前保留上次结果'
+          })
+          return
+        }
+        throw profileResult.error
+      }
+
+      const profile = profileResult.value
+      const isOpen = isDashboardRequestOk(openStatusResult)
+        ? openStatusResult.value.is_open
+        : trustedDataAvailable
+          ? this.data.isOpen
+          : profile.is_open
+      const pendingOrders = isDashboardRequestOk(orderSummaryResult)
+        ? (orderSummaryResult.value.paid_count || 0)
+        : this.data.pendingOrdersValue
+      const complaintBacklog = isDashboardRequestOk(complaintSummaryResult)
+        ? (complaintSummaryResult.value.pending_response || 0) + (complaintSummaryResult.value.processing || 0)
+        : this.data.complaintBacklogValue
+      const monthlyOrdersValue = isDashboardRequestOk(overviewResult)
+        ? overviewResult.value.total_orders
+        : this.data.monthlyOrdersValue
+      const monthlySalesValue = isDashboardRequestOk(overviewResult)
+        ? overviewResult.value.total_sales
+        : this.data.monthlySalesValue
+
+      const partialFailure = [
+        openStatusResult,
+        overviewResult,
+        orderSummaryResult,
+        complaintSummaryResult
+      ].some((result) => !result.ok)
+
+      this.setData({
+        initialLoading: false,
+        initialError: false,
+        initialErrorMessage: '',
+        refreshErrorMessage: partialFailure
+          ? (trustedDataAvailable ? '部分数据同步失败，当前保留上次结果' : '部分数据同步失败，未获取到的数据暂未显示')
+          : '',
+        monthRangeLabel: `${dayjs(monthStart).format('MM.DD')} - ${dayjs(monthEnd).format('MM.DD')}`,
+        activeMerchant: profile,
+        isOpen,
+        monthlyOrdersValue,
+        monthlySalesValue,
+        complaintBacklogValue: complaintBacklog,
+        pendingOrdersValue: pendingOrders,
+        pendingComplaintsValue: complaintBacklog,
+        overviewMetrics: buildOverviewMetrics({
+          monthlyOrders: monthlyOrdersValue,
+          monthlySales: monthlySalesValue,
+          complaintBacklog
+        }),
+        sections: buildSections({
+          pendingOrders,
+          pendingComplaints: complaintBacklog,
+          canManageDeviceSettings: this.data.canManageDeviceSettings,
+          canManageMerchantApplyment: this.data.canManageMerchantApplyment
+        })
+      })
+    } catch (err) {
+      logger.error('Merchant dashboard refresh failed', err)
+      this.setData({
+        initialLoading: false,
+        initialError: true,
+        initialErrorMessage: '商户首页加载失败，请重试'
+      })
+    } finally {
+      this.setData({
+        isPageSyncing: false,
+        lastRefreshAt: Date.now()
+      })
     }
   },
 
-  // 跳转到预订管理页面添加预订
-  goToAddReservation() {
-    const { activeTable } = this.data
-    this.closeTablePopup()
-    // 跳转到预订页面，带上桌台ID参数
-    wx.navigateTo({
-      url: `/pages/merchant/reservations/index?tableId=${activeTable?.id}&openAdd=true`
+  onRetryAccess() {
+    this.bootstrapPage()
+  },
+
+  onRetry() {
+    this.loadDashboard().catch((err) => logger.error('Merchant dashboard retry failed', err))
+  },
+
+  onManualRefresh() {
+    if (this.data.accessDenied || this.data.accessErrorMessage || !this.data.accessReady) return
+    this.loadDashboard({ silent: true }).catch((err) => logger.error('Merchant dashboard manual refresh failed', err))
+  },
+
+  async ensureCanResumeBusiness() {
+    if (!this.data.canManageMerchantApplyment) {
+      return true
+    }
+
+    try {
+      const applyment = await getMerchantApplymentStatus()
+      const applymentStatusView = buildMerchantApplymentStatusView(applyment)
+
+      if (applymentStatusView.isOpened) {
+        return true
+      }
+
+      const content = applymentStatusView.blockReason || applymentStatusView.guideText
+
+      const result = await new Promise<boolean>((resolve) => {
+        wx.showModal({
+          title: '暂时无法恢复营业',
+          content,
+          confirmText: '去处理',
+          cancelText: '知道了',
+          success: (modalResult) => resolve(!!modalResult.confirm),
+          fail: () => resolve(false)
+        })
+      })
+
+      if (result) {
+        wx.navigateTo({ url: '/pages/merchant/settings/applyment/index' })
+      }
+
+      return false
+    } catch (err) {
+      logger.warn('Merchant dashboard precheck applyment status failed', err)
+      return true
+    }
+  },
+
+  async onOpenStatusSwitchChange(e: WechatMiniprogram.CustomEvent<{ value: boolean }>) {
+    if (this.data.accessDenied || this.data.accessErrorMessage || !this.data.accessReady || this.data.openStatusSubmitting) {
+      return
+    }
+
+    const nextIsOpen = Boolean(e.detail?.value)
+    if (nextIsOpen === this.data.isOpen) {
+      return
+    }
+
+    if (nextIsOpen) {
+      const canResumeBusiness = await this.ensureCanResumeBusiness()
+      if (!canResumeBusiness) {
+        return
+      }
+    }
+
+    const confirmed = await new Promise<boolean>((resolve) => {
+      wx.showModal({
+        title: nextIsOpen ? '恢复营业' : '立即打烊',
+        content: nextIsOpen
+          ? '确认恢复营业后，顾客将可以继续下单。'
+          : '确认立即打烊后，顾客将暂时无法继续下单。',
+        confirmText: nextIsOpen ? '确认营业' : '确认打烊',
+        cancelText: '再想想',
+        success: (result) => resolve(!!result.confirm),
+        fail: () => resolve(false)
+      })
     })
+
+    if (!confirmed) {
+      return
+    }
+
+    this.setData({ openStatusSubmitting: true })
+
+    try {
+      const response = await updateMyMerchantOpenStatus(nextIsOpen)
+      this.setData({
+        isOpen: response.is_open,
+        lastRefreshAt: Date.now(),
+        refreshErrorMessage: ''
+      })
+    } catch (err) {
+      logger.error('Merchant dashboard update open status failed', err)
+      wx.showToast({
+        title: getErrorMessage(err, nextIsOpen ? '恢复营业失败，请稍后重试' : '打烊失败，请稍后重试'),
+        icon: 'none'
+      })
+    } finally {
+      this.setData({ openStatusSubmitting: false })
+    }
   },
 
-  // 旧的导航方法（保留用于快捷入口）
-  onTableTap(e: any) {
-    const id = e.currentTarget.dataset.id
-    wx.navigateTo({ url: `/pages/merchant/tables/index?tableId=${id}` })
-  },
-
-  // 快捷导航
-  goToInventory() {
-    wx.navigateTo({ url: '/pages/merchant/inventory/index' })
-  },
-
-  goToMembers() {
-    wx.navigateTo({ url: '/pages/merchant/members/index' })
-  },
-
-  goToReservations() {
-    wx.navigateTo({ url: '/pages/merchant/reservations/index' })
-  },
-
-  goToKitchen() {
-    wx.navigateTo({ url: '/pages/merchant/kds/index' })
-  },
-
-  goToStats() {
-    wx.navigateTo({ url: '/pages/merchant/analytics/index' })
-  },
-
-  goToFinance() {
-    wx.navigateTo({ url: '/pages/merchant/finance/index' })
-  },
-
-  goToSettings() {
-    wx.navigateTo({ url: '/pages/merchant/settings/index' })
-  },
-
-  goToDishes() {
-    wx.navigateTo({ url: '/pages/merchant/dishes/index' })
-  },
-
-  goToCombos() {
-    wx.navigateTo({ url: '/pages/merchant/combos/index' })
-  },
-
-  goToTables() {
-    wx.navigateTo({ url: '/pages/merchant/tables/index' })
-  },
-
-  goToMarketing() {
-    wx.navigateTo({ url: '/pages/merchant/vouchers/index' })
-  },
-
-  goToNavigation() {
-    wx.navigateTo({ url: '/pages/merchant/navigation/index' })
+  onTapEntry(e: WechatMiniprogram.TouchEvent) {
+    if (this.data.accessDenied || this.data.accessErrorMessage || !this.data.accessReady) return
+    const { path } = e.currentTarget.dataset as { path?: string }
+    if (!path) return
+    wx.navigateTo({ url: path })
   }
 })

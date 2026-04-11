@@ -1,0 +1,15 @@
+{
+  "navigationStyle": "custom",
+  "usingComponents": {
+    "custom-navbar": "/components/custom-navbar/index",
+    "t-button": "tdesign-miniprogram/button/button",
+    "t-empty": "tdesign-miniprogram/empty/empty",
+    "t-grid": "tdesign-miniprogram/grid/grid",
+    "t-grid-item": "tdesign-miniprogram/grid-item/grid-item",
+    "t-loading": "tdesign-miniprogram/loading/loading",
+    "t-notice-bar": "tdesign-miniprogram/notice-bar/notice-bar",
+    "t-tab-panel": "tdesign-miniprogram/tab-panel/tab-panel",
+    "t-tabs": "tdesign-miniprogram/tabs/tabs",
+    "t-tag": "tdesign-miniprogram/tag/tag"
+  }
+}

@@ -1,0 +1,448 @@
+package api
+
+import (
+	"encoding/json"
+	"net/http"
+	"strconv"
+
+	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgtype"
+	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/token"
+)
+
+type platformOperatorRuleItem struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Key      string `json:"key"`
+	Value    string `json:"value"`
+	Unit     string `json:"unit"`
+	Desc     string `json:"desc"`
+	Category string `json:"category"`
+	Editable bool   `json:"editable"`
+}
+
+type listPlatformOperatorRulesResponse struct {
+	Rules []platformOperatorRuleItem `json:"rules"`
+}
+
+type updatePlatformOperatorRuleRequest struct {
+	Value string `json:"value" binding:"required"`
+}
+
+const (
+	merchantDepositConfigKey                = "platform_rule.merchant_deposit_fen"
+	riderDepositConfigKey                   = "platform_rule.rider_deposit_fen"
+	platformOperationalConfigsSuccessorPath = "/v1/platform/operational-configs"
+)
+
+type depositConfigValue struct {
+	AmountFen int64 `json:"amount_fen"`
+}
+
+func (server *Server) getGlobalDepositFen(ctx *gin.Context, configKey string) (int64, bool, error) {
+	config, err := server.store.GetPlatformConfig(ctx, db.GetPlatformConfigParams{
+		ConfigKey: configKey,
+		ScopeType: db.PlatformConfigScopeGlobal,
+		ScopeID:   pgtype.Int8{Valid: false},
+	})
+	if err != nil {
+		if isNotFoundError(err) {
+			return 0, false, nil
+		}
+		return 0, false, err
+	}
+
+	if len(config.ConfigValue) == 0 {
+		return 0, false, nil
+	}
+
+	var payload depositConfigValue
+	if err := json.Unmarshal(config.ConfigValue, &payload); err != nil {
+		return 0, false, err
+	}
+
+	return payload.AmountFen, true, nil
+}
+
+func (server *Server) upsertGlobalDepositFen(ctx *gin.Context, configKey string, amountFen int64) error {
+	payload, err := json.Marshal(depositConfigValue{AmountFen: amountFen})
+	if err != nil {
+		return err
+	}
+
+	_, err = server.store.UpsertPlatformConfig(ctx, db.UpsertPlatformConfigParams{
+		ConfigKey:   configKey,
+		ConfigValue: payload,
+		ScopeType:   db.PlatformConfigScopeGlobal,
+		ScopeID:     pgtype.Int8{Valid: false},
+	})
+	return err
+}
+
+func markPlatformOperatorRulesDeprecated(ctx *gin.Context) {
+	ctx.Header("Deprecation", "true")
+	ctx.Header("Link", "<"+platformOperationalConfigsSuccessorPath+">; rel=\"successor-version\"")
+	ctx.Header("X-Deprecated-Route", "/v1/platform/operator-rules")
+}
+
+// listPlatformOperationalConfigs 获取平台运营配置列表
+// @Summary 获取平台运营配置列表
+// @Description 获取平台维护的运营真实配置项，包括平台佣金、运营商佣金、商户保证金与骑手押金。
+// @Tags Platform
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} listPlatformOperatorRulesResponse "配置列表"
+// @Failure 401 {object} errorRes "未授权"
+// @Failure 403 {object} errorRes "权限不足"
+// @Failure 500 {object} errorRes "服务器内部错误"
+// @Router /v1/platform/operational-configs [get]
+func (server *Server) listPlatformOperationalConfigs(ctx *gin.Context) {
+	server.renderPlatformOperationalConfigs(ctx)
+}
+
+// listPlatformOperatorRules 获取平台运营配置列表（兼容旧路径）
+// @Summary [Deprecated] 获取平台运营配置列表（兼容路径）
+// @Description 获取平台维护的运营真实配置项，包括平台佣金、运营商佣金、商户保证金与骑手押金。请迁移到 /v1/platform/operational-configs。
+// @Tags Platform
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} listPlatformOperatorRulesResponse "配置列表"
+// @Failure 401 {object} errorRes "未授权"
+// @Failure 403 {object} errorRes "权限不足"
+// @Failure 500 {object} errorRes "服务器内部错误"
+// @Router /v1/platform/operator-rules [get]
+func (server *Server) listPlatformOperatorRules(ctx *gin.Context) {
+	markPlatformOperatorRulesDeprecated(ctx)
+	server.renderPlatformOperationalConfigs(ctx)
+}
+
+func (server *Server) renderPlatformOperationalConfigs(ctx *gin.Context) {
+	platformRate := int32(2)
+	operatorRate := int32(3)
+	merchantDeposit := int64(500000)
+	riderDeposit := int64(db.DefaultRiderDepositThresholdFen)
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
+	if config, err := server.store.GetActiveProfitSharingConfig(ctx, db.GetActiveProfitSharingConfigParams{
+		OrderSource: "takeout",
+		MerchantID:  pgtype.Int8{Valid: false},
+		RegionID:    pgtype.Int8{Valid: false},
+	}); err == nil {
+		platformRate = config.PlatformRate
+		operatorRate = config.OperatorRate
+	} else if !isNotFoundError(err) {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	baseline, err := server.store.GetPlatformOperatorRuleBaselineFromRegion(ctx)
+	if err == nil {
+		merchantDeposit = baseline.MerchantDeposit
+	} else if !isNotFoundError(err) {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	} else {
+		fallback, fallbackErr := server.store.GetPlatformOperatorRuleBaselineFromOperator(ctx)
+		if fallbackErr == nil {
+			merchantDeposit = fallback.MerchantDeposit
+		} else if !isNotFoundError(fallbackErr) {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fallbackErr))
+			return
+		}
+	}
+
+	if configuredMerchantDeposit, ok, cfgErr := server.getGlobalDepositFen(ctx, merchantDepositConfigKey); cfgErr != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, cfgErr))
+		return
+	} else if ok {
+		merchantDeposit = configuredMerchantDeposit
+	}
+
+	if configuredRiderDeposit, ok, cfgErr := server.getGlobalDepositFen(ctx, riderDepositConfigKey); cfgErr != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, cfgErr))
+		return
+	} else if ok {
+		riderDeposit = configuredRiderDeposit
+	}
+
+	rules := []platformOperatorRuleItem{
+		{
+			ID:       "platform_rule_1",
+			Name:     "平台佣金比例",
+			Key:      "PLATFORM_COMMISSION",
+			Value:    strconv.FormatFloat(float64(platformRate), 'f', 2, 64),
+			Unit:     "%",
+			Desc:     "平台佣金比例（分账配置来源）",
+			Category: "platform",
+			Editable: true,
+		},
+		{
+			ID:       "platform_rule_1_1",
+			Name:     "运营商佣金比例",
+			Key:      "OPERATOR_COMMISSION",
+			Value:    strconv.FormatFloat(float64(operatorRate), 'f', 2, 64),
+			Unit:     "%",
+			Desc:     "运营商佣金比例（分账配置来源）",
+			Category: "platform",
+			Editable: true,
+		},
+		{
+			ID:       "platform_rule_2",
+			Name:     "商户入驻保证金",
+			Key:      "MERCHANT_DEPOSIT",
+			Value:    fenToYuanString(merchantDeposit, 2),
+			Unit:     "元",
+			Desc:     "商户入驻需缴纳的保证金（全局生效）",
+			Category: "platform",
+			Editable: true,
+		},
+		{
+			ID:       "platform_rule_3",
+			Name:     "骑手入驻押金",
+			Key:      "RIDER_DEPOSIT",
+			Value:    fenToYuanString(riderDeposit, 2),
+			Unit:     "元",
+			Desc:     "平台默认值；仅在运营商未单独配置时生效",
+			Category: "platform",
+			Editable: true,
+		},
+	}
+
+	_ = authPayload
+
+	ctx.JSON(http.StatusOK, listPlatformOperatorRulesResponse{Rules: rules})
+}
+
+func (server *Server) upsertGlobalProfitSharingConfig(ctx *gin.Context, platformRate, operatorRate int32, actorID int64) error {
+	configs, err := server.store.ListProfitSharingConfigs(ctx, db.ListProfitSharingConfigsParams{
+		Column1: "active",
+		Column2: "",
+		Column3: 0,
+		Column4: 0,
+		Limit:   200,
+		Offset:  0,
+	})
+	if err != nil {
+		return err
+	}
+
+	updated := false
+	for _, cfg := range configs {
+		if cfg.MerchantID.Valid || cfg.RegionID.Valid {
+			continue
+		}
+		if cfg.OrderSource != "all" {
+			continue
+		}
+		_, err := server.store.UpdateProfitSharingConfigTx(ctx, db.UpdateProfitSharingConfigTxParams{
+			ActorID:   actorID,
+			ActorRole: RoleAdmin,
+			Params: db.UpdateProfitSharingConfigParams{
+				ID:           cfg.ID,
+				PlatformRate: pgtype.Int4{Int32: platformRate, Valid: true},
+				OperatorRate: pgtype.Int4{Int32: operatorRate, Valid: true},
+			},
+		})
+		if err != nil {
+			return err
+		}
+		updated = true
+	}
+
+	if updated {
+		return nil
+	}
+
+	_, err = server.store.CreateProfitSharingConfigTx(ctx, db.CreateProfitSharingConfigTxParams{
+		ActorID:   actorID,
+		ActorRole: RoleAdmin,
+		Params: db.CreateProfitSharingConfigParams{
+			Status:       "active",
+			OrderSource:  "all",
+			PlatformRate: platformRate,
+			OperatorRate: operatorRate,
+			RiderEnabled: true,
+			Priority:     100,
+			CreatedBy:    pgtype.Int8{Int64: actorID, Valid: true},
+		},
+	})
+	return err
+}
+
+// updatePlatformOperationalConfig 更新平台运营配置项
+// @Summary 更新平台运营配置项
+// @Description 更新平台维护的运营真实配置项。
+// @Tags Platform
+// @Accept json
+// @Produce json
+// @Param key path string true "配置Key (PLATFORM_COMMISSION, OPERATOR_COMMISSION, MERCHANT_DEPOSIT, RIDER_DEPOSIT)"
+// @Param request body updatePlatformOperatorRuleRequest true "新值"
+// @Security BearerAuth
+// @Success 200 {object} MessageResponse "更新成功"
+// @Failure 400 {object} errorRes "请求参数错误"
+// @Failure 401 {object} errorRes "未授权"
+// @Failure 403 {object} errorRes "权限不足"
+// @Failure 404 {object} errorRes "配置不存在"
+// @Failure 500 {object} errorRes "服务器内部错误"
+// @Router /v1/platform/operational-configs/{key} [patch]
+func (server *Server) updatePlatformOperationalConfig(ctx *gin.Context) {
+	server.applyPlatformOperationalConfigUpdate(ctx)
+}
+
+// updatePlatformOperatorRule 更新平台运营配置项（兼容旧路径）
+// @Summary [Deprecated] 更新平台运营配置项（兼容路径）
+// @Description 更新平台维护的运营真实配置项。请迁移到 /v1/platform/operational-configs/{key}。
+// @Tags Platform
+// @Accept json
+// @Produce json
+// @Param key path string true "配置Key (PLATFORM_COMMISSION, OPERATOR_COMMISSION, MERCHANT_DEPOSIT, RIDER_DEPOSIT)"
+// @Param request body updatePlatformOperatorRuleRequest true "新值"
+// @Security BearerAuth
+// @Success 200 {object} MessageResponse "更新成功"
+// @Failure 400 {object} errorRes "请求参数错误"
+// @Failure 401 {object} errorRes "未授权"
+// @Failure 403 {object} errorRes "权限不足"
+// @Failure 404 {object} errorRes "配置不存在"
+// @Failure 500 {object} errorRes "服务器内部错误"
+// @Router /v1/platform/operator-rules/{key} [patch]
+func (server *Server) updatePlatformOperatorRule(ctx *gin.Context) {
+	markPlatformOperatorRulesDeprecated(ctx)
+	server.applyPlatformOperationalConfigUpdate(ctx)
+}
+
+func (server *Server) applyPlatformOperationalConfigUpdate(ctx *gin.Context) {
+	key := ctx.Param("key")
+
+	var req updatePlatformOperatorRuleRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	value, err := strconv.ParseFloat(req.Value, 64)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidNumberFormat))
+		return
+	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
+	switch key {
+	case "PLATFORM_COMMISSION":
+		if value < 0 || value > 100 {
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrRatioOutOfRange))
+			return
+		}
+		current, currentErr := server.store.GetActiveProfitSharingConfig(ctx, db.GetActiveProfitSharingConfigParams{
+			OrderSource: "takeout",
+			MerchantID:  pgtype.Int8{Valid: false},
+			RegionID:    pgtype.Int8{Valid: false},
+		})
+		operatorRate := int32(3)
+		if currentErr == nil {
+			operatorRate = current.OperatorRate
+		} else if !isNotFoundError(currentErr) {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, currentErr))
+			return
+		}
+		if value+float64(operatorRate) > 100 {
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrProfitShareExceedsLimit))
+			return
+		}
+		if err := server.upsertGlobalProfitSharingConfig(ctx, int32(value), operatorRate, authPayload.UserID); err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+
+	case "OPERATOR_COMMISSION":
+		if value < 0 || value > 100 {
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrRatioOutOfRange))
+			return
+		}
+		current, currentErr := server.store.GetActiveProfitSharingConfig(ctx, db.GetActiveProfitSharingConfigParams{
+			OrderSource: "takeout",
+			MerchantID:  pgtype.Int8{Valid: false},
+			RegionID:    pgtype.Int8{Valid: false},
+		})
+		platformRate := int32(2)
+		if currentErr == nil {
+			platformRate = current.PlatformRate
+		} else if !isNotFoundError(currentErr) {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, currentErr))
+			return
+		}
+		if float64(platformRate)+value > 100 {
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrProfitShareExceedsLimit))
+			return
+		}
+		if err := server.upsertGlobalProfitSharingConfig(ctx, platformRate, int32(value), authPayload.UserID); err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		// 同步 commission_rate 到 region_rule_configs 和 operators（DB 以小数存储，如 3% → 0.03）
+		rateDecimal := numericFromFloat(value / 100)
+		if err := server.store.UpdateAllRegionRuleConfigCommissionRate(ctx, rateDecimal); err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		if err := server.store.UpdateAllOperatorsCommissionRate(ctx, rateDecimal); err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+
+	case "MERCHANT_DEPOSIT":
+		if value < 0 {
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrAmountNegative))
+			return
+		}
+
+		amountFen := yuanToFen(value)
+		if err := server.upsertGlobalDepositFen(ctx, merchantDepositConfigKey, amountFen); err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		if err := server.store.UpdateAllRegionRuleConfigMerchantDeposit(ctx, amountFen); err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		if err := server.store.UpdateAllOperatorsMerchantDeposit(ctx, amountFen); err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+
+	case "RIDER_DEPOSIT":
+		if value < 0 {
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrAmountNegative))
+			return
+		}
+
+		amountFen := yuanToFen(value)
+		if err := server.upsertGlobalDepositFen(ctx, riderDepositConfigKey, amountFen); err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		if err := server.syncAllRiderOperationalStatuses(ctx); err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+
+	default:
+		ctx.JSON(http.StatusNotFound, errorResponse(ErrUnknownRuleKey))
+		return
+	}
+
+	server.writeAuditLog(ctx, AuditLogInput{
+		ActorUserID: authPayload.UserID,
+		ActorRole:   RoleAdmin,
+		Action:      "platform_operator_rule_updated",
+		TargetType:  "platform_rule",
+		RegionID:    nil,
+		Metadata: map[string]any{
+			"key":   key,
+			"value": req.Value,
+		},
+	})
+
+	ctx.JSON(http.StatusOK, MessageResponse{Message: "规则更新成功"})
+}

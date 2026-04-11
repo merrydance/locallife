@@ -3,11 +3,11 @@ package api
 import (
 	"bytes"
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
@@ -18,6 +18,7 @@ import (
 )
 
 func TestGetRegionAPI(t *testing.T) {
+	user, _ := randomUser(t)
 	region := randomRegion()
 
 	testCases := []struct {
@@ -47,7 +48,7 @@ func TestGetRegionAPI(t *testing.T) {
 				store.EXPECT().
 					GetRegion(gomock.Any(), gomock.Eq(region.ID)).
 					Times(1).
-					Return(db.Region{}, sql.ErrNoRows)
+					Return(db.Region{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -73,7 +74,7 @@ func TestGetRegionAPI(t *testing.T) {
 				store.EXPECT().
 					GetRegion(gomock.Any(), gomock.Eq(int64(0))).
 					Times(1).
-					Return(db.Region{}, sql.ErrNoRows)
+					Return(db.Region{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -105,9 +106,10 @@ func TestGetRegionAPI(t *testing.T) {
 
 			server := newTestServer(t, store)
 			recorder := httptest.NewRecorder()
-
 			request, err := http.NewRequest(http.MethodGet, tc.url, nil)
 			require.NoError(t, err)
+
+			addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 
 			server.router.ServeHTTP(recorder, request)
 			tc.checkResponse(t, recorder)
@@ -116,6 +118,7 @@ func TestGetRegionAPI(t *testing.T) {
 }
 
 func TestListRegionsAPI(t *testing.T) {
+	user, _ := randomUser(t)
 	n := 5
 	regions := make([]db.Region, n)
 	for i := 0; i < n; i++ {
@@ -238,6 +241,8 @@ func TestListRegionsAPI(t *testing.T) {
 			request, err := http.NewRequest(http.MethodGet, url, nil)
 			require.NoError(t, err)
 
+			addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
 			server.router.ServeHTTP(recorder, request)
 			tc.checkResponse(t, recorder)
 		})
@@ -246,6 +251,7 @@ func TestListRegionsAPI(t *testing.T) {
 
 func TestListRegionChildrenAPI(t *testing.T) {
 	parentRegion := randomRegion()
+	user, _ := randomUser(t)
 	childRegions := make([]db.Region, 3)
 	for i := 0; i < 3; i++ {
 		childRegions[i] = randomRegion()
@@ -286,8 +292,7 @@ func TestListRegionChildrenAPI(t *testing.T) {
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var regions []regionResponse
-				err := json.NewDecoder(recorder.Body).Decode(&regions)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &regions)
 				require.Empty(t, regions)
 			},
 		},
@@ -349,6 +354,8 @@ func TestListRegionChildrenAPI(t *testing.T) {
 			request, err := http.NewRequest(http.MethodGet, tc.url, nil)
 			require.NoError(t, err)
 
+			addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
 			server.router.ServeHTTP(recorder, request)
 			tc.checkResponse(t, recorder)
 		})
@@ -356,6 +363,7 @@ func TestListRegionChildrenAPI(t *testing.T) {
 }
 
 func TestSearchRegionsAPI(t *testing.T) {
+	user, _ := randomUser(t)
 	regions := make([]db.Region, 3)
 	for i := 0; i < 3; i++ {
 		regions[i] = randomRegion()
@@ -416,6 +424,8 @@ func TestSearchRegionsAPI(t *testing.T) {
 			request, err := http.NewRequest(http.MethodGet, url, nil)
 			require.NoError(t, err)
 
+			addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
 			server.router.ServeHTTP(recorder, request)
 			tc.checkResponse(t, recorder)
 		})
@@ -443,8 +453,7 @@ func randomRegion() db.Region {
 
 func requireBodyMatchRegion(t *testing.T, body *bytes.Buffer, region db.Region) {
 	var gotRegion regionResponse
-	err := json.NewDecoder(body).Decode(&gotRegion)
-	require.NoError(t, err)
+	requireUnmarshalAPIResponseData(t, body.Bytes(), &gotRegion)
 	require.Equal(t, region.ID, gotRegion.ID)
 	require.Equal(t, region.Code, gotRegion.Code)
 	require.Equal(t, region.Name, gotRegion.Name)
@@ -452,8 +461,7 @@ func requireBodyMatchRegion(t *testing.T, body *bytes.Buffer, region db.Region) 
 
 func requireBodyMatchRegions(t *testing.T, body *bytes.Buffer, regions []db.Region) {
 	var gotRegions []regionResponse
-	err := json.NewDecoder(body).Decode(&gotRegions)
-	require.NoError(t, err)
+	requireUnmarshalAPIResponseData(t, body.Bytes(), &gotRegions)
 	require.Equal(t, len(regions), len(gotRegions))
 	for i, region := range regions {
 		require.Equal(t, region.ID, gotRegions[i].ID)
@@ -465,6 +473,7 @@ func requireBodyMatchRegions(t *testing.T, body *bytes.Buffer, regions []db.Regi
 // ==================== 新增测试：listAvailableRegions ====================
 
 func TestListAvailableRegionsAPI(t *testing.T) {
+	user, _ := randomUser(t)
 	parentRegion := randomRegion()
 	parentRegion.Level = 2 // 市级
 
@@ -505,8 +514,7 @@ func TestListAvailableRegionsAPI(t *testing.T) {
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var response map[string]interface{}
-				err := json.NewDecoder(recorder.Body).Decode(&response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				regions, ok := response["regions"].([]interface{})
 				require.True(t, ok)
 				require.Equal(t, 3, len(regions))
@@ -560,8 +568,7 @@ func TestListAvailableRegionsAPI(t *testing.T) {
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var response map[string]interface{}
-				err := json.NewDecoder(recorder.Body).Decode(&response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				regions, ok := response["regions"].([]interface{})
 				require.True(t, ok)
 				require.Empty(t, regions)
@@ -635,6 +642,8 @@ func TestListAvailableRegionsAPI(t *testing.T) {
 			request, err := http.NewRequest(http.MethodGet, url, nil)
 			require.NoError(t, err)
 
+			addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
 			server.router.ServeHTTP(recorder, request)
 			tc.checkResponse(t, recorder)
 		})
@@ -644,6 +653,7 @@ func TestListAvailableRegionsAPI(t *testing.T) {
 // ==================== 新增测试：checkRegionAvailability ====================
 
 func TestCheckRegionAvailabilityAPI(t *testing.T) {
+	user, _ := randomUser(t)
 	region := randomRegion()
 	region.Level = 3 // 区县级
 
@@ -668,15 +678,14 @@ func TestCheckRegionAvailabilityAPI(t *testing.T) {
 					Times(1).
 					Return(region, nil)
 				store.EXPECT().
-					GetOperatorByRegion(gomock.Any(), gomock.Eq(region.ID)).
+					GetActiveOperatorByRegion(gomock.Any(), gomock.Eq(region.ID)).
 					Times(1).
-					Return(db.Operator{}, sql.ErrNoRows)
+					Return(db.Operator{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var response regionAvailabilityResponse
-				err := json.NewDecoder(recorder.Body).Decode(&response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, region.ID, response.RegionID)
 				require.True(t, response.IsAvailable)
 				require.Empty(t, response.Reason)
@@ -691,15 +700,14 @@ func TestCheckRegionAvailabilityAPI(t *testing.T) {
 					Times(1).
 					Return(region, nil)
 				store.EXPECT().
-					GetOperatorByRegion(gomock.Any(), gomock.Eq(region.ID)).
+					GetActiveOperatorByRegion(gomock.Any(), gomock.Eq(region.ID)).
 					Times(1).
 					Return(operator, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var response regionAvailabilityResponse
-				err := json.NewDecoder(recorder.Body).Decode(&response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, region.ID, response.RegionID)
 				require.False(t, response.IsAvailable)
 				require.Contains(t, response.Reason, operator.Name)
@@ -712,7 +720,7 @@ func TestCheckRegionAvailabilityAPI(t *testing.T) {
 				store.EXPECT().
 					GetRegion(gomock.Any(), gomock.Eq(region.ID)).
 					Times(1).
-					Return(db.Region{}, sql.ErrNoRows)
+					Return(db.Region{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -725,7 +733,7 @@ func TestCheckRegionAvailabilityAPI(t *testing.T) {
 				store.EXPECT().
 					GetRegion(gomock.Any(), gomock.Eq(int64(0))).
 					Times(1).
-					Return(db.Region{}, sql.ErrNoRows)
+					Return(db.Region{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -739,7 +747,7 @@ func TestCheckRegionAvailabilityAPI(t *testing.T) {
 					GetRegion(gomock.Any(), gomock.Any()).
 					Times(0)
 				store.EXPECT().
-					GetOperatorByRegion(gomock.Any(), gomock.Any()).
+					GetActiveOperatorByRegion(gomock.Any(), gomock.Any()).
 					Times(0)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
@@ -760,7 +768,7 @@ func TestCheckRegionAvailabilityAPI(t *testing.T) {
 			},
 		},
 		{
-			name: "GetOperatorByRegion_InternalError",
+			name: "GetActiveOperatorByRegion_InternalError",
 			url:  fmt.Sprintf("/v1/regions/%d/check", region.ID),
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
@@ -768,7 +776,7 @@ func TestCheckRegionAvailabilityAPI(t *testing.T) {
 					Times(1).
 					Return(region, nil)
 				store.EXPECT().
-					GetOperatorByRegion(gomock.Any(), gomock.Eq(region.ID)).
+					GetActiveOperatorByRegion(gomock.Any(), gomock.Eq(region.ID)).
 					Times(1).
 					Return(db.Operator{}, sql.ErrConnDone)
 			},
@@ -793,6 +801,8 @@ func TestCheckRegionAvailabilityAPI(t *testing.T) {
 
 			request, err := http.NewRequest(http.MethodGet, tc.url, nil)
 			require.NoError(t, err)
+
+			addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 
 			server.router.ServeHTTP(recorder, request)
 			tc.checkResponse(t, recorder)

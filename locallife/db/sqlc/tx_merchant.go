@@ -9,21 +9,24 @@ import (
 
 // SetBusinessHoursTxParams contains input parameters for setting merchant business hours
 type SetBusinessHoursTxParams struct {
-	MerchantID int64
-	Hours      []BusinessHourInput
+	MerchantID              int64
+	Hours                   []BusinessHourInput
+	AutoOpenByBusinessHours bool
 }
 
 // BusinessHourInput represents a business hour input
 type BusinessHourInput struct {
-	DayOfWeek int32
-	OpenTime  pgtype.Time
-	CloseTime pgtype.Time
-	IsClosed  bool
+	DayOfWeek   int32
+	OpenTime    pgtype.Time
+	CloseTime   pgtype.Time
+	IsClosed    bool
+	SpecialDate pgtype.Date
 }
 
 // SetBusinessHoursTxResult contains the result of setting business hours
 type SetBusinessHoursTxResult struct {
-	Hours []MerchantBusinessHour
+	Hours                   []MerchantBusinessHour
+	AutoOpenByBusinessHours bool
 }
 
 // SetBusinessHoursTx replaces all business hours for a merchant in a single transaction.
@@ -42,17 +45,28 @@ func (store *SQLStore) SetBusinessHoursTx(ctx context.Context, arg SetBusinessHo
 		result.Hours = make([]MerchantBusinessHour, 0, len(arg.Hours))
 		for _, h := range arg.Hours {
 			bh, err := q.CreateBusinessHour(ctx, CreateBusinessHourParams{
-				MerchantID: arg.MerchantID,
-				DayOfWeek:  h.DayOfWeek,
-				OpenTime:   h.OpenTime,
-				CloseTime:  h.CloseTime,
-				IsClosed:   h.IsClosed,
+				MerchantID:  arg.MerchantID,
+				DayOfWeek:   h.DayOfWeek,
+				OpenTime:    h.OpenTime,
+				CloseTime:   h.CloseTime,
+				IsClosed:    h.IsClosed,
+				SpecialDate: h.SpecialDate,
 			})
 			if err != nil {
 				return fmt.Errorf("create business hour for day %d: %w", h.DayOfWeek, err)
 			}
 			result.Hours = append(result.Hours, bh)
 		}
+
+		err = q.UpdateMerchantAutoOpenByBusinessHours(ctx, UpdateMerchantAutoOpenByBusinessHoursParams{
+			ID:                      arg.MerchantID,
+			AutoOpenByBusinessHours: arg.AutoOpenByBusinessHours,
+		})
+		if err != nil {
+			return fmt.Errorf("update auto open by business hours: %w", err)
+		}
+
+		result.AutoOpenByBusinessHours = arg.AutoOpenByBusinessHours
 
 		return nil
 	})

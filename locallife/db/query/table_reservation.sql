@@ -38,16 +38,30 @@ FROM table_reservations tr
 INNER JOIN tables t ON tr.table_id = t.id
 WHERE tr.id = $1;
 
--- name: ListReservationsByUser :many
+-- name: ListReservationsByUserWithStatus :many
+-- 用户预订列表：只返回在线预订（source = 'online' 或 NULL），不包括商户代客创建的预订
 SELECT 
     tr.*,
     t.table_no,
     t.table_type
 FROM table_reservations tr
 INNER JOIN tables t ON tr.table_id = t.id
-WHERE tr.user_id = $1
-ORDER BY tr.reservation_date DESC, tr.reservation_time DESC
-LIMIT $2 OFFSET $3;
+WHERE tr.user_id = sqlc.arg('user_id')
+  AND (tr.source IS NULL OR tr.source = 'online')
+  AND (sqlc.narg('status')::text IS NULL OR tr.status = sqlc.narg('status'))
+ORDER BY
+  CASE tr.status
+    WHEN 'pending' THEN 0
+    WHEN 'paid' THEN 1
+    WHEN 'confirmed' THEN 2
+    WHEN 'checked_in' THEN 3
+    WHEN 'completed' THEN 4
+    WHEN 'cancelled' THEN 5
+    WHEN 'expired' THEN 6
+    ELSE 7
+  END,
+  tr.created_at DESC
+LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
 -- name: ListReservationsByMerchant :many
 SELECT 
@@ -100,8 +114,9 @@ ORDER BY reservation_time;
 SELECT COUNT(*) FROM table_reservations
 WHERE table_id = $1 
   AND reservation_date = $2
-  AND status IN ('pending', 'paid', 'confirmed')
-  AND ($3::time, $4::interval) OVERLAPS (reservation_time, $4::interval);
+  AND status IN ('pending', 'paid', 'confirmed', 'checked_in')
+  AND ($3::time, $4::interval) OVERLAPS (reservation_time, $4::interval)
+  AND (id != $5 OR $5 IS NULL);
 
 -- name: UpdateReservationStatus :one
 UPDATE table_reservations
@@ -114,6 +129,14 @@ RETURNING *;
 UPDATE table_reservations
 SET status = 'paid',
     paid_at = now(),
+    updated_at = now()
+WHERE id = $1
+RETURNING *;
+
+-- name: AddReservationPrepaidAmount :one
+-- 追加菜品支付成功后累加预付金额
+UPDATE table_reservations
+SET prepaid_amount = prepaid_amount + $2,
     updated_at = now()
 WHERE id = $1
 RETURNING *;
@@ -210,9 +233,9 @@ SELECT
     COALESCE(SUM(deposit_amount) FILTER (WHERE status = 'completed'), 0) as total_deposit,
     COALESCE(SUM(prepaid_amount) FILTER (WHERE status = 'completed'), 0) as total_prepaid
 FROM table_reservations
-WHERE merchant_id = $1 
-  AND reservation_date >= $2 
-  AND reservation_date <= $3;
+WHERE merchant_id = sqlc.arg('merchant_id')
+  AND reservation_date >= sqlc.arg('start_date')
+  AND reservation_date <= sqlc.arg('end_date');
 
 -- name: CancelMerchantFutureReservations :execrows
 -- 商户熔断时自动取消所有未来的预订

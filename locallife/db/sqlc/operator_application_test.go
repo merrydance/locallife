@@ -142,22 +142,22 @@ func TestUpdateOperatorApplicationBusinessLicense(t *testing.T) {
 	app := createRandomOperatorApplication(t)
 
 	ocrData := map[string]string{
-		"company_name":     "测试公司",
-		"legal_person":     "张三",
-		"credit_code":      "91310000MA1K8F2M6A",
-		"registered_date":  "2020-01-01",
-		"business_scope":   "餐饮服务",
+		"company_name":    "测试公司",
+		"legal_person":    "张三",
+		"credit_code":     "91310000MA1K8F2M6A",
+		"registered_date": "2020-01-01",
+		"business_scope":  "餐饮服务",
 	}
 	ocrJSON, _ := json.Marshal(ocrData)
 
 	updated, err := testStore.UpdateOperatorApplicationBusinessLicense(context.Background(), UpdateOperatorApplicationBusinessLicenseParams{
-		ID:                    app.ID,
-		BusinessLicenseUrl:    pgtype.Text{String: "https://example.com/license.jpg", Valid: true},
-		BusinessLicenseNumber: pgtype.Text{String: "91310000MA1K8F2M6A", Valid: true},
-		BusinessLicenseOcr:    ocrJSON,
+		ID:                          app.ID,
+		BusinessLicenseMediaAssetID: pgtype.Int8{},
+		BusinessLicenseNumber:       pgtype.Text{String: "91310000MA1K8F2M6A", Valid: true},
+		BusinessLicenseOcr:          ocrJSON,
 	})
 	require.NoError(t, err)
-	require.True(t, updated.BusinessLicenseUrl.Valid)
+	require.False(t, updated.BusinessLicenseMediaAssetID.Valid)
 	require.Equal(t, "91310000MA1K8F2M6A", updated.BusinessLicenseNumber.String)
 	require.NotEmpty(t, updated.BusinessLicenseOcr)
 }
@@ -176,14 +176,14 @@ func TestUpdateOperatorApplicationIDCardFront(t *testing.T) {
 	ocrJSON, _ := json.Marshal(ocrData)
 
 	updated, err := testStore.UpdateOperatorApplicationIDCardFront(context.Background(), UpdateOperatorApplicationIDCardFrontParams{
-		ID:                  app.ID,
-		IDCardFrontUrl:      pgtype.Text{String: "https://example.com/id_front.jpg", Valid: true},
-		LegalPersonName:     pgtype.Text{String: "张三", Valid: true},
-		LegalPersonIDNumber: pgtype.Text{String: "110101199001011234", Valid: true},
-		IDCardFrontOcr:      ocrJSON,
+		ID:                      app.ID,
+		IDCardFrontMediaAssetID: pgtype.Int8{},
+		LegalPersonName:         pgtype.Text{String: "张三", Valid: true},
+		LegalPersonIDNumber:     pgtype.Text{String: "110101199001011234", Valid: true},
+		IDCardFrontOcr:          ocrJSON,
 	})
 	require.NoError(t, err)
-	require.True(t, updated.IDCardFrontUrl.Valid)
+	require.False(t, updated.IDCardFrontMediaAssetID.Valid)
 	require.Equal(t, "张三", updated.LegalPersonName.String)
 	require.Equal(t, "110101199001011234", updated.LegalPersonIDNumber.String)
 	require.NotEmpty(t, updated.IDCardFrontOcr)
@@ -202,12 +202,12 @@ func TestUpdateOperatorApplicationIDCardBack(t *testing.T) {
 	ocrJSON, _ := json.Marshal(ocrData)
 
 	updated, err := testStore.UpdateOperatorApplicationIDCardBack(context.Background(), UpdateOperatorApplicationIDCardBackParams{
-		ID:            app.ID,
-		IDCardBackUrl: pgtype.Text{String: "https://example.com/id_back.jpg", Valid: true},
-		IDCardBackOcr: ocrJSON,
+		ID:                     app.ID,
+		IDCardBackMediaAssetID: pgtype.Int8{},
+		IDCardBackOcr:          ocrJSON,
 	})
 	require.NoError(t, err)
-	require.True(t, updated.IDCardBackUrl.Valid)
+	require.False(t, updated.IDCardBackMediaAssetID.Valid)
 	require.NotEmpty(t, updated.IDCardBackOcr)
 }
 
@@ -228,28 +228,28 @@ func createCompleteOperatorApplication(t *testing.T) OperatorApplication {
 
 	// 上传营业执照
 	_, err = testStore.UpdateOperatorApplicationBusinessLicense(context.Background(), UpdateOperatorApplicationBusinessLicenseParams{
-		ID:                    app.ID,
-		BusinessLicenseUrl:    pgtype.Text{String: "https://example.com/license.jpg", Valid: true},
-		BusinessLicenseNumber: pgtype.Text{String: "91310000MA1K8F2M6A", Valid: true},
-		BusinessLicenseOcr:    []byte(`{"company_name": "测试公司"}`),
+		ID:                          app.ID,
+		BusinessLicenseMediaAssetID: pgtype.Int8{},
+		BusinessLicenseNumber:       pgtype.Text{String: "91310000MA1K8F2M6A", Valid: true},
+		BusinessLicenseOcr:          []byte(`{"company_name": "测试公司"}`),
 	})
 	require.NoError(t, err)
 
 	// 上传身份证正面
 	_, err = testStore.UpdateOperatorApplicationIDCardFront(context.Background(), UpdateOperatorApplicationIDCardFrontParams{
-		ID:                  app.ID,
-		IDCardFrontUrl:      pgtype.Text{String: "https://example.com/id_front.jpg", Valid: true},
-		LegalPersonName:     pgtype.Text{String: "张三", Valid: true},
-		LegalPersonIDNumber: pgtype.Text{String: "110101199001011234", Valid: true},
-		IDCardFrontOcr:      []byte(`{"name": "张三"}`),
+		ID:                      app.ID,
+		IDCardFrontMediaAssetID: pgtype.Int8{},
+		LegalPersonName:         pgtype.Text{String: "张三", Valid: true},
+		LegalPersonIDNumber:     pgtype.Text{String: "110101199001011234", Valid: true},
+		IDCardFrontOcr:          []byte(`{"name": "张三"}`),
 	})
 	require.NoError(t, err)
 
 	// 上传身份证背面
 	updated, err := testStore.UpdateOperatorApplicationIDCardBack(context.Background(), UpdateOperatorApplicationIDCardBackParams{
-		ID:            app.ID,
-		IDCardBackUrl: pgtype.Text{String: "https://example.com/id_back.jpg", Valid: true},
-		IDCardBackOcr: []byte(`{"valid_end": "20300101"}`),
+		ID:                     app.ID,
+		IDCardBackMediaAssetID: pgtype.Int8{},
+		IDCardBackOcr:          []byte(`{"valid_end": "20300101"}`),
 	})
 	require.NoError(t, err)
 
@@ -342,25 +342,30 @@ func TestResetOperatorApplicationToDraft(t *testing.T) {
 // ==================== List Tests ====================
 
 func TestListPendingOperatorApplications(t *testing.T) {
-	// 创建多个待审核的申请
+	// 创建多个申请并提交
 	for i := 0; i < 3; i++ {
 		app := createCompleteOperatorApplication(t)
 		_, err := testStore.SubmitOperatorApplication(context.Background(), app.ID)
 		require.NoError(t, err)
 	}
 
-	// 列出待审核的申请
+	// 列出申请（包含 submitted/approved/rejected）
 	apps, err := testStore.ListPendingOperatorApplications(context.Background(), ListPendingOperatorApplicationsParams{
 		Limit:  10,
 		Offset: 0,
 	})
 	require.NoError(t, err)
-	require.GreaterOrEqual(t, len(apps), 3, "应该至少有3个待审核的申请")
+	require.GreaterOrEqual(t, len(apps), 3, "应该至少有3个申请")
 
-	// 验证返回的都是submitted状态
+	// 验证返回状态属于可见范围，并且至少包含一个 submitted
+	hasSubmitted := false
 	for _, app := range apps {
-		require.Equal(t, "submitted", app.Status)
+		require.Contains(t, []string{"submitted", "approved", "rejected"}, app.Status)
+		if app.Status == "submitted" {
+			hasSubmitted = true
+		}
 	}
+	require.True(t, hasSubmitted, "列表中应包含至少一个 submitted 状态申请")
 }
 
 func TestCountPendingOperatorApplications(t *testing.T) {
@@ -398,26 +403,26 @@ func TestGetPendingOperatorApplicationByRegion(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = testStore.UpdateOperatorApplicationBusinessLicense(context.Background(), UpdateOperatorApplicationBusinessLicenseParams{
-		ID:                    app.ID,
-		BusinessLicenseUrl:    pgtype.Text{String: "https://example.com/license.jpg", Valid: true},
-		BusinessLicenseNumber: pgtype.Text{String: "91310000MA1K8F2M6A", Valid: true},
-		BusinessLicenseOcr:    []byte(`{}`),
+		ID:                          app.ID,
+		BusinessLicenseMediaAssetID: pgtype.Int8{},
+		BusinessLicenseNumber:       pgtype.Text{String: "91310000MA1K8F2M6A", Valid: true},
+		BusinessLicenseOcr:          []byte(`{}`),
 	})
 	require.NoError(t, err)
 
 	_, err = testStore.UpdateOperatorApplicationIDCardFront(context.Background(), UpdateOperatorApplicationIDCardFrontParams{
-		ID:                  app.ID,
-		IDCardFrontUrl:      pgtype.Text{String: "https://example.com/id_front.jpg", Valid: true},
-		LegalPersonName:     pgtype.Text{String: "张三", Valid: true},
-		LegalPersonIDNumber: pgtype.Text{String: "110101199001011234", Valid: true},
-		IDCardFrontOcr:      []byte(`{}`),
+		ID:                      app.ID,
+		IDCardFrontMediaAssetID: pgtype.Int8{},
+		LegalPersonName:         pgtype.Text{String: "张三", Valid: true},
+		LegalPersonIDNumber:     pgtype.Text{String: "110101199001011234", Valid: true},
+		IDCardFrontOcr:          []byte(`{}`),
 	})
 	require.NoError(t, err)
 
 	_, err = testStore.UpdateOperatorApplicationIDCardBack(context.Background(), UpdateOperatorApplicationIDCardBackParams{
-		ID:            app.ID,
-		IDCardBackUrl: pgtype.Text{String: "https://example.com/id_back.jpg", Valid: true},
-		IDCardBackOcr: []byte(`{}`),
+		ID:                     app.ID,
+		IDCardBackMediaAssetID: pgtype.Int8{},
+		IDCardBackOcr:          []byte(`{}`),
 	})
 	require.NoError(t, err)
 

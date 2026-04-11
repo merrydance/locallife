@@ -1,0 +1,42 @@
+<!-- 商户优惠信息展示与充值入口 -->
+<view class="promo-center" wx:if="{{hasPromos}}">
+  <!-- 商户通用规则展示 (展示为主) -->
+  <view class="rules-section" wx:if="{{(discountRules && discountRules.length > 0) || (deliveryFeeRules && deliveryFeeRules.length > 0) || (vouchers && vouchers.length > 0)}}">
+    <view class="rule-item" wx:for="{{discountRules || []}}" wx:key="title">
+      <text class="rule-badge discount">减</text>
+      <text class="rule-text">{{item.title}}</text>
+    </view>
+    <view class="rule-item" wx:for="{{deliveryFeeRules || []}}" wx:key="title">
+      <text class="rule-badge delivery">配</text>
+      <text class="rule-text">{{item.displayTitle}}</text>
+    </view>
+    <view class="rule-item" wx:for="{{vouchers || []}}" wx:key="title">
+      <text class="rule-badge discount">减</text>
+      <text class="rule-text">{{item.displayTitle}}</text>
+    </view>
+  </view>
+
+
+  <!-- 充值入口 (唯一复杂交互) -->
+  <view class="recharge-section" wx:if="{{rechargeRules && rechargeRules.length > 0}}">
+    <view class="recharge-header">
+      <text class="r-title">会员充值奖励</text>
+      <t-tag wx:if="{{currentBalance < orderTotal}}" size="extra-small" theme="danger" variant="dark">当前余额 ¥{{balanceDisplay}}，不足以支付</t-tag>
+    </view>
+    <view class="recharge-grid">
+      <view 
+        wx:for="{{rechargeRules || []}}" 
+        wx:key="rule_id"
+        class="recharge-box {{selectedRechargeId === item.rule_id ? 'active' : ''}}"
+        bindtap="onSelectRecharge"
+        data-rule="{{item}}"
+      >
+        <text class="rb-main">充{{item.rechargeDisplay}}</text>
+        <text class="rb-sub">送{{item.bonusDisplay}}</text>
+      </view>
+    </view>
+    <t-button block theme="primary" size="medium" shape="round" class="pay-btn" bindtap="onRecharge" loading="{{recharging}}">
+      {{selectedRechargeId ? '立即充值 ¥' + selectedRechargeDisplay : '选择充值金额'}}
+    </t-button>
+  </view>
+</view>

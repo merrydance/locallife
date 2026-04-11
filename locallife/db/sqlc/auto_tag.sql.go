@@ -11,41 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const deleteDishTagByTagID = `-- name: DeleteDishTagByTagID :exec
-DELETE FROM dish_tags WHERE tag_id = $1
-`
-
-// 删除指定标签的所有菜品关联（用于清理过期的自动标签）
-func (q *Queries) DeleteDishTagByTagID(ctx context.Context, tagID int64) error {
-	_, err := q.db.Exec(ctx, deleteDishTagByTagID, tagID)
-	return err
-}
-
-const getDishIDsWithTag = `-- name: GetDishIDsWithTag :many
-SELECT dish_id FROM dish_tags WHERE tag_id = $1
-`
-
-// 获取有指定标签的所有菜品ID
-func (q *Queries) GetDishIDsWithTag(ctx context.Context, tagID int64) ([]int64, error) {
-	rows, err := q.db.Query(ctx, getDishIDsWithTag, tagID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []int64{}
-	for rows.Next() {
-		var dish_id int64
-		if err := rows.Scan(&dish_id); err != nil {
-			return nil, err
-		}
-		items = append(items, dish_id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const getDishRepurchaseRate = `-- name: GetDishRepurchaseRate :one
 SELECT 
     COUNT(DISTINCT o.user_id) AS total_users,
@@ -74,89 +39,21 @@ func (q *Queries) GetDishRepurchaseRate(ctx context.Context, dishID pgtype.Int8)
 	return i, err
 }
 
-const getHotSellingDishIDs = `-- name: GetHotSellingDishIDs :many
-SELECT d.id
-FROM dishes d
-JOIN order_items oi ON d.id = oi.dish_id
+const getDishSales = `-- name: GetDishSales :one
+SELECT COALESCE(SUM(oi.quantity), 0)::int
+FROM order_items oi
 JOIN orders o ON oi.order_id = o.id
-WHERE o.status = 'completed'
-  AND o.created_at >= NOW() - INTERVAL '7 days'
-  AND d.is_online = true
-  AND d.is_available = true
-  AND d.deleted_at IS NULL
-GROUP BY d.id
-HAVING SUM(oi.quantity) >= $1
+WHERE oi.dish_id = $1
+  AND o.status IN ('user_delivered', 'completed')
+  AND o.created_at >= NOW() - INTERVAL '30 days'
 `
 
-// 获取热卖菜品ID列表（近7天销量 >= 指定阈值）
-func (q *Queries) GetHotSellingDishIDs(ctx context.Context, quantity int16) ([]int64, error) {
-	rows, err := q.db.Query(ctx, getHotSellingDishIDs, quantity)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []int64{}
-	for rows.Next() {
-		var id int64
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		items = append(items, id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getQualityDishIDs = `-- name: GetQualityDishIDs :many
-SELECT d.id
-FROM dishes d
-JOIN order_items oi ON d.id = oi.dish_id
-JOIN orders o ON oi.order_id = o.id
-WHERE o.status = 'completed'
-  AND d.is_online = true
-  AND d.is_available = true
-  AND d.deleted_at IS NULL
-  -- 排除近30天内有投诉的菜品
-  AND d.id NOT IN (
-      SELECT DISTINCT oi2.dish_id
-      FROM claims c
-      JOIN orders o2 ON c.order_id = o2.id
-      JOIN order_items oi2 ON o2.id = oi2.order_id
-      WHERE c.created_at >= NOW() - INTERVAL '30 days'
-        AND c.status IN ('approved', 'pending')
-  )
-  -- 排除近30天内有食品安全事故的商户的菜品
-  AND d.merchant_id NOT IN (
-      SELECT DISTINCT merchant_id
-      FROM food_safety_incidents
-      WHERE created_at >= NOW() - INTERVAL '30 days'
-  )
-GROUP BY d.id
-HAVING SUM(oi.quantity) >= $1
-`
-
-// 获取无投诉的高质量菜品ID列表
-// 条件: 销量>=指定阈值, 近30天无投诉, 商户无食品安全事故
-func (q *Queries) GetQualityDishIDs(ctx context.Context, quantity int16) ([]int64, error) {
-	rows, err := q.db.Query(ctx, getQualityDishIDs, quantity)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []int64{}
-	for rows.Next() {
-		var id int64
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		items = append(items, id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
+// 获取单个菜品近30天销量
+func (q *Queries) GetDishSales(ctx context.Context, dishID pgtype.Int8) (int32, error) {
+	row := q.db.QueryRow(ctx, getDishSales, dishID)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const getSystemTagByName = `-- name: GetSystemTagByName :one

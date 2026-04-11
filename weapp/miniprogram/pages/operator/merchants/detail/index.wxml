@@ -1,0 +1,169 @@
+<custom-navbar title="商户详情" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view
+  class="page page-shell page-shell--with-nav page-shell--bottom-safe"
+  style="--page-shell-nav-height: {{navBarHeight}}px"
+>
+  <view wx:if="{{loading}}" class="card">
+    <card-skeleton t-class="skeleton" />
+  </view>
+
+  <view wx:elif="{{error}}" class="card center">
+    <t-empty icon="error-circle" description="{{error}}">
+      <t-button slot="action" theme="primary" size="small" bind:tap="onRetry" shape="round">重试</t-button>
+    </t-empty>
+  </view>
+
+  <view wx:elif="{{!detail}}" class="card center">
+    <t-empty description="未找到商户信息" />
+  </view>
+
+  <block wx:else>
+    <!-- 商户基本资料 -->
+    <view class="card">
+      <view class="merchant-header">
+        <image wx:if="{{detail.logo_url}}" class="logo" src="{{detail.logo_url}}" mode="aspectFill" />
+        <view wx:else class="logo-placeholder"><text>{{detail.name[0]}}</text></view>
+        <view class="header-info">
+          <text class="merchant-name">{{detail.name}}</text>
+          <view class="tag-row">
+            <t-tag theme="{{detail.status_theme}}" variant="dark" size="small">{{detail.status_label}}</t-tag>
+            <t-tag theme="{{detail.business_state_theme}}" variant="light" size="small">{{detail.business_state_label}}</t-tag>
+          </view>
+          <text wx:if="{{detail.description}}" class="desc">{{detail.description}}</text>
+        </view>
+      </view>
+
+      <view class="action-row">
+        <t-button wx:if="{{detail.can_suspend}}" theme="warning" size="small" bindtap="onOpenSuspendDialog" shape="round">暂停商户</t-button>
+        <t-button wx:elif="{{detail.can_resume}}" theme="success" size="small" bindtap="onOpenResumeDialog" shape="round">恢复营业</t-button>
+      </view>
+
+      <view class="section-title">基本资料</view>
+      <view class="row"><text class="label">联系电话</text><text class="value">{{detail.phone}}</text></view>
+      <view class="row"><text class="label">联系人</text><text class="value">{{detail.contact_person || '-'}}</text></view>
+      <view class="row"><text class="label">联系人电话</text><text class="value">{{detail.contact_phone || '-'}}</text></view>
+      <view class="row"><text class="label">所属区域</text><text class="value">{{detail.region_name}}</text></view>
+      <view class="row"><text class="label">商户分类</text><text class="value">{{detail.category}}</text></view>
+      <view class="row"><text class="label">营业时间</text><text class="value">{{detail.business_hours}}</text></view>
+      <view class="row"><text class="label">佣金费率</text><text class="value">{{detail.commission_rate_display}}</text></view>
+      <view class="row"><text class="label">入驻时间</text><text class="value">{{detail.created_at}}</text></view>
+      <view class="row"><text class="label">地址</text><text class="value">{{detail.address}}</text></view>
+      <view class="row"><text class="label">坐标</text><text class="value small-text">{{detail.latitude}}, {{detail.longitude}}</text></view>
+      <view class="row"><text class="label">最近活跃</text><text class="value">{{detail.last_active_at || '-'}}</text></view>
+    </view>
+
+    <!-- 经营情况 -->
+    <view class="card">
+      <view class="section-header">
+        <text class="section-title">经营情况</text>
+        <t-tag wx:if="{{stats}}" variant="outline" size="small">近30天</t-tag>
+      </view>
+
+      <view wx:if="{{statsLoading}}" class="stats-loading">
+        <t-loading size="small" />
+        <text class="loading-text">加载中...</text>
+      </view>
+
+      <block wx:elif="{{stats}}">
+        <!-- 概览指标 -->
+        <view class="stat-grid">
+          <view class="stat-item">
+            <text class="stat-value">{{stats.total_orders}}</text>
+            <text class="stat-label">总订单数</text>
+          </view>
+          <view class="stat-item">
+            <text class="stat-value">¥{{stats.total_sales_display}}</text>
+            <text class="stat-label">GMV</text>
+          </view>
+          <view class="stat-item">
+            <text class="stat-value">¥{{stats.total_commission_display}}</text>
+            <text class="stat-label">平台佣金</text>
+          </view>
+          <view class="stat-item">
+            <text class="stat-value">¥{{stats.avg_daily_sales_display}}</text>
+            <text class="stat-label">日均销售额</text>
+          </view>
+        </view>
+
+        <!-- 复购分析 -->
+        <view class="divider" />
+        <view class="sub-title">用户复购</view>
+        <view class="stat-grid">
+          <view class="stat-item">
+            <text class="stat-value">{{stats.total_customers}}</text>
+            <text class="stat-label">下单用户</text>
+          </view>
+          <view class="stat-item">
+            <text class="stat-value">{{stats.repeat_customers}}</text>
+            <text class="stat-label">复购用户</text>
+          </view>
+          <view class="stat-item">
+            <text class="stat-value">{{stats.repurchase_rate_display}}%</text>
+            <text class="stat-label">复购率</text>
+          </view>
+          <view class="stat-item">
+            <text class="stat-value">{{stats.avg_orders_per_user_display}}次</text>
+            <text class="stat-label">人均下单</text>
+          </view>
+        </view>
+
+        <!-- 热销菜品 -->
+        <block wx:if="{{stats.top_dishes_with_revenue.length > 0}}">
+          <view class="divider" />
+          <view class="sub-title">热销菜品 Top 5</view>
+          <view class="dish-header">
+            <text class="dish-col dish-name">菜品</text>
+            <text class="dish-col dish-num">销量</text>
+            <text class="dish-col dish-num">营业额</text>
+          </view>
+          <view wx:for="{{stats.top_dishes_with_revenue}}" wx:key="dish_name" class="dish-row">
+            <text class="dish-col dish-name">{{item.dish_name}}</text>
+            <text class="dish-col dish-num">{{item.total_sold}}</text>
+            <text class="dish-col dish-num">¥{{item.total_revenue_display}}</text>
+          </view>
+        </block>
+
+        <view wx:if="{{stats.top_dishes_with_revenue.length === 0}}" class="empty-tip">近30天暂无订单数据</view>
+      </block>
+    </view>
+  </block>
+
+  <t-dialog
+    visible="{{suspendDialogVisible}}"
+    title="暂停商户"
+    confirm-btn="确认暂停"
+    cancel-btn="取消"
+    bind:confirm="onSuspendConfirm"
+    bind:cancel="onSuspendCancel"
+  >
+    <view class="dialog-content">
+      <text>确定要暂停商户 "{{detail.name}}" 吗？</text>
+      <t-textarea
+        placeholder="请输入暂停原因"
+        value="{{actionReason}}"
+        bind:change="onActionReasonChange"
+        maxlength="200"
+      />
+    </view>
+  </t-dialog>
+
+  <t-dialog
+    visible="{{resumeDialogVisible}}"
+    title="恢复商户"
+    confirm-btn="确认恢复"
+    cancel-btn="取消"
+    bind:confirm="onResumeConfirm"
+    bind:cancel="onResumeCancel"
+  >
+    <view class="dialog-content">
+      <text>确定要恢复商户 "{{detail.name}}" 吗？</text>
+      <t-textarea
+        placeholder="可选：输入恢复说明"
+        value="{{actionReason}}"
+        bind:change="onActionReasonChange"
+        maxlength="200"
+      />
+    </view>
+  </t-dialog>
+</view>

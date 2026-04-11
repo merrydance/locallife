@@ -4,6 +4,11 @@
         "custom-navbar": "/components/custom-navbar/index",
         "t-button": "tdesign-miniprogram/button/button",
         "t-empty": "tdesign-miniprogram/empty/empty",
-        "t-loading": "tdesign-miniprogram/loading/loading"
+        "t-loading": "tdesign-miniprogram/loading/loading",
+        "t-image": "tdesign-miniprogram/image/image",
+        "t-icon": "tdesign-miniprogram/icon/icon",
+        "t-tag": "tdesign-miniprogram/tag/tag",
+        "list-skeleton": "/components/list-skeleton/index",
+        "card-skeleton": "/components/card-skeleton/index"
     }
 }

@@ -33,33 +33,13 @@ func (fsh *FoodSafetyHandler) EvaluateFoodSafetyReport(
 	merchantID int64,
 	evidence []string,
 ) (*FoodSafetyCheckResult, error) {
-	// Step 1: 获取用户信用分
-	userProfile, err := fsh.store.GetUserProfile(ctx, db.GetUserProfileParams{
-		UserID: userID,
-		Role:   EntityTypeCustomer,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	// Step 2: 高信用用户 + 有证据 = 立即熔断24小时
-	if userProfile.TrustScore >= TrustScoreFoodSafetyReport && len(evidence) > 0 {
-		return &FoodSafetyCheckResult{
-			ShouldCircuitBreak: true,
-			IsMalicious:        false,
-			ReasonCode:         "high-trust-user-report-with-evidence",
-			Message:            "高信用用户举报且有证据，立即熔断",
-			DurationHours:      24,
-		}, nil
-	}
-
-	// Step 3: 检查商户最近1小时的食安举报
+	// Step 1: 检查商户最近1小时的食安举报
 	reports, err := fsh.store.GetMerchantRecentFoodSafetyReports(ctx, merchantID)
 	if err != nil {
 		return nil, err
 	}
 
-	// Step 4: 未达到3个 -> 仅记录和通知
+	// Step 2: 未达到3个 -> 仅记录和通知
 	if len(reports) < FoodSafetyReportsIn1Hour-1 { // -1因为当前这次还没创建
 		return &FoodSafetyCheckResult{
 			ShouldCircuitBreak: false,
@@ -70,7 +50,7 @@ func (fsh *FoodSafetyHandler) EvaluateFoodSafetyReport(
 		}, nil
 	}
 
-	// Step 5: 达到3个，检查是否恶作剧
+	// Step 3: 达到3个，检查是否恶作剧
 	// 需要加上当前用户
 	reporterIDs := make([]int64, 0, len(reports)+1)
 	reporterIDs = append(reporterIDs, userID)
@@ -94,7 +74,7 @@ func (fsh *FoodSafetyHandler) EvaluateFoodSafetyReport(
 		}, nil
 	}
 
-	// Step 6: 真实举报 -> 熔断48小时
+	// Step 4: 真实举报 -> 熔断48小时
 	return &FoodSafetyCheckResult{
 		ShouldCircuitBreak: true,
 		IsMalicious:        false,
@@ -120,17 +100,11 @@ func (fsh *FoodSafetyHandler) checkMaliciousPattern(
 	// 检查1: 都是新用户且首单
 	allNewUsersFirstOrder := true
 	for _, uid := range reporterIDs {
-		profile, err := fsh.store.GetUserProfile(ctx, db.GetUserProfileParams{
-			UserID: uid,
-			Role:   EntityTypeCustomer,
-		})
+		totalOrders, err := fsh.store.CountUserOrders(ctx, uid)
 		if err != nil {
-			// 如果查不到profile，说明可能还没创建，跳过
 			continue
 		}
-
-		// 检查是否新用户：只点了这一次外卖
-		if profile.TotalOrders > 1 {
+		if totalOrders > 1 {
 			allNewUsersFirstOrder = false
 			break
 		}
@@ -259,7 +233,7 @@ func (fsh *FoodSafetyHandler) sendNotification(entityType, title, message string
 	}
 
 	msg := websocket.Message{
-		Type:      "trust_score_alert",
+		Type:      "behavior_alert",
 		Data:      dataBytes,
 		Timestamp: time.Now(),
 	}

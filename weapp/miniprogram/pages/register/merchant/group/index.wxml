@@ -1,0 +1,224 @@
+<custom-navbar title="集团 / 品牌入驻" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view class="page-container page-shell page-shell--with-nav page-shell--bottom-safe" style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: 120rpx;">
+  
+  <view class="steps-container" wx:if="{{currentStep > 0 && currentStep < 4}}">
+    <t-steps current="{{currentStep - 1}}">
+      <t-step-item title="证照" />
+      <t-step-item title="信息" />
+      <t-step-item title="审核" />
+    </t-steps>
+  </view>
+
+  <view class="form-content">
+    
+    <!-- Step 0: Intro -->
+    <view class="step-view" wx:if="{{currentStep === 0}}">
+      <view class="status-card">
+        <view class="icon-box">
+          <t-icon name="root-list" size="120rpx" color="var(--td-brand-color)" />
+        </view>
+        <view class="welcome-text">欢迎入驻集团管理平台</view>
+        <view class="benefit-list">
+          <view class="benefit-item">
+            <t-icon name="check-circle" size="32rpx" color="var(--td-success-color)" />
+            <text>集中管理多家门店</text>
+          </view>
+          <view class="benefit-item">
+            <t-icon name="check-circle" size="32rpx" color="var(--td-success-color)" />
+            <text>共享品牌会员资产</text>
+          </view>
+          <view class="benefit-item">
+            <t-icon name="check-circle" size="32rpx" color="var(--td-success-color)" />
+            <text>跨店联合营销能力</text>
+          </view>
+        </view>
+      </view>
+      <view class="requirement-tip">
+        <t-icon name="info-circle" size="28rpx" />
+        <text>集团入驻需提供申请人身份证信息。系统会自动识别负责人姓名，审核时继续核验证件原图。</text>
+      </view>
+    </view>
+
+    <!-- Step 1: Upload (ID mandatory, License optional) -->
+    <view class="step-view" wx:if="{{currentStep === 1}}">
+      <view class="section-title">身份与资质 (必填项标记 *)</view>
+      
+      <view class="upload-section">
+        <view class="label-row">
+          <text class="label required">负责人身份证正反面</text>
+        </view>
+        <view class="id-upload-grid">
+          <document-uploader 
+            type="id-front" 
+            title="身份证人像面" 
+            value="{{idFront.url}}" 
+            rawUrl="{{idFront.rawUrl}}"
+            feedbackState="{{uploadFeedback.idFront.state}}"
+            feedbackTitle="{{uploadFeedback.idFront.title}}"
+            feedbackDescription="{{uploadFeedback.idFront.description}}"
+            bind:change="onIdFrontUpload"
+            bind:remove="onIdFrontRemove" 
+          />
+          <document-uploader 
+            type="id-back" 
+            title="身份证国徽面" 
+            value="{{idBack.url}}" 
+            rawUrl="{{idBack.rawUrl}}"
+            feedbackState="{{uploadFeedback.idBack.state}}"
+            feedbackTitle="{{uploadFeedback.idBack.title}}"
+            feedbackDescription="{{uploadFeedback.idBack.description}}"
+            bind:change="onIdBackUpload"
+            bind:remove="onIdBackRemove" 
+          />
+        </view>
+      </view>
+
+      <view class="upload-section">
+        <view class="label-row">
+          <text class="label">营业执照 (选填)</text>
+          <text class="hint">若无执照可暂跳过</text>
+        </view>
+        <document-uploader 
+          type="license" 
+          title="点击上传营业执照" 
+          value="{{license.url}}" 
+          rawUrl="{{license.rawUrl}}"
+          feedbackState="{{uploadFeedback.license.state}}"
+          feedbackTitle="{{uploadFeedback.license.title}}"
+          feedbackDescription="{{uploadFeedback.license.description}}"
+          bind:change="onLicenseUpload"
+          bind:remove="onLicenseRemove" 
+        />
+      </view>
+    </view>
+
+    <!-- Step 2: Info Confirmation -->
+    <view class="step-view" wx:if="{{currentStep === 2}}">
+      <view class="section-title">确认集团信息</view>
+      
+      <view class="card-group">
+        <t-input 
+          label="集团/品牌名" 
+          placeholder="请输入品牌名称" 
+          value="{{formData.groupName}}" 
+          bindchange="onInput" 
+          data-field="groupName" 
+        />
+        <view class="field-block {{phoneError ? 'field-block-error' : ''}}">
+          <t-input 
+            label="联系电话" 
+            type="number" 
+            placeholder="请输入手机号" 
+            value="{{formData.contactPhone}}" 
+            bindchange="onInput" 
+            data-field="contactPhone" 
+          />
+        </view>
+        <view class="field-error-text" wx:if="{{phoneError}}">{{phoneError}}</view>
+      </view>
+
+      <view class="section-title">办公地址</view>
+      <view class="card-group">
+        <view class="addr-picker" bindtap="onChooseAddress">
+          <view class="addr-label">点击选择地址</view>
+          <view class="addr-value {{formData.address ? '' : 'placeholder'}}">
+            {{formData.address || '选择品牌总部或办公地址'}}
+          </view>
+          <t-icon name="location" size="32rpx" color="var(--td-brand-color)" />
+        </view>
+      </view>
+
+      <view class="ocr-preview" wx:if="{{formData.licenseNumber}}">
+        <view class="ocr-title">自动识别信息</view>
+        <t-cell title="信用代码" note="{{formData.licenseNumber}}" />
+      </view>
+      <view class="ocr-preview note-only">
+        <view class="ocr-title">负责人身份证识别</view>
+        <block wx:if="{{ocrDisplayState.identity === 'done'}}">
+          <t-cell title="负责人姓名" note="{{formData.legalPerson || '--'}}" />
+          <t-cell title="身份证状态" note="已完成识别与回填" />
+        </block>
+        <view class="ocr-note" wx:elif="{{ocrDisplayState.identity === 'processing'}}">身份证正反面正在识别，完成后会统一回填负责人姓名。</view>
+        <view class="ocr-note error" wx:elif="{{ocrDisplayState.identity === 'failed'}}">身份证识别失败，请重新上传清晰、完整的正反面图片。</view>
+        <view class="ocr-note" wx:else>上传身份证正反面后，系统会自动回填负责人姓名。</view>
+      </view>
+    </view>
+
+    <!-- Step 3: Review -->
+    <view class="step-view" wx:if="{{currentStep === 3}}">
+      <view class="review-header">
+        <t-icon name="info-circle-filled" size="80rpx" color="var(--td-brand-color)" />
+        <view class="title">最后确认</view>
+        <view class="desc">提交后平台将在 24 小时内完成审核</view>
+      </view>
+
+      <view class="preview-card">
+        <t-cell title="申请机构" note="{{formData.groupName}}" />
+        <t-cell title="联系电话" note="{{formData.contactPhone}}" />
+        <t-cell title="负责人" note="{{formData.legalPerson || (ocrDisplayState.identity === 'processing' ? '身份证识别中' : '待审核核验')}}" />
+        <t-cell title="是否有执照" note="{{license.url ? '是' : '否'}}" />
+      </view>
+    </view>
+
+    <!-- Step 4: 审核状态 -->
+    <view class="step-view center" wx:if="{{currentStep === 4}}">
+      <view class="result-status">
+        <t-icon
+          name="{{resultStatusView.iconName}}"
+          size="160rpx"
+          color="{{resultStatusView.iconColor}}"
+        />
+        <view class="status-text">{{resultStatusView.resultText}}</view>
+        <view class="status-hint">{{resultStatusView.resultHint}}</view>
+      </view>
+      <t-button theme="primary" block size="large" bindtap="onBackHome" shape="round">返回个人中心</t-button>
+    </view>
+  </view>
+
+  <!-- Navigation Buttons -->
+  <view class="action-bar animate-slide-up" wx:if="{{currentStep < 4}}">
+    <view class="consent-row" wx:if="{{currentStep === 0 || currentStep === 3}}">
+      <checkbox-group bindchange="onConsentChange">
+        <label class="consent-label">
+          <checkbox value="agree" checked="{{consentChecked}}" color="var(--td-brand-color)" />
+          <text>我已阅读并同意</text>
+        </label>
+      </checkbox-group>
+      <view class="consent-links">
+        <text class="consent-link" data-type="USER_AGREEMENT" data-title="用户服务协议" catchtap="onViewAgreement">《用户服务协议》</text>
+        <text>和</text>
+        <text class="consent-link" data-type="PRIVACY_POLICY" data-title="隐私政策" catchtap="onViewAgreement">《隐私政策》</text>
+      </view>
+    </view>
+
+    <block wx:if="{{currentStep === 0}}">
+      <t-button block theme="primary" size="large" bindtap="onNext" shape="round">开始申请</t-button>
+    </block>
+    <block wx:elif="{{currentStep === 3}}">
+      <view class="btn-group">
+        <t-button block size="large" bindtap="onPrev" shape="round">返回修改</t-button>
+        <t-button block theme="primary" size="large" bindtap="onSubmit" loading="{{submitting}}" shape="round">确认提交</t-button>
+      </view>
+    </block>
+    <block wx:elif="{{currentStep < 3}}">
+      <view class="btn-group">
+        <t-button block size="large" bindtap="onPrev" shape="round">上一步</t-button>
+        <t-button block theme="primary" size="large" bindtap="onNext" shape="round">下一步</t-button>
+      </view>
+    </block>
+  </view>
+</view>
+
+<t-popup visible="{{consentPopupVisible}}" placement="bottom" bind:visible-change="closeConsentPopup">
+  <view class="consent-popup">
+    <view class="consent-popup-title">入驻协议确认</view>
+    <view class="consent-popup-desc">继续入驻前，请阅读并同意以下协议：</view>
+    <view class="consent-popup-links">
+      <text class="consent-link" data-type="USER_AGREEMENT" data-title="用户服务协议" catchtap="onViewAgreement">《用户服务协议》</text>
+      <text class="consent-link" data-type="PRIVACY_POLICY" data-title="隐私政策" catchtap="onViewAgreement">《隐私政策》</text>
+    </view>
+    <t-button block theme="primary" size="large" bindtap="onConfirmConsent" shape="round">我已阅读并同意，继续</t-button>
+    <t-button block variant="text" size="large" bindtap="closeConsentPopup">暂不继续</t-button>
+  </view>
+</t-popup>

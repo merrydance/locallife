@@ -1,5 +1,9 @@
 // / <reference path="../../../typings/index.d.ts" />
 
+type RoomCardData = {
+  id?: number
+}
+
 Component({
   properties: {
     room: {
@@ -10,9 +14,10 @@ Component({
 
   methods: {
     onTap() {
-      if (this.data.room) {
+      const room = this.data.room as RoomCardData
+      if (room?.id) {
         wx.navigateTo({
-          url: `/pages/reservation/room-detail/index?id=${this.data.room.id}`
+          url: `/pages/reservation/room-detail/index?id=${room.id}`
         })
       }
     }

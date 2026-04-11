@@ -1,99 +1,140 @@
-import { getMyVouchers, getMyAvailableVouchers, claimVoucher, UserVoucherResponse } from '../../../api/personal'
-import { formatPriceNoSymbol } from '../../../utils/util'
+import CouponService, { UserCoupon, MyCouponParams } from '../../../api/coupon'
+import { ErrorHandler } from '../../../utils/error-handler'
 
-interface CouponDisplay {
-  id: number
-  merchant_name: string
-  name: string
-  threshold: number
-  thresholdDisplay: string
-  discount: number
-  discountDisplay: string
-  end_date: string
-  can_claim?: boolean
-  status?: string
+// ViewModel
+interface CouponViewModel {
+    id: number
+    title: string
+    merchantName: string
+    valueDisplay: string
+    minSpendDisplay: string
+    timeRange: string
+    status: string // 'available' | 'used' | 'expired' | 'claimed'
+    statusClass: string
+    statusText: string
+    isClaimed: boolean
 }
 
 Page({
-  data: {
-    activeTab: 'AVAILABLE' as 'AVAILABLE' | 'MY',
-    coupons: [] as CouponDisplay[],
-    navBarHeight: 88,
-    loading: false
-  },
+    data: {
+        activeTab: 'AVAILABLE', // 'AVAILABLE' | 'ALL'
+        coupons: [] as CouponViewModel[],
+        navBarHeight: 88,
+        loading: false,
+        initialLoading: true,
+        error: null as string | null,
+        
+        // Paging
+        page: 1,
+        pageSize: 10,
+        hasMore: true
+    },
 
-  onLoad() {
-    this.loadCoupons()
-  },
+    onLoad() {
+        this.loadCoupons(true)
+    },
 
-  onNavHeight(e: WechatMiniprogram.CustomEvent) {
-    this.setData({ navBarHeight: e.detail.navBarHeight })
-  },
+    onNavHeight(e: WechatMiniprogram.CustomEvent) {
+        this.setData({ navBarHeight: e.detail.navBarHeight })
+    },
 
-  async loadCoupons() {
-    this.setData({ loading: true })
+    onTabChange(e: WechatMiniprogram.CustomEvent) {
+        this.setData({ 
+            activeTab: e.detail.value,
+            coupons: [],
+            page: 1,
+            hasMore: true
+        }, () => {
+            this.loadCoupons(true)
+        })
+    },
 
-    try {
-      const { activeTab } = this.data
-      let coupons: CouponDisplay[] = []
+    async loadCoupons(reset = false) {
+        if (!this.data.hasMore && !reset) return
+        if (this.data.loading && !this.data.initialLoading) return
 
-      if (activeTab === 'AVAILABLE') {
-        // 获取可领取的优惠券
-        const response = await getMyAvailableVouchers()
-        coupons = response.vouchers.map(v => ({
-          id: v.id,
-          merchant_name: v.merchant_name || '平台通用',
-          name: v.name,
-          threshold: v.min_order_amount,
-          thresholdDisplay: formatPriceNoSymbol(v.min_order_amount || 0),
-          discount: v.discount_amount,
-          discountDisplay: formatPriceNoSymbol(v.discount_amount || 0),
-          end_date: v.end_time?.split('T')[0] || '',
-          can_claim: true
-        }))
-      } else {
-        // 获取我的优惠券
-        const response = await getMyVouchers()
-        coupons = response.vouchers.map((v: UserVoucherResponse) => ({
-          id: v.id,
-          merchant_name: v.merchant_name || '平台通用',
-          name: v.voucher_name,
-          threshold: v.min_order_amount,
-          thresholdDisplay: formatPriceNoSymbol(v.min_order_amount || 0),
-          discount: v.discount_amount,
-          discountDisplay: formatPriceNoSymbol(v.discount_amount || 0),
-          end_date: v.end_time?.split('T')[0] || '',
-          status: v.status
-        }))
-      }
+        this.setData({ loading: true, error: null })
 
-      this.setData({
-        coupons,
-        loading: false
-      })
-    } catch (error) {
-      console.error('加载优惠券失败:', error)
-      wx.showToast({ title: '加载失败', icon: 'error' })
-      this.setData({ loading: false, coupons: [] })
+        try {
+            let list: CouponViewModel[] = []
+            const page = reset ? 1 : this.data.page
+            let hasMore = false
+            let nextPage = page + 1
+
+            if (this.data.activeTab === 'AVAILABLE') {
+                const params: MyCouponParams = {
+                    page_id: page,
+                    page_size: this.data.pageSize
+                }
+                const res = await CouponService.getMyAvailableCoupons(params)
+                list = res.coupons.map((c) => this.mapUserCouponToView(c))
+                hasMore = res.hasMore
+                nextPage = res.page + 1
+            } else {
+                const params: MyCouponParams = {
+                    page_id: page,
+                    page_size: this.data.pageSize
+                }
+                const res = await CouponService.getMyCoupons(params)
+                list = res.coupons.map((c) => this.mapUserCouponToView(c))
+                hasMore = res.hasMore
+                nextPage = res.page + 1
+            }
+
+            const newCoupons = reset ? list : [...this.data.coupons, ...list]
+            this.setData({
+                coupons: newCoupons,
+                hasMore,
+                page: nextPage,
+                loading: false,
+                initialLoading: false
+            })
+        } catch (error) {
+            this.setData({ 
+                loading: false,
+                initialLoading: false,
+                error: '加载优惠券失败'
+            })
+            ErrorHandler.handle(error, 'Coupons.load')
+        }
+    },
+
+    onRetry() {
+        this.loadCoupons(true)
+    },
+
+    onReachBottom() {
+        this.loadCoupons()
+    },
+    
+    onGoToAvailable() {
+         this.setData({ activeTab: 'AVAILABLE', page: 1, coupons: [] }, () => {
+             this.loadCoupons(true)
+         })
+    },
+
+    mapUserCouponToView(item: UserCoupon): CouponViewModel {
+        const statusMap: Record<string, string> = {
+            'available': '可使用',
+            'used': '已使用',
+            'expired': '已过期'
+        }
+        return {
+            id: item.id,
+            title: item.title,
+            merchantName: item.merchant_name,
+            valueDisplay: item.type === 'discount' ? `${item.value}` : `${item.value / 100}`,
+            minSpendDisplay: `${item.min_spend / 100}`,
+            timeRange: `${this.formatDate(item.start_time)} - ${this.formatDate(item.end_time)}`,
+            status: item.status, // available, used, expired
+            statusClass: item.status,
+            statusText: statusMap[item.status] || item.status,
+            isClaimed: true
+        }
+    },
+
+    formatDate(isoStr?: string): string {
+        if (!isoStr) return ''
+        return isoStr.split('T')[0]
     }
-  },
-
-  onTabChange(e: WechatMiniprogram.CustomEvent) {
-    this.setData({ activeTab: e.detail.value })
-    this.loadCoupons()
-  },
-
-  async onClaimCoupon(e: WechatMiniprogram.CustomEvent) {
-    const { id } = e.currentTarget.dataset
-    if (!id) return
-
-    try {
-      await claimVoucher(Number(id))
-      wx.showToast({ title: '领取成功', icon: 'success' })
-      this.loadCoupons()
-    } catch (error) {
-      console.error('领取优惠券失败:', error)
-      wx.showToast({ title: '领取失败', icon: 'error' })
-    }
-  }
 })

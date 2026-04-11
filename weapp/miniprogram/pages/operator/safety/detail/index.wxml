@@ -1,0 +1,58 @@
+<custom-navbar title="食安事件详情" showBack="{{true}}" bind:navheight="onNavHeight" />
+<view
+  class="page-container page-shell page-shell--with-nav page-shell--bottom-safe"
+  style="--page-shell-nav-height: {{navBarHeight}}px"
+>
+  <view wx:if="{{loading && initialLoading}}">
+    <list-skeleton row="6" />
+  </view>
+
+  <view wx:elif="{{error}}" class="card center-card">
+    <t-empty icon="info-circle" description="{{error}}">
+      <t-button slot="action" theme="primary" size="small" bindtap="onRetry" shape="round">重试</t-button>
+    </t-empty>
+  </view>
+
+  <view wx:elif="{{report}}">
+    <view class="card">
+      <view class="header-row">
+        <text class="title">{{report.title}}</text>
+        <t-tag theme="{{report.status_theme}}" variant="dark">{{report.status_label}}</t-tag>
+      </view>
+      <view class="meta">事件ID：{{report.id}}</view>
+      <view class="meta">等级：{{report.level}}</view>
+      <view class="meta">时间：{{report.created_at}}</view>
+      <view class="desc">{{report.description}}</view>
+      <view class="meta">涉及商户：{{report.merchant_ids.length ? report.merchant_ids.join(', ') : '无'}}</view>
+    </view>
+
+    <view class="card" wx:if="{{report.is_pending}}">
+      <view class="section-title">处置报告</view>
+      <t-radio-group value="{{resolutionStatus}}" bindchange="onResolutionStatusChange">
+        <t-radio value="resolved" label="已处理" />
+        <t-radio value="rejected" label="驳回" />
+      </t-radio-group>
+      <t-textarea label="处置说明" placeholder="填写处置结果与结论" value="{{resolutionNotes}}" bindchange="onResolutionNotesChange" />
+      <t-input label="恢复商户ID" placeholder="可选，多个用英文逗号分隔" value="{{recoverMerchantIdsRaw}}" bindchange="onRecoverMerchantIdsChange" />
+      <t-input label="恢复原因" placeholder="有恢复商户时必填" value="{{recoverReason}}" bindchange="onRecoverReasonChange" />
+      <t-button theme="primary" block bindtap="onSubmitResolution" loading="{{submitting}}" shape="round">提交处置</t-button>
+    </view>
+
+    <view class="card" wx:else>
+      <view class="section-title">处置结果</view>
+      <view class="meta">当前状态：{{report.status_label}}</view>
+      <view class="desc">{{report.resolution_notes || '暂无处置说明'}}</view>
+      <view wx:if="{{recoveredMerchantIds.length > 0}}" class="meta">本页恢复商户：{{recoveredMerchantIds.join(', ')}}</view>
+      <view class="readonly-tip">当前事件已进入只读状态，不可重复提交处置。</view>
+    </view>
+
+    <view class="card" wx:if="{{report.is_pending}}">
+      <view class="section-title">恢复商户上线</view>
+      <t-input label="商户ID" placeholder="输入商户ID" value="{{singleResumeMerchantId}}" bindchange="onSingleResumeMerchantIdChange" />
+      <t-input label="恢复原因" placeholder="输入恢复原因" value="{{singleResumeReason}}" bindchange="onSingleResumeReasonChange" />
+      <t-button theme="success" block bindtap="onResumeSingleMerchant" loading="{{resumeSubmitting}}" shape="round">恢复上线</t-button>
+    </view>
+  </view>
+
+  <t-empty wx:else icon="info-circle" description="事件不存在或无权限" />
+</view>

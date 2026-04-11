@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -62,8 +61,7 @@ func TestGetPlatformOverviewAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp platformOverviewResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Equal(t, int32(1000), resp.TotalOrders)
 				require.Equal(t, int64(5000000), resp.TotalGMV)
 				require.Equal(t, int64(150000), resp.TotalCommission)
@@ -250,8 +248,7 @@ func TestGetPlatformDailyStatsAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp []platformDailyStatRow
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Len(t, resp, 2)
 				require.Equal(t, "2025-01-01", resp[0].Date)
 				require.Equal(t, int32(100), resp[0].OrderCount)
@@ -282,8 +279,7 @@ func TestGetPlatformDailyStatsAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp []platformDailyStatRow
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Len(t, resp, 0)
 			},
 		},
@@ -302,6 +298,366 @@ func TestGetPlatformDailyStatsAPI(t *testing.T) {
 			recorder := httptest.NewRecorder()
 
 			url := "/v1/platform/stats/daily" + tc.query
+			request, err := http.NewRequest(http.MethodGet, url, nil)
+			require.NoError(t, err)
+
+			tc.setupAuth(t, request, server.tokenMaker)
+			server.router.ServeHTTP(recorder, request)
+			tc.checkResponse(t, recorder)
+		})
+	}
+}
+
+// ============================================================================
+// 平台分账对账汇总测试
+// ============================================================================
+
+func TestGetPlatformProfitSharingReconciliationAPI(t *testing.T) {
+	admin, _ := randomUser(t)
+
+	testCases := []struct {
+		name          string
+		query         string
+		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
+		buildStubs    func(store *mockdb.MockStore)
+		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
+	}{
+		{
+			name:  "OK",
+			query: "?start_date=2025-01-01&end_date=2025-01-31",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, admin.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					ListUserRoles(gomock.Any(), admin.ID).
+					Return([]db.UserRole{{
+						UserID: admin.ID,
+						Role:   "admin",
+						Status: "active",
+					}}, nil)
+
+				store.EXPECT().
+					GetProfitSharingReconciliationSummary(gomock.Any(), gomock.Any()).
+					Return([]db.GetProfitSharingReconciliationSummaryRow{
+						{
+							Status:                  "finished",
+							TotalOrders:             12,
+							TotalAmount:             120000,
+							TotalPlatformCommission: 3600,
+							TotalOperatorCommission: 2400,
+						},
+						{
+							Status:                  "failed",
+							TotalOrders:             2,
+							TotalAmount:             20000,
+							TotalPlatformCommission: 0,
+							TotalOperatorCommission: 0,
+						},
+					}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var resp []platformProfitSharingReconciliationRow
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Len(t, resp, 2)
+				require.Equal(t, "finished", resp[0].Status)
+				require.Equal(t, int64(12), resp[0].TotalOrders)
+				require.Equal(t, int64(120000), resp[0].TotalAmount)
+				require.Equal(t, int64(3600), resp[0].TotalPlatformCommission)
+				require.Equal(t, int64(2400), resp[0].TotalOperatorCommission)
+			},
+		},
+		{
+			name:  "InvalidDateFormat",
+			query: "?start_date=bad&end_date=2025-01-31",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, admin.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					ListUserRoles(gomock.Any(), admin.ID).
+					Return([]db.UserRole{{
+						UserID: admin.ID,
+						Role:   "admin",
+						Status: "active",
+					}}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
+			name:  "UnauthorizedNonAdmin",
+			query: "?start_date=2025-01-01&end_date=2025-01-31",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, admin.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					ListUserRoles(gomock.Any(), admin.ID).
+					Return([]db.UserRole{{
+						UserID: admin.ID,
+						Role:   "customer",
+						Status: "active",
+					}}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusForbidden, recorder.Code)
+			},
+		},
+	}
+
+	for i := range testCases {
+		tc := testCases[i]
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			tc.buildStubs(store)
+
+			server := newTestServer(t, store)
+			recorder := httptest.NewRecorder()
+
+			url := "/v1/platform/stats/profit-sharing/reconciliation" + tc.query
+			request, err := http.NewRequest(http.MethodGet, url, nil)
+			require.NoError(t, err)
+
+			tc.setupAuth(t, request, server.tokenMaker)
+			server.router.ServeHTTP(recorder, request)
+			tc.checkResponse(t, recorder)
+		})
+	}
+}
+
+// ============================================================================
+// 平台分账 SLA 汇总测试
+// ============================================================================
+
+func TestGetPlatformProfitSharingSlaSummaryAPI(t *testing.T) {
+	admin, _ := randomUser(t)
+
+	testCases := []struct {
+		name          string
+		query         string
+		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
+		buildStubs    func(store *mockdb.MockStore)
+		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
+	}{
+		{
+			name:  "OK",
+			query: "?start_date=2025-01-01&end_date=2025-01-31",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, admin.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					ListUserRoles(gomock.Any(), admin.ID).
+					Return([]db.UserRole{{
+						UserID: admin.ID,
+						Role:   "admin",
+						Status: "active",
+					}}, nil)
+
+				store.EXPECT().
+					GetProfitSharingSlaSummary(gomock.Any(), gomock.Any()).
+					Return(db.GetProfitSharingSlaSummaryRow{
+						TotalOrders:      20,
+						FinishedOrders:   18,
+						FailedOrders:     1,
+						PendingOrders:    1,
+						AvgFinishSeconds: 42,
+						P95FinishSeconds: 120,
+					}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var resp platformProfitSharingSlaSummaryResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Equal(t, int64(20), resp.TotalOrders)
+				require.Equal(t, int64(18), resp.FinishedOrders)
+				require.Equal(t, int64(1), resp.FailedOrders)
+				require.Equal(t, int64(1), resp.PendingOrders)
+				require.Equal(t, int64(42), resp.AvgFinishSeconds)
+				require.Equal(t, int64(120), resp.P95FinishSeconds)
+			},
+		},
+		{
+			name:  "InvalidDateFormat",
+			query: "?start_date=bad&end_date=2025-01-31",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, admin.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					ListUserRoles(gomock.Any(), admin.ID).
+					Return([]db.UserRole{{
+						UserID: admin.ID,
+						Role:   "admin",
+						Status: "active",
+					}}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
+			name:  "UnauthorizedNonAdmin",
+			query: "?start_date=2025-01-01&end_date=2025-01-31",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, admin.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					ListUserRoles(gomock.Any(), admin.ID).
+					Return([]db.UserRole{{
+						UserID: admin.ID,
+						Role:   "customer",
+						Status: "active",
+					}}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusForbidden, recorder.Code)
+			},
+		},
+	}
+
+	for i := range testCases {
+		tc := testCases[i]
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			tc.buildStubs(store)
+
+			server := newTestServer(t, store)
+			recorder := httptest.NewRecorder()
+
+			url := "/v1/platform/stats/profit-sharing/sla" + tc.query
+			request, err := http.NewRequest(http.MethodGet, url, nil)
+			require.NoError(t, err)
+
+			tc.setupAuth(t, request, server.tokenMaker)
+			server.router.ServeHTTP(recorder, request)
+			tc.checkResponse(t, recorder)
+		})
+	}
+}
+
+// ============================================================================
+// 平台分账规则审计记录测试
+// ============================================================================
+
+func TestGetPlatformProfitSharingConfigAuditsAPI(t *testing.T) {
+	admin, _ := randomUser(t)
+
+	testCases := []struct {
+		name          string
+		query         string
+		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
+		buildStubs    func(store *mockdb.MockStore)
+		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
+	}{
+		{
+			name:  "OK",
+			query: "?config_id=12&page=1&limit=2",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, admin.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					ListUserRoles(gomock.Any(), admin.ID).
+					Return([]db.UserRole{{
+						UserID: admin.ID,
+						Role:   "admin",
+						Status: "active",
+					}}, nil)
+
+				store.EXPECT().
+					ListProfitSharingConfigAudits(gomock.Any(), gomock.Any()).
+					Return([]db.ProfitSharingConfigAudit{
+						{
+							ID:        1,
+							ConfigID:  12,
+							Action:    "update",
+							ActorID:   pgtype.Int8{Int64: 99, Valid: true},
+							ActorRole: pgtype.Text{String: "admin", Valid: true},
+							Detail:    []byte(`{"before":{},"after":{"status":"active"}}`),
+							CreatedAt: time.Date(2025, 1, 2, 3, 4, 5, 0, time.UTC),
+						},
+					}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var resp listProfitSharingConfigAuditsResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Len(t, resp.Items, 1)
+				require.Equal(t, int32(1), resp.Page)
+				require.Equal(t, int32(2), resp.Limit)
+				require.Equal(t, int64(12), resp.Items[0].ConfigID)
+				require.Equal(t, "update", resp.Items[0].Action)
+				require.NotNil(t, resp.Items[0].ActorID)
+				require.NotNil(t, resp.Items[0].ActorRole)
+			},
+		},
+		{
+			name:  "InvalidLimit",
+			query: "?limit=-1",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, admin.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					ListUserRoles(gomock.Any(), admin.ID).
+					Return([]db.UserRole{{
+						UserID: admin.ID,
+						Role:   "admin",
+						Status: "active",
+					}}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
+			name:  "UnauthorizedNonAdmin",
+			query: "?page=1&limit=20",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, admin.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					ListUserRoles(gomock.Any(), admin.ID).
+					Return([]db.UserRole{{
+						UserID: admin.ID,
+						Role:   "customer",
+						Status: "active",
+					}}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusForbidden, recorder.Code)
+			},
+		},
+	}
+
+	for i := range testCases {
+		tc := testCases[i]
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			tc.buildStubs(store)
+
+			server := newTestServer(t, store)
+			recorder := httptest.NewRecorder()
+
+			url := "/v1/platform/stats/profit-sharing/config-audits" + tc.query
 			request, err := http.NewRequest(http.MethodGet, url, nil)
 			require.NoError(t, err)
 
@@ -370,8 +726,7 @@ func TestGetRegionComparisonAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp []regionComparisonRow
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Len(t, resp, 2)
 				require.Equal(t, "北京", resp[0].RegionName)
 				require.Equal(t, int32(100), resp[0].MerchantCount)
@@ -434,10 +789,10 @@ func TestGetMerchantRankingAPI(t *testing.T) {
 
 				store.EXPECT().
 					GetMerchantRanking(gomock.Any(), db.GetMerchantRankingParams{
-						CreatedAt:   time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
-						CreatedAt_2: time.Date(2025, 1, 31, 0, 0, 0, 0, time.UTC),
-						Limit:       20,
-						Offset:      0,
+						StartAt: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+						EndAt:   time.Date(2025, 1, 31, 0, 0, 0, 0, time.UTC),
+						Limit:   20,
+						Offset:  0,
 					}).
 					Return([]db.GetMerchantRankingRow{
 						{
@@ -466,8 +821,7 @@ func TestGetMerchantRankingAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp []merchantRankingRow
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Len(t, resp, 2)
 				require.Equal(t, "测试商户1", resp[0].MerchantName)
 				require.Equal(t, int32(500), resp[0].OrderCount)
@@ -490,10 +844,10 @@ func TestGetMerchantRankingAPI(t *testing.T) {
 
 				store.EXPECT().
 					GetMerchantRanking(gomock.Any(), db.GetMerchantRankingParams{
-						CreatedAt:   time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
-						CreatedAt_2: time.Date(2025, 1, 31, 0, 0, 0, 0, time.UTC),
-						Limit:       10,
-						Offset:      10, // (page-1) * limit = (2-1) * 10 = 10
+						StartAt: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+						EndAt:   time.Date(2025, 1, 31, 0, 0, 0, 0, time.UTC),
+						Limit:   10,
+						Offset:  10, // (page-1) * limit = (2-1) * 10 = 10
 					}).
 					Return([]db.GetMerchantRankingRow{}, nil)
 			},
@@ -595,8 +949,7 @@ func TestGetCategoryStatsAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp []categoryStatRow
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Len(t, resp, 2)
 				require.Equal(t, "快餐", resp[0].CategoryName)
 				require.Equal(t, int32(50), resp[0].MerchantCount)
@@ -673,8 +1026,7 @@ func TestGetUserGrowthStatsAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp []growthStatRow
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Len(t, resp, 2)
 				require.Equal(t, "2025-01-01", resp[0].Date)
 				require.Equal(t, int32(50), resp[0].Count)
@@ -751,8 +1103,7 @@ func TestGetMerchantGrowthStatsAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp []growthStatRow
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Len(t, resp, 2)
 				require.Equal(t, "2025-01-01", resp[0].Date)
 				require.Equal(t, int32(5), resp[0].Count)
@@ -814,10 +1165,10 @@ func TestGetRiderRankingAPI(t *testing.T) {
 
 				store.EXPECT().
 					GetRiderPerformanceRanking(gomock.Any(), db.GetRiderPerformanceRankingParams{
-						CreatedAt:   time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
-						CreatedAt_2: time.Date(2025, 1, 31, 0, 0, 0, 0, time.UTC),
-						Limit:       20,
-						Offset:      0,
+						StartAt: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+						EndAt:   time.Date(2025, 1, 31, 0, 0, 0, 0, time.UTC),
+						Limit:   20,
+						Offset:  0,
 					}).
 					Return([]db.GetRiderPerformanceRankingRow{
 						{
@@ -842,8 +1193,7 @@ func TestGetRiderRankingAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp []riderRankingRow
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Len(t, resp, 2)
 				require.Equal(t, "骑手A", resp[0].RiderName)
 				require.Equal(t, int32(200), resp[0].DeliveryCount)
@@ -918,8 +1268,7 @@ func TestGetHourlyDistributionAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp []hourlyDistributionRow
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Len(t, resp, 4)
 				// 验证午餐高峰时段数据
 				require.Equal(t, int32(12), resp[1].Hour)
@@ -995,8 +1344,7 @@ func TestGetRealtimeDashboardAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp realtimeDashboardResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Equal(t, int32(500), resp.Orders24h)
 				require.Equal(t, int64(2500000), resp.GMV24h)
 				require.Equal(t, int32(80), resp.ActiveMerchants24h)

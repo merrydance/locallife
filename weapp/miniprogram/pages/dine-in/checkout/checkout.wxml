@@ -1,10 +1,34 @@
 <!--堂食/预订结算页面 - 使用 TDesign 组件-->
 <custom-navbar title="{{orderType === 'dine_in' ? '堂食结账' : '预订结算'}}" showBack="{{true}}" bind:navheight="onNavHeight" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px;">
+<view class="page-container page-shell page-shell--with-nav" style="--page-shell-nav-height: {{navBarHeight}}px;">
   <!-- 加载状态 -->
-  <view wx:if="{{loading}}" class="loading-wrapper">
-    <t-loading theme="circular" size="48rpx" text="加载订单中..." />
+  <!-- 骨架屏 -->
+  <view wx:if="{{loading}}" class="skeleton-wrapper">
+    <view class="skeleton-card skeleton-animate">
+       <view class="skeleton-row">
+         <view class="skeleton-circle"></view>
+         <view style="flex:1; display:flex; flex-direction:column; gap:16rpx;">
+            <view class="skeleton-line w-60"></view>
+            <view class="skeleton-line w-40"></view>
+         </view>
+       </view>
+    </view>
+    <view class="skeleton-card skeleton-animate">
+       <view class="skeleton-line w-40" style="margin-bottom:24rpx;"></view>
+       <view class="skeleton-line w-80"></view>
+    </view>
+    <view class="skeleton-card skeleton-animate">
+       <view class="skeleton-line w-40" style="margin-bottom:24rpx;"></view>
+       <view class="skeleton-line w-80"></view>
+       <view class="skeleton-line w-80" style="margin-top:20rpx;"></view>
+    </view>
+  </view>
+
+  <!-- 错误状态 -->
+  <view wx:elif="{{isError}}" class="error-loading-container">
+    <t-empty icon="error-circle" description="{{errorMessage}}" />
+    <t-button theme="primary" shape="round" size="small" bindtap="onRetry">重试</t-button>
   </view>
 
   <!-- 主内容 -->
@@ -69,7 +93,7 @@
       </view>
       
       <view class="items-list">
-        <view wx:for="{{cart.items}}" wx:key="id" class="order-item">
+        <view wx:for="{{cart.items || []}}" wx:key="id" class="order-item">
           <t-image 
             src="{{item.dish_image || item.image_url}}" 
             mode="aspectFill" 
@@ -83,7 +107,8 @@
               <text class="item-price">¥{{item.priceDisplay}}</text>
             </view>
             <view class="item-bottom-row">
-              <text class="item-spec">{{item.spec_text || '标准'}}</text>
+              <text class="item-spec" wx:if="{{item.spec_text}}">{{item.spec_text}}</text>
+              <view wx:else></view>
               <text class="item-qty">×{{item.quantity}}</text>
             </view>
           </view>
@@ -94,45 +119,45 @@
     </view>
 
     <!-- 优惠券 -->
-    <view class="section-card">
-      <t-cell 
-        title="优惠券" 
-        arrow 
-        hover 
-        bind:click="onShowVouchers"
-        note="{{selectedVoucher ? selectedVoucher.title : '选择可用优惠券'}}"
-        t-class-note="{{selectedVoucher ? 'voucher-selected' : 'voucher-placeholder'}}"
-      />
-    </view>
-
-    <!-- 费用明细 -->
+    <!-- 费用明细 (数据源自后端 calculateCart) -->
     <view class="section-card price-section">
-      <view class="section-title">费用明细</view>
+      <view class="section-title">结算明细</view>
       <view class="price-row">
-        <text class="price-label">商品合计</text>
-        <text class="price-value">¥{{calculation.subtotalDisplay || '0.00'}}</text>
+        <text class="price-label">订单原价</text>
+        <text class="price-value">¥{{calculation.subtotalDisplay}}</text>
       </view>
-      <view class="price-row" wx:if="{{calculation.discount_amount > 0}}">
-        <text class="price-label">优惠减免</text>
-        <text class="price-value discount">-¥{{calculation.discountDisplay}}</text>
+      
+      <!-- 自动应用的优惠列表 -->
+      <view class="price-row" wx:for="{{calculation.ladder_promotions || []}}" wx:key="rule_id">
+        <text class="price-label" wx:if="{{item.current_hit}}">{{item.name}}（已满¥{{item.thresholdDisplay}}）</text>
+        <text class="price-label" wx:else>{{item.name}}（还差¥{{item.missingNeedDisplay}}）</text>
+        <text class="price-value">可减¥{{item.discountDisplay}}</text>
       </view>
+      <view class="price-row" wx:for="{{calculation.applied_promotions || []}}" wx:key="title">
+        <text class="price-label">{{item.title}}</text>
+        <text class="price-value status-red">-¥{{item.amountDisplay}}</text>
+      </view>
+      <view class="price-row" wx:for="{{calculation.voucher_trials || []}}" wx:key="voucher_id">
+        <text class="price-label">券试算：{{item.voucher_name}}（减¥{{item.amountDisplay}}）</text>
+        <text class="price-value">试算后¥{{item.trialPayableDisplay}}</text>
+      </view>
+      <view class="price-row" wx:if="{{calculation.payment_assessment && calculation.payment_assessment.payment_hint}}">
+        <text class="price-label">支付提示</text>
+        <text class="price-value">{{calculation.payment_assessment.payment_hint}}</text>
+      </view>
+
       <view class="price-row total-row">
-        <text class="price-label bold">应付金额</text>
-        <text class="price-value total">¥{{calculation.totalDisplay || '0.00'}}</text>
+        <text class="price-label bold">实付金额</text>
+        <text class="price-value total highlight">¥{{calculation.totalDisplay}}</text>
       </view>
     </view>
 
     <!-- 备注 -->
     <view class="section-card">
-      <view class="section-title">订单备注</view>
-      <t-textarea 
-        placeholder="有什么特殊要求吗？(选填)"
+      <remark-input 
         value="{{remark}}"
-        maxlength="{{200}}"
-        disableDefaultPadding="{{true}}"
-        indicator
+        placeholder="有什么特殊要求吗？"
         bind:change="onRemarkChange"
-        t-class="remark-textarea"
       />
     </view>
 
@@ -142,16 +167,37 @@
       <t-radio-group value="{{selectedPaymentMethod}}" bind:change="onPaymentMethodChange">
         <t-cell-group theme="card">
           <t-cell 
-            wx:for="{{paymentMethods}}" 
+            wx:for="{{paymentMethods || []}}" 
             wx:key="id" 
             title="{{item.name}}"
             leftIcon="{{item.icon}}"
             hover
+            class="{{item.disabled ? 'payment-disabled' : ''}}"
           >
-            <t-radio slot="right-icon" value="{{item.id}}" icon="circle" />
+            <t-radio slot="right-icon" value="{{item.id}}" icon="circle" disabled="{{item.disabled}}" />
           </t-cell>
         </t-cell-group>
       </t-radio-group>
+
+      <!-- 余额不足提示（当选择余额支付但余额不足时显示） -->
+      <view wx:if="{{balanceInsufficient}}" class="balance-warning">
+        <t-icon name="error-circle-filled" size="36rpx" color="#FA5151" />
+        <view class="warning-content">
+          <text class="warning-title">余额不足</text>
+          <text class="warning-desc">当前余额 ¥{{memberBalanceDisplay}}，订单需要 ¥{{calculation.totalDisplay}}</text>
+        </view>
+      </view>
+
+      <!-- 商户优惠中心（展示所有优惠：满减、配送、优惠券、充值活动） -->
+      <merchant-promos 
+        merchantId="{{merchantId}}"
+        showInsufficientTip="{{balanceInsufficient}}"
+        currentBalance="{{memberBalance}}"
+        membershipId="{{membershipId}}"
+        orderTotal="{{calculation.total_amount}}"
+        bind:recharged="onRecharged"
+        bind:claimVoucher="onClaimVoucher"
+      />
     </view>
 
     <!-- 底部占位 -->
@@ -159,7 +205,7 @@
   </scroll-view>
 
   <!-- 底部提交栏 -->
-  <view class="submit-bar" wx:if="{{!loading}}">
+  <view class="submit-bar" wx:if="{{!loading && !isError}}">
     <view class="submit-left">
       <text class="submit-label">应付：</text>
       <text class="submit-price">¥{{calculation.totalDisplay || '0.00'}}</text>
@@ -170,10 +216,10 @@
       shape="round"
       loading="{{submitting}}"
       disabled="{{!cart.items || cart.items.length === 0}}"
-      bind:tap="onSubmitOrder"
+      bind:tap="onSubmit"
       class="submit-btn"
     >
-      ¥{{calculation.totalDisplay || '0.00'}} 去支付
+      提交并支付
     </t-button>
   </view>
 </view>
@@ -210,7 +256,7 @@
         
         <!-- 优惠券列表 -->
         <view 
-          wx:for="{{vouchers}}" 
+          wx:for="{{vouchers || []}}" 
           wx:key="id" 
           class="voucher-item {{selectedVoucher && selectedVoucher.id === item.id ? 'selected' : ''}}"
           bind:tap="onSelectVoucher"

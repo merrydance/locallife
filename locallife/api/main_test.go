@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/media"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/util"
 	"github.com/merrydance/locallife/wechat"
@@ -42,8 +43,15 @@ g, rider, customer
 
 # Admin policies
 p, admin, /v1/platform/stats/*, GET
+p, admin, /v1/platform/profit-sharing/*, GET
+p, admin, /v1/platform/profit-sharing/*, POST
+p, admin, /v1/platform/profit-sharing/*, PATCH
+p, admin, /v1/platform/finance/*, GET
+p, admin, /v1/platform/refunds/*, POST
 p, admin, /v1/admin/*, GET
 p, admin, /v1/admin/*, POST
+p, admin, /v1/groups, POST
+p, admin, /v1/groups/applications/:id/review, POST
 
 # Operator policies
 p, operator, /v1/operator/*, GET
@@ -51,10 +59,9 @@ p, operator, /v1/operator/*, POST
 p, operator, /v1/operator/*, PATCH
 p, operator, /v1/operator/*, DELETE
 p, operator, /v1/operators/me/*, GET
+p, operator, /v1/operators/me/*, POST
 p, operator, /v1/delivery-fee/regions/:region_id/config, POST
 p, operator, /v1/delivery-fee/regions/:region_id/config, PATCH
-p, operator, /v1/regions/:id/recommendation-config, GET
-p, operator, /v1/regions/:id/recommendation-config, PATCH
 p, operator, /v1/reviews/:id, DELETE
 
 # Merchant owner policies
@@ -125,7 +132,6 @@ p, customer, /v1/notifications/*, GET
 p, customer, /v1/notifications/*, PUT
 p, customer, /v1/notifications/*, DELETE
 p, customer, /v1/cart/*, GET
-p, customer, /v1/cart/*, POST
 p, customer, /v1/cart/*, PATCH
 p, customer, /v1/cart/*, DELETE
 p, customer, /v1/favorites/*, GET
@@ -135,17 +141,15 @@ p, customer, /v1/memberships/*, GET
 p, customer, /v1/memberships/*, POST
 p, customer, /v1/reviews/*, GET
 p, customer, /v1/reviews/*, POST
-p, customer, /v1/recommendations/*, GET
-p, customer, /v1/behaviors/*, POST
 p, customer, /v1/vouchers/*, GET
 p, customer, /v1/vouchers/*, POST
 p, customer, /v1/reservations/*, GET
 p, customer, /v1/reservations/*, POST
 p, customer, /v1/history/*, GET
 p, customer, /v1/rooms/*, GET
-p, customer, /v1/trust-score/*, GET
-p, customer, /v1/trust-score/*, POST
 p, customer, /v1/claims/*, GET
+p, customer, /v1/claims/*, POST
+p, customer, /v1/food-safety/*, POST
 p, customer, /v1/ws, GET
 p, customer, /v1/delivery-fee/*, GET
 p, customer, /v1/delivery-fee/calculate, POST
@@ -163,12 +167,17 @@ func initTestCasbin() error {
 
 func newTestServer(t *testing.T, store db.Store) *Server {
 	config := util.Config{
+		Environment:         "test",
 		TokenSymmetricKey:   util.RandomString(32),
 		AccessTokenDuration: time.Minute,
 	}
 
-	server, err := NewServer(config, store, nil, nil)
+	server, err := NewServer(config, store, nil, nil, NewNoopAuditWriter())
 	require.NoError(t, err)
+
+	// Disable websocket side effects for unit tests.
+	server.wsHub = nil
+	server.wsPubSub = nil
 
 	return server
 }
@@ -176,29 +185,23 @@ func newTestServer(t *testing.T, store db.Store) *Server {
 // newTestServerWithWechat creates a test server with a mock wechat client
 func newTestServerWithWechat(t *testing.T, store db.Store, wechatClient interface{}) *Server {
 	config := util.Config{
+		Environment:         "test",
 		TokenSymmetricKey:   util.RandomString(32),
 		AccessTokenDuration: time.Minute,
 	}
 
-	tokenMaker, err := token.NewPasetoMaker(config.TokenSymmetricKey)
+	server, err := NewServer(config, store, nil, nil, NewNoopAuditWriter())
 	require.NoError(t, err)
-
-	server := &Server{
-		config:          config,
-		store:           store,
-		tokenMaker:      tokenMaker,
-		wechatClient:    wechatClient.(wechat.WechatClient),
-		weatherCache:    nil,
-		taskDistributor: nil,
-	}
-
-	server.setupRouter()
+	server.wechatClient = wechatClient.(wechat.WechatClient)
+	server.wsHub = nil
+	server.wsPubSub = nil
 	return server
 }
 
 // newTestServerWithPayment creates a test server with a mock payment client
 func newTestServerWithPayment(t *testing.T, store db.Store, paymentClient wechat.PaymentClientInterface) *Server {
 	config := util.Config{
+		Environment:         "test",
 		TokenSymmetricKey:   util.RandomString(32),
 		AccessTokenDuration: time.Minute,
 	}
@@ -210,6 +213,7 @@ func newTestServerWithPayment(t *testing.T, store db.Store, paymentClient wechat
 		config:          config,
 		store:           store,
 		tokenMaker:      tokenMaker,
+		auditWriter:     NewNoopAuditWriter(),
 		wechatClient:    nil,
 		paymentClient:   paymentClient,
 		weatherCache:    nil,
@@ -223,6 +227,7 @@ func newTestServerWithPayment(t *testing.T, store db.Store, paymentClient wechat
 // newTestServerWithTaskDistributor creates a test server with a mock task distributor
 func newTestServerWithTaskDistributor(t *testing.T, store db.Store, taskDistributor worker.TaskDistributor) *Server {
 	config := util.Config{
+		Environment:         "test",
 		TokenSymmetricKey:   util.RandomString(32),
 		AccessTokenDuration: time.Minute,
 	}
@@ -234,6 +239,7 @@ func newTestServerWithTaskDistributor(t *testing.T, store db.Store, taskDistribu
 		config:          config,
 		store:           store,
 		tokenMaker:      tokenMaker,
+		auditWriter:     NewNoopAuditWriter(),
 		wechatClient:    nil,
 		paymentClient:   nil,
 		weatherCache:    nil,
@@ -242,6 +248,34 @@ func newTestServerWithTaskDistributor(t *testing.T, store db.Store, taskDistribu
 
 	server.setupRouter()
 	return server
+}
+
+// newTestServerForMedia creates a test server with a temp-dir-backed LocalStorage.
+// Returns the server and the temp directory (auto-cleaned on test end).
+func newTestServerForMedia(t *testing.T, store db.Store) (*Server, string) {
+	t.Helper()
+	config := util.Config{
+		Environment:         "test",
+		TokenSymmetricKey:   util.RandomString(32),
+		AccessTokenDuration: time.Minute,
+	}
+
+	server, err := NewServer(config, store, nil, nil, NewNoopAuditWriter())
+	require.NoError(t, err)
+	server.wsHub = nil
+	server.wsPubSub = nil
+
+	tempDir := t.TempDir()
+	ls := media.NewLocalStorage("http://testserver", tempDir)
+	server.mediaRegistry = media.NewRegistry(store, ls)
+	server.mediaResolver = media.NewURLResolver(media.ResolverConfig{
+		CDNPublicBaseURL: "https://cdn.test.example.com",
+		ThumbWidth:       200,
+		CardWidth:        400,
+		DetailWidth:      960,
+	}, ls)
+
+	return server, tempDir
 }
 
 func TestMain(m *testing.M) {

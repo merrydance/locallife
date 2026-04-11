@@ -2,21 +2,16 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/maps"
 )
-
-const tencentMapBaseURL = "https://apis.map.qq.com"
-const tencentBicyclingURL = "/ws/direction/v1/bicycling/"
 
 type reverseGeocodeResponse struct {
 	Address          string `json:"address"`
@@ -32,6 +27,65 @@ type reverseGeocodeAPIResponse struct {
 	Code    int                    `json:"code" example:"0"`
 	Message string                 `json:"message" example:"ok"`
 	Data    reverseGeocodeResponse `json:"data"`
+}
+
+var _ reverseGeocodeAPIResponse
+
+type currentRegionByLocationResponse struct {
+	RegionID   int64  `json:"region_id"`
+	RegionName string `json:"region_name"`
+	ParentID   *int64 `json:"parent_id,omitempty"`
+	ParentName string `json:"parent_name,omitempty"`
+}
+
+// getCurrentRegionByLocation resolves current district by latitude/longitude.
+// @Summary 根据经纬度获取当前区县
+// @Description 根据用户当前经纬度匹配系统中的区县 region_id，并返回区县与上级城市信息。
+// @Tags 位置
+// @Produce json
+// @Param latitude query number true "纬度" example(39.908722)
+// @Param longitude query number true "经度" example(116.397499)
+// @Success 200 {object} currentRegionByLocationResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /v1/location/current-region [get]
+func (server *Server) getCurrentRegionByLocation(ctx *gin.Context) {
+	lat, lng, err := parseLatitudeLongitude(ctx)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	regionID, err := server.matchRegionID(ctx.Request.Context(), lat, lng)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("match region: %w", err)))
+		return
+	}
+
+	region, err := server.store.GetRegion(ctx, regionID)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrCoordinateNoDistrict))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	resp := currentRegionByLocationResponse{
+		RegionID:   region.ID,
+		RegionName: region.Name,
+	}
+
+	if region.ParentID.Valid {
+		resp.ParentID = &region.ParentID.Int64
+		if parent, parentErr := server.store.GetRegion(ctx, region.ParentID.Int64); parentErr == nil {
+			resp.ParentName = parent.Name
+		}
+	}
+
+	ctx.JSON(http.StatusOK, resp)
 }
 
 func parseLatitudeLongitude(ctx *gin.Context) (float64, float64, error) {
@@ -92,15 +146,17 @@ func parseLocationPair(value string) (float64, float64, error) {
 	return lat, lng, nil
 }
 
-type tencentDirectionAPIResponse struct {
-	Code    int         `json:"code" example:"0"`
-	Message string      `json:"message" example:"ok"`
-	Data    interface{} `json:"data"`
+type routeAPIResponse struct {
+	Code    int              `json:"code" example:"0"`
+	Message string           `json:"message" example:"ok"`
+	Data    maps.RouteResult `json:"data"`
 }
 
-// reverseGeocode uses Tencent LBS to convert (lat,lng) into an address.
+var _ routeAPIResponse
+
+// reverseGeocode uses self-hosted OSM (Nominatim) to convert (lat,lng) into an address.
 // @Summary 逆地址解析
-// @Description 使用腾讯 LBS 将经纬度解析为地址（服务端调用腾讯接口，不暴露 key）。
+// @Description 使用自建 OSM Nominatim 将经纬度解析为地址。
 // @Tags 位置
 // @Produce json
 // @Param latitude query number true "纬度" example(39.908722)
@@ -111,7 +167,7 @@ type tencentDirectionAPIResponse struct {
 // @Router /v1/location/reverse-geocode [get]
 func (server *Server) reverseGeocode(ctx *gin.Context) {
 	if server.mapClient == nil {
-		internalError(ctx, fmt.Errorf("tencent map client is not configured"))
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("map client is not configured")))
 		return
 	}
 
@@ -127,41 +183,35 @@ func (server *Server) reverseGeocode(ctx *gin.Context) {
 
 	result, err := server.mapClient.ReverseGeocode(ctx, maps.Location{Lat: lat, Lng: lng})
 	if err != nil {
-		internalError(ctx, fmt.Errorf("reverse geocode: %w", err))
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("reverse geocode: %w", err)))
 		return
 	}
 
-	ctx.JSON(http.StatusOK, reverseGeocodeAPIResponse{
-		Code:    0,
-		Message: "ok",
-		Data: reverseGeocodeResponse{
-			Address:          result.Address,
-			FormattedAddress: result.FormattedAddress,
-			Province:         result.Province,
-			City:             result.City,
-			District:         result.District,
-			Street:           result.Street,
-			StreetNumber:     result.StreetNumber,
-		},
+	ctx.JSON(http.StatusOK, reverseGeocodeResponse{
+		Address:          result.Address,
+		FormattedAddress: result.FormattedAddress,
+		Province:         result.Province,
+		City:             result.City,
+		District:         result.District,
+		Street:           result.Street,
+		StreetNumber:     result.StreetNumber,
 	})
 }
 
-// proxyTencentBicyclingDirection proxies Tencent LBS bicycling route API.
-// It returns Tencent's raw JSON response to minimize frontend changes.
-// @Summary 腾讯骑行路线（后端代理）
-// @Description 后端请求腾讯 LBS /ws/direction/v1/bicycling 并原样返回 JSON（不暴露 key）。
+// getBicyclingRoute uses self-hosted OSRM to return cycling route.
+// @Summary 自建 OSM 骑行路线
+// @Description 调用自建 OSRM /route 获取骑行距离与耗时。
 // @Tags 位置
 // @Produce json
 // @Param from query string true "起点坐标，格式: lat,lng" example("39.908722,116.397499")
 // @Param to query string true "终点坐标，格式: lat,lng" example("39.914722,116.404499")
-// @Param policy query integer false "路线策略（腾讯 LBS policy 参数）" example(0)
-// @Success 200 {object} tencentDirectionAPIResponse
+// @Success 200 {object} routeAPIResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /v1/location/direction/bicycling [get]
-func (server *Server) proxyTencentBicyclingDirection(ctx *gin.Context) {
-	if server.config.TencentMapKey == "" {
-		internalError(ctx, fmt.Errorf("tencent map key is not configured"))
+func (server *Server) getBicyclingRoute(ctx *gin.Context) {
+	if server.mapClient == nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("map client is not configured")))
 		return
 	}
 
@@ -172,72 +222,80 @@ func (server *Server) proxyTencentBicyclingDirection(ctx *gin.Context) {
 		return
 	}
 
-	if _, _, err := parseLocationPair(from); err != nil {
+	fromLat, fromLng, err := parseLocationPair(from)
+	if err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("invalid from: %w", err)))
 		return
 	}
-	if _, _, err := parseLocationPair(to); err != nil {
+	toLat, toLng, err := parseLocationPair(to)
+	if err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("invalid to: %w", err)))
 		return
 	}
 
-	params := url.Values{}
-	params.Set("from", from)
-	params.Set("to", to)
-	params.Set("key", server.config.TencentMapKey)
-	if policy := ctx.Query("policy"); policy != "" {
-		params.Set("policy", policy)
-	}
-
-	reqURL := tencentMapBaseURL + tencentBicyclingURL + "?" + params.Encode()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	route, err := server.mapClient.GetBicyclingRoute(ctx, maps.Location{Lat: fromLat, Lng: fromLng}, maps.Location{Lat: toLat, Lng: toLng})
 	if err != nil {
-		internalError(ctx, fmt.Errorf("create request: %w", err))
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("bicycling route: %w", err)))
 		return
 	}
 
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		internalError(ctx, fmt.Errorf("do request: %w", err))
-		return
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		internalError(ctx, fmt.Errorf("read response: %w", err))
-		return
-	}
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		internalError(ctx, fmt.Errorf("tencent direction http status=%d body=%s", resp.StatusCode, string(body)))
-		return
-	}
-
-	var raw json.RawMessage
-	if err := json.Unmarshal(body, &raw); err != nil {
-		internalError(ctx, fmt.Errorf("decode tencent direction response: %w", err))
-		return
-	}
-
-	ctx.JSON(http.StatusOK, tencentDirectionAPIResponse{
-		Code:    0,
-		Message: "ok",
-		Data:    raw,
-	})
+	ctx.JSON(http.StatusOK, route)
 }
 
 // matchRegionID 根据经纬度匹配 region_id
-// 优先使用腾讯地图逆地址解析获取 adcode 匹配，失败则回退到球面距离最近匹配
+// 优先使用自建 OSM 逆地址解析获取 adcode 匹配，失败则回退到球面距离最近匹配
 func (server *Server) matchRegionID(ctx context.Context, lat, lon float64) (int64, error) {
-	// 1. 尝试通过腾讯地图 API 获取 adcode
+	// 1. 尝试通过地图 API 获取 adcode
 	if server.mapClient != nil {
 		res, err := server.mapClient.ReverseGeocode(ctx, maps.Location{Lat: lat, Lng: lon})
-		if err == nil && res.Adcode != "" {
-			// 腾讯返回的 adcode 通常是 6 位，我们的数据库中也是 6 位
-			region, err := server.store.GetRegionByCode(ctx, res.Adcode)
-			if err == nil {
-				return region.ID, nil
+		if err == nil {
+			if res.Adcode != "" {
+				// 先尝试 provider + adcode 映射匹配
+				if res.Provider != "" {
+					region, err := server.store.GetRegionByProviderCode(ctx, db.GetRegionByProviderCodeParams{
+						Provider:     res.Provider,
+						ExternalCode: res.Adcode,
+					})
+					if err == nil {
+						return region.ID, nil
+					}
+				}
+				// 再尝试 adcode 精确匹配（部分地图服务可返回行政区划码）
+				region, err := server.store.GetRegionByCode(ctx, res.Adcode)
+				if err == nil {
+					return region.ID, nil
+				}
+			}
+
+			// OSM 逆地理编码的 adcode 可能是邮编，改用名称匹配作为兜底
+			var cityRegion *db.Region
+			if res.City != "" {
+				if city, err := server.store.GetRegionByNameAndLevel(ctx, db.GetRegionByNameAndLevelParams{
+					Name:  res.City,
+					Level: 2,
+				}); err == nil {
+					cityRegion = &city
+				}
+			}
+
+			if res.District != "" {
+				if cityRegion != nil {
+					if district, err := server.store.GetRegionByNameAndParent(ctx, db.GetRegionByNameAndParentParams{
+						Name:     res.District,
+						ParentID: pgtype.Int8{Int64: cityRegion.ID, Valid: true},
+					}); err == nil {
+						return district.ID, nil
+					}
+				}
+
+				for _, level := range []int16{3, 4} {
+					if district, err := server.store.GetRegionByNameAndLevel(ctx, db.GetRegionByNameAndLevelParams{
+						Name:  res.District,
+						Level: level,
+					}); err == nil {
+						return district.ID, nil
+					}
+				}
 			}
 		}
 	}

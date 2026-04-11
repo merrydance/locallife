@@ -2,7 +2,6 @@ package api
 
 import (
 	"bytes"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -19,6 +18,55 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
+
+func TestBuildRechargeRuleStatusResponse(t *testing.T) {
+	now := time.Now()
+	testCases := []struct {
+		name      string
+		rule      db.RechargeRule
+		wantCode  string
+		wantLabel string
+		wantTheme string
+	}{
+		{
+			name:      "Inactive",
+			rule:      db.RechargeRule{IsActive: false, ValidFrom: now.Add(-time.Hour), ValidUntil: now.Add(time.Hour)},
+			wantCode:  "inactive",
+			wantLabel: "已停用",
+			wantTheme: "default",
+		},
+		{
+			name:      "Expired",
+			rule:      db.RechargeRule{IsActive: true, ValidFrom: now.Add(-2 * time.Hour), ValidUntil: now.Add(-time.Hour)},
+			wantCode:  "expired",
+			wantLabel: "已过期",
+			wantTheme: "danger",
+		},
+		{
+			name:      "Scheduled",
+			rule:      db.RechargeRule{IsActive: true, ValidFrom: now.Add(time.Hour), ValidUntil: now.Add(2 * time.Hour)},
+			wantCode:  "scheduled",
+			wantLabel: "未开始",
+			wantTheme: "warning",
+		},
+		{
+			name:      "Active",
+			rule:      db.RechargeRule{IsActive: true, ValidFrom: now.Add(-time.Hour), ValidUntil: now.Add(time.Hour)},
+			wantCode:  "active",
+			wantLabel: "生效中",
+			wantTheme: "success",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			statusCode, statusLabel, statusTheme := buildRechargeRuleStatusResponse(tc.rule, now)
+			require.Equal(t, tc.wantCode, statusCode)
+			require.Equal(t, tc.wantLabel, statusLabel)
+			require.Equal(t, tc.wantTheme, statusTheme)
+		})
+	}
+}
 
 func TestJoinMembershipAPI(t *testing.T) {
 	user, _ := randomUser(t)
@@ -101,7 +149,7 @@ func TestJoinMembershipAPI(t *testing.T) {
 				store.EXPECT().
 					GetMerchant(gomock.Any(), gomock.Eq(merchant.ID)).
 					Times(1).
-					Return(db.Merchant{}, sql.ErrNoRows)
+					Return(db.Merchant{}, db.ErrRecordNotFound)
 				store.EXPECT().
 					JoinMembershipTx(gomock.Any(), gomock.Any()).
 					Times(0)
@@ -200,17 +248,39 @@ func TestRechargeMembershipAPI(t *testing.T) {
 					Times(1).
 					Return(user, nil)
 
-				// Mock CreatePaymentOrder
+				// Mock idempotency check: no existing pending payment order with prepay_id
 				store.EXPECT().
-					CreatePaymentOrder(gomock.Any(), gomock.Any()).
+					GetPendingPaymentOrderByUserAndBusinessType(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.PaymentOrder{
-						ID:           1,
-						UserID:       user.ID,
-						OutTradeNo:   gomock.Any().String(),
-						BusinessType: "membership_recharge",
-						Amount:       10000,
+					Return(db.PaymentOrder{}, db.ErrRecordNotFound)
+
+				// Mock CreateEcommercePaymentTx
+				store.EXPECT().
+					CreateEcommercePaymentTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.CreateEcommercePaymentTxResult{
+						PaymentOrder: db.PaymentOrder{
+							ID:           1,
+							UserID:       user.ID,
+							OutTradeNo:   "MBRC123",
+							BusinessType: "membership_recharge",
+							Amount:       100 * fenPerYuan,
+						},
+						CombinedPaymentOrder: db.CombinedPaymentOrder{ID: 1},
+						SubMchID:             "sub_mch_001",
 					}, nil)
+
+				// Mock UpdatePaymentOrderPrepayId
+				store.EXPECT().
+					UpdatePaymentOrderPrepayId(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.PaymentOrder{}, nil)
+
+				// Mock UpdateCombinedPaymentOrderPrepay
+				store.EXPECT().
+					UpdateCombinedPaymentOrderPrepay(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.CombinedPaymentOrder{}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -268,7 +338,7 @@ func TestRechargeMembershipAPI(t *testing.T) {
 				store.EXPECT().
 					GetMerchantMembership(gomock.Any(), gomock.Eq(int64(999))).
 					Times(1).
-					Return(db.MerchantMembership{}, sql.ErrNoRows)
+					Return(db.MerchantMembership{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -309,22 +379,25 @@ func TestRechargeMembershipAPI(t *testing.T) {
 
 			// Create mock payment client
 			paymentClient := mockwechat.NewMockPaymentClientInterface(ctrl)
+
+			// Create server with mock payment client
+			server := newTestServerWithPayment(t, store, paymentClient)
+
 			if tc.name == "OK" {
-				// Mock CreateJSAPIOrder for successful case
-				paymentClient.EXPECT().
-					CreateJSAPIOrder(gomock.Any(), gomock.Any()).
+				// Mock ecommerce client with CreateCombineOrder for successful case
+				ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+				ecommerceClient.EXPECT().
+					CreateCombineOrder(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(nil, &wechat.JSAPIPayParams{
+					Return(&wechat.CombineOrderResponse{PrepayID: "prepay_id_test"}, &wechat.JSAPIPayParams{
 						TimeStamp: "123456",
 						NonceStr:  "random",
 						Package:   "prepay_id=test",
 						SignType:  "RSA",
 						PaySign:   "sign",
 					}, nil)
+				server.SetEcommerceClientForTest(ecommerceClient)
 			}
-
-			// Create server with mock payment client
-			server := newTestServerWithPayment(t, store, paymentClient)
 			recorder := httptest.NewRecorder()
 
 			data, err := json.Marshal(tc.body)
@@ -396,7 +469,7 @@ func TestGetMembershipAPI(t *testing.T) {
 				store.EXPECT().
 					GetMerchantMembership(gomock.Any(), gomock.Eq(int64(999))).
 					Times(1).
-					Return(db.MerchantMembership{}, sql.ErrNoRows)
+					Return(db.MerchantMembership{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -480,14 +553,7 @@ func TestCreateRechargeRuleAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.UserRole{
-						UserID:          merchantOwner.ID,
-						Role:            "merchant",
-						RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true},
-					}, nil)
+				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
 
 				store.EXPECT().
 					CreateRechargeRule(gomock.Any(), gomock.Any()).
@@ -495,7 +561,7 @@ func TestCreateRechargeRuleAPI(t *testing.T) {
 					Return(randomRechargeRule(merchant.ID), nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
+				require.Equal(t, http.StatusCreated, recorder.Code)
 			},
 		},
 		{
@@ -511,10 +577,7 @@ func TestCreateRechargeRuleAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, otherUser.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.UserRole{}, sql.ErrNoRows)
+				expectResolveNoAccessibleMerchants(store, otherUser.ID)
 
 				store.EXPECT().
 					CreateRechargeRule(gomock.Any(), gomock.Any()).
@@ -537,14 +600,7 @@ func TestCreateRechargeRuleAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.UserRole{
-						UserID:          merchantOwner.ID,
-						Role:            "merchant",
-						RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true}, // 关联的是 merchant.ID，不是999
-					}, nil)
+				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
 
 				store.EXPECT().
 					CreateRechargeRule(gomock.Any(), gomock.Any()).
@@ -567,14 +623,7 @@ func TestCreateRechargeRuleAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.UserRole{
-						UserID:          merchantOwner.ID,
-						Role:            "merchant",
-						RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true},
-					}, nil)
+				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
 
 				store.EXPECT().
 					CreateRechargeRule(gomock.Any(), gomock.Any()).
@@ -635,19 +684,12 @@ func TestDeleteRechargeRuleAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
+
 				store.EXPECT().
 					GetRechargeRule(gomock.Any(), gomock.Eq(rule.ID)).
 					Times(1).
 					Return(rule, nil)
-
-				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.UserRole{
-						UserID:          merchantOwner.ID,
-						Role:            "merchant",
-						RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true},
-					}, nil)
 
 				store.EXPECT().
 					DeleteRechargeRule(gomock.Any(), gomock.Eq(rule.ID)).
@@ -666,10 +708,12 @@ func TestDeleteRechargeRuleAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
+
 				store.EXPECT().
 					GetRechargeRule(gomock.Any(), gomock.Eq(int64(999))).
 					Times(1).
-					Return(db.RechargeRule{}, sql.ErrNoRows)
+					Return(db.RechargeRule{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -683,15 +727,11 @@ func TestDeleteRechargeRuleAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, otherUser.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetRechargeRule(gomock.Any(), gomock.Eq(rule.ID)).
-					Times(1).
-					Return(rule, nil)
+				expectResolveNoAccessibleMerchants(store, otherUser.ID)
 
 				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.UserRole{}, sql.ErrNoRows)
+					GetRechargeRule(gomock.Any(), gomock.Any()).
+					Times(0)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)

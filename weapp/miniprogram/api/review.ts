@@ -1,171 +1,161 @@
-/**
- * 评价系统接口
- * 包含创建评价、查询评价、商家回复等功能
- */
+import { request } from '../utils/request'
+import { uploadMedia, MediaUploadResult } from '../utils/media'
+import { normalizePaginatedResult, type PaginatedListResult, type PaginationEnvelope } from './types'
 
-import { request, API_BASE } from '../utils/request'
-import { getToken } from '../utils/auth'
-
-// ==================== 数据类型定义 ====================
-
-/**
- * 评价类型枚举
- */
-export type ReviewRating = 1 | 2 | 3 | 4 | 5
-
-/**
- * 创建评价请求
- */
-export interface CreateReviewRequest {
-    order_id: number
-    rating: ReviewRating
-    content: string
-    images?: string[] // 图片URL列表
-    is_anonymous?: boolean
-}
-
-/**
- * 商家回复请求
- */
-export interface ReplyReviewRequest {
-    review_id: number
-    content: string
-}
-
-/**
- * 评价详情响应
- */
-export interface ReviewResponse {
+export interface Review {
     id: number
     order_id: number
     user_id: number
-    user_name: string // 匿名时显示"匿名用户"
-    user_avatar: string // 匿名时显示默认头像
     merchant_id: number
-    rating: ReviewRating
     content: string
+    rating?: number
+    tags?: string[]
+    image_urls?: string[]
     images?: string[]
-    reply?: string
-    reply_at?: string
+    is_visible: boolean
+    merchant_reply?: string
+    replied_at?: string
+    merchant_name?: string
+    merchant_logo_url?: string
+    merchant_logo?: string
     created_at: string
-    is_anonymous: boolean
 }
 
-/**
- * 评价列表查询参数
- */
-export interface ReviewListParams {
-    merchant_id?: number
-    user_id?: number
+export interface ListReviewsResponse {
+    reviews: Review[]
+    total: number
     page_id: number
     page_size: number
-    has_image?: boolean
-    has_reply?: boolean
 }
 
-/**
- * 评价列表响应
- */
-export interface ReviewListResponse {
-    reviews: ReviewResponse[]
-    total: number
-    rating_avg: number // 平均分
-    rating_counts: {
-        all: number
-        good: number    // 4-5分
-        medium: number  // 3分
-        bad: number     // 1-2分
-        has_image: number
+export interface ReviewListResult extends PaginatedListResult<Review> {
+    reviews: Review[]
+}
+
+type ReviewsResponse = PaginationEnvelope & {
+    reviews?: Review[]
+}
+
+export interface CreateReviewParams {
+    order_id: number
+    content: string
+    rating?: number
+    tags?: string[]
+    media_asset_ids?: number[]
+}
+
+export interface ReplyReviewParams {
+    reply: string
+}
+
+function normalizeReview(review: Review): Review {
+    const imageUrls = Array.isArray(review.image_urls)
+        ? review.image_urls
+        : Array.isArray(review.images)
+            ? review.images
+            : []
+
+    return {
+        ...review,
+        image_urls: imageUrls,
+        images: imageUrls,
+        merchant_logo: review.merchant_logo || review.merchant_logo_url
     }
 }
 
-// ==================== 评价服务 ====================
+function normalizeReviewListResponse(reviews: Review[] | undefined, pageId: number, pageSize: number, envelope: ReviewsResponse): ReviewListResult {
+    const normalizedReviews = Array.isArray(reviews) ? reviews.map(normalizeReview) : []
+    const normalized = normalizePaginatedResult(normalizedReviews, envelope, { page: pageId, pageSize })
+
+    return {
+        ...normalized,
+        reviews: normalizedReviews
+    }
+}
 
 export class ReviewService {
+    /**
+     * 获取我的评价列表
+     * GET /v1/reviews/me
+     */
+    static async listMyReviews(pageId: number = 1, pageSize: number = 10): Promise<ReviewListResult> {
+        const res = await request<ReviewsResponse>({
+            url: '/v1/reviews/me',
+            method: 'GET',
+            data: { page_id: pageId, page_size: pageSize }
+        })
+
+        return normalizeReviewListResponse(res?.reviews, pageId, pageSize, res || {})
+    }
+
+    static async listMerchantAllReviews(merchantId: number, pageId: number = 1, pageSize: number = 20): Promise<ReviewListResult> {
+        const res = await request<ReviewsResponse>({
+            url: `/v1/reviews/merchants/${merchantId}/all`,
+            method: 'GET',
+            data: { page_id: pageId, page_size: pageSize }
+        })
+
+        return normalizeReviewListResponse(res?.reviews, pageId, pageSize, res || {})
+    }
 
     /**
      * 创建评价
      * POST /v1/reviews
      */
-    static async createReview(data: CreateReviewRequest): Promise<ReviewResponse> {
-        return await request({
+    static async createReview(data: CreateReviewParams): Promise<Review> {
+        const review = await request<Review>({
             url: '/v1/reviews',
             method: 'POST',
             data
         })
+
+        return normalizeReview(review)
     }
 
     /**
-     * 获取评价列表
-     * GET /v1/reviews
+     * 获取指定订单的评价
+     * GET /v1/reviews/orders/:order_id
      */
-    static async getReviews(params: ReviewListParams): Promise<ReviewListResponse> {
-        return await request({
-            url: '/v1/reviews',
-            method: 'GET',
-            data: params
+    static async getReviewByOrderId(orderId: number): Promise<Review> {
+        const review = await request<Review>({
+            url: `/v1/reviews/orders/${orderId}`,
+            method: 'GET'
         })
+
+        return normalizeReview(review)
     }
 
     /**
      * 获取评价详情
      * GET /v1/reviews/:id
      */
-    static async getReviewDetail(id: number): Promise<ReviewResponse> {
-        return await request({
+    static async getReview(id: number): Promise<Review> {
+        const review = await request<Review>({
             url: `/v1/reviews/${id}`,
             method: 'GET'
         })
+
+        return normalizeReview(review)
     }
 
-    // ==================== 商家端接口 ====================
-
-    /**
-     * 商家回复评价
-     * POST /v1/merchant/reviews/:id/reply
-     */
-    static async replyReview(id: number, content: string): Promise<ReviewResponse> {
-        return await request({
-            url: `/v1/merchant/reviews/${id}/reply`,
+    static async replyToReview(reviewId: number, data: ReplyReviewParams): Promise<Review> {
+        const review = await request<Review>({
+            url: `/v1/reviews/${reviewId}/reply`,
             method: 'POST',
-            data: { content }
+            data
         })
+
+        return normalizeReview(review)
     }
 
     /**
-     * 上传评价图片
-     * POST /v1/reviews/images/upload
+     * 上传评价图片（媒体服务三步流程）
+     * @returns { mediaId, displayUrl, urls }
      */
-    static async uploadReviewImage(filePath: string): Promise<string> {
-        return new Promise((resolve, reject) => {
-            const token = getToken()
-            wx.uploadFile({
-                url: `${API_BASE}/v1/reviews/images/upload`,
-                filePath,
-                name: 'image',
-                header: {
-                    'Authorization': `Bearer ${token}`
-                },
-                success: (res) => {
-                    if (res.statusCode === 200) {
-                        try {
-                            const data = JSON.parse(res.data)
-                            if (data.code === 0 && data.data && data.data.image_url) {
-                                resolve(data.data.image_url)
-                            } else if (data.image_url) {
-                                resolve(data.image_url)
-                            } else {
-                                resolve(data.data?.image_url || data.image_url)
-                            }
-                        } catch (e) {
-                            reject(new Error('Parse response failed'))
-                        }
-                    } else {
-                        reject(new Error(`HTTP ${res.statusCode}`))
-                    }
-                },
-                fail: reject
-            })
+    static async uploadReviewImage(filePath: string): Promise<MediaUploadResult> {
+        return uploadMedia(filePath, {
+            businessType: 'user',
+            mediaCategory: 'review'
         })
     }
 }

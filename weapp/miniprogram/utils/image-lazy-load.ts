@@ -50,7 +50,7 @@ class ImageLazyLoader {
    * 加载单张图片
    */
   private loadImage(url: string): Promise<void> {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       const cacheItem = this.cache.get(url)
 
       // 如果已在加载中或已加载，跳过
@@ -61,7 +61,13 @@ class ImageLazyLoader {
 
       // 超过重试次数，跳过
       if (cacheItem && cacheItem.retryCount >= this.MAX_RETRY) {
-        reject(new Error('Max retry exceeded'))
+        this.cache.set(url, {
+          state: ImageLoadState.ERROR,
+          timestamp: Date.now(),
+          retryCount: cacheItem.retryCount
+        })
+        logger.warn(`图片预加载失败: ${url} Max retry exceeded`, undefined, 'ImageLazyLoader')
+        resolve()
         return
       }
 
@@ -83,16 +89,18 @@ class ImageLazyLoader {
               retryCount: 0
             })
             logger.debug(`图片预加载成功: ${url}`, undefined, 'ImageLazyLoader')
-            resolve()
           } else {
             this.handleLoadError(url)
-            reject(new Error(`HTTP ${res.statusCode}`))
+            logger.warn(`图片预加载失败: ${url} HTTP ${res.statusCode}`, undefined, 'ImageLazyLoader')
           }
+          // 即便失败也 resolve，避免未捕获的拒绝冒泡
+          resolve()
         },
         fail: (err) => {
           this.handleLoadError(url)
           logger.warn(`图片预加载失败: ${url}`, err, 'ImageLazyLoader')
-          reject(err)
+          // 避免未捕获的拒绝，记录后 resolve
+          resolve()
         }
       })
     })

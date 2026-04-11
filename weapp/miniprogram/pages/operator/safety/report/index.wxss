@@ -1,0 +1,86 @@
+.page-container {
+  min-height: 100vh;
+  background: var(--td-bg-color-page);
+}
+
+.toolbar {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 var(--spacer-md) var(--spacer-md);
+}
+
+.form-card {
+  margin-top: 0;
+}
+
+.card {
+  background: var(--td-bg-color-container);
+  margin: 0 var(--spacer-md) var(--spacer-md);
+  padding: var(--spacer-md);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.card-header,
+.card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.card-header {
+  margin-bottom: 16rpx;
+}
+
+.title {
+  font-size: 30rpx;
+  color: var(--td-text-color-primary);
+  font-weight: 500;
+}
+
+.section-title {
+  font-size: 30rpx;
+  color: var(--td-text-color-primary);
+  font-weight: 600;
+  margin-bottom: var(--spacer-sm);
+}
+
+.level-group {
+  margin: var(--spacer-sm) 0;
+}
+
+.field-label {
+  display: block;
+  font-size: 26rpx;
+  color: var(--td-text-color-secondary);
+  margin-bottom: var(--spacer-xs);
+}
+
+.card-body {
+  margin-bottom: 16rpx;
+}
+
+.body-text {
+  font-size: 24rpx;
+  color: var(--td-text-color-secondary);
+}
+
+.card-footer {
+  font-size: 24rpx;
+  color: var(--td-text-color-secondary);
+}
+
+.load-more {
+  padding: 0 var(--spacer-md) var(--spacer-lg);
+  display: flex;
+  justify-content: center;
+}
+
+.no-more-text {
+  font-size: 24rpx;
+  color: var(--td-text-color-placeholder);
+}
+
+.error-wrap {
+  padding: 120rpx 0;
+}

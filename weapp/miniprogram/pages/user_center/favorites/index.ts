@@ -1,145 +1,183 @@
-/**
- * 收藏页面
- * 使用真实后端API
- */
-
-import {
-  getFavoriteDishes,
-  getFavoriteMerchants,
-  removeDishFromFavorites,
-  removeMerchantFromFavorites,
-  FavoriteDishResponse,
-  FavoriteMerchantResponse
-} from '../../../api/personal'
-import { logger } from '../../../utils/logger'
+import FavoriteService, { FavoriteMerchantListItem, FavoriteType } from '../../../api/favorite'
+import ConsumerProfileAdapter from '../../../adapters/consumer-profile'
+import { ErrorHandler } from '../../../utils/error-handler'
+import Navigation from '../../../utils/navigation'
 import { formatPriceNoSymbol } from '../../../utils/util'
 
+type FavoriteDishItem = {
+    id: number
+    dish_id: number
+    dish_name: string
+    image_url?: string
+    description?: string
+    merchant_name?: string
+    price: number
+    created_at?: string
+}
+
+// ViewModel
+interface FavoriteViewModel {
+    id: number
+    targetId: number // merchant_id or dish_id
+    type: FavoriteType
+    typeText: string
+    title: string
+    image: string
+    subTitle: string
+    rating?: number
+    priceDisplay?: string
+    createdAt: string
+    isOrderingSuspended?: boolean
+}
+
 Page({
-  data: {
-    favorites: [] as any[],
-    activeTab: 'dishes' as 'dishes' | 'merchants',
-    loading: false,
-    navBarHeight: 88
-  },
+    data: {
+        activeTab: 'dish' as FavoriteType, // 'dish' | 'merchant'
+        favorites: [] as FavoriteViewModel[],
+        navBarHeight: 88,
+        loading: false,
+        initialLoading: true,
+        error: null as string | null,
+        
+        // Paging
+        page: 1,
+        pageSize: 10,
+        hasMore: true
+    },
 
-  onLoad() {
-    this.loadFavorites()
-  },
+    onLoad() {
+        this.loadFavorites(true)
+    },
 
-  onShow() {
-    // 返回时刷新数据
-    if (this.data.favorites.length > 0) {
-      this.loadFavorites()
-    }
-  },
+    onNavHeight(e: WechatMiniprogram.CustomEvent) {
+        this.setData({ navBarHeight: e.detail.navBarHeight })
+    },
 
-  onNavHeight(e: WechatMiniprogram.CustomEvent) {
-    this.setData({ navBarHeight: e.detail.navBarHeight })
-  },
+    onTabChange(e: WechatMiniprogram.CustomEvent) {
+        this.setData({ 
+            activeTab: e.detail.value,
+            favorites: [],
+            page: 1,
+            hasMore: true
+        }, () => {
+            this.loadFavorites(true)
+        })
+    },
 
-  onTabChange(e: WechatMiniprogram.CustomEvent) {
-    this.setData({ activeTab: e.detail.value })
-    this.loadFavorites()
-  },
+    async loadFavorites(reset = false) {
+        if (!this.data.hasMore && !reset) return
+        if (this.data.loading && !this.data.initialLoading) return
 
-  async loadFavorites() {
-    this.setData({ loading: true })
+        this.setData({ loading: true, error: null })
 
-    try {
-      const { activeTab } = this.data
+        try {
+            let list: FavoriteViewModel[] = []
+            let total = 0
 
-      if (activeTab === 'dishes') {
-        await this.loadFavoriteDishes()
-      } else {
-        await this.loadFavoriteMerchants()
-      }
-    } catch (error) {
-      console.error('加载收藏失败:', error)
-      wx.showToast({ title: '加载失败', icon: 'error' })
-    } finally {
-      this.setData({ loading: false })
-    }
-  },
+            if (this.data.activeTab === 'dish') {
+                const res = await FavoriteService.getFavoriteDishes(this.data.page, this.data.pageSize)
+                list = res.dishes.map((dish) => {
+                    const d = dish as unknown as FavoriteDishItem
+                    return ({
+                    id: d.id,
+                    targetId: d.dish_id,
+                    type: 'dish',
+                    typeText: '菜品',
+                    title: d.dish_name,
+                    image: d.image_url || '/assets/icons/dish.svg',
+                    subTitle: d.description || d.merchant_name || '',
+                    priceDisplay: formatPriceNoSymbol(d.price),
+                    createdAt: d.created_at?.split('T')[0] || ''
+                    })
+                })
+                total = res.total
+            } else {
+                const res = await FavoriteService.getFavoriteMerchants(this.data.page, this.data.pageSize)
+                list = res.merchants.map((merchant) => {
+                    const m = merchant as FavoriteMerchantListItem
+                    const viewModel = ConsumerProfileAdapter.toFavoriteMerchantViewModel(m)
+                    return ({
+                    ...viewModel,
+                    type: 'merchant',
+                    typeText: '餐厅'
+                    })
+                })
+                total = res.total
+            }
 
-  async loadFavoriteDishes() {
-    const result = await getFavoriteDishes({ page_id: 1, page_size: 50 })
-
-    const favorites = (result.dishes || []).map((item: FavoriteDishResponse) => ({
-      id: item.dish_id,
-      type: 'DISH',
-      name: item.dish_name,
-      image: item.dish_image_url || '/assets/default-dish.png',
-      price: item.price,
-      priceDisplay: formatPriceNoSymbol(item.price || 0),
-      merchantId: item.merchant_id,
-      merchantName: item.merchant_name,
-      desc: item.merchant_name
-    }))
-
-    this.setData({ favorites })
-  },
-
-  async loadFavoriteMerchants() {
-    const result = await getFavoriteMerchants({ page_id: 1, page_size: 50 })
-
-    const favorites = (result.merchants || []).map((item: FavoriteMerchantResponse) => ({
-      id: item.merchant_id,
-      type: 'MERCHANT',
-      name: item.merchant_name,
-      image: item.merchant_logo_url || '/assets/default-merchant.png',
-      monthlySales: item.monthly_sales,
-      deliveryFee: item.estimated_delivery_fee,
-      tags: item.tags || [],
-      desc: item.tags?.slice(0, 2).join(' · ') || ''
-    }))
-
-    this.setData({ favorites })
-  },
-
-  onItemClick(e: WechatMiniprogram.CustomEvent) {
-    const { id, type } = e.currentTarget.dataset
-    if (type === 'DISH') {
-      const item = this.data.favorites.find(f => f.id === id)
-      wx.navigateTo({
-        url: `/pages/takeout/dish-detail/index?id=${id}&merchant_id=${item?.merchantId || ''}`
-      })
-    } else {
-      wx.navigateTo({ url: `/pages/takeout/restaurant-detail/index?id=${id}` })
-    }
-  },
-
-  onRemoveFavorite(e: WechatMiniprogram.CustomEvent) {
-    const { id, type } = e.currentTarget.dataset
-
-    wx.showModal({
-      title: '取消收藏',
-      content: '确定要取消收藏吗？',
-      success: async (res) => {
-        if (res.confirm) {
-          await this.doRemoveFavorite(id, type)
+            const newFavorites = reset ? list : [...this.data.favorites, ...list]
+            this.setData({
+                favorites: newFavorites,
+                hasMore: newFavorites.length < total,
+                page: this.data.page + 1,
+                loading: false,
+                initialLoading: false
+            })
+        } catch (error) {
+            this.setData({ 
+                loading: false,
+                initialLoading: false,
+                error: '加载收藏列表失败'
+            })
+            ErrorHandler.handle(error, 'Favorites.load')
         }
-      }
-    })
-  },
+    },
 
-  async doRemoveFavorite(id: number, type: string) {
-    wx.showLoading({ title: '处理中...' })
-    try {
-      if (type === 'DISH') {
-        await removeDishFromFavorites(id)
-      } else {
-        await removeMerchantFromFavorites(id)
-      }
-      wx.hideLoading()
-      wx.showToast({ title: '已取消收藏', icon: 'success' })
+    onRetry() {
+        this.loadFavorites(true)
+    },
 
-      // 从列表中移除
-      const favorites = this.data.favorites.filter(f => !(f.id === id && f.type === type))
-      this.setData({ favorites })
-    } catch (error) {
-      wx.hideLoading()
-      logger.error('取消收藏失败', error, 'favorites.doRemoveFavorite')
-      wx.showToast({ title: '操作失败', icon: 'error' })
+    onReachBottom() {
+        this.loadFavorites()
+    },
+
+    async onRemoveFavorite(e: WechatMiniprogram.BaseEvent) {
+        const item = e.currentTarget.dataset.item as FavoriteViewModel
+        if (!item) return
+
+        wx.showModal({
+            title: '取消收藏',
+            content: `确定取消收藏"${item.title}"吗？`,
+            success: async (res) => {
+                if (res.confirm) {
+                     wx.showLoading({ title: '处理中' })
+                     try {
+                         if (item.type === 'dish') {
+                             // Backend API expects the Dish ID (targetId), not the favorite record ID
+                             await FavoriteService.removeFavoriteDish(item.targetId) 
+                         } else {
+                             await FavoriteService.removeFavoriteMerchant(item.targetId)
+                         }
+
+                         // Refresh list
+                         const favorites = this.data.favorites.filter((f) => f.id !== item.id)
+                         this.setData({ favorites })
+                     } catch (e) {
+                         ErrorHandler.handle(e, 'Favorites.remove')
+                     } finally {
+                         wx.hideLoading()
+                     }
+                }
+            }
+        })
+    },
+
+    onItemClick(e: WechatMiniprogram.BaseEvent) {
+        const item = e.currentTarget.dataset.item as FavoriteViewModel
+        if (!item) return
+
+        if (item.type === 'dish') {
+            Navigation.toDishDetail(String(item.targetId))
+        } else {
+            Navigation.toRestaurantDetail(item.targetId)
+        }
+    },
+    
+    onGoHome() {
+        if (this.data.activeTab === 'merchant') {
+            Navigation.toReservationHome()
+        } else {
+            Navigation.toTakeoutHome()
+        }
     }
-  }
 })

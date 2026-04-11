@@ -1,0 +1,101 @@
+<custom-navbar title="骑手管理" show-back="{{true}}" show-location="{{false}}" bind:navheight="onNavHeight" />
+
+<view
+  class="riders-page page-shell page-shell--with-nav page-shell--bottom-safe"
+  style="--page-shell-nav-height: {{navBarHeight}}px"
+>
+  <scroll-view
+    class="list-scroll"
+    scroll-y
+    refresher-enabled
+    refresher-triggered="{{refreshing}}"
+    bindrefresherrefresh="onRefresh"
+    bindscrolltolower="onLoadMore"
+  >
+    <view class="riders-container">
+      <view class="summary-card">
+        <text class="summary-title">骑手申请总数</text>
+        <text class="summary-value">{{total}}</text>
+      </view>
+
+      <view wx:if="{{loading}}" class="section-card">
+        <view wx:for="{{3}}" wx:key="index" class="skeleton-item skeleton-shimmer"></view>
+      </view>
+
+      <view wx:if="{{error}}" class="section-card status-wrap">
+        <t-empty icon="error-circle" description="{{error}}">
+          <t-button slot="action" theme="primary" shape="round" size="small" bind:tap="onRetry">重试</t-button>
+        </t-empty>
+      </view>
+
+      <view wx:if="{{!loading && !error && riders.length === 0}}" class="section-card status-wrap">
+        <t-empty description="暂无骑手申请" />
+      </view>
+
+      <view wx:for="{{riders}}" wx:key="id" class="section-card rider-card">
+        <view class="title-row">
+          <view class="name">{{item.name || ('骑手#' + item.id)}}</view>
+          <t-tag theme="{{item.statusTheme}}" variant="dark">{{item.statusLabel}}</t-tag>
+        </view>
+        <view class="meta-row">
+          <text class="meta-label">手机号</text>
+          <text class="meta-value">{{item.phone || '-'}}</text>
+        </view>
+        <view class="meta-row">
+          <text class="meta-label">所属区域</text>
+          <text class="meta-value">{{item.region_name || '-'}} ({{item.region_id}})</text>
+        </view>
+        <view class="meta-row">
+          <text class="meta-label">交通工具</text>
+          <text class="meta-value">{{item.vehicle_type || '-'}}</text>
+        </view>
+        <view class="meta-row">
+          <text class="meta-label">申请时间</text>
+          <text class="meta-value">{{item.applied_at || '-'}}</text>
+        </view>
+
+        <view wx:if="{{item.canReview}}" class="actions">
+          <t-button
+            theme="danger"
+            shape="round"
+            size="small"
+            loading="{{submitting}}"
+            bind:tap="onRejectTap"
+            data-id="{{item.id}}"
+            data-name="{{item.name}}"
+          >驳回</t-button>
+          <t-button
+            theme="primary"
+            shape="round"
+            size="small"
+            loading="{{submitting}}"
+            bind:tap="onApproveTap"
+            data-id="{{item.id}}"
+          >通过</t-button>
+        </view>
+      </view>
+
+      <view wx:if="{{!loading && !hasMore && riders.length > 0}}" class="no-more">没有更多了</view>
+    </view>
+  </scroll-view>
+
+  <t-dialog
+    visible="{{showRejectDialog}}"
+    title="驳回骑手申请"
+    confirm-btn="确认驳回"
+    cancel-btn="取消"
+    bind:confirm="onRejectConfirm"
+    bind:cancel="onRejectCancel"
+  >
+    <view class="dialog-content">
+      <view class="dialog-title">骑手：{{selectedName || '-'}}</view>
+      <t-textarea
+        value="{{rejectReason}}"
+        placeholder="请输入驳回原因"
+        maxlength="200"
+        indicator
+        bind:change="onRejectReasonChange"
+      />
+    </view>
+  </t-dialog>
+</view>

@@ -1,0 +1,113 @@
+.page-container {
+  min-height: 100vh;
+  background: var(--td-bg-color-page);
+  padding-bottom: calc(148rpx + var(--safe-area-bottom));
+}
+
+.page-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-md);
+}
+
+.state-block,
+.loading-state,
+.state-inline {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacer-md);
+}
+
+.state-block {
+  min-height: 60vh;
+  padding: 0 var(--spacer-lg);
+}
+
+.loading-state,
+.state-inline {
+  min-height: 320rpx;
+}
+
+.page-notice {
+  border-radius: var(--radius-md);
+}
+
+.section-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-md);
+  padding: var(--spacer-md);
+  border-radius: var(--radius-lg);
+  background: var(--td-bg-color-container);
+  box-shadow: var(--shadow-sm);
+}
+
+.section-top {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.section-title {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+}
+
+.section-caption {
+  font-size: var(--font-size-xs);
+  line-height: 1.6;
+  color: var(--td-text-color-secondary);
+}
+
+.option-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+  padding: 20rpx 24rpx;
+  border-radius: var(--radius-md);
+  background: var(--td-bg-color-secondarycontainer);
+}
+
+.option-group--disabled {
+  opacity: 0.66;
+}
+
+.option-group__header {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.option-group__title {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+}
+
+.option-group__desc,
+.option-group__help {
+  font-size: var(--font-size-xs);
+  line-height: 1.6;
+  color: var(--td-text-color-secondary);
+}
+
+.option-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+}
+
+.footer-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: var(--z-index-fixed);
+  padding: var(--spacer-md);
+  padding-bottom: calc(var(--spacer-md) + var(--safe-area-bottom));
+  background: var(--td-bg-color-container);
+  box-shadow: 0 -8rpx 24rpx rgba(0, 0, 0, 0.06);
+}

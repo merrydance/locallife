@@ -35,11 +35,11 @@ func createRandomUserRoleForUser(t *testing.T, userID int64, role string) UserRo
 }
 
 func TestCreateUserRole(t *testing.T) {
-	createRandomUserRole(t, "customer")
+	createRandomUserRole(t, UserRoleCustomer)
 }
 
 func TestGetUserRole(t *testing.T) {
-	role1 := createRandomUserRole(t, "customer")
+	role1 := createRandomUserRole(t, UserRoleCustomer)
 
 	role2, err := testStore.GetUserRole(context.Background(), role1.ID)
 	require.NoError(t, err)
@@ -52,11 +52,11 @@ func TestGetUserRole(t *testing.T) {
 
 func TestGetUserRoleByType(t *testing.T) {
 	user := createRandomUser(t)
-	role1 := createRandomUserRoleForUser(t, user.ID, "merchant")
+	role1 := createRandomUserRoleForUser(t, user.ID, UserRoleMerchantOwner)
 
 	arg := GetUserRoleByTypeParams{
 		UserID: user.ID,
-		Role:   "merchant",
+		Role:   UserRoleMerchantOwner,
 	}
 
 	role2, err := testStore.GetUserRoleByType(context.Background(), arg)
@@ -64,7 +64,7 @@ func TestGetUserRoleByType(t *testing.T) {
 	require.NotEmpty(t, role2)
 
 	require.Equal(t, role1.ID, role2.ID)
-	require.Equal(t, "merchant", role2.Role)
+	require.Equal(t, UserRoleMerchantOwner, role2.Role)
 }
 
 func TestHasRole(t *testing.T) {
@@ -73,14 +73,14 @@ func TestHasRole(t *testing.T) {
 	// 创建角色前检查
 	arg := HasRoleParams{
 		UserID: user.ID,
-		Role:   "operator",
+		Role:   UserRoleOperator,
 	}
 	hasRole, err := testStore.HasRole(context.Background(), arg)
 	require.NoError(t, err)
 	require.False(t, hasRole)
 
 	// 创建角色
-	createRandomUserRoleForUser(t, user.ID, "operator")
+	createRandomUserRoleForUser(t, user.ID, UserRoleOperator)
 
 	// 创建角色后检查
 	hasRole, err = testStore.HasRole(context.Background(), arg)
@@ -92,7 +92,7 @@ func TestListUserRoles(t *testing.T) {
 	user := createRandomUser(t)
 
 	// 创建多个角色
-	roles := []string{"customer", "merchant", "rider"}
+	roles := []string{UserRoleCustomer, UserRoleMerchantOwner, UserRoleRider}
 	for _, role := range roles {
 		createRandomUserRoleForUser(t, user.ID, role)
 	}
@@ -108,7 +108,7 @@ func TestListUserRoles(t *testing.T) {
 }
 
 func TestUpdateUserRoleStatus(t *testing.T) {
-	role1 := createRandomUserRole(t, "customer")
+	role1 := createRandomUserRole(t, UserRoleCustomer)
 
 	arg := UpdateUserRoleStatusParams{
 		ID:     role1.ID,
@@ -121,7 +121,7 @@ func TestUpdateUserRoleStatus(t *testing.T) {
 }
 
 func TestDeleteUserRole(t *testing.T) {
-	role := createRandomUserRole(t, "customer")
+	role := createRandomUserRole(t, UserRoleCustomer)
 
 	err := testStore.DeleteUserRole(context.Background(), role.ID)
 	require.NoError(t, err)
@@ -137,7 +137,7 @@ func TestCreateUserRoleWithRelatedEntity(t *testing.T) {
 
 	arg := CreateUserRoleParams{
 		UserID:          user.ID,
-		Role:            "merchant",
+		Role:            UserRoleMerchantOwner,
 		Status:          "active",
 		RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true},
 	}

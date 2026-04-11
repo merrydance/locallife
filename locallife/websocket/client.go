@@ -3,6 +3,7 @@ package websocket
 import (
 	"context"
 	"encoding/json"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -33,6 +34,10 @@ func NewClient(hub *Hub, conn *websocket.Conn, info ClientInfo) *Client {
 		done: make(chan struct{}),
 		conn: conn,
 	}
+}
+
+func (c *Client) nextSequence() uint64 {
+	return atomic.AddUint64(&c.seq, 1)
 }
 
 // ReadPump 从WebSocket读取消息
@@ -123,11 +128,23 @@ func (c *Client) handleMessage(msg Message) {
 	case "ack":
 		// 消息确认（可用于追踪消息送达）
 		var ackData struct {
-			MessageID string `json:"message_id"`
+			MessageID string    `json:"message_id"`
+			Sequence  uint64    `json:"sequence"`
+			Timestamp time.Time `json:"ts"`
 		}
 		if err := json.Unmarshal(msg.Data, &ackData); err == nil {
+			if ackData.Timestamp.IsZero() {
+				ackData.Timestamp = time.Now()
+			}
+			c.hub.RecordAck(c.info, Ack{
+				MessageID: ackData.MessageID,
+				Sequence:  ackData.Sequence,
+				Timestamp: ackData.Timestamp,
+			})
+
 			log.Debug().
 				Str("message_id", ackData.MessageID).
+				Uint64("sequence", ackData.Sequence).
 				Int64("user_id", c.info.UserID).
 				Msg("Message acknowledged")
 		}

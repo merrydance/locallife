@@ -26,22 +26,22 @@ SELECT
     END AS avg_order_amount
 FROM merchants m
 LEFT JOIN profit_sharing_orders ps ON ps.merchant_id = m.id 
-    AND ps.created_at >= $2
-    AND ps.created_at <= $3
+        AND ps.created_at >= $1
+        AND ps.created_at <= $2
     AND ps.status = 'finished'  -- 只统计分账成功的订单
-WHERE m.region_id = $1
+WHERE m.region_id = $3
   AND m.status = 'active'
 GROUP BY m.id, m.name
 ORDER BY total_sales DESC
-LIMIT $4 OFFSET $5
+LIMIT $5 OFFSET $4
 `
 
 type GetOperatorMerchantRankingParams struct {
-	RegionID    int64     `json:"region_id"`
-	CreatedAt   time.Time `json:"created_at"`
-	CreatedAt_2 time.Time `json:"created_at_2"`
-	Limit       int32     `json:"limit"`
-	Offset      int32     `json:"offset"`
+	StartAt  time.Time `json:"start_at"`
+	EndAt    time.Time `json:"end_at"`
+	RegionID int64     `json:"region_id"`
+	Offset   int32     `json:"offset"`
+	Limit    int32     `json:"limit"`
 }
 
 type GetOperatorMerchantRankingRow struct {
@@ -56,11 +56,11 @@ type GetOperatorMerchantRankingRow struct {
 // 运营商区域内商户排行（基于实际分账数据）
 func (q *Queries) GetOperatorMerchantRanking(ctx context.Context, arg GetOperatorMerchantRankingParams) ([]GetOperatorMerchantRankingRow, error) {
 	rows, err := q.db.Query(ctx, getOperatorMerchantRanking,
+		arg.StartAt,
+		arg.EndAt,
 		arg.RegionID,
-		arg.CreatedAt,
-		arg.CreatedAt_2,
-		arg.Limit,
 		arg.Offset,
+		arg.Limit,
 	)
 	if err != nil {
 		return nil, err
@@ -98,24 +98,24 @@ SELECT
 FROM riders r
 JOIN users u ON u.id = r.user_id
 LEFT JOIN deliveries d ON d.rider_id = r.id 
-    AND d.created_at >= $2
-    AND d.created_at <= $3
+        AND d.created_at >= $1
+        AND d.created_at <= $2
 LEFT JOIN orders o ON o.id = d.order_id
 LEFT JOIN merchants m ON m.id = o.merchant_id
-WHERE m.region_id = $1
+WHERE m.region_id = $3
   AND r.status = 'active'
 GROUP BY r.id, u.full_name, r.total_earnings
 HAVING COUNT(d.id) > 0
 ORDER BY completed_count DESC
-LIMIT $4 OFFSET $5
+LIMIT $5 OFFSET $4
 `
 
 type GetOperatorRiderRankingParams struct {
-	RegionID    int64     `json:"region_id"`
-	CreatedAt   time.Time `json:"created_at"`
-	CreatedAt_2 time.Time `json:"created_at_2"`
-	Limit       int32     `json:"limit"`
-	Offset      int32     `json:"offset"`
+	StartAt  time.Time `json:"start_at"`
+	EndAt    time.Time `json:"end_at"`
+	RegionID int64     `json:"region_id"`
+	Offset   int32     `json:"offset"`
+	Limit    int32     `json:"limit"`
 }
 
 type GetOperatorRiderRankingRow struct {
@@ -130,11 +130,11 @@ type GetOperatorRiderRankingRow struct {
 // 运营商区域内骑手绩效排行(通过配送订单关联区域)
 func (q *Queries) GetOperatorRiderRanking(ctx context.Context, arg GetOperatorRiderRankingParams) ([]GetOperatorRiderRankingRow, error) {
 	rows, err := q.db.Query(ctx, getOperatorRiderRanking,
+		arg.StartAt,
+		arg.EndAt,
 		arg.RegionID,
-		arg.CreatedAt,
-		arg.CreatedAt_2,
-		arg.Limit,
 		arg.Offset,
+		arg.Limit,
 	)
 	if err != nil {
 		return nil, err
@@ -173,17 +173,17 @@ FROM profit_sharing_orders ps
 JOIN merchants m ON m.id = ps.merchant_id
 JOIN payment_orders po ON po.id = ps.payment_order_id
 WHERE m.region_id = $1
-  AND ps.created_at >= $2
-  AND ps.created_at <= $3
+    AND ps.created_at >= $2
+    AND ps.created_at <= $3
   AND ps.status = 'finished'  -- 只统计分账成功的订单
 GROUP BY DATE(ps.created_at)
 ORDER BY date
 `
 
 type GetRegionDailyTrendParams struct {
-	RegionID    int64     `json:"region_id"`
-	CreatedAt   time.Time `json:"created_at"`
-	CreatedAt_2 time.Time `json:"created_at_2"`
+	RegionID int64     `json:"region_id"`
+	StartAt  time.Time `json:"start_at"`
+	EndAt    time.Time `json:"end_at"`
 }
 
 type GetRegionDailyTrendRow struct {
@@ -197,7 +197,7 @@ type GetRegionDailyTrendRow struct {
 
 // 区域日趋势（基于实际分账数据）
 func (q *Queries) GetRegionDailyTrend(ctx context.Context, arg GetRegionDailyTrendParams) ([]GetRegionDailyTrendRow, error) {
-	rows, err := q.db.Query(ctx, getRegionDailyTrend, arg.RegionID, arg.CreatedAt, arg.CreatedAt_2)
+	rows, err := q.db.Query(ctx, getRegionDailyTrend, arg.RegionID, arg.StartAt, arg.EndAt)
 	if err != nil {
 		return nil, err
 	}
@@ -235,17 +235,17 @@ SELECT
 FROM regions r
 LEFT JOIN merchants m ON m.region_id = r.id AND m.status = 'active'
 LEFT JOIN profit_sharing_orders ps ON ps.merchant_id = m.id 
-    AND ps.created_at >= $2
-    AND ps.created_at <= $3
+    AND ps.created_at >= $1
+    AND ps.created_at <= $2
     AND ps.status = 'finished'  -- 只统计分账成功的订单
-WHERE r.id = $1
+WHERE r.id = $3
 GROUP BY r.id, r.name
 `
 
 type GetRegionStatsParams struct {
-	ID          int64     `json:"id"`
-	CreatedAt   time.Time `json:"created_at"`
-	CreatedAt_2 time.Time `json:"created_at_2"`
+	StartAt  time.Time `json:"start_at"`
+	EndAt    time.Time `json:"end_at"`
+	RegionID int64     `json:"region_id"`
 }
 
 type GetRegionStatsRow struct {
@@ -265,7 +265,7 @@ type GetRegionStatsRow struct {
 // 区域统计：基于实际完成分账的数据（status='finished'）
 // 这样确保统计的佣金是真实分账成功的，而不是预估值
 func (q *Queries) GetRegionStats(ctx context.Context, arg GetRegionStatsParams) (GetRegionStatsRow, error) {
-	row := q.db.QueryRow(ctx, getRegionStats, arg.ID, arg.CreatedAt, arg.CreatedAt_2)
+	row := q.db.QueryRow(ctx, getRegionStats, arg.StartAt, arg.EndAt, arg.RegionID)
 	var i GetRegionStatsRow
 	err := row.Scan(
 		&i.RegionID,

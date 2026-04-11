@@ -334,6 +334,39 @@ func (q *Queries) GetUserBalanceLogByRelated(ctx context.Context, arg GetUserBal
 	return i, err
 }
 
+const getUserBalanceLogByRelatedAndType = `-- name: GetUserBalanceLogByRelatedAndType :one
+SELECT id, user_id, type, amount, balance_before, balance_after, related_type, related_id, source_type, source_id, remark, created_at FROM user_balance_logs
+WHERE related_type = $1 AND related_id = $2 AND type = $3
+LIMIT 1
+`
+
+type GetUserBalanceLogByRelatedAndTypeParams struct {
+	RelatedType pgtype.Text `json:"related_type"`
+	RelatedID   pgtype.Int8 `json:"related_id"`
+	Type        string      `json:"type"`
+}
+
+// 根据关联信息和类型获取日志（用于幂等检查/回滚）
+func (q *Queries) GetUserBalanceLogByRelatedAndType(ctx context.Context, arg GetUserBalanceLogByRelatedAndTypeParams) (UserBalanceLog, error) {
+	row := q.db.QueryRow(ctx, getUserBalanceLogByRelatedAndType, arg.RelatedType, arg.RelatedID, arg.Type)
+	var i UserBalanceLog
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Type,
+		&i.Amount,
+		&i.BalanceBefore,
+		&i.BalanceAfter,
+		&i.RelatedType,
+		&i.RelatedID,
+		&i.SourceType,
+		&i.SourceID,
+		&i.Remark,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const listUserBalanceLogs = `-- name: ListUserBalanceLogs :many
 SELECT id, user_id, type, amount, balance_before, balance_after, related_type, related_id, source_type, source_id, remark, created_at FROM user_balance_logs
 WHERE user_id = $1

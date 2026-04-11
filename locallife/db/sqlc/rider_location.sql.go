@@ -232,13 +232,13 @@ ORDER BY recorded_at ASC
 `
 
 type ListRiderLocationsParams struct {
-	RiderID      int64     `json:"rider_id"`
-	RecordedAt   time.Time `json:"recorded_at"`
-	RecordedAt_2 time.Time `json:"recorded_at_2"`
+	RiderID int64     `json:"rider_id"`
+	StartAt time.Time `json:"start_at"`
+	EndAt   time.Time `json:"end_at"`
 }
 
 func (q *Queries) ListRiderLocations(ctx context.Context, arg ListRiderLocationsParams) ([]RiderLocation, error) {
-	rows, err := q.db.Query(ctx, listRiderLocations, arg.RiderID, arg.RecordedAt, arg.RecordedAt_2)
+	rows, err := q.db.Query(ctx, listRiderLocations, arg.RiderID, arg.StartAt, arg.EndAt)
 	if err != nil {
 		return nil, err
 	}

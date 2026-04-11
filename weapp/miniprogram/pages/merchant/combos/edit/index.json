@@ -1,0 +1,15 @@
+{
+  "usingComponents": {
+    "custom-navbar": "/components/custom-navbar/index",
+    "t-button": "tdesign-miniprogram/button/button",
+    "t-check-tag": "tdesign-miniprogram/check-tag/check-tag",
+    "t-dialog": "tdesign-miniprogram/dialog/dialog",
+    "t-loading": "tdesign-miniprogram/loading/loading",
+    "t-empty": "tdesign-miniprogram/empty/empty",
+    "t-switch": "tdesign-miniprogram/switch/switch",
+    "t-stepper": "tdesign-miniprogram/stepper/stepper",
+    "t-input": "tdesign-miniprogram/input/input",
+    "t-textarea": "tdesign-miniprogram/textarea/textarea"
+  },
+  "navigationStyle": "custom"
+}

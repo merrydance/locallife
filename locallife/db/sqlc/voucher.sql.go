@@ -169,6 +169,40 @@ func (q *Queries) CreateVoucher(ctx context.Context, arg CreateVoucherParams) (V
 	return i, err
 }
 
+const decrementVoucherUsedQuantity = `-- name: DecrementVoucherUsedQuantity :one
+UPDATE vouchers
+SET
+    used_quantity = CASE WHEN used_quantity > 0 THEN used_quantity - 1 ELSE 0 END,
+    updated_at = NOW()
+WHERE id = $1
+RETURNING id, merchant_id, code, name, description, amount, min_order_amount, total_quantity, claimed_quantity, used_quantity, valid_from, valid_until, is_active, created_at, updated_at, allowed_order_types, deleted_at
+`
+
+func (q *Queries) DecrementVoucherUsedQuantity(ctx context.Context, id int64) (Voucher, error) {
+	row := q.db.QueryRow(ctx, decrementVoucherUsedQuantity, id)
+	var i Voucher
+	err := row.Scan(
+		&i.ID,
+		&i.MerchantID,
+		&i.Code,
+		&i.Name,
+		&i.Description,
+		&i.Amount,
+		&i.MinOrderAmount,
+		&i.TotalQuantity,
+		&i.ClaimedQuantity,
+		&i.UsedQuantity,
+		&i.ValidFrom,
+		&i.ValidUntil,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.AllowedOrderTypes,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
 const deleteVoucher = `-- name: DeleteVoucher :exec
 UPDATE vouchers SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL
 `
@@ -177,6 +211,21 @@ UPDATE vouchers SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL
 func (q *Queries) DeleteVoucher(ctx context.Context, id int64) error {
 	_, err := q.db.Exec(ctx, deleteVoucher, id)
 	return err
+}
+
+const expireUnusedVouchers = `-- name: ExpireUnusedVouchers :execrows
+UPDATE user_vouchers
+SET status = 'expired'
+WHERE status = 'unused' 
+    AND expires_at <= NOW()
+`
+
+func (q *Queries) ExpireUnusedVouchers(ctx context.Context) (int64, error) {
+	result, err := q.db.Exec(ctx, expireUnusedVouchers)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const getUserVoucher = `-- name: GetUserVoucher :one
@@ -761,16 +810,66 @@ func (q *Queries) ListUserVouchers(ctx context.Context, arg ListUserVouchersPara
 	return items, nil
 }
 
-const markExpiredVouchers = `-- name: MarkExpiredVouchers :exec
+const markUserVoucherAsExpiredOnRollback = `-- name: MarkUserVoucherAsExpiredOnRollback :one
 UPDATE user_vouchers
-SET status = 'expired'
-WHERE status = 'unused' 
-    AND expires_at <= NOW()
+SET
+    status = 'expired',
+    order_id = NULL,
+    used_at = NULL
+WHERE id = $1 AND status = 'used' AND order_id = $2
+RETURNING id, voucher_id, user_id, status, order_id, used_at, obtained_at, expires_at
 `
 
-func (q *Queries) MarkExpiredVouchers(ctx context.Context) error {
-	_, err := q.db.Exec(ctx, markExpiredVouchers)
-	return err
+type MarkUserVoucherAsExpiredOnRollbackParams struct {
+	ID      int64       `json:"id"`
+	OrderID pgtype.Int8 `json:"order_id"`
+}
+
+func (q *Queries) MarkUserVoucherAsExpiredOnRollback(ctx context.Context, arg MarkUserVoucherAsExpiredOnRollbackParams) (UserVoucher, error) {
+	row := q.db.QueryRow(ctx, markUserVoucherAsExpiredOnRollback, arg.ID, arg.OrderID)
+	var i UserVoucher
+	err := row.Scan(
+		&i.ID,
+		&i.VoucherID,
+		&i.UserID,
+		&i.Status,
+		&i.OrderID,
+		&i.UsedAt,
+		&i.ObtainedAt,
+		&i.ExpiresAt,
+	)
+	return i, err
+}
+
+const markUserVoucherAsUnused = `-- name: MarkUserVoucherAsUnused :one
+UPDATE user_vouchers
+SET
+    status = 'unused',
+    order_id = NULL,
+    used_at = NULL
+WHERE id = $1 AND status = 'used' AND order_id = $2
+RETURNING id, voucher_id, user_id, status, order_id, used_at, obtained_at, expires_at
+`
+
+type MarkUserVoucherAsUnusedParams struct {
+	ID      int64       `json:"id"`
+	OrderID pgtype.Int8 `json:"order_id"`
+}
+
+func (q *Queries) MarkUserVoucherAsUnused(ctx context.Context, arg MarkUserVoucherAsUnusedParams) (UserVoucher, error) {
+	row := q.db.QueryRow(ctx, markUserVoucherAsUnused, arg.ID, arg.OrderID)
+	var i UserVoucher
+	err := row.Scan(
+		&i.ID,
+		&i.VoucherID,
+		&i.UserID,
+		&i.Status,
+		&i.OrderID,
+		&i.UsedAt,
+		&i.ObtainedAt,
+		&i.ExpiresAt,
+	)
+	return i, err
 }
 
 const markUserVoucherAsUsed = `-- name: MarkUserVoucherAsUsed :one

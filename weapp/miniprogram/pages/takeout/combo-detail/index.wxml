@@ -1,0 +1,198 @@
+<view class="page-container" style="padding-top: {{navBarHeight}}px;">
+  <!-- 自定义导航栏 -->
+  <custom-navbar title="套餐详情" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+  <!-- 1. 错误状态 -->
+  <view wx:if="{{isError}}" class="error-container">
+    <t-empty icon="info-circle" description="{{errorMsg}}" />
+    <t-button theme="primary" size="small" bindtap="loadComboDetail" style="margin-top: 24rpx;" shape="round">重新加载</t-button>
+  </view>
+
+  <!-- 2. 骨架屏状态 (App Shell with Skeleton) -->
+  <view wx:elif="{{loading && !combo}}" class="skeleton-content">
+    <view class="skeleton-header-image skeleton-shimmer"></view>
+    <view class="skeleton-scroll" style="margin-top: -40rpx;">
+      <view class="content-card">
+        <view class="skeleton-basic">
+          <view class="skeleton-line skeleton-shimmer" style="width: 60%; height: 48rpx; margin-bottom: 30rpx;"></view>
+          <view class="skeleton-line skeleton-shimmer" style="width: 30%; height: 32rpx; margin-bottom: 24rpx;"></view>
+          <view class="skeleton-line skeleton-shimmer" style="width: 45%; height: 40rpx;"></view>
+        </view>
+        <view class="section-card" style="margin-top: 40rpx; padding: 30rpx;">
+          <view class="skeleton-line skeleton-shimmer" style="width: 25%; height: 32rpx; margin-bottom: 30rpx;"></view>
+          <view wx:for="{{[1,2]}}" wx:key="*this" style="display: flex; gap: 20rpx; margin-bottom: 24rpx;">
+            <view class="skeleton-rect skeleton-shimmer" style="width: 120rpx; height: 120rpx; border-radius: 8rpx;"></view>
+            <view style="flex: 1;">
+              <view class="skeleton-line skeleton-shimmer" style="width: 70%; height: 32rpx; margin-bottom: 16rpx;"></view>
+              <view class="skeleton-line skeleton-shimmer" style="width: 40%; height: 24rpx;"></view>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <block wx:elif="{{combo}}">
+    <!-- 头部主图 / 组合图 -->
+    <view class="header-image">
+      <view class="combo-image-grid grid-count-{{combo.dish_images.length > 4 ? 4 : combo.dish_images.length}}" wx:if="{{combo.dish_images && combo.dish_images.length > 0}}">
+        <t-image 
+          wx:for="{{combo.dish_images}}" 
+          wx:key="*this"
+          wx:if="{{index < 4}}"
+          src="{{item}}" 
+          mode="aspectFill" 
+          class="grid-img"
+        />
+      </view>
+      <t-image wx:else src="{{combo.image_url}}" mode="aspectFill" width="100%" height="560rpx" />
+      <view class="image-overlay" />
+    </view>
+
+    <!-- 内容区域 -->
+    <scroll-view scroll-y class="content-scroll" style="margin-top: -40rpx;">
+      <view class="content-card">
+        <!-- 基础信息 -->
+        <view class="basic-info">
+          <view class="title-row">
+            <text class="title">{{combo.name}}</text>
+            <button class="share-btn-reset share-wrapper" open-type="share">
+              <view class="share-icon-box">
+                <t-icon name="share" size="40rpx" color="var(--td-brand-color)" />
+              </view>
+            </button>
+          </view>
+          
+          <view class="stats-row">
+            <text class="sales">月售 {{combo.month_sales}}</text>
+            <view class="delivery-info" wx:if="{{combo.distance_km_display}}">
+              <text class="distance">{{combo.distance_km_display}}</text>
+              <text class="divider">|</text>
+              <text class="time">{{combo.estimated_delivery_time_display}}</text>
+            </view>
+          </view>
+
+          <view class="price-row">
+            <view class="price-box">
+              <text class="currency">¥</text>
+              <text class="price">{{combo.comboPriceDisplay}}</text>
+              <text class="original-price" wx:if="{{combo.original_price > combo.combo_price}}">¥{{combo.originalPriceDisplay}}</text>
+            </view>
+            <t-tag wx:if="{{combo.savings_percent > 0}}" variant="dark" theme="danger" class="savings-tag">
+              立省{{combo.savings_percent}}%
+            </t-tag>
+          </view>
+
+          <!-- 套餐标签 -->
+          <view class="spec-section" wx:if="{{combo.tags.length > 0}}">
+            <view class="spec-title">套餐标签</view>
+            <view class="spec-list">
+              <t-tag 
+                wx:for="{{combo.tags}}" 
+                wx:key="*this" 
+                size="medium"
+                variant="light-outline" 
+                theme="default"
+                class="spec-tag"
+              >
+                {{item}}
+              </t-tag>
+            </view>
+          </view>
+
+          <view class="description" wx:if="{{combo.description}}">
+            <view class="desc-title">套餐详述</view>
+            <text>{{combo.description}}</text>
+          </view>
+        </view>
+
+        <!-- 套餐内容 -->
+        <view class="section-card">
+          <view class="section-title">
+            <text>套餐内容</text>
+            <text class="dish-count">共 {{combo.dishes.length}} 件菜品</text>
+          </view>
+          
+          <view class="dish-list">
+            <view 
+              class="dish-item" 
+              wx:for="{{combo.dishes}}" 
+              wx:key="dish_id"
+              bindtap="onDishTap"
+              data-id="{{item.dish_id}}"
+            >
+              <t-image src="{{item.dish_image_url}}" mode="aspectFill" width="120rpx" height="120rpx" class="dish-img" />
+              <view class="dish-info">
+                <view class="dish-name-row">
+                  <text class="dish-name">{{item.dish_name}}</text>
+                  <text class="dish-qty">x{{item.quantity}}</text>
+                </view>
+                <view class="dish-price-row">
+                  <text class="dish-price" wx:if="{{item.dishPriceDisplay}}">单价 ¥{{item.dishPriceDisplay}}</text>
+                </view>
+                <view class="dish-price-row" wx:if="{{item.customization_summary}}">
+                  <text class="dish-price">固定规格：{{item.customization_summary}}</text>
+                </view>
+              </view>
+              <t-icon name="chevron-right" size="32rpx" color="rgba(0,0,0,0.26)" />
+            </view>
+          </view>
+        </view>
+
+        <!-- 套餐备注 -->
+        <view class="section-card">
+          <remark-input
+            value="{{remark}}"
+            placeholder="口味要求，如：少辣、不要葱等"
+            bind:change="onRemarkChange"
+            quickRemarks="{{quickRemarks}}"
+          />
+        </view>
+
+        <!-- 商家信息 -->
+        <view class="section-card merchant-card" bindtap="onShopTap">
+          <view class="merchant-info">
+            <t-icon name="shop" size="40rpx" color="rgba(0,0,0,0.4)" />
+            <text class="merchant-name">{{combo.merchant_name}}</text>
+          </view>
+          <t-icon name="chevron-right" size="40rpx" color="rgba(0,0,0,0.26)" />
+        </view>
+
+        <view class="safe-bottom" />
+      </view>
+    </scroll-view>
+  </block>
+
+  <!-- 底部操作栏 (App Shell) -->
+  <view class="action-bar" wx:if="{{!isError}}">
+    <block wx:if="{{!loading && combo}}">
+      <block wx:if="{{combo.is_open}}">
+        <view class="quantity-control">
+          <t-stepper 
+            value="{{quantity}}" 
+            min="{{1}}" 
+            max="{{99}}" 
+            theme="filled"
+            bind:change="onQuantityChange"
+          />
+        </view>
+        <view class="btn-group">
+          <t-button theme="light" shape="round" class="add-cart-btn" bindtap="onAddToCart">
+            加入购物车
+          </t-button>
+          <t-button theme="primary" shape="round" class="buy-now-btn" bindtap="onBuyNow">
+            立即购买
+          </t-button>
+        </view>
+      </block>
+      <view class="resting-bar" wx:else>
+        <text class="resting-text">商户休息中，暂不接受下单～</text>
+        <t-button theme="light" shape="round" block bindtap="onShopTap">进入店铺</t-button>
+      </view>
+    </block>
+    <view class="action-bar-skeleton" wx:else>
+      <view class="skeleton-rect skeleton-shimmer" style="width: 180rpx; height: 60rpx; border-radius: 30rpx;"></view>
+      <view class="skeleton-rect skeleton-shimmer" style="width: 400rpx; height: 80rpx; border-radius: 40rpx;"></view>
+    </view>
+  </view>
+</view>

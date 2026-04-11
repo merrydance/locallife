@@ -5,6 +5,13 @@
 
 import { request } from '../utils/request'
 
+export const MERCHANT_REJECT_REASON_OPTIONS = [
+    '门店临时打烊',
+    '商品已售罄',
+    '配送资源不足',
+    '订单信息异常'
+] as const
+
 // ==================== 订单数据类型定义 ====================
 
 /**
@@ -14,7 +21,7 @@ export interface OrderResponse {
     id: number                                   // 订单ID
     order_no: string                             // 订单编号
     order_type: 'takeout' | 'dine_in' | 'takeaway' | 'reservation'  // 订单类型
-    status: 'pending' | 'paid' | 'preparing' | 'ready' | 'delivering' | 'completed' | 'cancelled'  // 订单状态
+    status: 'pending' | 'paid' | 'preparing' | 'ready' | 'courier_accepted' | 'picked' | 'delivering' | 'rider_delivered' | 'user_delivered' | 'completed' | 'cancelled'  // 订单状态
     user_id: number                              // 用户ID
     merchant_id: number                          // 商户ID
     merchant_name: string                        // 商户名称
@@ -27,15 +34,41 @@ export interface OrderResponse {
     delivery_fee_discount: number                // 配送费优惠（分）
     discount_amount: number                      // 优惠金额（分）
     total_amount: number                         // 订单总金额（分）
-    payment_method: 'wechat' | 'balance'         // 支付方式
+    fulfillment_status?: 'scheduled' | 'pending_kitchen' | 'preparing' | 'ready' | 'completed' | 'cancelled'
+    payment_method?: 'wechat' | 'balance'        // 支付方式
     notes?: string                               // 订单备注
+    status_hint?: string
+    actions?: string[]
+    exception_state?: string
+    claim_channel?: string
+    overtime?: boolean
+    delivery_eta_minutes?: number
+    estimated_delivery_at?: string
+    pickup_code?: string
+    pickup_code_masked?: string
+    merchant_phone?: string
+    delivery_contact_name?: string
+    delivery_contact_phone?: string
+    delivery_address?: string
     delivery_distance?: number                   // 配送距离（米）
     created_at: string                           // 创建时间
     paid_at?: string                             // 支付时间
+    prep_start_at?: string
+    ready_at?: string
+    courier_accept_at?: string
+    picked_at?: string
+    rider_delivered_at?: string
+    user_delivered_at?: string
+    auto_user_delivered_at?: string
     completed_at?: string                        // 完成时间
     cancelled_at?: string                        // 取消时间
     cancel_reason?: string                       // 取消原因
     updated_at: string                           // 更新时间
+    badges?: Array<{
+        text?: string
+        type?: string
+        locale?: string
+    }>
 }
 
 /**
@@ -66,12 +99,99 @@ export interface OrderItemCustomization {
  * 订单统计响应 - 对齐 db.GetOrderStatsRow
  */
 export interface OrderStatsResponse {
-    total_orders: number                         // 总订单数
-    total_revenue: number                        // 总营收（分）
-    avg_order_value: number                      // 平均订单价值（分）
-    completed_orders: number                     // 已完成订单数
-    cancelled_orders: number                     // 已取消订单数
-    completion_rate: number                      // 完成率
+    pending_count: number                        // 待处理订单数
+    paid_count: number                           // 已支付订单数
+    preparing_count: number                      // 制作中订单数
+    ready_count: number                          // 待取餐/待配送订单数
+    delivering_count: number                     // 配送中订单数
+    completed_count: number                      // 已完成订单数（含用户确认收货）
+    cancelled_count: number                      // 已取消订单数
+}
+
+export interface MerchantOrderListResult {
+    orders: OrderResponse[]
+    total: number
+    page_id: number
+    page_size: number
+}
+
+export interface MerchantOrderSummaryResponse {
+    total: number
+    pending_count: number
+    paid_count: number
+    preparing_count: number
+    ready_count: number
+    courier_accepted_count: number
+    picked_count: number
+    delivering_count: number
+    rider_delivered_count: number
+    user_delivered_count: number
+    completed_count: number
+    cancelled_count: number
+}
+
+export interface MerchantOrderPrintJobResponse {
+    id: number
+    order_id: number
+    printer_id: number
+    printer_name: string
+    status: string
+    vendor_order_id?: string
+    error_message?: string
+    printed_at?: string
+    created_at: string
+}
+
+export interface MerchantOrderPrintJobsResult {
+    order_id: number
+    items: MerchantOrderPrintJobResponse[]
+}
+
+export interface MerchantOrderPrintJobStatusResponse {
+    print_log_id: number
+    order_id: number
+    printer_id: number
+    printer_name: string
+    local_status: string
+    vendor_order_id?: string
+    cloud_query_available: boolean
+    cloud_printed?: boolean
+    checked_at: string
+}
+
+export interface RetryMerchantOrderPrintJobResponse {
+    message: string
+    order_id: number
+    print_log_id: number
+    trigger: string
+}
+
+export interface PrintMerchantOrderResponse {
+    message: string
+    order_id: number
+    trigger: string
+}
+
+export interface MerchantPrintAnomalyItem {
+    print_log_id: number
+    order_id: number
+    order_no: string
+    order_type: OrderResponse['order_type'] | string
+    printer_id: number
+    printer_name: string
+    local_status: string
+    error_message?: string
+    vendor_order_id?: string
+    last_attempt_at: string
+    can_retry: boolean
+    retry_hint?: string
+}
+
+export interface MerchantPrintAnomaliesResult {
+    items: MerchantPrintAnomalyItem[]
+    total: number
+    page_id: number
+    page_size: number
 }
 
 /**
@@ -111,6 +231,7 @@ export interface KitchenOrderResponse {
  * 后厨订单商品项 - 对齐 api.kitchenOrderItem
  */
 export interface KitchenOrderItem {
+    category_name?: string                        // 商品分类名称
     customizations?: OrderItemCustomization[]    // 定制化选项
     id: number                                   // 商品项ID
     image_url: string                            // 商品图片URL
@@ -158,13 +279,30 @@ export class MerchantOrderManagementService {
     static async getOrderList(params: {
         page_id: number                            // 页码（必填）
         page_size: number                          // 每页数量（必填，5-50）
-        status?: 'pending' | 'paid' | 'preparing' | 'ready' | 'delivering' | 'completed' | 'cancelled'  // 状态筛选
-    }): Promise<OrderResponse[]> {
-        return await request({
+        status?: 'pending' | 'paid' | 'preparing' | 'ready' | 'courier_accepted' | 'picked' | 'delivering' | 'rider_delivered' | 'user_delivered' | 'completed' | 'cancelled'  // 状态筛选
+        order_type?: OrderResponse['order_type']   // 订单类型筛选
+    }): Promise<MerchantOrderListResult> {
+        const response = await request<OrderResponse[] | MerchantOrderListResult | { orders?: OrderResponse[], total?: number, page_id?: number, page_size?: number }>({
             url: '/v1/merchant/orders',
             method: 'GET',
             data: params
         })
+
+        if (Array.isArray(response)) {
+            return {
+                orders: response,
+                total: response.length,
+                page_id: params.page_id,
+                page_size: params.page_size
+            }
+        }
+
+        return {
+            orders: response.orders || [],
+            total: response.total || 0,
+            page_id: response.page_id || params.page_id,
+            page_size: response.page_size || params.page_size
+        }
     }
 
     /**
@@ -179,6 +317,13 @@ export class MerchantOrderManagementService {
             url: '/v1/merchant/orders/stats',
             method: 'GET',
             data: params
+        })
+    }
+
+    static async getOrderSummary(): Promise<MerchantOrderSummaryResponse> {
+        return await request({
+            url: '/v1/merchant/orders/summary',
+            method: 'GET'
         })
     }
 
@@ -235,6 +380,66 @@ export class MerchantOrderManagementService {
         return await request({
             url: `/v1/merchant/orders/${orderId}/complete`,
             method: 'POST'
+        })
+    }
+
+    /**
+     * 获取订单打印任务列表
+     * GET /v1/merchant/orders/{id}/print-jobs
+     */
+    static async listOrderPrintJobs(orderId: number): Promise<MerchantOrderPrintJobsResult> {
+        return await request({
+            url: `/v1/merchant/orders/${orderId}/print-jobs`,
+            method: 'GET'
+        })
+    }
+
+    /**
+     * 重试订单打印任务
+     * POST /v1/merchant/orders/{id}/print-jobs/{print_log_id}/retry
+     */
+    static async retryOrderPrintJob(orderId: number, printLogId: number): Promise<RetryMerchantOrderPrintJobResponse> {
+        return await request({
+            url: `/v1/merchant/orders/${orderId}/print-jobs/${printLogId}/retry`,
+            method: 'POST'
+        })
+    }
+
+    /**
+     * 查询订单打印任务的云端执行状态
+     * GET /v1/merchant/orders/{id}/print-jobs/{print_log_id}/status
+     */
+    static async getOrderPrintJobStatus(orderId: number, printLogId: number): Promise<MerchantOrderPrintJobStatusResponse> {
+        return await request({
+            url: `/v1/merchant/orders/${orderId}/print-jobs/${printLogId}/status`,
+            method: 'GET'
+        })
+    }
+
+    /**
+     * 手动创建订单打印任务
+     * POST /v1/merchant/orders/{id}/print-jobs
+     */
+    static async printOrder(orderId: number): Promise<PrintMerchantOrderResponse> {
+        return await request({
+            url: `/v1/merchant/orders/${orderId}/print-jobs`,
+            method: 'POST'
+        })
+    }
+
+    /**
+     * 获取商户打印异常列表
+     * GET /v1/merchant/orders/print-anomalies
+     */
+    static async listPrintAnomalies(params: {
+        page_id: number
+        page_size: number
+        status?: 'failed' | 'pending'
+    }): Promise<MerchantPrintAnomaliesResult> {
+        return await request({
+            url: '/v1/merchant/orders/print-anomalies',
+            method: 'GET',
+            data: params
         })
     }
 }
@@ -300,16 +505,24 @@ export class KitchenDisplayService {
  */
 export class OrderManagementAdapter {
 
+    static isTerminalOrderStatus(status: OrderResponse['status'] | string): boolean {
+        return status === 'completed' || status === 'cancelled'
+    }
+
     /**
      * 格式化订单状态显示文本
      */
     static formatOrderStatus(status: string): string {
         const statusMap: Record<string, string> = {
             'pending': '待支付',
-            'paid': '已支付',
+            'paid': '待接单',
             'preparing': '制作中',
-            'ready': '待配送/待取餐',
+            'ready': '待交付',
+            'courier_accepted': '骑手已接单',
+            'picked': '骑手已取餐',
             'delivering': '配送中',
+            'rider_delivered': '骑手已送达',
+            'user_delivered': '用户已确认',
             'completed': '已完成',
             'cancelled': '已取消'
         }
@@ -367,6 +580,33 @@ export class OrderManagementAdapter {
         }
     }
 
+    static getMerchantOrderStatusHint(order: OrderResponse): string {
+        switch (order.status) {
+            case 'paid':
+                return '顾客已支付，建议尽快接单或拒单处理'
+            case 'preparing':
+                return '商户正在制作中，可在出餐后标记完成'
+            case 'ready':
+                return order.order_type === 'takeout' ? '等待骑手取餐或系统分配送力' : '等待顾客取餐或到店核销'
+            case 'courier_accepted':
+                return '骑手已接单，正在到店取餐'
+            case 'picked':
+                return '骑手已取餐，订单即将配送'
+            case 'delivering':
+                return '配送途中，请关注异常和超时情况'
+            case 'rider_delivered':
+                return '骑手已送达，等待顾客确认'
+            case 'user_delivered':
+                return '顾客已确认收货，系统即将完成订单'
+            case 'completed':
+                return '订单已完成履约'
+            case 'cancelled':
+                return order.cancel_reason || '订单已取消'
+            default:
+                return ''
+        }
+    }
+
     /**
      * 判断订单是否可以接单
      */
@@ -378,7 +618,7 @@ export class OrderManagementAdapter {
      * 判断订单是否可以拒单
      */
     static canRejectOrder(order: OrderResponse): boolean {
-        return ['paid', 'preparing'].includes(order.status)
+        return order.status === 'paid'
     }
 
     /**
@@ -395,6 +635,14 @@ export class OrderManagementAdapter {
         return order.status === 'ready' && ['dine_in', 'takeaway'].includes(order.order_type)
     }
 
+    static shouldShowPassiveState(order: OrderResponse): boolean {
+        return !this.canAcceptOrder(order)
+            && !this.canRejectOrder(order)
+            && !this.canMarkReady(order)
+            && !this.canCompleteOrder(order)
+            && !this.isTerminalOrderStatus(order.status)
+    }
+
     /**
      * 获取订单状态对应的颜色
      */
@@ -404,7 +652,11 @@ export class OrderManagementAdapter {
             'paid': '#3498db',         // 蓝色
             'preparing': '#e74c3c',    // 红色
             'ready': '#f39c12',        // 橙色
-            'delivering': '#9b59b6',   // 紫色
+            'courier_accepted': '#2563eb',
+            'picked': '#0f766e',
+            'delivering': '#0284c7',
+            'rider_delivered': '#0d9488',
+            'user_delivered': '#16a34a',
             'completed': '#27ae60',    // 绿色
             'cancelled': '#95a5a6'     // 灰色
         }

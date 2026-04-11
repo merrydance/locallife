@@ -15,7 +15,7 @@ SELECT * FROM merchant_memberships
 WHERE merchant_id = $1 AND user_id = $2 LIMIT 1;
 
 -- name: ListUserMemberships :many
-SELECT m.*, mer.name as merchant_name, mer.logo_url
+SELECT m.*, mer.name as merchant_name, mer.logo_media_asset_id
 FROM merchant_memberships m
 JOIN merchants mer ON mer.id = m.merchant_id
 WHERE m.user_id = $1
@@ -23,7 +23,7 @@ ORDER BY m.balance DESC
 LIMIT $2 OFFSET $3;
 
 -- name: ListMerchantMembers :many
-SELECT m.*, u.full_name, u.phone, u.avatar_url
+SELECT m.*, u.full_name, u.phone, u.avatar_url, u.avatar_media_asset_id
 FROM merchant_memberships m
 JOIN users u ON u.id = m.user_id
 WHERE m.merchant_id = $1
@@ -34,8 +34,10 @@ LIMIT $2 OFFSET $3;
 UPDATE merchant_memberships
 SET 
     balance = $2,
-    total_recharged = $3,
-    total_consumed = $4,
+    principal_balance = $3,
+    bonus_balance = $4,
+    total_recharged = $5,
+    total_consumed = $6,
     updated_at = NOW()
 WHERE id = $1
 RETURNING *;
@@ -44,6 +46,7 @@ RETURNING *;
 UPDATE merchant_memberships
 SET 
     balance = balance + $2,
+    principal_balance = principal_balance + $2,
     total_recharged = total_recharged + $2,
     updated_at = NOW()
 WHERE id = $1
@@ -53,6 +56,7 @@ RETURNING *;
 UPDATE merchant_memberships
 SET 
     balance = balance - $2,
+    principal_balance = principal_balance - $2,
     total_consumed = total_consumed + $2,
     updated_at = NOW()
 WHERE id = $1 AND balance >= $2
@@ -131,17 +135,45 @@ INSERT INTO membership_transactions (
     membership_id,
     type,
     amount,
+    principal_amount,
+    bonus_amount,
     balance_after,
     related_order_id,
     recharge_rule_id,
     notes
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7
+    $1, $2, $3, $4, $5, $6, $7, $8, $9
+) RETURNING *;
+
+-- name: CreateMembershipTransactionWithPaymentOrderID :one
+INSERT INTO membership_transactions (
+    membership_id,
+    type,
+    amount,
+    principal_amount,
+    bonus_amount,
+    balance_after,
+    related_order_id,
+    recharge_rule_id,
+    notes,
+    payment_order_id
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
 ) RETURNING *;
 
 -- name: GetMembershipTransaction :one
 SELECT * FROM membership_transactions
 WHERE id = $1 LIMIT 1;
+
+-- name: GetMembershipTransactionByPaymentOrderID :one
+SELECT * FROM membership_transactions
+WHERE payment_order_id = $1 LIMIT 1;
+
+-- name: GetMembershipConsumeByOrder :one
+SELECT * FROM membership_transactions
+WHERE membership_id = $1 AND related_order_id = $2 AND type = 'consume'
+ORDER BY created_at DESC
+LIMIT 1;
 
 -- name: ListMembershipTransactions :many
 SELECT * FROM membership_transactions

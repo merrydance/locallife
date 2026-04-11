@@ -1,11 +1,17 @@
 import { tracker, EventType } from './utils/tracker'
-import { wechatLogin, getDeviceId } from './api/auth'
+import { wechatLogin, getUserInfo, getDeviceId, type UserResponse } from './api/auth'
 import { setToken } from './utils/auth'
 import { logger } from './utils/logger'
-import { ErrorHandler } from './utils/error-handler'
+import { AppError, ErrorHandler, ErrorType } from './utils/error-handler'
 import { networkMonitor } from './utils/network-monitor'
 import { themeManager } from './utils/theme'
 import { locationService } from './utils/location'
+import { confirmOrder } from './api/order'
+import { getErrorDebugMessage, isRetryableNetworkError } from './utils/user-facing'
+import { installPromptFeedbackGuards } from './utils/prompt-feedback'
+
+// 微信发货信息管理 — 确认收货组件的 appId
+const WECHAT_ORDER_CONFIRM_APPID = 'wx1183b055aeec94d1'
 
 App<IAppOption>({
   globalData: {
@@ -15,8 +21,11 @@ App<IAppOption>({
     latitude: null,
     longitude: null,
     userRole: 'guest',
+    userRoles: [] as string[],
+    userWorkbenches: [] as UserResponse['workbenches'],
     userId: undefined as number | undefined,
     merchantId: undefined,
+    merchantName: '',
     // 多店铺切换支持
     currentMerchantId: undefined as number | undefined,
     merchantInfo: undefined as {
@@ -26,15 +35,6 @@ App<IAppOption>({
       is_open: boolean
       status: string
     } | undefined,
-    // 设备平台信息（用于跨平台适配）
-    devicePlatform: null as {
-      type: string          // platform 原始值
-      isAndroid: boolean    // Android 手机
-      isIos: boolean        // iOS 设备
-      isOhos: boolean       // 鸿蒙 Next 手机
-      isPc: boolean         // PC 端（Windows/Mac/鸿蒙PC）
-      isDevtools: boolean   // 开发者工具
-    } | null,
     // (内部使用) 上次定位上下文
     _lastLocationContext: null as {
       lat: number
@@ -47,9 +47,28 @@ App<IAppOption>({
 
   onLaunch() {
     logger.info('🚀 小程序启动', undefined, 'App.onLaunch')
+    installPromptFeedbackGuards()
 
-    // 初始化设备平台信息（用于跨平台适配）
-    this.initDevicePlatform()
+    // 检查小程序版本更新
+    if (wx.canIUse('getUpdateManager')) {
+      const updateManager = wx.getUpdateManager()
+      updateManager.onUpdateReady(() => {
+        wx.showModal({
+          title: '更新提示',
+          content: '新版本已准备好，重启后生效，是否立即重启？',
+          confirmText: '立即重启',
+          cancelText: '稍后',
+          success(res) {
+            if (res.confirm) {
+              updateManager.applyUpdate()
+            }
+          }
+        })
+      })
+      updateManager.onUpdateFailed(() => {
+        logger.warn('小程序新版本下载失败', undefined, 'App.onLaunch')
+      })
+    }
 
     // 预初始化全局布局数据 (Phase 1)
     const { getGlobalLayoutData } = require('./utils/responsive')
@@ -57,6 +76,40 @@ App<IAppOption>({
     const { globalStore } = require('./utils/global-store')
     globalStore.set('navBarHeight', layout.navBarHeight)
     globalStore.set('isLargeScreen', layout.isLargeScreen)
+
+    // 恢复上次已知位置，避免首屏等待 GPS
+    // 用 setTimeout(0) 推迟到首帧渲染后再读 Storage，不阻塞 onLoad
+    setTimeout(() => {
+      const LOCATION_CACHE_MAX_AGE = 24 * 60 * 60 * 1000
+      try {
+        const lastKnown = wx.getStorageSync('last_known_location') as {
+          lat: number
+          lng: number
+          name: string
+          address?: string
+          time: number
+        } | null
+        if (lastKnown?.lat && lastKnown?.lng && (Date.now() - lastKnown.time) < LOCATION_CACHE_MAX_AGE) {
+          // 只在 globalData 还没被真实 GPS 覆盖的情况下才应用缓存
+          if (!this.globalData.latitude || !this.globalData.longitude) {
+            this.globalData.latitude = lastKnown.lat
+            this.globalData.longitude = lastKnown.lng
+            this.globalData.location = { name: lastKnown.name, address: lastKnown.address }
+            this.globalData._lastLocationContext = {
+              lat: lastKnown.lat,
+              lng: lastKnown.lng,
+              time: lastKnown.time,
+              name: lastKnown.name,
+              address: lastKnown.address
+            }
+            // 通知 globalStore，使地址栏等订阅者立即收到位置
+            const { globalStore } = require('./utils/global-store')
+            globalStore.updateLocation(lastKnown.lat, lastKnown.lng, lastKnown.name, lastKnown.address)
+            logger.info('已从缓存恢复位置', { name: lastKnown.name }, 'App.onLaunch')
+          }
+        }
+      } catch (_e) { /* storage 读取失败不影响主流程 */ }
+    }, 0)
 
     // 清除旧的 API 缓存（响应格式已更新为统一信封格式）
     this.clearApiCache()
@@ -80,6 +133,39 @@ App<IAppOption>({
     tracker.log(EventType.APP_OPEN)
   },
 
+  onShow(options?: WechatMiniprogram.App.LaunchShowOption) {
+    // 桌面微信长时间后台后，网络状态可能滞后；前台恢复时主动刷新
+    networkMonitor.refreshStatus(true).catch(() => {
+      // 忽略刷新失败，不影响主流程
+    })
+
+    // 处理微信发货信息管理「确认收货组件」回调
+    // 组件通过 wx.navigateBackMiniProgram 返回，触发此 onShow
+    const referrer = options?.referrerInfo
+    if (
+      referrer?.appId === WECHAT_ORDER_CONFIRM_APPID &&
+      (referrer?.extraData as { status?: string } | undefined)?.status === 'success'
+    ) {
+      const orderId = this.globalData.pendingConfirmOrderId
+      this.globalData.pendingConfirmOrderId = undefined
+      if (orderId) {
+        confirmOrder(orderId).then(() => {
+          logger.info('微信确认收货后同步本地状态成功', { orderId }, 'App.onShow')
+          // 刷新当前页面订单状态
+          const pages = getCurrentPages()
+          const currentPage = pages[pages.length - 1]
+          if (currentPage && typeof (currentPage as WechatMiniprogram.Page.Instance<Record<string, unknown>, Record<string, unknown>> & { loadOrderDetail?: () => void, loadDeliveryData?: () => void }).loadOrderDetail === 'function') {
+            (currentPage as WechatMiniprogram.Page.Instance<Record<string, unknown>, Record<string, unknown>> & { loadOrderDetail?: () => void }).loadOrderDetail!()
+          } else if (currentPage && typeof (currentPage as WechatMiniprogram.Page.Instance<Record<string, unknown>, Record<string, unknown>> & { loadDeliveryData?: () => void }).loadDeliveryData === 'function') {
+            (currentPage as WechatMiniprogram.Page.Instance<Record<string, unknown>, Record<string, unknown>> & { loadDeliveryData?: () => void }).loadDeliveryData!()
+          }
+        }).catch((err) => {
+          logger.error('微信确认收货后同步本地状态失败', err, 'App.onShow')
+        })
+      }
+    }
+  },
+
   /**
      * 全局错误捕获 - 捕获未处理的同步错误
      */
@@ -94,13 +180,21 @@ App<IAppOption>({
   /**
      * 全局Promise拒绝捕获 - 捕获未处理的Promise错误
      */
-  onUnhandledRejection(res: any) {
+  onUnhandledRejection(res: { reason?: unknown, promise?: unknown }) {
     // 后端服务不可用时使用简洁日志
-    const reasonStr = String(res.reason?.message || res.reason)
+    const reason = res.reason
+    const isNetworkAppError = reason instanceof AppError && reason.type === ErrorType.NETWORK
+    const reasonMessage = getErrorDebugMessage(reason)
+    const reasonStr = String(reasonMessage || reason)
     const isBackendError = reasonStr.includes('502') || reasonStr.includes('503') || reasonStr.includes('504')
 
     if (isBackendError) {
       logger.warn('[后端服务不可用] Promise rejected', { reason: reasonStr }, 'App.onUnhandledRejection')
+    } else if (isNetworkAppError) {
+      logger.warn('未处理的网络 Promise 拒绝（已抑制弹窗）', {
+        reason: reasonStr,
+        promise: res.promise
+      }, 'App.onUnhandledRejection')
     } else {
       logger.error('未处理的Promise拒绝', {
         reason: res.reason,
@@ -110,7 +204,7 @@ App<IAppOption>({
     }
 
     // 后端不可用时不上报
-    if (!isBackendError) {
+    if (!isBackendError && !isNetworkAppError) {
       this.reportErrorToMonitor(res.reason, 'onUnhandledRejection')
     }
   },
@@ -118,7 +212,11 @@ App<IAppOption>({
   /**
      * 页面未找到捕获
      */
-  onPageNotFound(res: any) {
+  onPageNotFound(res: {
+    path?: string
+    query?: Record<string, unknown>
+    isEntryPage?: boolean
+  }) {
     logger.warn('页面未找到', {
       path: res.path,
       query: res.query,
@@ -137,7 +235,7 @@ App<IAppOption>({
   /**
      * 上报错误到监控平台
      */
-  reportErrorToMonitor(error: any, type: string) {
+  reportErrorToMonitor(error: unknown, type: string) {
     try {
       // 使用微信小程序实时日志
       const realtimeLog = wx.getRealtimeLogManager ? wx.getRealtimeLogManager() : null
@@ -162,124 +260,168 @@ App<IAppOption>({
     }
   },
 
-  silentLogin() {
-    logger.info('开始静默登录流程', undefined, 'App.silentLogin')
+  silentLogin(attempt = 0) {
+    const MAX_LOGIN_RETRIES = 3
+    const RETRY_DELAYS = [0, 2000, 4000] // 首次无延迟，第2次等2秒，第3次等4秒
 
-    // 清除旧 token，避免旧 token 导致的刷新循环
+    if (attempt === 0) {
+      logger.info('开始静默登录流程', undefined, 'App.silentLogin')
+
+      const { getToken, isTokenNearExpiry, getRefreshToken, clearToken } = require('./utils/auth')
+      const existingToken = getToken() as string
+
+      // 快速路径：access token 仍有效，直接拉取用户信息，无需 wx.login
+      if (existingToken && !isTokenNearExpiry(0)) {
+        logger.info('Token 仍有效，跳过 wx.login', undefined, 'App.silentLogin')
+        getUserInfo()
+          .then((user) => {
+            this._applyUserInfo(user)
+            logger.info('✅ 静默登录成功 (复用 token)', { userId: user.id }, 'App.silentLogin')
+            if (this.globalData.latitude && this.globalData.longitude) {
+              this.reverseGeocodeWhenReady()
+            }
+          })
+          .catch((_err: unknown) => {
+            logger.warn('复用 token 拉取用户信息失败，降级到完整登录', _err, 'App.silentLogin')
+            clearToken()
+            this._doWxLogin(0, MAX_LOGIN_RETRIES, RETRY_DELAYS)
+          })
+        return
+      }
+
+      // 中速路径：access token 已过期但 refresh_token 仍有效 → 静默续期
+      const refreshToken = getRefreshToken() as string
+      if (refreshToken) {
+        logger.info('Token 已过期，尝试 refresh_token 静默续期', undefined, 'App.silentLogin')
+        this._refreshThenLoadUser(MAX_LOGIN_RETRIES, RETRY_DELAYS)
+        return
+      }
+
+      // 慢速路径：无任何可用凭证，走完整 wx.login
+      logger.debug('无有效 token，开始完整 wx.login 流程', undefined, 'App.silentLogin')
+      clearToken()
+    } else {
+      logger.info(`静默登录重试 (${attempt}/${MAX_LOGIN_RETRIES})`, undefined, 'App.silentLogin')
+    }
+
+    this._doWxLogin(attempt, MAX_LOGIN_RETRIES, RETRY_DELAYS)
+  },
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  _applyUserInfo(user: any) {
+    this.globalData.userId = user.id
+    this.globalData.userInfo = {
+      nickName: user.full_name || `User ${String(user.id).slice(-4)}`,
+      avatarUrl: user.avatar_url || 'https://tdesign.gtimg.com/mobile/demos/avatar1.png',
+      gender: 0,
+      country: '',
+      province: '',
+      city: '',
+      language: 'zh_CN'
+    }
+    // 缓存完整角色列表（小写），供 user_center onShow 快速恢复工作台
+    const normalizedRoles = (user.roles || []).map((r: string) => String(r).toLowerCase())
+    this.globalData.userRoles = normalizedRoles
+    this.globalData.userWorkbenches = user.workbenches || []
+    if (normalizedRoles.some((role: string) => ['merchant', 'merchant_owner', 'merchant_staff'].includes(role))) {
+      this.globalData.userRole = 'merchant'
+    } else if (normalizedRoles.includes('rider')) {
+      this.globalData.userRole = 'rider'
+    } else if (normalizedRoles.includes('operator')) {
+      this.globalData.userRole = 'operator'
+    } else if (normalizedRoles.includes('admin')) {
+      this.globalData.userRole = 'operator' // admin 降级到 operator 以满足类型约束
+    } else if (normalizedRoles.includes('customer')) {
+      this.globalData.userRole = 'customer'
+    }
+  },
+
+  /** 使用统一刷新锁执行静默续期，成功后拉取用户信息；失败则降级到 wx.login */
+  _refreshThenLoadUser(max: number, delays: number[]) {
+    const { refreshAuthToken } = require('./utils/request')
     const { clearToken } = require('./utils/auth')
-    clearToken()
-    logger.debug('已清除旧 token，准备重新登录', undefined, 'silentLogin')
 
+    refreshAuthToken(true)
+      .then(() => {
+        logger.info('refresh_token 续期成功，拉取用户信息', undefined, 'App._refreshThenLoadUser')
+        return getUserInfo()
+      })
+      .then((user: UserResponse) => {
+        this._applyUserInfo(user)
+        logger.info('✅ 静默登录成功 (refresh_token)', { userId: user.id }, 'App._refreshThenLoadUser')
+        if (this.globalData.latitude && this.globalData.longitude) {
+          this.reverseGeocodeWhenReady()
+        }
+      })
+      .catch((err: unknown) => {
+        logger.warn('refresh_token 静默续期失败，降级到 wx.login', err, 'App._refreshThenLoadUser')
+        clearToken()
+        this._doWxLogin(0, max, delays)
+      })
+  },
+
+  /** 完整的 wx.login → 后端 wechatLogin 流程（慢速路径及重试） */
+  _doWxLogin(attempt: number, max: number, delays: number[]) {
     wx.login({
       success: async (res) => {
         if (res.code) {
           try {
-            logger.debug('微信登录成功,code获取成功', { code: res.code.substring(0, 10) + '...' }, 'silentLogin')
+            logger.debug('微信登录成功,code获取成功', { code: res.code.substring(0, 10) + '...' }, '_doWxLogin')
 
-            // 获取设备ID
             const deviceId = getDeviceId()
-            logger.debug('设备ID已生成', { deviceId: deviceId.substring(0, 15) + '...' }, 'silentLogin')
+            logger.debug('设备ID已生成', { deviceId: deviceId.substring(0, 15) + '...' }, '_doWxLogin')
 
-            // 调用登录接口
-            logger.debug('开始调用后端登录接口', undefined, 'silentLogin')
+            logger.debug('开始调用后端登录接口', undefined, '_doWxLogin')
             const loginData = await wechatLogin({
               code: res.code,
               device_id: deviceId,
               device_type: 'miniprogram'
             })
 
-            logger.debug('后端登录接口调用成功', {
-              userId: loginData.user.id,
-              hasToken: !!loginData.access_token
-            }, 'silentLogin')
-
-            // 保存token
             const expiresAt = loginData.access_token_expires_at
               ? new Date(loginData.access_token_expires_at).getTime()
               : undefined
-            setToken(
-              loginData.access_token,
-              expiresAt,
-              loginData.refresh_token
-            )
+            setToken(loginData.access_token, expiresAt, loginData.refresh_token)
 
-            logger.info('Token已保存', {
-              tokenLength: loginData.access_token.length,
-              expiresAt: loginData.access_token_expires_at
-            }, 'silentLogin')
-
-            // 验证token是否真的保存成功
             const { getToken } = require('./utils/auth')
             const savedToken = getToken()
             if (!savedToken) {
-              logger.error('Token保存失败！getToken()返回空', undefined, 'silentLogin')
-            } else {
-              logger.debug('Token保存验证成功', { tokenLength: savedToken.length }, 'silentLogin')
+              logger.error('Token保存失败！getToken()返回空', undefined, '_doWxLogin')
             }
 
-            // 保存用户信息
-            const user = loginData.user
-            this.globalData.userId = user.id;
-            this.globalData.userInfo = {
-              nickName: user.full_name || `User ${user.id.toString().slice(-4)}`,
-              avatarUrl: user.avatar_url || 'https://tdesign.gtimg.com/mobile/demos/avatar1.png',
-              gender: 0,
-              country: '',
-              province: '',
-              city: '',
-              language: 'zh_CN'
-            }
-
-            // 确定用户角色
-            if (user.roles.includes('MERCHANT')) {
-              this.globalData.userRole = 'merchant'
-              logger.info('用户角色: 商户', undefined, 'silentLogin')
-            } else if (user.roles.includes('RIDER')) {
-              this.globalData.userRole = 'rider'
-              logger.info('用户角色: 骑手', undefined, 'silentLogin')
-            } else if (user.roles.includes('OPERATOR')) {
-              this.globalData.userRole = 'operator'
-              logger.info('用户角色: 运营商', undefined, 'silentLogin')
-            } else if (user.roles.includes('CUSTOMER')) {
-              this.globalData.userRole = 'customer'
-              logger.info('用户角色: 顾客', undefined, 'silentLogin')
-            }
-
-            logger.info('✅ 静默登录完全成功', {
-              userId: user.id,
+            this._applyUserInfo(loginData.user)
+            logger.info('✅ 静默登录完全成功 (wx.login)', {
+              userId: loginData.user.id,
               userRole: this.globalData.userRole,
               hasToken: !!savedToken
-            }, 'silentLogin')
+            }, '_doWxLogin')
 
-            // 登录成功后，如果已有坐标，立即进行逆地理编码
             if (this.globalData.latitude && this.globalData.longitude) {
-              logger.debug('登录成功，立即进行逆地理编码', undefined, 'silentLogin')
               this.reverseGeocodeWhenReady()
             }
 
           } catch (error) {
-            // 后端服务不可用时不显示Toast,仅记录日志
-            const appError = error as any
-            const isBackendError = appError.message && (
-              appError.message.includes('502') ||
-              appError.message.includes('503') ||
-              appError.message.includes('504')
-            )
+            const errorMsg = getErrorDebugMessage(error)
 
-            if (isBackendError) {
-              logger.warn('[后端服务不可用] 静默登录失败,用户可继续浏览', { error: appError.message }, 'App.silentLogin')
+            const isRetryable = isRetryableNetworkError(error)
+
+            if (isRetryable && attempt < max - 1) {
+              const delay = delays[attempt + 1] || 4000
+              logger.warn(`静默登录失败,${delay / 1000}秒后重试 (${attempt + 1}/${max})`, { error: errorMsg }, 'App._doWxLogin')
+              setTimeout(() => this._doWxLogin(attempt + 1, max, delays), delay)
             } else {
-              logger.error('❌ 静默登录流程失败', error, 'App.silentLogin')
-              ErrorHandler.handle(error, 'App.silentLogin')
+              logger.warn('静默登录最终失败,用户可继续浏览', {
+                error: errorMsg,
+                attempts: attempt + 1
+              }, 'App._doWxLogin')
             }
           }
         } else {
-          logger.error('wx.login成功但未返回code', res, 'App.silentLogin')
+          logger.error('wx.login成功但未返回code', res, '_doWxLogin')
         }
       },
       fail: (err) => {
-        logger.error('❌ wx.login调用失败', err, 'App.wx.login')
-        ErrorHandler.handle(err, 'App.wx.login')
+        logger.error('wx.login调用失败', err, 'App._doWxLogin')
       }
     })
   },
@@ -307,18 +449,11 @@ App<IAppOption>({
   /**
    * 获取位置坐标（不需要 token，本地调用）
    * 获取成功后，等待 token 准备好再调用逆地理编码
+   * 注意：即使 globalData 中已有缓存坐标（来自 Storage 恢复），也始终刷新 GPS，
+   * 成功后覆盖旧坐标，保证跨城场景下数据最终一致。
    */
   getLocationCoordinates() {
     logger.info('📍 开始获取位置坐标', undefined, 'getLocationCoordinates')
-
-    // 检查是否已有缓存的坐标
-    if (this.globalData.latitude && this.globalData.longitude) {
-      logger.info('使用缓存的坐标', {
-        latitude: this.globalData.latitude,
-        longitude: this.globalData.longitude
-      }, 'getLocationCoordinates')
-      return
-    }
 
     // 获取当前位置坐标（本地调用，不需要网络请求）
     logger.debug('调用 wx.getLocation', undefined, 'getLocationCoordinates')
@@ -426,6 +561,10 @@ App<IAppOption>({
         name: lastLoc.name,
         address: lastLoc.address || lastLoc.name
       }
+      // 刷新缓存时间戳（坐标小幅移动，延长有效期）
+      const _refreshedCtx = { lat: this.globalData.latitude, lng: this.globalData.longitude, time: now, name: lastLoc.name, address: lastLoc.address }
+      this.globalData._lastLocationContext = _refreshedCtx
+      try { wx.setStorageSync('last_known_location', _refreshedCtx) } catch (_e) { /* ignore */ }
 
       // 同步到 globalStore
       const { globalStore } = require('./utils/global-store')
@@ -483,13 +622,16 @@ App<IAppOption>({
       }
 
       // === 更新缓存上下文 ===
-      this.globalData._lastLocationContext = {
+      const _locCtx = {
         lat: this.globalData.latitude,
         lng: this.globalData.longitude,
         time: Date.now(),
         name: locationName,
         address: fullAddress
       }
+      this.globalData._lastLocationContext = _locCtx
+      // 持久化到 storage，供下次启动时立即恢复（避免等待 GPS）
+      try { wx.setStorageSync('last_known_location', _locCtx) } catch (_e) { /* ignore */ }
       // ====================
 
       // 同步到 globalStore（导航栏等组件使用）
@@ -540,9 +682,9 @@ App<IAppOption>({
     try {
       // 获取所有存储的 key
       const res = wx.getStorageInfoSync()
-      const keysToRemove = res.keys.filter(key => key.startsWith('api_'))
+      const keysToRemove = res.keys.filter((key) => key.startsWith('api_'))
 
-      keysToRemove.forEach(key => {
+      keysToRemove.forEach((key) => {
         try {
           wx.removeStorageSync(key)
         } catch (e) {
@@ -557,37 +699,7 @@ App<IAppOption>({
       // 忽略缓存清除失败
       logger.warn('清除 API 缓存失败', e, 'clearApiCache')
     }
-  },
-
-  /**
-   * 初始化设备平台信息
-   * 参考：https://mp.weixin.qq.com/s/3w1aZf86x2Im8jCy-CADBw
-   * 
-   * platform 可能的值：
-   * - 手机：android, ios, ohos (鸿蒙 Next)
-   * - 电脑：windows, mac, ohos_pc (鸿蒙 PC)
-   * - 开发工具：devtools
-   */
-  initDevicePlatform() {
-    try {
-      const info = wx.getDeviceInfo()
-      const platform = info.platform
-
-      this.globalData.devicePlatform = {
-        type: platform,
-        isAndroid: platform === 'android',
-        isIos: platform === 'ios',
-        isOhos: platform === 'ohos',  // 鸿蒙 Next 手机
-        isPc: platform === 'windows' || platform === 'mac' || platform === 'ohos_pc',
-        isDevtools: platform === 'devtools'
-      }
-
-      logger.info('📱 设备平台信息已初始化', {
-        platform,
-        ...this.globalData.devicePlatform
-      }, 'initDevicePlatform')
-    } catch (e) {
-      logger.warn('获取设备平台信息失败', e, 'initDevicePlatform')
-    }
   }
+
+
 })

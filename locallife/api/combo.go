@@ -1,25 +1,28 @@
 package api
 
 import (
-	"database/sql"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/media"
 	"github.com/merrydance/locallife/token"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/rs/zerolog/log"
 )
 
 // ==================== 套餐管理 ====================
 
 // comboDishInput 表示套餐中的菜品及其数量
 type comboDishInput struct {
-	DishID   int64 `json:"dish_id" binding:"required,min=1"` // 菜品ID
-	Quantity int32 `json:"quantity" binding:"min=1,max=99"`  // 数量，1-99
+	DishID         int64                  `json:"dish_id" binding:"required,min=1"` // 菜品ID
+	Quantity       int32                  `json:"quantity" binding:"min=1,max=99"`  // 数量，1-99
+	Customizations map[string]interface{} `json:"customizations"`
 }
 
 type createComboSetRequest struct {
@@ -34,11 +37,247 @@ type createComboSetRequest struct {
 }
 
 type comboSetResponse struct {
-	ID          int64   `json:"id"`
-	Name        string  `json:"name"`
-	Description *string `json:"description,omitempty"`
-	ComboPrice  int64   `json:"combo_price"`
-	IsOnline    bool    `json:"is_online"`
+	ID                int64         `json:"id"`
+	Name              string        `json:"name"`
+	Description       *string       `json:"description,omitempty"`
+	OriginalPrice     int64         `json:"original_price"`
+	ComboPrice        int64         `json:"combo_price"`
+	IsOnline          bool          `json:"is_online"`
+	DishCount         int64         `json:"dish_count"`
+	DishTotalQuantity int64         `json:"dish_total_quantity"`
+	Tags              []tagResponse `json:"tags,omitempty"`
+	DishImageURLs     []string      `json:"dish_image_urls,omitempty"`
+}
+
+type comboSetSummary struct {
+	Dishes            []db.DishWithQuantity
+	OriginalPrice     int64
+	DishCount         int64
+	DishTotalQuantity int64
+}
+
+func buildComboDishSelections(legacyDishIDs []int64, requestedDishes []comboDishInput) ([]comboDishInput, error) {
+	var dishesWithQty []comboDishInput
+	seenDishIDs := make(map[int64]struct{})
+
+	addDish := func(dish comboDishInput) error {
+		dishID := dish.DishID
+		if _, exists := seenDishIDs[dishID]; exists {
+			return fmt.Errorf("dish %d duplicated in combo", dishID)
+		}
+		seenDishIDs[dishID] = struct{}{}
+
+		qty := dish.Quantity
+		if qty <= 0 {
+			qty = 1
+		}
+		dish.Quantity = qty
+
+		dishesWithQty = append(dishesWithQty, dish)
+		return nil
+	}
+
+	switch {
+	case requestedDishes != nil:
+		dishesWithQty = make([]comboDishInput, 0, len(requestedDishes))
+		for _, dish := range requestedDishes {
+			if err := addDish(dish); err != nil {
+				return nil, err
+			}
+		}
+	case len(legacyDishIDs) > 0:
+		dishesWithQty = make([]comboDishInput, 0, len(legacyDishIDs))
+		for _, dishID := range legacyDishIDs {
+			if err := addDish(comboDishInput{DishID: dishID, Quantity: 1}); err != nil {
+				return nil, err
+			}
+		}
+	default:
+		return nil, nil
+	}
+
+	return dishesWithQty, nil
+}
+
+func (server *Server) normalizeComboDishSelections(ctx context.Context, requestedDishes []comboDishInput) ([]db.DishWithQuantity, error) {
+	if requestedDishes == nil {
+		return nil, nil
+	}
+
+	normalizer := apiDishCustomizationNormalizer{server: server}
+	dishes := make([]db.DishWithQuantity, 0, len(requestedDishes))
+	for _, dish := range requestedDishes {
+		var customizations []byte
+		var customizationExtraPrice int64
+		if len(dish.Customizations) > 0 {
+			normalized, extraPrice, err := normalizer.Normalize(ctx, dish.DishID, dish.Customizations)
+			if err != nil {
+				return nil, fmt.Errorf("normalize customizations for dish %d: %w", dish.DishID, err)
+			}
+			customizations = normalized
+			customizationExtraPrice = extraPrice
+		}
+
+		dishes = append(dishes, db.DishWithQuantity{
+			DishID:                  dish.DishID,
+			Quantity:                dish.Quantity,
+			Customizations:          customizations,
+			CustomizationExtraPrice: customizationExtraPrice,
+		})
+	}
+
+	return dishes, nil
+}
+
+func (server *Server) getMerchantFromContextOrAssociation(ctx *gin.Context, userID int64) (db.Merchant, error) {
+	merchant, err := server.resolveMerchantForUser(ctx, userID)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
+		} else {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		}
+		return db.Merchant{}, err
+	}
+	return merchant, nil
+}
+
+func unmarshalJSONField(value any, dest any) error {
+	if value == nil {
+		return nil
+	}
+
+	switch v := value.(type) {
+	case []byte:
+		if len(v) <= 2 {
+			return nil
+		}
+		return json.Unmarshal(v, dest)
+	case string:
+		if len(v) <= 2 {
+			return nil
+		}
+		return json.Unmarshal([]byte(v), dest)
+	default:
+		jsonBytes, err := json.Marshal(v)
+		if err != nil {
+			return err
+		}
+		if len(jsonBytes) <= 2 {
+			return nil
+		}
+		return json.Unmarshal(jsonBytes, dest)
+	}
+}
+
+func buildComboSetSummaryFromDishes(dishes []db.DishWithQuantity, originalPrice int64) comboSetSummary {
+	totalQuantity := int64(0)
+	for _, dish := range dishes {
+		totalQuantity += int64(dish.Quantity)
+	}
+
+	return comboSetSummary{
+		Dishes:            dishes,
+		OriginalPrice:     originalPrice,
+		DishCount:         int64(len(dishes)),
+		DishTotalQuantity: totalQuantity,
+	}
+}
+
+func decodeComboSetDetailsFields(result db.GetComboSetWithDetailsRow) ([]dishInComboResponse, []tagResponse, error) {
+	var dishes []dishInComboResponse
+	var tags []tagResponse
+
+	if err := unmarshalJSONField(result.Dishes, &dishes); err != nil {
+		return nil, nil, err
+	}
+
+	if err := unmarshalJSONField(result.Tags, &tags); err != nil {
+		return nil, nil, err
+	}
+
+	return dishes, tags, nil
+}
+
+func buildComboSetResponseFromDetails(result db.GetComboSetWithDetailsRow) (comboSetResponse, error) {
+	dishes, tags, err := decodeComboSetDetailsFields(result)
+	if err != nil {
+		return comboSetResponse{}, err
+	}
+
+	totalQuantity := int64(0)
+	for _, dish := range dishes {
+		totalQuantity += int64(dish.Quantity)
+	}
+
+	return comboSetResponse{
+		ID:                result.ID,
+		Name:              result.Name,
+		Description:       stringPtrFromPgText(result.Description),
+		OriginalPrice:     result.OriginalPrice,
+		ComboPrice:        result.ComboPrice,
+		IsOnline:          result.IsOnline,
+		DishCount:         int64(len(dishes)),
+		DishTotalQuantity: totalQuantity,
+		Tags:              tags,
+	}, nil
+}
+
+func (server *Server) loadComboSetResponse(ctx context.Context, comboID int64) (comboSetResponse, error) {
+	details, err := server.store.GetComboSetWithDetails(ctx, comboID)
+	if err != nil {
+		return comboSetResponse{}, err
+	}
+
+	resp, err := buildComboSetResponseFromDetails(details)
+	if err != nil {
+		return comboSetResponse{}, err
+	}
+
+	responses := []comboSetResponse{resp}
+	server.enrichComboSetImages(ctx, responses)
+	return responses[0], nil
+}
+
+func (server *Server) resolveComboSummary(
+	ctx context.Context,
+	merchantID int64,
+	legacyDishIDs []int64,
+	requestedDishes []comboDishInput,
+) (comboSetSummary, int, error) {
+	requestedSelections, err := buildComboDishSelections(legacyDishIDs, requestedDishes)
+	if err != nil {
+		return comboSetSummary{}, http.StatusBadRequest, err
+	}
+
+	if requestedSelections == nil {
+		return comboSetSummary{}, 0, nil
+	}
+
+	dishesWithQty, err := server.normalizeComboDishSelections(ctx, requestedSelections)
+	if err != nil {
+		return comboSetSummary{}, http.StatusBadRequest, err
+	}
+
+	originalPrice := int64(0)
+	for index := range dishesWithQty {
+		dish := &dishesWithQty[index]
+		resolvedDish, err := server.store.GetDish(ctx, dish.DishID)
+		if err != nil {
+			if isNotFoundError(err) {
+				return comboSetSummary{}, http.StatusBadRequest, fmt.Errorf("dish %d not found", dish.DishID)
+			}
+			return comboSetSummary{}, http.StatusInternalServerError, err
+		}
+		if resolvedDish.MerchantID != merchantID {
+			return comboSetSummary{}, http.StatusForbidden, fmt.Errorf("dish %d does not belong to this merchant", dish.DishID)
+		}
+
+		dish.DishBasePriceSnapshot = resolvedDish.Price
+		originalPrice += (dish.DishBasePriceSnapshot + dish.CustomizationExtraPrice) * int64(dish.Quantity)
+	}
+
+	return buildComboSetSummaryFromDishes(dishesWithQty, originalPrice), 0, nil
 }
 
 // createComboSet godoc
@@ -66,60 +305,26 @@ func (server *Server) createComboSet(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户信息
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.getMerchantFromContextOrAssociation(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	// 构建菜品列表（优先使用新的 Dishes 字段，向后兼容 DishIDs）
-	var dishesWithQty []db.DishWithQuantity
-	if len(req.Dishes) > 0 {
-		// 使用新格式：带数量的菜品列表
-		for _, d := range req.Dishes {
-			qty := d.Quantity
-			if qty <= 0 {
-				qty = 1
-			}
-			dishesWithQty = append(dishesWithQty, db.DishWithQuantity{
-				DishID:   d.DishID,
-				Quantity: qty,
-			})
-		}
-	} else if len(req.DishIDs) > 0 {
-		// 向后兼容：只有菜品ID，数量默认为1
-		for _, dishID := range req.DishIDs {
-			dishesWithQty = append(dishesWithQty, db.DishWithQuantity{
-				DishID:   dishID,
-				Quantity: 1,
-			})
-		}
-	}
-
-	// 验证所有菜品属于当前商户
-	for _, d := range dishesWithQty {
-		dish, err := server.store.GetDish(ctx, d.DishID)
-		if err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("dish %d not found", d.DishID)))
-				return
-			}
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+	comboSummary, statusCode, err := server.resolveComboSummary(ctx, merchant.ID, req.DishIDs, req.Dishes)
+	if err != nil {
+		if statusCode == http.StatusInternalServerError {
+			ctx.JSON(statusCode, internalError(ctx, err))
 			return
 		}
-		if dish.MerchantID != merchant.ID {
-			ctx.JSON(http.StatusForbidden, errorResponse(fmt.Errorf("dish %d does not belong to this merchant", d.DishID)))
-			return
-		}
+		ctx.JSON(statusCode, errorResponse(err))
+		return
 	}
 
 	// 构造创建参数
 	originalPrice := req.OriginalPrice
-	if originalPrice <= 0 {
+	if comboSummary.OriginalPrice > 0 {
+		originalPrice = comboSummary.OriginalPrice
+	} else if originalPrice <= 0 {
 		originalPrice = req.ComboPrice // 默认使用套餐价作为原价
 	}
 
@@ -136,7 +341,7 @@ func (server *Server) createComboSet(ctx *gin.Context) {
 		OriginalPrice: originalPrice,
 		ComboPrice:    req.ComboPrice,
 		IsOnline:      req.IsOnline,
-		Dishes:        dishesWithQty,
+		Dishes:        comboSummary.Dishes,
 		TagIDs:        req.TagIDs,
 	})
 	if err != nil {
@@ -144,13 +349,13 @@ func (server *Server) createComboSet(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, comboSetResponse{
-		ID:          result.ComboSet.ID,
-		Name:        result.ComboSet.Name,
-		Description: stringPtrFromPgText(result.ComboSet.Description),
-		ComboPrice:  result.ComboSet.ComboPrice,
-		IsOnline:    result.ComboSet.IsOnline,
-	})
+	response, err := server.loadComboSetResponse(ctx, result.ComboSet.ID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	ctx.JSON(http.StatusCreated, response)
 }
 
 type getComboSetRequest struct {
@@ -158,21 +363,28 @@ type getComboSetRequest struct {
 }
 
 type comboSetWithDetailsResponse struct {
-	ID          int64                 `json:"id"`
-	Name        string                `json:"name"`
-	Description *string               `json:"description,omitempty"`
-	ComboPrice  int64                 `json:"combo_price"`
-	IsOnline    bool                  `json:"is_online"`
-	Dishes      []dishInComboResponse `json:"dishes"`
-	Tags        []tagResponse         `json:"tags"`
+	ID            int64                 `json:"id"`
+	MerchantID    int64                 `json:"merchant_id"`
+	Name          string                `json:"name"`
+	Description   *string               `json:"description,omitempty"`
+	ImageURL      string                `json:"image_url,omitempty"`
+	OriginalPrice int64                 `json:"original_price"`
+	ComboPrice    int64                 `json:"combo_price"`
+	IsOnline      bool                  `json:"is_online"`
+	Dishes        []dishInComboResponse `json:"dishes"`
+	Tags          []tagResponse         `json:"tags"`
+	IsOpen        bool                  `json:"is_open"`
+	DishImageURLs []string              `json:"dish_image_urls,omitempty"` // 子菜品图片 CDN URL 列表
 }
 
 type dishInComboResponse struct {
-	ID       int64  `json:"dish_id"`
-	Name     string `json:"dish_name"`
-	Price    int64  `json:"dish_price,omitempty"`
-	ImageUrl string `json:"dish_image_url,omitempty"`
-	Quantity int32  `json:"quantity,omitempty"`
+	ID                      int64                  `json:"dish_id"`
+	Name                    string                 `json:"dish_name"`
+	Price                   int64                  `json:"dish_price,omitempty"`
+	Quantity                int32                  `json:"quantity,omitempty"`
+	Customizations          map[string]interface{} `json:"customizations,omitempty"`
+	CustomizationExtraPrice int64                  `json:"customization_extra_price,omitempty"`
+	CustomizationSummary    string                 `json:"customization_summary,omitempty"`
 }
 
 type tagResponse struct {
@@ -186,7 +398,7 @@ type tagResponse struct {
 // @Tags 套餐管理
 // @Produce json
 // @Param id path int true "套餐ID"
-// @Success 200 {object} comboSetWithDetailsResponse "套餐详情"
+// @Success 201 {object} comboSetWithDetailsResponse "套餐详情"
 // @Failure 400 {object} ErrorResponse "参数错误"
 // @Failure 401 {object} ErrorResponse "未授权"
 // @Failure 403 {object} ErrorResponse "非套餐所有者"
@@ -205,20 +417,15 @@ func (server *Server) getComboSet(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户信息
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.getMerchantFromContextOrAssociation(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
 	// 获取套餐详情（使用优化的JSON聚合查询）
 	result, err := server.store.GetComboSetWithDetails(ctx, req.ID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("combo set not found")))
 			return
 		}
@@ -232,72 +439,103 @@ func (server *Server) getComboSet(ctx *gin.Context) {
 		return
 	}
 
-	// 解析JSON字段
-	var dishes []dishInComboResponse
-	var tags []tagResponse
-
-	if result.Dishes != nil {
-		switch v := result.Dishes.(type) {
-		case []byte:
-			if len(v) > 2 { // 大于 "[]"
-				if err := json.Unmarshal(v, &dishes); err != nil {
-					ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-					return
-				}
-			}
-		case string:
-			if len(v) > 2 {
-				if err := json.Unmarshal([]byte(v), &dishes); err != nil {
-					ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-					return
-				}
-			}
-		default:
-			// pgx 可能直接返回解析后的 slice
-			if jsonBytes, err := json.Marshal(v); err == nil {
-				if err := json.Unmarshal(jsonBytes, &dishes); err != nil {
-					ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-					return
-				}
-			}
-		}
+	dishes, tags, err := decodeComboSetDetailsFields(result)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
 	}
 
-	if result.Tags != nil {
-		switch v := result.Tags.(type) {
-		case []byte:
-			if len(v) > 2 {
-				if err := json.Unmarshal(v, &tags); err != nil {
-					ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-					return
-				}
-			}
-		case string:
-			if len(v) > 2 {
-				if err := json.Unmarshal([]byte(v), &tags); err != nil {
-					ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-					return
-				}
-			}
-		default:
-			if jsonBytes, err := json.Marshal(v); err == nil {
-				if err := json.Unmarshal(jsonBytes, &tags); err != nil {
-					ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-					return
-				}
-			}
-		}
+	// 获取商户状态
+	merchant, _ = server.store.GetMerchant(ctx, result.MerchantID)
+	isOpen := false
+	if merchant.ID > 0 {
+		isOpen = merchant.IsOpen && merchant.Status == "approved"
 	}
 
-	ctx.JSON(http.StatusOK, comboSetWithDetailsResponse{
-		ID:          result.ID,
-		Name:        result.Name,
-		Description: stringPtrFromPgText(result.Description),
-		ComboPrice:  result.ComboPrice,
-		IsOnline:    result.IsOnline,
-		Dishes:      dishes,
-		Tags:        tags,
-	})
+	resp := comboSetWithDetailsResponse{
+		ID:            result.ID,
+		MerchantID:    result.MerchantID,
+		Name:          result.Name,
+		Description:   stringPtrFromPgText(result.Description),
+		ImageURL:      server.publicImageURL(ctx, int64PtrFromPgInt8(result.ImageMediaAssetID), media.VariantCard),
+		OriginalPrice: result.OriginalPrice,
+		ComboPrice:    result.ComboPrice,
+		IsOnline:      result.IsOnline,
+		Dishes:        dishes,
+		Tags:          tags,
+		IsOpen:        isOpen,
+	}
+
+	server.enrichSingleComboImages(ctx, &resp)
+	ctx.JSON(http.StatusOK, resp)
+}
+
+// getPublicComboDetail godoc
+// @Summary 获取套餐详情（消费者端）
+// @Description 获取套餐详情（包含关联的菜品和标签），无需商户权限
+// @Tags 公开接口
+// @Produce json
+// @Param id path int true "套餐ID"
+// @Success 200 {object} comboSetWithDetailsResponse "套餐详情"
+// @Failure 400 {object} ErrorResponse "参数错误"
+// @Failure 404 {object} ErrorResponse "套餐不存在"
+// @Failure 500 {object} ErrorResponse "服务器错误"
+// @Router /v1/public/combos/{id} [get]
+// @Security BearerAuth
+func (server *Server) getPublicComboDetail(ctx *gin.Context) {
+	var req getComboSetRequest
+	if err := ctx.ShouldBindUri(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	// 获取套餐详情（使用和商户端相同的查询，但不验证商户 ID）
+	result, err := server.store.GetComboSetWithDetails(ctx, req.ID)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("combo set not found")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	// 消费者端只能查看上架的套餐
+	if !result.IsOnline {
+		ctx.JSON(http.StatusNotFound, errorResponse(errors.New("combo set is not online")))
+		return
+	}
+
+	dishes, tags, err := decodeComboSetDetailsFields(result)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	// 获取商户状态
+	merchant, _ := server.store.GetMerchant(ctx, result.MerchantID)
+	isOpen := false
+	if merchant.ID > 0 {
+		isOpen = merchant.IsOpen && merchant.Status == "approved"
+	}
+
+	resp := comboSetWithDetailsResponse{
+		ID:            result.ID,
+		MerchantID:    result.MerchantID,
+		Name:          result.Name,
+		Description:   stringPtrFromPgText(result.Description),
+		ImageURL:      server.publicImageURL(ctx, int64PtrFromPgInt8(result.ImageMediaAssetID), media.VariantCard),
+		OriginalPrice: result.OriginalPrice,
+		ComboPrice:    result.ComboPrice,
+		IsOnline:      result.IsOnline,
+		Dishes:        dishes,
+		Tags:          tags,
+		IsOpen:        isOpen,
+	}
+
+	server.enrichSingleComboImages(ctx, &resp)
+
+	ctx.JSON(http.StatusOK, resp)
 }
 
 type listComboSetsRequest struct {
@@ -308,6 +546,9 @@ type listComboSetsRequest struct {
 
 type listComboSetsResponse struct {
 	ComboSets []comboSetResponse `json:"combo_sets"`
+	Total     int64              `json:"total"`
+	PageID    int32              `json:"page_id"`
+	PageSize  int32              `json:"page_size"`
 }
 
 // listComboSets godoc
@@ -336,13 +577,8 @@ func (server *Server) listComboSets(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户信息
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.getMerchantFromContextOrAssociation(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
@@ -357,7 +593,16 @@ func (server *Server) listComboSets(ctx *gin.Context) {
 		MerchantID: merchant.ID,
 		IsOnline:   isOnline,
 		Limit:      req.PageSize,
-		Offset:     (req.PageID - 1) * req.PageSize,
+		Offset:     pageOffset(req.PageID, req.PageSize),
+	})
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	count, err := server.store.CountComboSetsByMerchant(ctx, db.CountComboSetsByMerchantParams{
+		MerchantID: merchant.ID,
+		IsOnline:   isOnline,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -367,17 +612,32 @@ func (server *Server) listComboSets(ctx *gin.Context) {
 	// 转换响应
 	result := make([]comboSetResponse, 0, len(combos))
 	for _, combo := range combos {
+		var tags []tagResponse
+		if err := unmarshalJSONField(combo.Tags, &tags); err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+
 		result = append(result, comboSetResponse{
-			ID:          combo.ID,
-			Name:        combo.Name,
-			Description: stringPtrFromPgText(combo.Description),
-			ComboPrice:  combo.ComboPrice,
-			IsOnline:    combo.IsOnline,
+			ID:                combo.ID,
+			Name:              combo.Name,
+			Description:       stringPtrFromPgText(combo.Description),
+			OriginalPrice:     combo.OriginalPrice,
+			ComboPrice:        combo.ComboPrice,
+			IsOnline:          combo.IsOnline,
+			DishCount:         combo.DishCount,
+			DishTotalQuantity: combo.DishTotalQuantity,
+			Tags:              tags,
 		})
 	}
 
+	server.enrichComboSetImages(ctx, result)
+
 	ctx.JSON(http.StatusOK, listComboSetsResponse{
 		ComboSets: result,
+		Total:     count,
+		PageID:    req.PageID,
+		PageSize:  req.PageSize,
 	})
 }
 
@@ -390,7 +650,7 @@ type updateComboSetRequest struct {
 	Description *string          `json:"description" binding:"omitempty,max=500"`            // 描述，最大500字符
 	ComboPrice  *int64           `json:"combo_price" binding:"omitempty,gt=0,max=100000000"` // 套餐价格（分）
 	IsOnline    *bool            `json:"is_online"`                                          // 是否上架
-	Dishes      []comboDishInput `json:"dishes" binding:"omitempty,max=50"`                  // 可选：更新套餐菜品列表
+	Dishes      []comboDishInput `json:"dishes" binding:"omitempty,max=50"`                  // 可选：更新套餐菜品列表（带固定规格）
 	TagIDs      []int64          `json:"tag_ids" binding:"omitempty,max=10,dive,min=1"`      // 可选：更新属性标签列表
 }
 
@@ -427,20 +687,15 @@ func (server *Server) updateComboSet(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户信息
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.getMerchantFromContextOrAssociation(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
 	// 验证套餐是否属于该商户
 	existingCombo, err := server.store.GetComboSet(ctx, uriReq.ID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("combo set not found")))
 			return
 		}
@@ -460,10 +715,10 @@ func (server *Server) updateComboSet(ctx *gin.Context) {
 			String: existingCombo.Name,
 			Valid:  true,
 		},
-		Description:   existingCombo.Description,
-		ImageUrl:      existingCombo.ImageUrl,
-		OriginalPrice: pgtype.Int8{Int64: existingCombo.OriginalPrice, Valid: true},
-		ComboPrice:    pgtype.Int8{Int64: existingCombo.ComboPrice, Valid: true},
+		Description:       existingCombo.Description,
+		ImageMediaAssetID: existingCombo.ImageMediaAssetID,
+		OriginalPrice:     pgtype.Int8{Int64: existingCombo.OriginalPrice, Valid: true},
+		ComboPrice:        pgtype.Int8{Int64: existingCombo.ComboPrice, Valid: true},
 		IsOnline: pgtype.Bool{
 			Bool:  existingCombo.IsOnline,
 			Valid: true,
@@ -499,86 +754,49 @@ func (server *Server) updateComboSet(ctx *gin.Context) {
 		}
 	}
 
-	// 执行更新
-	updated, err := server.store.UpdateComboSet(ctx, params)
+	var dishesWithQty *[]db.DishWithQuantity
+	if req.Dishes != nil {
+		resolvedSummary, statusCode, err := server.resolveComboSummary(ctx, merchant.ID, nil, req.Dishes)
+		if err != nil {
+			if statusCode == http.StatusInternalServerError {
+				ctx.JSON(statusCode, internalError(ctx, err))
+				return
+			}
+			ctx.JSON(statusCode, errorResponse(err))
+			return
+		}
+		dishesWithQty = &resolvedSummary.Dishes
+		params.OriginalPrice = pgtype.Int8{Int64: resolvedSummary.OriginalPrice, Valid: true}
+	}
+
+	var tagIDs *[]int64
+	if req.TagIDs != nil {
+		tagIDs = &req.TagIDs
+	}
+
+	updated, err := server.store.UpdateComboSetTx(ctx, db.UpdateComboSetTxParams{
+		ID:                params.ID,
+		Name:              params.Name,
+		Description:       params.Description,
+		ImageMediaAssetID: params.ImageMediaAssetID,
+		OriginalPrice:     params.OriginalPrice,
+		ComboPrice:        params.ComboPrice,
+		IsOnline:          params.IsOnline,
+		Dishes:            dishesWithQty,
+		TagIDs:            tagIDs,
+	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	// 如果请求中包含菜品列表，则同步更新菜品
-	if len(req.Dishes) > 0 {
-		// 验证所有菜品属于当前商户
-		for _, d := range req.Dishes {
-			dish, err := server.store.GetDish(ctx, d.DishID)
-			if err != nil {
-				if errors.Is(err, sql.ErrNoRows) {
-					ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("dish %d not found", d.DishID)))
-					return
-				}
-				ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-				return
-			}
-			if dish.MerchantID != merchant.ID {
-				ctx.JSON(http.StatusForbidden, errorResponse(fmt.Errorf("dish %d does not belong to this merchant", d.DishID)))
-				return
-			}
-		}
-
-		// 先删除所有旧菜品关联
-		err = server.store.RemoveAllComboDishes(ctx, uriReq.ID)
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-
-		// 添加新的菜品关联（带数量）
-		for _, d := range req.Dishes {
-			qty := d.Quantity
-			if qty <= 0 {
-				qty = 1
-			}
-			_, err = server.store.AddComboDish(ctx, db.AddComboDishParams{
-				ComboID:  uriReq.ID,
-				DishID:   d.DishID,
-				Quantity: int16(qty),
-			})
-			if err != nil {
-				ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-				return
-			}
-		}
+	response, err := server.loadComboSetResponse(ctx, updated.ComboSet.ID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
 	}
 
-	// 如果请求中包含标签列表，则同步更新标签
-	if req.TagIDs != nil {
-		// 先删除所有旧标签关联
-		err = server.store.RemoveAllComboTags(ctx, uriReq.ID)
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-
-		// 添加新的标签关联
-		for _, tagID := range req.TagIDs {
-			_, err = server.store.AddComboTag(ctx, db.AddComboTagParams{
-				ComboID: uriReq.ID,
-				TagID:   tagID,
-			})
-			if err != nil {
-				ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-				return
-			}
-		}
-	}
-
-	ctx.JSON(http.StatusOK, comboSetResponse{
-		ID:          updated.ID,
-		Name:        updated.Name,
-		Description: stringPtrFromPgText(updated.Description),
-		ComboPrice:  updated.ComboPrice,
-		IsOnline:    updated.IsOnline,
-	})
+	ctx.JSON(http.StatusOK, response)
 }
 
 type toggleComboOnlineBodyRequest struct {
@@ -593,7 +811,7 @@ type toggleComboOnlineBodyRequest struct {
 // @Produce json
 // @Param id path int true "套餐ID"
 // @Param request body toggleComboOnlineBodyRequest true "状态更新"
-// @Success 200 {object} map[string]string "message: combo set online status updated"
+// @Success 200 {object} comboSetResponse "更新成功"
 // @Failure 400 {object} ErrorResponse "参数错误"
 // @Failure 401 {object} ErrorResponse "未认证"
 // @Failure 403 {object} ErrorResponse "非套餐所有者"
@@ -620,20 +838,15 @@ func (server *Server) toggleComboOnline(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户信息
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.getMerchantFromContextOrAssociation(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
 	// 验证套餐是否属于该商户
 	combo, err := server.store.GetComboSet(ctx, uriReq.ID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("combo set not found")))
 			return
 		}
@@ -656,7 +869,13 @@ func (server *Server) toggleComboOnline(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"message": "combo set online status updated"})
+	response, err := server.loadComboSetResponse(ctx, combo.ID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, response)
 }
 
 type deleteComboSetRequest struct {
@@ -688,20 +907,15 @@ func (server *Server) deleteComboSet(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户信息
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.getMerchantFromContextOrAssociation(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
 	// 验证套餐是否属于该商户
 	combo, err := server.store.GetComboSet(ctx, req.ID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("combo set not found")))
 			return
 		}
@@ -721,7 +935,7 @@ func (server *Server) deleteComboSet(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"message": "combo set deleted"})
+	ctx.JSON(http.StatusOK, successMessage("combo set deleted"))
 }
 
 // ==================== 套餐-菜品关联 ====================
@@ -765,20 +979,15 @@ func (server *Server) addComboDish(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户信息
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.getMerchantFromContextOrAssociation(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
 	// 验证套餐是否属于该商户
 	combo, err := server.store.GetComboSet(ctx, uriReq.ComboID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("combo set not found")))
 			return
 		}
@@ -794,7 +1003,7 @@ func (server *Server) addComboDish(ctx *gin.Context) {
 	// P1修复: 验证菜品是否属于该商户
 	dish, err := server.store.GetDish(ctx, bodyReq.DishID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("dish not found")))
 			return
 		}
@@ -809,16 +1018,19 @@ func (server *Server) addComboDish(ctx *gin.Context) {
 
 	// 添加关联
 	_, err = server.store.AddComboDish(ctx, db.AddComboDishParams{
-		ComboID:  uriReq.ComboID,
-		DishID:   bodyReq.DishID,
-		Quantity: 1, // 默认数量为1
+		ComboID:                 uriReq.ComboID,
+		DishID:                  bodyReq.DishID,
+		Quantity:                1, // 默认数量为1
+		DishBasePriceSnapshot:   dish.Price,
+		Customizations:          nil,
+		CustomizationExtraPrice: 0,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"message": "dish added to combo set"})
+	ctx.JSON(http.StatusOK, successMessage("dish added to combo set"))
 }
 
 type removeComboDishRequest struct {
@@ -852,20 +1064,15 @@ func (server *Server) removeComboDish(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户信息
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.getMerchantFromContextOrAssociation(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
 	// 验证套餐是否属于该商户
 	combo, err := server.store.GetComboSet(ctx, req.ComboID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("combo set not found")))
 			return
 		}
@@ -888,7 +1095,7 @@ func (server *Server) removeComboDish(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"message": "dish removed from combo set"})
+	ctx.JSON(http.StatusOK, successMessage("dish removed from combo set"))
 }
 
 // ==================== 辅助函数 ====================
@@ -899,4 +1106,90 @@ func stringPtrFromPgText(pt pgtype.Text) *string {
 		return nil
 	}
 	return &pt.String
+}
+
+func int64PtrFromPgInt8(pi pgtype.Int8) *int64 {
+	if !pi.Valid {
+		return nil
+	}
+	return &pi.Int64
+}
+
+// enrichComboSetImages godoc
+func (server *Server) enrichComboSetImages(ctx context.Context, combos []comboSetResponse) {
+	if len(combos) == 0 {
+		return
+	}
+
+	comboIDs := make([]int64, 0)
+	for _, combo := range combos {
+		comboIDs = append(comboIDs, combo.ID)
+	}
+
+	if len(comboIDs) == 0 {
+		return
+	}
+
+	// 批量查询成员图片
+	memberImages, err := server.store.GetComboMemberImagesByCombos(ctx, comboIDs)
+	if err != nil {
+		log.Error().Err(err).Msg("enrichComboListImages: failed to get combo member images")
+		return
+	}
+
+	// 按 combo_id 组织图片 asset ID
+	imgMap := make(map[int64][]int64)
+	for _, row := range memberImages {
+		if row.ImageMediaAssetID.Valid {
+			imgMap[row.ComboID] = append(imgMap[row.ComboID], row.ImageMediaAssetID.Int64)
+		}
+	}
+
+	// 收集所有 asset ID 并批量解析 URL
+	var allAssetIDs []int64
+	for _, ids := range imgMap {
+		allAssetIDs = append(allAssetIDs, ids...)
+	}
+	urlMap := server.batchPublicImageURLs(ctx, allAssetIDs, media.VariantCard)
+
+	// 回填
+	for i := range combos {
+		if imgs, ok := imgMap[combos[i].ID]; ok {
+			urls := make([]string, 0, len(imgs))
+			for _, id := range imgs {
+				if u, ok := urlMap[id]; ok {
+					urls = append(urls, u)
+				}
+			}
+			combos[i].DishImageURLs = urls
+		}
+	}
+}
+
+// enrichSingleComboImages 辅助函数：填充单个套餐的图片
+func (server *Server) enrichSingleComboImages(ctx context.Context, combo *comboSetWithDetailsResponse) {
+	// 批量查询成员图片
+	memberImages, err := server.store.GetComboMemberImagesByCombos(ctx, []int64{combo.ID})
+	if err != nil {
+		log.Error().Err(err).Int64("combo_id", combo.ID).Msg("enrichSingleComboImages: failed to get combo member images")
+		return
+	}
+
+	var assetIDs []int64
+	for _, row := range memberImages {
+		if row.ImageMediaAssetID.Valid {
+			assetIDs = append(assetIDs, row.ImageMediaAssetID.Int64)
+		}
+	}
+
+	if len(assetIDs) > 0 {
+		imgURLs := server.batchPublicImageURLs(ctx, assetIDs, media.VariantCard)
+		urls := make([]string, 0, len(assetIDs))
+		for _, id := range assetIDs {
+			if u, ok := imgURLs[id]; ok {
+				urls = append(urls, u)
+			}
+		}
+		combo.DishImageURLs = urls
+	}
 }

@@ -1,39 +1,65 @@
+/* Pages/takeout/cart/index.wxss */
 .page-container {
   min-height: 100vh;
-  background-color: #f5f5f5;
-  padding: 0 20rpx;
+  background-color: var(--td-bg-color-page);
+  padding: 0 var(--spacer-md);
+}
+
+/* 骨架屏布局 */
+.cart-skeleton {
+  padding-top: var(--spacer-md);
+}
+
+.merchant-skeleton-group {
+  margin-bottom: var(--spacer-md);
+  padding: var(--spacer-md);
+  background: var(--td-bg-color-container);
+  border-radius: var(--radius-lg);
+}
+
+.skeleton-header {
+  height: 40rpx;
+  width: 40%;
+  margin-bottom: 30rpx;
+  background: var(--td-bg-color-secondarycontainer);
+  border-radius: 4rpx;
+}
+
+.skeleton-footer {
+  height: 60rpx;
+  width: 100%;
+  margin-top: 20rpx;
+  background: var(--td-bg-color-secondarycontainer);
+  border-radius: 4rpx;
 }
 
 .loading-container {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 60vh;
+  display: none;
 }
 
-/* 空状态容器 - 垂直水平居中 */
+/* 空状态容器 */
 .empty-container {
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  min-height: calc(100vh - 200rpx);  /* 减去导航栏和底部栏高度 */
+  min-height: calc(100vh - 200rpx);
 }
 
 /* 商户分组 */
 .cart-groups {
   display: flex;
   flex-direction: column;
-  gap: 24rpx;
-  padding-top: 24rpx;  /* 与导航栏的间距 */
+  gap: var(--spacer-md);
+  padding-top: var(--spacer-md);
   padding-bottom: 40rpx;
 }
 
 .merchant-group {
-  background: #fff;
-  border-radius: 16rpx;
+  background: var(--td-bg-color-container);
+  border-radius: var(--radius-lg);
   overflow: hidden;
-  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.05);
+  box-shadow: var(--shadow-sm);
 }
 
 /* 商户头部 */
@@ -41,17 +67,23 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 24rpx 24rpx 24rpx 12rpx;  /* 左侧更紧凑 */
-  border-bottom: 1rpx solid #f0f0f0;
+  padding: var(--spacer-sm) var(--spacer-md) var(--spacer-sm) 12rpx;
+  border-bottom: 1rpx solid var(--td-component-stroke);
+}
+
+.merchant-header.disabled {
+  /* opacity: 0.75; */
+  /* filter: grayscale(0.8); */
+  /* 移除背景色变化，保持卡片一体感 */
 }
 
 .merchant-info {
   display: flex;
   align-items: center;
-  gap: 12rpx;
+  gap: var(--spacer-xs);
 }
 
-/* TDesign Checkbox 外部样式 */
+/* Checkbox */
 .custom-checkbox {
   margin-right: 0 !important;
   padding: 0 !important;
@@ -65,33 +97,33 @@
 .merchant-logo {
   width: 56rpx;
   height: 56rpx;
-  border-radius: 8rpx;
-  background-color: #f5f5f5;
+  border-radius: var(--radius-sm);
+  background-color: var(--td-bg-color-secondarycontainer);
 }
 
 .merchant-name {
-  font-size: 28rpx;
+  font-size: var(--font-size-base);
   font-weight: 600;
-  color: #333;
+  color: var(--td-text-color-primary);
 }
 
 .clear-btn {
-  font-size: 24rpx;
-  color: #999;
-  padding: 8rpx 16rpx;
+  font-size: var(--font-size-sm);
+  color: var(--td-text-color-placeholder);
+  padding: var(--spacer-xs) var(--spacer-sm);
 }
 
 /* 商品列表 */
 .cart-items {
-  padding: 0 24rpx;
+  padding: 0 var(--spacer-md);
 }
 
 .cart-item {
   display: flex;
-  align-items: center;
-  gap: 20rpx;
-  padding: 24rpx 0;
-  border-bottom: 1rpx solid #f5f5f5;
+  align-items: flex-start; /* 顶部对齐 */
+  gap: var(--spacer-sm);
+  padding: var(--spacer-md) 0;
+  border-bottom: 1rpx solid var(--td-component-stroke);
 }
 
 .cart-item:last-child {
@@ -105,8 +137,8 @@
 .item-image {
   width: 140rpx;
   height: 140rpx;
-  border-radius: 12rpx;
-  background-color: #f5f5f5;
+  border-radius: var(--radius-md);
+  background-color: var(--td-bg-color-secondarycontainer);
   flex-shrink: 0;
 }
 
@@ -115,80 +147,122 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 12rpx;
+  justify-content: space-between;
+  min-height: 140rpx; /* 撑开高度与图片一致 */
 }
 
 .item-name {
-  font-size: 28rpx;
-  color: #333;
+  font-size: var(--font-size-base);
+  color: var(--td-text-color-primary);
   font-weight: 500;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  line-height: 1.4;
+}
+
+.item-specs-tag {
+  align-self: flex-start; /* 宽度自适应 */
+  margin-top: 8rpx;
+  margin-bottom: 8rpx;
 }
 
 .item-price-row {
   display: flex;
-  align-items: center;
-  gap: 16rpx;
+  align-items: flex-end; /* 底部对齐 */
+  justify-content: space-between;
+  margin-top: auto; /* 推到底部 */
 }
 
 .item-price {
-  font-size: 28rpx;
-  color: #ff6600;
+  font-size: var(--font-size-base);
+  color: var(--td-brand-color);
   font-weight: 600;
 }
 
 .item-status {
-  font-size: 22rpx;
-  color: #ff4d4f;
-  background: #fff2f0;
+  font-size: var(--font-size-xs);
+  color: var(--td-error-color);
+  background: var(--td-error-color-light);
   padding: 4rpx 12rpx;
-  border-radius: 4rpx;
+  border-radius: var(--radius-xs);
+  margin-top: 8rpx;
+  align-self: flex-start;
 }
 
 /* 数量操作 */
 .item-actions {
   display: flex;
   align-items: center;
-  gap: 16rpx;
-  flex-shrink: 0;
+  gap: var(--spacer-sm);
 }
 
 .quantity-btn {
-  width: 48rpx;
-  height: 48rpx;
+  width: 44rpx;
+  height: 44rpx;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background-color: #f5f5f5;
+  transition: opacity var(--transition-base);
+}
+
+.quantity-btn:active {
+  opacity: 0.6;
 }
 
 .quantity-btn.increase {
-  background-color: #ff6600;
-  color: #fff;
+  background-color: var(--td-brand-color);
+  color: var(--td-text-color-anti);
 }
 
 .quantity-btn.decrease {
-  color: #666;
+  color: var(--td-text-color-primary);
+  border: 2rpx solid var(--td-component-stroke);
+  background-color: var(--td-bg-color-container);
 }
 
 .quantity {
   min-width: 48rpx;
   text-align: center;
-  font-size: 28rpx;
-  color: #333;
+  font-size: var(--font-size-base);
+  color: var(--td-text-color-primary);
+  font-weight: 600;
 }
+
+/* 套餐组合图 - Grid系统 */
+.combo-image-grid {
+  width: 140rpx;
+  height: 140rpx;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--td-bg-color-secondarycontainer);
+  display: grid;
+  gap: 1rpx;
+  flex-shrink: 0;
+}
+
+.grid-count-1 { grid-template-columns: 1fr; grid-template-rows: 1fr; }
+.grid-count-2 { grid-template-columns: repeat(2, 1fr); grid-template-rows: 1fr; }
+.grid-count-3 { grid-template-columns: repeat(2, 1fr); grid-template-rows: repeat(2, 1fr); }
+.grid-count-3 .grid-img:first-child { grid-column: span 2; }
+.grid-count-4 { grid-template-columns: repeat(2, 1fr); grid-template-rows: repeat(2, 1fr); }
+
+.grid-img {
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
+}
+
 
 /* 商户小计 */
 .merchant-footer {
-  padding: 20rpx 24rpx;
-  background: #fafafa;
+  padding: var(--spacer-sm) var(--spacer-md);
+  background: var(--td-bg-color-secondarycontainer);
   display: flex;
   flex-direction: column;
-  gap: 8rpx;
+  gap: var(--spacer-xs);
 }
 
 .fee-row {
@@ -198,13 +272,13 @@
 }
 
 .fee-label {
-  font-size: 24rpx;
-  color: #666;
+  font-size: var(--font-size-sm);
+  color: var(--td-text-color-secondary);
 }
 
 .fee-value {
-  font-size: 26rpx;
-  color: #333;
+  font-size: var(--font-size-sm);
+  color: var(--td-text-color-primary);
   font-weight: 500;
 }
 
@@ -217,10 +291,11 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 20rpx 24rpx 20rpx 32rpx;  /* 右侧24rpx更紧凑 */
+  padding: 20rpx 32rpx;
   padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
-  background: #fff;
-  box-shadow: 0 -4rpx 16rpx rgba(0, 0, 0, 0.08);
+  background: var(--td-bg-color-container);
+  box-shadow: var(--shadow-md);
+  z-index: 100;
 }
 
 .total-info {
@@ -232,17 +307,17 @@
 .total-row {
   display: flex;
   align-items: baseline;
-  gap: 8rpx;
+  gap: var(--spacer-xs);
 }
 
 .total-label {
-  font-size: 24rpx;
-  color: #666;
+  font-size: var(--font-size-sm);
+  color: var(--td-text-color-secondary);
 }
 
 .total-price {
   font-size: 36rpx;
-  color: #ff6600;
+  color: var(--td-brand-color);
   font-weight: 700;
 }
 
@@ -250,9 +325,10 @@
   flex-shrink: 0;
 }
 
-/* TDesign t-button 内部样式 (通过 t-class) */
+/* TDesign t-button 内部样式 */
 .checkout-btn-inner {
   margin: 0 !important;
-  padding-left: 40rpx !important;
-  padding-right: 40rpx !important;
+  padding-left: 48rpx !important;
+  padding-right: 48rpx !important;
+  font-weight: 600 !important;
 }

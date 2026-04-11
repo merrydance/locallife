@@ -15,7 +15,11 @@ INSERT INTO ecommerce_applyments (
     id_card_back_copy,
     account_type,
     account_bank,
+    account_bank_code,
+    bank_alias,
+    bank_alias_code,
     bank_address_code,
+    bank_branch_id,
     bank_name,
     account_number,
     account_name,
@@ -31,7 +35,8 @@ INSERT INTO ecommerce_applyments (
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
     $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
-    $21, $22, $23, $24, $25, $26, $27, 'pending'
+    $21, $22, $23, $24, $25, $26, $27, $28, $29, $30,
+    $31, 'pending'
 ) RETURNING *;
 
 -- name: GetEcommerceApplyment :one

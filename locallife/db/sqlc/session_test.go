@@ -55,7 +55,10 @@ func TestGetSessionByRefreshToken(t *testing.T) {
 	user := createRandomUser(t)
 	session1 := createRandomSession(t, user)
 
-	session2, err := testStore.GetSessionByRefreshToken(context.Background(), session1.RefreshToken)
+	session2, err := testStore.GetSessionByRefreshToken(context.Background(), GetSessionByRefreshTokenParams{
+		RefreshToken:         session1.RefreshToken,
+		RefreshTokenFallback: session1.RefreshToken,
+	})
 	require.NoError(t, err)
 	require.NotEmpty(t, session2)
 

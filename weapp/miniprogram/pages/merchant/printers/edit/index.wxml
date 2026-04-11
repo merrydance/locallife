@@ -1,0 +1,140 @@
+<custom-navbar title="{{isEdit ? '编辑打印机' : '新增打印机'}}" showBack="{{true}}" />
+
+<view
+  class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
+  style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: 220rpx;"
+>
+  <view wx:if="{{!accessReady || initialLoading}}" class="state-block">
+    <t-loading theme="circular" size="40rpx" text="加载打印机信息中..." vertical />
+  </view>
+
+  <view wx:elif="{{accessDenied}}" class="state-block">
+    <t-empty icon="lock-on" description="{{accessDeniedMessage || '打印设备和后厨协同设置仅支持老板或店长管理'}}" />
+    <t-button theme="primary" size="small" shape="round" bind:tap="onRetryAccess">重新校验</t-button>
+  </view>
+
+  <view wx:elif="{{accessErrorMessage}}" class="state-block">
+    <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
+    <t-button theme="primary" size="small" shape="round" bind:tap="onRetryAccess">重新校验</t-button>
+  </view>
+
+  <view wx:elif="{{initialError}}" class="state-block">
+    <t-empty icon="error-circle" description="{{initialErrorMessage || '打印机编辑页加载失败，请重试'}}" />
+    <t-button theme="primary" size="small" shape="round" bind:tap="onRetry">重新加载</t-button>
+  </view>
+
+  <block wx:else>
+    <view class="page-content">
+      <view class="section-panel">
+        <view class="section-top-main">
+          <text class="section-title">1. 基础信息</text>
+          <text class="section-caption">名称、序列号和密钥与云打印机平台保持一致。编辑时只有填写新密钥才会覆盖旧值。</text>
+        </view>
+
+        <t-cell-group theme="card">
+          <t-input
+            label="打印机名称"
+            value="{{formData.printer_name}}"
+            data-field="printer_name"
+            placeholder="如 前台主打印机"
+            bind:change="onFormInputChange"
+          />
+          <t-input
+            wx:if="{{!isEdit}}"
+            label="序列号"
+            value="{{formData.printer_sn}}"
+            data-field="printer_sn"
+            placeholder="请输入打印机机身序列号"
+            bind:change="onFormInputChange"
+          />
+          <t-input
+            label="{{isEdit ? '打印机密钥（留空不修改）' : '打印机密钥'}}"
+            value="{{formData.printer_key}}"
+            data-field="printer_key"
+            placeholder="请输入打印机密钥"
+            bind:change="onFormInputChange"
+          />
+        </t-cell-group>
+      </view>
+
+      <view class="section-panel">
+        <view class="section-top-main">
+          <text class="section-title">2. 设备类型</text>
+          <text class="section-caption">与套餐编辑页一致，采用摘要说明 + 聚焦选择，不把长说明塞进一行表单里。</text>
+        </view>
+
+        <view class="option-group">
+          <t-radio-group value="{{formData.printer_type}}" bind:change="onPrinterTypeChange">
+            <view wx:for="{{printerTypeOptions}}" wx:key="value" class="option-card">
+              <t-radio value="{{item.value}}" label="{{item.label}}" />
+              <text class="option-card__desc">{{item.desc}}</text>
+            </view>
+          </t-radio-group>
+        </view>
+      </view>
+
+      <view class="section-panel">
+        <view class="section-top-main">
+          <text class="section-title">3. 分发角色</text>
+          <text class="section-caption">角色会影响订单在前台和后厨之间的出单分发。</text>
+        </view>
+
+        <view class="option-group">
+          <t-radio-group value="{{formData.printer_role}}" bind:change="onPrinterRoleChange">
+            <view wx:for="{{printerRoleOptions}}" wx:key="value" class="option-card">
+              <t-radio value="{{item.value}}" label="{{item.label}}" />
+              <text class="option-card__desc">{{item.desc}}</text>
+            </view>
+          </t-radio-group>
+        </view>
+      </view>
+
+      <view class="section-panel">
+        <view class="section-top-main">
+          <text class="section-title">4. 打印场景</text>
+          <text class="section-caption">仅开启真正需要下发小票的场景，避免重复打印和误打单。</text>
+        </view>
+
+        <view class="switch-section">
+          <view class="switch-row">
+            <view class="switch-copy">
+              <text class="switch-title">打印外卖订单</text>
+              <text class="switch-desc">顾客下单后向该设备分发外卖小票。</text>
+            </view>
+            <t-switch value="{{formData.print_takeout}}" data-field="print_takeout" bind:change="onFormSwitchChange" size="large" />
+          </view>
+
+          <view class="switch-row">
+            <view class="switch-copy">
+              <text class="switch-title">打印堂食订单</text>
+              <text class="switch-desc">堂食扫码单和到店单据会分发到该设备。</text>
+            </view>
+            <t-switch value="{{formData.print_dine_in}}" data-field="print_dine_in" bind:change="onFormSwitchChange" size="large" />
+          </view>
+
+          <view class="switch-row">
+            <view class="switch-copy">
+              <text class="switch-title">打印预约订单</text>
+              <text class="switch-desc">预订相关订单和备餐单会分发到该设备。</text>
+            </view>
+            <t-switch value="{{formData.print_reservation}}" data-field="print_reservation" bind:change="onFormSwitchChange" size="large" />
+          </view>
+
+          <view wx:if="{{isEdit}}" class="switch-row">
+            <view class="switch-copy">
+              <text class="switch-title">启用打印机</text>
+              <text class="switch-desc">停用后不再参与新订单分发，但会保留设备记录。</text>
+            </view>
+            <t-switch value="{{formData.is_active}}" data-field="is_active" bind:change="onFormSwitchChange" size="large" />
+          </view>
+        </view>
+      </view>
+
+      <view class="footer-bar">
+        <t-button block theme="primary" size="large" shape="round" loading="{{submitting}}" bind:tap="onSubmit">
+          {{isEdit ? '保存打印机' : '新增打印机'}}
+        </t-button>
+      </view>
+    </view>
+  </block>
+</view>

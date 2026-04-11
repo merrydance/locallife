@@ -5,11 +5,8 @@ INSERT INTO merchant_applications (
   user_id,
   merchant_name,
   business_license_number,
-  business_license_image_url,
   legal_person_name,
   legal_person_id_number,
-  legal_person_id_front_url,
-  legal_person_id_back_url,
   contact_phone,
   business_address,
   business_scope,
@@ -17,7 +14,7 @@ INSERT INTO merchant_applications (
   latitude,
   region_id
 ) VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
+  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
 )
 RETURNING *;
 
@@ -65,7 +62,6 @@ INSERT INTO merchants (
   owner_user_id,
   name,
   description,
-  logo_url,
   phone,
   address,
   latitude,
@@ -74,7 +70,7 @@ INSERT INTO merchants (
   application_data,
   region_id
 ) VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
 )
 RETURNING *;
 
@@ -121,12 +117,23 @@ UPDATE merchants
 SET
   name = COALESCE(sqlc.narg('name'), name),
   description = COALESCE(sqlc.narg('description'), description),
-  logo_url = COALESCE(sqlc.narg('logo_url'), logo_url),
+  logo_media_asset_id = COALESCE(sqlc.narg('logo_media_asset_id'), logo_media_asset_id),
   phone = COALESCE(sqlc.narg('phone'), phone),
   address = COALESCE(sqlc.narg('address'), address),
   latitude = COALESCE(sqlc.narg('latitude'), latitude),
   longitude = COALESCE(sqlc.narg('longitude'), longitude),
   region_id = COALESCE(sqlc.narg('region_id'), region_id),
+  version = version + 1,
+  updated_at = now()
+WHERE id = sqlc.arg('id')
+  AND version = sqlc.arg('version')
+  AND deleted_at IS NULL
+RETURNING *;
+
+-- name: ClearMerchantLogo :one
+UPDATE merchants
+SET
+  logo_media_asset_id = NULL,
   version = version + 1,
   updated_at = now()
 WHERE id = sqlc.arg('id')
@@ -157,18 +164,70 @@ RETURNING *;
 UPDATE merchants SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL;
 
 -- name: SearchMerchants :many
-SELECT * FROM merchants
-WHERE status = 'active'
-  AND deleted_at IS NULL
-  AND name ILIKE '%' || $1 || '%'
-ORDER BY created_at DESC
-LIMIT $2 OFFSET $3;
+SELECT m.*, COALESCE(mp.total_orders, 0)::int AS total_orders,
+  COALESCE(
+    (SELECT json_agg(t.name)
+     FROM tags t
+     INNER JOIN merchant_tags mt ON t.id = mt.tag_id
+     WHERE mt.merchant_id = m.id
+       AND t.type = 'merchant'
+       AND t.status = 'active'
+    ), '[]'::json) AS tags,
+  COALESCE(
+    (SELECT json_agg(t.name ORDER BY t.sort_order ASC, t.name ASC)
+     FROM tags t
+     INNER JOIN merchant_system_labels msl ON t.id = msl.tag_id
+     WHERE msl.merchant_id = m.id
+       AND t.type = 'system'
+       AND t.status = 'active'
+    ), '[]'::json) AS system_labels,
+  ma.storefront_images,
+  COALESCE((SELECT AVG(d.repurchase_rate)
+     FROM dishes d
+     WHERE d.merchant_id = m.id
+       AND d.deleted_at IS NULL
+       AND d.is_online = true), 0)::float8 AS avg_repurchase_rate
+  , COALESCE(earth_distance(ll_to_earth(m.latitude::float8, m.longitude::float8), ll_to_earth($4::float8, $5::float8)), 0)::bigint AS distance_meters
+FROM merchants m
+  LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
+  LEFT JOIN merchant_applications ma ON ma.user_id = m.owner_user_id
+WHERE m.status = 'active'
+  AND m.deleted_at IS NULL
+  AND COALESCE(mp.is_takeout_suspended, false) = false
+  AND m.region_id = sqlc.narg('region_id')
+  AND (
+    $3::text IS NULL
+    OR m.name ILIKE '%' || $3 || '%'
+  )
+ORDER BY
+    m.is_open DESC,
+    CASE WHEN sqlc.arg('sort_by') = 'distance'
+      THEN earth_distance(ll_to_earth(m.latitude::float8, m.longitude::float8), ll_to_earth($4::float8, $5::float8))
+    END ASC NULLS LAST,
+    CASE WHEN sqlc.arg('sort_by') = 'distance' THEN COALESCE((SELECT AVG(d.repurchase_rate)
+     FROM dishes d
+     WHERE d.merchant_id = m.id
+       AND d.deleted_at IS NULL
+       AND d.is_online = true), 0) END DESC NULLS LAST,
+  CASE WHEN sqlc.arg('sort_by') = 'distance' THEN COALESCE(mp.total_orders, 0) END DESC NULLS LAST,
+    CASE WHEN sqlc.arg('sort_by') = 'distance' THEN NULL ELSE COALESCE((SELECT AVG(d.repurchase_rate)
+     FROM dishes d
+     WHERE d.merchant_id = m.id
+       AND d.deleted_at IS NULL
+       AND d.is_online = true), 0) END DESC NULLS LAST,
+  CASE WHEN sqlc.arg('sort_by') = 'distance' THEN NULL ELSE COALESCE(mp.total_orders, 0) END DESC NULLS LAST,
+  m.id ASC
+LIMIT $2
+OFFSET $1;
 
 -- name: CountSearchMerchants :one
-SELECT COUNT(*) FROM merchants
-WHERE status = 'active'
-  AND deleted_at IS NULL
-  AND name ILIKE '%' || $1 || '%';
+SELECT COUNT(*) FROM merchants m
+LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
+WHERE m.status = 'active'
+  AND m.deleted_at IS NULL
+  AND COALESCE(mp.is_takeout_suspended, false) = false
+  AND m.region_id = sqlc.narg('region_id')
+  AND m.name ILIKE '%' || $1 || '%';
 
 -- ==================== 商户标签关联 ====================
 
@@ -225,7 +284,12 @@ WHERE id = $1 LIMIT 1;
 SELECT * FROM merchant_business_hours
 WHERE merchant_id = $1
   AND special_date IS NULL
-ORDER BY day_of_week;
+ORDER BY day_of_week, open_time;
+
+-- name: ListMerchantBusinessHoursAll :many
+SELECT * FROM merchant_business_hours
+WHERE merchant_id = $1
+ORDER BY special_date NULLS FIRST, day_of_week, open_time;
 
 -- name: ListMerchantSpecialHours :many
 SELECT * FROM merchant_business_hours
@@ -263,6 +327,14 @@ WHERE id = $1;
 -- name: DeleteMerchantBusinessHours :exec
 DELETE FROM merchant_business_hours
 WHERE merchant_id = $1;
+
+-- name: UpdateMerchantAutoOpenByBusinessHours :exec
+UPDATE merchants
+SET
+  auto_open_by_business_hours = $2,
+  auto_close_at = CASE WHEN $2 THEN NULL ELSE auto_close_at END,
+  updated_at = now()
+WHERE id = $1;
 
 -- ==================== 高级查询（使用JOIN和聚合）====================
 
@@ -304,7 +376,7 @@ SELECT
     m.id,
     m.name,
     m.description,
-    m.logo_url,
+    m.logo_media_asset_id,
     m.address,
     m.latitude,
     m.longitude,
@@ -314,10 +386,13 @@ FROM merchants m
 LEFT JOIN orders o ON m.id = o.merchant_id 
   AND o.status IN ('completed')  -- 以已完成订单作为销量口径
 WHERE m.status = 'active'
+  AND m.is_open = true
 GROUP BY m.id
 ORDER BY 
+    m.is_open DESC,
     total_orders DESC,  -- 销量优先：回头客多的商户排前面
-    avg_rating DESC     -- 评分次之
+    avg_rating DESC,     -- 评分次之
+    earth_distance(ll_to_earth(m.latitude, m.longitude), ll_to_earth($2::float8, $3::float8)) ASC
 LIMIT $1;
 
 -- name: GetMerchantsByIDs :many
@@ -326,7 +401,7 @@ SELECT
     id,
     name,
     description,
-    logo_url,
+    logo_media_asset_id,
     address,
     latitude,
     longitude,
@@ -341,14 +416,13 @@ SELECT
     m.id,
     m.name,
     m.description,
-    m.logo_url,
+    m.logo_media_asset_id,
     m.address,
     m.latitude,
     m.longitude,
     m.region_id,
     m.status,
     m.is_open,
-    COALESCE(mp.trust_score, 500) AS trust_score,
     COALESCE(
         (SELECT COUNT(*)
          FROM orders o 
@@ -358,7 +432,6 @@ SELECT
         ), 0
     )::int AS monthly_orders
 FROM merchants m
-LEFT JOIN merchant_profiles mp ON mp.merchant_id = m.id
 WHERE m.id = ANY($1::bigint[])
   AND m.status = 'active';
 
@@ -376,7 +449,7 @@ RETURNING *;
 
 -- name: GetMerchantIsOpen :one
 -- 获取商户营业状态
-SELECT id, is_open, auto_close_at FROM merchants
+SELECT id, is_open, auto_close_at, auto_open_by_business_hours FROM merchants
 WHERE id = $1;
 
 -- name: ListOpenMerchants :many
@@ -398,6 +471,78 @@ WHERE is_open = true
   AND auto_close_at IS NOT NULL
   AND auto_close_at <= now()
 RETURNING id;
+
+-- name: SyncMerchantOpenStatusByBusinessHours :many
+WITH merchants_with_hours AS (
+  SELECT DISTINCT merchant_id
+  FROM merchant_business_hours
+),
+today_rows AS (
+  SELECT
+    mbh.merchant_id,
+    mbh.is_closed,
+    mbh.open_time,
+    mbh.close_time,
+    mbh.special_date
+  FROM merchant_business_hours mbh
+  JOIN merchants_with_hours mwh ON mwh.merchant_id = mbh.merchant_id
+  WHERE mbh.special_date = CURRENT_DATE
+     OR (mbh.special_date IS NULL AND mbh.day_of_week = EXTRACT(DOW FROM CURRENT_DATE)::int)
+),
+mode_by_merchant AS (
+  SELECT
+    merchant_id,
+    BOOL_OR(special_date IS NOT NULL) AS has_special
+  FROM today_rows
+  GROUP BY merchant_id
+),
+effective_rows AS (
+  SELECT tr.*
+  FROM today_rows tr
+  JOIN mode_by_merchant mm ON mm.merchant_id = tr.merchant_id
+  WHERE (mm.has_special AND tr.special_date IS NOT NULL)
+     OR (NOT mm.has_special AND tr.special_date IS NULL)
+),
+desired_state AS (
+  SELECT
+    mwh.merchant_id,
+    CASE
+      WHEN COUNT(er.*) = 0 THEN false
+      WHEN BOOL_OR(er.is_closed) THEN false
+      WHEN BOOL_OR((NOT er.is_closed) AND (LOCALTIME >= er.open_time AND LOCALTIME < er.close_time)) THEN true
+      ELSE false
+    END AS should_open
+  FROM merchants_with_hours mwh
+  LEFT JOIN effective_rows er ON er.merchant_id = mwh.merchant_id
+  GROUP BY mwh.merchant_id
+),
+updated AS (
+  UPDATE merchants m
+  SET
+    is_open = CASE
+      WHEN ds.should_open
+        AND COALESCE(mpc.sub_mch_id, '') <> ''
+        AND mpc.status = 'active' THEN true
+      ELSE false
+    END,
+    auto_close_at = NULL,
+    updated_at = now()
+  FROM desired_state ds
+  LEFT JOIN merchant_payment_configs mpc ON mpc.merchant_id = ds.merchant_id
+  WHERE m.id = ds.merchant_id
+    AND m.status = 'active'
+    AND m.auto_open_by_business_hours = true
+    AND m.is_open IS DISTINCT FROM CASE
+      WHEN ds.should_open
+        AND COALESCE(mpc.sub_mch_id, '') <> ''
+        AND mpc.status = 'active' THEN true
+      ELSE false
+    END
+  RETURNING m.id
+)
+SELECT id
+FROM updated
+ORDER BY id;
 
 -- ==================== 运营商管理商户 ====================
 
@@ -431,22 +576,86 @@ WHERE region_id = $1
   AND ($2::varchar IS NULL OR status = $2)
   AND deleted_at IS NULL;
 
--- name: GetMerchantByBossBindCode :one
--- 通过 Boss 认领码获取商户
-SELECT * FROM merchants
-WHERE boss_bind_code = $1 AND deleted_at IS NULL
-LIMIT 1;
 
--- name: UpdateMerchantBossBindCode :one
--- 更新 Boss 认领码
-UPDATE merchants
-SET boss_bind_code = $2, boss_bind_code_expires_at = $3, updated_at = now()
-WHERE id = $1 AND deleted_at IS NULL
-RETURNING *;
+-- name: CheckBusinessLicenseExists :one
+-- 检查营业执照号是否已被其他已通过的申请占用
+SELECT COUNT(*) FROM merchant_applications
+WHERE business_license_number = $1
+  AND status = 'approved'
+  AND id != $2;
 
--- name: ClearMerchantBossBindCode :exec
--- 清除 Boss 认领码
-UPDATE merchants
-SET boss_bind_code = NULL, boss_bind_code_expires_at = NULL, updated_at = now()
-WHERE id = $1;
+-- name: CheckLegalPersonIDExists :one
+-- 检查法人身份证号是否已被其他已通过的申请占用
+SELECT COUNT(*) FROM merchant_applications
+WHERE legal_person_id_number = $1
+  AND status = 'approved'
+  AND id != $2;
+
+-- name: SearchMerchantsByTag :many
+-- 按标签（菜系）过滤商户，支持区域和位置排序
+SELECT m.*, COALESCE(mp.total_orders, 0)::int AS total_orders,
+  COALESCE(
+    (SELECT json_agg(t.name)
+     FROM tags t
+     INNER JOIN merchant_tags mt ON t.id = mt.tag_id
+     WHERE mt.merchant_id = m.id
+       AND t.type = 'merchant'
+       AND t.status = 'active'
+    ), '[]'::json) AS tags,
+  COALESCE(
+    (SELECT json_agg(t.name ORDER BY t.sort_order ASC, t.name ASC)
+     FROM tags t
+     INNER JOIN merchant_system_labels msl ON t.id = msl.tag_id
+     WHERE msl.merchant_id = m.id
+       AND t.type = 'system'
+       AND t.status = 'active'
+    ), '[]'::json) AS system_labels,
+  ma.storefront_images,
+  COALESCE((SELECT AVG(d.repurchase_rate)
+     FROM dishes d
+     WHERE d.merchant_id = m.id
+       AND d.deleted_at IS NULL
+       AND d.is_online = true), 0)::float8 AS avg_repurchase_rate
+  , COALESCE(earth_distance(ll_to_earth(m.latitude::float8, m.longitude::float8), ll_to_earth(sqlc.arg('user_lat')::float8, sqlc.arg('user_lng')::float8)), 0)::bigint AS distance_meters
+FROM merchants m
+  LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
+  LEFT JOIN merchant_applications ma ON ma.user_id = m.owner_user_id
+  INNER JOIN merchant_tags mt_filter ON m.id = mt_filter.merchant_id
+WHERE m.status = 'active'
+  AND m.deleted_at IS NULL
+  AND COALESCE(mp.is_takeout_suspended, false) = false
+  AND m.region_id = sqlc.narg('region_id')
+  AND mt_filter.tag_id = sqlc.arg('tag_id')
+ORDER BY
+    m.is_open DESC,
+    CASE WHEN sqlc.arg('sort_by') = 'distance'
+      THEN earth_distance(ll_to_earth(m.latitude::float8, m.longitude::float8), ll_to_earth(sqlc.arg('user_lat')::float8, sqlc.arg('user_lng')::float8))
+    END ASC NULLS LAST,
+    CASE WHEN sqlc.arg('sort_by') = 'distance' THEN COALESCE((SELECT AVG(d.repurchase_rate)
+     FROM dishes d
+     WHERE d.merchant_id = m.id
+       AND d.deleted_at IS NULL
+       AND d.is_online = true), 0) END DESC NULLS LAST,
+  CASE WHEN sqlc.arg('sort_by') = 'distance' THEN COALESCE(mp.total_orders, 0) END DESC NULLS LAST,
+    CASE WHEN sqlc.arg('sort_by') = 'distance' THEN NULL ELSE COALESCE((SELECT AVG(d.repurchase_rate)
+     FROM dishes d
+     WHERE d.merchant_id = m.id
+       AND d.deleted_at IS NULL
+       AND d.is_online = true), 0) END DESC NULLS LAST,
+  CASE WHEN sqlc.arg('sort_by') = 'distance' THEN NULL ELSE COALESCE(mp.total_orders, 0) END DESC NULLS LAST,
+  m.id ASC
+LIMIT sqlc.arg('limit')
+OFFSET sqlc.arg('offset');
+
+-- name: CountSearchMerchantsByTag :one
+-- 统计指定标签在区域内的商户数量（用于分页）
+SELECT COUNT(*) FROM merchants m
+LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
+INNER JOIN merchant_tags mt ON m.id = mt.merchant_id
+WHERE m.status = 'active'
+  AND m.deleted_at IS NULL
+  AND COALESCE(mp.is_takeout_suspended, false) = false
+  AND m.region_id = sqlc.narg('region_id')
+  AND mt.tag_id = sqlc.arg('tag_id');
+
 

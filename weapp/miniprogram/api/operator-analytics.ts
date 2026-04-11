@@ -19,6 +19,14 @@ export type AppealPriority = 'low' | 'medium' | 'high' | 'urgent'
 
 // ==================== 区域统计相关类型 ====================
 
+/** 实时统计响应 - 对齐 api.operatorRealtimeStatsResponse */
+export interface OperatorRealtimeStatsResponse {
+    active_merchant_count: number
+    active_rider_count: number
+    pending_merchant_count: number
+    pending_rider_count: number
+}
+
 /** 区域统计响应 - 基于swagger api.operatorRegionStatsResponse */
 export interface OperatorRegionStatsResponse {
     region_id: number
@@ -75,26 +83,8 @@ export interface OperatorRegionStatsResponse {
     }
 }
 
-/** 趋势分析响应 - 基于swagger api.operatorTrendDailyResponse */
-export interface OperatorTrendDailyResponse {
-    trends: OperatorDailyTrendItem[]
-    summary: {
-        total_days: number
-        avg_daily_orders: number
-        avg_daily_gmv: number
-        avg_daily_commission: number
-        best_day: {
-            date: string
-            orders: number
-            gmv: number
-        }
-        worst_day: {
-            date: string
-            orders: number
-            gmv: number
-        }
-    }
-}
+/** 趋势分析响应 - 对齐后端 /v1/operator/trend/daily（数组） */
+export type OperatorTrendDailyResponse = OperatorDailyTrendItem[]
 
 /** 日趋势项 - 基于swagger api.operatorDailyTrendItem */
 export interface OperatorDailyTrendItem {
@@ -110,6 +100,7 @@ export interface OperatorDailyTrendItem {
     avg_order_value: number
     completion_rate: number
     total_commission: number
+    operator_income: number  // 运营商当日可得金额（后端计算）
     weather?: string
     special_events?: string[]
 }
@@ -129,6 +120,13 @@ export interface ListOperatorAppealsResponse {
         resolved_count: number
         avg_resolution_time: number
     }
+}
+
+export interface OperatorAppealSummaryResponse {
+    total: number
+    pending: number
+    approved: number
+    rejected: number
 }
 
 /** 运营商申诉项 - 基于swagger api.operatorAppealItem */
@@ -224,6 +222,27 @@ export interface AppealQueryParams extends Record<string, unknown> {
     limit?: number
 }
 
+type GrowthAnalysis = {
+    merchantGrowth: number
+    riderGrowth: number
+    orderGrowth: number
+    gmvGrowth: number
+    overallGrowth: number
+}
+
+type AppealEfficiencyMetrics = {
+    avgResolutionTime: number
+    resolutionRate: number
+    satisfactionRate: number
+    workload: number
+}
+
+type AppealDistribution = {
+    byStatus: Map<AppealStatus, number>
+    byType: Map<AppealType, number>
+    byPriority: Map<AppealPriority, number>
+}
+
 // ==================== 运营商数据统计服务类 ====================
 
 /**
@@ -255,14 +274,26 @@ export class OperatorAnalyticsService {
      * @param endDate 结束日期
      */
     async getDailyTrend(regionId?: number, startDate?: string, endDate?: string): Promise<OperatorTrendDailyResponse> {
+        const data: Record<string, string | number> = {}
+        if (typeof regionId === 'number') data.region_id = regionId
+        if (startDate) data.start_date = startDate
+        if (endDate) data.end_date = endDate
+
         return request({
             url: '/v1/operator/trend/daily',
             method: 'GET',
-            data: {
-                region_id: regionId,
-                start_date: startDate,
-                end_date: endDate
-            }
+            data
+        })
+    }
+
+    /**
+     * 获取实时统计数据
+     */
+    async getRealtimeStats(regionId?: number): Promise<OperatorRealtimeStatsResponse> {
+        return request({
+            url: '/v1/operator/stats/realtime',
+            method: 'GET',
+            data: regionId ? { region_id: regionId } : undefined
         })
     }
 }
@@ -283,6 +314,14 @@ export class OperatorAppealService {
             url: '/v1/operator/appeals',
             method: 'GET',
             data: params
+        })
+    }
+
+    async getAppealSummary(regionId?: number): Promise<OperatorAppealSummaryResponse> {
+        return request({
+            url: '/v1/operator/appeals/summary',
+            method: 'GET',
+            data: regionId ? { region_id: regionId } : undefined
         })
     }
 
@@ -365,7 +404,7 @@ export class DataAnalysisService {
         else if (performanceScore >= 50) performanceLevel = 'average'
 
         // 增长分析
-        let growthAnalysis: any = undefined
+        let growthAnalysis: GrowthAnalysis | undefined = undefined
         if (previousStats) {
             growthAnalysis = {
                 merchantGrowth: stats.growth_stats.merchant_growth_rate,
@@ -417,14 +456,13 @@ export class DataAnalysisService {
             byPriority: Map<AppealPriority, number>
         }
         trends: {
-            dailyVolume: Array<{ date: string; count: number }>
-            resolutionTrend: Array<{ date: string; avgTime: number }>
+            dailyVolume: Array<{ date: string, count: number }>
+            resolutionTrend: Array<{ date: string, avgTime: number }>
         }
         insights: string[]
         actionItems: string[]
     } {
-        const now = Date.now()
-        const resolvedAppeals = appeals.filter(a => a.status === 'resolved' && a.resolution_time)
+        const resolvedAppeals = appeals.filter((a) => a.status === 'resolved' && a.resolution_time)
         const totalAppeals = appeals.length
 
         // 效率指标
@@ -434,19 +472,19 @@ export class DataAnalysisService {
 
         const resolutionRate = totalAppeals > 0 ? (resolvedAppeals.length / totalAppeals) * 100 : 0
 
-        const satisfactionAppeals = resolvedAppeals.filter(a => a.satisfaction_rating)
+        const satisfactionAppeals = resolvedAppeals.filter((a) => a.satisfaction_rating)
         const satisfactionRate = satisfactionAppeals.length > 0
             ? satisfactionAppeals.reduce((sum, a) => sum + (a.satisfaction_rating || 0), 0) / satisfactionAppeals.length
             : 0
 
-        const workload = appeals.filter(a => ['pending', 'processing'].includes(a.status)).length
+        const workload = appeals.filter((a) => ['pending', 'processing'].includes(a.status)).length
 
         // 分布统计
         const statusDistribution = new Map<AppealStatus, number>()
         const typeDistribution = new Map<AppealType, number>()
         const priorityDistribution = new Map<AppealPriority, number>()
 
-        appeals.forEach(appeal => {
+        appeals.forEach((appeal) => {
             statusDistribution.set(appeal.status, (statusDistribution.get(appeal.status) || 0) + 1)
             typeDistribution.set(appeal.appeal_type, (typeDistribution.get(appeal.appeal_type) || 0) + 1)
             priorityDistribution.set(appeal.priority, (priorityDistribution.get(appeal.priority) || 0) + 1)
@@ -454,9 +492,9 @@ export class DataAnalysisService {
 
         // 趋势分析（简化版）
         const dailyVolumeMap = new Map<string, number>()
-        const resolutionTimeMap = new Map<string, { total: number; count: number }>()
+        const resolutionTimeMap = new Map<string, { total: number, count: number }>()
 
-        appeals.forEach(appeal => {
+        appeals.forEach((appeal) => {
             const date = appeal.created_at.split('T')[0]
             dailyVolumeMap.set(date, (dailyVolumeMap.get(date) || 0) + 1)
 
@@ -484,14 +522,22 @@ export class DataAnalysisService {
             resolutionRate,
             satisfactionRate,
             workload
-        }, { statusDistribution, typeDistribution, priorityDistribution })
+        }, {
+            byStatus: statusDistribution,
+            byType: typeDistribution,
+            byPriority: priorityDistribution
+        })
 
         const actionItems = this.generateAppealActionItems({
             avgResolutionTime,
             resolutionRate,
             satisfactionRate,
             workload
-        }, { statusDistribution, typeDistribution, priorityDistribution })
+        }, {
+            byStatus: statusDistribution,
+            byType: typeDistribution,
+            byPriority: priorityDistribution
+        })
 
         return {
             efficiency: {
@@ -580,7 +626,7 @@ export class DataAnalysisService {
     private generateInsights(
         stats: OperatorRegionStatsResponse,
         performanceScore: number,
-        growthAnalysis?: any
+        growthAnalysis?: GrowthAnalysis
     ): string[] {
         const insights: string[] = []
 
@@ -624,7 +670,7 @@ export class DataAnalysisService {
     private generateRecommendations(
         stats: OperatorRegionStatsResponse,
         performanceLevel: string,
-        growthAnalysis?: any
+        growthAnalysis?: GrowthAnalysis
     ): string[] {
         const recommendations: string[] = []
 
@@ -660,8 +706,8 @@ export class DataAnalysisService {
      * 生成申诉洞察
      */
     private generateAppealInsights(
-        efficiency: any,
-        distribution: any
+        efficiency: AppealEfficiencyMetrics,
+        distribution: AppealDistribution
     ): string[] {
         const insights: string[] = []
 
@@ -677,9 +723,10 @@ export class DataAnalysisService {
             insights.push('待处理申诉数量较多，建议增加处理人员')
         }
 
-        const orderIssueCount = distribution.byType.get('order_issue') || 0
-        const totalCount = Array.from(distribution.byType.values()).reduce((sum, count) => sum + count, 0)
-        if (orderIssueCount / totalCount > 0.5) {
+        const byType = distribution.byType
+        const orderIssueCount = byType.get('order_issue') || 0
+        const totalCount = Array.from(byType.values()).reduce((sum, count) => sum + count, 0)
+        if (totalCount > 0 && orderIssueCount / totalCount > 0.5) {
             insights.push('订单相关申诉占比较高，建议重点关注订单流程')
         }
 
@@ -690,8 +737,8 @@ export class DataAnalysisService {
      * 生成申诉行动项
      */
     private generateAppealActionItems(
-        efficiency: any,
-        distribution: any
+        efficiency: AppealEfficiencyMetrics,
+        distribution: AppealDistribution
     ): string[] {
         const actionItems: string[] = []
 
@@ -715,172 +762,6 @@ export class DataAnalysisService {
         return actionItems
     }
 }
-
-// ==================== 数据适配器 ====================
-
-/**
- * 运营商数据统计适配器
- * 处理前端数据格式与后端API数据格式的转换
- */
-export class OperatorAnalyticsAdapter {
-    /**
-     * 适配区域统计响应数据
-     */
-    static adaptRegionStatsResponse(data: OperatorRegionStatsResponse): {
-        regionId: number
-        regionName: string
-        dateRange: {
-            startDate: string
-            endDate: string
-        }
-        merchantStats: {
-            totalMerchants: number
-            activeMerchants: number
-            newMerchants: number
-            suspendedMerchants: number
-            avgRating: number
-            topCategories: Array<{
-                category: string
-                count: number
-                percentage: number
-            }>
-        }
-        riderStats: {
-            totalRiders: number
-            activeRiders: number
-            onlineRiders: number
-            newRiders: number
-            suspendedRiders: number
-            avgRating: number
-            avgDeliveryTime: number
-        }
-        orderStats: {
-            totalOrders: number
-            completedOrders: number
-            cancelledOrders: number
-            completionRate: number
-            avgOrderValue: number
-            totalGmv: number
-            peakHours: Array<{
-                hour: number
-                orderCount: number
-            }>
-        }
-        financialStats: {
-            totalCommission: number
-            merchantCommission: number
-            deliveryCommission: number
-            platformFee: number
-            settlementAmount: number
-        }
-        growthStats: {
-            merchantGrowthRate: number
-            riderGrowthRate: number
-            orderGrowthRate: number
-            gmvGrowthRate: number
-        }
-    } {
-        return {
-            regionId: data.region_id,
-            regionName: data.region_name,
-            dateRange: {
-                startDate: data.date_range.start_date,
-                endDate: data.date_range.end_date
-            },
-            merchantStats: {
-                totalMerchants: data.merchant_stats.total_merchants,
-                activeMerchants: data.merchant_stats.active_merchants,
-                newMerchants: data.merchant_stats.new_merchants,
-                suspendedMerchants: data.merchant_stats.suspended_merchants,
-                avgRating: data.merchant_stats.avg_rating,
-                topCategories: data.merchant_stats.top_categories
-            },
-            riderStats: {
-                totalRiders: data.rider_stats.total_riders,
-                activeRiders: data.rider_stats.active_riders,
-                onlineRiders: data.rider_stats.online_riders,
-                newRiders: data.rider_stats.new_riders,
-                suspendedRiders: data.rider_stats.suspended_riders,
-                avgRating: data.rider_stats.avg_rating,
-                avgDeliveryTime: data.rider_stats.avg_delivery_time
-            },
-            orderStats: {
-                totalOrders: data.order_stats.total_orders,
-                completedOrders: data.order_stats.completed_orders,
-                cancelledOrders: data.order_stats.cancelled_orders,
-                completionRate: data.order_stats.completion_rate,
-                avgOrderValue: data.order_stats.avg_order_value,
-                totalGmv: data.order_stats.total_gmv,
-                peakHours: data.order_stats.peak_hours.map(item => ({
-                    hour: item.hour,
-                    orderCount: item.order_count
-                }))
-            },
-            financialStats: {
-                totalCommission: data.financial_stats.total_commission,
-                merchantCommission: data.financial_stats.merchant_commission,
-                deliveryCommission: data.financial_stats.delivery_commission,
-                platformFee: data.financial_stats.platform_fee,
-                settlementAmount: data.financial_stats.settlement_amount
-            },
-            growthStats: {
-                merchantGrowthRate: data.growth_stats.merchant_growth_rate,
-                riderGrowthRate: data.growth_stats.rider_growth_rate,
-                orderGrowthRate: data.growth_stats.order_growth_rate,
-                gmvGrowthRate: data.growth_stats.gmv_growth_rate
-            }
-        }
-    }
-
-    /**
-     * 适配申诉项数据
-     */
-    static adaptAppealItem(data: OperatorAppealItem): {
-        id: number
-        appealType: AppealType
-        status: AppealStatus
-        priority: AppealPriority
-        title: string
-        description: string
-        userId: number
-        userName: string
-        userPhone: string
-        orderId?: number
-        merchantId?: number
-        riderId?: number
-        regionId: number
-        createdAt: string
-        updatedAt: string
-        resolvedAt?: string
-        assignedTo?: string
-        resolutionTime?: number
-        satisfactionRating?: number
-    } {
-        return {
-            id: data.id,
-            appealType: data.appeal_type,
-            status: data.status,
-            priority: data.priority,
-            title: data.title,
-            description: data.description,
-            userId: data.user_id,
-            userName: data.user_name,
-            userPhone: data.user_phone,
-            orderId: data.order_id,
-            merchantId: data.merchant_id,
-            riderId: data.rider_id,
-            regionId: data.region_id,
-            createdAt: data.created_at,
-            updatedAt: data.updated_at,
-            resolvedAt: data.resolved_at,
-            assignedTo: data.assigned_to,
-            resolutionTime: data.resolution_time,
-            satisfactionRating: data.satisfaction_rating
-        }
-    }
-}
-
-// ==================== 导出服务实例 ====================
 
 export const operatorAnalyticsService = new OperatorAnalyticsService()
 export const operatorAppealService = new OperatorAppealService()
@@ -907,9 +788,10 @@ export async function getOperatorAnalyticsDashboard(regionId?: number): Promise<
     const endDate = new Date().toISOString().split('T')[0]
     const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
 
-    const [regionStats, trendAnalysis, appealList] = await Promise.all([
+    const [regionStats, trendAnalysis, appealSummary, appealList] = await Promise.all([
         operatorAnalyticsService.getRegionStats(regionId || 1, startDate, endDate),
         operatorAnalyticsService.getDailyTrend(regionId, startDate, endDate),
+        operatorAppealService.getAppealSummary(regionId),
         operatorAppealService.getAppealList({
             region_id: regionId,
             limit: 20,
@@ -922,9 +804,9 @@ export async function getOperatorAnalyticsDashboard(regionId?: number): Promise<
     const performanceAnalysis = dataAnalysisService.analyzeRegionPerformanceTrend(regionStats)
 
     // 申诉摘要
-    const appealSummary = {
-        totalAppeals: appealList.total,
-        pendingAppeals: appealList.stats.pending_count,
+    const appealSummaryView = {
+        totalAppeals: appealSummary.total,
+        pendingAppeals: appealSummary.pending,
         avgResolutionTime: appealList.stats.avg_resolution_time,
         satisfactionRate: 4.2 // 模拟数据，实际应该从API获取
     }
@@ -933,7 +815,7 @@ export async function getOperatorAnalyticsDashboard(regionId?: number): Promise<
         regionStats,
         trendAnalysis,
         performanceAnalysis,
-        appealSummary,
+        appealSummary: appealSummaryView,
         recentAppeals: appealList.appeals.slice(0, 10)
     }
 }
@@ -1072,66 +954,4 @@ export function formatAppealType(type: AppealType): string {
         other: '其他'
     }
     return typeMap[type] || type
-}
-
-/**
- * 格式化申诉优先级显示
- * @param priority 申诉优先级
- */
-export function formatAppealPriority(priority: AppealPriority): string {
-    const priorityMap: Record<AppealPriority, string> = {
-        low: '低',
-        medium: '中',
-        high: '高',
-        urgent: '紧急'
-    }
-    return priorityMap[priority] || priority
-}
-
-/**
- * 格式化时间显示（分钟）
- * @param minutes 分钟数
- */
-export function formatResolutionTime(minutes: number): string {
-    if (minutes < 60) {
-        return `${minutes}分钟`
-    } else if (minutes < 1440) {
-        const hours = Math.floor(minutes / 60)
-        const remainingMinutes = minutes % 60
-        return remainingMinutes > 0 ? `${hours}小时${remainingMinutes}分钟` : `${hours}小时`
-    } else {
-        const days = Math.floor(minutes / 1440)
-        const remainingHours = Math.floor((minutes % 1440) / 60)
-        return remainingHours > 0 ? `${days}天${remainingHours}小时` : `${days}天`
-    }
-}
-
-/**
- * 验证申诉查询参数
- * @param params 查询参数
- */
-export function validateAppealQueryParams(params: AppealQueryParams): { valid: boolean; message?: string } {
-    if (params.start_date && params.end_date) {
-        const startDate = new Date(params.start_date)
-        const endDate = new Date(params.end_date)
-
-        if (startDate > endDate) {
-            return { valid: false, message: '开始日期不能晚于结束日期' }
-        }
-
-        const daysDiff = (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)
-        if (daysDiff > 365) {
-            return { valid: false, message: '查询时间范围不能超过365天' }
-        }
-    }
-
-    if (params.page && params.page < 1) {
-        return { valid: false, message: '页码必须大于0' }
-    }
-
-    if (params.limit && (params.limit < 1 || params.limit > 100)) {
-        return { valid: false, message: '每页数量必须在1-100之间' }
-    }
-
-    return { valid: true }
 }

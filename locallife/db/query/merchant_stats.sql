@@ -10,10 +10,10 @@ SELECT
     COUNT(*) FILTER (WHERE order_type = 'takeout')::int AS takeout_orders,
     COUNT(*) FILTER (WHERE order_type = 'dine_in')::int AS dine_in_orders
 FROM orders
-WHERE merchant_id = $1
-  AND created_at >= $2
-  AND created_at <= $3
-  AND status IN ('delivered', 'completed')
+WHERE merchant_id = sqlc.arg('merchant_id')
+  AND created_at >= sqlc.arg('start_at')
+  AND created_at <= sqlc.arg('end_at')
+  AND status IN ('user_delivered', 'completed')
 GROUP BY DATE(created_at)
 ORDER BY date DESC;
 
@@ -30,10 +30,10 @@ SELECT
         ELSE 0
     END AS avg_daily_sales
 FROM orders
-WHERE merchant_id = $1
-  AND created_at >= $2
-  AND created_at <= $3
-  AND status IN ('delivered', 'completed');
+WHERE merchant_id = sqlc.arg('merchant_id')
+  AND created_at >= sqlc.arg('start_at')
+  AND created_at <= sqlc.arg('end_at')
+  AND status IN ('user_delivered', 'completed');
 
 -- name: GetTopSellingDishes :many
 -- 菜品销量排行: 从order_items实时聚合
@@ -47,12 +47,12 @@ FROM order_items oi
 JOIN dishes d ON d.id = oi.dish_id
 JOIN orders o ON o.id = oi.order_id
 WHERE o.merchant_id = $1
-  AND o.created_at >= $2
-  AND o.created_at <= $3
-  AND o.status IN ('delivered', 'completed')
+  AND o.created_at >= sqlc.arg('start_at')
+  AND o.created_at <= sqlc.arg('end_at')
+  AND o.status IN ('user_delivered', 'completed')
 GROUP BY oi.dish_id, d.name, d.price
 ORDER BY total_sold DESC
-LIMIT $4;
+LIMIT sqlc.arg('limit');
 
 -- name: GetMerchantCustomerStats :many
 -- 顾客消费分析: 实时计算每个顾客的消费统计
@@ -61,6 +61,7 @@ SELECT
     u.full_name,
     u.phone,
     u.avatar_url,
+    u.avatar_media_asset_id,
     COUNT(*)::int AS total_orders,
     COALESCE(SUM(o.final_amount), 0)::bigint AS total_amount,
     CASE 
@@ -73,22 +74,22 @@ SELECT
 FROM orders o
 JOIN users u ON u.id = o.user_id
 WHERE o.merchant_id = $1
-  AND o.status IN ('delivered', 'completed')
-GROUP BY o.user_id, u.full_name, u.phone, u.avatar_url
+  AND o.status IN ('user_delivered', 'completed')
+GROUP BY o.user_id, u.full_name, u.phone, u.avatar_url, u.avatar_media_asset_id
 ORDER BY 
     CASE 
         WHEN sqlc.arg(order_by)::text = 'total_orders' THEN COUNT(*)
         WHEN sqlc.arg(order_by)::text = 'total_amount' THEN SUM(o.final_amount)
         ELSE EXTRACT(EPOCH FROM MAX(o.created_at))
     END DESC
-LIMIT $2 OFFSET $3;
+LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
 -- name: CountMerchantCustomers :one
 -- 统计商户的顾客总数
 SELECT COUNT(DISTINCT user_id)::int
 FROM orders
 WHERE merchant_id = $1
-  AND status IN ('delivered', 'completed');
+  AND status IN ('user_delivered', 'completed');
 
 -- name: GetCustomerMerchantDetail :one
 -- 单个顾客在某商户的消费详情
@@ -97,6 +98,7 @@ SELECT
     u.full_name,
     u.phone,
     u.avatar_url,
+    u.avatar_media_asset_id,
     COUNT(*)::int AS total_orders,
     COALESCE(SUM(o.final_amount), 0)::bigint AS total_amount,
     CASE 
@@ -110,8 +112,8 @@ FROM orders o
 JOIN users u ON u.id = o.user_id
 WHERE o.merchant_id = $1
   AND o.user_id = $2
-  AND o.status IN ('delivered', 'completed')
-GROUP BY o.user_id, u.full_name, u.phone, u.avatar_url;
+  AND o.status IN ('user_delivered', 'completed')
+GROUP BY o.user_id, u.full_name, u.phone, u.avatar_url, u.avatar_media_asset_id;
 
 -- name: GetCustomerFavoriteDishes :many
 -- 查询顾客最喜欢的菜品
@@ -125,7 +127,7 @@ JOIN dishes d ON d.id = oi.dish_id
 JOIN orders o ON o.id = oi.order_id
 WHERE o.merchant_id = $1
   AND o.user_id = $2
-  AND o.status IN ('delivered', 'completed')
+  AND o.status IN ('user_delivered', 'completed')
 GROUP BY oi.dish_id, d.name
 ORDER BY order_count DESC, total_quantity DESC
 LIMIT $3;
@@ -138,10 +140,10 @@ SELECT
     COALESCE(SUM(final_amount), 0)::bigint AS total_sales,
     COALESCE(AVG(final_amount), 0)::bigint AS avg_order_amount
 FROM orders
-WHERE merchant_id = $1
-  AND created_at >= $2
-  AND created_at <= $3
-  AND status IN ('delivered', 'completed')
+WHERE merchant_id = sqlc.arg('merchant_id')
+  AND created_at >= sqlc.arg('start_at')
+  AND created_at <= sqlc.arg('end_at')
+  AND status IN ('user_delivered', 'completed')
 GROUP BY EXTRACT(HOUR FROM created_at)
 ORDER BY hour;
 
@@ -153,10 +155,10 @@ SELECT
     COALESCE(SUM(final_amount), 0)::bigint AS total_sales,
     COALESCE(AVG(final_amount), 0)::bigint AS avg_order_amount
 FROM orders
-WHERE merchant_id = $1
-  AND created_at >= $2
-  AND created_at <= $3
-  AND status IN ('delivered', 'completed')
+WHERE merchant_id = sqlc.arg('merchant_id')
+  AND created_at >= sqlc.arg('start_at')
+  AND created_at <= sqlc.arg('end_at')
+  AND status IN ('user_delivered', 'completed')
 GROUP BY order_type
 ORDER BY order_count DESC;
 
@@ -169,10 +171,10 @@ WITH customer_order_counts AS (
         user_id,
         COUNT(*) AS order_count
     FROM orders
-    WHERE merchant_id = $1
-      AND created_at >= $2
-      AND created_at <= $3
-      AND status IN ('delivered', 'completed')
+    WHERE merchant_id = sqlc.arg('merchant_id')
+      AND created_at >= sqlc.arg('start_at')
+      AND created_at <= sqlc.arg('end_at')
+      AND status IN ('user_delivered', 'completed')
     GROUP BY user_id
 )
 SELECT 
@@ -196,8 +198,8 @@ FROM customer_order_counts;
 SELECT 
     dc.id AS category_id,
     dc.name AS category_name,
-    COUNT(DISTINCT oi.dish_id)::int AS dish_count,
-    SUM(oi.quantity)::int AS total_quantity,
+  COUNT(DISTINCT o.id)::int AS order_count,
+    COALESCE(SUM(oi.quantity), 0)::int AS total_quantity,
     COALESCE(SUM(oi.subtotal), 0)::bigint AS total_revenue
 FROM dish_categories dc
 JOIN merchant_dish_categories mdc ON dc.id = mdc.category_id
@@ -206,7 +208,7 @@ LEFT JOIN order_items oi ON oi.dish_id = d.id
 LEFT JOIN orders o ON o.id = oi.order_id 
     AND o.created_at >= @start_date 
     AND o.created_at <= @end_date
-    AND o.status IN ('delivered', 'completed')
+    AND o.status IN ('user_delivered', 'completed')
 WHERE mdc.merchant_id = $1
 GROUP BY dc.id, dc.name, mdc.sort_order
 ORDER BY mdc.sort_order ASC, total_revenue DESC;
@@ -234,7 +236,7 @@ SELECT
   d.description,
   d.price,
   d.member_price,
-  d.image_url,
+  d.image_media_asset_id,
   d.is_available,
   d.sort_order,
   d.prepare_time,
@@ -246,8 +248,35 @@ SELECT
     '[]'::json
   ) as tags,
   COALESCE(
+    (SELECT json_agg(
+      json_build_object(
+        'id', dcg.id,
+        'name', dcg.name,
+        'is_required', dcg.is_required,
+        'sort_order', dcg.sort_order,
+        'options', (
+          SELECT json_agg(
+            json_build_object(
+              'id', dco.id,
+              'tag_id', dco.tag_id,
+              'tag_name', opt_tag.name,
+              'extra_price', dco.extra_price,
+              'sort_order', dco.sort_order
+            ) ORDER BY dco.sort_order
+          )
+          FROM dish_customization_options dco
+          JOIN tags opt_tag ON dco.tag_id = opt_tag.id
+          WHERE dco.group_id = dcg.id
+        )
+      ) ORDER BY dcg.sort_order
+     )
+     FROM dish_customization_groups dcg
+     WHERE dcg.dish_id = d.id),
+    '[]'::json
+  ) as customization_groups,
+  COALESCE(
     (SELECT SUM(oi.quantity)::int FROM order_items oi JOIN orders o ON o.id = oi.order_id 
-     WHERE oi.dish_id = d.id AND o.status IN ('completed', 'delivered') 
+    WHERE oi.dish_id = d.id AND o.status IN ('user_delivered', 'completed', 'delivered') 
      AND o.created_at > NOW() - INTERVAL '30 days'),
     0
   ) as monthly_sales
@@ -258,7 +287,15 @@ WHERE d.merchant_id = $1
   AND d.is_online = true
   AND d.is_available = true
   AND d.deleted_at IS NULL
-ORDER BY COALESCE(mdc.sort_order, 999), d.sort_order, d.id;
+ORDER BY
+  COALESCE(mdc.sort_order, 999),
+  CASE
+    WHEN EXISTS (SELECT 1 FROM dish_tags dt JOIN tags t ON t.id = dt.tag_id WHERE dt.dish_id = d.id AND t.name = '推荐') THEN 0
+    WHEN EXISTS (SELECT 1 FROM dish_tags dt JOIN tags t ON t.id = dt.tag_id WHERE dt.dish_id = d.id AND t.name = '热卖') THEN 1
+    ELSE 2
+  END,
+  d.sort_order,
+  d.id;
 
 -- name: GetMerchantOnlineCombos :many
 -- 获取商户所有在线套餐 - 消费者端使用
@@ -266,7 +303,7 @@ SELECT
   cs.id,
   cs.name,
   cs.description,
-  cs.image_url,
+  cs.image_media_asset_id,
   cs.combo_price,
   -- 实时计算实际原价（单品价之和）
   COALESCE(
@@ -283,7 +320,11 @@ SELECT
     FROM combo_dishes cd
     JOIN dishes d ON d.id = cd.dish_id
     WHERE cd.combo_id = cs.id
-  ) as dishes
+  ) as dishes,
+  COALESCE(
+    (SELECT json_agg(t.name) FROM combo_tags ct JOIN tags t ON t.id = ct.tag_id WHERE ct.combo_id = cs.id),
+    '[]'::json
+  ) as tags
 FROM combo_sets cs
 WHERE cs.merchant_id = $1
   AND cs.is_online = true

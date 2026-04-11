@@ -12,6 +12,54 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const addReservationPrepaidAmount = `-- name: AddReservationPrepaidAmount :one
+UPDATE table_reservations
+SET prepaid_amount = prepaid_amount + $2,
+    updated_at = now()
+WHERE id = $1
+RETURNING id, table_id, user_id, merchant_id, reservation_date, reservation_time, guest_count, contact_name, contact_phone, payment_mode, deposit_amount, prepaid_amount, refund_deadline, status, payment_deadline, notes, paid_at, confirmed_at, completed_at, cancelled_at, cancel_reason, created_at, updated_at, checked_in_at, cooking_started_at, source
+`
+
+type AddReservationPrepaidAmountParams struct {
+	ID            int64 `json:"id"`
+	PrepaidAmount int64 `json:"prepaid_amount"`
+}
+
+// 追加菜品支付成功后累加预付金额
+func (q *Queries) AddReservationPrepaidAmount(ctx context.Context, arg AddReservationPrepaidAmountParams) (TableReservation, error) {
+	row := q.db.QueryRow(ctx, addReservationPrepaidAmount, arg.ID, arg.PrepaidAmount)
+	var i TableReservation
+	err := row.Scan(
+		&i.ID,
+		&i.TableID,
+		&i.UserID,
+		&i.MerchantID,
+		&i.ReservationDate,
+		&i.ReservationTime,
+		&i.GuestCount,
+		&i.ContactName,
+		&i.ContactPhone,
+		&i.PaymentMode,
+		&i.DepositAmount,
+		&i.PrepaidAmount,
+		&i.RefundDeadline,
+		&i.Status,
+		&i.PaymentDeadline,
+		&i.Notes,
+		&i.PaidAt,
+		&i.ConfirmedAt,
+		&i.CompletedAt,
+		&i.CancelledAt,
+		&i.CancelReason,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CheckedInAt,
+		&i.CookingStartedAt,
+		&i.Source,
+	)
+	return i, err
+}
+
 const cancelMerchantFutureReservations = `-- name: CancelMerchantFutureReservations :execrows
 UPDATE table_reservations
 SET 
@@ -41,8 +89,9 @@ const checkTableAvailability = `-- name: CheckTableAvailability :one
 SELECT COUNT(*) FROM table_reservations
 WHERE table_id = $1 
   AND reservation_date = $2
-  AND status IN ('pending', 'paid', 'confirmed')
+  AND status IN ('pending', 'paid', 'confirmed', 'checked_in')
   AND ($3::time, $4::interval) OVERLAPS (reservation_time, $4::interval)
+  AND (id != $5 OR $5 IS NULL)
 `
 
 type CheckTableAvailabilityParams struct {
@@ -50,6 +99,7 @@ type CheckTableAvailabilityParams struct {
 	ReservationDate pgtype.Date     `json:"reservation_date"`
 	Column3         pgtype.Time     `json:"column_3"`
 	Column4         pgtype.Interval `json:"column_4"`
+	ID              int64           `json:"id"`
 }
 
 // Check if table has any active reservation for given date and time
@@ -59,6 +109,7 @@ func (q *Queries) CheckTableAvailability(ctx context.Context, arg CheckTableAvai
 		arg.ReservationDate,
 		arg.Column3,
 		arg.Column4,
+		arg.ID,
 	)
 	var count int64
 	err := row.Scan(&count)
@@ -373,15 +424,15 @@ SELECT
     COALESCE(SUM(deposit_amount) FILTER (WHERE status = 'completed'), 0) as total_deposit,
     COALESCE(SUM(prepaid_amount) FILTER (WHERE status = 'completed'), 0) as total_prepaid
 FROM table_reservations
-WHERE merchant_id = $1 
-  AND reservation_date >= $2 
+WHERE merchant_id = $1
+  AND reservation_date >= $2
   AND reservation_date <= $3
 `
 
 type GetReservationStatsByDateRangeParams struct {
-	MerchantID        int64       `json:"merchant_id"`
-	ReservationDate   pgtype.Date `json:"reservation_date"`
-	ReservationDate_2 pgtype.Date `json:"reservation_date_2"`
+	MerchantID int64       `json:"merchant_id"`
+	StartDate  pgtype.Date `json:"start_date"`
+	EndDate    pgtype.Date `json:"end_date"`
 }
 
 type GetReservationStatsByDateRangeRow struct {
@@ -394,7 +445,7 @@ type GetReservationStatsByDateRangeRow struct {
 
 // Get reservation statistics for a merchant within date range
 func (q *Queries) GetReservationStatsByDateRange(ctx context.Context, arg GetReservationStatsByDateRangeParams) (GetReservationStatsByDateRangeRow, error) {
-	row := q.db.QueryRow(ctx, getReservationStatsByDateRange, arg.MerchantID, arg.ReservationDate, arg.ReservationDate_2)
+	row := q.db.QueryRow(ctx, getReservationStatsByDateRange, arg.MerchantID, arg.StartDate, arg.EndDate)
 	var i GetReservationStatsByDateRangeRow
 	err := row.Scan(
 		&i.TotalCount,
@@ -1194,7 +1245,7 @@ func (q *Queries) ListReservationsByTableAndDate(ctx context.Context, arg ListRe
 	return items, nil
 }
 
-const listReservationsByUser = `-- name: ListReservationsByUser :many
+const listReservationsByUserWithStatus = `-- name: ListReservationsByUserWithStatus :many
 SELECT 
     tr.id, tr.table_id, tr.user_id, tr.merchant_id, tr.reservation_date, tr.reservation_time, tr.guest_count, tr.contact_name, tr.contact_phone, tr.payment_mode, tr.deposit_amount, tr.prepaid_amount, tr.refund_deadline, tr.status, tr.payment_deadline, tr.notes, tr.paid_at, tr.confirmed_at, tr.completed_at, tr.cancelled_at, tr.cancel_reason, tr.created_at, tr.updated_at, tr.checked_in_at, tr.cooking_started_at, tr.source,
     t.table_no,
@@ -1202,17 +1253,31 @@ SELECT
 FROM table_reservations tr
 INNER JOIN tables t ON tr.table_id = t.id
 WHERE tr.user_id = $1
-ORDER BY tr.reservation_date DESC, tr.reservation_time DESC
-LIMIT $2 OFFSET $3
+  AND (tr.source IS NULL OR tr.source = 'online')
+  AND ($2::text IS NULL OR tr.status = $2)
+ORDER BY
+  CASE tr.status
+    WHEN 'pending' THEN 0
+    WHEN 'paid' THEN 1
+    WHEN 'confirmed' THEN 2
+    WHEN 'checked_in' THEN 3
+    WHEN 'completed' THEN 4
+    WHEN 'cancelled' THEN 5
+    WHEN 'expired' THEN 6
+    ELSE 7
+  END,
+  tr.created_at DESC
+LIMIT $4 OFFSET $3
 `
 
-type ListReservationsByUserParams struct {
-	UserID int64 `json:"user_id"`
-	Limit  int32 `json:"limit"`
-	Offset int32 `json:"offset"`
+type ListReservationsByUserWithStatusParams struct {
+	UserID int64       `json:"user_id"`
+	Status pgtype.Text `json:"status"`
+	Offset int32       `json:"offset"`
+	Limit  int32       `json:"limit"`
 }
 
-type ListReservationsByUserRow struct {
+type ListReservationsByUserWithStatusRow struct {
 	ID               int64              `json:"id"`
 	TableID          int64              `json:"table_id"`
 	UserID           int64              `json:"user_id"`
@@ -1243,15 +1308,21 @@ type ListReservationsByUserRow struct {
 	TableType        string             `json:"table_type"`
 }
 
-func (q *Queries) ListReservationsByUser(ctx context.Context, arg ListReservationsByUserParams) ([]ListReservationsByUserRow, error) {
-	rows, err := q.db.Query(ctx, listReservationsByUser, arg.UserID, arg.Limit, arg.Offset)
+// 用户预订列表：只返回在线预订（source = 'online' 或 NULL），不包括商户代客创建的预订
+func (q *Queries) ListReservationsByUserWithStatus(ctx context.Context, arg ListReservationsByUserWithStatusParams) ([]ListReservationsByUserWithStatusRow, error) {
+	rows, err := q.db.Query(ctx, listReservationsByUserWithStatus,
+		arg.UserID,
+		arg.Status,
+		arg.Offset,
+		arg.Limit,
+	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []ListReservationsByUserRow{}
+	items := []ListReservationsByUserWithStatusRow{}
 	for rows.Next() {
-		var i ListReservationsByUserRow
+		var i ListReservationsByUserWithStatusRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.TableID,

@@ -9,7 +9,7 @@ import { request } from '../utils/request'
 // ==================== 数据类型定义 ====================
 
 /** 商户状态枚举 */
-export type MerchantStatus = 'active' | 'suspended' | 'pending_approval' | 'rejected' | 'closed'
+export type MerchantStatus = 'approved' | 'suspended' | 'pending' | 'rejected' | 'closed'
 
 /** 商户类型枚举 */
 export type MerchantType = 'restaurant' | 'grocery' | 'pharmacy' | 'convenience' | 'other'
@@ -28,23 +28,36 @@ export interface ListOperatorMerchantsResponse {
     total?: number                               // 总数
 }
 
-/** 运营商商户项 - 基于swagger api.operatorMerchantItem */
+export interface OperatorMerchantSummaryResponse {
+    total: number
+    pending: number
+    approved: number
+    rejected: number
+    suspended: number
+}
+
+/** 运营商商户项 - 对齐后端 api.merchantListItem 结构 */
 export interface OperatorMerchantItem {
     id: number
     name: string
     phone: string
     address: string
-    region_id: number
-    region_name: string
-    category: string
-    type: MerchantType
-    status: MerchantStatus
-    rating: number
-    order_count: number
-    total_gmv: number
-    commission_amount: number
-    created_at: string
-    updated_at: string
+    status: string           // 商户状态
+    is_open: boolean         // 是否营业中
+    owner_user_id: number    // 店主用户ID
+    region_id: number        // 区域ID
+    latitude: number         // 纬度
+    longitude: number        // 经度
+    created_at: string       // 创建时间
+    // 以下字段后端暂未返回，标为可选
+    region_name?: string
+    category?: string
+    type?: MerchantType
+    rating?: number
+    order_count?: number
+    total_gmv?: number
+    commission_amount?: number
+    updated_at?: string
     last_active_at?: string
 }
 
@@ -83,7 +96,7 @@ export interface OperatorMerchantDetailResponse {
         total_gmv: number
         avg_order_value: number
         completion_rate: number
-        response_time: number
+        responseTime: number
         dish_count: number
         active_dish_count: number
     }
@@ -128,6 +141,11 @@ export interface MerchantQueryParams extends Record<string, unknown> {
     limit?: number
 }
 
+export function parseMerchantStatusFilter(status?: string): MerchantStatus | '' {
+    const validStatuses = new Set<MerchantStatus>(['approved', 'suspended', 'pending', 'rejected', 'closed'])
+    return status && validStatuses.has(status as MerchantStatus) ? (status as MerchantStatus) : ''
+}
+
 /** 商户排行查询参数 */
 export interface MerchantRankingParams extends Record<string, unknown> {
     region_id?: number
@@ -165,6 +183,27 @@ export interface ResumeOperatorMerchantRequest extends Record<string, unknown> {
     reason: string                               // 恢复原因（5-500字符，必填）
 }
 
+/** 商户经营统计热销菜品 - 对齐 api.merchantStatsDish */
+export interface MerchantStatsDish {
+    dish_name: string
+    total_sold: number
+    total_revenue: number
+}
+
+/** 商户经营统计响应 - 对齐 api.merchantStatsResponse */
+export interface MerchantStatsResponse {
+    days: number
+    total_orders: number
+    total_sales: number
+    total_commission: number
+    avg_daily_sales: number
+    total_customers: number
+    repeat_customers: number
+    repurchase_rate_basis_points: number
+    avg_orders_per_user_cents: number
+    top_dishes: MerchantStatsDish[]
+}
+
 // ==================== 运营商商户管理服务类 ====================
 
 /**
@@ -181,6 +220,14 @@ export class OperatorMerchantManagementService {
             url: '/v1/operator/merchants',
             method: 'GET',
             data: params
+        })
+    }
+
+    async getMerchantSummary(regionId?: number): Promise<OperatorMerchantSummaryResponse> {
+        return request({
+            url: '/v1/operator/merchants/summary',
+            method: 'GET',
+            data: regionId ? { region_id: regionId } : undefined
         })
     }
 
@@ -210,26 +257,39 @@ export class OperatorMerchantManagementService {
     /**
      * 暂停商户
      * @param merchantId 商户ID
-     * @param actionData 操作数据
+     * @param data 操作参数
      */
-    async suspendMerchant(merchantId: number, actionData: MerchantActionRequest): Promise<void> {
+    async suspendMerchant(merchantId: number, data: MerchantActionRequest): Promise<void> {
         return request({
             url: `/v1/operator/merchants/${merchantId}/suspend`,
             method: 'POST',
-            data: actionData
+            data
         })
     }
 
     /**
      * 恢复商户
      * @param merchantId 商户ID
-     * @param actionData 操作数据
+     * @param data 操作参数
      */
-    async resumeMerchant(merchantId: number, actionData: MerchantActionRequest): Promise<void> {
+    async resumeMerchant(merchantId: number, data: MerchantActionRequest): Promise<void> {
         return request({
             url: `/v1/operator/merchants/${merchantId}/resume`,
             method: 'POST',
-            data: actionData
+            data
+        })
+    }
+
+    /**
+     * 获取商户经营统计
+     * @param merchantId 商户ID
+     * @param days 统计天数（默认30）
+     */
+    async getMerchantStats(merchantId: number, days = 30): Promise<MerchantStatsResponse> {
+        return request({
+            url: `/v1/operator/merchants/${merchantId}/stats`,
+            method: 'GET',
+            data: { days }
         })
     }
 }
@@ -258,7 +318,7 @@ export class MerchantAnalyticsService {
         const stats = merchant.stats
 
         // 订单效率 (0-100)
-        const orderEfficiency = Math.min(100, (stats.completion_rate + (100 - Math.min(stats.response_time / 60, 100))))
+        const orderEfficiency = Math.min(100, (stats.completion_rate + (100 - Math.min(stats.responseTime / 60, 100))))
 
         // 收入表现 (0-100)
         const avgOrderValue = stats.avg_order_value
@@ -292,8 +352,8 @@ export class MerchantAnalyticsService {
         if (merchant.rating >= 4.5) strengths.push('用户评价优秀')
         else if (merchant.rating < 3.5) weaknesses.push('用户评价较差')
 
-        if (stats.response_time <= 300) strengths.push('响应速度快') // 5分钟内
-        else if (stats.response_time > 900) weaknesses.push('响应速度慢') // 超过15分钟
+        if (stats.responseTime <= 300) strengths.push('响应速度快') // 5分钟内
+        else if (stats.responseTime > 900) weaknesses.push('响应速度慢') // 超过15分钟
 
         if (avgOrderValue >= 5000) strengths.push('客单价较高') // 50元以上
         else if (avgOrderValue < 2000) weaknesses.push('客单价偏低') // 20元以下
@@ -319,8 +379,8 @@ export class MerchantAnalyticsService {
      * @param previousPeriod 上期数据
      */
     analyzeMerchantGrowth(
-        currentPeriod: { orderCount: number; gmv: number; rating: number },
-        previousPeriod: { orderCount: number; gmv: number; rating: number }
+        currentPeriod: { orderCount: number, gmv: number, rating: number },
+        previousPeriod: { orderCount: number, gmv: number, rating: number }
     ): {
         orderGrowth: number
         gmvGrowth: number
@@ -376,14 +436,14 @@ export class MerchantAnalyticsService {
             totalGmv: number
         }>()
 
-        merchants.forEach(merchant => {
-            const category = merchant.category
+        merchants.forEach((merchant) => {
+            const category = merchant.category || '未分类'
             const existing = categoryMap.get(category) || { count: 0, totalRating: 0, totalGmv: 0 }
 
             categoryMap.set(category, {
                 count: existing.count + 1,
-                totalRating: existing.totalRating + merchant.rating,
-                totalGmv: existing.totalGmv + merchant.total_gmv
+                totalRating: existing.totalRating + (merchant.rating || 0),
+                totalGmv: existing.totalGmv + (merchant.total_gmv || 0)
             })
         })
 
@@ -396,11 +456,11 @@ export class MerchantAnalyticsService {
             avgGmv: data.totalGmv / data.count
         })).sort((a, b) => b.count - a.count)
 
-        const topCategories = categoryStats.slice(0, 5).map(stat => stat.category)
+        const topCategories = categoryStats.slice(0, 5).map((stat) => stat.category)
 
         // 简化的趋势分析（实际应该基于历史数据）
         const categoryTrends = new Map<string, 'growing' | 'stable' | 'declining'>()
-        categoryStats.forEach(stat => {
+        categoryStats.forEach((stat) => {
             if (stat.avgGmv > 100000) categoryTrends.set(stat.category, 'growing')
             else if (stat.avgGmv > 50000) categoryTrends.set(stat.category, 'stable')
             else categoryTrends.set(stat.category, 'declining')
@@ -421,165 +481,6 @@ export class MerchantAnalyticsService {
     private calculateGrowthRate(current: number, previous: number): number {
         if (previous === 0) return current > 0 ? 100 : 0
         return ((current - previous) / previous) * 100
-    }
-}
-
-// ==================== 数据适配器 ====================
-
-/**
- * 运营商商户管理数据适配器
- * 处理前端数据格式与后端API数据格式的转换
- */
-export class OperatorMerchantManagementAdapter {
-    /**
-     * 适配商户列表项数据
-     */
-    static adaptMerchantItem(data: OperatorMerchantItem): {
-        id: number
-        name: string
-        phone: string
-        address: string
-        regionId: number
-        regionName: string
-        category: string
-        type: MerchantType
-        status: MerchantStatus
-        rating: number
-        orderCount: number
-        totalGmv: number
-        commissionAmount: number
-        createdAt: string
-        updatedAt: string
-        lastActiveAt?: string
-    } {
-        return {
-            id: data.id,
-            name: data.name,
-            phone: data.phone,
-            address: data.address,
-            regionId: data.region_id,
-            regionName: data.region_name,
-            category: data.category,
-            type: data.type,
-            status: data.status,
-            rating: data.rating,
-            orderCount: data.order_count,
-            totalGmv: data.total_gmv,
-            commissionAmount: data.commission_amount,
-            createdAt: data.created_at,
-            updatedAt: data.updated_at,
-            lastActiveAt: data.last_active_at
-        }
-    }
-
-    /**
-     * 适配商户详情数据
-     */
-    static adaptMerchantDetail(data: OperatorMerchantDetailResponse): {
-        id: number
-        userId: number
-        name: string
-        phone: string
-        email?: string
-        address: string
-        latitude: number
-        longitude: number
-        regionId: number
-        regionName: string
-        category: string
-        type: MerchantType
-        status: MerchantStatus
-        rating: number
-        reviewCount: number
-        businessHours: string
-        description?: string
-        images: string[]
-        licenseNumber?: string
-        contactPerson: string
-        contactPhone: string
-        bankAccount?: string
-        commissionRate: number
-        createdAt: string
-        updatedAt: string
-        lastActiveAt?: string
-        stats: {
-            totalOrders: number
-            completedOrders: number
-            cancelledOrders: number
-            totalGmv: number
-            avgOrderValue: number
-            completionRate: number
-            responseTime: number
-            dishCount: number
-            activeDishCount: number
-        }
-    } {
-        return {
-            id: data.id,
-            userId: data.user_id,
-            name: data.name,
-            phone: data.phone,
-            email: data.email,
-            address: data.address,
-            latitude: data.latitude,
-            longitude: data.longitude,
-            regionId: data.region_id,
-            regionName: data.region_name,
-            category: data.category,
-            type: data.type,
-            status: data.status,
-            rating: data.rating,
-            reviewCount: data.review_count,
-            businessHours: data.business_hours,
-            description: data.description,
-            images: data.images,
-            licenseNumber: data.license_number,
-            contactPerson: data.contact_person,
-            contactPhone: data.contact_phone,
-            bankAccount: data.bank_account,
-            commissionRate: data.commission_rate,
-            createdAt: data.created_at,
-            updatedAt: data.updated_at,
-            lastActiveAt: data.last_active_at,
-            stats: {
-                totalOrders: data.stats.total_orders,
-                completedOrders: data.stats.completed_orders,
-                cancelledOrders: data.stats.cancelled_orders,
-                totalGmv: data.stats.total_gmv,
-                avgOrderValue: data.stats.avg_order_value,
-                completionRate: data.stats.completion_rate,
-                responseTime: data.stats.response_time,
-                dishCount: data.stats.dish_count,
-                activeDishCount: data.stats.active_dish_count
-            }
-        }
-    }
-
-    /**
-     * 适配商户排行项数据
-     */
-    static adaptMerchantRankingItem(data: OperatorMerchantRankingItem): {
-        rank: number
-        merchantId: number
-        merchantName: string
-        regionName: string
-        orderCount: number
-        totalGmv: number
-        commissionAmount: number
-        rating: number
-        growthRate: number
-    } {
-        return {
-            rank: data.rank,
-            merchantId: data.merchant_id,
-            merchantName: data.merchant_name,
-            regionName: data.region_name,
-            orderCount: data.order_count,
-            totalGmv: data.total_gmv,
-            commissionAmount: data.commission_amount,
-            rating: data.rating,
-            growthRate: data.growth_rate
-        }
     }
 }
 
@@ -614,42 +515,39 @@ export async function getMerchantManagementDashboard(regionId?: number): Promise
     const endDate = new Date().toISOString().split('T')[0]
     const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
 
-    const [merchantList, merchantRanking] = await Promise.all([
-        operatorMerchantManagementService.getMerchantList({
-            region_id: regionId,
-            limit: 100,
-            sort_by: 'created_at',
-            sort_order: 'desc'
-        }),
+    const [merchantSummaryResult, merchantRanking, merchantSampleResult] = await Promise.all([
+        operatorMerchantManagementService.getMerchantSummary(regionId),
         operatorMerchantManagementService.getMerchantRanking({
             region_id: regionId,
             start_date: startDate,
             end_date: endDate,
             rank_by: 'total_gmv',
             limit: 10
+        }),
+        operatorMerchantManagementService.getMerchantList({
+            region_id: regionId,
+            limit: 100,
+            sort_by: 'created_at',
+            sort_order: 'desc'
         })
     ])
 
-    // 统计商户状态分布
     const merchantSummary = {
-        total: merchantList.total,
-        active: merchantList.merchants.filter(m => m.status === 'active').length,
-        suspended: merchantList.merchants.filter(m => m.status === 'suspended').length,
-        pending: merchantList.merchants.filter(m => m.status === 'pending_approval').length
+        total: merchantSummaryResult.total,
+        active: merchantSummaryResult.approved,
+        suspended: merchantSummaryResult.suspended,
+        pending: merchantSummaryResult.pending
     }
 
-    // 分析商户分类
-    const categoryAnalysis = merchantAnalyticsService.analyzeMerchantsByCategory(merchantList.merchants)
+    const merchants = merchantSampleResult.merchants || []
+    const categoryAnalysis = merchantAnalyticsService.analyzeMerchantsByCategory(merchants)
+    const recentMerchants = merchants.slice(0, 10)
 
-    // 获取最近注册的商户
-    const recentMerchants = merchantList.merchants.slice(0, 10)
-
-    // 模拟绩效分布（实际应该基于详细数据计算）
     const performanceDistribution = {
-        excellent: Math.round(merchantList.total * 0.15),
-        good: Math.round(merchantList.total * 0.35),
-        average: Math.round(merchantList.total * 0.35),
-        poor: Math.round(merchantList.total * 0.15)
+        excellent: Math.round(merchantSummary.total * 0.15),
+        good: Math.round(merchantSummary.total * 0.35),
+        average: Math.round(merchantSummary.total * 0.35),
+        poor: Math.round(merchantSummary.total * 0.15)
     }
 
     return {
@@ -705,7 +603,7 @@ function generateMerchantRecommendations(
     const recommendations: string[] = []
 
     // 基于绩效弱点的建议
-    performance.weaknesses.forEach(weakness => {
+    performance.weaknesses.forEach((weakness) => {
         switch (weakness) {
             case '订单完成率偏低':
                 recommendations.push('建议优化备货管理，减少缺货导致的订单取消')
@@ -726,7 +624,7 @@ function generateMerchantRecommendations(
     })
 
     // 基于商户状态的建议
-    if (merchant.status === 'pending_approval') {
+    if (merchant.status === 'pending') {
         recommendations.push('商户正在审核中，请耐心等待审核结果')
     }
 
@@ -840,10 +738,10 @@ export async function batchMerchantAction(
     actionData: MerchantActionRequest
 ): Promise<{
     success: number[]
-    failed: Array<{ id: number; error: string }>
+    failed: Array<{ id: number, error: string }>
 }> {
     const success: number[] = []
-    const failed: Array<{ id: number; error: string }> = []
+    const failed: Array<{ id: number, error: string }> = []
 
     for (const merchantId of merchantIds) {
         try {
@@ -874,91 +772,38 @@ export async function batchMerchantAction(
  * @param status 商户状态
  */
 export function formatMerchantStatus(status: MerchantStatus): string {
-    const statusMap: Record<MerchantStatus, string> = {
+    const statusMap: Record<string, string> = {
         active: '正常营业',
+        approved: '正常营业',
         suspended: '暂停营业',
-        pending_approval: '待审核',
+        pending: '待审核',
         rejected: '审核拒绝',
         closed: '已关闭'
     }
     return statusMap[status] || status
 }
 
-/**
- * 格式化商户类型显示
- * @param type 商户类型
- */
-export function formatMerchantType(type: MerchantType): string {
-    const typeMap: Record<MerchantType, string> = {
-        restaurant: '餐饮',
-        grocery: '生鲜',
-        pharmacy: '药店',
-        convenience: '便利店',
-        other: '其他'
-    }
-    return typeMap[type] || type
-}
+export type MerchantStatusTheme = 'success' | 'warning' | 'default'
 
-/**
- * 格式化绩效等级显示
- * @param level 绩效等级
- */
-export function formatPerformanceLevel(level: 'excellent' | 'good' | 'average' | 'poor'): string {
-    const levelMap = {
-        excellent: '优秀',
-        good: '良好',
-        average: '一般',
-        poor: '较差'
-    }
-    return levelMap[level] || level
-}
-
-/**
- * 格式化风险等级显示
- * @param level 风险等级
- */
-export function formatRiskLevel(level: 'low' | 'medium' | 'high'): string {
-    const levelMap = {
-        low: '低风险',
-        medium: '中风险',
-        high: '高风险'
-    }
-    return levelMap[level] || level
-}
-
-/**
- * 验证商户查询参数
- * @param params 查询参数
- */
-export function validateMerchantQueryParams(params: MerchantQueryParams): { valid: boolean; message?: string } {
-    if (params.rating_min && (params.rating_min < 0 || params.rating_min > 5)) {
-        return { valid: false, message: '最低评分必须在0-5之间' }
+export function getMerchantStatusDisplay(status: MerchantStatus | string) {
+    const normalizedStatus = status === 'active' ? 'approved' : status
+    const isOpen = normalizedStatus === 'approved'
+    const themeMap: Record<string, MerchantStatusTheme> = {
+        approved: 'success',
+        suspended: 'warning',
+        pending: 'default',
+        rejected: 'default',
+        closed: 'default'
     }
 
-    if (params.rating_max && (params.rating_max < 0 || params.rating_max > 5)) {
-        return { valid: false, message: '最高评分必须在0-5之间' }
+    return {
+        normalizedStatus,
+        label: formatMerchantStatus(normalizedStatus as MerchantStatus),
+        theme: themeMap[normalizedStatus] || 'default',
+        canSuspend: isOpen,
+        canResume: normalizedStatus === 'suspended',
+        isOpen,
+        businessStateLabel: isOpen ? '营业中' : '已打烊',
+        businessStateTheme: isOpen ? ('success' as const) : ('default' as const)
     }
-
-    if (params.rating_min && params.rating_max && params.rating_min > params.rating_max) {
-        return { valid: false, message: '最低评分不能高于最高评分' }
-    }
-
-    if (params.start_date && params.end_date) {
-        const startDate = new Date(params.start_date)
-        const endDate = new Date(params.end_date)
-
-        if (startDate > endDate) {
-            return { valid: false, message: '开始日期不能晚于结束日期' }
-        }
-    }
-
-    if (params.page && params.page < 1) {
-        return { valid: false, message: '页码必须大于0' }
-    }
-
-    if (params.limit && (params.limit < 1 || params.limit > 100)) {
-        return { valid: false, message: '每页数量必须在1-100之间' }
-    }
-
-    return { valid: true }
 }

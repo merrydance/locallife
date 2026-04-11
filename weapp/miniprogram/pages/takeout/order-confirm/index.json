@@ -3,6 +3,14 @@
     "usingComponents": {
         "custom-navbar": "/components/custom-navbar/index",
         "t-image": "tdesign-miniprogram/image/image",
-        "t-button": "tdesign-miniprogram/button/button"
+        "t-button": "tdesign-miniprogram/button/button",
+        "t-tag": "tdesign-miniprogram/tag/tag",
+        "t-icon": "tdesign-miniprogram/icon/icon",
+        "remark-input": "/components/remark-input/index",
+        "merchant-promos": "/components/merchant-promos/index",
+        "t-radio": "tdesign-miniprogram/radio/radio",
+        "t-radio-group": "tdesign-miniprogram/radio-group/radio-group",
+        "t-cell": "tdesign-miniprogram/cell/cell",
+        "t-cell-group": "tdesign-miniprogram/cell-group/cell-group"
     }
 }

@@ -41,6 +41,25 @@ WHERE status = $1
 ORDER BY created_at
 LIMIT $2 OFFSET $3;
 
+-- name: ListPendingReservationRefundOrdersForRecovery :many
+SELECT
+    ro.id,
+    ro.payment_order_id,
+    ro.refund_amount,
+    ro.refund_reason,
+    ro.out_refund_no,
+    po.reservation_id,
+    po.business_type
+FROM refund_orders ro
+JOIN payment_orders po ON po.id = ro.payment_order_id
+WHERE ro.status = 'pending'
+    AND po.status = 'paid'
+    AND po.reservation_id IS NOT NULL
+    AND po.business_type IN ('reservation', 'reservation_addon')
+    AND ro.created_at < sqlc.arg('created_before')
+ORDER BY ro.created_at ASC
+LIMIT sqlc.arg('limit')::int;
+
 -- name: UpdateRefundOrderToProcessing :one
 UPDATE refund_orders
 SET
@@ -54,7 +73,7 @@ UPDATE refund_orders
 SET
     status = 'success',
     refunded_at = now()
-WHERE id = $1 AND status = 'processing'
+WHERE id = $1 AND status IN ('pending', 'processing')
 RETURNING *;
 
 -- name: UpdateRefundOrderToFailed :one
@@ -68,10 +87,53 @@ RETURNING *;
 UPDATE refund_orders
 SET
     status = 'closed'
-WHERE id = $1 AND status = 'pending'
+WHERE id = $1 AND status IN ('pending', 'processing')
 RETURNING *;
 
 -- name: GetTotalRefundedByPaymentOrder :one
 SELECT COALESCE(SUM(refund_amount), 0)::bigint as total_refunded
 FROM refund_orders
-WHERE payment_order_id = $1 AND status = 'success';
+WHERE payment_order_id = $1 AND status IN ('pending', 'processing', 'success');
+
+-- name: GetPendingRiderDepositRefundAmountByUserID :one
+SELECT COALESCE(SUM(ro.refund_amount), 0)::bigint AS pending_rider_deposit_refund_amount
+FROM refund_orders ro
+JOIN payment_orders po ON po.id = ro.payment_order_id
+WHERE po.user_id = $1
+    AND po.business_type = 'rider_deposit'
+    AND ro.refund_type = 'rider_deposit'
+    AND ro.status IN ('pending', 'processing');
+
+-- name: ListRefundOrdersForReconciliation :many
+-- 获取指定日期范围内直连支付（miniprogram/deposit等）成功退款订单（用于每日对账）
+-- 通过 JOIN payment_orders 过滤 payment_type，排除收付通退款（已单独对账）
+SELECT r.id, r.out_refund_no, r.refund_id, r.refund_amount, r.status
+FROM refund_orders r
+JOIN payment_orders p ON p.id = r.payment_order_id
+WHERE r.status = 'success'
+  AND r.refunded_at >= $1
+  AND r.refunded_at < $2
+  AND p.payment_type != 'profit_sharing';
+
+-- name: ListEcommerceRefundOrdersForReconciliation :many
+-- 获取指定日期范围内收付通退款成功记录（payment_type='profit_sharing'）
+-- 对应微信 /v3/ecommerce/refunds/apply 产生的退款账单
+SELECT r.id, r.out_refund_no, r.refund_id, r.refund_amount, r.status
+FROM refund_orders r
+JOIN payment_orders p ON p.id = r.payment_order_id
+WHERE r.status = 'success'
+  AND r.refunded_at >= $1
+  AND r.refunded_at < $2
+  AND p.payment_type = 'profit_sharing';
+
+-- name: ListStuckProcessingRefundOrders :many
+-- 查找持续处于 processing 状态超过阈值时间的退款单（微信回调可能永久丢失）
+-- 用于运营告警，让人工核查微信商户平台退款结果
+SELECT ro.id, ro.out_refund_no, ro.refund_id, ro.refund_amount, ro.status, ro.created_at,
+       po.payment_type
+FROM refund_orders ro
+JOIN payment_orders po ON po.id = ro.payment_order_id
+WHERE ro.status = 'processing'
+  AND ro.created_at < sqlc.arg('created_before')
+ORDER BY ro.created_at ASC
+LIMIT sqlc.arg('limit')::int;

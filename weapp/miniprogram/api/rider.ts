@@ -1,122 +1,153 @@
 import { request } from '../utils/request'
 
-export interface RiderOrderDTO {
-  id: string
-  status: string
-  fee: number // Rider's earning in cents
-  merchant_name: string
-  merchant_address: string
-  merchant_phone?: string
-  customer_name?: string
-  customer_address: string
-  customer_phone?: string
-  distance_to_shop: number // meters
-  distance_to_deliver: number // meters
-  expect_pickup_time: string
-  expect_deliver_time: string
-  created_at: string
-  items?: string[]
+export interface RiderInfo {
+    id: number
+    user_id: number
+    real_name: string
+    phone: string
+    deposit_amount: number
+    frozen_deposit: number
+    status: 'pending' | 'approved' | 'active' | 'suspended' | 'rejected'
+    is_online: boolean
+    credit_score: number
+    total_orders: number
+    total_earnings: number
+    online_duration: number
+    current_longitude?: number
+    current_latitude?: number
+    location_updated_at?: string
+    created_at: string
 }
 
-export interface DepositInfo {
-  amount: number
-  status: string // PAID, UNPAID, REFUNDED
-  paid_at?: string
+export interface RiderStatus {
+    status: string
+    is_online: boolean
+    online_status: 'offline' | 'online' | 'delivering'
+    active_deliveries: number
+    current_longitude?: number
+    current_latitude?: number
+    location_updated_at?: string
+    can_go_online: boolean
+    can_go_offline: boolean
+    online_block_reason?: string
 }
 
-export interface RiderDashboardDTO {
-  rider_id: string
-  active_tasks: RiderOrderDTO[]
-  deposit: DepositInfo
-  last_event_at: string
+export interface RiderDepositBalance {
+    total_deposit: number
+    frozen_deposit: number
+    delivery_frozen_deposit?: number
+    withdrawal_processing_amount?: number
+    available_deposit: number
 }
 
-export interface RiderMetricsDTO {
-  completed_orders: number
-  online_hours: number
-  rating: number // 0-100
-  total_earnings: number // cents
+export interface RiderDepositRecord {
+    id: number
+    rider_id: number
+    amount: number
+    type: string
+    balance_after: number
+    remark?: string
+    created_at: string
 }
 
-/**
- * Get Rider Dashboard Data (Active tasks, deposit info)
- */
-export function getRiderDashboard() {
-  return request<RiderDashboardDTO>({
-    url: '/rider/dashboard',
-    method: 'GET'
-  })
+export interface RiderDepositListResponse {
+    deposits: RiderDepositRecord[]
+    total: number
+    page_id: number
+    page_size: number
 }
 
-/**
- * Get Rider Metrics (Today's stats)
- */
-export function getRiderMetrics() {
-  return request<RiderMetricsDTO>({
-    url: '/rider/metrics/today',
-    method: 'GET'
-  })
+export interface RiderDepositPayResponse {
+    payment_order_id?: number
+    out_trade_no?: string
+    amount?: number
+    expires_at?: string
+    pay_params?: WechatMiniprogram.RequestPaymentOption
 }
 
-/**
- * Get Available Orders (Pool)
- */
-export function getAvailableOrders(page: number = 1, pageSize: number = 20) {
-  return request<PagingData<RiderOrderDTO>>({
-    url: '/rider/orders/available',
-    method: 'GET',
-    data: { page, page_size: pageSize }
-  })
+export interface RiderWithdrawRefundItem {
+    refund_order_id: number
+    payment_order_id: number
+    out_refund_no: string
+    amount: number
+    status: string
 }
 
-/**
- * Accept an order
- */
-export function acceptOrder(orderId: string) {
-  return request<void>({
-    url: `/rider/orders/${orderId}/accept`,
-    method: 'POST'
-  })
+export interface RiderWithdrawResponse {
+    status: string
+    requested_amount: number
+    accepted_amount: number
+    refunds: RiderWithdrawRefundItem[]
 }
 
-/**
- * Pickup an order
- */
-export function pickupOrder(orderId: string) {
-  return request<void>({
-    url: `/rider/orders/${orderId}/pickup`,
-    method: 'POST'
-  })
+export class RiderService {
+    static async getMe(): Promise<RiderInfo> {
+        return await request({ url: '/v1/rider/me', method: 'GET' })
+    }
+
+    static async getStatus(): Promise<RiderStatus> {
+        return await request({ url: '/v1/rider/status', method: 'GET' })
+    }
+
+    static async goOnline(): Promise<RiderInfo> {
+        return await request({ url: '/v1/rider/online', method: 'POST' })
+    }
+
+    static async goOffline(): Promise<RiderInfo> {
+        return await request({ url: '/v1/rider/offline', method: 'POST' })
+    }
+
+    static async getDepositBalance(): Promise<RiderDepositBalance> {
+        return await request({ url: '/v1/rider/deposit', method: 'GET' })
+    }
+
+    static async listDepositRecords(params: { page: number, limit: number }): Promise<RiderDepositListResponse> {
+        return await request({
+            url: '/v1/rider/deposits',
+            method: 'GET',
+            data: params
+        })
+    }
+
+    static async rechargeDeposit(data: { amount: number, remark?: string }): Promise<RiderDepositPayResponse> {
+        return await request({
+            url: '/v1/rider/deposit',
+            method: 'POST',
+            data
+        })
+    }
+
+    static async withdrawDeposit(data: { amount: number, remark?: string }): Promise<RiderWithdrawResponse> {
+        return await request({
+            url: '/v1/rider/withdraw',
+            method: 'POST',
+            data
+        })
+    }
+
+    static async updateLocation(locations: Array<{
+        longitude: number
+        latitude: number
+        recorded_at: string
+        delivery_id?: number
+        source?: string
+        accuracy?: number
+        speed?: number
+        heading?: number
+    }>): Promise<unknown> {
+        return await request({
+            url: '/v1/rider/location',
+            method: 'POST',
+            data: { locations }
+        })
+    }
+    static async request<T = unknown>(
+        url: string,
+        method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE',
+        data?: unknown
+    ): Promise<T> {
+        return await request<T>({ url, method, data })
+    }
 }
 
-/**
- * Deliver an order
- */
-export function deliverOrder(orderId: string) {
-  return request<void>({
-    url: `/rider/orders/${orderId}/deliver`,
-    method: 'POST'
-  })
-}
-
-/**
- * Set Rider Online
- */
-export function setRiderOnline(mode: string = 'DELIVERY') {
-  return request<void>({
-    url: '/rider/online',
-    method: 'POST',
-    data: { mode }
-  })
-}
-
-/**
- * Set Rider Offline
- */
-export function setRiderOffline() {
-  return request<void>({
-    url: '/rider/offline',
-    method: 'POST'
-  })
-}
-
+export default RiderService

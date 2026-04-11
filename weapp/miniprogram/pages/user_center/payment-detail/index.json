@@ -4,6 +4,10 @@
         "t-loading": "tdesign-miniprogram/loading/loading",
         "t-icon": "tdesign-miniprogram/icon/icon",
         "t-button": "tdesign-miniprogram/button/button",
-        "t-empty": "tdesign-miniprogram/empty/empty"
+        "t-empty": "tdesign-miniprogram/empty/empty",
+        "t-tag": "tdesign-miniprogram/tag/tag",
+        "t-divider": "tdesign-miniprogram/divider/divider",
+        "card-skeleton": "/components/card-skeleton/index",
+        "list-skeleton": "/components/list-skeleton/index"
     }
 }

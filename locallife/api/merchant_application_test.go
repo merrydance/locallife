@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"math/big"
 	"net/http"
@@ -9,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/maps"
 	"github.com/merrydance/locallife/token"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -22,20 +23,17 @@ import (
 
 func randomMerchantAppDraft(userID int64) db.MerchantApplication {
 	return db.MerchantApplication{
-		ID:                      1,
-		UserID:                  userID,
-		MerchantName:            "",
-		BusinessLicenseNumber:   "",
-		BusinessLicenseImageUrl: "",
-		LegalPersonName:         "",
-		LegalPersonIDNumber:     "",
-		LegalPersonIDFrontUrl:   "",
-		LegalPersonIDBackUrl:    "",
-		ContactPhone:            "",
-		BusinessAddress:         "",
-		Status:                  "draft",
-		CreatedAt:               time.Now(),
-		UpdatedAt:               time.Now(),
+		ID:                    1,
+		UserID:                userID,
+		MerchantName:          "",
+		BusinessLicenseNumber: "",
+		LegalPersonName:       "",
+		LegalPersonIDNumber:   "",
+		ContactPhone:          "",
+		BusinessAddress:       "",
+		Status:                "draft",
+		CreatedAt:             time.Now(),
+		UpdatedAt:             time.Now(),
 	}
 }
 
@@ -51,10 +49,10 @@ func randomMerchantAppDraftWithData(userID int64) db.MerchantApplication {
 	})
 
 	foodPermitOCR, _ := json.Marshal(FoodPermitOCRData{
-		PermitNo: "JY11105000000001",
+		PermitNo:    "JY11105000000001",
 		CompanyName: "测试餐饮有限公司",
-		ValidTo:  "2030年12月31日",
-		OCRAt:    time.Now().Format(time.RFC3339),
+		ValidTo:     "2030年12月31日",
+		OCRAt:       time.Now().Format(time.RFC3339),
 	})
 
 	idCardFrontOCR, _ := json.Marshal(MerchantIDCardOCRData{
@@ -68,30 +66,62 @@ func randomMerchantAppDraftWithData(userID int64) db.MerchantApplication {
 	})
 
 	return db.MerchantApplication{
-		ID:                      1,
-		UserID:                  userID,
-		MerchantName:            "测试餐厅",
-		BusinessLicenseNumber:   "91110000MA12345678",
-		BusinessLicenseImageUrl: "uploads/merchants/1/business_license/test.jpg",
-		BusinessLicenseOcr:      licenseOCR,
-		LegalPersonName:         "张三",
-		LegalPersonIDNumber:     "110101199001011234",
-		LegalPersonIDFrontUrl:   "uploads/merchants/1/id_front/test.jpg",
-		LegalPersonIDBackUrl:    "uploads/merchants/1/id_back/test.jpg",
-		IDCardFrontOcr:          idCardFrontOCR,
-		IDCardBackOcr:           idCardBackOCR,
-		ContactPhone:            "13800138000",
-		BusinessAddress:         "北京市朝阳区测试路100号1楼",
-		BusinessScope:           pgtype.Text{String: "餐饮服务", Valid: true},
-		FoodPermitUrl:           pgtype.Text{String: "uploads/merchants/1/food_permit/test.jpg", Valid: true},
-		FoodPermitOcr:           foodPermitOCR,
-		Longitude:               pgtype.Numeric{Int: big.NewInt(1163210000), Exp: -7, Valid: true},
-		Latitude:                pgtype.Numeric{Int: big.NewInt(399080000), Exp: -7, Valid: true},
-		RegionID:                pgtype.Int8{Int64: 1, Valid: true},
-		Status:                  "draft",
-		CreatedAt:               time.Now(),
-		UpdatedAt:               time.Now(),
+		ID:                          1,
+		UserID:                      userID,
+		MerchantName:                "测试餐厅",
+		BusinessLicenseNumber:       "91110000MA12345678",
+		BusinessLicenseOcr:          licenseOCR,
+		LegalPersonName:             "张三",
+		LegalPersonIDNumber:         "110101199001011234",
+		IDCardFrontOcr:              idCardFrontOCR,
+		IDCardBackOcr:               idCardBackOCR,
+		ContactPhone:                "13800138000",
+		BusinessAddress:             "北京市朝阳区测试路100号1楼",
+		BusinessScope:               pgtype.Text{String: "餐饮服务", Valid: true},
+		BusinessLicenseMediaAssetID: pgtype.Int8{Int64: 2, Valid: true},
+		IDCardFrontMediaAssetID:     pgtype.Int8{Int64: 3, Valid: true},
+		IDCardBackMediaAssetID:      pgtype.Int8{Int64: 4, Valid: true},
+		FoodPermitMediaAssetID:      pgtype.Int8{Int64: 1, Valid: true},
+		FoodPermitOcr:               foodPermitOCR,
+		Longitude:                   pgtype.Numeric{Int: big.NewInt(1163210000), Exp: -7, Valid: true},
+		Latitude:                    pgtype.Numeric{Int: big.NewInt(399080000), Exp: -7, Valid: true},
+		RegionID:                    pgtype.Int8{Int64: 1, Valid: true},
+		Status:                      "draft",
+		CreatedAt:                   time.Now(),
+		UpdatedAt:                   time.Now(),
 	}
+}
+
+func expectMerchantApplicationPublicDocumentLookups(store *mockdb.MockStore, userID int64) {
+	assets := map[int64]db.MediaAsset{
+		1: {
+			ID:               1,
+			UploadedBy:       userID,
+			Visibility:       "public",
+			MediaCategory:    "food_permit",
+			ModerationStatus: "pending",
+			ObjectKey:        "merchant/applications/1/food-permit.jpg",
+		},
+		2: {
+			ID:               2,
+			UploadedBy:       userID,
+			Visibility:       "public",
+			MediaCategory:    "business_license",
+			ModerationStatus: "pending",
+			ObjectKey:        "merchant/applications/1/business-license.jpg",
+		},
+	}
+
+	store.EXPECT().
+		GetMediaAssetByID(gomock.Any(), gomock.Any()).
+		AnyTimes().
+		DoAndReturn(func(_ context.Context, mediaID int64) (db.MediaAsset, error) {
+			asset, ok := assets[mediaID]
+			if !ok {
+				return db.MediaAsset{}, db.ErrRecordNotFound
+			}
+			return asset, nil
+		})
 }
 
 // ==================== 获取或创建草稿测试 ====================
@@ -111,13 +141,11 @@ func TestGetOrCreateMerchantApplicationDraft(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				// 没有草稿
 				store.EXPECT().
 					GetMerchantApplicationDraft(gomock.Any(), user.ID).
 					Times(1).
-					Return(db.MerchantApplication{}, pgx.ErrNoRows)
+					Return(db.MerchantApplication{}, db.ErrRecordNotFound)
 
-				// 创建新草稿
 				newApp := randomMerchantAppDraft(user.ID)
 				store.EXPECT().
 					CreateMerchantApplicationDraft(gomock.Any(), user.ID).
@@ -134,7 +162,6 @@ func TestGetOrCreateMerchantApplicationDraft(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				// 有草稿
 				existingApp := randomMerchantAppDraft(user.ID)
 				store.EXPECT().
 					GetMerchantApplicationDraft(gomock.Any(), user.ID).
@@ -146,12 +173,38 @@ func TestGetOrCreateMerchantApplicationDraft(t *testing.T) {
 			},
 		},
 		{
+			name: "GetExisting_SubmittedAutoResetToDraft",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				existingApp := randomMerchantAppDraft(user.ID)
+				existingApp.Status = "submitted"
+				resetApp := existingApp
+				resetApp.Status = "draft"
+
+				store.EXPECT().
+					GetMerchantApplicationDraft(gomock.Any(), user.ID).
+					Times(1).
+					Return(existingApp, nil)
+				store.EXPECT().
+					ResetMerchantApplicationTx(gomock.Any(), db.ResetMerchantApplicationTxParams{
+						ApplicationID: existingApp.ID,
+						UserID:        user.ID,
+					}).
+					Times(1).
+					Return(db.ResetMerchantApplicationTxResult{Application: resetApp}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+			},
+		},
+		{
 			name: "AlreadyApproved",
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				// 已有通过的申请，现在允许获取并编辑
 				approvedApp := randomMerchantAppDraft(user.ID)
 				approvedApp.Status = "approved"
 				store.EXPECT().
@@ -164,13 +217,9 @@ func TestGetOrCreateMerchantApplicationDraft(t *testing.T) {
 			},
 		},
 		{
-			name: "NoAuth",
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				// 不添加认证
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				// 不应该调用任何方法
-			},
+			name:       "NoAuth",
+			setupAuth:  func(t *testing.T, request *http.Request, tokenMaker token.Maker) {},
+			buildStubs: func(store *mockdb.MockStore) {},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusUnauthorized, recorder.Code)
 			},
@@ -184,6 +233,7 @@ func TestGetOrCreateMerchantApplicationDraft(t *testing.T) {
 			defer ctrl.Finish()
 
 			store := mockdb.NewMockStore(ctrl)
+			expectMerchantApplicationPublicDocumentLookups(store, user.ID)
 			tc.buildStubs(store)
 
 			server := newTestServer(t, store)
@@ -203,7 +253,6 @@ func TestGetOrCreateMerchantApplicationDraft(t *testing.T) {
 
 func TestUpdateMerchantApplicationBasicInfo(t *testing.T) {
 	user, _ := randomUser(t)
-
 	testCases := []struct {
 		name          string
 		body          updateMerchantBasicInfoRequest
@@ -214,9 +263,13 @@ func TestUpdateMerchantApplicationBasicInfo(t *testing.T) {
 		{
 			name: "OK",
 			body: updateMerchantBasicInfoRequest{
-				MerchantName:    "新店名",
-				ContactPhone:    "13800138001",
-				BusinessAddress: "北京市海淀区测试路200号",
+				MerchantName:          "新店名",
+				ContactPhone:          "13800138001",
+				BusinessAddress:       "北京市海淀区测试路200号",
+				BusinessLicenseNumber: "91110000MA12345678",
+				BusinessScope:         "餐饮服务;热食类食品制售",
+				LegalPersonName:       "李四",
+				LegalPersonIDNumber:   "110101199001011234",
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
@@ -232,17 +285,30 @@ func TestUpdateMerchantApplicationBasicInfo(t *testing.T) {
 				updatedApp.MerchantName = "新店名"
 				updatedApp.ContactPhone = "13800138001"
 				updatedApp.BusinessAddress = "北京市海淀区测试路200号"
+				updatedApp.BusinessLicenseNumber = "91110000MA12345678"
+				updatedApp.BusinessScope = pgtype.Text{String: "餐饮服务;热食类食品制售", Valid: true}
+				updatedApp.LegalPersonName = "李四"
+				updatedApp.LegalPersonIDNumber = "110101199001011234"
 				store.EXPECT().
 					UpdateMerchantApplicationBasicInfo(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(updatedApp, nil)
+					DoAndReturn(func(_ context.Context, arg db.UpdateMerchantApplicationBasicInfoParams) (db.MerchantApplication, error) {
+						require.Equal(t, "新店名", arg.MerchantName.String)
+						require.Equal(t, "13800138001", arg.ContactPhone.String)
+						require.Equal(t, "北京市海淀区测试路200号", arg.BusinessAddress.String)
+						require.Equal(t, "91110000MA12345678", arg.BusinessLicenseNumber.String)
+						require.Equal(t, "餐饮服务;热食类食品制售", arg.BusinessScope.String)
+						require.Equal(t, "李四", arg.LegalPersonName.String)
+						require.Equal(t, "110101199001011234", arg.LegalPersonIDNumber.String)
+						return updatedApp, nil
+					})
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 			},
 		},
 		{
-			name: "NotDraft_AutoReset",
+			name: "Submitted_AutoResetToDraft",
 			body: updateMerchantBasicInfoRequest{
 				MerchantName: "新店名",
 			},
@@ -252,31 +318,85 @@ func TestUpdateMerchantApplicationBasicInfo(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				app := randomMerchantAppDraft(user.ID)
 				app.Status = "submitted"
+				resetApp := app
+				resetApp.Status = "draft"
+				updatedApp := resetApp
+				updatedApp.MerchantName = "新店名"
 				store.EXPECT().
 					GetMerchantApplicationDraft(gomock.Any(), user.ID).
 					Times(1).
 					Return(app, nil)
-
-				// 应该自动重置为草稿
-				resetApp := app
-				resetApp.Status = "draft"
 				store.EXPECT().
 					ResetMerchantApplicationTx(gomock.Any(), db.ResetMerchantApplicationTxParams{
 						ApplicationID: app.ID,
 						UserID:        user.ID,
 					}).
 					Times(1).
-					Return(db.ResetMerchantApplicationTxResult{
-						Application: resetApp,
-					}, nil)
+					Return(db.ResetMerchantApplicationTxResult{Application: resetApp}, nil)
+				store.EXPECT().
+					UpdateMerchantApplicationBasicInfo(gomock.Any(), gomock.Any()).
+					Times(1).
+					DoAndReturn(func(_ context.Context, arg db.UpdateMerchantApplicationBasicInfoParams) (db.MerchantApplication, error) {
+						require.Equal(t, resetApp.ID, arg.ID)
+						require.Equal(t, "新店名", arg.MerchantName.String)
+						return updatedApp, nil
+					})
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+			},
+		},
+		{
+			name: "Approved_AutoResetToDraft",
+			body: updateMerchantBasicInfoRequest{
+				MerchantName:    "修正后的店名",
+				BusinessAddress: "北京市朝阳区修正路300号",
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				app := randomMerchantAppDraftWithData(user.ID)
+				app.Status = "approved"
+
+				resetApp := app
+				resetApp.Status = "draft"
+
+				updatedApp := resetApp
+				updatedApp.MerchantName = "修正后的店名"
+				updatedApp.BusinessAddress = "北京市朝阳区修正路300号"
+
+				store.EXPECT().
+					GetMerchantApplicationDraft(gomock.Any(), user.ID).
+					Times(1).
+					Return(app, nil)
+
+				store.EXPECT().
+					ResetMerchantApplicationTx(gomock.Any(), db.ResetMerchantApplicationTxParams{
+						ApplicationID: app.ID,
+						UserID:        user.ID,
+					}).
+					Times(1).
+					Return(db.ResetMerchantApplicationTxResult{Application: resetApp}, nil)
 
 				store.EXPECT().
 					UpdateMerchantApplicationBasicInfo(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(resetApp, nil)
+					DoAndReturn(func(_ context.Context, arg db.UpdateMerchantApplicationBasicInfoParams) (db.MerchantApplication, error) {
+						require.Equal(t, resetApp.ID, arg.ID)
+						require.Equal(t, "修正后的店名", arg.MerchantName.String)
+						require.Equal(t, "北京市朝阳区修正路300号", arg.BusinessAddress.String)
+						return updatedApp, nil
+					})
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var resp merchantApplicationDraftResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Equal(t, "draft", resp.Status)
+				require.Equal(t, "修正后的店名", resp.MerchantName)
+				require.Equal(t, "北京市朝阳区修正路300号", resp.BusinessAddress)
 			},
 		},
 	}
@@ -288,6 +408,7 @@ func TestUpdateMerchantApplicationBasicInfo(t *testing.T) {
 			defer ctrl.Finish()
 
 			store := mockdb.NewMockStore(ctrl)
+			expectMerchantApplicationPublicDocumentLookups(store, user.ID)
 			tc.buildStubs(store)
 
 			server := newTestServer(t, store)
@@ -307,6 +428,95 @@ func TestUpdateMerchantApplicationBasicInfo(t *testing.T) {
 	}
 }
 
+func TestDeleteMerchantApplicationDocument(t *testing.T) {
+	user, _ := randomUser(t)
+
+	testCases := []struct {
+		name          string
+		documentType  string
+		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
+		buildStubs    func(store *mockdb.MockStore)
+		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
+	}{
+		{
+			name:         "OKBusinessLicense",
+			documentType: "business_license",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				app := randomMerchantAppDraftWithData(user.ID)
+				updatedApp := app
+				updatedApp.BusinessLicenseMediaAssetID = pgtype.Int8{}
+				updatedApp.BusinessLicenseOcr = nil
+
+				store.EXPECT().
+					GetMerchantApplicationDraft(gomock.Any(), user.ID).
+					Times(1).
+					Return(app, nil)
+
+				store.EXPECT().
+					ClearMerchantApplicationBusinessLicense(gomock.Any(), app.ID).
+					Times(1).
+					Return(updatedApp, nil)
+
+				store.EXPECT().
+					SoftDeleteMediaAsset(gomock.Any(), int64(2)).
+					Times(1).
+					Return(db.MediaAsset{ID: 2, UploadedBy: user.ID}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var response merchantApplicationDraftResponse
+				err := json.Unmarshal(recorder.Body.Bytes(), &response)
+				require.NoError(t, err)
+				require.Nil(t, response.BusinessLicenseMediaAssetID)
+				require.Nil(t, response.BusinessLicenseOCR)
+			},
+		},
+		{
+			name:         "InvalidDocumentType",
+			documentType: "invalid",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				app := randomMerchantAppDraftWithData(user.ID)
+				store.EXPECT().
+					GetMerchantApplicationDraft(gomock.Any(), user.ID).
+					Times(1).
+					Return(app, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+	}
+
+	for i := range testCases {
+		tc := testCases[i]
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			expectMerchantApplicationPublicDocumentLookups(store, user.ID)
+			tc.buildStubs(store)
+
+			server := newTestServer(t, store)
+			recorder := httptest.NewRecorder()
+
+			request, err := http.NewRequest(http.MethodDelete, "/v1/merchant/application/documents/"+tc.documentType, nil)
+			require.NoError(t, err)
+
+			tc.setupAuth(t, request, server.tokenMaker)
+			server.router.ServeHTTP(recorder, request)
+			tc.checkResponse(t, recorder)
+		})
+	}
+}
+
 // ==================== 提交申请测试 ====================
 
 func TestSubmitMerchantApplication(t *testing.T) {
@@ -315,7 +525,8 @@ func TestSubmitMerchantApplication(t *testing.T) {
 	testCases := []struct {
 		name          string
 		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
-		buildStubs    func(store *mockdb.MockStore)
+		buildStubs    func(t *testing.T, store *mockdb.MockStore)
+		configureServer func(server *Server)
 		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
 	}{
 		{
@@ -323,7 +534,7 @@ func TestSubmitMerchantApplication(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {
+			buildStubs: func(t *testing.T, store *mockdb.MockStore) {
 				app := randomMerchantAppDraftWithData(user.ID)
 				store.EXPECT().
 					GetMerchantApplicationDraft(gomock.Any(), user.ID).
@@ -337,14 +548,26 @@ func TestSubmitMerchantApplication(t *testing.T) {
 					Times(1).
 					Return(submittedApp, nil)
 
-				// 检查地址唯一性
 				store.EXPECT().
-					CheckMerchantAddressExists(gomock.Any(), db.CheckMerchantAddressExistsParams{
-						Address:     submittedApp.BusinessAddress,
-						OwnerUserID: user.ID,
+					ListMerchantLocationsInRegion(gomock.Any(), submittedApp.RegionID.Int64).
+					Times(1).
+					Return([]db.ListMerchantLocationsInRegionRow{}, nil)
+
+				store.EXPECT().
+					CheckBusinessLicenseExists(gomock.Any(), db.CheckBusinessLicenseExistsParams{
+						BusinessLicenseNumber: submittedApp.BusinessLicenseNumber,
+						ID:                    submittedApp.ID,
 					}).
 					Times(1).
-					Return(false, nil)
+					Return(int64(0), nil)
+
+				store.EXPECT().
+					CheckLegalPersonIDExists(gomock.Any(), db.CheckLegalPersonIDExistsParams{
+						LegalPersonIDNumber: submittedApp.LegalPersonIDNumber,
+						ID:                  submittedApp.ID,
+					}).
+					Times(1).
+					Return(int64(0), nil)
 
 				approvedApp := submittedApp
 				approvedApp.Status = "approved"
@@ -360,18 +583,113 @@ func TestSubmitMerchantApplication(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp merchantApplicationDraftResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Equal(t, "approved", resp.Status)
 			},
 		},
 		{
-			name: "Rejected_NoBusinessScope",
+			name: "Approved_AddressMatchesReverseGeocode",
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {
-				// 营业执照经营范围不包含餐饮
+			buildStubs: func(t *testing.T, store *mockdb.MockStore) {
+				app := randomMerchantAppDraftWithData(user.ID)
+				store.EXPECT().
+					GetMerchantApplicationDraft(gomock.Any(), user.ID).
+					Times(1).
+					Return(app, nil)
+
+				submittedApp := app
+				submittedApp.Status = "submitted"
+				store.EXPECT().
+					SubmitMerchantApplication(gomock.Any(), app.ID).
+					Times(1).
+					Return(submittedApp, nil)
+
+				store.EXPECT().
+					ListMerchantLocationsInRegion(gomock.Any(), submittedApp.RegionID.Int64).
+					Times(1).
+					Return([]db.ListMerchantLocationsInRegionRow{}, nil)
+
+				store.EXPECT().
+					CheckBusinessLicenseExists(gomock.Any(), db.CheckBusinessLicenseExistsParams{
+						BusinessLicenseNumber: submittedApp.BusinessLicenseNumber,
+						ID:                    submittedApp.ID,
+					}).
+					Times(1).
+					Return(int64(0), nil)
+
+				store.EXPECT().
+					CheckLegalPersonIDExists(gomock.Any(), db.CheckLegalPersonIDExistsParams{
+						LegalPersonIDNumber: submittedApp.LegalPersonIDNumber,
+						ID:                  submittedApp.ID,
+					}).
+					Times(1).
+					Return(int64(0), nil)
+
+				approvedApp := submittedApp
+				approvedApp.Status = "approved"
+				store.EXPECT().
+					ApproveMerchantApplicationTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.ApproveMerchantApplicationTxResult{
+						Application: approvedApp,
+						Merchant:    db.Merchant{ID: 1},
+					}, nil)
+			},
+			configureServer: func(server *Server) {
+				server.mapClient = stubMapClient{reverseResult: &maps.ReverseGeocodeResult{
+					Address:          "北京市朝阳区测试路100号",
+					FormattedAddress: "北京市朝阳区测试路100号",
+					Province:         "北京市",
+					City:             "北京市",
+					District:         "朝阳区",
+					Street:           "测试路",
+					StreetNumber:     "100号",
+				}}
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+			},
+		},
+		{
+			name: "BadRequest_ReverseGeocodeAddressMismatch",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(t *testing.T, store *mockdb.MockStore) {
+				app := randomMerchantAppDraftWithData(user.ID)
+				store.EXPECT().
+					GetMerchantApplicationDraft(gomock.Any(), user.ID).
+					Times(1).
+					Return(app, nil)
+			},
+			configureServer: func(server *Server) {
+				server.mapClient = stubMapClient{reverseResult: &maps.ReverseGeocodeResult{
+					Address:          "北京市海淀区光华路200号",
+					FormattedAddress: "北京市海淀区光华路200号",
+					Province:         "北京市",
+					City:             "北京市",
+					District:         "海淀区",
+					Street:           "光华路",
+					StreetNumber:     "200号",
+				}}
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				var response ErrorResponse
+				require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
+				require.Equal(t, ErrInvalidAddress.Code, response.Code)
+				require.Contains(t, response.Error, "地图定位与营业执照注册地址不一致")
+				require.Contains(t, response.Error, "北京市海淀区光华路200号")
+			},
+		},
+		{
+			name: "BadRequest_NoBusinessScopeKeepsDraft",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(t *testing.T, store *mockdb.MockStore) {
 				app := randomMerchantAppDraftWithData(user.ID)
 				licenseOCR, _ := json.Marshal(BusinessLicenseOCRData{
 					EnterpriseName: "测试科技有限公司",
@@ -386,6 +704,34 @@ func TestSubmitMerchantApplication(t *testing.T) {
 					GetMerchantApplicationDraft(gomock.Any(), user.ID).
 					Times(1).
 					Return(app, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				require.Contains(t, recorder.Body.String(), "经营范围未识别到餐饮相关内容")
+			},
+		},
+		{
+			name: "Approved_FoodPermitRawTextFallback",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(t *testing.T, store *mockdb.MockStore) {
+				app := randomMerchantAppDraftWithData(user.ID)
+				foodPermitOCR, err := json.Marshal(FoodPermitOCRData{
+					PermitNo:     "JY11105000000001",
+					CompanyName:  "地址：生祠经营场所面积在50平米以上的小餐饮办理《食品河北省邢台市宁晋县经济开发区希望路北段路东",
+					OperatorName: "张三",
+					ValidTo:      "2030年12月31日",
+					RawText:      "经营者名称：测试餐饮有限公司\n经营场所：北京市朝阳区测试路100号1楼\n许可证编号：JY11105000000001\n有效期至：2030年12月31日",
+					OCRAt:        time.Now().Format(time.RFC3339),
+				})
+				require.NoError(t, err)
+				app.FoodPermitOcr = foodPermitOCR
+
+				store.EXPECT().
+					GetMerchantApplicationDraft(gomock.Any(), user.ID).
+					Times(1).
+					Return(app, nil)
 
 				submittedApp := app
 				submittedApp.Status = "submitted"
@@ -394,25 +740,117 @@ func TestSubmitMerchantApplication(t *testing.T) {
 					Times(1).
 					Return(submittedApp, nil)
 
-				// 因为经营范围检查在地址检查之前失败，所以不会调用地址检查
+				store.EXPECT().
+					ListMerchantLocationsInRegion(gomock.Any(), submittedApp.RegionID.Int64).
+					Times(1).
+					Return([]db.ListMerchantLocationsInRegionRow{}, nil)
 
 				store.EXPECT().
-					RejectMerchantApplication(gomock.Any(), gomock.Any()).
+					CheckBusinessLicenseExists(gomock.Any(), db.CheckBusinessLicenseExistsParams{
+						BusinessLicenseNumber: submittedApp.BusinessLicenseNumber,
+						ID:                    submittedApp.ID,
+					}).
 					Times(1).
-					Return(db.MerchantApplication{
-						ID:           app.ID,
-						Status:       "rejected",
-						RejectReason: pgtype.Text{String: "经营范围不包含餐饮相关内容", Valid: true},
+					Return(int64(0), nil)
+
+				store.EXPECT().
+					CheckLegalPersonIDExists(gomock.Any(), db.CheckLegalPersonIDExistsParams{
+						LegalPersonIDNumber: submittedApp.LegalPersonIDNumber,
+						ID:                  submittedApp.ID,
+					}).
+					Times(1).
+					Return(int64(0), nil)
+
+				approvedApp := submittedApp
+				approvedApp.Status = "approved"
+				store.EXPECT().
+					ApproveMerchantApplicationTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.ApproveMerchantApplicationTxResult{
+						Application: approvedApp,
+						Merchant:    db.Merchant{ID: 1},
 					}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp merchantApplicationDraftResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Equal(t, "approved", resp.Status)
+			},
+		},
+		{
+			name: "BadRequest_FoodPermitNameUnreadable",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(t *testing.T, store *mockdb.MockStore) {
+				app := randomMerchantAppDraftWithData(user.ID)
+				foodPermitOCR, err := json.Marshal(FoodPermitOCRData{
+					PermitNo:     "JY11105000000001",
+					CompanyName:  "地址：生祠经营场所面积在50平米以上的小餐饮办理《食品河北省邢台市宁晋县经济开发区希望路北段路东",
+					OperatorName: "张三",
+					ValidTo:      "2030年12月31日",
+					RawText:      "经营场所：北京市朝阳区测试路100号1楼\n许可证编号：JY11105000000001\n有效期至：2030年12月31日",
+					OCRAt:        time.Now().Format(time.RFC3339),
+				})
 				require.NoError(t, err)
-				require.Equal(t, "rejected", resp.Status)
-				require.NotNil(t, resp.RejectReason)
+				app.FoodPermitOcr = foodPermitOCR
+
+				store.EXPECT().
+					GetMerchantApplicationDraft(gomock.Any(), user.ID).
+					Times(1).
+					Return(app, nil)
+
+				store.EXPECT().
+					ListMerchantLocationsInRegion(gomock.Any(), app.RegionID.Int64).
+					Times(1).
+					Return([]db.ListMerchantLocationsInRegionRow{}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				var response ErrorResponse
+				require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
+				require.Equal(t, ErrMerchantFoodPermitNameUnreadable.Code, response.Code)
+				require.Equal(t, ErrMerchantFoodPermitNameUnreadable.Message, response.Error)
+			},
+		},
+		{
+			name: "BadRequest_FoodPermitNameMismatch",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(t *testing.T, store *mockdb.MockStore) {
+				app := randomMerchantAppDraftWithData(user.ID)
+				foodPermitOCR, err := json.Marshal(FoodPermitOCRData{
+					PermitNo:     "JY11105000000001",
+					CompanyName:  "另一家餐饮店",
+					OperatorName: "李四",
+					ValidTo:      "2030年12月31日",
+					RawText:      "经营者名称：另一家餐饮店\n经营场所：北京市朝阳区测试路100号1楼\n许可证编号：JY11105000000001\n有效期至：2030年12月31日",
+					OCRAt:        time.Now().Format(time.RFC3339),
+				})
+				require.NoError(t, err)
+				app.FoodPermitOcr = foodPermitOCR
+
+				store.EXPECT().
+					GetMerchantApplicationDraft(gomock.Any(), user.ID).
+					Times(1).
+					Return(app, nil)
+
+				store.EXPECT().
+					ListMerchantLocationsInRegion(gomock.Any(), app.RegionID.Int64).
+					Times(1).
+					Return([]db.ListMerchantLocationsInRegionRow{}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				var response ErrorResponse
+				require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
+				require.Equal(t, ErrMerchantFoodPermitNameMismatch.Code, response.Code)
+				require.Contains(t, response.Error, "食品经营许可证主体名称与营业执照企业名称不一致")
+				require.Contains(t, response.Error, "营业执照：测试餐饮有限公司")
+				require.Contains(t, response.Error, "食品经营许可证：另一家餐饮店")
 			},
 		},
 		{
@@ -420,10 +858,9 @@ func TestSubmitMerchantApplication(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {
+			buildStubs: func(t *testing.T, store *mockdb.MockStore) {
 				app := randomMerchantAppDraftWithData(user.ID)
-				app.FoodPermitUrl = pgtype.Text{Valid: false} // 没有食品许可证
-
+				app.FoodPermitMediaAssetID = pgtype.Int8{}
 				store.EXPECT().
 					GetMerchantApplicationDraft(gomock.Any(), user.ID).
 					Times(1).
@@ -438,10 +875,9 @@ func TestSubmitMerchantApplication(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {
+			buildStubs: func(t *testing.T, store *mockdb.MockStore) {
 				app := randomMerchantAppDraftWithData(user.ID)
-				app.RegionID = pgtype.Int8{Valid: false} // 没有区域ID
-
+				app.RegionID = pgtype.Int8{Valid: false}
 				store.EXPECT().
 					GetMerchantApplicationDraft(gomock.Any(), user.ID).
 					Times(1).
@@ -452,11 +888,96 @@ func TestSubmitMerchantApplication(t *testing.T) {
 			},
 		},
 		{
+			name: "Approved_WithoutContactPhone",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(t *testing.T, store *mockdb.MockStore) {
+				app := randomMerchantAppDraftWithData(user.ID)
+				app.MerchantName = ""
+				app.ContactPhone = ""
+
+				store.EXPECT().
+					GetMerchantApplicationDraft(gomock.Any(), user.ID).
+					Times(1).
+					Return(app, nil)
+
+				store.EXPECT().
+					GetUser(gomock.Any(), user.ID).
+					Times(1).
+					Return(db.User{ID: user.ID}, nil)
+
+				derivedApp := app
+				derivedApp.MerchantName = "测试餐饮有限公司"
+				store.EXPECT().
+					UpdateMerchantApplicationBasicInfo(gomock.Any(), gomock.Any()).
+					Times(1).
+					DoAndReturn(func(_ context.Context, arg db.UpdateMerchantApplicationBasicInfoParams) (db.MerchantApplication, error) {
+						require.Equal(t, app.ID, arg.ID)
+						require.True(t, arg.MerchantName.Valid)
+						require.Equal(t, "测试餐饮有限公司", arg.MerchantName.String)
+						require.False(t, arg.ContactPhone.Valid)
+						return derivedApp, nil
+					})
+
+				submittedApp := derivedApp
+				submittedApp.Status = "submitted"
+				store.EXPECT().
+					SubmitMerchantApplication(gomock.Any(), app.ID).
+					Times(1).
+					Return(submittedApp, nil)
+
+				store.EXPECT().
+					ListMerchantLocationsInRegion(gomock.Any(), submittedApp.RegionID.Int64).
+					Times(1).
+					Return([]db.ListMerchantLocationsInRegionRow{}, nil)
+
+				store.EXPECT().
+					CheckBusinessLicenseExists(gomock.Any(), db.CheckBusinessLicenseExistsParams{
+						BusinessLicenseNumber: submittedApp.BusinessLicenseNumber,
+						ID:                    submittedApp.ID,
+					}).
+					Times(1).
+					Return(int64(0), nil)
+
+				store.EXPECT().
+					CheckLegalPersonIDExists(gomock.Any(), db.CheckLegalPersonIDExistsParams{
+						LegalPersonIDNumber: submittedApp.LegalPersonIDNumber,
+						ID:                  submittedApp.ID,
+					}).
+					Times(1).
+					Return(int64(0), nil)
+
+				approvedApp := submittedApp
+				approvedApp.Status = "approved"
+				store.EXPECT().
+					ApproveMerchantApplicationTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					DoAndReturn(func(_ context.Context, arg db.ApproveMerchantApplicationTxParams) (db.ApproveMerchantApplicationTxResult, error) {
+						require.Equal(t, "测试餐饮有限公司", arg.MerchantName)
+						require.Equal(t, "", arg.Phone)
+						return db.ApproveMerchantApplicationTxResult{
+							Application: approvedApp,
+							Merchant:    db.Merchant{ID: 1},
+						}, nil
+					})
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var resp merchantApplicationDraftResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Equal(t, "approved", resp.Status)
+				require.Equal(t, "测试餐饮有限公司", resp.MerchantName)
+				require.Equal(t, "", resp.ContactPhone)
+			},
+		},
+		{
 			name: "SubmittedStatus_Retry",
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {
+			buildStubs: func(t *testing.T, store *mockdb.MockStore) {
 				app := randomMerchantAppDraftWithData(user.ID)
 				app.Status = "submitted"
 
@@ -465,14 +986,26 @@ func TestSubmitMerchantApplication(t *testing.T) {
 					Times(1).
 					Return(app, nil)
 
-				// 已经是 submitted，直接进入审核
 				store.EXPECT().
-					CheckMerchantAddressExists(gomock.Any(), db.CheckMerchantAddressExistsParams{
-						Address:     app.BusinessAddress,
-						OwnerUserID: user.ID,
+					ListMerchantLocationsInRegion(gomock.Any(), app.RegionID.Int64).
+					Times(1).
+					Return([]db.ListMerchantLocationsInRegionRow{}, nil)
+
+				store.EXPECT().
+					CheckBusinessLicenseExists(gomock.Any(), db.CheckBusinessLicenseExistsParams{
+						BusinessLicenseNumber: app.BusinessLicenseNumber,
+						ID:                    app.ID,
 					}).
 					Times(1).
-					Return(false, nil)
+					Return(int64(0), nil)
+
+				store.EXPECT().
+					CheckLegalPersonIDExists(gomock.Any(), db.CheckLegalPersonIDExistsParams{
+						LegalPersonIDNumber: app.LegalPersonIDNumber,
+						ID:                  app.ID,
+					}).
+					Times(1).
+					Return(int64(0), nil)
 
 				store.EXPECT().
 					ApproveMerchantApplicationTx(gomock.Any(), gomock.Any()).
@@ -486,51 +1019,33 @@ func TestSubmitMerchantApplication(t *testing.T) {
 			},
 		},
 		{
-			name: "Rejected_AddressAlreadyExists",
+			name: "BadRequest_AddressAlreadyExistsKeepsDraft",
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {
+			buildStubs: func(t *testing.T, store *mockdb.MockStore) {
 				app := randomMerchantAppDraftWithData(user.ID)
 				store.EXPECT().
 					GetMerchantApplicationDraft(gomock.Any(), user.ID).
 					Times(1).
 					Return(app, nil)
 
-				submittedApp := app
-				submittedApp.Status = "submitted"
 				store.EXPECT().
-					SubmitMerchantApplication(gomock.Any(), app.ID).
+					ListMerchantLocationsInRegion(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(submittedApp, nil)
-
-				// 地址已被占用
-				store.EXPECT().
-					CheckMerchantAddressExists(gomock.Any(), db.CheckMerchantAddressExistsParams{
-						Address:     submittedApp.BusinessAddress,
-						OwnerUserID: user.ID,
-					}).
-					Times(1).
-					Return(true, nil)
-
-				store.EXPECT().
-					RejectMerchantApplication(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.MerchantApplication{
-						ID:           app.ID,
-						Status:       "rejected",
-						RejectReason: pgtype.Text{String: "该地址已有商户入驻，同一地址不能注册两家餐厅", Valid: true},
+					Return([]db.ListMerchantLocationsInRegionRow{
+						{
+							OwnerUserID: user.ID + 1,
+							Address:     "北京市朝阳区测试路100号",
+							Latitude:    pgtype.Numeric{Int: big.NewInt(399080000), Exp: -7, Valid: true},
+							Longitude:   pgtype.Numeric{Int: big.NewInt(1163210000), Exp: -7, Valid: true},
+						},
 					}, nil)
+
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
-
-				var resp merchantApplicationDraftResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
-				require.Equal(t, "rejected", resp.Status)
-				require.NotNil(t, resp.RejectReason)
-				require.Contains(t, *resp.RejectReason, "地址已有商户入驻")
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				require.Contains(t, recorder.Body.String(), "附近已有其他商户完成入驻")
 			},
 		},
 	}
@@ -542,9 +1057,13 @@ func TestSubmitMerchantApplication(t *testing.T) {
 			defer ctrl.Finish()
 
 			store := mockdb.NewMockStore(ctrl)
-			tc.buildStubs(store)
+			expectMerchantApplicationPublicDocumentLookups(store, user.ID)
+			tc.buildStubs(t, store)
 
 			server := newTestServer(t, store)
+			if tc.configureServer != nil {
+				tc.configureServer(server)
+			}
 			recorder := httptest.NewRecorder()
 
 			request, err := http.NewRequest(http.MethodPost, "/v1/merchant/application/submit", nil)
@@ -597,8 +1116,7 @@ func TestResetMerchantApplication(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp merchantApplicationDraftResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Equal(t, "draft", resp.Status)
 			},
 		},
@@ -628,6 +1146,7 @@ func TestResetMerchantApplication(t *testing.T) {
 			defer ctrl.Finish()
 
 			store := mockdb.NewMockStore(ctrl)
+			expectMerchantApplicationPublicDocumentLookups(store, user.ID)
 			tc.buildStubs(store)
 
 			server := newTestServer(t, store)
@@ -738,4 +1257,166 @@ func TestIsAddressMatch(t *testing.T) {
 			require.Equal(t, tc.expected, result, "license: %s, business: %s", tc.license, tc.business)
 		})
 	}
+}
+
+// TestGetOrCreateMerchantApplicationDraft_WithMediaAssetIDs — Phase 5.6
+// 当草稿中已绑定证照媒体资产 ID 时，GET /v1/merchant/application 响应中应包含
+// business_license_media_asset_id 和 food_permit_media_asset_id 字段
+func TestGetOrCreateMerchantApplicationDraft_WithMediaAssetIDs(t *testing.T) {
+	user, _ := randomUser(t)
+	app := randomMerchantAppDraftWithData(user.ID)
+	// randomMerchantAppDraftWithData 已设置:
+	//   BusinessLicenseMediaAssetID = 2, FoodPermitMediaAssetID = 1
+	//   IDCardFrontMediaAssetID = 3, IDCardBackMediaAssetID = 4
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectMerchantApplicationPublicDocumentLookups(store, user.ID)
+	store.EXPECT().
+		GetMerchantApplicationDraft(gomock.Any(), user.ID).
+		Times(1).
+		Return(app, nil)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	request, err := http.NewRequest(http.MethodGet, "/v1/merchant/application", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp merchantApplicationDraftResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.NotNil(t, resp.BusinessLicenseMediaAssetID)
+	require.Equal(t, int64(2), *resp.BusinessLicenseMediaAssetID)
+	require.NotNil(t, resp.BusinessLicenseURL)
+	require.Contains(t, *resp.BusinessLicenseURL, "business-license.jpg")
+	require.NotNil(t, resp.FoodPermitMediaAssetID)
+	require.Equal(t, int64(1), *resp.FoodPermitMediaAssetID)
+	require.NotNil(t, resp.FoodPermitURL)
+	require.Contains(t, *resp.FoodPermitURL, "food-permit.jpg")
+	require.NotNil(t, resp.IDCardFrontMediaAssetID)
+	require.Equal(t, int64(3), *resp.IDCardFrontMediaAssetID)
+	require.NotNil(t, resp.IDCardBackMediaAssetID)
+	require.Equal(t, int64(4), *resp.IDCardBackMediaAssetID)
+}
+
+func TestGetOrCreateMerchantApplicationDraft_ReturnsAsyncOCRFields(t *testing.T) {
+	user, _ := randomUser(t)
+	app := randomMerchantAppDraft(user.ID)
+	ocrJobID := int64(9001)
+
+	businessLicenseOCR, err := json.Marshal(BusinessLicenseOCRData{
+		Status:         "processing",
+		ErrorCode:      "ocr_rate_limited",
+		AlertEmittedAt: "2026-03-25T16:00:00Z",
+		QueuedAt:       "2026-03-25T15:59:00Z",
+		StartedAt:      "2026-03-25T15:59:05Z",
+		OCRJobID:       &ocrJobID,
+	})
+	require.NoError(t, err)
+	foodPermitOCR, err := json.Marshal(FoodPermitOCRData{
+		Status:    "done",
+		QueuedAt:  "2026-03-25T15:58:00Z",
+		StartedAt: "2026-03-25T15:58:03Z",
+		OCRJobID:  &ocrJobID,
+	})
+	require.NoError(t, err)
+	idCardFrontOCR, err := json.Marshal(MerchantIDCardOCRData{
+		Status:         "failed",
+		ErrorCode:      "ocr_bad_request",
+		AlertEmittedAt: "2026-03-25T16:01:00Z",
+		QueuedAt:       "2026-03-25T16:00:30Z",
+		StartedAt:      "2026-03-25T16:00:31Z",
+		OCRJobID:       &ocrJobID,
+	})
+	require.NoError(t, err)
+
+	app.BusinessLicenseOcr = businessLicenseOCR
+	app.FoodPermitOcr = foodPermitOCR
+	app.IDCardFrontOcr = idCardFrontOCR
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectMerchantApplicationPublicDocumentLookups(store, user.ID)
+	store.EXPECT().
+		GetMerchantApplicationDraft(gomock.Any(), user.ID).
+		Times(1).
+		Return(app, nil)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	request, err := http.NewRequest(http.MethodGet, "/v1/merchant/application", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp merchantApplicationDraftResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.NotNil(t, resp.BusinessLicenseOCR)
+	require.Equal(t, "processing", resp.BusinessLicenseOCR.Status)
+	require.Equal(t, "ocr_rate_limited", resp.BusinessLicenseOCR.ErrorCode)
+	require.Equal(t, "2026-03-25T16:00:00Z", resp.BusinessLicenseOCR.AlertEmittedAt)
+	require.Equal(t, "2026-03-25T15:59:00Z", resp.BusinessLicenseOCR.QueuedAt)
+	require.Equal(t, "2026-03-25T15:59:05Z", resp.BusinessLicenseOCR.StartedAt)
+	require.NotNil(t, resp.BusinessLicenseOCR.OCRJobID)
+	require.Equal(t, ocrJobID, *resp.BusinessLicenseOCR.OCRJobID)
+	require.NotNil(t, resp.FoodPermitOCR)
+	require.Equal(t, "2026-03-25T15:58:00Z", resp.FoodPermitOCR.QueuedAt)
+	require.Equal(t, "2026-03-25T15:58:03Z", resp.FoodPermitOCR.StartedAt)
+	require.NotNil(t, resp.FoodPermitOCR.OCRJobID)
+	require.Equal(t, ocrJobID, *resp.FoodPermitOCR.OCRJobID)
+	require.NotNil(t, resp.IDCardFrontOCR)
+	require.Equal(t, "failed", resp.IDCardFrontOCR.Status)
+	require.Equal(t, "ocr_bad_request", resp.IDCardFrontOCR.ErrorCode)
+	require.Equal(t, "2026-03-25T16:01:00Z", resp.IDCardFrontOCR.AlertEmittedAt)
+	require.NotNil(t, resp.IDCardFrontOCR.OCRJobID)
+	require.Equal(t, ocrJobID, *resp.IDCardFrontOCR.OCRJobID)
+}
+
+func TestGetOrCreateMerchantApplicationDraft_RewritesPublicImageArraysInLocalMode(t *testing.T) {
+	user, _ := randomUser(t)
+	app := randomMerchantAppDraft(user.ID)
+
+	storefrontImages, err := json.Marshal([]string{"uploads/merchants/12/storefront/cover.jpg"})
+	require.NoError(t, err)
+	environmentImages, err := json.Marshal([]string{"uploads/merchants/12/environment/room.jpg"})
+	require.NoError(t, err)
+	app.StorefrontImages = storefrontImages
+	app.EnvironmentImages = environmentImages
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectMerchantApplicationPublicDocumentLookups(store, user.ID)
+	store.EXPECT().
+		GetMerchantApplicationDraft(gomock.Any(), user.ID).
+		Times(1).
+		Return(app, nil)
+
+	server := newTestServer(t, store)
+	server.config.FileStorageProvider = "local"
+	recorder := httptest.NewRecorder()
+
+	request, err := http.NewRequest(http.MethodGet, "/v1/merchant/application", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp merchantApplicationDraftResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Equal(t, []string{"/dev/uploads/merchants/12/storefront/cover.jpg"}, resp.StorefrontImages)
+	require.Equal(t, []string{"/dev/uploads/merchants/12/environment/room.jpg"}, resp.EnvironmentImages)
 }

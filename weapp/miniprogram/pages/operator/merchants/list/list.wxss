@@ -1,52 +1,62 @@
-.merchants-list {
+.page-container {
   min-height: 100vh;
-  background-color: #f5f5f5;
+  background-color: var(--td-bg-color-page);
   display: flex;
   flex-direction: column;
 }
 
+.header-tools {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: var(--td-bg-color-container);
+}
+
 .search-bar {
-  padding: 24rpx 32rpx;
-  background: white;
+  padding: var(--spacer-md);
 }
 
 .filter-tabs {
-  background: white;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1rpx solid var(--td-border-color, #eee);
+}
+
+.tabs-container {
+  --td-tab-item-active-color: var(--td-brand-color);
+  --td-tab-track-color: var(--td-brand-color);
+}
+
+.content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 
 .merchants-scroll {
   flex: 1;
-  padding: 24rpx 32rpx;
-}
-
-.loading-container,
-.empty-container {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  padding: 120rpx 0;
+  height: 0; /* Important for flex-grow in scroll-view */
 }
 
 .merchants-container {
+  padding: var(--spacer-md) var(--spacer-md) calc(var(--spacer-md) + env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
-  gap: 24rpx;
+  gap: var(--spacer-md);
 }
 
 .merchant-card {
-  background: white;
-  border-radius: 16rpx;
+  background: var(--td-bg-color-container);
+  border-radius: var(--radius-lg);
   padding: 32rpx;
   display: flex;
   flex-direction: column;
-  gap: 24rpx;
+  gap: var(--spacer-md);
+  box-shadow: var(--shadow-sm, 0 4rpx 20rpx rgba(0, 0, 0, 0.05));
 }
 
 .merchant-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
 }
 
 .merchant-info {
@@ -58,8 +68,8 @@
 
 .merchant-name {
   font-size: 32rpx;
-  font-weight: bold;
-  color: #333;
+  font-weight: 600;
+  color: var(--td-text-color-primary);
 }
 
 .merchant-rating {
@@ -70,8 +80,8 @@
 
 .rating-text {
   font-size: 28rpx;
-  color: #faad14;
-  font-weight: bold;
+  color: var(--td-warning-color);
+  font-weight: 600;
 }
 
 .merchant-details {
@@ -88,15 +98,15 @@
 
 .detail-text {
   font-size: 24rpx;
-  color: #666;
+  color: var(--td-text-color-secondary);
 }
 
 .merchant-stats {
   display: flex;
   justify-content: space-around;
   padding: 24rpx 0;
-  border-top: 1px solid #f0f0f0;
-  border-bottom: 1px solid #f0f0f0;
+  border-top: 1rpx solid var(--td-border-color, #f0f0f0);
+  border-bottom: 1rpx solid var(--td-border-color, #f0f0f0);
 }
 
 .stat-item {
@@ -107,14 +117,14 @@
 }
 
 .stat-value {
-  font-size: 32rpx;
-  font-weight: bold;
-  color: #333;
+  font-size: 30rpx;
+  font-weight: 600;
+  color: var(--td-text-color-primary);
 }
 
 .stat-label {
-  font-size: 24rpx;
-  color: #999;
+  font-size: 22rpx;
+  color: var(--td-text-color-placeholder);
 }
 
 .merchant-actions {
@@ -123,18 +133,44 @@
   justify-content: flex-end;
 }
 
-.loading-more,
-.no-more {
+.load-more {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 32rpx 0;
+}
+
+.no-more-text {
+  font-size: 24rpx;
+  color: var(--td-text-color-placeholder);
+}
+
+/* 异常状态 */
+.error-container {
+  padding: 120rpx 0;
   display: flex;
   justify-content: center;
-  padding: 40rpx 0;
-  color: #999;
-  font-size: 24rpx;
+  align-items: center;
+}
+
+/* 骨架屏 */
+.skeleton-container {
+  padding: var(--spacer-md);
+}
+
+/* 动画 */
+.animate-fade-in {
+  animation: fadeIn 0.4s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(20rpx); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .dialog-content {
   padding: 32rpx;
   display: flex;
   flex-direction: column;
-  gap: 24rpx;
+  gap: var(--spacer-md);
 }

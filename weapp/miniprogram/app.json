@@ -1,90 +1,24 @@
 {
   "pages": [
     "pages/takeout/index",
-    "pages/takeout/cart/index",
     "pages/reservation/index",
     "pages/user_center/index",
-    "pages/takeout/dish-detail/index",
     "pages/dining/index",
-    "pages/orders/detail/index",
-    "pages/orders/list/index",
-    "pages/reservation/confirm/index",
-    "pages/reservation/room-detail/index",
-    "pages/takeout/order-confirm/index",
-    "pages/takeout/restaurant-detail/index",
-    "pages/user_center/addresses/index",
-    "pages/user_center/addresses/edit/index",
-    "pages/user_center/coupons/index",
-    "pages/user_center/credit/index",
-    "pages/user_center/favorites/index",
-    "pages/user_center/membership/index",
-    "pages/user_center/points/index",
-    "pages/user_center/reviews/index",
-    "pages/user_center/wallet/index",
-    "pages/user_center/payment-detail/index",
-    "pages/user_center/refund-detail/index",
-    "pages/user_center/reservations/index",
-    "pages/user_center/reviews/create/index",
-    "pages/dine-in/scan-entry/scan-entry",
-    "pages/dine-in/menu/menu",
-    "pages/dine-in/checkout/checkout",
-    "pages/dine-in/payment-success/payment-success",
-    "pages/orders/tracking/index",
-    "pages/support/index",
-    "pages/message/center/index",
-    "pages/credit/index",
-    "pages/user/bind-merchant/index",
-    "pages/user/claim-boss/index"
+    "pages/notification/index",
+    "pages/user/bind-merchant/index"
   ],
   "subPackages": [
-    {
-      "root": "pages/merchant",
-      "name": "merchant",
-      "pages": [
-        "dashboard/index",
-        "analytics/dishes/index",
-        "analytics/enhanced/index",
-        "analytics/index",
-        "analytics/sales/index",
-        "dinein/index",
-        "delivery-settings/index",
-        "dishes/edit/index",
-        "dishes/index",
-        "health/index",
-        "orders/index",
-        "reservations/index",
-        "dishes/manage/manage",
-        "tables/manage/manage",
-        "tables/index",
-        "kds/index",
-        "analytics/dashboard/dashboard",
-        "inventory/index",
-        "finance/index",
-        "admin/index",
-        "combos/index",
-        "members/index",
-        "membership-settings/index",
-        "vouchers/index",
-        "discounts/index",
-        "review/manage/index",
-        "settings/index",
-        "staff/index",
-        "navigation/index"
-      ],
-      "independent": false
-    },
     {
       "root": "pages/rider",
       "name": "rider",
       "pages": [
         "dashboard/index",
         "claims/index",
-        "credit/index",
+        "claims/detail/index",
         "deposit/index",
+        "navigation/index",
         "task-detail/index",
-        "tasks/index",
-        "delivery/manage/manage",
-        "exception/index"
+        "tasks/index"
       ],
       "independent": false
     },
@@ -93,13 +27,25 @@
       "name": "operator",
       "pages": [
         "analytics/index",
-        "automation/index",
-        "claims/index",
         "dashboard/index",
         "merchants/index",
+        "merchants/detail/index",
+        "riders/index",
+        "riders/detail/index",
         "rules/index",
-        "dashboard/dashboard",
-        "merchants/list/list"
+        "region/index",
+        "region/config",
+        "timeslot/index",
+        "delivery-fee/index",
+        "safety/report/index",
+        "safety/detail/index",
+        "applyment/index",
+        "applyment/completed/index",
+        "applyment/success/index",
+        "finance/withdraw/index",
+        "appeal/list/index",
+        "appeal/detail/index",
+        "region-expansion/index"
       ],
       "independent": false
     },
@@ -108,6 +54,9 @@
       "name": "register",
       "pages": [
         "merchant/index",
+        "merchant/store/index",
+        "merchant/group/index",
+        "merchant/join-group/index",
         "rider/index",
         "operator/index"
       ],
@@ -117,7 +66,161 @@
       "root": "pages/platform",
       "name": "platform",
       "pages": [
-        "dashboard/dashboard"
+        "dashboard/dashboard",
+        "operators/index",
+        "operators/detail",
+        "operational-configs/index",
+        "riders/index",
+        "tables/tags/index",
+        "groups/index",
+        "groups/detail"
+      ],
+      "independent": false
+    },
+    {
+      "root": "pages/orders",
+      "name": "orders",
+      "pages": [
+        "detail/index",
+        "list/index",
+        "tracking/index",
+        "success/index"
+      ]
+    },
+    {
+      "root": "pages/dine-in",
+      "name": "dinein",
+      "pages": [
+        "scan-entry/scan-entry",
+        "menu/menu",
+        "checkout/checkout",
+        "payment-success/payment-success"
+      ]
+    },
+    {
+      "root": "pages/takeout/cart",
+      "pages": ["index"]
+    },
+    {
+      "root": "pages/takeout/dish-detail",
+      "pages": ["index"]
+    },
+    {
+      "root": "pages/takeout/combo-detail",
+      "pages": ["index"]
+    },
+    {
+      "root": "pages/takeout/order-confirm",
+      "pages": ["index"]
+    },
+    {
+      "root": "pages/takeout/restaurant-detail",
+      "pages": ["index"]
+    },
+    {
+      "root": "pages/takeout/search",
+      "pages": ["index"]
+    },
+    {
+      "root": "pages/takeout/merchant-info",
+      "pages": ["index"]
+    },
+    {
+      "root": "pages/takeout/category",
+      "pages": ["index"]
+    },
+    { "root": "pages/reservation/create", "pages": ["index"] },
+    { "root": "pages/reservation/confirm", "pages": ["index"] },
+    { "root": "pages/reservation/detail", "pages": ["index"] },
+    { "root": "pages/reservation/list", "pages": ["index"] },
+    { "root": "pages/reservation/modify", "pages": ["index"] },
+    { "root": "pages/reservation/room-detail", "pages": ["index"] },
+    { "root": "pages/user_center/addresses", "pages": ["index", "edit/index"] },
+    { "root": "pages/user_center/coupons", "pages": ["index"] },
+    { "root": "pages/user_center/favorites", "pages": ["index"] },
+    { "root": "pages/user_center/membership", "pages": ["index"] },
+    { "root": "pages/user_center/reviews", "pages": ["index", "create/index"] },
+    { "root": "pages/user_center/wallet", "pages": ["index"] },
+    { "root": "pages/user_center/payment-detail", "pages": ["index"] },
+    { "root": "pages/user_center/refund-detail", "pages": ["index"] },
+    {
+      "root": "pages/user_center/reservations",
+      "pages": ["index"]
+    },
+    {
+      "root": "pages/user_center/agreements",
+      "pages": ["index", "detail/index"]
+    },
+    {
+      "root": "pages/user_center/about_us",
+      "pages": ["index"]
+    },
+    {
+      "root": "pages/user_center/service_center",
+      "pages": ["index", "submit/index", "detail/index"]
+    },
+    {
+      "root": "pages/merchant",
+      "name": "merchant",
+      "pages": [
+        "dashboard/index",
+        "kitchen/index",
+        "kitchen/detail/index",
+        "stats/index",
+        "stats/customers/index",
+        "stats/customers/detail/index",
+        "staff/index",
+        "settings/profile/index",
+        "settings/business-hours/index",
+        "settings/membership/index",
+        "settings/members/index",
+        "settings/recharge-rules/index",
+        "settings/recharge-rules/edit/index",
+        "settings/application/index",
+        "settings/applyment/index",
+        "settings/display-config/index",
+        "group/application/index",
+        "group/join/index",
+        "config/index",
+        "complaints/index",
+        "complaints/detail/index",
+        "claims/index",
+        "claims/detail/index",
+        "appeals/index",
+        "appeals/detail/index",
+        "finance/index",
+        "finance/bills/index",
+        "finance/settlement-account/index",
+        "finance/settlement-account/edit/index",
+        "finance/orders/index",
+        "finance/service-fees/index",
+        "finance/promotions/index",
+        "finance/daily/index",
+        "finance/settlements/index",
+        "finance/timeline/index",
+        "reviews/index",
+        "dishes/index",
+        "dishes/categories/index",
+        "dishes/edit/index",
+        "combos/index",
+        "combos/edit/index",
+        "inventory/index",
+        "reservations/index",
+        "reservations/edit/index",
+        "orders/list/index",
+        "orders/detail/index",
+        "orders/print-anomalies/index",
+        "tables/index",
+        "tables/edit/index",
+        "printers/index",
+        "printers/edit/index",
+        "profile-images/index",
+        "discount-rules/index",
+        "discount-rules/edit/index",
+        "delivery-promotions/index",
+        "delivery-promotions/edit/index",
+        "vouchers/index",
+        "vouchers/edit/index"
       ],
       "independent": false
     }
@@ -128,24 +231,16 @@
       "packages": [
         "__APP__"
       ]
-    },
-    "pages/user_center/index": {
-      "network": "all",
-      "packages": [
-        "merchant",
-        "rider"
-      ]
     }
   },
   "window": {
-    "pageOrientation": "auto",
+    "pageOrientation": "portrait",
     "backgroundTextStyle": "light",
     "navigationBarBackgroundColor": "#fff",
     "navigationBarTitleText": "LocalLife",
     "navigationBarTextStyle": "black",
     "navigationStyle": "custom"
   },
-  "resizable": true,
   "tabBar": {
     "custom": false,
     "color": "#000000",

@@ -1,0 +1,256 @@
+.page-container {
+  min-height: 100vh;
+  background: var(--td-bg-color-page);
+}
+
+.page-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-md);
+}
+
+.state-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24rpx;
+  padding: 140rpx 24rpx;
+}
+
+.page-notice {
+  border-radius: var(--radius-md);
+}
+
+.control-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+  padding: 16rpx 0 12rpx;
+  background: var(--td-bg-color-page);
+}
+
+.filter-panel {
+  padding: 20rpx 24rpx;
+  border-radius: var(--radius-lg);
+  background: var(--td-bg-color-container);
+  box-shadow: var(--shadow-sm);
+}
+
+.filter-block {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+}
+
+.filter-label {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+}
+
+.filter-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+}
+
+.loading-state,
+.state-inline {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacer-md);
+  min-height: 320rpx;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20rpx;
+}
+
+.summary-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+  padding: 24rpx;
+  border-radius: 20rpx;
+  background: var(--td-bg-color-container);
+  box-shadow: var(--shadow-sm);
+}
+
+.brand-card {
+  background: linear-gradient(135deg, var(--td-brand-color), #1c7ef5);
+}
+
+.brand-card .summary-label,
+.brand-card .summary-value {
+  color: var(--td-text-color-anti);
+}
+
+.summary-label {
+  font-size: var(--font-size-xs);
+  color: var(--td-text-color-secondary);
+}
+
+.summary-value {
+  font-size: 44rpx;
+  line-height: 1.2;
+  font-weight: 700;
+  color: var(--td-text-color-primary);
+}
+
+.meta-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+  padding: 20rpx 24rpx;
+  border-radius: 18rpx;
+  background: var(--td-bg-color-container);
+}
+
+.meta-item {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  font-size: 24rpx;
+  color: var(--td-text-color-secondary);
+}
+
+.meta-item.warning {
+  color: var(--td-warning-color-7);
+}
+
+.result-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4rpx 4rpx 0;
+}
+
+.result-summary {
+  font-size: var(--font-size-sm);
+  color: var(--td-text-color-secondary);
+}
+
+.section-block {
+  margin-bottom: 12rpx;
+}
+
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16rpx;
+  padding: 0 4rpx;
+}
+
+.section-title {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+}
+
+.section-count {
+  font-size: 24rpx;
+  color: var(--td-text-color-placeholder);
+}
+
+.order-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+.order-card {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+  padding: 24rpx;
+  border-radius: 20rpx;
+  background: var(--td-bg-color-container);
+  box-shadow: var(--shadow-sm);
+}
+
+.order-head,
+.order-id-row,
+.order-meta-row,
+.dish-row,
+.notes-row,
+.ready-hint,
+.progress-row {
+  display: flex;
+  align-items: center;
+}
+
+.order-head,
+.order-meta-row,
+.dish-row {
+  justify-content: space-between;
+}
+
+.order-id-row {
+  gap: 12rpx;
+}
+
+.order-no {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: var(--td-text-color-primary);
+}
+
+.order-meta-row {
+  font-size: 24rpx;
+  color: var(--td-text-color-secondary);
+  gap: 16rpx;
+}
+
+.dish-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10rpx;
+}
+
+.compact-list {
+  gap: 8rpx;
+}
+
+.dish-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 28rpx;
+  color: var(--td-text-color-primary);
+  font-weight: 500;
+}
+
+.dish-qty {
+  font-size: 26rpx;
+  color: var(--td-text-color-secondary);
+}
+
+.notes-row,
+.ready-hint {
+  gap: 8rpx;
+  font-size: 24rpx;
+  color: var(--td-text-color-secondary);
+}
+
+.ready-hint {
+  color: var(--td-success-color);
+}
+
+.progress-row {
+  justify-content: flex-start;
+}
+
+.card-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12rpx;
+}
+
+.card-actions-single {
+  justify-content: flex-start;
+}

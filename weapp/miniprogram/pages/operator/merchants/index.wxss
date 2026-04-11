@@ -1,86 +1,182 @@
 .page-container {
   min-height: 100vh;
-  background: #F6F6F6;
-}
-
-.loading {
+  background-color: var(--td-bg-color-page);
   display: flex;
-  justify-content: center;
-  padding: 100rpx 0;
+  flex-direction: column;
 }
 
-.merchants-list {
-  padding: 24rpx;
+.header-tools {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--td-bg-color-container);
 }
 
-.merchants-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 24rpx;
+.search-bar {
+  padding: var(--spacer-md) var(--spacer-md) var(--spacer-sm);
 }
 
-@media (min-width: 1024rpx) {
-  .merchants-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
+.filter-tabs {
+  border-bottom: 1rpx solid var(--td-border-color, #eee);
 }
 
-@media (min-width: 1440rpx) {
-  .merchants-grid {
-    grid-template-columns: repeat(3, 1fr);
-  }
+.tabs-container {
+  --td-tab-item-active-color: var(--td-brand-color);
+  --td-tab-track-color: var(--td-brand-color);
+}
+
+.content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.merchants-scroll {
+  flex: 1;
+  height: 0;
+}
+
+.merchants-container {
+  padding: var(--spacer-md) var(--spacer-md) calc(var(--spacer-md) + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-md);
 }
 
 .merchant-card {
-  background: #fff;
-  border-radius: 16rpx;
-  padding: 24rpx;
-  box-shadow: 0 4rpx 12rpx rgba(0,0,0,0.05);
+  background: var(--td-bg-color-container);
+  border-radius: var(--radius-lg);
+  padding: 32rpx;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-md);
+  box-shadow: var(--shadow-sm, 0 4rpx 20rpx rgba(0, 0, 0, 0.05));
 }
 
-.card-header {
+.merchant-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16rpx;
-  padding-bottom: 16rpx;
-  border-bottom: 1rpx solid #F0F0F0;
+  gap: var(--spacer-sm);
+}
+
+.merchant-info {
+  display: flex;
+  align-items: center;
+  gap: var(--spacer-sm);
+  flex: 1;
 }
 
 .merchant-name {
+  font-size: var(--font-size-heading);
+  font-weight: 600;
+  color: var(--td-text-color-primary, #333);
+}
+
+.merchant-rating {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+}
+
+.rating-text {
+  font-size: var(--font-size-base);
+  color: var(--td-warning-color, #faad14);
+  font-weight: 600;
+}
+
+.merchant-details {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+}
+
+.detail-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.detail-text {
+  font-size: var(--font-size-xs);
+  color: var(--td-text-color-secondary, #666);
+}
+
+.merchant-stats {
+  display: flex;
+  justify-content: space-around;
+  padding: var(--spacer-md) 0;
+  border-top: 1rpx solid var(--td-border-color, #f0f0f0);
+  border-bottom: 1rpx solid var(--td-border-color, #f0f0f0);
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8rpx;
+}
+
+.stat-value {
   font-size: 30rpx;
-  font-weight: bold;
-  color: #333;
+  font-weight: 600;
+  color: var(--td-text-color-primary, #333);
 }
 
-.card-body {
-  margin-bottom: 16rpx;
+.stat-label {
+  font-size: var(--font-size-xxs);
+  color: var(--td-text-color-placeholder, #999);
 }
 
-.info-row {
+.merchant-actions {
   display: flex;
-  justify-content: space-between;
-  padding: 8rpx 0;
-  font-size: 26rpx;
-}
-
-.label {
-  color: #666;
-}
-
-.value {
-  color: #333;
-  font-weight: 500;
-}
-
-.rating {
-  color: #FF9C00;
-}
-
-.card-actions {
-  display: flex;
+  gap: var(--spacer-sm);
   justify-content: flex-end;
-  gap: 16rpx;
-  padding-top: 16rpx;
-  border-top: 1rpx solid #F0F0F0;
+}
+
+/* 异常状态 */
+.error-container {
+  padding: 120rpx 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* 骨架屏 */
+.skeleton-container {
+  padding: var(--spacer-md);
+}
+
+.load-more {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 32rpx 0;
+}
+
+.no-more-text {
+  font-size: var(--font-size-xs);
+  color: var(--td-text-color-placeholder, #999);
+}
+
+.dialog-content {
+  padding: 32rpx;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-md);
+}
+
+.empty-container {
+  padding: 120rpx 0;
+}
+
+/* 动画 */
+.animate-fade-in {
+  animation: fadeIn 0.4s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(20rpx); }
+  to { opacity: 1; transform: translateY(0); }
 }

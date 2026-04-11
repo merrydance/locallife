@@ -1,11 +1,13 @@
 {
     "navigationBarTitleText": "运营商工作台",
-    "navigationBarBackgroundColor": "#667eea",
-    "navigationBarTextStyle": "white",
-    "enablePullDownRefresh": true,
     "usingComponents": {
+        "custom-navbar": "/components/custom-navbar/index",
         "t-loading": "tdesign-miniprogram/loading/loading",
         "t-icon": "tdesign-miniprogram/icon/icon",
-        "t-tag": "tdesign-miniprogram/tag/tag"
+        "t-tag": "tdesign-miniprogram/tag/tag",
+        "t-button": "tdesign-miniprogram/button/button",
+        "t-empty": "tdesign-miniprogram/empty/empty",
+        "card-skeleton": "/components/card-skeleton/index",
+        "list-skeleton": "/components/list-skeleton/index"
     }
 }

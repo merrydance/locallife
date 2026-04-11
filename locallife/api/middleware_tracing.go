@@ -1,6 +1,8 @@
 package api
 
 import (
+	"context"
+	"net/url"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -10,11 +12,15 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+// contextKeyType is a private type for context keys to avoid collisions
+type contextKeyType string
+
 const (
 	// RequestIDHeader HTTP 请求头中的 request_id 键
 	RequestIDHeader = "X-Request-ID"
 	// RequestIDKey Gin Context 中的 request_id 键
-	RequestIDKey = "request_id"
+	RequestIDKey    = "request_id"
+	requestIDCtxKey = contextKeyType("request_id")
 )
 
 // RequestTracingMiddleware 请求追踪中间件
@@ -29,6 +35,7 @@ func RequestTracingMiddleware() gin.HandlerFunc {
 
 		// 存储到 Context 中供后续使用
 		ctx.Set(RequestIDKey, requestID)
+		ctx.Request = ctx.Request.WithContext(context.WithValue(ctx.Request.Context(), requestIDCtxKey, requestID))
 
 		// 设置响应头
 		ctx.Header(RequestIDHeader, requestID)
@@ -44,7 +51,7 @@ func RequestLoggingMiddleware() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		start := time.Now()
 		path := ctx.Request.URL.Path
-		query := ctx.Request.URL.RawQuery
+		query := sanitizeQuery(ctx.Request.URL.RawQuery)
 
 		// 获取 request_id
 		requestID, _ := ctx.Get(RequestIDKey)
@@ -58,10 +65,13 @@ func RequestLoggingMiddleware() gin.HandlerFunc {
 		clientIP := ctx.ClientIP()
 		method := ctx.Request.Method
 		userAgent := ctx.Request.UserAgent()
+		isClientLogScanner401 := path == "/v1/logs/error" && status == 401 && isScannerUserAgent(userAgent)
 
 		// 根据状态码选择日志级别
 		var logEvent *zerolog.Event
 		switch {
+		case isClientLogScanner401:
+			logEvent = log.Info()
 		case status >= 500:
 			logEvent = log.Error()
 		case status >= 400:
@@ -95,6 +105,22 @@ func RequestLoggingMiddleware() gin.HandlerFunc {
 
 		logEvent.Msg("HTTP request")
 	}
+}
+
+func sanitizeQuery(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	values, err := url.ParseQuery(raw)
+	if err != nil {
+		return "<redacted>"
+	}
+	for _, key := range []string{"token", "access_token", "refresh_token"} {
+		if _, ok := values[key]; ok {
+			values.Set(key, "***")
+		}
+	}
+	return values.Encode()
 }
 
 // GetRequestID 从 Context 获取 request_id

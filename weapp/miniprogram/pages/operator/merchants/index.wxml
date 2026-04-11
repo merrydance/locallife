@@ -1,54 +1,192 @@
 <custom-navbar title="商户管理" showBack="{{true}}" bind:navheight="onNavHeight" />
 
-<view class="page-container {{isLargeScreen ? 'large-screen' : ''}}" style="padding-top: {{navBarHeight}}px;">
-  <t-loading wx:if="{{loading}}" theme="circular" size="40rpx" class="loading" />
-
-  <view wx:if="{{!loading}}" class="merchants-list">
-    <view wx:if="{{merchants.length === 0}}" class="empty">
-      <t-empty description="暂无商户" />
+<view
+  class="page-container page-shell page-shell--with-nav page-shell--bottom-safe {{isLargeScreen ? 'large-screen' : ''}}"
+  style="--page-shell-nav-height: {{navBarHeight}}px"
+>
+  <view class="header-tools">
+    <view class="search-bar">
+      <t-search
+        model:value="{{searchKeyword}}"
+        placeholder="搜索商户名称、电话"
+        bind:change="onSearchChange"
+        bind:clear="onSearchClear"
+      />
     </view>
 
-    <view wx:else class="merchants-grid">
-      <view wx:for="{{merchants}}" wx:key="id" class="merchant-card">
-        <view class="card-header">
-          <text class="merchant-name">{{item.name}}</text>
-          <t-tag theme="{{item.status === 'ACTIVE' ? 'success' : 'danger'}}" size="small">
-            {{item.status === 'ACTIVE' ? '营业中' : '已封禁'}}
-          </t-tag>
-        </view>
-
-        <view class="card-body">
-          <view class="info-row">
-            <text class="label">负责人:</text>
-            <text class="value">{{item.owner}}</text>
-          </view>
-          <view class="info-row">
-            <text class="label">联系电话:</text>
-            <text class="value">{{item.phone}}</text>
-          </view>
-          <view class="info-row">
-            <text class="label">评分:</text>
-            <text class="value rating">⭐ {{item.rating}}</text>
-          </view>
-          <view class="info-row">
-            <text class="label">总订单:</text>
-            <text class="value">{{item.order_count}}</text>
-          </view>
-        </view>
-
-        <view class="card-actions">
-          <t-button size="small" theme="default" data-id="{{item.id}}" bindtap="onViewDetail">查看详情</t-button>
-          <t-button 
-            size="small" 
-            theme="{{item.status === 'ACTIVE' ? 'danger' : 'primary'}}" 
-            data-id="{{item.id}}" 
-            data-status="{{item.status}}"
-            bindtap="onToggleStatus"
-          >
-            {{item.status === 'ACTIVE' ? '封禁' : '解封'}}
-          </t-button>
-        </view>
-      </view>
+    <view class="filter-tabs">
+      <t-tabs value="{{statusFilter}}" bind:change="onStatusFilterChange" t-class="tabs-container">
+        <t-tab-panel label="全部" value="" />
+        <t-tab-panel label="正常" value="approved" />
+        <t-tab-panel label="暂停" value="suspended" />
+        <t-tab-panel label="待审核" value="pending" />
+      </t-tabs>
     </view>
   </view>
+
+  <view class="content">
+    <!-- 错误状态 -->
+    <view wx:if="{{error && !initialLoading}}" class="error-container">
+      <t-empty icon="info-circle" description="{{error}}">
+        <t-button slot="action" theme="primary" size="small" bindtap="onRetry" shape="round">重试</t-button>
+      </t-empty>
+    </view>
+
+    <block wx:else>
+      <!-- Loading (Skeleton) -->
+      <view wx:if="{{initialLoading}}" class="skeleton-container animate-fade-in">
+        <view class="merchants-skeleton-grid">
+          <card-skeleton wx:for="{{6}}" wx:key="index" t-class="merchant-skeleton-item" />
+        </view>
+      </view>
+
+      <view wx:else class="animate-fade-in">
+        <scroll-view
+          scroll-y
+          class="merchants-scroll"
+          bindscrolltolower="onLoadMore"
+          lower-threshold="100"
+          enable-back-to-top
+          refresher-enabled="{{true}}"
+          bindrefresherrefresh="onPullDownRefresh"
+          refresher-triggered="{{refreshing}}"
+        >
+          <view wx:if="{{merchants.length === 0}}" class="empty-container">
+            <t-empty icon="shop" description="暂无商户数据" />
+          </view>
+
+          <view wx:else class="merchants-container">
+            <view
+              wx:for="{{merchants}}"
+              wx:key="id"
+              class="merchant-card"
+              bindtap="onMerchantTap"
+              data-id="{{item.id}}"
+            >
+              <view class="merchant-header">
+                <view class="merchant-info">
+                  <text class="merchant-name">{{item.name}}</text>
+                  <t-tag
+                    theme="{{item.status_theme}}"
+                    size="small"
+                    variant="dark"
+                  >
+                    {{item.status_label}}
+                  </t-tag>
+                </view>
+                <view class="merchant-rating">
+                  <t-icon name="star-filled" size="16px" color="#faad14" />
+                  <text class="rating-text">{{item.rating_display}}</text>
+                </view>
+              </view>
+
+              <view class="merchant-details">
+                <view class="detail-row">
+                  <t-icon name="location" size="14px" color="#999" />
+                  <text class="detail-text">{{item.address}}</text>
+                </view>
+                <view class="detail-row">
+                  <t-icon name="call" size="14px" color="#999" />
+                  <text class="detail-text">{{item.phone}}</text>
+                </view>
+                <view class="detail-row">
+                  <t-icon name="shop" size="14px" color="#999" />
+                  <text class="detail-text">{{item.category_display}} · {{item.region_name_display}}</text>
+                </view>
+              </view>
+
+              <view class="merchant-stats">
+                <view class="stat-item">
+                  <text class="stat-value">{{item.order_count_display}}</text>
+                  <text class="stat-label">订单数</text>
+                </view>
+                <view class="stat-item">
+                  <text class="stat-value">{{item.total_gmv_display}}</text>
+                  <text class="stat-label">GMV</text>
+                </view>
+                <view class="stat-item">
+                  <text class="stat-value">{{item.commission_amount_display}}</text>
+                  <text class="stat-label">佣金</text>
+                </view>
+              </view>
+
+              <view class="merchant-actions">
+                <t-button
+                  wx:if="{{item.can_suspend}}"
+                  theme="warning"
+                  size="small"
+                  bindtap="onSuspendTap"
+                  data-id="{{item.id}}"
+                  data-name="{{item.name}}"
+                  catchtap="stopPropagation"
+                  shape="round"
+                >
+                  暂停商户
+                </t-button>
+                <t-button
+                  wx:elif="{{item.can_resume}}"
+                  theme="success"
+                  size="small"
+                  bindtap="onResumeTap"
+                  data-id="{{item.id}}"
+                  data-name="{{item.name}}"
+                  catchtap="stopPropagation"
+                  shape="round"
+                >
+                  恢复营业
+                </t-button>
+                <t-button
+                  theme="primary"
+                  size="small"
+                  bindtap="onMerchantTap"
+                  data-id="{{item.id}}"
+                  catchtap="stopPropagation"
+                  shape="round"
+                >
+                  管理详情
+                </t-button>
+              </view>
+            </view>
+
+            <view class="load-more">
+              <t-loading wx:if="{{loadingMore}}" theme="dots" size="40rpx" />
+              <text wx:elif="{{!hasMore && merchants.length > 0}}" class="no-more-text">没有更多数据了</text>
+            </view>
+          </view>
+        </scroll-view>
+      </view>
+    </block>
+  </view>
+
+  <t-dialog
+    visible="{{suspendDialogVisible}}"
+    title="暂停商户"
+    confirm-btn="确认暂停"
+    cancel-btn="取消"
+    bind:confirm="onSuspendConfirm"
+    bind:cancel="onSuspendCancel"
+  >
+    <view class="dialog-content">
+      <text>确定要暂停商户 "{{selectedMerchant.name}}" 吗？</text>
+      <t-textarea
+        placeholder="请输入暂停原因（必填）"
+        value="{{suspendReason}}"
+        bind:change="onSuspendReasonChange"
+        maxlength="200"
+      />
+    </view>
+  </t-dialog>
+
+  <t-dialog
+    visible="{{resumeDialogVisible}}"
+    title="恢复商户"
+    confirm-btn="确认恢复"
+    cancel-btn="取消"
+    bind:confirm="onResumeConfirm"
+    bind:cancel="onResumeCancel"
+  >
+    <view class="dialog-content">
+      <text>确定要恢复商户 "{{selectedMerchant.name}}" 吗？</text>
+    </view>
+  </t-dialog>
 </view>

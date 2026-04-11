@@ -1,0 +1,96 @@
+<custom-navbar title="{{isEdit ? '编辑配送优惠' : '新增配送优惠'}}" showBack="{{true}}" />
+
+<view
+  class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
+  style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: 220rpx;"
+>
+  <view wx:if="{{accessReady && accessDenied}}" class="state-block">
+    <t-empty icon="lock-on" description="当前账号无商户权限，请返回“我的”切换身份" />
+  </view>
+
+  <view wx:elif="{{accessReady && accessErrorMessage}}" class="state-block">
+    <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
+    <t-button theme="primary" size="small" shape="round" bind:tap="onRetryAccess">重新校验</t-button>
+  </view>
+
+  <view wx:elif="{{initialLoading}}" class="state-block">
+    <t-loading theme="circular" size="40rpx" text="加载配送优惠信息中..." vertical />
+  </view>
+
+  <view wx:elif="{{initialError}}" class="state-block">
+    <t-empty icon="error-circle" description="{{initialErrorMessage || '配送优惠编辑页加载失败，请重试'}}" />
+    <t-button theme="primary" size="small" shape="round" bind:tap="onRetry">重新加载</t-button>
+  </view>
+
+  <block wx:else>
+    <view class="page-content">
+      <view class="section-panel">
+        <view class="section-top">
+          <text class="section-title">优惠规则</text>
+        </view>
+
+        <t-cell-group theme="card">
+          <t-input
+            label="优惠名称"
+            placeholder="例如：满30减5"
+            value="{{formData.name}}"
+            data-field="name"
+            required
+            bind:change="onFormInputChange"
+          />
+          <t-input
+            label="最低订单金额(元)"
+            type="digit"
+            placeholder="如 30.00"
+            value="{{formData.min_order_yuan}}"
+            data-field="min_order_yuan"
+            required
+            bind:change="onFormInputChange"
+          />
+          <t-input
+            label="优惠金额(元)"
+            type="digit"
+            placeholder="如 5.00"
+            value="{{formData.discount_yuan}}"
+            data-field="discount_yuan"
+            required
+            bind:change="onFormInputChange"
+          />
+        </t-cell-group>
+      </view>
+
+      <view class="section-panel">
+        <view class="section-top">
+          <text class="section-title">生效时间</text>
+        </view>
+
+        <t-cell-group theme="card">
+          <picker mode="date" value="{{formData.valid_from}}" bindchange="onDateChange" data-field="valid_from">
+            <t-cell title="开始日期" arrow note="{{formData.valid_from || '请选择'}}" />
+          </picker>
+          <picker mode="date" value="{{formData.valid_until}}" bindchange="onDateChange" data-field="valid_until">
+            <t-cell title="结束日期" arrow note="{{formData.valid_until || '请选择'}}" />
+          </picker>
+        </t-cell-group>
+      </view>
+
+      <view wx:if="{{isEdit}}" class="section-panel">
+        <view class="section-top">
+          <text class="section-title">生效状态</text>
+        </view>
+
+        <t-cell-group theme="card">
+          <t-cell title="启用状态" description="关闭后当前优惠不再参与新的配送费计算">
+            <t-switch slot="note" value="{{formData.is_active}}" data-field="is_active" bind:change="onSwitchChange" />
+          </t-cell>
+        </t-cell-group>
+      </view>
+    </view>
+
+    <view class="footer-bar">
+      <t-button block theme="primary" size="large" shape="round" loading="{{submitting}}" bind:tap="onSubmit">
+        {{isEdit ? '保存配送优惠' : '创建配送优惠'}}
+      </t-button>
+    </view>
+  </block>
+</view>

@@ -1,4 +1,4 @@
-.container {
+.page-container {
   background: #f5f5f5;
   min-height: 100vh;
 }
@@ -46,4 +46,16 @@
 
 .empty-state {
   padding-top: 100rpx;
+}
+
+.load-more-wrap {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 16rpx 0 32rpx;
+}
+
+.load-more-text {
+  font-size: 24rpx;
+  color: #999;
 }

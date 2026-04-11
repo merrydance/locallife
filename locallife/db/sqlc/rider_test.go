@@ -33,7 +33,7 @@ func createRandomRiderWithUser(t *testing.T, userID int64) Rider {
 	require.Equal(t, arg.RealName, rider.RealName)
 	require.Equal(t, arg.IDCardNo, rider.IDCardNo)
 	require.Equal(t, arg.Phone, rider.Phone)
-	require.Equal(t, "pending", rider.Status)
+	require.Equal(t, RiderStatusApproved, rider.Status)
 	require.Equal(t, int64(0), rider.DepositAmount)
 	require.Equal(t, false, rider.IsOnline)
 	require.NotZero(t, rider.ID)
@@ -62,11 +62,8 @@ func createActiveRider(t *testing.T) Rider {
 	require.NoError(t, err)
 	require.Equal(t, int64(30000), updated.DepositAmount)
 
-	// 创建骑手profile（高值单资格积分需要）
-	_, err = testStore.CreateRiderProfile(context.Background(), CreateRiderProfileParams{
-		RiderID:    rider.ID,
-		TrustScore: 850, // 默认信任分
-	})
+	// 创建骑手 profile，供后续信任画像与相关测试使用
+	_, err = testStore.CreateRiderProfile(context.Background(), rider.ID)
 	require.NoError(t, err)
 
 	return updated
@@ -166,23 +163,23 @@ func TestGetRiderByUserID(t *testing.T) {
 
 func TestUpdateRiderStatus(t *testing.T) {
 	rider := createRandomRider(t)
-	require.Equal(t, "pending", rider.Status)
+	require.Equal(t, RiderStatusApproved, rider.Status)
 
 	// 审核通过
 	updated, err := testStore.UpdateRiderStatus(context.Background(), UpdateRiderStatusParams{
 		ID:     rider.ID,
-		Status: "active",
+		Status: RiderStatusActive,
 	})
 	require.NoError(t, err)
-	require.Equal(t, "active", updated.Status)
+	require.Equal(t, RiderStatusActive, updated.Status)
 
 	// 禁用
 	updated, err = testStore.UpdateRiderStatus(context.Background(), UpdateRiderStatusParams{
 		ID:     rider.ID,
-		Status: "suspended",
+		Status: RiderStatusSuspended,
 	})
 	require.NoError(t, err)
-	require.Equal(t, "suspended", updated.Status)
+	require.Equal(t, RiderStatusSuspended, updated.Status)
 }
 
 func TestUpdateRiderDeposit(t *testing.T) {
@@ -325,14 +322,14 @@ func TestUpdateRiderStats(t *testing.T) {
 }
 
 func TestCountRidersByStatus(t *testing.T) {
-	createRandomRider(t) // pending
+	createRandomRider(t) // approved
 	createActiveRider(t) // active
 
-	pendingCount, err := testStore.CountRidersByStatus(context.Background(), "pending")
+	approvedCount, err := testStore.CountRidersByStatus(context.Background(), RiderStatusApproved)
 	require.NoError(t, err)
-	require.GreaterOrEqual(t, pendingCount, int64(1))
+	require.GreaterOrEqual(t, approvedCount, int64(1))
 
-	activeCount, err := testStore.CountRidersByStatus(context.Background(), "active")
+	activeCount, err := testStore.CountRidersByStatus(context.Background(), RiderStatusActive)
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, activeCount, int64(1))
 }
@@ -396,182 +393,6 @@ func TestListRiderDeposits(t *testing.T) {
 	for i := 0; i < len(deposits)-1; i++ {
 		require.GreaterOrEqual(t, deposits[i].CreatedAt, deposits[i+1].CreatedAt)
 	}
-}
-
-// ==================== Withdraw Deposit Transaction Tests ====================
-
-func TestWithdrawDepositTx(t *testing.T) {
-	rider := createActiveRider(t)
-
-	// 先充值押金
-	initialDeposit := int64(50000) // 500元
-	_, err := testStore.UpdateRiderDeposit(context.Background(), UpdateRiderDepositParams{
-		ID:            rider.ID,
-		DepositAmount: initialDeposit,
-		FrozenDeposit: 0,
-	})
-	require.NoError(t, err)
-
-	// 执行提现
-	withdrawAmount := int64(20000) // 200元
-	result, err := testStore.WithdrawDepositTx(context.Background(), WithdrawDepositTxParams{
-		RiderID: rider.ID,
-		Amount:  withdrawAmount,
-		Remark:  "测试提现",
-	})
-	require.NoError(t, err)
-
-	// 验证骑手余额正确更新
-	require.Equal(t, initialDeposit-withdrawAmount, result.Rider.DepositAmount)
-	require.Equal(t, int64(0), result.Rider.FrozenDeposit)
-
-	// 验证押金流水正确创建
-	require.Equal(t, rider.ID, result.DepositLog.RiderID)
-	require.Equal(t, withdrawAmount, result.DepositLog.Amount)
-	require.Equal(t, "withdraw", result.DepositLog.Type)
-	require.Equal(t, initialDeposit-withdrawAmount, result.DepositLog.BalanceAfter)
-
-	// 再次查询骑手确认数据库已持久化
-	updatedRider, err := testStore.GetRider(context.Background(), rider.ID)
-	require.NoError(t, err)
-	require.Equal(t, initialDeposit-withdrawAmount, updatedRider.DepositAmount)
-}
-
-func TestWithdrawDepositTx_InsufficientBalance(t *testing.T) {
-	rider := createActiveRider(t)
-
-	// 充值少量押金
-	initialDeposit := int64(10000) // 100元
-	frozenDeposit := int64(5000)   // 冻结50元，可用50元
-	_, err := testStore.UpdateRiderDeposit(context.Background(), UpdateRiderDepositParams{
-		ID:            rider.ID,
-		DepositAmount: initialDeposit,
-		FrozenDeposit: frozenDeposit,
-	})
-	require.NoError(t, err)
-
-	// 尝试提现超过可用余额
-	withdrawAmount := int64(8000) // 80元，超过可用的50元
-	_, err = testStore.WithdrawDepositTx(context.Background(), WithdrawDepositTxParams{
-		RiderID: rider.ID,
-		Amount:  withdrawAmount,
-		Remark:  "测试提现失败",
-	})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "可用余额不足")
-
-	// 验证余额未变化
-	updatedRider, err := testStore.GetRider(context.Background(), rider.ID)
-	require.NoError(t, err)
-	require.Equal(t, initialDeposit, updatedRider.DepositAmount) // 余额不变
-}
-
-func TestWithdrawDepositTx_Concurrent(t *testing.T) {
-	rider := createActiveRider(t)
-
-	// 充值押金
-	initialDeposit := int64(100000) // 1000元
-	_, err := testStore.UpdateRiderDeposit(context.Background(), UpdateRiderDepositParams{
-		ID:            rider.ID,
-		DepositAmount: initialDeposit,
-		FrozenDeposit: 0,
-	})
-	require.NoError(t, err)
-
-	// 并发提现测试：同时发起多个提现请求
-	n := 5
-	withdrawAmount := int64(30000) // 每次300元，5次共1500元，超过1000元
-	errs := make(chan error, n)
-
-	for i := 0; i < n; i++ {
-		go func() {
-			_, err := testStore.WithdrawDepositTx(context.Background(), WithdrawDepositTxParams{
-				RiderID: rider.ID,
-				Amount:  withdrawAmount,
-				Remark:  "并发提现测试",
-			})
-			errs <- err
-		}()
-	}
-
-	// 收集结果
-	successCount := 0
-	failCount := 0
-	for i := 0; i < n; i++ {
-		err := <-errs
-		if err == nil {
-			successCount++
-		} else {
-			failCount++
-		}
-	}
-
-	// 验证：只有部分提现成功（余额不足时应失败）
-	// 1000元最多成功3次300元提现
-	require.LessOrEqual(t, successCount, 3)
-	require.GreaterOrEqual(t, failCount, 2)
-
-	// 验证最终余额一致
-	finalRider, err := testStore.GetRider(context.Background(), rider.ID)
-	require.NoError(t, err)
-	expectedBalance := initialDeposit - int64(successCount)*withdrawAmount
-	require.Equal(t, expectedBalance, finalRider.DepositAmount)
-	require.GreaterOrEqual(t, finalRider.DepositAmount, int64(0)) // 余额不能为负
-}
-
-func TestRollbackWithdrawTx(t *testing.T) {
-	rider := createActiveRider(t)
-
-	// 充值押金
-	initialDeposit := int64(50000) // 500元
-	_, err := testStore.UpdateRiderDeposit(context.Background(), UpdateRiderDepositParams{
-		ID:            rider.ID,
-		DepositAmount: initialDeposit,
-		FrozenDeposit: 0,
-	})
-	require.NoError(t, err)
-
-	// 先执行一次提现
-	withdrawAmount := int64(20000) // 200元
-	result, err := testStore.WithdrawDepositTx(context.Background(), WithdrawDepositTxParams{
-		RiderID: rider.ID,
-		Amount:  withdrawAmount,
-		Remark:  "测试提现",
-	})
-	require.NoError(t, err)
-	require.Equal(t, initialDeposit-withdrawAmount, result.Rider.DepositAmount)
-
-	// 模拟微信支付失败，执行回滚
-	err = testStore.RollbackWithdrawTx(context.Background(), RollbackWithdrawTxParams{
-		RiderID: rider.ID,
-		Amount:  withdrawAmount,
-	})
-	require.NoError(t, err)
-
-	// 验证余额已恢复
-	finalRider, err := testStore.GetRider(context.Background(), rider.ID)
-	require.NoError(t, err)
-	require.Equal(t, initialDeposit, finalRider.DepositAmount)
-
-	// 验证有回滚流水记录
-	deposits, err := testStore.ListRiderDeposits(context.Background(), ListRiderDepositsParams{
-		RiderID: rider.ID,
-		Limit:   10,
-		Offset:  0,
-	})
-	require.NoError(t, err)
-
-	// 找到回滚记录
-	foundRollback := false
-	for _, d := range deposits {
-		if d.Type == "withdraw_rollback" {
-			foundRollback = true
-			require.Equal(t, withdrawAmount, d.Amount)
-			require.Equal(t, initialDeposit, d.BalanceAfter)
-			break
-		}
-	}
-	require.True(t, foundRollback, "应该存在 withdraw_rollback 类型的流水记录")
 }
 
 // ==================== Rider Location Tests ====================
@@ -640,9 +461,9 @@ func TestBatchCreateRiderLocations(t *testing.T) {
 
 	// 验证数据已插入
 	storedLocations, err := testStore.ListRiderLocations(context.Background(), ListRiderLocationsParams{
-		RiderID:      rider.ID,
-		RecordedAt:   now.Add(-10 * time.Minute),
-		RecordedAt_2: now.Add(time.Minute),
+		RiderID: rider.ID,
+		StartAt: now.Add(-10 * time.Minute),
+		EndAt:   now.Add(time.Minute),
 	})
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, len(storedLocations), 3)
@@ -669,9 +490,9 @@ func TestListRiderLocations(t *testing.T) {
 	endTime := time.Now().Add(time.Second)
 
 	locations, err := testStore.ListRiderLocations(context.Background(), ListRiderLocationsParams{
-		RiderID:      rider.ID,
-		RecordedAt:   startTime.Add(-time.Second), // 稍早于开始时间
-		RecordedAt_2: endTime,
+		RiderID: rider.ID,
+		StartAt: startTime.Add(-time.Second), // 稍早于开始时间
+		EndAt:   endTime,
 	})
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, len(locations), 5)
@@ -704,253 +525,6 @@ func TestGetRiderLatestLocation(t *testing.T) {
 
 	lng, _ := location.Longitude.Float64Value()
 	require.InDelta(t, lastLng, lng.Float64, 0.0001)
-}
-
-// ==================== Premium Score (高值单资格积分) Tests ====================
-
-// 创建骑手并确保有rider_profile
-// 注意：createActiveRider 已经自动创建了 rider_profile
-func createRiderWithProfile(t *testing.T) Rider {
-	return createActiveRider(t)
-}
-
-func TestGetRiderPremiumScore(t *testing.T) {
-	rider := createRiderWithProfile(t)
-
-	// 初始积分应该是0
-	score, err := testStore.GetRiderPremiumScore(context.Background(), rider.ID)
-	require.NoError(t, err)
-	require.Equal(t, int16(0), score)
-}
-
-func TestUpdateRiderPremiumScore(t *testing.T) {
-	rider := createRiderWithProfile(t)
-
-	// 测试增加积分
-	newScore, err := testStore.UpdateRiderPremiumScore(context.Background(), UpdateRiderPremiumScoreParams{
-		RiderID:      rider.ID,
-		PremiumScore: 1, // +1
-	})
-	require.NoError(t, err)
-	require.Equal(t, int16(1), newScore)
-
-	// 再增加
-	newScore, err = testStore.UpdateRiderPremiumScore(context.Background(), UpdateRiderPremiumScoreParams{
-		RiderID:      rider.ID,
-		PremiumScore: 1, // +1
-	})
-	require.NoError(t, err)
-	require.Equal(t, int16(2), newScore)
-
-	// 测试减少积分（接高值单）
-	newScore, err = testStore.UpdateRiderPremiumScore(context.Background(), UpdateRiderPremiumScoreParams{
-		RiderID:      rider.ID,
-		PremiumScore: -3, // -3
-	})
-	require.NoError(t, err)
-	require.Equal(t, int16(-1), newScore)
-
-	// 验证最终积分
-	score, err := testStore.GetRiderPremiumScore(context.Background(), rider.ID)
-	require.NoError(t, err)
-	require.Equal(t, int16(-1), score)
-}
-
-func TestCreateRiderPremiumScoreLog(t *testing.T) {
-	rider := createRiderWithProfile(t)
-
-	// 创建一条积分变更日志
-	log, err := testStore.CreateRiderPremiumScoreLog(context.Background(), CreateRiderPremiumScoreLogParams{
-		RiderID:      rider.ID,
-		ChangeAmount: 1,
-		OldScore:     0,
-		NewScore:     1,
-		ChangeType:   "normal_order",
-		Remark:       pgtype.Text{String: "完成普通单", Valid: true},
-	})
-	require.NoError(t, err)
-	require.NotZero(t, log.ID)
-	require.Equal(t, rider.ID, log.RiderID)
-	require.Equal(t, int16(1), log.ChangeAmount)
-	require.Equal(t, int16(0), log.OldScore)
-	require.Equal(t, int16(1), log.NewScore)
-	require.Equal(t, "normal_order", log.ChangeType)
-	require.Equal(t, "完成普通单", log.Remark.String)
-}
-
-func TestListRiderPremiumScoreLogs(t *testing.T) {
-	rider := createRiderWithProfile(t)
-
-	// 创建多条积分变更日志
-	for i := 0; i < 5; i++ {
-		_, err := testStore.CreateRiderPremiumScoreLog(context.Background(), CreateRiderPremiumScoreLogParams{
-			RiderID:      rider.ID,
-			ChangeAmount: 1,
-			OldScore:     int16(i),
-			NewScore:     int16(i + 1),
-			ChangeType:   "normal_order",
-		})
-		require.NoError(t, err)
-		time.Sleep(10 * time.Millisecond) // 确保时间戳不同
-	}
-
-	// 查询日志
-	logs, err := testStore.ListRiderPremiumScoreLogs(context.Background(), ListRiderPremiumScoreLogsParams{
-		RiderID: rider.ID,
-		Limit:   10,
-		Offset:  0,
-	})
-	require.NoError(t, err)
-	require.Len(t, logs, 5)
-
-	// 验证按时间降序排列（最新的在前）
-	for i := 0; i < len(logs)-1; i++ {
-		require.GreaterOrEqual(t, logs[i].CreatedAt, logs[i+1].CreatedAt)
-	}
-}
-
-func TestCountRiderPremiumScoreLogs(t *testing.T) {
-	rider := createRiderWithProfile(t)
-
-	// 创建3条日志
-	for i := 0; i < 3; i++ {
-		_, err := testStore.CreateRiderPremiumScoreLog(context.Background(), CreateRiderPremiumScoreLogParams{
-			RiderID:      rider.ID,
-			ChangeAmount: 1,
-			OldScore:     int16(i),
-			NewScore:     int16(i + 1),
-			ChangeType:   "normal_order",
-		})
-		require.NoError(t, err)
-	}
-
-	// 统计数量
-	count, err := testStore.CountRiderPremiumScoreLogs(context.Background(), rider.ID)
-	require.NoError(t, err)
-	require.Equal(t, int64(3), count)
-}
-
-func TestGetRiderPremiumScoreWithProfile(t *testing.T) {
-	rider := createRiderWithProfile(t)
-
-	// 更新积分为5
-	_, err := testStore.UpdateRiderPremiumScore(context.Background(), UpdateRiderPremiumScoreParams{
-		RiderID:      rider.ID,
-		PremiumScore: 5,
-	})
-	require.NoError(t, err)
-
-	// 查询带档案的积分信息
-	info, err := testStore.GetRiderPremiumScoreWithProfile(context.Background(), rider.ID)
-	require.NoError(t, err)
-	require.Equal(t, rider.ID, info.RiderID)
-	require.Equal(t, rider.RealName, info.RealName)
-	require.Equal(t, int16(5), info.PremiumScore)
-	require.True(t, info.CanAcceptPremiumOrder)
-
-	// 将积分减为负数
-	_, err = testStore.UpdateRiderPremiumScore(context.Background(), UpdateRiderPremiumScoreParams{
-		RiderID:      rider.ID,
-		PremiumScore: -10,
-	})
-	require.NoError(t, err)
-
-	// 再次查询
-	info, err = testStore.GetRiderPremiumScoreWithProfile(context.Background(), rider.ID)
-	require.NoError(t, err)
-	require.Equal(t, int16(-5), info.PremiumScore)
-	require.False(t, info.CanAcceptPremiumOrder)
-}
-
-func TestPremiumScoreBusinessRule(t *testing.T) {
-	// 测试完整的业务规则：
-	// - 初始积分为0
-	// - 接普通单+1
-	// - 接高值单-3
-	// - 积分可为负
-
-	rider := createRiderWithProfile(t)
-
-	// 初始积分
-	score, err := testStore.GetRiderPremiumScore(context.Background(), rider.ID)
-	require.NoError(t, err)
-	require.Equal(t, int16(0), score)
-
-	// 模拟完成3个普通单
-	for i := 0; i < 3; i++ {
-		oldScore := score
-		score, err = testStore.UpdateRiderPremiumScore(context.Background(), UpdateRiderPremiumScoreParams{
-			RiderID:      rider.ID,
-			PremiumScore: 1, // 普通单 +1
-		})
-		require.NoError(t, err)
-
-		_, err = testStore.CreateRiderPremiumScoreLog(context.Background(), CreateRiderPremiumScoreLogParams{
-			RiderID:      rider.ID,
-			ChangeAmount: 1,
-			OldScore:     oldScore,
-			NewScore:     score,
-			ChangeType:   "normal_order",
-		})
-		require.NoError(t, err)
-	}
-	require.Equal(t, int16(3), score)
-
-	// 查询积分状态，应该可以接高值单
-	info, err := testStore.GetRiderPremiumScoreWithProfile(context.Background(), rider.ID)
-	require.NoError(t, err)
-	require.True(t, info.CanAcceptPremiumOrder)
-
-	// 模拟完成1个高值单
-	oldScore := score
-	score, err = testStore.UpdateRiderPremiumScore(context.Background(), UpdateRiderPremiumScoreParams{
-		RiderID:      rider.ID,
-		PremiumScore: -3, // 高值单 -3
-	})
-	require.NoError(t, err)
-	require.Equal(t, int16(0), score)
-
-	_, err = testStore.CreateRiderPremiumScoreLog(context.Background(), CreateRiderPremiumScoreLogParams{
-		RiderID:      rider.ID,
-		ChangeAmount: -3,
-		OldScore:     oldScore,
-		NewScore:     score,
-		ChangeType:   "premium_order",
-	})
-	require.NoError(t, err)
-
-	// 积分为0，仍然可以接高值单
-	info, err = testStore.GetRiderPremiumScoreWithProfile(context.Background(), rider.ID)
-	require.NoError(t, err)
-	require.True(t, info.CanAcceptPremiumOrder)
-
-	// 再接一个高值单，积分变为负数
-	oldScore = score
-	score, err = testStore.UpdateRiderPremiumScore(context.Background(), UpdateRiderPremiumScoreParams{
-		RiderID:      rider.ID,
-		PremiumScore: -3,
-	})
-	require.NoError(t, err)
-	require.Equal(t, int16(-3), score)
-
-	_, err = testStore.CreateRiderPremiumScoreLog(context.Background(), CreateRiderPremiumScoreLogParams{
-		RiderID:      rider.ID,
-		ChangeAmount: -3,
-		OldScore:     oldScore,
-		NewScore:     score,
-		ChangeType:   "premium_order",
-	})
-	require.NoError(t, err)
-
-	// 积分为负，不能接高值单
-	info, err = testStore.GetRiderPremiumScoreWithProfile(context.Background(), rider.ID)
-	require.NoError(t, err)
-	require.False(t, info.CanAcceptPremiumOrder)
-
-	// 验证日志数量
-	count, err := testStore.CountRiderPremiumScoreLogs(context.Background(), rider.ID)
-	require.NoError(t, err)
-	require.Equal(t, int64(5), count) // 3普通单 + 2高值单
 }
 
 // ==================== 运营商骑手管理集成测试 ====================
@@ -1110,31 +684,4 @@ func TestCountRidersByRegionWithStatus(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, suspendedCount, int64(1))
-}
-
-func TestListOnlineRidersByRegion(t *testing.T) {
-	region := createRandomRegion(t)
-	regionID := pgtype.Int8{Int64: region.ID, Valid: true}
-
-	// 创建一个在线骑手
-	rider := createRiderInRegion(t, region.ID, "active")
-	_, err := testStore.UpdateRiderOnlineStatus(context.Background(), UpdateRiderOnlineStatusParams{
-		ID:       rider.ID,
-		IsOnline: true,
-	})
-	require.NoError(t, err)
-
-	// 创建一个离线骑手
-	createRiderInRegion(t, region.ID, "active")
-
-	// 查询在线骑手
-	onlineRiders, err := testStore.ListOnlineRidersByRegion(context.Background(), regionID)
-	require.NoError(t, err)
-	require.GreaterOrEqual(t, len(onlineRiders), 1)
-
-	// 验证只有在线骑手
-	for _, r := range onlineRiders {
-		require.True(t, r.IsOnline)
-		require.Equal(t, "active", r.Status)
-	}
 }

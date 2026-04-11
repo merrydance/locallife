@@ -1,0 +1,11 @@
+{
+  "navigationStyle": "custom",
+  "usingComponents": {
+    "custom-navbar": "/components/custom-navbar/index",
+    "card-skeleton": "/components/card-skeleton/index",
+    "t-button": "tdesign-miniprogram/button/button",
+    "t-loading": "tdesign-miniprogram/loading/loading",
+    "t-empty": "tdesign-miniprogram/empty/empty",
+    "t-icon": "tdesign-miniprogram/icon/icon"
+  }
+}

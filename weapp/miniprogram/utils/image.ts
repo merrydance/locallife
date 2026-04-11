@@ -27,7 +27,7 @@ export function formatImageUrl(
 ): string {
   // 空值处理
   if (!url) {
-    return '/assets/placeholder.png'
+    return '/assets/icons/plate.svg'
   }
 
   // 预处理Url：如果以 / 开头，拼接域名
@@ -43,7 +43,7 @@ export function formatImageUrl(
     width: size || options?.width || 300,
     height: size || options?.height || 300,
     quality: options?.quality || 80,
-    format: options?.format || 'jpg',
+    format: options?.format || 'webp',
     mode: options?.mode || 'crop'
   }
 
@@ -68,11 +68,11 @@ export function formatImageUrl(
  * 文档: https://developer.qiniu.com/dora/manual/1279/basic-processing-images-imageview2
  */
 function formatQiniuUrl(url: string, options: ImageOptions): string {
-  const { width, height, quality, mode } = options
+  const { width, height, quality, mode, format } = options
   const modeCode = mode === 'crop' ? 1 : 2
 
-  // imageView2/<mode>/w/<Width>/h/<Height>/q/<Quality>
-  const params = `imageView2/${modeCode}/w/${width}/h/${height}/q/${quality}`
+  // imageView2/<mode>/w/<Width>/h/<Height>/q/<Quality>/format/<format>
+  const params = `imageView2/${modeCode}/w/${width}/h/${height}/q/${quality}/format/${format}`
 
   // 处理已有参数的情况
   const separator = url.includes('?') ? '&' : '?'
@@ -84,11 +84,11 @@ function formatQiniuUrl(url: string, options: ImageOptions): string {
  * 文档: https://help.aliyun.com/document_detail/44688.html
  */
 function formatAliyunUrl(url: string, options: ImageOptions): string {
-  const { width, height, quality, mode } = options
+  const { width, height, quality, mode, format } = options
   const modeParam = mode === 'crop' ? 'c' : 'm'
 
-  // image/resize,m_fill,w_300,h_300/quality,q_80
-  const params = `image/resize,${modeParam}_fill,w_${width},h_${height}/quality,q_${quality}`
+  // image/resize,m_fill,w_300,h_300/quality,q_80/format,webp
+  const params = `image/resize,${modeParam}_fill,w_${width},h_${height}/quality,q_${quality}/format,${format}`
 
   const separator = url.includes('?') ? '&' : '?'
   return `${url}${separator}x-oss-process=${params}`
@@ -99,10 +99,10 @@ function formatAliyunUrl(url: string, options: ImageOptions): string {
  * 文档: https://cloud.tencent.com/document/product/460/36540
  */
 function formatTencentUrl(url: string, options: ImageOptions): string {
-  const { width, height, quality } = options
+  const { width, height, quality, format } = options
 
-  // imageMogr2/thumbnail/300x300/quality/80
-  const params = `imageMogr2/thumbnail/${width}x${height}/quality/${quality}`
+  // imageMogr2/thumbnail/300x300/quality/80/format/webp
+  const params = `imageMogr2/thumbnail/${width}x${height}/quality/${quality}/format/${format}`
 
   const separator = url.includes('?') ? '&' : '?'
   return `${url}${separator}${params}`
@@ -161,17 +161,22 @@ import { API_BASE } from './request'
 
 /**
  * 获取公共图片完整URL
- * 如果是相对路径（以/开头），则拼接API_BASE
+ * 如果是相对路径（以/开头），则拼接 API_BASE。
+ * local 开发模式下，后端公共素材会返回 /dev/uploads/...。
  */
 export function getPublicImageUrl(path: string | undefined | null): string {
   if (!path) return ''
   if (/^https?:\/\//.test(path)) return path
   if (path.startsWith('data:')) return path
 
+  if (path.startsWith('/uploads/') || path.startsWith('uploads/')) {
+    return ''
+  }
+
   if (path.startsWith('/')) {
     const baseUrl = API_BASE.endsWith('/') ? API_BASE.slice(0, -1) : API_BASE
     return `${baseUrl}${path}`
   }
 
-  return path
+  return ''
 }

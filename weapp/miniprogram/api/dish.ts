@@ -3,8 +3,8 @@
  * 基于swagger.json完全重构，仅保留后端支持的接口
  */
 
-import { request, API_BASE } from '../utils/request'
-import { getToken } from '../utils/auth'
+import { request } from '../utils/request'
+import { uploadMedia, MediaUploadResult } from '../utils/media'
 
 // ==================== 菜品数据类型定义 ====================
 
@@ -17,12 +17,15 @@ export interface DishResponse {
     name: string                                 // 菜品名称
     description: string                          // 菜品描述
     price: number                                // 价格（分）
+    original_price?: number                      // 原价（分）
     member_price?: number                        // 会员价（分）
+    image_asset_id?: number                      // 菜品图片媒体资产ID
     image_url: string                            // 菜品图片URL
-    category_id: number                          // 分类ID
-    category_name: string                        // 分类名称
+    category_id?: number                         // 分类ID
+    category_name?: string                       // 分类名称
     is_online: boolean                           // 是否上架
     is_available: boolean                        // 是否可用
+    is_packaging?: boolean                       // 是否为包装菜品
     prepare_time?: number                        // 预估制作时间（分钟）
     sort_order: number                           // 排序
     customization_groups?: CustomizationGroup[]  // 定制化分组
@@ -52,6 +55,9 @@ export interface DishSummary {
     estimated_delivery_time?: number             // 预估配送时间（秒）
     estimated_delivery_fee?: number              // 预估配送费（分）
     monthly_sales?: number                       // 近30天销量
+    repurchase_rate?: number                     // 复购率 (0-1)
+    attributes?: string[]                        // 菜品属性/标签
+    customization_groups?: CustomizationGroup[]  // 定制化分组
 }
 
 /**
@@ -105,19 +111,11 @@ export interface DishCategory {
 }
 
 /**
- * 创建/更新分类请求
- */
-export interface CreateDishCategoryRequest {
-    name: string
-    sort_order?: number
-}
-
-/**
  * 菜品列表响应 - 对齐 api.listDishesResponse
  */
 export interface ListDishesResponse {
     dishes: DishResponse[]                       // 菜品列表
-    total_count: number                          // 总数
+    total: number                                // 总数
 }
 
 /**
@@ -126,10 +124,11 @@ export interface ListDishesResponse {
 export interface CreateDishRequest extends Record<string, unknown> {
     category_id?: number                         // 分类ID
     description?: string                         // 菜品描述
-    image_url?: string                           // 菜品图片URL
+    image_asset_id?: number                      // 菜品图片媒体资产ID（新）
     ingredient_ids?: number[]                    // 食材ID列表（最多20个）
     is_available?: boolean                       // 是否可用
     is_online?: boolean                          // 是否上架
+    is_packaging?: boolean                       // 是否为包装菜品
     member_price?: number                        // 会员价（分）
     name: string                                 // 菜品名称（必填）
     prepare_time?: number                        // 预估制作时间（分钟）
@@ -147,12 +146,13 @@ export interface UpdateDishRequest extends Record<string, unknown> {
     description?: string                         // 菜品描述
     price?: number                               // 价格（分）
     member_price?: number                        // 会员价（分）
-    image_url?: string                           // 菜品图片URL
+    image_asset_id?: number                      // 菜品图片媒体资产ID（新）
     category_id?: number                         // 分类ID
     prepare_time?: number                        // 预估制作时间（分钟）
     sort_order?: number                          // 排序
     is_online?: boolean                          // 是否上架
     is_available?: boolean                       // 是否可用
+    is_packaging?: boolean                       // 是否为包装菜品
     tag_ids?: number[]                           // 标签ID列表（最多10个）
 }
 
@@ -182,8 +182,10 @@ export interface ComboSetResponse {
     id: number                                   // 套餐ID
     name: string                                 // 套餐名称
     description?: string                         // 套餐描述
+    original_price: number                       // 原价（分）
     combo_price: number                          // 套餐价格（分）
     is_online: boolean                           // 是否上架
+    dish_image_urls?: string[]                   // 成员菜品图片列表（后端真实字段）
 }
 
 /**
@@ -195,6 +197,9 @@ export interface DishInComboResponse {
     dish_price?: number                          // 菜品价格（分）
     dish_image_url?: string                      // 菜品图片
     quantity?: number                            // 数量
+    customizations?: Record<string, number | string>
+    customization_extra_price?: number
+    customization_summary?: string
 }
 
 /**
@@ -202,12 +207,18 @@ export interface DishInComboResponse {
  */
 export interface ComboSetWithDetailsResponse {
     id: number                                   // 套餐ID
+    merchant_id: number                          // 商户ID
     name: string                                 // 套餐名称
     description?: string                         // 套餐描述
+    image_url?: string                           // 套餐图片
+    original_price: number                       // 原价（分）
     combo_price: number                          // 套餐价格（分）
     is_online: boolean                           // 是否上架
     dishes: DishInComboResponse[]                // 套餐包含的菜品
     tags?: TagInfo[]                             // 标签信息
+    is_open?: boolean                            // 商户是否营业
+    dish_image_urls?: string[]                   // 子菜品图片列表（后端真实字段）
+    dish_images?: string[]                       // 子菜品图片列表
 }
 
 /**
@@ -216,6 +227,7 @@ export interface ComboSetWithDetailsResponse {
 export interface ComboDishInput {
     dish_id: number                              // 菜品ID（必填）
     quantity: number                             // 数量，1-99
+    customizations?: Record<string, number | string>
 }
 
 export interface UpdateComboSetRequest extends Record<string, unknown> {
@@ -225,18 +237,6 @@ export interface UpdateComboSetRequest extends Record<string, unknown> {
     name?: string                                // 套餐名称，最大100字符
     dishes?: ComboDishInput[]                    // 可选：更新套餐菜品列表（带数量）
     tag_ids?: number[]                           // 可选：更新属性标签ID列表（最多10个）
-}
-
-/**
- * 创建套餐请求 - 对齐 api.createComboSetRequest
- */
-export interface CreateComboSetRequest extends Record<string, unknown> {
-    combo_price: number                          // 套餐价格（分，必填）
-    description?: string                         // 描述，最大500字符
-    is_online?: boolean                          // 是否上架
-    name: string                                 // 套餐名称，最大100字符（必填）
-    dish_ids?: number[]                          // 套餐包含的菜品ID列表
-    tag_ids?: number[]                           // 属性标签ID列表（最多10个）
 }
 
 // ==================== 库存数据类型定义 ====================
@@ -250,6 +250,7 @@ export interface DailyInventoryResponse {
     dish_id: number                              // 菜品ID
     id: number                                   // 库存记录ID
     merchant_id: number                          // 商户ID
+    reserved_quantity: number                    // 预留数量
     sold_quantity: number                        // 已售数量
     total_quantity: number                       // 总库存数量
 }
@@ -272,6 +273,7 @@ export interface DailyInventoryWithDishResponse {
     dish_price: number
     id: number
     merchant_id: number
+    reserved_quantity: number
     sold_quantity: number
     total_quantity: number
 }
@@ -450,6 +452,7 @@ export interface CreateComboSetRequest extends Record<string, unknown> {
     is_online?: boolean                          // 是否上线
     dish_ids?: number[]                          // 向后兼容：关联菜品ID列表（最多50个）
     dishes?: ComboDishInput[]                    // 推荐：带数量的菜品列表
+    tag_ids?: number[]                           // 属性标签ID列表（最多10个）
 }
 
 /**
@@ -471,6 +474,9 @@ export interface ToggleComboOnlineBodyRequest extends Record<string, unknown> {
  */
 export interface ListComboSetsResponse {
     combo_sets: ComboSetResponse[]               // 套餐列表
+    total: number                                // 总数
+    page_id: number                              // 当前页码
+    page_size: number                            // 每页数量
 }
 
 /**
@@ -511,6 +517,7 @@ export interface ComboSummary {
     merchant_region_id: number                   // 商户区域ID
     merchant_is_open?: boolean                   // 商户是否营业
     distance?: number                            // 距离（米）
+    estimated_delivery_time?: number             // 预估配送时间（秒）
     estimated_delivery_fee?: number              // 预估配送费（分）
 }
 
@@ -556,7 +563,7 @@ export class TagService {
      * 创建标签
      * POST /v1/tags
      */
-    static async createTag(data: { name: string; type: string }): Promise<TagInfo> {
+    static async createTag(data: { name: string, type: string }): Promise<TagInfo> {
         return await request<TagInfo>({
             url: '/v1/tags',
             method: 'POST',
@@ -595,10 +602,31 @@ export class DishManagementService {
         page_id: number
         page_size: number
     }): Promise<ListDishesResponse> {
+        const query: {
+            category_id?: number
+            is_online?: boolean
+            is_available?: boolean
+            page_id: number
+            page_size: number
+        } = {
+            page_id: params.page_id,
+            page_size: params.page_size
+        }
+
+        if (typeof params.category_id === 'number' && Number.isFinite(params.category_id)) {
+            query.category_id = params.category_id
+        }
+        if (typeof params.is_online === 'boolean') {
+            query.is_online = params.is_online
+        }
+        if (typeof params.is_available === 'boolean') {
+            query.is_available = params.is_available
+        }
+
         return await request({
             url: '/v1/dishes',
             method: 'GET',
-            data: params
+            data: query
         })
     }
 
@@ -615,11 +643,21 @@ export class DishManagementService {
     }
 
     /**
-     * 获取菜品详情（消费者端）
-     * GET /v1/public/dishes/{id}
-     * 注意：使用公开接口，无需商户权限
+     * 获取菜品详情（商户端）
+     * GET /v1/dishes/{id}
      */
     static async getDishDetail(dishId: number): Promise<DishResponse> {
+        return await request({
+            url: `/v1/dishes/${dishId}`,
+            method: 'GET'
+        })
+    }
+
+    /**
+     * 获取菜品详情（公开接口，消费者端使用）
+     * GET /v1/public/dishes/{id}
+     */
+    static async getPublicDishDetail(dishId: number): Promise<DishResponse> {
         return await request({
             url: `/v1/public/dishes/${dishId}`,
             method: 'GET'
@@ -639,6 +677,18 @@ export class DishManagementService {
     }
 
     /**
+     * 设置菜品推荐/热卖标签（影响店内菜单排序）
+     * PUT /v1/dishes/{id}/featured-tags
+     */
+    static async setDishFeaturedTags(dishId: number, tags: string[]): Promise<{ tags: string[] }> {
+        return await request({
+            url: `/v1/dishes/${dishId}/featured-tags`,
+            method: 'PUT',
+            data: { tags }
+        })
+    }
+
+    /**
      * 删除菜品
      * DELETE /v1/dishes/{id}
      */
@@ -651,15 +701,14 @@ export class DishManagementService {
 
     /**
      * 更新菜品状态
-     * PATCH /v1/dishes/{id}/status (使用PUT方法)
+     * PATCH /v1/dishes/{id}/status
      */
     static async updateDishStatus(dishId: number, data: {
-        is_online?: boolean
-        is_available?: boolean
+        is_online: boolean
     }): Promise<void> {
         return await request({
             url: `/v1/dishes/${dishId}/status`,
-            method: 'PUT',
+            method: 'PATCH',
             data
         })
     }
@@ -681,10 +730,11 @@ export class DishManagementService {
      * GET /v1/dishes/{id}/customizations
      */
     static async getDishCustomizations(dishId: number): Promise<CustomizationGroup[]> {
-        return await request({
+        const response = await request<DishCustomizationsResponse>({
             url: `/v1/dishes/${dishId}/customizations`,
             method: 'GET'
         })
+        return Array.isArray(response.groups) ? response.groups : []
     }
 
     /**
@@ -713,6 +763,18 @@ export class DishManagementService {
     }
 
     /**
+     * 获取全局菜品分类列表
+     * GET /v1/dishes/categories/global
+     */
+    static async getGlobalDishCategories(): Promise<DishCategory[]> {
+        const response = await request<{ categories: DishCategory[] }>({
+            url: '/v1/dishes/categories/global',
+            method: 'GET'
+        })
+        return response.categories || []
+    }
+
+    /**
      * 创建菜品分类
      * POST /v1/dishes/categories
      */
@@ -726,12 +788,12 @@ export class DishManagementService {
 
     /**
      * 更新菜品分类
-     * PUT /v1/dishes/categories/{id}
+     * PATCH /v1/dishes/categories/{id}
      */
-    static async updateDishCategory(id: number, data: CreateDishCategoryRequest): Promise<DishCategory> {
+    static async updateDishCategory(id: number, data: UpdateDishCategoryRequest): Promise<DishCategory> {
         return await request({
             url: `/v1/dishes/categories/${id}`,
-            method: 'PUT',
+            method: 'PATCH',
             data
         })
     }
@@ -748,39 +810,13 @@ export class DishManagementService {
     }
 
     /**
-     * 上传菜品图片
-     * POST /v1/dishes/images/upload
+     * 上传菜品图片（媒体服务三步流程）
+     * @returns { mediaId, displayUrl, urls }
      */
-    static async uploadDishImage(filePath: string): Promise<string> {
-        return new Promise((resolve, reject) => {
-            const token = getToken()
-            wx.uploadFile({
-                url: `${API_BASE}/v1/dishes/images/upload`,
-                filePath,
-                name: 'image',
-                header: {
-                    'Authorization': `Bearer ${token}`
-                },
-                success: (res) => {
-                    if (res.statusCode === 200) {
-                        try {
-                            const data = JSON.parse(res.data)
-                            if (data.code === 0 && data.data && data.data.image_url) {
-                                resolve(data.data.image_url)
-                            } else if (data.image_url) {
-                                resolve(data.image_url)
-                            } else {
-                                resolve(data.data?.image_url || data.image_url)
-                            }
-                        } catch (e) {
-                            reject(new Error('Parse response failed'))
-                        }
-                    } else {
-                        reject(new Error(`HTTP ${res.statusCode}`))
-                    }
-                },
-                fail: reject
-            })
+    static async uploadDishImage(filePath: string): Promise<MediaUploadResult> {
+        return uploadMedia(filePath, {
+            businessType: 'merchant',
+            mediaCategory: 'dish'
         })
     }
 }
@@ -801,13 +837,7 @@ export class ComboManagementService {
         page_id: number
         page_size: number
         is_online?: boolean
-    }): Promise<{
-        combo_sets: ComboSetResponse[]
-        total: number
-        page_id: number
-        page_size: number
-        has_more: boolean
-    }> {
+    }): Promise<ListComboSetsResponse> {
         return await request({
             url: '/v1/combos',
             method: 'GET',
@@ -822,6 +852,17 @@ export class ComboManagementService {
     static async getComboDetail(comboId: number): Promise<ComboSetWithDetailsResponse> {
         return await request({
             url: `/v1/combos/${comboId}`,
+            method: 'GET'
+        })
+    }
+
+    /**
+     * 获取套餐详情（公开接口，消费者端使用）
+     * GET /v1/public/combos/{id}
+     */
+    static async getPublicComboDetail(comboId: number): Promise<ComboSetWithDetailsResponse> {
+        return await request({
+            url: `/v1/public/combos/${comboId}`,
             method: 'GET'
         })
     }
@@ -999,11 +1040,21 @@ export interface SearchDishItem {
     name: string
     description: string
     image_url: string
-    price: number      // 后端已转换为元
+    price: number      // 分
     member_price?: number
     is_available: boolean
     is_online: boolean
     sort_order: number
+    monthly_sales: number
+    repurchase_rate: number
+    merchant_name?: string
+    merchant_logo?: string
+    merchant_is_open?: boolean
+    distance: number
+    estimated_delivery_fee: number // 分
+    estimated_delivery_time: number // 秒
+    attributes?: string[]          // 菜品属性/标签
+    customization_groups?: CustomizationGroup[]   // 定制化分组
 }
 
 /**
@@ -1017,26 +1068,7 @@ export interface SearchDishesResponse {
     has_more?: boolean
 }
 
-/**
- * 搜索菜品 - 基于 /v1/search/dishes
- */
-export async function searchDishes(params: {
-    keyword: string
-    merchant_id?: number
-    page_id: number
-    page_size: number
-}): Promise<SearchDishItem[]> {
-    const response = await request<SearchDishesResponse>({
-        url: '/v1/search/dishes',
-        method: 'GET',
-        data: params,
-        useCache: true,
-        cacheTTL: 2 * 60 * 1000 // 2分钟缓存
-    })
-    // 后端返回 { dishes: [], total: ..., ... }
-    // 提取 dishes 数组返回
-    return response.dishes || []
-}
+
 
 /**
  * 推荐菜品响应 - 对齐后端实际返回格式
@@ -1048,9 +1080,9 @@ export interface RecommendedDishesResponse {
 }
 
 /**
- * 推荐菜品请求参数
+ * 搜索菜品参数 (UI)
  */
-export interface RecommendDishesParams {
+export interface DishSearchParams {
     merchant_id?: number
     limit?: number
     page?: number              // 页码，从1开始
@@ -1061,35 +1093,76 @@ export interface RecommendDishesParams {
 }
 
 /**
- * 推荐菜品响应（包含分页信息）
+ * 搜索菜品结果 (UI)
  */
-export interface RecommendDishesResult {
+export interface DishSearchResult {
     dishes: DishSummary[]
     has_more: boolean
     page: number
-    total_count: number
+    total: number
 }
 
 /**
- * 获取推荐菜品 - 基于 /v1/recommendations/dishes
+ * 搜索菜品 (原 getRecommendedDishes) - 基于 /v1/search/dishes
  * 支持分页，返回包含 has_more 的完整响应
  */
-export async function getRecommendedDishes(params?: RecommendDishesParams): Promise<RecommendDishesResult> {
-    const response = await request<RecommendedDishesResponse & { has_more?: boolean; page?: number; total_count?: number }>({
-        url: '/v1/recommendations/dishes',
+export async function searchDishes(params?: DishSearchParams): Promise<DishSearchResult> {
+    // 首页推荐重构：使用搜索接口替代推荐接口
+    // 如果没有关键词，表示获取推荐流（不传 keyword，避免后端将空字符串视为非法参数）
+    const trimmedKeyword = typeof params?.keyword === 'string' ? params.keyword.trim() : ''
+    const searchParams: Record<string, unknown> = {
+        page_id: params?.page || 1,
+        page_size: params?.limit || 20
+    }
+
+    if (trimmedKeyword) {
+        searchParams.keyword = trimmedKeyword
+    }
+
+    // 仅当参数存在时才添加，避免传递 undefined 导致后端验证失败
+    if (params?.merchant_id) searchParams.merchant_id = params.merchant_id
+    if (params?.tag_id) searchParams.tag_id = params.tag_id // Added
+    if (params?.user_latitude) searchParams.user_latitude = params.user_latitude
+    if (params?.user_longitude) searchParams.user_longitude = params.user_longitude
+
+    const response = await request<SearchDishesResponse>({
+        url: '/v1/search/dishes',
         method: 'GET',
-        data: params,
-        useCache: params?.page === 1 || !params?.page,  // 只缓存第一页
-        cacheTTL: 3 * 60 * 1000 // 3分钟缓存
+        data: searchParams,
+        useCache: searchParams.page_id === 1 && !searchParams.keyword, // 只缓存首页默认流
+        cacheTTL: 1 * 60 * 1000 // 1分钟缓存 (数据即时性要求高)
     })
-    // 返回完整响应，包含分页信息
+
+    // 转换响应格式以匹配 DishSearchResult
+    const page = response.page_id ?? 1
+    const pageSize = response.page_size ?? params?.limit ?? 20
+    const totalCount = response.total ?? 0
+    const hasMore = response.has_more ?? (page * pageSize < totalCount)
+
     return {
-        dishes: response.dishes || [],
-        has_more: response.has_more ?? false,
-        page: response.page ?? 1,
-        total_count: response.total_count ?? 0
+        dishes: (response.dishes || []).map((item) => ({
+            ...item,
+            // 使用后端返回的商户信息，部分字段暂时缺省
+            merchant_name: item.merchant_name || '未知商户',
+            merchant_logo: item.merchant_logo || '',
+            merchant_latitude: 0,
+            merchant_longitude: 0,
+            merchant_region_id: 0,
+            merchant_is_open: item.merchant_is_open ?? true,
+            distance: item.distance || 0,
+            estimated_delivery_fee: item.estimated_delivery_fee || 0,
+            estimated_delivery_time: item.estimated_delivery_time || 0,
+            attributes: item.attributes || [],
+            customization_groups: item.customization_groups || [],
+            tags: item.attributes || []
+        } as unknown as DishSummary)),
+
+        has_more: hasMore,
+        page,
+        total: totalCount
     }
 }
+
 
 /**
  * 推荐套餐响应 - 对齐后端实际返回格式
@@ -1105,6 +1178,7 @@ export interface RecommendedCombosResponse {
  */
 export interface RecommendCombosParams {
     merchant_id?: number
+    region_id?: number
     limit?: number
     page?: number
     keyword?: string              // 搜索关键词
@@ -1119,26 +1193,36 @@ export interface RecommendCombosResult {
     combos: ComboSummary[]  // 使用 ComboSummary（包含完整信息：图片、销量、距离等）
     has_more: boolean
     page: number
-    total_count: number
+    total: number
 }
 
 /**
- * 获取推荐套餐 - 基于 /v1/recommendations/combos
+ * 获取推荐套餐 - 基于 /v1/search/combos
  * 支持分页，返回包含 has_more 的完整响应
  */
 export async function getRecommendedCombos(params?: RecommendCombosParams): Promise<RecommendCombosResult> {
-    const response = await request<RecommendedCombosResponse & { has_more?: boolean; page?: number; total_count?: number }>({
-        url: '/v1/recommendations/combos',
+    const page = params?.page ?? 1
+    const pageSize = params?.limit ?? 20
+    const response = await request<{ combos: ComboSummary[], total?: number, page_id?: number, page_size?: number }>({
+        url: '/v1/search/combos',
         method: 'GET',
-        data: params,
-        useCache: params?.page === 1 || !params?.page,
+        data: {
+            keyword: params?.keyword ?? '',
+            region_id: params?.region_id,
+            user_latitude: params?.user_latitude,
+            user_longitude: params?.user_longitude,
+            page_id: page,
+            page_size: pageSize
+        },
+        useCache: page === 1,
         cacheTTL: 3 * 60 * 1000 // 3分钟缓存
     })
+    const total = response.total ?? response.combos?.length ?? 0
     return {
         combos: response.combos || [],
-        has_more: response.has_more ?? false,
-        page: response.page ?? 1,
-        total_count: response.total_count ?? 0
+        has_more: page * pageSize < total,
+        page,
+        total
     }
 }
 
@@ -1170,6 +1254,69 @@ export async function getTags(type: string): Promise<Tag[]> {
         cacheTTL: 10 * 60 * 1000 // 10分钟缓存
     })
     return response.tags || []
+}
+
+// ==================== 套餐搜索 API ====================
+
+export interface SearchComboItem {
+    id: number
+    merchant_id: number
+    name: string
+    description: string
+    image_url: string
+    original_price: number      // 分
+    combo_price: number         // 分
+    savings_percent: number     // %
+    monthly_sales: number
+    merchant_name: string
+    merchant_logo: string
+    merchant_is_open: boolean
+    distance: number            // 米
+    estimated_delivery_fee?: number // 分
+    estimated_delivery_time: number // 秒
+    tags?: string[]                // 标签
+}
+
+export interface ComboSearchParams {
+    keyword?: string
+    region_id?: number
+    page_id?: number
+    page_size?: number
+    user_latitude?: number
+    user_longitude?: number
+}
+
+export interface ComboSearchResult {
+    combos: SearchComboItem[]
+    total: number
+    page_id: number
+    page_size: number
+}
+
+/**
+ * 搜索套餐 - 基于 /v1/search/combos
+ */
+export async function searchCombos(params: ComboSearchParams): Promise<ComboSearchResult> {
+    // 过滤掉 undefined 的参数
+    const searchParams: Record<string, unknown> = {
+        page_id: params.page_id || 1,
+        page_size: params.page_size || 20
+    }
+
+    if (params.keyword) searchParams.keyword = params.keyword
+    if (params.region_id !== undefined) searchParams.region_id = params.region_id
+    if (params.user_latitude !== undefined) searchParams.user_latitude = params.user_latitude
+    if (params.user_longitude !== undefined) searchParams.user_longitude = params.user_longitude
+
+    const response = await request<ComboSearchResult>({
+        url: '/v1/search/combos',
+        method: 'GET',
+        data: searchParams,
+        useCache: true,
+        cacheTTL: 2 * 60 * 1000 // 2分钟缓存
+    })
+
+    return response
 }
 
 // ==================== 导出默认服务 ====================

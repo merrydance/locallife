@@ -1,13 +1,15 @@
 package api
 
 import (
-	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"time"
 
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/logic"
+	"github.com/merrydance/locallife/media"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/wechat"
 
@@ -24,14 +26,23 @@ type joinMembershipRequest struct {
 
 // membershipResponse 会员信息响应
 type membershipResponse struct {
-	ID             int64     `json:"id"`
-	MerchantID     int64     `json:"merchant_id"`
-	MerchantName   string    `json:"merchant_name,omitempty"`
-	UserID         int64     `json:"user_id"`
-	Balance        int64     `json:"balance"`
-	TotalRecharged int64     `json:"total_recharged"`
-	TotalConsumed  int64     `json:"total_consumed"`
-	CreatedAt      time.Time `json:"created_at"`
+	ID             int64      `json:"id"`
+	MerchantID     int64      `json:"merchant_id"`
+	MerchantName   string     `json:"merchant_name,omitempty"`
+	LogoAssetID    *int64     `json:"-"`
+	LogoURL        string     `json:"logo_url,omitempty"`
+	UserID         int64      `json:"user_id"`
+	Balance        int64      `json:"balance"`
+	TotalRecharged int64      `json:"total_recharged"`
+	TotalConsumed  int64      `json:"total_consumed"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      *time.Time `json:"updated_at,omitempty"`
+}
+
+type membershipPaymentResponse struct {
+	PaymentOrderID int64       `json:"payment_order_id"`
+	OutTradeNo     string      `json:"out_trade_no"`
+	PayParams      interface{} `json:"pay_params"`
 }
 
 // joinMembership godoc
@@ -57,10 +68,9 @@ func (server *Server) joinMembership(ctx *gin.Context) {
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-	// 验证商户是否存在
 	merchant, err := server.store.GetMerchant(ctx, req.MerchantID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -68,7 +78,6 @@ func (server *Server) joinMembership(ctx *gin.Context) {
 		return
 	}
 
-	// 使用事务加入会员
 	result, err := server.store.JoinMembershipTx(ctx, db.JoinMembershipTxParams{
 		MerchantID: req.MerchantID,
 		UserID:     authPayload.UserID,
@@ -88,6 +97,11 @@ func (server *Server) joinMembership(ctx *gin.Context) {
 		TotalConsumed:  result.Membership.TotalConsumed,
 		CreatedAt:      result.Membership.CreatedAt,
 	}
+	if merchant.LogoMediaAssetID.Valid {
+		v := merchant.LogoMediaAssetID.Int64
+		rsp.LogoAssetID = &v
+	}
+	rsp.LogoURL = server.publicImageURL(ctx, rsp.LogoAssetID, media.VariantCard)
 
 	ctx.JSON(http.StatusOK, rsp)
 }
@@ -98,6 +112,13 @@ type listUserMembershipsRequest struct {
 	PageSize int32 `form:"page_size" binding:"required,min=5,max=50"`
 }
 
+type listUserMembershipsResponse struct {
+	Memberships []membershipResponse `json:"memberships"`
+	Total       int64                `json:"total"`
+	PageID      int32                `json:"page_id"`
+	PageSize    int32                `json:"page_size"`
+}
+
 // listUserMemberships godoc
 // @Summary 获取用户会员列表
 // @Description 获取当前用户的所有会员卡
@@ -105,7 +126,7 @@ type listUserMembershipsRequest struct {
 // @Produce json
 // @Param page_id query int true "页码" minimum(1)
 // @Param page_size query int true "每页数量" minimum(5) maximum(50)
-// @Success 200 {array} membershipResponse "会员列表"
+// @Success 200 {object} listUserMembershipsResponse "会员列表"
 // @Failure 400 {object} ErrorResponse "参数错误"
 // @Failure 401 {object} ErrorResponse "未认证"
 // @Failure 500 {object} ErrorResponse "服务器错误"
@@ -123,14 +144,40 @@ func (server *Server) listUserMemberships(ctx *gin.Context) {
 	memberships, err := server.store.ListUserMemberships(ctx, db.ListUserMembershipsParams{
 		UserID: authPayload.UserID,
 		Limit:  req.PageSize,
-		Offset: (req.PageID - 1) * req.PageSize,
+		Offset: pageOffset(req.PageID, req.PageSize),
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	ctx.JSON(http.StatusOK, memberships)
+	rsp := make([]membershipResponse, len(memberships))
+	for i, m := range memberships {
+		rsp[i] = convertUserMembershipResponse(m)
+	}
+
+	// 批量填充商户 Logo URL
+	logoAssetIDs := make([]int64, 0, len(rsp))
+	for _, r := range rsp {
+		if r.LogoAssetID != nil {
+			logoAssetIDs = append(logoAssetIDs, *r.LogoAssetID)
+		}
+	}
+	if len(logoAssetIDs) > 0 {
+		logoURLs := server.batchPublicImageURLs(ctx, logoAssetIDs, media.VariantCard)
+		for i := range rsp {
+			if rsp[i].LogoAssetID != nil {
+				rsp[i].LogoURL = logoURLs[*rsp[i].LogoAssetID]
+			}
+		}
+	}
+
+	ctx.JSON(http.StatusOK, listUserMembershipsResponse{
+		Memberships: rsp,
+		Total:       int64(len(rsp)),
+		PageID:      req.PageID,
+		PageSize:    req.PageSize,
+	})
 }
 
 // getMembershipRequest 获取会员详情请求
@@ -161,19 +208,15 @@ func (server *Server) getMembership(ctx *gin.Context) {
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-	membership, err := server.store.GetMerchantMembership(ctx, req.ID)
+	membership, err := logic.GetMembershipForUser(ctx, server.store, logic.MembershipAccessInput{
+		UserID:       authPayload.UserID,
+		MembershipID: req.ID,
+	})
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("membership not found")))
+		if writeLogicRequestError(ctx, err) {
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 验证权限：只能查看自己的会员卡
-	if membership.UserID != authPayload.UserID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not authorized")))
 		return
 	}
 
@@ -207,14 +250,18 @@ type createRechargeRuleRequest struct {
 
 // rechargeRuleResponse 充值规则响应
 type rechargeRuleResponse struct {
-	ID             int64     `json:"id"`
-	MerchantID     int64     `json:"merchant_id"`
-	RechargeAmount int64     `json:"recharge_amount"`
-	BonusAmount    int64     `json:"bonus_amount"`
-	IsActive       bool      `json:"is_active"`
-	ValidFrom      time.Time `json:"valid_from"`
-	ValidUntil     time.Time `json:"valid_until"`
-	CreatedAt      time.Time `json:"created_at"`
+	ID             int64      `json:"id"`
+	MerchantID     int64      `json:"merchant_id"`
+	RechargeAmount int64      `json:"recharge_amount"`
+	BonusAmount    int64      `json:"bonus_amount"`
+	IsActive       bool       `json:"is_active"`
+	ValidFrom      time.Time  `json:"valid_from"`
+	ValidUntil     time.Time  `json:"valid_until"`
+	StatusCode     string     `json:"status_code"`
+	StatusLabel    string     `json:"status_label"`
+	StatusTheme    string     `json:"status_theme"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      *time.Time `json:"updated_at,omitempty"`
 }
 
 // createRechargeRule godoc
@@ -245,52 +292,32 @@ func (server *Server) createRechargeRule(ctx *gin.Context) {
 		return
 	}
 
-	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-
-	// 验证商户权限
-	merchantID, err := server.getMerchantIDByUser(ctx, authPayload.UserID)
-	if err != nil {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("merchant role required")))
+	merchant, ok := GetMerchantFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("merchant context required")))
 		return
 	}
-
-	// 验证URL中的商户ID与用户的商户ID一致
-	if merchantID != uriReq.MerchantID {
+	if merchant.ID != uriReq.MerchantID {
 		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not authorized for this merchant")))
 		return
 	}
 
-	// 验证时间范围
-	if req.ValidUntil.Before(req.ValidFrom) {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("valid_until must be after valid_from")))
-		return
-	}
-
-	rule, err := server.store.CreateRechargeRule(ctx, db.CreateRechargeRuleParams{
-		MerchantID:     merchantID,
+	rule, err := logic.CreateRechargeRule(ctx, server.store, logic.CreateRechargeRuleInput{
+		MerchantID:     merchant.ID,
 		RechargeAmount: req.RechargeAmount,
 		BonusAmount:    req.BonusAmount,
-		IsActive:       true,
 		ValidFrom:      req.ValidFrom,
 		ValidUntil:     req.ValidUntil,
 	})
 	if err != nil {
+		if writeLogicRequestError(ctx, err) {
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	rsp := rechargeRuleResponse{
-		ID:             rule.ID,
-		MerchantID:     rule.MerchantID,
-		RechargeAmount: rule.RechargeAmount,
-		BonusAmount:    rule.BonusAmount,
-		IsActive:       rule.IsActive,
-		ValidFrom:      rule.ValidFrom,
-		ValidUntil:     rule.ValidUntil,
-		CreatedAt:      rule.CreatedAt,
-	}
-
-	ctx.JSON(http.StatusOK, rsp)
+	ctx.JSON(http.StatusCreated, convertRechargeRuleResponse(rule))
 }
 
 // listRechargeRulesRequest 获取充值规则列表请求
@@ -304,7 +331,7 @@ type listRechargeRulesRequest struct {
 // @Tags 会员管理
 // @Produce json
 // @Param id path int true "商户ID"
-// @Success 200 {array} rechargeRuleResponse "规则列表"
+// @Success 201 {array} rechargeRuleResponse "规则列表"
 // @Failure 400 {object} ErrorResponse "参数错误"
 // @Failure 500 {object} ErrorResponse "服务器错误"
 // @Router /v1/merchants/{id}/recharge-rules [get]
@@ -316,13 +343,30 @@ func (server *Server) listRechargeRules(ctx *gin.Context) {
 		return
 	}
 
-	rules, err := server.store.ListMerchantRechargeRules(ctx, req.MerchantID)
+	merchant, ok := GetMerchantFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("merchant context required")))
+		return
+	}
+
+	rules, err := logic.ListMerchantRechargeRules(ctx, server.store, logic.MerchantRechargeRulesInput{
+		MerchantID:       merchant.ID,
+		TargetMerchantID: req.MerchantID,
+	})
 	if err != nil {
+		if writeLogicRequestError(ctx, err) {
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	ctx.JSON(http.StatusOK, rules)
+	rsp := make([]rechargeRuleResponse, len(rules))
+	for i, rule := range rules {
+		rsp[i] = convertRechargeRuleResponse(rule)
+	}
+
+	ctx.JSON(http.StatusOK, rsp)
 }
 
 // listActiveRechargeRulesRequest 获取有效充值规则请求
@@ -348,13 +392,70 @@ func (server *Server) listActiveRechargeRules(ctx *gin.Context) {
 		return
 	}
 
-	rules, err := server.store.ListActiveRechargeRules(ctx, req.MerchantID)
+	merchant, ok := GetMerchantFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("merchant context required")))
+		return
+	}
+
+	rules, err := logic.ListActiveRechargeRules(ctx, server.store, logic.MerchantRechargeRulesInput{
+		MerchantID:       merchant.ID,
+		TargetMerchantID: req.MerchantID,
+	})
 	if err != nil {
+		if writeLogicRequestError(ctx, err) {
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	ctx.JSON(http.StatusOK, rules)
+	rsp := make([]rechargeRuleResponse, len(rules))
+	for i, rule := range rules {
+		rsp[i] = convertRechargeRuleResponse(rule)
+	}
+
+	ctx.JSON(http.StatusOK, rsp)
+}
+
+// getPublicRechargeRulesRequest 获取公开充值规则请求（C端）
+type getPublicRechargeRulesRequest struct {
+	MerchantID int64 `uri:"id" binding:"required,min=1"`
+}
+
+// getPublicRechargeRules godoc
+// @Summary 获取商户的生效中充值规则（C端公开）
+// @Description 获取商户当前生效中的充值规则，供C端用户查看充值活动
+// @Tags 会员管理
+// @Produce json
+// @Param id path int true "商户ID"
+// @Success 200 {array} rechargeRuleResponse "规则列表"
+// @Failure 400 {object} ErrorResponse "参数错误"
+// @Failure 500 {object} ErrorResponse "服务器错误"
+// @Router /v1/public/merchants/{id}/recharge-rules [get]
+// @Security BearerAuth
+func (server *Server) getPublicRechargeRules(ctx *gin.Context) {
+	var req getPublicRechargeRulesRequest
+	if err := ctx.ShouldBindUri(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	rules, err := logic.GetPublicRechargeRules(ctx, server.store, req.MerchantID)
+	if err != nil {
+		if writeLogicRequestError(ctx, err) {
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	rsp := make([]rechargeRuleResponse, len(rules))
+	for i, rule := range rules {
+		rsp[i] = convertRechargeRuleResponse(rule)
+	}
+
+	ctx.JSON(http.StatusOK, rsp)
 }
 
 // updateRechargeRuleURIRequest 更新充值规则路径参数
@@ -402,74 +503,85 @@ func (server *Server) updateRechargeRule(ctx *gin.Context) {
 		return
 	}
 
-	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	merchant, ok := GetMerchantFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("merchant context required")))
+		return
+	}
 
-	// 获取原规则验证权限
-	rule, err := server.store.GetRechargeRule(ctx, uriReq.RuleID)
+	updatedRule, err := logic.UpdateRechargeRuleForMerchant(ctx, server.store, logic.UpdateRechargeRuleInput{
+		MerchantID:       merchant.ID,
+		TargetMerchantID: uriReq.MerchantID,
+		RuleID:           uriReq.RuleID,
+		RechargeAmount:   req.RechargeAmount,
+		BonusAmount:      req.BonusAmount,
+		IsActive:         req.IsActive,
+		ValidFrom:        req.ValidFrom,
+		ValidUntil:       req.ValidUntil,
+	})
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("rule not found")))
+		if writeLogicRequestError(ctx, err) {
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	// 验证规则属于当前商户
-	if rule.MerchantID != uriReq.MerchantID {
-		ctx.JSON(http.StatusNotFound, errorResponse(errors.New("rule not found")))
-		return
+	ctx.JSON(http.StatusOK, convertRechargeRuleResponse(updatedRule))
+}
+
+func convertUserMembershipResponse(m db.ListUserMembershipsRow) membershipResponse {
+	rsp := membershipResponse{
+		ID:             m.ID,
+		MerchantID:     m.MerchantID,
+		MerchantName:   m.MerchantName,
+		UserID:         m.UserID,
+		Balance:        m.Balance,
+		TotalRecharged: m.TotalRecharged,
+		TotalConsumed:  m.TotalConsumed,
+		CreatedAt:      m.CreatedAt,
+		UpdatedAt:      pgTimeToPtr(m.UpdatedAt),
+	}
+	if m.LogoMediaAssetID.Valid {
+		v := m.LogoMediaAssetID.Int64
+		rsp.LogoAssetID = &v
+	}
+	return rsp
+}
+
+func convertRechargeRuleResponse(rule db.RechargeRule) rechargeRuleResponse {
+	statusCode, statusLabel, statusTheme := buildRechargeRuleStatusResponse(rule, time.Now())
+
+	return rechargeRuleResponse{
+		ID:             rule.ID,
+		MerchantID:     rule.MerchantID,
+		RechargeAmount: rule.RechargeAmount,
+		BonusAmount:    rule.BonusAmount,
+		IsActive:       rule.IsActive,
+		ValidFrom:      rule.ValidFrom,
+		ValidUntil:     rule.ValidUntil,
+		StatusCode:     statusCode,
+		StatusLabel:    statusLabel,
+		StatusTheme:    statusTheme,
+		CreatedAt:      rule.CreatedAt,
+		UpdatedAt:      pgTimeToPtr(rule.UpdatedAt),
+	}
+}
+
+func buildRechargeRuleStatusResponse(rule db.RechargeRule, now time.Time) (string, string, string) {
+	if !rule.IsActive {
+		return "inactive", "已停用", "default"
 	}
 
-	// 验证商户权限
-	merchantID, err := server.getMerchantIDByUser(ctx, authPayload.UserID)
-	if err != nil || merchantID != rule.MerchantID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not authorized")))
-		return
+	if now.After(rule.ValidUntil) {
+		return "expired", "已过期", "danger"
 	}
 
-	// 构造更新参数
-	arg := db.UpdateRechargeRuleParams{
-		ID: uriReq.RuleID,
+	if now.Before(rule.ValidFrom) {
+		return "scheduled", "未开始", "warning"
 	}
 
-	if req.RechargeAmount != nil {
-		arg.RechargeAmount = pgtype.Int8{Int64: *req.RechargeAmount, Valid: true}
-	}
-	if req.BonusAmount != nil {
-		arg.BonusAmount = pgtype.Int8{Int64: *req.BonusAmount, Valid: true}
-	}
-	if req.IsActive != nil {
-		arg.IsActive = pgtype.Bool{Bool: *req.IsActive, Valid: true}
-	}
-	if req.ValidFrom != nil {
-		arg.ValidFrom = pgtype.Timestamptz{Time: *req.ValidFrom, Valid: true}
-	}
-	if req.ValidUntil != nil {
-		arg.ValidUntil = pgtype.Timestamptz{Time: *req.ValidUntil, Valid: true}
-	}
-
-	// 验证时间范围（如果两个时间都提供或部分提供）
-	effectiveValidFrom := rule.ValidFrom
-	effectiveValidUntil := rule.ValidUntil
-	if req.ValidFrom != nil {
-		effectiveValidFrom = *req.ValidFrom
-	}
-	if req.ValidUntil != nil {
-		effectiveValidUntil = *req.ValidUntil
-	}
-	if effectiveValidUntil.Before(effectiveValidFrom) {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("valid_until must be after valid_from")))
-		return
-	}
-
-	updatedRule, err := server.store.UpdateRechargeRule(ctx, arg)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	ctx.JSON(http.StatusOK, updatedRule)
+	return "active", "生效中", "success"
 }
 
 // deleteRechargeRuleURIRequest 删除充值规则路径参数
@@ -500,39 +612,26 @@ func (server *Server) deleteRechargeRule(ctx *gin.Context) {
 		return
 	}
 
-	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	merchant, ok := GetMerchantFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("merchant context required")))
+		return
+	}
 
-	// 获取规则验证权限
-	rule, err := server.store.GetRechargeRule(ctx, req.RuleID)
+	err := logic.DeleteRechargeRuleForMerchant(ctx, server.store, logic.DeleteRechargeRuleInput{
+		MerchantID:       merchant.ID,
+		TargetMerchantID: req.MerchantID,
+		RuleID:           req.RuleID,
+	})
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("rule not found")))
+		if writeLogicRequestError(ctx, err) {
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	// 验证规则属于当前商户
-	if rule.MerchantID != req.MerchantID {
-		ctx.JSON(http.StatusNotFound, errorResponse(errors.New("rule not found")))
-		return
-	}
-
-	// 验证商户权限
-	merchantID, err := server.getMerchantIDByUser(ctx, authPayload.UserID)
-	if err != nil || merchantID != rule.MerchantID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not authorized")))
-		return
-	}
-
-	err = server.store.DeleteRechargeRule(ctx, req.RuleID)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	ctx.JSON(http.StatusOK, gin.H{"message": "rule deleted successfully"})
+	ctx.JSON(http.StatusOK, successMessage("rule deleted successfully"))
 }
 
 // ==================== 会员充值 ====================
@@ -541,7 +640,7 @@ func (server *Server) deleteRechargeRule(ctx *gin.Context) {
 type rechargeRequest struct {
 	MembershipID   int64  `json:"membership_id" binding:"required,min=1"`
 	RechargeAmount int64  `json:"recharge_amount" binding:"required,min=1,max=100000000"` // 最大100万元
-	PaymentMethod  string `json:"payment_method" binding:"required,oneof=wechat alipay"`
+	PaymentMethod  string `json:"payment_method" binding:"required,oneof=wechat"`
 }
 
 // transactionResponse 交易流水响应
@@ -580,46 +679,34 @@ func (server *Server) rechargeMembership(ctx *gin.Context) {
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-	// 验证会员卡所有权
-	membership, err := server.store.GetMerchantMembership(ctx, req.MembershipID)
+	rechargeCtx, err := logic.PrepareMembershipRecharge(ctx, server.store, logic.MembershipRechargeInput{
+		UserID:         authPayload.UserID,
+		MembershipID:   req.MembershipID,
+		RechargeAmount: req.RechargeAmount,
+	})
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("membership not found")))
+		if writeLogicRequestError(ctx, err) {
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	if membership.UserID != authPayload.UserID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not authorized")))
-		return
-	}
-
-	// 查找匹配的充值规则
-	matchingRule, err := server.store.GetMatchingRechargeRule(ctx, db.GetMatchingRechargeRuleParams{
-		MerchantID:     membership.MerchantID,
-		RechargeAmount: req.RechargeAmount,
-	})
-
-	var bonusAmount int64
-	var ruleID *int64
-	if err == nil {
-		// 找到匹配的规则，应用赠送
-		bonusAmount = matchingRule.BonusAmount
-		ruleID = &matchingRule.ID
-	} else if errors.Is(err, sql.ErrNoRows) {
-		// 没有匹配规则，不赠送
-		bonusAmount = 0
-		ruleID = nil
-	} else {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
+	membership := rechargeCtx.Membership
+	bonusAmount := rechargeCtx.BonusAmount
+	ruleID := rechargeCtx.RechargeRuleID
 
 	// 创建支付订单
-	outTradeNo := fmt.Sprintf("MBR%d_%d", membership.ID, time.Now().Unix())
 	expireTime := time.Now().Add(5 * time.Minute) // 5分钟过期
+
+	if req.PaymentMethod != "wechat" {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("unsupported payment method")))
+		return
+	}
+	if server.ecommerceClient == nil {
+		ctx.JSON(http.StatusServiceUnavailable, errorResponse(errors.New("payment service not available")))
+		return
+	}
 
 	// 获取用户OpenID（从users表）
 	user, err := server.store.GetUser(ctx, authPayload.UserID)
@@ -634,51 +721,133 @@ func (server *Server) rechargeMembership(ctx *gin.Context) {
 	}
 
 	// 准备attach数据
-	var ruleIDValue interface{} = nil
-	if ruleID != nil {
-		ruleIDValue = *ruleID
+	attachPayload := struct {
+		MembershipID   int64  `json:"membership_id"`
+		BonusAmount    int64  `json:"bonus_amount"`
+		RechargeRuleID *int64 `json:"recharge_rule_id"`
+	}{
+		MembershipID:   req.MembershipID,
+		BonusAmount:    bonusAmount,
+		RechargeRuleID: ruleID,
 	}
-	attachStr := fmt.Sprintf(`{"membership_id":%d,"bonus_amount":%d,"recharge_rule_id":%v}`,
-		req.MembershipID, bonusAmount, ruleIDValue)
-
-	// 创建支付订单记录
-	paymentOrder, err := server.store.CreatePaymentOrder(ctx, db.CreatePaymentOrderParams{
-		UserID:       authPayload.UserID,
-		PaymentType:  "jsapi",
-		BusinessType: "membership_recharge",
-		Amount:       req.RechargeAmount,
-		OutTradeNo:   outTradeNo,
-		ExpiresAt:    pgtype.Timestamptz{Time: expireTime, Valid: true},
-		Attach:       pgtype.Text{String: attachStr, Valid: true},
-	})
+	attachBytes, err := json.Marshal(attachPayload)
 	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("failed to marshal attach payload: %w", err)))
+		return
+	}
+	attachStr := string(attachBytes)
+
+	// 幂等保护：如已有未过期的 pending 支付单且已有 prepay_id，直接重新签名返回
+	existingPayment, findErr := server.store.GetPendingPaymentOrderByUserAndBusinessType(ctx, db.GetPendingPaymentOrderByUserAndBusinessTypeParams{
+		UserID:       authPayload.UserID,
+		BusinessType: BusinessTypeMembershipRecharge,
+		Amount:       req.RechargeAmount,
+	})
+	if findErr == nil && existingPayment.PrepayID.Valid {
+		if payParams, signErr := server.ecommerceClient.GenerateJSAPIPayParams(existingPayment.PrepayID.String); signErr == nil {
+			ctx.JSON(http.StatusOK, membershipPaymentResponse{
+				PaymentOrderID: existingPayment.ID,
+				OutTradeNo:     existingPayment.OutTradeNo,
+				PayParams:      payParams,
+			})
+			return
+		}
+	}
+
+	// 生成合单主单号和子单号
+	combineOutTradeNo, err := generateOutTradeNoWithPrefix("MBRC")
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("failed to generate combine out trade no: %w", err)))
+		return
+	}
+
+	description := fmt.Sprintf("会员充值 - 商户ID:%d", membership.MerchantID)
+
+	// 创建新支付单（含合单主记录）
+	var txResult db.CreateEcommercePaymentTxResult
+	for attempt := 1; attempt <= outTradeNoMaxRetry; attempt++ {
+		var outTradeNo string
+		var genErr error
+		outTradeNo, genErr = generateOutTradeNoWithPrefix("MBR")
+		if genErr != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, genErr))
+			return
+		}
+		txResult, err = server.store.CreateEcommercePaymentTx(ctx, db.CreateEcommercePaymentTxParams{
+			UserID:            authPayload.UserID,
+			MerchantID:        membership.MerchantID,
+			Amount:            req.RechargeAmount,
+			BusinessType:      BusinessTypeMembershipRecharge,
+			CombineOutTradeNo: combineOutTradeNo,
+			OutTradeNo:        outTradeNo,
+			ExpiresAt:         expireTime,
+			Attach:            attachStr,
+		})
+		if err == nil {
+			break
+		}
+		if isOutTradeNoConflict(err) && attempt < outTradeNoMaxRetry {
+			if !sleepWithContext(ctx.Request.Context(), outTradeNoRetryBaseBack*time.Duration(attempt)) {
+				ctx.JSON(http.StatusRequestTimeout, errorResponse(errors.New("request canceled")))
+				return
+			}
+			continue
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("failed to create payment order: %w", err)))
 		return
 	}
 
-	// 调用微信支付API创建JSAPI订单
-	description := fmt.Sprintf("会员充值 - 商户ID:%d", membership.MerchantID)
-	jsapiReq := &wechat.JSAPIOrderRequest{
-		OutTradeNo:    outTradeNo,
-		Description:   description,
-		TotalAmount:   req.RechargeAmount,
-		OpenID:        user.WechatOpenid,
-		ExpireTime:    expireTime,
-		Attach:        attachStr,
-		PayerClientIP: ctx.ClientIP(),
-	}
-
-	_, payParams, err := server.paymentClient.CreateJSAPIOrder(ctx, jsapiReq)
+	// 调用收付通合单支付 API
+	combineResp, payParams, err := server.ecommerceClient.CreateCombineOrder(ctx, &wechat.CombineOrderRequest{
+		CombineOutTradeNo: combineOutTradeNo,
+		SubOrders: []wechat.SubOrder{
+			{
+				SubMchID:    txResult.SubMchID,
+				Amount:      req.RechargeAmount,
+				OutTradeNo:  txResult.PaymentOrder.OutTradeNo,
+				Description: description,
+				Attach:      attachStr,
+			},
+		},
+		PayerOpenID: user.WechatOpenid,
+		ExpireTime:  expireTime,
+		SceneInfo: &wechat.CombineSceneInfo{
+			PayerClientIP: ctx.ClientIP(),
+		},
+	})
 	if err != nil {
+		_, _ = server.store.UpdatePaymentOrderToClosed(ctx, txResult.PaymentOrder.ID)
+		_, _ = server.store.UpdateCombinedPaymentOrderToClosed(ctx, txResult.CombinedPaymentOrder.ID)
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("failed to create wechat order: %w", err)))
 		return
 	}
+	if combineResp == nil || combineResp.PrepayID == "" {
+		_, _ = server.store.UpdatePaymentOrderToClosed(ctx, txResult.PaymentOrder.ID)
+		_, _ = server.store.UpdateCombinedPaymentOrderToClosed(ctx, txResult.CombinedPaymentOrder.ID)
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("failed to create wechat order: empty prepay id")))
+		return
+	}
+
+	_, _ = server.store.UpdatePaymentOrderPrepayId(ctx, db.UpdatePaymentOrderPrepayIdParams{
+		ID:       txResult.PaymentOrder.ID,
+		PrepayID: pgtype.Text{String: combineResp.PrepayID, Valid: true},
+	})
+	_, _ = server.store.UpdateCombinedPaymentOrderPrepay(ctx, db.UpdateCombinedPaymentOrderPrepayParams{
+		ID:       txResult.CombinedPaymentOrder.ID,
+		PrepayID: pgtype.Text{String: combineResp.PrepayID, Valid: true},
+	})
+
+	updatedPayment := txResult.PaymentOrder
+	updatedPayment.CombinedPaymentID = pgtype.Int8{Int64: txResult.CombinedPaymentOrder.ID, Valid: true}
+	updatedPayment.PrepayID = pgtype.Text{String: combineResp.PrepayID, Valid: true}
+	updatedPayment.ExpiresAt = pgtype.Timestamptz{Time: expireTime, Valid: true}
+	server.scheduleTimeoutForPaymentOrder(ctx, updatedPayment)
 
 	// 返回支付参数给前端，前端调用wx.requestPayment进行支付
-	ctx.JSON(http.StatusOK, gin.H{
-		"payment_order_id": paymentOrder.ID,
-		"out_trade_no":     outTradeNo,
-		"pay_params":       payParams,
+	ctx.JSON(http.StatusOK, membershipPaymentResponse{
+		PaymentOrderID: txResult.PaymentOrder.ID,
+		OutTradeNo:     txResult.PaymentOrder.OutTradeNo,
+		PayParams:      payParams,
 	})
 }
 
@@ -691,6 +860,13 @@ type listTransactionsRequest struct {
 	PageSize     int32 `form:"page_size" binding:"required,min=5,max=50"`
 }
 
+type listMembershipTransactionsResponse struct {
+	Transactions []transactionResponse `json:"transactions"`
+	Total        int64                 `json:"total"`
+	PageID       int32                 `json:"page_id"`
+	PageSize     int32                 `json:"page_size"`
+}
+
 // listMembershipTransactions godoc
 // @Summary 获取会员交易流水
 // @Description 获取会员卡的交易历史记录（充值、消费等）
@@ -699,7 +875,7 @@ type listTransactionsRequest struct {
 // @Param id path int true "会员ID"
 // @Param page_id query int true "页码" minimum(1)
 // @Param page_size query int true "每页数量" minimum(5) maximum(50)
-// @Success 200 {array} transactionResponse "交易流水列表"
+// @Success 200 {object} listMembershipTransactionsResponse "交易流水列表"
 // @Failure 400 {object} ErrorResponse "参数错误"
 // @Failure 401 {object} ErrorResponse "未认证"
 // @Failure 403 {object} ErrorResponse "非会员卡所有者"
@@ -720,28 +896,16 @@ func (server *Server) listMembershipTransactions(ctx *gin.Context) {
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-	// 验证会员卡所有权
-	membership, err := server.store.GetMerchantMembership(ctx, req.MembershipID)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("membership not found")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	if membership.UserID != authPayload.UserID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not authorized")))
-		return
-	}
-
-	transactions, err := server.store.ListMembershipTransactions(ctx, db.ListMembershipTransactionsParams{
+	transactions, err := logic.ListMembershipTransactionsForUser(ctx, server.store, logic.MembershipTransactionsInput{
+		UserID:       authPayload.UserID,
 		MembershipID: req.MembershipID,
 		Limit:        req.PageSize,
-		Offset:       (req.PageID - 1) * req.PageSize,
+		Offset:       pageOffset(req.PageID, req.PageSize),
 	})
 	if err != nil {
+		if writeLogicRequestError(ctx, err) {
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -752,28 +916,15 @@ func (server *Server) listMembershipTransactions(ctx *gin.Context) {
 		rsp[i] = convertTransaction(tx)
 	}
 
-	ctx.JSON(http.StatusOK, rsp)
+	ctx.JSON(http.StatusOK, listMembershipTransactionsResponse{
+		Transactions: rsp,
+		Total:        int64(len(rsp)),
+		PageID:       req.PageID,
+		PageSize:     req.PageSize,
+	})
 }
 
 // ==================== 辅助函数 ====================
-
-// getMerchantIDByUser 根据用户ID获取商户ID
-func (server *Server) getMerchantIDByUser(ctx *gin.Context, userID int64) (int64, error) {
-	// 查询用户的商户角色
-	role, err := server.store.GetUserRoleByType(ctx, db.GetUserRoleByTypeParams{
-		UserID: userID,
-		Role:   "merchant",
-	})
-	if err != nil {
-		return 0, err
-	}
-
-	if !role.RelatedEntityID.Valid {
-		return 0, errors.New("merchant entity not found")
-	}
-
-	return role.RelatedEntityID.Int64, nil
-}
 
 // convertTransaction 转换交易记录为响应格式
 func convertTransaction(tx db.MembershipTransaction) transactionResponse {
@@ -822,11 +973,15 @@ type membershipSettingsResponse struct {
 func (server *Server) getMerchantMembershipSettings(ctx *gin.Context) {
 	// 获取认证信息
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-
-	// 获取商户信息
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+	if _, err := server.requireOwnedMerchantForUser(ctx, authPayload.UserID); err != nil {
+		if writeMerchantSelectionError(ctx, err) {
+			return
+		}
+		if errors.Is(err, errMerchantOwnerRequired) {
+			ctx.JSON(http.StatusForbidden, errorResponse(err))
+			return
+		}
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -834,19 +989,9 @@ func (server *Server) getMerchantMembershipSettings(ctx *gin.Context) {
 		return
 	}
 
-	// 获取会员设置
-	settings, err := server.store.GetMerchantMembershipSettings(ctx, merchant.ID)
+	settings, err := logic.GetMembershipSettingsForOwner(ctx, server.store, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			// 返回默认设置
-			ctx.JSON(http.StatusOK, membershipSettingsResponse{
-				MerchantID:          merchant.ID,
-				BalanceUsableScenes: []string{"dine_in", "takeout", "reservation"},
-				BonusUsableScenes:   []string{"dine_in"},
-				AllowWithVoucher:    true,
-				AllowWithDiscount:   true,
-				MaxDeductionPercent: 100,
-			})
+		if writeLogicRequestError(ctx, err) {
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -894,11 +1039,15 @@ func (server *Server) updateMerchantMembershipSettings(ctx *gin.Context) {
 
 	// 获取认证信息
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-
-	// 获取商户信息
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+	if _, err := server.requireOwnedMerchantForUser(ctx, authPayload.UserID); err != nil {
+		if writeMerchantSelectionError(ctx, err) {
+			return
+		}
+		if errors.Is(err, errMerchantOwnerRequired) {
+			ctx.JSON(http.StatusForbidden, errorResponse(err))
+			return
+		}
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -906,39 +1055,18 @@ func (server *Server) updateMerchantMembershipSettings(ctx *gin.Context) {
 		return
 	}
 
-	// 设置默认值
-	balanceScenes := []string{"dine_in", "takeout", "reservation"}
-	bonusScenes := []string{"dine_in"}
-	allowVoucher := true
-	allowDiscount := true
-	maxPercent := int32(100)
-
-	if req.BalanceUsableScenes != nil {
-		balanceScenes = req.BalanceUsableScenes
-	}
-	if req.BonusUsableScenes != nil {
-		bonusScenes = req.BonusUsableScenes
-	}
-	if req.AllowWithVoucher != nil {
-		allowVoucher = *req.AllowWithVoucher
-	}
-	if req.AllowWithDiscount != nil {
-		allowDiscount = *req.AllowWithDiscount
-	}
-	if req.MaxDeductionPercent != nil {
-		maxPercent = *req.MaxDeductionPercent
-	}
-
-	// Upsert 设置
-	settings, err := server.store.UpsertMerchantMembershipSettings(ctx, db.UpsertMerchantMembershipSettingsParams{
-		MerchantID:          merchant.ID,
-		BalanceUsableScenes: balanceScenes,
-		BonusUsableScenes:   bonusScenes,
-		AllowWithVoucher:    allowVoucher,
-		AllowWithDiscount:   allowDiscount,
-		MaxDeductionPercent: maxPercent,
+	settings, err := logic.UpdateMembershipSettingsForOwner(ctx, server.store, logic.UpdateMembershipSettingsInput{
+		OwnerUserID:         authPayload.UserID,
+		BalanceUsableScenes: req.BalanceUsableScenes,
+		BonusUsableScenes:   req.BonusUsableScenes,
+		AllowWithVoucher:    req.AllowWithVoucher,
+		AllowWithDiscount:   req.AllowWithDiscount,
+		MaxDeductionPercent: req.MaxDeductionPercent,
 	})
 	if err != nil {
+		if writeLogicRequestError(ctx, err) {
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -966,6 +1094,13 @@ type listMerchantMembersQueryRequest struct {
 	PageSize int32 `form:"page_size" binding:"required,min=5,max=50"`
 }
 
+type listMerchantMembersResponse struct {
+	Members  []merchantMemberResponse `json:"members"`
+	Total    int64                    `json:"total"`
+	PageID   int32                    `json:"page_id"`
+	PageSize int32                    `json:"page_size"`
+}
+
 // merchantMemberResponse 商户会员响应
 type merchantMemberResponse struct {
 	UserID         int64     `json:"user_id"`
@@ -987,7 +1122,7 @@ type merchantMemberResponse struct {
 // @Param id path int true "商户ID"
 // @Param page_id query int true "页码" minimum(1)
 // @Param page_size query int true "每页数量" minimum(5) maximum(50)
-// @Success 200 {array} merchantMemberResponse "会员列表"
+// @Success 200 {object} listMerchantMembersResponse "会员列表"
 // @Failure 400 {object} ErrorResponse "参数错误"
 // @Failure 401 {object} ErrorResponse "未认证"
 // @Failure 403 {object} ErrorResponse "非商户用户"
@@ -1006,25 +1141,22 @@ func (server *Server) listMerchantMembers(ctx *gin.Context) {
 		return
 	}
 
-	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-
-	// 验证商户权限
-	merchantID, err := server.getMerchantIDByUser(ctx, authPayload.UserID)
-	if err != nil {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("merchant role required")))
-		return
-	}
-	if merchantID != uriReq.MerchantID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not authorized for this merchant")))
+	merchant, ok := GetMerchantFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("merchant context not found")))
 		return
 	}
 
-	members, err := server.store.ListMerchantMembers(ctx, db.ListMerchantMembersParams{
-		MerchantID: merchantID,
-		Limit:      queryReq.PageSize,
-		Offset:     (queryReq.PageID - 1) * queryReq.PageSize,
+	members, err := logic.ListMerchantMembers(ctx, server.store, logic.MerchantMembersInput{
+		MerchantID:       merchant.ID,
+		TargetMerchantID: uriReq.MerchantID,
+		Limit:            queryReq.PageSize,
+		Offset:           pageOffset(queryReq.PageID, queryReq.PageSize),
 	})
 	if err != nil {
+		if writeLogicRequestError(ctx, err) {
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -1036,8 +1168,8 @@ func (server *Server) listMerchantMembers(ctx *gin.Context) {
 			phone = m.Phone.String
 		}
 		avatarURL := ""
-		if m.AvatarUrl.Valid {
-			avatarURL = m.AvatarUrl.String
+		if m.AvatarMediaAssetID.Valid {
+			avatarURL = server.publicImageURL(ctx, &m.AvatarMediaAssetID.Int64, media.VariantOriginal)
 		}
 		rsp[i] = merchantMemberResponse{
 			UserID:         m.UserID,
@@ -1052,7 +1184,12 @@ func (server *Server) listMerchantMembers(ctx *gin.Context) {
 		}
 	}
 
-	ctx.JSON(http.StatusOK, rsp)
+	ctx.JSON(http.StatusOK, listMerchantMembersResponse{
+		Members:  rsp,
+		Total:    int64(len(rsp)),
+		PageID:   queryReq.PageID,
+		PageSize: queryReq.PageSize,
+	})
 }
 
 // getMerchantMemberDetailRequest 获取商户会员详情请求
@@ -1097,50 +1234,29 @@ func (server *Server) getMerchantMemberDetail(ctx *gin.Context) {
 		return
 	}
 
-	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-
-	// 验证商户权限
-	merchantID, err := server.getMerchantIDByUser(ctx, authPayload.UserID)
-	if err != nil {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("merchant role required")))
-		return
-	}
-	if merchantID != req.MerchantID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not authorized for this merchant")))
+	merchant, ok := GetMerchantFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("merchant context not found")))
 		return
 	}
 
-	// 获取会员信息
-	membership, err := server.store.GetMembershipByMerchantAndUser(ctx, db.GetMembershipByMerchantAndUserParams{
-		MerchantID: merchantID,
-		UserID:     req.UserID,
+	detail, err := logic.GetMerchantMemberDetail(ctx, server.store, logic.MerchantMemberDetailInput{
+		MerchantID:        merchant.ID,
+		TargetMerchantID:  req.MerchantID,
+		UserID:            req.UserID,
+		TransactionsLimit: 20,
 	})
 	if err != nil {
-		if err == sql.ErrNoRows {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("membership not found")))
+		if writeLogicRequestError(ctx, err) {
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	// 获取用户信息
-	user, err := server.store.GetUser(ctx, req.UserID)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 获取交易记录（最近20条）
-	transactions, err := server.store.ListMembershipTransactions(ctx, db.ListMembershipTransactionsParams{
-		MembershipID: membership.ID,
-		Limit:        20,
-		Offset:       0,
-	})
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
+	membership := detail.Membership
+	user := detail.User
+	transactions := detail.Transactions
 
 	txRsp := make([]transactionResponse, len(transactions))
 	for i, tx := range transactions {
@@ -1152,8 +1268,8 @@ func (server *Server) getMerchantMemberDetail(ctx *gin.Context) {
 		phone = user.Phone.String
 	}
 	avatarURL := ""
-	if user.AvatarUrl.Valid {
-		avatarURL = user.AvatarUrl.String
+	if user.AvatarMediaAssetID.Valid {
+		avatarURL = server.publicImageURL(ctx, &user.AvatarMediaAssetID.Int64, media.VariantOriginal)
 	}
 
 	ctx.JSON(http.StatusOK, merchantMemberDetailResponse{
@@ -1212,90 +1328,35 @@ func (server *Server) adjustMemberBalance(ctx *gin.Context) {
 		return
 	}
 
-	if bodyReq.Amount == 0 {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("amount cannot be zero")))
+	merchant, ok := GetMerchantFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("merchant context not found")))
 		return
 	}
 
-	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-
-	// 验证商户权限
-	merchantID, err := server.getMerchantIDByUser(ctx, authPayload.UserID)
-	if err != nil {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("merchant role required")))
-		return
-	}
-	if merchantID != uriReq.MerchantID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not authorized for this merchant")))
-		return
-	}
-
-	// 获取会员信息
-	membership, err := server.store.GetMembershipByMerchantAndUserForUpdate(ctx, db.GetMembershipByMerchantAndUserForUpdateParams{
-		MerchantID: merchantID,
-		UserID:     uriReq.UserID,
+	result, err := logic.AdjustMemberBalance(ctx, server.store, logic.AdjustMemberBalanceInput{
+		MerchantID:       merchant.ID,
+		TargetMerchantID: uriReq.MerchantID,
+		UserID:           uriReq.UserID,
+		Amount:           bodyReq.Amount,
+		Notes:            bodyReq.Notes,
 	})
 	if err != nil {
-		if err == sql.ErrNoRows {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("membership not found")))
+		if writeLogicRequestError(ctx, err) {
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	var updatedMembership db.MerchantMembership
-	var txType string
-
-	if bodyReq.Amount > 0 {
-		// 增加余额（退款/充值调整）
-		updatedMembership, err = server.store.IncrementMembershipBalance(ctx, db.IncrementMembershipBalanceParams{
-			ID:      membership.ID,
-			Balance: bodyReq.Amount,
-		})
-		txType = "adjustment_credit"
-	} else {
-		// 扣减余额
-		if membership.Balance < -bodyReq.Amount {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("insufficient balance")))
-			return
-		}
-		updatedMembership, err = server.store.DecrementMembershipBalance(ctx, db.DecrementMembershipBalanceParams{
-			ID:      membership.ID,
-			Balance: -bodyReq.Amount,
-		})
-		txType = "adjustment_debit"
-	}
-
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 记录交易流水
-	_, err = server.store.CreateMembershipTransaction(ctx, db.CreateMembershipTransactionParams{
-		MembershipID:   membership.ID,
-		Type:           txType,
-		Amount:         bodyReq.Amount,
-		BalanceAfter:   updatedMembership.Balance,
-		RelatedOrderID: pgtype.Int8{},
-		RechargeRuleID: pgtype.Int8{},
-		Notes:          pgtype.Text{String: bodyReq.Notes, Valid: true},
-	})
-	if err != nil {
-		// 流水记录失败不影响主流程
-		fmt.Printf("failed to create transaction log: %v\n", err)
-	}
-
-	// 获取用户信息用于响应
-	user, _ := server.store.GetUser(ctx, uriReq.UserID)
+	user := result.User
 	phone := ""
 	if user.Phone.Valid {
 		phone = user.Phone.String
 	}
 	avatarURL := ""
-	if user.AvatarUrl.Valid {
-		avatarURL = user.AvatarUrl.String
+	if user.AvatarMediaAssetID.Valid {
+		avatarURL = server.publicImageURL(ctx, &user.AvatarMediaAssetID.Int64, media.VariantOriginal)
 	}
 
 	ctx.JSON(http.StatusOK, merchantMemberResponse{
@@ -1303,10 +1364,10 @@ func (server *Server) adjustMemberBalance(ctx *gin.Context) {
 		FullName:       user.FullName,
 		Phone:          phone,
 		AvatarURL:      avatarURL,
-		MembershipID:   updatedMembership.ID,
-		Balance:        updatedMembership.Balance,
-		TotalRecharged: updatedMembership.TotalRecharged,
-		TotalConsumed:  updatedMembership.TotalConsumed,
-		CreatedAt:      updatedMembership.CreatedAt,
+		MembershipID:   result.Membership.ID,
+		Balance:        result.Membership.Balance,
+		TotalRecharged: result.Membership.TotalRecharged,
+		TotalConsumed:  result.Membership.TotalConsumed,
+		CreatedAt:      result.Membership.CreatedAt,
 	})
 }

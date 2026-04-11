@@ -7,7 +7,7 @@ INSERT INTO combo_sets (
   merchant_id,
   name,
   description,
-  image_url,
+  image_media_asset_id,
   original_price,
   combo_price,
   is_online
@@ -27,11 +27,14 @@ SELECT
       jsonb_build_object(
         'dish_id', cd.dish_id,
         'dish_name', d.name,
-        'dish_price', d.price,
-        'dish_image_url', d.image_url,
-        'quantity', cd.quantity
+        'dish_price', COALESCE(cd.dish_base_price_snapshot, d.price) + COALESCE(cd.customization_extra_price, 0),
+        'dish_image_media_asset_id', d.image_media_asset_id,
+        'quantity', cd.quantity,
+        'customizations', COALESCE(cd.customizations, '{}'::jsonb),
+        'customization_extra_price', COALESCE(cd.customization_extra_price, 0),
+        'customization_summary', COALESCE(cd.customizations ->> 'meta_specs', '')
       )
-    ) FILTER (WHERE cd.dish_id IS NOT NULL),
+    ) FILTER (WHERE d.id IS NOT NULL),
     '[]'
   ) as dishes,
   COALESCE(
@@ -45,19 +48,52 @@ SELECT
   ) as tags
 FROM combo_sets cs
 LEFT JOIN combo_dishes cd ON cs.id = cd.combo_id
-LEFT JOIN dishes d ON cd.dish_id = d.id
+LEFT JOIN dishes d ON cd.dish_id = d.id AND d.deleted_at IS NULL
 LEFT JOIN combo_tags ct ON cs.id = ct.combo_id
 LEFT JOIN tags t ON ct.tag_id = t.id
 WHERE cs.id = $1 AND cs.deleted_at IS NULL
 GROUP BY cs.id;
 
 -- name: ListComboSetsByMerchant :many
-SELECT * FROM combo_sets
+SELECT
+  cs.id,
+  cs.name,
+  cs.description,
+  cs.original_price,
+  cs.combo_price,
+  cs.is_online,
+  COALESCE(dish_stats.dish_count, 0)::bigint AS dish_count,
+  COALESCE(dish_stats.dish_total_quantity, 0)::bigint AS dish_total_quantity,
+  COALESCE(tag_stats.tags, '[]'::json) AS tags
+FROM combo_sets cs
+LEFT JOIN LATERAL (
+  SELECT
+    COUNT(d.id)::bigint AS dish_count,
+    COALESCE(SUM(cd.quantity), 0)::bigint AS dish_total_quantity
+  FROM combo_dishes cd
+  JOIN dishes d ON d.id = cd.dish_id AND d.deleted_at IS NULL
+  WHERE cd.combo_id = cs.id
+) AS dish_stats ON TRUE
+LEFT JOIN LATERAL (
+  SELECT COALESCE(
+    json_agg(
+      jsonb_build_object(
+        'id', t.id,
+        'name', t.name
+      )
+      ORDER BY t.sort_order ASC, t.id ASC
+    ),
+    '[]'::json
+  ) AS tags
+  FROM combo_tags ct
+  JOIN tags t ON t.id = ct.tag_id
+  WHERE ct.combo_id = cs.id
+) AS tag_stats ON TRUE
 WHERE 
-  merchant_id = $1
-  AND deleted_at IS NULL
-  AND (sqlc.narg('is_online')::boolean IS NULL OR is_online = sqlc.narg('is_online'))
-ORDER BY created_at DESC
+  cs.merchant_id = $1
+  AND cs.deleted_at IS NULL
+  AND (sqlc.narg('is_online')::boolean IS NULL OR cs.is_online = sqlc.narg('is_online'))
+ORDER BY cs.created_at DESC
 LIMIT $2 OFFSET $3;
 
 -- name: UpdateComboSet :one
@@ -65,7 +101,7 @@ UPDATE combo_sets
 SET
   name = COALESCE(sqlc.narg('name'), name),
   description = COALESCE(sqlc.narg('description'), description),
-  image_url = COALESCE(sqlc.narg('image_url'), image_url),
+  image_media_asset_id = COALESCE(sqlc.narg('image_media_asset_id'), image_media_asset_id),
   original_price = COALESCE(sqlc.narg('original_price'), original_price),
   combo_price = COALESCE(sqlc.narg('combo_price'), combo_price),
   is_online = COALESCE(sqlc.narg('is_online'), is_online),
@@ -99,23 +135,33 @@ WHERE
 INSERT INTO combo_dishes (
   combo_id,
   dish_id,
-  quantity
+  quantity,
+  dish_base_price_snapshot,
+  customizations,
+  customization_extra_price
 ) VALUES (
-  $1, $2, $3
+  $1, $2, $3, $4, $5, $6
 ) RETURNING *;
 
 -- name: ListComboDishes :many
 SELECT 
   d.*,
-  cd.quantity
+  cd.quantity,
+  cd.dish_base_price_snapshot,
+  cd.customizations,
+  cd.customization_extra_price
 FROM dishes d
 JOIN combo_dishes cd ON d.id = cd.dish_id
-WHERE cd.combo_id = $1
+WHERE cd.combo_id = $1 AND d.deleted_at IS NULL
 ORDER BY cd.id ASC;
 
 -- name: RemoveComboDish :exec
 DELETE FROM combo_dishes
 WHERE combo_id = $1 AND dish_id = $2;
+
+-- name: RemoveDishFromAllCombos :exec
+DELETE FROM combo_dishes
+WHERE dish_id = $1;
 
 -- name: RemoveAllComboDishes :exec
 DELETE FROM combo_dishes
@@ -165,16 +211,21 @@ SELECT
     cs.merchant_id,
     cs.name,
     cs.description,
-    cs.image_url,
+    cs.image_media_asset_id,
     cs.original_price,
     cs.combo_price,
     COALESCE(SUM(oi.quantity), 0)::int AS total_sold
 FROM combo_sets cs
 LEFT JOIN order_items oi ON cs.id = oi.combo_id
-LEFT JOIN orders o ON o.id = oi.order_id AND o.status IN ('delivered', 'completed')
-WHERE cs.is_online = true AND cs.deleted_at IS NULL
-GROUP BY cs.id
-ORDER BY total_sold DESC, cs.created_at DESC
+LEFT JOIN orders o ON o.id = oi.order_id AND o.status IN ('user_delivered', 'completed')
+LEFT JOIN merchants m ON cs.merchant_id = m.id
+WHERE cs.is_online = true AND cs.deleted_at IS NULL AND m.status = 'active'
+GROUP BY cs.id, m.is_open, m.latitude, m.longitude
+ORDER BY 
+    m.is_open DESC, 
+    total_sold DESC, 
+    cs.created_at DESC,
+    earth_distance(ll_to_earth(m.latitude::float8, m.longitude::float8), ll_to_earth($2::float8, $3::float8)) ASC
 LIMIT $1;
 
 -- name: GetCombosByIDs :many
@@ -184,7 +235,7 @@ SELECT
     merchant_id,
     name,
     description,
-    image_url,
+    image_media_asset_id,
     original_price,
     combo_price,
     is_online
@@ -202,21 +253,21 @@ SELECT
     cs.name,
     cs.description,
     COALESCE(
-        NULLIF(cs.image_url, ''),
-        (SELECT d.image_url 
+        NULLIF(cs.image_media_asset_id::text, ''),
+        (SELECT d.image_media_asset_id::text
          FROM combo_dishes cd 
          JOIN dishes d ON cd.dish_id = d.id 
          WHERE cd.combo_id = cs.id 
-           AND d.image_url IS NOT NULL 
-           AND d.image_url != ''
+           AND d.image_media_asset_id IS NOT NULL
+           AND d.deleted_at IS NULL
          ORDER BY cd.id ASC 
          LIMIT 1)
-    ) AS image_url,
+    ) AS image_media_asset_id,
     cs.original_price,
     cs.combo_price,
     cs.is_online,
     m.name AS merchant_name,
-    m.logo_url AS merchant_logo,
+    m.logo_media_asset_id AS merchant_logo_media_asset_id,
     m.latitude AS merchant_latitude,
     m.longitude AS merchant_longitude,
     m.region_id AS merchant_region_id,
@@ -226,7 +277,7 @@ SELECT
          FROM order_items oi 
          JOIN orders o ON o.id = oi.order_id 
          WHERE oi.combo_id = cs.id 
-           AND o.status IN ('delivered', 'completed')
+           AND o.status IN ('user_delivered', 'completed')
            AND o.created_at >= NOW() - INTERVAL '30 days'
         ), 0
     )::int AS monthly_sales
@@ -240,15 +291,22 @@ WHERE cs.id = ANY($1::bigint[])
 -- name: ListOnlineCombosByMerchant :many
 -- 获取商户上架套餐（用于扫码点餐菜单展示）
 SELECT 
-    id,
-    merchant_id,
-    name,
-    description,
-    image_url,
-    original_price,
-    combo_price AS price,
-    is_online
-FROM combo_sets
+    cs.id,
+    cs.merchant_id,
+    cs.name,
+    cs.description,
+    cs.image_media_asset_id,
+    cs.original_price,
+    cs.combo_price AS price,
+    cs.is_online,
+    COALESCE(
+      (SELECT json_agg(t.name)
+       FROM combo_tags ct
+       JOIN tags t ON ct.tag_id = t.id
+       WHERE ct.combo_id = cs.id),
+      '[]'
+    ) as tags
+FROM combo_sets cs
 WHERE merchant_id = $1
   AND deleted_at IS NULL
   AND is_online = true
@@ -265,3 +323,102 @@ WHERE
   AND cs.is_online = true
   AND cs.name ILIKE '%' || $1 || '%'
 ORDER BY cs.created_at DESC;
+
+-- name: SearchCombosGlobal :many
+-- Consumer-Facing Global Combo Search
+-- Returns enriched data for the home feed or search page.
+-- Strict filters: Online combos only, Active merchants only.
+-- Sorting: Open Merchants First > Sales (Weighted) > Distance.
+SELECT 
+    cs.id,
+    cs.merchant_id,
+    cs.name,
+    cs.description,
+    cs.image_media_asset_id,
+  dish_img.image_media_asset_id AS fallback_image_media_asset_id,
+    cs.original_price,
+    cs.combo_price,
+    cs.is_online,
+    m.name AS merchant_name,
+    m.logo_media_asset_id AS merchant_logo_media_asset_id,
+    m.latitude AS merchant_latitude,
+    m.longitude AS merchant_longitude,
+    m.region_id AS merchant_region_id,
+    m.is_open AS merchant_is_open,
+    -- Calculate Sales using Order Items (Last 30 days) for Relevance
+    COALESCE(
+        (SELECT SUM(oi.quantity)
+         FROM order_items oi 
+         JOIN orders o ON o.id = oi.order_id 
+         WHERE oi.combo_id = cs.id 
+           AND o.status IN ('user_delivered', 'completed')
+           AND o.created_at >= NOW() - INTERVAL '30 days'
+        ), 0
+    )::int AS monthly_sales,
+    -- Distance Calculation
+    COALESCE(earth_distance(ll_to_earth(m.latitude::float8, m.longitude::float8), ll_to_earth($4::float8, $5::float8)), 9999999)::float8 AS distance,
+    COALESCE(
+      (SELECT json_agg(t.name)
+       FROM combo_tags ct
+       JOIN tags t ON ct.tag_id = t.id
+       WHERE ct.combo_id = cs.id),
+      '[]'
+    ) as tags
+FROM combo_sets cs
+JOIN merchants m ON cs.merchant_id = m.id
+LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
+LEFT JOIN LATERAL (
+    SELECT d.image_media_asset_id
+    FROM combo_dishes cd
+    JOIN dishes d ON cd.dish_id = d.id
+    WHERE cd.combo_id = cs.id
+      AND d.image_media_asset_id IS NOT NULL
+      AND d.deleted_at IS NULL
+    ORDER BY cd.id ASC
+    LIMIT 1
+) AS dish_img ON TRUE
+WHERE 
+    m.status = 'active'
+    AND m.deleted_at IS NULL
+  AND COALESCE(mp.is_takeout_suspended, false) = false
+  AND m.region_id = sqlc.narg('region_id')
+    AND cs.deleted_at IS NULL
+    AND cs.is_online = true
+    AND (
+        $1::text = '' OR 
+        cs.name ILIKE '%' || $1 || '%' OR 
+        m.name ILIKE '%' || $1 || '%'
+    )
+ORDER BY 
+    m.is_open DESC, 
+    monthly_sales DESC,
+    distance ASC
+LIMIT $2 OFFSET $3;
+
+-- name: CountSearchCombosGlobal :one
+-- Count for pagination
+SELECT COUNT(*)
+FROM combo_sets cs
+JOIN merchants m ON cs.merchant_id = m.id
+LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
+WHERE 
+    m.status = 'active'
+    AND m.deleted_at IS NULL
+  AND COALESCE(mp.is_takeout_suspended, false) = false
+  AND m.region_id = sqlc.narg('region_id')
+    AND cs.deleted_at IS NULL
+    AND cs.is_online = true
+    AND (
+        $1::text = '' OR 
+        cs.name ILIKE '%' || $1 || '%' OR 
+        m.name ILIKE '%' || $1 || '%'
+    );
+
+-- name: GetComboMemberImagesByCombos :many
+-- 批量获取多个套餐的成员图片
+SELECT cd.combo_id, d.image_media_asset_id
+FROM combo_dishes cd
+JOIN dishes d ON cd.dish_id = d.id
+WHERE cd.combo_id = ANY($1::bigint[])
+  AND d.deleted_at IS NULL
+ORDER BY cd.combo_id, cd.id ASC;

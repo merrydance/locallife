@@ -2,10 +2,12 @@
   <t-image class="restaurant-image" src="{{restaurant.imageUrl}}" mode="aspectFill" lazy />
   
   <view class="restaurant-info">
-    <!-- 第1行: 餐厅名 + 休息中标签 -->
+    <!-- 第1行: 餐厅名 + 角标 -->
     <view class="row-1">
       <text class="restaurant-name">{{restaurant.name}}</text>
-      <t-tag wx:if="{{restaurant.isOpen === false}}" theme="danger" size="small" variant="light">休息中</t-tag>
+      <t-tag wx:if="{{restaurant.label === '推荐'}}" class="merchant-tag" theme="success" size="small" variant="dark">推荐</t-tag>
+      <t-tag wx:elif="{{restaurant.label === '热销'}}" class="merchant-tag" theme="warning" size="small" variant="dark">热销</t-tag>
+      <t-tag wx:if="{{restaurant.isOpen === false}}" class="merchant-tag" theme="danger" size="small" variant="dark">休息中</t-tag>
     </view>
 
     
@@ -18,9 +20,21 @@
       <text class="distance">{{restaurant.distance}}</text>
     </view>
     
-    <!-- 第3行: 标签 + 包间信息（条件显示） -->
+    <!-- 第3行: 配送费 + 月售 -->
     <view class="row-3">
-      <t-tag wx:for="{{restaurant.tags}}" wx:key="*this" size="small" variant="light">{{item}}</t-tag>
+      <text wx:if="{{restaurant.deliveryFeeDisplay}}" class="delivery-fee">{{restaurant.deliveryFeeDisplay}}</text>
+      <text wx:if="{{restaurant.monthlySales > 0}}" class="monthly-sales">月售{{restaurant.monthlySales}}</text>
+    </view>
+
+    <!-- 第4行: 促销/运费补贴 -->
+    <view class="row-4" wx:if="{{restaurant.promoText || restaurant.subsidyText}}">
+      <t-tag wx:if="{{restaurant.promoText}}" class="merchant-tag" size="small" variant="dark" theme="default" shape="round">{{restaurant.promoText}}</t-tag>
+      <t-tag wx:if="{{restaurant.subsidyText}}" class="merchant-tag" size="small" variant="dark" theme="default" shape="round">{{restaurant.subsidyText}}</t-tag>
+    </view>
+
+    <!-- 第5行: 标签 + 包间信息（条件显示） -->
+    <view class="row-5" wx:if="{{(restaurant.displayTags && restaurant.displayTags.length > 0) || restaurant.availableRoomsBadge}}">
+      <t-tag wx:for="{{restaurant.displayTags || restaurant.tags}}" wx:key="*this" class="merchant-tag" size="small" variant="dark" theme="default" shape="round">{{item}}</t-tag>
       <text wx:if="{{restaurant.availableRoomsBadge}}" class="rooms">🚪 {{restaurant.availableRoomsBadge}}</text>
     </view>
   </view>

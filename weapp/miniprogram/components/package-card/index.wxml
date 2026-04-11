@@ -1,0 +1,46 @@
+<view class="package-card" bindtap="onTap">
+  <!-- 组合图系统 -->
+  <view wx:if="{{package.dishImages && package.dishImages.length > 0}}" class="combo-image-grid grid-count-{{package.dishImages.length > 4 ? 4 : package.dishImages.length}}">
+    <t-image 
+      wx:for="{{package.dishImages}}" 
+      wx:for-item="img" 
+      wx:for-index="imgIdx"
+      wx:if="{{imgIdx < 4}}"
+      wx:key="*this"
+      class="grid-img" 
+      src="{{img}}" 
+      mode="aspectFill" 
+      lazy 
+    />
+  </view>
+  <t-image wx:else class="package-image" src="{{package.imageUrl}}" mode="aspectFill" lazy />
+  <view class="package-info">
+    <view class="row-1">
+      <text class="shop-dish-name">{{package.merchantName}}·{{package.name}}</text>
+      <t-tag wx:if="{{package.merchantIsOpen === false}}" theme="danger" size="small" variant="dark">休息中</t-tag>
+    </view>
+
+    <view class="row-2">
+      <text class="price">{{package.priceDisplay}}</text>
+      <text class="separator">|</text>
+      <text class="sales">{{package.salesBadge}}</text>
+    </view>
+    
+    <view class="row-3">
+      <text class="distance">📍{{package.distance}}</text>
+      <text wx:if="{{package.savingsPercent > 0}}" class="discount">省{{package.savingsPercent}}%</text>
+    </view>
+    
+    <view wx:if="{{package.deliveryFeeDisplay}}" class="row-4">
+      <text class="delivery-fee">{{package.deliveryFeeDisplay}}</text>
+    </view>
+    
+    <view wx:if="{{package.tags.length > 0}}" class="row-5">
+      <t-tag wx:for="{{package.tags}}" wx:for-item="tag" wx:key="*this" size="small" variant="dark" theme="primary">{{tag}}</t-tag>
+    </view>
+  </view>
+  
+  <view class="add-btn-wrapper">
+    <t-button theme="primary" size="small" icon="add" shape="circle" catchtap="onAdd" />
+  </view>
+</view>

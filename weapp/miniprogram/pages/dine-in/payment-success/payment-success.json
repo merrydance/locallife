@@ -1,8 +1,10 @@
 {
     "navigationBarTitleText": "支付成功",
-    "navigationBarBackgroundColor": "#667eea",
-    "navigationBarTextStyle": "white",
-    "backgroundColor": "#667eea",
-    "enablePullDownRefresh": false,
-    "disableScroll": false
+    "navigationStyle": "custom",
+    "backgroundColor": "#f5f5f5",
+    "usingComponents": {
+        "custom-navbar": "/components/custom-navbar/index",
+        "t-button": "tdesign-miniprogram/button/button",
+        "t-icon": "tdesign-miniprogram/icon/icon"
+    }
 }

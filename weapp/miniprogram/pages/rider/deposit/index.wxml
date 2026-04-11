@@ -1,70 +1,144 @@
-<custom-navbar title="我的押金" showBack="{{true}}" bind:navheight="onNavHeight" />
+<custom-navbar title="押金账户" showBack="{{true}}" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px;">
-  <t-loading wx:if="{{loading}}" theme="circular" size="40rpx" class="loading" />
+<scroll-view 
+  scroll-y 
+  class="page-container" 
+  style="padding-top: {{navBarHeight}}px;"
+  refresher-enabled="{{true}}"
+  refresher-triggered="{{refreshing}}"
+  bindrefresherrefresh="onRefresh"
+  bindscrolltolower="onReachBottom"
+>
+  <view wx:if="{{accountError && !loading}}" class="state-shell">
+    <t-empty icon="error-circle" description="{{accountError}}" />
+    <t-button theme="primary" block shape="round" bindtap="onRetryPage">重新加载</t-button>
+  </view>
 
-  <view wx:if="{{!loading}}" class="content">
-    <!-- 押金卡片 -->
-    <view class="deposit-card">
-      <view class="card-header">
-        <text class="label">当前押金</text>
-        <t-tag theme="{{status === 'PAID' ? 'success' : (status === 'REFUNDING' ? 'warning' : 'default')}}">
-          {{status === 'PAID' ? '已缴纳' : (status === 'REFUNDING' ? '退款中' : '未缴纳')}}
-        </t-tag>
+  <block wx:else>
+    <!-- 1. 余额总览卡片 -->
+    <view class="wallet-card">
+      <view class="balance-main">
+        <text class="label">可用押金 (元)</text>
+        <view class="value">¥{{formatBalanceAmount(availableDeposit)}}</view>
       </view>
-      <view class="amount-row">
-        <text class="currency">¥</text>
-        <text class="amount">{{depositDisplay}}</text>
-      </view>
-      <view class="action-row">
-        <t-button 
-          wx:if="{{status === 'UNPAID'}}" 
-          theme="primary" 
-          block 
-          bindtap="onPayDeposit"
-        >立即缴纳</t-button>
-        <t-button 
-          wx:if="{{status === 'PAID'}}" 
-          theme="light" 
-          block 
-          bindtap="onRefundDeposit"
-        >申请退还</t-button>
-        <t-button 
-          wx:if="{{status === 'REFUNDING'}}" 
-          theme="default" 
-          disabled 
-          block
-        >退款审核中</t-button>
-      </view>
-    </view>
-
-    <!-- 押金说明 -->
-    <view class="info-card">
-      <view class="section-title">押金说明</view>
-      <view class="info-item">
-        <t-icon name="info-circle" size="32rpx" color="#666" />
-        <text>接单前需缴纳押金 ¥{{minDepositDisplay}}</text>
-      </view>
-      <view class="info-item">
-        <t-icon name="check-circle" size="32rpx" color="#666" />
-        <text>押金随时可申请退还，预计1-3个工作日到账</text>
-      </view>
-    </view>
-
-    <!-- 交易记录 -->
-    <view class="history-section">
-      <view class="section-title">交易记录</view>
-      <view class="history-list">
-        <view wx:for="{{transactions}}" wx:key="id" class="history-item">
-          <view class="item-left">
-            <text class="item-type">{{item.type === 'PAYMENT' ? '缴纳押金' : '退还押金'}}</text>
-            <text class="item-time">{{item.created_at}}</text>
-          </view>
-          <text class="item-amount {{item.type === 'PAYMENT' ? 'negative' : 'positive'}}">
-            {{item.amountDisplay}}
-          </text>
+      
+      <view class="balance-sub">
+        <view class="sub-item">
+          <text class="sub-label">押金总额</text>
+          <text class="sub-value">¥{{formatBalanceAmount(totalDeposit)}}</text>
+        </view>
+        <view class="balance-divider"></view>
+        <view class="sub-item">
+          <text class="sub-label">配送冻结</text>
+          <text class="sub-value">¥{{formatBalanceAmount(deliveryFrozenDeposit)}}</text>
+        </view>
+        <view class="balance-divider"></view>
+        <view class="sub-item">
+          <text class="sub-label">提现处理中</text>
+          <text class="sub-value">¥{{formatBalanceAmount(withdrawalProcessingAmount)}}</text>
         </view>
       </view>
+
+      <view class="wallet-tip">配送分账资金将直接进入微信零钱，本页仅展示押金与账单记录。</view>
+      <view class="wallet-tip">冻结押金已拆分展示为配送冻结与提现处理中，合计仍等于当前冻结押金。</view>
+      <view class="wallet-tip wallet-tip-secondary">{{withdrawHint}}</view>
+      <view wx:if="{{actionNoticeMessage}}" class="action-notice action-notice-{{actionNoticeTheme}}">
+        <text class="action-notice-text">{{actionNoticeMessage}}</text>
+      </view>
+
+      <view class="wallet-actions">
+        <t-button block theme="primary" shape="round" bindtap="onShowRecharge">充值押金</t-button>
+        <t-button block theme="primary" variant="outline" shape="round" disabled="{{!canWithdraw}}" bindtap="onShowWithdraw">申请提现</t-button>
+      </view>
     </view>
+
+    <!-- 2. 交易记录列表 -->
+    <view class="history-section">
+      <view class="section-header">
+        <text class="section-title">账单明细</text>
+      </view>
+
+      <t-loading wx:if="{{loading && transactions.length === 0}}" theme="circular" size="40rpx" class="loading" />
+
+      <view wx:elif="{{listError && transactions.length === 0}}" class="inline-state-card">
+        <t-empty icon="error-circle" description="{{listError}}" />
+        <t-button theme="primary" shape="round" bindtap="onRetryTransactions">重新加载账单</t-button>
+      </view>
+
+      <view class="history-list" wx:elif="{{transactions.length > 0}}">
+        <view class="history-item" wx:for="{{transactions}}" wx:key="id">
+          <view class="item-icon">
+            <t-icon 
+              name="{{item.icon_name}}" 
+              color="{{getTransactionAmountClass(item.amount, item.type) === 'positive' ? 'var(--td-success-color)' : 'var(--td-text-color-primary)'}}"
+              size="48rpx"
+            />
+          </view>
+          <view class="item-info">
+            <view class="item-header">
+              <view class="item-title">{{item.display_type_text}}</view>
+              <t-tag size="small" theme="{{item.status_theme}}" variant="light">{{item.status_text}}</t-tag>
+            </view>
+            <view class="item-time">{{item.display_time}}</view>
+            <view wx:if="{{item.display_remark}}" class="item-remark">{{item.display_remark}}</view>
+          </view>
+          <view class="item-amount {{getTransactionAmountClass(item.amount, item.type)}}">
+            {{formatTransactionAmount(item.amount, item.type)}}
+          </view>
+        </view>
+
+        <view wx:if="{{listError}}" class="load-more-tip error-tip" bindtap="onRetryTransactions">{{listError}}，点击重试</view>
+        <view wx:elif="{{loadingMore}}" class="load-more-tip">正在加载更多...</view>
+        <view wx:elif="{{!hasMore}}" class="load-more-tip">没有更多记录了</view>
+      </view>
+
+      <t-empty wx:else icon="info-circle" description="暂无收支明细" />
+    </view>
+  </block>
+</scroll-view>
+
+<!-- 充值弹窗 -->
+<t-dialog
+  visible="{{isRechargeVisible}}"
+  title="押金充值"
+  confirm-btn="{{ {content: rechargeSubmitting ? '提交中...' : '立即支付', variant: 'base', theme: 'primary'} }}"
+  cancel-btn="取消"
+  bind:confirm="confirmRecharge"
+  bind:cancel="onCloseRechargeDialog"
+>
+  <view slot="content" class="dialog-content">
+    <t-input
+      placeholder="请输入充值金额"
+      type="digit"
+      label="金额(元)"
+      value="{{rechargeAmount}}"
+      data-field="rechargeAmount"
+      bind:change="onInputAmount"
+      t-class="amount-input"
+    />
+    <view class="dialog-tips">上线需保持押金不少于 100.00 元</view>
   </view>
-</view>
+</t-dialog>
+
+<t-dialog
+  visible="{{isWithdrawVisible}}"
+  title="押金提现"
+  confirm-btn="{{ {content: withdrawSubmitting ? '提交中...' : '确认提现', variant: 'base', theme: 'primary'} }}"
+  cancel-btn="取消"
+  bind:confirm="confirmWithdraw"
+  bind:cancel="onCloseWithdrawDialog"
+>
+  <view slot="content" class="dialog-content">
+    <t-input
+      placeholder="请输入提现金额"
+      type="digit"
+      label="金额(元)"
+      value="{{withdrawAmount}}"
+      data-field="withdrawAmount"
+      bind:change="onInputAmount"
+      t-class="amount-input"
+    />
+    <view class="dialog-tips">最低提现 1.00 元，存在冻结押金或进行中配送时申请会失败。</view>
+    <view class="dialog-tips">如存在配送冻结或提现处理中金额，需要等待释放后才能再次申请提现。</view>
+  </view>
+</t-dialog>

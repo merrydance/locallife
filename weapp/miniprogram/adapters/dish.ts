@@ -2,6 +2,8 @@ import { Dish, DishResponse } from '../models/dish'
 import { DishSummary as ApiDishSummary } from '../api/dish'
 
 import { getPublicImageUrl } from '../utils/image'
+import { formatPrice } from '../utils/util'
+
 
 export class DishAdapter {
   /**
@@ -13,10 +15,10 @@ export class DishAdapter {
       name: dto.name,
       imageUrl: getPublicImageUrl(dto.image_url),
       price: dto.price,
-      priceDisplay: `¥${(dto.price / 100).toFixed(2)}`,
+      priceDisplay: formatPrice(dto.price),
       shopName: '商户名称', // 需要从商户信息获取
       merchantId: dto.merchant_id,
-      attributes: dto.ingredients?.map(ing => ing.name) || [],
+      attributes: dto.ingredients?.map((ing) => ing.name) || [],
       spicyLevel: 0, // 从tags中解析辣度
       salesBadge: '', // 菜品详情中没有销量信息
       ratingDisplay: '0.0', // 菜品详情中没有评分信息
@@ -24,8 +26,8 @@ export class DishAdapter {
       deliveryTimeDisplay: DishAdapter.formatDeliveryTime(dto.prepare_time),
       deliveryFeeDisplay: '配送费待定',
       discountRule: '',
-      tags: dto.tags?.map(tag => tag.name) || [],
-      isPremade: dto.tags?.some(tag => tag.name.includes('预制')) || false,
+      tags: dto.tags?.map((tag) => tag.name) || [],
+      isPremade: dto.tags?.some((tag) => tag.name.includes('预制')) || false,
       customization_groups: dto.customization_groups,
       member_price: dto.member_price,
       is_available: dto.is_available,
@@ -42,23 +44,27 @@ export class DishAdapter {
       name: dto.name,
       imageUrl: getPublicImageUrl(dto.image_url),
       price: dto.price,
-      priceDisplay: `¥${(dto.price / 100).toFixed(2)}`,
+      priceDisplay: formatPrice(dto.price),
       shopName: dto.merchant_name || '未知商家',
       merchantId: dto.merchant_id,
-      attributes: [], // 摘要数据中没有配料信息
-      spicyLevel: 0, // 从tags中解析辣度
+      spicyLevel: 0,
       salesBadge: DishAdapter.formatSales(dto.monthly_sales || 0),
-      ratingDisplay: '0.0', // 摘要数据中没有评分
+      ratingDisplay: '0.0',
       distance: DishAdapter.formatDistance(dto.distance || 0),
       deliveryTimeDisplay: DishAdapter.formatDeliveryTimeSeconds(dto.estimated_delivery_time || 0),
       deliveryFeeDisplay: DishAdapter.formatDeliveryFee(dto.estimated_delivery_fee || 0),
       discountRule: '',
       tags: dto.tags || [],
       isPremade: dto.tags?.includes('预制') || false,
-      merchantIsOpen: dto.merchant_is_open ?? true, // 商户营业状态，默认营业
+      merchantIsOpen: dto.merchant_is_open ?? true,
       distance_meters: dto.distance || 0,
       member_price: dto.member_price,
-      is_available: dto.is_available
+      is_available: dto.is_available,
+      repurchaseRate: dto.repurchase_rate,
+      repurchaseRateDisplay: DishAdapter.formatRepurchaseRate(dto.repurchase_rate),
+      estimated_delivery_time: dto.estimated_delivery_time,
+      attributes: dto.attributes || [],
+      customization_groups: dto.customization_groups || []
     }
   }
 
@@ -120,5 +126,10 @@ export class DishAdapter {
       return `满${(threshold / 100).toFixed(0)}返${discount}元`
     }
     return ''
+  }
+
+  static formatRepurchaseRate(rate?: number): string {
+    if (!rate || rate <= 0) return ''
+    return `复购率${(rate * 100).toFixed(0)}%`
   }
 }

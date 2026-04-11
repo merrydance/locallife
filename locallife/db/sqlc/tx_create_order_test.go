@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"math/big"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/merrydance/locallife/util"
@@ -239,6 +240,53 @@ func TestCreateOrderTxTakeoutOrder(t *testing.T) {
 	require.Equal(t, int64(5500), result.Order.TotalAmount)
 }
 
+func TestCreateOrderTxAllocatesMerchantDailyPickupCode(t *testing.T) {
+	user := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
+	address := createRandomUserAddress(t, user)
+	pickupTime := time.Date(2026, 4, 1, 10, 0, 0, 0, time.Local)
+
+	newOrderParams := func(orderNo string, at time.Time) CreateOrderTxParams {
+		return CreateOrderTxParams{
+			CreateOrderParams: CreateOrderParams{
+				OrderNo:     orderNo,
+				UserID:      user.ID,
+				MerchantID:  merchant.ID,
+				OrderType:   OrderTypeTakeout,
+				AddressID:   pgtype.Int8{Int64: address.ID, Valid: true},
+				DeliveryFee: 200,
+				Subtotal:    1800,
+				TotalAmount: 2000,
+				Status:      OrderStatusPending,
+				PickupCode:  pgtype.Text{},
+			},
+			Items: []CreateOrderItemParams{{
+				DishID:    pgtype.Int8{Int64: 1, Valid: true},
+				Name:      "测试菜品",
+				UnitPrice: 1800,
+				Quantity:  1,
+				Subtotal:  1800,
+			}},
+			PickupTime: at,
+		}
+	}
+
+	first, err := testStore.CreateOrderTx(context.Background(), newOrderParams(util.RandomString(20), pickupTime))
+	require.NoError(t, err)
+	require.True(t, first.Order.PickupCode.Valid)
+	require.Equal(t, "1", first.Order.PickupCode.String)
+
+	second, err := testStore.CreateOrderTx(context.Background(), newOrderParams(util.RandomString(20), pickupTime.Add(2*time.Hour)))
+	require.NoError(t, err)
+	require.True(t, second.Order.PickupCode.Valid)
+	require.Equal(t, "2", second.Order.PickupCode.String)
+
+	third, err := testStore.CreateOrderTx(context.Background(), newOrderParams(util.RandomString(20), pickupTime.Add(24*time.Hour)))
+	require.NoError(t, err)
+	require.True(t, third.Order.PickupCode.Valid)
+	require.Equal(t, "1", third.Order.PickupCode.String)
+}
+
 func TestCreateOrderTxEmptyItems(t *testing.T) {
 	user := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
@@ -267,6 +315,44 @@ func TestCreateOrderTxEmptyItems(t *testing.T) {
 
 	require.NotZero(t, result.Order.ID)
 	require.Len(t, result.Items, 0)
+}
+
+func TestCreateOrderTxRejectsDuplicateActiveReservationOrder(t *testing.T) {
+	user := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
+	room := createRandomRoom(t, merchant.ID)
+	reservation := createRandomReservation(t, user.ID, merchant.ID, room.ID, "confirmed")
+
+	newReservationOrderParams := func(orderNo string) CreateOrderTxParams {
+		return CreateOrderTxParams{
+			CreateOrderParams: CreateOrderParams{
+				OrderNo:       orderNo,
+				UserID:        user.ID,
+				MerchantID:    merchant.ID,
+				OrderType:     OrderTypeReservation,
+				ReservationID: pgtype.Int8{Int64: reservation.ID, Valid: true},
+				Subtotal:      5000,
+				TotalAmount:   5000,
+				Status:        OrderStatusPending,
+			},
+			EnforceSingleActiveReservationOrder: true,
+		}
+	}
+
+	first, err := testStore.CreateOrderTx(context.Background(), newReservationOrderParams(util.RandomString(20)))
+	require.NoError(t, err)
+	require.NotZero(t, first.Order.ID)
+
+	_, err = testStore.CreateOrderTx(context.Background(), newReservationOrderParams(util.RandomString(20)))
+	require.Error(t, err)
+	require.ErrorIs(t, err, ErrReservationActiveOrderConflict)
+	require.Equal(t, "reservation already has an active order", err.Error())
+
+	latestOrder, err := testStore.GetLatestOrderByReservation(context.Background(), pgtype.Int8{Int64: reservation.ID, Valid: true})
+	require.NoError(t, err)
+	require.Equal(t, first.Order.ID, latestOrder.ID)
+	require.False(t, latestOrder.ReplacedByOrderID.Valid)
+	require.NotEqual(t, OrderStatusCancelled, latestOrder.Status)
 }
 
 // ==================== CreateOrderTx with Voucher Tests ====================
@@ -361,10 +447,12 @@ func TestCreateOrderTxWithBalance(t *testing.T) {
 	// 手动增加余额（模拟充值）
 	rechargeAmount := int64(50000) // 500元
 	membership.Membership, err = testStore.UpdateMembershipBalance(context.Background(), UpdateMembershipBalanceParams{
-		ID:             membership.Membership.ID,
-		Balance:        rechargeAmount,
-		TotalRecharged: rechargeAmount,
-		TotalConsumed:  0,
+		ID:               membership.Membership.ID,
+		Balance:          rechargeAmount,
+		PrincipalBalance: rechargeAmount,
+		BonusBalance:     0,
+		TotalRecharged:   rechargeAmount,
+		TotalConsumed:    0,
 	})
 	require.NoError(t, err)
 	require.Equal(t, rechargeAmount, membership.Membership.Balance)
@@ -408,9 +496,13 @@ func TestCreateOrderTxWithBalance(t *testing.T) {
 
 	// 验证订单
 	require.NotZero(t, result.Order.ID)
+	require.Equal(t, OrderStatusPaid, result.Order.Status)
 	require.Equal(t, balancePaid, result.Order.BalancePaid)
 	require.True(t, result.Order.MembershipID.Valid)
 	require.Equal(t, membership.Membership.ID, result.Order.MembershipID.Int64)
+	require.True(t, result.Order.PaymentMethod.Valid)
+	require.Equal(t, "balance", result.Order.PaymentMethod.String)
+	require.True(t, result.Order.PaidAt.Valid)
 
 	// 验证会员余额已扣减
 	require.NotNil(t, result.Membership)
@@ -453,10 +545,12 @@ func TestCreateOrderTxWithVoucherAndBalance(t *testing.T) {
 
 	rechargeAmount := int64(50000) // 500元
 	membership.Membership, err = testStore.UpdateMembershipBalance(context.Background(), UpdateMembershipBalanceParams{
-		ID:             membership.Membership.ID,
-		Balance:        rechargeAmount,
-		TotalRecharged: rechargeAmount,
-		TotalConsumed:  0,
+		ID:               membership.Membership.ID,
+		Balance:          rechargeAmount,
+		PrincipalBalance: rechargeAmount,
+		BonusBalance:     0,
+		TotalRecharged:   rechargeAmount,
+		TotalConsumed:    0,
 	})
 	require.NoError(t, err)
 
@@ -621,6 +715,127 @@ func TestCreateOrderTxInsufficientBalance(t *testing.T) {
 	require.Contains(t, err.Error(), "insufficient balance")
 }
 
+func TestCreateOrderTx_BillingGroupAggregation(t *testing.T) {
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	user := createRandomUser(t)
+	table := createRandomTable(t, merchant.ID)
+	session := createOpenDiningSession(t, merchant.ID, table.ID, user.ID, pgtype.Int8{Valid: false})
+
+	billingGroup, err := testStore.CreateBillingGroup(context.Background(), CreateBillingGroupParams{
+		DiningSessionID: session.ID,
+		Status:          "open",
+		IsDefault:       true,
+		TotalAmount:     9999,
+		PaidAmount:      8888,
+	})
+	require.NoError(t, err)
+
+	orderNo := util.RandomString(20)
+	result, err := testStore.CreateOrderTx(context.Background(), CreateOrderTxParams{
+		CreateOrderParams: CreateOrderParams{
+			OrderNo:             orderNo,
+			UserID:              user.ID,
+			MerchantID:          merchant.ID,
+			OrderType:           "dine_in",
+			TableID:             pgtype.Int8{Int64: table.ID, Valid: true},
+			DeliveryFee:         0,
+			Subtotal:            1280,
+			DiscountAmount:      0,
+			DeliveryFeeDiscount: 0,
+			TotalAmount:         1280,
+			Status:              OrderStatusPending,
+		},
+		Items: []CreateOrderItemParams{{
+			DishID:    pgtype.Int8{Int64: 1, Valid: true},
+			Name:      "Billing Dish",
+			UnitPrice: 1280,
+			Quantity:  1,
+			Subtotal:  1280,
+		}},
+		BillingGroupID: &billingGroup.ID,
+	})
+	require.NoError(t, err)
+
+	orders, err := testStore.ListBillingGroupOrdersByGroup(context.Background(), billingGroup.ID)
+	require.NoError(t, err)
+	require.Len(t, orders, 1)
+	require.Equal(t, result.Order.ID, orders[0].OrderID)
+	require.Equal(t, int64(1280), orders[0].Amount)
+	require.Equal(t, "linked", orders[0].Status)
+
+	amounts, err := testStore.GetBillingGroupAmounts(context.Background(), billingGroup.ID)
+	require.NoError(t, err)
+	require.Equal(t, int64(1280), amounts.TotalAmount)
+	require.Equal(t, int64(0), amounts.PaidAmount)
+}
+
+func TestGetBillingGroupAmounts_ExcludesCancelledAndReplacedOrders(t *testing.T) {
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	user := createRandomUser(t)
+	table := createRandomTable(t, merchant.ID)
+	session := createOpenDiningSession(t, merchant.ID, table.ID, user.ID, pgtype.Int8{Valid: false})
+
+	billingGroup, err := testStore.CreateBillingGroup(context.Background(), CreateBillingGroupParams{
+		DiningSessionID: session.ID,
+		Status:          "open",
+		IsDefault:       true,
+		TotalAmount:     0,
+		PaidAmount:      0,
+	})
+	require.NoError(t, err)
+
+	pendingOrder := createRandomOrderWithUserAndMerchant(t, user.ID, merchant.ID)
+	paidOrder := createRandomOrderWithUserAndMerchant(t, user.ID, merchant.ID)
+	cancelledOrder := createRandomOrderWithUserAndMerchant(t, user.ID, merchant.ID)
+	replacedOrder := createRandomOrderWithUserAndMerchant(t, user.ID, merchant.ID)
+
+	_, err = testStore.(*SQLStore).connPool.Exec(context.Background(), `
+		UPDATE orders
+		SET status = $2, total_amount = $3, replaced_by_order_id = $4, updated_at = now()
+		WHERE id = $1`, pendingOrder.ID, OrderStatusPending, int64(1000), pgtype.Int8{Valid: false})
+	require.NoError(t, err)
+	_, err = testStore.(*SQLStore).connPool.Exec(context.Background(), `
+		UPDATE orders
+		SET status = $2, total_amount = $3, updated_at = now()
+		WHERE id = $1`, paidOrder.ID, OrderStatusPaid, int64(2000))
+	require.NoError(t, err)
+	_, err = testStore.(*SQLStore).connPool.Exec(context.Background(), `
+		UPDATE orders
+		SET status = $2, total_amount = $3, updated_at = now()
+		WHERE id = $1`, cancelledOrder.ID, OrderStatusCancelled, int64(3000))
+	require.NoError(t, err)
+	_, err = testStore.(*SQLStore).connPool.Exec(context.Background(), `
+		UPDATE orders
+		SET status = $2, total_amount = $3, replaced_by_order_id = $4, updated_at = now()
+		WHERE id = $1`, replacedOrder.ID, OrderStatusPaid, int64(4000), pgtype.Int8{Int64: paidOrder.ID, Valid: true})
+	require.NoError(t, err)
+
+	for _, entry := range []struct {
+		orderID int64
+		amount  int64
+	}{
+		{orderID: pendingOrder.ID, amount: 1000},
+		{orderID: paidOrder.ID, amount: 2000},
+		{orderID: cancelledOrder.ID, amount: 3000},
+		{orderID: replacedOrder.ID, amount: 4000},
+	} {
+		_, err = testStore.CreateBillingGroupOrder(context.Background(), CreateBillingGroupOrderParams{
+			BillingGroupID: billingGroup.ID,
+			OrderID:        entry.orderID,
+			Amount:         entry.amount,
+			Status:         "linked",
+		})
+		require.NoError(t, err)
+	}
+
+	amounts, err := testStore.GetBillingGroupAmounts(context.Background(), billingGroup.ID)
+	require.NoError(t, err)
+	require.Equal(t, int64(3000), amounts.TotalAmount)
+	require.Equal(t, int64(2000), amounts.PaidAmount)
+}
+
 // ==================== ProcessOrderPaymentTx Transaction Tests ====================
 
 // createMerchantWithLocation 创建带有经纬度的商户（用于配送测试）
@@ -632,9 +847,9 @@ func createMerchantWithLocation(t *testing.T, ownerID int64) Merchant {
 		OwnerUserID: ownerID,
 		Name:        util.RandomString(10),
 		Description: pgtype.Text{String: util.RandomString(50), Valid: true},
-		LogoUrl:     pgtype.Text{String: "https://example.com/logo.jpg", Valid: true},
-		Phone:       "13800138000",
-		Address:     "北京市朝阳区测试路" + util.RandomString(8), // 添加随机后缀避免重复
+
+		Phone:   "13800138000",
+		Address: "北京市朝阳区测试路" + util.RandomString(8), // 添加随机后缀避免重复
 		// 设置经纬度（北京朝阳区）
 		Latitude:        pgtype.Numeric{Int: big.NewInt(399282), Exp: -4, Valid: true},  // 39.9282
 		Longitude:       pgtype.Numeric{Int: big.NewInt(1164507), Exp: -4, Valid: true}, // 116.4507
@@ -688,30 +903,21 @@ func TestProcessOrderPaymentTx_TakeoutOrder(t *testing.T) {
 		OrderID: createResult.Order.ID,
 	})
 	require.NoError(t, err)
+	require.Equal(t, OrderStatusPaid, result.Order.Status)
+	require.Equal(t, FulfillmentStatusPendingKitchen, result.Order.FulfillmentStatus)
 
-	// 验证订单状态没有在这个事务中更新（状态更新在外部）
+	// 验证订单已更新为支付完成且ID一致
 	require.Equal(t, createResult.Order.ID, result.Order.ID)
 
-	// ✅ 核心验证：外卖订单应该创建配送单
-	require.NotNil(t, result.Delivery, "外卖订单应该创建配送单")
-	require.Equal(t, createResult.Order.ID, result.Delivery.OrderID)
-	require.Equal(t, "pending", result.Delivery.Status)
-	require.Equal(t, merchant.Address, result.Delivery.PickupAddress)
-	require.Equal(t, address.DetailAddress, result.Delivery.DeliveryAddress)
-	require.Equal(t, int32(2500), result.Delivery.Distance)
-	require.Equal(t, int64(800), result.Delivery.DeliveryFee)
+	// ✅ 核心验证：外卖订单支付成功后既不创建配送单，也不立即进入配送池
+	require.Nil(t, result.Delivery, "外卖订单支付成功后不应立即创建配送单")
+	_, err = testStore.GetDeliveryByOrderID(context.Background(), createResult.Order.ID)
+	require.ErrorIs(t, err, ErrRecordNotFound)
 
-	// ✅ 核心验证：外卖订单应该进入配送池
-	require.NotNil(t, result.PoolItem, "外卖订单应该进入配送池")
-	require.Equal(t, createResult.Order.ID, result.PoolItem.OrderID)
-	require.Equal(t, merchant.ID, result.PoolItem.MerchantID)
-	require.Equal(t, int64(800), result.PoolItem.DeliveryFee)
-	require.Equal(t, int32(1), result.PoolItem.Priority) // 8元运费，优先级=1
-
-	// 验证配送池可以被查询到
-	poolItem, err := testStore.GetDeliveryPoolByOrderID(context.Background(), createResult.Order.ID)
-	require.NoError(t, err)
-	require.Equal(t, result.PoolItem.ID, poolItem.ID)
+	// ✅ 关键调整：支付成功后不立即进入配送池
+	require.Nil(t, result.PoolItem, "外卖订单支付成功后不应立即进入配送池")
+	_, err = testStore.GetDeliveryPoolByOrderID(context.Background(), createResult.Order.ID)
+	require.ErrorIs(t, err, ErrRecordNotFound)
 }
 
 func TestProcessOrderPaymentTx_TakeoutOrder_HighDeliveryFee(t *testing.T) {
@@ -752,10 +958,10 @@ func TestProcessOrderPaymentTx_TakeoutOrder_HighDeliveryFee(t *testing.T) {
 		OrderID: createResult.Order.ID,
 	})
 	require.NoError(t, err)
+	require.Equal(t, FulfillmentStatusPendingKitchen, result.Order.FulfillmentStatus)
 
-	// 验证高运费订单的优先级为3
-	require.NotNil(t, result.PoolItem)
-	require.Equal(t, int32(3), result.PoolItem.Priority, ">=20元运费应该是高优先级3")
+	// 验证高运费订单在支付成功后仍不会立即入池
+	require.Nil(t, result.PoolItem)
 }
 
 func TestProcessOrderPaymentTx_DineInOrder(t *testing.T) {
@@ -793,6 +999,7 @@ func TestProcessOrderPaymentTx_DineInOrder(t *testing.T) {
 		OrderID: createResult.Order.ID,
 	})
 	require.NoError(t, err)
+	require.Equal(t, FulfillmentStatusPendingKitchen, result.Order.FulfillmentStatus)
 
 	// ✅ 堂食订单不应该有配送单和配送池
 	require.Nil(t, result.Delivery, "堂食订单不应该创建配送单")
@@ -832,6 +1039,7 @@ func TestProcessOrderPaymentTx_TakeawayOrder(t *testing.T) {
 		OrderID: createResult.Order.ID,
 	})
 	require.NoError(t, err)
+	require.Equal(t, FulfillmentStatusPendingKitchen, result.Order.FulfillmentStatus)
 
 	// ✅ 外带自取订单不应该有配送单
 	require.Nil(t, result.Delivery, "外带订单不应该创建配送单")
@@ -870,12 +1078,14 @@ func TestProcessOrderPaymentTx_TakeoutWithoutAddress(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// 支付处理应该失败
-	_, err = testStore.ProcessOrderPaymentTx(context.Background(), ProcessOrderPaymentTxParams{
+	// 当前实现会先完成支付与库存扣减，配送单在商家后续推进履约时再创建。
+	result, err := testStore.ProcessOrderPaymentTx(context.Background(), ProcessOrderPaymentTxParams{
 		OrderID: createResult.Order.ID,
 	})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "missing delivery address")
+	require.NoError(t, err)
+	require.Equal(t, "paid", result.Order.Status)
+	require.Nil(t, result.Delivery)
+	require.Nil(t, result.PoolItem)
 }
 
 func TestProcessOrderPaymentTx_TakeoutOrder_MediumDeliveryFee(t *testing.T) {
@@ -916,8 +1126,8 @@ func TestProcessOrderPaymentTx_TakeoutOrder_MediumDeliveryFee(t *testing.T) {
 		OrderID: createResult.Order.ID,
 	})
 	require.NoError(t, err)
+	require.Equal(t, FulfillmentStatusPendingKitchen, result.Order.FulfillmentStatus)
 
-	// 验证中等运费订单的优先级为2
-	require.NotNil(t, result.PoolItem)
-	require.Equal(t, int32(2), result.PoolItem.Priority, ">=10元且<20元运费应该是中优先级2")
+	// 验证中等运费订单在支付成功后仍不会立即入池
+	require.Nil(t, result.PoolItem)
 }

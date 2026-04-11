@@ -5,11 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/media"
 	"github.com/merrydance/locallife/token"
+	"github.com/merrydance/locallife/util"
 	"github.com/merrydance/locallife/websocket"
 
 	"github.com/gin-gonic/gin"
@@ -24,7 +25,7 @@ type createTableRequest struct {
 	Capacity     int16   `json:"capacity" binding:"required,min=1,max=100"`
 	Description  *string `json:"description" binding:"omitempty,max=500"`
 	MinimumSpend *int64  `json:"minimum_spend,omitempty" binding:"omitempty,min=0,max=100000000"`
-	QrCodeUrl    *string `json:"qr_code_url,omitempty" binding:"omitempty,url,max=500"`
+	AccessCode   *string `json:"access_code,omitempty" binding:"omitempty,min=4,max=32"`
 	TagIds       []int64 `json:"tag_ids,omitempty"` // 标签ID列表
 }
 
@@ -37,6 +38,8 @@ type tableResponse struct {
 	Description          *string           `json:"description,omitempty"`
 	MinimumSpend         *int64            `json:"minimum_spend,omitempty"`
 	QrCodeUrl            *string           `json:"qr_code_url,omitempty"`
+	PrimaryImageAssetID  *int64            `json:"-"`
+	ImageURL             string            `json:"image_url,omitempty"`
 	Status               string            `json:"status"`
 	CurrentReservationID *int64            `json:"current_reservation_id,omitempty"`
 	CurrentReservation   *reservationBrief `json:"current_reservation,omitempty"` // 当前预订信息
@@ -62,7 +65,15 @@ type tableTagInfo struct {
 	Type string `json:"type"`
 }
 
-func newTableResponse(t db.Table) tableResponse {
+type tableTagsListResponse struct {
+	Tags []tableTagInfo `json:"tags"`
+}
+
+type tableImagesListResponse struct {
+	Images []tableImageResponse `json:"images"`
+}
+
+func (server *Server) newTableResponse(t db.Table) tableResponse {
 	resp := tableResponse{
 		ID:         t.ID,
 		MerchantID: t.MerchantID,
@@ -79,8 +90,85 @@ func newTableResponse(t db.Table) tableResponse {
 	if t.MinimumSpend.Valid {
 		resp.MinimumSpend = &t.MinimumSpend.Int64
 	}
-	if t.QrCodeUrl.Valid {
-		resp.QrCodeUrl = &t.QrCodeUrl.String
+	if t.QrCodeUrl.Valid && t.QrCodeUrl.String != "" {
+		qrCodeURL := server.resolvePublicUploadURLForClient(t.QrCodeUrl.String)
+		resp.QrCodeUrl = &qrCodeURL
+	}
+	if t.CurrentReservationID.Valid {
+		resp.CurrentReservationID = &t.CurrentReservationID.Int64
+	}
+	if t.UpdatedAt.Valid {
+		resp.UpdatedAt = &t.UpdatedAt.Time
+	}
+
+	return resp
+}
+
+func primaryImageAssetIDFromValue(value interface{}) *int64 {
+	if value == nil {
+		return nil
+	}
+
+	if id, ok := value.(int64); ok && id > 0 {
+		return &id
+	}
+
+	return nil
+}
+
+func (server *Server) newTableResponseFromListRow(t db.ListTablesByMerchantRow) tableResponse {
+	resp := tableResponse{
+		ID:                  t.ID,
+		MerchantID:          t.MerchantID,
+		TableNo:             t.TableNo,
+		TableType:           t.TableType,
+		Capacity:            t.Capacity,
+		Status:              t.Status,
+		CreatedAt:           t.CreatedAt,
+		PrimaryImageAssetID: primaryImageAssetIDFromValue(t.PrimaryImageAssetID),
+	}
+
+	if t.Description.Valid {
+		resp.Description = &t.Description.String
+	}
+	if t.MinimumSpend.Valid {
+		resp.MinimumSpend = &t.MinimumSpend.Int64
+	}
+	if t.QrCodeUrl.Valid && t.QrCodeUrl.String != "" {
+		qrCodeURL := server.resolvePublicUploadURLForClient(t.QrCodeUrl.String)
+		resp.QrCodeUrl = &qrCodeURL
+	}
+	if t.CurrentReservationID.Valid {
+		resp.CurrentReservationID = &t.CurrentReservationID.Int64
+	}
+	if t.UpdatedAt.Valid {
+		resp.UpdatedAt = &t.UpdatedAt.Time
+	}
+
+	return resp
+}
+
+func (server *Server) newTableResponseFromListTypeRow(t db.ListTablesByMerchantAndTypeRow) tableResponse {
+	resp := tableResponse{
+		ID:                  t.ID,
+		MerchantID:          t.MerchantID,
+		TableNo:             t.TableNo,
+		TableType:           t.TableType,
+		Capacity:            t.Capacity,
+		Status:              t.Status,
+		CreatedAt:           t.CreatedAt,
+		PrimaryImageAssetID: primaryImageAssetIDFromValue(t.PrimaryImageAssetID),
+	}
+
+	if t.Description.Valid {
+		resp.Description = &t.Description.String
+	}
+	if t.MinimumSpend.Valid {
+		resp.MinimumSpend = &t.MinimumSpend.Int64
+	}
+	if t.QrCodeUrl.Valid && t.QrCodeUrl.String != "" {
+		qrCodeURL := server.resolvePublicUploadURLForClient(t.QrCodeUrl.String)
+		resp.QrCodeUrl = &qrCodeURL
 	}
 	if t.CurrentReservationID.Valid {
 		resp.CurrentReservationID = &t.CurrentReservationID.Int64
@@ -116,7 +204,7 @@ func (server *Server) createTable(ctx *gin.Context) {
 
 	// 获取商户ID
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.getMerchantFromContextOrStore(ctx, authPayload.UserID)
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
@@ -155,8 +243,13 @@ func (server *Server) createTable(ctx *gin.Context) {
 	if req.MinimumSpend != nil {
 		arg.MinimumSpend = pgtype.Int8{Int64: *req.MinimumSpend, Valid: true}
 	}
-	if req.QrCodeUrl != nil {
-		arg.QrCodeUrl = pgtype.Text{String: *req.QrCodeUrl, Valid: true}
+	if req.AccessCode != nil {
+		hashedCode, err := util.HashPassword(*req.AccessCode)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		arg.AccessCodeHash = pgtype.Text{String: hashedCode, Valid: true}
 	}
 
 	table, err := server.store.CreateTable(ctx, arg)
@@ -179,7 +272,7 @@ func (server *Server) createTable(ctx *gin.Context) {
 		}
 	}
 
-	ctx.JSON(http.StatusOK, newTableResponse(table))
+	ctx.JSON(http.StatusCreated, server.newTableResponse(table))
 }
 
 type getTableRequest struct {
@@ -192,7 +285,7 @@ type getTableRequest struct {
 // @Tags 桌台管理
 // @Produce json
 // @Param id path int true "桌台ID"
-// @Success 200 {object} tableResponse "桌台详情"
+// @Success 201 {object} tableResponse "桌台详情"
 // @Failure 400 {object} ErrorResponse "参数错误"
 // @Failure 401 {object} ErrorResponse "未认证"
 // @Failure 403 {object} ErrorResponse "非桌台所有者"
@@ -209,7 +302,7 @@ func (server *Server) getTable(ctx *gin.Context) {
 
 	// 验证商户权限
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.getMerchantFromContextOrStore(ctx, authPayload.UserID)
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
@@ -236,7 +329,7 @@ func (server *Server) getTable(ctx *gin.Context) {
 	}
 
 	// 获取标签
-	resp := newTableResponse(table)
+	resp := server.newTableResponse(table)
 	tags, err := server.store.ListTableTags(ctx, table.ID)
 	if err == nil && len(tags) > 0 {
 		tableTagInfos := make([]tableTagInfo, len(tags))
@@ -264,6 +357,7 @@ type listTablesRequest struct {
 type listTablesResponse struct {
 	Tables []tableResponse `json:"tables"`
 	Count  int64           `json:"count"`
+	Total  int64           `json:"total"`
 }
 
 // listTables godoc
@@ -288,7 +382,7 @@ func (server *Server) listTables(ctx *gin.Context) {
 
 	// 验证商户权限并获取商户ID
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.getMerchantFromContextOrStore(ctx, authPayload.UserID)
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
@@ -298,31 +392,56 @@ func (server *Server) listTables(ctx *gin.Context) {
 		return
 	}
 
-	var tables []db.Table
+	var respTables []tableResponse
 
 	if req.TableType != "" {
-		tables, err = server.store.ListTablesByMerchantAndType(ctx, db.ListTablesByMerchantAndTypeParams{
+		tables, listErr := server.store.ListTablesByMerchantAndType(ctx, db.ListTablesByMerchantAndTypeParams{
 			MerchantID: merchant.ID,
 			TableType:  req.TableType,
 		})
-	} else {
-		tables, err = server.store.ListTablesByMerchant(ctx, merchant.ID)
-	}
+		if listErr != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, listErr))
+			return
+		}
 
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
+		respTables = make([]tableResponse, len(tables))
+		for i, t := range tables {
+			respTables[i] = server.newTableResponseFromListTypeRow(t)
+		}
+	} else {
+		tables, listErr := server.store.ListTablesByMerchant(ctx, merchant.ID)
+		if listErr != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, listErr))
+			return
+		}
+
+		respTables = make([]tableResponse, len(tables))
+		for i, t := range tables {
+			respTables[i] = server.newTableResponseFromListRow(t)
+		}
 	}
 
 	resp := listTablesResponse{
-		Tables: make([]tableResponse, len(tables)),
-		Count:  int64(len(tables)),
+		Tables: respTables,
+		Count:  int64(len(respTables)),
+		Total:  int64(len(respTables)),
 	}
-	for i, t := range tables {
-		resp.Tables[i] = newTableResponse(t)
+
+	imageAssetIDs := make([]int64, 0, len(resp.Tables))
+	for _, table := range resp.Tables {
+		if table.PrimaryImageAssetID != nil {
+			imageAssetIDs = append(imageAssetIDs, *table.PrimaryImageAssetID)
+		}
+	}
+	imageURLs := server.batchPublicImageURLs(ctx, imageAssetIDs, media.VariantCard)
+
+	for i := range resp.Tables {
+		if resp.Tables[i].PrimaryImageAssetID != nil {
+			resp.Tables[i].ImageURL = imageURLs[*resp.Tables[i].PrimaryImageAssetID]
+		}
 
 		// 加载每个桌台的标签
-		tags, err := server.store.ListTableTags(ctx, t.ID)
+		tags, err := server.store.ListTableTags(ctx, resp.Tables[i].ID)
 		if err == nil && len(tags) > 0 {
 			resp.Tables[i].Tags = make([]tagInfo, len(tags))
 			for j, tag := range tags {
@@ -334,8 +453,8 @@ func (server *Server) listTables(ctx *gin.Context) {
 		}
 
 		// 加载当前预订信息
-		if t.CurrentReservationID.Valid {
-			reservation, err := server.store.GetTableReservation(ctx, t.CurrentReservationID.Int64)
+		if resp.Tables[i].CurrentReservationID != nil {
+			reservation, err := server.store.GetTableReservation(ctx, *resp.Tables[i].CurrentReservationID)
 			if err == nil {
 				var notes *string
 				if reservation.Notes.Valid {
@@ -408,10 +527,18 @@ func (server *Server) listAvailableRooms(ctx *gin.Context) {
 		if r.MinimumSpend.Valid {
 			item.MinimumSpend = r.MinimumSpend.Int64
 		}
-		if r.PrimaryImage != "" {
-			item.PrimaryImage = normalizeUploadURLForClient(r.PrimaryImage)
+		if r.PrimaryImageAssetID != nil {
+			if id, ok := r.PrimaryImageAssetID.(int64); ok && id != 0 {
+				item.PrimaryImageAssetID = &id
+			}
 		}
 		resp.Rooms[i] = item
+	}
+
+	for i := range resp.Rooms {
+		if resp.Rooms[i].PrimaryImageAssetID != nil {
+			resp.Rooms[i].ImageURL = server.publicImageURL(ctx, resp.Rooms[i].PrimaryImageAssetID, media.VariantCard)
+		}
 	}
 
 	ctx.JSON(http.StatusOK, resp)
@@ -462,10 +589,18 @@ func (server *Server) listMerchantRoomsForCustomer(ctx *gin.Context) {
 		if r.MinimumSpend.Valid {
 			item.MinimumSpend = r.MinimumSpend.Int64
 		}
-		if r.PrimaryImage != "" {
-			item.PrimaryImage = normalizeUploadURLForClient(r.PrimaryImage)
+		if r.PrimaryImageAssetID != nil {
+			if id, ok := r.PrimaryImageAssetID.(int64); ok && id != 0 {
+				item.PrimaryImageAssetID = &id
+			}
 		}
 		resp.Rooms[i] = item
+	}
+
+	for i := range resp.Rooms {
+		if resp.Rooms[i].PrimaryImageAssetID != nil {
+			resp.Rooms[i].ImageURL = server.publicImageURL(ctx, resp.Rooms[i].PrimaryImageAssetID, media.VariantCard)
+		}
 	}
 
 	ctx.JSON(http.StatusOK, resp)
@@ -473,10 +608,11 @@ func (server *Server) listMerchantRoomsForCustomer(ctx *gin.Context) {
 
 type updateTableRequest struct {
 	TableNo      *string `json:"table_no,omitempty" binding:"omitempty,max=50"`
+	TableType    *string `json:"table_type,omitempty" binding:"omitempty,oneof=table room"`
 	Capacity     *int16  `json:"capacity,omitempty" binding:"omitempty,min=1,max=100"`
 	Description  *string `json:"description,omitempty" binding:"omitempty,max=500"`
 	MinimumSpend *int64  `json:"minimum_spend,omitempty" binding:"omitempty,min=0,max=100000000"`
-	QrCodeUrl    *string `json:"qr_code_url,omitempty" binding:"omitempty,url,max=500"`
+	AccessCode   *string `json:"access_code,omitempty" binding:"omitempty,min=4,max=32"`
 	Status       *string `json:"status,omitempty" binding:"omitempty,oneof=available occupied disabled"`
 	TagIds       []int64 `json:"tag_ids,omitempty"` // 标签ID列表
 }
@@ -514,7 +650,7 @@ func (server *Server) updateTable(ctx *gin.Context) {
 
 	// 验证商户权限
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.getMerchantFromContextOrStore(ctx, authPayload.UserID)
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
@@ -546,6 +682,12 @@ func (server *Server) updateTable(ctx *gin.Context) {
 
 	if req.TableNo != nil {
 		arg.TableNo = pgtype.Text{String: *req.TableNo, Valid: true}
+		if *req.TableNo != table.TableNo {
+			arg.QrCodeUrl = pgtype.Text{String: "", Valid: true}
+		}
+	}
+	if req.TableType != nil {
+		arg.TableType = pgtype.Text{String: *req.TableType, Valid: true}
 	}
 	if req.Capacity != nil {
 		arg.Capacity = pgtype.Int2{Int16: *req.Capacity, Valid: true}
@@ -556,8 +698,13 @@ func (server *Server) updateTable(ctx *gin.Context) {
 	if req.MinimumSpend != nil {
 		arg.MinimumSpend = pgtype.Int8{Int64: *req.MinimumSpend, Valid: true}
 	}
-	if req.QrCodeUrl != nil {
-		arg.QrCodeUrl = pgtype.Text{String: *req.QrCodeUrl, Valid: true}
+	if req.AccessCode != nil {
+		hashedCode, err := util.HashPassword(*req.AccessCode)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		arg.AccessCodeHash = pgtype.Text{String: hashedCode, Valid: true}
 	}
 	if req.Status != nil {
 		arg.Status = pgtype.Text{String: *req.Status, Valid: true}
@@ -591,7 +738,7 @@ func (server *Server) updateTable(ctx *gin.Context) {
 		}
 	}
 
-	ctx.JSON(http.StatusOK, newTableResponse(updatedTable))
+	ctx.JSON(http.StatusOK, server.newTableResponse(updatedTable))
 }
 
 type updateTableStatusRequest struct {
@@ -632,7 +779,7 @@ func (server *Server) updateTableStatus(ctx *gin.Context) {
 
 	// 验证商户权限
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.getMerchantFromContextOrStore(ctx, authPayload.UserID)
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
@@ -657,10 +804,52 @@ func (server *Server) updateTableStatus(ctx *gin.Context) {
 		return
 	}
 
+	// 特殊处理：如果请求将桌台设为空闲(available)，尝试查找并关闭关联的就餐会话
+	// 这是为了修复前端可能直接调用此接口而没有调用 CloseDiningSessionTx 导致的会话残留问题
+	if req.Status == "available" {
+		session, err := server.store.GetActiveDiningSessionByTable(ctx, uriReq.ID)
+		if err == nil && session.MerchantID == merchant.ID {
+			// 找到活动会话，使用事务进行完整关闭（含释放桌台、结算）
+			_, err = server.store.CloseDiningSessionTx(ctx, db.CloseDiningSessionTxParams{
+				ID:         session.ID,
+				MerchantID: merchant.ID,
+			})
+			if err == nil {
+				// 成功关闭后，重新获取桌台信息返回
+				updatedTable, err := server.store.GetTable(ctx, uriReq.ID)
+				if err == nil {
+					// WebSocket 推送
+					if server.wsHub != nil {
+						tableData, _ := json.Marshal(map[string]any{
+							"id":       updatedTable.ID,
+							"table_no": updatedTable.TableNo,
+							"status":   updatedTable.Status,
+						})
+						server.wsHub.SendToMerchant(merchant.ID, websocket.Message{
+							Type:      "table_status_change",
+							Data:      tableData,
+							Timestamp: time.Now(),
+						})
+					}
+					ctx.JSON(http.StatusOK, server.newTableResponse(updatedTable))
+					return
+				}
+			}
+			// 如果关闭会话失败（例如已关闭），则继续执行后续的强制更新桌台状态逻辑作为兜底
+		}
+	}
+
 	// 构建更新参数
 	var reservationID pgtype.Int8
 	if req.CurrentReservationID != nil {
 		reservationID = pgtype.Int8{Int64: *req.CurrentReservationID, Valid: true}
+	}
+
+	// 强制清理：如果是释放桌台，且桌台当前有预订，强制结束预订状态
+	// 这是为了防止 UpdateTableStatus 清除了桌台上的引用，但 Reservation 表里依然保留 checked_in 状态
+	if req.Status == "available" && table.CurrentReservationID.Valid {
+		// 我们忽略错误，因为如果预订已经结束也无所谓; 主要是为了处理脏数据
+		_, _ = server.store.UpdateReservationToCompleted(ctx, table.CurrentReservationID.Int64)
 	}
 
 	updatedTable, err := server.store.UpdateTableStatus(ctx, db.UpdateTableStatusParams{
@@ -687,7 +876,7 @@ func (server *Server) updateTableStatus(ctx *gin.Context) {
 		})
 	}
 
-	ctx.JSON(http.StatusOK, newTableResponse(updatedTable))
+	ctx.JSON(http.StatusOK, server.newTableResponse(updatedTable))
 }
 
 type deleteTableRequest struct {
@@ -718,7 +907,7 @@ func (server *Server) deleteTable(ctx *gin.Context) {
 
 	// 验证商户权限
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.getMerchantFromContextOrStore(ctx, authPayload.UserID)
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
@@ -762,23 +951,35 @@ func (server *Server) deleteTable(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"message": "table deleted successfully"})
+	ctx.JSON(http.StatusOK, successMessage("table deleted successfully"))
 }
 
 // ==================== 桌台图片管理 ====================
 
 type tableImageResponse struct {
-	ID        int64  `json:"id"`
-	TableID   int64  `json:"table_id"`
-	ImageURL  string `json:"image_url"`
-	SortOrder int32  `json:"sort_order"`
-	IsPrimary bool   `json:"is_primary"`
+	ID           int64  `json:"id"`
+	TableID      int64  `json:"table_id"`
+	MediaAssetID *int64 `json:"media_asset_id,omitempty"`
+	ImageURL     string `json:"image_url,omitempty"`
+	SortOrder    int32  `json:"sort_order"`
+	IsPrimary    bool   `json:"is_primary"`
+}
+
+func (server *Server) newTableImageResponse(img db.TableImage, imageURL string) tableImageResponse {
+	return tableImageResponse{
+		ID:           img.ID,
+		TableID:      img.TableID,
+		MediaAssetID: int64PtrFromPgInt8(img.MediaAssetID),
+		ImageURL:     imageURL,
+		SortOrder:    img.SortOrder,
+		IsPrimary:    img.IsPrimary,
+	}
 }
 
 type addTableImageRequest struct {
-	ImageURL  string `json:"image_url" binding:"required,min=1,max=500"`
-	SortOrder int32  `json:"sort_order" binding:"omitempty,min=0,max=100"`
-	IsPrimary bool   `json:"is_primary"`
+	MediaAssetID int64 `json:"media_asset_id" binding:"required,min=1"`
+	SortOrder    int32 `json:"sort_order" binding:"omitempty,min=0,max=100"`
+	IsPrimary    bool  `json:"is_primary"`
 }
 
 // addTableImage godoc
@@ -814,7 +1015,7 @@ func (server *Server) addTableImage(ctx *gin.Context) {
 
 	// 验证商户权限
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.getMerchantFromContextOrStore(ctx, authPayload.UserID)
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
@@ -839,15 +1040,6 @@ func (server *Server) addTableImage(ctx *gin.Context) {
 		return
 	}
 
-	// 桌台/包间图片必须先审后存：仅允许使用 uploads/public/... 本地路径
-	normalized := normalizeStoredUploadPath(req.ImageURL)
-	prefix := fmt.Sprintf("uploads/public/merchants/%d/tables/", merchant.ID)
-	if normalized == "" || !strings.HasPrefix(normalized, prefix) {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("image_url 仅允许使用通过桌台图片上传接口生成的本地路径")))
-		return
-	}
-	req.ImageURL = normalized
-
 	// 如果设置为主图，先清除其他主图标记
 	if req.IsPrimary {
 		err = server.store.SetPrimaryTableImage(ctx, uriReq.ID)
@@ -859,10 +1051,10 @@ func (server *Server) addTableImage(ctx *gin.Context) {
 
 	// 添加图片
 	image, err := server.store.AddTableImage(ctx, db.AddTableImageParams{
-		TableID:   uriReq.ID,
-		ImageUrl:  normalizeImageURLForStorage(req.ImageURL),
-		SortOrder: req.SortOrder,
-		IsPrimary: req.IsPrimary,
+		TableID:      uriReq.ID,
+		MediaAssetID: pgtype.Int8{Int64: req.MediaAssetID, Valid: true},
+		SortOrder:    req.SortOrder,
+		IsPrimary:    req.IsPrimary,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -870,11 +1062,12 @@ func (server *Server) addTableImage(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusCreated, tableImageResponse{
-		ID:        image.ID,
-		TableID:   image.TableID,
-		ImageURL:  normalizeUploadURLForClient(image.ImageUrl),
-		SortOrder: image.SortOrder,
-		IsPrimary: image.IsPrimary,
+		ID:           image.ID,
+		TableID:      image.TableID,
+		MediaAssetID: int64PtrFromPgInt8(image.MediaAssetID),
+		ImageURL:     server.publicImageURL(ctx, int64PtrFromPgInt8(image.MediaAssetID), media.VariantDetail),
+		SortOrder:    image.SortOrder,
+		IsPrimary:    image.IsPrimary,
 	})
 }
 
@@ -898,6 +1091,31 @@ func (server *Server) listTableImages(ctx *gin.Context) {
 		return
 	}
 
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	merchant, err := server.getMerchantFromContextOrStore(ctx, authPayload.UserID)
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	table, err := server.store.GetTable(ctx, uriReq.ID)
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("table not found")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	if table.MerchantID != merchant.ID {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("table does not belong to your merchant")))
+		return
+	}
+
 	images, err := server.store.ListTableImages(ctx, uriReq.ID)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -905,17 +1123,18 @@ func (server *Server) listTableImages(ctx *gin.Context) {
 	}
 
 	resp := make([]tableImageResponse, len(images))
-	for i, img := range images {
-		resp[i] = tableImageResponse{
-			ID:        img.ID,
-			TableID:   img.TableID,
-			ImageURL:  normalizeUploadURLForClient(img.ImageUrl),
-			SortOrder: img.SortOrder,
-			IsPrimary: img.IsPrimary,
+	imageAssetIDs := make([]int64, 0, len(images))
+	for _, img := range images {
+		if img.MediaAssetID.Valid {
+			imageAssetIDs = append(imageAssetIDs, img.MediaAssetID.Int64)
 		}
 	}
+	imageURLs := server.batchPublicImageURLs(ctx, imageAssetIDs, media.VariantDetail)
+	for i, img := range images {
+		resp[i] = server.newTableImageResponse(img, imageURLs[img.MediaAssetID.Int64])
+	}
 
-	ctx.JSON(http.StatusOK, gin.H{"images": resp})
+	ctx.JSON(http.StatusOK, tableImagesListResponse{Images: resp})
 }
 
 // setTablePrimaryImage godoc
@@ -945,7 +1164,7 @@ func (server *Server) setTablePrimaryImage(ctx *gin.Context) {
 
 	// 验证商户权限
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.getMerchantFromContextOrStore(ctx, authPayload.UserID)
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
@@ -989,11 +1208,12 @@ func (server *Server) setTablePrimaryImage(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, tableImageResponse{
-		ID:        image.ID,
-		TableID:   image.TableID,
-		ImageURL:  normalizeUploadURLForClient(image.ImageUrl),
-		SortOrder: image.SortOrder,
-		IsPrimary: image.IsPrimary,
+		ID:           image.ID,
+		TableID:      image.TableID,
+		MediaAssetID: int64PtrFromPgInt8(image.MediaAssetID),
+		ImageURL:     server.publicImageURL(ctx, int64PtrFromPgInt8(image.MediaAssetID), media.VariantDetail),
+		SortOrder:    image.SortOrder,
+		IsPrimary:    image.IsPrimary,
 	})
 }
 
@@ -1024,7 +1244,7 @@ func (server *Server) deleteTableImage(ctx *gin.Context) {
 
 	// 验证商户权限
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.getMerchantFromContextOrStore(ctx, authPayload.UserID)
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
@@ -1056,7 +1276,7 @@ func (server *Server) deleteTableImage(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"message": "image deleted successfully"})
+	ctx.JSON(http.StatusOK, successMessage("image deleted successfully"))
 }
 
 // ==================== 桌台标签管理 ====================
@@ -1099,7 +1319,7 @@ func (server *Server) addTableTag(ctx *gin.Context) {
 
 	// 验证商户权限
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.getMerchantFromContextOrStore(ctx, authPayload.UserID)
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
@@ -1154,7 +1374,7 @@ func (server *Server) addTableTag(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"message": "tag added successfully"})
+	ctx.JSON(http.StatusOK, successMessage("tag added successfully"))
 }
 
 type removeTableTagRequest struct {
@@ -1186,7 +1406,7 @@ func (server *Server) removeTableTag(ctx *gin.Context) {
 
 	// 验证商户权限
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.getMerchantFromContextOrStore(ctx, authPayload.UserID)
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
@@ -1221,7 +1441,7 @@ func (server *Server) removeTableTag(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"message": "tag removed successfully"})
+	ctx.JSON(http.StatusOK, successMessage("tag removed successfully"))
 }
 
 // listTableTags godoc
@@ -1242,6 +1462,31 @@ func (server *Server) listTableTags(ctx *gin.Context) {
 		return
 	}
 
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	merchant, err := server.getMerchantFromContextOrStore(ctx, authPayload.UserID)
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	table, err := server.store.GetTable(ctx, req.ID)
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("table not found")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	if table.MerchantID != merchant.ID {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("table does not belong to your merchant")))
+		return
+	}
+
 	tags, err := server.store.ListTableTags(ctx, req.ID)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -1257,7 +1502,7 @@ func (server *Server) listTableTags(ctx *gin.Context) {
 		}
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"tags": resp})
+	ctx.JSON(http.StatusOK, tableTagsListResponse{Tags: resp})
 }
 
 // roomDetailResponse 包间详情响应（C端顾客使用）
@@ -1270,16 +1515,18 @@ type roomDetailResponse struct {
 	MinimumSpend        int64          `json:"minimum_spend,omitempty"`
 	Status              string         `json:"status"`
 	Tags                []tableTagInfo `json:"tags"`
-	Images              []string       `json:"images"`
-	PrimaryImage        string         `json:"primary_image,omitempty"`
+	ImageURLs           []string       `json:"image_urls"`
+	PrimaryImageAssetID *int64         `json:"-"`
+	PrimaryImageURL     string         `json:"primary_image_url,omitempty"`
 	MonthlyReservations int64          `json:"monthly_reservations"`
 	// 商户信息
-	MerchantName      string   `json:"merchant_name"`
-	MerchantLogo      string   `json:"merchant_logo,omitempty"`
-	MerchantAddress   string   `json:"merchant_address,omitempty"`
-	MerchantPhone     string   `json:"merchant_phone,omitempty"`
-	MerchantLatitude  *float64 `json:"merchant_latitude,omitempty"`
-	MerchantLongitude *float64 `json:"merchant_longitude,omitempty"`
+	MerchantName        string   `json:"merchant_name"`
+	MerchantLogoAssetID *int64   `json:"-"`
+	MerchantLogoURL     string   `json:"merchant_logo_url,omitempty"`
+	MerchantAddress     string   `json:"merchant_address,omitempty"`
+	MerchantPhone       string   `json:"merchant_phone,omitempty"`
+	MerchantLatitude    *float64 `json:"merchant_latitude,omitempty"`
+	MerchantLongitude   *float64 `json:"merchant_longitude,omitempty"`
 }
 
 // roomListItemResponse 包间列表项响应（C端顾客使用）
@@ -1291,7 +1538,8 @@ type roomListItemResponse struct {
 	Description         string `json:"description,omitempty"`
 	MinimumSpend        int64  `json:"minimum_spend,omitempty"`
 	Status              string `json:"status"`
-	PrimaryImage        string `json:"primary_image,omitempty"`
+	PrimaryImageAssetID *int64 `json:"-"`
+	ImageURL            string `json:"image_url,omitempty"`
 	MonthlyReservations int64  `json:"monthly_reservations,omitempty"`
 }
 
@@ -1355,9 +1603,20 @@ func (server *Server) getRoomDetail(ctx *gin.Context) {
 		return
 	}
 
-	imageUrls := make([]string, len(images))
-	for i, img := range images {
-		imageUrls[i] = normalizeUploadURLForClient(img.ImageUrl)
+	imageAssetIDs := make([]int64, 0, len(images))
+	for _, img := range images {
+		if img.MediaAssetID.Valid {
+			imageAssetIDs = append(imageAssetIDs, img.MediaAssetID.Int64)
+		}
+	}
+	imageURLs := make([]string, 0, len(imageAssetIDs))
+	if len(imageAssetIDs) > 0 {
+		resolvedURLs := server.batchPublicImageURLs(ctx, imageAssetIDs, media.VariantDetail)
+		for _, id := range imageAssetIDs {
+			if u, ok := resolvedURLs[id]; ok {
+				imageURLs = append(imageURLs, u)
+			}
+		}
 	}
 
 	resp := roomDetailResponse{
@@ -1367,7 +1626,7 @@ func (server *Server) getRoomDetail(ctx *gin.Context) {
 		Capacity:            room.Capacity,
 		Status:              room.Status,
 		Tags:                tagList,
-		Images:              imageUrls,
+		ImageURLs:           imageURLs,
 		MonthlyReservations: room.MonthlyReservations,
 		MerchantName:        room.MerchantName,
 		MerchantAddress:     room.MerchantAddress,
@@ -1380,11 +1639,15 @@ func (server *Server) getRoomDetail(ctx *gin.Context) {
 	if room.MinimumSpend.Valid {
 		resp.MinimumSpend = room.MinimumSpend.Int64
 	}
-	if room.PrimaryImage != "" {
-		resp.PrimaryImage = normalizeUploadURLForClient(room.PrimaryImage)
+	if room.PrimaryImageAssetID != nil {
+		if id, ok := room.PrimaryImageAssetID.(int64); ok && id != 0 {
+			resp.PrimaryImageAssetID = &id
+			resp.PrimaryImageURL = server.publicImageURL(ctx, &id, media.VariantCard)
+		}
 	}
-	if room.MerchantLogo.Valid {
-		resp.MerchantLogo = normalizeUploadURLForClient(room.MerchantLogo.String)
+	if room.MerchantLogoMediaAssetID.Valid {
+		resp.MerchantLogoAssetID = &room.MerchantLogoMediaAssetID.Int64
+		resp.MerchantLogoURL = server.publicImageURL(ctx, resp.MerchantLogoAssetID, media.VariantCard)
 	}
 	if room.MerchantLatitude.Valid {
 		lat, _ := room.MerchantLatitude.Float64Value()
@@ -1406,6 +1669,7 @@ func (server *Server) getRoomDetail(ctx *gin.Context) {
 type timeSlot struct {
 	Time      string `json:"time"`      // 时间如 "11:00", "11:30"
 	Available bool   `json:"available"` // 是否可预约
+	Period    string `json:"period"`    // "lunch", "dinner", "other"
 }
 
 // roomAvailabilityResponse 包间可用性响应
@@ -1447,9 +1711,9 @@ func (server *Server) getRoomAvailability(ctx *gin.Context) {
 	}
 
 	// 解析日期
-	date, err := time.Parse("2006-01-02", queryReq.Date)
+	date, err := parseISODate(queryReq.Date, "invalid date format, expected YYYY-MM-DD")
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid date format, expected YYYY-MM-DD")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
 
@@ -1482,42 +1746,112 @@ func (server *Server) getRoomAvailability(ctx *gin.Context) {
 		return
 	}
 
-	// 收集该日期的所有有效预约起始时间
-	var reservedStartMinutes []int
-	for _, r := range reservations {
-		// 考虑所有占用桌台的状态
-		if r.Status == ReservationStatusPending ||
-			r.Status == ReservationStatusPaid ||
-			r.Status == ReservationStatusConfirmed ||
-			r.Status == ReservationStatusCheckedIn {
-			if r.ReservationTime.Valid {
-				startMin := int(r.ReservationTime.Microseconds / 1000000 / 60)
-				reservedStartMinutes = append(reservedStartMinutes, startMin)
+	// 获取商户营业时间
+	businessHours, err := server.store.ListMerchantBusinessHours(ctx, room.MerchantID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	// 确定当天的营业时间
+	dayOfWeek := int32(date.Weekday())
+	var todayHours []db.MerchantBusinessHour
+	for _, bh := range businessHours {
+		// 优先检查特殊日期
+		if bh.SpecialDate.Valid && bh.SpecialDate.Time.Format("2006-01-02") == queryReq.Date {
+			todayHours = append(todayHours, bh)
+		}
+	}
+	if len(todayHours) == 0 {
+		// 如果没有特殊日期，使用周几的配置
+		for _, bh := range businessHours {
+			if !bh.SpecialDate.Valid && bh.DayOfWeek == dayOfWeek {
+				todayHours = append(todayHours, bh)
 			}
 		}
 	}
 
-	// 生成时间段列表（11:00-21:00，每30分钟一个时段）
+	// 如果没有配置营业时间，或者标记为关闭
+	isClosed := len(todayHours) == 0
+	for _, bh := range todayHours {
+		if bh.IsClosed {
+			isClosed = true
+			break
+		}
+	}
+
+	if isClosed {
+		ctx.JSON(http.StatusOK, roomAvailabilityResponse{
+			RoomID:    room.ID,
+			RoomNo:    room.TableNo,
+			Date:      queryReq.Date,
+			TimeSlots: []timeSlot{},
+		})
+		return
+	}
+
+	// 构造 TimeSlotConfig 用于冲突检测
+	config := util.DefaultConfig
+	if len(todayHours) > 0 {
+		h1 := todayHours[0]
+		config.LunchStart = int(h1.OpenTime.Microseconds/1000000/3600*100) + int(h1.OpenTime.Microseconds/1000000%3600/60)
+		config.LunchEnd = int(h1.CloseTime.Microseconds/1000000/3600*100) + int(h1.CloseTime.Microseconds/1000000%3600/60)
+		config.DinnerStart = 0
+		config.DinnerEnd = 0
+
+		if len(todayHours) > 1 {
+			h2 := todayHours[1]
+			config.DinnerStart = int(h2.OpenTime.Microseconds/1000000/3600*100) + int(h2.OpenTime.Microseconds/1000000%3600/60)
+			config.DinnerEnd = int(h2.CloseTime.Microseconds/1000000/3600*100) + int(h2.CloseTime.Microseconds/1000000%3600/60)
+		} else if config.LunchStart >= 1500 {
+			// 如果只有一个段，且是下午 15:00 之后开始，视为晚餐
+			config.DinnerStart = config.LunchStart
+			config.DinnerEnd = config.LunchEnd
+			config.LunchStart = 0
+			config.LunchEnd = 0
+		}
+	}
+
+	now := time.Now()
 	slots := []timeSlot{}
-	durationMin := ReservationDurationHours * 60
-	for hour := 11; hour <= 21; hour++ {
-		for _, minute := range []int{0, 30} {
-			if hour == 21 && minute == 30 {
-				continue // 21:30 不提供预约
-			}
-			currentMin := hour*60 + minute
+
+	// 生成时间段列表：基于真实的营业时间段，间隔 30 分钟
+	for _, bh := range todayHours {
+		startTotalMin := int(bh.OpenTime.Microseconds / 1000000 / 60)
+		endTotalMin := int(bh.CloseTime.Microseconds / 1000000 / 60)
+
+		// 间隔 30 分钟由于预约通常需要提前一点点，或者最后一单不能太晚
+		// 这里允许到 CloseTime 前 30 分钟
+		for currentMin := startTotalMin; currentMin <= endTotalMin-30; currentMin += 30 {
+			hour := currentMin / 60
+			minute := currentMin % 60
 			timeStr := fmt.Sprintf("%02d:%02d", hour, minute)
 
-			// 检查当前时段起始的 4 小时内是否与已有预约冲突
+			// 构造当前时段的时间对象进行比较
+			currentSlotTime := time.Date(date.Year(), date.Month(), date.Day(), hour, minute, 0, 0, time.Local)
+
+			// 1. 检查是否是过去的时间
+			if currentSlotTime.Before(now) {
+				slots = append(slots, timeSlot{
+					Time:      timeStr,
+					Available: false,
+					Period:    string(util.GetDiningTimeSlotWithConfig(currentSlotTime, config)),
+				})
+				continue
+			}
+
+			// 2. 检查冲突
 			available := true
-			for _, startMin := range reservedStartMinutes {
-				// 冲突条件：两个 4 小时时段有重叠
-				// 即：|currentMin - startMin| < durationMin
-				diff := currentMin - startMin
-				if diff < 0 {
-					diff = -diff
+			for _, r := range reservations {
+				if r.Status == ReservationStatusCancelled || r.Status == ReservationStatusExpired || r.Status == ReservationStatusNoShow {
+					continue
 				}
-				if diff < durationMin {
+				if !r.ReservationTime.Valid {
+					continue
+				}
+
+				existingTime := util.CombineDateAndTime(r.ReservationDate.Time, r.ReservationTime.Microseconds)
+				if util.AreReservationsConflictingWithConfig(currentSlotTime, existingTime, config) {
 					available = false
 					break
 				}
@@ -1526,6 +1860,7 @@ func (server *Server) getRoomAvailability(ctx *gin.Context) {
 			slots = append(slots, timeSlot{
 				Time:      timeStr,
 				Available: available,
+				Period:    string(util.GetDiningTimeSlotWithConfig(currentSlotTime, config)),
 			})
 		}
 	}

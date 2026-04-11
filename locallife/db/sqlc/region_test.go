@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/merrydance/locallife/util"
 	"github.com/stretchr/testify/require"
@@ -25,7 +24,7 @@ func TestRegionQueries_CreateAndGet(t *testing.T) {
 func TestRegionQueries_GetRegion_NotFound(t *testing.T) {
 	got, err := testStore.GetRegion(context.Background(), -1)
 	require.Error(t, err)
-	require.ErrorIs(t, err, pgx.ErrNoRows)
+	require.ErrorIs(t, err, ErrRecordNotFound)
 	require.Empty(t, got)
 }
 
@@ -98,13 +97,18 @@ func TestRegionQueries_ListRegions_Filters(t *testing.T) {
 	require.Equal(t, city1.ID, regions[0].ID)
 	require.Equal(t, city2.ID, regions[1].ID)
 
-	// parent_id 未指定时（NULL），SQL 约定返回 parent_id IS NULL 的根区域
-	rootRegions, err := testStore.ListRegions(ctx, ListRegionsParams{Limit: 200, Offset: 0})
+	// parent_id 未指定时，不按 parent 过滤；至少应包含上面创建的城市
+	allRegions, err := testStore.ListRegions(ctx, ListRegionsParams{Limit: 100000, Offset: 0})
 	require.NoError(t, err)
-	require.NotEmpty(t, rootRegions)
-	for _, r := range rootRegions {
-		require.False(t, r.ParentID.Valid)
+	require.NotEmpty(t, allRegions)
+	ids := make(map[int64]struct{}, len(allRegions))
+	for _, r := range allRegions {
+		ids[r.ID] = struct{}{}
 	}
+	_, ok1 := ids[city1.ID]
+	_, ok2 := ids[city2.ID]
+	require.True(t, ok1)
+	require.True(t, ok2)
 }
 
 func TestRegionQueries_ListRegionChildren(t *testing.T) {
@@ -135,6 +139,39 @@ func TestRegionQueries_ListRegionChildren(t *testing.T) {
 	require.Len(t, children, 2)
 	require.Equal(t, child1.ID, children[0].ID)
 	require.Equal(t, child2.ID, children[1].ID)
+}
+
+func TestRegionQueries_GetClosestRegion_IncludesCountyLevel(t *testing.T) {
+	ctx := context.Background()
+	lat := 37.0611534 + float64(util.RandomInt(1, 500))/1000000
+	lon := 115.0554199 + float64(util.RandomInt(1, 500))/1000000
+
+	city, err := testStore.CreateRegion(ctx, CreateRegionParams{
+		Code:      util.RandomString(6),
+		Name:      "city_" + util.RandomString(6),
+		Level:     2,
+		ParentID:  pgtype.Int8{Valid: false},
+		Longitude: pgtype.Numeric{},
+		Latitude:  pgtype.Numeric{},
+	})
+	require.NoError(t, err)
+
+	county, err := testStore.CreateRegion(ctx, CreateRegionParams{
+		Code:      util.RandomString(6),
+		Name:      "county_" + util.RandomString(6),
+		Level:     4,
+		ParentID:  pgtype.Int8{Int64: city.ID, Valid: true},
+		Longitude: numericFromFloat(lon),
+		Latitude:  numericFromFloat(lat),
+	})
+	require.NoError(t, err)
+
+	got, err := testStore.GetClosestRegion(ctx, GetClosestRegionParams{
+		Lat: lat,
+		Lon: lon,
+	})
+	require.NoError(t, err)
+	require.Equal(t, county.ID, got.ID)
 }
 
 func TestRegionQueries_SearchRegionsByName(t *testing.T) {

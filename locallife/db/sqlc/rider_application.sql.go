@@ -19,7 +19,7 @@ SET
     reviewed_at = now(),
     updated_at = now()
 WHERE id = $1 AND status = 'submitted'
-RETURNING id, user_id, real_name, phone, id_card_front_url, id_card_back_url, id_card_ocr, health_cert_url, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at
+RETURNING id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id
 `
 
 type ApproveRiderApplicationParams struct {
@@ -36,10 +36,7 @@ func (q *Queries) ApproveRiderApplication(ctx context.Context, arg ApproveRiderA
 		&i.UserID,
 		&i.RealName,
 		&i.Phone,
-		&i.IDCardFrontUrl,
-		&i.IDCardBackUrl,
 		&i.IDCardOcr,
-		&i.HealthCertUrl,
 		&i.HealthCertOcr,
 		&i.Status,
 		&i.RejectReason,
@@ -48,6 +45,149 @@ func (q *Queries) ApproveRiderApplication(ctx context.Context, arg ApproveRiderA
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.SubmittedAt,
+		&i.IDCardFrontMediaAssetID,
+		&i.IDCardBackMediaAssetID,
+		&i.HealthCertMediaAssetID,
+	)
+	return i, err
+}
+
+const clearRiderApplicationHealthCert = `-- name: ClearRiderApplicationHealthCert :one
+UPDATE rider_applications
+SET
+    health_cert_media_asset_id = NULL,
+    health_cert_ocr = NULL,
+    updated_at = now()
+WHERE id = $1 AND status = 'draft'
+RETURNING id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id
+`
+
+// 清空健康证媒体与 OCR 结果
+func (q *Queries) ClearRiderApplicationHealthCert(ctx context.Context, id int64) (RiderApplication, error) {
+	row := q.db.QueryRow(ctx, clearRiderApplicationHealthCert, id)
+	var i RiderApplication
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.RealName,
+		&i.Phone,
+		&i.IDCardOcr,
+		&i.HealthCertOcr,
+		&i.Status,
+		&i.RejectReason,
+		&i.ReviewedBy,
+		&i.ReviewedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.SubmittedAt,
+		&i.IDCardFrontMediaAssetID,
+		&i.IDCardBackMediaAssetID,
+		&i.HealthCertMediaAssetID,
+	)
+	return i, err
+}
+
+const clearRiderApplicationIDCardBack = `-- name: ClearRiderApplicationIDCardBack :one
+UPDATE rider_applications
+SET
+    id_card_back_media_asset_id = NULL,
+    id_card_ocr = CASE
+        WHEN id_card_ocr IS NULL THEN NULL
+        ELSE NULLIF(
+            id_card_ocr
+                - 'status'
+                - 'error'
+                - 'error_code'
+                - 'alert_emitted_at'
+                - 'queued_at'
+                - 'started_at'
+                - 'ocr_job_id'
+                - 'ocr_at'
+                - 'valid_start'
+                - 'valid_end',
+            '{}'::jsonb
+        )
+    END,
+    updated_at = now()
+WHERE id = $1 AND status = 'draft'
+RETURNING id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id
+`
+
+// 清空身份证背面媒体与对应 OCR 字段，保留正面实名信息
+func (q *Queries) ClearRiderApplicationIDCardBack(ctx context.Context, id int64) (RiderApplication, error) {
+	row := q.db.QueryRow(ctx, clearRiderApplicationIDCardBack, id)
+	var i RiderApplication
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.RealName,
+		&i.Phone,
+		&i.IDCardOcr,
+		&i.HealthCertOcr,
+		&i.Status,
+		&i.RejectReason,
+		&i.ReviewedBy,
+		&i.ReviewedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.SubmittedAt,
+		&i.IDCardFrontMediaAssetID,
+		&i.IDCardBackMediaAssetID,
+		&i.HealthCertMediaAssetID,
+	)
+	return i, err
+}
+
+const clearRiderApplicationIDCardFront = `-- name: ClearRiderApplicationIDCardFront :one
+UPDATE rider_applications
+SET
+    id_card_front_media_asset_id = NULL,
+    id_card_ocr = CASE
+        WHEN id_card_ocr IS NULL THEN NULL
+        ELSE NULLIF(
+            id_card_ocr
+                - 'status'
+                - 'error'
+                - 'error_code'
+                - 'alert_emitted_at'
+                - 'queued_at'
+                - 'started_at'
+                - 'ocr_job_id'
+                - 'ocr_at'
+                - 'name'
+                - 'id_number'
+                - 'gender'
+                - 'nation'
+                - 'address',
+            '{}'::jsonb
+        )
+    END,
+    updated_at = now()
+WHERE id = $1 AND status = 'draft'
+RETURNING id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id
+`
+
+// 清空身份证正面媒体与对应 OCR 字段，保留背面有效期信息
+func (q *Queries) ClearRiderApplicationIDCardFront(ctx context.Context, id int64) (RiderApplication, error) {
+	row := q.db.QueryRow(ctx, clearRiderApplicationIDCardFront, id)
+	var i RiderApplication
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.RealName,
+		&i.Phone,
+		&i.IDCardOcr,
+		&i.HealthCertOcr,
+		&i.Status,
+		&i.RejectReason,
+		&i.ReviewedBy,
+		&i.ReviewedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.SubmittedAt,
+		&i.IDCardFrontMediaAssetID,
+		&i.IDCardBackMediaAssetID,
+		&i.HealthCertMediaAssetID,
 	)
 	return i, err
 }
@@ -72,7 +212,7 @@ INSERT INTO rider_applications (
 ) VALUES (
     $1,
     'draft'
-) RETURNING id, user_id, real_name, phone, id_card_front_url, id_card_back_url, id_card_ocr, health_cert_url, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at
+) RETURNING id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id
 `
 
 // 创建骑手申请草稿
@@ -84,10 +224,7 @@ func (q *Queries) CreateRiderApplication(ctx context.Context, userID int64) (Rid
 		&i.UserID,
 		&i.RealName,
 		&i.Phone,
-		&i.IDCardFrontUrl,
-		&i.IDCardBackUrl,
 		&i.IDCardOcr,
-		&i.HealthCertUrl,
 		&i.HealthCertOcr,
 		&i.Status,
 		&i.RejectReason,
@@ -96,12 +233,15 @@ func (q *Queries) CreateRiderApplication(ctx context.Context, userID int64) (Rid
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.SubmittedAt,
+		&i.IDCardFrontMediaAssetID,
+		&i.IDCardBackMediaAssetID,
+		&i.HealthCertMediaAssetID,
 	)
 	return i, err
 }
 
 const getRiderApplication = `-- name: GetRiderApplication :one
-SELECT id, user_id, real_name, phone, id_card_front_url, id_card_back_url, id_card_ocr, health_cert_url, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at FROM rider_applications
+SELECT id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id FROM rider_applications
 WHERE id = $1
 `
 
@@ -114,10 +254,7 @@ func (q *Queries) GetRiderApplication(ctx context.Context, id int64) (RiderAppli
 		&i.UserID,
 		&i.RealName,
 		&i.Phone,
-		&i.IDCardFrontUrl,
-		&i.IDCardBackUrl,
 		&i.IDCardOcr,
-		&i.HealthCertUrl,
 		&i.HealthCertOcr,
 		&i.Status,
 		&i.RejectReason,
@@ -126,12 +263,15 @@ func (q *Queries) GetRiderApplication(ctx context.Context, id int64) (RiderAppli
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.SubmittedAt,
+		&i.IDCardFrontMediaAssetID,
+		&i.IDCardBackMediaAssetID,
+		&i.HealthCertMediaAssetID,
 	)
 	return i, err
 }
 
 const getRiderApplicationByUserID = `-- name: GetRiderApplicationByUserID :one
-SELECT id, user_id, real_name, phone, id_card_front_url, id_card_back_url, id_card_ocr, health_cert_url, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at FROM rider_applications
+SELECT id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id FROM rider_applications
 WHERE user_id = $1
 `
 
@@ -144,10 +284,7 @@ func (q *Queries) GetRiderApplicationByUserID(ctx context.Context, userID int64)
 		&i.UserID,
 		&i.RealName,
 		&i.Phone,
-		&i.IDCardFrontUrl,
-		&i.IDCardBackUrl,
 		&i.IDCardOcr,
-		&i.HealthCertUrl,
 		&i.HealthCertOcr,
 		&i.Status,
 		&i.RejectReason,
@@ -156,12 +293,15 @@ func (q *Queries) GetRiderApplicationByUserID(ctx context.Context, userID int64)
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.SubmittedAt,
+		&i.IDCardFrontMediaAssetID,
+		&i.IDCardBackMediaAssetID,
+		&i.HealthCertMediaAssetID,
 	)
 	return i, err
 }
 
 const listRiderApplications = `-- name: ListRiderApplications :many
-SELECT id, user_id, real_name, phone, id_card_front_url, id_card_back_url, id_card_ocr, health_cert_url, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at FROM rider_applications
+SELECT id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id FROM rider_applications
 WHERE 
     ($3::text IS NULL OR status = $3)
 ORDER BY 
@@ -192,10 +332,7 @@ func (q *Queries) ListRiderApplications(ctx context.Context, arg ListRiderApplic
 			&i.UserID,
 			&i.RealName,
 			&i.Phone,
-			&i.IDCardFrontUrl,
-			&i.IDCardBackUrl,
 			&i.IDCardOcr,
-			&i.HealthCertUrl,
 			&i.HealthCertOcr,
 			&i.Status,
 			&i.RejectReason,
@@ -204,6 +341,9 @@ func (q *Queries) ListRiderApplications(ctx context.Context, arg ListRiderApplic
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.SubmittedAt,
+			&i.IDCardFrontMediaAssetID,
+			&i.IDCardBackMediaAssetID,
+			&i.HealthCertMediaAssetID,
 		); err != nil {
 			return nil, err
 		}
@@ -215,49 +355,6 @@ func (q *Queries) ListRiderApplications(ctx context.Context, arg ListRiderApplic
 	return items, nil
 }
 
-const rejectRiderApplication = `-- name: RejectRiderApplication :one
-UPDATE rider_applications
-SET 
-    status = 'rejected',
-    reject_reason = $2,
-    reviewed_by = $3,
-    reviewed_at = now(),
-    updated_at = now()
-WHERE id = $1 AND status = 'submitted'
-RETURNING id, user_id, real_name, phone, id_card_front_url, id_card_back_url, id_card_ocr, health_cert_url, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at
-`
-
-type RejectRiderApplicationParams struct {
-	ID           int64       `json:"id"`
-	RejectReason pgtype.Text `json:"reject_reason"`
-	ReviewedBy   pgtype.Int8 `json:"reviewed_by"`
-}
-
-// 拒绝骑手申请
-func (q *Queries) RejectRiderApplication(ctx context.Context, arg RejectRiderApplicationParams) (RiderApplication, error) {
-	row := q.db.QueryRow(ctx, rejectRiderApplication, arg.ID, arg.RejectReason, arg.ReviewedBy)
-	var i RiderApplication
-	err := row.Scan(
-		&i.ID,
-		&i.UserID,
-		&i.RealName,
-		&i.Phone,
-		&i.IDCardFrontUrl,
-		&i.IDCardBackUrl,
-		&i.IDCardOcr,
-		&i.HealthCertUrl,
-		&i.HealthCertOcr,
-		&i.Status,
-		&i.RejectReason,
-		&i.ReviewedBy,
-		&i.ReviewedAt,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.SubmittedAt,
-	)
-	return i, err
-}
-
 const resetRiderApplicationToDraft = `-- name: ResetRiderApplicationToDraft :one
 UPDATE rider_applications
 SET 
@@ -267,11 +364,11 @@ SET
     reviewed_at = NULL,
     submitted_at = NULL,
     updated_at = now()
-WHERE id = $1 AND status = 'rejected'
-RETURNING id, user_id, real_name, phone, id_card_front_url, id_card_back_url, id_card_ocr, health_cert_url, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at
+WHERE id = $1 AND status = 'submitted'
+RETURNING id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id
 `
 
-// 重置申请为草稿状态（被拒绝后可重新编辑）
+// 手动重置申请为草稿状态，并清空审核痕迹
 func (q *Queries) ResetRiderApplicationToDraft(ctx context.Context, id int64) (RiderApplication, error) {
 	row := q.db.QueryRow(ctx, resetRiderApplicationToDraft, id)
 	var i RiderApplication
@@ -280,10 +377,7 @@ func (q *Queries) ResetRiderApplicationToDraft(ctx context.Context, id int64) (R
 		&i.UserID,
 		&i.RealName,
 		&i.Phone,
-		&i.IDCardFrontUrl,
-		&i.IDCardBackUrl,
 		&i.IDCardOcr,
-		&i.HealthCertUrl,
 		&i.HealthCertOcr,
 		&i.Status,
 		&i.RejectReason,
@@ -292,6 +386,53 @@ func (q *Queries) ResetRiderApplicationToDraft(ctx context.Context, id int64) (R
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.SubmittedAt,
+		&i.IDCardFrontMediaAssetID,
+		&i.IDCardBackMediaAssetID,
+		&i.HealthCertMediaAssetID,
+	)
+	return i, err
+}
+
+const returnRiderApplicationToDraft = `-- name: ReturnRiderApplicationToDraft :one
+UPDATE rider_applications
+SET 
+    status = 'draft',
+    reject_reason = $2,
+    reviewed_by = $3,
+    reviewed_at = now(),
+    submitted_at = NULL,
+    updated_at = now()
+WHERE id = $1 AND status = 'submitted'
+RETURNING id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id
+`
+
+type ReturnRiderApplicationToDraftParams struct {
+	ID           int64       `json:"id"`
+	RejectReason pgtype.Text `json:"reject_reason"`
+	ReviewedBy   pgtype.Int8 `json:"reviewed_by"`
+}
+
+// 审核未通过后退回草稿，保留失败原因
+func (q *Queries) ReturnRiderApplicationToDraft(ctx context.Context, arg ReturnRiderApplicationToDraftParams) (RiderApplication, error) {
+	row := q.db.QueryRow(ctx, returnRiderApplicationToDraft, arg.ID, arg.RejectReason, arg.ReviewedBy)
+	var i RiderApplication
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.RealName,
+		&i.Phone,
+		&i.IDCardOcr,
+		&i.HealthCertOcr,
+		&i.Status,
+		&i.RejectReason,
+		&i.ReviewedBy,
+		&i.ReviewedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.SubmittedAt,
+		&i.IDCardFrontMediaAssetID,
+		&i.IDCardBackMediaAssetID,
+		&i.HealthCertMediaAssetID,
 	)
 	return i, err
 }
@@ -303,7 +444,7 @@ SET
     submitted_at = now(),
     updated_at = now()
 WHERE id = $1 AND status = 'draft'
-RETURNING id, user_id, real_name, phone, id_card_front_url, id_card_back_url, id_card_ocr, health_cert_url, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at
+RETURNING id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id
 `
 
 // 提交骑手申请
@@ -315,10 +456,7 @@ func (q *Queries) SubmitRiderApplication(ctx context.Context, id int64) (RiderAp
 		&i.UserID,
 		&i.RealName,
 		&i.Phone,
-		&i.IDCardFrontUrl,
-		&i.IDCardBackUrl,
 		&i.IDCardOcr,
-		&i.HealthCertUrl,
 		&i.HealthCertOcr,
 		&i.Status,
 		&i.RejectReason,
@@ -327,6 +465,9 @@ func (q *Queries) SubmitRiderApplication(ctx context.Context, id int64) (RiderAp
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.SubmittedAt,
+		&i.IDCardFrontMediaAssetID,
+		&i.IDCardBackMediaAssetID,
+		&i.HealthCertMediaAssetID,
 	)
 	return i, err
 }
@@ -338,7 +479,7 @@ SET
     phone = COALESCE($3, phone),
     updated_at = now()
 WHERE id = $1 AND status = 'draft'
-RETURNING id, user_id, real_name, phone, id_card_front_url, id_card_back_url, id_card_ocr, health_cert_url, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at
+RETURNING id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id
 `
 
 type UpdateRiderApplicationBasicInfoParams struct {
@@ -356,10 +497,7 @@ func (q *Queries) UpdateRiderApplicationBasicInfo(ctx context.Context, arg Updat
 		&i.UserID,
 		&i.RealName,
 		&i.Phone,
-		&i.IDCardFrontUrl,
-		&i.IDCardBackUrl,
 		&i.IDCardOcr,
-		&i.HealthCertUrl,
 		&i.HealthCertOcr,
 		&i.Status,
 		&i.RejectReason,
@@ -368,6 +506,9 @@ func (q *Queries) UpdateRiderApplicationBasicInfo(ctx context.Context, arg Updat
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.SubmittedAt,
+		&i.IDCardFrontMediaAssetID,
+		&i.IDCardBackMediaAssetID,
+		&i.HealthCertMediaAssetID,
 	)
 	return i, err
 }
@@ -375,32 +516,29 @@ func (q *Queries) UpdateRiderApplicationBasicInfo(ctx context.Context, arg Updat
 const updateRiderApplicationHealthCert = `-- name: UpdateRiderApplicationHealthCert :one
 UPDATE rider_applications
 SET 
-    health_cert_url = COALESCE($2, health_cert_url),
+    health_cert_media_asset_id = COALESCE($2, health_cert_media_asset_id),
     health_cert_ocr = COALESCE($3, health_cert_ocr),
     updated_at = now()
 WHERE id = $1 AND status = 'draft'
-RETURNING id, user_id, real_name, phone, id_card_front_url, id_card_back_url, id_card_ocr, health_cert_url, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at
+RETURNING id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id
 `
 
 type UpdateRiderApplicationHealthCertParams struct {
-	ID            int64       `json:"id"`
-	HealthCertUrl pgtype.Text `json:"health_cert_url"`
-	HealthCertOcr []byte      `json:"health_cert_ocr"`
+	ID                     int64       `json:"id"`
+	HealthCertMediaAssetID pgtype.Int8 `json:"health_cert_media_asset_id"`
+	HealthCertOcr          []byte      `json:"health_cert_ocr"`
 }
 
 // 更新健康证信息
 func (q *Queries) UpdateRiderApplicationHealthCert(ctx context.Context, arg UpdateRiderApplicationHealthCertParams) (RiderApplication, error) {
-	row := q.db.QueryRow(ctx, updateRiderApplicationHealthCert, arg.ID, arg.HealthCertUrl, arg.HealthCertOcr)
+	row := q.db.QueryRow(ctx, updateRiderApplicationHealthCert, arg.ID, arg.HealthCertMediaAssetID, arg.HealthCertOcr)
 	var i RiderApplication
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
 		&i.RealName,
 		&i.Phone,
-		&i.IDCardFrontUrl,
-		&i.IDCardBackUrl,
 		&i.IDCardOcr,
-		&i.HealthCertUrl,
 		&i.HealthCertOcr,
 		&i.Status,
 		&i.RejectReason,
@@ -409,6 +547,9 @@ func (q *Queries) UpdateRiderApplicationHealthCert(ctx context.Context, arg Upda
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.SubmittedAt,
+		&i.IDCardFrontMediaAssetID,
+		&i.IDCardBackMediaAssetID,
+		&i.HealthCertMediaAssetID,
 	)
 	return i, err
 }
@@ -416,30 +557,34 @@ func (q *Queries) UpdateRiderApplicationHealthCert(ctx context.Context, arg Upda
 const updateRiderApplicationIDCard = `-- name: UpdateRiderApplicationIDCard :one
 UPDATE rider_applications
 SET 
-    id_card_front_url = COALESCE($2, id_card_front_url),
-    id_card_back_url = COALESCE($3, id_card_back_url),
-    id_card_ocr = COALESCE($4, id_card_ocr),
+    id_card_front_media_asset_id = COALESCE($2, id_card_front_media_asset_id),
+    id_card_back_media_asset_id = COALESCE($3, id_card_back_media_asset_id),
+    id_card_ocr = CASE
+        WHEN $4::jsonb IS NULL THEN id_card_ocr
+        WHEN id_card_ocr IS NULL THEN $4::jsonb
+        ELSE id_card_ocr || $4::jsonb
+    END,
     -- OCR识别出姓名时自动更新real_name
     real_name = COALESCE($5, real_name),
     updated_at = now()
 WHERE id = $1 AND status = 'draft'
-RETURNING id, user_id, real_name, phone, id_card_front_url, id_card_back_url, id_card_ocr, health_cert_url, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at
+RETURNING id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id
 `
 
 type UpdateRiderApplicationIDCardParams struct {
-	ID             int64       `json:"id"`
-	IDCardFrontUrl pgtype.Text `json:"id_card_front_url"`
-	IDCardBackUrl  pgtype.Text `json:"id_card_back_url"`
-	IDCardOcr      []byte      `json:"id_card_ocr"`
-	RealName       pgtype.Text `json:"real_name"`
+	ID                      int64       `json:"id"`
+	IDCardFrontMediaAssetID pgtype.Int8 `json:"id_card_front_media_asset_id"`
+	IDCardBackMediaAssetID  pgtype.Int8 `json:"id_card_back_media_asset_id"`
+	IDCardOcr               []byte      `json:"id_card_ocr"`
+	RealName                pgtype.Text `json:"real_name"`
 }
 
 // 更新身份证信息
 func (q *Queries) UpdateRiderApplicationIDCard(ctx context.Context, arg UpdateRiderApplicationIDCardParams) (RiderApplication, error) {
 	row := q.db.QueryRow(ctx, updateRiderApplicationIDCard,
 		arg.ID,
-		arg.IDCardFrontUrl,
-		arg.IDCardBackUrl,
+		arg.IDCardFrontMediaAssetID,
+		arg.IDCardBackMediaAssetID,
 		arg.IDCardOcr,
 		arg.RealName,
 	)
@@ -449,10 +594,7 @@ func (q *Queries) UpdateRiderApplicationIDCard(ctx context.Context, arg UpdateRi
 		&i.UserID,
 		&i.RealName,
 		&i.Phone,
-		&i.IDCardFrontUrl,
-		&i.IDCardBackUrl,
 		&i.IDCardOcr,
-		&i.HealthCertUrl,
 		&i.HealthCertOcr,
 		&i.Status,
 		&i.RejectReason,
@@ -461,6 +603,9 @@ func (q *Queries) UpdateRiderApplicationIDCard(ctx context.Context, arg UpdateRi
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.SubmittedAt,
+		&i.IDCardFrontMediaAssetID,
+		&i.IDCardBackMediaAssetID,
+		&i.HealthCertMediaAssetID,
 	)
 	return i, err
 }

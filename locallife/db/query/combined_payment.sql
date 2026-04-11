@@ -98,7 +98,7 @@ ORDER BY created_at;
 SELECT 
     s.*,
     m.name as merchant_name,
-    m.logo_url as merchant_logo,
+    m.logo_media_asset_id as merchant_logo_media_asset_id,
     o.order_no
 FROM combined_payment_sub_orders s
 JOIN merchants m ON m.id = s.merchant_id
@@ -135,13 +135,13 @@ SELECT
                 'id', s.id,
                 'order_id', s.order_id,
                 'merchant_id', s.merchant_id,
-                'sub_mchid', s.sub_mchid,
+                'sub_mch_id', s.sub_mchid,
                 'amount', s.amount,
                 'out_trade_no', s.out_trade_no,
                 'description', s.description,
                 'profit_sharing_status', s.profit_sharing_status,
                 'merchant_name', m.name,
-                'merchant_logo', m.logo_url,
+                'merchant_logo_media_asset_id', m.logo_media_asset_id,
                 'order_no', o.order_no
             ) ORDER BY s.created_at
         ) FILTER (WHERE s.id IS NOT NULL), '[]'
@@ -152,3 +152,11 @@ LEFT JOIN merchants m ON m.id = s.merchant_id
 LEFT JOIN orders o ON o.id = s.order_id
 WHERE c.id = $1
 GROUP BY c.id;
+
+-- name: ListCombinedPaymentOrdersForReconciliation :many
+-- 获取指定日期范围内所有合单（收付通）支付订单（用于每日对账）
+SELECT id, combine_out_trade_no, transaction_id, total_amount, status
+FROM combined_payment_orders
+WHERE status IN ('paid', 'refunded')
+  AND paid_at >= $1
+  AND paid_at < $2;

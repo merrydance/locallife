@@ -2,6 +2,8 @@ package worker
 
 import (
 	"context"
+
+	"github.com/hibiken/asynq"
 )
 
 // NotificationAdapter 将 TaskDistributor 适配为 algorithm.NotificationDistributor
@@ -34,4 +36,21 @@ func (a *NotificationAdapter) SendUserNotification(
 		RelatedType: relatedType,
 		RelatedID:   relatedID,
 	})
+}
+
+// ClaimPayoutAdapter 将 TaskDistributor 适配为 algorithm.ClaimPayoutDistributor。
+type ClaimPayoutAdapter struct {
+	distributor TaskDistributor
+}
+
+// NewClaimPayoutAdapter 创建 payout action 分发适配器。
+func NewClaimPayoutAdapter(distributor TaskDistributor) *ClaimPayoutAdapter {
+	return &ClaimPayoutAdapter{distributor: distributor}
+}
+
+// EnqueueClaimPayoutAction 将 payout action 入队到正式赔付任务。
+func (a *ClaimPayoutAdapter) EnqueueClaimPayoutAction(ctx context.Context, actionID int64) error {
+	return a.distributor.DistributeTaskClaimPayout(ctx, &ClaimPayoutPayload{
+		ActionID: actionID,
+	}, asynq.Queue(QueueCritical))
 }

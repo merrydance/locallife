@@ -319,6 +319,8 @@ func TestUseVoucherTxExpired(t *testing.T) {
 		VoucherID: voucher.ID,
 	})
 	require.NoError(t, err)
+	_, err = testStore.IncrementVoucherClaimedQuantity(context.Background(), voucher.ID)
+	require.NoError(t, err)
 
 	// 尝试使用（应该失败）
 	result, err := testStore.UseVoucherTx(context.Background(), UseVoucherTxParams{

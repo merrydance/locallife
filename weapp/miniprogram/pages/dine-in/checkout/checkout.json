@@ -15,10 +15,12 @@
         "t-radio-group": "tdesign-miniprogram/radio-group/radio-group",
         "t-popup": "tdesign-miniprogram/popup/popup",
         "t-textarea": "tdesign-miniprogram/textarea/textarea",
+        "remark-input": "/components/remark-input/index",
         "t-image": "tdesign-miniprogram/image/image",
         "t-button": "tdesign-miniprogram/button/button",
         "t-icon": "tdesign-miniprogram/icon/icon",
         "t-loading": "tdesign-miniprogram/loading/loading",
-        "t-empty": "tdesign-miniprogram/empty/empty"
+        "t-empty": "tdesign-miniprogram/empty/empty",
+        "merchant-promos": "/components/merchant-promos/index"
     }
 }

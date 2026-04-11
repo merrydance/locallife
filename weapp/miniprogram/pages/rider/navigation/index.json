@@ -1,0 +1,12 @@
+{
+  "navigationBarTitleText": "配送导航",
+  "navigationStyle": "custom",
+  "usingComponents": {
+    "custom-navbar": "/components/custom-navbar/index",
+    "t-button": "tdesign-miniprogram/button/button",
+    "t-empty": "tdesign-miniprogram/empty/empty",
+    "t-icon": "tdesign-miniprogram/icon/icon",
+    "t-loading": "tdesign-miniprogram/loading/loading",
+    "t-tag": "tdesign-miniprogram/tag/tag"
+  }
+}

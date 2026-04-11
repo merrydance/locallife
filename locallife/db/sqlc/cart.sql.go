@@ -48,6 +48,17 @@ func (q *Queries) AddCartItem(ctx context.Context, arg AddCartItemParams) (CartI
 	return i, err
 }
 
+const cleanupOldCarts = `-- name: CleanupOldCarts :exec
+DELETE FROM carts
+WHERE updated_at < $1
+`
+
+// P1-026: 清理长期未更新的购物车及其商品（ON DELETE CASCADE）
+func (q *Queries) CleanupOldCarts(ctx context.Context, updatedAt time.Time) error {
+	_, err := q.db.Exec(ctx, cleanupOldCarts, updatedAt)
+	return err
+}
+
 const clearCart = `-- name: ClearCart :exec
 DELETE FROM cart_items
 WHERE cart_id = $1
@@ -193,8 +204,8 @@ SELECT
     cs.combo_price AS combo_price,
     cs.is_online AS combo_is_available
 FROM cart_items ci
-LEFT JOIN dishes d ON d.id = ci.dish_id
-LEFT JOIN combo_sets cs ON cs.id = ci.combo_id
+LEFT JOIN dishes d ON d.id = ci.dish_id AND d.deleted_at IS NULL
+LEFT JOIN combo_sets cs ON cs.id = ci.combo_id AND cs.deleted_at IS NULL
 WHERE ci.id = $1
 `
 
@@ -304,12 +315,12 @@ SELECT
                 'quantity', ci.quantity,
                 'customizations', ci.customizations,
                 'dish_name', d.name,
-                'dish_image_url', d.image_url,
+                'dish_image_media_asset_id', d.image_media_asset_id,
                 'dish_price', d.price,
                 'dish_member_price', d.member_price,
                 'dish_is_available', d.is_available,
                 'combo_name', cs.name,
-                'combo_image_url', cs.image_url,
+                'combo_image_media_asset_id', cs.image_media_asset_id,
                 'combo_original_price', cs.original_price,
                 'combo_price', cs.combo_price,
                 'combo_is_available', cs.is_online
@@ -318,8 +329,8 @@ SELECT
     )::json AS items
 FROM carts c
 LEFT JOIN cart_items ci ON ci.cart_id = c.id
-LEFT JOIN dishes d ON d.id = ci.dish_id
-LEFT JOIN combo_sets cs ON cs.id = ci.combo_id
+LEFT JOIN dishes d ON d.id = ci.dish_id AND d.deleted_at IS NULL
+LEFT JOIN combo_sets cs ON cs.id = ci.combo_id AND cs.deleted_at IS NULL
 WHERE c.user_id = $1 AND c.merchant_id = $2 AND c.order_type = $3 AND c.table_id IS NOT DISTINCT FROM $4 AND c.reservation_id IS NOT DISTINCT FROM $5
 GROUP BY c.id
 `
@@ -371,7 +382,7 @@ const getUserCarts = `-- name: GetUserCarts :many
 SELECT 
     c.id, c.user_id, c.merchant_id, c.updated_at, c.created_at, c.order_type, c.table_id, c.reservation_id,
     m.name AS merchant_name,
-    m.logo_url AS merchant_logo,
+    m.logo_media_asset_id AS merchant_logo_media_asset_id,
     COUNT(ci.id) AS item_count
 FROM carts c
 JOIN merchants m ON m.id = c.merchant_id
@@ -382,17 +393,17 @@ ORDER BY c.updated_at DESC
 `
 
 type GetUserCartsRow struct {
-	ID            int64       `json:"id"`
-	UserID        int64       `json:"user_id"`
-	MerchantID    int64       `json:"merchant_id"`
-	UpdatedAt     time.Time   `json:"updated_at"`
-	CreatedAt     time.Time   `json:"created_at"`
-	OrderType     string      `json:"order_type"`
-	TableID       pgtype.Int8 `json:"table_id"`
-	ReservationID pgtype.Int8 `json:"reservation_id"`
-	MerchantName  string      `json:"merchant_name"`
-	MerchantLogo  pgtype.Text `json:"merchant_logo"`
-	ItemCount     int64       `json:"item_count"`
+	ID                       int64       `json:"id"`
+	UserID                   int64       `json:"user_id"`
+	MerchantID               int64       `json:"merchant_id"`
+	UpdatedAt                time.Time   `json:"updated_at"`
+	CreatedAt                time.Time   `json:"created_at"`
+	OrderType                string      `json:"order_type"`
+	TableID                  pgtype.Int8 `json:"table_id"`
+	ReservationID            pgtype.Int8 `json:"reservation_id"`
+	MerchantName             string      `json:"merchant_name"`
+	MerchantLogoMediaAssetID pgtype.Int8 `json:"merchant_logo_media_asset_id"`
+	ItemCount                int64       `json:"item_count"`
 }
 
 func (q *Queries) GetUserCarts(ctx context.Context, userID int64) ([]GetUserCartsRow, error) {
@@ -414,7 +425,7 @@ func (q *Queries) GetUserCarts(ctx context.Context, userID int64) ([]GetUserCart
 			&i.TableID,
 			&i.ReservationID,
 			&i.MerchantName,
-			&i.MerchantLogo,
+			&i.MerchantLogoMediaAssetID,
 			&i.ItemCount,
 		); err != nil {
 			return nil, err
@@ -435,7 +446,7 @@ SELECT
     c.updated_at,
     c.created_at,
     m.name AS merchant_name,
-    m.logo_url AS merchant_logo,
+    m.logo_media_asset_id AS merchant_logo_media_asset_id,
     m.region_id AS region_id,
     mpc.sub_mch_id AS sub_mchid,
     m.status AS merchant_status,
@@ -454,18 +465,18 @@ type GetUserCartsByCartIDsParams struct {
 }
 
 type GetUserCartsByCartIDsRow struct {
-	ID                int64          `json:"id"`
-	UserID            int64          `json:"user_id"`
-	MerchantID        int64          `json:"merchant_id"`
-	UpdatedAt         time.Time      `json:"updated_at"`
-	CreatedAt         time.Time      `json:"created_at"`
-	MerchantName      string         `json:"merchant_name"`
-	MerchantLogo      pgtype.Text    `json:"merchant_logo"`
-	RegionID          int64          `json:"region_id"`
-	SubMchid          pgtype.Text    `json:"sub_mchid"`
-	MerchantStatus    string         `json:"merchant_status"`
-	MerchantLatitude  pgtype.Numeric `json:"merchant_latitude"`
-	MerchantLongitude pgtype.Numeric `json:"merchant_longitude"`
+	ID                       int64          `json:"id"`
+	UserID                   int64          `json:"user_id"`
+	MerchantID               int64          `json:"merchant_id"`
+	UpdatedAt                time.Time      `json:"updated_at"`
+	CreatedAt                time.Time      `json:"created_at"`
+	MerchantName             string         `json:"merchant_name"`
+	MerchantLogoMediaAssetID pgtype.Int8    `json:"merchant_logo_media_asset_id"`
+	RegionID                 int64          `json:"region_id"`
+	SubMchid                 pgtype.Text    `json:"sub_mchid"`
+	MerchantStatus           string         `json:"merchant_status"`
+	MerchantLatitude         pgtype.Numeric `json:"merchant_latitude"`
+	MerchantLongitude        pgtype.Numeric `json:"merchant_longitude"`
 }
 
 // 根据购物车ID列表获取用户购物车详情（用于合单结算）
@@ -485,7 +496,7 @@ func (q *Queries) GetUserCartsByCartIDs(ctx context.Context, arg GetUserCartsByC
 			&i.UpdatedAt,
 			&i.CreatedAt,
 			&i.MerchantName,
-			&i.MerchantLogo,
+			&i.MerchantLogoMediaAssetID,
 			&i.RegionID,
 			&i.SubMchid,
 			&i.MerchantStatus,
@@ -581,8 +592,8 @@ SELECT
     ), 0)::bigint AS total_amount
 FROM carts c
 LEFT JOIN cart_items ci ON ci.cart_id = c.id
-LEFT JOIN dishes d ON d.id = ci.dish_id
-LEFT JOIN combo_sets cs ON cs.id = ci.combo_id
+LEFT JOIN dishes d ON d.id = ci.dish_id AND d.deleted_at IS NULL
+LEFT JOIN combo_sets cs ON cs.id = ci.combo_id AND cs.deleted_at IS NULL
 WHERE c.user_id = $1 AND (c.order_type = $2 OR $2 IS NULL)
 `
 
@@ -614,7 +625,7 @@ SELECT
     c.table_id,
     c.reservation_id,
     m.name AS merchant_name,
-    m.logo_url AS merchant_logo,
+    m.logo_media_asset_id AS merchant_logo_media_asset_id,
     mpc.sub_mch_id AS sub_mchid,
     COUNT(ci.id)::int AS item_count,
     COALESCE(SUM(
@@ -637,8 +648,8 @@ FROM carts c
 JOIN merchants m ON m.id = c.merchant_id
 LEFT JOIN merchant_payment_configs mpc ON mpc.merchant_id = m.id
 LEFT JOIN cart_items ci ON ci.cart_id = c.id
-LEFT JOIN dishes d ON d.id = ci.dish_id
-LEFT JOIN combo_sets cs ON cs.id = ci.combo_id
+LEFT JOIN dishes d ON d.id = ci.dish_id AND d.deleted_at IS NULL
+LEFT JOIN combo_sets cs ON cs.id = ci.combo_id AND cs.deleted_at IS NULL
 WHERE c.user_id = $1 AND (c.order_type = $2 OR $2 IS NULL)
 GROUP BY c.id, c.merchant_id, c.order_type, c.table_id, c.reservation_id, m.id, mpc.sub_mch_id
 HAVING COUNT(ci.id) > 0  -- 只返回有商品的购物车
@@ -651,18 +662,18 @@ type GetUserCartsWithDetailsParams struct {
 }
 
 type GetUserCartsWithDetailsRow struct {
-	CartID        int64       `json:"cart_id"`
-	MerchantID    int64       `json:"merchant_id"`
-	OrderType     string      `json:"order_type"`
-	TableID       pgtype.Int8 `json:"table_id"`
-	ReservationID pgtype.Int8 `json:"reservation_id"`
-	MerchantName  string      `json:"merchant_name"`
-	MerchantLogo  pgtype.Text `json:"merchant_logo"`
-	SubMchid      pgtype.Text `json:"sub_mchid"`
-	ItemCount     int32       `json:"item_count"`
-	Subtotal      int64       `json:"subtotal"`
-	AllAvailable  bool        `json:"all_available"`
-	UpdatedAt     time.Time   `json:"updated_at"`
+	CartID                   int64       `json:"cart_id"`
+	MerchantID               int64       `json:"merchant_id"`
+	OrderType                string      `json:"order_type"`
+	TableID                  pgtype.Int8 `json:"table_id"`
+	ReservationID            pgtype.Int8 `json:"reservation_id"`
+	MerchantName             string      `json:"merchant_name"`
+	MerchantLogoMediaAssetID pgtype.Int8 `json:"merchant_logo_media_asset_id"`
+	SubMchid                 pgtype.Text `json:"sub_mchid"`
+	ItemCount                int32       `json:"item_count"`
+	Subtotal                 int64       `json:"subtotal"`
+	AllAvailable             bool        `json:"all_available"`
+	UpdatedAt                time.Time   `json:"updated_at"`
 }
 
 // 获取用户所有购物车及其商品详情（用于合单结算）
@@ -682,7 +693,7 @@ func (q *Queries) GetUserCartsWithDetails(ctx context.Context, arg GetUserCartsW
 			&i.TableID,
 			&i.ReservationID,
 			&i.MerchantName,
-			&i.MerchantLogo,
+			&i.MerchantLogoMediaAssetID,
 			&i.SubMchid,
 			&i.ItemCount,
 			&i.Subtotal,
@@ -703,41 +714,41 @@ const listCartItems = `-- name: ListCartItems :many
 SELECT 
     ci.id, ci.cart_id, ci.dish_id, ci.combo_id, ci.quantity, ci.customizations, ci.created_at, ci.updated_at,
     d.name AS dish_name,
-    d.image_url AS dish_image_url,
+    d.image_media_asset_id AS dish_image_media_asset_id,
     d.price AS dish_price,
     d.member_price AS dish_member_price,
     d.is_available AS dish_is_available,
     cs.name AS combo_name,
-    cs.image_url AS combo_image_url,
+    cs.image_media_asset_id AS combo_image_media_asset_id,
     cs.original_price AS combo_original_price,
     cs.combo_price AS combo_price,
     cs.is_online AS combo_is_available
 FROM cart_items ci
-LEFT JOIN dishes d ON d.id = ci.dish_id
-LEFT JOIN combo_sets cs ON cs.id = ci.combo_id
+LEFT JOIN dishes d ON d.id = ci.dish_id AND d.deleted_at IS NULL
+LEFT JOIN combo_sets cs ON cs.id = ci.combo_id AND cs.deleted_at IS NULL
 WHERE ci.cart_id = $1
 ORDER BY ci.created_at
 `
 
 type ListCartItemsRow struct {
-	ID                 int64       `json:"id"`
-	CartID             int64       `json:"cart_id"`
-	DishID             pgtype.Int8 `json:"dish_id"`
-	ComboID            pgtype.Int8 `json:"combo_id"`
-	Quantity           int16       `json:"quantity"`
-	Customizations     []byte      `json:"customizations"`
-	CreatedAt          time.Time   `json:"created_at"`
-	UpdatedAt          time.Time   `json:"updated_at"`
-	DishName           pgtype.Text `json:"dish_name"`
-	DishImageUrl       pgtype.Text `json:"dish_image_url"`
-	DishPrice          pgtype.Int8 `json:"dish_price"`
-	DishMemberPrice    pgtype.Int8 `json:"dish_member_price"`
-	DishIsAvailable    pgtype.Bool `json:"dish_is_available"`
-	ComboName          pgtype.Text `json:"combo_name"`
-	ComboImageUrl      pgtype.Text `json:"combo_image_url"`
-	ComboOriginalPrice pgtype.Int8 `json:"combo_original_price"`
-	ComboPrice         pgtype.Int8 `json:"combo_price"`
-	ComboIsAvailable   pgtype.Bool `json:"combo_is_available"`
+	ID                     int64       `json:"id"`
+	CartID                 int64       `json:"cart_id"`
+	DishID                 pgtype.Int8 `json:"dish_id"`
+	ComboID                pgtype.Int8 `json:"combo_id"`
+	Quantity               int16       `json:"quantity"`
+	Customizations         []byte      `json:"customizations"`
+	CreatedAt              time.Time   `json:"created_at"`
+	UpdatedAt              time.Time   `json:"updated_at"`
+	DishName               pgtype.Text `json:"dish_name"`
+	DishImageMediaAssetID  pgtype.Int8 `json:"dish_image_media_asset_id"`
+	DishPrice              pgtype.Int8 `json:"dish_price"`
+	DishMemberPrice        pgtype.Int8 `json:"dish_member_price"`
+	DishIsAvailable        pgtype.Bool `json:"dish_is_available"`
+	ComboName              pgtype.Text `json:"combo_name"`
+	ComboImageMediaAssetID pgtype.Int8 `json:"combo_image_media_asset_id"`
+	ComboOriginalPrice     pgtype.Int8 `json:"combo_original_price"`
+	ComboPrice             pgtype.Int8 `json:"combo_price"`
+	ComboIsAvailable       pgtype.Bool `json:"combo_is_available"`
 }
 
 func (q *Queries) ListCartItems(ctx context.Context, cartID int64) ([]ListCartItemsRow, error) {
@@ -759,12 +770,12 @@ func (q *Queries) ListCartItems(ctx context.Context, cartID int64) ([]ListCartIt
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DishName,
-			&i.DishImageUrl,
+			&i.DishImageMediaAssetID,
 			&i.DishPrice,
 			&i.DishMemberPrice,
 			&i.DishIsAvailable,
 			&i.ComboName,
-			&i.ComboImageUrl,
+			&i.ComboImageMediaAssetID,
 			&i.ComboOriginalPrice,
 			&i.ComboPrice,
 			&i.ComboIsAvailable,
@@ -783,45 +794,45 @@ const listCartItemsForCheckout = `-- name: ListCartItemsForCheckout :many
 SELECT 
     ci.id, ci.cart_id, ci.dish_id, ci.combo_id, ci.quantity, ci.customizations, ci.created_at, ci.updated_at,
     d.name AS dish_name,
-    d.image_url AS dish_image_url,
+    d.image_media_asset_id AS dish_image_media_asset_id,
     d.price AS dish_price,
     d.member_price AS dish_member_price,
     d.is_available AS dish_is_available,
     d.is_online AS dish_is_online,
     d.merchant_id AS dish_merchant_id,
     cs.name AS combo_name,
-    cs.image_url AS combo_image_url,
+    cs.image_media_asset_id AS combo_image_media_asset_id,
     cs.combo_price AS combo_price,
     cs.is_online AS combo_is_online,
     cs.merchant_id AS combo_merchant_id
 FROM cart_items ci
-LEFT JOIN dishes d ON d.id = ci.dish_id
-LEFT JOIN combo_sets cs ON cs.id = ci.combo_id
+LEFT JOIN dishes d ON d.id = ci.dish_id AND d.deleted_at IS NULL
+LEFT JOIN combo_sets cs ON cs.id = ci.combo_id AND cs.deleted_at IS NULL
 WHERE ci.cart_id = ANY($1::bigint[])
 ORDER BY ci.cart_id, ci.created_at
 `
 
 type ListCartItemsForCheckoutRow struct {
-	ID              int64       `json:"id"`
-	CartID          int64       `json:"cart_id"`
-	DishID          pgtype.Int8 `json:"dish_id"`
-	ComboID         pgtype.Int8 `json:"combo_id"`
-	Quantity        int16       `json:"quantity"`
-	Customizations  []byte      `json:"customizations"`
-	CreatedAt       time.Time   `json:"created_at"`
-	UpdatedAt       time.Time   `json:"updated_at"`
-	DishName        pgtype.Text `json:"dish_name"`
-	DishImageUrl    pgtype.Text `json:"dish_image_url"`
-	DishPrice       pgtype.Int8 `json:"dish_price"`
-	DishMemberPrice pgtype.Int8 `json:"dish_member_price"`
-	DishIsAvailable pgtype.Bool `json:"dish_is_available"`
-	DishIsOnline    pgtype.Bool `json:"dish_is_online"`
-	DishMerchantID  pgtype.Int8 `json:"dish_merchant_id"`
-	ComboName       pgtype.Text `json:"combo_name"`
-	ComboImageUrl   pgtype.Text `json:"combo_image_url"`
-	ComboPrice      pgtype.Int8 `json:"combo_price"`
-	ComboIsOnline   pgtype.Bool `json:"combo_is_online"`
-	ComboMerchantID pgtype.Int8 `json:"combo_merchant_id"`
+	ID                     int64       `json:"id"`
+	CartID                 int64       `json:"cart_id"`
+	DishID                 pgtype.Int8 `json:"dish_id"`
+	ComboID                pgtype.Int8 `json:"combo_id"`
+	Quantity               int16       `json:"quantity"`
+	Customizations         []byte      `json:"customizations"`
+	CreatedAt              time.Time   `json:"created_at"`
+	UpdatedAt              time.Time   `json:"updated_at"`
+	DishName               pgtype.Text `json:"dish_name"`
+	DishImageMediaAssetID  pgtype.Int8 `json:"dish_image_media_asset_id"`
+	DishPrice              pgtype.Int8 `json:"dish_price"`
+	DishMemberPrice        pgtype.Int8 `json:"dish_member_price"`
+	DishIsAvailable        pgtype.Bool `json:"dish_is_available"`
+	DishIsOnline           pgtype.Bool `json:"dish_is_online"`
+	DishMerchantID         pgtype.Int8 `json:"dish_merchant_id"`
+	ComboName              pgtype.Text `json:"combo_name"`
+	ComboImageMediaAssetID pgtype.Int8 `json:"combo_image_media_asset_id"`
+	ComboPrice             pgtype.Int8 `json:"combo_price"`
+	ComboIsOnline          pgtype.Bool `json:"combo_is_online"`
+	ComboMerchantID        pgtype.Int8 `json:"combo_merchant_id"`
 }
 
 // 获取购物车商品详情（用于结算时校验价格和可用性）
@@ -844,14 +855,14 @@ func (q *Queries) ListCartItemsForCheckout(ctx context.Context, dollar_1 []int64
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DishName,
-			&i.DishImageUrl,
+			&i.DishImageMediaAssetID,
 			&i.DishPrice,
 			&i.DishMemberPrice,
 			&i.DishIsAvailable,
 			&i.DishIsOnline,
 			&i.DishMerchantID,
 			&i.ComboName,
-			&i.ComboImageUrl,
+			&i.ComboImageMediaAssetID,
 			&i.ComboPrice,
 			&i.ComboIsOnline,
 			&i.ComboMerchantID,
@@ -884,6 +895,35 @@ type UpdateCartItemParams struct {
 
 func (q *Queries) UpdateCartItem(ctx context.Context, arg UpdateCartItemParams) (CartItem, error) {
 	row := q.db.QueryRow(ctx, updateCartItem, arg.ID, arg.Quantity, arg.Customizations)
+	var i CartItem
+	err := row.Scan(
+		&i.ID,
+		&i.CartID,
+		&i.DishID,
+		&i.ComboID,
+		&i.Quantity,
+		&i.Customizations,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateCartItemQuantityRelative = `-- name: UpdateCartItemQuantityRelative :one
+UPDATE cart_items
+SET quantity = quantity + $1
+WHERE id = $2 AND quantity + $1 <= 99
+RETURNING id, cart_id, dish_id, combo_id, quantity, customizations, created_at, updated_at
+`
+
+type UpdateCartItemQuantityRelativeParams struct {
+	Amount int16 `json:"amount"`
+	ID     int64 `json:"id"`
+}
+
+// P1-016 修复：在数据库层确保数量不超过上限（原子性保证）
+func (q *Queries) UpdateCartItemQuantityRelative(ctx context.Context, arg UpdateCartItemQuantityRelativeParams) (CartItem, error) {
+	row := q.db.QueryRow(ctx, updateCartItemQuantityRelative, arg.Amount, arg.ID)
 	var i CartItem
 	err := row.Scan(
 		&i.ID,

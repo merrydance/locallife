@@ -8,32 +8,113 @@ import { DishManagementService, DishResponse } from '../../../api/dish'
 import { getMerchantReviews } from '../../../api/personal'
 import { getPublicImageUrl } from '../../../utils/image'
 import { formatPriceNoSymbol } from '../../../utils/util'
+import { getErrorUserMessage } from '../../../utils/user-facing'
+
+type ExtraInfo = {
+  shopName?: string
+  monthSales?: number
+  distanceMeters?: number
+  estimatedDeliveryTime?: number
+}
+
+type ReviewViewModel = {
+  user_name: string
+  content: string
+  images: string[]
+  created_at: string
+}
+
+type CustomizationOption = {
+  id: number
+  tag_name: string
+  extra_price?: number
+}
+
+type CustomizationGroup = {
+  id: number
+  name: string
+  is_required?: boolean
+  options?: CustomizationOption[]
+}
+
+type SpecOption = {
+  id: string
+  name: string
+  price_diff: number
+  priceDiffDisplay: string | null
+}
+
+type SpecGroup = {
+  id: string
+  name: string
+  is_required?: boolean
+  specs: SpecOption[]
+}
+
+type DishViewModel = {
+  id: number
+  name: string
+  shop_name: string
+  shop_id?: number
+  merchant_id?: number
+  images: string[]
+  image_url?: string
+  price: number
+  priceDisplay: string
+  original_price: number
+  originalPriceDisplay: string
+  member_price?: number
+  memberPriceDisplay: string | null
+  description: string
+  is_available?: boolean
+  is_online?: boolean
+  prepare_time?: number
+  spec_groups: SpecGroup[]
+  reviews: ReviewViewModel[]
+  tags: string[]
+  ingredients: string[]
+  month_sales: number
+  distance_meters: number
+  distance_km_display: string
+  estimated_delivery_time: number
+  estimated_delivery_time_display: string
+}
+
+const getErrorMessage = getErrorUserMessage
 
 Page({
   data: {
     dishId: '',
     merchantId: '',
-    dish: null as any,
+    dish: null as DishViewModel | null,
     selectedSpecs: {} as Record<string, string>,
     quantity: 1,
     navBarHeight: 88,
     currentImageIndex: 0,
     loading: true,
+    isError: false,
+    errorMsg: '',
     totalPrice: 0,
-    totalPriceDisplay: '0.00'
+    totalPriceDisplay: '0.00',
+    extraInfo: {} as ExtraInfo
   },
 
-  onLoad(options: any) {
+  onLoad(options: Record<string, string>) {
+    wx.showShareMenu({
+      withShareTicket: true,
+      menus: ['shareAppMessage', 'shareTimeline']
+    })
+
     const dishId = options.id
     const merchantId = options.merchant_id || ''
     // 从列表页传递过来的额外信息
     const shopName = decodeURIComponent(options.shop_name || '')
     const monthSales = parseInt(options.month_sales || '0')
     const distanceMeters = parseInt(options.distance || '0')
-    const deliveryTimeMinutes = parseInt(options.delivery_time || '0')
+    const estimatedDeliveryTime = parseInt(options.estimated_delivery_time || options.delivery_time || '0')
 
     if (!dishId) {
-      wx.showToast({ title: '菜品ID缺失', icon: 'error' })
+      wx.showToast({ title: '参数错误', icon: 'error' })
       setTimeout(() => wx.navigateBack(), 1500)
       return
     }
@@ -41,7 +122,7 @@ Page({
     this.setData({
       dishId,
       merchantId,
-      extraInfo: { shopName, monthSales, distanceMeters, deliveryTimeMinutes }
+      extraInfo: { shopName, monthSales, distanceMeters, estimatedDeliveryTime }
     })
     this.loadDishDetail()
   },
@@ -51,29 +132,32 @@ Page({
   },
 
   async loadDishDetail() {
-    this.setData({ loading: true })
+    this.setData({ loading: true, isError: false })
 
     try {
       const dishId = parseInt(this.data.dishId)
 
-      // 获取菜品详情
-      const dishData: DishResponse = await DishManagementService.getDishDetail(dishId)
+      // 获取菜品详情 (silent request implied by request.ts default)
+      const dishData: DishResponse = await DishManagementService.getPublicDishDetail(dishId)
 
       if (!dishData) {
-        wx.showToast({ title: '菜品不存在', icon: 'error' })
-        this.setData({ loading: false })
+        this.setData({ 
+          loading: false, 
+          isError: true, 
+          errorMsg: '该菜品已下架或不存在' 
+        })
         return
       }
 
       // 加载评价（如果有商户ID）
-      let reviews: any[] = []
+      let reviews: ReviewViewModel[] = []
       if (dishData.merchant_id) {
         try {
           const reviewsResult = await getMerchantReviews(dishData.merchant_id, {
             page_id: 1,
             page_size: 5
           })
-          reviews = (reviewsResult.reviews || []).map(r => ({
+          reviews = (reviewsResult.reviews || []).map((r) => ({
             user_name: '用户' + r.user_id,
             content: r.content,
             images: r.images || [],
@@ -85,8 +169,16 @@ Page({
       }
 
       // 从 URL 参数获取额外信息
-      const extraInfo = (this.data as any).extraInfo || {}
+      const extraInfo = (this.data as { extraInfo?: ExtraInfo }).extraInfo || {}
       const imageUrl = getPublicImageUrl(dishData.image_url)
+      const distanceMeters = extraInfo.distanceMeters || 0
+      const estimatedDeliveryMinutes = extraInfo.estimatedDeliveryTime || 0
+      const distanceKmDisplay = distanceMeters > 0
+        ? `${(distanceMeters / 1000).toFixed(1)}km`
+        : ''
+      const estimatedDeliveryDisplay = estimatedDeliveryMinutes > 0
+        ? `预计${estimatedDeliveryMinutes}分钟送达`
+        : ''
 
       // 构建菜品视图模型
       const dish = {
@@ -109,19 +201,21 @@ Page({
         prepare_time: dishData.prepare_time,
         spec_groups: this.convertCustomizationGroups(dishData.customization_groups),
         reviews,
-        tags: dishData.tags?.map(t => t.name) || [],
-        ingredients: dishData.ingredients || [],
+        tags: dishData.tags?.map((t) => t.name) || [],
+        ingredients: (dishData.ingredients || []).map((ingredient) => ingredient.name),
         // 额外展示字段（从列表页传递）
         month_sales: extraInfo.monthSales || 0,
-        distance_meters: extraInfo.distanceMeters || 0,
-        delivery_time_minutes: extraInfo.deliveryTimeMinutes || Math.round((dishData.prepare_time || 10) + 15) // 制作时间+配送时间
+        distance_meters: distanceMeters,
+        distance_km_display: distanceKmDisplay,
+        estimated_delivery_time: estimatedDeliveryMinutes,
+        estimated_delivery_time_display: estimatedDeliveryDisplay
       }
 
       // 初始化规格选择
       const selectedSpecs: Record<string, string> = {}
       if (dish.spec_groups) {
-        dish.spec_groups.forEach((group: any) => {
-          if (group.specs && group.specs.length > 0) {
+        dish.spec_groups.forEach((group: SpecGroup) => {
+          if (group.is_required && group.specs && group.specs.length > 0) {
             selectedSpecs[group.id] = group.specs[0].id
           }
         })
@@ -142,22 +236,25 @@ Page({
         tags: dish.tags
       })
 
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('加载菜品详情失败:', error)
-      wx.showToast({ title: '加载失败', icon: 'error' })
-      this.setData({ loading: false })
+      this.setData({ 
+        loading: false, 
+        isError: true, 
+        errorMsg: getErrorMessage(error, '加载信息失败，请重试') 
+      })
     }
   },
 
   // 转换定制化分组为规格组格式
-  convertCustomizationGroups(groups: any[] | undefined): any[] {
+  convertCustomizationGroups(groups: CustomizationGroup[] | undefined): SpecGroup[] {
     if (!groups || groups.length === 0) return []
 
-    return groups.map(group => ({
+    return groups.map((group) => ({
       id: group.id.toString(),
       name: group.name,
       is_required: group.is_required,
-      specs: (group.options || []).map((opt: any) => ({
+      specs: (group.options || []).map((opt: CustomizationOption) => ({
         id: opt.id.toString(),
         name: opt.tag_name,
         price_diff: opt.extra_price || 0,
@@ -189,9 +286,9 @@ Page({
     let totalPrice = dish.price
 
     if (dish.spec_groups) {
-      dish.spec_groups.forEach((group: any) => {
+      dish.spec_groups.forEach((group: SpecGroup) => {
         const selectedSpecId = selectedSpecs[group.id]
-        const spec = group.specs?.find((s: any) => s.id === selectedSpecId)
+        const spec = group.specs?.find((s: SpecOption) => s.id === selectedSpecId)
         if (spec) {
           totalPrice += spec.price_diff
         }
@@ -217,24 +314,27 @@ Page({
     this.setData({ quantity })
   },
 
-  async onAddToCart() {
+  async onAddToCart(options?: { silentSuccess?: boolean }) {
     const { dish, selectedSpecs, quantity, totalPrice } = this.data
-    if (!dish) return
+    if (!dish) return false
 
     // 构建规格描述
     const specNames: string[] = []
+    const customizations: Record<string, string> = {}
     if (dish.spec_groups) {
-      dish.spec_groups.forEach((group: any) => {
+      dish.spec_groups.forEach((group: SpecGroup) => {
         const selectedSpecId = selectedSpecs[group.id]
-        const spec = group.specs?.find((s: any) => s.id === selectedSpecId)
+        const spec = group.specs?.find((s: SpecOption) => s.id === selectedSpecId)
         if (spec) {
           specNames.push(spec.name)
+          customizations[group.id] = selectedSpecId
         }
       })
     }
     const specDesc = specNames.length > 0 ? `(${specNames.join('/')})` : ''
 
     const CartService = require('../../../services/cart').default
+
     const success = await CartService.addItem({
       merchantId: dish.shop_id || dish.merchant_id,
       dishId: dish.id,
@@ -243,25 +343,31 @@ Page({
       imageUrl: dish.images?.[0] || dish.image_url,
       price: totalPrice,
       priceDisplay: `¥${(totalPrice / 100).toFixed(2)}`,
-      quantity
+      quantity,
+      customizations: Object.keys(customizations).length > 0 ? customizations : undefined
     })
 
     if (!success) {
-      return
+      return false
     }
 
-    tracker.log(EventType.ADD_CART, dish.id, {
+    tracker.log(EventType.ADD_CART, String(dish.id), {
       shop_id: dish.shop_id,
       quantity,
       price: totalPrice,
       tags: dish.tags
     })
 
-    wx.showToast({ title: '已加入购物车', icon: 'success' })
+    if (!options?.silentSuccess) {
+      wx.showToast({ title: '已加入购物车', icon: 'success' })
+    }
+
+    return true
   },
 
-  onBuyNow() {
-    this.onAddToCart()
+  async onBuyNow() {
+    const success = await this.onAddToCart({ silentSuccess: true })
+    if (!success) return
     wx.navigateTo({ url: '/pages/takeout/cart/index' })
   },
 
@@ -269,6 +375,29 @@ Page({
     const { dish } = this.data
     if (dish && dish.shop_id) {
       wx.navigateTo({ url: `/pages/takeout/restaurant-detail/index?id=${dish.shop_id}` })
+    }
+  },
+
+  // Gap 8: 分享给朋友
+  onShareAppMessage(): WechatMiniprogram.Page.ICustomShareContent {
+    const { dish } = this.data as {
+      dish?: { id?: number, name?: string, images?: string[], shop_id?: number }
+    }
+    return {
+      title: dish?.name ? `${dish.name} — 好吃到停不下来！` : '发现一道美食，快来尝尝！',
+      path: `/pages/takeout/dish-detail/index?id=${dish?.id}&merchant_id=${dish?.shop_id}`,
+      imageUrl: dish?.images?.[0] || ''
+    }
+  },
+
+  // Gap 8: 分享到朋友圈
+  onShareTimeline(): WechatMiniprogram.Page.ICustomTimelineContent {
+    const { dish } = this.data as {
+      dish?: { name?: string, images?: string[] }
+    }
+    return {
+      title: dish?.name ? `${dish.name} — 美食推荐` : '发现一道美食',
+      imageUrl: dish?.images?.[0] || ''
     }
   }
 })

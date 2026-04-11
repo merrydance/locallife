@@ -1,0 +1,26 @@
+<custom-navbar title="提交成功" showBack="{{false}}" bind:navheight="onNavHeight" />
+
+<view class="page" style="padding-top: {{navBarHeight}}px;">
+  <view class="content">
+    <view class="result-card">
+      <t-icon name="check-circle-filled" size="120rpx" color="var(--td-success-color-6)" />
+      <view class="result-title">开户申请已提交</view>
+      <view class="result-message">{{message}}</view>
+
+      <view wx:if="{{applymentId}}" class="info-block">
+        <view class="info-label">申请单号</view>
+        <view class="info-value">{{applymentId}}</view>
+      </view>
+
+      <view class="tips-block">
+        <view class="tips-title">接下来你可以这样做</view>
+        <view wx:for="{{tips}}" wx:key="*this" class="tip-item">{{item}}</view>
+      </view>
+    </view>
+
+    <view class="action-group">
+      <t-button theme="primary" block shape="round" size="large" bindtap="onBackToApplyment">返回开户页查看进度</t-button>
+      <t-button theme="default" block shape="round" size="large" bindtap="onBackToDashboard">返回运营台</t-button>
+    </view>
+  </view>
+</view>

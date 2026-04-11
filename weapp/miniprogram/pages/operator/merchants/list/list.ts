@@ -5,20 +5,48 @@
 
 import {
     operatorMerchantManagementService,
-    formatMerchantStatus,
+    getMerchantStatusDisplay,
     type OperatorMerchantItem,
     type MerchantQueryParams,
     type MerchantStatus
 } from '@/api/operator-merchant-management'
+import { getErrorUserMessage } from '@/utils/user-facing'
+
+interface MerchantListPageDataset {
+    id?: number
+    name?: string
+}
+
+type MerchantListView = OperatorMerchantItem & {
+    status_label: string
+    status_theme: 'success' | 'warning' | 'default'
+    can_suspend: boolean
+    can_resume: boolean
+}
+
+function adaptMerchant(item: OperatorMerchantItem): MerchantListView {
+    const statusDisplay = getMerchantStatusDisplay(item.status)
+    return {
+        ...item,
+        status: statusDisplay.normalizedStatus,
+        status_label: statusDisplay.label,
+        status_theme: statusDisplay.theme,
+        can_suspend: statusDisplay.canSuspend,
+        can_resume: statusDisplay.canResume
+    }
+}
 
 Page({
     data: {
         loading: false,
         loadingMore: false,
         refreshing: false,
+        initialLoading: true,
+        error: null as string | null,
+        navBarHeight: 88,
 
         // 商户列表
-        merchants: [] as OperatorMerchantItem[],
+        merchants: [] as MerchantListView[],
 
         // 分页
         page: 1,
@@ -41,7 +69,15 @@ Page({
     },
 
     onLoad() {
-        this.loadMerchants()
+        this.loadMerchants(true)
+    },
+
+    onNavHeight(e: WechatMiniprogram.CustomEvent<{ navBarHeight: number }>) {
+        this.setData({ navBarHeight: e.detail.navBarHeight || 88 })
+    },
+
+    onRetry() {
+        this.loadMerchants(true)
     },
 
     onPullDownRefresh() {
@@ -56,11 +92,11 @@ Page({
      * 加载商户列表
      */
     async loadMerchants(refresh: boolean = false) {
-        if (this.data.loading || this.data.loadingMore) return
+        if (this.data.loading || (this.data.loadingMore && !refresh)) return
 
         try {
             if (refresh) {
-                this.setData({ loading: true, page: 1 })
+                this.setData({ loading: true, error: null, page: 1 })
             } else {
                 this.setData({ loadingMore: true })
             }
@@ -75,21 +111,30 @@ Page({
             }
 
             const result = await operatorMerchantManagementService.getMerchantList(params)
-
-            const merchants = refresh ? result.merchants : [...this.data.merchants, ...result.merchants]
+            const list = (result.merchants || []).map(adaptMerchant)
+            const merchants = refresh ? list : [...this.data.merchants, ...list]
+            const total = result.total || 0
+            const hasMore = merchants.length < total
 
             this.setData({
                 merchants,
-                total: result.total,
-                hasMore: result.has_more,
-                page: this.data.page + 1
+                total,
+                hasMore,
+                page: refresh ? 2 : this.data.page + 1,
+                loading: false,
+                loadingMore: false,
+                initialLoading: false
             })
         } catch (error) {
             console.error('加载商户列表失败:', error)
-            wx.showToast({
-                title: '加载失败',
-                icon: 'none'
-            })
+            if (refresh) {
+                this.setData({
+                    error: getErrorUserMessage(error, '加载商户列表失败，请稍后重试'),
+                    initialLoading: false
+                })
+            } else {
+                wx.showToast({ title: getErrorUserMessage(error, '加载更多失败，请稍后重试'), icon: 'none' })
+            }
         } finally {
             this.setData({
                 loading: false,
@@ -110,7 +155,7 @@ Page({
     /**
      * 搜索变化
      */
-    onSearchChange(e: any) {
+    onSearchChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
         const keyword = e.detail.value
         this.setData({ searchKeyword: keyword })
 
@@ -124,7 +169,7 @@ Page({
             this.loadMerchants(true)
         }, 500)
 
-        this.setData({ searchTimer: timer as any })
+        this.setData({ searchTimer: timer })
     },
 
     /**
@@ -138,7 +183,7 @@ Page({
     /**
      * 状态筛选变化
      */
-    onStatusFilterChange(e: any) {
+    onStatusFilterChange(e: WechatMiniprogram.CustomEvent<{ value: MerchantStatus | '' }>) {
         this.setData({
             statusFilter: e.detail.value,
             page: 1
@@ -149,18 +194,20 @@ Page({
     /**
      * 点击商户卡片
      */
-    onMerchantTap(e: any) {
-        const { id } = e.currentTarget.dataset
+    onMerchantTap(e: WechatMiniprogram.TouchEvent) {
+        const { id } = e.currentTarget.dataset as MerchantListPageDataset
+        if (!id) return
         wx.navigateTo({
-            url: `/pages/operator/merchants/detail/detail?id=${id}`
+            url: `/pages/operator/merchants/detail/index?id=${id}`
         })
     },
 
     /**
      * 暂停商户
      */
-    onSuspendTap(e: any) {
-        const { id, name } = e.currentTarget.dataset
+    onSuspendTap(e: WechatMiniprogram.TouchEvent) {
+        const { id, name } = e.currentTarget.dataset as MerchantListPageDataset
+        if (!id || !name) return
         this.setData({
             selectedMerchant: { id, name },
             suspendDialogVisible: true,
@@ -202,7 +249,7 @@ Page({
         } catch (error) {
             console.error('暂停商户失败:', error)
             wx.showToast({
-                title: '操作失败',
+                title: getErrorUserMessage(error, '暂停失败，请稍后重试'),
                 icon: 'none'
             })
         } finally {
@@ -220,8 +267,9 @@ Page({
     /**
      * 恢复商户
      */
-    onResumeTap(e: any) {
-        const { id, name } = e.currentTarget.dataset
+    onResumeTap(e: WechatMiniprogram.TouchEvent) {
+        const { id, name } = e.currentTarget.dataset as MerchantListPageDataset
+        if (!id || !name) return
         this.setData({
             selectedMerchant: { id, name },
             resumeDialogVisible: true
@@ -254,7 +302,7 @@ Page({
         } catch (error) {
             console.error('恢复商户失败:', error)
             wx.showToast({
-                title: '操作失败',
+                title: getErrorUserMessage(error, '恢复失败，请稍后重试'),
                 icon: 'none'
             })
         } finally {
@@ -275,14 +323,6 @@ Page({
     stopPropagation() {
         // 阻止事件冒泡
     },
-
-    /**
-     * 格式化商户状态
-     */
-    formatStatus(status: MerchantStatus): string {
-        return formatMerchantStatus(status)
-    },
-
     /**
      * 格式化金额
      */

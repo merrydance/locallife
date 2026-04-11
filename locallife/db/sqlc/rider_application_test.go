@@ -107,15 +107,15 @@ func TestUpdateRiderApplicationBasicInfo_OnlyDraft(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = testStore.UpdateRiderApplicationIDCard(context.Background(), UpdateRiderApplicationIDCardParams{
-		ID:             app.ID,
-		IDCardFrontUrl: pgtype.Text{String: "front.jpg", Valid: true},
-		IDCardBackUrl:  pgtype.Text{String: "back.jpg", Valid: true},
+		ID:                      app.ID,
+		IDCardFrontMediaAssetID: pgtype.Int8{},
+		IDCardBackMediaAssetID:  pgtype.Int8{},
 	})
 	require.NoError(t, err)
 
 	_, err = testStore.UpdateRiderApplicationHealthCert(context.Background(), UpdateRiderApplicationHealthCertParams{
-		ID:            app.ID,
-		HealthCertUrl: pgtype.Text{String: "health.jpg", Valid: true},
+		ID:                     app.ID,
+		HealthCertMediaAssetID: pgtype.Int8{},
 	})
 	require.NoError(t, err)
 
@@ -147,16 +147,51 @@ func TestUpdateRiderApplicationIDCard(t *testing.T) {
 	ocrJSON, _ := json.Marshal(ocrData)
 
 	updated, err := testStore.UpdateRiderApplicationIDCard(context.Background(), UpdateRiderApplicationIDCardParams{
-		ID:             app.ID,
-		IDCardFrontUrl: pgtype.Text{String: "front.jpg", Valid: true},
-		IDCardBackUrl:  pgtype.Text{String: "back.jpg", Valid: true},
-		IDCardOcr:      ocrJSON,
-		RealName:       pgtype.Text{String: "张三", Valid: true},
+		ID:                      app.ID,
+		IDCardFrontMediaAssetID: pgtype.Int8{},
+		IDCardBackMediaAssetID:  pgtype.Int8{},
+		IDCardOcr:               ocrJSON,
+		RealName:                pgtype.Text{String: "张三", Valid: true},
 	})
 	require.NoError(t, err)
-	require.Equal(t, "front.jpg", updated.IDCardFrontUrl.String)
-	require.Equal(t, "back.jpg", updated.IDCardBackUrl.String)
+	require.False(t, updated.IDCardFrontMediaAssetID.Valid)
+	require.False(t, updated.IDCardBackMediaAssetID.Valid)
 	require.NotEmpty(t, updated.IDCardOcr)
+	require.Equal(t, "张三", updated.RealName.String)
+}
+
+func TestUpdateRiderApplicationIDCard_MergesOCRPayload(t *testing.T) {
+	app := createRandomRiderApplication(t)
+
+	frontOCR, err := json.Marshal(map[string]string{
+		"name":      "张三",
+		"id_number": "110101199001011234",
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.UpdateRiderApplicationIDCard(context.Background(), UpdateRiderApplicationIDCardParams{
+		ID:        app.ID,
+		IDCardOcr: frontOCR,
+		RealName:  pgtype.Text{String: "张三", Valid: true},
+	})
+	require.NoError(t, err)
+
+	backOCR, err := json.Marshal(map[string]string{
+		"valid_end": "2035.01.01",
+	})
+	require.NoError(t, err)
+
+	updated, err := testStore.UpdateRiderApplicationIDCard(context.Background(), UpdateRiderApplicationIDCardParams{
+		ID:        app.ID,
+		IDCardOcr: backOCR,
+	})
+	require.NoError(t, err)
+
+	var payload map[string]string
+	require.NoError(t, json.Unmarshal(updated.IDCardOcr, &payload))
+	require.Equal(t, "张三", payload["name"])
+	require.Equal(t, "110101199001011234", payload["id_number"])
+	require.Equal(t, "2035.01.01", payload["valid_end"])
 	require.Equal(t, "张三", updated.RealName.String)
 }
 
@@ -166,11 +201,11 @@ func TestUpdateRiderApplicationHealthCert(t *testing.T) {
 	app := createRandomRiderApplication(t)
 
 	updated, err := testStore.UpdateRiderApplicationHealthCert(context.Background(), UpdateRiderApplicationHealthCertParams{
-		ID:            app.ID,
-		HealthCertUrl: pgtype.Text{String: "health.jpg", Valid: true},
+		ID:                     app.ID,
+		HealthCertMediaAssetID: pgtype.Int8{},
 	})
 	require.NoError(t, err)
-	require.Equal(t, "health.jpg", updated.HealthCertUrl.String)
+	require.False(t, updated.HealthCertMediaAssetID.Valid)
 }
 
 // ==================== Submit Tests ====================
@@ -185,13 +220,13 @@ func TestSubmitRiderApplication(t *testing.T) {
 		Phone:    pgtype.Text{String: "13812345678", Valid: true},
 	})
 	_, _ = testStore.UpdateRiderApplicationIDCard(context.Background(), UpdateRiderApplicationIDCardParams{
-		ID:             app.ID,
-		IDCardFrontUrl: pgtype.Text{String: "front.jpg", Valid: true},
-		IDCardBackUrl:  pgtype.Text{String: "back.jpg", Valid: true},
+		ID:                      app.ID,
+		IDCardFrontMediaAssetID: pgtype.Int8{},
+		IDCardBackMediaAssetID:  pgtype.Int8{},
 	})
 	_, _ = testStore.UpdateRiderApplicationHealthCert(context.Background(), UpdateRiderApplicationHealthCertParams{
-		ID:            app.ID,
-		HealthCertUrl: pgtype.Text{String: "health.jpg", Valid: true},
+		ID:                     app.ID,
+		HealthCertMediaAssetID: pgtype.Int8{},
 	})
 
 	// 提交
@@ -213,13 +248,13 @@ func TestApproveRiderApplication(t *testing.T) {
 		Phone:    pgtype.Text{String: "13812345678", Valid: true},
 	})
 	_, _ = testStore.UpdateRiderApplicationIDCard(context.Background(), UpdateRiderApplicationIDCardParams{
-		ID:             app.ID,
-		IDCardFrontUrl: pgtype.Text{String: "front.jpg", Valid: true},
-		IDCardBackUrl:  pgtype.Text{String: "back.jpg", Valid: true},
+		ID:                      app.ID,
+		IDCardFrontMediaAssetID: pgtype.Int8{},
+		IDCardBackMediaAssetID:  pgtype.Int8{},
 	})
 	_, _ = testStore.UpdateRiderApplicationHealthCert(context.Background(), UpdateRiderApplicationHealthCertParams{
-		ID:            app.ID,
-		HealthCertUrl: pgtype.Text{String: "health.jpg", Valid: true},
+		ID:                     app.ID,
+		HealthCertMediaAssetID: pgtype.Int8{},
 	})
 	_, _ = testStore.SubmitRiderApplication(context.Background(), app.ID)
 
@@ -232,9 +267,9 @@ func TestApproveRiderApplication(t *testing.T) {
 	require.True(t, approved.ReviewedAt.Valid)
 }
 
-// ==================== Reject Tests ====================
+// ==================== Return-To-Draft Tests ====================
 
-func TestRejectRiderApplication(t *testing.T) {
+func TestReturnRiderApplicationToDraft(t *testing.T) {
 	app := createRandomRiderApplication(t)
 
 	// 填充并提交
@@ -244,25 +279,27 @@ func TestRejectRiderApplication(t *testing.T) {
 		Phone:    pgtype.Text{String: "13812345678", Valid: true},
 	})
 	_, _ = testStore.UpdateRiderApplicationIDCard(context.Background(), UpdateRiderApplicationIDCardParams{
-		ID:             app.ID,
-		IDCardFrontUrl: pgtype.Text{String: "front.jpg", Valid: true},
-		IDCardBackUrl:  pgtype.Text{String: "back.jpg", Valid: true},
+		ID:                      app.ID,
+		IDCardFrontMediaAssetID: pgtype.Int8{},
+		IDCardBackMediaAssetID:  pgtype.Int8{},
 	})
 	_, _ = testStore.UpdateRiderApplicationHealthCert(context.Background(), UpdateRiderApplicationHealthCertParams{
-		ID:            app.ID,
-		HealthCertUrl: pgtype.Text{String: "health.jpg", Valid: true},
+		ID:                     app.ID,
+		HealthCertMediaAssetID: pgtype.Int8{},
 	})
 	_, _ = testStore.SubmitRiderApplication(context.Background(), app.ID)
 
-	// 拒绝
+	// 审核未通过后退回草稿
 	rejectReason := "身份证照片不清晰"
-	rejected, err := testStore.RejectRiderApplication(context.Background(), RejectRiderApplicationParams{
+	returned, err := testStore.ReturnRiderApplicationToDraft(context.Background(), ReturnRiderApplicationToDraftParams{
 		ID:           app.ID,
 		RejectReason: pgtype.Text{String: rejectReason, Valid: true},
 	})
 	require.NoError(t, err)
-	require.Equal(t, "rejected", rejected.Status)
-	require.Equal(t, rejectReason, rejected.RejectReason.String)
+	require.Equal(t, "draft", returned.Status)
+	require.Equal(t, rejectReason, returned.RejectReason.String)
+	require.True(t, returned.ReviewedAt.Valid)
+	require.False(t, returned.SubmittedAt.Valid)
 }
 
 // ==================== Reset Tests ====================
@@ -270,26 +307,22 @@ func TestRejectRiderApplication(t *testing.T) {
 func TestResetRiderApplicationToDraft(t *testing.T) {
 	app := createRandomRiderApplication(t)
 
-	// 填充、提交、拒绝
+	// 填充并提交
 	_, _ = testStore.UpdateRiderApplicationBasicInfo(context.Background(), UpdateRiderApplicationBasicInfoParams{
 		ID:       app.ID,
 		RealName: pgtype.Text{String: "张三", Valid: true},
 		Phone:    pgtype.Text{String: "13812345678", Valid: true},
 	})
 	_, _ = testStore.UpdateRiderApplicationIDCard(context.Background(), UpdateRiderApplicationIDCardParams{
-		ID:             app.ID,
-		IDCardFrontUrl: pgtype.Text{String: "front.jpg", Valid: true},
-		IDCardBackUrl:  pgtype.Text{String: "back.jpg", Valid: true},
+		ID:                      app.ID,
+		IDCardFrontMediaAssetID: pgtype.Int8{},
+		IDCardBackMediaAssetID:  pgtype.Int8{},
 	})
 	_, _ = testStore.UpdateRiderApplicationHealthCert(context.Background(), UpdateRiderApplicationHealthCertParams{
-		ID:            app.ID,
-		HealthCertUrl: pgtype.Text{String: "health.jpg", Valid: true},
+		ID:                     app.ID,
+		HealthCertMediaAssetID: pgtype.Int8{},
 	})
 	_, _ = testStore.SubmitRiderApplication(context.Background(), app.ID)
-	_, _ = testStore.RejectRiderApplication(context.Background(), RejectRiderApplicationParams{
-		ID:           app.ID,
-		RejectReason: pgtype.Text{String: "照片不清晰", Valid: true},
-	})
 
 	// 重置为草稿
 	reset, err := testStore.ResetRiderApplicationToDraft(context.Background(), app.ID)
@@ -297,6 +330,37 @@ func TestResetRiderApplicationToDraft(t *testing.T) {
 	require.Equal(t, "draft", reset.Status)
 	require.False(t, reset.RejectReason.Valid)
 	require.False(t, reset.SubmittedAt.Valid)
+}
+
+func TestResetSubmittedRiderApplicationToDraft(t *testing.T) {
+	app := createRandomRiderApplication(t)
+
+	_, _ = testStore.UpdateRiderApplicationBasicInfo(context.Background(), UpdateRiderApplicationBasicInfoParams{
+		ID:       app.ID,
+		RealName: pgtype.Text{String: "张三", Valid: true},
+		Phone:    pgtype.Text{String: "13812345678", Valid: true},
+	})
+	_, _ = testStore.UpdateRiderApplicationIDCard(context.Background(), UpdateRiderApplicationIDCardParams{
+		ID:                      app.ID,
+		IDCardFrontMediaAssetID: pgtype.Int8{},
+		IDCardBackMediaAssetID:  pgtype.Int8{},
+	})
+	_, _ = testStore.UpdateRiderApplicationHealthCert(context.Background(), UpdateRiderApplicationHealthCertParams{
+		ID:                     app.ID,
+		HealthCertMediaAssetID: pgtype.Int8{},
+	})
+	submitted, err := testStore.SubmitRiderApplication(context.Background(), app.ID)
+	require.NoError(t, err)
+	require.Equal(t, "submitted", submitted.Status)
+	require.True(t, submitted.SubmittedAt.Valid)
+
+	reset, err := testStore.ResetRiderApplicationToDraft(context.Background(), app.ID)
+	require.NoError(t, err)
+	require.Equal(t, "draft", reset.Status)
+	require.False(t, reset.RejectReason.Valid)
+	require.False(t, reset.SubmittedAt.Valid)
+	require.False(t, reset.ReviewedAt.Valid)
+	require.False(t, reset.ReviewedBy.Valid)
 }
 
 // ==================== List Tests ====================
@@ -324,13 +388,13 @@ func TestListRiderApplicationsByStatus(t *testing.T) {
 		Phone:    pgtype.Text{String: "13900000000", Valid: true},
 	})
 	_, _ = testStore.UpdateRiderApplicationIDCard(context.Background(), UpdateRiderApplicationIDCardParams{
-		ID:             app.ID,
-		IDCardFrontUrl: pgtype.Text{String: "f.jpg", Valid: true},
-		IDCardBackUrl:  pgtype.Text{String: "b.jpg", Valid: true},
+		ID:                      app.ID,
+		IDCardFrontMediaAssetID: pgtype.Int8{},
+		IDCardBackMediaAssetID:  pgtype.Int8{},
 	})
 	_, _ = testStore.UpdateRiderApplicationHealthCert(context.Background(), UpdateRiderApplicationHealthCertParams{
-		ID:            app.ID,
-		HealthCertUrl: pgtype.Text{String: "h.jpg", Valid: true},
+		ID:                     app.ID,
+		HealthCertMediaAssetID: pgtype.Int8{},
 	})
 	_, _ = testStore.SubmitRiderApplication(context.Background(), app.ID)
 

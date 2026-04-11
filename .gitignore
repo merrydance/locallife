@@ -66,6 +66,8 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 package-lock.json
+!web/package-lock.json
+!weapp/package-lock.json
 
 # TypeScript
 *.tsbuildinfo
@@ -76,6 +78,8 @@ dist/
 build/
 out/
 lib/
+!web/src/lib/
+!web/src/lib/**
 
 # 微信小程序本地文件
 weapp/project.private.config.json
@@ -86,6 +90,10 @@ weapp/miniprogram/build/
 # NPM 构建输出
 weapp/miniprogram_npm/
 weapp/miniprogram/miniprogram_npm/
+
+# TypeScript 编译输出（.ts -> .js）
+weapp/miniprogram/**/*.js
+!weapp/miniprogram/miniprogram_npm/**/*.js
 
 # 测试 / 覆盖率
 coverage/
@@ -107,3 +115,13 @@ __pycache__/
 # Agent / Gemini 生成文件
 # ==========================================
 .gemini/
+legal_exports/agreements_v1_2_0/CONSUMER_RIGHTS.pdf
+legal_exports/agreements_v1_2_0/CONSUMER_RIGHTS.pdf
+legal_exports/agreements_v1_2_0/extract_and_print.py
+legal_exports/agreements_v1_2_0/MERCHANT_AGREEMENT.pdf
+legal_exports/agreements_v1_2_0/OPERATOR_AGREEMENT.html
+legal_exports/agreements_v1_2_0/RIDER_AGREEMENT.html
+legal_exports/agreements_v1_2_0/RIDER_AGREEMENT.pdf
+legal_exports/agreements_v1_2_0/USER_AGREEMENT.pdf
+.gitignore
+legal_exports/agreements_v1_2_0/MERCHANT_AGREEMENT.pdf

@@ -16,7 +16,7 @@ const countMerchantCustomers = `-- name: CountMerchantCustomers :one
 SELECT COUNT(DISTINCT user_id)::int
 FROM orders
 WHERE merchant_id = $1
-  AND status IN ('delivered', 'completed')
+  AND status IN ('user_delivered', 'completed')
 `
 
 // 统计商户的顾客总数
@@ -38,7 +38,7 @@ JOIN dishes d ON d.id = oi.dish_id
 JOIN orders o ON o.id = oi.order_id
 WHERE o.merchant_id = $1
   AND o.user_id = $2
-  AND o.status IN ('delivered', 'completed')
+  AND o.status IN ('user_delivered', 'completed')
 GROUP BY oi.dish_id, d.name
 ORDER BY order_count DESC, total_quantity DESC
 LIMIT $3
@@ -89,6 +89,7 @@ SELECT
     u.full_name,
     u.phone,
     u.avatar_url,
+    u.avatar_media_asset_id,
     COUNT(*)::int AS total_orders,
     COALESCE(SUM(o.final_amount), 0)::bigint AS total_amount,
     CASE 
@@ -102,8 +103,8 @@ FROM orders o
 JOIN users u ON u.id = o.user_id
 WHERE o.merchant_id = $1
   AND o.user_id = $2
-  AND o.status IN ('delivered', 'completed')
-GROUP BY o.user_id, u.full_name, u.phone, u.avatar_url
+  AND o.status IN ('user_delivered', 'completed')
+GROUP BY o.user_id, u.full_name, u.phone, u.avatar_url, u.avatar_media_asset_id
 `
 
 type GetCustomerMerchantDetailParams struct {
@@ -112,15 +113,16 @@ type GetCustomerMerchantDetailParams struct {
 }
 
 type GetCustomerMerchantDetailRow struct {
-	UserID         int64       `json:"user_id"`
-	FullName       string      `json:"full_name"`
-	Phone          pgtype.Text `json:"phone"`
-	AvatarUrl      pgtype.Text `json:"avatar_url"`
-	TotalOrders    int32       `json:"total_orders"`
-	TotalAmount    int64       `json:"total_amount"`
-	AvgOrderAmount int32       `json:"avg_order_amount"`
-	FirstOrderAt   interface{} `json:"first_order_at"`
-	LastOrderAt    interface{} `json:"last_order_at"`
+	UserID             int64       `json:"user_id"`
+	FullName           string      `json:"full_name"`
+	Phone              pgtype.Text `json:"phone"`
+	AvatarUrl          pgtype.Text `json:"avatar_url"`
+	AvatarMediaAssetID pgtype.Int8 `json:"avatar_media_asset_id"`
+	TotalOrders        int32       `json:"total_orders"`
+	TotalAmount        int64       `json:"total_amount"`
+	AvgOrderAmount     int32       `json:"avg_order_amount"`
+	FirstOrderAt       interface{} `json:"first_order_at"`
+	LastOrderAt        interface{} `json:"last_order_at"`
 }
 
 // 单个顾客在某商户的消费详情
@@ -132,6 +134,7 @@ func (q *Queries) GetCustomerMerchantDetail(ctx context.Context, arg GetCustomer
 		&i.FullName,
 		&i.Phone,
 		&i.AvatarUrl,
+		&i.AvatarMediaAssetID,
 		&i.TotalOrders,
 		&i.TotalAmount,
 		&i.AvgOrderAmount,
@@ -145,8 +148,8 @@ const getDishCategoryStats = `-- name: GetDishCategoryStats :many
 SELECT 
     dc.id AS category_id,
     dc.name AS category_name,
-    COUNT(DISTINCT oi.dish_id)::int AS dish_count,
-    SUM(oi.quantity)::int AS total_quantity,
+  COUNT(DISTINCT o.id)::int AS order_count,
+    COALESCE(SUM(oi.quantity), 0)::int AS total_quantity,
     COALESCE(SUM(oi.subtotal), 0)::bigint AS total_revenue
 FROM dish_categories dc
 JOIN merchant_dish_categories mdc ON dc.id = mdc.category_id
@@ -155,7 +158,7 @@ LEFT JOIN order_items oi ON oi.dish_id = d.id
 LEFT JOIN orders o ON o.id = oi.order_id 
     AND o.created_at >= $2 
     AND o.created_at <= $3
-    AND o.status IN ('delivered', 'completed')
+    AND o.status IN ('user_delivered', 'completed')
 WHERE mdc.merchant_id = $1
 GROUP BY dc.id, dc.name, mdc.sort_order
 ORDER BY mdc.sort_order ASC, total_revenue DESC
@@ -170,7 +173,7 @@ type GetDishCategoryStatsParams struct {
 type GetDishCategoryStatsRow struct {
 	CategoryID    int64  `json:"category_id"`
 	CategoryName  string `json:"category_name"`
-	DishCount     int32  `json:"dish_count"`
+	OrderCount    int32  `json:"order_count"`
 	TotalQuantity int32  `json:"total_quantity"`
 	TotalRevenue  int64  `json:"total_revenue"`
 }
@@ -188,7 +191,7 @@ func (q *Queries) GetDishCategoryStats(ctx context.Context, arg GetDishCategoryS
 		if err := rows.Scan(
 			&i.CategoryID,
 			&i.CategoryName,
-			&i.DishCount,
+			&i.OrderCount,
 			&i.TotalQuantity,
 			&i.TotalRevenue,
 		); err != nil {
@@ -231,6 +234,7 @@ SELECT
     u.full_name,
     u.phone,
     u.avatar_url,
+    u.avatar_media_asset_id,
     COUNT(*)::int AS total_orders,
     COALESCE(SUM(o.final_amount), 0)::bigint AS total_amount,
     CASE 
@@ -243,43 +247,44 @@ SELECT
 FROM orders o
 JOIN users u ON u.id = o.user_id
 WHERE o.merchant_id = $1
-  AND o.status IN ('delivered', 'completed')
-GROUP BY o.user_id, u.full_name, u.phone, u.avatar_url
+  AND o.status IN ('user_delivered', 'completed')
+GROUP BY o.user_id, u.full_name, u.phone, u.avatar_url, u.avatar_media_asset_id
 ORDER BY 
     CASE 
-        WHEN $4::text = 'total_orders' THEN COUNT(*)
-        WHEN $4::text = 'total_amount' THEN SUM(o.final_amount)
+        WHEN $2::text = 'total_orders' THEN COUNT(*)
+        WHEN $2::text = 'total_amount' THEN SUM(o.final_amount)
         ELSE EXTRACT(EPOCH FROM MAX(o.created_at))
     END DESC
-LIMIT $2 OFFSET $3
+LIMIT $4 OFFSET $3
 `
 
 type GetMerchantCustomerStatsParams struct {
 	MerchantID int64  `json:"merchant_id"`
-	Limit      int32  `json:"limit"`
-	Offset     int32  `json:"offset"`
 	OrderBy    string `json:"order_by"`
+	Offset     int32  `json:"offset"`
+	Limit      int32  `json:"limit"`
 }
 
 type GetMerchantCustomerStatsRow struct {
-	UserID         int64       `json:"user_id"`
-	FullName       string      `json:"full_name"`
-	Phone          pgtype.Text `json:"phone"`
-	AvatarUrl      pgtype.Text `json:"avatar_url"`
-	TotalOrders    int32       `json:"total_orders"`
-	TotalAmount    int64       `json:"total_amount"`
-	AvgOrderAmount int32       `json:"avg_order_amount"`
-	FirstOrderAt   interface{} `json:"first_order_at"`
-	LastOrderAt    interface{} `json:"last_order_at"`
+	UserID             int64       `json:"user_id"`
+	FullName           string      `json:"full_name"`
+	Phone              pgtype.Text `json:"phone"`
+	AvatarUrl          pgtype.Text `json:"avatar_url"`
+	AvatarMediaAssetID pgtype.Int8 `json:"avatar_media_asset_id"`
+	TotalOrders        int32       `json:"total_orders"`
+	TotalAmount        int64       `json:"total_amount"`
+	AvgOrderAmount     int32       `json:"avg_order_amount"`
+	FirstOrderAt       interface{} `json:"first_order_at"`
+	LastOrderAt        interface{} `json:"last_order_at"`
 }
 
 // 顾客消费分析: 实时计算每个顾客的消费统计
 func (q *Queries) GetMerchantCustomerStats(ctx context.Context, arg GetMerchantCustomerStatsParams) ([]GetMerchantCustomerStatsRow, error) {
 	rows, err := q.db.Query(ctx, getMerchantCustomerStats,
 		arg.MerchantID,
-		arg.Limit,
-		arg.Offset,
 		arg.OrderBy,
+		arg.Offset,
+		arg.Limit,
 	)
 	if err != nil {
 		return nil, err
@@ -293,6 +298,7 @@ func (q *Queries) GetMerchantCustomerStats(ctx context.Context, arg GetMerchantC
 			&i.FullName,
 			&i.Phone,
 			&i.AvatarUrl,
+			&i.AvatarMediaAssetID,
 			&i.TotalOrders,
 			&i.TotalAmount,
 			&i.AvgOrderAmount,
@@ -322,15 +328,15 @@ FROM orders
 WHERE merchant_id = $1
   AND created_at >= $2
   AND created_at <= $3
-  AND status IN ('delivered', 'completed')
+  AND status IN ('user_delivered', 'completed')
 GROUP BY DATE(created_at)
 ORDER BY date DESC
 `
 
 type GetMerchantDailyStatsParams struct {
-	MerchantID  int64     `json:"merchant_id"`
-	CreatedAt   time.Time `json:"created_at"`
-	CreatedAt_2 time.Time `json:"created_at_2"`
+	MerchantID int64     `json:"merchant_id"`
+	StartAt    time.Time `json:"start_at"`
+	EndAt      time.Time `json:"end_at"`
 }
 
 type GetMerchantDailyStatsRow struct {
@@ -345,7 +351,7 @@ type GetMerchantDailyStatsRow struct {
 // M12: 商户统计查询 (实时计算)
 // 商户日报: 按天聚合订单数据
 func (q *Queries) GetMerchantDailyStats(ctx context.Context, arg GetMerchantDailyStatsParams) ([]GetMerchantDailyStatsRow, error) {
-	rows, err := q.db.Query(ctx, getMerchantDailyStats, arg.MerchantID, arg.CreatedAt, arg.CreatedAt_2)
+	rows, err := q.db.Query(ctx, getMerchantDailyStats, arg.MerchantID, arg.StartAt, arg.EndAt)
 	if err != nil {
 		return nil, err
 	}
@@ -378,7 +384,7 @@ SELECT
   d.description,
   d.price,
   d.member_price,
-  d.image_url,
+  d.image_media_asset_id,
   d.is_available,
   d.sort_order,
   d.prepare_time,
@@ -390,8 +396,35 @@ SELECT
     '[]'::json
   ) as tags,
   COALESCE(
+    (SELECT json_agg(
+      json_build_object(
+        'id', dcg.id,
+        'name', dcg.name,
+        'is_required', dcg.is_required,
+        'sort_order', dcg.sort_order,
+        'options', (
+          SELECT json_agg(
+            json_build_object(
+              'id', dco.id,
+              'tag_id', dco.tag_id,
+              'tag_name', opt_tag.name,
+              'extra_price', dco.extra_price,
+              'sort_order', dco.sort_order
+            ) ORDER BY dco.sort_order
+          )
+          FROM dish_customization_options dco
+          JOIN tags opt_tag ON dco.tag_id = opt_tag.id
+          WHERE dco.group_id = dcg.id
+        )
+      ) ORDER BY dcg.sort_order
+     )
+     FROM dish_customization_groups dcg
+     WHERE dcg.dish_id = d.id),
+    '[]'::json
+  ) as customization_groups,
+  COALESCE(
     (SELECT SUM(oi.quantity)::int FROM order_items oi JOIN orders o ON o.id = oi.order_id 
-     WHERE oi.dish_id = d.id AND o.status IN ('completed', 'delivered') 
+    WHERE oi.dish_id = d.id AND o.status IN ('user_delivered', 'completed', 'delivered') 
      AND o.created_at > NOW() - INTERVAL '30 days'),
     0
   ) as monthly_sales
@@ -402,24 +435,33 @@ WHERE d.merchant_id = $1
   AND d.is_online = true
   AND d.is_available = true
   AND d.deleted_at IS NULL
-ORDER BY COALESCE(mdc.sort_order, 999), d.sort_order, d.id
+ORDER BY
+  COALESCE(mdc.sort_order, 999),
+  CASE
+    WHEN EXISTS (SELECT 1 FROM dish_tags dt JOIN tags t ON t.id = dt.tag_id WHERE dt.dish_id = d.id AND t.name = '推荐') THEN 0
+    WHEN EXISTS (SELECT 1 FROM dish_tags dt JOIN tags t ON t.id = dt.tag_id WHERE dt.dish_id = d.id AND t.name = '热卖') THEN 1
+    ELSE 2
+  END,
+  d.sort_order,
+  d.id
 `
 
 type GetMerchantDishesWithCategoryRow struct {
-	ID                int64       `json:"id"`
-	Name              string      `json:"name"`
-	Description       pgtype.Text `json:"description"`
-	Price             int64       `json:"price"`
-	MemberPrice       pgtype.Int8 `json:"member_price"`
-	ImageUrl          pgtype.Text `json:"image_url"`
-	IsAvailable       bool        `json:"is_available"`
-	SortOrder         int16       `json:"sort_order"`
-	PrepareTime       int16       `json:"prepare_time"`
-	CategoryID        int64       `json:"category_id"`
-	CategoryName      string      `json:"category_name"`
-	CategorySortOrder int16       `json:"category_sort_order"`
-	Tags              interface{} `json:"tags"`
-	MonthlySales      interface{} `json:"monthly_sales"`
+	ID                  int64       `json:"id"`
+	Name                string      `json:"name"`
+	Description         pgtype.Text `json:"description"`
+	Price               int64       `json:"price"`
+	MemberPrice         pgtype.Int8 `json:"member_price"`
+	ImageMediaAssetID   pgtype.Int8 `json:"image_media_asset_id"`
+	IsAvailable         bool        `json:"is_available"`
+	SortOrder           int16       `json:"sort_order"`
+	PrepareTime         int16       `json:"prepare_time"`
+	CategoryID          int64       `json:"category_id"`
+	CategoryName        string      `json:"category_name"`
+	CategorySortOrder   int16       `json:"category_sort_order"`
+	Tags                interface{} `json:"tags"`
+	CustomizationGroups interface{} `json:"customization_groups"`
+	MonthlySales        interface{} `json:"monthly_sales"`
 }
 
 // 获取商户所有在线菜品（含分类信息）- 消费者端使用
@@ -438,7 +480,7 @@ func (q *Queries) GetMerchantDishesWithCategory(ctx context.Context, merchantID 
 			&i.Description,
 			&i.Price,
 			&i.MemberPrice,
-			&i.ImageUrl,
+			&i.ImageMediaAssetID,
 			&i.IsAvailable,
 			&i.SortOrder,
 			&i.PrepareTime,
@@ -446,6 +488,7 @@ func (q *Queries) GetMerchantDishesWithCategory(ctx context.Context, merchantID 
 			&i.CategoryName,
 			&i.CategorySortOrder,
 			&i.Tags,
+			&i.CustomizationGroups,
 			&i.MonthlySales,
 		); err != nil {
 			return nil, err
@@ -468,15 +511,15 @@ FROM orders
 WHERE merchant_id = $1
   AND created_at >= $2
   AND created_at <= $3
-  AND status IN ('delivered', 'completed')
+  AND status IN ('user_delivered', 'completed')
 GROUP BY EXTRACT(HOUR FROM created_at)
 ORDER BY hour
 `
 
 type GetMerchantHourlyStatsParams struct {
-	MerchantID  int64     `json:"merchant_id"`
-	CreatedAt   time.Time `json:"created_at"`
-	CreatedAt_2 time.Time `json:"created_at_2"`
+	MerchantID int64     `json:"merchant_id"`
+	StartAt    time.Time `json:"start_at"`
+	EndAt      time.Time `json:"end_at"`
 }
 
 type GetMerchantHourlyStatsRow struct {
@@ -488,7 +531,7 @@ type GetMerchantHourlyStatsRow struct {
 
 // 商户时段分析: 按小时统计订单分布
 func (q *Queries) GetMerchantHourlyStats(ctx context.Context, arg GetMerchantHourlyStatsParams) ([]GetMerchantHourlyStatsRow, error) {
-	rows, err := q.db.Query(ctx, getMerchantHourlyStats, arg.MerchantID, arg.CreatedAt, arg.CreatedAt_2)
+	rows, err := q.db.Query(ctx, getMerchantHourlyStats, arg.MerchantID, arg.StartAt, arg.EndAt)
 	if err != nil {
 		return nil, err
 	}
@@ -517,7 +560,7 @@ SELECT
   cs.id,
   cs.name,
   cs.description,
-  cs.image_url,
+  cs.image_media_asset_id,
   cs.combo_price,
   -- 实时计算实际原价（单品价之和）
   COALESCE(
@@ -534,7 +577,11 @@ SELECT
     FROM combo_dishes cd
     JOIN dishes d ON d.id = cd.dish_id
     WHERE cd.combo_id = cs.id
-  ) as dishes
+  ) as dishes,
+  COALESCE(
+    (SELECT json_agg(t.name) FROM combo_tags ct JOIN tags t ON t.id = ct.tag_id WHERE ct.combo_id = cs.id),
+    '[]'::json
+  ) as tags
 FROM combo_sets cs
 WHERE cs.merchant_id = $1
   AND cs.is_online = true
@@ -543,14 +590,15 @@ ORDER BY cs.id
 `
 
 type GetMerchantOnlineCombosRow struct {
-	ID            int64       `json:"id"`
-	Name          string      `json:"name"`
-	Description   pgtype.Text `json:"description"`
-	ImageUrl      pgtype.Text `json:"image_url"`
-	ComboPrice    int64       `json:"combo_price"`
-	OriginalPrice int64       `json:"original_price"`
-	IsOnline      bool        `json:"is_online"`
-	Dishes        []byte      `json:"dishes"`
+	ID                int64       `json:"id"`
+	Name              string      `json:"name"`
+	Description       pgtype.Text `json:"description"`
+	ImageMediaAssetID pgtype.Int8 `json:"image_media_asset_id"`
+	ComboPrice        int64       `json:"combo_price"`
+	OriginalPrice     int64       `json:"original_price"`
+	IsOnline          bool        `json:"is_online"`
+	Dishes            []byte      `json:"dishes"`
+	Tags              interface{} `json:"tags"`
 }
 
 // 获取商户所有在线套餐 - 消费者端使用
@@ -567,11 +615,12 @@ func (q *Queries) GetMerchantOnlineCombos(ctx context.Context, merchantID int64)
 			&i.ID,
 			&i.Name,
 			&i.Description,
-			&i.ImageUrl,
+			&i.ImageMediaAssetID,
 			&i.ComboPrice,
 			&i.OriginalPrice,
 			&i.IsOnline,
 			&i.Dishes,
+			&i.Tags,
 		); err != nil {
 			return nil, err
 		}
@@ -593,15 +642,15 @@ FROM orders
 WHERE merchant_id = $1
   AND created_at >= $2
   AND created_at <= $3
-  AND status IN ('delivered', 'completed')
+  AND status IN ('user_delivered', 'completed')
 GROUP BY order_type
 ORDER BY order_count DESC
 `
 
 type GetMerchantOrderSourceStatsParams struct {
-	MerchantID  int64     `json:"merchant_id"`
-	CreatedAt   time.Time `json:"created_at"`
-	CreatedAt_2 time.Time `json:"created_at_2"`
+	MerchantID int64     `json:"merchant_id"`
+	StartAt    time.Time `json:"start_at"`
+	EndAt      time.Time `json:"end_at"`
 }
 
 type GetMerchantOrderSourceStatsRow struct {
@@ -613,7 +662,7 @@ type GetMerchantOrderSourceStatsRow struct {
 
 // 订单来源分析
 func (q *Queries) GetMerchantOrderSourceStats(ctx context.Context, arg GetMerchantOrderSourceStatsParams) ([]GetMerchantOrderSourceStatsRow, error) {
-	rows, err := q.db.Query(ctx, getMerchantOrderSourceStats, arg.MerchantID, arg.CreatedAt, arg.CreatedAt_2)
+	rows, err := q.db.Query(ctx, getMerchantOrderSourceStats, arg.MerchantID, arg.StartAt, arg.EndAt)
 	if err != nil {
 		return nil, err
 	}
@@ -652,13 +701,13 @@ FROM orders
 WHERE merchant_id = $1
   AND created_at >= $2
   AND created_at <= $3
-  AND status IN ('delivered', 'completed')
+  AND status IN ('user_delivered', 'completed')
 `
 
 type GetMerchantOverviewParams struct {
-	MerchantID  int64     `json:"merchant_id"`
-	CreatedAt   time.Time `json:"created_at"`
-	CreatedAt_2 time.Time `json:"created_at_2"`
+	MerchantID int64     `json:"merchant_id"`
+	StartAt    time.Time `json:"start_at"`
+	EndAt      time.Time `json:"end_at"`
 }
 
 type GetMerchantOverviewRow struct {
@@ -671,7 +720,7 @@ type GetMerchantOverviewRow struct {
 
 // 商户概览: 指定日期范围的汇总统计
 func (q *Queries) GetMerchantOverview(ctx context.Context, arg GetMerchantOverviewParams) (GetMerchantOverviewRow, error) {
-	row := q.db.QueryRow(ctx, getMerchantOverview, arg.MerchantID, arg.CreatedAt, arg.CreatedAt_2)
+	row := q.db.QueryRow(ctx, getMerchantOverview, arg.MerchantID, arg.StartAt, arg.EndAt)
 	var i GetMerchantOverviewRow
 	err := row.Scan(
 		&i.TotalDays,
@@ -692,7 +741,7 @@ WITH customer_order_counts AS (
     WHERE merchant_id = $1
       AND created_at >= $2
       AND created_at <= $3
-      AND status IN ('delivered', 'completed')
+      AND status IN ('user_delivered', 'completed')
     GROUP BY user_id
 )
 SELECT 
@@ -713,9 +762,9 @@ FROM customer_order_counts
 `
 
 type GetMerchantRepurchaseRateParams struct {
-	MerchantID  int64     `json:"merchant_id"`
-	CreatedAt   time.Time `json:"created_at"`
-	CreatedAt_2 time.Time `json:"created_at_2"`
+	MerchantID int64     `json:"merchant_id"`
+	StartAt    time.Time `json:"start_at"`
+	EndAt      time.Time `json:"end_at"`
 }
 
 type GetMerchantRepurchaseRateRow struct {
@@ -730,7 +779,7 @@ type GetMerchantRepurchaseRateRow struct {
 // 注意: repurchase_rate_percent 返回万分比(如 7550 表示 75.50%)，API层需除以100
 // 注意: avg_orders_per_user 返回百分比形式(如 235 表示 2.35次)，API层需除以100
 func (q *Queries) GetMerchantRepurchaseRate(ctx context.Context, arg GetMerchantRepurchaseRateParams) (GetMerchantRepurchaseRateRow, error) {
-	row := q.db.QueryRow(ctx, getMerchantRepurchaseRate, arg.MerchantID, arg.CreatedAt, arg.CreatedAt_2)
+	row := q.db.QueryRow(ctx, getMerchantRepurchaseRate, arg.MerchantID, arg.StartAt, arg.EndAt)
 	var i GetMerchantRepurchaseRateRow
 	err := row.Scan(
 		&i.TotalCustomers,
@@ -755,17 +804,17 @@ JOIN orders o ON o.id = oi.order_id
 WHERE o.merchant_id = $1
   AND o.created_at >= $2
   AND o.created_at <= $3
-  AND o.status IN ('delivered', 'completed')
+  AND o.status IN ('user_delivered', 'completed')
 GROUP BY oi.dish_id, d.name, d.price
 ORDER BY total_sold DESC
 LIMIT $4
 `
 
 type GetTopSellingDishesParams struct {
-	MerchantID  int64     `json:"merchant_id"`
-	CreatedAt   time.Time `json:"created_at"`
-	CreatedAt_2 time.Time `json:"created_at_2"`
-	Limit       int32     `json:"limit"`
+	MerchantID int64     `json:"merchant_id"`
+	StartAt    time.Time `json:"start_at"`
+	EndAt      time.Time `json:"end_at"`
+	Limit      int32     `json:"limit"`
 }
 
 type GetTopSellingDishesRow struct {
@@ -780,8 +829,8 @@ type GetTopSellingDishesRow struct {
 func (q *Queries) GetTopSellingDishes(ctx context.Context, arg GetTopSellingDishesParams) ([]GetTopSellingDishesRow, error) {
 	rows, err := q.db.Query(ctx, getTopSellingDishes,
 		arg.MerchantID,
-		arg.CreatedAt,
-		arg.CreatedAt_2,
+		arg.StartAt,
+		arg.EndAt,
 		arg.Limit,
 	)
 	if err != nil {
@@ -850,7 +899,7 @@ func (q *Queries) ListMerchantActiveDeliveryPromotions(ctx context.Context, merc
 }
 
 const listMerchantActiveDiscountRules = `-- name: ListMerchantActiveDiscountRules :many
-SELECT id, merchant_id, name, description, min_order_amount, discount_amount, can_stack_with_voucher, can_stack_with_membership, valid_from, valid_until, is_active, created_at, updated_at, deleted_at FROM discount_rules
+SELECT id, merchant_id, name, description, min_order_amount, discount_amount, can_stack_with_voucher, can_stack_with_membership, valid_from, valid_until, is_active, created_at, updated_at, deleted_at, stacking_group FROM discount_rules
 WHERE merchant_id = $1
   AND is_active = true
   AND valid_from <= NOW()
@@ -884,6 +933,7 @@ func (q *Queries) ListMerchantActiveDiscountRules(ctx context.Context, merchantI
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+			&i.StackingGroup,
 		); err != nil {
 			return nil, err
 		}

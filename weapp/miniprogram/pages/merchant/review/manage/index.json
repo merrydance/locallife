@@ -1,7 +1,0 @@
-{
-    "navigationBarTitleText": "评价管理",
-    "navigationStyle": "custom",
-    "usingComponents": {
-        "merchant-header": "/components/merchant-header/index"
-    }
-}

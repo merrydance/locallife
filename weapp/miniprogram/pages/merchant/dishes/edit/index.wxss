@@ -1,74 +1,187 @@
 .page-container {
   min-height: 100vh;
-  background: #F6F6F6;
+  background: var(--td-bg-color-page);
+  padding-bottom: calc(148rpx + var(--safe-area-bottom));
 }
 
-.loading {
+.page-content {
   display: flex;
+  flex-direction: column;
+  gap: var(--spacer-md);
+}
+
+.state-block {
+  min-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   justify-content: center;
-  padding: 100rpx 0;
+  gap: var(--spacer-md);
+  padding: 0 var(--spacer-lg);
 }
 
-.form-container {
-  padding: 24rpx;
+.notice-card,
+.section-panel {
+  background: var(--td-bg-color-container);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
 }
 
-.input,
-.picker {
-  text-align: right;
-  font-size: 28rpx;
-  color: #333;
+.notice-copy {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-xs);
 }
 
-.textarea {
-  width: 100%;
-  min-height: 120rpx;
-  padding: 16rpx;
-  background: #F6F6F6;
-  border-radius: 8rpx;
-  font-size: 28rpx;
-  margin-top: 16rpx;
+.notice-text,
+.section-caption {
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+  color: var(--td-text-color-secondary);
 }
 
-.image-preview {
-  margin-top: 24rpx;
-  width: 200rpx;
-  height: 200rpx;
-  border-radius: 8rpx;
-  overflow: hidden;
+.notice-card {
+  padding: var(--spacer-sm) var(--spacer-md);
 }
 
-.submit-bar {
+.notice-card--warning {
+  background: var(--td-warning-color-1);
+  border: 1rpx solid rgba(255, 193, 7, 0.35);
+}
+
+.notice-card--split {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--spacer-sm);
+}
+
+.notice-title,
+.section-title,
+.cover-title,
+.spec-group-title {
+  font-size: var(--font-size-base);
+  font-weight: 700;
+  color: var(--td-text-color-primary);
+}
+
+.spec-option-title,
+.spec-options-title {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+}
+
+.section-panel {
+  padding: var(--spacer-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-md);
+}
+
+.section-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--spacer-sm);
+}
+
+.section-top--split {
+  align-items: center;
+}
+
+.field-action-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: var(--spacer-sm);
+}
+
+.field-action-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.section-top-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacer-sm);
+}
+
+.section-top-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.section-top-button {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.cover-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-md);
+}
+
+.uploading-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacer-xs);
+}
+
+.uploading-text,
+.spec-group-meta {
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+  color: var(--td-text-color-secondary);
+}
+
+.inline-note-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+  padding: var(--spacer-md);
+  border-radius: var(--radius-md);
+  background: var(--td-bg-color-secondarycontainer);
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+  color: var(--td-text-color-secondary);
+}
+
+.inline-note-card--warning {
+  background: var(--td-warning-color-1);
+}
+
+.tag-check-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacer-sm);
+}
+
+.footer-bar {
   position: fixed;
-  bottom: 0;
   left: 0;
   right: 0;
-  padding: 16rpx 24rpx;
-  padding-bottom: calc(16rpx + env(safe-area-inset-bottom));
-  background: #fff;
-  box-shadow: 0 -4rpx 12rpx rgba(0,0,0,0.08);
+  bottom: 0;
+  z-index: var(--z-index-fixed);
+  padding: var(--spacer-md);
+  padding-bottom: calc(var(--spacer-md) + var(--safe-area-bottom));
+  background: var(--td-bg-color-container);
+  box-shadow: 0 -8rpx 24rpx rgba(0, 0, 0, 0.06);
 }
 
-.submit-btn {
-  width: 100%;
+.dialog-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-sm);
 }
-@media (min-width: 750px) {
-  .form-container {
-    padding: 24px !important;
-    max-width: 800px !important;
-    margin: 0 auto !important;
-  }
-  .input, .picker, .textarea {
-    font-size: 14px !important;
-  }
-  .image-preview {
-    width: 120px !important;
-    height: 120px !important;
-  }
-  .submit-bar {
-    max-width: 800px !important;
-    left: 50% !important;
-    transform: translateX(-50%) !important;
-    border-radius: 8px 8px 0 0 !important;
+
+@media (max-width: 420px) {
+  .notice-card--split,
+  .section-top {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }

@@ -6,24 +6,43 @@
 import { request } from '../utils/request'
 import { logger } from '../utils/logger'
 import type { DishSummary } from './dish'
-import type { MerchantSummary } from './merchant'
+import {
+    getRecommendedMerchantsWithMeta as getRecommendedMerchantsWithMetaFromMerchant,
+    searchMerchantsWithMeta as searchMerchantsWithMetaFromMerchant,
+    type MerchantSummary,
+    type MerchantSummaryListResult
+} from './merchant'
+import { normalizePaginatedResult, type PaginatedListResult, type PaginationEnvelope } from './types'
 
 // ==================== 数据类型定义 ====================
 
 /** 搜索商户参数 */
 export interface SearchMerchantsParams extends Record<string, unknown> {
     keyword: string
+    region_id?: number
+    tag_id?: number
+    sort_by?: 'distance'
     user_latitude?: number
     user_longitude?: number
     page_id: number
     page_size: number
 }
 
+export interface CountSearchMerchantsParams extends Record<string, unknown> {
+    keyword?: string
+    region_id?: number
+    tag_id?: number
+    user_latitude?: number
+    user_longitude?: number
+}
+
 /** 推荐商户参数 */
 export interface RecommendMerchantsParams extends Record<string, unknown> {
+    region_id?: number
     user_latitude?: number
     user_longitude?: number
     limit?: number
+    page?: number
 }
 
 /** 搜索包间参数 - 对齐后端 searchRoomsRequest */
@@ -32,6 +51,7 @@ export interface SearchRoomsParams extends Record<string, unknown> {
     reservation_time: string           // 必填：预订时段 HH:MM
     min_capacity?: number              // 可选：最小容纳人数
     max_capacity?: number              // 可选：最大容纳人数
+    min_minimum_spend?: number         // 可选：最小低消（分）
     max_minimum_spend?: number         // 可选：最大低消（分）
     tag_id?: number                    // 可选：菜系/标签ID
     region_id?: number                 // 可选：区域ID
@@ -43,6 +63,8 @@ export interface SearchRoomsParams extends Record<string, unknown> {
 
 /** 推荐包间参数 - 对齐后端 exploreRoomsRequest */
 export interface RecommendRoomsParams extends Record<string, unknown> {
+    reservation_date?: string         // 预订日期 YYYY-MM-DD（用于探索列表兜底）
+    reservation_time?: string         // 预订时段 HH:MM（用于探索列表兜底）
     region_id?: number                 // 区域ID
     min_capacity?: number              // 最小容纳人数
     max_capacity?: number              // 最大容纳人数
@@ -97,6 +119,25 @@ export interface SearchSuggestion {
     count: number
 }
 
+interface SearchMerchantsResponse {
+    merchants: MerchantSummary[]
+    total?: number
+}
+
+interface SearchRoomsResponse {
+    rooms: RoomSearchResult[]
+    total?: number
+}
+
+export interface RoomSearchListResult extends PaginatedListResult<RoomSearchResult> {
+    rooms: RoomSearchResult[]
+}
+
+interface SearchDishesResponse {
+    dishes: DishSummary[]
+    total?: number
+}
+
 // ==================== API接口函数 ====================
 
 /**
@@ -112,7 +153,7 @@ function cleanParams<T>(params: T): T {
         // JSON keeps nulls. If backend dislikes null, we should remove them.
         // Let's remove nulls too for max safety against "null" string.
         if (cleaned && typeof cleaned === 'object') {
-            Object.keys(cleaned).forEach(key => {
+            Object.keys(cleaned).forEach((key) => {
                 if (cleaned[key] === null) {
                     delete cleaned[key]
                 }
@@ -134,12 +175,27 @@ export async function searchMerchants(params: SearchMerchantsParams): Promise<Me
     if (!data.keyword) data.keyword = ''
 
     // Response is { merchants: [], total: ... }
-    const res = await request<any>({
+    const res = await request<SearchMerchantsResponse | MerchantSummary[]>({
         url: '/v1/search/merchants',
         method: 'GET',
         data
     })
-    return res.merchants || res // Fallback if API changes
+    return Array.isArray(res) ? res : (res.merchants || []) // Fallback if API changes
+}
+
+export async function searchMerchantsWithMeta(params: SearchMerchantsParams): Promise<MerchantSummaryListResult> {
+    return searchMerchantsWithMetaFromMerchant(params)
+}
+
+export async function countSearchMerchants(params: CountSearchMerchantsParams): Promise<{ count: number, available: boolean }> {
+    const data = cleanParams(params)
+    if (!data.keyword) data.keyword = ''
+
+    return request({
+        url: '/v1/search/merchants/count',
+        method: 'GET',
+        data
+    })
 }
 
 /**
@@ -147,12 +203,26 @@ export async function searchMerchants(params: SearchMerchantsParams): Promise<Me
  * @param params 推荐参数
  */
 export async function getRecommendedMerchants(params: RecommendMerchantsParams = {}): Promise<MerchantSummary[]> {
-    const res = await request<any>({
-        url: '/v1/recommendations/merchants',
-        method: 'GET',
-        data: cleanParams(params)
+    const pageSize = params.limit || 20
+    const res = await searchMerchants({
+        keyword: '',
+        region_id: params.region_id,
+        user_latitude: params.user_latitude,
+        user_longitude: params.user_longitude,
+        page_id: 1,
+        page_size: pageSize
     })
-    return res.merchants || res
+    return res
+}
+
+export async function getRecommendedMerchantsWithMeta(params: RecommendMerchantsParams = {}): Promise<MerchantSummaryListResult> {
+    return getRecommendedMerchantsWithMetaFromMerchant({
+        region_id: params.region_id,
+        user_latitude: params.user_latitude,
+        user_longitude: params.user_longitude,
+        limit: params.limit,
+        page: params.page
+    })
 }
 
 /**
@@ -162,12 +232,26 @@ export async function getRecommendedMerchants(params: RecommendMerchantsParams =
 export async function getRecommendedRooms(params: RecommendRoomsParams): Promise<RoomSearchResult[]> {
     logger.debug('Fetching Recommended Rooms', params, 'API')
 
-    const res = await request<any>({
-        url: '/v1/recommendations/rooms',
-        method: 'GET',
-        data: cleanParams(params)
+    const now = new Date()
+    const yyyy = now.getFullYear()
+    const mm = String(now.getMonth() + 1).padStart(2, '0')
+    const dd = String(now.getDate()).padStart(2, '0')
+    const defaultDate = `${yyyy}-${mm}-${dd}`
+    const defaultTime = '12:00'
+
+    const res = await searchRooms({
+        reservation_date: params.reservation_date || defaultDate,
+        reservation_time: params.reservation_time || defaultTime,
+        region_id: params.region_id,
+        min_capacity: params.min_capacity,
+        max_capacity: params.max_capacity,
+        max_minimum_spend: params.max_minimum_spend,
+        user_latitude: params.user_latitude,
+        user_longitude: params.user_longitude,
+        page_id: params.page_id,
+        page_size: params.page_size
     })
-    return res.rooms || res
+    return res
 }
 
 /**
@@ -175,12 +259,26 @@ export async function getRecommendedRooms(params: RecommendRoomsParams): Promise
  * @param params 搜索参数
  */
 export async function searchRooms(params: SearchRoomsParams): Promise<RoomSearchResult[]> {
-    const res = await request<any>({
+    const result = await searchRoomsWithMeta(params)
+    return result.rooms
+}
+
+export async function searchRoomsWithMeta(params: SearchRoomsParams): Promise<RoomSearchListResult> {
+    const res = await request<SearchRoomsResponse | RoomSearchResult[]>({
         url: '/v1/search/rooms',
         method: 'GET',
         data: cleanParams(params)
     })
-    return res.rooms || res
+    const rooms = Array.isArray(res) ? res : (res.rooms || [])
+    const normalized = normalizePaginatedResult(rooms, Array.isArray(res) ? null : (res as PaginationEnvelope), {
+        page: params.page_id,
+        pageSize: params.page_size
+    })
+
+    return {
+        ...normalized,
+        rooms
+    }
 }
 
 /**
@@ -279,7 +377,7 @@ export async function unifiedSearch(
                 page_size: dish_limit,
                 ...cleanedLoc
             }
-        }) as Promise<any>,
+        }) as Promise<SearchDishesResponse | DishSummary[]>,
         request({
             url: '/v1/search/merchants',
             method: 'GET',
@@ -289,14 +387,25 @@ export async function unifiedSearch(
                 page_size: merchant_limit,
                 ...cleanedLoc
             }
-        }) as Promise<any>
+        }) as Promise<SearchMerchantsResponse | MerchantSummary[]>
     ])
 
+    const dishes = Array.isArray(dishResults) ? dishResults : (dishResults.dishes || [])
+    const merchants = Array.isArray(merchantResults)
+        ? merchantResults
+        : (merchantResults.merchants || [])
+    const dishTotal = Array.isArray(dishResults)
+        ? dishResults.length
+        : (dishResults.total || dishes.length)
+    const merchantTotal = Array.isArray(merchantResults)
+        ? merchantResults.length
+        : (merchantResults.total || merchants.length)
+
     return {
-        dishes: dishResults.dishes || dishResults,
-        merchants: merchantResults.merchants || merchantResults,
-        total_dishes: dishResults.total || dishResults.length,
-        total_merchants: merchantResults.total || merchantResults.length
+        dishes,
+        merchants,
+        total_dishes: dishTotal,
+        total_merchants: merchantTotal
     }
 }
 

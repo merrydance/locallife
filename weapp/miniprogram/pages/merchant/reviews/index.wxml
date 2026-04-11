@@ -1,0 +1,115 @@
+<custom-navbar title="评价管理" showBack="{{true}}" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px">
+  <view wx:if="{{accessReady && accessDenied}}" class="state-block">
+    <t-empty icon="error-circle" description="当前账号无商户权限，请返回“我的”切换身份" />
+  </view>
+
+  <view wx:elif="{{accessReady && accessErrorMessage}}" class="state-block">
+    <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
+    <t-button theme="primary" size="small" shape="round" bindtap="onRetryAccess">重新校验</t-button>
+  </view>
+
+  <view wx:elif="{{initialLoading}}" class="state-block">
+    <t-loading theme="circular" size="40rpx" text="加载评价列表中..." vertical />
+  </view>
+
+  <view wx:elif="{{initialError}}" class="state-block">
+    <t-empty description="{{initialErrorMessage || '评价列表加载失败，请重试'}}" />
+    <t-button theme="primary" size="small" shape="round" bindtap="onRetry">重新加载</t-button>
+  </view>
+
+  <block wx:else>
+    <view wx:if="{{actionNoticeMessage}}" class="inline-banner inline-banner-success">
+      <text class="inline-banner-text">{{actionNoticeMessage}}</text>
+    </view>
+
+    <view wx:if="{{refreshErrorMessage}}" class="inline-banner inline-banner-danger">
+      <text class="inline-banner-text">{{refreshErrorMessage}}</text>
+      <text class="inline-banner-action" bindtap="onRetryRefresh">重新同步</text>
+    </view>
+
+    <view class="hero-card">
+      <view class="hero-copy">
+        <text class="hero-title">商户评价管理</text>
+        <text class="hero-subtitle">查看本店全部评价，包含已回复和平台隐藏记录，便于统一跟进顾客反馈。</text>
+        <text class="hero-meta">{{merchantName ? merchantName + ' · ' : ''}}已加载 {{reviews.length}} / 共 {{total}} 条</text>
+      </view>
+    </view>
+
+    <view wx:if="{{loading && !reviews.length}}" class="state-block state-block-compact">
+      <t-loading theme="circular" size="40rpx" text="刷新评价中..." vertical />
+    </view>
+
+    <view wx:elif="{{!loading && !reviews.length}}" class="empty-wrap">
+      <t-empty description="当前暂无评价记录" />
+    </view>
+
+    <view wx:else class="review-list">
+      <view wx:for="{{reviews}}" wx:key="id" class="review-card">
+        <view class="card-header">
+          <view class="card-head-left">
+            <text class="review-order">{{item.orderIdLabel}}</text>
+            <text class="review-time">评价时间 {{item.createdAtLabel}}</text>
+          </view>
+          <view class="tag-stack">
+            <t-tag size="small" variant="dark" theme="{{item.replyStatusTheme}}">{{item.replyStatusLabel}}</t-tag>
+            <t-tag size="small" variant="dark" theme="{{item.visibilityTheme}}">{{item.visibilityLabel}}</t-tag>
+          </view>
+        </view>
+
+        <view class="content-block">{{item.content || '顾客未填写评价内容'}}</view>
+
+        <view wx:if="{{item.imageUrls.length}}" class="image-list">
+          <image
+            wx:for="{{item.imageUrls}}"
+            wx:for-item="imageUrl"
+            wx:key="*this"
+            class="image-thumb"
+            src="{{imageUrl}}"
+            mode="aspectFill"
+            data-urls="{{item.imageUrls}}"
+            data-current="{{imageUrl}}"
+            bindtap="onPreviewImage"
+          />
+        </view>
+
+        <view class="reply-section">
+          <view class="reply-section-head">
+            <text class="reply-section-title">商户回复</text>
+            <text class="reply-section-time">{{item.repliedAtLabel === '暂无' ? '尚未回复' : '回复于 ' + item.repliedAtLabel}}</text>
+          </view>
+          <view wx:if="{{item.hasReply}}" class="reply-content">{{item.merchantReply}}</view>
+          <view wx:else class="reply-placeholder">当前还没有商户回复，建议及时说明处理结果或沟通方案。</view>
+          <view class="reply-hint">{{item.replyHint}}</view>
+        </view>
+
+        <view class="action-row">
+          <t-button size="small" theme="default" shape="round" data-id="{{item.id}}" bindtap="onOpenReplyPopup">{{item.replyActionLabel}}</t-button>
+        </view>
+      </view>
+
+      <view wx:if="{{hasMore}}" class="more-wrap">
+        <t-button size="large" theme="default" shape="round" loading="{{loadingMore}}" bindtap="onLoadMore">加载更多</t-button>
+      </view>
+    </view>
+  </block>
+
+  <t-popup wx:if="{{replyPopupVisible}}" visible="{{replyPopupVisible}}" placement="bottom" bind:visible-change="onReplyPopupVisibleChange">
+    <view class="popup-sheet">
+      <view class="popup-title">{{activeReviewHasReply ? '更新商户回复' : '回复顾客评价'}}</view>
+      <text class="popup-subtitle">请用顾客可理解的话说明处理结果、后续动作或沟通安排，回复内容会直接展示给顾客。</text>
+      <t-textarea
+        value="{{replyDraft}}"
+        placeholder="请输入回复内容，控制在 500 字内"
+        maxlength="500"
+        indicator
+        bindchange="onReplyInput"
+      />
+      <view class="popup-actions">
+        <t-button block theme="default" size="large" shape="round" disabled="{{replySubmitting}}" bindtap="onCloseReplyPopup">取消</t-button>
+        <t-button block theme="primary" size="large" shape="round" loading="{{replySubmitting}}" bindtap="onSubmitReply">提交回复</t-button>
+      </view>
+    </view>
+  </t-popup>
+</view>

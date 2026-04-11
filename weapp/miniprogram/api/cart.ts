@@ -25,13 +25,20 @@ export interface CartItemResponse {
     dish_id?: number
     combo_id?: number
     name: string              // 商品名称
-    image_url: string         // 商品图片
+    image_url?: string        // 商品图片
     quantity: number
     unit_price: number
     subtotal: number          // 小计金额
     member_price?: number     // 会员价
     is_available: boolean
-    customizations?: Record<string, unknown>  // 定制选项，object类型
+    customizations?: Record<string, unknown>  // 定制选项原始 ID
+    customization_details?: Array<{           // 解析后的详细信息
+        name: string
+        value: string
+        extra_price: number
+    }>
+    spec_text?: string                        // 聚合好的描述文字
+    combo_member_images?: string[]           // 套餐成员图片
 }
 
 /** 购物车摘要 - 对齐 api.cartSummaryResponse */
@@ -81,14 +88,14 @@ export interface ClearCartRequest extends Record<string, unknown> {
 
 /** 商户购物车响应 - 对齐 api.merchantCartResponse */
 export interface MerchantCartResponse {
-    all_available?: boolean   // 所有商品是否可购买
-    cart_id?: number          // 购物车ID
-    item_count?: number       // 商品数量
-    merchant_id?: number      // 商户ID
+    all_available: boolean    // 所有商品是否可购买
+    cart_id: number           // 购物车ID
+    item_count: number        // 商品数量
+    merchant_id: number       // 商户ID
     merchant_logo?: string    // 商户Logo URL
-    merchant_name?: string    // 商户名称
-    subtotal?: number         // 商品小计（分）
-    order_type?: string       // 订单类型
+    merchant_name: string     // 商户名称
+    subtotal: number          // 商品小计（分）
+    order_type: string        // 订单类型
     table_id?: number         // 桌台ID
     reservation_id?: number   // 预约ID
 }
@@ -142,11 +149,48 @@ export interface CalculateCartResponse {
     subtotal: number              // 商品小计（分）
     delivery_fee: number          // 配送费（分）
     delivery_fee_discount: number // 配送费满返减免（分）
+    delivery_distance?: number    // 配送距离（米）
+    delivery_eta_minutes?: number // 预计送达总时长（分钟）
+    prepare_minutes?: number      // 出餐时间（分钟）
+    rider_to_store_minutes?: number // 骑手到店时间（分钟）
+    store_to_user_minutes?: number // 店到用户时间（分钟）
+    buffer_minutes?: number       // 缓冲时间（分钟）
     discount_amount: number       // 优惠券减免金额（分）
-    discount_info?: string        // 优惠说明
-    meets_min_order: boolean      // 是否满足起送金额
-    min_order_amount: number      // 最小起送金额（分），0表示无限制
+    discount_info: string         // 优惠说明
+    meets_min_order?: boolean     // 是否满足起送金额；字段缺失即无起送限制
+    min_order_amount?: number     // 最小起送金额（分）；字段缺失即无起送限制
     total_amount: number          // 实付金额（分）
+    applied_promotions?: Array<{  // 已应用的优惠明细
+        title: string
+        amount: number
+        type: string
+    }>
+    suggested_voucher?: {
+        id: number
+        name: string
+        amount: number
+    }
+    ladder_promotions?: Array<{
+        rule_id: number
+        name: string
+        threshold: number
+        discount: number
+        current_hit: boolean
+        missing_need: number
+    }>
+    voucher_trials?: Array<{
+        voucher_id: number
+        voucher_name: string
+        amount: number
+        trial_payable: number
+    }>
+    payment_assessment?: {
+        is_balance_payable: boolean
+        usable_balance: number
+        principal_part: number
+        bonus_part: number
+        payment_hint: string
+    }
 }
 
 // ==================== API接口函数 ====================
@@ -155,16 +199,20 @@ export interface CalculateCartResponse {
  * 获取指定商户的购物车
  * @param params 获取参数
  */
-export async function getCart(params: {
-    merchant_id: number,
-    order_type?: string,
-    table_id?: number,
-    reservation_id?: number
-}): Promise<CartResponse> {
+export async function getCart(
+    params: {
+        merchant_id: number
+        order_type?: string
+        table_id?: number
+        reservation_id?: number
+    },
+    options?: { loading?: boolean, loadingText?: string }
+): Promise<CartResponse> {
     return request({
         url: '/v1/cart',
         method: 'GET',
-        data: params
+        data: params,
+        ...(options || {})
     })
 }
 
@@ -173,22 +221,27 @@ export async function getCart(params: {
  * @param orderType 订单类型过滤
  */
 export async function getCartSummary(orderType?: string): Promise<CartSummaryResponse> {
-    return request({
+    const response = await request<UserCartsResponse>({
         url: '/v1/cart/summary',
         method: 'GET',
         data: orderType ? { order_type: orderType } : undefined
     })
+    return response.summary
 }
 
 /**
  * 获取用户所有商户的购物车（完整信息）
  * @param orderType 订单类型过滤
  */
-export async function getUserCarts(orderType?: string): Promise<UserCartsResponse> {
+export async function getUserCarts(
+    orderType?: string,
+    options?: { loading?: boolean, loadingText?: string }
+): Promise<UserCartsResponse> {
     return request({
         url: '/v1/cart/summary',
         method: 'GET',
-        data: orderType ? { order_type: orderType } : undefined
+        data: orderType ? { order_type: orderType } : undefined,
+        ...(options || {})
     })
 }
 
@@ -196,11 +249,15 @@ export async function getUserCarts(orderType?: string): Promise<UserCartsRespons
  * 添加商品到购物车
  * @param item 商品信息
  */
-export async function addToCart(item: AddCartItemRequest): Promise<CartResponse> {
+export async function addToCart(
+    item: AddCartItemRequest,
+    options?: { loading?: boolean, loadingText?: string }
+): Promise<CartResponse> {
     return request({
         url: '/v1/cart/items',
         method: 'POST',
-        data: item
+        data: item,
+        ...(options || {})
     })
 }
 
@@ -209,11 +266,16 @@ export async function addToCart(item: AddCartItemRequest): Promise<CartResponse>
  * @param itemId 商品项ID
  * @param updates 更新数据
  */
-export async function updateCartItem(itemId: number, updates: UpdateCartItemRequest): Promise<CartResponse> {
+export async function updateCartItem(
+    itemId: number,
+    updates: UpdateCartItemRequest,
+    options?: { loading?: boolean, loadingText?: string }
+): Promise<CartResponse> {
     return request({
         url: `/v1/cart/items/${itemId}`,
         method: 'PATCH',  // Swagger 定义是 PATCH
-        data: updates
+        data: updates,
+        ...(options || {})
     })
 }
 
@@ -221,10 +283,14 @@ export async function updateCartItem(itemId: number, updates: UpdateCartItemRequ
  * 从购物车删除商品
  * @param itemId 商品项ID
  */
-export async function removeFromCart(itemId: number): Promise<CartResponse> {
+export async function removeFromCart(
+    itemId: number,
+    options?: { loading?: boolean, loadingText?: string }
+): Promise<CartResponse> {
     return request({
         url: `/v1/cart/items/${itemId}`,
-        method: 'DELETE'
+        method: 'DELETE',
+        ...(options || {})
     })
 }
 
@@ -232,11 +298,11 @@ export async function removeFromCart(itemId: number): Promise<CartResponse> {
  * 清空指定商户的购物车
  * @param merchantId 商户ID
  */
-export async function clearCart(merchantId?: number): Promise<void> {
+export async function clearCart(params: ClearCartRequest): Promise<void> {
     return request({
         url: '/v1/cart/clear',
         method: 'POST',
-        data: merchantId ? { merchant_id: merchantId } : undefined
+        data: params
     })
 }
 
@@ -244,11 +310,15 @@ export async function clearCart(merchantId?: number): Promise<void> {
  * 计算购物车金额
  * @param params 计算参数
  */
-export async function calculateCart(params: CalculateCartRequest): Promise<CalculateCartResponse> {
+export async function calculateCart(
+    params: CalculateCartRequest,
+    options?: { loading?: boolean, loadingText?: string }
+): Promise<CalculateCartResponse> {
     return request({
         url: '/v1/cart/calculate',
         method: 'POST',
-        data: params
+        data: params,
+        ...(options || {})
     })
 }
 

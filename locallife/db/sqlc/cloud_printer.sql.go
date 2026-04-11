@@ -18,12 +18,13 @@ INSERT INTO cloud_printers (
     printer_sn,
     printer_key,
     printer_type,
+    printer_role,
     print_takeout,
     print_dine_in,
     print_reservation
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8
-) RETURNING id, merchant_id, printer_name, printer_sn, printer_key, printer_type, print_takeout, print_dine_in, print_reservation, is_active, created_at, updated_at
+    $1, $2, $3, $4, $5, $6, $7, $8, $9
+) RETURNING id, merchant_id, printer_name, printer_sn, printer_key, printer_type, print_takeout, print_dine_in, print_reservation, is_active, created_at, updated_at, printer_role
 `
 
 type CreateCloudPrinterParams struct {
@@ -32,6 +33,7 @@ type CreateCloudPrinterParams struct {
 	PrinterSn        string `json:"printer_sn"`
 	PrinterKey       string `json:"printer_key"`
 	PrinterType      string `json:"printer_type"`
+	PrinterRole      string `json:"printer_role"`
 	PrintTakeout     bool   `json:"print_takeout"`
 	PrintDineIn      bool   `json:"print_dine_in"`
 	PrintReservation bool   `json:"print_reservation"`
@@ -44,6 +46,7 @@ func (q *Queries) CreateCloudPrinter(ctx context.Context, arg CreateCloudPrinter
 		arg.PrinterSn,
 		arg.PrinterKey,
 		arg.PrinterType,
+		arg.PrinterRole,
 		arg.PrintTakeout,
 		arg.PrintDineIn,
 		arg.PrintReservation,
@@ -62,6 +65,7 @@ func (q *Queries) CreateCloudPrinter(ctx context.Context, arg CreateCloudPrinter
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PrinterRole,
 	)
 	return i, err
 }
@@ -77,7 +81,7 @@ func (q *Queries) DeleteCloudPrinter(ctx context.Context, id int64) error {
 }
 
 const getCloudPrinter = `-- name: GetCloudPrinter :one
-SELECT id, merchant_id, printer_name, printer_sn, printer_key, printer_type, print_takeout, print_dine_in, print_reservation, is_active, created_at, updated_at FROM cloud_printers
+SELECT id, merchant_id, printer_name, printer_sn, printer_key, printer_type, print_takeout, print_dine_in, print_reservation, is_active, created_at, updated_at, printer_role FROM cloud_printers
 WHERE id = $1 LIMIT 1
 `
 
@@ -97,12 +101,13 @@ func (q *Queries) GetCloudPrinter(ctx context.Context, id int64) (CloudPrinter, 
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PrinterRole,
 	)
 	return i, err
 }
 
 const getCloudPrinterBySN = `-- name: GetCloudPrinterBySN :one
-SELECT id, merchant_id, printer_name, printer_sn, printer_key, printer_type, print_takeout, print_dine_in, print_reservation, is_active, created_at, updated_at FROM cloud_printers
+SELECT id, merchant_id, printer_name, printer_sn, printer_key, printer_type, print_takeout, print_dine_in, print_reservation, is_active, created_at, updated_at, printer_role FROM cloud_printers
 WHERE printer_sn = $1 LIMIT 1
 `
 
@@ -122,12 +127,13 @@ func (q *Queries) GetCloudPrinterBySN(ctx context.Context, printerSn string) (Cl
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PrinterRole,
 	)
 	return i, err
 }
 
 const listActiveCloudPrintersByMerchant = `-- name: ListActiveCloudPrintersByMerchant :many
-SELECT id, merchant_id, printer_name, printer_sn, printer_key, printer_type, print_takeout, print_dine_in, print_reservation, is_active, created_at, updated_at FROM cloud_printers
+SELECT id, merchant_id, printer_name, printer_sn, printer_key, printer_type, print_takeout, print_dine_in, print_reservation, is_active, created_at, updated_at, printer_role FROM cloud_printers
 WHERE merchant_id = $1 AND is_active = true
 ORDER BY created_at
 `
@@ -154,6 +160,7 @@ func (q *Queries) ListActiveCloudPrintersByMerchant(ctx context.Context, merchan
 			&i.IsActive,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.PrinterRole,
 		); err != nil {
 			return nil, err
 		}
@@ -166,7 +173,7 @@ func (q *Queries) ListActiveCloudPrintersByMerchant(ctx context.Context, merchan
 }
 
 const listCloudPrintersByMerchant = `-- name: ListCloudPrintersByMerchant :many
-SELECT id, merchant_id, printer_name, printer_sn, printer_key, printer_type, print_takeout, print_dine_in, print_reservation, is_active, created_at, updated_at FROM cloud_printers
+SELECT id, merchant_id, printer_name, printer_sn, printer_key, printer_type, print_takeout, print_dine_in, print_reservation, is_active, created_at, updated_at, printer_role FROM cloud_printers
 WHERE merchant_id = $1
 ORDER BY created_at
 `
@@ -193,6 +200,7 @@ func (q *Queries) ListCloudPrintersByMerchant(ctx context.Context, merchantID in
 			&i.IsActive,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.PrinterRole,
 		); err != nil {
 			return nil, err
 		}
@@ -209,19 +217,21 @@ UPDATE cloud_printers
 SET
     printer_name = COALESCE($2, printer_name),
     printer_key = COALESCE($3, printer_key),
-    print_takeout = COALESCE($4, print_takeout),
-    print_dine_in = COALESCE($5, print_dine_in),
-    print_reservation = COALESCE($6, print_reservation),
-    is_active = COALESCE($7, is_active),
+    printer_role = COALESCE($4, printer_role),
+    print_takeout = COALESCE($5, print_takeout),
+    print_dine_in = COALESCE($6, print_dine_in),
+    print_reservation = COALESCE($7, print_reservation),
+    is_active = COALESCE($8, is_active),
     updated_at = now()
 WHERE id = $1
-RETURNING id, merchant_id, printer_name, printer_sn, printer_key, printer_type, print_takeout, print_dine_in, print_reservation, is_active, created_at, updated_at
+RETURNING id, merchant_id, printer_name, printer_sn, printer_key, printer_type, print_takeout, print_dine_in, print_reservation, is_active, created_at, updated_at, printer_role
 `
 
 type UpdateCloudPrinterParams struct {
 	ID               int64       `json:"id"`
 	PrinterName      pgtype.Text `json:"printer_name"`
 	PrinterKey       pgtype.Text `json:"printer_key"`
+	PrinterRole      pgtype.Text `json:"printer_role"`
 	PrintTakeout     pgtype.Bool `json:"print_takeout"`
 	PrintDineIn      pgtype.Bool `json:"print_dine_in"`
 	PrintReservation pgtype.Bool `json:"print_reservation"`
@@ -233,6 +243,7 @@ func (q *Queries) UpdateCloudPrinter(ctx context.Context, arg UpdateCloudPrinter
 		arg.ID,
 		arg.PrinterName,
 		arg.PrinterKey,
+		arg.PrinterRole,
 		arg.PrintTakeout,
 		arg.PrintDineIn,
 		arg.PrintReservation,
@@ -252,6 +263,7 @@ func (q *Queries) UpdateCloudPrinter(ctx context.Context, arg UpdateCloudPrinter
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PrinterRole,
 	)
 	return i, err
 }

@@ -3,14 +3,17 @@
  * 显示用户的所有预订记录
  */
 
-import { ReservationService, ReservationResponse, ReservationStatus } from '../../../api/reservation'
+import { ReservationService, ReservationStatus, ReservationListParams } from '../../../api/reservation'
 import { logger } from '../../../utils/logger'
+import { ReservationCardAdapter, ReservationCardViewModel } from '../../../adapters/reservation-card'
+import { processPayment, PaymentCancelledError } from '../../../api/payment'
+import Navigation from '../../../utils/navigation'
 
 // 状态筛选选项
 const STATUS_TABS = [
     { label: '全部', value: '' },
     { label: '待支付', value: 'pending' },
-    { label: '已确认', value: 'confirmed' },
+    { label: '已确认', value: 'confirmed' }, // 包含 confirmed, checked_in
     { label: '已完成', value: 'completed' },
     { label: '已取消', value: 'cancelled' }
 ]
@@ -23,19 +26,33 @@ const CANCEL_REASONS = [
     '其他原因'
 ]
 
+const getEventId = (event: WechatMiniprogram.BaseEvent): number | null => {
+    const dataset = event.currentTarget.dataset as { id?: string | number }
+    const id = dataset.id
+    const numericId = typeof id === 'number' ? id : Number(id)
+    return Number.isFinite(numericId) ? numericId : null
+}
+
 Page({
     data: {
-        reservations: [] as ReservationResponse[],
+        reservations: [] as ReservationCardViewModel[],
         navBarHeight: 88,
         loading: false,
+        initialLoading: true,
+        error: null as string | null,
+        payingReservationId: 0,
         page: 1,
         pageSize: 10,
         hasMore: true,
         statusTabs: STATUS_TABS,
-        currentStatus: '' as ReservationStatus | ''
+        currentStatus: '' as string
     },
 
-    onLoad() {
+    onLoad(options?: { status?: string }) {
+        const currentStatus = options?.status === 'all' ? '' : (options?.status || '')
+        if (currentStatus) {
+            this.setData({ currentStatus })
+        }
         this.loadReservations(true)
     },
 
@@ -51,70 +68,59 @@ Page({
 
     onReachBottom() {
         if (this.data.hasMore && !this.data.loading) {
-            this.setData({ page: this.data.page + 1 })
             this.loadReservations(false)
         }
     },
 
+    preventBubble() {},
+
     async loadReservations(reset = false) {
-        if (this.data.loading) return
-        this.setData({ loading: true })
+        if (this.data.loading && !this.data.initialLoading) return
+        this.setData({ loading: true, error: null })
 
         if (reset) {
             this.setData({ page: 1, reservations: [], hasMore: true })
         }
 
         try {
-            const { currentStatus, page, pageSize } = this.data
-            const params: any = { page_id: page, page_size: pageSize }
-            if (currentStatus) {
-                params.status = currentStatus
+            const { currentStatus, pageSize } = this.data
+            const targetPage = reset ? 1 : this.data.page
+            const params: ReservationListParams = {
+                page_id: targetPage,
+                page_size: pageSize,
+                ...(currentStatus ? { status: currentStatus as ReservationStatus } : {})
             }
 
             const response = await ReservationService.getUserReservations(params)
             const result = response.reservations
+            const totalCount = response.total ?? result.length
 
-            // 处理显示字段
-            const processedReservations = result.map((r: ReservationResponse) => this.processReservation(r))
-            const reservations = reset ? processedReservations : [...this.data.reservations, ...processedReservations]
+            const viewModels = result.map((r) => ReservationCardAdapter.toCardViewModel(r))
+            
+            const reservations = reset ? viewModels : [...this.data.reservations, ...viewModels]
 
             this.setData({
                 reservations,
+                page: targetPage + 1,
                 loading: false,
-                hasMore: result.length === pageSize
+                initialLoading: false,
+                hasMore: reservations.length < totalCount
             })
         } catch (error) {
             logger.error('加载预订列表失败', error, 'reservations.loadReservations')
-            wx.showToast({ title: '加载失败', icon: 'error' })
-            this.setData({ loading: false })
+            this.setData({ 
+                loading: false,
+                initialLoading: false,
+                error: '加载预订列表失败'
+            })
         }
     },
 
-    processReservation(r: ReservationResponse): ReservationResponse & { _statusText: string; _statusClass: string; _canCancel: boolean; _canOrder: boolean; _dateTimeDisplay: string; _depositDisplay: string } {
-        return {
-            ...r,
-            _statusText: this.getStatusText(r.status || ''),
-            _statusClass: r.status || '',
-            _canCancel: ['pending', 'paid', 'confirmed'].includes(r.status || ''),
-            _canOrder: ['confirmed', 'checked_in'].includes(r.status || ''),  // 已确认或已签到可点菜
-            _dateTimeDisplay: r.reservation_time, // Interface uses reservation_time for full datetime
-            _depositDisplay: r.deposit_amount ? `¥${(r.deposit_amount / 100).toFixed(2)}` : ''
-        }
+    onRetry() {
+        this.loadReservations(true)
     },
 
-    getStatusText(status: string): string {
-        const statusMap: Record<string, string> = {
-            'pending': '待支付',
-            'paid': '已支付',
-            'confirmed': '已确认',
-            'completed': '已完成',
-            'cancelled': '已取消',
-            'no_show': '未到店'
-        }
-        return statusMap[status] || status
-    },
-
-    onStatusChange(e: WechatMiniprogram.CustomEvent) {
+    onStatusChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
         const status = e.detail.value || ''
         if (status === this.data.currentStatus) return
         this.setData({ currentStatus: status })
@@ -122,14 +128,15 @@ Page({
     },
 
     onViewDetail(e: WechatMiniprogram.BaseEvent) {
-        const { id } = e.currentTarget.dataset
+        const id = getEventId(e)
+        if (!id) return
         wx.navigateTo({
-            url: `/pages/user_center/reservations/detail/index?id=${id}`
+            url: `/pages/reservation/detail/index?id=${id}`
         })
     },
 
     onCancelReservation(e: WechatMiniprogram.BaseEvent) {
-        const { id } = e.currentTarget.dataset
+        const id = getEventId(e)
         if (!id) return
 
         wx.showActionSheet({
@@ -146,8 +153,7 @@ Page({
         try {
             await ReservationService.cancelReservation(reservationId, reason)
             wx.hideLoading()
-            wx.showToast({ title: '已取消', icon: 'success' })
-            setTimeout(() => this.loadReservations(true), 1500)
+            await this.loadReservations(true)
         } catch (error) {
             wx.hideLoading()
             logger.error('取消预订失败', error, 'reservations.doCancelReservation')
@@ -156,15 +162,50 @@ Page({
     },
 
     /**
+     * 去支付
+     */
+    async onPayReservation(e: WechatMiniprogram.BaseEvent) {
+        const id = getEventId(e)
+        if (!id || this.data.payingReservationId) return
+
+        this.setData({ payingReservationId: id })
+        try {
+            const paymentResult = await processPayment(id, 'reservation')
+            
+            const res = this.data.reservations.find((r) => r.id === id)
+            Navigation.toReservationPaymentResult({
+                reservationId: String(id),
+                amount: res?.depositDisplay?.replace('¥', '') || '0.00',
+                result: paymentResult.status === 'paid' ? 'success' : paymentResult.status,
+                source: 'list',
+                returnStatus: this.data.currentStatus || 'all'
+            })
+        } catch (error) {
+            logger.error('支付失败', error, 'Reservations.onPay')
+            const res = this.data.reservations.find((r) => r.id === id)
+            Navigation.toReservationPaymentResult({
+                reservationId: String(id),
+                amount: res?.depositDisplay?.replace('¥', '') || '0.00',
+                result: error instanceof PaymentCancelledError ? 'cancelled' : 'unknown',
+                source: 'list',
+                returnStatus: this.data.currentStatus || 'all'
+            })
+        } finally {
+            this.setData({ payingReservationId: 0 })
+        }
+    },
+
+    /**
      * 跳转到点菜页面
      */
     onGoToOrder(e: WechatMiniprogram.BaseEvent) {
-        const item = e.currentTarget.dataset.item as ReservationResponse
+        const item = (e.currentTarget.dataset as { item?: ReservationCardViewModel }).item
         if (!item) return
 
         // 跳转到堂食点餐页面，传递预订ID和商户ID
+        // 注意：这里需要确保 menu 页面支持 reservation_id 参数
         wx.navigateTo({
-            url: `/pages/dine-in/menu/menu?reservation_id=${item.id}&merchant_id=${item.merchant_id}`
+            url: `/pages/dine-in/menu/menu?reservation_id=${item.id}&merchant_id=${item.merchantId}`
         })
     }
 })

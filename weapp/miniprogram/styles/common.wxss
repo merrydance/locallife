@@ -150,7 +150,7 @@
   color: #333;
   margin: 32rpx 0 24rpx;
   padding-left: 16rpx;
-  border-left: 6rpx solid var(--td-brand-color, #FF6B58);
+  border-left: 6rpx solid var(--td-brand-color, #FF6B00);
   line-height: 1.4;
 }
 
@@ -213,7 +213,7 @@
 
 .upload-label.required::before {
   content: '*';
-  color: var(--td-error-color, #FF6B58);
+  color: var(--td-error-color, #E53935);
   margin-right: 4rpx;
   font-size: 32rpx;
 }
@@ -321,7 +321,7 @@
 
 /* ==================== 颜色 ==================== */
 
-.text-primary { color: var(--td-brand-color, #FF6B58) !important; }
+.text-primary { color: var(--td-brand-color, #FF6B00) !important; }
 .text-success { color: var(--td-success-color, #00897B) !important; }
 .text-warning { color: var(--td-warning-color, #FFC107) !important; }
 .text-error { color: var(--td-error-color, #E34D59) !important; }
@@ -329,7 +329,7 @@
 .text-dark { color: #333 !important; }
 .text-white { color: #fff !important; }
 
-.bg-primary { background-color: var(--td-brand-color, #FF6B58) !important; }
+.bg-primary { background-color: var(--td-brand-color, #FF6B00) !important; }
 .bg-white { background-color: #fff !important; }
 .bg-gray { background-color: #F6F6F6 !important; }
 

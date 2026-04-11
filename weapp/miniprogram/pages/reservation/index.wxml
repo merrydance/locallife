@@ -1,10 +1,11 @@
+<!-- 预订页面 - 消费端 -->
 <custom-navbar title="预订" location="{{address}}" bind:navheight="onNavHeight" bind:locationchange="onLocationChange" />
 
-<!-- Skyline 需要用 scroll-view 实现页面滚动和下拉刷新 -->
+<!-- Skyline 滚动容器 -->
 <scroll-view 
   scroll-y 
   class="page-scroll" 
-  style="height: {{scrollViewHeight}}px; margin-top: {{navBarHeight}}px;"
+  style="height: {{scrollViewHeight}}px; padding-top: calc({{navBarHeight}}px + var(--spacer-sm)); box-sizing: border-box; padding-bottom: env(safe-area-inset-bottom);"
   bindscrolltolower="onReachBottom"
   lower-threshold="200"
   refresher-enabled="{{true}}"
@@ -17,78 +18,96 @@
   <view class="top-bar">
     <t-button 
       class="filter-btn-new"
-      theme="primary" 
-      variant="outline"
-      icon="control-platform" 
+      theme="default"
+      icon="filter" 
       size="medium" 
-      aria-label="条件过滤"
+      shape="round"
+      aria-label="筛选"
       bind:tap="showFilterPopup"
-    >条件过滤</t-button>
+    >筛选</t-button>
     <view class="search-box">
       <t-search 
         model:value="{{keyword}}"
-        placeholder="搜索包间、餐厅、菜系"
+        placeholder="搜索餐厅、菜系、包间"
         bind:change="onSearch"
         shape="round"
+        focus="{{false}}"
       />
     </view>
   </view>
 
-  <!-- Filter Tabs (Pinned below search) -->
+  <!-- Filter Tabs -->
   <view class="tabs-section">
-    <t-tabs value="{{activeTab}}" bind:change="onTabChange">
+    <t-tabs value="{{activeTab}}" bind:change="onTabChange" space-evenly="{{false}}" t-class="custom-tabs">
       <t-tab-panel label="预订包间" value="room" />
-      <t-tab-panel label="找餐厅" value="restaurant" />
+      <t-tab-panel label="探索餐厅" value="restaurant" />
     </t-tabs>
   </view>
 
-  <!-- 内容区域 - 与 takeout 一致的结构 -->
+  <!-- 内容区域 -->
   <view class="content-section">
     <!-- Skeleton Loading -->
     <block wx:if="{{loading && itemList.length === 0}}">
       <card-skeleton wx:for="{{[1,2,3]}}" wx:key="*this" />
     </block>
 
+    <!-- Error State -->
+    <view wx:elif="{{isError && itemList.length === 0}}" class="error-container" style="padding-top: 100rpx; display: flex; flex-direction: column; align-items: center; gap: 32rpx;">
+       <t-empty icon="error-circle" description="{{errorMessage}}" />
+       <t-button theme="primary" size="medium" bindtap="onRetry" shape="round">重试</t-button>
+    </view>
+
     <!-- Empty State -->
-    <t-empty 
-      wx:elif="{{itemList.length === 0 && !loading}}"
-      description="暂无符合条件的结果"
-      icon="info-circle-filled"
-    />
+    <view wx:elif="{{itemList.length === 0 && !loading}}" class="empty-container">
+      <block wx:if="{{activeTab === 'room' && hasRestaurantsInArea}}">
+        <t-empty
+          icon="info-circle-filled"
+          description="当前区域餐厅暂无可预订包间"
+        />
+      </block>
+      <block wx:else>
+        <t-empty
+          icon="info-circle-filled"
+          description="当前区域暂无可服务商户"
+        />
+        <view class="empty-actions">
+          <t-button theme="primary" size="large" block bind:tap="onMerchantRegister" shape="round">商户入驻</t-button>
+          <t-button size="large" block bind:tap="onOperatorRegister" shape="round">运营商入驻</t-button>
+        </view>
+      </block>
+    </view>
 
-    <!-- Room Cards -->
-    <block wx:elif="{{activeTab === 'room'}}">
-      <room-card 
-        wx:for="{{itemList}}" 
-        wx:key="id" 
-        room="{{item}}"
-        bind:tap="onItemTap"
-        data-id="{{item.id}}"
-      />
-    </block>
+    <!-- Item List -->
+    <block wx:else>
+      <block wx:if="{{activeTab === 'room'}}">
+        <room-card 
+          wx:for="{{itemList}}" 
+          wx:key="id" 
+          room="{{item}}"
+        />
+      </block>
 
-    <!-- Restaurant Cards -->
-    <block wx:elif="{{activeTab === 'restaurant'}}">
-      <restaurant-card 
-        wx:for="{{itemList}}" 
-        wx:key="id" 
-        restaurant="{{item}}"
-        bind:tap="onItemTap"
-        data-id="{{item.id}}"
-      />
+      <block wx:elif="{{activeTab === 'restaurant'}}">
+        <restaurant-card 
+          wx:for="{{itemList}}" 
+          wx:key="id" 
+          restaurant="{{item}}"
+        />
+      </block>
     </block>
     
-    <t-loading wx:if="{{loading && itemList.length > 0}}" theme="circular" size="40rpx" class="loading-more" text="加载中..." />
-    <view wx:if="{{!hasMore && itemList.length > 0}}" class="no-more">没有更多了</view>
+    <!-- Footer States -->
+    <t-loading wx:if="{{loading && itemList.length > 0}}" theme="circular" size="40rpx" class="loading-more" text="努力加载中..." />
+    <view wx:if="{{!hasMore && itemList.length > 0}}" class="no-more">已展示全部结果</view>
   </view>
 </scroll-view>
 
-<!-- Filter Popup -->
+<!-- Filter Popup (Drawer) -->
 <t-popup visible="{{filterVisible}}" placement="left" bind:visible-change="onFilterPopupChange">
   <view class="filter-drawer">
     <view class="drawer-header" style="padding-top: {{navBarHeight}}px;">
       <text class="drawer-title">筛选条件</text>
-      <t-icon name="close" size="40rpx" bind:tap="hideFilterPopup" />
+      <t-icon name="close" size="44rpx" bind:tap="hideFilterPopup" color="var(--td-text-color-secondary)" />
     </view>
     
     <scroll-view scroll-y class="drawer-content">
@@ -103,7 +122,8 @@
             content="{{item.label}}"
             bind:change="onDateTagChange"
             data-value="{{item.value}}"
-            variant="outline"
+            shape="round"
+            
           />
         </view>
       </view>
@@ -119,7 +139,8 @@
             content="{{item.label}}"
             bind:change="onTimeTagChange"
             data-value="{{item.value}}"
-            variant="outline"
+            shape="round"
+            
           />
         </view>
       </view>
@@ -135,14 +156,15 @@
             content="{{item.label}}"
             bind:change="onGuestTagChange"
             data-value="{{item.value}}"
-            variant="outline" 
+            shape="round"
+            
           />
         </view>
       </view>
 
       <!-- Price Range -->
       <view class="filter-group">
-        <view class="group-title">人均价格</view>
+        <view class="group-title">包间低消</view>
         <view class="tags-container">
            <t-check-tag 
             wx:for="{{priceOptions}}" 
@@ -151,15 +173,15 @@
             content="{{item.label}}"
             bind:change="onPriceTagChange"
             data-value="{{item.value}}"
-            variant="outline"
+            shape="round"
            />
         </view>
       </view>
     </scroll-view>
 
     <view class="drawer-footer">
-      <t-button variant="outline" block bind:tap="resetFilter">重置</t-button>
-      <t-button theme="primary" block bind:tap="applyFilter">查看结果</t-button>
+      <t-button theme="default" shape="round" block bind:tap="resetFilter">重置</t-button>
+      <t-button theme="primary" shape="round" block bind:tap="applyFilter">查看结果</t-button>
     </view>
   </view>
 </t-popup>

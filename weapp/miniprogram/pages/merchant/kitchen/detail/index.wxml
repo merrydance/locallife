@@ -1,0 +1,139 @@
+<custom-navbar title="后厨详情" showBack="{{true}}" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px;">
+  <view wx:if="{{loading && !detail}}" class="state-block">
+    <t-loading theme="circular" size="40rpx" text="加载后厨详情中..." vertical />
+  </view>
+
+  <view wx:elif="{{initialError}}" class="state-block">
+    <t-empty description="{{initialErrorMessage || '后厨详情加载失败，请重试'}}" />
+    <view class="retry-button" bindtap="onRetry">重新加载</view>
+  </view>
+
+  <view wx:elif="{{detail}}" class="content">
+    <view wx:if="{{actionNoticeMessage}}" class="inline-banner inline-banner-success">
+      <text class="inline-banner-text">{{actionNoticeMessage}}</text>
+    </view>
+
+    <view wx:if="{{refreshErrorMessage}}" class="inline-banner inline-banner-danger">
+      <text class="inline-banner-text">{{refreshErrorMessage}}</text>
+      <text class="inline-banner-action" bindtap="onRetryRefresh">重新同步</text>
+    </view>
+
+    <view class="hero-card">
+      <view class="hero-top">
+        <view class="hero-copy">
+          <view class="hero-order-row">
+            <t-tag size="small" theme="{{detail.statusTheme}}" variant="dark">{{detail.statusLabel}}</t-tag>
+            <text class="hero-order-no">#{{detail.orderNoShort}}</text>
+          </view>
+          <text class="hero-title">{{detail.orderTypeLabel}} · {{detail.seatOrPickupLabel}}</text>
+          <text class="hero-subtitle">下单于 {{detail.createdAtLabel}}</text>
+        </view>
+      </view>
+
+      <view class="hero-metrics">
+        <view class="hero-metric">
+          <text class="metric-label">等待时长</text>
+          <text class="metric-value">{{detail.waitingLabel}}</text>
+        </view>
+        <view class="hero-metric">
+          <text class="metric-label">预计出餐</text>
+          <text class="metric-value">{{detail.estimatedReadyLabel}}</text>
+        </view>
+      </view>
+
+      <view class="hero-tip-row">
+        <view class="meta-chip">{{detail.remainingLabel}}</view>
+        <view class="meta-chip {{detail.is_urged ? 'meta-chip-warning' : ''}}">{{detail.urgencyLabel}}</view>
+      </view>
+    </view>
+
+    <view class="card">
+      <view class="card-title">出餐进度</view>
+      <t-steps layout="vertical" current="{{detail.progressCurrent}}" theme="dot">
+        <t-step-item title="新订单进入后厨" content="支付时间 {{detail.paidAtLabel}}" />
+        <t-step-item title="后厨开始制作" content="{{detail.preparingStartedAtLabel}}" />
+        <t-step-item title="已出餐待取" content="{{detail.readyAtLabel}}" />
+      </t-steps>
+    </view>
+
+    <view class="card">
+      <view class="card-head">
+        <view>
+          <view class="card-title card-title-tight">商品清单</view>
+          <text class="card-subtitle">共 {{detail.itemCount}} 款，{{detail.totalQuantity}} 件商品</text>
+        </view>
+      </view>
+
+      <view class="item-list">
+        <view wx:for="{{detail.items}}" wx:key="id" class="item-card">
+          <block wx:if="{{item.hasImage}}">
+            <t-image src="{{item.image_url}}" mode="aspectFill" width="120rpx" height="120rpx" shape="round" />
+          </block>
+          <view wx:else class="item-image-placeholder">
+            <t-icon name="app" size="40rpx" />
+          </view>
+
+          <view class="item-main">
+            <view class="item-head">
+              <view>
+                <view class="item-title-row">
+                  <text class="item-name">{{item.name}}</text>
+                  <t-tag size="small" variant="light" theme="primary">x{{item.quantity}}</t-tag>
+                </view>
+                <view class="item-meta-row">
+                  <text>{{item.categoryLabel}}</text>
+                  <text>{{item.prepareTimeLabel}}</text>
+                </view>
+              </view>
+            </view>
+
+            <view wx:if="{{item.customizationSummary}}" class="item-customizations">
+              <text class="item-customizations-label">口味备注</text>
+              <text class="item-customizations-value">{{item.customizationSummary}}</text>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <view class="card">
+      <view class="card-title">订单信息</view>
+      <view class="row">
+        <text class="label">订单编号</text>
+        <text class="value">{{detail.order_no}}</text>
+      </view>
+      <view class="row">
+        <text class="label">订单类型</text>
+        <text class="value">{{detail.orderTypeLabel}}</text>
+      </view>
+      <view class="row">
+        <text class="label">当前状态</text>
+        <text class="value">{{detail.statusLabel}}</text>
+      </view>
+      <view class="row">
+        <text class="label">桌台/取餐</text>
+        <text class="value">{{detail.seatOrPickupLabel}}</text>
+      </view>
+      <view class="row">
+        <text class="label">支付时间</text>
+        <text class="value">{{detail.paidAtLabel}}</text>
+      </view>
+      <view class="row">
+        <text class="label">预计出餐</text>
+        <text class="value">{{detail.estimatedReadyLabel}}</text>
+      </view>
+      <view class="desc">
+        <text class="desc-label">订单备注</text>
+        <text class="desc-value">{{detail.noteLabel}}</text>
+      </view>
+    </view>
+
+    <view class="action-bar">
+      <t-button size="small" variant="outline" shape="round" bindtap="onViewBoard">返回看板</t-button>
+      <t-button wx:if="{{detail.canStartPreparing}}" theme="primary" shape="round" loading="{{actionLoading && actionType === 'preparing'}}" bindtap="onStartPreparing">开始制作</t-button>
+      <t-button wx:elif="{{detail.canMarkReady}}" theme="primary" shape="round" loading="{{actionLoading && actionType === 'ready'}}" bindtap="onMarkReady">标记出餐</t-button>
+    </view>
+  </view>
+</view>

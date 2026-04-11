@@ -1,0 +1,240 @@
+.page-container {
+  min-height: 100vh;
+  background: var(--td-bg-color-page);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* 搜索框 */
+.search-bar {
+  background: var(--td-bg-color-page);
+  padding: 0 var(--spacer-md) var(--spacer-sm);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  box-shadow: none;
+}
+
+/* ======= 初始态 ======= */
+.initial-section {
+  padding: 24rpx;
+}
+
+.initial-loading,
+.initial-error,
+.result-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24rpx;
+  padding: 80rpx 24rpx;
+}
+
+.block-section {
+  margin-bottom: 40rpx;
+}
+
+.block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20rpx;
+}
+
+.block-title {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+}
+
+.clear-btn {
+  padding: 8rpx;
+}
+
+/* Chips */
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+}
+
+.chip {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  background: var(--td-bg-color-container);
+  border: 1rpx solid var(--td-bg-color-secondarycontainer);
+  border-radius: 999rpx;
+  padding: 10rpx 24rpx;
+  font-size: 26rpx;
+  color: var(--td-text-color-secondary);
+}
+
+.chip.hot-top {
+  color: var(--td-brand-color);
+  border-color: var(--td-brand-color-3);
+  background: var(--td-brand-color-1);
+}
+
+/* ======= 建议态 ======= */
+.suggest-list {
+  background: transparent;
+}
+
+.suggest-empty {
+  padding: 40rpx 24rpx;
+  text-align: center;
+}
+
+.suggest-empty-text {
+  font-size: 26rpx;
+  color: var(--td-text-color-placeholder);
+}
+
+.suggest-item {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  padding: 24rpx;
+  border-bottom: 1rpx solid var(--td-bg-color-secondarycontainer);
+}
+
+.suggest-text {
+  flex: 1;
+  font-size: 28rpx;
+  color: var(--td-text-color-primary);
+}
+
+.suggest-type {
+  font-size: 22rpx;
+  color: var(--td-text-color-placeholder);
+}
+
+/* ======= 结果态 ======= */
+.results-section {
+  display: flex;
+  flex-direction: column;
+}
+
+.result-tabs {
+  background: var(--td-bg-color-page);
+  position: sticky;
+  top: 88rpx;
+  z-index: 5;
+}
+
+.searching-wrap {
+  text-align: center;
+  padding: 80rpx 0;
+}
+
+.empty-state {
+  margin-top: 80rpx;
+}
+
+.result-scroll {
+  height: calc(100vh - 320rpx);
+}
+
+/* 菜品行 */
+.dish-row {
+  display: flex;
+  gap: 24rpx;
+  align-items: center;
+  padding: 24rpx;
+  background: var(--td-bg-color-container);
+  border-bottom: 1rpx solid var(--td-bg-color-secondarycontainer);
+}
+
+.dish-img {
+  border-radius: 12rpx;
+  flex-shrink: 0;
+}
+
+.dish-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.dish-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  margin-bottom: 8rpx;
+}
+
+.dish-name {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.dish-shop {
+  font-size: 24rpx;
+  color: var(--td-text-color-secondary);
+  margin-bottom: 8rpx;
+}
+
+.dish-price {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: var(--td-brand-color);
+}
+
+/* 商家行 */
+.merchant-row {
+  display: flex;
+  gap: 24rpx;
+  align-items: flex-start;
+  padding: 24rpx;
+  background: var(--td-bg-color-container);
+  border-bottom: 1rpx solid var(--td-bg-color-secondarycontainer);
+}
+
+.merchant-logo {
+  border-radius: 12rpx;
+  flex-shrink: 0;
+}
+
+.merchant-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.merchant-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  margin-bottom: 8rpx;
+}
+
+.merchant-name {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.merchant-meta {
+  font-size: 24rpx;
+  color: var(--td-text-color-secondary);
+  margin-bottom: 12rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tag-row {
+  display: flex;
+  gap: var(--spacer-sm);
+  flex-wrap: wrap;
+}

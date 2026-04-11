@@ -1,13 +1,15 @@
 {
   "navigationBarTitleText": "编辑地址",
   "usingComponents": {
+    "custom-navbar": "/components/custom-navbar/index",
     "t-input": "tdesign-miniprogram/input/input",
     "t-button": "tdesign-miniprogram/button/button",
     "t-cell": "tdesign-miniprogram/cell/cell",
     "t-cell-group": "tdesign-miniprogram/cell-group/cell-group",
     "t-textarea": "tdesign-miniprogram/textarea/textarea",
     "t-switch": "tdesign-miniprogram/switch/switch",
-    "t-radio": "tdesign-miniprogram/radio/radio",
-    "t-radio-group": "tdesign-miniprogram/radio-group/radio-group"
+    "t-icon": "tdesign-miniprogram/icon/icon",
+    "t-empty": "tdesign-miniprogram/empty/empty",
+    "list-skeleton": "/components/list-skeleton/index"
   }
 }

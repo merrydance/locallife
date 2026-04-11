@@ -1,8 +1,13 @@
 {
     "navigationBarTitleText": "申诉详情",
     "usingComponents": {
+        "custom-navbar": "/components/custom-navbar/index",
+        "t-input": "tdesign-miniprogram/input/input",
         "t-button": "tdesign-miniprogram/button/button",
         "t-textarea": "tdesign-miniprogram/textarea/textarea",
-        "t-dialog": "tdesign-miniprogram/dialog/dialog"
+        "t-dialog": "tdesign-miniprogram/dialog/dialog",
+        "t-empty": "tdesign-miniprogram/empty/empty",
+        "t-loading": "tdesign-miniprogram/loading/loading",
+        "card-skeleton": "/components/card-skeleton/index"
     }
 }

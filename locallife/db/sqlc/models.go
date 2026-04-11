@@ -10,6 +10,29 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AbnormalStatsDaily struct {
+	ID             int64       `json:"id"`
+	StatDate       pgtype.Date `json:"stat_date"`
+	EntityType     string      `json:"entity_type"`
+	EntityID       int64       `json:"entity_id"`
+	TotalOrders    int32       `json:"total_orders"`
+	AbnormalClaims int32       `json:"abnormal_claims"`
+	CreatedAt      time.Time   `json:"created_at"`
+	UpdatedAt      time.Time   `json:"updated_at"`
+}
+
+type Agreement struct {
+	ID          int64       `json:"id"`
+	Type        string      `json:"type"`
+	Title       string      `json:"title"`
+	Content     string      `json:"content"`
+	Version     string      `json:"version"`
+	PublishedOn pgtype.Date `json:"published_on"`
+	IsActive    bool        `json:"is_active"`
+	CreatedAt   time.Time   `json:"created_at"`
+	UpdatedAt   time.Time   `json:"updated_at"`
+}
+
 // 申诉表 - 商户/骑手对索赔的申诉
 type Appeal struct {
 	ID      int64 `json:"id"`
@@ -17,19 +40,177 @@ type Appeal struct {
 	// 申诉人类型：merchant=商户, rider=骑手
 	AppellantType string `json:"appellant_type"`
 	// 申诉人ID（商户ID或骑手ID）
-	AppellantID  int64              `json:"appellant_id"`
-	Reason       string             `json:"reason"`
-	EvidenceUrls []string           `json:"evidence_urls"`
-	Status       string             `json:"status"`
-	ReviewerID   pgtype.Int8        `json:"reviewer_id"`
-	ReviewNotes  pgtype.Text        `json:"review_notes"`
-	ReviewedAt   pgtype.Timestamptz `json:"reviewed_at"`
+	AppellantID int64              `json:"appellant_id"`
+	Reason      string             `json:"reason"`
+	Status      string             `json:"status"`
+	ReviewerID  pgtype.Int8        `json:"reviewer_id"`
+	ReviewNotes pgtype.Text        `json:"review_notes"`
+	ReviewedAt  pgtype.Timestamptz `json:"reviewed_at"`
 	// 补偿金额（申诉成功时平台垫付给申诉人）
 	CompensationAmount pgtype.Int8        `json:"compensation_amount"`
 	CompensatedAt      pgtype.Timestamptz `json:"compensated_at"`
 	// 关联区域（用于运营商按区域过滤）
 	RegionID  int64     `json:"region_id"`
 	CreatedAt time.Time `json:"created_at"`
+}
+
+type AuditLog struct {
+	ID          int64       `json:"id"`
+	ActorUserID pgtype.Int8 `json:"actor_user_id"`
+	ActorRole   string      `json:"actor_role"`
+	Action      string      `json:"action"`
+	TargetType  string      `json:"target_type"`
+	TargetID    pgtype.Int8 `json:"target_id"`
+	RegionID    pgtype.Int8 `json:"region_id"`
+	RequestID   pgtype.Text `json:"request_id"`
+	TraceID     pgtype.Text `json:"trace_id"`
+	ClientIp    pgtype.Text `json:"client_ip"`
+	UserAgent   pgtype.Text `json:"user_agent"`
+	Metadata    []byte      `json:"metadata"`
+	CreatedAt   time.Time   `json:"created_at"`
+}
+
+type BehaviorAction struct {
+	ID           int64              `json:"id"`
+	DecisionID   int64              `json:"decision_id"`
+	ActionType   string             `json:"action_type"`
+	TargetEntity string             `json:"target_entity"`
+	Status       string             `json:"status"`
+	Detail       []byte             `json:"detail"`
+	ExecutedAt   pgtype.Timestamptz `json:"executed_at"`
+	CreatedAt    time.Time          `json:"created_at"`
+}
+
+type BehaviorAppeal struct {
+	ID         int64              `json:"id"`
+	EntityType string             `json:"entity_type"`
+	EntityID   int64              `json:"entity_id"`
+	DecisionID pgtype.Int8        `json:"decision_id"`
+	Reason     string             `json:"reason"`
+	Evidence   pgtype.Text        `json:"evidence"`
+	Status     string             `json:"status"`
+	CreatedAt  time.Time          `json:"created_at"`
+	ReevalAt   pgtype.Timestamptz `json:"reeval_at"`
+}
+
+type BehaviorBlocklist struct {
+	ID         int64              `json:"id"`
+	EntityType string             `json:"entity_type"`
+	EntityID   int64              `json:"entity_id"`
+	ReasonCode string             `json:"reason_code"`
+	BlockUntil pgtype.Timestamptz `json:"block_until"`
+	Status     string             `json:"status"`
+	CreatedAt  time.Time          `json:"created_at"`
+	UpdatedAt  time.Time          `json:"updated_at"`
+}
+
+type BehaviorDecision struct {
+	ID                     int64       `json:"id"`
+	OrderID                pgtype.Int8 `json:"order_id"`
+	UserID                 pgtype.Int8 `json:"user_id"`
+	MerchantID             pgtype.Int8 `json:"merchant_id"`
+	RiderID                pgtype.Int8 `json:"rider_id"`
+	DecisionVersion        string      `json:"decision_version"`
+	ReasonCodes            []string    `json:"reason_codes"`
+	ResponsibleParty       string      `json:"responsible_party"`
+	CompensationSource     string      `json:"compensation_source"`
+	DecisionStatus         string      `json:"decision_status"`
+	TraceSummary           pgtype.Text `json:"trace_summary"`
+	CreatedAt              time.Time   `json:"created_at"`
+	UpdatedAt              time.Time   `json:"updated_at"`
+	ReservationID          pgtype.Int8 `json:"reservation_id"`
+	ClaimID                pgtype.Int8 `json:"claim_id"`
+	DecisionMode           pgtype.Text `json:"decision_mode"`
+	ResponsibilityDomain   pgtype.Text `json:"responsibility_domain"`
+	PayoutMode             pgtype.Text `json:"payout_mode"`
+	EffectiveStatus        string      `json:"effective_status"`
+	ConfidenceScore        pgtype.Int4 `json:"confidence_score"`
+	UserRiskScore          pgtype.Int4 `json:"user_risk_score"`
+	MerchantLiabilityScore pgtype.Int4 `json:"merchant_liability_score"`
+	RiderLiabilityScore    pgtype.Int4 `json:"rider_liability_score"`
+	FallbackReason         pgtype.Text `json:"fallback_reason"`
+	RestrictionReason      pgtype.Text `json:"restriction_reason"`
+	LiabilityShares        []byte      `json:"liability_shares"`
+	ScoreBreakdown         []byte      `json:"score_breakdown"`
+	GraphHits              []byte      `json:"graph_hits"`
+	FactSnapshot           []byte      `json:"fact_snapshot"`
+	SupersedesDecisionID   pgtype.Int8 `json:"supersedes_decision_id"`
+	OverturnedByDecisionID pgtype.Int8 `json:"overturned_by_decision_id"`
+	ProfileEffectApplied   bool        `json:"profile_effect_applied"`
+}
+
+type BehaviorDecisionEffect struct {
+	ID                   int64              `json:"id"`
+	DecisionID           int64              `json:"decision_id"`
+	EntityType           string             `json:"entity_type"`
+	EntityID             int64              `json:"entity_id"`
+	MetricKey            string             `json:"metric_key"`
+	DeltaValue           int64              `json:"delta_value"`
+	Status               string             `json:"status"`
+	AppliedAt            time.Time          `json:"applied_at"`
+	RevertedAt           pgtype.Timestamptz `json:"reverted_at"`
+	RevertedByDecisionID pgtype.Int8        `json:"reverted_by_decision_id"`
+	Note                 pgtype.Text        `json:"note"`
+	CreatedAt            time.Time          `json:"created_at"`
+}
+
+type BehaviorTraceSnapshot struct {
+	ID                 int64          `json:"id"`
+	DecisionID         int64          `json:"decision_id"`
+	WindowDays         int32          `json:"window_days"`
+	AbnormalCount      int32          `json:"abnormal_count"`
+	TotalCount         int32          `json:"total_count"`
+	AbnormalRate       pgtype.Numeric `json:"abnormal_rate"`
+	AssociationHits    []string       `json:"association_hits"`
+	CreatedAt          time.Time      `json:"created_at"`
+	ActorType          pgtype.Text    `json:"actor_type"`
+	ActorID            pgtype.Int8    `json:"actor_id"`
+	WindowKey          pgtype.Text    `json:"window_key"`
+	StatsScope         pgtype.Text    `json:"stats_scope"`
+	MetricPayload      []byte         `json:"metric_payload"`
+	AssociationPayload []byte         `json:"association_payload"`
+	SnapshotVersion    pgtype.Text    `json:"snapshot_version"`
+}
+
+type BillingGroup struct {
+	ID              int64              `json:"id"`
+	DiningSessionID int64              `json:"dining_session_id"`
+	Status          string             `json:"status"`
+	IsDefault       bool               `json:"is_default"`
+	TotalAmount     int64              `json:"total_amount"`
+	PaidAmount      int64              `json:"paid_amount"`
+	CreatedAt       time.Time          `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	ClosedAt        pgtype.Timestamptz `json:"closed_at"`
+}
+
+type BillingGroupMember struct {
+	ID             int64              `json:"id"`
+	BillingGroupID int64              `json:"billing_group_id"`
+	UserID         int64              `json:"user_id"`
+	Role           string             `json:"role"`
+	JoinedAt       time.Time          `json:"joined_at"`
+	LeftAt         pgtype.Timestamptz `json:"left_at"`
+}
+
+type BillingGroupOrder struct {
+	ID             int64              `json:"id"`
+	BillingGroupID int64              `json:"billing_group_id"`
+	OrderID        int64              `json:"order_id"`
+	Amount         int64              `json:"amount"`
+	Status         string             `json:"status"`
+	CreatedAt      time.Time          `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
+type BrandMenuTemplate struct {
+	ID        int64     `json:"id"`
+	BrandID   int64     `json:"brand_id"`
+	Payload   []byte    `json:"payload"`
+	Version   int32     `json:"version"`
+	Status    string    `json:"status"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // 用户浏览历史
@@ -85,15 +266,12 @@ type Claim struct {
 	UserID         int64       `json:"user_id"`
 	ClaimType      string      `json:"claim_type"`
 	Description    string      `json:"description"`
-	EvidenceUrls   []string    `json:"evidence_urls"`
 	ClaimAmount    int64       `json:"claim_amount"`
 	ApprovedAmount pgtype.Int8 `json:"approved_amount"`
 	Status         string      `json:"status"`
-	// instant=秒赔(>=750分+<=50元), auto=回溯通过, manual=人工审核
+	// instant=秒赔(>=750分+<=50元), auto=自动裁定通过
 	ApprovalType pgtype.Text `json:"approval_type"`
-	// 用户提交索赔时的信用分快照（决策依据）
-	TrustScoreSnapshot pgtype.Int2 `json:"trust_score_snapshot"`
-	IsMalicious        bool        `json:"is_malicious"`
+	IsMalicious  bool        `json:"is_malicious"`
 	// 回溯检查：最近5笔订单（30天→90天→1年）的索赔历史
 	LookbackResult     []byte             `json:"lookback_result"`
 	AutoApprovalReason pgtype.Text        `json:"auto_approval_reason"`
@@ -103,6 +281,33 @@ type Claim struct {
 	CreatedAt          time.Time          `json:"created_at"`
 	ReviewedAt         pgtype.Timestamptz `json:"reviewed_at"`
 	PaidAt             pgtype.Timestamptz `json:"paid_at"`
+	DecisionVersion    pgtype.Text        `json:"decision_version"`
+	DecisionReason     pgtype.Text        `json:"decision_reason"`
+}
+
+type ClaimRecovery struct {
+	ID               int64       `json:"id"`
+	ClaimID          int64       `json:"claim_id"`
+	OrderID          int64       `json:"order_id"`
+	ResponsibleParty string      `json:"responsible_party"`
+	RecoveryTarget   pgtype.Text `json:"recovery_target"`
+	RecoveryAmount   int64       `json:"recovery_amount"`
+	Status           string      `json:"status"`
+	DueAt            time.Time   `json:"due_at"`
+	DecisionSnapshot []byte      `json:"decision_snapshot"`
+	CreatedAt        time.Time   `json:"created_at"`
+	UpdatedAt        time.Time   `json:"updated_at"`
+	DecisionID       pgtype.Int8 `json:"decision_id"`
+	RecoveryBasis    pgtype.Text `json:"recovery_basis"`
+}
+
+type ClaimRecoveryEvent struct {
+	ID         int64       `json:"id"`
+	RecoveryID int64       `json:"recovery_id"`
+	DecisionID pgtype.Int8 `json:"decision_id"`
+	EventType  string      `json:"event_type"`
+	Payload    []byte      `json:"payload"`
+	CreatedAt  time.Time   `json:"created_at"`
 }
 
 type CloudPrinter struct {
@@ -118,6 +323,26 @@ type CloudPrinter struct {
 	IsActive         bool               `json:"is_active"`
 	CreatedAt        time.Time          `json:"created_at"`
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	PrinterRole      string             `json:"printer_role"`
+}
+
+type CloudPrinterReconciliationJob struct {
+	ID            int64              `json:"id"`
+	MerchantID    int64              `json:"merchant_id"`
+	PrinterID     pgtype.Int8        `json:"printer_id"`
+	PrinterName   string             `json:"printer_name"`
+	PrinterSn     string             `json:"printer_sn"`
+	PrinterKey    pgtype.Text        `json:"printer_key"`
+	PrinterType   string             `json:"printer_type"`
+	DesiredAction string             `json:"desired_action"`
+	SourceAction  string             `json:"source_action"`
+	Status        string             `json:"status"`
+	FailureReason string             `json:"failure_reason"`
+	LastError     string             `json:"last_error"`
+	RetryCount    int32              `json:"retry_count"`
+	ResolvedAt    pgtype.Timestamptz `json:"resolved_at"`
+	CreatedAt     time.Time          `json:"created_at"`
+	UpdatedAt     time.Time          `json:"updated_at"`
 }
 
 // 合单支付主表，支持多商户一次支付
@@ -153,10 +378,13 @@ type CombinedPaymentSubOrder struct {
 }
 
 type ComboDish struct {
-	ID       int64 `json:"id"`
-	ComboID  int64 `json:"combo_id"`
-	DishID   int64 `json:"dish_id"`
-	Quantity int16 `json:"quantity"`
+	ID                      int64  `json:"id"`
+	ComboID                 int64  `json:"combo_id"`
+	DishID                  int64  `json:"dish_id"`
+	Quantity                int16  `json:"quantity"`
+	Customizations          []byte `json:"customizations"`
+	CustomizationExtraPrice int64  `json:"customization_extra_price"`
+	DishBasePriceSnapshot   int64  `json:"dish_base_price_snapshot"`
 }
 
 type ComboSet struct {
@@ -164,13 +392,14 @@ type ComboSet struct {
 	MerchantID    int64              `json:"merchant_id"`
 	Name          string             `json:"name"`
 	Description   pgtype.Text        `json:"description"`
-	ImageUrl      pgtype.Text        `json:"image_url"`
 	OriginalPrice int64              `json:"original_price"`
 	ComboPrice    int64              `json:"combo_price"`
 	IsOnline      bool               `json:"is_online"`
 	CreatedAt     time.Time          `json:"created_at"`
 	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 	DeletedAt     pgtype.Timestamptz `json:"deleted_at"`
+	// 套餐封面图媒体资产 ID，取代 image_url 字段
+	ImageMediaAssetID pgtype.Int8 `json:"image_media_asset_id"`
 }
 
 type ComboTag struct {
@@ -181,14 +410,15 @@ type ComboTag struct {
 }
 
 type DailyInventory struct {
-	ID            int64              `json:"id"`
-	MerchantID    int64              `json:"merchant_id"`
-	DishID        int64              `json:"dish_id"`
-	Date          pgtype.Date        `json:"date"`
-	TotalQuantity int32              `json:"total_quantity"`
-	SoldQuantity  int32              `json:"sold_quantity"`
-	CreatedAt     time.Time          `json:"created_at"`
-	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	ID               int64              `json:"id"`
+	MerchantID       int64              `json:"merchant_id"`
+	DishID           int64              `json:"dish_id"`
+	Date             pgtype.Date        `json:"date"`
+	TotalQuantity    int32              `json:"total_quantity"`
+	SoldQuantity     int32              `json:"sold_quantity"`
+	CreatedAt        time.Time          `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	ReservedQuantity int32              `json:"reserved_quantity"`
 }
 
 // 配送单表
@@ -224,6 +454,7 @@ type Delivery struct {
 	CreatedAt           time.Time          `json:"created_at"`
 	AssignedAt          pgtype.Timestamptz `json:"assigned_at"`
 	CompletedAt         pgtype.Timestamptz `json:"completed_at"`
+	RiderDeliveredAt    pgtype.Timestamptz `json:"rider_delivered_at"`
 }
 
 // 运费配置表，按区县配置基础运费规则
@@ -248,6 +479,25 @@ type DeliveryFeeConfig struct {
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
+// 配送围栏事件（到店/驻留/到达收货点）
+type DeliveryLocationEvent struct {
+	ID         int64          `json:"id"`
+	DeliveryID int64          `json:"delivery_id"`
+	OrderID    int64          `json:"order_id"`
+	RiderID    int64          `json:"rider_id"`
+	Longitude  pgtype.Numeric `json:"longitude"`
+	Latitude   pgtype.Numeric `json:"latitude"`
+	Accuracy   pgtype.Numeric `json:"accuracy"`
+	Speed      pgtype.Numeric `json:"speed"`
+	// arrive_pickup/dwell_pickup/arrive_dropoff/dwell_dropoff
+	EventType string `json:"event_type"`
+	// 上报来源，例如 gps
+	Source string `json:"source"`
+	// 事件对应的定位时间
+	RecordedAt time.Time `json:"recorded_at"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
 // 可接单订单池
 type DeliveryPool struct {
 	ID                int64          `json:"id"`
@@ -264,6 +514,22 @@ type DeliveryPool struct {
 	ExpiresAt        time.Time `json:"expires_at"`
 	Priority         int32     `json:"priority"`
 	CreatedAt        time.Time `json:"created_at"`
+	// 预计送达时间
+	ExpectedDeliveryAt pgtype.Timestamptz `json:"expected_delivery_at"`
+}
+
+type DiningSession struct {
+	ID            int64              `json:"id"`
+	MerchantID    int64              `json:"merchant_id"`
+	TableID       int64              `json:"table_id"`
+	ReservationID pgtype.Int8        `json:"reservation_id"`
+	UserID        int64              `json:"user_id"`
+	ActiveOrderID pgtype.Int8        `json:"active_order_id"`
+	Status        string             `json:"status"`
+	OpenedAt      time.Time          `json:"opened_at"`
+	ClosedAt      pgtype.Timestamptz `json:"closed_at"`
+	CreatedAt     time.Time          `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 }
 
 // M10: 满减规则表
@@ -282,6 +548,7 @@ type DiscountRule struct {
 	CreatedAt              time.Time          `json:"created_at"`
 	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
 	DeletedAt              pgtype.Timestamptz `json:"deleted_at"`
+	StackingGroup          pgtype.Text        `json:"stacking_group"`
 }
 
 type Dish struct {
@@ -290,7 +557,6 @@ type Dish struct {
 	CategoryID  pgtype.Int8        `json:"category_id"`
 	Name        string             `json:"name"`
 	Description pgtype.Text        `json:"description"`
-	ImageUrl    pgtype.Text        `json:"image_url"`
 	Price       int64              `json:"price"`
 	MemberPrice pgtype.Int8        `json:"member_price"`
 	IsAvailable bool               `json:"is_available"`
@@ -299,8 +565,14 @@ type Dish struct {
 	CreatedAt   time.Time          `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 	// 预估制作时间（分钟），默认10分钟
-	PrepareTime int16              `json:"prepare_time"`
-	DeletedAt   pgtype.Timestamptz `json:"deleted_at"`
+	PrepareTime    int16              `json:"prepare_time"`
+	DeletedAt      pgtype.Timestamptz `json:"deleted_at"`
+	MonthlySales   int32              `json:"monthly_sales"`
+	RepurchaseRate pgtype.Numeric     `json:"repurchase_rate"`
+	// 菜品图片媒体资产 ID，取代 image_url 字段
+	ImageMediaAssetID pgtype.Int8 `json:"image_media_asset_id"`
+	// 是否为包装菜品；包装菜品仅用于外卖与自取订单的包装方式选择
+	IsPackaging bool `json:"is_packaging"`
 }
 
 type DishCategory struct {
@@ -375,15 +647,25 @@ type EcommerceApplyment struct {
 	BusinessAdditionPics  []string    `json:"business_addition_pics"`
 	BusinessAdditionDesc  pgtype.Text `json:"business_addition_desc"`
 	// 进件状态: pending-待提交, submitted-已提交, auditing-审核中, rejected-已驳回, frozen-冻结, to_be_signed-待签约, signing-签约中, rejected_sign-签约失败, finish-完成
-	Status       string             `json:"status"`
-	SignUrl      pgtype.Text        `json:"sign_url"`
-	SignState    pgtype.Text        `json:"sign_state"`
-	RejectReason pgtype.Text        `json:"reject_reason"`
-	SubMchID     pgtype.Text        `json:"sub_mch_id"`
-	CreatedAt    time.Time          `json:"created_at"`
-	SubmittedAt  pgtype.Timestamptz `json:"submitted_at"`
-	AuditedAt    pgtype.Timestamptz `json:"audited_at"`
-	UpdatedAt    time.Time          `json:"updated_at"`
+	Status                   string             `json:"status"`
+	SignUrl                  pgtype.Text        `json:"sign_url"`
+	SignState                pgtype.Text        `json:"sign_state"`
+	RejectReason             pgtype.Text        `json:"reject_reason"`
+	SubMchID                 pgtype.Text        `json:"sub_mch_id"`
+	CreatedAt                time.Time          `json:"created_at"`
+	SubmittedAt              pgtype.Timestamptz `json:"submitted_at"`
+	AuditedAt                pgtype.Timestamptz `json:"audited_at"`
+	UpdatedAt                time.Time          `json:"updated_at"`
+	ResultTaskProcessedState pgtype.Text        `json:"result_task_processed_state"`
+	ResultTaskProcessedAt    pgtype.Timestamptz `json:"result_task_processed_at"`
+	// 微信收付通开户银行编码
+	AccountBankCode pgtype.Int8 `json:"account_bank_code"`
+	// 微信收付通银行别名名称
+	BankAlias pgtype.Text `json:"bank_alias"`
+	// 微信收付通银行别名编码
+	BankAliasCode pgtype.Text `json:"bank_alias_code"`
+	// 微信收付通支行联行号
+	BankBranchID pgtype.Text `json:"bank_branch_id"`
 }
 
 // 用户收藏表
@@ -408,8 +690,6 @@ type FoodSafetyIncident struct {
 	UserID       int64  `json:"user_id"`
 	IncidentType string `json:"incident_type"`
 	Description  string `json:"description"`
-	// 食安必须有证据（照片、描述）
-	EvidenceUrls []string `json:"evidence_urls"`
 	// 订单完整快照（所有字段）用于事故溯源
 	OrderSnapshot []byte `json:"order_snapshot"`
 	// 商户快照（菜单、当班员工）
@@ -448,6 +728,24 @@ type FraudPattern struct {
 	ConfirmedAt pgtype.Timestamptz `json:"confirmed_at"`
 }
 
+type GroupMenuTemplate struct {
+	ID        int64     `json:"id"`
+	GroupID   int64     `json:"group_id"`
+	Payload   []byte    `json:"payload"`
+	Version   int32     `json:"version"`
+	Status    string    `json:"status"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+type GroupPolicy struct {
+	GroupID       int64  `json:"group_id"`
+	PricingMode   string `json:"pricing_mode"`
+	MenuMode      string `json:"menu_mode"`
+	InventoryMode string `json:"inventory_mode"`
+	PromotionMode string `json:"promotion_mode"`
+}
+
 type Ingredient struct {
 	ID         int64       `json:"id"`
 	Name       string      `json:"name"`
@@ -458,17 +756,68 @@ type Ingredient struct {
 	CreatedAt  time.Time   `json:"created_at"`
 }
 
+// 媒体资产表，统一管理 OSS 上传文件的元数据
+type MediaAsset struct {
+	ID int64 `json:"id"`
+	// OSS 对象键，全局唯一，不包含域名
+	ObjectKey string `json:"object_key"`
+	// 可见性：public（公共桶，走 CDN）或 private（私有桶，鉴权后签名访问）
+	Visibility string `json:"visibility"`
+	// 媒体用途类别，决定 object_key 前缀和权限策略
+	MediaCategory  string      `json:"media_category"`
+	MimeType       string      `json:"mime_type"`
+	FileSize       int64       `json:"file_size"`
+	Width          pgtype.Int4 `json:"width"`
+	Height         pgtype.Int4 `json:"height"`
+	ChecksumSha256 string      `json:"checksum_sha256"`
+	// 上传状态：pending（待上传）→ uploaded（已传到 OSS）→ confirmed（后端已确认）→ failed/deleted
+	UploadStatus string `json:"upload_status"`
+	// 内容审核状态：pending → approved/rejected/quarantined
+	ModerationStatus string `json:"moderation_status"`
+	UploadedBy       int64  `json:"uploaded_by"`
+	// 来源客户端类型，用于审计
+	SourceClient string             `json:"source_client"`
+	CreatedAt    time.Time          `json:"created_at"`
+	UpdatedAt    time.Time          `json:"updated_at"`
+	DeletedAt    pgtype.Timestamptz `json:"deleted_at"`
+	// 微信异步图审 trace_id，用于回调结果关联
+	ModerationTraceID pgtype.Text `json:"moderation_trace_id"`
+}
+
+// 媒体上传会话表，每次申请直传 OSS 创建一条记录
+type MediaUploadSession struct {
+	// upload_id，客户端在 complete 时回传用于校验
+	ID            string      `json:"id"`
+	MediaAssetID  pgtype.Int8 `json:"media_asset_id"`
+	UserID        int64       `json:"user_id"`
+	BusinessType  string      `json:"business_type"`
+	MediaCategory string      `json:"media_category"`
+	Visibility    string      `json:"visibility"`
+	// 预分配的 OSS 对象键，complete 时必须与此一致
+	ObjectKey      string `json:"object_key"`
+	ChecksumSha256 string `json:"checksum_sha256"`
+	ContentType    string `json:"content_type"`
+	ContentLength  int64  `json:"content_length"`
+	Status         string `json:"status"`
+	// 直传凭证过期时间，过期后 complete 失败
+	ExpireAt  time.Time `json:"expire_at"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 // M10: 会员交易流水表
 type MembershipTransaction struct {
-	ID             int64       `json:"id"`
-	MembershipID   int64       `json:"membership_id"`
-	Type           string      `json:"type"`
-	Amount         int64       `json:"amount"`
-	BalanceAfter   int64       `json:"balance_after"`
-	RelatedOrderID pgtype.Int8 `json:"related_order_id"`
-	RechargeRuleID pgtype.Int8 `json:"recharge_rule_id"`
-	Notes          pgtype.Text `json:"notes"`
-	CreatedAt      time.Time   `json:"created_at"`
+	ID              int64       `json:"id"`
+	MembershipID    int64       `json:"membership_id"`
+	Type            string      `json:"type"`
+	Amount          int64       `json:"amount"`
+	BalanceAfter    int64       `json:"balance_after"`
+	RelatedOrderID  pgtype.Int8 `json:"related_order_id"`
+	RechargeRuleID  pgtype.Int8 `json:"recharge_rule_id"`
+	Notes           pgtype.Text `json:"notes"`
+	CreatedAt       time.Time   `json:"created_at"`
+	PaymentOrderID  pgtype.Int8 `json:"payment_order_id"`
+	PrincipalAmount int64       `json:"principal_amount"`
+	BonusAmount     int64       `json:"bonus_amount"`
 }
 
 type Merchant struct {
@@ -476,7 +825,6 @@ type Merchant struct {
 	OwnerUserID int64          `json:"owner_user_id"`
 	Name        string         `json:"name"`
 	Description pgtype.Text    `json:"description"`
-	LogoUrl     pgtype.Text    `json:"logo_url"`
 	Phone       string         `json:"phone"`
 	Address     string         `json:"address"`
 	Latitude    pgtype.Numeric `json:"latitude"`
@@ -502,25 +850,24 @@ type Merchant struct {
 	BindCode pgtype.Text `json:"bind_code"`
 	// 绑定码过期时间
 	BindCodeExpiresAt pgtype.Timestamptz `json:"bind_code_expires_at"`
-	// Boss 认领码
-	BossBindCode pgtype.Text `json:"boss_bind_code"`
-	// Boss 认领码过期时间
-	BossBindCodeExpiresAt pgtype.Timestamptz `json:"boss_bind_code_expires_at"`
+	GroupID           pgtype.Int8        `json:"group_id"`
+	BrandID           pgtype.Int8        `json:"brand_id"`
+	// 商户 Logo 媒体资产 ID，取代 logo_url 字段
+	LogoMediaAssetID pgtype.Int8 `json:"logo_media_asset_id"`
+	// 是否按营业时间自动切换营业状态
+	AutoOpenByBusinessHours bool `json:"auto_open_by_business_hours"`
 }
 
 type MerchantApplication struct {
-	ID                      int64       `json:"id"`
-	UserID                  int64       `json:"user_id"`
-	MerchantName            string      `json:"merchant_name"`
-	BusinessLicenseNumber   string      `json:"business_license_number"`
-	BusinessLicenseImageUrl string      `json:"business_license_image_url"`
-	LegalPersonName         string      `json:"legal_person_name"`
-	LegalPersonIDNumber     string      `json:"legal_person_id_number"`
-	LegalPersonIDFrontUrl   string      `json:"legal_person_id_front_url"`
-	LegalPersonIDBackUrl    string      `json:"legal_person_id_back_url"`
-	ContactPhone            string      `json:"contact_phone"`
-	BusinessAddress         string      `json:"business_address"`
-	BusinessScope           pgtype.Text `json:"business_scope"`
+	ID                    int64       `json:"id"`
+	UserID                int64       `json:"user_id"`
+	MerchantName          string      `json:"merchant_name"`
+	BusinessLicenseNumber string      `json:"business_license_number"`
+	LegalPersonName       string      `json:"legal_person_name"`
+	LegalPersonIDNumber   string      `json:"legal_person_id_number"`
+	ContactPhone          string      `json:"contact_phone"`
+	BusinessAddress       string      `json:"business_address"`
+	BusinessScope         pgtype.Text `json:"business_scope"`
 	// draft=草稿, submitted=已提交(待审核), approved=已通过, rejected=已拒绝
 	Status       string             `json:"status"`
 	RejectReason pgtype.Text        `json:"reject_reason"`
@@ -534,8 +881,6 @@ type MerchantApplication struct {
 	Latitude pgtype.Numeric `json:"latitude"`
 	// 区域ID，根据商户定位自动确定
 	RegionID pgtype.Int8 `json:"region_id"`
-	// 食品经营许可证图片URL
-	FoodPermitUrl pgtype.Text `json:"food_permit_url"`
 	// 食品经营许可证OCR识别结果JSON
 	FoodPermitOcr []byte `json:"food_permit_ocr"`
 	// 营业执照OCR识别结果JSON
@@ -548,6 +893,14 @@ type MerchantApplication struct {
 	StorefrontImages []byte `json:"storefront_images"`
 	// 店内环境照片URL数组 JSON，最多5张
 	EnvironmentImages []byte `json:"environment_images"`
+	// 营业执照图片媒体资产 ID
+	BusinessLicenseMediaAssetID pgtype.Int8 `json:"business_license_media_asset_id"`
+	// 食品经营许可证图片媒体资产 ID
+	FoodPermitMediaAssetID pgtype.Int8 `json:"food_permit_media_asset_id"`
+	// 法人身份证正面媒体资产 ID
+	IDCardFrontMediaAssetID pgtype.Int8 `json:"id_card_front_media_asset_id"`
+	// 法人身份证背面媒体资产 ID
+	IDCardBackMediaAssetID pgtype.Int8 `json:"id_card_back_media_asset_id"`
 }
 
 // Boss 店铺认领关系表 - Boss 可以认领多个店铺，只有分析和员工管理权限
@@ -559,6 +912,18 @@ type MerchantBoss struct {
 	Status    string             `json:"status"`
 	CreatedAt time.Time          `json:"created_at"`
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+type MerchantBrand struct {
+	ID          int64       `json:"id"`
+	GroupID     int64       `json:"group_id"`
+	Name        string      `json:"name"`
+	Description pgtype.Text `json:"description"`
+	Status      string      `json:"status"`
+	CreatedAt   time.Time   `json:"created_at"`
+	UpdatedAt   time.Time   `json:"updated_at"`
+	// 品牌 Logo 媒体资产 ID，取代 logo_url 字段
+	LogoMediaAssetID pgtype.Int8 `json:"logo_media_asset_id"`
 }
 
 type MerchantBusinessHour struct {
@@ -573,6 +938,20 @@ type MerchantBusinessHour struct {
 	SpecialDate pgtype.Date `json:"special_date"`
 	CreatedAt   time.Time   `json:"created_at"`
 	UpdatedAt   time.Time   `json:"updated_at"`
+}
+
+// 商户能力真值表；系统标签由此表派生，不与经营类目混用
+type MerchantCapability struct {
+	MerchantID int64 `json:"merchant_id"`
+	// 明厨亮灶状态：unknown/yes/no
+	OpenKitchenStatus string `json:"open_kitchen_status"`
+	// 堂食能力状态：unknown/yes/no
+	DineInStatus string `json:"dine_in_status"`
+	// 最后一次能力确认来源
+	Source    string      `json:"source"`
+	Note      pgtype.Text `json:"note"`
+	CreatedAt time.Time   `json:"created_at"`
+	UpdatedAt time.Time   `json:"updated_at"`
 }
 
 // 商户运费满返促销表，门槛式阶梯取最优
@@ -598,16 +977,86 @@ type MerchantDishCategory struct {
 	CreatedAt  time.Time `json:"created_at"`
 }
 
+type MerchantGroup struct {
+	ID              int64       `json:"id"`
+	Name            string      `json:"name"`
+	OwnerUserID     int64       `json:"owner_user_id"`
+	Status          string      `json:"status"`
+	ContactPhone    pgtype.Text `json:"contact_phone"`
+	LicenseNumber   pgtype.Text `json:"license_number"`
+	Address         pgtype.Text `json:"address"`
+	RegionID        pgtype.Int8 `json:"region_id"`
+	ApplicationData []byte      `json:"application_data"`
+	CreatedAt       time.Time   `json:"created_at"`
+	UpdatedAt       time.Time   `json:"updated_at"`
+	// 集团营业执照图片媒体资产 ID，取代 license_image_url 字段
+	LicenseMediaAssetID pgtype.Int8 `json:"license_media_asset_id"`
+}
+
+type MerchantGroupApplication struct {
+	ID              int64              `json:"id"`
+	ApplicantUserID int64              `json:"applicant_user_id"`
+	GroupName       string             `json:"group_name"`
+	ContactPhone    string             `json:"contact_phone"`
+	LicenseNumber   pgtype.Text        `json:"license_number"`
+	Address         pgtype.Text        `json:"address"`
+	RegionID        pgtype.Int8        `json:"region_id"`
+	Status          string             `json:"status"`
+	RejectReason    pgtype.Text        `json:"reject_reason"`
+	ReviewedBy      pgtype.Int8        `json:"reviewed_by"`
+	ReviewedAt      pgtype.Timestamptz `json:"reviewed_at"`
+	ApplicationData []byte             `json:"application_data"`
+	CreatedAt       time.Time          `json:"created_at"`
+	UpdatedAt       time.Time          `json:"updated_at"`
+	// 集团营业执照图片媒体资产 ID，取代 license_image_url 字段
+	LicenseMediaAssetID pgtype.Int8 `json:"license_media_asset_id"`
+}
+
+type MerchantGroupAuditLog struct {
+	ID          int64       `json:"id"`
+	GroupID     pgtype.Int8 `json:"group_id"`
+	ActorUserID pgtype.Int8 `json:"actor_user_id"`
+	Action      string      `json:"action"`
+	TargetType  string      `json:"target_type"`
+	TargetID    pgtype.Int8 `json:"target_id"`
+	Metadata    []byte      `json:"metadata"`
+	CreatedAt   time.Time   `json:"created_at"`
+}
+
+type MerchantGroupJoinRequest struct {
+	ID              int64              `json:"id"`
+	GroupID         int64              `json:"group_id"`
+	MerchantID      int64              `json:"merchant_id"`
+	ApplicantUserID int64              `json:"applicant_user_id"`
+	Status          string             `json:"status"`
+	Reason          pgtype.Text        `json:"reason"`
+	ReviewedBy      pgtype.Int8        `json:"reviewed_by"`
+	ReviewedAt      pgtype.Timestamptz `json:"reviewed_at"`
+	CreatedAt       time.Time          `json:"created_at"`
+}
+
+type MerchantGroupMember struct {
+	ID        int64       `json:"id"`
+	GroupID   int64       `json:"group_id"`
+	UserID    int64       `json:"user_id"`
+	Role      string      `json:"role"`
+	Status    string      `json:"status"`
+	JoinedAt  time.Time   `json:"joined_at"`
+	InvitedBy pgtype.Int8 `json:"invited_by"`
+}
+
 // M10: 商户会员账户表
 type MerchantMembership struct {
-	ID             int64              `json:"id"`
-	MerchantID     int64              `json:"merchant_id"`
-	UserID         int64              `json:"user_id"`
-	Balance        int64              `json:"balance"`
-	TotalRecharged int64              `json:"total_recharged"`
-	TotalConsumed  int64              `json:"total_consumed"`
-	CreatedAt      time.Time          `json:"created_at"`
-	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	ID               int64              `json:"id"`
+	MerchantID       int64              `json:"merchant_id"`
+	UserID           int64              `json:"user_id"`
+	Balance          int64              `json:"balance"`
+	TotalRecharged   int64              `json:"total_recharged"`
+	TotalConsumed    int64              `json:"total_consumed"`
+	CreatedAt        time.Time          `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	PrincipalBalance int64              `json:"principal_balance"`
+	BonusBalance     int64              `json:"bonus_balance"`
 }
 
 // 商户会员使用场景配置
@@ -642,10 +1091,8 @@ type MerchantPaymentConfig struct {
 
 // 商户信任画像表 - 信用分驱动食安熔断
 type MerchantProfile struct {
-	ID         int64 `json:"id"`
-	MerchantID int64 `json:"merchant_id"`
-	// 商户信任分，400以下停业整顿
-	TrustScore      int16 `json:"trust_score"`
+	ID              int64 `json:"id"`
+	MerchantID      int64 `json:"merchant_id"`
 	TotalOrders     int32 `json:"total_orders"`
 	TotalSales      int64 `json:"total_sales"`
 	CompletedOrders int32 `json:"completed_orders"`
@@ -669,6 +1116,31 @@ type MerchantProfile struct {
 	SuspendedAt   pgtype.Timestamptz `json:"suspended_at"`
 	SuspendUntil  pgtype.Timestamptz `json:"suspend_until"`
 	UpdatedAt     time.Time          `json:"updated_at"`
+	// 是否暂停外卖接单（追偿逾期/经营限制）
+	IsTakeoutSuspended bool `json:"is_takeout_suspended"`
+	// 外卖暂停原因
+	TakeoutSuspendReason pgtype.Text        `json:"takeout_suspend_reason"`
+	TakeoutSuspendedAt   pgtype.Timestamptz `json:"takeout_suspended_at"`
+	// 外卖暂停截止时间
+	TakeoutSuspendUntil pgtype.Timestamptz `json:"takeout_suspend_until"`
+}
+
+// 商户结算调整流水（追偿真实扣款/回滚）
+type MerchantSettlementAdjustment struct {
+	ID         int64 `json:"id"`
+	MerchantID int64 `json:"merchant_id"`
+	// 调整类型：claim_recovery_charge/claim_recovery_reversal
+	AdjustmentType string `json:"adjustment_type"`
+	// 调整金额（分，扣款为负，回滚为正）
+	Amount int64 `json:"amount"`
+	// 状态：finished=已入账，reversed=已冲正
+	Status      string             `json:"status"`
+	RelatedType pgtype.Text        `json:"related_type"`
+	RelatedID   pgtype.Int8        `json:"related_id"`
+	Note        pgtype.Text        `json:"note"`
+	PostedAt    pgtype.Timestamptz `json:"posted_at"`
+	CreatedAt   time.Time          `json:"created_at"`
+	UpdatedAt   time.Time          `json:"updated_at"`
 }
 
 // 商户员工表 - 管理商户与用户的关联关系及角色
@@ -686,6 +1158,15 @@ type MerchantStaff struct {
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
+// 商户系统展示标签关联表；仅存储派生或运营维护的系统标签
+type MerchantSystemLabel struct {
+	MerchantID int64     `json:"merchant_id"`
+	TagID      int64     `json:"tag_id"`
+	Source     string    `json:"source"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
+}
+
 type MerchantTag struct {
 	MerchantID int64     `json:"merchant_id"`
 	TagID      int64     `json:"tag_id"`
@@ -696,11 +1177,11 @@ type MerchantTag struct {
 type Notification struct {
 	ID     int64 `json:"id"`
 	UserID int64 `json:"user_id"`
-	// 通知类型：order/payment/delivery/system/food_safety
+	// 通知类型（事件标识，小写字母/数字/下划线，如 order_completed, delivery_delay 等）
 	Type    string `json:"type"`
 	Title   string `json:"title"`
 	Content string `json:"content"`
-	// 关联实体类型，用于跳转
+	// 关联实体类型（小写字母/数字/下划线，如 order, delivery, appeal 等）
 	RelatedType pgtype.Text `json:"related_type"`
 	RelatedID   pgtype.Int8 `json:"related_id"`
 	// 扩展数据JSON，用于前端渲染
@@ -713,6 +1194,42 @@ type Notification struct {
 	CreatedAt time.Time          `json:"created_at"`
 	// 过期时间，过期后可删除
 	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+}
+
+// 统一 OCR 任务表
+type OcrJob struct {
+	ID int64 `json:"id"`
+	// 由 media_asset_id + document_type + owner_type + owner_id + side 组成的幂等键
+	IdempotencyKey string `json:"idempotency_key"`
+	// 证件类型：business_license | id_card | food_permit | health_cert
+	DocumentType   string      `json:"document_type"`
+	Provider       string      `json:"provider"`
+	ProviderTaskID pgtype.Text `json:"provider_task_id"`
+	MediaAssetID   int64       `json:"media_asset_id"`
+	// 业务主体类型：merchant_application | operator_application | rider_application | group_application
+	OwnerType string `json:"owner_type"`
+	OwnerID   int64  `json:"owner_id"`
+	// 证件面：front | back，非双面证件为空字符串
+	Side         string             `json:"side"`
+	Status       string             `json:"status"`
+	AttemptCount int32              `json:"attempt_count"`
+	MaxAttempts  int32              `json:"max_attempts"`
+	NextRetryAt  pgtype.Timestamptz `json:"next_retry_at"`
+	LeasedAt     pgtype.Timestamptz `json:"leased_at"`
+	LeaseOwner   pgtype.Text        `json:"lease_owner"`
+	ErrorCode    pgtype.Text        `json:"error_code"`
+	ErrorMessage pgtype.Text        `json:"error_message"`
+	// 供应商原始 OCR 结果
+	RawResult []byte `json:"raw_result"`
+	// 统一归一化后的 OCR 结果
+	NormalizedResult []byte             `json:"normalized_result"`
+	ResultVersion    int32              `json:"result_version"`
+	RetentionUntil   pgtype.Timestamptz `json:"retention_until"`
+	RequestedBy      int64              `json:"requested_by"`
+	CreatedAt        time.Time          `json:"created_at"`
+	StartedAt        pgtype.Timestamptz `json:"started_at"`
+	FinishedAt       pgtype.Timestamptz `json:"finished_at"`
+	UpdatedAt        time.Time          `json:"updated_at"`
 }
 
 type Operator struct {
@@ -735,7 +1252,15 @@ type Operator struct {
 	// 合同年限（1/2/3年等）
 	ContractYears int32 `json:"contract_years"`
 	// 微信平台收付通二级商户号（开户成功后返回）
-	SubMchID pgtype.Text `json:"sub_mch_id"`
+	SubMchID             pgtype.Text    `json:"sub_mch_id"`
+	Balance              int64          `json:"balance"`
+	WalletAccount        []byte         `json:"wallet_account"`
+	MerchantDeposit      int64          `json:"merchant_deposit"`
+	RiderDeposit         int64          `json:"rider_deposit"`
+	WeatherCoeffExtreme  pgtype.Numeric `json:"weather_coeff_extreme"`
+	WeatherCoeffHeavy    pgtype.Numeric `json:"weather_coeff_heavy"`
+	WeatherCoeffModerate pgtype.Numeric `json:"weather_coeff_moderate"`
+	WeatherCoeffLight    pgtype.Numeric `json:"weather_coeff_light"`
 }
 
 // 运营商入驻申请表，支持草稿保存和人工审核
@@ -747,14 +1272,11 @@ type OperatorApplication struct {
 	Name                  pgtype.Text `json:"name"`
 	ContactName           pgtype.Text `json:"contact_name"`
 	ContactPhone          pgtype.Text `json:"contact_phone"`
-	BusinessLicenseUrl    pgtype.Text `json:"business_license_url"`
 	BusinessLicenseNumber pgtype.Text `json:"business_license_number"`
 	// 营业执照OCR识别结果JSON
 	BusinessLicenseOcr  []byte      `json:"business_license_ocr"`
 	LegalPersonName     pgtype.Text `json:"legal_person_name"`
 	LegalPersonIDNumber pgtype.Text `json:"legal_person_id_number"`
-	IDCardFrontUrl      pgtype.Text `json:"id_card_front_url"`
-	IDCardBackUrl       pgtype.Text `json:"id_card_back_url"`
 	// 身份证正面OCR识别结果JSON
 	IDCardFrontOcr []byte `json:"id_card_front_ocr"`
 	// 身份证背面OCR识别结果JSON
@@ -768,6 +1290,12 @@ type OperatorApplication struct {
 	CreatedAt    time.Time          `json:"created_at"`
 	UpdatedAt    time.Time          `json:"updated_at"`
 	SubmittedAt  pgtype.Timestamptz `json:"submitted_at"`
+	// 运营商营业执照媒体资产 ID
+	BusinessLicenseMediaAssetID pgtype.Int8 `json:"business_license_media_asset_id"`
+	// 运营商法人身份证正面媒体资产 ID
+	IDCardFrontMediaAssetID pgtype.Int8 `json:"id_card_front_media_asset_id"`
+	// 运营商法人身份证背面媒体资产 ID
+	IDCardBackMediaAssetID pgtype.Int8 `json:"id_card_back_media_asset_id"`
 }
 
 // 运营商管理的区域列表，支持一个运营商管理多个区县
@@ -777,6 +1305,17 @@ type OperatorRegion struct {
 	RegionID   int64     `json:"region_id"`
 	Status     string    `json:"status"`
 	CreatedAt  time.Time `json:"created_at"`
+}
+
+// 运营商区域扩展申请，允许已入驻运营商申请管理更多区县
+type OperatorRegionApplication struct {
+	ID           int64              `json:"id"`
+	OperatorID   int64              `json:"operator_id"`
+	RegionID     int64              `json:"region_id"`
+	Status       string             `json:"status"`
+	RejectReason pgtype.Text        `json:"reject_reason"`
+	CreatedAt    time.Time          `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 }
 
 type Order struct {
@@ -812,23 +1351,49 @@ type Order struct {
 	// 会员余额支付金额(分)
 	BalancePaid int64 `json:"balance_paid"`
 	// 使用的会员卡ID
-	MembershipID pgtype.Int8 `json:"membership_id"`
+	MembershipID        pgtype.Int8        `json:"membership_id"`
+	FulfillmentStatus   string             `json:"fulfillment_status"`
+	ReplacedByOrderID   pgtype.Int8        `json:"replaced_by_order_id"`
+	PickupCode          pgtype.Text        `json:"pickup_code"`
+	DispatchOrderID     pgtype.Int8        `json:"dispatch_order_id"`
+	FlowID              pgtype.Int8        `json:"flow_id"`
+	StatusHint          pgtype.Text        `json:"status_hint"`
+	Badges              []byte             `json:"badges"`
+	ExceptionState      pgtype.Text        `json:"exception_state"`
+	ClaimChannel        pgtype.Text        `json:"claim_channel"`
+	Overtime            bool               `json:"overtime"`
+	PrepStartAt         pgtype.Timestamptz `json:"prep_start_at"`
+	ReadyAt             pgtype.Timestamptz `json:"ready_at"`
+	CourierAcceptAt     pgtype.Timestamptz `json:"courier_accept_at"`
+	PickedAt            pgtype.Timestamptz `json:"picked_at"`
+	RiderDeliveredAt    pgtype.Timestamptz `json:"rider_delivered_at"`
+	UserDeliveredAt     pgtype.Timestamptz `json:"user_delivered_at"`
+	AutoUserDeliveredAt pgtype.Timestamptz `json:"auto_user_delivered_at"`
+	// 配送预计在途时间（秒），由 LBS 真实路径计算得出
+	DeliveryDuration             pgtype.Int4    `json:"delivery_duration"`
+	DeliveryContactNameSnapshot  pgtype.Text    `json:"delivery_contact_name_snapshot"`
+	DeliveryContactPhoneSnapshot pgtype.Text    `json:"delivery_contact_phone_snapshot"`
+	DeliveryAddressSnapshot      pgtype.Text    `json:"delivery_address_snapshot"`
+	DeliveryLongitudeSnapshot    pgtype.Numeric `json:"delivery_longitude_snapshot"`
+	DeliveryLatitudeSnapshot     pgtype.Numeric `json:"delivery_latitude_snapshot"`
 }
 
 type OrderDisplayConfig struct {
-	ID               int64              `json:"id"`
-	MerchantID       int64              `json:"merchant_id"`
-	EnablePrint      bool               `json:"enable_print"`
-	PrintTakeout     bool               `json:"print_takeout"`
-	PrintDineIn      bool               `json:"print_dine_in"`
-	PrintReservation bool               `json:"print_reservation"`
-	EnableVoice      bool               `json:"enable_voice"`
-	VoiceTakeout     bool               `json:"voice_takeout"`
-	VoiceDineIn      bool               `json:"voice_dine_in"`
-	EnableKds        bool               `json:"enable_kds"`
-	KdsUrl           pgtype.Text        `json:"kds_url"`
-	CreatedAt        time.Time          `json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	ID                int64              `json:"id"`
+	MerchantID        int64              `json:"merchant_id"`
+	EnablePrint       bool               `json:"enable_print"`
+	PrintTakeout      bool               `json:"print_takeout"`
+	PrintDineIn       bool               `json:"print_dine_in"`
+	PrintReservation  bool               `json:"print_reservation"`
+	EnableVoice       bool               `json:"enable_voice"`
+	VoiceTakeout      bool               `json:"voice_takeout"`
+	VoiceDineIn       bool               `json:"voice_dine_in"`
+	EnableKds         bool               `json:"enable_kds"`
+	KdsUrl            pgtype.Text        `json:"kds_url"`
+	CreatedAt         time.Time          `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	PrintDispatchMode string             `json:"print_dispatch_mode"`
+	PrintTriggerMode  string             `json:"print_trigger_mode"`
 }
 
 type OrderItem struct {
@@ -842,6 +1407,14 @@ type OrderItem struct {
 	Subtotal       int64       `json:"subtotal"`
 	Customizations []byte      `json:"customizations"`
 	CreatedAt      time.Time   `json:"created_at"`
+}
+
+type OrderPickupCounter struct {
+	MerchantID   int64              `json:"merchant_id"`
+	PickupDate   pgtype.Date        `json:"pickup_date"`
+	LastSequence int32              `json:"last_sequence"`
+	CreatedAt    time.Time          `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 }
 
 type OrderStatusLog struct {
@@ -872,7 +1445,8 @@ type PaymentOrder struct {
 	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
 	Attach        pgtype.Text        `json:"attach"`
 	// 关联的合单支付ID，单商户支付时为NULL
-	CombinedPaymentID pgtype.Int8 `json:"combined_payment_id"`
+	CombinedPaymentID pgtype.Int8        `json:"combined_payment_id"`
+	ProcessedAt       pgtype.Timestamptz `json:"processed_at"`
 }
 
 // 高峰/特殊时段配置表（午高峰、晚高峰、深夜配送等）
@@ -893,15 +1467,70 @@ type PeakHourConfig struct {
 	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
 }
 
+// 平台运营告警历史，用于离线回看与控制台首屏恢复
+type PlatformAlertEvent struct {
+	ID          int64  `json:"id"`
+	AlertType   string `json:"alert_type"`
+	Level       string `json:"level"`
+	Title       string `json:"title"`
+	Message     string `json:"message"`
+	RelatedID   int64  `json:"related_id"`
+	RelatedType string `json:"related_type"`
+	// 告警扩展字段，前端按需渲染
+	Extra     []byte    `json:"extra"`
+	EmittedAt time.Time `json:"emitted_at"`
+}
+
+type PlatformConfig struct {
+	ID          int64       `json:"id"`
+	ConfigKey   string      `json:"config_key"`
+	ConfigValue []byte      `json:"config_value"`
+	ScopeType   string      `json:"scope_type"`
+	ScopeID     pgtype.Int8 `json:"scope_id"`
+	CreatedAt   time.Time   `json:"created_at"`
+	UpdatedAt   time.Time   `json:"updated_at"`
+}
+
 type PrintLog struct {
+	ID            int64              `json:"id"`
+	OrderID       int64              `json:"order_id"`
+	PrinterID     int64              `json:"printer_id"`
+	PrintContent  string             `json:"print_content"`
+	Status        string             `json:"status"`
+	ErrorMessage  pgtype.Text        `json:"error_message"`
+	PrintedAt     pgtype.Timestamptz `json:"printed_at"`
+	CreatedAt     time.Time          `json:"created_at"`
+	VendorOrderID pgtype.Text        `json:"vendor_order_id"`
+	TaskKey       pgtype.Text        `json:"task_key"`
+}
+
+// 分账规则配置表（Phase2 草案）
+type ProfitSharingConfig struct {
 	ID           int64              `json:"id"`
-	OrderID      int64              `json:"order_id"`
-	PrinterID    int64              `json:"printer_id"`
-	PrintContent string             `json:"print_content"`
 	Status       string             `json:"status"`
-	ErrorMessage pgtype.Text        `json:"error_message"`
-	PrintedAt    pgtype.Timestamptz `json:"printed_at"`
+	OrderSource  string             `json:"order_source"`
+	RegionID     pgtype.Int8        `json:"region_id"`
+	MerchantID   pgtype.Int8        `json:"merchant_id"`
+	PlatformRate int32              `json:"platform_rate"`
+	OperatorRate int32              `json:"operator_rate"`
+	RiderEnabled bool               `json:"rider_enabled"`
+	Priority     int32              `json:"priority"`
+	EffectiveAt  pgtype.Timestamptz `json:"effective_at"`
+	ExpiresAt    pgtype.Timestamptz `json:"expires_at"`
+	CreatedBy    pgtype.Int8        `json:"created_by"`
 	CreatedAt    time.Time          `json:"created_at"`
+	UpdatedAt    time.Time          `json:"updated_at"`
+}
+
+// 分账规则配置审计表（Phase2 草案）
+type ProfitSharingConfigAudit struct {
+	ID        int64       `json:"id"`
+	ConfigID  int64       `json:"config_id"`
+	Action    string      `json:"action"`
+	ActorID   pgtype.Int8 `json:"actor_id"`
+	ActorRole pgtype.Text `json:"actor_role"`
+	Detail    []byte      `json:"detail"`
+	CreatedAt time.Time   `json:"created_at"`
 }
 
 type ProfitSharingOrder struct {
@@ -933,6 +1562,28 @@ type ProfitSharingOrder struct {
 	OperatorRate int32 `json:"operator_rate"`
 }
 
+// 分账回退记录表，退款前的分账回退流水
+type ProfitSharingReturn struct {
+	ID                   int64  `json:"id"`
+	RefundOrderID        int64  `json:"refund_order_id"`
+	ProfitSharingOrderID int64  `json:"profit_sharing_order_id"`
+	PaymentOrderID       int64  `json:"payment_order_id"`
+	SubMchid             string `json:"sub_mchid"`
+	OutOrderNo           string `json:"out_order_no"`
+	// 商户分账回退单号
+	OutReturnNo string `json:"out_return_no"`
+	// 回退接收方商户号（平台/运营商）
+	ReturnMchid string `json:"return_mchid"`
+	Amount      int64  `json:"amount"`
+	// 回退状态：pending/processing/success/failed
+	Status     string             `json:"status"`
+	ReturnID   pgtype.Text        `json:"return_id"`
+	FailReason pgtype.Text        `json:"fail_reason"`
+	FinishedAt pgtype.Timestamptz `json:"finished_at"`
+	CreatedAt  time.Time          `json:"created_at"`
+	UpdatedAt  time.Time          `json:"updated_at"`
+}
+
 // M10: 充值规则表（充100送20等）
 type RechargeRule struct {
 	ID             int64              `json:"id"`
@@ -962,34 +1613,21 @@ type RecommendConfig struct {
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
 
-// 推荐结果表：缓存生成的推荐结果
-type Recommendation struct {
-	ID          int64   `json:"id"`
-	UserID      int64   `json:"user_id"`
-	DishIds     []int64 `json:"dish_ids"`
-	ComboIds    []int64 `json:"combo_ids"`
-	MerchantIds []int64 `json:"merchant_ids"`
-	// 使用的算法：collaborative/content-based/hybrid/ee-algorithm
-	Algorithm   string         `json:"algorithm"`
-	Score       pgtype.Numeric `json:"score"`
-	GeneratedAt time.Time      `json:"generated_at"`
-	// 推荐过期时间（通常5分钟后）
-	ExpiredAt time.Time `json:"expired_at"`
-}
-
-// 推荐配置表：区域级别EE算法配置
-type RecommendationConfig struct {
-	ID       int64 `json:"id"`
-	RegionID int64 `json:"region_id"`
-	// 喜好推荐比例 0.00-1.00，默认60%
-	ExploitationRatio pgtype.Numeric `json:"exploitation_ratio"`
-	// 探索推荐比例 0.00-1.00，默认30%
-	ExplorationRatio pgtype.Numeric `json:"exploration_ratio"`
-	// 随机推荐比例 0.00-1.00，默认10%
-	RandomRatio pgtype.Numeric `json:"random_ratio"`
-	// 是否启用自动调整比例（基于成交转化率，M12功能）
-	AutoAdjust bool      `json:"auto_adjust"`
-	UpdatedAt  time.Time `json:"updated_at"`
+// 每日微信支付对账报告，由 bill-reconciliation 调度器自动生成
+type ReconciliationReport struct {
+	ID             int64              `json:"id"`
+	BillDate       pgtype.Date        `json:"bill_date"`
+	BillType       string             `json:"bill_type"`
+	Status         string             `json:"status"`
+	WxpayCount     int32              `json:"wxpay_count"`
+	LocalCount     int32              `json:"local_count"`
+	MismatchCount  int32              `json:"mismatch_count"`
+	MissingLocal   []byte             `json:"missing_local"`
+	MissingWxpay   []byte             `json:"missing_wxpay"`
+	AmountMismatch []byte             `json:"amount_mismatch"`
+	ErrorMessage   pgtype.Text        `json:"error_message"`
+	CreatedAt      time.Time          `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 }
 
 type RefundOrder struct {
@@ -1021,6 +1659,48 @@ type Region struct {
 	CreatedAt time.Time      `json:"created_at"`
 	// 和风天气城市ID，首次查询后缓存
 	QweatherLocationID pgtype.Text `json:"qweather_location_id"`
+	Status             string      `json:"status"`
+}
+
+type RegionExternalMapping struct {
+	ID           int64       `json:"id"`
+	RegionID     int64       `json:"region_id"`
+	Provider     string      `json:"provider"`
+	ExternalCode string      `json:"external_code"`
+	ExternalName pgtype.Text `json:"external_name"`
+	CreatedAt    time.Time   `json:"created_at"`
+}
+
+// 区县级规则配置表，按 region 维度管理运营规则
+type RegionRuleConfig struct {
+	ID int64 `json:"id"`
+	// 区县ID
+	RegionID int64 `json:"region_id"`
+	// 平台抽成比例（0.03=3%）
+	CommissionRate pgtype.Numeric `json:"commission_rate"`
+	// 商户押金（分）
+	MerchantDeposit int64 `json:"merchant_deposit"`
+	// 骑手押金（分）
+	RiderDeposit int64 `json:"rider_deposit"`
+	// 极端天气系数
+	WeatherCoeffExtreme pgtype.Numeric `json:"weather_coeff_extreme"`
+	// 暴雨雪天气系数
+	WeatherCoeffHeavy pgtype.Numeric `json:"weather_coeff_heavy"`
+	// 中雨雪天气系数
+	WeatherCoeffModerate pgtype.Numeric `json:"weather_coeff_moderate"`
+	// 小雨雪天气系数
+	WeatherCoeffLight pgtype.Numeric     `json:"weather_coeff_light"`
+	CreatedAt         time.Time          `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+}
+
+type ReservationInventory struct {
+	ID            int64              `json:"id"`
+	ReservationID int64              `json:"reservation_id"`
+	DishID        int64              `json:"dish_id"`
+	Quantity      int32              `json:"quantity"`
+	CreatedAt     time.Time          `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 }
 
 type ReservationItem struct {
@@ -1034,6 +1714,15 @@ type ReservationItem struct {
 	CreatedAt     time.Time   `json:"created_at"`
 }
 
+type ReservationPayment struct {
+	ID             int64     `json:"id"`
+	ReservationID  int64     `json:"reservation_id"`
+	PaymentOrderID int64     `json:"payment_order_id"`
+	Amount         int64     `json:"amount"`
+	Type           string    `json:"type"`
+	CreatedAt      time.Time `json:"created_at"`
+}
+
 // 订单评价表
 type Review struct {
 	ID int64 `json:"id"`
@@ -1045,8 +1734,6 @@ type Review struct {
 	MerchantID int64 `json:"merchant_id"`
 	// 评价内容
 	Content string `json:"content"`
-	// 评价图片URLs，PostgreSQL数组类型
-	Images []string `json:"images"`
 	// 是否可见，低信用用户评价不展示
 	IsVisible bool `json:"is_visible"`
 	// 商户回复内容
@@ -1054,6 +1741,16 @@ type Review struct {
 	// 回复时间
 	RepliedAt pgtype.Timestamptz `json:"replied_at"`
 	CreatedAt time.Time          `json:"created_at"`
+}
+
+// 评价图片关联表，取代 reviews.images 数组字段
+type ReviewImage struct {
+	ID           int64 `json:"id"`
+	ReviewID     int64 `json:"review_id"`
+	MediaAssetID int64 `json:"media_asset_id"`
+	// 图片排列顺序
+	SortOrder int32     `json:"sort_order"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 // 骑手表
@@ -1083,21 +1780,16 @@ type Rider struct {
 	RegionID pgtype.Int8 `json:"region_id"`
 	// 关联的入驻申请ID，审核通过后填充
 	ApplicationID pgtype.Int8 `json:"application_id"`
-	// 微信平台收付通二级商户号
-	SubMchID pgtype.Text `json:"sub_mch_id"`
 }
 
 // 骑手入驻申请表，支持草稿保存和自动审核
 type RiderApplication struct {
-	ID             int64       `json:"id"`
-	UserID         int64       `json:"user_id"`
-	RealName       pgtype.Text `json:"real_name"`
-	Phone          pgtype.Text `json:"phone"`
-	IDCardFrontUrl pgtype.Text `json:"id_card_front_url"`
-	IDCardBackUrl  pgtype.Text `json:"id_card_back_url"`
+	ID       int64       `json:"id"`
+	UserID   int64       `json:"user_id"`
+	RealName pgtype.Text `json:"real_name"`
+	Phone    pgtype.Text `json:"phone"`
 	// 身份证OCR识别结果JSON
-	IDCardOcr     []byte      `json:"id_card_ocr"`
-	HealthCertUrl pgtype.Text `json:"health_cert_url"`
+	IDCardOcr []byte `json:"id_card_ocr"`
 	// 健康证OCR识别结果JSON
 	HealthCertOcr []byte `json:"health_cert_ocr"`
 	// draft=草稿, submitted=已提交待审核, approved=已通过, rejected=已拒绝
@@ -1108,6 +1800,12 @@ type RiderApplication struct {
 	CreatedAt    time.Time          `json:"created_at"`
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 	SubmittedAt  pgtype.Timestamptz `json:"submitted_at"`
+	// 骑手身份证正面媒体资产 ID
+	IDCardFrontMediaAssetID pgtype.Int8 `json:"id_card_front_media_asset_id"`
+	// 骑手身份证背面媒体资产 ID
+	IDCardBackMediaAssetID pgtype.Int8 `json:"id_card_back_media_asset_id"`
+	// 骑手健康证媒体资产 ID
+	HealthCertMediaAssetID pgtype.Int8 `json:"health_cert_media_asset_id"`
 }
 
 // 骑手押金流水
@@ -1121,6 +1819,27 @@ type RiderDeposit struct {
 	BalanceAfter   int64       `json:"balance_after"`
 	Remark         pgtype.Text `json:"remark"`
 	CreatedAt      time.Time   `json:"created_at"`
+	PaymentOrderID pgtype.Int8 `json:"payment_order_id"`
+}
+
+// 骑手押金可退款凭证，记录每笔押金支付单在微信退款窗口内的可退款状态
+type RiderDepositCredit struct {
+	ID      int64 `json:"id"`
+	RiderID int64 `json:"rider_id"`
+	// 原始押金支付单 ID，后续提现应基于该支付单走退款
+	PaymentOrderID   int64 `json:"payment_order_id"`
+	OriginalAmount   int64 `json:"original_amount"`
+	RefundableAmount int64 `json:"refundable_amount"`
+	RefundedAmount   int64 `json:"refunded_amount"`
+	// active=可退款, partially_refunded=部分退款, fully_refunded=已全部退款, expired=已过期, legacy=历史兼容数据
+	Status string    `json:"status"`
+	PaidAt time.Time `json:"paid_at"`
+	// 微信退款有效截止时间，通常为支付成功后 365 天
+	RefundableUntil time.Time          `json:"refundable_until"`
+	LastRemindedAt  pgtype.Timestamptz `json:"last_reminded_at"`
+	ExpiredAt       pgtype.Timestamptz `json:"expired_at"`
+	CreatedAt       time.Time          `json:"created_at"`
+	UpdatedAt       time.Time          `json:"updated_at"`
 }
 
 // 骑手位置记录
@@ -1139,26 +1858,10 @@ type RiderLocation struct {
 	RecordedAt time.Time      `json:"recorded_at"`
 }
 
-// 高值单资格积分变更日志表
-type RiderPremiumScoreLog struct {
-	ID                int64       `json:"id"`
-	RiderID           int64       `json:"rider_id"`
-	ChangeAmount      int16       `json:"change_amount"`
-	OldScore          int16       `json:"old_score"`
-	NewScore          int16       `json:"new_score"`
-	ChangeType        string      `json:"change_type"`
-	RelatedOrderID    pgtype.Int8 `json:"related_order_id"`
-	RelatedDeliveryID pgtype.Int8 `json:"related_delivery_id"`
-	Remark            pgtype.Text `json:"remark"`
-	CreatedAt         time.Time   `json:"created_at"`
-}
-
 // 骑手信任画像表 - 餐损索赔由押金扣除
 type RiderProfile struct {
-	ID      int64 `json:"id"`
-	RiderID int64 `json:"rider_id"`
-	// 骑手信任分，350以下暂停接单
-	TrustScore          int16 `json:"trust_score"`
+	ID                  int64 `json:"id"`
+	RiderID             int64 `json:"rider_id"`
 	TotalDeliveries     int32 `json:"total_deliveries"`
 	CompletedDeliveries int32 `json:"completed_deliveries"`
 	OnTimeDeliveries    int32 `json:"on_time_deliveries"`
@@ -1182,8 +1885,103 @@ type RiderProfile struct {
 	SuspendedAt   pgtype.Timestamptz `json:"suspended_at"`
 	SuspendUntil  pgtype.Timestamptz `json:"suspend_until"`
 	UpdatedAt     time.Time          `json:"updated_at"`
-	// 高值单资格积分：普通单+1，高值单-3，超时-5，餐损-10，≥0可接高值单
-	PremiumScore int16 `json:"premium_score"`
+}
+
+// 规则主体表（Phase1 草案）
+type Rule struct {
+	ID               int64       `json:"id"`
+	Name             string      `json:"name"`
+	Category         string      `json:"category"`
+	Status           string      `json:"status"`
+	CurrentVersionID pgtype.Int8 `json:"current_version_id"`
+	CreatedBy        pgtype.Int8 `json:"created_by"`
+	CreatedAt        time.Time   `json:"created_at"`
+	UpdatedAt        time.Time   `json:"updated_at"`
+}
+
+// 规则审计表（Phase1 草案）
+type RuleAudit struct {
+	ID            int64       `json:"id"`
+	RuleID        int64       `json:"rule_id"`
+	RuleVersionID pgtype.Int8 `json:"rule_version_id"`
+	Action        string      `json:"action"`
+	ActorID       pgtype.Int8 `json:"actor_id"`
+	ActorRole     pgtype.Text `json:"actor_role"`
+	Detail        []byte      `json:"detail"`
+	CreatedAt     time.Time   `json:"created_at"`
+}
+
+// 规则命中审计表（Phase1 草案）
+type RuleHit struct {
+	ID            int64       `json:"id"`
+	RuleID        int64       `json:"rule_id"`
+	RuleVersionID pgtype.Int8 `json:"rule_version_id"`
+	Domain        string      `json:"domain"`
+	Decision      string      `json:"decision"`
+	Reason        pgtype.Text `json:"reason"`
+	Inputs        []byte      `json:"inputs"`
+	Outputs       []byte      `json:"outputs"`
+	ActorID       pgtype.Int8 `json:"actor_id"`
+	ActorRole     pgtype.Text `json:"actor_role"`
+	RegionID      pgtype.Int8 `json:"region_id"`
+	MerchantID    pgtype.Int8 `json:"merchant_id"`
+	CreatedAt     time.Time   `json:"created_at"`
+}
+
+// 规则版本表（Phase1 草案）
+type RuleVersion struct {
+	ID          int64              `json:"id"`
+	RuleID      int64              `json:"rule_id"`
+	Version     int32              `json:"version"`
+	Status      string             `json:"status"`
+	Priority    int32              `json:"priority"`
+	Scope       []byte             `json:"scope"`
+	Condition   []byte             `json:"condition"`
+	Action      []byte             `json:"action"`
+	GrayConfig  []byte             `json:"gray_config"`
+	EffectiveAt pgtype.Timestamptz `json:"effective_at"`
+	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
+	CreatedBy   pgtype.Int8        `json:"created_by"`
+	CreatedAt   time.Time          `json:"created_at"`
+}
+
+type SafetyReport struct {
+	ID              int64       `json:"id"`
+	ReporterID      int64       `json:"reporter_id"`
+	RegionID        int64       `json:"region_id"`
+	Title           string      `json:"title"`
+	Description     string      `json:"description"`
+	Level           string      `json:"level"`
+	MerchantIds     []int64     `json:"merchant_ids"`
+	Status          string      `json:"status"`
+	ResolutionNotes pgtype.Text `json:"resolution_notes"`
+	CreatedAt       time.Time   `json:"created_at"`
+	UpdatedAt       time.Time   `json:"updated_at"`
+}
+
+// 安全事件上报图片关联表，取代 safety_reports.images text[] 字段
+type SafetyReportImage struct {
+	ID           int64     `json:"id"`
+	ReportID     int64     `json:"report_id"`
+	MediaAssetID int64     `json:"media_asset_id"`
+	SortOrder    int16     `json:"sort_order"`
+	CreatedAt    time.Time `json:"created_at"`
+}
+
+type SearchHistory struct {
+	ID        int64     `json:"id"`
+	UserID    int64     `json:"user_id"`
+	Keyword   string    `json:"keyword"`
+	Type      string    `json:"type"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type SearchPopularKeyword struct {
+	ID        int64     `json:"id"`
+	Keyword   string    `json:"keyword"`
+	Type      string    `json:"type"`
+	Count     int32     `json:"count"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 type Session struct {
@@ -1199,6 +1997,28 @@ type Session struct {
 	CreatedAt             time.Time `json:"created_at"`
 }
 
+// 平台收付通补差订单；平台出资补贴给二级商户，对应微信支付 /v3/ecommerce/subsidies/create
+type SubsidyOrder struct {
+	ID               int64              `json:"id"`
+	PaymentOrderID   int64              `json:"payment_order_id"`
+	SubMchID         string             `json:"sub_mch_id"`
+	TransactionID    pgtype.Text        `json:"transaction_id"`
+	OutSubsidyNo     string             `json:"out_subsidy_no"`
+	PayerAmount      int64              `json:"payer_amount"`
+	Amount           int64              `json:"amount"`
+	Description      string             `json:"description"`
+	Status           string             `json:"status"`
+	WxpaySubsidyID   pgtype.Text        `json:"wxpay_subsidy_id"`
+	FailReason       pgtype.Text        `json:"fail_reason"`
+	OutReturnNo      pgtype.Text        `json:"out_return_no"`
+	ReturnAmount     pgtype.Int8        `json:"return_amount"`
+	ReturnStatus     pgtype.Text        `json:"return_status"`
+	ReturnWxpayID    pgtype.Text        `json:"return_wxpay_id"`
+	ReturnFailReason pgtype.Text        `json:"return_fail_reason"`
+	CreatedAt        time.Time          `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Table struct {
 	ID                   int64              `json:"id"`
 	MerchantID           int64              `json:"merchant_id"`
@@ -1212,6 +2032,7 @@ type Table struct {
 	CurrentReservationID pgtype.Int8        `json:"current_reservation_id"`
 	CreatedAt            time.Time          `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+	AccessCodeHash       pgtype.Text        `json:"access_code_hash"`
 }
 
 // 桌台/包间图片表
@@ -1219,13 +2040,13 @@ type TableImage struct {
 	ID int64 `json:"id"`
 	// 桌台ID
 	TableID int64 `json:"table_id"`
-	// 图片URL
-	ImageUrl string `json:"image_url"`
 	// 排序顺序
 	SortOrder int32 `json:"sort_order"`
 	// 是否为主图
 	IsPrimary bool      `json:"is_primary"`
 	CreatedAt time.Time `json:"created_at"`
+	// 桌台图片媒体资产 ID，取代 image_url 字段
+	MediaAssetID pgtype.Int8 `json:"media_asset_id"`
 }
 
 type TableReservation struct {
@@ -1267,6 +2088,18 @@ type TableTag struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+type TableTransferLog struct {
+	ID              int64       `json:"id"`
+	MerchantID      int64       `json:"merchant_id"`
+	DiningSessionID int64       `json:"dining_session_id"`
+	ReservationID   pgtype.Int8 `json:"reservation_id"`
+	FromTableID     int64       `json:"from_table_id"`
+	ToTableID       int64       `json:"to_table_id"`
+	OperatorUserID  int64       `json:"operator_user_id"`
+	Reason          pgtype.Text `json:"reason"`
+	CreatedAt       time.Time   `json:"created_at"`
+}
+
 type Tag struct {
 	ID   int64  `json:"id"`
 	Name string `json:"name"`
@@ -1275,26 +2108,6 @@ type Tag struct {
 	SortOrder int16     `json:"sort_order"`
 	Status    string    `json:"status"`
 	CreatedAt time.Time `json:"created_at"`
-}
-
-// TrustScore变更记录表（审计日志）- 所有信用分变更可追溯
-type TrustScoreChange struct {
-	ID         int64  `json:"id"`
-	EntityType string `json:"entity_type"`
-	EntityID   int64  `json:"entity_id"`
-	OldScore   int16  `json:"old_score"`
-	NewScore   int16  `json:"new_score"`
-	// 变化值：负数=扣分，正数=加分（第一版不实现加分）
-	ScoreChange int16 `json:"score_change"`
-	// 变更原因类型：用于统计分析
-	ReasonType        string      `json:"reason_type"`
-	ReasonDescription string      `json:"reason_description"`
-	RelatedType       pgtype.Text `json:"related_type"`
-	RelatedID         pgtype.Int8 `json:"related_id"`
-	// 系统自动变更 vs 人工调整
-	IsAuto     bool        `json:"is_auto"`
-	OperatorID pgtype.Int8 `json:"operator_id"`
-	CreatedAt  time.Time   `json:"created_at"`
 }
 
 type User struct {
@@ -1309,19 +2122,22 @@ type User struct {
 	// 微信头像URL
 	AvatarUrl pgtype.Text `json:"avatar_url"`
 	CreatedAt time.Time   `json:"created_at"`
+	// 用户头像媒体资产 ID，用于应用内上传的头像；微信头像仍存 avatar_url
+	AvatarMediaAssetID pgtype.Int8 `json:"avatar_media_asset_id"`
 }
 
 type UserAddress struct {
-	ID            int64          `json:"id"`
-	UserID        int64          `json:"user_id"`
-	RegionID      int64          `json:"region_id"`
-	DetailAddress string         `json:"detail_address"`
-	ContactName   string         `json:"contact_name"`
-	ContactPhone  string         `json:"contact_phone"`
-	Longitude     pgtype.Numeric `json:"longitude"`
-	Latitude      pgtype.Numeric `json:"latitude"`
-	IsDefault     bool           `json:"is_default"`
-	CreatedAt     time.Time      `json:"created_at"`
+	ID            int64              `json:"id"`
+	UserID        int64              `json:"user_id"`
+	RegionID      int64              `json:"region_id"`
+	DetailAddress string             `json:"detail_address"`
+	ContactName   string             `json:"contact_name"`
+	ContactPhone  string             `json:"contact_phone"`
+	Longitude     pgtype.Numeric     `json:"longitude"`
+	Latitude      pgtype.Numeric     `json:"latitude"`
+	IsDefault     bool               `json:"is_default"`
+	CreatedAt     time.Time          `json:"created_at"`
+	DeletedAt     pgtype.Timestamptz `json:"deleted_at"`
 }
 
 // 用户余额账户
@@ -1342,7 +2158,7 @@ type UserBalance struct {
 type UserBalanceLog struct {
 	ID     int64 `json:"id"`
 	UserID int64 `json:"user_id"`
-	// 变动类型：claim_refund/order_pay/withdraw/recharge/adjustment
+	// 变动类型：claim_payout/claim_payout_reversal/appeal_compensation/order_pay/withdraw/recharge/adjustment
 	Type          string      `json:"type"`
 	Amount        int64       `json:"amount"`
 	BalanceBefore int64       `json:"balance_before"`
@@ -1354,20 +2170,6 @@ type UserBalanceLog struct {
 	SourceID   pgtype.Int8 `json:"source_id"`
 	Remark     pgtype.Text `json:"remark"`
 	CreatedAt  time.Time   `json:"created_at"`
-}
-
-// 用户行为埋点表：浏览、详情、加购、购买
-type UserBehavior struct {
-	ID     int64 `json:"id"`
-	UserID int64 `json:"user_id"`
-	// view/detail/cart/purchase - 浏览列表/查看详情/加购/购买
-	BehaviorType string      `json:"behavior_type"`
-	DishID       pgtype.Int8 `json:"dish_id"`
-	ComboID      pgtype.Int8 `json:"combo_id"`
-	MerchantID   pgtype.Int8 `json:"merchant_id"`
-	// 停留时长(秒)，仅view/detail行为有值
-	Duration  pgtype.Int4 `json:"duration"`
-	CreatedAt time.Time   `json:"created_at"`
 }
 
 // 用户索赔警告状态表，记录用户的索赔行为模式
@@ -1393,17 +2195,18 @@ type UserDevice struct {
 	// 设备指纹，可以是设备IMEI、UUID或浏览器指纹（TEXT类型，遵循PostgreSQL最佳实践）
 	DeviceID string `json:"device_id"`
 	// 设备类型：ios/android/web等
-	DeviceType  string      `json:"device_type"`
-	DeviceModel pgtype.Text `json:"device_model"`
-	OsVersion   pgtype.Text `json:"os_version"`
-	AppVersion  pgtype.Text `json:"app_version"`
-	UserAgent   pgtype.Text `json:"user_agent"`
-	IpAddress   pgtype.Text `json:"ip_address"`
-	LastLoginAt time.Time   `json:"last_login_at"`
-	CreatedAt   time.Time   `json:"created_at"`
-	FirstSeen   time.Time   `json:"first_seen"`
-	LastSeen    time.Time   `json:"last_seen"`
-	UpdatedAt   time.Time   `json:"updated_at"`
+	DeviceType        string      `json:"device_type"`
+	DeviceModel       pgtype.Text `json:"device_model"`
+	OsVersion         pgtype.Text `json:"os_version"`
+	AppVersion        pgtype.Text `json:"app_version"`
+	UserAgent         pgtype.Text `json:"user_agent"`
+	IpAddress         pgtype.Text `json:"ip_address"`
+	LastLoginAt       time.Time   `json:"last_login_at"`
+	CreatedAt         time.Time   `json:"created_at"`
+	FirstSeen         time.Time   `json:"first_seen"`
+	LastSeen          time.Time   `json:"last_seen"`
+	UpdatedAt         time.Time   `json:"updated_at"`
+	DeviceFingerprint pgtype.Text `json:"device_fingerprint"`
 }
 
 // 用户通知偏好设置
@@ -1421,54 +2224,6 @@ type UserNotificationPreference struct {
 	DoNotDisturbEnd pgtype.Time        `json:"do_not_disturb_end"`
 	CreatedAt       time.Time          `json:"created_at"`
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
-}
-
-// 用户偏好表：基于行为和消费分析
-type UserPreference struct {
-	ID     int64 `json:"id"`
-	UserID int64 `json:"user_id"`
-	// JSON格式：{"川菜": 0.8, "粤菜": 0.6} - 菜系偏好得分
-	CuisinePreferences []byte      `json:"cuisine_preferences"`
-	PriceRangeMin      pgtype.Int8 `json:"price_range_min"`
-	PriceRangeMax      pgtype.Int8 `json:"price_range_max"`
-	AvgOrderAmount     pgtype.Int8 `json:"avg_order_amount"`
-	// PostgreSQL数组：[11,12,18,19] - 常下单时段(小时)
-	FavoriteTimeSlots []int32     `json:"favorite_time_slots"`
-	PurchaseFrequency int16       `json:"purchase_frequency"`
-	LastOrderDate     pgtype.Date `json:"last_order_date"`
-	// JSON格式：{"川菜": 15, "粤菜": 8} - 购买次数统计
-	TopCuisines []byte    `json:"top_cuisines"`
-	UpdatedAt   time.Time `json:"updated_at"`
-}
-
-// 用户信任画像表（顾客）- 信用驱动异常处理
-type UserProfile struct {
-	ID     int64  `json:"id"`
-	UserID int64  `json:"user_id"`
-	Role   string `json:"role"`
-	// 信任分，初始850（高信任），只有负面行为才扣分
-	TrustScore         int16 `json:"trust_score"`
-	TotalOrders        int32 `json:"total_orders"`
-	CompletedOrders    int32 `json:"completed_orders"`
-	CancelledOrders    int32 `json:"cancelled_orders"`
-	TotalClaims        int32 `json:"total_claims"`
-	MaliciousClaims    int32 `json:"malicious_claims"`
-	FoodSafetyReports  int32 `json:"food_safety_reports"`
-	VerifiedViolations int32 `json:"verified_violations"`
-	// 近7天索赔次数（快速识别异常）
-	Recent7dClaims int32 `json:"recent_7d_claims"`
-	Recent7dOrders int32 `json:"recent_7d_orders"`
-	// 近30天索赔次数（回溯检查）
-	Recent30dClaims  int32 `json:"recent_30d_claims"`
-	Recent30dOrders  int32 `json:"recent_30d_orders"`
-	Recent30dCancels int32 `json:"recent_30d_cancels"`
-	// 近90天索赔次数（长期趋势）
-	Recent90dClaims int32              `json:"recent_90d_claims"`
-	Recent90dOrders int32              `json:"recent_90d_orders"`
-	IsBlacklisted   bool               `json:"is_blacklisted"`
-	BlacklistReason pgtype.Text        `json:"blacklist_reason"`
-	BlacklistedAt   pgtype.Timestamptz `json:"blacklisted_at"`
-	UpdatedAt       time.Time          `json:"updated_at"`
 }
 
 type UserRole struct {
@@ -1559,6 +2314,22 @@ type WeatherCoefficient struct {
 	CreatedAt         time.Time   `json:"created_at"`
 }
 
+type WebLoginSession struct {
+	ID              int64              `json:"id"`
+	Code            string             `json:"code"`
+	Status          string             `json:"status"`
+	UserID          pgtype.Int8        `json:"user_id"`
+	ExpiresAt       time.Time          `json:"expires_at"`
+	ConfirmedAt     pgtype.Timestamptz `json:"confirmed_at"`
+	ConsumedAt      pgtype.Timestamptz `json:"consumed_at"`
+	WebUserAgent    pgtype.Text        `json:"web_user_agent"`
+	WebClientIp     pgtype.Text        `json:"web_client_ip"`
+	ConfirmClientIp pgtype.Text        `json:"confirm_client_ip"`
+	CreatedAt       time.Time          `json:"created_at"`
+	UpdatedAt       time.Time          `json:"updated_at"`
+	PollToken       pgtype.Text        `json:"poll_token"`
+}
+
 type WechatAccessToken struct {
 	ID int64 `json:"id"`
 	// miniprogram/official-account
@@ -1566,6 +2337,30 @@ type WechatAccessToken struct {
 	AccessToken string    `json:"access_token"`
 	ExpiresAt   time.Time `json:"expires_at"`
 	CreatedAt   time.Time `json:"created_at"`
+}
+
+// 微信支付用户投诉记录；由每日同步任务从微信拉取，商户可通过平台回复并完结
+type WechatComplaint struct {
+	ID                     int64              `json:"id"`
+	ComplaintID            string             `json:"complaint_id"`
+	ComplaintTime          time.Time          `json:"complaint_time"`
+	PayerOpenid            pgtype.Text        `json:"payer_openid"`
+	ComplaintDetail        string             `json:"complaint_detail"`
+	ComplaintState         string             `json:"complaint_state"`
+	TransactionID          pgtype.Text        `json:"transaction_id"`
+	OutTradeNo             pgtype.Text        `json:"out_trade_no"`
+	SubMchID               pgtype.Text        `json:"sub_mch_id"`
+	MerchantID             pgtype.Int8        `json:"merchant_id"`
+	PayerComplaintFullInfo bool               `json:"payer_complaint_full_info"`
+	Amount                 int64              `json:"amount"`
+	ResponseContent        pgtype.Text        `json:"response_content"`
+	RespondedAt            pgtype.Timestamptz `json:"responded_at"`
+	MediaIds               []byte             `json:"media_ids"`
+	CompletedAt            pgtype.Timestamptz `json:"completed_at"`
+	LastSyncedAt           pgtype.Timestamptz `json:"last_synced_at"`
+	WxpayUpdateTime        pgtype.Timestamptz `json:"wxpay_update_time"`
+	CreatedAt              time.Time          `json:"created_at"`
+	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
 }
 
 // 微信支付回调通知记录表，用于防止重复处理（幂等性）
@@ -1582,4 +2377,17 @@ type WechatNotification struct {
 	// 通知处理完成时间
 	ProcessedAt pgtype.Timestamp `json:"processed_at"`
 	CreatedAt   pgtype.Timestamp `json:"created_at"`
+}
+
+type WithdrawalRecord struct {
+	ID           int64       `json:"id"`
+	UserID       int64       `json:"user_id"`
+	Amount       int64       `json:"amount"`
+	Status       string      `json:"status"`
+	Channel      string      `json:"channel"`
+	AccountInfo  []byte      `json:"account_info"`
+	Reason       pgtype.Text `json:"reason"`
+	CreatedAt    time.Time   `json:"created_at"`
+	UpdatedAt    time.Time   `json:"updated_at"`
+	OutRequestNo pgtype.Text `json:"out_request_no"`
 }

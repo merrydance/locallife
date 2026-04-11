@@ -1,20 +1,96 @@
-<custom-navbar title="任务大厅" showBack="{{true}}" bind:navheight="onNavHeight" />
+<custom-navbar title="配送历史" showBack="{{true}}" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px;">
-  <t-loading wx:if="{{loading && tasks.length === 0}}" theme="circular" size="40rpx" class="loading" />
-
-  <view wx:if="{{!loading && tasks.length === 0}}" class="empty">
-    <t-empty description="暂无待抢任务" />
+<scroll-view 
+  scroll-y 
+  class="page-container" 
+  style="padding-top: {{navBarHeight}}px;"
+  bindscrolltolower="onReachBottom"
+>
+  <view wx:if="{{loading && deliveries.length === 0}}" class="history-loading">
+    <t-loading theme="circular" size="40rpx" text="正在加载历史任务..." />
   </view>
 
-  <view class="tasks-list">
-    <view wx:for="{{tasks}}" wx:key="id" class="task-item">
-      <!-- Force status to 'PENDING' or 0 logic for delivery-card to show 'Grab' if backend returns something else -->
-      <!-- Actually delivery-card should handle the status -->
-      <delivery-card task="{{item}}" bind:action="onTaskAction" />
+  <view wx:elif="{{errorMessage && deliveries.length === 0}}" class="history-error card-state">
+    <t-empty icon="error-circle" description="{{errorMessage}}" />
+    <t-button theme="primary" shape="round" bindtap="onRetry" size="medium">重新加载</t-button>
+  </view>
+
+  <block wx:else>
+  <!-- 历史概览 -->
+  <view class="history-summary">
+    <view class="summary-item">
+      <view class="val">{{totalCount}}</view>
+      <view class="lab">累计完成</view>
+    </view>
+    <t-divider layout="vertical" />
+    <view class="summary-item">
+      <view class="val">¥{{totalEarnings / 100}}</view>
+      <view class="lab">累计收益</view>
     </view>
   </view>
+
+  <!-- 历史列表 -->
+  <view class="history-list" wx:if="{{deliveries.length > 0}}">
+    <view 
+      class="history-card" 
+      wx:for="{{deliveries}}" 
+      wx:key="id"
+      bindtap="onGoToDetail"
+      data-order-id="{{item.order_id}}"
+    >
+      <view class="card-header">
+        <text class="date">{{item.display_time || '--'}}</text>
+        <t-tag theme="{{item.status_theme}}" variant="dark" size="extra-small">{{item.status_text}}</t-tag>
+      </view>
+      
+      <view class="card-body">
+        <view class="route-info">
+          <view class="address-row">
+            <view class="address"><t-icon name="location" size="32rpx" /> {{item.pickup_address}}</view>
+            <view
+              class="nav-action"
+              catchtap="onOpenLocation"
+              data-latitude="{{item.pickup_latitude}}"
+              data-longitude="{{item.pickup_longitude}}"
+              data-name="{{item.merchant_name || '取货点'}}"
+              data-address="{{item.pickup_address}}"
+              data-label="到店导航"
+            >
+              <t-icon name="map-location" size="34rpx" />
+            </view>
+          </view>
+          <view class="arrow"><t-icon name="arrow-down-rectangle" size="24rpx" /></view>
+          <view class="address-row">
+            <view class="address"><t-icon name="map-location" size="32rpx" /> {{item.delivery_address}}</view>
+            <view
+              class="nav-action"
+              catchtap="onOpenLocation"
+              data-latitude="{{item.delivery_latitude}}"
+              data-longitude="{{item.delivery_longitude}}"
+              data-name="{{item.delivery_contact || '送达点'}}"
+              data-address="{{item.delivery_address}}"
+              data-label="送达导航"
+            >
+              <t-icon name="map-location" size="34rpx" />
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <view class="card-footer">
+        <text class="order-no">订单: {{item.order_id}}</text>
+        <view class="income">+¥{{item.rider_earnings / 100}}</view>
+      </view>
+    </view>
+    
+    <t-loading wx:if="{{loadingMore}}" theme="circular" size="40rpx" text="加载中..." />
+    <view class="card-state load-more-state" wx:if="{{loadMoreError}}">
+      <text class="load-more-error">{{loadMoreError}}</text>
+      <t-button theme="primary" variant="outline" shape="round" size="small" bindtap="onRetryLoadMore">重试加载更多</t-button>
+    </view>
+    <view class="no-more" wx:if="{{!hasMore && !loadMoreError}}">到底啦，仅显示最近半年的记录</view>
+  </view>
   
-  <t-loading wx:if="{{loading && tasks.length > 0}}" theme="circular" size="40rpx" class="loading-more" text="加载中..." />
-  <view wx:if="{{!hasMore && tasks.length > 0}}" class="no-more">没有更多了</view>
-</view>
+  <t-empty wx:else icon="order-adjustment" description="暂无历史纪录" />
+  </block>
+</scroll-view>

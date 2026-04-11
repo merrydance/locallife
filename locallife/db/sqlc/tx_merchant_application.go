@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -30,7 +29,7 @@ type ApproveMerchantApplicationTxResult struct {
 }
 
 // ApproveMerchantApplicationTx approves a merchant application, creates merchant record,
-// and assigns merchant role to user in a single transaction.
+// assigns merchant owner role, and ensures the owner is present in merchant_staff.
 // This ensures atomicity: if any step fails, all changes are rolled back.
 func (store *SQLStore) ApproveMerchantApplicationTx(ctx context.Context, arg ApproveMerchantApplicationTxParams) (ApproveMerchantApplicationTxResult, error) {
 	var result ApproveMerchantApplicationTxResult
@@ -51,13 +50,12 @@ func (store *SQLStore) ApproveMerchantApplicationTx(ctx context.Context, arg App
 		// Step 2: 创建或更新商户记录
 		existingMerchant, err := q.GetMerchantByOwner(ctx, arg.UserID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, ErrRecordNotFound) {
 				// 创建新商户
 				result.Merchant, err = q.CreateMerchant(ctx, CreateMerchantParams{
 					OwnerUserID:     arg.UserID,
 					Name:            arg.MerchantName,
 					Description:     pgtype.Text{},
-					LogoUrl:         pgtype.Text{},
 					Phone:           arg.Phone,
 					Address:         arg.Address,
 					Latitude:        arg.Latitude,
@@ -82,18 +80,64 @@ func (store *SQLStore) ApproveMerchantApplicationTx(ctx context.Context, arg App
 				RegionID:  pgtype.Int8{Int64: arg.RegionID, Valid: true},
 			})
 			if err == nil {
-				// 确保状态也是 approved
-				result.Merchant, err = q.UpdateMerchantStatus(ctx, UpdateMerchantStatusParams{
-					ID:     existingMerchant.ID,
-					Status: "approved",
-				})
+				// 仅在非 active/suspended 状态下推进到 approved，避免降级
+				if existingMerchant.Status != "active" && existingMerchant.Status != "suspended" {
+					result.Merchant, err = q.UpdateMerchantStatus(ctx, UpdateMerchantStatusParams{
+						ID:     existingMerchant.ID,
+						Status: "approved",
+					})
+				}
 			}
 		}
 		if err != nil {
 			return fmt.Errorf("create/update merchant: %w", err)
 		}
 
-		// Step 3: 创建或更新用户商户角色
+		// Step 2.5: 入驻后默认设为打烊状态，商户需手动开店
+		result.Merchant, err = q.UpdateMerchantIsOpen(ctx, UpdateMerchantIsOpenParams{
+			ID:     result.Merchant.ID,
+			IsOpen: false,
+		})
+		if err != nil {
+			return fmt.Errorf("set merchant closed: %w", err)
+		}
+
+		catalog, err := LoadMerchantSystemLabelCatalog(ctx, q)
+		if err != nil {
+			return fmt.Errorf("load merchant system label catalog: %w", err)
+		}
+		if err := ReconcileMerchantSystemLabels(ctx, q, result.Merchant.ID, catalog, MerchantSystemLabelSourceReconciler); err != nil {
+			return fmt.Errorf("reconcile merchant system labels: %w", err)
+		}
+
+		// Step 3: 确保老板在 merchant_staff 中有 owner 记录。
+		staff, err := q.GetMerchantStaff(ctx, GetMerchantStaffParams{
+			MerchantID: result.Merchant.ID,
+			UserID:     arg.UserID,
+		})
+		if err != nil {
+			if errors.Is(err, ErrRecordNotFound) {
+				_, err = q.CreateMerchantStaff(ctx, CreateMerchantStaffParams{
+					MerchantID: result.Merchant.ID,
+					UserID:     arg.UserID,
+					Role:       MerchantStaffRoleOwner,
+					Status:     MerchantStaffStatusActive,
+					InvitedBy:  pgtype.Int8{},
+				})
+			} else {
+				return fmt.Errorf("get merchant staff: %w", err)
+			}
+		} else if staff.Role != MerchantStaffRoleOwner || staff.Status != MerchantStaffStatusActive {
+			_, err = q.UpdateMerchantStaffRole(ctx, UpdateMerchantStaffRoleParams{
+				ID:   staff.ID,
+				Role: MerchantStaffRoleOwner,
+			})
+		}
+		if err != nil {
+			return fmt.Errorf("ensure merchant owner staff: %w", err)
+		}
+
+		// Step 4: 创建或更新用户商户老板角色。
 		// 检查是否已有该角色
 		roles, err := q.ListUserRoles(ctx, arg.UserID)
 		if err != nil {
@@ -102,7 +146,7 @@ func (store *SQLStore) ApproveMerchantApplicationTx(ctx context.Context, arg App
 
 		hasMerchantRole := false
 		for _, r := range roles {
-			if r.Role == "merchant" {
+			if r.Role == UserRoleMerchantOwner {
 				hasMerchantRole = true
 				// 如果角色已存在但关联实体 ID 不对，或者状态不是 active，可以在这里更新
 				// 但目前 CreateUserRole 足够，如果已存在则跳过
@@ -114,7 +158,7 @@ func (store *SQLStore) ApproveMerchantApplicationTx(ctx context.Context, arg App
 		if !hasMerchantRole {
 			result.UserRole, err = q.CreateUserRole(ctx, CreateUserRoleParams{
 				UserID:          arg.UserID,
-				Role:            "merchant",
+				Role:            UserRoleMerchantOwner,
 				Status:          "active",
 				RelatedEntityID: pgtype.Int8{Int64: result.Merchant.ID, Valid: true},
 			})
@@ -155,17 +199,19 @@ func (store *SQLStore) ResetMerchantApplicationTx(ctx context.Context, arg Reset
 			return fmt.Errorf("reset application: %w", err)
 		}
 
-		// Step 2: 如果商户记录已存在，将其状态改为 pending
+		// Step 2: 如果商户记录已存在，仅在非 active/approved 状态下改为 pending
 		merchant, err := q.GetMerchantByOwner(ctx, arg.UserID)
 		if err == nil {
-			result.Merchant, err = q.UpdateMerchantStatus(ctx, UpdateMerchantStatusParams{
-				ID:     merchant.ID,
-				Status: "pending",
-			})
-			if err != nil {
-				return fmt.Errorf("update merchant status: %w", err)
+			if merchant.Status != "active" && merchant.Status != "approved" {
+				result.Merchant, err = q.UpdateMerchantStatus(ctx, UpdateMerchantStatusParams{
+					ID:     merchant.ID,
+					Status: "pending",
+				})
+				if err != nil {
+					return fmt.Errorf("update merchant status: %w", err)
+				}
 			}
-		} else if !errors.Is(err, pgx.ErrNoRows) {
+		} else if !errors.Is(err, ErrRecordNotFound) {
 			return fmt.Errorf("get merchant: %w", err)
 		}
 

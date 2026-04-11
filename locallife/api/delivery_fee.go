@@ -1,9 +1,10 @@
 package api
 
 import (
-	"database/sql"
+	"context"
 	"errors"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -30,7 +31,7 @@ func (server *Server) checkOperatorManagesRegion(ctx *gin.Context, regionID int6
 		var err error
 		operator, err = server.store.GetOperatorByUser(ctx, authPayload.UserID)
 		if err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
+			if isNotFoundError(err) {
 				return nil, errors.New("operator record not found")
 			}
 			return nil, err
@@ -55,40 +56,65 @@ func (server *Server) checkOperatorManagesRegion(ctx *gin.Context, regionID int6
 
 // getOperatorRegionID 获取运营商管理的区域ID
 func (server *Server) getOperatorRegionID(ctx *gin.Context) (int64, error) {
+	if regionIDQuery := ctx.Query("region_id"); regionIDQuery != "" {
+		regionID, err := strconv.ParseInt(regionIDQuery, 10, 64)
+		if err != nil || regionID <= 0 {
+			return 0, errors.New("invalid region_id")
+		}
+		if _, err := server.checkOperatorManagesRegion(ctx, regionID); err != nil {
+			return 0, err
+		}
+		return regionID, nil
+	}
+
 	// 如果中间件已经设置了 operator，直接使用
 	if op, ok := GetOperatorFromContext(ctx); ok {
-		if op.RegionID == 0 {
-			return 0, errors.New("operator has no assigned region")
+		if op.RegionID > 0 {
+			if _, err := server.checkOperatorManagesRegion(ctx, op.RegionID); err == nil {
+				return op.RegionID, nil
+			}
 		}
-		return op.RegionID, nil
-	}
 
-	// 向后兼容：从数据库查询
-	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-
-	// 查询operator角色记录
-	operatorRole, err := server.store.GetUserRoleByType(ctx, db.GetUserRoleByTypeParams{
-		UserID: authPayload.UserID,
-		Role:   "operator",
-	})
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return 0, errors.New("operator role not found")
+		regionRelations, err := server.store.ListOperatorRegions(ctx, op.ID)
+		if err != nil {
+			return 0, err
 		}
-		return 0, err
-	}
+		if len(regionRelations) == 1 {
+			return regionRelations[0].RegionID, nil
+		}
+		if len(regionRelations) > 1 {
+			return 0, errors.New("region_id is required when managing multiple regions")
+		}
 
-	// 检查状态
-	if operatorRole.Status != "active" {
-		return 0, errors.New("operator role is not active")
-	}
-
-	// related_entity_id存储region_id
-	if !operatorRole.RelatedEntityID.Valid {
 		return 0, errors.New("operator has no assigned region")
 	}
 
-	return operatorRole.RelatedEntityID.Int64, nil
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	operator, err := server.store.GetOperatorByUser(ctx, authPayload.UserID)
+	if err != nil {
+		if isNotFoundError(err) {
+			return 0, errors.New("operator record not found")
+		}
+		return 0, err
+	}
+	if operator.RegionID > 0 {
+		if _, err := server.checkOperatorManagesRegion(ctx, operator.RegionID); err == nil {
+			return operator.RegionID, nil
+		}
+	}
+
+	regionRelations, err := server.store.ListOperatorRegions(ctx, operator.ID)
+	if err != nil {
+		return 0, err
+	}
+	if len(regionRelations) == 1 {
+		return regionRelations[0].RegionID, nil
+	}
+	if len(regionRelations) > 1 {
+		return 0, errors.New("region_id is required when managing multiple regions")
+	}
+
+	return 0, errors.New("operator has no assigned region")
 }
 
 // ============================================================================
@@ -117,6 +143,13 @@ type deliveryFeeConfigResponse struct {
 	IsActive      bool       `json:"is_active"`
 	CreatedAt     time.Time  `json:"created_at"`
 	UpdatedAt     *time.Time `json:"updated_at,omitempty"`
+}
+
+func validateMinMaxFee(minFee int64, maxFee *int64) error {
+	if maxFee != nil && *maxFee < minFee {
+		return errors.New("max_fee cannot be less than min_fee")
+	}
+	return nil
 }
 
 func newDeliveryFeeConfigResponse(config db.DeliveryFeeConfig) deliveryFeeConfigResponse {
@@ -161,7 +194,7 @@ func newDeliveryFeeConfigResponse(config db.DeliveryFeeConfig) deliveryFeeConfig
 // @Failure 403 {object} ErrorResponse "Operator role required or not authorized for this region"
 // @Failure 409 {object} ErrorResponse "Config already exists for this region"
 // @Failure 500 {object} ErrorResponse
-// @Router /delivery-fee/regions/{region_id}/config [post]
+// @Router /v1/delivery-fee/regions/{region_id}/config [post]
 // @Security BearerAuth
 func (server *Server) createDeliveryFeeConfig(ctx *gin.Context) {
 	var req createDeliveryFeeConfigRequest
@@ -170,7 +203,14 @@ func (server *Server) createDeliveryFeeConfig(ctx *gin.Context) {
 		return
 	}
 
-	// 权限验证由中间件处理（RoleMiddleware + OperatorMiddleware + OperatorRegionMiddleware）
+	if err := validateMinMaxFee(req.MinFee, req.MaxFee); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
+	// 权限验证由中间件处理（CasbinRoleMiddleware + LoadOperatorMiddleware + ValidateOperatorRegionMiddleware）
 
 	arg := db.CreateDeliveryFeeConfigParams{
 		RegionID:      req.RegionID,
@@ -182,10 +222,12 @@ func (server *Server) createDeliveryFeeConfig(ctx *gin.Context) {
 	}
 
 	// ValueRatio: 默认1%
-	if req.ValueRatio > 0 {
-		arg.ValueRatio.Scan(req.ValueRatio)
+	valueRatio := req.ValueRatio
+	if valueRatio > 0 {
+		_ = arg.ValueRatio.Scan(valueRatio)
 	} else {
-		arg.ValueRatio.Scan(0.01)
+		valueRatio = 0.01
+		_ = arg.ValueRatio.Scan(valueRatio)
 	}
 
 	if req.MaxFee != nil {
@@ -195,12 +237,31 @@ func (server *Server) createDeliveryFeeConfig(ctx *gin.Context) {
 	config, err := server.store.CreateDeliveryFeeConfig(ctx, arg)
 	if err != nil {
 		if db.ErrorCode(err) == db.UniqueViolation {
-			ctx.JSON(http.StatusConflict, errorResponse(errors.New("delivery fee config already exists for this region")))
+			ctx.JSON(http.StatusConflict, errorResponse(ErrDeliveryFeeConfigExists))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
+
+	server.writeAuditLog(ctx, AuditLogInput{
+		ActorUserID: authPayload.UserID,
+		ActorRole:   "operator",
+		Action:      "delivery_fee_config_created",
+		TargetType:  "delivery_fee_config",
+		TargetID:    &config.ID,
+		RegionID:    &config.RegionID,
+		Metadata: map[string]any{
+			"region_id":        config.RegionID,
+			"base_fee":         req.BaseFee,
+			"base_distance":    req.BaseDistance,
+			"extra_fee_per_km": req.ExtraFeePerKm,
+			"value_ratio":      valueRatio,
+			"max_fee":          req.MaxFee,
+			"min_fee":          req.MinFee,
+			"is_active":        true,
+		},
+	})
 
 	ctx.JSON(http.StatusCreated, newDeliveryFeeConfigResponse(config))
 }
@@ -220,7 +281,7 @@ type getDeliveryFeeConfigURI struct {
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse "Config not found"
 // @Failure 500 {object} ErrorResponse
-// @Router /delivery-fee/config/{region_id} [get]
+// @Router /v1/delivery-fee/config/{region_id} [get]
 // @Security BearerAuth
 func (server *Server) getDeliveryFeeConfig(ctx *gin.Context) {
 	var uri getDeliveryFeeConfigURI
@@ -231,8 +292,8 @@ func (server *Server) getDeliveryFeeConfig(ctx *gin.Context) {
 
 	config, err := server.store.GetDeliveryFeeConfigByRegion(ctx, uri.RegionID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("delivery fee config not found")))
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrDeliveryFeeConfigNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -270,7 +331,7 @@ type updateDeliveryFeeConfigRequest struct {
 // @Failure 403 {object} ErrorResponse "Operator role required or not authorized for this region"
 // @Failure 404 {object} ErrorResponse "Config not found"
 // @Failure 500 {object} ErrorResponse
-// @Router /delivery-fee/regions/{region_id}/config [patch]
+// @Router /v1/delivery-fee/regions/{region_id}/config [patch]
 // @Security BearerAuth
 func (server *Server) updateDeliveryFeeConfig(ctx *gin.Context) {
 	var uri updateDeliveryFeeConfigURI
@@ -285,13 +346,15 @@ func (server *Server) updateDeliveryFeeConfig(ctx *gin.Context) {
 		return
 	}
 
-	// 权限验证由中间件处理（RoleMiddleware + OperatorMiddleware + OperatorRegionMiddleware）
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
+	// 权限验证由中间件处理（CasbinRoleMiddleware + LoadOperatorMiddleware + ValidateOperatorRegionMiddleware）
 
 	// 获取现有配置
 	existingConfig, err := server.store.GetDeliveryFeeConfigByRegion(ctx, uri.RegionID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("delivery fee config not found")))
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrDeliveryFeeConfigNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -300,6 +363,26 @@ func (server *Server) updateDeliveryFeeConfig(ctx *gin.Context) {
 
 	arg := db.UpdateDeliveryFeeConfigParams{
 		ID: existingConfig.ID,
+	}
+
+	effectiveMinFee := existingConfig.MinFee
+	if req.MinFee != nil {
+		effectiveMinFee = *req.MinFee
+	}
+
+	var effectiveMaxFee *int64
+	if existingConfig.MaxFee.Valid {
+		currentMaxFee := existingConfig.MaxFee.Int64
+		effectiveMaxFee = &currentMaxFee
+	}
+	if req.MaxFee != nil {
+		newMaxFee := *req.MaxFee
+		effectiveMaxFee = &newMaxFee
+	}
+
+	if err := validateMinMaxFee(effectiveMinFee, effectiveMaxFee); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
 	}
 
 	if req.BaseFee != nil {
@@ -313,7 +396,7 @@ func (server *Server) updateDeliveryFeeConfig(ctx *gin.Context) {
 	}
 	if req.ValueRatio != nil {
 		arg.ValueRatio = pgtype.Numeric{}
-		arg.ValueRatio.Scan(*req.ValueRatio)
+		_ = arg.ValueRatio.Scan(*req.ValueRatio)
 	}
 	if req.MaxFee != nil {
 		arg.MaxFee = pgtype.Int8{Int64: *req.MaxFee, Valid: true}
@@ -330,6 +413,42 @@ func (server *Server) updateDeliveryFeeConfig(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
+
+	updatedFields := map[string]any{}
+	if req.BaseFee != nil {
+		updatedFields["base_fee"] = *req.BaseFee
+	}
+	if req.BaseDistance != nil {
+		updatedFields["base_distance"] = *req.BaseDistance
+	}
+	if req.ExtraFeePerKm != nil {
+		updatedFields["extra_fee_per_km"] = *req.ExtraFeePerKm
+	}
+	if req.ValueRatio != nil {
+		updatedFields["value_ratio"] = *req.ValueRatio
+	}
+	if req.MaxFee != nil {
+		updatedFields["max_fee"] = *req.MaxFee
+	}
+	if req.MinFee != nil {
+		updatedFields["min_fee"] = *req.MinFee
+	}
+	if req.IsActive != nil {
+		updatedFields["is_active"] = *req.IsActive
+	}
+
+	server.writeAuditLog(ctx, AuditLogInput{
+		ActorUserID: authPayload.UserID,
+		ActorRole:   "operator",
+		Action:      "delivery_fee_config_updated",
+		TargetType:  "delivery_fee_config",
+		TargetID:    &config.ID,
+		RegionID:    &config.RegionID,
+		Metadata: map[string]any{
+			"region_id":      config.RegionID,
+			"updated_fields": updatedFields,
+		},
+	})
 
 	ctx.JSON(http.StatusOK, newDeliveryFeeConfigResponse(config))
 }
@@ -418,7 +537,7 @@ func parsePgTime(s string) (pgtype.Time, error) {
 // @Failure 401 {object} ErrorResponse
 // @Failure 403 {object} ErrorResponse "Operator role required or not authorized for this region"
 // @Failure 500 {object} ErrorResponse
-// @Router /operator/regions/{region_id}/peak-hours [post]
+// @Router /v1/operator/regions/{region_id}/peak-hours [post]
 // @Security BearerAuth
 func (server *Server) createPeakHourConfig(ctx *gin.Context) {
 	var req createPeakHourConfigRequest
@@ -426,6 +545,8 @@ func (server *Server) createPeakHourConfig(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 验证 operator 角色和区域权限
 	if _, err := server.checkOperatorManagesRegion(ctx, req.RegionID); err != nil {
@@ -435,13 +556,13 @@ func (server *Server) createPeakHourConfig(ctx *gin.Context) {
 
 	startTime, err := parsePgTime(req.StartTime)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid start_time format, expected HH:MM")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidStartTimeFormat))
 		return
 	}
 
 	endTime, err := parsePgTime(req.EndTime)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid end_time format, expected HH:MM")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidEndTimeFormat))
 		return
 	}
 
@@ -452,13 +573,30 @@ func (server *Server) createPeakHourConfig(ctx *gin.Context) {
 		DaysOfWeek: req.DaysOfWeek,
 		IsActive:   true,
 	}
-	arg.Coefficient.Scan(req.Coefficient)
+	arg.Coefficient = numericFromFloat(req.Coefficient)
 
 	config, err := server.store.CreatePeakHourConfig(ctx, arg)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
+
+	server.writeAuditLog(ctx, AuditLogInput{
+		ActorUserID: authPayload.UserID,
+		ActorRole:   "operator",
+		Action:      "peak_hour_config_created",
+		TargetType:  "peak_hour_config",
+		TargetID:    &config.ID,
+		RegionID:    &config.RegionID,
+		Metadata: map[string]any{
+			"region_id":    config.RegionID,
+			"start_time":   req.StartTime,
+			"end_time":     req.EndTime,
+			"coefficient":  req.Coefficient,
+			"days_of_week": req.DaysOfWeek,
+			"is_active":    true,
+		},
+	})
 
 	ctx.JSON(http.StatusCreated, newPeakHourConfigResponse(config))
 }
@@ -479,7 +617,7 @@ type listPeakHourConfigsURI struct {
 // @Failure 401 {object} ErrorResponse
 // @Failure 403 {object} ErrorResponse "Operator role required"
 // @Failure 500 {object} ErrorResponse
-// @Router /operator/regions/{region_id}/peak-hours [get]
+// @Router /v1/operator/regions/{region_id}/peak-hours [get]
 // @Security BearerAuth
 func (server *Server) listPeakHourConfigs(ctx *gin.Context) {
 	var uri listPeakHourConfigsURI
@@ -519,7 +657,7 @@ type deletePeakHourConfigURI struct {
 // @Failure 403 {object} ErrorResponse "Operator role required or not authorized for this region"
 // @Failure 404 {object} ErrorResponse "Config not found"
 // @Failure 500 {object} ErrorResponse
-// @Router /operator/peak-hours/{id} [delete]
+// @Router /v1/operator/peak-hours/{id} [delete]
 // @Security BearerAuth
 func (server *Server) deletePeakHourConfig(ctx *gin.Context) {
 	var uri deletePeakHourConfigURI
@@ -528,11 +666,13 @@ func (server *Server) deletePeakHourConfig(ctx *gin.Context) {
 		return
 	}
 
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
 	// 先获取配置以验证区域权限
 	config, err := server.store.GetPeakHourConfig(ctx, uri.ID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("peak hour config not found")))
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrPeakHourConfigNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -551,6 +691,18 @@ func (server *Server) deletePeakHourConfig(ctx *gin.Context) {
 		return
 	}
 
+	server.writeAuditLog(ctx, AuditLogInput{
+		ActorUserID: authPayload.UserID,
+		ActorRole:   "operator",
+		Action:      "peak_hour_config_deleted",
+		TargetType:  "peak_hour_config",
+		TargetID:    &config.ID,
+		RegionID:    &config.RegionID,
+		Metadata: map[string]any{
+			"region_id": config.RegionID,
+		},
+	})
+
 	ctx.JSON(http.StatusNoContent, nil)
 }
 
@@ -566,6 +718,15 @@ type createDeliveryPromotionRequest struct {
 	ValidUntil     string `json:"valid_until" binding:"required"`
 }
 
+type updateDeliveryPromotionRequest struct {
+	Name           *string `json:"name"`
+	MinOrderAmount *int64  `json:"min_order_amount"`
+	DiscountAmount *int64  `json:"discount_amount"`
+	ValidFrom      *string `json:"valid_from"`
+	ValidUntil     *string `json:"valid_until"`
+	IsActive       *bool   `json:"is_active"`
+}
+
 type deliveryPromotionResponse struct {
 	ID             int64      `json:"id"`
 	MerchantID     int64      `json:"merchant_id"`
@@ -575,11 +736,32 @@ type deliveryPromotionResponse struct {
 	ValidFrom      time.Time  `json:"valid_from"`
 	ValidUntil     time.Time  `json:"valid_until"`
 	IsActive       bool       `json:"is_active"`
+	StatusCode     string     `json:"status_code"`
+	StatusLabel    string     `json:"status_label"`
+	StatusTheme    string     `json:"status_theme"`
 	CreatedAt      time.Time  `json:"created_at"`
 	UpdatedAt      *time.Time `json:"updated_at,omitempty"`
 }
 
+func buildDeliveryPromotionStatusResponse(promo db.MerchantDeliveryPromotion, now time.Time) (string, string, string) {
+	if !promo.IsActive {
+		return "inactive", "已停用", "default"
+	}
+
+	if now.After(promo.ValidUntil) {
+		return "expired", "已过期", "danger"
+	}
+
+	if now.Before(promo.ValidFrom) {
+		return "scheduled", "未开始", "warning"
+	}
+
+	return "active", "生效中", "success"
+}
+
 func newDeliveryPromotionResponse(promo db.MerchantDeliveryPromotion) deliveryPromotionResponse {
+	statusCode, statusLabel, statusTheme := buildDeliveryPromotionStatusResponse(promo, time.Now())
+
 	rsp := deliveryPromotionResponse{
 		ID:             promo.ID,
 		MerchantID:     promo.MerchantID,
@@ -589,6 +771,9 @@ func newDeliveryPromotionResponse(promo db.MerchantDeliveryPromotion) deliveryPr
 		ValidFrom:      promo.ValidFrom,
 		ValidUntil:     promo.ValidUntil,
 		IsActive:       promo.IsActive,
+		StatusCode:     statusCode,
+		StatusLabel:    statusLabel,
+		StatusTheme:    statusTheme,
 		CreatedAt:      promo.CreatedAt,
 	}
 
@@ -612,7 +797,7 @@ func newDeliveryPromotionResponse(promo db.MerchantDeliveryPromotion) deliveryPr
 // @Failure 401 {object} ErrorResponse
 // @Failure 403 {object} ErrorResponse "Merchant role required or not authorized for this merchant"
 // @Failure 500 {object} ErrorResponse
-// @Router /delivery-fee/merchants/{id}/promotions [post]
+// @Router /v1/delivery-fee/merchants/{id}/promotions [post]
 // @Security BearerAuth
 func (server *Server) createDeliveryPromotion(ctx *gin.Context) {
 	// 获取 URI 中的 merchant_id
@@ -622,15 +807,17 @@ func (server *Server) createDeliveryPromotion(ctx *gin.Context) {
 		return
 	}
 
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
 	// 验证商户权限：当前用户必须是该商户的所有者
 	merchant, exists := GetMerchantFromContext(ctx)
 	if !exists {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("merchant information not found")))
+		ctx.JSON(http.StatusForbidden, errorResponse(ErrDeliveryMerchantInfoNotFound))
 		return
 	}
 
 	if merchant.ID != uri.MerchantID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("you can only manage your own merchant's promotions")))
+		ctx.JSON(http.StatusForbidden, errorResponse(ErrPromotionManageMerchantOnly))
 		return
 	}
 
@@ -642,24 +829,24 @@ func (server *Server) createDeliveryPromotion(ctx *gin.Context) {
 
 	validFrom, err := time.Parse(time.RFC3339, req.ValidFrom)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid valid_from format, expected RFC3339")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidValidFromFormat))
 		return
 	}
 
 	validUntil, err := time.Parse(time.RFC3339, req.ValidUntil)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid valid_until format, expected RFC3339")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidValidUntilFormat))
 		return
 	}
 
 	if validUntil.Before(validFrom) {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("valid_until must be after valid_from")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrValidUntilBeforeValidFrom))
 		return
 	}
 
 	// 业务规则：折扣金额不能超过最低订单金额
 	if req.DiscountAmount > req.MinOrderAmount && req.MinOrderAmount > 0 {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("discount_amount cannot exceed min_order_amount")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrDiscountExceedsMinOrder))
 		return
 	}
 
@@ -679,6 +866,24 @@ func (server *Server) createDeliveryPromotion(ctx *gin.Context) {
 		return
 	}
 
+	server.writeAuditLog(ctx, AuditLogInput{
+		ActorUserID: authPayload.UserID,
+		ActorRole:   "merchant",
+		Action:      "delivery_promotion_created",
+		TargetType:  "delivery_promotion",
+		TargetID:    &promo.ID,
+		RegionID:    &merchant.RegionID,
+		Metadata: map[string]any{
+			"merchant_id":      promo.MerchantID,
+			"name":             promo.Name,
+			"min_order_amount": promo.MinOrderAmount,
+			"discount_amount":  promo.DiscountAmount,
+			"valid_from":       req.ValidFrom,
+			"valid_until":      req.ValidUntil,
+			"is_active":        promo.IsActive,
+		},
+	})
+
 	ctx.JSON(http.StatusCreated, newDeliveryPromotionResponse(promo))
 }
 
@@ -697,7 +902,7 @@ type listDeliveryPromotionsURI struct {
 // @Failure 400 {object} ErrorResponse
 // @Failure 403 {object} ErrorResponse "Merchant role required or not authorized for this merchant"
 // @Failure 500 {object} ErrorResponse
-// @Router /delivery-fee/merchants/{merchant_id}/promotions [get]
+// @Router /v1/delivery-fee/merchants/{merchant_id}/promotions [get]
 // @Security BearerAuth
 func (server *Server) listDeliveryPromotions(ctx *gin.Context) {
 	var uri listDeliveryPromotionsURI
@@ -709,12 +914,12 @@ func (server *Server) listDeliveryPromotions(ctx *gin.Context) {
 	// 验证商户权限：当前用户必须是该商户的所有者
 	merchant, exists := GetMerchantFromContext(ctx)
 	if !exists {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("merchant information not found")))
+		ctx.JSON(http.StatusForbidden, errorResponse(ErrDeliveryMerchantInfoNotFound))
 		return
 	}
 
 	if merchant.ID != uri.MerchantID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("you can only view your own merchant's promotions")))
+		ctx.JSON(http.StatusForbidden, errorResponse(ErrPromotionViewMerchantOnly))
 		return
 	}
 
@@ -750,7 +955,7 @@ type deleteDeliveryPromotionURI struct {
 // @Failure 403 {object} ErrorResponse "Merchant role required or not authorized for this merchant"
 // @Failure 404 {object} ErrorResponse "Promotion not found"
 // @Failure 500 {object} ErrorResponse
-// @Router /delivery-fee/merchants/{merchant_id}/promotions/{id} [delete]
+// @Router /v1/delivery-fee/merchants/{merchant_id}/promotions/{id} [delete]
 // @Security BearerAuth
 func (server *Server) deleteDeliveryPromotion(ctx *gin.Context) {
 	var uri deleteDeliveryPromotionURI
@@ -759,23 +964,25 @@ func (server *Server) deleteDeliveryPromotion(ctx *gin.Context) {
 		return
 	}
 
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
 	// 验证商户权限：当前用户必须是该商户的所有者
 	merchant, exists := GetMerchantFromContext(ctx)
 	if !exists {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("merchant information not found")))
+		ctx.JSON(http.StatusForbidden, errorResponse(ErrDeliveryMerchantInfoNotFound))
 		return
 	}
 
 	if merchant.ID != uri.MerchantID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("you can only delete your own merchant's promotions")))
+		ctx.JSON(http.StatusForbidden, errorResponse(ErrPromotionDeleteMerchantOnly))
 		return
 	}
 
 	// 先获取促销活动，验证归属
 	promo, err := server.store.GetDeliveryPromotion(ctx, uri.ID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("delivery promotion not found")))
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrDeliveryPromotionNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -784,7 +991,7 @@ func (server *Server) deleteDeliveryPromotion(ctx *gin.Context) {
 
 	// 验证促销属于该商户
 	if promo.MerchantID != uri.MerchantID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("promotion does not belong to this merchant")))
+		ctx.JSON(http.StatusForbidden, errorResponse(ErrPromotionNotOwnedByMerchant))
 		return
 	}
 
@@ -794,7 +1001,154 @@ func (server *Server) deleteDeliveryPromotion(ctx *gin.Context) {
 		return
 	}
 
+	server.writeAuditLog(ctx, AuditLogInput{
+		ActorUserID: authPayload.UserID,
+		ActorRole:   "merchant",
+		Action:      "delivery_promotion_deleted",
+		TargetType:  "delivery_promotion",
+		TargetID:    &promo.ID,
+		RegionID:    &merchant.RegionID,
+		Metadata: map[string]any{
+			"merchant_id": promo.MerchantID,
+			"name":        promo.Name,
+		},
+	})
+
 	ctx.JSON(http.StatusNoContent, nil)
+}
+
+// updateDeliveryPromotion godoc
+// @Summary Update delivery promotion (Merchant)
+// @Description Update a delivery fee promotion. Only the merchant owner can update their own promotions.
+// @Tags delivery-fee
+// @Accept json
+// @Produce json
+// @Param merchant_id path int true "Merchant ID"
+// @Param id path int true "Promotion ID"
+// @Param request body updateDeliveryPromotionRequest true "Update fields"
+// @Success 200 {object} deliveryPromotionResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 403 {object} ErrorResponse "Merchant role required or not authorized for this merchant"
+// @Failure 404 {object} ErrorResponse "Promotion not found"
+// @Failure 500 {object} ErrorResponse
+// @Router /v1/delivery-fee/merchants/{merchant_id}/promotions/{id} [patch]
+// @Security BearerAuth
+func (server *Server) updateDeliveryPromotion(ctx *gin.Context) {
+	var uri deleteDeliveryPromotionURI
+	if err := ctx.ShouldBindUri(&uri); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
+	// 验证商户权限
+	merchant, exists := GetMerchantFromContext(ctx)
+	if !exists {
+		ctx.JSON(http.StatusForbidden, errorResponse(ErrDeliveryMerchantInfoNotFound))
+		return
+	}
+
+	if merchant.ID != uri.MerchantID {
+		ctx.JSON(http.StatusForbidden, errorResponse(ErrPromotionUpdateMerchantOnly))
+		return
+	}
+
+	var req updateDeliveryPromotionRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	// 先获取促销活动，验证归属
+	existingPromo, err := server.store.GetDeliveryPromotion(ctx, uri.ID)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrDeliveryPromotionNotFound))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	if existingPromo.MerchantID != uri.MerchantID {
+		ctx.JSON(http.StatusForbidden, errorResponse(ErrPromotionNotOwnedByMerchant))
+		return
+	}
+
+	arg := db.UpdateDeliveryPromotionParams{
+		ID: uri.ID,
+	}
+
+	if req.Name != nil {
+		arg.Name = pgtype.Text{String: *req.Name, Valid: true}
+	}
+	if req.MinOrderAmount != nil {
+		arg.MinOrderAmount = pgtype.Int8{Int64: *req.MinOrderAmount, Valid: true}
+	}
+	if req.DiscountAmount != nil {
+		arg.DiscountAmount = pgtype.Int8{Int64: *req.DiscountAmount, Valid: true}
+	}
+	if req.ValidFrom != nil {
+		t, err := time.Parse(time.RFC3339, *req.ValidFrom)
+		if err != nil {
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidValidFromFormat))
+			return
+		}
+		arg.ValidFrom = pgtype.Timestamptz{Time: t, Valid: true}
+	}
+	if req.ValidUntil != nil {
+		t, err := time.Parse(time.RFC3339, *req.ValidUntil)
+		if err != nil {
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidValidUntilFormat))
+			return
+		}
+		arg.ValidUntil = pgtype.Timestamptz{Time: t, Valid: true}
+	}
+	if req.IsActive != nil {
+		arg.IsActive = pgtype.Bool{Bool: *req.IsActive, Valid: true}
+	}
+
+	promo, err := server.store.UpdateDeliveryPromotion(ctx, arg)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	updatedFields := map[string]any{}
+	if req.Name != nil {
+		updatedFields["name"] = *req.Name
+	}
+	if req.MinOrderAmount != nil {
+		updatedFields["min_order_amount"] = *req.MinOrderAmount
+	}
+	if req.DiscountAmount != nil {
+		updatedFields["discount_amount"] = *req.DiscountAmount
+	}
+	if req.ValidFrom != nil {
+		updatedFields["valid_from"] = *req.ValidFrom
+	}
+	if req.ValidUntil != nil {
+		updatedFields["valid_until"] = *req.ValidUntil
+	}
+	if req.IsActive != nil {
+		updatedFields["is_active"] = *req.IsActive
+	}
+
+	server.writeAuditLog(ctx, AuditLogInput{
+		ActorUserID: authPayload.UserID,
+		ActorRole:   "merchant",
+		Action:      "delivery_promotion_updated",
+		TargetType:  "delivery_promotion",
+		TargetID:    &promo.ID,
+		RegionID:    &merchant.RegionID,
+		Metadata: map[string]any{
+			"merchant_id":    promo.MerchantID,
+			"updated_fields": updatedFields,
+		},
+	})
+
+	ctx.JSON(http.StatusOK, newDeliveryPromotionResponse(promo))
 }
 
 // ============================================================================
@@ -803,7 +1157,11 @@ func (server *Server) deleteDeliveryPromotion(ctx *gin.Context) {
 
 // 默认运费配置常量（当区域没有配置时使用）
 const (
-	DefaultBaseFee             int64   = 500 // 默认基础运费 5 元
+	DefaultBaseFee             int64   = 5 * fenPerYuan // 默认基础运费 5 元
+	DefaultBaseDistance        int32   = 3000
+	DefaultExtraFeePerKm       int64   = 1 * fenPerYuan // 1 元/km
+	DefaultMinFee              int64   = 5 * fenPerYuan // 5 元
+	DefaultValueRatio          float64 = 0.01
 	DefaultWeatherCoefficient  float64 = 1.0
 	DefaultPeakHourCoefficient float64 = 1.0
 )
@@ -839,7 +1197,7 @@ type calculateDeliveryFeeResponse struct {
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse "Config not found"
 // @Failure 500 {object} ErrorResponse
-// @Router /delivery-fee/calculate [post]
+// @Router /v1/delivery-fee/calculate [post]
 // @Security BearerAuth
 func (server *Server) calculateDeliveryFee(ctx *gin.Context) {
 	var req calculateDeliveryFeeRequest
@@ -851,7 +1209,7 @@ func (server *Server) calculateDeliveryFee(ctx *gin.Context) {
 	// API 层严格检查：配置必须存在且激活
 	config, err := server.store.GetDeliveryFeeConfigByRegion(ctx, req.RegionID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(ErrDeliveryFeeConfigNotFound))
 			return
 		}
@@ -899,19 +1257,15 @@ type DeliveryFeeResult struct {
 	SuspendReason       string
 }
 
-// 运费计算相关错误
-var (
-	ErrDeliveryFeeConfigNotFound = errors.New("delivery fee config not found for this region")
-	ErrDeliveryServiceDisabled   = errors.New("delivery service is disabled for this region")
-)
+// ErrDeliveryFeeConfigNotFound 和 ErrDeliveryServiceDisabled 已迁移至 api/apierrors.go
 
 // calculateDeliveryFeeInternal 内部运费计算方法，供其他模块调用
 // 此方法会自动获取配置，如果配置不存在则使用默认值
-func (server *Server) calculateDeliveryFeeInternal(ctx *gin.Context, regionID, merchantID int64, distance int32, orderAmount int64) (*DeliveryFeeResult, error) {
+func (server *Server) calculateDeliveryFeeInternal(ctx context.Context, regionID, merchantID int64, distance int32, orderAmount int64) (*DeliveryFeeResult, error) {
 	// 获取基础运费配置
 	config, err := server.store.GetDeliveryFeeConfigByRegion(ctx, regionID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			// 没有配置，返回默认运费（内部调用降级处理）
 			return &DeliveryFeeResult{
 				BaseFee:             DefaultBaseFee,
@@ -934,7 +1288,7 @@ func (server *Server) calculateDeliveryFeeInternal(ctx *gin.Context, regionID, m
 }
 
 // calculateDeliveryFeeWithConfig 使用预取配置计算运费的核心方法
-func (server *Server) calculateDeliveryFeeWithConfig(ctx *gin.Context, config *db.DeliveryFeeConfig, merchantID int64, distance int32, orderAmount int64) (*DeliveryFeeResult, error) {
+func (server *Server) calculateDeliveryFeeWithConfig(ctx context.Context, config *db.DeliveryFeeConfig, merchantID int64, distance int32, orderAmount int64) (*DeliveryFeeResult, error) {
 	regionID := config.RegionID
 
 	// 1. 计算基础运费
@@ -1063,11 +1417,8 @@ func (server *Server) calculateDeliveryFeeWithConfig(ctx *gin.Context, config *d
 		}
 	}
 
-	// 9. 计算最终运费（不能为负）
-	finalFee := subtotal - promotionDiscount
-	if finalFee < 0 {
-		finalFee = 0
-	}
+	// 9. 最终运费：不扣减商户满返，骑手费保持完整；满返折扣由上层在订单总价中抵扣
+	finalFee := subtotal
 
 	return &DeliveryFeeResult{
 		BaseFee:             baseFee,

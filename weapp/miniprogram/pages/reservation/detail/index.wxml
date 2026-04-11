@@ -1,53 +1,124 @@
-<view class="container" wx:if="{{reservation}}">
-  <view class="status-card">
-    <t-icon name="check-circle-filled" size="64rpx" color="{{reservation.status === 'confirmed' ? '#00a870' : '#ed7b2f'}}" />
-    <text class="status-text">{{reservation._statusText}}</text>
-    <text class="status-desc" wx:if="{{reservation.status === 'pending'}}">请等待商户确认</text>
+<custom-navbar title="预订详情" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px; padding-bottom: calc(120rpx + env(safe-area-inset-bottom));">
+  <block wx:if="{{loading}}">
+     <view style="padding: 24rpx;">
+       <card-skeleton wx:for="{{[1,2]}}" wx:key="*this" />
+     </view>
+  </block>
+
+  <view wx:elif="{{isError}}" class="error-container" style="padding-top: 200rpx; display: flex; flex-direction: column; align-items: center; gap: 32rpx;">
+     <t-empty icon="error-circle" description="{{errorMessage}}" />
+     <t-button theme="primary" size="medium" bindtap="onRetry" shape="round">重试</t-button>
   </view>
 
-  <t-cell-group theme="card">
-    <t-cell title="商户" note="{{reservation.merchant_name}}" arrow />
-    <t-cell title="时间" note="{{reservation._timeText}}" />
-    <t-cell title="人数" note="{{reservation.party_size}}人" />
-    <t-cell title="联系人" note="{{reservation.contact_name}} {{reservation.contact_phone}}" />
-    <t-cell title="备注" note="{{reservation.notes || '无'}}" />
-  </t-cell-group>
-
-  <view class="actions">
-    <t-button block variant="outline" icon="call" bind:tap="onCallMerchant">联系商户</t-button>
-    
-    <t-button 
-      wx:if="{{reservation.status === 'confirmed' || reservation.status === 'checked_in'}}" 
-      block 
-      theme="primary" 
-      bind:tap="onGoToOrder"
-    >
-      点菜
-    </t-button>
-    
-    <t-button 
-      wx:if="{{reservation.status === 'pending' || reservation.status === 'confirmed'}}" 
-      block 
-      theme="danger" 
-      variant="outline" 
-      bind:tap="onCancel"
-    >
-      取消预订
-    </t-button>
-  </view>
-
-  <t-dialog
-    visible="{{showCancelDialog}}"
-    title="取消预订"
-    confirm-btn="确认取消"
-    cancel-btn="暂不取消"
-    bind:confirm="confirmCancel"
-    bind:cancel="closeCancelDialog"
-  >
-    <view slot="content">
-      <t-radio-group value="{{cancelReason}}" bind:change="onReasonChange">
-        <t-radio wx:for="{{cancelReasons}}" wx:key="*this" value="{{item}}" label="{{item}}" />
-      </t-radio-group>
+  <view wx:elif="{{reservation}}" class="detail-content animate-fade-in">
+    <view wx:if="{{refreshErrorMessage}}" class="inline-banner inline-banner-danger">
+      <text class="inline-banner-text">{{refreshErrorMessage}}</text>
+      <text class="inline-banner-action" bindtap="onRetryRefresh">重新同步</text>
     </view>
-  </t-dialog>
+
+    <!-- 1. 状态头部 -->
+    <view class="status-header">
+       <view class="status-left">
+          <view class="status-title">{{reservation.statusText}}</view>
+          <view class="status-desc">{{reservation.dateTimeDisplay}} · {{reservation.guestCount}}人</view>
+       </view>
+       <t-icon name="{{reservation.statusClass === 'completed' || reservation.statusClass === 'confirmed' ? 'check-circle' : 'time'}}" size="56rpx" color="#333" />
+    </view>
+
+    <!-- 2. 商户信息 -->
+    <view class="info-card card" bindtap="onEnterMerchant">
+       <view class="merchant-row">
+          <view class="merchant-info">
+             <view class="merchant-name">{{reservation.merchantName}}</view>
+             <view class="merchant-address">{{reservation.merchantAddress}}</view>
+          </view>
+          <t-icon name="chevron-right" size="32rpx" color="#999" />
+       </view>
+       <t-divider />
+       <view class="contact-actions">
+          <t-button size="small" variant="text" icon="call" catchtap="onCallMerchant" shape="round">联系商家</t-button>
+          <t-button size="small" variant="text" icon="location" catchtap="onNavMerchant" shape="round">导航前往</t-button>
+       </view>
+    </view>
+
+    <!-- 3. 已点菜品 (如果有) -->
+    <view class="order-card card" wx:if="{{reservation.items && reservation.items.length > 0}}">
+      <view class="card-title">已点菜品</view>
+       <view class="item-list">
+        <view wx:for="{{reservation.items}}" wx:key="id" class="order-item">
+          <t-image src="{{item.imageUrl}}" mode="aspectFill" width="96rpx" height="96rpx" shape="round" class="item-img" />
+          <view class="item-main">
+              <view class="item-name">{{item.name}}</view>
+              <view class="item-meta">
+                  <text class="item-price">{{item.unitPriceDisplay}}</text>
+                  <text class="item-qty">x{{item.quantity}}</text>
+              </view>
+          </view>
+          <view class="item-total">{{item.totalPriceDisplay}}</view>
+        </view>
+      </view>
+      <t-divider />
+      <view class="total-row">
+         <text class="total-label">菜品小计</text>
+         <text class="total-price">{{reservation.itemsTotalDisplay}}</text>
+      </view>
+    </view>
+
+    <!-- 4. 预订信息 -->
+    <view class="info-card card">
+      <view class="card-title">预订信息</view>
+      <t-cell-group>
+        <t-cell title="预订桌台" note="{{reservation.tableNo || '待分配'}}" />
+        <t-cell title="预订人" note="{{reservation.contactName}} {{reservation.contactPhone}}" />
+        <t-cell wx:if="{{reservation.depositDisplay}}" title="已付定金" note="{{reservation.depositDisplay}}" />
+        <t-cell title="预订备注" note="{{reservation.notes || '无'}}" align="top" />
+      </t-cell-group>
+    </view>
+    
+    <!-- 5. 订单信息 -->
+    <view class="info-card card">
+      <view class="card-title">订单信息</view>
+      <t-cell-group>
+        <t-cell title="预订编号" note="{{reservation.id}}" hover arrow bindtap="onCopy" data-text="{{reservation.id}}" />
+        <t-cell title="提交时间" note="{{reservation.createdAt}}" />
+        <t-cell title="支付方式" note="{{reservation.paymentModeText}}" />
+      </t-cell-group>
+    </view>
+
+  </view>
 </view>
+
+<!-- 底部操作栏 -->
+<view wx:if="{{!loading && reservation}}" class="bottom-bar">
+   <view class="bottom-actions">
+      <view class="secondary-actions">
+         <t-button wx:if="{{reservation.canCancel}}" size="medium" shape="round" bindtap="onCancel">取消预订</t-button>
+      </view>
+
+      <view class="primary-actions">
+          <t-button wx:if="{{reservation.canPay}}" theme="primary" size="medium" shape="round" loading="{{paying}}" bindtap="onPay">去支付</t-button>
+          <!-- 只有已确认/已到店才能加菜，或者全款模式且未确认也可以修改菜品(视业务而定)，这里保守按 Adapter 逻辑 -->
+          <t-button wx:if="{{reservation.canOrder}}" theme="primary" size="medium" shape="round" bindtap="onModifyDishes">加菜/点餐</t-button>
+          
+          <t-button wx:if="{{reservation.status === 'completed'}}" theme="primary" size="medium" shape="round" bindtap="onRebook">再次预订</t-button>
+      </view>
+   </view>
+</view>
+
+<t-dialog
+  visible="{{showCancelDialog}}"
+  title="取消预订"
+  content="已支付预订将按系统退款策略处理（可能为部分退款）。"
+  confirm-btn="确认取消"
+  cancel-btn="暂不取消"
+  bind:confirm="confirmCancel"
+  bind:cancel="closeCancelDialog"
+>
+  <view slot="content" class="dialog-content">
+    <t-radio-group value="{{cancelReason}}" bind:change="onReasonChange">
+      <t-radio wx:for="{{cancelReasons}}" wx:key="*this" value="{{item}}" label="{{item}}" />
+    </t-radio-group>
+  </view>
+</t-dialog>

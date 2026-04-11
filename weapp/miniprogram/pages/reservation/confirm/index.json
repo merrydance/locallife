@@ -1,5 +1,6 @@
 {
     "navigationBarTitleText": "确认预定",
+    "navigationStyle": "custom",
     "usingComponents": {
         "custom-navbar": "/components/custom-navbar/index",
         "t-cell": "tdesign-miniprogram/cell/cell",
@@ -12,6 +13,8 @@
         "t-radio": "tdesign-miniprogram/radio/radio",
         "t-radio-group": "tdesign-miniprogram/radio-group/radio-group",
         "t-picker": "tdesign-miniprogram/picker/picker",
-        "t-picker-item": "tdesign-miniprogram/picker-item/picker-item"
+        "t-picker-item": "tdesign-miniprogram/picker-item/picker-item",
+        "t-tag": "tdesign-miniprogram/tag/tag",
+        "merchant-promos": "/components/merchant-promos/index"
     }
 }

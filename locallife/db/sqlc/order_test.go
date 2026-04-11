@@ -211,8 +211,9 @@ func TestUpdateOrderStatus(t *testing.T) {
 	require.Equal(t, "pending", order.Status)
 
 	arg := UpdateOrderStatusParams{
-		ID:     order.ID,
-		Status: "paid",
+		ID:             order.ID,
+		Status:         "paid",
+		ExpectedStatus: "pending",
 	}
 
 	updatedOrder, err := testStore.UpdateOrderStatus(context.Background(), arg)
@@ -228,8 +229,9 @@ func TestUpdateOrderToPaid(t *testing.T) {
 	require.Equal(t, "pending", order.Status)
 
 	arg := UpdateOrderToPaidParams{
-		ID:            order.ID,
-		PaymentMethod: pgtype.Text{String: "wechat", Valid: true},
+		ID:                order.ID,
+		PaymentMethod:     pgtype.Text{String: "wechat", Valid: true},
+		FulfillmentStatus: pgtype.Text{},
 	}
 
 	updatedOrder, err := testStore.UpdateOrderToPaid(context.Background(), arg)
@@ -248,8 +250,9 @@ func TestUpdateOrderToCompleted(t *testing.T) {
 
 	// 先设置为 paid 状态
 	_, err := testStore.UpdateOrderStatus(context.Background(), UpdateOrderStatusParams{
-		ID:     order.ID,
-		Status: "paid",
+		ID:             order.ID,
+		Status:         "paid",
+		ExpectedStatus: "pending",
 	})
 	require.NoError(t, err)
 
@@ -267,8 +270,9 @@ func TestUpdateOrderToCancelled(t *testing.T) {
 	require.Equal(t, "pending", order.Status)
 
 	arg := UpdateOrderToCancelledParams{
-		ID:           order.ID,
-		CancelReason: pgtype.Text{String: "用户取消", Valid: true},
+		ID:             order.ID,
+		CancelReason:   pgtype.Text{String: "用户取消", Valid: true},
+		ExpectedStatus: "pending",
 	}
 
 	updatedOrder, err := testStore.UpdateOrderToCancelled(context.Background(), arg)
@@ -361,6 +365,57 @@ func TestCreateTakeoutOrder(t *testing.T) {
 	require.Equal(t, int64(500), order.DeliveryFee)
 	require.True(t, order.DeliveryDistance.Valid)
 	require.Equal(t, int32(3000), order.DeliveryDistance.Int32)
+}
+
+func TestGetOrderWithDetails_PrefersDeliverySnapshot(t *testing.T) {
+	user := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
+	address := createRandomUserAddress(t, user)
+
+	arg := CreateOrderParams{
+		OrderNo:                      util.RandomString(20),
+		UserID:                       user.ID,
+		MerchantID:                   merchant.ID,
+		OrderType:                    OrderTypeTakeout,
+		AddressID:                    pgtype.Int8{Int64: address.ID, Valid: true},
+		DeliveryContactNameSnapshot:  pgtype.Text{String: address.ContactName, Valid: true},
+		DeliveryContactPhoneSnapshot: pgtype.Text{String: address.ContactPhone, Valid: true},
+		DeliveryAddressSnapshot:      pgtype.Text{String: address.DetailAddress, Valid: true},
+		DeliveryLongitudeSnapshot:    address.Longitude,
+		DeliveryLatitudeSnapshot:     address.Latitude,
+		DeliveryFee:                  500,
+		DeliveryDistance:             pgtype.Int4{Int32: 3000, Valid: true},
+		Subtotal:                     5000,
+		DiscountAmount:               0,
+		DeliveryFeeDiscount:          0,
+		TotalAmount:                  5500,
+		Status:                       OrderStatusPending,
+	}
+
+	order, err := testStore.CreateOrder(context.Background(), arg)
+	require.NoError(t, err)
+
+	updatedAddress, err := testStore.UpdateUserAddress(context.Background(), UpdateUserAddressParams{
+		ID:            address.ID,
+		UserID:        user.ID,
+		ContactName:   pgtype.Text{String: "最新地址联系人", Valid: true},
+		ContactPhone:  pgtype.Text{String: "13900001111", Valid: true},
+		DetailAddress: pgtype.Text{String: "北京市海淀区最新地址", Valid: true},
+		Longitude:     numericFromFloat(116.500001),
+		Latitude:      numericFromFloat(39.900001),
+	})
+	require.NoError(t, err)
+	require.Equal(t, "最新地址联系人", updatedAddress.ContactName)
+
+	details, err := testStore.GetOrderWithDetails(context.Background(), order.ID)
+	require.NoError(t, err)
+	require.Equal(t, address.ContactName, details.DeliveryContactName)
+	require.Equal(t, address.ContactPhone, details.DeliveryContactPhone)
+	require.Equal(t, address.DetailAddress, details.DeliveryAddress)
+	require.False(t, details.CombinedPaymentID.Valid)
+	require.Empty(t, details.CombineOutTradeNo)
+	require.True(t, details.DeliveryAddressSnapshot.Valid)
+	require.Equal(t, address.DetailAddress, details.DeliveryAddressSnapshot.String)
 }
 
 func TestCreateDineInOrder(t *testing.T) {

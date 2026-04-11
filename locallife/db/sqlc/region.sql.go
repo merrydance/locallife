@@ -22,7 +22,7 @@ INSERT INTO regions (
   latitude
 ) VALUES (
   $1, $2, $3, $4, $5, $6
-) RETURNING id, code, name, level, parent_id, longitude, latitude, created_at, qweather_location_id
+) RETURNING id, code, name, level, parent_id, longitude, latitude, created_at, qweather_location_id, status
 `
 
 type CreateRegionParams struct {
@@ -54,6 +54,7 @@ func (q *Queries) CreateRegion(ctx context.Context, arg CreateRegionParams) (Reg
 		&i.Latitude,
 		&i.CreatedAt,
 		&i.QweatherLocationID,
+		&i.Status,
 	)
 	return i, err
 }
@@ -69,8 +70,10 @@ func (q *Queries) DeleteRegion(ctx context.Context, id int64) error {
 }
 
 const getClosestRegion = `-- name: GetClosestRegion :one
-SELECT id, code, name, level, parent_id, longitude, latitude, created_at, qweather_location_id FROM regions
-WHERE level = 3
+SELECT id, code, name, level, parent_id, longitude, latitude, created_at, qweather_location_id, status FROM regions
+WHERE level IN (3, 4)
+  AND longitude IS NOT NULL
+  AND latitude IS NOT NULL
 ORDER BY (
     6371000 * acos(
         cos(radians($1::float8)) * cos(radians(latitude)) * 
@@ -100,12 +103,13 @@ func (q *Queries) GetClosestRegion(ctx context.Context, arg GetClosestRegionPara
 		&i.Latitude,
 		&i.CreatedAt,
 		&i.QweatherLocationID,
+		&i.Status,
 	)
 	return i, err
 }
 
 const getRegion = `-- name: GetRegion :one
-SELECT id, code, name, level, parent_id, longitude, latitude, created_at, qweather_location_id FROM regions
+SELECT id, code, name, level, parent_id, longitude, latitude, created_at, qweather_location_id, status FROM regions
 WHERE id = $1 LIMIT 1
 `
 
@@ -122,12 +126,13 @@ func (q *Queries) GetRegion(ctx context.Context, id int64) (Region, error) {
 		&i.Latitude,
 		&i.CreatedAt,
 		&i.QweatherLocationID,
+		&i.Status,
 	)
 	return i, err
 }
 
 const getRegionByCode = `-- name: GetRegionByCode :one
-SELECT id, code, name, level, parent_id, longitude, latitude, created_at, qweather_location_id FROM regions
+SELECT id, code, name, level, parent_id, longitude, latitude, created_at, qweather_location_id, status FROM regions
 WHERE code = $1 LIMIT 1
 `
 
@@ -144,6 +149,93 @@ func (q *Queries) GetRegionByCode(ctx context.Context, code string) (Region, err
 		&i.Latitude,
 		&i.CreatedAt,
 		&i.QweatherLocationID,
+		&i.Status,
+	)
+	return i, err
+}
+
+const getRegionByNameAndLevel = `-- name: GetRegionByNameAndLevel :one
+SELECT id, code, name, level, parent_id, longitude, latitude, created_at, qweather_location_id, status FROM regions
+WHERE name = $1 AND level = $2 LIMIT 1
+`
+
+type GetRegionByNameAndLevelParams struct {
+	Name  string `json:"name"`
+	Level int16  `json:"level"`
+}
+
+func (q *Queries) GetRegionByNameAndLevel(ctx context.Context, arg GetRegionByNameAndLevelParams) (Region, error) {
+	row := q.db.QueryRow(ctx, getRegionByNameAndLevel, arg.Name, arg.Level)
+	var i Region
+	err := row.Scan(
+		&i.ID,
+		&i.Code,
+		&i.Name,
+		&i.Level,
+		&i.ParentID,
+		&i.Longitude,
+		&i.Latitude,
+		&i.CreatedAt,
+		&i.QweatherLocationID,
+		&i.Status,
+	)
+	return i, err
+}
+
+const getRegionByNameAndParent = `-- name: GetRegionByNameAndParent :one
+SELECT id, code, name, level, parent_id, longitude, latitude, created_at, qweather_location_id, status FROM regions
+WHERE name = $1 AND parent_id = $2 LIMIT 1
+`
+
+type GetRegionByNameAndParentParams struct {
+	Name     string      `json:"name"`
+	ParentID pgtype.Int8 `json:"parent_id"`
+}
+
+func (q *Queries) GetRegionByNameAndParent(ctx context.Context, arg GetRegionByNameAndParentParams) (Region, error) {
+	row := q.db.QueryRow(ctx, getRegionByNameAndParent, arg.Name, arg.ParentID)
+	var i Region
+	err := row.Scan(
+		&i.ID,
+		&i.Code,
+		&i.Name,
+		&i.Level,
+		&i.ParentID,
+		&i.Longitude,
+		&i.Latitude,
+		&i.CreatedAt,
+		&i.QweatherLocationID,
+		&i.Status,
+	)
+	return i, err
+}
+
+const getRegionByProviderCode = `-- name: GetRegionByProviderCode :one
+SELECT r.id, r.code, r.name, r.level, r.parent_id, r.longitude, r.latitude, r.created_at, r.qweather_location_id, r.status FROM region_external_mappings rem
+JOIN regions r ON r.id = rem.region_id
+WHERE rem.provider = $1 AND rem.external_code = $2
+LIMIT 1
+`
+
+type GetRegionByProviderCodeParams struct {
+	Provider     string `json:"provider"`
+	ExternalCode string `json:"external_code"`
+}
+
+func (q *Queries) GetRegionByProviderCode(ctx context.Context, arg GetRegionByProviderCodeParams) (Region, error) {
+	row := q.db.QueryRow(ctx, getRegionByProviderCode, arg.Provider, arg.ExternalCode)
+	var i Region
+	err := row.Scan(
+		&i.ID,
+		&i.Code,
+		&i.Name,
+		&i.Level,
+		&i.ParentID,
+		&i.Longitude,
+		&i.Latitude,
+		&i.CreatedAt,
+		&i.QweatherLocationID,
+		&i.Status,
 	)
 	return i, err
 }
@@ -195,13 +287,29 @@ func (q *Queries) GetRegionsWithDeliveryFeeConfig(ctx context.Context) ([]GetReg
 
 const listAvailableRegions = `-- name: ListAvailableRegions :many
 SELECT 
-  r.id, r.code, r.name, r.level, r.parent_id, r.longitude, r.latitude, r.created_at, r.qweather_location_id,
+  r.id, r.code, r.name, r.level, r.parent_id, r.longitude, r.latitude, r.created_at, r.qweather_location_id, r.status,
   p.name as parent_name
 FROM regions r
 LEFT JOIN regions p ON r.parent_id = p.id
 WHERE 
   NOT EXISTS (
+    SELECT 1
+    FROM operator_regions or_t
+    JOIN operators o ON o.id = or_t.operator_id
+    WHERE or_t.region_id = r.id
+      AND or_t.status = 'active'
+      AND o.status = 'active'
+  )
+  AND
+  NOT EXISTS (
     SELECT 1 FROM operators o WHERE o.region_id = r.id
+  )
+  AND
+  NOT EXISTS (
+    SELECT 1
+    FROM operator_applications oa
+    WHERE oa.region_id = r.id
+      AND oa.status IN ('submitted', 'approved')
   )
   AND CASE 
     WHEN $3::bigint IS NULL THEN TRUE
@@ -233,10 +341,11 @@ type ListAvailableRegionsRow struct {
 	Latitude           pgtype.Numeric `json:"latitude"`
 	CreatedAt          time.Time      `json:"created_at"`
 	QweatherLocationID pgtype.Text    `json:"qweather_location_id"`
+	Status             string         `json:"status"`
 	ParentName         pgtype.Text    `json:"parent_name"`
 }
 
-// 获取未被运营商占用的区域列表（优化：避免 N+1 查询）
+// 获取可申请区域列表：排除已被有效运营商占用，且排除已提交/已通过的申请占坑
 func (q *Queries) ListAvailableRegions(ctx context.Context, arg ListAvailableRegionsParams) ([]ListAvailableRegionsRow, error) {
 	rows, err := q.db.Query(ctx, listAvailableRegions,
 		arg.Limit,
@@ -261,6 +370,7 @@ func (q *Queries) ListAvailableRegions(ctx context.Context, arg ListAvailableReg
 			&i.Latitude,
 			&i.CreatedAt,
 			&i.QweatherLocationID,
+			&i.Status,
 			&i.ParentName,
 		); err != nil {
 			return nil, err
@@ -274,7 +384,7 @@ func (q *Queries) ListAvailableRegions(ctx context.Context, arg ListAvailableReg
 }
 
 const listRegionChildren = `-- name: ListRegionChildren :many
-SELECT id, code, name, level, parent_id, longitude, latitude, created_at, qweather_location_id FROM regions
+SELECT id, code, name, level, parent_id, longitude, latitude, created_at, qweather_location_id, status FROM regions
 WHERE parent_id = $1
 ORDER BY id
 `
@@ -298,6 +408,7 @@ func (q *Queries) ListRegionChildren(ctx context.Context, parentID pgtype.Int8) 
 			&i.Latitude,
 			&i.CreatedAt,
 			&i.QweatherLocationID,
+			&i.Status,
 		); err != nil {
 			return nil, err
 		}
@@ -310,10 +421,10 @@ func (q *Queries) ListRegionChildren(ctx context.Context, parentID pgtype.Int8) 
 }
 
 const listRegions = `-- name: ListRegions :many
-SELECT id, code, name, level, parent_id, longitude, latitude, created_at, qweather_location_id FROM regions
+SELECT id, code, name, level, parent_id, longitude, latitude, created_at, qweather_location_id, status FROM regions
 WHERE 
   CASE 
-    WHEN $3::bigint IS NULL THEN parent_id IS NULL
+    WHEN $3::bigint IS NULL THEN TRUE
     ELSE parent_id = $3
   END
   AND CASE
@@ -356,6 +467,7 @@ func (q *Queries) ListRegions(ctx context.Context, arg ListRegionsParams) ([]Reg
 			&i.Latitude,
 			&i.CreatedAt,
 			&i.QweatherLocationID,
+			&i.Status,
 		); err != nil {
 			return nil, err
 		}
@@ -368,7 +480,7 @@ func (q *Queries) ListRegions(ctx context.Context, arg ListRegionsParams) ([]Reg
 }
 
 const searchRegionsByName = `-- name: SearchRegionsByName :many
-SELECT id, code, name, level, parent_id, longitude, latitude, created_at, qweather_location_id FROM regions
+SELECT id, code, name, level, parent_id, longitude, latitude, created_at, qweather_location_id, status FROM regions
 WHERE name LIKE '%' || $1 || '%'
 ORDER BY level, id
 LIMIT $2
@@ -398,6 +510,7 @@ func (q *Queries) SearchRegionsByName(ctx context.Context, arg SearchRegionsByNa
 			&i.Latitude,
 			&i.CreatedAt,
 			&i.QweatherLocationID,
+			&i.Status,
 		); err != nil {
 			return nil, err
 		}
@@ -416,7 +529,7 @@ SET
   longitude = COALESCE($2, longitude),
   latitude = COALESCE($3, latitude)
 WHERE id = $4
-RETURNING id, code, name, level, parent_id, longitude, latitude, created_at, qweather_location_id
+RETURNING id, code, name, level, parent_id, longitude, latitude, created_at, qweather_location_id, status
 `
 
 type UpdateRegionParams struct {
@@ -444,6 +557,7 @@ func (q *Queries) UpdateRegion(ctx context.Context, arg UpdateRegionParams) (Reg
 		&i.Latitude,
 		&i.CreatedAt,
 		&i.QweatherLocationID,
+		&i.Status,
 	)
 	return i, err
 }
@@ -463,4 +577,46 @@ type UpdateRegionQweatherLocationIDParams struct {
 func (q *Queries) UpdateRegionQweatherLocationID(ctx context.Context, arg UpdateRegionQweatherLocationIDParams) error {
 	_, err := q.db.Exec(ctx, updateRegionQweatherLocationID, arg.ID, arg.QweatherLocationID)
 	return err
+}
+
+const upsertRegionExternalMapping = `-- name: UpsertRegionExternalMapping :one
+INSERT INTO region_external_mappings (
+  region_id,
+  provider,
+  external_code,
+  external_name
+) VALUES (
+  $1, $2, $3, $4
+)
+ON CONFLICT (provider, external_code)
+DO UPDATE SET
+  region_id = EXCLUDED.region_id,
+  external_name = EXCLUDED.external_name
+RETURNING id, region_id, provider, external_code, external_name, created_at
+`
+
+type UpsertRegionExternalMappingParams struct {
+	RegionID     int64       `json:"region_id"`
+	Provider     string      `json:"provider"`
+	ExternalCode string      `json:"external_code"`
+	ExternalName pgtype.Text `json:"external_name"`
+}
+
+func (q *Queries) UpsertRegionExternalMapping(ctx context.Context, arg UpsertRegionExternalMappingParams) (RegionExternalMapping, error) {
+	row := q.db.QueryRow(ctx, upsertRegionExternalMapping,
+		arg.RegionID,
+		arg.Provider,
+		arg.ExternalCode,
+		arg.ExternalName,
+	)
+	var i RegionExternalMapping
+	err := row.Scan(
+		&i.ID,
+		&i.RegionID,
+		&i.Provider,
+		&i.ExternalCode,
+		&i.ExternalName,
+		&i.CreatedAt,
+	)
+	return i, err
 }

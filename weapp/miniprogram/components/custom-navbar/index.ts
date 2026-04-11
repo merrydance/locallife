@@ -2,6 +2,10 @@
 
 import { globalStore } from '../../utils/global-store'
 
+type NavbarInstance = WechatMiniprogram.Component.InstanceMethods<WechatMiniprogram.IAnyObject> & {
+  _unsubscribe?: () => void
+}
+
 Component({
   properties: {
     title: {
@@ -17,6 +21,10 @@ Component({
       type: Boolean,
       value: false
     },
+    showHome: {
+      type: Boolean,
+      value: false
+    },
     showLocation: {
       type: Boolean,
       value: true
@@ -28,7 +36,8 @@ Component({
     navBarHeight: 0,
     navBarContentHeight: 44,
     capsuleWidth: 87,
-    displayLocation: '' // 内部管理的location显示值
+    displayLocation: '', // 内部管理的location显示值
+    innerShowHome: false // 内部计算的首页按钮显示状态
   },
 
   lifetimes: {
@@ -39,8 +48,9 @@ Component({
 
     detached() {
       // 取消订阅
-      if ((this as any)._unsubscribe) {
-        (this as any)._unsubscribe()
+      const navbar = this as unknown as NavbarInstance
+      if (navbar._unsubscribe) {
+        navbar._unsubscribe()
       }
     }
   },
@@ -48,18 +58,22 @@ Component({
   methods: {
     initNavBar() {
       // 获取稳定的高度计算逻辑
-      const { getStableBarHeights, isLargeScreen } = require('../../utils/responsive')
+      const { getStableBarHeights } = require('../../utils/responsive')
       const { statusBarHeight, navBarContentHeight, navBarHeight } = getStableBarHeights()
 
       const menuButton = wx.getMenuButtonBoundingClientRect()
       const windowInfo = wx.getWindowInfo()
       const capsuleWidth = windowInfo.screenWidth - menuButton.left
 
+      const pages = getCurrentPages()
+      const isHomePage = pages.length > 0 && pages[pages.length - 1].route === 'pages/takeout/index'
+      
       this.setData({
         statusBarHeight,
         navBarHeight,
         navBarContentHeight,
-        capsuleWidth
+        capsuleWidth,
+        innerShowHome: this.properties.showHome || !isHomePage
       })
 
       // 同步到全局状态
@@ -76,17 +90,23 @@ Component({
          * 订阅全局location变化
          */
     subscribeToLocationChanges() {
-      (this as any)._unsubscribe = globalStore.subscribe('location', (newLocation) => {
+      const navbar = this as unknown as NavbarInstance
+      navbar._unsubscribe = globalStore.subscribe('location', (newLocation: unknown) => {
+        const locationData =
+          typeof newLocation === 'object' && newLocation !== null
+            ? (newLocation as { name?: string })
+            : {}
+
         console.log('[Navbar] 收到位置更新通知', {
-          newLocation,
+          newLocation: locationData,
           hasPropertiesLocation: !!this.properties.location,
           willUpdate: !this.properties.location
         })
 
         // 只在必要时更新 - 如果properties没传location,才使用全局的
         if (!this.properties.location) {
-          this.setData({ displayLocation: newLocation.name || '定位中...' })
-          console.log('[Navbar] 已更新 displayLocation:', newLocation.name || '定位中...')
+          this.setData({ displayLocation: locationData.name || '定位中...' })
+          console.log('[Navbar] 已更新 displayLocation:', locationData.name || '定位中...')
         }
       })
     },
@@ -109,98 +129,7 @@ Component({
     },
 
     onLocationTap() {
-      // 如果当前显示"定位失败"，则调用chooseLocation让用户手动选择
-      if (this.data.displayLocation === '定位失败') {
-        this.openChooseLocation()
-        return
-      }
-
-      // 否则重新获取当前位置
-      this.setData({ displayLocation: '正在定位...' })
-
-      wx.getLocation({
-        type: 'gcj02',
-        success: async (res) => {
-          try {
-            // 使用后端逆地理编码接口
-            const { locationService } = require('../../utils/location')
-            const locationInfo = await locationService.reverseGeocode(res.latitude, res.longitude)
-
-            const name = locationInfo.street || locationInfo.district || locationInfo.address || '当前位置'
-
-            // 更新全局状态
-            const app = getApp<IAppOption>()
-            app.globalData.latitude = res.latitude
-            app.globalData.longitude = res.longitude
-            app.globalData.location = {
-              name,
-              address: locationInfo.address
-            }
-
-            // 使用GlobalStore统一管理,自动同步到所有监听者
-            globalStore.updateLocation(
-              res.latitude,
-              res.longitude,
-              name,
-              locationInfo.address
-            )
-
-            // 局部更新显示
-            this.setData({ displayLocation: name })
-
-            // 通知父页面
-            this.triggerEvent('locationchange', {
-              latitude: res.latitude,
-              longitude: res.longitude,
-              name,
-              address: locationInfo.address
-            })
-
-            wx.showToast({ title: '位置已更新', icon: 'success', duration: 1500 })
-          } catch (err) {
-            // 逆地理编码失败，使用坐标
-            const displayLocation = `${res.latitude.toFixed(4)}, ${res.longitude.toFixed(4)}`
-
-            const app = getApp<IAppOption>()
-            app.globalData.latitude = res.latitude
-            app.globalData.longitude = res.longitude
-            app.globalData.location = {
-              name: displayLocation,
-              address: displayLocation
-            }
-
-            globalStore.updateLocation(
-              res.latitude,
-              res.longitude,
-              displayLocation,
-              displayLocation
-            )
-            this.setData({ displayLocation })
-            this.triggerEvent('locationchange', res)
-          }
-        },
-        fail: (err) => {
-          // getLocation失败，显示"定位失败"让用户点击重试（会触发chooseLocation）
-          this.setData({ displayLocation: '定位失败' })
-
-          // 更新全局状态
-          const app = getApp<IAppOption>()
-          app.globalData.location = { name: '定位失败' }
-
-          if (err.errMsg.includes('auth deny')) {
-            wx.showModal({
-              title: '需要位置权限',
-              content: '请在设置中开启位置权限',
-              confirmText: '去设置',
-              success: (modalRes) => {
-                if (modalRes.confirm) {
-                  wx.openSetting()
-                }
-              }
-            })
-          }
-        }
-      })
+      this.openChooseLocation()
     },
 
     /**
@@ -285,6 +214,12 @@ Component({
           url: '/pages/takeout/index'
         })
       }
+    },
+
+    onHomeTap() {
+      wx.switchTab({
+        url: '/pages/takeout/index'
+      })
     }
   },
 
@@ -296,6 +231,13 @@ Component({
       if (newLocation) {
         this.setData({ displayLocation: newLocation })
       }
+    },
+    'showHome'(showHome: boolean) {
+      const pages = getCurrentPages()
+      const isHomePage = pages.length > 0 && pages[pages.length - 1].route === 'pages/takeout/index'
+      this.setData({
+        innerShowHome: showHome || !isHomePage
+      })
     }
   }
 })

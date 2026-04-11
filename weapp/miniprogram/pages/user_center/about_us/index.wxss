@@ -1,0 +1,100 @@
+/* 关于我们 - 遵循 .github/standards/weapp/DESIGN_SYSTEM.md */
+
+.page-scroll {
+  background: var(--td-bg-color-page);
+  box-sizing: border-box;
+}
+
+.content-section {
+  padding: 0 var(--spacer-md) var(--spacer-md);
+  display: flex;
+  flex-direction: column;
+}
+
+.about-card {
+  background: var(--td-bg-color-container);
+  border-radius: var(--radius-md);
+  padding: var(--spacer-xl, 64rpx) var(--spacer-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.brand-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 64rpx;
+}
+
+.logo-wrapper {
+  width: 160rpx;
+  height: 160rpx;
+  background: linear-gradient(135deg, #ff6b58, #ff4d3a);
+  border-radius: var(--radius-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: var(--spacer-md);
+  box-shadow: 0 8rpx 24rpx rgba(255, 107, 88, 0.3);
+}
+
+.brand-name {
+  font-size: 40rpx;
+  font-weight: 700;
+  color: var(--td-text-color-primary);
+  margin-bottom: var(--spacer-xs);
+}
+
+.version {
+  font-size: var(--font-size-sm);
+  color: var(--td-text-color-placeholder);
+}
+
+.intro-section {
+  margin-bottom: var(--spacer-lg);
+}
+
+.section-title {
+  font-size: var(--font-size-heading);
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+  margin-bottom: var(--spacer-sm);
+}
+
+.section-content {
+  font-size: var(--font-size-base);
+  color: var(--td-text-color-secondary);
+  line-height: 1.6;
+  text-align: justify;
+  white-space: pre-wrap;
+}
+
+.company-section {
+  margin-top: var(--spacer-lg);
+}
+
+.info-item {
+  display: flex;
+  justify-content: space-between;
+  padding: var(--spacer-sm) 0;
+  font-size: var(--font-size-base);
+}
+
+.label {
+  color: var(--td-text-color-placeholder);
+}
+
+.value {
+  color: var(--td-text-color-primary);
+  font-weight: 500;
+}
+
+.footer-info {
+  margin-top: 64rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  color: var(--td-text-color-placeholder);
+  font-size: var(--font-size-xs);
+  letter-spacing: 4rpx;
+  opacity: 0.6;
+}

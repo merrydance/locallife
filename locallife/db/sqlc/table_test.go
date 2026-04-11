@@ -2,7 +2,6 @@ package db
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -553,17 +552,17 @@ func TestAddTableImage(t *testing.T) {
 	table := createRandomRoom(t, merchant.ID)
 
 	arg := AddTableImageParams{
-		TableID:   table.ID,
-		ImageUrl:  "https://example.com/room1.jpg",
-		SortOrder: 1,
-		IsPrimary: true,
+		TableID:      table.ID,
+		MediaAssetID: pgtype.Int8{},
+		SortOrder:    1,
+		IsPrimary:    true,
 	}
 
 	image, err := testStore.AddTableImage(context.Background(), arg)
 	require.NoError(t, err)
 	require.NotZero(t, image.ID)
 	require.Equal(t, table.ID, image.TableID)
-	require.Equal(t, arg.ImageUrl, image.ImageUrl)
+	require.Equal(t, arg.MediaAssetID, image.MediaAssetID)
 	require.Equal(t, arg.SortOrder, image.SortOrder)
 	require.True(t, image.IsPrimary)
 }
@@ -576,10 +575,10 @@ func TestListTableImages(t *testing.T) {
 	// 添加多张图片
 	for i := 1; i <= 3; i++ {
 		arg := AddTableImageParams{
-			TableID:   table.ID,
-			ImageUrl:  fmt.Sprintf("https://example.com/room%d.jpg", i),
-			SortOrder: int32(i),
-			IsPrimary: i == 1,
+			TableID:      table.ID,
+			MediaAssetID: pgtype.Int8{},
+			SortOrder:    int32(i),
+			IsPrimary:    i == 1,
 		}
 		_, err := testStore.AddTableImage(context.Background(), arg)
 		require.NoError(t, err)
@@ -602,25 +601,25 @@ func TestGetPrimaryTableImage(t *testing.T) {
 
 	// 添加非主图
 	_, err := testStore.AddTableImage(context.Background(), AddTableImageParams{
-		TableID:   table.ID,
-		ImageUrl:  "https://example.com/non-primary.jpg",
-		SortOrder: 1,
-		IsPrimary: false,
+		TableID:      table.ID,
+		MediaAssetID: pgtype.Int8{},
+		SortOrder:    1,
+		IsPrimary:    false,
 	})
 	require.NoError(t, err)
 
 	// 添加主图
 	_, err = testStore.AddTableImage(context.Background(), AddTableImageParams{
-		TableID:   table.ID,
-		ImageUrl:  "https://example.com/primary.jpg",
-		SortOrder: 2,
-		IsPrimary: true,
+		TableID:      table.ID,
+		MediaAssetID: pgtype.Int8{},
+		SortOrder:    2,
+		IsPrimary:    true,
 	})
 	require.NoError(t, err)
 
 	primaryImage, err := testStore.GetPrimaryTableImage(context.Background(), table.ID)
 	require.NoError(t, err)
-	require.Equal(t, "https://example.com/primary.jpg", primaryImage.ImageUrl)
+	require.False(t, primaryImage.MediaAssetID.Valid)
 	require.True(t, primaryImage.IsPrimary)
 }
 
@@ -631,10 +630,10 @@ func TestSetPrimaryTableImage(t *testing.T) {
 
 	// 添加一张主图
 	img1, err := testStore.AddTableImage(context.Background(), AddTableImageParams{
-		TableID:   table.ID,
-		ImageUrl:  "https://example.com/img1.jpg",
-		SortOrder: 1,
-		IsPrimary: true,
+		TableID:      table.ID,
+		MediaAssetID: pgtype.Int8{},
+		SortOrder:    1,
+		IsPrimary:    true,
 	})
 	require.NoError(t, err)
 	require.True(t, img1.IsPrimary)
@@ -658,10 +657,10 @@ func TestSetTableImagePrimary(t *testing.T) {
 
 	// 添加一张非主图
 	img, err := testStore.AddTableImage(context.Background(), AddTableImageParams{
-		TableID:   table.ID,
-		ImageUrl:  "https://example.com/img.jpg",
-		SortOrder: 1,
-		IsPrimary: false,
+		TableID:      table.ID,
+		MediaAssetID: pgtype.Int8{},
+		SortOrder:    1,
+		IsPrimary:    false,
 	})
 	require.NoError(t, err)
 	require.False(t, img.IsPrimary)
@@ -678,10 +677,10 @@ func TestDeleteTableImage(t *testing.T) {
 	table := createRandomRoom(t, merchant.ID)
 
 	img, err := testStore.AddTableImage(context.Background(), AddTableImageParams{
-		TableID:   table.ID,
-		ImageUrl:  "https://example.com/to-delete.jpg",
-		SortOrder: 1,
-		IsPrimary: false,
+		TableID:      table.ID,
+		MediaAssetID: pgtype.Int8{},
+		SortOrder:    1,
+		IsPrimary:    false,
 	})
 	require.NoError(t, err)
 
@@ -724,10 +723,10 @@ func TestSearchRoomsWithImage(t *testing.T) {
 
 	// 添加主图
 	_, err := testStore.AddTableImage(context.Background(), AddTableImageParams{
-		TableID:   room.ID,
-		ImageUrl:  "https://example.com/searchtest-primary.jpg",
-		SortOrder: 1,
-		IsPrimary: true,
+		TableID:      room.ID,
+		MediaAssetID: pgtype.Int8{},
+		SortOrder:    1,
+		IsPrimary:    true,
 	})
 	require.NoError(t, err)
 
@@ -735,7 +734,7 @@ func TestSearchRoomsWithImage(t *testing.T) {
 	result, err := testStore.SearchRoomsWithImage(context.Background(), SearchRoomsWithImageParams{
 		PageSize:   100,
 		PageOffset: 0,
-		RegionID:   pgtype.Int8{Int64: merchant.RegionID, Valid: true},
+		RegionID:   merchant.RegionID,
 	})
 	require.NoError(t, err)
 	require.NotEmpty(t, result, "should find at least one room")
@@ -760,15 +759,16 @@ func TestExploreNearbyRooms(t *testing.T) {
 
 	// 添加主图
 	_, err := testStore.AddTableImage(context.Background(), AddTableImageParams{
-		TableID:   room.ID,
-		ImageUrl:  "https://example.com/explore.jpg",
-		SortOrder: 1,
-		IsPrimary: true,
+		TableID:      room.ID,
+		MediaAssetID: pgtype.Int8{},
+		SortOrder:    1,
+		IsPrimary:    true,
 	})
 	require.NoError(t, err)
 
 	// 探索附近包间
 	result, err := testStore.ExploreNearbyRooms(context.Background(), ExploreNearbyRoomsParams{
+		RegionID:   merchant.RegionID,
 		PageSize:   10,
 		PageOffset: 0,
 	})

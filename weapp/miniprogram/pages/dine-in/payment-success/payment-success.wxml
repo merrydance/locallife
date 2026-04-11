@@ -1,5 +1,7 @@
 <!--堂食支付成功页面-->
-<view class="payment-success-container">
+<custom-navbar title="支付成功" showBack="{{false}}" bind:navheight="onNavHeight" />
+
+<view class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: 40rpx;">
   <!-- 成功状态 -->
   <view class="success-section">
     <view class="success-icon">✅</view>
@@ -18,11 +20,11 @@
         <text class="info-label">支付金额</text>
         <text class="info-value amount">¥{{paymentAmount}}</text>
       </view>
-      <view class="info-row">
+      <view wx:if="{{tableInfo && tableInfo.table_number}}" class="info-row">
         <text class="info-label">用餐桌台</text>
         <text class="info-value">{{tableInfo.table_number}}号桌</text>
       </view>
-      <view class="info-row">
+      <view wx:if="{{merchantInfo && merchantInfo.name}}" class="info-row">
         <text class="info-label">商户名称</text>
         <text class="info-value">{{merchantInfo.name}}</text>
       </view>
@@ -38,7 +40,7 @@
       </view>
       <view class="tips-content">
         <text class="tips-text">• 请保持手机畅通，商家会及时为您制作美食</text>
-        <text class="tips-text">• 如有疑问可联系商家或呼叫服务员</text>
+        <text class="tips-text">• 如有疑问可联系商家工作人员</text>
         <text class="tips-text">• {{countdown}}秒后自动跳转到订单详情</text>
       </view>
     </view>
@@ -75,12 +77,12 @@
   </view>
 
   <!-- 操作按钮 -->
-  <view class="action-section">
-    <button class="action-btn primary" bindtap="goToOrderDetail">
+  <view class="action-section" style="padding: 0 32rpx;">
+    <t-button theme="primary" shape="round" block size="large" bindtap="goToOrderDetail" style="margin-bottom: 32rpx;">
       查看订单详情
-    </button>
-    <button class="action-btn secondary" bindtap="goToHome">
+    </t-button>
+    <t-button theme="default" shape="round" block size="large" bindtap="goToHome">
       返回首页
-    </button>
+    </t-button>
   </view>
 </view>

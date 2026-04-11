@@ -202,13 +202,13 @@ SELECT
                 'id', s.id,
                 'order_id', s.order_id,
                 'merchant_id', s.merchant_id,
-                'sub_mchid', s.sub_mchid,
+                'sub_mch_id', s.sub_mchid,
                 'amount', s.amount,
                 'out_trade_no', s.out_trade_no,
                 'description', s.description,
                 'profit_sharing_status', s.profit_sharing_status,
                 'merchant_name', m.name,
-                'merchant_logo', m.logo_url,
+                'merchant_logo_media_asset_id', m.logo_media_asset_id,
                 'order_no', o.order_no
             ) ORDER BY s.created_at
         ) FILTER (WHERE s.id IS NOT NULL), '[]'
@@ -340,6 +340,54 @@ func (q *Queries) GetCombinedPaymentSubOrdersByOrder(ctx context.Context, orderI
 	return items, nil
 }
 
+const listCombinedPaymentOrdersForReconciliation = `-- name: ListCombinedPaymentOrdersForReconciliation :many
+SELECT id, combine_out_trade_no, transaction_id, total_amount, status
+FROM combined_payment_orders
+WHERE status IN ('paid', 'refunded')
+  AND paid_at >= $1
+  AND paid_at < $2
+`
+
+type ListCombinedPaymentOrdersForReconciliationParams struct {
+	PaidAt   pgtype.Timestamptz `json:"paid_at"`
+	PaidAt_2 pgtype.Timestamptz `json:"paid_at_2"`
+}
+
+type ListCombinedPaymentOrdersForReconciliationRow struct {
+	ID                int64       `json:"id"`
+	CombineOutTradeNo string      `json:"combine_out_trade_no"`
+	TransactionID     pgtype.Text `json:"transaction_id"`
+	TotalAmount       int64       `json:"total_amount"`
+	Status            string      `json:"status"`
+}
+
+// 获取指定日期范围内所有合单（收付通）支付订单（用于每日对账）
+func (q *Queries) ListCombinedPaymentOrdersForReconciliation(ctx context.Context, arg ListCombinedPaymentOrdersForReconciliationParams) ([]ListCombinedPaymentOrdersForReconciliationRow, error) {
+	rows, err := q.db.Query(ctx, listCombinedPaymentOrdersForReconciliation, arg.PaidAt, arg.PaidAt_2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListCombinedPaymentOrdersForReconciliationRow{}
+	for rows.Next() {
+		var i ListCombinedPaymentOrdersForReconciliationRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.CombineOutTradeNo,
+			&i.TransactionID,
+			&i.TotalAmount,
+			&i.Status,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listCombinedPaymentSubOrders = `-- name: ListCombinedPaymentSubOrders :many
 SELECT id, combined_payment_id, order_id, merchant_id, sub_mchid, amount, out_trade_no, description, profit_sharing_status, created_at FROM combined_payment_sub_orders
 WHERE combined_payment_id = $1
@@ -381,7 +429,7 @@ const listCombinedPaymentSubOrdersWithMerchant = `-- name: ListCombinedPaymentSu
 SELECT 
     s.id, s.combined_payment_id, s.order_id, s.merchant_id, s.sub_mchid, s.amount, s.out_trade_no, s.description, s.profit_sharing_status, s.created_at,
     m.name as merchant_name,
-    m.logo_url as merchant_logo,
+    m.logo_media_asset_id as merchant_logo_media_asset_id,
     o.order_no
 FROM combined_payment_sub_orders s
 JOIN merchants m ON m.id = s.merchant_id
@@ -391,19 +439,19 @@ ORDER BY s.created_at
 `
 
 type ListCombinedPaymentSubOrdersWithMerchantRow struct {
-	ID                  int64       `json:"id"`
-	CombinedPaymentID   int64       `json:"combined_payment_id"`
-	OrderID             int64       `json:"order_id"`
-	MerchantID          int64       `json:"merchant_id"`
-	SubMchid            string      `json:"sub_mchid"`
-	Amount              int64       `json:"amount"`
-	OutTradeNo          string      `json:"out_trade_no"`
-	Description         string      `json:"description"`
-	ProfitSharingStatus string      `json:"profit_sharing_status"`
-	CreatedAt           time.Time   `json:"created_at"`
-	MerchantName        string      `json:"merchant_name"`
-	MerchantLogo        pgtype.Text `json:"merchant_logo"`
-	OrderNo             string      `json:"order_no"`
+	ID                       int64       `json:"id"`
+	CombinedPaymentID        int64       `json:"combined_payment_id"`
+	OrderID                  int64       `json:"order_id"`
+	MerchantID               int64       `json:"merchant_id"`
+	SubMchid                 string      `json:"sub_mchid"`
+	Amount                   int64       `json:"amount"`
+	OutTradeNo               string      `json:"out_trade_no"`
+	Description              string      `json:"description"`
+	ProfitSharingStatus      string      `json:"profit_sharing_status"`
+	CreatedAt                time.Time   `json:"created_at"`
+	MerchantName             string      `json:"merchant_name"`
+	MerchantLogoMediaAssetID pgtype.Int8 `json:"merchant_logo_media_asset_id"`
+	OrderNo                  string      `json:"order_no"`
 }
 
 func (q *Queries) ListCombinedPaymentSubOrdersWithMerchant(ctx context.Context, combinedPaymentID int64) ([]ListCombinedPaymentSubOrdersWithMerchantRow, error) {
@@ -427,7 +475,7 @@ func (q *Queries) ListCombinedPaymentSubOrdersWithMerchant(ctx context.Context, 
 			&i.ProfitSharingStatus,
 			&i.CreatedAt,
 			&i.MerchantName,
-			&i.MerchantLogo,
+			&i.MerchantLogoMediaAssetID,
 			&i.OrderNo,
 		); err != nil {
 			return nil, err

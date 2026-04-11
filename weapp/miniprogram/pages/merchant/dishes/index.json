@@ -1,8 +1,21 @@
 {
-    "usingComponents": {
-        "merchant-header": "/components/merchant-header/index",
-        "tag-selector": "../components/tag-selector/index"
-    },
-    "navigationStyle": "custom",
-    "enablePullDownRefresh": false
+  "usingComponents": {
+    "t-check-tag": "tdesign-miniprogram/check-tag/check-tag",
+    "t-tabs": "tdesign-miniprogram/tabs/tabs",
+    "t-tab-panel": "tdesign-miniprogram/tab-panel/tab-panel",
+    "t-button": "tdesign-miniprogram/button/button",
+    "t-empty": "tdesign-miniprogram/empty/empty",
+    "t-loading": "tdesign-miniprogram/loading/loading",
+    "t-fab": "tdesign-miniprogram/fab/fab",
+    "t-tag": "tdesign-miniprogram/tag/tag",
+    "t-cell-group": "tdesign-miniprogram/cell-group/cell-group",
+    "t-dialog": "tdesign-miniprogram/dialog/dialog",
+    "t-divider": "tdesign-miniprogram/divider/divider",
+    "t-image": "tdesign-miniprogram/image/image",
+    "t-switch": "tdesign-miniprogram/switch/switch",
+    "t-sticky": "tdesign-miniprogram/sticky/sticky",
+    "t-notice-bar": "tdesign-miniprogram/notice-bar/notice-bar",
+    "custom-navbar": "/components/custom-navbar/index"
+  },
+  "navigationStyle": "custom"
 }

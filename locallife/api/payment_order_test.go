@@ -10,12 +10,13 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/util"
+	"github.com/merrydance/locallife/wechat"
+	mockwechat "github.com/merrydance/locallife/wechat/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
@@ -78,25 +79,33 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 	order := randomPaymentTestOrder(user.ID, merchant.ID)
 	paymentOrder := randomPaymentOrder(user.ID, &order.ID)
 	paymentOrder.Amount = order.TotalAmount
+	paymentOrder.PaymentType = PaymentTypeProfitShare
+	paymentOrder.CombinedPaymentID = pgtype.Int8{Int64: util.RandomInt(1, 1000), Valid: true}
+	payParams := &wechat.JSAPIPayParams{
+		TimeStamp: "1234567890",
+		NonceStr:  "nonce",
+		Package:   "prepay_id=wx123",
+		SignType:  "RSA",
+		PaySign:   "signature",
+	}
 
 	testCases := []struct {
 		name          string
 		body          gin.H
 		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
-		buildStubs    func(store *mockdb.MockStore)
+		buildStubs    func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface)
 		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
 	}{
 		{
-			name: "OK",
+			name: "OK_MissingPaymentType_UsesCompatibleDefault",
 			body: gin.H{
 				"order_id":      order.ID,
-				"payment_type":  "miniprogram",
 				"business_type": "order",
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {
+			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
 				store.EXPECT().
 					GetOrder(gomock.Any(), order.ID).
 					Times(1).
@@ -105,19 +114,45 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 				store.EXPECT().
 					GetLatestPaymentOrderByOrder(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.PaymentOrder{}, pgx.ErrNoRows)
+					Return(db.PaymentOrder{}, db.ErrRecordNotFound)
 
 				store.EXPECT().
-					CreatePaymentOrder(gomock.Any(), gomock.Any()).
+					GetUser(gomock.Any(), user.ID).
 					Times(1).
-					Return(paymentOrder, nil)
+					Return(user, nil)
+
+				store.EXPECT().
+					GetMerchant(gomock.Any(), merchant.ID).
+					Times(1).
+					Return(merchant, nil)
+
+				store.EXPECT().
+					CreatePartnerPaymentTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.CreatePartnerPaymentTxResult{
+						PaymentOrder: paymentOrder,
+						SubMchID:     "1900000109",
+					}, nil)
+
+				ecommerceClient.EXPECT().
+					CreatePartnerJSAPIOrder(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(&wechat.PartnerJSAPIOrderResponse{PrepayID: "wx123"}, payParams, nil)
+
+				store.EXPECT().
+					UpdatePaymentOrderPrepayId(gomock.Any(), gomock.Any()).
+					Times(1).
+					DoAndReturn(func(_ any, arg db.UpdatePaymentOrderPrepayIdParams) (db.PaymentOrder, error) {
+						updated := paymentOrder
+						updated.PrepayID = arg.PrepayID
+						return updated, nil
+					})
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
+				require.Equal(t, http.StatusCreated, recorder.Code)
 
 				var response paymentOrderResponse
-				err := json.NewDecoder(recorder.Body).Decode(&response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, paymentOrder.ID, response.ID)
 				require.Equal(t, "pending", response.Status)
 			},
@@ -132,11 +167,11 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {
+			buildStubs: func(store *mockdb.MockStore, _ *mockwechat.MockEcommerceClientInterface) {
 				store.EXPECT().
 					GetOrder(gomock.Any(), order.ID).
 					Times(1).
-					Return(db.Order{}, pgx.ErrNoRows)
+					Return(db.Order{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -152,7 +187,7 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, otherUser.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {
+			buildStubs: func(store *mockdb.MockStore, _ *mockwechat.MockEcommerceClientInterface) {
 				store.EXPECT().
 					GetOrder(gomock.Any(), order.ID).
 					Times(1).
@@ -172,7 +207,7 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {
+			buildStubs: func(store *mockdb.MockStore, _ *mockwechat.MockEcommerceClientInterface) {
 				paidOrder := order
 				paidOrder.Status = "paid"
 				store.EXPECT().
@@ -194,7 +229,10 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {
+			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
+				existingPendingPayment := paymentOrder
+				existingPendingPayment.PrepayID = pgtype.Text{String: "wx123", Valid: true}
+
 				store.EXPECT().
 					GetOrder(gomock.Any(), order.ID).
 					Times(1).
@@ -204,20 +242,74 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 				store.EXPECT().
 					GetLatestPaymentOrderByOrder(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(paymentOrder, nil)
+					Return(existingPendingPayment, nil)
 
-				// 不应该创建新的支付订单
-				store.EXPECT().
-					CreatePaymentOrder(gomock.Any(), gomock.Any()).
-					Times(0)
+				ecommerceClient.EXPECT().
+					GenerateJSAPIPayParams(gomock.Any()).
+					Times(1).
+					Return(payParams, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
+				require.Equal(t, http.StatusCreated, recorder.Code)
 
 				var response paymentOrderResponse
-				err := json.NewDecoder(recorder.Body).Decode(&response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, paymentOrder.ID, response.ID)
+			},
+		},
+		{
+			name: "ConcurrentPendingPaymentConflict_ReusesExistingPayment",
+			body: gin.H{
+				"order_id":      order.ID,
+				"payment_type":  "miniprogram",
+				"business_type": "order",
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
+				existingPendingPayment := paymentOrder
+				existingPendingPayment.PrepayID = pgtype.Text{String: "wx123", Valid: true}
+
+				gomock.InOrder(
+					store.EXPECT().
+						GetOrder(gomock.Any(), order.ID).
+						Times(1).
+						Return(order, nil),
+					store.EXPECT().
+						GetLatestPaymentOrderByOrder(gomock.Any(), gomock.Any()).
+						Times(1).
+						Return(db.PaymentOrder{}, db.ErrRecordNotFound),
+					store.EXPECT().
+						GetUser(gomock.Any(), user.ID).
+						Times(1).
+						Return(user, nil),
+					store.EXPECT().
+						GetMerchant(gomock.Any(), merchant.ID).
+						Times(1).
+						Return(merchant, nil),
+					store.EXPECT().
+						CreatePartnerPaymentTx(gomock.Any(), gomock.Any()).
+						Times(1).
+						Return(db.CreatePartnerPaymentTxResult{}, db.ErrOrderPendingPaymentConflict),
+					store.EXPECT().
+						GetLatestPaymentOrderByOrder(gomock.Any(), gomock.Any()).
+						Times(1).
+						Return(existingPendingPayment, nil),
+					ecommerceClient.EXPECT().
+						GenerateJSAPIPayParams("wx123").
+						Times(1).
+						Return(payParams, nil),
+				)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusCreated, recorder.Code)
+
+				var response paymentOrderResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Equal(t, paymentOrder.ID, response.ID)
+				require.Equal(t, "pending", response.Status)
+				require.NotNil(t, response.PayParams)
 			},
 		},
 		{
@@ -230,9 +322,71 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {},
+			buildStubs: func(store *mockdb.MockStore, _ *mockwechat.MockEcommerceClientInterface) {},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
+			name: "LegacyNativePaymentType_StillAccepted",
+			body: gin.H{
+				"order_id":      order.ID,
+				"payment_type":  "native",
+				"business_type": "order",
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
+				store.EXPECT().
+					GetOrder(gomock.Any(), order.ID).
+					Times(1).
+					Return(order, nil)
+
+				store.EXPECT().
+					GetLatestPaymentOrderByOrder(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.PaymentOrder{}, db.ErrRecordNotFound)
+
+				store.EXPECT().
+					GetUser(gomock.Any(), user.ID).
+					Times(1).
+					Return(user, nil)
+
+				store.EXPECT().
+					GetMerchant(gomock.Any(), merchant.ID).
+					Times(1).
+					Return(merchant, nil)
+
+				store.EXPECT().
+					CreatePartnerPaymentTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.CreatePartnerPaymentTxResult{
+						PaymentOrder: paymentOrder,
+						SubMchID:     "1900000109",
+					}, nil)
+
+				ecommerceClient.EXPECT().
+					CreatePartnerJSAPIOrder(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(&wechat.PartnerJSAPIOrderResponse{PrepayID: "wx123"}, payParams, nil)
+
+				store.EXPECT().
+					UpdatePaymentOrderPrepayId(gomock.Any(), gomock.Any()).
+					Times(1).
+					DoAndReturn(func(_ any, arg db.UpdatePaymentOrderPrepayIdParams) (db.PaymentOrder, error) {
+						updated := paymentOrder
+						updated.PrepayID = arg.PrepayID
+						return updated, nil
+					})
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusCreated, recorder.Code)
+
+				var response paymentOrderResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Equal(t, paymentOrder.ID, response.ID)
+				require.Equal(t, "pending", response.Status)
 			},
 		},
 		{
@@ -245,7 +399,7 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {},
+			buildStubs: func(store *mockdb.MockStore, _ *mockwechat.MockEcommerceClientInterface) {},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
 			},
@@ -260,7 +414,7 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {},
+			buildStubs: func(store *mockdb.MockStore, _ *mockwechat.MockEcommerceClientInterface) {},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
 			},
@@ -273,7 +427,7 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 				"business_type": "order",
 			},
 			setupAuth:  func(t *testing.T, request *http.Request, tokenMaker token.Maker) {},
-			buildStubs: func(store *mockdb.MockStore) {},
+			buildStubs: func(store *mockdb.MockStore, _ *mockwechat.MockEcommerceClientInterface) {},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusUnauthorized, recorder.Code)
 			},
@@ -288,9 +442,12 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 			defer ctrl.Finish()
 
 			store := mockdb.NewMockStore(ctrl)
-			tc.buildStubs(store)
+			ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+			tc.buildStubs(store, ecommerceClient)
 
 			server := newTestServer(t, store)
+			server.SetEcommerceClientForTest(ecommerceClient)
+			server.SetTaskDistributorForTest(nil)
 			recorder := httptest.NewRecorder()
 
 			data, err := json.Marshal(tc.body)
@@ -340,8 +497,7 @@ func TestGetPaymentOrderAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response paymentOrderResponse
-				err := json.NewDecoder(recorder.Body).Decode(&response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, paymentOrder.ID, response.ID)
 			},
 		},
@@ -355,7 +511,7 @@ func TestGetPaymentOrderAPI(t *testing.T) {
 				store.EXPECT().
 					GetPaymentOrder(gomock.Any(), int64(99999)).
 					Times(1).
-					Return(db.PaymentOrder{}, pgx.ErrNoRows)
+					Return(db.PaymentOrder{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -446,10 +602,9 @@ func TestListPaymentOrdersAPI(t *testing.T) {
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
-				var response []paymentOrderResponse
-				err := json.NewDecoder(recorder.Body).Decode(&response)
-				require.NoError(t, err)
-				require.Len(t, response, 1)
+				var response listPaymentOrdersResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Len(t, response.PaymentOrders, 1)
 			},
 		},
 		{
@@ -458,9 +613,22 @@ func TestListPaymentOrdersAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					ListPaymentOrdersByUser(gomock.Any(), db.ListPaymentOrdersByUserParams{
+						UserID: user.ID,
+						Limit:  10,
+						Offset: 0,
+					}).
+					Times(1).
+					Return([]db.PaymentOrder{paymentOrder}, nil)
+			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var response listPaymentOrdersResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Len(t, response.PaymentOrders, 1)
 			},
 		},
 		{
@@ -469,9 +637,22 @@ func TestListPaymentOrdersAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					ListPaymentOrdersByUser(gomock.Any(), db.ListPaymentOrdersByUserParams{
+						UserID: user.ID,
+						Limit:  4,
+						Offset: 0,
+					}).
+					Times(1).
+					Return([]db.PaymentOrder{paymentOrder}, nil)
+			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var response listPaymentOrdersResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Len(t, response.PaymentOrders, 1)
 			},
 		},
 		{
@@ -559,8 +740,7 @@ func TestClosePaymentOrderAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response paymentOrderResponse
-				err := json.NewDecoder(recorder.Body).Decode(&response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, "closed", response.Status)
 			},
 		},
@@ -574,7 +754,7 @@ func TestClosePaymentOrderAPI(t *testing.T) {
 				store.EXPECT().
 					GetPaymentOrder(gomock.Any(), int64(99999)).
 					Times(1).
-					Return(db.PaymentOrder{}, pgx.ErrNoRows)
+					Return(db.PaymentOrder{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -649,6 +829,149 @@ func TestClosePaymentOrderAPI(t *testing.T) {
 	}
 }
 
+func TestCreateCombinedPaymentOrderAPI_ServiceUnavailableWhenEcommerceClientMissing(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	body, err := json.Marshal(gin.H{"order_ids": []int64{11, 22}})
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPost, "/v1/payments/combined", bytes.NewReader(body))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, 1001, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusServiceUnavailable, recorder.Code)
+	var resp APIResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, CodeServiceUnavail, resp.Code)
+	require.Equal(t, "internal server error", resp.Message)
+}
+
+func TestCloseCombinedPaymentOrderAPI_ServiceUnavailableWhenEcommerceClientMissing(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	request, err := http.NewRequest(http.MethodPost, "/v1/payments/combined/123/close", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, 1001, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusServiceUnavailable, recorder.Code)
+	var resp APIResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, CodeServiceUnavail, resp.Code)
+	require.Equal(t, "internal server error", resp.Message)
+}
+
+func TestQueryCombinedPaymentOrderAPI_ServiceUnavailableWhenEcommerceClientMissing(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	request, err := http.NewRequest(http.MethodGet, "/v1/payments/combined/123/query", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, 1001, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusServiceUnavailable, recorder.Code)
+	var resp APIResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, CodeServiceUnavail, resp.Code)
+	require.Equal(t, "internal server error", resp.Message)
+}
+
+func TestQueryCombinedPaymentOrderAPI_RemotePaidOmitsPayParams(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	server := newTestServerWithEcommerce(t, store, ecommerceClient)
+	recorder := httptest.NewRecorder()
+
+	subOrders, err := json.Marshal([]map[string]any{{
+		"order_id":         int64(11),
+		"payment_order_id": int64(22),
+		"merchant_id":      int64(33),
+		"sub_mch_id":       "1900001111",
+		"amount":           int64(5000),
+		"out_trade_no":     "P202001010000000001",
+		"description":      "test-sub-order",
+	}})
+	require.NoError(t, err)
+
+	store.EXPECT().
+		GetCombinedPaymentOrderWithSubOrders(gomock.Any(), int64(123)).
+		Times(1).
+		Return(db.GetCombinedPaymentOrderWithSubOrdersRow{
+			ID:                123,
+			UserID:            1001,
+			CombineOutTradeNo: "CP20260406000001",
+			TotalAmount:       5000,
+			PrepayID:          pgtype.Text{String: "combine-prepay-123", Valid: true},
+			Status:            "pending",
+			ExpiresAt:         pgtype.Timestamptz{Time: time.Now().Add(10 * time.Minute), Valid: true},
+			SubOrders:         subOrders,
+		}, nil)
+	ecommerceClient.EXPECT().
+		QueryCombineOrder(gomock.Any(), "CP20260406000001").
+		Times(1).
+		Return(&wechat.CombineQueryResponse{
+			CombineOutTradeNo: "CP20260406000001",
+			SubOrders: []wechat.CombineSubOrderResult{{
+				MchID:         "service-mchid-001",
+				SubMchID:      "1900001111",
+				OutTradeNo:    "P202001010000000001",
+				TransactionID: "wx-txn-123",
+				TradeType:     "JSAPI",
+				TradeState:    "SUCCESS",
+				Amount: struct {
+					TotalAmount    int64  `json:"total_amount"`
+					PayerAmount    int64  `json:"payer_amount"`
+					Currency       string `json:"currency"`
+					PayerCurrency  string `json:"payer_currency"`
+					SettlementRate int64  `json:"settlement_rate"`
+				}{
+					TotalAmount:   5000,
+					PayerAmount:   5000,
+					Currency:      "CNY",
+					PayerCurrency: "CNY",
+				},
+			}},
+		}, nil)
+
+	request, err := http.NewRequest(http.MethodGet, "/v1/payments/combined/123/query", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, 1001, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var response combinedPaymentOrderResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+	require.Nil(t, response.PayParams)
+	require.NotNil(t, response.WechatQuery)
+	require.Equal(t, "paid", response.WechatQuery.AggregateTradeState)
+	require.Equal(t, "CP20260406000001", response.WechatQuery.CombineOutTradeNo)
+	require.Len(t, response.SubOrders, 1)
+}
+
 // ==================== CreateRefundOrder Tests ====================
 
 func TestCreateRefundOrderAPI(t *testing.T) {
@@ -660,9 +983,9 @@ func TestCreateRefundOrderAPI(t *testing.T) {
 
 	paymentOrder := randomPaymentOrder(user.ID, &order.ID)
 	paymentOrder.Status = "paid"
-	paymentOrder.Amount = 10000
+	paymentOrder.Amount = 100 * fenPerYuan
 
-	refundOrder := randomRefundOrder(paymentOrder.ID, 10000)
+	refundOrder := randomRefundOrder(paymentOrder.ID, 100*fenPerYuan)
 
 	testCases := []struct {
 		name          string
@@ -699,9 +1022,9 @@ func TestCreateRefundOrderAPI(t *testing.T) {
 					Return(order, nil)
 
 				store.EXPECT().
-					CreateRefundOrder(gomock.Any(), gomock.Any()).
+					CreateRefundOrderTx(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(refundOrder, nil)
+					Return(db.CreateRefundOrderTxResult{RefundOrder: refundOrder}, nil)
 
 				store.EXPECT().
 					GetRefundOrder(gomock.Any(), refundOrder.ID).
@@ -709,11 +1032,10 @@ func TestCreateRefundOrderAPI(t *testing.T) {
 					Return(refundOrder, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
+				require.Equal(t, http.StatusCreated, recorder.Code)
 
 				var response refundOrderResponse
-				err := json.NewDecoder(recorder.Body).Decode(&response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, refundOrder.ID, response.ID)
 			},
 		},
@@ -731,7 +1053,7 @@ func TestCreateRefundOrderAPI(t *testing.T) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), otherUser.ID).
 					Times(1).
-					Return(db.Merchant{}, pgx.ErrNoRows)
+					Return(db.Merchant{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -756,7 +1078,7 @@ func TestCreateRefundOrderAPI(t *testing.T) {
 				store.EXPECT().
 					GetPaymentOrder(gomock.Any(), int64(99999)).
 					Times(1).
-					Return(db.PaymentOrder{}, pgx.ErrNoRows)
+					Return(db.PaymentOrder{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -934,8 +1256,7 @@ func TestGetRefundOrderAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response refundOrderResponse
-				err := json.NewDecoder(recorder.Body).Decode(&response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, refundOrder.ID, response.ID)
 			},
 		},
@@ -971,7 +1292,7 @@ func TestGetRefundOrderAPI(t *testing.T) {
 				store.EXPECT().
 					GetRefundOrder(gomock.Any(), int64(99999)).
 					Times(1).
-					Return(db.RefundOrder{}, pgx.ErrNoRows)
+					Return(db.RefundOrder{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -1003,7 +1324,7 @@ func TestGetRefundOrderAPI(t *testing.T) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), otherUser.ID).
 					Times(1).
-					Return(db.Merchant{}, pgx.ErrNoRows)
+					Return(db.Merchant{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -1085,10 +1406,9 @@ func TestListRefundOrdersByPaymentAPI(t *testing.T) {
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
-				var response []refundOrderResponse
-				err := json.NewDecoder(recorder.Body).Decode(&response)
-				require.NoError(t, err)
-				require.Len(t, response, 1)
+				var response listRefundOrdersByPaymentResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Len(t, response.RefundOrders, 1)
 			},
 		},
 		{
@@ -1101,7 +1421,7 @@ func TestListRefundOrdersByPaymentAPI(t *testing.T) {
 				store.EXPECT().
 					GetPaymentOrder(gomock.Any(), int64(99999)).
 					Times(1).
-					Return(db.PaymentOrder{}, pgx.ErrNoRows)
+					Return(db.PaymentOrder{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -1128,7 +1448,7 @@ func TestListRefundOrdersByPaymentAPI(t *testing.T) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), otherUser.ID).
 					Times(1).
-					Return(db.Merchant{}, pgx.ErrNoRows)
+					Return(db.Merchant{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -1161,6 +1481,143 @@ func TestListRefundOrdersByPaymentAPI(t *testing.T) {
 			url := fmt.Sprintf("/v1/payments/%d/refunds", tc.paymentID)
 			request, err := http.NewRequest(http.MethodGet, url, nil)
 			require.NoError(t, err)
+
+			tc.setupAuth(t, request, server.tokenMaker)
+			server.router.ServeHTTP(recorder, request)
+			tc.checkResponse(t, recorder)
+		})
+	}
+}
+
+func TestApplyPlatformAbnormalRefundAPI(t *testing.T) {
+	admin, _ := randomUser(t)
+	user, _ := randomUser(t)
+	order := randomPaymentTestOrder(user.ID, util.RandomInt(1, 1000))
+	paymentOrder := randomPaymentOrder(user.ID, &order.ID)
+	paymentOrder.PaymentType = "profit_sharing"
+	paymentOrder.Status = "paid"
+	refundOrder := randomRefundOrder(paymentOrder.ID, paymentOrder.Amount)
+	refundOrder.Status = "failed"
+	refundOrder.RefundID = pgtype.Text{String: "wx_refund_001", Valid: true}
+	updatedRefund := refundOrder
+	updatedRefund.Status = "processing"
+	merchantConfig := db.MerchantPaymentConfig{
+		ID:         util.RandomInt(1, 1000),
+		MerchantID: order.MerchantID,
+		SubMchID:   "1900000109",
+		Status:     "active",
+	}
+
+	testCases := []struct {
+		name          string
+		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
+		buildStubs    func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface)
+		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
+	}{
+		{
+			name: "OK_Admin",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, admin.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
+				store.EXPECT().
+					ListUserRoles(gomock.Any(), admin.ID).
+					Times(1).
+					Return([]db.UserRole{{UserID: admin.ID, Role: RoleAdmin, Status: "active"}}, nil)
+
+				store.EXPECT().
+					GetRefundOrder(gomock.Any(), refundOrder.ID).
+					Times(1).
+					Return(refundOrder, nil)
+
+				store.EXPECT().
+					GetPaymentOrder(gomock.Any(), paymentOrder.ID).
+					Times(1).
+					Return(paymentOrder, nil)
+
+				store.EXPECT().
+					GetOrder(gomock.Any(), order.ID).
+					Times(1).
+					Return(order, nil)
+
+				store.EXPECT().
+					GetMerchantPaymentConfig(gomock.Any(), order.MerchantID).
+					Times(1).
+					Return(merchantConfig, nil)
+
+				ecommerceClient.EXPECT().
+					ApplyEcommerceAbnormalRefund(gomock.Any(), gomock.Any()).
+					Times(1).
+					DoAndReturn(func(_ any, req *wechat.EcommerceAbnormalRefundRequest) (*wechat.EcommerceRefundResponse, error) {
+						require.Equal(t, refundOrder.RefundID.String, req.RefundID)
+						require.Equal(t, refundOrder.OutRefundNo, req.OutRefundNo)
+						require.Equal(t, merchantConfig.SubMchID, req.SubMchID)
+						require.Equal(t, wechat.EcommerceAbnormalRefundTypeMerchantBankCard, req.Type)
+						return &wechat.EcommerceRefundResponse{
+							RefundID: refundOrder.RefundID.String,
+							Status:   wechat.RefundStatusProcessing,
+						}, nil
+					})
+
+				store.EXPECT().
+					UpdateRefundOrderToProcessing(gomock.Any(), db.UpdateRefundOrderToProcessingParams{
+						ID:       refundOrder.ID,
+						RefundID: pgtype.Text{String: refundOrder.RefundID.String, Valid: true},
+					}).
+					Times(1).
+					Return(updatedRefund, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var response applyAbnormalRefundResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Equal(t, updatedRefund.ID, response.RefundOrder.ID)
+				require.Equal(t, "processing", response.RefundOrder.Status)
+				require.Equal(t, wechat.RefundStatusProcessing, response.Wechat.Status)
+			},
+		},
+		{
+			name: "Forbidden_NotAdmin",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
+				store.EXPECT().
+					ListUserRoles(gomock.Any(), user.ID).
+					Times(1).
+					Return([]db.UserRole{{UserID: user.ID, Role: RoleCustomer, Status: "active"}}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusForbidden, recorder.Code)
+			},
+		},
+	}
+
+	for i := range testCases {
+		tc := testCases[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+			tc.buildStubs(store, ecommerceClient)
+
+			server := newTestServer(t, store)
+			server.ecommerceClient = ecommerceClient
+			server.refundOrchestrator = nil
+
+			recorder := httptest.NewRecorder()
+			body := gin.H{"type": wechat.EcommerceAbnormalRefundTypeMerchantBankCard}
+			data, err := json.Marshal(body)
+			require.NoError(t, err)
+
+			url := fmt.Sprintf("/v1/platform/refunds/%d/apply-abnormal-refund", refundOrder.ID)
+			request, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(data))
+			require.NoError(t, err)
+			request.Header.Set("Content-Type", "application/json")
 
 			tc.setupAuth(t, request, server.tokenMaker)
 			server.router.ServeHTTP(recorder, request)

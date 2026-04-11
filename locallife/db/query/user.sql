@@ -27,6 +27,7 @@ SET
   full_name = COALESCE(sqlc.narg(full_name), full_name),
   phone = COALESCE(sqlc.narg(phone), phone),
   avatar_url = COALESCE(sqlc.narg(avatar_url), avatar_url),
+  avatar_media_asset_id = COALESCE(sqlc.narg(avatar_media_asset_id), avatar_media_asset_id),
   wechat_unionid = COALESCE(sqlc.narg(wechat_unionid), wechat_unionid)
 WHERE id = sqlc.arg(id)
 RETURNING *;

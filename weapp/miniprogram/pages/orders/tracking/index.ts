@@ -1,6 +1,13 @@
-import { getOrderDetail } from '../../../api/order'
-import { getDeliveryByOrder, getRiderLocation, getDeliveryTrack, DeliveryResponse, LocationResponse } from '../../../api/delivery'
+import DeliveryService, {
+  buildDeliveryProgress,
+  DeliveryProgressView,
+  DeliveryResponse,
+  getDeliveryStatusDisplay
+} from '../../../api/delivery'
+import { getBicyclingDirection } from '../../../api/location'
+import { confirmOrder, getOrderDetail } from '../../../api/order'
 import { logger } from '../../../utils/logger'
+import { getErrorUserMessage } from '../../../utils/user-facing'
 
 interface MapPoint {
   latitude: number
@@ -33,12 +40,7 @@ interface Polyline {
   arrowLine?: boolean
 }
 
-interface DeliveryProgress {
-  title: string
-  time: string
-  done: boolean
-  active: boolean
-}
+const getErrorMessage = getErrorUserMessage
 
 Page({
   data: {
@@ -46,6 +48,8 @@ Page({
     deliveryId: 0,
     navBarHeight: 88,
     loading: true,
+    isError: false,
+    errorMsg: '',
     // 配送信息
     delivery: null as DeliveryResponse | null,
     riderName: '',
@@ -54,6 +58,7 @@ Page({
     estimatedDeliveryTime: '',
     deliveryStatus: '',
     deliveryStatusText: '',
+    showConfirmReceipt: false,
     // 地图相关
     mapCenter: { latitude: 39.9, longitude: 116.4 },
     scale: 14,
@@ -61,42 +66,119 @@ Page({
     polyline: [] as Polyline[],
     includePoints: [] as MapPoint[],
     // 进度
-    progress: [] as DeliveryProgress[],
+    progress: [] as DeliveryProgressView[],
     // 位置刷新定时器
     locationTimer: null as number | null
   },
 
   onLoad(options: { orderId?: string }) {
-    if (options.orderId) {
-      this.setData({ orderId: parseInt(options.orderId) })
+    const orderId = options.orderId ? parseInt(options.orderId) : NaN
+    if (Number.isFinite(orderId) && orderId > 0) {
+      this.setData({ orderId })
       this.loadDeliveryData()
+      return
     }
+
+    // 未传或无效订单ID，立即停止加载，避免空白页
+    this.setData({ loading: false })
+    wx.showToast({ title: '缺少订单ID', icon: 'none' })
   },
 
   onUnload() {
-    // 清理定时器
-    if (this.data.locationTimer) {
+    this.stopLocationTracking()
+  },
+
+  onHide() {
+    // 页面隐藏时暂停轮询（用户切到其他页面）
+    this.stopLocationTracking()
+  },
+
+  onShow() {
+    // 页面重新显示时恢复轮询（副作用：也刻刷新一次位置）
+    if (this.data.deliveryId && this.data.delivery && getDeliveryStatusDisplay(this.data.delivery.status).isLocationTracked) {
+      this.updateRiderLocation()
+      this.startLocationTracking()
+    }
+  },
+
+  stopLocationTracking() {
+    if (this.data.locationTimer !== null) {
       clearInterval(this.data.locationTimer)
+      this.setData({ locationTimer: null })
+    }
+  },
+
+  async onConfirmReceipt() {
+    try {
+      wx.showLoading({ title: '加载中...' })
+      const order = await getOrderDetail(this.data.orderId)
+      wx.hideLoading()
+
+      const transactionId = order.wechat_transaction_id
+      if (!transactionId) {
+        // 无微信支付交易号（如余额支付），直接走本地确认
+        wx.showModal({
+          title: '确认收货',
+          content: '确认已收到包裹？',
+          success: async (res) => {
+            if (res.confirm) {
+              wx.showLoading({ title: '处理中...' })
+              try {
+                await confirmOrder(this.data.orderId)
+                wx.hideLoading()
+                wx.navigateBack({ delta: 1 })
+              } catch (error) {
+                wx.hideLoading()
+                logger.error('确认收货失败', error, 'Tracking.onConfirmReceipt')
+                wx.showToast({ title: '确认失败', icon: 'error' })
+              }
+            }
+          }
+        })
+        return
+      }
+
+      // 有微信支付交易号：通过微信官方确认收货组件
+      const app = getApp<IAppOption>()
+      app.globalData.pendingConfirmOrderId = this.data.orderId
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if ((wx as any).openBusinessView) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (wx as any).openBusinessView({
+          businessType: 'weappOrderConfirm',
+          extraData: { transaction_id: transactionId },
+          fail() {
+            logger.error('打开确认收货组件失败', undefined, 'Tracking.onConfirmReceipt')
+            wx.showToast({ title: '打开失败，请重试', icon: 'none' })
+          }
+        })
+      } else {
+        wx.showToast({ title: '请升级微信后重试', icon: 'none' })
+      }
+    } catch (error) {
+      wx.hideLoading()
+      logger.error('确认收货失败', error, 'Tracking.onConfirmReceipt')
+      wx.showToast({ title: '操作失败，请重试', icon: 'none' })
     }
   },
 
   async loadDeliveryData() {
-    this.setData({ loading: true })
+    this.setData({ loading: true, isError: false })
     try {
-      // 1. 获取订单信息
-      const order = await getOrderDetail(this.data.orderId)
+      // 1. 获取配送信息
+      const delivery = await DeliveryService.getDeliveryByOrder(this.data.orderId)
 
-      // 2. 获取配送信息
-      const delivery = await getDeliveryByOrder(this.data.orderId)
-
-      // 3. 处理骑手信息
+      // 2. 处理骑手信息
       const riderPhone = delivery.pickup_phone || ''
-      const riderPhoneDisplay = riderPhone ? riderPhone.replace(/(\d{3})\d{4}(\d{4})/, '$1****$2') : ''
+      const riderPhoneDisplay = riderPhone
+        ? riderPhone.replace(/(\d{3})\d{4}(\d{4})/, '$1****$2')
+        : ''
+      const statusDisplay = getDeliveryStatusDisplay(delivery.status)
 
-      // 4. 生成配送进度
-      const progress = this.generateProgress(delivery)
+      // 3. 生成配送进度
+      const progress = buildDeliveryProgress(delivery, this.formatTime)
 
-      // 5. 设置地图标记点
+      // 4. 设置地图标记点
       const merchantPoint: MapPoint = {
         latitude: delivery.pickup_latitude,
         longitude: delivery.pickup_longitude
@@ -109,78 +191,34 @@ Page({
       this.setData({
         delivery,
         deliveryId: delivery.id,
-        riderName: '骑手',  // 后端暂无骑手姓名字段
+        riderName: '骑手', // 后端暂无骑手姓名字段
         riderPhone,
         riderPhoneDisplay,
-        estimatedDeliveryTime: delivery.estimated_delivery_at ? this.formatTime(delivery.estimated_delivery_at) : '计算中',
+        estimatedDeliveryTime: delivery.estimated_delivery_at
+          ? this.formatTime(delivery.estimated_delivery_at)
+          : '计算中',
         deliveryStatus: delivery.status,
-        deliveryStatusText: this.getStatusText(delivery.status),
+        deliveryStatusText: statusDisplay.text,
+        showConfirmReceipt: statusDisplay.canConfirmReceipt,
         progress,
         loading: false
       })
 
-      // 6. 设置地图
+      // 5. 设置地图
       this.setupMap(merchantPoint, customerPoint)
 
-      // 7. 开始位置追踪（配送中状态）
-      if (delivery.status === 'delivering' || delivery.status === 'picked') {
+      // 6. 开始位置追踪（配送中状态）
+      if (statusDisplay.isLocationTracked) {
         this.startLocationTracking()
       }
-
-    } catch (error) {
+    } catch (error: unknown) {
       logger.error('加载配送信息失败', error, 'tracking.loadDeliveryData')
-      wx.showToast({ title: '加载失败', icon: 'error' })
-      this.setData({ loading: false })
+      this.setData({ 
+        loading: false, 
+        isError: true, 
+        errorMsg: getErrorMessage(error, '获取配送信息失败') 
+      })
     }
-  },
-
-  generateProgress(delivery: DeliveryResponse): DeliveryProgress[] {
-    const progress: DeliveryProgress[] = [
-      {
-        title: '商家已接单',
-        time: delivery.created_at ? this.formatTime(delivery.created_at) : '',
-        done: true,
-        active: false
-      },
-      {
-        title: '骑手已接单',
-        time: delivery.assigned_at ? this.formatTime(delivery.assigned_at) : '',
-        done: !!delivery.assigned_at,
-        active: delivery.status === 'assigned'
-      },
-      {
-        title: '骑手已取餐',
-        time: delivery.picked_at ? this.formatTime(delivery.picked_at) : '',
-        done: !!delivery.picked_at,
-        active: delivery.status === 'picked'
-      },
-      {
-        title: '配送中',
-        time: '',
-        done: delivery.status === 'delivering',
-        active: delivery.status === 'delivering'
-      },
-      {
-        title: '已送达',
-        time: delivery.delivered_at ? this.formatTime(delivery.delivered_at) : '',
-        done: !!delivery.delivered_at,
-        active: delivery.status === 'delivered'
-      }
-    ]
-    return progress
-  },
-
-  getStatusText(status: string): string {
-    const statusMap: Record<string, string> = {
-      'pending': '等待骑手接单',
-      'assigned': '骑手已接单',
-      'picking': '骑手正在取餐',
-      'picked': '骑手已取餐',
-      'delivering': '骑手正在配送',
-      'delivered': '已送达',
-      'cancelled': '配送已取消'
-    }
-    return statusMap[status] || status
   },
 
   formatTime(timeStr: string): string {
@@ -222,7 +260,7 @@ Page({
     if (!deliveryId || !delivery) return
 
     try {
-      const location = await getRiderLocation(deliveryId)
+      const location = await DeliveryService.getRiderLocation(deliveryId)
       if (location && location.latitude && location.longitude) {
         const riderPoint: MapPoint = {
           latitude: location.latitude,
@@ -231,8 +269,13 @@ Page({
 
         // 更新骑手标记
         const markers = [...this.data.markers]
-        const riderMarkerIndex = markers.findIndex(m => m.id === 2)
-        const riderMarker = this.buildMarker(2, riderPoint, '骑手', '/assets/rider.png')
+        const riderMarkerIndex = markers.findIndex((m) => m.id === 2)
+        const riderMarker = this.buildMarker(
+          2,
+          riderPoint,
+          '骑手',
+          '/assets/rider.png'
+        )
 
         if (riderMarkerIndex >= 0) {
           markers[riderMarkerIndex] = riderMarker
@@ -242,9 +285,15 @@ Page({
 
         // 更新includePoints
         const includePoints = [
-          { latitude: delivery.pickup_latitude, longitude: delivery.pickup_longitude },
+          {
+            latitude: delivery.pickup_latitude,
+            longitude: delivery.pickup_longitude
+          },
           riderPoint,
-          { latitude: delivery.delivery_latitude, longitude: delivery.delivery_longitude }
+          {
+            latitude: delivery.delivery_latitude,
+            longitude: delivery.delivery_longitude
+          }
         ]
 
         this.setData({ markers, includePoints })
@@ -265,27 +314,22 @@ Page({
 
   async planRoute(merchantPoint: MapPoint, customerPoint: MapPoint) {
     try {
-      const { request } = await import('../../../utils/request')
       const fromStr = `${merchantPoint.latitude},${merchantPoint.longitude}`
       const toStr = `${customerPoint.latitude},${customerPoint.longitude}`
 
-      const data = await request({
-        url: '/v1/location/direction/bicycling',
-        method: 'GET',
-        data: { from: fromStr, to: toStr, policy: 0 }
-      })
+      const data = await getBicyclingDirection({ from: fromStr, to: toStr })
 
-      if (data.status === 0 && data.result?.routes?.[0]) {
-        const route = data.result.routes[0]
-        const points = this.decodePolyline(route.polyline)
-
+      // 自建 OSM 返回 {code,message,data{distance,duration}}
+      if (data.code === 0) {
         this.setData({
-          polyline: [{
-            points,
-            color: '#1d63ff',
-            width: 8,
-            arrowLine: true
-          }]
+          polyline: [
+            {
+              points: [merchantPoint, customerPoint],
+              color: '#1d63ff',
+              width: 8,
+              arrowLine: true
+            }
+          ]
         })
       } else {
         this.useFallbackRoute(merchantPoint, customerPoint)
@@ -296,35 +340,25 @@ Page({
     }
   },
 
-  decodePolyline(coors: number[]): MapPoint[] {
-    const decoded = [...coors]
-    for (let i = 2; i < decoded.length; i++) {
-      decoded[i] = decoded[i - 2] + decoded[i] / 1000000
-    }
-
-    const points: MapPoint[] = []
-    for (let i = 0; i < decoded.length; i += 2) {
-      const lat = decoded[i]
-      const lng = decoded[i + 1]
-      if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
-        points.push({ latitude: lat, longitude: lng })
-      }
-    }
-    return points
-  },
-
   useFallbackRoute(merchantPoint: MapPoint, customerPoint: MapPoint) {
     this.setData({
-      polyline: [{
-        points: [merchantPoint, customerPoint],
-        color: '#1d63ff',
-        width: 6,
-        dottedLine: true
-      }]
+      polyline: [
+        {
+          points: [merchantPoint, customerPoint],
+          color: '#1d63ff',
+          width: 6,
+          dottedLine: true
+        }
+      ]
     })
   },
 
-  buildMarker(id: number, point: MapPoint, label: string, iconPath: string): MiniMarker {
+  buildMarker(
+    id: number,
+    point: MapPoint,
+    label: string,
+    iconPath: string
+  ): MiniMarker {
     return {
       id,
       latitude: point.latitude,

@@ -1,0 +1,157 @@
+<custom-navbar title="骑手管理" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view
+  class="page page-shell page-shell--with-nav page-shell--bottom-safe {{isLargeScreen ? 'large-screen' : ''}}"
+  style="--page-shell-nav-height: {{navBarHeight}}px"
+>
+  <view class="header-tools">
+    <view class="search-bar">
+      <t-search
+        model:value="{{searchKeyword}}"
+        placeholder="搜索骑手姓名、电话"
+        bind:change="onSearchChange"
+        bind:clear="onSearchClear"
+      />
+    </view>
+
+    <view class="filter-tabs">
+      <t-tabs value="{{statusFilter}}" bind:change="onStatusFilterChange" t-class="tabs-container">
+        <t-tab-panel label="全部" value="" />
+        <t-tab-panel label="正常" value="active" />
+        <t-tab-panel label="暂停" value="suspended" />
+        <t-tab-panel label="待审核" value="pending" />
+      </t-tabs>
+    </view>
+  </view>
+
+  <view class="content">
+    <view wx:if="{{initialLoading}}" class="card">
+      <card-skeleton t-class="skeleton" />
+    </view>
+
+    <view wx:elif="{{error}}" class="card center">
+      <t-empty icon="error-circle" description="{{error}}">
+        <t-button slot="action" theme="primary" size="small" bind:tap="onRetry" shape="round">重试</t-button>
+      </t-empty>
+    </view>
+
+    <scroll-view
+      wx:else
+      scroll-y
+      class="riders-scroll"
+      bindscrolltolower="onLoadMore"
+      lower-threshold="100"
+      enable-back-to-top
+      refresher-enabled="{{true}}"
+      bindrefresherrefresh="onPullDownRefresh"
+      refresher-triggered="{{refreshing}}"
+    >
+      <view wx:if="{{riders.length === 0}}" class="card center">
+        <t-empty description="暂无骑手数据" />
+      </view>
+
+      <view wx:else class="riders-container">
+        <view wx:for="{{riders}}" wx:key="id" class="card rider-card" bind:tap="onTapRider" data-id="{{item.id}}">
+          <view class="title-row">
+            <view class="title-main">
+              <text class="title">{{item.name}}</text>
+              <text class="region-text">{{item.region_name}}</text>
+            </view>
+            <t-tag theme="{{item.status_theme}}" variant="dark">{{item.status_label}}</t-tag>
+          </view>
+
+          <view class="meta-row">
+            <view class="meta-item"><text class="label">手机号</text><text class="value">{{item.phone}}</text></view>
+            <view class="meta-item"><text class="label">在线状态</text><text class="value">{{item.online_status_label}}</text></view>
+          </view>
+
+          <view class="stats-row">
+            <view class="stat-item">
+              <text class="stat-value">{{item.delivery_count}}</text>
+              <text class="stat-label">配送单</text>
+            </view>
+            <view class="stat-item">
+              <text class="stat-value">{{item.rating_display}}</text>
+              <text class="stat-label">评分</text>
+            </view>
+            <view class="stat-item">
+              <text class="stat-value">{{item.total_earnings_display}}</text>
+              <text class="stat-label">累计收入</text>
+            </view>
+          </view>
+
+          <view class="action-row">
+            <t-button
+              wx:if="{{item.can_suspend}}"
+              theme="warning"
+              size="small"
+              bindtap="onSuspendTap"
+              data-id="{{item.id}}"
+              data-name="{{item.name}}"
+              catchtap="stopPropagation"
+              shape="round"
+            >
+              暂停接单
+            </t-button>
+            <t-button
+              wx:elif="{{item.can_resume}}"
+              theme="success"
+              size="small"
+              bindtap="onResumeTap"
+              data-id="{{item.id}}"
+              data-name="{{item.name}}"
+              catchtap="stopPropagation"
+              shape="round"
+            >
+              恢复接单
+            </t-button>
+            <t-button theme="primary" size="small" bindtap="onTapRider" data-id="{{item.id}}" catchtap="stopPropagation" shape="round">查看详情</t-button>
+          </view>
+        </view>
+
+        <view class="loading-wrap">
+          <t-loading wx:if="{{loadingMore}}" theme="circular" size="32rpx" />
+          <text wx:elif="{{!hasMore && riders.length > 0}}" class="no-more-text">没有更多数据了</text>
+        </view>
+      </view>
+    </scroll-view>
+  </view>
+
+  <t-dialog
+    visible="{{suspendDialogVisible}}"
+    title="暂停骑手"
+    confirm-btn="确认暂停"
+    cancel-btn="取消"
+    bind:confirm="onSuspendConfirm"
+    bind:cancel="onSuspendCancel"
+  >
+    <view class="dialog-content">
+      <text>确定要暂停骑手 "{{selectedRider.name}}" 吗？</text>
+      <t-textarea
+        placeholder="请输入暂停原因"
+        value="{{actionReason}}"
+        bind:change="onReasonChange"
+        maxlength="200"
+      />
+    </view>
+  </t-dialog>
+
+  <t-dialog
+    visible="{{resumeDialogVisible}}"
+    title="恢复骑手"
+    confirm-btn="确认恢复"
+    cancel-btn="取消"
+    bind:confirm="onResumeConfirm"
+    bind:cancel="onResumeCancel"
+  >
+    <view class="dialog-content">
+      <text>确定要恢复骑手 "{{selectedRider.name}}" 吗？</text>
+      <t-textarea
+        placeholder="可选：输入恢复说明"
+        value="{{actionReason}}"
+        bind:change="onReasonChange"
+        maxlength="200"
+      />
+    </view>
+  </t-dialog>
+</view>

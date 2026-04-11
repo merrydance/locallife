@@ -1,466 +1,165 @@
-<!-- 菜品管理 - 桌面级 SaaS 界面 -->
+<custom-navbar title="菜品管理" showBack="{{true}}" />
 
-<!-- WXS 模块 - 处理数组操作 -->
-<wxs module="utils">
-  module.exports = {
-    contains: function(arr, id) {
-      if (!arr || !arr.length) return false;
-      for (var i = 0; i < arr.length; i++) {
-        if (arr[i] === id) return true;
-      }
-      return false;
-    }
-  }
-</wxs>
-
-<match-media max-width="1599">
-  <view class="desktop-only-notice">
-    <view class="notice-box">
-      <view class="notice-icon">🖥️</view>
-      <text class="notice-title">此功能需要在电脑端使用</text>
-      <text class="notice-desc">请使用 1600px 以上分辨率的显示器访问菜品管理</text>
-      <button class="btn-back" bindtap="goBack">返回工作台</button>
-    </view>
+<view
+  class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
+  style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: 32rpx;"
+>
+  <view wx:if="{{initialLoading}}" class="state-block">
+    <t-loading theme="circular" size="40rpx" text="加载菜品中..." vertical />
   </view>
-</match-media>
 
-<match-media min-width="1600">
-  <view class="saas-layout">
-    <!-- 侧边栏 -->
+  <view wx:elif="{{initialError}}" class="state-block">
+    <t-empty icon="error-circle" description="{{initialErrorMessage || '菜品加载失败，请重试'}}" />
+    <t-button theme="primary" size="small" shape="round" bind:tap="onRetry">重新加载</t-button>
+  </view>
 
-    <!-- 主区域 -->
-    <view class="main-area" style="margin-left: 0;">
-      <!-- 顶部栏 -->
-      <merchant-header 
-        merchant-name="{{merchantName}}"
-        is-open="{{isOpen}}"
+  <block wx:else>
+    <view class="page-content">
+      <t-notice-bar
+        wx:if="{{refreshErrorMessage}}"
+        visible="{{true}}"
+        theme="warning"
+        content="{{refreshErrorMessage}}"
+        prefixIcon="error-circle"
+        t-class="page-notice"
       />
 
-      <!-- 页面内容 -->
-      <view class="page-container">
-        <!-- 左侧分类导航 -->
-        <view class="category-nav">
-          <view class="nav-header">
-            <text class="nav-title">菜品分类</text>
-            <view class="btn-add-category" bindtap="onOpenCategoryManager">⚙️</view>
+      <t-sticky offset-top="{{navBarHeight}}" z-index="40">
+        <view class="control-panel">
+          <view class="tabs-shell tabs-shell--top">
+            <t-tabs value="{{currentCategoryId}}" bind:change="onTabChange">
+              <t-tab-panel label="全部" value="{{0}}" />
+              <t-tab-panel wx:for="{{categories || []}}" wx:key="id" label="{{item.name}}" value="{{item.id}}" />
+            </t-tabs>
           </view>
-          <scroll-view class="nav-list" scroll-y>
-            <view 
-              wx:for="{{categories}}" 
-              wx:key="id" 
-              class="nav-item {{activeCategoryId === item.id ? 'active' : ''}}"
-              bindtap="onCategoryChange"
-              data-id="{{item.id}}"
-            >
-              <text class="nav-label">{{item.name}}</text>
-              <text class="nav-count" wx:if="{{item.dish_count}}">{{item.dish_count}}</text>
+
+          <view class="filter-panel">
+            <view class="filter-block">
+              <text class="filter-label">上架状态</text>
+              <view class="filter-tags">
+                <t-check-tag
+                  wx:for="{{onlineFilterOptions}}"
+                  wx:key="value"
+                  checked="{{currentOnlineFilter === item.value}}"
+                  content="{{item.label}}"
+                  size="small"
+                  shape="round"
+                  data-value="{{item.value}}"
+                  bind:change="onOnlineFilterChange"
+                />
+              </view>
             </view>
-          </scroll-view>
+          </view>
         </view>
+      </t-sticky>
 
-        <!-- 右侧内容区 -->
-        <view class="content-area">
-          <!-- 工具栏 -->
-          <view class="toolbar">
-            <view class="search-box">
-              <input 
-                class="search-input" 
-                placeholder="搜索菜品名称..." 
-                value="{{searchKeyword}}"
-                bindinput="onSearch"
-              />
-            </view>
-            <view class="toolbar-actions">
-              <button 
-                class="btn-secondary {{isMultiSelectMode ? 'active' : ''}}" 
-                bindtap="onToggleMultiSelect"
-              >
-                {{isMultiSelectMode ? '取消多选' : '批量操作'}}
-              </button>
-              <button class="btn-primary" bindtap="onAddDish">+ 添加菜品</button>
-            </view>
-          </view>
+      <view class="result-bar">
+        <text class="result-summary">{{resultSummaryText}}</text>
+      </view>
 
-          <!-- 菜品列表 -->
-          <view class="dishes-content">
-            <!-- 左侧菜品列表 -->
-            <view class="dishes-list">
-              <view wx:if="{{loading}}" class="loading-state">
-                <text>加载中...</text>
-              </view>
-              <view wx:elif="{{dishes.length === 0}}" class="empty-state">
-                <text class="empty-icon">🍽️</text>
-                <text class="empty-text">暂无菜品</text>
-              </view>
-              <scroll-view wx:else class="dish-scroll" scroll-y>
-                <view 
-                  wx:for="{{dishes}}" 
-                  wx:key="id" 
-                  class="dish-card {{selectedDishId === item.id ? 'selected' : ''}} {{isMultiSelectMode && utils.contains(selectedDishIds, item.id) ? 'checked' : ''}}"
-                  bindtap="onDishTap"
-                  data-item="{{item}}"
+      <view wx:if="{{loading && !dishes.length}}" class="loading-state">
+        <t-loading theme="circular" size="40rpx" text="加载中..." vertical />
+      </view>
+
+      <t-empty wx:elif="{{!loading && !dishes.length}}" icon="info-circle" description="{{emptyDescription}}" />
+
+      <block wx:else>
+        <view class="dish-list">
+          <block wx:for="{{dishes}}" wx:key="id">
+            <t-cell-group class="dish-card" theme="card">
+              <view class="dish-card-main" bindtap="onDishCardTap" data-id="{{item.id}}">
+                <t-image
+                  t-class="dish-cover"
+                  src="{{item.image_url || '/assets/icons/empty.svg'}}"
+                  mode="aspectFill"
+                  width="100%"
+                  height="280rpx"
+                  shape="square"
+                  bind:error="onDishImageError"
                   data-id="{{item.id}}"
-                >
-                  <!-- 多选复选框 -->
-                  <view wx:if="{{isMultiSelectMode}}" class="dish-checkbox">
-                    <view class="checkbox {{utils.contains(selectedDishIds, item.id) ? 'checked' : ''}}">
-                      <text wx:if="{{utils.contains(selectedDishIds, item.id)}}">✓</text>
-                    </view>
-                  </view>
-                  <image 
-                    class="dish-image" 
-                    src="{{item.image_url || '/assets/images/dish-placeholder.png'}}" 
-                    mode="aspectFill"
-                  />
-                  <view class="dish-info">
-                    <view class="dish-name-row">
+                />
+
+                <view class="dish-content">
+                  <view class="dish-header">
+                    <view class="dish-header-main">
                       <text class="dish-name">{{item.name}}</text>
-                      <view class="dish-status {{item.is_online ? 'online' : 'offline'}}">
-                        {{item.is_online ? '在售' : '下架'}}
-                      </view>
+                      <text class="dish-desc">{{item.description || '暂无描述'}}</text>
                     </view>
-                    <view class="dish-meta">
-                      <text class="dish-price">¥{{item.priceDisplay}}</text>
-                      <text class="dish-category" wx:if="{{item.category_name}}">{{item.category_name}}</text>
-                    </view>
-                  </view>
-                </view>
-              </scroll-view>
-
-              <!-- 批量操作工具栏 -->
-              <view wx:if="{{isMultiSelectMode}}" class="batch-toolbar">
-                <view class="batch-info">
-                  <text>已选 {{selectedDishIds.length}} 项</text>
-                  <text class="batch-select-all" bindtap="onSelectAll">
-                    {{selectedDishIds.length === dishes.length ? '取消全选' : '全选'}}
-                  </text>
-                </view>
-                <view class="batch-actions">
-                  <button 
-                    class="btn-batch online" 
-                    bindtap="onBatchOnline" 
-                    disabled="{{selectedDishIds.length === 0}}"
-                  >
-                    批量上架
-                  </button>
-                  <button 
-                    class="btn-batch offline" 
-                    bindtap="onBatchOffline" 
-                    disabled="{{selectedDishIds.length === 0}}"
-                  >
-                    批量下架
-                  </button>
-                </view>
-              </view>
-            </view>
-
-            <!-- 右侧编辑面板 -->
-            <view class="editor-panel">
-              <view wx:if="{{!selectedDish && !isAdding}}" class="editor-placeholder">
-                <text class="placeholder-icon">👆</text>
-                <text class="placeholder-text">选择菜品进行编辑</text>
-              </view>
-
-              <view wx:else class="editor-content">
-                <view class="editor-header">
-                  <text class="editor-title">{{isAdding ? '添加菜品' : '编辑菜品'}}</text>
-                  <view class="editor-actions">
-                    <button class="btn-cancel" bindtap="onCancelEdit">取消</button>
-                    <button class="btn-save" bindtap="onSaveDish" disabled="{{saving}}">
-                      {{saving ? '保存中...' : '保存'}}
-                    </button>
-                  </view>
-                </view>
-
-                <view class="editor-form">
-                  <!-- 基本信息 -->
-                  <view class="form-section">
-                    <view class="section-title">基本信息</view>
-                    
-                    <view class="form-group">
-                      <label class="form-label">菜品名称 <text class="required">*</text></label>
-                      <input 
-                        class="form-input" 
-                        placeholder="请输入菜品名称" 
-                        value="{{selectedDish.name}}"
-                        data-field="name"
-                        bindinput="onFieldChange"
-                      />
-                    </view>
-
-                    <view class="form-group">
-                      <label class="form-label">所属分类</label>
-                      <view class="custom-select" bindtap="onToggleCategoryDropdown">
-                        <view class="select-value {{selectedDish.category_name ? '' : 'placeholder'}}">
-                          {{selectedDish.category_name || '请选择分类'}}
-                        </view>
-                        <text class="select-arrow {{showCategoryDropdown ? 'open' : ''}}">▼</text>
-                        <!-- 下拉选项列表 -->
-                        <view class="select-dropdown {{showCategoryDropdown ? 'visible' : ''}}" catchtap="stopPropagation">
-                          <view 
-                            class="select-option {{item.id === selectedDish.category_id ? 'selected' : ''}}"
-                            wx:for="{{categoryOptions}}"
-                            wx:key="id"
-                            data-item="{{item}}"
-                            catchtap="onSelectCategory"
-                          >
-                            {{item.name}}
-                          </view>
-                          <view class="select-option empty" wx:if="{{categoryOptions.length === 0}}">
-                            暂无分类
-                          </view>
-                        </view>
-                      </view>
-                    </view>
-
-                    <view class="form-group">
-                      <label class="form-label">菜品图片</label>
-                      <view class="image-upload" bindtap="onUploadImage">
-                        <image 
-                          wx:if="{{selectedDish.image_url_display || selectedDish.image_url}}" 
-                          class="upload-preview" 
-                          src="{{selectedDish.image_url_display || selectedDish.image_url}}" 
-                          mode="aspectFill"
-                        />
-                        <view wx:else class="upload-placeholder">
-                          <text class="upload-icon">📷</text>
-                          <text class="upload-text">点击上传</text>
-                        </view>
-                      </view>
-                    </view>
-
-                    <view class="form-group">
-                      <label class="form-label">菜品描述</label>
-                      <textarea 
-                        class="form-textarea" 
-                        placeholder="请输入菜品描述（选填）" 
-                        value="{{selectedDish.description}}"
-                        data-field="description"
-                        bindinput="onFieldChange"
-                        maxlength="500"
+                    <view class="dish-switch-wrap" catchtap="onActionsCatch">
+                      <t-switch
+                        value="{{item.is_online}}"
+                        label="{{onlineSwitchLabels}}"
+                        size="small"
+                        loading="{{item.statusPending}}"
+                        disabled="{{item.deletePending || item.is_packaging}}"
+                        bind:change="onSwitchStatusChange"
+                        data-id="{{item.id}}"
                       />
                     </view>
                   </view>
 
-                  <!-- 价格设置 -->
-                  <view class="form-section">
-                    <view class="section-title">价格设置</view>
-                    
-                    <view class="form-row">
-                      <view class="form-group flex-1">
-                        <label class="form-label">售价 (元) <text class="required">*</text></label>
-                        <input 
-                          class="form-input" 
-                          type="digit" 
-                          placeholder="0.00" 
-                          value="{{selectedDish.price ? selectedDish.price / 100 : ''}}"
-                          data-field="price"
-                          bindinput="onPriceFieldChange"
-                        />
-                      </view>
-                      <view class="form-group flex-1">
-                        <label class="form-label">会员价 (元)</label>
-                        <input 
-                          class="form-input" 
-                          type="digit" 
-                          placeholder="0.00" 
-                          value="{{selectedDish.member_price ? selectedDish.member_price / 100 : ''}}"
-                          data-field="member_price"
-                          bindinput="onPriceFieldChange"
-                        />
-                      </view>
+                  <view class="dish-meta-row">
+                    <view class="dish-price-row">
+                      <text class="price-value">¥{{item.price / 100}}</text>
+                      <t-tag wx:if="{{item.member_price}}" theme="warning" variant="dark" size="small">会员价 ¥{{item.member_price / 100}}</t-tag>
+                      <t-tag wx:if="{{item.is_packaging}}" theme="primary" variant="light" size="small">包装</t-tag>
                     </view>
-                  </view>
-
-                  <!-- 属性标签 -->
-                  <view class="form-section">
-                    <view class="section-header">
-                      <view class="section-title">属性标签</view>
-                      <view class="section-action" bindtap="onOpenTagManager" data-type="dish">管理</view>
+                    <view wx:if="{{item.category_name}}" class="dish-category-row">
+                      <t-tag theme="default" variant="light" size="small">{{item.category_name}}</t-tag>
                     </view>
-                    <view class="tags-container">
-                      <view 
-                        wx:for="{{availableTags}}" 
-                        wx:key="id" 
-                        class="tag-item {{utils.contains(selectedTagIds, item.id) ? 'selected' : ''}}"
-                        bindtap="onTagToggle"
-                        data-id="{{item.id}}"
-                      >
-                        <text class="tag-name">{{item.name}}</text>
-                        <text class="tag-check" wx:if="{{utils.contains(selectedTagIds, item.id)}}">✓</text>
-                      </view>
-                      <view wx:if="{{availableTags.length === 0}}" class="tags-empty">
-                        <text>暂无可用标签</text>
-                      </view>
-                    </view>
-                  </view>
-
-                  <!-- 定制选项 -->
-                  <view class="form-section">
-                    <view class="section-header">
-                      <view class="section-title">定制选项 <text class="section-hint">(选中即支持定制)</text></view>
-                      <view class="section-action" bindtap="onOpenTagManager" data-type="customization">管理</view>
-                    </view>
-                    <view class="tags-container">
-                      <view 
-                        wx:for="{{customizationTags}}" 
-                        wx:key="id" 
-                        class="tag-item customization {{utils.contains(selectedCustomizationTagIds, item.id) ? 'selected' : ''}}"
-                        bindtap="onCustomizationTagToggle"
-                        data-id="{{item.id}}"
-                        data-name="{{item.name}}"
-                      >
-                        <text class="tag-name">{{item.name}}</text>
-                        <text class="tag-check" wx:if="{{utils.contains(selectedCustomizationTagIds, item.id)}}">✓</text>
-                      </view>
-                      <view wx:if="{{customizationTags.length === 0}}" class="tags-empty">
-                        <text>暂无定制标签</text>
-                      </view>
-                    </view>
-                    
-                    <!-- 已选定制选项及加价设置 -->
-                    <view wx:if="{{selectedCustomizationOptions.length > 0}}" class="selected-customizations">
-                      <view class="customization-list-header">已选定制选项</view>
-                      <view 
-                        wx:for="{{selectedCustomizationOptions}}" 
-                        wx:key="tag_id" 
-                        class="customization-option-row"
-                      >
-                        <text class="option-label">{{item.tag_name}}</text>
-                        <view class="option-price-wrapper">
-                          <text class="price-prefix">加价 ¥</text>
-                          <input 
-                            class="price-input-small" 
-                            type="digit"
-                            placeholder="0"
-                            value="{{item.extra_price ? item.extra_price / 100 : ''}}"
-                            data-tag-id="{{item.tag_id}}"
-                            bindinput="onCustomizationPriceChange"
-                          />
-                        </view>
-                      </view>
-                    </view>
-                  </view>
-
-                  <!-- 状态设置 -->
-                  <view class="form-section">
-                    <view class="section-title">状态设置</view>
-                    
-                    <view class="form-group horizontal">
-                      <label class="form-label">上架销售</label>
-                      <view 
-                        class="toggle {{selectedDish.is_online ? 'on' : ''}}" 
-                        bindtap="onToggleOnline"
-                      >
-                        <view class="toggle-handle"></view>
-                      </view>
-                    </view>
-                  </view>
-
-                  <!-- 删除按钮 -->
-                  <view wx:if="{{!isAdding && selectedDish.id}}" class="form-section">
-                    <button class="btn-danger" bindtap="onDeleteDish">删除此菜品</button>
                   </view>
                 </view>
               </view>
-            </view>
-          </view>
+
+              <t-divider />
+
+              <view class="dish-action-bar" catchtap="onActionsCatch">
+                <view class="dish-action-slot">
+                  <t-button class="dish-action-button" variant="text" theme="default" size="small" bind:tap="onDishCardTap" data-id="{{item.id}}">编辑</t-button>
+                </view>
+                <t-divider layout="vertical" />
+                <view class="dish-action-slot">
+                  <t-button
+                    class="dish-action-button"
+                    variant="text"
+                    theme="danger"
+                    size="small"
+                    loading="{{item.deletePending}}"
+                    disabled="{{item.deletePending || item.statusPending}}"
+                    bind:tap="onRequestDeleteDish"
+                    data-id="{{item.id}}"
+                  >删除</t-button>
+                </view>
+              </view>
+            </t-cell-group>
+          </block>
         </view>
-      </view>
-    </view>
-  </view>
-</match-media>
 
-<!-- 分类管理弹窗 -->
-<view class="modal-mask {{showCategoryManager ? 'visible' : ''}}" bindtap="onCloseCategoryManager"></view>
-<view class="modal-panel {{showCategoryManager ? 'visible' : ''}}" catchtap="">
-  <view class="modal-header">
-    <text class="modal-title">分类管理</text>
-    <view class="modal-close" bindtap="onCloseCategoryManager">✕</view>
-  </view>
-  <view class="modal-body">
-    <!-- 添加分类 -->
-    <view class="add-category-box">
-      <input 
-        class="form-input" 
-        placeholder="输入新分类名称" 
-        value="{{newCategoryName}}"
-        bindinput="onNewCategoryNameChange"
-      />
-      <button class="btn-primary" bindtap="onConfirmAddCategory">添加</button>
-    </view>
-    
-    <!-- 分类列表 -->
-    <view class="category-list">
-      <view 
-        wx:for="{{categories}}" 
-        wx:key="id" 
-        wx:if="{{item.id !== 'all'}}"
-        class="category-item"
-      >
-        <text class="category-name">{{item.name}}</text>
-        <view class="category-actions">
-          <text class="btn-delete" bindtap="onDeleteCategory" data-id="{{item.id}}" data-name="{{item.name}}">删除</text>
+        <view wx:if="{{loading && dishes.length}}" class="load-more">
+          <t-loading theme="dots" size="32rpx" text="加载更多菜品中..." />
         </view>
-      </view>
-    </view>
-  </view>
-</view>
 
-<!-- 分类选择弹窗 -->
-<view class="modal-mask {{showCategorySelector ? 'visible' : ''}}" bindtap="onCloseCategorySelector"></view>
-<view class="modal-panel small {{showCategorySelector ? 'visible' : ''}}" catchtap="">
-  <view class="modal-header">
-    <text class="modal-title">选择分类</text>
-    <view class="modal-close" bindtap="onCloseCategorySelector">✕</view>
-  </view>
-  <view class="modal-body">
-    <view 
-      wx:for="{{categories}}" 
-      wx:key="id" 
-      wx:if="{{item.id !== 'all'}}"
-      class="select-item"
-      bindtap="onSelectCategory"
-      data-id="{{item.id}}"
-      data-name="{{item.name}}"
-    >
-      {{item.name}}
+        <view wx:elif="{{!hasMore && dishes.length > 0}}" class="list-end">
+          <text class="list-end__text">已加载全部菜品，共 {{dishes.length}} 项</text>
+        </view>
+      </block>
     </view>
-  </view>
-</view>
+  </block>
 
-<!-- 标签管理弹窗 -->
-<view class="modal-mask {{showTagManager ? 'visible' : ''}}" bindtap="onCloseTagManager"></view>
-<view class="modal-panel {{showTagManager ? 'visible' : ''}}" catchtap="">
-  <view class="modal-header">
-    <text class="modal-title">{{tagManagerType === 'dish' ? '属性标签管理' : '定制标签管理'}}</text>
-    <view class="modal-close" bindtap="onCloseTagManager">✕</view>
-  </view>
-  <view class="modal-body">
-    <view class="add-tag-row">
-      <input 
-        class="tag-input" 
-        placeholder="输入新标签名称" 
-        value="{{newTagName}}"
-        bindinput="onNewTagNameInput"
-      />
-      <button class="btn-primary btn-small" bindtap="onAddTag">添加</button>
+  <t-dialog
+    visible="{{deleteDialogVisible}}"
+    title="确认删除菜品"
+    using-custom-navbar="{{true}}"
+    confirm-btn="{{ { content: '确认删除', theme: 'danger', loading: deleteDialogSubmitting } }}"
+    cancel-btn="取消"
+    bind:confirm="onConfirmDeleteDish"
+    bind:cancel="onCancelDeleteDialog"
+    bind:close="onCancelDeleteDialog"
+  >
+    <view slot="content" class="dialog-content">
+      <text>删除后无法恢复，确定要删除“{{deleteDialogDishName}}”吗？</text>
     </view>
-    <view class="tag-list">
-      <view 
-        wx:for="{{tagManagerType === 'dish' ? availableTags : customizationTags}}" 
-        wx:key="id"
-        class="tag-list-item"
-      >
-        <text class="tag-list-name">{{item.name}}</text>
-        <text class="tag-list-delete" bindtap="onDeleteTag" data-id="{{item.id}}" data-name="{{item.name}}">删除</text>
-      </view>
-      <view wx:if="{{tagManagerType === 'dish' && availableTags.length === 0}}" class="tag-list-empty">
-        暂无标签，请添加
-      </view>
-      <view wx:if="{{tagManagerType === 'customization' && customizationTags.length === 0}}" class="tag-list-empty">
-        暂无标签，请添加
-      </view>
-    </view>
-  </view>
+  </t-dialog>
+
+  <t-fab icon="add" bind:click="onAddDish" />
 </view>

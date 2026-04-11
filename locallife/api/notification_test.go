@@ -15,9 +15,64 @@ import (
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
+	"github.com/merrydance/locallife/websocket"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
+
+func TestResolveWebSocketClientInfo(t *testing.T) {
+	tests := []struct {
+		name           string
+		roles          []db.UserRole
+		expectedType   websocket.ClientType
+		expectedEntity int64
+	}{
+		{
+			name: "merchant owner maps to merchant client",
+			roles: []db.UserRole{{
+				Role:            RoleMerchantOwner,
+				RelatedEntityID: pgtype.Int8{Int64: 21, Valid: true},
+			}},
+			expectedType:   websocket.ClientTypeMerchant,
+			expectedEntity: 21,
+		},
+		{
+			name: "merchant staff maps to merchant client",
+			roles: []db.UserRole{{
+				Role:            RoleMerchantStaff,
+				RelatedEntityID: pgtype.Int8{Int64: 35, Valid: true},
+			}},
+			expectedType:   websocket.ClientTypeMerchant,
+			expectedEntity: 35,
+		},
+		{
+			name: "rider maps to rider client",
+			roles: []db.UserRole{{
+				Role:            RoleRider,
+				RelatedEntityID: pgtype.Int8{Int64: 8, Valid: true},
+			}},
+			expectedType:   websocket.ClientTypeRider,
+			expectedEntity: 8,
+		},
+		{
+			name: "invalid merchant role is ignored",
+			roles: []db.UserRole{{
+				Role:            RoleMerchantOwner,
+				RelatedEntityID: pgtype.Int8{Int64: 0, Valid: false},
+			}},
+			expectedType:   "",
+			expectedEntity: 0,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			clientType, entityID := websocket.ResolveClientInfoFromRoles(tc.roles)
+			require.Equal(t, tc.expectedType, clientType)
+			require.Equal(t, tc.expectedEntity, entityID)
+		})
+	}
+}
 
 func TestListNotificationsAPI(t *testing.T) {
 	user, _ := randomUser(t)
@@ -72,9 +127,8 @@ func TestListNotificationsAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response listNotificationsResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
-				require.Equal(t, int64(1), response.TotalCount)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Equal(t, int64(1), response.Total)
 				require.Len(t, response.Notifications, 1)
 				require.Equal(t, "order", response.Notifications[0].Type)
 			},
@@ -144,8 +198,7 @@ func TestGetUnreadCountAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response unreadCountResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, int64(5), response.Count)
 			},
 		},
@@ -166,6 +219,120 @@ func TestGetUnreadCountAPI(t *testing.T) {
 
 			url := "/v1/notifications/unread/count"
 			request, err := http.NewRequest(http.MethodGet, url, nil)
+			require.NoError(t, err)
+
+			tc.setupAuth(t, request, server.tokenMaker)
+			server.router.ServeHTTP(recorder, request)
+			tc.checkResponse(t, recorder)
+		})
+	}
+}
+
+func TestListPlatformAlertsAPI(t *testing.T) {
+	user, _ := randomUser(t)
+	now := time.Now()
+
+	testCases := []struct {
+		name          string
+		query         string
+		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
+		buildStubs    func(store *mockdb.MockStore)
+		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
+	}{
+		{
+			name:  "OK",
+			query: "?page_id=1&page_size=10",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					ListUserRoles(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return([]db.UserRole{{Role: RoleOperator, Status: "active"}}, nil)
+
+				store.EXPECT().
+					ListPlatformAlertEvents(gomock.Any(), gomock.Eq(db.ListPlatformAlertEventsParams{
+						Limit:  10,
+						Offset: 0,
+					})).
+					Times(1).
+					Return([]db.PlatformAlertEvent{{
+						ID:          1,
+						AlertType:   "REFUND_FAILED",
+						Level:       "warning",
+						Title:       "异常退款待处理",
+						Message:     "需要平台人工处理",
+						RelatedID:   99,
+						RelatedType: "refund_order",
+						Extra:       []byte(`{"refund_order_id":99,"abnormal_refund_api_path":"/v1/platform/refunds/abnormal"}`),
+						EmittedAt:   now,
+					}}, nil)
+
+				store.EXPECT().
+					CountPlatformAlertEvents(gomock.Any()).
+					Times(1).
+					Return(int64(1), nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var response listPlatformAlertsResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Equal(t, int64(1), response.Total)
+				require.False(t, response.HasMore)
+				require.Len(t, response.Alerts, 1)
+				require.Equal(t, "REFUND_FAILED", response.Alerts[0].AlertType)
+				require.Equal(t, "/v1/platform/refunds/abnormal", response.Alerts[0].Extra["abnormal_refund_api_path"])
+			},
+		},
+		{
+			name:  "Forbidden for non platform role",
+			query: "?page_id=1&page_size=10",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					ListUserRoles(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return([]db.UserRole{{Role: RoleCustomer, Status: "active"}}, nil)
+				store.EXPECT().ListPlatformAlertEvents(gomock.Any(), gomock.Any()).Times(0)
+				store.EXPECT().CountPlatformAlertEvents(gomock.Any()).Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusForbidden, recorder.Code)
+			},
+		},
+		{
+			name:      "Unauthorized",
+			query:     "?page_id=1&page_size=10",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().ListUserRoles(gomock.Any(), gomock.Any()).Times(0)
+				store.EXPECT().ListPlatformAlertEvents(gomock.Any(), gomock.Any()).Times(0)
+				store.EXPECT().CountPlatformAlertEvents(gomock.Any()).Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusUnauthorized, recorder.Code)
+			},
+		},
+	}
+
+	for i := range testCases {
+		tc := testCases[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			tc.buildStubs(store)
+
+			server := newTestServer(t, store)
+			recorder := httptest.NewRecorder()
+
+			request, err := http.NewRequest(http.MethodGet, "/v1/platform/alerts"+tc.query, nil)
 			require.NoError(t, err)
 
 			tc.setupAuth(t, request, server.tokenMaker)
@@ -222,8 +389,7 @@ func TestMarkNotificationAsReadAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response notificationResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, notification.ID, response.ID)
 				require.True(t, response.IsRead)
 			},
@@ -238,7 +404,7 @@ func TestMarkNotificationAsReadAPI(t *testing.T) {
 				store.EXPECT().
 					MarkNotificationAsRead(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.Notification{}, sql.ErrNoRows)
+					Return(db.Notification{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -294,8 +460,7 @@ func TestMarkAllAsReadAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response markAllAsReadResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.True(t, response.Success)
 			},
 		},
@@ -366,7 +531,7 @@ func TestDeleteNotificationAPI(t *testing.T) {
 				store.EXPECT().
 					DeleteNotification(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(sql.ErrNoRows)
+					Return(db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -433,8 +598,7 @@ func TestGetNotificationPreferencesAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response notificationPreferencesResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, user.ID, response.UserID)
 				require.True(t, response.EnableOrderNotifications)
 			},
@@ -509,8 +673,7 @@ func TestUpdateNotificationPreferencesAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response notificationPreferencesResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.False(t, response.EnableOrderNotifications)
 			},
 		},
@@ -842,8 +1005,7 @@ func TestUpdateNotificationPreferencesWithDoNotDisturbAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response notificationPreferencesResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.NotNil(t, response.DoNotDisturbStart)
 				require.NotNil(t, response.DoNotDisturbEnd)
 				require.Equal(t, "22:00:00", *response.DoNotDisturbStart)

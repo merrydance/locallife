@@ -12,12 +12,13 @@ export interface FavoriteDishResponse {
     id: number
     dish_id: number
     dish_name: string
-    dish_image_url?: string
+    description?: string
+    image_url?: string
     merchant_id: number
     merchant_name: string
-    merchant_logo_url?: string
     price: number
     member_price?: number
+    is_available: boolean
     created_at: string
 }
 
@@ -26,24 +27,31 @@ export interface FavoriteMerchantResponse {
     merchant_id: number
     merchant_name: string
     merchant_logo_url?: string
-    monthly_sales: number
-    estimated_delivery_fee: number
-    tags: string[]
+    merchant_logo?: string
+    address: string
+    status: string
+    is_ordering_suspended?: boolean
     created_at: string
 }
 
 export interface ListFavoriteDishesResponse {
     dishes: FavoriteDishResponse[]
     total: number
-    page: number
+    page?: number
+    page_id?: number
     page_size: number
+    total_pages?: number
+    total_page?: number
 }
 
 export interface ListFavoriteMerchantsResponse {
     merchants: FavoriteMerchantResponse[]
     total: number
-    page: number
+    page?: number
+    page_id?: number
     page_size: number
+    total_pages?: number
+    total_page?: number
 }
 
 // 浏览历史类型 - 对齐 api.browseHistoryItem
@@ -90,6 +98,15 @@ export interface ListReviewsResponse {
     page_size: number
 }
 
+// ==================== 员工绑定商户 ====================
+
+export interface BindMerchantResponse {
+    message: string
+    merchant_id: number
+    merchant_name: string
+    role: string
+}
+
 /** 回复评价请求 - 对齐 api.replyReviewRequest */
 export interface ReplyReviewRequest extends Record<string, unknown> {
     reply: string                                // 回复内容（1-500字符）
@@ -100,11 +117,13 @@ export interface MembershipResponse {
     id: number
     user_id: number
     merchant_id: number
-    merchant_name: string
+    merchant_name?: string
+    logo_url?: string
     balance: number               // 余额（分）
     total_recharged: number       // 累计充值（分）
     total_consumed: number        // 累计消费（分）
     created_at: string
+    updated_at?: string
 }
 
 export interface MembershipTransactionResponse {
@@ -128,6 +147,8 @@ export interface RechargeRequest extends Record<string, unknown> {
 export interface ListMembershipsResponse {
     memberships: MembershipResponse[]
     total: number
+    page_id?: number
+    page_size?: number
 }
 
 export interface ListMembershipTransactionsResponse {
@@ -180,7 +201,9 @@ export interface UpdateNotificationPreferencesRequest extends Record<string, unk
 /** 通知列表响应 - 对齐 api.listNotificationsResponse */
 export interface ListNotificationsResponse {
     notifications: NotificationResponse[]
-    total_count: number                          // 总数
+    total: number                                // 总数
+    page_id?: number
+    page_size?: number
 }
 
 export interface UnreadCountResponse {
@@ -191,15 +214,14 @@ export interface UnreadCountResponse {
 export interface ClaimResponse {
     id: number
     user_id: number
-    order_id?: number
+    order_id: number
     claim_type: string            // 申诉类型
     claim_amount: number          // 申诉金额（分）
     description: string
-    evidence_urls: string[]       // 证据图片URL
     status: string                // 状态
     approval_type?: string        // 审批类型
     approved_amount?: number      // 批准金额（分）
-    is_malicious?: boolean        // 是否恶意申诉
+    is_malicious: boolean         // 是否恶意申诉
     review_notes?: string         // 审核备注
     reviewed_at?: string          // 审核时间
     reviewer_id?: number          // 审核人ID
@@ -211,13 +233,13 @@ export interface CreateClaimRequest extends Record<string, unknown> {
     claim_type: string            // 申诉类型
     claim_amount: number          // 申诉金额（分）
     description: string
-    evidence_urls?: string[]      // 证据图片URL
 }
 
 export interface ListClaimsResponse {
     claims: ClaimResponse[]
     total: number
     page: number
+    page_id?: number
     page_size: number
 }
 
@@ -225,6 +247,7 @@ export interface ListClaimsResponse {
 export interface VoucherResponse {
     id: number
     merchant_id: number
+    merchant_name?: string
     name: string
     description?: string
     code: string                  // 优惠券码
@@ -261,11 +284,15 @@ export interface UserVoucherResponse {
 export interface ListMyVouchersResponse {
     vouchers: UserVoucherResponse[]  // 用户优惠券
     total: number
+    page_id?: number
+    page_size?: number
 }
 
 export interface ListAvailableVouchersResponse {
     vouchers: VoucherResponse[]      // 可领取的优惠券
     total: number
+    page_id?: number
+    page_size?: number
 }
 
 /** 收藏菜品行 - 对齐 api.favoriteDishRow */
@@ -330,6 +357,15 @@ export interface PaginationParams extends Record<string, unknown> {
 
 export interface FavoritesParams extends PaginationParams {
     // 可以添加筛选参数
+}
+
+export interface FavoritesSummaryResponse {
+    merchant_count: number
+    dish_count: number
+}
+
+export interface FavoriteStatusResponse {
+    exists: boolean
 }
 
 export interface HistoryParams extends PaginationParams {
@@ -420,6 +456,27 @@ export function removeMerchantFromFavorites(merchantId: number): Promise<void> {
     })
 }
 
+export function getFavoritesSummary(): Promise<FavoritesSummaryResponse> {
+    return request({
+        url: '/v1/favorites/summary',
+        method: 'GET'
+    })
+}
+
+export function getFavoriteDishStatus(dishId: number): Promise<FavoriteStatusResponse> {
+    return request({
+        url: `/v1/favorites/dishes/${dishId}`,
+        method: 'GET'
+    })
+}
+
+export function getFavoriteMerchantStatus(merchantId: number): Promise<FavoriteStatusResponse> {
+    return request({
+        url: `/v1/favorites/merchants/${merchantId}`,
+        method: 'GET'
+    })
+}
+
 // ==================== 浏览历史接口 ====================
 
 /**
@@ -466,6 +523,18 @@ export function getMyReviews(params: ReviewsParams = {}): Promise<ListReviewsRes
         data: params
     })
 }
+
+/**
+ * 员工绑定商户
+ */
+export function bindMerchant(inviteCode: string): Promise<BindMerchantResponse> {
+    return request({
+        url: '/v1/bind-merchant',
+        method: 'POST',
+        data: { invite_code: inviteCode }
+    })
+}
+
 
 /**
  * 获取评价详情
@@ -518,7 +587,8 @@ export function replyToReview(reviewId: number, data: ReplyReviewRequest): Promi
 export function getMyMemberships(): Promise<ListMembershipsResponse> {
     return request({
         url: '/v1/memberships',
-        method: 'GET'
+        method: 'GET',
+        data: { page_id: 1, page_size: 20 }
     })
 }
 
@@ -535,7 +605,7 @@ export function getMembershipDetail(membershipId: number): Promise<MembershipRes
 /**
  * 会员卡充值
  */
-export function rechargeMembership(data: RechargeRequest): Promise<any> {
+export function rechargeMembership(data: RechargeRequest): Promise<RechargeResponse> {
     return request({
         url: '/v1/memberships/recharge',
         method: 'POST',
@@ -557,16 +627,56 @@ export function getMembershipTransactions(
     })
 }
 
+// ==================== 充值规则接口 ====================
+
+/** 充值规则响应 - 对齐 api.rechargeRuleResponse */
+export interface RechargeRuleResponse {
+    id: number                            // 规则ID
+    merchant_id: number                   // 商户ID
+    recharge_amount: number               // 充值金额（分）
+    bonus_amount: number                  // 赠送金额（分）
+    is_active: boolean                    // 是否激活
+    valid_from: string                    // 有效期开始
+    valid_until: string                   // 有效期结束
+    created_at: string                    // 创建时间
+    updated_at?: string                   // 更新时间
+}
+
+/** 充值响应 - 对齐 api.rechargeResponse */
+export interface RechargeResponse {
+    payment_order_id: number              // 支付订单ID
+    out_trade_no: string                  // 商户订单号
+    pay_params: WechatMiniprogram.RequestPaymentOption  // 微信支付参数
+}
+
+/**
+ * 获取商户的生效中充值规则（C端公开）
+ */
+export function getPublicRechargeRules(merchantId: number): Promise<RechargeRuleResponse[]> {
+    return request({
+        url: `/v1/public/merchants/${merchantId}/recharge-rules`,
+        method: 'GET'
+    })
+}
+
 // ==================== 通知系统接口 ====================
 
 /**
  * 获取通知列表
  */
 export function getNotifications(params: NotificationsParams = {}): Promise<ListNotificationsResponse> {
+    const pageId = params.page ?? 1
+    const pageSize = params.page_size ?? 20
+    const offset = (pageId - 1) * pageSize
     return request({
         url: '/v1/notifications',
         method: 'GET',
-        data: params
+        data: {
+            type: params.type,
+            is_read: params.is_read,
+            limit: pageSize,
+            offset
+        }
     })
 }
 
@@ -671,20 +781,35 @@ export function getClaimDetail(claimId: number): Promise<ClaimResponse> {
  * 获取我的优惠券列表
  */
 export function getMyVouchers(params: VouchersParams = {}): Promise<ListMyVouchersResponse> {
+    const pageId = params.page ?? 1
+    const pageSize = params.page_size ?? 20
     return request({
         url: '/v1/vouchers/me',
         method: 'GET',
-        data: params
+        data: {
+            page_id: pageId,
+            page_size: pageSize,
+            status: params.status,
+            merchant_id: params.merchant_id
+        }
     })
 }
 
 /**
  * 获取我的可用优惠券
  */
-export function getMyAvailableVouchers(): Promise<ListAvailableVouchersResponse> {
+export function getMyAvailableVouchers(params: VouchersParams = {}): Promise<ListAvailableVouchersResponse> {
+    const pageId = params.page ?? 1
+    const pageSize = params.page_size ?? 20
     return request({
         url: '/v1/vouchers/me/available',
-        method: 'GET'
+        method: 'GET',
+        data: {
+            page_id: pageId,
+            page_size: pageSize,
+            status: params.status,
+            merchant_id: params.merchant_id
+        }
     })
 }
 
@@ -715,8 +840,8 @@ export function claimVoucher(voucherId: number): Promise<void> {
  */
 export async function isDishFavorited(dishId: number): Promise<boolean> {
     try {
-        const response = await getFavoriteDishes({ page: 1, page_size: 1000 })
-        return response.dishes.some(dish => dish.dish_id === dishId)
+        const response = await getFavoriteDishStatus(dishId)
+        return !!response.exists
     } catch (error) {
         console.error('检查菜品收藏状态失败:', error)
         return false
@@ -728,8 +853,8 @@ export async function isDishFavorited(dishId: number): Promise<boolean> {
  */
 export async function isMerchantFavorited(merchantId: number): Promise<boolean> {
     try {
-        const response = await getFavoriteMerchants({ page: 1, page_size: 1000 })
-        return response.merchants.some(merchant => merchant.merchant_id === merchantId)
+        const response = await getFavoriteMerchantStatus(merchantId)
+        return !!response.exists
     } catch (error) {
         console.error('检查商户收藏状态失败:', error)
         return false
@@ -770,14 +895,12 @@ export async function toggleMerchantFavorite(merchantId: number): Promise<boolea
 export async function getPersonalCenterOverview() {
     try {
         const [
-            favoriteDishes,
-            favoriteMerchants,
+            favoriteSummary,
             unreadCount,
             availableVouchers,
             memberships
         ] = await Promise.all([
-            getFavoriteDishes({ page: 1, page_size: 1 }),
-            getFavoriteMerchants({ page: 1, page_size: 1 }),
+            getFavoritesSummary(),
             getUnreadNotificationCount(),
             getMyAvailableVouchers(),
             getMyMemberships()
@@ -785,8 +908,8 @@ export async function getPersonalCenterOverview() {
 
         return {
             favoriteCount: {
-                dishes: favoriteDishes.total,
-                merchants: favoriteMerchants.total
+                dishes: favoriteSummary.dish_count,
+                merchants: favoriteSummary.merchant_count
             },
             unreadNotifications: unreadCount.count,
             availableVouchers: availableVouchers.total,

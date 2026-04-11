@@ -1,108 +1,12 @@
 /**
- * 商户基础管理接口
- * 基于swagger.json完全重构，仅保留后端支持的接口
+ * 商户基础管理接口 (仅保留顾客端搜索和推荐)
  */
 
-import { request, API_BASE } from '../utils/request'
-import { getToken } from '../utils/auth'
-import { logger } from '../utils/logger'
+import { request } from '../utils/request'
+import { normalizePaginatedResult, type PaginatedListResult, type PaginationEnvelope } from './types'
+import type { CustomizationGroup } from './dish'
 
 // ==================== 数据类型定义 ====================
-
-/**
- * 商户详情响应 - 完全对齐 api.merchantResponse
- */
-export interface MerchantResponse {
-  id: number                                   // 商户ID
-  name: string                                 // 商户名称
-  address: string                              // 商户地址
-  description: string                          // 商户描述
-  phone: string                                // 商户电话
-  logo_url: string                             // 商户Logo URL
-  latitude: string                             // 纬度（后端定义为string）
-  longitude: string                            // 经度（后端定义为string）
-  status: string                               // 商户状态
-  is_open: boolean                             // 是否营业
-  owner_user_id: number                        // 商户所有者用户ID
-  region_id: number                            // 区域ID
-  created_at: string                           // 创建时间
-  updated_at: string                           // 更新时间
-  version?: number                             // 乐观锁版本号（可选）
-}
-
-/**
- * 商户更新请求 - 完全对齐 api.updateMerchantRequest
- */
-export interface UpdateMerchantRequest extends Record<string, unknown> {
-  name?: string                                // 商户名称 (2-50字符)
-  address?: string                             // 商户地址 (5-200字符)
-  description?: string                         // 商户描述 (最多500字符)
-  phone?: string                               // 商户电话 (11位)
-  logo_url?: string                            // Logo URL (最多500字符)
-  latitude?: string                            // 纬度
-  longitude?: string                           // 经度
-  version: number                              // 乐观锁版本号（必填）
-}
-
-/**
- * 商户状态响应 - 完全对齐 api.merchantStatusResponse
- */
-export interface MerchantStatusResponse {
-  is_open: boolean                             // 是否营业
-  message: string                              // 状态消息
-  auto_close_at?: string                       // 自动打烊时间
-}
-
-/**
- * 商户状态更新请求 - 完全对齐 api.updateMerchantStatusRequest
- */
-export interface UpdateMerchantStatusRequest extends Record<string, unknown> {
-  is_open: boolean                             // 是否营业（必填）
-  auto_close_at?: string                       // 自动打烊时间（RFC3339格式，最多50字符）
-}
-
-/**
- * 营业时间项 - 完全对齐 api.businessHourItem
- */
-export interface BusinessHourItem {
-  day_of_week?: number                         // 星期几 (0=周日, 1=周一, ..., 6=周六)
-  open_time: string                            // 开始时间 (HH:MM格式，必填)
-  close_time: string                           // 结束时间 (HH:MM格式，必填)
-  is_closed?: boolean                          // 是否休息
-}
-
-/**
- * 营业时间响应项 - 完全对齐 api.businessHourResponse
- */
-export interface BusinessHourResponse {
-  id: number                                   // 营业时间ID
-  day_of_week: number                          // 星期几
-  day_name: string                             // 星期名称
-  open_time: string                            // 开始时间
-  close_time: string                           // 结束时间
-  is_closed: boolean                           // 是否休息
-}
-
-/**
- * 设置营业时间请求 - 完全对齐 api.setBusinessHoursRequest
- */
-export interface SetBusinessHoursRequest extends Record<string, unknown> {
-  hours: BusinessHourItem[]                    // 一周的营业时间（1-7项，必填）
-}
-
-/**
- * 营业时间列表响应 - 完全对齐 api.businessHoursListResponse
- */
-export interface BusinessHoursListResponse {
-  hours: BusinessHourResponse[]                // 营业时间列表
-}
-
-/**
- * 图片上传响应 - 完全对齐 api.uploadImageResponse
- */
-export interface UploadImageResponse {
-  image_url: string                            // 图片URL
-}
 
 /**
  * 商户摘要信息 - 对齐 api.merchantSummary（用于搜索和推荐）
@@ -110,280 +14,88 @@ export interface UploadImageResponse {
 export interface MerchantSummary {
   id: number                                   // 商户ID
   name: string                                 // 商户名称
-  address: string                              // 商户地址
-  description: string                          // 商户描述
-  logo_url: string                             // Logo URL
-  latitude: number                             // 纬度
-  longitude: number                            // 经度
-  distance: number                             // 距离（米）
-  estimated_delivery_fee: number              // 预估配送费（分）
-  monthly_sales: number                       // 近30天订单量
-  region_id: number                            // 区域ID
-  is_open: boolean                             // 是否营业
-  tags: string[]                               // 商户标签
-}
-
-
-/**
- * 商户详情响应 - 对齐 api.merchantDetailResponse
- */
-export interface MerchantDetailResponse {
-  id: number                                   // 商户ID
-  name: string                                 // 商户名称
-  address: string                              // 商户地址
+  address?: string                             // 商户地址
   description?: string                         // 商户描述
-  phone: string                                // 商户电话
-  logo_url?: string                            // 商户Logo URL
-  latitude: number                             // 纬度
-  longitude: number                            // 经度
-  status: string                               // 商户状态
-  is_open: boolean                             // 是否营业
-  owner_user_id: number                        // 商户所有者用户ID
-  region_id: number                            // 区域ID
-  version: number                              // 乐观锁版本号
-  created_at: string                           // 创建时间
-  updated_at: string                           // 更新时间
+  logo_url?: string                            // Logo URL
+  cover_image?: string                         // 门头照（列表卡片封面）
+  distance?: number                            // 距离（米）
+  estimated_delivery_fee?: number              // 预估配送费（分）
+  total_orders?: number                        // 总销量（搜索返回）
+  monthly_sales?: number                       // 近30天订单量（旧字段）
+  region_id?: number                           // 区域ID
+  status?: string                              // 商户状态
+  is_open?: boolean                            // 是否营业（仅部分接口）
+  tags?: string[]                              // 商户标签（仅部分接口）
+  system_labels?: string[]                     // 商户系统标签（如：无明厨亮灶）
+  created_at?: string                          // 入驻时间（用于判断新店）
+  label?: string                               // 推荐 / 热销
 }
 
-/**
- * 商户列表项 - 对齐 api.merchantListItem
- */
-export interface MerchantListItem {
-  created_at: string
-}
-
-/**
- * 菜品数据传输对象
- */
-export interface DishDTO {
-  id: string
-  merchant_id: string
-  category_id: string
-  category_name?: string
+/** 搜索商户返回项 - 对齐后端 searchMerchantResponse */
+export interface SearchMerchantItem {
+  id: number
   name: string
   description?: string
-  price: number
-  stock: number
-  status: 'ON_SHELF' | 'OFF_SHELF'
-  image_url?: string
-  month_sales?: number
-}
-
-/**
- * 订单菜品项
- */
-export interface OrderDishItem {
-  name: string
-  quantity: number
-  price: number
-}
-
-/**
- * 订单详情响应
- */
-export interface MerchantOrderDTO {
-  id: string
-  order_no: string
+  address?: string
+  phone?: string
+  logo_url: string
+  cover_image?: string
   status: string
-  order_type: 'TAKEOUT' | 'DINE_IN'
-  total_amount: number
-  items: OrderDishItem[]
-  table_id?: string
-  delivery_address?: any
-  created_at: string
+  is_open?: boolean
+  region_id: number
+  total_orders?: number
+  distance?: number
+  estimated_delivery_fee?: number
+  tags?: string[]
+  system_labels?: string[]
+  created_at?: string  // 入驻时间，用于前端判断"新店"
+  label?: string       // 推荐 / 热销
 }
 
-/**
- * 更新商户基本信息请求 - 对齐 api.updateMerchantBasicInfoRequest
- */
-export interface UpdateMerchantBasicInfoRequest extends Record<string, unknown> {
-  merchant_name?: string                       // 商户名称（2-50字符）
-  business_address?: string                    // 商户地址（5-200字符）
-  contact_phone?: string                       // 联系电话
-  latitude?: string                            // 纬度
-  longitude?: string                           // 经度
-  region_id?: number                           // 区域ID
+export interface SearchMerchantsResponse {
+  merchants: SearchMerchantItem[]
+  total?: number
+  page_id?: number
+  page_size?: number
 }
 
-/**
- * 商户绑定银行卡请求 - 对齐 api.merchantBindBankRequest
- */
-export interface MerchantBindBankRequest extends Record<string, unknown> {
-  account_type: 'ACCOUNT_TYPE_BUSINESS' | 'ACCOUNT_TYPE_PRIVATE'  // 账户类型
-  account_bank: string                         // 开户银行（最大128字符）
-  account_name: string                         // 开户名称（最大128字符）
-  account_number: string                       // 银行账号
-  bank_address_code: string                    // 开户银行省市编码
-  bank_name?: string                           // 开户银行全称（支行）
-  contact_phone: string                        // 联系电话
-  contact_email?: string                       // 联系邮箱
+export interface SearchMerchantsParams {
+  keyword?: string
+  region_id?: number
+  tag_id?: number
+  sort_by?: 'distance'
+  page_id?: number
+  page_size?: number
+  user_latitude?: number
+  user_longitude?: number
 }
 
-/**
- * 商户绑定银行卡响应 - 对齐 api.merchantBindBankResponse
- */
-export interface MerchantBindBankResponse {
-  applyment_id: number                         // 微信申请单号
-  status: string                               // 状态
-  message: string                              // 消息
+export interface MerchantSummaryListResult extends PaginatedListResult<MerchantSummary> {
+  merchants: MerchantSummary[]
 }
 
-// ==================== 商户基础管理服务 ====================
+type SearchMerchantsEnvelope = PaginationEnvelope & {
+  merchants?: SearchMerchantItem[]
+}
 
-/**
- * 商户基础管理服务
- * 基于swagger.json完全重构，仅包含后端支持的接口
- */
-export class MerchantManagementService {
-
-  /**
-   * 获取当前商户信息
-   * GET /v1/merchants/me
-   */
-  static async getMerchantInfo(): Promise<MerchantResponse> {
-    return await request({
-      url: '/v1/merchants/me',
-      method: 'GET',
-      useCache: true,
-      cacheTTL: 5 * 60 * 1000 // 5分钟缓存
-    })
-  }
-
-  /**
-   * 获取当前用户拥有的所有商户列表
-   * GET /v1/merchants/my
-   * 用于多店铺切换功能
-   */
-  static async getMyMerchants(): Promise<MerchantResponse[]> {
-    return await request({
-      url: '/v1/merchants/my',
-      method: 'GET',
-      useCache: true,
-      cacheTTL: 5 * 60 * 1000 // 5分钟缓存
-    })
-  }
-
-  /**
-   * 更新商户信息
-   * PATCH /v1/merchants/me
-   * 使用乐观锁防止并发冲突
-   */
-  static async updateMerchantInfo(data: UpdateMerchantRequest): Promise<MerchantResponse> {
-    return await request({
-      url: '/v1/merchants/me',
-      method: 'PATCH',
-      data
-    })
-  }
-
-  /**
-   * 获取商户营业状态
-   * GET /v1/merchants/me/status
-   */
-  static async getMerchantStatus(): Promise<MerchantStatusResponse> {
-    return await request({
-      url: '/v1/merchants/me/status',
-      method: 'GET'
-    })
-  }
-
-  /**
-   * 更新商户营业状态
-   * PATCH /v1/merchants/me/status
-   */
-  static async updateMerchantStatus(data: UpdateMerchantStatusRequest): Promise<MerchantStatusResponse> {
-    return await request({
-      url: '/v1/merchants/me/status',
-      method: 'PATCH',
-      data
-    })
-  }
-
-  /**
-   * 获取商户营业时间
-   * GET /v1/merchants/me/business-hours
-   */
-  static async getBusinessHours(): Promise<BusinessHoursListResponse> {
-    return await request({
-      url: '/v1/merchants/me/business-hours',
-      method: 'GET'
-    })
-  }
-
-  /**
-   * 设置商户营业时间
-   * PUT /v1/merchants/me/business-hours
-   */
-  static async setBusinessHours(data: SetBusinessHoursRequest): Promise<BusinessHoursListResponse> {
-    return await request({
-      url: '/v1/merchants/me/business-hours',
-      method: 'PUT',
-      data
-    })
-  }
-
-  /**
-   * 上传商户图片
-   * POST /v1/merchants/images/upload
-   * 支持营业执照、身份证、Logo等图片上传
-   */
-  static async uploadImage(
-    filePath: string,
-    category: 'business_license' | 'id_front' | 'id_back' | 'logo'
-  ): Promise<UploadImageResponse> {
-    const token = getToken()
-    return new Promise((resolve, reject) => {
-      wx.uploadFile({
-        url: `${API_BASE}/v1/merchants/images/upload`,
-        filePath: filePath,
-        name: 'image',
-        formData: { category },
-        header: {
-          'Authorization': `Bearer ${token}`
-        },
-        success: (res) => {
-          if (res.statusCode === 200) {
-            try {
-              const data = JSON.parse(res.data)
-              logger.debug('Upload Response Raw', data, 'Merchant') // DEBUG
-
-              // Helper to normalize
-              const normalize = (url: string) => {
-                if (url && !url.startsWith('http')) {
-                  if (url.startsWith('/')) url = url.substring(1)
-                  return `${API_BASE}/${url}`
-                }
-                return url
-              }
-
-              if (data.code === 0 && data.data) {
-                // Envelope format
-                if (data.data.image_url) {
-                  data.data.image_url = normalize(data.data.image_url)
-                }
-                resolve(data.data)
-              } else if (data.image_url) {
-                // Direct format (Unwrapped)
-                data.image_url = normalize(data.image_url)
-                resolve(data as UploadImageResponse)
-              } else {
-                // Fallback
-                resolve(data as unknown as UploadImageResponse)
-              }
-            } catch (e) {
-              reject(new Error('Parse upload response failed'))
-            }
-          } else {
-            logger.error('Upload failed', res, 'Merchant')
-            reject(new Error(`HTTP ${res.statusCode}`))
-          }
-        },
-        fail: (err) => {
-          logger.error('Upload network error', err, 'Merchant')
-          reject(err)
-        }
-      })
-    })
+function normalizeMerchantSummary(item: SearchMerchantItem): MerchantSummary {
+  return {
+    id: item.id,
+    name: item.name,
+    address: item.address || '',
+    description: item.description || '',
+    logo_url: item.logo_url || '',
+    cover_image: item.cover_image || '',
+    distance: item.distance,
+    estimated_delivery_fee: item.estimated_delivery_fee,
+    total_orders: item.total_orders,
+    region_id: item.region_id,
+    status: item.status,
+    is_open: item.is_open,
+    tags: item.tags || [],
+    system_labels: item.system_labels || [],
+    created_at: item.created_at,
+    label: item.label
   }
 }
 
@@ -391,23 +103,14 @@ export class MerchantManagementService {
 
 /**
  * 搜索商户 - 基于 /v1/search/merchants
- * 注意：后端要求 keyword, page_id, page_size 为必填参数
  */
-export async function searchMerchants(params: {
-  keyword?: string
-  page_id?: number
-  page_size?: number
-  user_latitude?: number
-  user_longitude?: number
-}): Promise<MerchantSummary[]> {
-  // 后端要求必填参数，提供默认值
-  const requestParams: any = {
-    keyword: params.keyword || '', // 空字符串表示搜索全部
+export async function searchMerchantsWithMeta(params: SearchMerchantsParams): Promise<MerchantSummaryListResult> {
+  const requestParams: Record<string, unknown> = {
+    keyword: params.keyword || '',
     page_id: params.page_id || 1,
     page_size: params.page_size || 20
   }
 
-  // 仅添加有效的经纬度
   if (params.user_latitude !== undefined && params.user_latitude !== null) {
     requestParams.user_latitude = params.user_latitude
   }
@@ -415,31 +118,48 @@ export async function searchMerchants(params: {
     requestParams.user_longitude = params.user_longitude
   }
 
-  const response = await request<{ merchants: MerchantSummary[], total?: number }>({
+  if (params.region_id !== undefined && params.region_id !== null) {
+    requestParams.region_id = params.region_id
+  }
+
+  if (params.tag_id !== undefined && params.tag_id !== null) {
+    requestParams.tag_id = params.tag_id
+  }
+
+  if (params.sort_by) {
+    requestParams.sort_by = params.sort_by
+  }
+
+  const response = await request<SearchMerchantsEnvelope>({
     url: '/v1/search/merchants',
     method: 'GET',
     data: requestParams,
     useCache: true,
-    cacheTTL: 2 * 60 * 1000 // 2分钟缓存
+    cacheTTL: 2 * 60 * 1000
   })
 
-  // 后端返回 { merchants: [...], total, page_id, page_size }，解包返回数组
-  return response.merchants || []
+  const merchants = (response.merchants || []).map(normalizeMerchantSummary)
+  const normalized = normalizePaginatedResult(merchants, response, {
+    page: params.page_id || 1,
+    pageSize: params.page_size || 20
+  })
+
+  return {
+    ...normalized,
+    merchants
+  }
 }
 
-/**
- * 推荐商户响应 - 对齐 api.recommendMerchantsResponse
- */
-export interface RecommendMerchantsResponse {
-  merchants: MerchantSummary[]
-  algorithm: string
-  expired_at: string
+export async function searchMerchants(params: SearchMerchantsParams): Promise<MerchantSummary[]> {
+  const result = await searchMerchantsWithMeta(params)
+  return result.merchants
 }
 
 /**
  * 推荐商户请求参数
  */
 export interface RecommendMerchantsParams {
+  region_id?: number
   user_latitude?: number
   user_longitude?: number
   limit?: number
@@ -453,31 +173,35 @@ export interface RecommendMerchantsResult {
   merchants: MerchantSummary[]
   has_more: boolean
   page: number
-  total_count: number
+  total: number
+}
+
+export async function getRecommendedMerchantsWithMeta(params?: RecommendMerchantsParams): Promise<MerchantSummaryListResult> {
+  return searchMerchantsWithMeta({
+    keyword: '',
+    region_id: params?.region_id,
+    user_latitude: params?.user_latitude,
+    user_longitude: params?.user_longitude,
+    page_id: params?.page ?? 1,
+    page_size: params?.limit ?? 20
+  })
 }
 
 /**
- * 获取推荐商户 - 基于 /v1/recommendations/merchants
- * 支持分页，返回包含 has_more 的完整响应
+ * 获取推荐商户
  */
 export async function getRecommendedMerchants(params?: RecommendMerchantsParams): Promise<RecommendMerchantsResult> {
-  const response = await request<RecommendMerchantsResponse & { has_more?: boolean; page?: number; total_count?: number }>({
-    url: '/v1/recommendations/merchants',
-    method: 'GET',
-    data: params,
-    useCache: params?.page === 1 || !params?.page,
-    cacheTTL: 3 * 60 * 1000 // 3分钟缓存
-  })
+  const result = await getRecommendedMerchantsWithMeta(params)
   return {
-    merchants: response.merchants || [],
-    has_more: response.has_more ?? false,
-    page: response.page ?? 1,
-    total_count: response.total_count ?? 0
+    merchants: result.merchants,
+    has_more: result.hasMore,
+    page: result.page,
+    total: result.total
   }
 }
 
 /**
- * 消费者端商户详情响应 - 对齐 api.publicMerchantDetailResponse
+ * 消费者端的证照/优惠规则定义
  */
 export interface PublicDiscountRule {
   id: number
@@ -501,46 +225,44 @@ export interface PublicDeliveryPromotion {
 }
 
 export interface PublicMerchantDetail {
-  id: number                                   // 商户ID
-  name: string                                 // 商户名称
-  description?: string                         // 商户描述
-  logo_url?: string                            // Logo URL
-  cover_image?: string                         // 门头照/招牌图
-  phone: string                                // 商户电话
-  address: string                              // 商户地址
-  latitude: number                             // 纬度
-  longitude: number                            // 经度
-  region_id: number                            // 区域ID
-  is_open: boolean                             // 是否营业
-  tags: string[]                               // 商户标签（如：快餐、川菜）
-  monthly_sales: number                        // 近30天订单量
-  trust_score: number                          // 信誉分
-  avg_prep_minutes: number                     // 平均出餐时间（分钟）
-  business_license_image_url?: string          // 营业执照图片
-  food_permit_url?: string                     // 食品经营许可证
-  business_hours?: {                           // 营业时间
-    day_of_week: number                        // 0=周日, 1=周一, ..., 6=周六
-    open_time: string                          // HH:MM
-    close_time: string                         // HH:MM
-    is_closed: boolean                         // 是否休息
+  id: number
+  name: string
+  description?: string
+  logo_url?: string
+  cover_image?: string
+  phone: string
+  address: string
+  latitude: number
+  longitude: number
+  region_id: number
+  is_open: boolean
+  is_ordering_suspended: boolean
+  tags: string[]
+  system_labels?: string[]
+  monthly_sales: number
+  avg_prep_minutes: number
+  business_license_image_url?: string
+  food_permit_url?: string
+  business_hours?: {
+    day_of_week: number
+    open_time: string
+    close_time: string
+    is_closed: boolean
   }[]
-  discount_rules?: PublicDiscountRule[]         // 满减规则
-  vouchers?: PublicVoucher[]                   // 代金券
-  delivery_promotions?: PublicDeliveryPromotion[] // 配送费优惠
+  discount_rules?: PublicDiscountRule[]
+  vouchers?: PublicVoucher[]
+  delivery_promotions?: PublicDeliveryPromotion[]
 }
-
 
 /**
  * 获取商户详情（消费者端）
- * GET /v1/public/merchants/:id
- * 返回包含标签、营业时间、证照等完整信息
  */
-export async function getPublicMerchantDetail(merchantId: number): Promise<PublicMerchantDetail> {
+export async function getPublicMerchantDetail(merchantId: number, lite = false): Promise<PublicMerchantDetail> {
   return await request({
-    url: `/v1/public/merchants/${merchantId}`,
+    url: `/v1/public/merchants/${merchantId}${lite ? '?lite=true' : ''}`,
     method: 'GET',
     useCache: true,
-    cacheTTL: 5 * 60 * 1000 // 5分钟缓存
+    cacheTTL: 5 * 60 * 1000
   })
 }
 
@@ -561,6 +283,7 @@ export interface PublicDish {
   name: string
   description?: string
   price: number
+  original_price?: number
   member_price?: number
   image_url?: string
   category_id: number
@@ -568,7 +291,10 @@ export interface PublicDish {
   monthly_sales: number
   prepare_time: number
   tags: string[]
+  customization_groups?: CustomizationGroup[]
 }
+
+export type DishDTO = PublicDish
 
 /**
  * 菜品列表响应
@@ -580,7 +306,6 @@ export interface PublicMerchantDishesResponse {
 
 /**
  * 获取商户菜品列表（消费者端）
- * GET /v1/public/merchants/:id/dishes
  */
 export async function getPublicMerchantDishes(merchantId: number): Promise<PublicMerchantDishesResponse> {
   return await request({
@@ -611,6 +336,8 @@ export interface PublicCombo {
   combo_price: number
   original_price: number
   dishes: ComboDishItem[]
+  tags?: string[]
+  dish_images?: string[]
 }
 
 /**
@@ -622,7 +349,6 @@ export interface PublicMerchantCombosResponse {
 
 /**
  * 获取商户套餐列表（消费者端）
- * GET /v1/public/merchants/:id/combos
  */
 export async function getPublicMerchantCombos(merchantId: number): Promise<PublicMerchantCombosResponse> {
   return await request({
@@ -633,112 +359,37 @@ export async function getPublicMerchantCombos(merchantId: number): Promise<Publi
   })
 }
 
-// ==================== 商户基础管理适配器 ====================
-
 /**
- * 商户基础管理数据适配器
- * 处理前端展示数据和后端API数据之间的转换
+ * 查询当前用户是否曾在该商户成功下单（用于展示"再来一单"标识）
  */
+export async function getHasUserOrderedFromMerchant(merchantId: number): Promise<boolean> {
+  try {
+    const result = await request<{ has_ordered: boolean }>({
+      url: `/v1/public/merchants/${merchantId}/has-ordered`,
+      method: 'GET',
+      useCache: true,
+      cacheTTL: 10 * 60 * 1000
+    })
+    return result.has_ordered ?? false
+  } catch {
+    return false
+  }
+}
+
+// ==================== 数据适配器 (仅保留顾客端相关) ====================
+
 export class MerchantManagementAdapter {
-
-  /**
-   * 格式化商户状态显示文本
-   */
-  static formatMerchantStatus(status: string): string {
-    const statusMap: Record<string, string> = {
-      'active': '正常营业',
-      'inactive': '暂停营业',
-      'suspended': '已暂停',
-      'pending': '待审核'
-    }
-    return statusMap[status] || status
-  }
-
-  /**
-   * 格式化营业状态显示文本
-   */
-  static formatBusinessStatus(isOpen: boolean): string {
-    return isOpen ? '营业中' : '已打烊'
-  }
-
-  /**
-   * 格式化星期显示文本
-   */
   static formatDayOfWeek(dayOfWeek: number): string {
     const dayNames = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
     return dayNames[dayOfWeek] || `星期${dayOfWeek}`
   }
 
-  /**
-   * 生成默认营业时间（周一到周日 9:00-21:00）
-   */
-  static generateDefaultBusinessHours(): BusinessHourItem[] {
-    const defaultHours: BusinessHourItem[] = []
-
-    for (let i = 0; i < 7; i++) {
-      defaultHours.push({
-        day_of_week: i,
-        open_time: '09:00',
-        close_time: '21:00',
-        is_closed: false
-      })
-    }
-
-    return defaultHours
-  }
-
-  /**
-   * 验证营业时间数据
-   */
-  static validateBusinessHours(hours: BusinessHourItem[]): {
-    isValid: boolean
-    errors: string[]
-  } {
-    const errors: string[] = []
-
-    if (!hours || hours.length === 0) {
-      errors.push('营业时间不能为空')
-      return { isValid: false, errors }
-    }
-
-    if (hours.length > 7) {
-      errors.push('营业时间最多7天')
-    }
-
-    hours.forEach((hour, index) => {
-      if (!hour.open_time || !hour.close_time) {
-        errors.push(`第${index + 1}项营业时间缺少开始或结束时间`)
-      }
-
-      if (hour.open_time && hour.close_time) {
-        const openTime = new Date(`2000-01-01 ${hour.open_time}:00`)
-        const closeTime = new Date(`2000-01-01 ${hour.close_time}:00`)
-
-        if (openTime >= closeTime) {
-          errors.push(`第${index + 1}项营业时间：开始时间不能晚于或等于结束时间`)
-        }
-      }
-
-      if (hour.day_of_week !== undefined && (hour.day_of_week < 0 || hour.day_of_week > 6)) {
-        errors.push(`第${index + 1}项营业时间：星期数值无效`)
-      }
-    })
-
-    return {
-      isValid: errors.length === 0,
-      errors
-    }
-  }
-
-  /**
-   * 检查当前是否在营业时间内
-   */
-  static isCurrentlyOpen(businessHours: BusinessHourResponse[]): boolean {
+  static isCurrentlyOpen(businessHours: { day_of_week: number, open_time: string, close_time: string, is_closed: boolean }[]): boolean {
     const now = new Date()
-    const currentDay = now.getDay() // 0=周日, 1=周一, ..., 6=周六
-    const currentTime = now.toTimeString().slice(0, 5) // HH:MM格式
+    const currentDay = now.getDay()
+    const currentTime = now.toTimeString().slice(0, 5)
 
-    const todayHours = businessHours.find(hour => hour.day_of_week === currentDay)
+    const todayHours = businessHours.find((hour) => hour.day_of_week === currentDay)
 
     if (!todayHours || todayHours.is_closed) {
       return false
@@ -746,114 +397,583 @@ export class MerchantManagementAdapter {
 
     return currentTime >= todayHours.open_time && currentTime <= todayHours.close_time
   }
-
-  /**
-   * 获取下次营业时间
-   */
-  static getNextOpenTime(businessHours: BusinessHourResponse[]): string | null {
-    const now = new Date()
-    const currentDay = now.getDay()
-    const currentTime = now.toTimeString().slice(0, 5)
-
-    // 检查今天剩余时间
-    const todayHours = businessHours.find(hour => hour.day_of_week === currentDay)
-    if (todayHours && !todayHours.is_closed && currentTime < todayHours.open_time) {
-      return `今天 ${todayHours.open_time}`
-    }
-
-    // 检查未来7天
-    for (let i = 1; i <= 7; i++) {
-      const checkDay = (currentDay + i) % 7
-      const dayHours = businessHours.find(hour => hour.day_of_week === checkDay)
-
-      if (dayHours && !dayHours.is_closed) {
-        const dayName = this.formatDayOfWeek(checkDay)
-        return `${dayName} ${dayHours.open_time}`
-      }
-    }
-
-    return null
-  }
 }
 
-// ==================== 导出默认服务 ====================
-
-
-export default MerchantManagementService
-
+export const getMerchantDishes = getPublicMerchantDishes
 export const getMerchants = searchMerchants
 
-/**
- * 获取商户订单列表
- */
-export function getMerchantOrders(merchantId: string, status?: string): Promise<MerchantOrderDTO[]> {
-  return request({
-    url: `/merchant/${merchantId}/orders`,
-    method: 'GET',
-    data: { status }
-  })
-}
+// ==================== 商户工作台接口（商户自身管理用） ====================
 
 /**
- * 获取商户菜品列表响应类型
+ * 商户详情响应（商户工作台使用，包含 version）
  */
-export interface MerchantDishesResponse {
-  categories: Array<{
-    id: number
-    name: string
-    sort_order: number
+export interface MerchantOperatorResponse {
+  id: number
+  owner_user_id: number
+  region_id: number
+  name: string
+  description?: string
+  logo_url?: string
+  phone: string
+  address: string
+  latitude?: string
+  longitude?: string
+  status: string
+  is_open: boolean
+  version: number
+  group_id?: number
+  brand_id?: number
+  created_at: string
+  updated_at: string
+}
+
+export interface MerchantOpenStatusResponse {
+  is_open: boolean
+  auto_close_at?: string
+  message: string
+}
+
+export interface MerchantBusinessHour {
+  id?: number
+  day_of_week: number
+  day_name?: string
+  open_time: string
+  close_time: string
+  is_closed: boolean
+  special_date?: string
+}
+
+export interface MerchantBusinessHoursResponse {
+  hours: MerchantBusinessHour[]
+  auto_open_by_business_hours: boolean
+}
+
+export interface UpdateMyMerchantProfileRequest {
+  name?: string
+  description?: string
+  phone?: string
+  address?: string
+  latitude?: string
+  longitude?: string
+  logo_asset_id?: number | null
+  clear_logo?: boolean
+  version: number
+}
+
+export interface UpdateMerchantBusinessHoursRequest {
+  auto_open_by_business_hours: boolean
+  hours: Array<{
+    day_of_week: number
+    open_time: string
+    close_time: string
+    is_closed: boolean
+    special_date?: string
   }>
-  dishes: DishDTO[]
+}
+
+export type MerchantMembershipScene = 'dine_in' | 'takeout' | 'reservation'
+
+export interface MerchantMembershipSettingsResponse {
+  merchant_id: number
+  balance_usable_scenes: MerchantMembershipScene[]
+  bonus_usable_scenes: MerchantMembershipScene[]
+  allow_with_voucher: boolean
+  allow_with_discount: boolean
+  max_deduction_percent: number
+}
+
+export interface UpdateMerchantMembershipSettingsRequest {
+  balance_usable_scenes?: MerchantMembershipScene[]
+  bonus_usable_scenes?: MerchantMembershipScene[]
+  allow_with_voucher?: boolean
+  allow_with_discount?: boolean
+  max_deduction_percent?: number
 }
 
 /**
- * 获取商户菜品列表
+ * 获取当前用户可访问的全部商户（多门店切换）
+ * GET /v1/merchants/my
  */
-export function getMerchantDishes(merchantId: string): Promise<MerchantDishesResponse> {
-  return request({
-    url: `/v1/public/merchants/${merchantId}/dishes`,
+export function listMyMerchants() {
+  return request<MerchantOperatorResponse[]>({
+    url: '/v1/merchants/my',
     method: 'GET'
   })
 }
 
 /**
- * 接单
+ * 获取当前登录商户信息（商户工作台）
+ * GET /v1/merchants/me
  */
-export function acceptOrder(merchantId: string, orderId: string): Promise<void> {
-  return request({
-    url: `/merchant/orders/${orderId}/accept`,
-    method: 'POST'
+export function getMyMerchantProfile() {
+  return request<MerchantOperatorResponse>({
+    url: '/v1/merchants/me',
+    method: 'GET'
   })
 }
 
 /**
- * 拒单
+ * 更新当前商户 Logo（商户工作台）
+ * PATCH /v1/merchants/me
+ * @param logoAssetId 媒体资产 ID
+ * @param version 乐观锁版本号
  */
-export function rejectOrder(orderId: string, reason: string): Promise<void> {
-  return request({
-    url: `/merchant/orders/${orderId}/reject`,
+export function updateMyMerchantLogo(logoAssetId: number | null, version: number) {
+  const data: Record<string, unknown> = { version }
+  if (logoAssetId === null) {
+    data.clear_logo = true
+  } else if (logoAssetId) {
+    data.logo_asset_id = logoAssetId
+  }
+  return request<MerchantOperatorResponse>({
+    url: '/v1/merchants/me',
+    method: 'PATCH',
+    data
+  })
+}
+
+/**
+ * 更新当前商户资料（商户工作台）
+ * PATCH /v1/merchants/me
+ */
+export function updateMyMerchantProfile(data: UpdateMyMerchantProfileRequest) {
+  return request<MerchantOperatorResponse>({
+    url: '/v1/merchants/me',
+    method: 'PATCH',
+    data
+  })
+}
+
+/**
+ * 获取当前商户营业状态
+ * GET /v1/merchants/me/status
+ */
+export function getMyMerchantOpenStatus() {
+  return request<MerchantOpenStatusResponse>({
+    url: '/v1/merchants/me/status',
+    method: 'GET'
+  })
+}
+
+/**
+ * 更新当前商户营业状态
+ * PATCH /v1/merchants/me/status
+ */
+export function updateMyMerchantOpenStatus(isOpen: boolean, autoCloseAt?: string) {
+  const data: Record<string, unknown> = { is_open: isOpen }
+  if (autoCloseAt) {
+    data.auto_close_at = autoCloseAt
+  }
+  return request<MerchantOpenStatusResponse>({
+    url: '/v1/merchants/me/status',
+    method: 'PATCH',
+    data
+  })
+}
+
+/**
+ * 获取当前商户营业时间
+ * GET /v1/merchants/me/business-hours
+ */
+export function getMyMerchantBusinessHours() {
+  return request<MerchantBusinessHoursResponse>({
+    url: '/v1/merchants/me/business-hours',
+    method: 'GET'
+  })
+}
+
+/**
+ * 更新当前商户营业时间
+ * PUT /v1/merchants/me/business-hours
+ */
+export function updateMyMerchantBusinessHours(data: UpdateMerchantBusinessHoursRequest) {
+  return request<MerchantBusinessHoursResponse>({
+    url: '/v1/merchants/me/business-hours',
+    method: 'PUT',
+    data
+  })
+}
+
+/**
+ * 获取当前商户会员设置
+ * GET /v1/merchants/me/membership-settings
+ */
+export function getMyMerchantMembershipSettings() {
+  return request<MerchantMembershipSettingsResponse>({
+    url: '/v1/merchants/me/membership-settings',
+    method: 'GET'
+  })
+}
+
+/**
+ * 更新当前商户会员设置
+ * PUT /v1/merchants/me/membership-settings
+ */
+export function updateMyMerchantMembershipSettings(data: UpdateMerchantMembershipSettingsRequest) {
+  return request<MerchantMembershipSettingsResponse>({
+    url: '/v1/merchants/me/membership-settings',
+    method: 'PUT',
+    data
+  })
+}
+
+export interface MerchantRechargeRuleResponse {
+  id: number
+  merchant_id: number
+  recharge_amount: number
+  bonus_amount: number
+  is_active: boolean
+  valid_from: string
+  valid_until: string
+  status_code: MerchantTimedRuleStatusCode
+  status_label: string
+  status_theme: MerchantRuleStatusTheme
+  created_at: string
+  updated_at?: string
+}
+
+export type MerchantRuleStatusTheme = 'success' | 'warning' | 'danger' | 'default'
+export type MerchantTimedRuleStatusCode = 'inactive' | 'expired' | 'scheduled' | 'active'
+
+export interface MerchantTimedRuleStatusView {
+  label: string
+  theme: MerchantRuleStatusTheme
+  code: MerchantTimedRuleStatusCode
+}
+
+function buildMerchantTimedRuleStatusView(
+  rule: Pick<MerchantRechargeRuleResponse | MerchantDiscountRuleResponse, 'is_active' | 'valid_from' | 'valid_until'>,
+  now: Date = new Date()
+): MerchantTimedRuleStatusView {
+  const ruleWithStatus = rule as Partial<Pick<MerchantRechargeRuleResponse, 'status_code' | 'status_label' | 'status_theme'>>
+
+  if (ruleWithStatus.status_code && ruleWithStatus.status_label && ruleWithStatus.status_theme) {
+    return {
+      label: ruleWithStatus.status_label,
+      theme: ruleWithStatus.status_theme,
+      code: ruleWithStatus.status_code
+    }
+  }
+
+  const validUntil = new Date(rule.valid_until)
+  const validFrom = new Date(rule.valid_from)
+
+  if (!rule.is_active) {
+    return { label: '已停用', theme: 'default', code: 'inactive' }
+  }
+
+  if (now > validUntil) {
+    return { label: '已过期', theme: 'danger', code: 'expired' }
+  }
+
+  if (now < validFrom) {
+    return { label: '未开始', theme: 'warning', code: 'scheduled' }
+  }
+
+  return { label: '生效中', theme: 'success', code: 'active' }
+}
+
+export function buildMerchantRechargeRuleStatusView(
+  rule: Pick<MerchantRechargeRuleResponse, 'is_active' | 'valid_from' | 'valid_until'>,
+  now: Date = new Date()
+): MerchantTimedRuleStatusView {
+  return buildMerchantTimedRuleStatusView(rule, now)
+}
+
+export interface CreateMerchantRechargeRuleRequest {
+  recharge_amount: number
+  bonus_amount: number
+  valid_from: string
+  valid_until: string
+}
+
+export interface UpdateMerchantRechargeRuleRequest {
+  recharge_amount?: number
+  bonus_amount?: number
+  is_active?: boolean
+  valid_from?: string
+  valid_until?: string
+}
+
+export interface MerchantMembershipTransaction {
+  id: number
+  membership_id: number
+  type: string
+  amount: number
+  balance_after: number
+  related_order_id?: number
+  notes?: string
+  created_at: string
+}
+
+export interface MerchantMemberSummary {
+  user_id: number
+  full_name: string
+  phone: string
+  avatar_url: string
+  membership_id: number
+  balance: number
+  total_recharged: number
+  total_consumed: number
+  created_at: string
+}
+
+export interface MerchantMemberDetail extends MerchantMemberSummary {
+  transactions: MerchantMembershipTransaction[]
+}
+
+export interface ListMerchantMembersResponse {
+  members: MerchantMemberSummary[]
+  total: number
+  page_id: number
+  page_size: number
+}
+
+export interface AdjustMerchantMemberBalanceRequest {
+  amount: number
+  notes: string
+}
+
+export interface MerchantDiscountRuleResponse {
+  id: number
+  merchant_id: number
+  name: string
+  description?: string
+  min_order_amount: number
+  discount_amount: number
+  can_stack_with_voucher: boolean
+  can_stack_with_membership: boolean
+  stacking_group?: string
+  valid_from: string
+  valid_until: string
+  is_active: boolean
+  status_code: MerchantTimedRuleStatusCode
+  status_label: string
+  status_theme: MerchantRuleStatusTheme
+  created_at: string
+}
+
+export function buildMerchantDiscountRuleStatusView(
+  rule: Pick<MerchantDiscountRuleResponse, 'is_active' | 'valid_from' | 'valid_until'>,
+  now: Date = new Date()
+): MerchantTimedRuleStatusView {
+  return buildMerchantTimedRuleStatusView(rule, now)
+}
+
+export interface ListMerchantDiscountRulesResponse {
+  rules: MerchantDiscountRuleResponse[]
+  total: number
+  page_id: number
+  page_size: number
+}
+
+export interface CreateMerchantDiscountRuleRequest {
+  name: string
+  description?: string
+  min_order_amount: number
+  discount_amount: number
+  can_stack_with_voucher?: boolean
+  can_stack_with_membership?: boolean
+  stacking_group?: string
+  valid_from: string
+  valid_until: string
+}
+
+export interface UpdateMerchantDiscountRuleRequest {
+  name?: string
+  description?: string
+  min_order_amount?: number
+  discount_amount?: number
+  can_stack_with_voucher?: boolean
+  can_stack_with_membership?: boolean
+  stacking_group?: string
+  valid_from?: string
+  valid_until?: string
+  is_active?: boolean
+}
+
+/**
+ * 获取商户充值规则列表
+ * GET /v1/merchants/{id}/recharge-rules
+ */
+export function listMerchantRechargeRules(merchantId: number) {
+  return request<MerchantRechargeRuleResponse[]>({
+    url: `/v1/merchants/${merchantId}/recharge-rules`,
+    method: 'GET'
+  })
+}
+
+/**
+ * 创建商户充值规则
+ * POST /v1/merchants/{id}/recharge-rules
+ */
+export function createMerchantRechargeRule(merchantId: number, data: CreateMerchantRechargeRuleRequest) {
+  return request<MerchantRechargeRuleResponse>({
+    url: `/v1/merchants/${merchantId}/recharge-rules`,
     method: 'POST',
-    data: { reason }
+    data
   })
 }
 
 /**
- * 出餐
+ * 更新商户充值规则
+ * PATCH /v1/merchants/{id}/recharge-rules/{rule_id}
  */
-export function readyOrder(orderId: string): Promise<void> {
-  return request({
-    url: `/merchant/orders/${orderId}/ready`,
-    method: 'POST'
+export function updateMerchantRechargeRule(merchantId: number, ruleId: number, data: UpdateMerchantRechargeRuleRequest) {
+  return request<MerchantRechargeRuleResponse>({
+    url: `/v1/merchants/${merchantId}/recharge-rules/${ruleId}`,
+    method: 'PATCH',
+    data
   })
 }
 
 /**
- * 更新/新增菜品
+ * 删除商户充值规则
+ * DELETE /v1/merchants/{id}/recharge-rules/{rule_id}
  */
-export function upsertDish(merchantId: string, dish: any): Promise<void> {
-  return request({
-    url: `/merchant/${merchantId}/dishes`,
+export function deleteMerchantRechargeRule(merchantId: number, ruleId: number) {
+  return request<{ message?: string }>({
+    url: `/v1/merchants/${merchantId}/recharge-rules/${ruleId}`,
+    method: 'DELETE'
+  })
+}
+
+/**
+ * 获取商户会员列表
+ * GET /v1/merchants/{id}/members
+ */
+export function listMerchantMembers(merchantId: number, pageId: number = 1, pageSize: number = 20) {
+  return request<ListMerchantMembersResponse>({
+    url: `/v1/merchants/${merchantId}/members`,
+    method: 'GET',
+    data: { page_id: pageId, page_size: pageSize }
+  })
+}
+
+/**
+ * 获取商户会员详情
+ * GET /v1/merchants/{id}/members/{user_id}
+ */
+export function getMerchantMemberDetail(merchantId: number, userId: number) {
+  return request<MerchantMemberDetail>({
+    url: `/v1/merchants/${merchantId}/members/${userId}`,
+    method: 'GET'
+  })
+}
+
+/**
+ * 调整商户会员余额
+ * POST /v1/merchants/{id}/members/{user_id}/balance
+ */
+export function adjustMerchantMemberBalance(merchantId: number, userId: number, data: AdjustMerchantMemberBalanceRequest) {
+  return request<MerchantMemberSummary>({
+    url: `/v1/merchants/${merchantId}/members/${userId}/balance`,
     method: 'POST',
-    data: dish
+    data
+  })
+}
+
+/**
+ * 获取商户满减规则列表
+ * GET /v1/merchants/{id}/discounts
+ */
+export function listMerchantDiscountRules(merchantId: number, pageId: number = 1, pageSize: number = 20) {
+  return request<ListMerchantDiscountRulesResponse>({
+    url: `/v1/merchants/${merchantId}/discounts`,
+    method: 'GET',
+    data: { page_id: pageId, page_size: pageSize }
+  })
+}
+
+/**
+ * 获取单条商户满减规则
+ * GET /v1/merchants/{id}/discounts/{rule_id}
+ */
+export function getMerchantDiscountRule(merchantId: number, ruleId: number) {
+  return request<MerchantDiscountRuleResponse>({
+    url: `/v1/merchants/${merchantId}/discounts/${ruleId}`,
+    method: 'GET'
+  })
+}
+
+/**
+ * 创建商户满减规则
+ * POST /v1/merchants/{id}/discounts
+ */
+export function createMerchantDiscountRule(merchantId: number, data: CreateMerchantDiscountRuleRequest) {
+  return request<MerchantDiscountRuleResponse>({
+    url: `/v1/merchants/${merchantId}/discounts`,
+    method: 'POST',
+    data
+  })
+}
+
+/**
+ * 更新商户满减规则
+ * PATCH /v1/merchants/{id}/discounts/{rule_id}
+ */
+export function updateMerchantDiscountRule(merchantId: number, ruleId: number, data: UpdateMerchantDiscountRuleRequest) {
+  return request<MerchantDiscountRuleResponse>({
+    url: `/v1/merchants/${merchantId}/discounts/${ruleId}`,
+    method: 'PATCH',
+    data: {
+      id: ruleId,
+      ...data
+    }
+  })
+}
+
+/**
+ * 删除商户满减规则
+ * DELETE /v1/merchants/{id}/discounts/{rule_id}
+ */
+export function deleteMerchantDiscountRule(merchantId: number, ruleId: number) {
+  return request<{ message?: string }>({
+    url: `/v1/merchants/${merchantId}/discounts/${ruleId}`,
+    method: 'DELETE'
+  })
+}
+
+// ==================== 商户经营类目 ====================
+
+export interface MerchantCategoryTag {
+  id: number
+  name: string
+  type: string
+  sort_order: number
+}
+
+/**
+ * 获取当前商户已选的经营类目标签
+ * GET /v1/merchants/me/tags
+ */
+export function getMyMerchantTags() {
+  return request<{ tags: MerchantCategoryTag[] }>({
+    url: '/v1/merchants/me/tags',
+    method: 'GET'
+  })
+}
+
+/**
+ * 获取平台所有可选的商户类目标签
+ * GET /v1/tags?type=merchant
+ */
+export function getAvailableMerchantTags() {
+  return request<{ tags: MerchantCategoryTag[] }>({
+    url: '/v1/tags',
+    method: 'GET',
+    data: { type: 'merchant' }
+  })
+}
+
+/**
+ * 替换当前商户的经营类目标签（最多5个）
+ * PUT /v1/merchants/me/tags
+ */
+export function setMyMerchantTags(tagIds: number[]) {
+  return request<{ tags: MerchantCategoryTag[] }>({
+    url: '/v1/merchants/me/tags',
+    method: 'PUT',
+    data: { tag_ids: tagIds }
   })
 }

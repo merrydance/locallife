@@ -1,10 +1,18 @@
 <custom-navbar title="外卖" location="{{address}}" bind:locationchange="onLocationChange" />
 
+<template name="provider-onboarding-empty">
+  <t-empty description="附近暂无商户服务，你可以成为第一个 🏪" />
+  <view class="empty-actions">
+    <t-button theme="primary" size="large" block bind:tap="onMerchantRegister" shape="round">商户入驻</t-button>
+    <t-button size="large" block bind:tap="onOperatorRegister" shape="round">运营商入驻</t-button>
+  </view>
+</template>
+
 <!-- Skyline 需要用 scroll-view 实现页面滚动和下拉刷新 -->
 <scroll-view 
   scroll-y 
   class="page-scroll" 
-  style="height: {{scrollViewHeight}}px; margin-top: {{navBarHeight}}px;"
+  style="height: {{scrollViewHeight}}px; padding-top: calc({{navBarHeight}}px + var(--spacer-sm)); box-sizing: border-box; padding-bottom: env(safe-area-inset-bottom);"
   bindscrolltolower="onReachBottom"
   lower-threshold="200"
   refresher-enabled="{{true}}"
@@ -13,126 +21,95 @@
   enhanced="{{true}}"
   show-scrollbar="{{false}}"
 >
-  <!-- 搜索框 -->
-  <view class="search-section">
+  <!-- 搜索框 (App Shell) -->
+  <view class="search-section" bindtap="onSearchTap">
     <t-search 
       model:value="{{searchKeyword}}"
       placeholder="搜索菜品、商家"
-      bind:change="onSearch"
+      disabled="{{true}}"
     />
   </view>
 
-  <!-- 3个Tab -->
-  <view class="tabs-section">
-    <t-tabs value="{{activeTab}}" bind:change="onTabChange">
-      <t-tab-panel label="菜品列表" value="dishes" />
-      <t-tab-panel label="餐厅列表" value="restaurants" />
-      <t-tab-panel label="套餐列表" value="packages" />
-    </t-tabs>
-  </view>
-
-  <!-- 分类导航 (有标签时显示，只有"全部"时隐藏) -->
-  <view wx:if="{{categories.length > 1}}" class="category-section">
-    <category-tabs 
-      categories="{{categories}}"
-      activeId="{{activeCategoryId}}"
-      bind:change="onTabCategoryChange"
-    />
-  </view>
-
-  <!-- 位置引导提示 -->
-  <view wx:if="{{needLocation}}" class="location-guide">
-    <view class="location-guide-icon">📍</view>
-    <view class="location-guide-title">需要您的位置信息</view>
-    <view class="location-guide-desc">本地生活服务依赖于您的位置，请先完成定位</view>
-    <view class="location-guide-buttons">
-      <t-button theme="primary" size="small" bind:tap="onRetryLocation">重新定位</t-button>
-      <t-button variant="outline" size="small" bind:tap="onManualLocation">手动选择</t-button>
-    </view>
-  </view>
-
-  <!-- 内容区域 -->
-  <view class="content-section" wx:if="{{!needLocation}}">
-    <!-- 菜品列表 -->
-    <block wx:if="{{activeTab === 'dishes'}}">
-      <!-- 骨架屏 -->
-      <block wx:if="{{loading && dishes.length === 0}}">
-        <dish-skeleton wx:for="{{[1,2,3,4,5]}}" wx:key="*this" />
-      </block>
-      
-      <!-- 真实数据 -->
-      <dish-card 
-        wx:for="{{dishes}}" 
+  <!-- 菜系品类网格（动态，按区域） -->
+  <view wx:if="{{cuisineCategories.length > 1}}" class="cuisine-grid-section">
+    <t-grid column="{{5}}" gutter="{{12}}" border="{{false}}" t-class="cuisine-grid">
+      <t-grid-item
+        wx:for="{{cuisineCategories}}"
         wx:key="id"
-        dish="{{item}}"
-        bind:add="onAddCart"
-      />
-      <t-empty wx:if="{{!loading && dishes.length === 0}}" description="暂无菜品" />
-      <view wx:if="{{!hasMore && dishes.length > 0}}" class="no-more">没有更多了</view>
-    </block>
-
-    <!-- 餐厅列表 -->
-    <block wx:if="{{activeTab === 'restaurants'}}">
-      <restaurant-card 
-        wx:for="{{restaurants}}" 
-        wx:key="id"
-        restaurant="{{item}}"
-      />
-      <t-empty wx:if="{{!loading && restaurants.length === 0}}" description="暂无餐厅" />
-      <view wx:if="{{!hasMore && restaurants.length > 0}}" class="no-more">没有更多了</view>
-    </block>
-
-    <!-- 套餐列表 -->
-    <block wx:if="{{activeTab === 'packages'}}">
-      <view wx:for="{{packages}}" wx:key="id" class="package-card" bindtap="onPackageTap" data-id="{{item.id}}">
-        <t-image class="package-image" src="{{item.imageUrl}}" mode="aspectFill" lazy />
-        <view class="package-info">
-          <!-- 第1行: 店名·套餐名 + 休息中标签 -->
-          <view class="row-1">
-            <text class="shop-dish-name">{{item.merchantName}}·{{item.name}}</text>
-            <t-tag wx:if="{{item.merchantIsOpen === false}}" theme="danger" size="small" variant="light">休息中</t-tag>
-          </view>
-
-          <!-- 第2行: 价格 | 销量 -->
-          <view class="row-2">
-            <text class="price">{{item.priceDisplay}}</text>
-            <text class="separator">|</text>
-            <text class="sales">{{item.salesBadge}}</text>
-          </view>
-          <!-- 第3行: 距离 + 优惠百分比 -->
-          <view class="row-3">
-            <text class="distance">📍{{item.distance}}</text>
-            <text wx:if="{{item.savingsPercent > 0}}" class="discount">省{{item.savingsPercent}}%</text>
-          </view>
-          <!-- 第4行: 配送费 -->
-          <view wx:if="{{item.deliveryFeeDisplay}}" class="row-4">
-            <text class="delivery-fee">{{item.deliveryFeeDisplay}}</text>
-          </view>
-          <!-- 第5行: 标签 -->
-          <view wx:if="{{item.tags.length > 0}}" class="row-5">
-            <t-tag wx:for="{{item.tags}}" wx:for-item="tag" wx:key="*this" size="small" variant="light">{{tag}}</t-tag>
-          </view>
+        bind:click="onCategoryTap"
+        data-id="{{item.id}}"
+        text="{{item.name}}"
+        t-class="{{item.selected ? 'cuisine-grid-item cuisine-grid-item--active' : 'cuisine-grid-item'}}"
+        t-class-content="cuisine-grid-item-content"
+        t-class-text="{{item.selected ? 'cuisine-grid-item-text cuisine-grid-item-text--active' : 'cuisine-grid-item-text'}}"
+      >
+        <view slot="image" class="cuisine-icon-wrap {{item.selected ? 'cuisine-icon-wrap--active' : ''}}" style="{{item.iconStyle}}">
+          <text class="cuisine-icon-text">{{item.iconText}}</text>
         </view>
-        <!-- 加购按钮 -->
-        <t-button class="add-btn" theme="primary" size="small" icon="add" shape="circle" catchtap="onAddComboToCart" data-id="{{item.id}}" data-merchant-id="{{item.merchantId}}" />
-      </view>
-      <t-empty wx:if="{{!loading && packages.length === 0}}" description="暂无套餐" />
-      <view wx:if="{{!hasMore && packages.length > 0}}" class="no-more">没有更多了</view>
-    </block>
+      </t-grid-item>
+    </t-grid>
+  </view>
 
-    <!-- 加载中 -->
-    <view wx:if="{{loading}}" class="loading-wrapper">
-      <t-loading theme="circular" size="40rpx" text="加载中..." />
+  <!-- 内容区域 (统一 Feed) -->
+  <view class="content-section">
+    <!-- 0. 位置引导提示 (Persistent state) -->
+    <view wx:if="{{needLocation}}" class="location-guide">
+      <view class="location-guide-icon">📍</view>
+      <view class="location-guide-title">需要您的位置信息</view>
+      <view class="location-guide-desc">本地生活服务依赖于您的位置，请先完成定位</view>
+      <view class="location-guide-buttons">
+        <t-button theme="primary" size="small" bind:tap="onRetryLocation" shape="round">重新定位</t-button>
+        <t-button size="small" bind:tap="onManualLocation" shape="round">手动选择</t-button>
+      </view>
     </view>
+
+    <!-- 1. 错误状态 (Four States - Error) -->
+    <view wx:elif="{{isError}}" class="error-container">
+      <t-empty icon="info-circle" description="{{errorMsg}}" />
+      <t-button theme="primary" size="small" bindtap="loadData" block style="margin: 0 40rpx;" shape="round">重试</t-button>
+    </view>
+
+    <block wx:else>
+      <!-- 商户 Feed 列表 -->
+      <view class="feed-section">
+
+        <block wx:if="{{loading && merchantFeed.length === 0}}">
+          <list-skeleton wx:for="{{[1,2,3,4,5]}}" wx:key="*this" showAvatar="{{true}}" />
+        </block>
+
+        <block wx:elif="{{merchantFeed.length > 0}}">
+          <merchant-feed-card
+            wx:for="{{merchantFeed}}"
+            wx:key="id"
+            merchant="{{item}}"
+            bind:dishadd="onDishAddFromFeed"
+            bind:merchanttap="onMerchantTapFromFeed"
+          />
+          <view wx:if="{{!hasMore}}" class="no-more">没有更多了</view>
+        </block>
+
+        <view wx:elif="{{!loading}}" class="empty-entry">
+          <block wx:if="{{!hasServiceProviders}}">
+            <template is="provider-onboarding-empty" />
+          </block>
+          <t-empty wx:else description="附近暂无商家" />
+        </view>
+
+        <view wx:if="{{loading && merchantFeed.length > 0}}" class="loading-wrapper">
+          <t-loading theme="circular" size="40rpx" text="加载中..." />
+        </view>
+
+      </view>
+    </block>
   </view>
   
-  <!-- 底部安全区占位 (菜品和套餐Tab显示购物车时) -->
-  <view wx:if="{{(activeTab === 'dishes' || activeTab === 'packages') && cartTotalCount > 0}}" style="height: 120rpx;"></view>
+  <!-- 底部安全区占位 (购物车显示时) -->
+  <view wx:if="{{cartTotalCount > 0}}" style="height: 120rpx;"></view>
 </scroll-view>
 
-<!-- 购物车栏 (菜品和套餐Tab) -->
+<!-- 购物车栏 (App Shell - Persistent Action) -->
 <cart-bar 
-  wx:if="{{(activeTab === 'dishes' || activeTab === 'packages') && cartTotalCount > 0}}"
+  wx:if="{{cartTotalCount > 0}}"
   totalCount="{{cartTotalCount}}"
   totalPrice="{{cartTotalPrice}}"
   bind:checkout="onCheckout"

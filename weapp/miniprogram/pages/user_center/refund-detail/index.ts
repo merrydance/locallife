@@ -1,25 +1,23 @@
-import { getRefundById, Refund } from '../../../api/payment-refund'
+import { buildRefundProgress, getRefundById, getRefundReturns, getRefundStatusView, ProfitSharingReturn, RefundOrder, RefundProgressView } from '../../../api/payment'
 import { logger } from '../../../utils/logger'
-
-interface RefundProgress {
-    title: string
-    time: string
-    done: boolean
-    active: boolean
-}
 
 Page({
     data: {
         refundId: 0,
-        refund: null as Refund | null,
+        refund: null as RefundOrder | null,
         navBarHeight: 88,
-        loading: true,
+        loading: false,
+        initialLoading: true,
+        error: null as string | null,
         // 显示字段
         amountDisplay: '',
         statusText: '',
         statusClass: '',
+        statusIcon: 'info-circle-filled',
         refundTypeText: '',
-        progress: [] as RefundProgress[]
+        progress: [] as RefundProgressView[],
+        profitSharingReturns: [] as ProfitSharingReturn[],
+        showPendingTip: false
     },
 
     onLoad(options: { id?: string }) {
@@ -30,73 +28,50 @@ Page({
     },
 
     async loadRefundDetail() {
-        this.setData({ loading: true })
+        if (!this.data.refundId) return
+        this.setData({ loading: true, error: null })
         try {
             const refund = await getRefundById(this.data.refundId)
             this.processRefund(refund)
+            try {
+                const returns = await getRefundReturns(this.data.refundId)
+                this.setData({ profitSharingReturns: returns || [] })
+            } catch (returnErr) {
+                logger.warn('加载分账回退记录失败', returnErr, 'refund-detail.loadRefundDetail')
+            }
+            this.setData({ initialLoading: false, loading: false })
         } catch (error) {
             logger.error('加载退款详情失败', error, 'refund-detail.loadRefundDetail')
-            wx.showToast({ title: '加载失败', icon: 'error' })
-        } finally {
-            this.setData({ loading: false })
+            this.setData({ 
+                initialLoading: false, 
+                loading: false,
+                error: '加载退款详情失败'
+            })
         }
     },
 
-    processRefund(refund: Refund) {
-        const amountDisplay = `¥${(refund.amount / 100).toFixed(2)}`
-        const statusText = this.getStatusText(refund.status)
-        const statusClass = refund.status
+    onRetry() {
+        this.loadRefundDetail()
+    },
+
+    processRefund(refund: RefundOrder) {
+        const statusView = getRefundStatusView(refund.status)
+        const amountDisplay = `¥${(refund.refund_amount / 100).toFixed(2)}`
+        const statusText = statusView.text
+        const statusClass = statusView.className
         const refundTypeText = refund.refund_type === 'full' ? '全额退款' : '部分退款'
-        const progress = this.generateProgress(refund)
+        const progress = buildRefundProgress(refund, this.formatTime)
 
         this.setData({
             refund,
             amountDisplay,
             statusText,
             statusClass,
+            statusIcon: statusView.icon,
             refundTypeText,
-            progress
+            progress,
+            showPendingTip: statusView.showPendingTip
         })
-    },
-
-    getStatusText(status: string): string {
-        const statusMap: Record<string, string> = {
-            'pending': '退款申请中',
-            'processing': '退款处理中',
-            'success': '退款成功',
-            'failed': '退款失败'
-        }
-        return statusMap[status] || status
-    },
-
-    generateProgress(refund: Refund): RefundProgress[] {
-        const progress: RefundProgress[] = [
-            {
-                title: '提交申请',
-                time: this.formatTime(refund.created_at),
-                done: true,
-                active: refund.status === 'pending'
-            },
-            {
-                title: '审核中',
-                time: '',
-                done: ['processing', 'success', 'failed'].includes(refund.status),
-                active: refund.status === 'processing'
-            },
-            {
-                title: '退款处理',
-                time: '',
-                done: ['success', 'failed'].includes(refund.status),
-                active: false
-            },
-            {
-                title: refund.status === 'failed' ? '退款失败' : '退款完成',
-                time: refund.processed_at ? this.formatTime(refund.processed_at) : '',
-                done: ['success', 'failed'].includes(refund.status),
-                active: ['success', 'failed'].includes(refund.status)
-            }
-        ]
-        return progress
     },
 
     formatTime(timeStr: string): string {

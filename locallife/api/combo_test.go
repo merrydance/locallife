@@ -2,7 +2,7 @@ package api
 
 import (
 	"bytes"
-	"database/sql"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -10,13 +10,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/util"
-
-	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
@@ -25,16 +24,80 @@ import (
 
 func randomComboSet(merchantID int64) db.ComboSet {
 	return db.ComboSet{
-		ID:            util.RandomInt(1, 1000),
-		MerchantID:    merchantID,
-		Name:          util.RandomString(8),
-		Description:   pgtype.Text{String: util.RandomString(20), Valid: true},
-		ImageUrl:      pgtype.Text{String: "https://example.com/combo.jpg", Valid: true},
-		OriginalPrice: util.RandomInt(5000, 15000),
-		ComboPrice:    util.RandomInt(4000, 12000),
-		IsOnline:      true,
-		CreatedAt:     time.Now(),
-		UpdatedAt:     pgtype.Timestamptz{Time: time.Now(), Valid: true},
+		ID:                util.RandomInt(1, 1000),
+		MerchantID:        merchantID,
+		Name:              util.RandomString(8),
+		Description:       pgtype.Text{String: util.RandomString(20), Valid: true},
+		ImageMediaAssetID: pgtype.Int8{},
+		OriginalPrice:     util.RandomInt(5000, 15000),
+		ComboPrice:        util.RandomInt(4000, 12000),
+		IsOnline:          true,
+		CreatedAt:         time.Now(),
+		UpdatedAt:         pgtype.Timestamptz{Time: time.Now(), Valid: true},
+	}
+}
+
+func comboDetailsRow(combo db.ComboSet, dishesJSON, tagsJSON []byte) db.GetComboSetWithDetailsRow {
+	return db.GetComboSetWithDetailsRow{
+		ID:                combo.ID,
+		MerchantID:        combo.MerchantID,
+		Name:              combo.Name,
+		Description:       combo.Description,
+		ImageMediaAssetID: combo.ImageMediaAssetID,
+		OriginalPrice:     combo.OriginalPrice,
+		ComboPrice:        combo.ComboPrice,
+		IsOnline:          combo.IsOnline,
+		CreatedAt:         combo.CreatedAt,
+		UpdatedAt:         combo.UpdatedAt,
+		Dishes:            dishesJSON,
+		Tags:              tagsJSON,
+	}
+}
+
+func expectComboSummaryReload(store *mockdb.MockStore, combo db.ComboSet, dishesJSON, tagsJSON []byte) {
+	store.EXPECT().
+		GetComboSetWithDetails(gomock.Any(), gomock.Eq(combo.ID)).
+		Times(1).
+		Return(comboDetailsRow(combo, dishesJSON, tagsJSON), nil)
+
+	store.EXPECT().
+		GetComboMemberImagesByCombos(gomock.Any(), gomock.Eq([]int64{combo.ID})).
+		Times(1).
+		Return(nil, nil)
+}
+
+func comboCustomizationGroupsFixture() []map[string]interface{} {
+	return []map[string]interface{}{
+		{
+			"id":          int64(501),
+			"name":        "杯型",
+			"sort_order":  int32(1),
+			"is_required": true,
+			"options": []map[string]interface{}{
+				{
+					"id":          int64(601),
+					"tag_id":      int64(701),
+					"tag_name":    "大杯",
+					"extra_price": int64(300),
+					"sort_order":  int32(1),
+				},
+			},
+		},
+		{
+			"id":          int64(502),
+			"name":        "冰量",
+			"sort_order":  int32(2),
+			"is_required": true,
+			"options": []map[string]interface{}{
+				{
+					"id":          int64(602),
+					"tag_id":      int64(702),
+					"tag_name":    "少冰",
+					"extra_price": int64(0),
+					"sort_order":  int32(1),
+				},
+			},
+		},
 	}
 }
 
@@ -44,6 +107,11 @@ func TestCreateComboSetAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchant(user.ID)
 	combo := randomComboSet(merchant.ID)
+	responseDishesJSON := []byte(`[{"dish_id":101,"dish_name":"菜品1","dish_price":1200,"quantity":2}]`)
+	responseTagsJSON := []byte(`[{"id":11,"name":"招牌"}]`)
+	normalizedDishID := int64(101)
+	normalizedDish := db.Dish{ID: normalizedDishID, MerchantID: merchant.ID, Name: "菜品1", Price: 1200}
+	customizationGroups := comboCustomizationGroupsFixture()
 
 	testCases := []struct {
 		name          string
@@ -64,24 +132,130 @@ func TestCreateComboSetAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					CreateComboSetTx(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(db.CreateComboSetTxResult{ComboSet: combo}, nil)
+
+				expectComboSummaryReload(store, combo, responseDishesJSON, responseTagsJSON)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
+				require.Equal(t, http.StatusCreated, recorder.Code)
 				var response comboSetResponse
-				err := json.NewDecoder(recorder.Body).Decode(&response)
-				require.NoError(t, err)
-				require.Equal(t, combo.ID, response.ID)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, combo.Name, response.Name)
 				require.Equal(t, combo.ComboPrice, response.ComboPrice)
+				require.Equal(t, int64(1), response.DishCount)
+				require.Equal(t, int64(2), response.DishTotalQuantity)
+				require.Len(t, response.Tags, 1)
+			},
+		},
+		{
+			name: "NormalizeFixedCustomizations",
+			body: gin.H{
+				"name":        combo.Name,
+				"combo_price": combo.ComboPrice,
+				"dishes": []gin.H{{
+					"dish_id":  normalizedDishID,
+					"quantity": 2,
+					"customizations": gin.H{
+						"501":        601,
+						"502":        602,
+						"meta_specs": "客户端伪造摘要",
+					},
+				}},
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetDishWithCustomizations(gomock.Any(), gomock.Eq(normalizedDishID)).
+					Times(1).
+					Return(db.GetDishWithCustomizationsRow{
+						ID:                  normalizedDish.ID,
+						MerchantID:          merchant.ID,
+						Price:               normalizedDish.Price,
+						CustomizationGroups: customizationGroups,
+					}, nil)
+
+				store.EXPECT().
+					GetDish(gomock.Any(), gomock.Eq(normalizedDishID)).
+					Times(1).
+					Return(normalizedDish, nil)
+
+				store.EXPECT().
+					CreateComboSetTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					DoAndReturn(func(_ context.Context, arg db.CreateComboSetTxParams) (db.CreateComboSetTxResult, error) {
+						require.Len(t, arg.Dishes, 1)
+						require.Equal(t, normalizedDish.Price, arg.Dishes[0].DishBasePriceSnapshot)
+						require.Equal(t, int64(300), arg.Dishes[0].CustomizationExtraPrice)
+						require.JSONEq(t, `{"501":601,"502":602,"meta_specs":"大杯 / 少冰"}`, string(arg.Dishes[0].Customizations))
+						return db.CreateComboSetTxResult{ComboSet: combo}, nil
+					})
+
+				expectComboSummaryReload(store, combo, responseDishesJSON, responseTagsJSON)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusCreated, recorder.Code)
+			},
+		},
+		{
+			name: "RejectMetaOnlyCustomizations",
+			body: gin.H{
+				"name":        combo.Name,
+				"combo_price": combo.ComboPrice,
+				"dishes": []gin.H{{
+					"dish_id":  normalizedDishID,
+					"quantity": 1,
+					"customizations": gin.H{
+						"meta_specs": "伪造摘要",
+					},
+				}},
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetDishWithCustomizations(gomock.Any(), gomock.Eq(normalizedDishID)).
+					Times(1).
+					Return(db.GetDishWithCustomizationsRow{
+						ID:                  normalizedDish.ID,
+						MerchantID:          merchant.ID,
+						Price:               normalizedDish.Price,
+						CustomizationGroups: customizationGroups,
+					}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
+			name: "DuplicateDishes",
+			body: gin.H{
+				"name":        combo.Name,
+				"combo_price": combo.ComboPrice,
+				"dishes": []gin.H{
+					{"dish_id": 88, "quantity": 1},
+					{"dish_id": 88, "quantity": 2},
+				},
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
 			},
 		},
 		{
@@ -94,16 +268,13 @@ func TestCreateComboSetAPI(t *testing.T) {
 				// No authorization
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Any()).
-					Times(0)
+				expectNoMerchantAccessResolution(store)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusUnauthorized, recorder.Code)
 			},
 		},
 		{
-			name: "NotMerchant",
 			body: gin.H{
 				"name":        combo.Name,
 				"combo_price": combo.ComboPrice,
@@ -112,10 +283,7 @@ func TestCreateComboSetAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(db.Merchant{}, sql.ErrNoRows)
+				expectResolveNoAccessibleMerchants(store, user.ID)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -131,9 +299,7 @@ func TestCreateComboSetAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Any()).
-					Times(0)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -175,7 +341,10 @@ func TestGetComboSetAPI(t *testing.T) {
 	combo := randomComboSet(util.RandomInt(1, 100))
 
 	// 模拟GetComboSetWithDetails返回的数据
-	dishesJSON := []byte(`[{"id":1,"name":"菜品1"},{"id":2,"name":"菜品2"}]`)
+	dishesJSON := []byte(`[
+		{"dish_id":1,"dish_name":"菜品1","dish_price":1800,"quantity":1,"customizations":{"12":34,"meta_specs":"大杯 / 少冰"},"customization_extra_price":300,"customization_summary":"大杯 / 少冰"},
+		{"dish_id":2,"dish_name":"菜品2","dish_price":2200,"quantity":2}
+	]`)
 	tagsJSON := []byte(`[{"id":1,"name":"标签1"}]`)
 
 	// 创建一个商户用于测试
@@ -197,41 +366,65 @@ func TestGetComboSetAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				// 首先获取商户信息
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchant, nil)
+				const comboDishAssetID int64 = 31
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				detailsRow := db.GetComboSetWithDetailsRow{
-					ID:            combo.ID,
-					MerchantID:    combo.MerchantID,
-					Name:          combo.Name,
-					Description:   combo.Description,
-					ImageUrl:      combo.ImageUrl,
-					OriginalPrice: combo.OriginalPrice,
-					ComboPrice:    combo.ComboPrice,
-					IsOnline:      combo.IsOnline,
-					CreatedAt:     combo.CreatedAt,
-					UpdatedAt:     combo.UpdatedAt,
-					Dishes:        dishesJSON,
-					Tags:          tagsJSON,
+					ID:                combo.ID,
+					MerchantID:        combo.MerchantID,
+					Name:              combo.Name,
+					Description:       combo.Description,
+					ImageMediaAssetID: combo.ImageMediaAssetID,
+					OriginalPrice:     combo.OriginalPrice,
+					ComboPrice:        combo.ComboPrice,
+					IsOnline:          combo.IsOnline,
+					CreatedAt:         combo.CreatedAt,
+					UpdatedAt:         combo.UpdatedAt,
+					Dishes:            dishesJSON,
+					Tags:              tagsJSON,
 				}
 
 				store.EXPECT().
 					GetComboSetWithDetails(gomock.Any(), gomock.Eq(combo.ID)).
 					Times(1).
 					Return(detailsRow, nil)
+
+				store.EXPECT().
+					GetMerchant(gomock.Any(), combo.MerchantID).
+					Times(1).
+					Return(merchant, nil)
+
+				store.EXPECT().
+					GetComboMemberImagesByCombos(gomock.Any(), gomock.Eq([]int64{combo.ID})).
+					Times(1).
+					Return([]db.GetComboMemberImagesByCombosRow{{
+						ComboID:           combo.ID,
+						ImageMediaAssetID: pgtype.Int8{Int64: comboDishAssetID, Valid: true},
+					}}, nil)
+
+				store.EXPECT().
+					ListMediaAssetsByIDs(gomock.Any(), gomock.Eq([]int64{comboDishAssetID})).
+					Times(1).
+					Return([]db.ListMediaAssetsByIDsRow{{
+						ID:               comboDishAssetID,
+						ObjectKey:        "merchant/combo/31/member.jpg",
+						Visibility:       "public",
+						ModerationStatus: "approved",
+					}}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var response comboSetWithDetailsResponse
-				err := json.NewDecoder(recorder.Body).Decode(&response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, combo.ID, response.ID)
 				require.Equal(t, combo.Name, response.Name)
 				require.Len(t, response.Dishes, 2)
+				require.Equal(t, "大杯 / 少冰", response.Dishes[0].CustomizationSummary)
+				require.Equal(t, int64(300), response.Dishes[0].CustomizationExtraPrice)
+				require.Equal(t, float64(34), response.Dishes[0].Customizations["12"])
 				require.Len(t, response.Tags, 1)
+				require.Len(t, response.DishImageURLs, 1)
+				require.Contains(t, response.DishImageURLs[0], "merchant/combo/31/member.jpg")
 			},
 		},
 		{
@@ -241,9 +434,7 @@ func TestGetComboSetAPI(t *testing.T) {
 				// No authorization
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Any()).
-					Times(0)
+				expectNoMerchantAccessResolution(store)
 				store.EXPECT().
 					GetComboSetWithDetails(gomock.Any(), gomock.Any()).
 					Times(0)
@@ -259,15 +450,12 @@ func TestGetComboSetAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					GetComboSetWithDetails(gomock.Any(), gomock.Eq(combo.ID)).
 					Times(1).
-					Return(db.GetComboSetWithDetailsRow{}, sql.ErrNoRows)
+					Return(db.GetComboSetWithDetailsRow{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -280,10 +468,7 @@ func TestGetComboSetAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(db.Merchant{}, sql.ErrNoRows)
+				expectResolveNoAccessibleMerchants(store, user.ID)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -296,10 +481,7 @@ func TestGetComboSetAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				// 返回一个属于其他商户的套餐
 				detailsRow := db.GetComboSetWithDetailsRow{
@@ -324,9 +506,7 @@ func TestGetComboSetAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Any()).
-					Times(0)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 				store.EXPECT().
 					GetComboSetWithDetails(gomock.Any(), gomock.Any()).
 					Times(0)
@@ -347,7 +527,7 @@ func TestGetComboSetAPI(t *testing.T) {
 			store := mockdb.NewMockStore(ctrl)
 			tc.buildStubs(store)
 
-			server := newTestServer(t, store)
+			server, _ := newTestServerForMedia(t, store)
 			recorder := httptest.NewRecorder()
 
 			url := fmt.Sprintf("/v1/combos/%d", tc.comboID)
@@ -387,22 +567,69 @@ func TestListComboSetsAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchant, nil)
+				const comboImageAssetID int64 = 41
+				listRows := make([]db.ListComboSetsByMerchantRow, 0, len(combos))
+				for index, combo := range combos {
+					row := db.ListComboSetsByMerchantRow{
+						ID:                combo.ID,
+						Name:              combo.Name,
+						Description:       combo.Description,
+						OriginalPrice:     combo.OriginalPrice,
+						ComboPrice:        combo.ComboPrice,
+						IsOnline:          combo.IsOnline,
+						DishCount:         2,
+						DishTotalQuantity: 3,
+					}
+					if index == 0 {
+						row.Tags = []byte(`[{"id":11,"name":"招牌"}]`)
+					}
+					listRows = append(listRows, row)
+				}
+
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					ListComboSetsByMerchant(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(combos, nil)
+					Return(listRows, nil)
+
+				store.EXPECT().
+					CountComboSetsByMerchant(gomock.Any(), gomock.Eq(db.CountComboSetsByMerchantParams{
+						MerchantID: merchant.ID,
+						IsOnline:   pgtype.Bool{},
+					})).
+					Times(1).
+					Return(int64(n), nil)
+
+				store.EXPECT().
+					GetComboMemberImagesByCombos(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return([]db.GetComboMemberImagesByCombosRow{{
+						ComboID:           combos[0].ID,
+						ImageMediaAssetID: pgtype.Int8{Int64: comboImageAssetID, Valid: true},
+					}}, nil)
+
+				store.EXPECT().
+					ListMediaAssetsByIDs(gomock.Any(), gomock.Eq([]int64{comboImageAssetID})).
+					Times(1).
+					Return([]db.ListMediaAssetsByIDsRow{{
+						ID:               comboImageAssetID,
+						ObjectKey:        "merchant/combo/41/list.jpg",
+						Visibility:       "public",
+						ModerationStatus: "approved",
+					}}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var response listComboSetsResponse
-				err := json.NewDecoder(recorder.Body).Decode(&response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Len(t, response.ComboSets, n)
+				require.Equal(t, combos[0].OriginalPrice, response.ComboSets[0].OriginalPrice)
+				require.Equal(t, int64(2), response.ComboSets[0].DishCount)
+				require.Equal(t, int64(3), response.ComboSets[0].DishTotalQuantity)
+				require.Len(t, response.ComboSets[0].Tags, 1)
+				require.Len(t, response.ComboSets[0].DishImageURLs, 1)
+				require.Contains(t, response.ComboSets[0].DishImageURLs[0], "merchant/combo/41/list.jpg")
 			},
 		},
 		{
@@ -412,9 +639,7 @@ func TestListComboSetsAPI(t *testing.T) {
 				// No authorization
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Any()).
-					Times(0)
+				expectNoMerchantAccessResolution(store)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusUnauthorized, recorder.Code)
@@ -427,9 +652,7 @@ func TestListComboSetsAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Any()).
-					Times(0)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -447,7 +670,7 @@ func TestListComboSetsAPI(t *testing.T) {
 			store := mockdb.NewMockStore(ctrl)
 			tc.buildStubs(store)
 
-			server := newTestServer(t, store)
+			server, _ := newTestServerForMedia(t, store)
 			recorder := httptest.NewRecorder()
 
 			url := "/v1/combos" + tc.query
@@ -461,12 +684,71 @@ func TestListComboSetsAPI(t *testing.T) {
 	}
 }
 
+func TestGetPublicComboDetailAPI_ApprovedMerchantKeepsOpenState(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	merchant.IsOpen = true
+	combo := randomComboSet(merchant.ID)
+	combo.IsOnline = true
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	detailsRow := db.GetComboSetWithDetailsRow{
+		ID:                combo.ID,
+		MerchantID:        combo.MerchantID,
+		Name:              combo.Name,
+		Description:       combo.Description,
+		ImageMediaAssetID: combo.ImageMediaAssetID,
+		OriginalPrice:     combo.OriginalPrice,
+		ComboPrice:        combo.ComboPrice,
+		IsOnline:          combo.IsOnline,
+		CreatedAt:         combo.CreatedAt,
+		UpdatedAt:         combo.UpdatedAt,
+	}
+
+	store.EXPECT().
+		GetComboSetWithDetails(gomock.Any(), gomock.Eq(combo.ID)).
+		Times(1).
+		Return(detailsRow, nil)
+
+	store.EXPECT().
+		GetMerchant(gomock.Any(), combo.MerchantID).
+		Times(1).
+		Return(merchant, nil)
+
+	store.EXPECT().
+		GetComboMemberImagesByCombos(gomock.Any(), gomock.Eq([]int64{combo.ID})).
+		Times(1).
+		Return(nil, nil)
+
+	server, _ := newTestServerForMedia(t, store)
+	recorder := httptest.NewRecorder()
+
+	request, err := http.NewRequest(http.MethodGet, fmt.Sprintf("/v1/public/combos/%d", combo.ID), nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var response comboSetWithDetailsResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+	require.True(t, response.IsOpen)
+}
+
 // ==================== 套餐更新测试 ====================
 
 func TestUpdateComboSetAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchant(user.ID)
 	combo := randomComboSet(merchant.ID)
+	responseDishesJSON := []byte(`[{"dish_id":201,"dish_name":"菜品A","dish_price":1800,"quantity":1},{"dish_id":202,"dish_name":"菜品B","dish_price":2200,"quantity":3}]`)
+	responseTagsJSON := []byte(`[{"id":21,"name":"午市推荐"}]`)
+	normalizedDishID := int64(201)
+	normalizedDish := db.Dish{ID: normalizedDishID, MerchantID: merchant.ID, Name: "菜品A", Price: 1500}
+	customizationGroups := comboCustomizationGroupsFixture()
 
 	newName := "Updated Combo"
 	newPrice := int64(8888)
@@ -493,10 +775,7 @@ func TestUpdateComboSetAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					GetComboSet(gomock.Any(), gomock.Eq(combo.ID)).
@@ -504,17 +783,139 @@ func TestUpdateComboSetAPI(t *testing.T) {
 					Return(combo, nil)
 
 				store.EXPECT().
-					UpdateComboSet(gomock.Any(), gomock.Any()).
+					UpdateComboSetTx(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(updatedCombo, nil)
+					Return(db.UpdateComboSetTxResult{ComboSet: updatedCombo}, nil)
+
+				expectComboSummaryReload(store, updatedCombo, responseDishesJSON, responseTagsJSON)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var response comboSetResponse
-				err := json.NewDecoder(recorder.Body).Decode(&response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, newName, response.Name)
 				require.Equal(t, newPrice, response.ComboPrice)
+				require.Equal(t, int64(2), response.DishCount)
+				require.Equal(t, int64(4), response.DishTotalQuantity)
+				require.Len(t, response.Tags, 1)
+			},
+		},
+		{
+			name: "NormalizeFixedCustomizations",
+			body: gin.H{
+				"id": combo.ID,
+				"dishes": []gin.H{{
+					"dish_id":  normalizedDishID,
+					"quantity": 2,
+					"customizations": gin.H{
+						"501":        601,
+						"502":        602,
+						"meta_specs": "伪造摘要",
+					},
+				}},
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetComboSet(gomock.Any(), gomock.Eq(combo.ID)).
+					Times(1).
+					Return(combo, nil)
+
+				store.EXPECT().
+					GetDishWithCustomizations(gomock.Any(), gomock.Eq(normalizedDishID)).
+					Times(1).
+					Return(db.GetDishWithCustomizationsRow{
+						ID:                  normalizedDish.ID,
+						MerchantID:          merchant.ID,
+						Price:               normalizedDish.Price,
+						CustomizationGroups: customizationGroups,
+					}, nil)
+
+				store.EXPECT().
+					GetDish(gomock.Any(), gomock.Eq(normalizedDishID)).
+					Times(1).
+					Return(normalizedDish, nil)
+
+				store.EXPECT().
+					UpdateComboSetTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					DoAndReturn(func(_ context.Context, arg db.UpdateComboSetTxParams) (db.UpdateComboSetTxResult, error) {
+						require.NotNil(t, arg.Dishes)
+						require.Len(t, *arg.Dishes, 1)
+						require.Equal(t, normalizedDish.Price, (*arg.Dishes)[0].DishBasePriceSnapshot)
+						require.Equal(t, int64(300), (*arg.Dishes)[0].CustomizationExtraPrice)
+						require.JSONEq(t, `{"501":601,"502":602,"meta_specs":"大杯 / 少冰"}`, string((*arg.Dishes)[0].Customizations))
+						return db.UpdateComboSetTxResult{ComboSet: updatedCombo}, nil
+					})
+
+				expectComboSummaryReload(store, updatedCombo, responseDishesJSON, responseTagsJSON)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+			},
+		},
+		{
+			name: "RejectMetaOnlyCustomizations",
+			body: gin.H{
+				"id": combo.ID,
+				"dishes": []gin.H{{
+					"dish_id": normalizedDishID,
+					"customizations": gin.H{
+						"meta_specs": "伪造摘要",
+					},
+				}},
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetComboSet(gomock.Any(), gomock.Eq(combo.ID)).
+					Times(1).
+					Return(combo, nil)
+
+				store.EXPECT().
+					GetDishWithCustomizations(gomock.Any(), gomock.Eq(normalizedDishID)).
+					Times(1).
+					Return(db.GetDishWithCustomizationsRow{
+						ID:                  normalizedDish.ID,
+						MerchantID:          merchant.ID,
+						Price:               normalizedDish.Price,
+						CustomizationGroups: customizationGroups,
+					}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
+			name: "DuplicateDishes",
+			body: gin.H{
+				"id": combo.ID,
+				"dishes": []gin.H{
+					{"dish_id": 99, "quantity": 1},
+					{"dish_id": 99, "quantity": 2},
+				},
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetComboSet(gomock.Any(), gomock.Eq(combo.ID)).
+					Times(1).
+					Return(combo, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
 			},
 		},
 		{
@@ -527,9 +928,7 @@ func TestUpdateComboSetAPI(t *testing.T) {
 				// No authorization
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Any()).
-					Times(0)
+				expectNoMerchantAccessResolution(store)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusUnauthorized, recorder.Code)
@@ -545,15 +944,12 @@ func TestUpdateComboSetAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					GetComboSet(gomock.Any(), gomock.Eq(combo.ID)).
 					Times(1).
-					Return(db.ComboSet{}, sql.ErrNoRows)
+					Return(db.ComboSet{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -569,10 +965,7 @@ func TestUpdateComboSetAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				// 套餐属于不同的商户
 				otherCombo := combo
@@ -636,10 +1029,7 @@ func TestDeleteComboSetAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					GetComboSet(gomock.Any(), gomock.Eq(combo.ID)).
@@ -653,6 +1043,9 @@ func TestDeleteComboSetAPI(t *testing.T) {
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
+				var response MessageResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Equal(t, "combo set deleted", response.Message)
 			},
 		},
 		{
@@ -662,9 +1055,7 @@ func TestDeleteComboSetAPI(t *testing.T) {
 				// No authorization
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Any()).
-					Times(0)
+				expectNoMerchantAccessResolution(store)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusUnauthorized, recorder.Code)
@@ -677,15 +1068,12 @@ func TestDeleteComboSetAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					GetComboSet(gomock.Any(), gomock.Eq(combo.ID)).
 					Times(1).
-					Return(db.ComboSet{}, sql.ErrNoRows)
+					Return(db.ComboSet{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -734,10 +1122,11 @@ func TestAddComboDishAPI(t *testing.T) {
 	}
 
 	comboDish := db.ComboDish{
-		ID:       util.RandomInt(1, 1000),
-		ComboID:  combo.ID,
-		DishID:   dishID,
-		Quantity: 1,
+		ID:                    util.RandomInt(1, 1000),
+		ComboID:               combo.ID,
+		DishID:                dishID,
+		Quantity:              1,
+		DishBasePriceSnapshot: dish.Price,
 	}
 
 	testCases := []struct {
@@ -758,10 +1147,7 @@ func TestAddComboDishAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					GetComboSet(gomock.Any(), gomock.Eq(combo.ID)).
@@ -777,7 +1163,10 @@ func TestAddComboDishAPI(t *testing.T) {
 				store.EXPECT().
 					AddComboDish(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(comboDish, nil)
+					DoAndReturn(func(_ context.Context, arg db.AddComboDishParams) (db.ComboDish, error) {
+						require.Equal(t, dish.Price, arg.DishBasePriceSnapshot)
+						return comboDish, nil
+					})
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -793,10 +1182,7 @@ func TestAddComboDishAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					GetComboSet(gomock.Any(), gomock.Eq(combo.ID)).
@@ -828,9 +1214,7 @@ func TestAddComboDishAPI(t *testing.T) {
 				// No authorization
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Any()).
-					Times(0)
+				expectNoMerchantAccessResolution(store)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusUnauthorized, recorder.Code)
@@ -846,9 +1230,7 @@ func TestAddComboDishAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Any()).
-					Times(0)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -890,6 +1272,10 @@ func TestToggleComboOnlineAPI(t *testing.T) {
 	merchant := randomMerchant(user.ID)
 	combo := randomComboSet(merchant.ID)
 	combo.IsOnline = false
+	updatedCombo := combo
+	updatedCombo.IsOnline = true
+	responseDishesJSON := []byte(`[{"dish_id":301,"dish_name":"热销菜","dish_price":3200,"quantity":2}]`)
+	responseTagsJSON := []byte(`[{"id":31,"name":"热卖"}]`)
 
 	testCases := []struct {
 		name          string
@@ -909,10 +1295,7 @@ func TestToggleComboOnlineAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					GetComboSet(gomock.Any(), gomock.Eq(combo.ID)).
@@ -923,9 +1306,17 @@ func TestToggleComboOnlineAPI(t *testing.T) {
 					UpdateComboSetOnlineStatus(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(nil)
+
+				expectComboSummaryReload(store, updatedCombo, responseDishesJSON, responseTagsJSON)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
+				var response comboSetResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.True(t, response.IsOnline)
+				require.Equal(t, int64(1), response.DishCount)
+				require.Equal(t, int64(2), response.DishTotalQuantity)
+				require.Len(t, response.Tags, 1)
 			},
 		},
 		{
@@ -938,9 +1329,7 @@ func TestToggleComboOnlineAPI(t *testing.T) {
 				// No authorization
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Any()).
-					Times(0)
+				expectNoMerchantAccessResolution(store)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusUnauthorized, recorder.Code)
@@ -956,15 +1345,12 @@ func TestToggleComboOnlineAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					GetComboSet(gomock.Any(), gomock.Eq(combo.ID)).
 					Times(1).
-					Return(db.ComboSet{}, sql.ErrNoRows)
+					Return(db.ComboSet{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -1023,10 +1409,7 @@ func TestRemoveComboDishAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					GetComboSet(gomock.Any(), gomock.Eq(combo.ID)).
@@ -1050,9 +1433,7 @@ func TestRemoveComboDishAPI(t *testing.T) {
 				// No authorization
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Any()).
-					Times(0)
+				expectNoMerchantAccessResolution(store)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusUnauthorized, recorder.Code)
@@ -1066,9 +1447,7 @@ func TestRemoveComboDishAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Any()).
-					Times(0)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)

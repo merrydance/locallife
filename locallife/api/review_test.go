@@ -2,7 +2,6 @@ package api
 
 import (
 	"bytes"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -10,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -38,7 +36,6 @@ func TestCreateReviewAPI(t *testing.T) {
 			body: map[string]interface{}{
 				"order_id": order.ID,
 				"content":  "Great food and service!",
-				"images":   []string{fmt.Sprintf("uploads/reviews/%d/image1.jpg", user.ID)},
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
@@ -54,21 +51,7 @@ func TestCreateReviewAPI(t *testing.T) {
 				store.EXPECT().
 					GetReviewByOrderID(gomock.Any(), gomock.Eq(order.ID)).
 					Times(1).
-					Return(db.Review{}, pgx.ErrNoRows)
-
-				// Mock GetUserProfile (high trust score)
-				store.EXPECT().
-					GetUserProfile(gomock.Any(), db.GetUserProfileParams{
-						UserID: user.ID,
-						Role:   "customer",
-					}).
-					Times(1).
-					Return(db.UserProfile{
-						ID:         1,
-						UserID:     user.ID,
-						Role:       "customer",
-						TrustScore: 850,
-					}, nil)
+					Return(db.Review{}, db.ErrRecordNotFound)
 
 				// Mock GetUser (for wechat openid)
 				store.EXPECT().
@@ -86,87 +69,21 @@ func TestCreateReviewAPI(t *testing.T) {
 						UserID:     user.ID,
 						MerchantID: merchant.ID,
 						Content:    "Great food and service!",
-						Images:     []string{fmt.Sprintf("uploads/reviews/%d/image1.jpg", user.ID)},
-						IsVisible:  true,
-						CreatedAt:  time.Now(),
+
+						IsVisible: true,
+						CreatedAt: time.Now(),
 					}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
+				require.Equal(t, http.StatusCreated, recorder.Code)
 
 				var response reviewResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, order.ID, response.OrderID)
 				require.Equal(t, user.ID, response.UserID)
 				require.Equal(t, merchant.ID, response.MerchantID)
 				require.Equal(t, "Great food and service!", response.Content)
 				require.True(t, response.IsVisible)
-			},
-		},
-		{
-			name: "LowTrustScore_NotVisible",
-			body: map[string]interface{}{
-				"order_id": order.ID,
-				"content":  "Bad review from low trust user",
-			},
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetOrder(gomock.Any(), gomock.Eq(order.ID)).
-					Times(1).
-					Return(order, nil)
-
-				store.EXPECT().
-					GetReviewByOrderID(gomock.Any(), gomock.Eq(order.ID)).
-					Times(1).
-					Return(db.Review{}, pgx.ErrNoRows)
-
-				// Mock GetUserProfile (low trust score < 600)
-				store.EXPECT().
-					GetUserProfile(gomock.Any(), db.GetUserProfileParams{
-						UserID: user.ID,
-						Role:   "customer",
-					}).
-					Times(1).
-					Return(db.UserProfile{
-						ID:         1,
-						UserID:     user.ID,
-						Role:       "customer",
-						TrustScore: 500, // Low trust score
-					}, nil)
-
-				store.EXPECT().
-					GetUser(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(user, nil)
-
-				// Mock CreateReview with is_visible=false
-				store.EXPECT().
-					CreateReview(gomock.Any(), gomock.Any()).
-					Times(1).
-					DoAndReturn(func(ctx interface{}, arg db.CreateReviewParams) (db.Review, error) {
-						require.False(t, arg.IsVisible) // Verify is_visible is false
-						return db.Review{
-							ID:         1,
-							OrderID:    order.ID,
-							UserID:     user.ID,
-							MerchantID: merchant.ID,
-							Content:    "Bad review from low trust user",
-							IsVisible:  false,
-							CreatedAt:  time.Now(),
-						}, nil
-					})
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
-
-				var response reviewResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
-				require.False(t, response.IsVisible) // Verify review is not visible
 			},
 		},
 		{
@@ -182,7 +99,7 @@ func TestCreateReviewAPI(t *testing.T) {
 				store.EXPECT().
 					GetOrder(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.Order{}, pgx.ErrNoRows)
+					Return(db.Order{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -311,11 +228,6 @@ func TestCreateReviewAPI(t *testing.T) {
 					MsgSecCheck(gomock.Any(), gomock.Eq(user.WechatOpenid), gomock.Eq(2), gomock.Eq("Great food and service!")).
 					Times(1).
 					Return(nil)
-			case "LowTrustScore_NotVisible":
-				wechatClient.EXPECT().
-					MsgSecCheck(gomock.Any(), gomock.Eq(user.WechatOpenid), gomock.Eq(2), gomock.Eq("Bad review from low trust user")).
-					Times(1).
-					Return(nil)
 			}
 
 			server := newTestServerWithWechat(t, store, wechatClient)
@@ -385,14 +297,18 @@ func TestListMerchantReviewsAPI(t *testing.T) {
 					CountReviewsByMerchant(gomock.Any(), gomock.Eq(merchant.ID)).
 					Times(1).
 					Return(int64(2), nil)
+
+				store.EXPECT().
+					ListReviewImagesByReviews(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return([]db.ReviewImage{}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response map[string]interface{}
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
-				require.Equal(t, float64(2), response["total_count"])
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Equal(t, float64(2), response["total"])
 				require.Equal(t, float64(1), response["page_id"])
 
 				reviewsList := response["reviews"].([]interface{})
@@ -480,28 +396,19 @@ func TestReplyReviewAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
 				// Mock GetReview
 				store.EXPECT().
 					GetReview(gomock.Any(), gomock.Eq(review.ID)).
 					Times(1).
 					Return(review, nil)
 
-				// Mock GetUserRoleByType (merchant owner)
+				// Mock GetUser (for wechat openid)
 				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), gomock.Any()).
+					GetUser(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
-					Return(db.UserRole{
-						ID:              1,
-						UserID:          user.ID,
-						Role:            "merchant_owner",
-						RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true},
-					}, nil)
-
-					// Mock GetUser (for wechat openid)
-					store.EXPECT().
-						GetUser(gomock.Any(), gomock.Eq(user.ID)).
-						Times(1).
-						Return(user, nil)
+					Return(user, nil)
 
 				// Mock UpdateMerchantReply
 				store.EXPECT().
@@ -518,13 +425,17 @@ func TestReplyReviewAPI(t *testing.T) {
 						RepliedAt:     pgtype.Timestamptz{Time: time.Now(), Valid: true},
 						CreatedAt:     review.CreatedAt,
 					}, nil)
+
+				store.EXPECT().
+					ListReviewImages(gomock.Any(), gomock.Eq(review.ID)).
+					Times(1).
+					Return([]db.ReviewImage{}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response reviewResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.NotNil(t, response.MerchantReply)
 				require.Equal(t, "Thank you for your feedback!", *response.MerchantReply)
 			},
@@ -539,10 +450,12 @@ func TestReplyReviewAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
 				store.EXPECT().
 					GetReview(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.Review{}, pgx.ErrNoRows)
+					Return(db.Review{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -558,16 +471,11 @@ func TestReplyReviewAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetReview(gomock.Any(), gomock.Eq(review.ID)).
-					Times(1).
-					Return(review, nil)
+				expectResolveNoAccessibleMerchants(store, user.ID)
 
-				// No merchant_owner role
 				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.UserRole{}, pgx.ErrNoRows)
+					GetReview(gomock.Any(), gomock.Any()).
+					Times(0)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -583,21 +491,14 @@ func TestReplyReviewAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
+				otherMerchant := merchant
+				otherMerchant.ID = merchant.ID + 999
+				expectResolveSingleOwnedMerchant(store, user.ID, otherMerchant)
+
 				store.EXPECT().
 					GetReview(gomock.Any(), gomock.Eq(review.ID)).
 					Times(1).
 					Return(review, nil)
-
-				// Different merchant
-				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.UserRole{
-						ID:              1,
-						UserID:          user.ID,
-						Role:            "merchant_owner",
-						RelatedEntityID: pgtype.Int8{Int64: merchant.ID + 999, Valid: true},
-					}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -642,7 +543,7 @@ func TestDeleteReviewAPI(t *testing.T) {
 	operatorUser, _ := randomUser(t)
 	user, _ := randomUser(t)
 	regionID := int64(1)
-	
+
 	// 创建带有 RegionID 的商户
 	merchant := db.Merchant{
 		ID:          util.RandomInt(1, 1000),
@@ -657,9 +558,9 @@ func TestDeleteReviewAPI(t *testing.T) {
 		CreatedAt:   time.Now(),
 		UpdatedAt:   time.Now(),
 	}
-	
+
 	review := randomReview(user.ID, merchant.ID)
-	
+
 	operator := db.Operator{
 		ID:       util.RandomInt(1, 100),
 		UserID:   operatorUser.ID,
@@ -681,17 +582,7 @@ func TestDeleteReviewAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, operatorUser.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				// Mock for CasbinRoleMiddleware
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), operatorUser.ID).
-					Times(1).
-					Return([]db.UserRole{{UserID: operatorUser.ID, Role: "operator", Status: "active", RelatedEntityID: pgtype.Int8{Int64: regionID, Valid: true}}}, nil)
-
-				// Mock for LoadOperatorMiddleware
-				store.EXPECT().
-					GetOperatorByUser(gomock.Any(), gomock.Eq(operatorUser.ID)).
-					Times(1).
-					Return(operator, nil)
+				expectActiveOperatorAuth(store, operatorUser.ID, operator)
 
 				// Mock GetReview
 				store.EXPECT().
@@ -705,14 +596,7 @@ func TestDeleteReviewAPI(t *testing.T) {
 					Times(1).
 					Return(merchant, nil)
 
-				// Mock checkOperatorManagesRegion in handler
-				store.EXPECT().
-					CheckOperatorManagesRegion(gomock.Any(), db.CheckOperatorManagesRegionParams{
-						OperatorID: operator.ID,
-						RegionID:   regionID,
-					}).
-					Times(1).
-					Return(true, nil)
+				expectOperatorManagesRegion(store, operator, regionID, true)
 
 				// Mock DeleteReview
 				store.EXPECT().
@@ -761,17 +645,9 @@ func TestDeleteReviewAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, operatorUser.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				// Mock for CasbinRoleMiddleware
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), operatorUser.ID).
-					Times(1).
-					Return([]db.UserRole{{UserID: operatorUser.ID, Role: "operator", Status: "active", RelatedEntityID: pgtype.Int8{Int64: regionID, Valid: true}}}, nil)
-
-				// Mock for LoadOperatorMiddleware
-				store.EXPECT().
-					GetOperatorByUser(gomock.Any(), gomock.Eq(operatorUser.ID)).
-					Times(1).
-					Return(operator, nil)
+				notManagedOperator := operator
+				notManagedOperator.RegionID = regionID + 999
+				expectActiveOperatorAuth(store, operatorUser.ID, notManagedOperator)
 
 				// Mock GetReview
 				store.EXPECT().
@@ -785,14 +661,7 @@ func TestDeleteReviewAPI(t *testing.T) {
 					Times(1).
 					Return(merchant, nil)
 
-				// Mock checkOperatorManagesRegion - operator doesn't manage this region
-				store.EXPECT().
-					CheckOperatorManagesRegion(gomock.Any(), db.CheckOperatorManagesRegionParams{
-						OperatorID: operator.ID,
-						RegionID:   regionID,
-					}).
-					Times(1).
-					Return(false, nil)
+				expectOperatorManagesRegion(store, notManagedOperator, regionID, false)
 
 				store.EXPECT().
 					DeleteReview(gomock.Any(), gomock.Any()).
@@ -825,7 +694,7 @@ func TestDeleteReviewAPI(t *testing.T) {
 				store.EXPECT().
 					GetReview(gomock.Any(), gomock.Eq(int64(99999))).
 					Times(1).
-					Return(db.Review{}, sql.ErrNoRows)
+					Return(db.Review{}, db.ErrRecordNotFound)
 
 				store.EXPECT().
 					DeleteReview(gomock.Any(), gomock.Any()).
@@ -869,7 +738,6 @@ func randomReview(userID, merchantID int64) db.Review {
 		UserID:     userID,
 		MerchantID: merchantID,
 		Content:    "Great food and service!",
-		Images:     []string{"https://example.com/image1.jpg"},
 		IsVisible:  true,
 		CreatedAt:  time.Now(),
 	}
@@ -887,4 +755,61 @@ func randomCompletedOrder(userID, merchantID int64) db.Order {
 		TotalAmount: 10000,
 		CreatedAt:   time.Now(),
 	}
+}
+
+// TestListMerchantReviewsAPI_WithImages 回归测试（Phase 5.3）：
+// 当评价存在关联图片时，GET /v1/reviews/merchants/{id} 响应中应包含 CDN image_urls。
+func TestListMerchantReviewsAPI_WithImages(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	review := db.Review{
+		ID: 1, OrderID: 1, UserID: user.ID, MerchantID: merchant.ID,
+		Content: "Great!", IsVisible: true, CreatedAt: time.Now(),
+	}
+
+	const imageAssetID int64 = 99
+	reviewImage := db.ReviewImage{ReviewID: review.ID, MediaAssetID: imageAssetID}
+	imageAsset := db.ListMediaAssetsByIDsRow{
+		ID:               imageAssetID,
+		ObjectKey:        "review/image/99/photo.jpg",
+		Visibility:       "public",
+		ModerationStatus: "approved",
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		ListReviewsByMerchant(gomock.Any(), gomock.Any()).
+		Times(1).Return([]db.Review{review}, nil)
+	store.EXPECT().
+		CountReviewsByMerchant(gomock.Any(), gomock.Eq(merchant.ID)).
+		Times(1).Return(int64(1), nil)
+	store.EXPECT().
+		ListReviewImagesByReviews(gomock.Any(), gomock.Any()).
+		Times(1).Return([]db.ReviewImage{reviewImage}, nil)
+	store.EXPECT().
+		ListMediaAssetsByIDs(gomock.Any(), gomock.Any()).
+		Times(1).Return([]db.ListMediaAssetsByIDsRow{imageAsset}, nil)
+
+	server, _ := newTestServerForMedia(t, store)
+
+	url := fmt.Sprintf("/v1/reviews/merchants/%d?page_id=1&page_size=10", merchant.ID)
+	request, err := http.NewRequest(http.MethodGet, url, nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var response struct {
+		Reviews []reviewResponse `json:"reviews"`
+	}
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+	require.Len(t, response.Reviews, 1)
+	require.Len(t, response.Reviews[0].ImageURLs, 1, "review 应有 1 条 image_url")
+	require.Contains(t, response.Reviews[0].ImageURLs[0], "https://cdn.test.example.com")
+	require.Contains(t, response.Reviews[0].ImageURLs[0], imageAsset.ObjectKey)
 }

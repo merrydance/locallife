@@ -27,6 +27,9 @@ export interface Dish {
     member_price?: number  // 会员价
     is_available?: boolean  // 是否可用
     prepare_time?: number  // 制作时间
+    repurchaseRate?: number // 复购率
+    repurchaseRateDisplay?: string // 复购率展示
+    estimated_delivery_time?: number // 预估配送时间（秒）
 }
 
 /**
@@ -36,7 +39,7 @@ export interface CustomizationGroup {
     id: number
     name: string
     is_required: boolean
-    max_selections: number
+    sort_order: number
     options: CustomizationOption[]
 }
 
@@ -45,8 +48,10 @@ export interface CustomizationGroup {
  */
 export interface CustomizationOption {
     id: number
-    name: string
-    price_adjustment: number  // 价格调整（分）
+    tag_id: number
+    tag_name: string
+    extra_price: number
+    sort_order: number
 }
 
 /**
@@ -90,6 +95,7 @@ export interface DishSummary {
     distance: number
     estimated_delivery_fee: number
     monthly_sales: number
+    repurchase_rate?: number
     is_available: boolean
     tags: string[]
 }

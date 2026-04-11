@@ -1,4 +1,18 @@
-import { request, uploadFile } from '../utils/request'
+import { request } from '../utils/request'
+import { uploadMedia, type MediaUploadResult } from '../utils/media'
+import type { AgreementConsentPayload } from './agreement-consent'
+import { waitForOCRJobTerminal, waitForOCRWriteback } from './ocr-jobs'
+import { AppError, ErrorType } from '../utils/error-handler'
+
+const OCR_ENQUEUE_RETRY_DELAY_MS = 1500
+const OCR_ENQUEUE_MAX_ATTEMPTS = 3
+const IMAGE_MODERATION_PENDING_MARKERS = [
+  'image moderation is pending',
+  '内容审核中',
+  '多媒体内容安全审查',
+  '安全审查系统拦截'
+]
+const OCR_BLOCKED_MESSAGE = '图片被微信多媒体内容安全审查系统拦截，请更换图片再试'
 
 // ==================== OCR Status Types ====================
 
@@ -47,6 +61,175 @@ export interface IDCardOCRData extends BaseOCRData {
 
 export type ApplicationStatus = 'draft' | 'submitted' | 'approved' | 'rejected'
 
+export interface MerchantApplicationStatusView {
+  statusCode: string
+  isDraft: boolean
+  isSubmitted: boolean
+  isApproved: boolean
+  isRejected: boolean
+  tagText: string
+  tagTheme: 'primary' | 'success' | 'warning' | 'danger'
+  badgeText: string
+  guideText: string
+  editTip: string
+  canEdit: boolean
+  canSubmit: boolean
+  canReset: boolean
+}
+
+export interface MerchantApplicationOCRStatusView {
+  statusCode: string
+  text: string
+  isPending: boolean
+  isReady: boolean
+  isFailed: boolean
+}
+
+export function buildMerchantApplicationStatusView(status?: ApplicationStatus | string): MerchantApplicationStatusView {
+  const normalizedStatus = String(status || 'draft').trim().toLowerCase() || 'draft'
+
+  switch (normalizedStatus) {
+    case 'submitted':
+      return {
+        statusCode: normalizedStatus,
+        isDraft: false,
+        isSubmitted: true,
+        isApproved: false,
+        isRejected: false,
+        tagText: '审核中',
+        tagTheme: 'warning',
+        badgeText: '审核',
+        guideText: '申请已提交，审核通过后继续完成收付通进件。',
+        editTip: '当前状态不可编辑',
+        canEdit: false,
+        canSubmit: false,
+        canReset: false
+      }
+    case 'approved':
+      return {
+        statusCode: normalizedStatus,
+        isDraft: false,
+        isSubmitted: false,
+        isApproved: true,
+        isRejected: false,
+        tagText: '已通过',
+        tagTheme: 'success',
+        badgeText: '通过',
+        guideText: '主体已通过，可继续完成收付通进件和签约。',
+        editTip: '已通过申请如需修改，保存或上传后会自动回到草稿状态',
+        canEdit: true,
+        canSubmit: true,
+        canReset: false
+      }
+    case 'rejected':
+      return {
+        statusCode: normalizedStatus,
+        isDraft: false,
+        isSubmitted: false,
+        isApproved: false,
+        isRejected: true,
+        tagText: '已驳回',
+        tagTheme: 'danger',
+        badgeText: '驳回',
+        guideText: '申请已驳回，请按驳回原因修改后重新提交。',
+        editTip: '可保存草稿，提交前请确认无误',
+        canEdit: true,
+        canSubmit: true,
+        canReset: true
+      }
+    default:
+      return {
+        statusCode: 'draft',
+        isDraft: true,
+        isSubmitted: false,
+        isApproved: false,
+        isRejected: false,
+        tagText: '草稿中',
+        tagTheme: 'primary',
+        badgeText: '草稿',
+        guideText: '填写主体资料并上传证照，确认定位后提交审核。',
+        editTip: '可保存草稿，提交前请确认无误',
+        canEdit: true,
+        canSubmit: true,
+        canReset: false
+      }
+  }
+}
+
+export function buildMerchantApplicationOCRStatusView(status?: OCRStatus | string): MerchantApplicationOCRStatusView {
+  const normalizedStatus = String(status || '').trim().toLowerCase()
+
+  switch (normalizedStatus) {
+    case 'done':
+      return {
+        statusCode: normalizedStatus,
+        text: '识别完成',
+        isPending: false,
+        isReady: true,
+        isFailed: false
+      }
+    case 'processing':
+      return {
+        statusCode: normalizedStatus,
+        text: '识别中',
+        isPending: true,
+        isReady: false,
+        isFailed: false
+      }
+    case 'failed':
+      return {
+        statusCode: normalizedStatus,
+        text: '识别失败',
+        isPending: false,
+        isReady: false,
+        isFailed: true
+      }
+    case 'pending':
+      return {
+        statusCode: normalizedStatus,
+        text: '待识别',
+        isPending: true,
+        isReady: false,
+        isFailed: false
+      }
+    default:
+      return {
+        statusCode: '',
+        text: '未上传',
+        isPending: false,
+        isReady: false,
+        isFailed: false
+      }
+  }
+}
+
+export function buildMerchantApplicationOCRNoticeMessage(statuses: Array<OCRStatus | string | undefined>) {
+  const hasPendingStatus = statuses.some((status) => buildMerchantApplicationOCRStatusView(status).isPending)
+  if (!hasPendingStatus) {
+    return ''
+  }
+
+  return '部分证照仍在识别中，请等待本次识别完成后再提交审核。'
+}
+
+export function buildMerchantApplicationOCRSubmitBlockMessage(checks: Array<{ label: string, status?: OCRStatus | string }>) {
+  for (const item of checks) {
+    const statusView = buildMerchantApplicationOCRStatusView(item.status)
+    if (statusView.isReady) {
+      continue
+    }
+    if (statusView.isPending) {
+      return `${item.label}仍在识别中，请等待识别完成后再提交`
+    }
+    if (statusView.isFailed) {
+      return `${item.label}识别失败，请提供更清晰更规整的图片重试`
+    }
+    return `${item.label}识别结果未就绪，请重新上传后再试`
+  }
+
+  return ''
+}
+
 export interface MerchantApplicationDraftResponse {
   id: number
   user_id: number
@@ -56,16 +239,18 @@ export interface MerchantApplicationDraftResponse {
   longitude: string | null
   latitude: string | null
   region_id: number | null
-  business_license_image_url: string
+  business_license_media_asset_id?: number | null
+  business_license_url?: string | null
   business_license_number: string
   business_scope: string | null
   business_license_ocr: BusinessLicenseOCRData | null
-  food_permit_url: string | null
+  food_permit_media_asset_id?: number | null
+  food_permit_url?: string | null
   food_permit_ocr: FoodPermitOCRData | null
   legal_person_name: string
   legal_person_id_number: string
-  legal_person_id_front_url: string
-  legal_person_id_back_url: string
+  id_card_front_media_asset_id?: number | null
+  id_card_back_media_asset_id?: number | null
   id_card_front_ocr: IDCardOCRData | null
   id_card_back_ocr: IDCardOCRData | null
   storefront_images?: string[] | null  // 门头照 URL 数组，最多3张
@@ -74,6 +259,83 @@ export interface MerchantApplicationDraftResponse {
   reject_reason: string | null
   created_at: string
   updated_at: string
+}
+
+interface OCRJobResponse {
+  ocr_job_id: number
+  status: string
+}
+
+export type MerchantApplicationOCRDocumentType = 'business_license' | 'food_permit' | 'id_card'
+
+export type MerchantApplicationOCRSubmissionState = 'queued'
+
+export interface MerchantApplicationOCRSubmissionResult {
+  draft: MerchantApplicationDraftResponse
+  mediaId: number
+  state: MerchantApplicationOCRSubmissionState
+}
+
+interface MerchantApplicationOCRRequestOptions {
+  maxAttempts?: number
+  retryDelayMs?: number
+}
+
+function buildMerchantDraftOCRCheck(
+  documentType: MerchantApplicationOCRDocumentType,
+  side?: 'Front' | 'Back'
+) {
+  return (draft: MerchantApplicationDraftResponse) => {
+    if (documentType === 'business_license') {
+      const status = draft.business_license_ocr?.status || ''
+      const error = draft.business_license_ocr?.error || ''
+      return {
+        ready: status === 'done'
+          || !!String(draft.business_license_number || '').trim()
+          || !!String(draft.business_license_ocr?.enterprise_name || '').trim()
+          || !!String(draft.business_license_ocr?.credit_code || '').trim()
+          || !!String(draft.business_license_ocr?.reg_num || '').trim(),
+        failed: status === 'failed',
+        errorMessage: error
+      }
+    }
+
+    if (documentType === 'food_permit') {
+      const status = draft.food_permit_ocr?.status || ''
+      const error = draft.food_permit_ocr?.error || ''
+      return {
+        ready: status === 'done'
+          || !!String(draft.food_permit_ocr?.valid_to || '').trim()
+          || !!String(draft.food_permit_ocr?.permit_no || '').trim()
+          || !!String(draft.food_permit_ocr?.company_name || '').trim()
+          || !!String(draft.food_permit_ocr?.raw_text || '').trim(),
+        failed: status === 'failed',
+        errorMessage: error
+      }
+    }
+
+    if (side === 'Back') {
+      const status = draft.id_card_back_ocr?.status || ''
+      const error = draft.id_card_back_ocr?.error || ''
+      return {
+        ready: status === 'done' || !!String(draft.id_card_back_ocr?.valid_date || '').trim(),
+        failed: status === 'failed',
+        errorMessage: error
+      }
+    }
+
+    const status = draft.id_card_front_ocr?.status || ''
+    const error = draft.id_card_front_ocr?.error || ''
+    return {
+      ready: status === 'done'
+        || !!String(draft.legal_person_name || '').trim()
+        || !!String(draft.legal_person_id_number || '').trim()
+        || !!String(draft.id_card_front_ocr?.name || '').trim()
+        || !!String(draft.id_card_front_ocr?.id_number || '').trim(),
+      failed: status === 'failed',
+      errorMessage: error
+    }
+  }
 }
 
 // 图片上传响应
@@ -89,7 +351,7 @@ export interface UpdateMerchantImagesRequest {
 
 // ==================== Request Types ====================
 
-// 对齐 api/merchant-application.ts 中的定义，支持更完整的字段更新
+// 兼容当前商户入驻基础信息更新请求定义。
 export interface UpdateMerchantBasicInfoRequest {
   merchant_name?: string
   contact_phone?: string
@@ -98,13 +360,9 @@ export interface UpdateMerchantBasicInfoRequest {
   latitude?: string
   region_id?: number
   business_license_number?: string
-  business_license_image_url?: string
   business_scope?: string
   legal_person_name?: string
   legal_person_id_number?: string
-  legal_person_id_front_url?: string
-  legal_person_id_back_url?: string
-  food_permit_url?: string
   storefront_images?: string[] // 虽然有单独接口，但API也可能支持
   environment_images?: string[]
 }
@@ -137,63 +395,151 @@ export function updateMerchantBasicInfo(data: UpdateMerchantBasicInfoRequest) {
   })
 }
 
+async function enqueueMerchantApplicationOCR(
+  mediaId: number,
+  documentType: MerchantApplicationOCRDocumentType,
+  side?: 'Front' | 'Back',
+  options?: MerchantApplicationOCRRequestOptions
+): Promise<MerchantApplicationOCRSubmissionResult> {
+  const draft = await getMerchantApplication()
+
+  const maxAttempts = Math.max(1, options?.maxAttempts ?? OCR_ENQUEUE_MAX_ATTEMPTS)
+  const retryDelayMs = Math.max(0, options?.retryDelayMs ?? OCR_ENQUEUE_RETRY_DELAY_MS)
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    try {
+      const job = await request<OCRJobResponse>({
+        url: '/v1/ocr/jobs',
+        method: 'POST',
+        data: {
+          document_type: documentType,
+          media_asset_id: mediaId,
+          owner_type: 'merchant_application',
+          owner_id: draft.id,
+          side: side ? side.toLowerCase() : undefined
+        }
+      })
+
+      await waitForOCRJobTerminal(job.ocr_job_id, {
+        maxAttempts: 20,
+        intervalMs: 1000
+      })
+      const latestDraft = await waitForOCRWriteback(
+        getMerchantApplication,
+        buildMerchantDraftOCRCheck(documentType, side),
+        {
+          maxAttempts: 20,
+          intervalMs: 1000
+        }
+      )
+
+      return {
+        draft: latestDraft,
+        mediaId,
+        state: 'queued' as const
+      }
+    } catch (error) {
+      if (!isImageModerationPendingError(error)) {
+        throw error
+      }
+
+      if (attempt >= maxAttempts - 1) {
+        throw new AppError({
+          type: ErrorType.BUSINESS,
+          message: 'OCR enqueue blocked by media moderation',
+          userMessage: OCR_BLOCKED_MESSAGE
+        }, error)
+      }
+
+      await sleep(retryDelayMs)
+    }
+  }
+
+  throw new AppError({
+    type: ErrorType.BUSINESS,
+    message: 'OCR enqueue blocked by media moderation',
+    userMessage: OCR_BLOCKED_MESSAGE
+  })
+}
+
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => {
+    setTimeout(resolve, ms)
+  })
+}
+
+function extractErrorMessage(error: unknown) {
+  if (!error || typeof error !== 'object') return ''
+
+  const maybeError = error as {
+    userMessage?: string
+    message?: string
+    originalError?: { message?: string }
+  }
+
+  return String(maybeError.userMessage || maybeError.message || maybeError.originalError?.message || '')
+}
+
+function isImageModerationPendingError(error: unknown) {
+  const message = extractErrorMessage(error).toLowerCase()
+  return IMAGE_MODERATION_PENDING_MARKERS.some((marker) => message.includes(marker))
+}
+
+export function enqueueMerchantApplicationOCRForMedia(
+  mediaId: number,
+  documentType: MerchantApplicationOCRDocumentType,
+  side?: 'Front' | 'Back',
+  options?: MerchantApplicationOCRRequestOptions
+) {
+  return enqueueMerchantApplicationOCR(mediaId, documentType, side, options)
+}
+
 /**
  * 营业执照 OCR（异步）
- * POST /v1/merchant/application/license/ocr
- * @param filePath 本地文件路径，若不传则复用已上传的图片
+ * 统一走 POST /v1/ocr/jobs，owner_type=merchant_application，document_type=business_license
+ * 若传 filePath：先上传到媒体服务，再以 media_asset_id 创建 OCR 作业
  */
-export function ocrBusinessLicense(filePath?: string) {
-  if (filePath) {
-    return uploadFile<MerchantApplicationDraftResponse>(
-      filePath,
-      '/v1/merchant/application/license/ocr',
-      'image'
-    )
+export async function ocrBusinessLicense(filePath?: string): Promise<MerchantApplicationOCRSubmissionResult> {
+  if (!filePath) {
+    throw new Error('missing filePath for merchant business license OCR')
   }
-  // 不传文件时，触发复用已有图片的 OCR
-  return request<MerchantApplicationDraftResponse>({
-    url: '/v1/merchant/application/license/ocr',
-    method: 'POST'
+  const { mediaId } = await uploadMedia(filePath, {
+    businessType: 'merchant',
+    mediaCategory: 'business_license'
   })
+  return enqueueMerchantApplicationOCR(mediaId, 'business_license')
 }
 
 /**
  * 食品经营许可证 OCR（异步）
- * POST /v1/merchant/application/foodpermit/ocr
+ * 统一走 POST /v1/ocr/jobs，owner_type=merchant_application，document_type=food_permit
  */
-export function ocrFoodPermit(filePath?: string) {
-  if (filePath) {
-    return uploadFile<MerchantApplicationDraftResponse>(
-      filePath,
-      '/v1/merchant/application/foodpermit/ocr',
-      'image'
-    )
+export async function ocrFoodPermit(filePath?: string): Promise<MerchantApplicationOCRSubmissionResult> {
+  if (!filePath) {
+    throw new Error('missing filePath for merchant food permit OCR')
   }
-  return request<MerchantApplicationDraftResponse>({
-    url: '/v1/merchant/application/foodpermit/ocr',
-    method: 'POST'
+  const { mediaId } = await uploadMedia(filePath, {
+    businessType: 'merchant',
+    mediaCategory: 'food_permit'
   })
+  return enqueueMerchantApplicationOCR(mediaId, 'food_permit')
 }
 
 /**
  * 身份证 OCR（异步）
- * POST /v1/merchant/application/idcard/ocr
+ * 统一走 POST /v1/ocr/jobs，owner_type=merchant_application，document_type=id_card
  * @param side 'Front' 或 'Back'
  */
-export function ocrIdCard(filePath: string | undefined, side: 'Front' | 'Back') {
-  if (filePath) {
-    return uploadFile<MerchantApplicationDraftResponse>(
-      filePath,
-      '/v1/merchant/application/idcard/ocr',
-      'image',
-      { side }
-    )
+export async function ocrIdCard(filePath: string | undefined, side: 'Front' | 'Back'): Promise<MerchantApplicationOCRSubmissionResult> {
+  if (!filePath) {
+    throw new Error('missing filePath for merchant id card OCR')
   }
-  return request<MerchantApplicationDraftResponse>({
-    url: '/v1/merchant/application/idcard/ocr',
-    method: 'POST',
-    data: { side }
+  const mediaCategory = side === 'Front' ? 'id_card_front' : 'id_card_back'
+  const { mediaId } = await uploadMedia(filePath, {
+    businessType: 'merchant',
+    mediaCategory
   })
+  return enqueueMerchantApplicationOCR(mediaId, 'id_card', side)
 }
 
 /**
@@ -201,10 +547,11 @@ export function ocrIdCard(filePath: string | undefined, side: 'Front' | 'Back') 
  * POST /v1/merchant/application/submit
  * 无请求体，返回 approved 或 rejected
  */
-export function submitMerchantApplication() {
+export function submitMerchantApplication(data?: AgreementConsentPayload) {
   return request<MerchantApplicationDraftResponse>({
     url: '/v1/merchant/application/submit',
-    method: 'POST'
+    method: 'POST',
+    data
   })
 }
 
@@ -231,18 +578,24 @@ export function resetMerchantApplication() {
 }
 
 /**
- * 上传门头照/环境照图片文件
- * POST /v1/merchants/images/upload
+ * 上传商户图片文件（Logo、门头照、环境照）
+ * 媒体服务三步流程
  * @param filePath 本地文件路径
- * @param category 'storefront' 或 'environment'
+ * @param category 'logo' | 'storefront' | 'environment'
+ * @returns { mediaId, displayUrl, urls }
  */
-export function uploadMerchantImage(filePath: string, category: 'storefront' | 'environment') {
-  return uploadFile<UploadImageResponse>(
-    filePath,
-    '/v1/merchants/images/upload',
-    'image',
-    { category }
-  )
+export function uploadMerchantImage(
+  filePath: string,
+  category: 'logo' | 'storefront' | 'environment'
+): Promise<MediaUploadResult> {
+  const mediaCategory =
+    category === 'logo' ? 'logo'
+    : category === 'storefront' ? 'storefront'
+    : 'environment'
+  return uploadMedia(filePath, {
+    businessType: 'merchant',
+    mediaCategory
+  })
 }
 
 /**
@@ -257,12 +610,99 @@ export function updateMerchantImages(data: UpdateMerchantImagesRequest) {
   })
 }
 
+export function deleteMediaAsset(mediaId: number) {
+  return request<void>({
+    url: `/v1/media/${mediaId}`,
+    method: 'DELETE'
+  })
+}
+
+export function deleteMerchantApplicationDocument(
+  documentType: 'business_license' | 'food_permit' | 'id_card_front' | 'id_card_back'
+) {
+  return request<MerchantApplicationDraftResponse>({
+    url: `/v1/merchant/application/documents/${documentType}`,
+    method: 'DELETE'
+  })
+}
+
+// 更新商户店铺图片请求（已入驻商户使用）
+export interface UpdateShopImagesRequest {
+  storefront_images?: string[]
+  environment_images?: string[]
+}
+
+// 更新商户店铺图片响应
+export interface UpdateShopImagesResponse {
+  storefront_images: string[] | null
+  environment_images: string[] | null
+}
+interface MediaAssetDetailResponse {
+  id: number
+  upload_status: string
+  moderation_status: string
+  urls?: {
+    thumb?: string
+    card?: string
+    detail?: string
+    original?: string
+  } | null
+}
+
+export async function waitForPublicMediaDisplayUrl(
+  mediaId: number,
+  options?: { maxAttempts?: number, intervalMs?: number }
+): Promise<string> {
+  const maxAttempts = Math.max(1, options?.maxAttempts ?? 8)
+  const intervalMs = Math.max(300, options?.intervalMs ?? 1500)
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const asset = await request<MediaAssetDetailResponse>({
+      url: `/v1/media/${mediaId}`,
+      method: 'GET'
+    })
+
+    const displayUrl = asset.urls?.card || asset.urls?.detail || asset.urls?.original || ''
+    if (displayUrl) {
+      return displayUrl
+    }
+
+    if (asset.moderation_status && asset.moderation_status !== 'pending') {
+      return ''
+    }
+
+    if (attempt < maxAttempts - 1) {
+      await sleep(intervalMs)
+    }
+  }
+
+  return ''
+}
+
+/**
+ * 更新已入驻商户的门头照/环境照
+ * PATCH /v1/merchants/me/shop-images
+ */
+export function updateShopImages(data: UpdateShopImagesRequest) {
+  return request<UpdateShopImagesResponse>({
+    url: '/v1/merchants/me/shop-images',
+    method: 'PATCH',
+    data
+  })
+}
+
 // ==================== Rider & Other Types (Preserved) ====================
 
 export interface ApplyRiderRequest {
   id_card_no: string
   phone: string
   real_name: string
+  vehicle_type?: string
+  address?: string
+  gender?: string
+  id_card_front_images?: string[]
+  id_card_back_images?: string[]
+  health_certificate_images?: string[]
 }
 
 export function submitRiderApplication(data: ApplyRiderRequest) {

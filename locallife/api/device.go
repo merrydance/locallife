@@ -3,15 +3,18 @@ package api
 import (
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
+	"github.com/merrydance/locallife/cloudprint"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+const printerTypeFeieyun = "feieyun"
 
 // ==================== 注册打印机 ====================
 
@@ -19,7 +22,8 @@ type createPrinterRequest struct {
 	PrinterName      string `json:"printer_name" binding:"required,max=100"`
 	PrinterSN        string `json:"printer_sn" binding:"required,max=100"`
 	PrinterKey       string `json:"printer_key" binding:"required,max=100"`
-	PrinterType      string `json:"printer_type" binding:"required,oneof=feieyun yilianyun other"`
+	PrinterType      string `json:"printer_type" binding:"required,oneof=feieyun"`
+	PrinterRole      string `json:"printer_role" binding:"omitempty,oneof=front kitchen"`
 	PrintTakeout     *bool  `json:"print_takeout"`
 	PrintDineIn      *bool  `json:"print_dine_in"`
 	PrintReservation *bool  `json:"print_reservation"`
@@ -31,6 +35,7 @@ type printerResponse struct {
 	PrinterName      string `json:"printer_name"`
 	PrinterSN        string `json:"printer_sn"`
 	PrinterType      string `json:"printer_type"`
+	PrinterRole      string `json:"printer_role"`
 	PrintTakeout     bool   `json:"print_takeout"`
 	PrintDineIn      bool   `json:"print_dine_in"`
 	PrintReservation bool   `json:"print_reservation"`
@@ -39,9 +44,36 @@ type printerResponse struct {
 	UpdatedAt        string `json:"updated_at,omitempty"`
 }
 
+type printerListResponse struct {
+	Printers interface{} `json:"printers"`
+	Total    int         `json:"total"`
+}
+
+type printerTestNotImplementedResponse struct {
+	Error       string `json:"error"`
+	PrinterName string `json:"printer_name"`
+	PrinterSN   string `json:"printer_sn"`
+	PrinterType string `json:"printer_type"`
+}
+
+type printerLiveStatusResponse struct {
+	PrinterID      int64     `json:"printer_id"`
+	PrinterName    string    `json:"printer_name"`
+	PrinterSN      string    `json:"printer_sn"`
+	PrinterType    string    `json:"printer_type"`
+	ProviderStatus string    `json:"provider_status"`
+	Online         bool      `json:"online"`
+	Working        bool      `json:"working"`
+	Model          *string   `json:"model,omitempty"`
+	PrintLogo      *bool     `json:"print_logo,omitempty"`
+	ScanSwitch     *bool     `json:"scan_switch,omitempty"`
+	CheckedAt      time.Time `json:"checked_at"`
+	InfoStatus     *string   `json:"info_status,omitempty"`
+}
+
 // createPrinter 注册打印机设备
 // @Summary 注册打印机
-// @Description 商户注册新的云打印机设备，支持飞鹅云和易联云
+// @Description 商户注册新的云打印机设备，当前仅支持飞鹅云
 // @Tags 商户设备管理
 // @Accept json
 // @Produce json
@@ -65,9 +97,9 @@ func (server *Server) createPrinter(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户信息
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.getMerchantFromContextOrStore(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -81,7 +113,7 @@ func (server *Server) createPrinter(ctx *gin.Context) {
 		ctx.JSON(http.StatusConflict, errorResponse(errors.New("printer serial number already registered")))
 		return
 	}
-	if !errors.Is(err, pgx.ErrNoRows) {
+	if !isNotFoundError(err) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -99,6 +131,22 @@ func (server *Server) createPrinter(ctx *gin.Context) {
 	if req.PrintReservation != nil {
 		printReservation = *req.PrintReservation
 	}
+	printerRole := req.PrinterRole
+	if printerRole == "" {
+		printerRole = "front"
+	}
+
+	registeredRemotely := req.PrinterType == printerTypeFeieyun && server.printerClient != nil
+	if registeredRemotely {
+		if err := server.printerClient.AddPrinter(ctx, cloudprint.AddPrinterInput{
+			SN:   req.PrinterSN,
+			Key:  req.PrinterKey,
+			Name: req.PrinterName,
+		}); err != nil {
+			ctx.JSON(http.StatusBadGateway, loggedServerError(ctx, err, "cloud printer provider unavailable", "cloud printer add failed"))
+			return
+		}
+	}
 
 	// 创建打印机
 	printer, err := server.store.CreateCloudPrinter(ctx, db.CreateCloudPrinterParams{
@@ -107,11 +155,24 @@ func (server *Server) createPrinter(ctx *gin.Context) {
 		PrinterSn:        req.PrinterSN,
 		PrinterKey:       req.PrinterKey,
 		PrinterType:      req.PrinterType,
+		PrinterRole:      printerRole,
 		PrintTakeout:     printTakeout,
 		PrintDineIn:      printDineIn,
 		PrintReservation: printReservation,
 	})
 	if err != nil {
+		if registeredRemotely {
+			server.recordPrinterReconciliationJob(ctx, printerReconciliationJobRecordInput{
+				MerchantID:    merchant.ID,
+				PrinterName:   req.PrinterName,
+				PrinterSN:     req.PrinterSN,
+				PrinterType:   req.PrinterType,
+				DesiredAction: db.CloudPrinterReconciliationActionRemove,
+				SourceAction:  db.CloudPrinterReconciliationSourceCreate,
+				FailureReason: buildPrinterStateDriftFailureReason(err),
+				LastError:     err.Error(),
+			})
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -151,9 +212,9 @@ func (server *Server) listPrinters(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户信息
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.getMerchantFromContextOrStore(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -178,10 +239,7 @@ func (server *Server) listPrinters(ctx *gin.Context) {
 		result[i] = toPrinterResponse(printer)
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"printers": result,
-		"total":    len(result),
-	})
+	ctx.JSON(http.StatusOK, printerListResponse{Printers: result, Total: len(result)})
 }
 
 // ==================== 获取单个打印机 ====================
@@ -216,9 +274,9 @@ func (server *Server) getPrinter(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户信息
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.getMerchantFromContextOrStore(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -229,7 +287,7 @@ func (server *Server) getPrinter(ctx *gin.Context) {
 	// 获取打印机
 	printer, err := server.store.GetCloudPrinter(ctx, req.ID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("printer not found")))
 			return
 		}
@@ -247,11 +305,100 @@ func (server *Server) getPrinter(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, resp)
 }
 
+// getPrinterLiveStatus 获取打印机实时状态
+// @Summary 获取打印机实时状态
+// @Description 向飞鹅云查询打印机在线状态与基础能力信息
+// @Tags 商户设备管理
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param id path int true "打印机ID"
+// @Success 200 {object} printerLiveStatusResponse "成功返回实时状态"
+// @Failure 401 {object} map[string]interface{} "未授权"
+// @Failure 403 {object} map[string]interface{} "打印机不属于该商户"
+// @Failure 404 {object} map[string]interface{} "打印机不存在"
+// @Failure 501 {object} map[string]interface{} "当前环境不支持查询"
+// @Failure 502 {object} map[string]interface{} "云打印平台调用失败"
+// @Failure 500 {object} map[string]interface{} "服务器错误"
+// @Router /v1/merchant/devices/{id}/status [get]
+func (server *Server) getPrinterLiveStatus(ctx *gin.Context) {
+	var req getPrinterRequest
+	if err := ctx.ShouldBindUri(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	merchant, err := server.getMerchantFromContextOrStore(ctx, authPayload.UserID)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	printer, err := server.store.GetCloudPrinter(ctx, req.ID)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("printer not found")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	if printer.MerchantID != merchant.ID {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("printer does not belong to this merchant")))
+		return
+	}
+	if printer.PrinterType != printerTypeFeieyun || server.printerClient == nil {
+		ctx.JSON(http.StatusNotImplemented, errorResponse(errors.New("current printer type or environment does not support live status query")))
+		return
+	}
+
+	providerStatus, err := server.printerClient.QueryPrinterStatus(ctx, printer.PrinterSn)
+	if err != nil {
+		ctx.JSON(http.StatusBadGateway, loggedServerError(ctx, err, "cloud printer status unavailable", "cloud printer status query failed"))
+		return
+	}
+	info, err := server.printerClient.GetPrinterInfo(ctx, printer.PrinterSn)
+	if err != nil {
+		ctx.JSON(http.StatusBadGateway, loggedServerError(ctx, err, "cloud printer status unavailable", "cloud printer info query failed"))
+		return
+	}
+
+	online, working := interpretFeieyunPrinterStatus(providerStatus)
+	resp := printerLiveStatusResponse{
+		PrinterID:      printer.ID,
+		PrinterName:    printer.PrinterName,
+		PrinterSN:      printer.PrinterSn,
+		PrinterType:    printer.PrinterType,
+		ProviderStatus: providerStatus,
+		Online:         online,
+		Working:        working,
+		PrintLogo:      info.PrintLogo,
+		ScanSwitch:     info.ScanSwitch,
+		CheckedAt:      time.Now(),
+	}
+	if info.Model != "" {
+		model := info.Model
+		resp.Model = &model
+	}
+	if info.Status != "" {
+		status := info.Status
+		resp.InfoStatus = &status
+	}
+
+	ctx.JSON(http.StatusOK, resp)
+}
+
 // ==================== 更新打印机 ====================
 
 type updatePrinterRequest struct {
 	PrinterName      string `json:"printer_name" binding:"omitempty,max=100"`
 	PrinterKey       string `json:"printer_key" binding:"omitempty,max=100"`
+	PrinterRole      string `json:"printer_role" binding:"omitempty,oneof=front kitchen"`
 	PrintTakeout     *bool  `json:"print_takeout"`
 	PrintDineIn      *bool  `json:"print_dine_in"`
 	PrintReservation *bool  `json:"print_reservation"`
@@ -291,9 +438,9 @@ func (server *Server) updatePrinter(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户信息
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.getMerchantFromContextOrStore(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -304,7 +451,7 @@ func (server *Server) updatePrinter(ctx *gin.Context) {
 	// 获取打印机验证归属
 	printer, err := server.store.GetCloudPrinter(ctx, uriReq.ID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("printer not found")))
 			return
 		}
@@ -327,6 +474,9 @@ func (server *Server) updatePrinter(ctx *gin.Context) {
 	}
 	if req.PrinterKey != "" {
 		updateParams.PrinterKey = pgtype.Text{String: req.PrinterKey, Valid: true}
+	}
+	if req.PrinterRole != "" {
+		updateParams.PrinterRole = pgtype.Text{String: req.PrinterRole, Valid: true}
 	}
 	if req.PrintTakeout != nil {
 		updateParams.PrintTakeout = pgtype.Bool{Bool: *req.PrintTakeout, Valid: true}
@@ -380,9 +530,9 @@ func (server *Server) deletePrinter(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户信息
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.getMerchantFromContextOrStore(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -393,7 +543,7 @@ func (server *Server) deletePrinter(ctx *gin.Context) {
 	// 获取打印机验证归属
 	printer, err := server.store.GetCloudPrinter(ctx, req.ID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("printer not found")))
 			return
 		}
@@ -406,16 +556,36 @@ func (server *Server) deletePrinter(ctx *gin.Context) {
 		return
 	}
 
+	removedRemotely := printer.PrinterType == printerTypeFeieyun && server.printerClient != nil
+	if removedRemotely {
+		if err := server.printerClient.RemovePrinter(ctx, cloudprint.RemovePrinterInput{SN: printer.PrinterSn}); err != nil {
+			ctx.JSON(http.StatusBadGateway, loggedServerError(ctx, err, "cloud printer provider unavailable", "cloud printer remove failed"))
+			return
+		}
+	}
+
 	// 删除打印机
 	err = server.store.DeleteCloudPrinter(ctx, req.ID)
 	if err != nil {
+		if removedRemotely {
+			server.recordPrinterReconciliationJob(ctx, printerReconciliationJobRecordInput{
+				MerchantID:    merchant.ID,
+				PrinterID:     pgtype.Int8{Int64: printer.ID, Valid: true},
+				PrinterName:   printer.PrinterName,
+				PrinterSN:     printer.PrinterSn,
+				PrinterKey:    pgtype.Text{String: printer.PrinterKey, Valid: printer.PrinterKey != ""},
+				PrinterType:   printer.PrinterType,
+				DesiredAction: db.CloudPrinterReconciliationActionRegister,
+				SourceAction:  db.CloudPrinterReconciliationSourceDelete,
+				FailureReason: buildPrinterStateDriftFailureReason(err),
+				LastError:     err.Error(),
+			})
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"message": "printer deleted successfully",
-	})
+	ctx.JSON(http.StatusOK, successMessage("printer deleted successfully"))
 }
 
 // ==================== 测试打印机 ====================
@@ -426,7 +596,7 @@ type testPrinterRequest struct {
 
 // testPrinter 测试打印机
 // @Summary 测试打印机
-// @Description 向打印机发送测试打印命令（功能尚未接入云打印服务）
+// @Description 向飞鹅云打印机发送在线测试打印命令；未配置云打印客户端时返回暂不支持
 // @Tags 商户设备管理
 // @Accept json
 // @Produce json
@@ -451,9 +621,9 @@ func (server *Server) testPrinter(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户信息
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.getMerchantFromContextOrStore(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -464,7 +634,7 @@ func (server *Server) testPrinter(ctx *gin.Context) {
 	// 获取打印机验证归属
 	printer, err := server.store.GetCloudPrinter(ctx, req.ID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("printer not found")))
 			return
 		}
@@ -478,33 +648,61 @@ func (server *Server) testPrinter(ctx *gin.Context) {
 	}
 
 	// 注意：云打印测试功能尚未接入实际服务
-	// 生产环境需要根据 printer_type 调用对应的云打印服务 API:
-	// - feieyun: 飞鹅云打印 API
-	// - yilianyun: 易联云打印 API
-	ctx.JSON(http.StatusNotImplemented, gin.H{
-		"error":        "云打印测试功能尚未接入，请联系技术支持",
-		"printer_name": printer.PrinterName,
-		"printer_sn":   printer.PrinterSn,
-		"printer_type": printer.PrinterType,
+	if printer.PrinterType != printerTypeFeieyun || server.printerClient == nil {
+		ctx.JSON(http.StatusNotImplemented, printerTestNotImplementedResponse{
+			Error:       "当前打印机类型或环境配置暂不支持在线测试打印",
+			PrinterName: printer.PrinterName,
+			PrinterSN:   printer.PrinterSn,
+			PrinterType: printer.PrinterType,
+		})
+		return
+	}
+
+	content := "<CB><B>打印测试</B></CB><BR>乐客来福<BR>设备：" + printer.PrinterName + "<BR>时间：" + time.Now().Format("2006-01-02 15:04:05") + "<BR><CUT>"
+	orderID, err := server.printerClient.Print(ctx, cloudprint.PrintInput{
+		SN:      printer.PrinterSn,
+		Content: content,
+		Copies:  1,
 	})
+	if err != nil {
+		ctx.JSON(http.StatusBadGateway, loggedServerError(ctx, err, "cloud printer provider unavailable", "cloud printer test print failed"))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"message":         "test print sent",
+		"vendor_order_id": orderID,
+	})
+}
+
+func interpretFeieyunPrinterStatus(status string) (bool, bool) {
+	normalized := strings.TrimSpace(status)
+	if normalized == "" {
+		return false, false
+	}
+	online := strings.Contains(normalized, "在线")
+	working := online && strings.Contains(normalized, "正常") && !strings.Contains(normalized, "不正常")
+	return online, working
 }
 
 // ==================== 订单展示配置 ====================
 
 type getDisplayConfigResponse struct {
-	ID               int64  `json:"id"`
-	MerchantID       int64  `json:"merchant_id"`
-	EnablePrint      bool   `json:"enable_print"`
-	PrintTakeout     bool   `json:"print_takeout"`
-	PrintDineIn      bool   `json:"print_dine_in"`
-	PrintReservation bool   `json:"print_reservation"`
-	EnableVoice      bool   `json:"enable_voice"`
-	VoiceTakeout     bool   `json:"voice_takeout"`
-	VoiceDineIn      bool   `json:"voice_dine_in"`
-	EnableKDS        bool   `json:"enable_kds"`
-	KdsURL           string `json:"kds_url,omitempty"`
-	CreatedAt        string `json:"created_at"`
-	UpdatedAt        string `json:"updated_at,omitempty"`
+	ID                int64  `json:"id"`
+	MerchantID        int64  `json:"merchant_id"`
+	EnablePrint       bool   `json:"enable_print"`
+	PrintTakeout      bool   `json:"print_takeout"`
+	PrintDineIn       bool   `json:"print_dine_in"`
+	PrintReservation  bool   `json:"print_reservation"`
+	PrintDispatchMode string `json:"print_dispatch_mode"`
+	PrintTriggerMode  string `json:"print_trigger_mode"`
+	EnableVoice       bool   `json:"enable_voice"`
+	VoiceTakeout      bool   `json:"voice_takeout"`
+	VoiceDineIn       bool   `json:"voice_dine_in"`
+	EnableKDS         bool   `json:"enable_kds"`
+	KdsURL            string `json:"kds_url,omitempty"`
+	CreatedAt         string `json:"created_at"`
+	UpdatedAt         string `json:"updated_at,omitempty"`
 }
 
 // getDisplayConfig 获取订单展示配置
@@ -524,9 +722,9 @@ func (server *Server) getDisplayConfig(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户信息
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.getMerchantFromContextOrStore(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -537,18 +735,20 @@ func (server *Server) getDisplayConfig(ctx *gin.Context) {
 	// 获取配置
 	config, err := server.store.GetOrderDisplayConfigByMerchant(ctx, merchant.ID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			// 返回默认配置
 			ctx.JSON(http.StatusOK, getDisplayConfigResponse{
-				MerchantID:       merchant.ID,
-				EnablePrint:      true,
-				PrintTakeout:     true,
-				PrintDineIn:      true,
-				PrintReservation: true,
-				EnableVoice:      false,
-				VoiceTakeout:     true,
-				VoiceDineIn:      true,
-				EnableKDS:        false,
+				MerchantID:        merchant.ID,
+				EnablePrint:       true,
+				PrintTakeout:      true,
+				PrintDineIn:       true,
+				PrintReservation:  true,
+				PrintDispatchMode: "single_full",
+				PrintTriggerMode:  "accepted",
+				EnableVoice:       false,
+				VoiceTakeout:      true,
+				VoiceDineIn:       true,
+				EnableKDS:         false,
 			})
 			return
 		}
@@ -567,19 +767,21 @@ func (server *Server) getDisplayConfig(ctx *gin.Context) {
 	}
 
 	resp := getDisplayConfigResponse{
-		ID:               config.ID,
-		MerchantID:       config.MerchantID,
-		EnablePrint:      config.EnablePrint,
-		PrintTakeout:     config.PrintTakeout,
-		PrintDineIn:      config.PrintDineIn,
-		PrintReservation: config.PrintReservation,
-		EnableVoice:      config.EnableVoice,
-		VoiceTakeout:     config.VoiceTakeout,
-		VoiceDineIn:      config.VoiceDineIn,
-		EnableKDS:        config.EnableKds,
-		KdsURL:           kdsURL,
-		CreatedAt:        config.CreatedAt.Format(time.RFC3339),
-		UpdatedAt:        updatedAt,
+		ID:                config.ID,
+		MerchantID:        config.MerchantID,
+		EnablePrint:       config.EnablePrint,
+		PrintTakeout:      config.PrintTakeout,
+		PrintDineIn:       config.PrintDineIn,
+		PrintReservation:  config.PrintReservation,
+		PrintDispatchMode: config.PrintDispatchMode,
+		PrintTriggerMode:  config.PrintTriggerMode,
+		EnableVoice:       config.EnableVoice,
+		VoiceTakeout:      config.VoiceTakeout,
+		VoiceDineIn:       config.VoiceDineIn,
+		EnableKDS:         config.EnableKds,
+		KdsURL:            kdsURL,
+		CreatedAt:         config.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:         updatedAt,
 	}
 
 	ctx.JSON(http.StatusOK, resp)
@@ -588,15 +790,17 @@ func (server *Server) getDisplayConfig(ctx *gin.Context) {
 // ==================== 更新订单展示配置 ====================
 
 type updateDisplayConfigRequest struct {
-	EnablePrint      *bool   `json:"enable_print"`
-	PrintTakeout     *bool   `json:"print_takeout"`
-	PrintDineIn      *bool   `json:"print_dine_in"`
-	PrintReservation *bool   `json:"print_reservation"`
-	EnableVoice      *bool   `json:"enable_voice"`
-	VoiceTakeout     *bool   `json:"voice_takeout"`
-	VoiceDineIn      *bool   `json:"voice_dine_in"`
-	EnableKDS        *bool   `json:"enable_kds"`
-	KdsURL           *string `json:"kds_url" binding:"omitempty,url,max=500"`
+	EnablePrint       *bool   `json:"enable_print"`
+	PrintTakeout      *bool   `json:"print_takeout"`
+	PrintDineIn       *bool   `json:"print_dine_in"`
+	PrintReservation  *bool   `json:"print_reservation"`
+	PrintDispatchMode *string `json:"print_dispatch_mode" binding:"omitempty,oneof=single_full split"`
+	PrintTriggerMode  *string `json:"print_trigger_mode" binding:"omitempty,oneof=accepted ready manual"`
+	EnableVoice       *bool   `json:"enable_voice"`
+	VoiceTakeout      *bool   `json:"voice_takeout"`
+	VoiceDineIn       *bool   `json:"voice_dine_in"`
+	EnableKDS         *bool   `json:"enable_kds"`
+	KdsURL            *string `json:"kds_url" binding:"omitempty,url,max=500"`
 }
 
 // updateDisplayConfig 更新订单展示配置
@@ -624,9 +828,9 @@ func (server *Server) updateDisplayConfig(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户信息
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.getMerchantFromContextOrStore(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -636,7 +840,7 @@ func (server *Server) updateDisplayConfig(ctx *gin.Context) {
 
 	// 检查是否已有配置
 	_, err = server.store.GetOrderDisplayConfigByMerchant(ctx, merchant.ID)
-	configNotFound := errors.Is(err, pgx.ErrNoRows)
+	configNotFound := isNotFoundError(err)
 	if err != nil && !configNotFound {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
@@ -646,15 +850,17 @@ func (server *Server) updateDisplayConfig(ctx *gin.Context) {
 	if configNotFound {
 		// 创建新配置
 		createParams := db.CreateOrderDisplayConfigParams{
-			MerchantID:       merchant.ID,
-			EnablePrint:      true,
-			PrintTakeout:     true,
-			PrintDineIn:      true,
-			PrintReservation: true,
-			EnableVoice:      false,
-			VoiceTakeout:     true,
-			VoiceDineIn:      true,
-			EnableKds:        false,
+			MerchantID:        merchant.ID,
+			EnablePrint:       true,
+			PrintTakeout:      true,
+			PrintDineIn:       true,
+			PrintReservation:  true,
+			PrintDispatchMode: "single_full",
+			PrintTriggerMode:  "accepted",
+			EnableVoice:       false,
+			VoiceTakeout:      true,
+			VoiceDineIn:       true,
+			EnableKds:         false,
 		}
 
 		// 应用请求中的值
@@ -669,6 +875,12 @@ func (server *Server) updateDisplayConfig(ctx *gin.Context) {
 		}
 		if req.PrintReservation != nil {
 			createParams.PrintReservation = *req.PrintReservation
+		}
+		if req.PrintDispatchMode != nil {
+			createParams.PrintDispatchMode = *req.PrintDispatchMode
+		}
+		if req.PrintTriggerMode != nil {
+			createParams.PrintTriggerMode = *req.PrintTriggerMode
 		}
 		if req.EnableVoice != nil {
 			createParams.EnableVoice = *req.EnableVoice
@@ -709,6 +921,12 @@ func (server *Server) updateDisplayConfig(ctx *gin.Context) {
 		if req.PrintReservation != nil {
 			updateParams.PrintReservation = pgtype.Bool{Bool: *req.PrintReservation, Valid: true}
 		}
+		if req.PrintDispatchMode != nil {
+			updateParams.PrintDispatchMode = pgtype.Text{String: *req.PrintDispatchMode, Valid: true}
+		}
+		if req.PrintTriggerMode != nil {
+			updateParams.PrintTriggerMode = pgtype.Text{String: *req.PrintTriggerMode, Valid: true}
+		}
 		if req.EnableVoice != nil {
 			updateParams.EnableVoice = pgtype.Bool{Bool: *req.EnableVoice, Valid: true}
 		}
@@ -743,19 +961,21 @@ func (server *Server) updateDisplayConfig(ctx *gin.Context) {
 	}
 
 	resp := getDisplayConfigResponse{
-		ID:               config.ID,
-		MerchantID:       config.MerchantID,
-		EnablePrint:      config.EnablePrint,
-		PrintTakeout:     config.PrintTakeout,
-		PrintDineIn:      config.PrintDineIn,
-		PrintReservation: config.PrintReservation,
-		EnableVoice:      config.EnableVoice,
-		VoiceTakeout:     config.VoiceTakeout,
-		VoiceDineIn:      config.VoiceDineIn,
-		EnableKDS:        config.EnableKds,
-		KdsURL:           kdsURL,
-		CreatedAt:        config.CreatedAt.Format(time.RFC3339),
-		UpdatedAt:        updatedAt,
+		ID:                config.ID,
+		MerchantID:        config.MerchantID,
+		EnablePrint:       config.EnablePrint,
+		PrintTakeout:      config.PrintTakeout,
+		PrintDineIn:       config.PrintDineIn,
+		PrintReservation:  config.PrintReservation,
+		PrintDispatchMode: config.PrintDispatchMode,
+		PrintTriggerMode:  config.PrintTriggerMode,
+		EnableVoice:       config.EnableVoice,
+		VoiceTakeout:      config.VoiceTakeout,
+		VoiceDineIn:       config.VoiceDineIn,
+		EnableKDS:         config.EnableKds,
+		KdsURL:            kdsURL,
+		CreatedAt:         config.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:         updatedAt,
 	}
 
 	ctx.JSON(http.StatusOK, resp)
@@ -775,6 +995,7 @@ func toPrinterResponse(printer db.CloudPrinter) printerResponse {
 		PrinterName:      printer.PrinterName,
 		PrinterSN:        printer.PrinterSn,
 		PrinterType:      printer.PrinterType,
+		PrinterRole:      printer.PrinterRole,
 		PrintTakeout:     printer.PrintTakeout,
 		PrintDineIn:      printer.PrintDineIn,
 		PrintReservation: printer.PrintReservation,

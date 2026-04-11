@@ -1,0 +1,103 @@
+---
+name: "Mini Program Implementation Template"
+description: "Use when drafting any Mini Program implementation request for weapp/, including normal page or component changes, diagnosis-first page方案 before coding, payment-adjacent flows, and TDesign-first UI refactors. Trigger phrases: update Mini Program page, 小程序页面, 小程序页面方案, 小程序 UI 重构, TDesign 重构, TDesign-first 页面重写, 全页重构, 整页重新布局, 极简美学, build Mini Program page, create merchant page, 新建商户页面, 新建运营页面, 新建平台页面, fix component behavior, 列表空态和错误态, wire page state, improve weak-network UX, implement service-to-view change, setData 热点, 弱网体验, 小程序支付, 支付结果, login recovery after pay, duplicate tap guard, 重复点击支付, 图标按钮替代文字按钮, 组件拆分重构."
+---
+# Mini Program Implementation Template
+
+Use this template when asking for a concrete Mini Program change in `weapp/`.
+
+This is the default implementation prompt for Mini Program page work, including new non-consumer pages, management surfaces, diagnosis-first page方案, and payment-adjacent flows.
+
+Use the Mini Program row in `.github/standards/engineering/AI_PROMPT_GOVERNANCE.md` as the shared source for implementation push items, prohibited shortcuts, and review-ready hand-off expectations.
+Use `.github/standards/weapp/README.md` as the weapp standards index, `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md` as the default page-delivery baseline, and the role-matched design document for visual rules instead of restating the full standards body here.
+Classify the task as `G0`, `G1`, `G2`, or `G3` using `.github/standards/engineering/ENGINEERING_GOVERNANCE_BASELINE.md`, then choose validation depth and residual-risk wording using `.github/standards/engineering/VALIDATION_AND_RELEASE_MATRIX.md`.
+
+## Mini Program Implementation Request
+
+Request:
+
+- Update or build <page or component>
+- State the task risk level (`G0`/`G1`/`G2`/`G3`) and why
+- Follow `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md` for the non-visual delivery baseline
+- Use the role-matched visual standard explicitly: consumer surfaces use `.github/standards/weapp/DESIGN_SYSTEM.md`; merchant, operator, platform, rider, and other non-consumer surfaces use `.github/standards/weapp/NON_CONSUMER_DESIGN_SYSTEM.md`
+- Run validation that matches the risk level and report what was executed
+- State which relevant paths remain unverified and what residual risk remains
+
+Implementation must push:
+
+- Start from the user task, first-screen essentials, and current-page boundary before coding or styling
+- Treat the real backend contract as the only source of truth for fields, statuses, permissions, pagination, and metric meaning
+- Keep information architecture and page boundary decisions ahead of component and styling choices, following the role-matched weapp standards instead of local page guesswork
+- For TDesign-first refactor or style-reset requests, default to full-page information architecture and layout redesign rather than patching the legacy page shell unless the user explicitly asks for a local adjustment only
+- Use TDesign MCP and the role-matched design standard to justify major component choices and any user-visible non-TDesign exception
+- Extract complex regions into dedicated domain components when they own local state, repeated add/remove/edit flows, dense layout, or reusable task-specific interaction
+- Wire service calls, page state, handlers, WXML, WXSS, and user-visible feedback end to end
+- State which role-side design document governed the visual decisions and whether any exception crossed that boundary
+- Report any user-visible area that still does not use TDesign, any backend-contract ambiguity, and any remaining weak-network, re-entry, duplicate-tap, or payment-state risk
+
+Implementation must not do:
+
+- Do not invent backend fields, states, permissions, metric semantics, or pagination conclusions
+- Do not preserve the legacy page layout by default when the request is a refactor, redesign, style unification, or TDesign rewrite
+- Do not jump from the old WXML structure straight to component selection without first inventorying the backend-supported capabilities and actions
+- Do not force unfinished, future, unsupported, or cross-role capabilities into the current page just to make it look complete
+- Do not leave business-specific styles in global styles unless they are truly shared
+- Do not carry customer-side brand colors, decorative token language, or marketing-style visual treatment into merchant, operator, platform, rider, or other non-consumer surfaces by default
+- Do not override TDesign internals for page-local taste when official props, theme hooks, or page-level layout control would suffice
+- Do not modify TDesign in ways the official documentation does not support
+- Do not leave complex edit or composition regions inline in a page file once they already behave like standalone submodules
+- Do not stop at WXML or WXSS changes when the task actually requires service, state, handler, or feedback changes
+- Do not treat payment as just a button click if the task touches payment, result state, login recovery, or duplicate-tap protection
+
+Required context:
+
+- Target page or component path: <path>
+- User role and target task: <consumer, merchant, rider, operator, platform, or other + what they are trying to finish>
+- Desired behavior or UX change: <details>
+- Success condition: <what should feel clearly better or become reliably correct>
+- Backend contract source for any touched API: <swagger, backend handler/DTO, typed service contract, or explicit note that contract is still missing>
+
+Optional context:
+
+- Task frequency: <first-time, occasional, high-frequency>
+- Weak-network or re-entry sensitivity: <details>
+- State to preserve: <scroll position, filters, draft form, selected tab, local cache>
+- Existing reference page or component: <path>
+- Related service or API change: <details>
+- Related backend payment callback or polling path: <path>
+- Known weak-network or re-entry issue: <details>
+- Payment preconditions or consent requirements: <details>
+
+Acceptance focus:
+
+- The hand-off names the task risk level, the role-side design document used, and the validation depth chosen for that risk
+- The implementation is closed across service, state, handlers, render branches, feedback, and any affected payment or recovery path
+- If backend semantics are ambiguous or required fields are missing, the request states whether backend clarification or backend changes are needed instead of guessing in the page layer
+- Any visual-system exception, non-TDesign exception, or remaining weak-network / re-entry / duplicate-tap / unknown-result risk is stated explicitly
+
+TDesign-first refactor mode:
+
+- If the request is to refactor UI, unify style, switch fully to TDesign, or rebuild a page in a minimalist direction, first decide whether the old page shell should be discarded instead of incrementally preserved
+- Before coding, explicitly map backend-supported capabilities, states, and actions into page sections and first-screen priority rather than treating the existing DOM tree as the page architecture
+- Use TDesign MCP to justify each major component choice by task fit; only fall back to native or local custom user-visible controls after recording why TDesign and supported outer composition do not satisfy the need
+- Complex business areas should be split into dedicated components with explicit input, output, and page-owned orchestration boundaries rather than staying as one oversized page file
+- Delivery notes for this mode must name the page sections that were relaid out, the TDesign components chosen for each major area, and every deliberate exception from TDesign-first usage
+
+Diagnosis-first mode:
+
+- If the user asked for a page方案, do not jump straight to code. First establish page task, first-screen hierarchy, page boundary, backend truth, and TDesign-first UI composition.
+- The diagnosis-first structure must cover: target page, user role, primary task, current problems, first-screen essentials, backend-source verification, problem diagnosis, proposed solution, implementation steps, non-goals, risk level, and validation plan.
+- The page solution must keep UI consistency, small-screen usability, TDesign-first composition, and page shell stability as required deliverables instead of optional polish.
+- The page solution must explicitly state whether the page belongs to consumer or non-consumer visual scope and avoid borrowing the wrong side's design language.
+
+Payment-related mode:
+
+- Treat payment-adjacent work as at least `G2`, and use `G3` when identity, authorization-sensitive state, private materials, or high-impact duplicate action risk is involved
+- Login expiry and recovery are connected to the payment path
+- Duplicate taps, stale polling, and delayed confirmation states are handled deliberately
+- User-facing copy distinguishes success, failure, cancellation, and unknown result states
+- Service calls, page state, event handlers, and view feedback stay wired end to end
+- Leaving the app, returning from WeChat pay, or re-entering the page can reconnect to the correct payment state
+- Unknown result states provide a credible next step such as status recheck, delayed confirmation guidance, or safe retry rules
+- If backend payment state ownership, callback timing, or result semantics are ambiguous, the request must call out the backend gap explicitly and decide whether backend changes are needed before frontend implementation proceeds
+- The same order or payment record is not shown as conflicting states across entry, result, and history surfaces

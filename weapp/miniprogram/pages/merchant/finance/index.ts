@@ -1,273 +1,359 @@
-/**
- * 财务管理页面
- * 集成全部 6 个后端财务 API，提供全面的财务分析
- */
+import {
+  createMerchantWithdraw,
+  getMerchantAccountBalance,
+  getMerchantAccountStatusView,
+  getMerchantWithdrawal,
+  getMerchantWithdrawStatusView,
+  listMerchantWithdrawals,
+  type MerchantAccountBalanceResponse,
+  type MerchantWithdrawItem
+} from '../../../api/merchant-finance-account'
+import {
+  canManageMerchantApplyment,
+  ensureMerchantConsoleAccess
+} from '../../../utils/console-access'
+import { logger } from '../../../utils/logger'
+import { getStableBarHeights } from '../../../utils/responsive'
+import { getErrorDebugMessage, getErrorUserMessage } from '../../../utils/user-facing'
 
-import { request } from '@/utils/request'
-import { formatPriceNoSymbol } from '@/utils/util'
-
-// 类型定义
-interface FinanceOverviewResponse {
-    completed_orders: number
-    pending_orders: number
-    total_gmv: number
-    total_income: number
-    total_platform_fee: number
-    total_operator_fee: number
-    total_service_fee: number
-    pending_income: number
-    promotion_orders: number
-    total_promotion_exp: number
-    net_income: number
+type InputChangeDetail = {
+  value: string
 }
 
-interface FinanceOrderItem {
-    id: number
-    payment_order_id: number
-    order_id: number
-    order_source: string
-    total_amount: number
-    platform_fee: number
-    operator_fee: number
-    merchant_amount: number
-    status: string
-    created_at: string
-    finished_at?: string
-}
-
-interface ServiceFeeItem {
-    date: string
-    order_source: string
-    order_count: number
-    total_amount: number
-    platform_fee: number
-    operator_fee: number
-    total_fee: number
-}
-
-interface PromotionExpenseItem {
-    id: number
-    order_no: string
-    order_type: string
-    subtotal: number
-    delivery_fee: number
-    delivery_fee_discount: number
-    total_amount: number
-    created_at: string
-    completed_at?: string
-}
-
-interface DailyFinanceItem {
-    date: string
-    order_count: number
-    total_gmv: number
-    merchant_income: number
-    total_fee: number
-}
-
-interface SettlementItem {
-    id: number
-    payment_order_id: number
-    order_source: string
-    total_amount: number
-    platform_fee: number
-    operator_fee: number
-    merchant_amount: number
-    sharing_order_id?: string
-    status: string
-    created_at: string
-    finished_at?: string
-}
-
-// 财务服务
-const FinanceService = {
-    async getOverview(startDate: string, endDate: string): Promise<FinanceOverviewResponse> {
-        return request({ url: '/v1/merchant/finance/overview', method: 'GET', data: { start_date: startDate, end_date: endDate } })
-    },
-    async getOrders(startDate: string, endDate: string, page = 1, limit = 20): Promise<FinanceOrderItem[]> {
-        return request({ url: '/v1/merchant/finance/orders', method: 'GET', data: { start_date: startDate, end_date: endDate, page, limit } })
-    },
-    async getServiceFees(startDate: string, endDate: string): Promise<ServiceFeeItem[]> {
-        return request({ url: '/v1/merchant/finance/service-fees', method: 'GET', data: { start_date: startDate, end_date: endDate } })
-    },
-    async getPromotions(startDate: string, endDate: string, page = 1, limit = 20): Promise<PromotionExpenseItem[]> {
-        return request({ url: '/v1/merchant/finance/promotions', method: 'GET', data: { start_date: startDate, end_date: endDate, page, limit } })
-    },
-    async getDailyFinance(startDate: string, endDate: string): Promise<DailyFinanceItem[]> {
-        return request({ url: '/v1/merchant/finance/daily', method: 'GET', data: { start_date: startDate, end_date: endDate } })
-    },
-    async getSettlements(startDate: string, endDate: string, status?: string, page = 1, limit = 20): Promise<SettlementItem[]> {
-        const data: any = { start_date: startDate, end_date: endDate, page, limit }
-        if (status) data.status = status
-        return request({ url: '/v1/merchant/finance/settlements', method: 'GET', data })
-    }
+const EMPTY_BALANCE: MerchantAccountBalanceResponse = {
+  sub_mch_id: '',
+  available_amount: 0,
+  pending_amount: 0,
+  withdrawable_amount: 0,
+  account_status: '',
+  status_desc: ''
 }
 
 Page({
-    data: {
-        sidebarCollapsed: false,
-        loading: true,
+  data: {
+    navBarHeight: 88,
+    accessReady: false,
+    accessDenied: false,
+    accessErrorMessage: '',
+    canManageMerchantApplyment: false,
+    initialLoading: true,
+    initialError: false,
+    initialErrorMessage: '',
+    loading: false,
+    loadedOnce: false,
+    refreshErrorMessage: '',
+    balanceStatusDesc: '',
+    notConfigured: false,
+    balance: EMPTY_BALANCE as MerchantAccountBalanceResponse,
+    withdrawAmountYuan: '',
+    withdrawRemark: '',
+    isWithdrawDialogVisible: false,
+    withdrawSyncingId: 0,
+    withdrawals: [] as MerchantWithdrawItem[],
+    submitting: false
+  },
 
-        // 日期范围
-        dateRange: 'month' as 'week' | 'month',
-        startDate: '',
-        endDate: '',
+  async onLoad() {
+    const { navBarHeight } = getStableBarHeights()
+    this.setData({ navBarHeight })
+    await this.bootstrapPage()
+  },
 
-        // Tab
-        activeTab: 'overview' as 'overview' | 'daily' | 'orders' | 'fees' | 'promotions' | 'settlements',
-
-        // 数据
-        overview: null as FinanceOverviewResponse | null,
-        dailyFinance: [] as DailyFinanceItem[],
-        orders: [] as FinanceOrderItem[],
-        serviceFees: [] as ServiceFeeItem[],
-        promotions: [] as PromotionExpenseItem[],
-        settlements: [] as SettlementItem[]
-    },
-
-    onLoad() {
-        this.setDateRange('month')
-    },
-
-    onSidebarCollapse(e: any) {
-        this.setData({ sidebarCollapsed: e.detail.collapsed })
-    },
-
-    // 设置日期范围
-    setDateRange(range: 'week' | 'month') {
-        const today = new Date()
-        const endDate = this.formatDate(today)
-        let startDate: string
-
-        if (range === 'week') {
-            const weekAgo = new Date(today)
-            weekAgo.setDate(weekAgo.getDate() - 6)
-            startDate = this.formatDate(weekAgo)
-        } else {
-            const monthAgo = new Date(today)
-            monthAgo.setDate(monthAgo.getDate() - 29)
-            startDate = this.formatDate(monthAgo)
-        }
-
-        this.setData({ dateRange: range, startDate, endDate })
-        this.loadData()
-    },
-
-    onDateRangeChange(e: any) {
-        const range = e.currentTarget.dataset.range
-        this.setDateRange(range)
-    },
-
-    formatDate(date: Date): string {
-        const year = date.getFullYear()
-        const month = ('0' + (date.getMonth() + 1)).slice(-2)
-        const day = ('0' + date.getDate()).slice(-2)
-        return `${year}-${month}-${day}`
-    },
-
-    // 切换 Tab
-    onTabChange(e: any) {
-        const tab = e.currentTarget.dataset.tab
-        this.setData({ activeTab: tab })
-        this.loadTabData(tab)
-    },
-
-    // 加载当前 Tab 数据
-    async loadTabData(tab: string) {
-        const { startDate, endDate } = this.data
-        this.setData({ loading: true })
-
-        try {
-            switch (tab) {
-                case 'overview':
-                    const overview = await FinanceService.getOverview(startDate, endDate)
-                    // 预处理 overview 价格
-                    const overviewDisplay = overview ? {
-                        ...overview,
-                        total_gmv_display: formatPriceNoSymbol(overview.total_gmv || 0),
-                        total_income_display: formatPriceNoSymbol(overview.total_income || 0),
-                        net_income_display: formatPriceNoSymbol(overview.net_income || 0),
-                        pending_income_display: formatPriceNoSymbol(overview.pending_income || 0),
-                        total_platform_fee_display: formatPriceNoSymbol(overview.total_platform_fee || 0),
-                        total_operator_fee_display: formatPriceNoSymbol(overview.total_operator_fee || 0),
-                        total_promotion_exp_display: formatPriceNoSymbol(overview.total_promotion_exp || 0)
-                    } : null
-                    this.setData({ overview: overviewDisplay, loading: false })
-                    break
-                case 'daily':
-                    const dailyFinance = await FinanceService.getDailyFinance(startDate, endDate)
-                    const dailyDisplay = (dailyFinance || []).map((item: DailyFinanceItem) => ({
-                        ...item,
-                        total_gmv_display: formatPriceNoSymbol(item.total_gmv || 0),
-                        merchant_income_display: formatPriceNoSymbol(item.merchant_income || 0),
-                        total_fee_display: formatPriceNoSymbol(item.total_fee || 0)
-                    }))
-                    this.setData({ dailyFinance: dailyDisplay, loading: false })
-                    break
-                case 'orders':
-                    const orders = await FinanceService.getOrders(startDate, endDate)
-                    const ordersDisplay = (orders || []).map((item: FinanceOrderItem) => ({
-                        ...item,
-                        total_amount_display: formatPriceNoSymbol(item.total_amount || 0),
-                        total_fee_display: formatPriceNoSymbol((item.platform_fee || 0) + (item.operator_fee || 0)),
-                        merchant_amount_display: formatPriceNoSymbol(item.merchant_amount || 0),
-                        created_date: item.created_at ? item.created_at.slice(0, 10) : '-'
-                    }))
-                    this.setData({ orders: ordersDisplay, loading: false })
-                    break
-                case 'fees':
-                    const serviceFees = await FinanceService.getServiceFees(startDate, endDate)
-                    const feesDisplay = (serviceFees || []).map((item: ServiceFeeItem) => ({
-                        ...item,
-                        total_amount_display: formatPriceNoSymbol(item.total_amount || 0),
-                        platform_fee_display: formatPriceNoSymbol(item.platform_fee || 0),
-                        operator_fee_display: formatPriceNoSymbol(item.operator_fee || 0),
-                        total_fee_display: formatPriceNoSymbol(item.total_fee || 0)
-                    }))
-                    this.setData({ serviceFees: feesDisplay, loading: false })
-                    break
-                case 'promotions':
-                    const promotions = await FinanceService.getPromotions(startDate, endDate)
-                    const promotionsDisplay = (promotions || []).map((item: PromotionExpenseItem) => ({
-                        ...item,
-                        subtotal_display: formatPriceNoSymbol(item.subtotal || 0),
-                        delivery_fee_display: formatPriceNoSymbol(item.delivery_fee || 0),
-                        delivery_fee_discount_display: formatPriceNoSymbol(item.delivery_fee_discount || 0),
-                        created_date: item.created_at ? item.created_at.slice(0, 10) : '-'
-                    }))
-                    this.setData({ promotions: promotionsDisplay, loading: false })
-                    break
-                case 'settlements':
-                    const settlements = await FinanceService.getSettlements(startDate, endDate)
-                    const settlementsDisplay = (settlements || []).map((item: SettlementItem) => ({
-                        ...item,
-                        total_amount_display: formatPriceNoSymbol(item.total_amount || 0),
-                        merchant_amount_display: formatPriceNoSymbol(item.merchant_amount || 0),
-                        created_date: item.created_at ? item.created_at.slice(0, 10) : '-'
-                    }))
-                    this.setData({ settlements: settlementsDisplay, loading: false })
-                    break
-            }
-        } catch (error: any) {
-            console.error('加载财务数据失败:', error)
-            wx.showToast({ title: '加载失败', icon: 'none' })
-            this.setData({ loading: false })
-        }
-    },
-
-    // 加载初始数据
-    async loadData() {
-        await this.loadTabData(this.data.activeTab)
-    },
-
-    // 格式化状态
-    formatStatus(status: string): string {
-        const map: Record<string, string> = {
-            'pending': '待处理',
-            'processing': '处理中',
-            'finished': '已完成',
-            'failed': '失败'
-        }
-        return map[status] || status
+  onPullDownRefresh() {
+    if (!this.hasAccess()) {
+      wx.stopPullDownRefresh()
+      return
     }
+
+    void this.loadData()
+  },
+
+  async bootstrapPage() {
+    this.setData({
+      accessReady: false,
+      accessDenied: false,
+      accessErrorMessage: '',
+      canManageMerchantApplyment: false,
+      initialLoading: true,
+      initialError: false,
+      initialErrorMessage: '',
+      loading: false,
+      loadedOnce: false,
+      refreshErrorMessage: ''
+    })
+
+    const accessResult = await ensureMerchantConsoleAccess()
+    const roles = accessResult.status === 'granted' ? accessResult.user?.roles || [] : []
+
+    this.setData({
+      accessReady: true,
+      accessDenied: accessResult.status === 'denied',
+      accessErrorMessage: accessResult.status === 'error' ? accessResult.message : '',
+      canManageMerchantApplyment: canManageMerchantApplyment(roles)
+    })
+
+    if (accessResult.status !== 'granted') {
+      this.setData({ initialLoading: false })
+      return
+    }
+
+    await this.loadData()
+  },
+
+  hasAccess() {
+    return this.data.accessReady && !this.data.accessDenied && !this.data.accessErrorMessage
+  },
+
+  async loadData() {
+    const hadTrustedData = this.data.loadedOnce
+
+    this.setData({
+      loading: true,
+      initialError: false,
+      initialErrorMessage: '',
+      refreshErrorMessage: ''
+    })
+
+    try {
+      const [balance, records] = await Promise.all([
+        getMerchantAccountBalance(),
+        listMerchantWithdrawals(1, 20)
+      ])
+
+      const accountStatus = balance.account_status || records.account_status || ''
+      const statusDesc = balance.status_desc || records.status_desc || ''
+      const accountStatusView = getMerchantAccountStatusView(accountStatus, statusDesc)
+
+      this.setData({
+        initialLoading: false,
+        initialError: false,
+        initialErrorMessage: '',
+        loading: false,
+        loadedOnce: true,
+        balance,
+        notConfigured: !accountStatusView.isActive,
+        balanceStatusDesc: accountStatusView.statusDesc,
+        withdrawals: accountStatusView.isActive ? (records.withdrawals || []) : [],
+        refreshErrorMessage: ''
+      })
+    } catch (error) {
+      const debugMessage = getErrorDebugMessage(error)
+      if (debugMessage.includes('404')) {
+        this.setData({
+          initialLoading: false,
+          initialError: false,
+          initialErrorMessage: '',
+          loading: false,
+          loadedOnce: true,
+          notConfigured: true,
+          balanceStatusDesc: '暂未查询到收付通账户，请先完成收付通进件和签约。',
+          withdrawals: [],
+          refreshErrorMessage: ''
+        })
+        return
+      }
+
+      const message = getErrorUserMessage(error, '资金账户加载失败，请稍后重试')
+      logger.error('Load merchant finance account failed', error, 'merchant-finance-home')
+
+      if (hadTrustedData) {
+        this.setData({
+          initialLoading: false,
+          initialError: false,
+          initialErrorMessage: '',
+          loading: false,
+          refreshErrorMessage: `${message}，当前已保留上次同步结果`
+        })
+        return
+      }
+
+      this.setData({
+        initialLoading: false,
+        initialError: true,
+        initialErrorMessage: message,
+        loading: false,
+        refreshErrorMessage: ''
+      })
+    } finally {
+      wx.stopPullDownRefresh()
+    }
+  },
+
+  onRetryAccess() {
+    void this.bootstrapPage()
+  },
+
+  onRetry() {
+    if (!this.hasAccess()) {
+      void this.bootstrapPage()
+      return
+    }
+
+    void this.loadData()
+  },
+
+  onWithdrawAmountChange(e: WechatMiniprogram.CustomEvent<InputChangeDetail>) {
+    this.setData({ withdrawAmountYuan: e.detail.value })
+  },
+
+  onWithdrawRemarkChange(e: WechatMiniprogram.CustomEvent<InputChangeDetail>) {
+    this.setData({ withdrawRemark: e.detail.value })
+  },
+
+  onOpenWithdrawDialog() {
+    if (this.data.notConfigured || !this.data.canManageMerchantApplyment) {
+      return
+    }
+
+    this.setData({ isWithdrawDialogVisible: true })
+  },
+
+  onCloseWithdrawDialog() {
+    if (this.data.submitting) {
+      return
+    }
+
+    this.setData({ isWithdrawDialogVisible: false })
+  },
+
+  async onSubmitWithdraw() {
+    if (!this.data.canManageMerchantApplyment) {
+      wx.showToast({ title: '提现仅支持老板账号发起', icon: 'none' })
+      return
+    }
+
+    if (this.data.submitting || this.data.notConfigured) {
+      return
+    }
+
+    const amountYuan = Number(this.data.withdrawAmountYuan)
+    if (!Number.isFinite(amountYuan) || amountYuan < 1) {
+      wx.showToast({ title: '提现金额至少1元', icon: 'none' })
+      return
+    }
+
+    if (!this.data.withdrawRemark.trim()) {
+      wx.showToast({ title: '请输入提现备注', icon: 'none' })
+      return
+    }
+
+    const amount = Math.round(amountYuan * 100)
+    if (amount > this.data.balance.withdrawable_amount) {
+      wx.showToast({ title: '超过可提现余额', icon: 'none' })
+      return
+    }
+
+    this.setData({ submitting: true })
+    wx.showLoading({ title: '提交中...' })
+
+    try {
+      const result = await createMerchantWithdraw({
+        amount,
+        remark: this.data.withdrawRemark.trim()
+      })
+
+      this.upsertWithdrawal(result.withdrawal)
+      this.setData({ withdrawAmountYuan: '', withdrawRemark: '', isWithdrawDialogVisible: false })
+      await this.loadData()
+      wx.showModal({
+        title: '提现申请已提交',
+        content: this.getWithdrawCreatedMessage(result.withdrawal),
+        showCancel: false,
+        confirmText: '知道了'
+      })
+    } catch (error) {
+      logger.error('Submit merchant withdraw failed', error, 'merchant-finance-home')
+      wx.showToast({
+        title: getErrorUserMessage(error, '提现申请失败，请稍后重试'),
+        icon: 'none'
+      })
+    } finally {
+      wx.hideLoading()
+      this.setData({ submitting: false })
+    }
+  },
+
+  async onRefreshWithdrawal(e: WechatMiniprogram.TouchEvent) {
+    const { id } = e.currentTarget.dataset as { id?: number }
+    if (!id || this.data.withdrawSyncingId === id) {
+      return
+    }
+
+    this.setData({ withdrawSyncingId: id })
+    try {
+      const record = await getMerchantWithdrawal(id)
+      this.upsertWithdrawal(record)
+      wx.showToast({ title: `状态已同步为${this.getStatusText(record.status)}`, icon: 'none' })
+    } catch (error) {
+      logger.error('Refresh merchant withdrawal failed', error, 'merchant-finance-home')
+      wx.showToast({ title: getErrorUserMessage(error, '同步提现状态失败，请稍后重试'), icon: 'none' })
+    } finally {
+      this.setData({ withdrawSyncingId: 0 })
+    }
+  },
+
+  upsertWithdrawal(withdrawal: MerchantWithdrawItem) {
+    const next = [withdrawal, ...this.data.withdrawals.filter((item) => item.id !== withdrawal.id)]
+    this.setData({ withdrawals: next.slice(0, 20) })
+  },
+
+  getWithdrawCreatedMessage(withdrawal: MerchantWithdrawItem): string {
+    const parts = [`状态：${this.getStatusText(withdrawal.status)}`]
+    if (withdrawal.out_request_no) {
+      parts.push(`请求单号：${withdrawal.out_request_no}`)
+    }
+    if (withdrawal.withdraw_id) {
+      parts.push(`微信提现单号：${withdrawal.withdraw_id}`)
+    }
+    if (withdrawal.reason) {
+      parts.push(`原因：${withdrawal.reason}`)
+    }
+    parts.push('可在本页继续同步最新状态。')
+    return parts.join('\n')
+  },
+
+  formatAmount(fen: number) {
+    return (fen / 100).toFixed(2)
+  },
+
+  formatDateTime(value?: string) {
+    if (!value) return '暂无'
+    return value.replace('T', ' ').slice(0, 16)
+  },
+
+  getStatusText(status: string) {
+    return getMerchantWithdrawStatusView(status).text
+  },
+
+  getStatusTheme(status: string) {
+    return getMerchantWithdrawStatusView(status).theme
+  },
+
+  getWithdrawPanelTheme() {
+    if (this.data.notConfigured) {
+      return 'warning'
+    }
+
+    if (!this.data.canManageMerchantApplyment) {
+      return 'default'
+    }
+
+    return 'success'
+  },
+
+  getWithdrawPanelText() {
+    if (this.data.notConfigured) {
+      return '未开通'
+    }
+
+    if (!this.data.canManageMerchantApplyment) {
+      return '仅查看'
+    }
+
+    return '可提现'
+  },
+
+  canSubmitWithdraw() {
+    return !this.data.notConfigured && this.data.canManageMerchantApplyment
+  }
 })

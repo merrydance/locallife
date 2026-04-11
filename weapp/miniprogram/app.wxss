@@ -8,40 +8,44 @@
  */
 page {
   /* ========== TDesign主题色覆盖 ========== */
-  /* 品牌主色 - 活力珊瑚 #FF6B58 (30%使用) */
-  --td-brand-color: #FF6B58;
-  --td-brand-color-1: #FFF5F3;
-  --td-brand-color-2: #FFE8E5;
-  --td-brand-color-3: #FFD4CE;
-  --td-brand-color-4: #FFBFB6;
-  --td-brand-color-5: #FFAA9E;
-  --td-brand-color-6: #FF9586;
-  --td-brand-color-7: #FF806E;
-  --td-brand-color-8: #FF6B58;
-  --td-brand-color-9: #E66A5C;
-  --td-brand-color-10: #CC5E50;
+  /* 品牌主色 - 活力暖橙 #FF6B00 (30%使用) */
+  --td-brand-color: #FF6B00;
+  --td-brand-color-1: #FFF0E0;
+  --td-brand-color-2: #FFE1C2;
+  --td-brand-color-3: #FFD2A3;
+  --td-brand-color-4: #FFC385;
+  --td-brand-color-5: #FFB466;
+  --td-brand-color-6: #FFA547;
+  --td-brand-color-7: #FF9629;
+  --td-brand-color-8: #FF880A;
+  --td-brand-color-9: #E66000;
+  --td-brand-color-10: #CC5500;
   
-  --td-brand-color-light: #FF8A75;
-  --td-brand-color-focus: #E66A5C;
-  --td-brand-color-disabled: #FFBFB6;
+  /* 浅色背景变量映射到最淡的色阶，确保文字对比度 */
+  --td-brand-color-light: var(--td-brand-color-1);
+  --td-brand-color-focus: #E66000;
+  --td-brand-color-disabled: #FFC385;
   
   /* 辅助色 - 极客深青 #00897B (10%使用) */
   --td-success-color: #00897B;
   --td-success-color-1: #E6F7F5;
   --td-success-color-5: #4DB6AC;
   --td-success-color-7: #00897B;
+  --td-success-color-light: var(--td-success-color-1);
   
   /* 强调色 - 日光芥末 #FFC107 (10%使用) */
   --td-warning-color: #FFC107;
   --td-warning-color-1: #FFF9E6;
   --td-warning-color-5: #FFD54F;
   --td-warning-color-7: #FFC107;
+  --td-warning-color-light: var(--td-warning-color-1);
   
   /* 错误色 - 警示红 #E53935 */
   --td-error-color: #E53935;
   --td-error-color-1: #FFEBEE;
   --td-error-color-5: #EF5350;
   --td-error-color-7: #E53935;
+  --td-error-color-light: var(--td-error-color-1);
   
   /* ========== 背景色 (60%使用) ========== */
   --td-bg-color-page: #FAFAFA;        /* 陶瓷白 - 页面背景 */
@@ -56,9 +60,14 @@ page {
   --td-text-color-anti: rgba(255, 255, 255, 0.87); /* 白色文字 */
   
   /* ========== 自定义品牌变量 ========== */
-  /* 用于价格、促销等特殊场景 */
-  --brand-coral: #FF6B58;
-  --brand-coral-gradient: linear-gradient(135deg, #FF8A75 0%, #FF6B58 100%);
+  --brand-primary: #FF6B00;       /* 主色：暖橙 */
+  --brand-primary-light: #FFF0E0; /* 浅主色背景 */
+  --brand-secondary: #1A1A2E;     /* 深夜蓝（优质质感） */
+  --brand-accent: #FFD166;        /* 强调黄 */
+  
+  /* 兼容旧变量 */
+  --brand-coral: #FF6B00;
+  --brand-coral-gradient: linear-gradient(135deg, #FF9629 0%, #FF6B00 100%);
   --brand-teal: #00897B;
   --brand-mustard: #FFC107;
   
@@ -66,29 +75,86 @@ page {
   --shadow-sm: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
   --shadow-md: 0 4rpx 12rpx rgba(0, 0, 0, 0.08);
   --shadow-lg: 0 8rpx 24rpx rgba(0, 0, 0, 0.12);
+  --shadow-card: 0 4rpx 20rpx rgba(0,0,0,0.06);
+  --shadow-float: 0 8rpx 32rpx rgba(0,0,0,0.12);
 
   /* ========== 消费侧卡片设计 Token ========== */
   /* 仅用于消费侧组件，不影响商户侧 */
-  --customer-card-padding: 20rpx;
-  --customer-card-gap: 20rpx;
-  --customer-card-margin: 12rpx;
-  --customer-card-radius: 16rpx;
-  --customer-card-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.06);
-  --customer-card-shadow-active: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
+  --customer-card-padding: 24rpx;
+  --customer-card-gap: 24rpx;
+  --customer-card-margin: 16rpx;
+  --customer-card-radius: 24rpx;
+  --customer-card-shadow: var(--shadow-card);
+  --customer-card-shadow-active: var(--shadow-sm);
   --customer-image-size: 180rpx;
   --customer-image-radius: 12rpx;
-  --customer-title-size: 28rpx;
-  --customer-subtitle-size: 24rpx;
-  --customer-caption-size: 22rpx;
-  --customer-section-gap: 12rpx;
-  --customer-page-padding: 20rpx;
+  --customer-title-size: 32rpx;
+  --customer-subtitle-size: 26rpx;
+  --customer-caption-size: 24rpx;
+  --customer-section-gap: 16rpx;
+  --customer-page-padding: 24rpx;
+
+  /* ========== 统一文字系统 (Typography System) ========== */
+  --font-size-display: 48rpx;
+  --font-size-title: 36rpx;    /* 页面标题 */
+  --font-size-heading: 32rpx;  /* 卡片/模块标题 */
+  --font-size-base: 28rpx;     /* 正文/列表项 */
+  --font-size-sm: 26rpx;       /* 辅助文本 */
+  --font-size-xs: 24rpx;       /* 说明/标签 */
+  --font-size-xxs: 20rpx;      /* 角标 */
+
+  /* ========== 统一间距系统 (Spacing System) - 8rpx网格 ========== */
+  --spacer-xxs: 4rpx;   /* 极微 */
+  --spacer-xs: 8rpx;    /* 紧凑 (icon-text) */
+  --spacer-sm: 16rpx;   /* 小 (card-margin, tag-gap) */
+  --spacer-md: 24rpx;   /* TDesign Component Overrides - 按钮形状收口为大圆角 */
+  --td-button-border-radius: 999px;
+  --td-button-large-border-radius: 999px;
+  --td-button-medium-border-radius: 999px;
+  --td-button-small-border-radius: 999px;
+  --td-button-extra-small-border-radius: 999px;
+
+  /* Cart Bar Specific Overrides */
+  --spacer-lg: 32rpx;   /* 大 (section-gap) */
+  --spacer-xl: 48rpx;   /* 超大 */
+  --spacer-xxl: 64rpx;  /* 巨型 */
+
+
+  /* ========== 统一圆角系统 (Radius System) ========== */
+  --radius-xs: 4rpx;    /* 极小 (标签) */
+  --radius-sm: 8rpx;    /* 小 (小卡片/按钮) */
+  --radius-md: 12rpx;   /* 中 (标准卡片/图片) */
+  --radius-lg: 16rpx;   /* 大 (大卡片/弹窗) */
+  --radius-xl: 24rpx;   /* 超大 (底部面板) */
+  --radius-card: 24rpx; /* 新标准卡片 */
+  --radius-round: 999rpx; /* 全圆 (胶囊/头像) */
+  --radius-pill: 999rpx; /* 药丸 */
+
+  /* ========== 统一层级系统 (Z-Index System) ========== */
+  --z-index-base: 1;
+  --z-index-sticky: 100;   /* 吸顶元素 */
+  --z-index-dropdown: 800; /* 下拉菜单 */
+  --z-index-fixed: 1000;   /* 固定底部栏/悬浮按钮 */
+  --z-index-modal: 2000;   /* 弹窗/遮罩 */
+  --z-index-toast: 3000;   /* 提示框 */
+
+  /* ========== 统一动效系统 (Motion System) ========== */
+  --transition-base: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-fade: 0.3s ease-in-out;
+
+  /* ========== 安全区域 (Safe Area) ========== */
+  --safe-area-bottom: constant(safe-area-inset-bottom);
+  --safe-area-bottom: env(safe-area-inset-bottom);
+  --popup-bottom-padding-sm: calc(24rpx + var(--safe-area-bottom));
+  --popup-bottom-padding-md: calc(32rpx + var(--safe-area-bottom));
+  --popup-bottom-padding-lg: calc(40rpx + var(--safe-area-bottom));
 }
 
 /* ========== 深色模式 ========== */
 page[data-theme="dark"] {
   /* 品牌色微调（深色模式下更柔和） */
-  --td-brand-color: #FF8A7A;
-  --td-brand-color-8: #FF8A7A;
+  --td-brand-color: #FFA547;
+  --td-brand-color-8: #FFA547;
   
   /* 背景色 */
   --td-bg-color-page: #121212;
@@ -111,8 +177,8 @@ page[data-theme="dark"] {
   --td-error-color: #FF6B6B;
   
   /* 品牌色 */
-  --brand-coral: #FF8A7A;
-  --brand-coral-gradient: linear-gradient(135deg, #FF9B8B 0%, #FF8A7A 100%);
+  --brand-coral: #FFA547;
+  --brand-coral-gradient: linear-gradient(135deg, #FFB466 0%, #FFA547 100%);
   --brand-teal: #26A69A;
   --brand-mustard: #FFD54F;
   
@@ -132,47 +198,63 @@ page[data-theme="dark"] {
   box-sizing: border-box;
 }
 
-/* 
- * PC 端字体和间距锁定
- * 防止 rpx 在大屏上过度放大，保持视觉比例一致
- * 注意：仅锁定尺寸变量，不改变布局结构
- */
-@media (min-width: 750px) {
-  page {
-    /* 字号锁定 - 防止文字过大 */
-    --td-font-size-xs: 11px !important;
-    --td-font-size-s: 13px !important;
-    --td-font-size-m: 14px !important;
-    --td-font-size-l: 16px !important;
-    --td-font-size-xl: 18px !important;
-    --td-font-size-2xl: 24px !important;
-
-    /* 间距锁定 */
-    --td-spacer-1: 4px !important;
-    --td-spacer-2: 8px !important;
-    --td-spacer-3: 12px !important;
-    --td-spacer-4: 16px !important;
-    --td-spacer-5: 20px !important;
-    --td-spacer-6: 24px !important;
-
-    /* 圆角锁定 */
-    --td-radius-small: 4px !important;
-    --td-radius-default: 6px !important;
-    --td-radius-medium: 8px !important;
-    --td-radius-large: 12px !important;
-
-    /* TDesign 组件尺寸锁定 */
-    --td-button-medium-height: 40px !important;
-    --td-button-large-height: 48px !important;
-    --td-button-small-height: 32px !important;
-    --td-tag-medium-height: 24px !important;
-    --td-tag-large-height: 32px !important;
-  }
-
-  /* 基础字体锁定 */
-  text, view {
-    font-size: 14px;
-  }
+.page-shell {
+  min-height: 100vh;
+  background-color: var(--td-bg-color-page);
+  box-sizing: border-box;
 }
 
+.page-shell--with-nav {
+  padding-top: calc(var(--page-shell-nav-height, 0px) + var(--spacer-sm));
+}
 
+.page-shell--bottom-safe {
+  padding-bottom: calc(var(--page-shell-bottom-offset, 0rpx) + var(--safe-area-bottom));
+}
+
+.page-shell--page-gutter {
+  padding-left: var(--spacer-md);
+  padding-right: var(--spacer-md);
+}
+
+/* 全局收紧表单分组标题与内容间距（影响 t-cell-group） */
+.t-cell-group {
+  margin: 0 !important;
+}
+
+.t-cell-group__title {
+  padding: 12rpx 24rpx !important;
+  font-size: 26rpx !important;
+  color: var(--td-text-color-secondary) !important;
+  background: var(--td-bg-color-secondarycontainer) !important;
+  line-height: 36rpx !important;
+}
+
+.t-cell-group__wrapper {
+  margin-top: 0 !important;
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(90deg, var(--td-bg-color-secondarycontainer) 25%, var(--td-bg-color-page) 50%, var(--td-bg-color-secondarycontainer) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+.skeleton-rect {
+  background: var(--td-bg-color-secondarycontainer);
+}
+
+.skeleton-circle {
+  border-radius: 50%;
+  background: var(--td-bg-color-secondarycontainer);
+}
+
+/* 全站标签视觉基线（非交互态） */
+.t-tag {
+  border-radius: var(--radius-round) !important;
+}

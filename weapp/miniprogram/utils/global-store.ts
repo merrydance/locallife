@@ -16,15 +16,14 @@ interface StoreState {
   longitude: number | null
   navBarHeight: number
   cart: {
-    items: any[]
+    items: unknown[]
     totalCount: number
     totalPrice: number
     totalPriceDisplay: string
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type ListenerMap = Map<keyof StoreState, Set<Listener<any>>>
+type ListenerMap = Map<keyof StoreState, Set<Listener<StoreState[keyof StoreState]>>>
 
 class GlobalStore {
   private static instance: GlobalStore
@@ -108,11 +107,11 @@ class GlobalStore {
     if (!this.listeners.has(key)) {
       this.listeners.set(key, new Set())
     }
-    this.listeners.get(key)!.add(listener)
+    this.listeners.get(key)!.add(listener as Listener<StoreState[keyof StoreState]>)
 
     // 返回取消订阅函数
     return () => {
-      this.listeners.get(key)?.delete(listener)
+      this.listeners.get(key)?.delete(listener as Listener<StoreState[keyof StoreState]>)
     }
   }
 

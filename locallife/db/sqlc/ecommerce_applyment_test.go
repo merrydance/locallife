@@ -18,12 +18,6 @@ func createRandomEcommerceApplymentForMerchant(t *testing.T) EcommerceApplyment 
 	return createRandomEcommerceApplymentWithSubject(t, "merchant", merchant.ID)
 }
 
-// createRandomEcommerceApplymentForRider 为骑手创建测试进件记录
-func createRandomEcommerceApplymentForRider(t *testing.T) EcommerceApplyment {
-	rider := createRandomRider(t)
-	return createRandomEcommerceApplymentWithSubject(t, "rider", rider.ID)
-}
-
 // createRandomEcommerceApplymentWithSubject 创建指定主体的进件记录
 func createRandomEcommerceApplymentWithSubject(t *testing.T, subjectType string, subjectID int64) EcommerceApplyment {
 	outRequestNo := util.RandomString(20)
@@ -44,7 +38,11 @@ func createRandomEcommerceApplymentWithSubject(t *testing.T, subjectType string,
 		IDCardBackCopy:        "https://example.com/id_back.jpg",
 		AccountType:           "ACCOUNT_TYPE_PRIVATE",
 		AccountBank:           "招商银行",
+		AccountBankCode:       pgtype.Int8{Int64: 1099, Valid: true},
+		BankAlias:             pgtype.Text{String: "深圳前海微众银行", Valid: true},
+		BankAliasCode:         pgtype.Text{String: "1000009561", Valid: true},
 		BankAddressCode:       "440300",
+		BankBranchID:          pgtype.Text{String: "402584040001", Valid: true},
 		BankName:              pgtype.Text{String: "招商银行深圳分行", Valid: true},
 		AccountNumber:         "6214830012345678",
 		AccountName:           util.RandomString(6),
@@ -65,6 +63,14 @@ func createRandomEcommerceApplymentWithSubject(t *testing.T, subjectType string,
 	require.Equal(t, arg.SubjectType, applyment.SubjectType)
 	require.Equal(t, arg.SubjectID, applyment.SubjectID)
 	require.Equal(t, arg.OutRequestNo, applyment.OutRequestNo)
+	require.True(t, applyment.AccountBankCode.Valid)
+	require.Equal(t, arg.AccountBankCode.Int64, applyment.AccountBankCode.Int64)
+	require.True(t, applyment.BankAlias.Valid)
+	require.Equal(t, arg.BankAlias.String, applyment.BankAlias.String)
+	require.True(t, applyment.BankAliasCode.Valid)
+	require.Equal(t, arg.BankAliasCode.String, applyment.BankAliasCode.String)
+	require.True(t, applyment.BankBranchID.Valid)
+	require.Equal(t, arg.BankBranchID.String, applyment.BankBranchID.String)
 	require.Equal(t, "pending", applyment.Status)
 	require.NotZero(t, applyment.ID)
 	require.NotZero(t, applyment.CreatedAt)
@@ -228,10 +234,18 @@ func TestUpdateEcommerceApplymentSubMchID(t *testing.T) {
 func TestListEcommerceApplymentsBySubject(t *testing.T) {
 	merchant := createRandomMerchantForTest(t)
 
+	before, err := testStore.ListEcommerceApplymentsBySubject(context.Background(), ListEcommerceApplymentsBySubjectParams{
+		SubjectType: "merchant",
+		SubjectID:   merchant.ID,
+	})
+	require.NoError(t, err)
+
 	// 创建多个进件记录
 	n := 3
+	createdIDs := make(map[int64]struct{}, n)
 	for i := 0; i < n; i++ {
-		createRandomEcommerceApplymentWithSubject(t, "merchant", merchant.ID)
+		created := createRandomEcommerceApplymentWithSubject(t, "merchant", merchant.ID)
+		createdIDs[created.ID] = struct{}{}
 	}
 
 	applyments, err := testStore.ListEcommerceApplymentsBySubject(context.Background(), ListEcommerceApplymentsBySubjectParams{
@@ -239,13 +253,19 @@ func TestListEcommerceApplymentsBySubject(t *testing.T) {
 		SubjectID:   merchant.ID,
 	})
 	require.NoError(t, err)
-	require.Len(t, applyments, n)
+	require.Len(t, applyments, len(before)+n)
 
 	// 验证所有记录都属于该商户
 	for _, a := range applyments {
 		require.Equal(t, "merchant", a.SubjectType)
 		require.Equal(t, merchant.ID, a.SubjectID)
 	}
+
+	// 验证新创建记录都在结果中
+	for _, a := range applyments {
+		delete(createdIDs, a.ID)
+	}
+	require.Empty(t, createdIDs)
 }
 
 func TestListEcommerceApplymentsByStatus(t *testing.T) {
@@ -393,45 +413,6 @@ func TestConcurrentCreateEcommerceApplyment(t *testing.T) {
 		err := <-errs
 		require.NoError(t, err)
 	}
-}
-
-// ==================== 骑手进件测试 ====================
-
-func TestCreateEcommerceApplymentForRider(t *testing.T) {
-	applyment := createRandomEcommerceApplymentForRider(t)
-	require.NotEmpty(t, applyment)
-	require.Equal(t, "rider", applyment.SubjectType)
-	require.Equal(t, "pending", applyment.Status)
-}
-
-func TestRiderApplymentStatusFlow(t *testing.T) {
-	applyment := createRandomEcommerceApplymentForRider(t)
-
-	// 1. pending -> submitted
-	updated, err := testStore.UpdateEcommerceApplymentToSubmitted(context.Background(), UpdateEcommerceApplymentToSubmittedParams{
-		ID:          applyment.ID,
-		ApplymentID: pgtype.Int8{Int64: 123456789, Valid: true},
-	})
-	require.NoError(t, err)
-	require.Equal(t, "submitted", updated.Status)
-
-	// 2. submitted -> auditing
-	updated, err = testStore.UpdateEcommerceApplymentStatus(context.Background(), UpdateEcommerceApplymentStatusParams{
-		ID:     applyment.ID,
-		Status: "auditing",
-	})
-	require.NoError(t, err)
-	require.Equal(t, "auditing", updated.Status)
-
-	// 3. auditing -> finish (with sub_mch_id)
-	subMchID := "rider_sub_mch_123"
-	updated, err = testStore.UpdateEcommerceApplymentSubMchID(context.Background(), UpdateEcommerceApplymentSubMchIDParams{
-		ID:       applyment.ID,
-		SubMchID: pgtype.Text{String: subMchID, Valid: true},
-	})
-	require.NoError(t, err)
-	require.Equal(t, "finish", updated.Status)
-	require.Equal(t, subMchID, updated.SubMchID.String)
 }
 
 // ==================== 被拒后重新提交测试 ====================

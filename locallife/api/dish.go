@@ -5,19 +5,15 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/media"
 	"github.com/merrydance/locallife/token"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/rs/zerolog/log"
 )
-
-func isNoRows(err error) bool {
-	return errors.Is(err, pgx.ErrNoRows)
-}
 
 // ==================== 菜品分类 ====================
 
@@ -57,9 +53,9 @@ func (server *Server) createDishCategory(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户信息（验证商户权限）
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.resolveMerchantForUser(ctx, authPayload.UserID)
 	if err != nil {
-		if isNoRows(err) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
 		}
@@ -85,7 +81,7 @@ func (server *Server) createDishCategory(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, dishCategoryResponse{
+	ctx.JSON(http.StatusCreated, dishCategoryResponse{
 		ID:        category.ID,
 		Name:      category.Name,
 		SortOrder: req.SortOrder,
@@ -96,13 +92,21 @@ type listDishCategoriesResponse struct {
 	Categories []dishCategoryResponse `json:"categories"`
 }
 
+type listGlobalDishCategoriesResponse struct {
+	Categories []dishCategoryResponse `json:"categories"`
+}
+
+type dishTagsResponse struct {
+	Tags []string `json:"tags"`
+}
+
 // listDishCategories godoc
 // @Summary 获取菜品分类列表
 // @Description 获取当前商户的所有菜品分类
 // @Tags 菜品管理
 // @Accept json
 // @Produce json
-// @Success 200 {object} listDishCategoriesResponse "分类列表"
+// @Success 201 {object} listDishCategoriesResponse "分类列表"
 // @Failure 401 {object} ErrorResponse "未授权"
 // @Failure 404 {object} ErrorResponse "商户不存在"
 // @Failure 500 {object} ErrorResponse "服务器内部错误"
@@ -113,9 +117,9 @@ func (server *Server) listDishCategories(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户信息
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.resolveMerchantForUser(ctx, authPayload.UserID)
 	if err != nil {
-		if isNoRows(err) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
 		}
@@ -141,6 +145,50 @@ func (server *Server) listDishCategories(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, listDishCategoriesResponse{
+		Categories: result,
+	})
+}
+
+// listGlobalDishCategories godoc
+// @Summary 获取全局菜品分类列表
+// @Description 获取全局可复用菜品分类（用于商户关联）
+// @Tags 菜品管理
+// @Accept json
+// @Produce json
+// @Success 200 {object} listGlobalDishCategoriesResponse "分类列表"
+// @Failure 401 {object} ErrorResponse "未授权"
+// @Failure 500 {object} ErrorResponse "服务器内部错误"
+// @Router /v1/dishes/categories/global [get]
+// @Security BearerAuth
+func (server *Server) listGlobalDishCategories(ctx *gin.Context) {
+	// 保持与其他商户接口一致，验证当前用户具备商户身份
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	_, err := server.resolveMerchantForUser(ctx, authPayload.UserID)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get merchant by owner: %w", err)))
+		return
+	}
+
+	globalCategories, err := server.store.ListGlobalDishCategories(ctx)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("list global dish categories: %w", err)))
+		return
+	}
+
+	result := make([]dishCategoryResponse, len(globalCategories))
+	for i, cat := range globalCategories {
+		result[i] = dishCategoryResponse{
+			ID:        cat.ID,
+			Name:      cat.Name,
+			SortOrder: 0,
+		}
+	}
+
+	ctx.JSON(http.StatusOK, listGlobalDishCategoriesResponse{
 		Categories: result,
 	})
 }
@@ -187,9 +235,9 @@ func (server *Server) updateDishCategory(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户信息
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.resolveMerchantForUser(ctx, authPayload.UserID)
 	if err != nil {
-		if isNoRows(err) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
 		}
@@ -203,7 +251,7 @@ func (server *Server) updateDishCategory(ctx *gin.Context) {
 		CategoryID: uri.ID,
 	})
 	if err != nil {
-		if isNoRows(err) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not your category")))
 			return
 		}
@@ -214,7 +262,7 @@ func (server *Server) updateDishCategory(ctx *gin.Context) {
 	// 获取分类名称（用于判断是否改名）
 	category, err := server.store.GetDishCategory(ctx, uri.ID)
 	if err != nil {
-		if isNoRows(err) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("category not found")))
 			return
 		}
@@ -231,48 +279,21 @@ func (server *Server) updateDishCategory(ctx *gin.Context) {
 	}
 
 	if req.Name != nil && *req.Name != category.Name {
-		// 1. 获取或创建新名称的全局分类
-		newCategory, err := server.store.CreateDishCategory(ctx, *req.Name)
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("create new global dish category: %w", err)))
-			return
-		}
-
-		// 2. 将商户关联到新分类
-		_, err = server.store.LinkMerchantDishCategory(ctx, db.LinkMerchantDishCategoryParams{
-			MerchantID: merchant.ID,
-			CategoryID: newCategory.ID,
-			SortOrder:  finalSortOrder,
-		})
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("link merchant to new dish category: %w", err)))
-			return
-		}
-
-		// 3. 更新该商户下所有属于旧分类的菜品到新分类
-		// 注意：我们需要一个 UpdateDishCategoryForMerchant 的查询，但目前可以先用简单的逻辑
-		// 这里暂且假设我们需要更新 dishes 表
-		err = server.store.UpdateDishesCategory(ctx, db.UpdateDishesCategoryParams{
+		// 将 4 步操作（创建分类 → 关联新分类 → 迁移菜品 → 取消旧关联）封装在同一事务中，
+		// 任一步骤失败均自动回滚，确保数据一致性。
+		txResult, err := server.store.RenameMerchantDishCategoryTx(ctx, db.RenameMerchantDishCategoryTxParams{
 			MerchantID:    merchant.ID,
-			OldCategoryID: pgtype.Int8{Int64: uri.ID, Valid: true},
-			NewCategoryID: pgtype.Int8{Int64: newCategory.ID, Valid: true},
+			OldCategoryID: uri.ID,
+			NewName:       *req.Name,
+			SortOrder:     finalSortOrder,
 		})
 		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("migrate dishes to new category: %w", err)))
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("rename dish category: %w", err)))
 			return
 		}
-
-		// 4. 取消旧分类的关联
-		err = server.store.UnlinkMerchantDishCategory(ctx, db.UnlinkMerchantDishCategoryParams{
-			MerchantID: merchant.ID,
-			CategoryID: uri.ID,
-		})
-		if err != nil {
-			// 即使取消失败也继续，因为新关联已经建立
-		}
-
-		finalID = newCategory.ID
-		finalName = newCategory.Name
+		finalID = txResult.NewCategoryID
+		finalName = txResult.NewCategoryName
+		finalSortOrder = txResult.SortOrder
 	} else if req.SortOrder != nil {
 		// 如果只更新了排序，且名称没变，则直接使用新的排序
 		finalSortOrder = *req.SortOrder
@@ -315,9 +336,9 @@ func (server *Server) deleteDishCategory(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户信息
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.resolveMerchantForUser(ctx, authPayload.UserID)
 	if err != nil {
-		if isNoRows(err) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
 		}
@@ -331,7 +352,7 @@ func (server *Server) deleteDishCategory(ctx *gin.Context) {
 		CategoryID: uri.ID,
 	})
 	if err != nil {
-		if isNoRows(err) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not your category")))
 			return
 		}
@@ -349,7 +370,7 @@ func (server *Server) deleteDishCategory(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"message": "category deleted successfully"})
+	ctx.JSON(http.StatusOK, successMessage("category deleted successfully"))
 }
 
 // ==================== 菜品管理 ====================
@@ -358,16 +379,17 @@ type createDishRequest struct {
 	CategoryID          *int64                    `json:"category_id" binding:"omitempty,min=1"`
 	Name                string                    `json:"name" binding:"required,min=1,max=50"`
 	Description         string                    `json:"description" binding:"omitempty,max=500"`
-	ImageURL            string                    `json:"image_url" binding:"omitempty,max=500"`
-	Price               int64                     `json:"price" binding:"required,min=1,max=9999900"` // 最高99999元
-	MemberPrice         *int64                    `json:"member_price" binding:"omitempty,min=1,max=9999900"`
+	Price               *int64                    `json:"price" binding:"required,min=0,max=9999900"` // 最高99999元
+	MemberPrice         *int64                    `json:"member_price" binding:"omitempty,min=0,max=9999900"`
 	IsAvailable         bool                      `json:"is_available"`
 	IsOnline            bool                      `json:"is_online"`
+	IsPackaging         bool                      `json:"is_packaging"`
 	SortOrder           int16                     `json:"sort_order" binding:"min=0,max=999"`
 	PrepareTime         int16                     `json:"prepare_time" binding:"omitempty,min=0,max=120"`       // 预估制作时间（分钟），0表示使用默认值10分钟
 	IngredientIDs       []int64                   `json:"ingredient_ids" binding:"omitempty,max=20,dive,min=1"` // 最多20个食材
 	TagIDs              []int64                   `json:"tag_ids" binding:"omitempty,max=10,dive,min=1"`        // 最多10个标签
 	CustomizationGroups []customizationGroupInput `json:"customization_groups" binding:"omitempty,max=20,dive"` // 定制选项分组
+	ImageAssetID        *int64                    `json:"image_asset_id" binding:"omitempty,min=1"`             // 图片媒体资产ID
 }
 
 type dishResponse struct {
@@ -377,16 +399,54 @@ type dishResponse struct {
 	CategoryName        *string              `json:"category_name,omitempty"`
 	Name                string               `json:"name"`
 	Description         string               `json:"description"`
-	ImageURL            string               `json:"image_url"`
+	ImageAssetID        *int64               `json:"image_asset_id,omitempty"`
+	ImageURL            string               `json:"image_url,omitempty"`
 	Price               int64                `json:"price"`
+	OriginalPrice       int64                `json:"original_price"`
 	MemberPrice         *int64               `json:"member_price"`
 	IsAvailable         bool                 `json:"is_available"`
 	IsOnline            bool                 `json:"is_online"`
+	IsPackaging         bool                 `json:"is_packaging"`
 	SortOrder           int16                `json:"sort_order"`
 	PrepareTime         int16                `json:"prepare_time"` // 预估制作时间（分钟）
 	Ingredients         []ingredient         `json:"ingredients,omitempty"`
 	Tags                []tagInfo            `json:"tags,omitempty"`
 	CustomizationGroups []customizationGroup `json:"customization_groups,omitempty"`
+}
+
+func normalizePackagingDishCreate(req createDishRequest) (bool, bool, bool) {
+	isPackaging := req.IsPackaging
+	isAvailable := req.IsAvailable
+	isOnline := req.IsOnline
+	if isPackaging {
+		isAvailable = true
+		isOnline = true
+	}
+	return isPackaging, isAvailable, isOnline
+}
+
+func resolvePackagingDishUpdate(current db.Dish, req updateDishRequest) (bool, bool, bool) {
+	nextIsPackaging := current.IsPackaging
+	if req.IsPackaging != nil {
+		nextIsPackaging = *req.IsPackaging
+	}
+
+	nextIsAvailable := current.IsAvailable
+	if req.IsAvailable != nil {
+		nextIsAvailable = *req.IsAvailable
+	}
+
+	nextIsOnline := current.IsOnline
+	if req.IsOnline != nil {
+		nextIsOnline = *req.IsOnline
+	}
+
+	if nextIsPackaging {
+		nextIsAvailable = true
+		nextIsOnline = true
+	}
+
+	return nextIsPackaging, nextIsAvailable, nextIsOnline
 }
 
 type ingredient struct {
@@ -442,25 +502,14 @@ func (server *Server) createDish(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户信息
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.resolveMerchantForUser(ctx, authPayload.UserID)
 	if err != nil {
-		if isNoRows(err) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get merchant by owner: %w", err)))
 		return
-	}
-
-	// 菜品图片必须先审后存：仅允许使用 uploads/public/... 本地路径
-	if strings.TrimSpace(req.ImageURL) != "" {
-		normalized := normalizeStoredUploadPath(req.ImageURL)
-		prefix := fmt.Sprintf("uploads/public/merchants/%d/dishes/", merchant.ID)
-		if normalized == "" || !strings.HasPrefix(normalized, prefix) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("image_url 仅允许使用通过菜品图片上传接口生成的本地路径")))
-			return
-		}
-		req.ImageURL = normalized
 	}
 
 	// 准备参数
@@ -472,7 +521,7 @@ func (server *Server) createDish(ctx *gin.Context) {
 			CategoryID: *req.CategoryID,
 		})
 		if err != nil {
-			if isNoRows(err) {
+			if isNotFoundError(err) {
 				ctx.JSON(http.StatusForbidden, errorResponse(errors.New("category does not belong to this merchant")))
 				return
 			}
@@ -487,102 +536,130 @@ func (server *Server) createDish(ctx *gin.Context) {
 		memberPrice = pgtype.Int8{Int64: *req.MemberPrice, Valid: true}
 	}
 
+	var imageMediaAssetID pgtype.Int8
+	if req.ImageAssetID != nil {
+		imageMediaAssetID = pgtype.Int8{Int64: *req.ImageAssetID, Valid: true}
+	}
+
+	customizationTagNames := make(map[int64]string)
+	customizationInputs := make([]db.CustomizationGroupInput, 0, len(req.CustomizationGroups))
+	for _, g := range req.CustomizationGroups {
+		options := make([]db.CustomizationOptionInput, 0, len(g.Options))
+		for _, o := range g.Options {
+			if _, exists := customizationTagNames[o.TagID]; !exists {
+				tag, err := server.store.GetTag(ctx, o.TagID)
+				if err != nil {
+					if isNotFoundError(err) {
+						ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("tag %d not found", o.TagID)))
+						return
+					}
+					ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get tag %d: %w", o.TagID, err)))
+					return
+				}
+				customizationTagNames[o.TagID] = tag.Name
+			}
+
+			options = append(options, db.CustomizationOptionInput{
+				TagID:      o.TagID,
+				ExtraPrice: o.ExtraPrice,
+				SortOrder:  o.SortOrder,
+			})
+		}
+
+		customizationInputs = append(customizationInputs, db.CustomizationGroupInput{
+			Name:       g.Name,
+			IsRequired: g.IsRequired,
+			SortOrder:  g.SortOrder,
+			Options:    options,
+		})
+	}
+
 	// 处理预估制作时间默认值
 	const defaultPrepareTime int16 = 10 // 默认10分钟
 	prepareTime := req.PrepareTime
 	if prepareTime <= 0 {
 		prepareTime = defaultPrepareTime
 	}
+	isPackaging, isAvailable, isOnline := normalizePackagingDishCreate(req)
 
 	// 使用事务创建菜品+食材+标签，保证原子性
 	txResult, err := server.store.CreateDishTx(ctx, db.CreateDishTxParams{
-		MerchantID:    merchant.ID,
-		CategoryID:    categoryID,
-		Name:          req.Name,
-		Description:   pgtype.Text{String: req.Description, Valid: req.Description != ""},
-		ImageUrl:      pgtype.Text{String: normalizeImageURLForStorage(req.ImageURL), Valid: req.ImageURL != ""},
-		Price:         req.Price,
-		MemberPrice:   memberPrice,
-		IsAvailable:   req.IsAvailable,
-		IsOnline:      req.IsOnline,
-		SortOrder:     req.SortOrder,
-		PrepareTime:   prepareTime,
-		IngredientIDs: req.IngredientIDs,
-		TagIDs:        req.TagIDs,
+		MerchantID:          merchant.ID,
+		CategoryID:          categoryID,
+		Name:                req.Name,
+		Description:         pgtype.Text{String: req.Description, Valid: req.Description != ""},
+		ImageMediaAssetID:   imageMediaAssetID,
+		Price:               *req.Price,
+		MemberPrice:         memberPrice,
+		IsAvailable:         isAvailable,
+		IsOnline:            isOnline,
+		IsPackaging:         isPackaging,
+		SortOrder:           req.SortOrder,
+		PrepareTime:         prepareTime,
+		IngredientIDs:       req.IngredientIDs,
+		TagIDs:              req.TagIDs,
+		CustomizationGroups: customizationInputs,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("create dish tx: %w", err)))
 		return
 	}
 
-	// 如果有定制选项，保存定制选项
 	var customizationGroups []customizationGroup
-	if len(req.CustomizationGroups) > 0 {
-		groups := make([]db.CustomizationGroupInput, 0, len(req.CustomizationGroups))
-		for _, g := range req.CustomizationGroups {
-			options := make([]db.CustomizationOptionInput, 0, len(g.Options))
-			for _, o := range g.Options {
-				options = append(options, db.CustomizationOptionInput{
-					TagID:      o.TagID,
-					ExtraPrice: o.ExtraPrice,
-					SortOrder:  o.SortOrder,
-				})
-			}
-			groups = append(groups, db.CustomizationGroupInput{
-				Name:       g.Name,
-				IsRequired: g.IsRequired,
-				SortOrder:  g.SortOrder,
-				Options:    options,
+	for _, g := range txResult.CustomizationGroups {
+		options := make([]customizationOption, 0, len(g.Options))
+		for _, o := range g.Options {
+			options = append(options, customizationOption{
+				ID:         o.ID,
+				TagID:      o.TagID,
+				TagName:    customizationTagNames[o.TagID],
+				ExtraPrice: o.ExtraPrice,
+				SortOrder:  o.SortOrder,
 			})
 		}
-
-		custResult, err := server.store.SetDishCustomizationsTx(ctx, db.SetDishCustomizationsTxParams{
-			DishID: txResult.Dish.ID,
-			Groups: groups,
+		customizationGroups = append(customizationGroups, customizationGroup{
+			ID:         g.Group.ID,
+			Name:       g.Group.Name,
+			IsRequired: g.Group.IsRequired,
+			SortOrder:  g.Group.SortOrder,
+			Options:    options,
 		})
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("set dish customizations: %w", err)))
-			return
-		}
-
-		// 构建定制选项响应
-		for _, g := range custResult.Groups {
-			var options []customizationOption
-			for _, o := range g.Options {
-				// 获取标签名称
-				tag, _ := server.store.GetTag(ctx, o.TagID)
-				options = append(options, customizationOption{
-					ID:         o.ID,
-					TagID:      o.TagID,
-					TagName:    tag.Name,
-					ExtraPrice: o.ExtraPrice,
-					SortOrder:  o.SortOrder,
-				})
-			}
-			customizationGroups = append(customizationGroups, customizationGroup{
-				ID:         g.Group.ID,
-				Name:       g.Group.Name,
-				IsRequired: g.Group.IsRequired,
-				SortOrder:  g.Group.SortOrder,
-				Options:    options,
-			})
-		}
 	}
 
-	ctx.JSON(http.StatusOK, dishResponse{
+	assetID := int64PtrFromPgInt8(txResult.Dish.ImageMediaAssetID)
+	ctx.JSON(http.StatusCreated, dishResponse{
 		ID:                  txResult.Dish.ID,
 		MerchantID:          txResult.Dish.MerchantID,
 		CategoryID:          toPtrInt64(txResult.Dish.CategoryID),
 		Name:                txResult.Dish.Name,
 		Description:         txResult.Dish.Description.String,
-		ImageURL:            normalizeUploadURLForClient(txResult.Dish.ImageUrl.String),
+		ImageAssetID:        assetID,
+		ImageURL:            server.publicImageURL(ctx, assetID, media.VariantCard),
 		Price:               txResult.Dish.Price,
+		OriginalPrice:       txResult.Dish.Price,
 		MemberPrice:         toPtrInt64(txResult.Dish.MemberPrice),
 		IsAvailable:         txResult.Dish.IsAvailable,
 		IsOnline:            txResult.Dish.IsOnline,
+		IsPackaging:         txResult.Dish.IsPackaging,
 		SortOrder:           txResult.Dish.SortOrder,
 		PrepareTime:         txResult.Dish.PrepareTime,
 		CustomizationGroups: customizationGroups,
+	})
+
+	server.writeAuditLog(ctx, AuditLogInput{
+		ActorUserID: authPayload.UserID,
+		ActorRole:   "merchant",
+		Action:      "dish_created",
+		TargetType:  "dish",
+		TargetID:    &txResult.Dish.ID,
+		RegionID:    &merchant.RegionID,
+		Metadata: map[string]any{
+			"merchant_id":  txResult.Dish.MerchantID,
+			"name":         txResult.Dish.Name,
+			"price":        txResult.Dish.Price,
+			"is_online":    txResult.Dish.IsOnline,
+			"is_packaging": txResult.Dish.IsPackaging,
+		},
 	})
 }
 
@@ -595,8 +672,10 @@ type listDishesRequest struct {
 }
 
 type listDishesResponse struct {
-	Dishes     []dishResponse `json:"dishes"`
-	TotalCount int64          `json:"total_count"`
+	Dishes   []dishResponse `json:"dishes"`
+	Total    int64          `json:"total"`
+	PageID   int32          `json:"page_id"`
+	PageSize int32          `json:"page_size"`
 }
 
 // listDishesByMerchant godoc
@@ -610,7 +689,7 @@ type listDishesResponse struct {
 // @Param is_available query bool false "按可用状态筛选"
 // @Param page_id query int true "页码" minimum(1)
 // @Param page_size query int true "每页数量" minimum(5) maximum(50)
-// @Success 200 {object} listDishesResponse "菜品列表"
+// @Success 201 {object} listDishesResponse "菜品列表"
 // @Failure 400 {object} ErrorResponse "请求参数错误"
 // @Failure 401 {object} ErrorResponse "未授权"
 // @Failure 404 {object} ErrorResponse "商户不存在"
@@ -628,9 +707,9 @@ func (server *Server) listDishesByMerchant(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户信息
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.resolveMerchantForUser(ctx, authPayload.UserID)
 	if err != nil {
-		if isNoRows(err) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
 		}
@@ -661,7 +740,7 @@ func (server *Server) listDishesByMerchant(ctx *gin.Context) {
 		IsOnline:    isOnline,
 		IsAvailable: isAvailable,
 		Limit:       req.PageSize,
-		Offset:      (req.PageID - 1) * req.PageSize,
+		Offset:      pageOffset(req.PageID, req.PageSize),
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("list dishes by merchant: %w", err)))
@@ -678,27 +757,53 @@ func (server *Server) listDishesByMerchant(ctx *gin.Context) {
 		return
 	}
 
+	// 批量解析图片 URL
+	imgAssetIDs := make([]int64, 0, len(dishes))
+	for _, d := range dishes {
+		if d.ImageMediaAssetID.Valid {
+			imgAssetIDs = append(imgAssetIDs, d.ImageMediaAssetID.Int64)
+		}
+	}
+	imgURLs := server.batchPublicImageURLs(ctx, imgAssetIDs, media.VariantCard)
+
 	// 转换响应
 	result := make([]dishResponse, len(dishes))
 	for i, dish := range dishes {
+		var customizationGroups []customizationGroup
+		if err := parseJSON(dish.CustomizationGroups, &customizationGroups); err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("failed to parse customization_groups: %w", err)))
+			return
+		}
+
+		assetID := int64PtrFromPgInt8(dish.ImageMediaAssetID)
+		var imgURL string
+		if assetID != nil {
+			imgURL = imgURLs[*assetID]
+		}
 		result[i] = dishResponse{
-			ID:          dish.ID,
-			MerchantID:  dish.MerchantID,
-			CategoryID:  toPtrInt64(dish.CategoryID),
-			Name:        dish.Name,
-			Description: dish.Description.String,
-			ImageURL:    normalizeUploadURLForClient(dish.ImageUrl.String),
-			Price:       dish.Price,
-			MemberPrice: toPtrInt64(dish.MemberPrice),
-			IsAvailable: dish.IsAvailable,
-			IsOnline:    dish.IsOnline,
-			SortOrder:   dish.SortOrder,
+			ID:            dish.ID,
+			MerchantID:    dish.MerchantID,
+			CategoryID:    toPtrInt64(dish.CategoryID),
+			Name:          dish.Name,
+			Description:   dish.Description.String,
+			ImageAssetID:  assetID,
+			ImageURL:      imgURL,
+			Price:         dish.Price,
+			OriginalPrice: dish.Price,
+			MemberPrice:   toPtrInt64(dish.MemberPrice),
+			IsAvailable:   dish.IsAvailable,
+			IsOnline:      dish.IsOnline,
+			IsPackaging:   dish.IsPackaging,
+			SortOrder:     dish.SortOrder,
+			CustomizationGroups: customizationGroups,
 		}
 	}
 
 	ctx.JSON(http.StatusOK, listDishesResponse{
-		Dishes:     result,
-		TotalCount: count,
+		Dishes:   result,
+		Total:    count,
+		PageID:   req.PageID,
+		PageSize: req.PageSize,
 	})
 }
 
@@ -731,9 +836,9 @@ func (server *Server) getDish(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户信息
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.resolveMerchantForUser(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
 		}
@@ -744,7 +849,7 @@ func (server *Server) getDish(ctx *gin.Context) {
 	// 使用单一查询获取菜品完整信息(含食材、标签、定制选项)
 	dish, err := server.store.GetDishComplete(ctx, req.ID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("dish not found")))
 			return
 		}
@@ -754,6 +859,19 @@ func (server *Server) getDish(ctx *gin.Context) {
 
 	// 验证菜品属于当前商户
 	if dish.MerchantID != merchant.ID {
+		server.writeAuditLog(ctx, AuditLogInput{
+			ActorUserID: authPayload.UserID,
+			ActorRole:   "merchant",
+			Action:      "merchant_resource_access_denied",
+			TargetType:  "dish",
+			TargetID:    &dish.ID,
+			RegionID:    &merchant.RegionID,
+			Metadata: map[string]any{
+				"reason":      "dish_not_belong_to_merchant",
+				"merchant_id": merchant.ID,
+				"dish_id":     dish.ID,
+			},
+		})
 		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("dish does not belong to this merchant")))
 		return
 	}
@@ -777,6 +895,7 @@ func (server *Server) getDish(ctx *gin.Context) {
 		return
 	}
 
+	dishAssetID := int64PtrFromPgInt8(dish.ImageMediaAssetID)
 	ctx.JSON(http.StatusOK, dishResponse{
 		ID:                  dish.ID,
 		MerchantID:          dish.MerchantID,
@@ -784,11 +903,14 @@ func (server *Server) getDish(ctx *gin.Context) {
 		CategoryName:        toPtrString(dish.CategoryName),
 		Name:                dish.Name,
 		Description:         dish.Description.String,
-		ImageURL:            normalizeUploadURLForClient(dish.ImageUrl.String),
+		ImageAssetID:        dishAssetID,
+		ImageURL:            server.publicImageURL(ctx, dishAssetID, media.VariantDetail),
 		Price:               dish.Price,
+		OriginalPrice:       dish.Price,
 		MemberPrice:         toPtrInt64(dish.MemberPrice),
 		IsAvailable:         dish.IsAvailable,
 		IsOnline:            dish.IsOnline,
+		IsPackaging:         dish.IsPackaging,
 		SortOrder:           dish.SortOrder,
 		Ingredients:         ingredients,
 		Tags:                tags,
@@ -798,8 +920,9 @@ func (server *Server) getDish(ctx *gin.Context) {
 
 // getPublicDishDetail godoc
 // @Summary 获取菜品详情（消费者端）
-// @Description 公开接口，获取菜品详细信息，无需认证
+// @Description 需登录访问（消费者端），获取菜品详细信息
 // @Tags 公开接口
+// @Security BearerAuth
 // @Accept json
 // @Produce json
 // @Param id path int true "菜品ID"
@@ -818,7 +941,7 @@ func (server *Server) getPublicDishDetail(ctx *gin.Context) {
 	// 使用单一查询获取菜品完整信息(含食材、标签、定制选项)
 	dish, err := server.store.GetDishComplete(ctx, req.ID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("dish not found")))
 			return
 		}
@@ -851,6 +974,7 @@ func (server *Server) getPublicDishDetail(ctx *gin.Context) {
 		return
 	}
 
+	publicAssetID := int64PtrFromPgInt8(dish.ImageMediaAssetID)
 	ctx.JSON(http.StatusOK, dishResponse{
 		ID:                  dish.ID,
 		MerchantID:          dish.MerchantID,
@@ -858,11 +982,12 @@ func (server *Server) getPublicDishDetail(ctx *gin.Context) {
 		CategoryName:        toPtrString(dish.CategoryName),
 		Name:                dish.Name,
 		Description:         dish.Description.String,
-		ImageURL:            normalizeUploadURLForClient(dish.ImageUrl.String),
+		ImageURL:            server.publicImageURL(ctx, publicAssetID, media.VariantDetail),
 		Price:               dish.Price,
 		MemberPrice:         toPtrInt64(dish.MemberPrice),
 		IsAvailable:         dish.IsAvailable,
 		IsOnline:            dish.IsOnline,
+		IsPackaging:         dish.IsPackaging,
 		SortOrder:           dish.SortOrder,
 		PrepareTime:         dish.PrepareTime,
 		Ingredients:         ingredients,
@@ -872,17 +997,18 @@ func (server *Server) getPublicDishDetail(ctx *gin.Context) {
 }
 
 type updateDishRequest struct {
-	CategoryID  *int64  `json:"category_id" binding:"omitempty,min=1"`
-	Name        string  `json:"name" binding:"omitempty,min=1,max=100"`        // 菜品名称，最大100字符
-	Description string  `json:"description" binding:"omitempty,max=1000"`      // 描述，最大1000字符
-	ImageURL    string  `json:"image_url" binding:"omitempty,max=500"`         // 图片URL，最大500字符
-	Price       *int64  `json:"price" binding:"omitempty,min=1,max=100000000"` // 价格（分），最大100万元
-	MemberPrice *int64  `json:"member_price" binding:"omitempty,min=0,max=100000000"`
-	IsAvailable *bool   `json:"is_available"`
-	IsOnline    *bool   `json:"is_online"`
-	SortOrder   *int16  `json:"sort_order" binding:"omitempty,min=0"`
-	PrepareTime *int16  `json:"prepare_time" binding:"omitempty,min=1,max=120"` // 预估制作时间（分钟），1-120分钟
-	TagIDs      []int64 `json:"tag_ids" binding:"omitempty,max=10,dive,min=1"`  // 标签ID列表（最多10个）
+	CategoryID   *int64  `json:"category_id" binding:"omitempty,min=1"`
+	Name         string  `json:"name" binding:"omitempty,min=1,max=100"`        // 菜品名称，最大100字符
+	Description  string  `json:"description" binding:"omitempty,max=1000"`      // 描述，最大1000字符
+	ImageAssetID *int64  `json:"image_asset_id" binding:"omitempty,min=1"`      // 图片媒体资产ID
+	Price        *int64  `json:"price" binding:"omitempty,min=0,max=100000000"` // 价格（分），最大100万元
+	MemberPrice  *int64  `json:"member_price" binding:"omitempty,min=0,max=100000000"`
+	IsAvailable  *bool   `json:"is_available"`
+	IsOnline     *bool   `json:"is_online"`
+	IsPackaging  *bool   `json:"is_packaging"`
+	SortOrder    *int16  `json:"sort_order" binding:"omitempty,min=0"`
+	PrepareTime  *int16  `json:"prepare_time" binding:"omitempty,min=1,max=120"` // 预估制作时间（分钟），1-120分钟
+	TagIDs       []int64 `json:"tag_ids" binding:"omitempty,max=10,dive,min=1"`  // 标签ID列表（最多10个）
 }
 
 // updateDish godoc
@@ -918,9 +1044,9 @@ func (server *Server) updateDish(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户信息
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.resolveMerchantForUser(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
 		}
@@ -931,7 +1057,7 @@ func (server *Server) updateDish(ctx *gin.Context) {
 	// 验证菜品所有权
 	dish, err := server.store.GetDish(ctx, uriReq.ID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("dish not found")))
 			return
 		}
@@ -940,19 +1066,21 @@ func (server *Server) updateDish(ctx *gin.Context) {
 	}
 
 	if dish.MerchantID != merchant.ID {
+		server.writeAuditLog(ctx, AuditLogInput{
+			ActorUserID: authPayload.UserID,
+			ActorRole:   "merchant",
+			Action:      "merchant_resource_access_denied",
+			TargetType:  "dish",
+			TargetID:    &dish.ID,
+			RegionID:    &merchant.RegionID,
+			Metadata: map[string]any{
+				"reason":      "dish_not_belong_to_merchant",
+				"merchant_id": merchant.ID,
+				"dish_id":     dish.ID,
+			},
+		})
 		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("dish does not belong to this merchant")))
 		return
-	}
-
-	// 菜品图片必须先审后存：仅允许使用 uploads/public/... 本地路径
-	if strings.TrimSpace(req.ImageURL) != "" {
-		normalized := normalizeStoredUploadPath(req.ImageURL)
-		prefix := fmt.Sprintf("uploads/public/merchants/%d/dishes/", merchant.ID)
-		if normalized == "" || !strings.HasPrefix(normalized, prefix) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("image_url 仅允许使用通过菜品图片上传接口生成的本地路径")))
-			return
-		}
-		req.ImageURL = normalized
 	}
 
 	// 准备更新参数
@@ -971,9 +1099,9 @@ func (server *Server) updateDish(ctx *gin.Context) {
 		description = pgtype.Text{String: req.Description, Valid: true}
 	}
 
-	var imageURL pgtype.Text
-	if req.ImageURL != "" {
-		imageURL = pgtype.Text{String: normalizeImageURLForStorage(req.ImageURL), Valid: true}
+	var imageMediaAssetID pgtype.Int8
+	if req.ImageAssetID != nil {
+		imageMediaAssetID = pgtype.Int8{Int64: *req.ImageAssetID, Valid: true}
 	}
 
 	var price pgtype.Int8
@@ -987,13 +1115,17 @@ func (server *Server) updateDish(ctx *gin.Context) {
 	}
 
 	var isAvailable pgtype.Bool
-	if req.IsAvailable != nil {
-		isAvailable = pgtype.Bool{Bool: *req.IsAvailable, Valid: true}
-	}
-
 	var isOnline pgtype.Bool
-	if req.IsOnline != nil {
-		isOnline = pgtype.Bool{Bool: *req.IsOnline, Valid: true}
+	var isPackaging pgtype.Bool
+	nextIsPackaging, nextIsAvailable, nextIsOnline := resolvePackagingDishUpdate(dish, req)
+	if req.IsAvailable != nil || nextIsPackaging != dish.IsPackaging {
+		isAvailable = pgtype.Bool{Bool: nextIsAvailable, Valid: true}
+	}
+	if req.IsOnline != nil || nextIsPackaging != dish.IsPackaging {
+		isOnline = pgtype.Bool{Bool: nextIsOnline, Valid: true}
+	}
+	if req.IsPackaging != nil {
+		isPackaging = pgtype.Bool{Bool: nextIsPackaging, Valid: true}
 	}
 
 	var sortOrder pgtype.Int2
@@ -1014,18 +1146,19 @@ func (server *Server) updateDish(ctx *gin.Context) {
 
 	// 使用事务更新菜品（支持标签更新）
 	txResult, err := server.store.UpdateDishTx(ctx, db.UpdateDishTxParams{
-		ID:          uriReq.ID,
-		CategoryID:  categoryID,
-		Name:        name,
-		Description: description,
-		ImageUrl:    imageURL,
-		Price:       price,
-		MemberPrice: memberPrice,
-		IsAvailable: isAvailable,
-		IsOnline:    isOnline,
-		SortOrder:   sortOrder,
-		PrepareTime: prepareTime,
-		TagIDs:      tagIDs,
+		ID:                uriReq.ID,
+		CategoryID:        categoryID,
+		Name:              name,
+		Description:       description,
+		ImageMediaAssetID: imageMediaAssetID,
+		Price:             price,
+		MemberPrice:       memberPrice,
+		IsAvailable:       isAvailable,
+		IsOnline:          isOnline,
+		IsPackaging:       isPackaging,
+		SortOrder:         sortOrder,
+		PrepareTime:       prepareTime,
+		TagIDs:            tagIDs,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("update dish tx: %w", err)))
@@ -1042,20 +1175,74 @@ func (server *Server) updateDish(ctx *gin.Context) {
 		})
 	}
 
+	updatedFields := map[string]any{}
+	if req.Name != "" {
+		updatedFields["name"] = req.Name
+	}
+	if req.Description != "" {
+		updatedFields["description"] = req.Description
+	}
+	if req.ImageAssetID != nil {
+		updatedFields["image_media_asset_id"] = *req.ImageAssetID
+	}
+	if req.CategoryID != nil {
+		updatedFields["category_id"] = *req.CategoryID
+	}
+	if req.Price != nil {
+		updatedFields["price"] = *req.Price
+	}
+	if req.MemberPrice != nil {
+		updatedFields["member_price"] = *req.MemberPrice
+	}
+	if req.IsAvailable != nil {
+		updatedFields["is_available"] = *req.IsAvailable
+	}
+	if req.IsOnline != nil {
+		updatedFields["is_online"] = *req.IsOnline
+	}
+	if req.IsPackaging != nil {
+		updatedFields["is_packaging"] = *req.IsPackaging
+	}
+	if req.SortOrder != nil {
+		updatedFields["sort_order"] = *req.SortOrder
+	}
+	if req.PrepareTime != nil {
+		updatedFields["prepare_time"] = *req.PrepareTime
+	}
+	if req.TagIDs != nil {
+		updatedFields["tag_ids"] = req.TagIDs
+	}
+
+	updatedAssetID := int64PtrFromPgInt8(txResult.Dish.ImageMediaAssetID)
 	ctx.JSON(http.StatusOK, dishResponse{
-		ID:          txResult.Dish.ID,
-		MerchantID:  txResult.Dish.MerchantID,
-		CategoryID:  toPtrInt64(txResult.Dish.CategoryID),
-		Name:        txResult.Dish.Name,
-		Description: txResult.Dish.Description.String,
-		ImageURL:    normalizeUploadURLForClient(txResult.Dish.ImageUrl.String),
-		Price:       txResult.Dish.Price,
-		MemberPrice: toPtrInt64(txResult.Dish.MemberPrice),
-		IsAvailable: txResult.Dish.IsAvailable,
-		IsOnline:    txResult.Dish.IsOnline,
-		SortOrder:   txResult.Dish.SortOrder,
-		PrepareTime: txResult.Dish.PrepareTime,
-		Tags:        tags,
+		ID:           txResult.Dish.ID,
+		MerchantID:   txResult.Dish.MerchantID,
+		CategoryID:   toPtrInt64(txResult.Dish.CategoryID),
+		Name:         txResult.Dish.Name,
+		Description:  txResult.Dish.Description.String,
+		ImageAssetID: updatedAssetID,
+		ImageURL:     server.publicImageURL(ctx, updatedAssetID, media.VariantCard),
+		Price:        txResult.Dish.Price,
+		MemberPrice:  toPtrInt64(txResult.Dish.MemberPrice),
+		IsAvailable:  txResult.Dish.IsAvailable,
+		IsOnline:     txResult.Dish.IsOnline,
+		IsPackaging:  txResult.Dish.IsPackaging,
+		SortOrder:    txResult.Dish.SortOrder,
+		PrepareTime:  txResult.Dish.PrepareTime,
+		Tags:         tags,
+	})
+
+	server.writeAuditLog(ctx, AuditLogInput{
+		ActorUserID: authPayload.UserID,
+		ActorRole:   "merchant",
+		Action:      "dish_updated",
+		TargetType:  "dish",
+		TargetID:    &txResult.Dish.ID,
+		RegionID:    &merchant.RegionID,
+		Metadata: map[string]any{
+			"merchant_id":    merchant.ID,
+			"updated_fields": updatedFields,
+		},
 	})
 }
 
@@ -1085,9 +1272,9 @@ func (server *Server) deleteDish(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户信息
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.resolveMerchantForUser(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
 		}
@@ -1098,7 +1285,7 @@ func (server *Server) deleteDish(ctx *gin.Context) {
 	// 验证菜品所有权
 	dish, err := server.store.GetDish(ctx, req.ID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("dish not found")))
 			return
 		}
@@ -1107,18 +1294,51 @@ func (server *Server) deleteDish(ctx *gin.Context) {
 	}
 
 	if dish.MerchantID != merchant.ID {
+		server.writeAuditLog(ctx, AuditLogInput{
+			ActorUserID: authPayload.UserID,
+			ActorRole:   "merchant",
+			Action:      "merchant_resource_access_denied",
+			TargetType:  "dish",
+			TargetID:    &dish.ID,
+			RegionID:    &merchant.RegionID,
+			Metadata: map[string]any{
+				"reason":      "dish_not_belong_to_merchant",
+				"merchant_id": merchant.ID,
+				"dish_id":     dish.ID,
+			},
+		})
 		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("dish does not belong to this merchant")))
 		return
 	}
 
-	// 删除菜品（CASCADE 会自动删除关联的食材、标签、定制选项等）
+	// 删除菜品（软删除）
 	err = server.store.DeleteDish(ctx, req.ID)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("delete dish: %w", err)))
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"message": "dish deleted successfully"})
+	// 从所有套餐中移除该菜品（物理删除关联关系，因为菜品已被软删除）
+	err = server.store.RemoveDishFromAllCombos(ctx, req.ID)
+	if err != nil {
+		// 菜品本身已标记删除，移除套餐关联失败不影响主流程
+		log.Error().Err(err).Int64("dish_id", req.ID).Msg("failed to remove dish from combos after deletion")
+	}
+
+	server.writeAuditLog(ctx, AuditLogInput{
+		ActorUserID: authPayload.UserID,
+		ActorRole:   "merchant",
+		Action:      "dish_deleted",
+		TargetType:  "dish",
+		TargetID:    &dish.ID,
+		RegionID:    &merchant.RegionID,
+		Metadata: map[string]any{
+			"merchant_id": merchant.ID,
+			"name":        dish.Name,
+		},
+	})
+
+	ctx.JSON(http.StatusOK, successMessage("dish deleted successfully"))
 }
 
 // ==================== 辅助函数 ====================
@@ -1215,9 +1435,9 @@ func (server *Server) updateDishStatus(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.resolveMerchantForUser(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
 		}
@@ -1228,7 +1448,7 @@ func (server *Server) updateDishStatus(ctx *gin.Context) {
 	// 获取菜品
 	dish, err := server.store.GetDish(ctx, uri.ID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("dish not found")))
 			return
 		}
@@ -1239,6 +1459,10 @@ func (server *Server) updateDishStatus(ctx *gin.Context) {
 	// 验证菜品所有权
 	if dish.MerchantID != merchant.ID {
 		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("dish does not belong to this merchant")))
+		return
+	}
+	if dish.IsPackaging && !*req.IsOnline {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("packaging dishes must stay online and available")))
 		return
 	}
 
@@ -1263,6 +1487,19 @@ func (server *Server) updateDishStatus(ctx *gin.Context) {
 		Name:     dish.Name,
 		IsOnline: *req.IsOnline,
 		Message:  message,
+	})
+
+	server.writeAuditLog(ctx, AuditLogInput{
+		ActorUserID: authPayload.UserID,
+		ActorRole:   "merchant",
+		Action:      "dish_status_updated",
+		TargetType:  "dish",
+		TargetID:    &dish.ID,
+		RegionID:    &merchant.RegionID,
+		Metadata: map[string]any{
+			"merchant_id": merchant.ID,
+			"is_online":   *req.IsOnline,
+		},
 	})
 }
 
@@ -1291,9 +1528,9 @@ func (server *Server) batchUpdateDishStatus(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.resolveMerchantForUser(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
 		}
@@ -1326,6 +1563,33 @@ func (server *Server) batchUpdateDishStatus(ctx *gin.Context) {
 
 	var updated []int64
 	if len(validDishIDs) > 0 {
+		if !*req.IsOnline {
+			filteredDishIDs := make([]int64, 0, len(validDishIDs))
+			for _, dishID := range validDishIDs {
+				dish, err := server.store.GetDish(ctx, dishID)
+				if err != nil {
+					failed = append(failed, dishID)
+					continue
+				}
+				if dish.IsPackaging {
+					failed = append(failed, dishID)
+					continue
+				}
+				filteredDishIDs = append(filteredDishIDs, dishID)
+			}
+			validDishIDs = filteredDishIDs
+		}
+
+		if len(validDishIDs) == 0 {
+			message := "批量下架完成"
+			ctx.JSON(http.StatusOK, batchDishStatusResponse{
+				Updated: updated,
+				Failed:  failed,
+				Message: message,
+			})
+			return
+		}
+
 		// 批量更新菜品状态
 		rowsAffected, err := server.store.BatchUpdateDishOnlineStatus(ctx, db.BatchUpdateDishOnlineStatusParams{
 			IsOnline:   *req.IsOnline,
@@ -1354,6 +1618,21 @@ func (server *Server) batchUpdateDishStatus(ctx *gin.Context) {
 		Updated: updated,
 		Failed:  failed,
 		Message: message,
+	})
+
+	server.writeAuditLog(ctx, AuditLogInput{
+		ActorUserID: authPayload.UserID,
+		ActorRole:   "merchant",
+		Action:      "dish_status_batch_updated",
+		TargetType:  "dish",
+		TargetID:    nil,
+		RegionID:    &merchant.RegionID,
+		Metadata: map[string]any{
+			"merchant_id": merchant.ID,
+			"is_online":   *req.IsOnline,
+			"updated":     updated,
+			"failed":      failed,
+		},
 	})
 }
 
@@ -1441,9 +1720,9 @@ func (server *Server) setDishCustomizations(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.resolveMerchantForUser(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
 		}
@@ -1454,7 +1733,7 @@ func (server *Server) setDishCustomizations(ctx *gin.Context) {
 	// 获取菜品
 	dish, err := server.store.GetDish(ctx, uri.ID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("dish not found")))
 			return
 		}
@@ -1475,7 +1754,7 @@ func (server *Server) setDishCustomizations(ctx *gin.Context) {
 			if _, exists := tagNameMap[o.TagID]; !exists {
 				tag, err := server.store.GetTag(ctx, o.TagID)
 				if err != nil {
-					if errors.Is(err, pgx.ErrNoRows) {
+					if isNotFoundError(err) {
 						ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("tag %d not found", o.TagID)))
 						return
 					}
@@ -1565,7 +1844,7 @@ func (server *Server) getDishCustomizations(ctx *gin.Context) {
 	// 使用单次查询获取菜品和所有定制信息（消除 N+1 查询）
 	dish, err := server.store.GetDishWithCustomizations(ctx, uri.ID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("dish not found")))
 			return
 		}
@@ -1626,4 +1905,123 @@ func (server *Server) getDishCustomizations(ctx *gin.Context) {
 		DishID: dish.ID,
 		Groups: resultGroups,
 	})
+}
+
+// =============================================================================
+// setDishFeaturedTags - 设置菜品推荐/热卖标签（商户手动）
+// =============================================================================
+
+type setDishFeaturedTagsRequest struct {
+	Tags []string `json:"tags"` // 期望设置的标签名列表，如 ["推荐"] 或 ["热卖"] 或 []
+}
+
+// setDishFeaturedTags godoc
+// @Summary 设置菜品推荐/热卖标签
+// @Description 商户手动为菜品打上或取消"推荐"/"热卖"标签，影响店内菜单排序
+// @Tags 菜品管理
+// @Accept json
+// @Produce json
+// @Param id path int true "菜品ID"
+// @Param request body setDishFeaturedTagsRequest true "标签列表"
+// @Success 200 {object} map[string]interface{} "更新后的标签"
+// @Security BearerAuth
+// @Router /v1/dishes/{id}/featured-tags [put]
+func (server *Server) setDishFeaturedTags(ctx *gin.Context) {
+	var uri getDishRequest
+	if err := ctx.ShouldBindUri(&uri); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	var req setDishFeaturedTagsRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	// 获取认证信息
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
+	// 获取商户
+	merchant, err := server.resolveMerchantForUser(ctx, authPayload.UserID)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get merchant by owner: %w", err)))
+		return
+	}
+
+	// 获取菜品
+	dish, err := server.store.GetDish(ctx, uri.ID)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("dish not found")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get dish: %w", err)))
+		return
+	}
+
+	// 验证菜品所有权
+	if dish.MerchantID != merchant.ID {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("dish does not belong to this merchant")))
+		return
+	}
+
+	// 只允许推荐/热卖两个标签
+	allowed := map[string]bool{"推荐": true, "热卖": true}
+	wantSet := map[string]bool{}
+	for _, name := range req.Tags {
+		if allowed[name] {
+			wantSet[name] = true
+		}
+	}
+
+	// 获取当前菜品的推荐/热卖标签状态
+	currentTags, err := server.store.ListDishTags(ctx, uri.ID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("list dish tags: %w", err)))
+		return
+	}
+
+	// 删除不再需要的推荐/热卖标签
+	for _, tag := range currentTags {
+		if allowed[tag.Name] && !wantSet[tag.Name] {
+			_ = server.store.RemoveDishTag(ctx, db.RemoveDishTagParams{
+				DishID: uri.ID,
+				TagID:  tag.ID,
+			})
+		}
+	}
+
+	// 构建当前已有标签集合
+	currentTagNames := map[string]bool{}
+	for _, tag := range currentTags {
+		currentTagNames[tag.Name] = true
+	}
+
+	// 添加新需要的标签
+	for name := range wantSet {
+		if currentTagNames[name] {
+			continue // 已存在，跳过
+		}
+		sysTag, err := server.store.GetSystemTagByName(ctx, name)
+		if err != nil {
+			continue // 标签不存在则跳过
+		}
+		_ = server.store.UpsertDishTag(ctx, db.UpsertDishTagParams{
+			DishID: uri.ID,
+			TagID:  sysTag.ID,
+		})
+	}
+
+	// 返回更新后的标签
+	updatedTags, _ := server.store.ListDishTags(ctx, uri.ID)
+	tagNames := make([]string, 0, len(updatedTags))
+	for _, t := range updatedTags {
+		tagNames = append(tagNames, t.Name)
+	}
+	ctx.JSON(http.StatusOK, dishTagsResponse{Tags: tagNames})
 }

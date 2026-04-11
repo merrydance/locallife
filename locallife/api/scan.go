@@ -1,19 +1,24 @@
 package api
 
 import (
-	"errors"
+	"bytes"
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/media"
 	"github.com/merrydance/locallife/token"
-	"github.com/merrydance/locallife/util"
 	"github.com/merrydance/locallife/wechat"
 )
+
+const currentTableQRCodeFilenameSuffix = "_qrcode_v2.png"
 
 // =============================================================================
 // Scan Table API - 扫码点餐
@@ -30,10 +35,12 @@ type scanTableMerchantInfo struct {
 	ID          int64   `json:"id"`
 	Name        string  `json:"name"`
 	Description *string `json:"description,omitempty"`
-	LogoUrl     *string `json:"logo_url,omitempty"`
-	Phone       string  `json:"phone"`
-	Address     string  `json:"address"`
+	LogoAssetID *int64  `json:"logo_asset_id,omitempty"`
+	LogoURL     string  `json:"logo_url,omitempty"`
+	Phone       string  `json:"phone,omitempty"`
+	Address     string  `json:"address,omitempty"`
 	Status      string  `json:"status"`
+	IsOpen      bool    `json:"is_open"`
 }
 
 // scanTableTableInfo 桌台信息
@@ -49,16 +56,22 @@ type scanTableTableInfo struct {
 
 // scanTableDishInfo 菜品信息
 type scanTableDishInfo struct {
-	ID           int64   `json:"id"`
-	Name         string  `json:"name"`
-	Description  *string `json:"description,omitempty"`
-	ImageUrl     *string `json:"image_url,omitempty"`
-	Price        int64   `json:"price"`
-	MemberPrice  *int64  `json:"member_price,omitempty"`
-	CategoryID   int64   `json:"category_id"`
-	CategoryName string  `json:"category_name"`
-	IsAvailable  bool    `json:"is_available"`
-	SortOrder    int32   `json:"sort_order"`
+	ID                  int64                `json:"id"`
+	Name                string               `json:"name"`
+	Description         *string              `json:"description,omitempty"`
+	ImageAssetID        *int64               `json:"image_asset_id,omitempty"`
+	ImageURL            string               `json:"image_url,omitempty"`
+	Price               int64                `json:"price"`
+	OriginalPrice       int64                `json:"original_price"`
+	MemberPrice         *int64               `json:"member_price,omitempty"`
+	CategoryID          int64                `json:"category_id"`
+	CategoryName        string               `json:"category_name"`
+	IsAvailable         bool                 `json:"is_available"`
+	SortOrder           int32                `json:"sort_order"`
+	CustomizationGroups []customizationGroup `json:"customization_groups,omitempty"`
+	Tags                []string             `json:"tags,omitempty"`
+	MerchantID          int64                `json:"merchant_id"`
+	IsOnline            bool                 `json:"is_online"`
 }
 
 // scanTableCategoryInfo 分类信息
@@ -71,13 +84,15 @@ type scanTableCategoryInfo struct {
 
 // scanTableComboInfo 套餐信息
 type scanTableComboInfo struct {
-	ID            int64   `json:"id"`
-	Name          string  `json:"name"`
-	Description   *string `json:"description,omitempty"`
-	ImageUrl      *string `json:"image_url,omitempty"`
-	Price         int64   `json:"price"`
-	OriginalPrice *int64  `json:"original_price,omitempty"`
-	IsAvailable   bool    `json:"is_available"`
+	ID            int64    `json:"id"`
+	Name          string   `json:"name"`
+	Description   *string  `json:"description,omitempty"`
+	ImageAssetID  *int64   `json:"image_asset_id,omitempty"`
+	ImageURL      string   `json:"image_url,omitempty"`
+	Price         int64    `json:"price"`
+	OriginalPrice *int64   `json:"original_price,omitempty"`
+	IsAvailable   bool     `json:"is_available"`
+	Tags          []string `json:"tags,omitempty"`
 }
 
 // scanTablePromotionInfo 满返/满减优惠信息
@@ -109,6 +124,7 @@ type scanTableResponse struct {
 // @Failure 400 {object} ErrorResponse "请求参数错误"
 // @Failure 404 {object} ErrorResponse "商户或桌台不存在"
 // @Failure 503 {object} ErrorResponse "商户未营业或桌台已停用"
+// @Security BearerAuth
 // @Router /v1/scan/table [get]
 func (server *Server) scanTable(ctx *gin.Context) {
 	var req scanTableRequest
@@ -120,8 +136,8 @@ func (server *Server) scanTable(ctx *gin.Context) {
 	// 1. 获取商户信息
 	merchant, err := server.store.GetMerchant(ctx, req.MerchantID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("商户不存在")))
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrMerchantNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -130,7 +146,13 @@ func (server *Server) scanTable(ctx *gin.Context) {
 
 	// 检查商户状态
 	if merchant.Status != "approved" {
-		ctx.JSON(http.StatusServiceUnavailable, errorResponse(errors.New("商户未营业")))
+		ctx.JSON(http.StatusServiceUnavailable, errorResponse(ErrMerchantServiceUnavailable))
+		return
+	}
+
+	// P1-022 修复：检查商户实时营业状态
+	if !merchant.IsOpen {
+		ctx.JSON(http.StatusServiceUnavailable, errorResponse(ErrMerchantServiceUnavailable))
 		return
 	}
 
@@ -140,8 +162,8 @@ func (server *Server) scanTable(ctx *gin.Context) {
 		TableNo:    req.TableNo,
 	})
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("桌台不存在")))
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrTableNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -150,27 +172,37 @@ func (server *Server) scanTable(ctx *gin.Context) {
 
 	// 检查桌台状态
 	if table.Status == "disabled" {
-		ctx.JSON(http.StatusServiceUnavailable, errorResponse(errors.New("桌台已停用")))
+		ctx.JSON(http.StatusServiceUnavailable, errorResponse(ErrTableDisabled))
 		return
 	}
 
-	// 3. 获取菜品分类
-	categories, err := server.store.ListDishCategories(ctx, req.MerchantID)
+	response, err := server.buildScanTableResponse(ctx, merchant, table)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	// 4. 获取所有上架菜品
-	dishes, err := server.store.ListDishesForMenu(ctx, req.MerchantID)
+	ctx.JSON(http.StatusOK, response)
+}
+
+func (server *Server) buildScanTableResponse(ctx context.Context, merchant db.Merchant, table db.Table) (scanTableResponse, error) {
+	categories, err := server.store.ListDishCategories(ctx, merchant.ID)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
+		return scanTableResponse{}, err
 	}
 
-	// 构建分类 -> 菜品映射
-	categoryMap := make(map[int64]*scanTableCategoryInfo)
-	var categoryList []scanTableCategoryInfo
+	dishes, err := server.store.ListDishesForMenu(ctx, merchant.ID)
+	if err != nil {
+		return scanTableResponse{}, err
+	}
+
+	categoryMap := make(map[int64]int)
+	categoryNameMap := make(map[int64]string)
+	categoryList := make([]scanTableCategoryInfo, 0, len(categories)+1)
+	const uncategorizedCategoryID int64 = -1
+	const uncategorizedCategoryName = "其他"
+	var dishAssetIDs []int64
+
 	for _, cat := range categories {
 		catInfo := scanTableCategoryInfo{
 			ID:        cat.ID,
@@ -179,10 +211,27 @@ func (server *Server) scanTable(ctx *gin.Context) {
 			Dishes:    []scanTableDishInfo{},
 		}
 		categoryList = append(categoryList, catInfo)
-		categoryMap[cat.ID] = &categoryList[len(categoryList)-1]
+		categoryMap[cat.ID] = len(categoryList) - 1
+		categoryNameMap[cat.ID] = cat.Name
 	}
 
-	// 将菜品分配到分类
+	ensureUncategorizedCategory := func() int {
+		if idx, ok := categoryMap[uncategorizedCategoryID]; ok {
+			return idx
+		}
+
+		categoryList = append(categoryList, scanTableCategoryInfo{
+			ID:        uncategorizedCategoryID,
+			Name:      uncategorizedCategoryName,
+			SortOrder: 9999,
+			Dishes:    []scanTableDishInfo{},
+		})
+		idx := len(categoryList) - 1
+		categoryMap[uncategorizedCategoryID] = idx
+		categoryNameMap[uncategorizedCategoryID] = uncategorizedCategoryName
+		return idx
+	}
+
 	for _, dish := range dishes {
 		var categoryID int64
 		if dish.CategoryID.Valid {
@@ -190,45 +239,54 @@ func (server *Server) scanTable(ctx *gin.Context) {
 		}
 
 		dishInfo := scanTableDishInfo{
-			ID:          dish.ID,
-			Name:        dish.Name,
-			Price:       dish.Price,
-			CategoryID:  categoryID,
-			IsAvailable: dish.IsAvailable,
-			SortOrder:   int32(dish.SortOrder),
+			ID:            dish.ID,
+			MerchantID:    merchant.ID,
+			IsOnline:      true,
+			Name:          dish.Name,
+			Price:         dish.Price,
+			OriginalPrice: dish.Price,
+			CategoryID:    categoryID,
+			IsAvailable:   dish.IsAvailable,
+			SortOrder:     int32(dish.SortOrder),
 		}
 		if dish.Description.Valid {
 			dishInfo.Description = &dish.Description.String
 		}
-		if dish.ImageUrl.Valid {
-			img := normalizeUploadURLForClient(dish.ImageUrl.String)
-			dishInfo.ImageUrl = &img
+		dishInfo.ImageAssetID = int64PtrFromPgInt8(dish.ImageMediaAssetID)
+		if dishInfo.ImageAssetID != nil {
+			dishAssetIDs = append(dishAssetIDs, *dishInfo.ImageAssetID)
 		}
 		if dish.MemberPrice.Valid {
 			dishInfo.MemberPrice = &dish.MemberPrice.Int64
 		}
-
-		// 找到分类名称
-		for _, cat := range categories {
-			if cat.ID == categoryID {
-				dishInfo.CategoryName = cat.Name
-				break
-			}
+		if dish.Tags != nil {
+			_ = parseJSON(dish.Tags, &dishInfo.Tags)
+		}
+		if dish.CustomizationGroups != nil {
+			_ = parseJSON(dish.CustomizationGroups, &dishInfo.CustomizationGroups)
 		}
 
-		if cat, ok := categoryMap[categoryID]; ok {
-			cat.Dishes = append(cat.Dishes, dishInfo)
+		if categoryName, ok := categoryNameMap[categoryID]; ok {
+			dishInfo.CategoryName = categoryName
+		}
+
+		if categoryIndex, ok := categoryMap[categoryID]; ok {
+			categoryList[categoryIndex].Dishes = append(categoryList[categoryIndex].Dishes, dishInfo)
+		} else {
+			fallbackIndex := ensureUncategorizedCategory()
+			dishInfo.CategoryID = uncategorizedCategoryID
+			dishInfo.CategoryName = uncategorizedCategoryName
+			categoryList[fallbackIndex].Dishes = append(categoryList[fallbackIndex].Dishes, dishInfo)
 		}
 	}
 
-	// 5. 获取上架套餐
-	combos, err := server.store.ListOnlineCombosByMerchant(ctx, req.MerchantID)
+	combos, err := server.store.ListOnlineCombosByMerchant(ctx, merchant.ID)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
+		return scanTableResponse{}, err
 	}
 
-	var comboList []scanTableComboInfo
+	var comboAssetIDs []int64
+	comboList := make([]scanTableComboInfo, 0, len(combos))
 	for _, combo := range combos {
 		comboInfo := scanTableComboInfo{
 			ID:          combo.ID,
@@ -236,12 +294,15 @@ func (server *Server) scanTable(ctx *gin.Context) {
 			Price:       combo.Price,
 			IsAvailable: combo.IsOnline,
 		}
+		if combo.Tags != nil {
+			_ = parseJSON(combo.Tags, &comboInfo.Tags)
+		}
 		if combo.Description.Valid {
 			comboInfo.Description = &combo.Description.String
 		}
-		if combo.ImageUrl.Valid {
-			img := normalizeUploadURLForClient(combo.ImageUrl.String)
-			comboInfo.ImageUrl = &img
+		comboInfo.ImageAssetID = int64PtrFromPgInt8(combo.ImageMediaAssetID)
+		if comboInfo.ImageAssetID != nil {
+			comboAssetIDs = append(comboAssetIDs, *comboInfo.ImageAssetID)
 		}
 		if combo.OriginalPrice > 0 {
 			comboInfo.OriginalPrice = &combo.OriginalPrice
@@ -249,12 +310,8 @@ func (server *Server) scanTable(ctx *gin.Context) {
 		comboList = append(comboList, comboInfo)
 	}
 
-	// 6. 获取优惠活动（满返运费 + 满减）
 	var promotions []scanTablePromotionInfo
-
-	// 6.1 满返运费（商户配送优惠）- 使用已过滤有效期和活动状态的查询
-	deliveryPromotions, err := server.store.ListActiveDeliveryPromotionsByMerchant(ctx, req.MerchantID)
-	if err == nil {
+	if deliveryPromotions, err := server.store.ListActiveDeliveryPromotionsByMerchant(ctx, merchant.ID); err == nil {
 		for _, dp := range deliveryPromotions {
 			promotions = append(promotions, scanTablePromotionInfo{
 				Type:        "delivery_return",
@@ -264,10 +321,7 @@ func (server *Server) scanTable(ctx *gin.Context) {
 			})
 		}
 	}
-
-	// 6.2 满减规则
-	discountRules, err := server.store.ListActiveDiscountRules(ctx, req.MerchantID)
-	if err == nil {
+	if discountRules, err := server.store.ListActiveDiscountRules(ctx, merchant.ID); err == nil {
 		for _, dr := range discountRules {
 			promotions = append(promotions, scanTablePromotionInfo{
 				Type:        "discount",
@@ -278,13 +332,14 @@ func (server *Server) scanTable(ctx *gin.Context) {
 		}
 	}
 
-	// 构建响应
 	response := scanTableResponse{
 		Merchant: scanTableMerchantInfo{
-			ID:     merchant.ID,
-			Name:   merchant.Name,
-			Phone:  merchant.Phone,
-			Status: merchant.Status,
+			ID:      merchant.ID,
+			Name:    merchant.Name,
+			Phone:   merchant.Phone,
+			Address: merchant.Address,
+			Status:  merchant.Status,
+			IsOpen:  merchant.IsOpen,
 		},
 		Table: scanTableTableInfo{
 			ID:        table.ID,
@@ -298,16 +353,11 @@ func (server *Server) scanTable(ctx *gin.Context) {
 		Promotions: promotions,
 	}
 
-	// 填充可选字段
 	if merchant.Description.Valid {
 		response.Merchant.Description = &merchant.Description.String
 	}
-	if merchant.LogoUrl.Valid {
-		logo := normalizeUploadURLForClient(merchant.LogoUrl.String)
-		response.Merchant.LogoUrl = &logo
-	}
-	response.Merchant.Address = merchant.Address
-
+	response.Merchant.LogoAssetID = int64PtrFromPgInt8(merchant.LogoMediaAssetID)
+	response.Merchant.LogoURL = server.publicImageURL(ctx, response.Merchant.LogoAssetID, media.VariantCard)
 	if table.Description.Valid {
 		response.Table.Description = &table.Description.String
 	}
@@ -315,26 +365,101 @@ func (server *Server) scanTable(ctx *gin.Context) {
 		response.Table.MinimumSpend = &table.MinimumSpend.Int64
 	}
 
-	ctx.JSON(http.StatusOK, response)
+	dishImageURLs := server.batchPublicImageURLs(ctx, dishAssetIDs, media.VariantCard)
+	comboImageURLs := server.batchPublicImageURLs(ctx, comboAssetIDs, media.VariantCard)
+	for i := range response.Categories {
+		for j := range response.Categories[i].Dishes {
+			if response.Categories[i].Dishes[j].ImageAssetID != nil {
+				response.Categories[i].Dishes[j].ImageURL = dishImageURLs[*response.Categories[i].Dishes[j].ImageAssetID]
+			}
+			dishID := response.Categories[i].Dishes[j].ID
+			dishWithCust, err := server.store.GetDishWithCustomizations(ctx, dishID)
+			if err == nil {
+				var groups []customizationGroup
+				if err := parseJSON(dishWithCust.CustomizationGroups, &groups); err == nil {
+					response.Categories[i].Dishes[j].CustomizationGroups = groups
+				}
+			}
+		}
+	}
+	for i := range response.Combos {
+		if response.Combos[i].ImageAssetID != nil {
+			response.Combos[i].ImageURL = comboImageURLs[*response.Combos[i].ImageAssetID]
+		}
+	}
+
+	return response, nil
 }
 
 // formatDeliveryReturnDesc 格式化满返描述
 func formatDeliveryReturnDesc(minAmount, returnAmount int64) string {
-	return "满" + strconv.FormatFloat(float64(minAmount)/100, 'f', 0, 64) +
-		"元返" + strconv.FormatFloat(float64(returnAmount)/100, 'f', 0, 64) + "元运费"
+	return "满" + fenToYuanString(minAmount, 0) +
+		"元返" + fenToYuanString(returnAmount, 0) + "元运费"
 }
 
 // formatDiscountDesc 格式化满减描述
 func formatDiscountDesc(minAmount, discountValue int64) string {
-	return "满" + strconv.FormatFloat(float64(minAmount)/100, 'f', 0, 64) +
-		"元减" + strconv.FormatFloat(float64(discountValue)/100, 'f', 0, 64) + "元"
+	return "满" + fenToYuanString(minAmount, 0) +
+		"元减" + fenToYuanString(discountValue, 0) + "元"
 }
 
 // generateTableQRCodeResponse 生成二维码响应
 type generateTableQRCodeResponse struct {
-	QrCodeUrl  string `json:"qr_code_url" example:"https://api.example.com/uploads/qrcodes/m1_t123.png"`
+	QrCodeUrl  string `json:"qr_code_url" example:"https://cdn.example.com/qrcodes/m1_t123.png"`
 	TableNo    string `json:"table_no" example:"T01"`
 	MerchantID int64  `json:"merchant_id" example:"1"`
+}
+
+func isCurrentTableQRCodePath(path string) bool {
+	return strings.HasSuffix(path, currentTableQRCodeFilenameSuffix)
+}
+
+func buildTableQRCodeObjectKey(merchantID, tableID int64, checksum string) string {
+	shortChecksum := checksum
+	if len(shortChecksum) > 12 {
+		shortChecksum = shortChecksum[:12]
+	}
+	filename := fmt.Sprintf("qrcode_m%d_t%d_%s%s", merchantID, tableID, shortChecksum, currentTableQRCodeFilenameSuffix)
+	return fmt.Sprintf("merchant/table/%d/qrcodes/%s", merchantID, filename)
+}
+
+func (server *Server) storeTableQRCode(ctx context.Context, uploaderID int64, merchantID, tableID int64, pngData []byte) (string, error) {
+	if server.mediaStorage == nil {
+		return "", fmt.Errorf("media storage is not initialized")
+	}
+
+	checksumBytes := sha256.Sum256(pngData)
+	checksum := hex.EncodeToString(checksumBytes[:])
+	objectKey := buildTableQRCodeObjectKey(merchantID, tableID, checksum)
+
+	if err := server.mediaStorage.PutObject(ctx, server.mediaStorage.PublicBucket(), objectKey, "image/png", bytes.NewReader(pngData), int64(len(pngData))); err != nil {
+		return "", err
+	}
+
+	asset, err := server.store.CreateMediaAsset(ctx, db.CreateMediaAssetParams{
+		ObjectKey:      objectKey,
+		Visibility:     string(media.VisibilityPublic),
+		MediaCategory:  string(media.CategoryTableImage),
+		MimeType:       "image/png",
+		FileSize:       int64(len(pngData)),
+		ChecksumSha256: checksum,
+		UploadedBy:     uploaderID,
+		SourceClient:   "server",
+	})
+	if err != nil {
+		return "", err
+	}
+
+	if asset.ModerationStatus != "approved" {
+		if _, err := server.store.SetMediaAssetModerationStatus(ctx, db.SetMediaAssetModerationStatusParams{
+			ID:               asset.ID,
+			ModerationStatus: "approved",
+		}); err != nil {
+			return "", err
+		}
+	}
+
+	return server.mediaResolver.PublicURL(objectKey, media.VariantOriginal), nil
 }
 
 // generateTableQRCode godoc
@@ -354,15 +479,15 @@ type generateTableQRCodeResponse struct {
 func (server *Server) generateTableQRCode(ctx *gin.Context) {
 	tableID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("无效的桌台ID")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidTableID))
 		return
 	}
 
 	// 获取桌台
 	table, err := server.store.GetTable(ctx, tableID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("桌台不存在")))
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrTableNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -371,21 +496,21 @@ func (server *Server) generateTableQRCode(ctx *gin.Context) {
 
 	// 验证是否为商户
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.getMerchantFromContextOrStore(ctx, authPayload.UserID)
 	if err != nil {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("您不是商户")))
+		ctx.JSON(http.StatusForbidden, errorResponse(ErrNotMerchant))
 		return
 	}
 
 	if table.MerchantID != merchant.ID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("该桌台不属于您的商户")))
+		ctx.JSON(http.StatusForbidden, errorResponse(ErrTableNotOwned))
 		return
 	}
 
-	// 如果已有二维码URL，直接返回
-	if table.QrCodeUrl.Valid && table.QrCodeUrl.String != "" {
+	// 如果已有当前版本二维码，直接返回；旧版带文字二维码会在这里自动刷新为新版本。
+	if table.QrCodeUrl.Valid && table.QrCodeUrl.String != "" && isCurrentTableQRCodePath(table.QrCodeUrl.String) {
 		ctx.JSON(http.StatusOK, generateTableQRCodeResponse{
-			QrCodeUrl:  normalizeUploadURLForClient(table.QrCodeUrl.String),
+			QrCodeUrl:  table.QrCodeUrl.String,
 			TableNo:    table.TableNo,
 			MerchantID: merchant.ID,
 		})
@@ -416,10 +541,7 @@ func (server *Server) generateTableQRCode(ctx *gin.Context) {
 		return
 	}
 
-	// 保存PNG图片到文件系统
-	filename := fmt.Sprintf("qrcode_m%d_t%d.png", merchant.ID, tableID)
-	uploader := util.NewFileUploader("uploads")
-	relativePath, err := uploader.SaveQRCodeImage(merchant.ID, filename, pngData)
+	qrCodeURL, err := server.storeTableQRCode(ctx, authPayload.UserID, merchant.ID, tableID, pngData)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("保存二维码图片失败: %w", err)))
 		return
@@ -428,7 +550,7 @@ func (server *Server) generateTableQRCode(ctx *gin.Context) {
 	// 更新桌台的二维码URL
 	_, err = server.store.UpdateTable(ctx, db.UpdateTableParams{
 		ID:        tableID,
-		QrCodeUrl: pgtype.Text{String: relativePath, Valid: true},
+		QrCodeUrl: pgtype.Text{String: qrCodeURL, Valid: true},
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -436,7 +558,7 @@ func (server *Server) generateTableQRCode(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, generateTableQRCodeResponse{
-		QrCodeUrl:  normalizeUploadURLForClient(relativePath),
+		QrCodeUrl:  qrCodeURL,
 		TableNo:    table.TableNo,
 		MerchantID: merchant.ID,
 	})

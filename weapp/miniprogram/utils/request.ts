@@ -1,5 +1,5 @@
-import { getToken, clearToken, setToken, isTokenNearExpiry } from './auth'
-import { ApiResponse, ErrorCode } from '../api/types'
+import { getToken, clearToken, setToken, isTokenNearExpiry, hasToken } from './auth'
+import { ApiResponse, ErrorCode, classifyErrorCode } from '../api/types'
 import { logger } from './logger'
 import { ErrorHandler, ErrorType, AppError } from './error-handler'
 import { requestManager } from './request-manager'
@@ -7,13 +7,15 @@ import { networkMonitor } from './network-monitor'
 import { CacheManager, CacheStrategy } from './cache'
 import { API_CONFIG, ENV } from '../config/index'
 import { performanceMonitor } from './performance-monitor'
+import { mapBackendMessageToUserMessage } from './user-facing'
 
 export const API_BASE = API_CONFIG.BASE_URL
 
 interface RequestOptions {
   url: string
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH'
-  data?: any
+  data?: unknown
+  timeout?: number
   loading?: boolean
   loadingText?: string
   context?: string // 请求上下文,用于批量取消
@@ -22,95 +24,268 @@ interface RequestOptions {
   useCache?: boolean // 是否使用缓存
   cacheTTL?: number // 缓存时间(毫秒)
   skipAuth?: boolean // 跳过 token 验证和刷新（用于登录、刷新 token 等不需要认证的接口）
+  strictEnvelope?: boolean // 严格要求返回统一响应信封，缺少 code 时视为失败
 }
 
 const cache = new CacheManager()
+const MEDIA_SECURITY_BLOCKED_MESSAGE = '图片被微信多媒体内容安全审查系统拦截，请更换图片再试'
+const OCR_TIMEOUT_MESSAGE = '识别超时，请稍后重试'
+const OCR_FAILURE_MESSAGE = '识别失败，请提供更清晰更规整的图片重试'
 
-export function uploadFile<T = any>(filePath: string, url: string = '/upload/image', name: string = 'file', formData: any = {}): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const doUpload = () => {
-      wx.uploadFile({
-        url: `${API_BASE}${url}`,
-        filePath,
-        name,
-        header: {
-          'Authorization': `Bearer ${getToken()}`
-        },
-        formData: formData,
-        success: (res) => {
-          // wx.uploadFile returns data as string
-          let data: any
-          try {
-            data = JSON.parse(res.data)
-          } catch (e) {
-            // If not JSON, probably error page or simple string
-            data = res.data
-          }
+interface RefreshTokenPayload {
+  access_token: string
+  refresh_token?: string
+  access_token_expires_at?: string
+}
 
-          if (res.statusCode === 200 || res.statusCode === 201) {
-            // Verify code if it exists in envelope
-            if (data && typeof data === 'object' && data.code !== undefined) {
-              if (data.code === 0) {
-                logger.debug('文件上传成功', { url: url }, 'uploadFile')
-                // Return the data part as T, or the whole thing?
-                // request() returns response.data. 
-                // Existing uploadFile returned data.data.url string.
-                // To be generic, let's return data.data usually.
-                resolve(data.data as T)
-              } else {
-                reject(new AppError({
-                  type: ErrorType.BUSINESS,
-                  message: `上传失败: ${data.message}`,
-                  userMessage: data.message
-                }))
-              }
-            } else {
-              // Legacy behavior or different format
-              resolve(data as T)
-            }
-          } else if (res.statusCode === 401) {
-            // Token expired
-            logger.warn('Token已过期(upload),尝试自动刷新', undefined, 'uploadFile')
-            performTokenRefresh(true).then(() => {
-              // Retry upload
-              doUpload()
-            }).catch((err) => {
-              clearToken()
-              // User requested silent login, no redirect.
-              reject(new AppError({
-                type: ErrorType.AUTH,
-                message: '登录已过期且刷新失败',
-                userMessage: '登录状态失效，请重试'
-              }))
-            })
-          } else {
-            // 解析后端返回的错误信息
-            const errMsg = (data && data.message) || (data && data.error) || '文件上传失败'
-            const userMsg = (data && data.userMessage) || '文件上传失败'
+type WechatLoginPayload = RefreshTokenPayload
 
-            logger.warn(`上传失败 HTTP ${res.statusCode}`, { url: url, response: data }, 'uploadFile')
+const _inflightGetRequests = new Map<string, Promise<unknown>>()
 
-            reject(new AppError({
-              type: ErrorType.NETWORK,
-              message: `HTTP ${res.statusCode}: ${errMsg}`,
-              userMessage: userMsg
-            }, data))
-          }
-        },
-        fail: (err) => {
-          const error = ErrorHandler.handleNetworkError(err, 'uploadFile')
-          reject(error)
-        }
-      })
+function sanitizeGetParams(data: unknown): unknown {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    return data
+  }
+
+  const source = data as Record<string, unknown>
+  const cleaned: Record<string, unknown> = {}
+
+  Object.entries(source).forEach(([key, value]) => {
+    if (value === undefined || value === null) {
+      return
     }
 
-    // Check token expiry before starting (optional optimization)
-    if (isTokenNearExpiry(60000)) {
-      refreshTokenOnce().then(doUpload).catch(() => doUpload())
-    } else {
-      doUpload()
+    if (typeof value === 'string') {
+      const trimmed = value.trim()
+      const lower = trimmed.toLowerCase()
+      if (!trimmed || lower === 'undefined' || lower === 'null' || lower === 'nan') {
+        return
+      }
+      cleaned[key] = trimmed
+      return
     }
+
+    if (typeof value === 'number' && !Number.isFinite(value)) {
+      return
+    }
+
+    cleaned[key] = value
   })
+
+  return cleaned
+}
+
+function buildGetSingleFlightKey(url: string, data: unknown, skipAuth: boolean): string {
+  let serialized = ''
+  try {
+    serialized = JSON.stringify(data || {})
+  } catch (_error) {
+    serialized = String(data)
+  }
+  return `GET|${url}|${serialized}|skipAuth:${skipAuth ? '1' : '0'}`
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+function containsChineseText(text: string): boolean {
+  return /[\u4e00-\u9fff]/.test(text)
+}
+
+function isOnboardingSubmitEndpoint(url: string): boolean {
+  return url === '/v1/merchant/application/submit' || url === '/v1/rider/application/submit'
+}
+
+function shouldPreserveOnboardingBusinessMessage(url: string, backendMessage: string): boolean {
+  if (!isOnboardingSubmitEndpoint(url)) {
+    return false
+  }
+
+  const message = backendMessage.replace(/\s+/g, ' ').trim()
+  if (!message || message.length > 120 || message.includes('\n')) {
+    return false
+  }
+
+  if (!containsChineseText(message)) {
+    return false
+  }
+
+  const normalized = message.toLowerCase()
+  const diagnosticMarkers = [
+    'sql',
+    'stack',
+    'traceback',
+    'panic',
+    'exception',
+    'token',
+    'jwt',
+    'request:fail',
+    'http ',
+    'bad gateway',
+    'gateway timeout',
+    'service unavailable',
+    'internal server error',
+    'unauthorized',
+    'forbidden',
+    'not found',
+    'no rows in result set',
+    'nginx'
+  ]
+
+  return !diagnosticMarkers.some((marker) => normalized.includes(marker))
+}
+
+function mapSearchBadRequestMessage(url: string, backendMessage: string, fallback: string): string {
+  const normalized = backendMessage.toLowerCase()
+  const isNoRows = normalized.includes('no rows in result set')
+
+  if (!isNoRows) {
+    return fallback
+  }
+
+  if (url.includes('/v1/search/dishes')) {
+    return '当前区域暂无可推荐菜品'
+  }
+  if (url.includes('/v1/search/rooms')) {
+    return '当前区域暂无可预订包间'
+  }
+  if (url.includes('/v1/search/merchants')) {
+    return '当前区域暂无可浏览商家'
+  }
+  if (url.includes('/v1/search/combos')) {
+    return '当前区域暂无可推荐套餐'
+  }
+
+  return '当前区域暂无可用内容'
+}
+
+function mapKnownBackendMessage(url: string, backendMessage: string): string | undefined {
+  const normalized = backendMessage.trim().toLowerCase()
+  if (!normalized) {
+    return undefined
+  }
+
+  if (normalized.includes('this endpoint requires merchant role') || normalized.includes('merchant owner role not found') || normalized.includes('not a merchant')) {
+    return '当前角色不支持使用此功能，请切换到商户角色后再试。'
+  }
+
+  if (normalized.includes('this endpoint requires rider role') || normalized.includes('rider role not found') || normalized.includes('not a rider')) {
+    return '当前角色不支持使用此功能，请切换到骑手角色后再试。'
+  }
+
+  if (normalized.includes('this endpoint requires operator role') || normalized.includes('operator role not found') || normalized.includes('operator not found in context')) {
+    return '当前角色不支持使用此功能，请切换到运营角色后再试。'
+  }
+
+  if (normalized.includes('this endpoint requires admin role') || normalized.includes('platform role not found') || normalized.includes('admin role not found')) {
+    return '当前角色不支持使用此功能，请切换到平台管理员角色后再试。'
+  }
+
+  if (normalized.includes('operator account is not active') || normalized.includes('operator is not active')) {
+    return '当前运营账号尚未完成开户，暂时不能加载运营中心数据。'
+  }
+
+  if (normalized === 'merchant is closed') {
+    return '商户休息中～'
+  }
+
+  if (normalized.includes('image moderation is pending')) {
+    return MEDIA_SECURITY_BLOCKED_MESSAGE
+  }
+
+  if (normalized.includes('invalid media id')) {
+    return '图片处理失败，请重新上传'
+  }
+
+  if (
+    normalized.includes('upload session not found') ||
+    normalized.includes('session not found') ||
+    normalized.includes('asset not found') ||
+    normalized.includes('media: asset')
+  ) {
+    if (url.includes('/v1/media') || url.includes('/v1/ocr')) {
+      return '图片已失效，请重新上传'
+    }
+  }
+
+  if (normalized.includes('ocr timeout') || normalized.includes('recognize timeout') || normalized.includes('recognition timeout')) {
+    return OCR_TIMEOUT_MESSAGE
+  }
+
+  if (
+    normalized.includes('ocr failed') ||
+    normalized.includes('recognize failed') ||
+    normalized.includes('recognition failed')
+  ) {
+    return OCR_FAILURE_MESSAGE
+  }
+
+  if (normalized.includes('invalid coordinates')) {
+    return '位置信息无效，请重新定位'
+  }
+
+  if (normalized.includes('no application') || normalized.includes('application not found')) {
+    return '您还没有申请记录'
+  }
+
+  if (normalized.includes('already submitted') || normalized.includes('application submitted')) {
+    return '申请已提交，请等待审核'
+  }
+
+  if (normalized.includes('application can only be submitted in draft state')) {
+    return '当前申请状态暂不支持再次提交，请返回查看审核进度'
+  }
+
+  if (normalized.includes('application can only be modified in draft state')) {
+    return '申请已提交，暂时不能修改资料'
+  }
+
+  if (normalized.includes('already approved') || normalized.includes('application approved')) {
+    return '申请已通过，无需重复提交'
+  }
+
+  if (normalized.includes('unauthorized') || normalized.includes('forbidden')) {
+    return '当前无权限执行该操作'
+  }
+
+  return undefined
+}
+
+function normalizeBackendUserMessage(url: string, backendMessage: string, fallback: string): string {
+  if (!backendMessage) {
+    return fallback
+  }
+
+  const mappedMessage = mapKnownBackendMessage(url, backendMessage)
+  if (mappedMessage) {
+    return mappedMessage
+  }
+
+  if (shouldPreserveOnboardingBusinessMessage(url, backendMessage)) {
+    return backendMessage.replace(/\s+/g, ' ').trim()
+  }
+
+  return mapBackendMessageToUserMessage(backendMessage, fallback)
+}
+
+function isExpectedOperatorApplicationNotFound(
+  method: string,
+  url: string,
+  statusCode: number,
+  backendMessage: string,
+  envelopeCode?: number
+): boolean {
+  if (method !== 'GET' || url !== '/v1/operator/application' || statusCode !== 404) {
+    return false
+  }
+
+  if (envelopeCode === ErrorCode.NOT_FOUND) {
+    return true
+  }
+
+  const normalized = backendMessage.toLowerCase()
+  return normalized.includes('您还没有申请记录') || normalized.includes('no application')
 }
 
 export async function request<T = unknown>(options: RequestOptions): Promise<T> {
@@ -118,27 +293,40 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
     url,
     method = 'GET',
     data,
-    loading = true,
+    loading = false, // 默认为 false，由页面根据业务逻辑显示骨架屏或局部加载
     loadingText = '加载中...',
+    timeout = API_CONFIG.TIMEOUT,
     context,
     requestId = `${method}_${url}_${Date.now()}`,
     retry = false,
     useCache = false,
     cacheTTL = 5 * 60 * 1000, // 默认5分钟
-    skipAuth = false // 是否跳过认证
+    skipAuth = false, // 是否跳过认证
+    strictEnvelope = false
   } = options
+
+  const normalizedData = method === 'GET' ? sanitizeGetParams(data) : data
+  const singleFlightKey = method === 'GET'
+    ? buildGetSingleFlightKey(url, normalizedData, skipAuth)
+    : ''
+
+  if (singleFlightKey) {
+    const existing = _inflightGetRequests.get(singleFlightKey)
+    if (existing) {
+      logger.debug(`复用GET并发请求: ${url}`, { singleFlightKey }, 'request')
+      return existing as Promise<T>
+    }
+  }
 
   // 智能缓存策略(GET请求)
   if (useCache && method === 'GET') {
-    const cacheKey = `api_${url}_${JSON.stringify(data || {})}`
+    const cacheKey = `api_${url}_${JSON.stringify(normalizedData || {})}`
     const cached = cache.get<T>(cacheKey)
     if (cached) {
       logger.debug(`✅ 命中缓存: ${url}`, { cacheTTL }, 'request')
 
       // 记录性能监控 - 缓存命中
       performanceMonitor.recordRequest(true)
-
-      // 后台静默刷新缓存（如果缓存即将过期）
       const cacheAge = cache.getAge(cacheKey)
       if (cacheAge && cacheAge > cacheTTL * 0.8) {
         logger.debug(`🔄 后台刷新缓存: ${url}`, undefined, 'request')
@@ -156,66 +344,76 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
     }
   }
 
-  // 检查网络状态
-  if (!networkMonitor.isOnline()) {
-    const error = new AppError({
-      type: ErrorType.NETWORK,
-      message: '网络不可用',
-      userMessage: '网络连接失败,请检查网络设置'
-    })
-
-    if (loading) wx.hideLoading()
-
-    // 显示重试按钮
-    showRetryDialog(error, () => request(options))
-    throw error
-  }
-
-  if (loading) {
-    wx.showLoading({ title: loadingText, mask: true })
-  }
-
-  try {
-    // 在每次请求前，若 token 在阈值内即将过期，则先尝试刷新一次（单并发）
-    // 跳过认证的请求（如登录、刷新 token）不需要检查 token
-    if (!skipAuth) {
-      await ensureValidToken()
+  const requestPromise = (async (): Promise<T> => {
+    // 预检查网络状态（桌面微信长时间 idle 恢复后可能出现状态滞后）
+    // 注意：这里不做“硬拦截”。即便本地状态显示离线，也允许发起一次真实请求来判定，
+    // 避免出现“状态卡死，必须重进小程序才恢复”的问题。
+    if (!networkMonitor.isOnline()) {
+      const refreshed = await networkMonitor.refreshStatus(true)
+      if (!refreshed.isConnected) {
+        logger.warn('网络预检查仍显示离线，继续发起探测请求以避免状态误判', {
+          method,
+          url
+        }, 'request')
+      }
     }
 
-    const app = getApp<IAppOption>()
-    const latitude = app?.globalData?.latitude || 0
-    const longitude = app?.globalData?.longitude || 0
+    if (loading) {
+      wx.showLoading({ title: loadingText, mask: true })
+    }
 
-    logger.debug(`API请求: ${method} ${url}`, { data, latitude, longitude, requestId }, 'request')
+    try {
+      // 在每次请求前，若 token 在阈值内即将过期，则先尝试刷新一次（单并发）
+      // 跳过认证的请求（如登录、刷新 token）不需要检查 token
+      if (!skipAuth) {
+        await ensureValidToken()
+      }
 
-    const result = await new Promise<WechatMiniprogram.RequestSuccessCallbackResult>((resolve, reject) => {
-      const task = wx.request({
-        url: `${API_BASE}${url}`,
-        method: method as any,
-        data,
-        header: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${getToken()}`,
-          'X-User-Latitude': String(latitude),
-          'X-User-Longitude': String(longitude),
-          'X-Response-Envelope': '1' // 启用统一响应信封：{ code, message, data }
-        },
-        success: (res) => {
-          requestManager.unregister(requestId)
-          resolve(res)
-        },
-        fail: (err) => {
-          requestManager.unregister(requestId)
-          reject(err)
-        }
+      const app = getApp<IAppOption>()
+      const latitude = app?.globalData?.latitude || 0
+      const longitude = app?.globalData?.longitude || 0
+
+      logger.debug(`API请求: ${method} ${url}`, { data: normalizedData, latitude, longitude, requestId }, 'request')
+
+      const requestData = normalizedData as WechatMiniprogram.IAnyObject | string | ArrayBuffer | undefined
+      const result = await new Promise<WechatMiniprogram.RequestSuccessCallbackResult>((resolve, reject) => {
+        const task = wx.request({
+          url: `${API_BASE}${url}`,
+          method: method as WechatMiniprogram.RequestOption['method'],
+          data: requestData,
+          timeout,
+          header: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${getToken()}`,
+            'X-User-Latitude': String(latitude),
+            'X-User-Longitude': String(longitude),
+            'X-Response-Envelope': '1' // 启用统一响应信封：{ code, message, data }
+          },
+          success: (res) => {
+            requestManager.unregister(requestId)
+            resolve(res)
+          },
+          fail: (err) => {
+            requestManager.unregister(requestId)
+            // Ensure err is an object, not null or undefined
+            const errorInfo = err || { errMsg: 'wx.request failed with no error info' }
+            reject(errorInfo)
+          }
+        })
+
+        // 注册请求任务以便取消
+        requestManager.register(requestId, task, context)
       })
 
-      // 注册请求任务以便取消
-      requestManager.register(requestId, task, context)
-    })
+    // 204 No Content 视为成功（如 DELETE 返回空）
+    if (result.statusCode === 204) {
+      performanceMonitor.recordRequest(false)
+      logger.debug(`API响应成功(204): ${method} ${url}`, undefined, 'request')
+      return undefined as T
+    }
 
     // 检查HTTP状态码
-    if (result.statusCode !== 200 && result.statusCode !== 201) {
+    if (result.statusCode !== 200 && result.statusCode !== 201 && result.statusCode !== 202) {
       // 特殊处理 401 Unauthorized
       if (result.statusCode === 401) {
         logger.warn('Token无效(HTTP 401),尝试自动刷新', undefined, 'request')
@@ -223,6 +421,8 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
           await performTokenRefresh(true)
           logger.info('Token自动刷新成功,重试请求', undefined, 'request')
           if (loading) wx.hideLoading()
+          // 清除 singleFlight 登记，避免递归 request() 拿到自身 Promise 造成循环死锁
+          if (singleFlightKey) _inflightGetRequests.delete(singleFlightKey)
           return request<T>(options)
         } catch (refreshError) {
           logger.error('Token刷新失败(HTTP 401)', refreshError, 'request')
@@ -237,33 +437,114 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
         }
       }
 
-      logger.error(`HTTP错误: ${method} ${url}`, {
-        statusCode: result.statusCode,
-        data: result.data
-      }, 'request')
-
       // 尝试从后端响应中提取错误信息
-      const responseData = result.data as any
-      const backendMessage = responseData?.message || responseData?.error || ''
+      const responseData = result.data as unknown
+      const rawEnvelopeCode = isRecord(responseData) && typeof responseData.code === 'number'
+        ? responseData.code
+        : undefined
+      const envelopeCode = rawEnvelopeCode !== undefined ? classifyErrorCode(rawEnvelopeCode) : undefined
+      const envelopeMessage = isRecord(responseData) && typeof responseData.message === 'string'
+        ? responseData.message
+        : undefined
+
+      const backendMessage = (() => {
+        if (envelopeMessage) return envelopeMessage
+        if (!isRecord(responseData)) return ''
+        if (typeof responseData.error === 'string') return responseData.error
+        const dataField = responseData.data
+        if (isRecord(dataField)) {
+          if (typeof dataField.error === 'string') return dataField.error
+          if (typeof dataField.message === 'string') return dataField.message
+        }
+        return ''
+      })()
+
+      if (isExpectedOperatorApplicationNotFound(method, url, result.statusCode, backendMessage, envelopeCode)) {
+        logger.debug(`预期业务状态: ${method} ${url} 无申请记录`, {
+          statusCode: result.statusCode,
+          code: rawEnvelopeCode ?? envelopeCode,
+          message: backendMessage
+        }, 'request')
+      } else {
+        logger.error(`HTTP错误: ${method} ${url}`, {
+          statusCode: result.statusCode,
+          data: result.data
+        }, 'request')
+      }
+
+      if (envelopeCode !== undefined) {
+        let userMessage = normalizeBackendUserMessage(url, backendMessage, '服务器响应异常,请稍后重试')
+        const displayCode = rawEnvelopeCode ?? envelopeCode
+        let errorDetail = `API ${displayCode}`
+        let errorType = ErrorType.BUSINESS
+
+        if (envelopeCode === ErrorCode.BAD_REQUEST) {
+          userMessage = normalizeBackendUserMessage(url, backendMessage, '请求参数错误')
+          userMessage = mapSearchBadRequestMessage(url, backendMessage, userMessage)
+          errorDetail = `参数错误(${displayCode}): ${backendMessage}`
+        } else if (envelopeCode === ErrorCode.CONFLICT) {
+          userMessage = normalizeBackendUserMessage(url, backendMessage, '操作冲突，请稍后重试')
+          errorDetail = `冲突(${displayCode}): ${backendMessage}`
+        } else if (envelopeCode === ErrorCode.NOT_FOUND) {
+          userMessage = normalizeBackendUserMessage(url, backendMessage, '服务暂时不可用,请稍后重试')
+          errorDetail = backendMessage ? `服务未找到(${displayCode}): ${backendMessage}` : `服务未找到(${displayCode})`
+        } else if (
+          envelopeCode === ErrorCode.BAD_GATEWAY ||
+          envelopeCode === ErrorCode.SERVICE_UNAVAILABLE ||
+          envelopeCode === ErrorCode.GATEWAY_TIMEOUT
+        ) {
+          userMessage = '服务暂时不可用,请稍后重试'
+          errorDetail = `网关错误(${displayCode})`
+          errorType = ErrorType.NETWORK
+        } else if (envelopeCode === ErrorCode.INTERNAL_ERROR) {
+          userMessage = '服务器内部错误,请稍后重试'
+          errorDetail = `服务器错误(${displayCode})`
+          errorType = ErrorType.NETWORK
+        } else if (envelopeCode === ErrorCode.UNAUTHORIZED) {
+          userMessage = '登录已过期,请重新登录'
+          errorDetail = `认证失败(${displayCode})`
+          errorType = ErrorType.AUTH
+        } else if (envelopeCode === ErrorCode.FORBIDDEN) {
+          userMessage = normalizeBackendUserMessage(url, backendMessage, '无权限操作')
+          errorDetail = `权限不足(${displayCode}): ${backendMessage}`
+          errorType = ErrorType.PERMISSION
+        } else if (envelopeCode === ErrorCode.UNPROCESSABLE) {
+          userMessage = normalizeBackendUserMessage(url, backendMessage, '请求语义错误')
+          errorDetail = `语义错误(${displayCode}): ${backendMessage}`
+        } else if (envelopeCode === ErrorCode.TOO_MANY_REQUESTS) {
+          userMessage = '请求过于频繁，请稍后重试'
+          errorDetail = `限流(${displayCode})`
+        }
+
+        throw new AppError({
+          type: errorType,
+          message: errorDetail,
+          userMessage,
+          code: displayCode,
+          statusCode: result.statusCode
+        }, responseData)
+        }
 
       // 常见HTTP错误处理
-      let userMessage = backendMessage || '服务器响应异常,请稍后重试'
+      let userMessage = normalizeBackendUserMessage(url, backendMessage, '服务器响应异常,请稍后重试')
       let errorDetail = `HTTP ${result.statusCode}`
       let errorType = ErrorType.NETWORK
 
       if (result.statusCode === 400) {
         // 400 Bad Request - 请求参数错误，显示后端返回的具体错误信息
-        userMessage = backendMessage || '请求参数错误'
+        userMessage = normalizeBackendUserMessage(url, backendMessage, '请求参数错误')
+        userMessage = mapSearchBadRequestMessage(url, backendMessage, userMessage)
+
         errorDetail = `参数错误(400): ${backendMessage}`
         errorType = ErrorType.BUSINESS
       } else if (result.statusCode === 409) {
         // 409 Conflict - 冲突错误（如时间段已被预订），显示后端返回的具体错误信息
-        userMessage = backendMessage || '操作冲突，请稍后重试'
+        userMessage = normalizeBackendUserMessage(url, backendMessage, '操作冲突，请稍后重试')
         errorDetail = `冲突(409): ${backendMessage}`
         errorType = ErrorType.BUSINESS
       } else if (result.statusCode === 404) {
-        userMessage = '服务暂时不可用,请稍后重试'
-        errorDetail = '服务未找到(404) - 可能是后端服务未启动'
+        userMessage = normalizeBackendUserMessage(url, backendMessage, '服务暂时不可用,请稍后重试')
+        errorDetail = backendMessage ? `服务未找到(404): ${backendMessage}` : '服务未找到(404) - 可能是后端服务未启动'
       } else if (result.statusCode === 502 || result.statusCode === 503 || result.statusCode === 504) {
         userMessage = '服务暂时不可用,请稍后重试'
         errorDetail = `网关错误(${result.statusCode}) - 后端服务可能未启动`
@@ -272,7 +553,7 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
         errorDetail = `服务器错误(${result.statusCode})`
       } else if (result.statusCode >= 400) {
         // 其他 4xx 客户端错误，优先使用后端返回的消息
-        userMessage = backendMessage || '请求失败，请稍后重试'
+        userMessage = normalizeBackendUserMessage(url, backendMessage, '请求失败，请稍后重试')
         errorDetail = `客户端错误(${result.statusCode}): ${backendMessage}`
         errorType = ErrorType.BUSINESS
       }
@@ -280,7 +561,8 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
       throw new AppError({
         type: errorType,
         message: errorDetail,
-        userMessage
+        userMessage,
+        statusCode: result.statusCode
       })
     }
 
@@ -333,13 +615,29 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
     }
 
     // 检查 code 字段是否存在（统一响应信封格式要求所有接口都有 code 字段）
+    // 部分旧接口仍直接返回数组/对象，此时视为成功并直接返回原始数据，避免前端崩溃
     if (response.code === undefined || response.code === null) {
-      logger.error(`API响应缺少code字段: ${method} ${url}`, response, 'request')
-      throw new AppError({
-        type: ErrorType.BUSINESS,
-        message: 'API响应缺少code字段',
-        userMessage: '服务器响应异常,请稍后重试'
-      })
+      if (strictEnvelope) {
+        logger.error(`API响应缺少code字段(严格模式): ${method} ${url}`, response, 'request')
+        throw new AppError({
+          type: ErrorType.BUSINESS,
+          message: 'API响应缺少code字段(严格模式)',
+          userMessage: '服务器响应异常，请稍后重试'
+        }, response)
+      }
+
+      logger.warn(`API响应缺少code字段，按兼容模式处理: ${method} ${url}`, response, 'request')
+
+      // 记录性能监控 - 网络请求成功
+      performanceMonitor.recordRequest(false)
+
+      // 缓存兼容：直接缓存原始数据
+      if (useCache && method === 'GET') {
+        const cacheKey = `api_${url}_${JSON.stringify(normalizedData || {})}`
+        cache.set(cacheKey, response as unknown as T, cacheTTL, CacheStrategy.MEMORY_FIRST)
+      }
+
+      return response as unknown as T
     }
 
     if (response.code === ErrorCode.SUCCESS) {
@@ -350,12 +648,12 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
 
       // 保存缓存(GET请求)
       if (useCache && method === 'GET') {
-        const cacheKey = `api_${url}_${JSON.stringify(data || {})}`
+        const cacheKey = `api_${url}_${JSON.stringify(normalizedData || {})}`
         cache.set(cacheKey, response.data, cacheTTL, CacheStrategy.MEMORY_FIRST)
       }
 
       return response.data
-    } else if (response.code === ErrorCode.TOKEN_EXPIRED) {
+    } else if (response.code === ErrorCode.TOKEN_EXPIRED || response.code === ErrorCode.UNAUTHORIZED) {
       // Token过期,自动静默刷新
       logger.warn('Token已过期,尝试自动刷新', undefined, 'request')
 
@@ -365,6 +663,8 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
         logger.info('Token自动刷新成功,重试请求', undefined, 'request')
         // 关闭loading后再重试
         if (loading) wx.hideLoading()
+        // 清除 singleFlight 登记，避免递归 request() 拿到自身 Promise 造成循环死锁
+        if (singleFlightKey) _inflightGetRequests.delete(singleFlightKey)
         return request<T>(options)
       } catch (refreshError) {
         // 刷新失败
@@ -382,61 +682,80 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
       // 业务错误
       const errorCode = response.code || 'UNKNOWN'
       const errorMessage = response.message || '未知错误'
+      const friendlyMessage = normalizeBackendUserMessage(url, errorMessage, '操作失败，请稍后重试')
       logger.warn(`API业务错误: ${method} ${url}`, { code: errorCode, message: errorMessage, fullResponse: response }, 'request')
       throw new AppError({
         type: ErrorType.BUSINESS,
         message: `API错误 [${errorCode}]: ${errorMessage}`,
-        userMessage: errorMessage
+        userMessage: friendlyMessage,
+        code: typeof errorCode === 'number' || typeof errorCode === 'string' ? errorCode : undefined
       })
     }
-  } catch (error) {
-    // 网络错误或其他错误
-    if (error instanceof AppError) {
+    } catch (error) {
+      // 网络错误或其他错误
+      if (error instanceof AppError) {
+        // 如果启用了重试
+        if (retry) {
+          const retryCount = typeof retry === 'number' ? retry : 1
+          logger.warn(`请求失败,将重试 ${retryCount} 次`, { url }, 'request')
+          // 关闭loading后再重试
+          if (loading) wx.hideLoading()
+          return retryRequest(options, retryCount)
+        }
+        throw error
+      }
+
+      // 静默处理abort错误（并发请求被取消的正常情况）
+      const errMsg = (error as { errMsg?: string })?.errMsg || ''
+      if (errMsg.includes('abort')) {
+        // abort是正常的并发控制，静默处理
+        if (retry) {
+          const retryCount = typeof retry === 'number' ? retry : 1
+          if (loading) wx.hideLoading()
+          return retryRequest(options, retryCount)
+        }
+        throw new AppError({
+          type: ErrorType.NETWORK,
+          message: `请求已取消: ${method} ${url}`,
+          userMessage: '请求已取消'
+        }, error)
+      }
+
+      logger.error(`API请求失败: ${method} ${url}`, error || 'Unknown error', 'request')
+      const networkError = ErrorHandler.handleNetworkError(error || new Error('Network request failed'), `request:${method}:${url}`)
+
       // 如果启用了重试
       if (retry) {
         const retryCount = typeof retry === 'number' ? retry : 1
-        logger.warn(`请求失败,将重试 ${retryCount} 次`, { url }, 'request')
         // 关闭loading后再重试
         if (loading) wx.hideLoading()
         return retryRequest(options, retryCount)
       }
-      throw error
-    }
 
-    // 静默处理abort错误（并发请求被取消的正常情况）
-    const errMsg = (error as any)?.errMsg || ''
-    if (errMsg.includes('abort')) {
-      // abort是正常的并发控制，静默处理
-      if (retry) {
-        const retryCount = typeof retry === 'number' ? retry : 1
-        if (loading) wx.hideLoading()
-        return retryRequest(options, retryCount)
-      }
-      throw error
-    }
-
-    logger.error(`API请求失败: ${method} ${url}`, error, 'request')
-    const networkError = ErrorHandler.handleNetworkError(error, `request:${method}:${url}`)
-
-    // 如果启用了重试
-    if (retry) {
-      const retryCount = typeof retry === 'number' ? retry : 1
-      // 关闭loading后再重试
-      if (loading) wx.hideLoading()
-      return retryRequest(options, retryCount)
-    }
-
-    throw networkError
-  } finally {
-    // 确保hideLoading在所有情况下都被调用
-    if (loading) {
-      try {
-        wx.hideLoading()
-      } catch (e) {
-        // 忽略hideLoading的错误
+      throw networkError
+    } finally {
+      // 确保hideLoading在所有情况下都被调用
+      if (loading) {
+        try {
+          wx.hideLoading()
+        } catch (e) {
+          // 忽略hideLoading的错误
+        }
       }
     }
+  })()
+
+  if (singleFlightKey) {
+    _inflightGetRequests.set(singleFlightKey, requestPromise as Promise<unknown>)
+    requestPromise.finally(() => {
+      const current = _inflightGetRequests.get(singleFlightKey)
+      if (current === requestPromise) {
+        _inflightGetRequests.delete(singleFlightKey)
+      }
+    })
   }
+
+  return requestPromise
 }
 
 /**
@@ -466,7 +785,7 @@ async function retryRequest<T>(options: RequestOptions, retryCount: number, curr
 /**
  * 显示重试对话框
  */
-function showRetryDialog(error: AppError, retryFn: () => Promise<unknown>) {
+function _showRetryDialog(error: AppError, retryFn: () => Promise<unknown>) {
   wx.showModal({
     title: '网络异常',
     content: error.userMessage || '网络连接失败',
@@ -487,7 +806,8 @@ function showRetryDialog(error: AppError, retryFn: () => Promise<unknown>) {
 // 单次并发刷新锁
 let _refreshingPromise: Promise<void> | null = null
 const REFRESH_THRESHOLD = 5 * 60 * 1000 // 5分钟
-const REFRESH_TIMEOUT = 10000 // 10秒
+const REFRESH_TIMEOUT = 25000 // 覆盖 refresh_token 超时 + wx.login 降级链路
+const TOKEN_REFRESH_REQUEST_TIMEOUT = 10000
 
 /**
  * 统一的Token刷新入口 (带锁)
@@ -507,18 +827,16 @@ async function performTokenRefresh(force: boolean = false): Promise<void> {
 
   logger.info('开始刷新Token', { force }, 'performTokenRefresh')
 
-  _refreshingPromise = new Promise<void>(async (resolve, reject) => {
-    try {
-      await refreshTokenWithTimeout()
-      resolve()
-    } catch (e) {
-      reject(e)
-    } finally {
-      // 延迟清除锁，防止瞬间并发穿透
-      setTimeout(() => {
-        _refreshingPromise = null
-      }, 500)
-    }
+  _refreshingPromise = new Promise<void>((resolve, reject) => {
+    refreshTokenWithTimeout()
+      .then(resolve)
+      .catch(reject)
+      .finally(() => {
+        // 延迟清除锁，防止瞬间并发穿透
+        setTimeout(() => {
+          _refreshingPromise = null
+        }, 500)
+      })
   })
 
   return _refreshingPromise
@@ -527,8 +845,15 @@ async function performTokenRefresh(force: boolean = false): Promise<void> {
 /**
  * 确保Token有效性(请求前检查)
  */
-async function ensureValidToken(): Promise<void> {
+export async function ensureValidToken(): Promise<void> {
+  if (!hasToken()) {
+    return performTokenRefresh(true)
+  }
   return performTokenRefresh(false)
+}
+
+export async function refreshAuthToken(force: boolean = false): Promise<void> {
+  return performTokenRefresh(force)
 }
 
 /**
@@ -570,11 +895,11 @@ async function refreshTokenOnce(): Promise<void> {
             header: { 'Content-Type': 'application/json', 'X-Response-Envelope': '1' },
             success: resolve,
             fail: reject,
-            timeout: 5000
+            timeout: TOKEN_REFRESH_REQUEST_TIMEOUT
           })
         })
 
-        const response = res.data as ApiResponse<any>
+        const response = res.data as ApiResponse<RefreshTokenPayload>
         if (res.statusCode === 200 && response.code === ErrorCode.SUCCESS && response.data?.access_token) {
           const d = response.data
           const expiresAt = d.access_token_expires_at ? new Date(d.access_token_expires_at).getTime() : undefined
@@ -592,9 +917,9 @@ async function refreshTokenOnce(): Promise<void> {
     logger.info('开始wx.login重新登录', undefined, 'refreshTokenOnce')
     const code = await new Promise<string>((resolve, reject) => {
       wx.login({
-        success: (res) => res.code ? resolve(res.code) : reject(new Error('获取code失败')),
-        fail: reject,
-        timeout: 5000
+        success: (res) => res.code ? resolve(res.code) : reject(new Error('获取code失败: res.code missing')),
+        fail: (err) => reject(err || new Error('wx.login failed')),
+        timeout: TOKEN_REFRESH_REQUEST_TIMEOUT
       })
     })
 
@@ -607,11 +932,11 @@ async function refreshTokenOnce(): Promise<void> {
         header: { 'Content-Type': 'application/json', 'X-Response-Envelope': '1' },
         success: resolve,
         fail: reject,
-        timeout: 5000
+        timeout: TOKEN_REFRESH_REQUEST_TIMEOUT
       })
     })
 
-    const response2 = res2.data as ApiResponse<any>
+    const response2 = res2.data as ApiResponse<WechatLoginPayload>
     if (res2.statusCode === 200 && response2.code === ErrorCode.SUCCESS && response2.data?.access_token) {
       const d = response2.data
       const expiresAt = d.access_token_expires_at ? new Date(d.access_token_expires_at).getTime() : undefined

@@ -118,11 +118,50 @@ func (q *Queries) GetSessionByAccessToken(ctx context.Context, accessToken strin
 
 const getSessionByRefreshToken = `-- name: GetSessionByRefreshToken :one
 SELECT id, user_id, access_token, refresh_token, access_token_expires_at, refresh_token_expires_at, user_agent, client_ip, is_revoked, created_at FROM sessions
-WHERE refresh_token = $1 LIMIT 1
+WHERE refresh_token = $1
+  OR refresh_token = $2
+LIMIT 1
 `
 
-func (q *Queries) GetSessionByRefreshToken(ctx context.Context, refreshToken string) (Session, error) {
-	row := q.db.QueryRow(ctx, getSessionByRefreshToken, refreshToken)
+type GetSessionByRefreshTokenParams struct {
+	RefreshToken         string `json:"refresh_token"`
+	RefreshTokenFallback string `json:"refresh_token_fallback"`
+}
+
+func (q *Queries) GetSessionByRefreshToken(ctx context.Context, arg GetSessionByRefreshTokenParams) (Session, error) {
+	row := q.db.QueryRow(ctx, getSessionByRefreshToken, arg.RefreshToken, arg.RefreshTokenFallback)
+	var i Session
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.AccessToken,
+		&i.RefreshToken,
+		&i.AccessTokenExpiresAt,
+		&i.RefreshTokenExpiresAt,
+		&i.UserAgent,
+		&i.ClientIp,
+		&i.IsRevoked,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getSessionByRefreshTokenForUpdate = `-- name: GetSessionByRefreshTokenForUpdate :one
+SELECT id, user_id, access_token, refresh_token, access_token_expires_at, refresh_token_expires_at, user_agent, client_ip, is_revoked, created_at FROM sessions
+WHERE refresh_token = $1
+  OR refresh_token = $2
+LIMIT 1
+FOR UPDATE
+`
+
+type GetSessionByRefreshTokenForUpdateParams struct {
+	RefreshToken         string `json:"refresh_token"`
+	RefreshTokenFallback string `json:"refresh_token_fallback"`
+}
+
+// P1-012 修复：加行锁防止并发刷新
+func (q *Queries) GetSessionByRefreshTokenForUpdate(ctx context.Context, arg GetSessionByRefreshTokenForUpdateParams) (Session, error) {
+	row := q.db.QueryRow(ctx, getSessionByRefreshTokenForUpdate, arg.RefreshToken, arg.RefreshTokenFallback)
 	var i Session
 	err := row.Scan(
 		&i.ID,
@@ -210,4 +249,46 @@ WHERE user_id = $1 AND is_revoked = false
 func (q *Queries) RevokeUserSessions(ctx context.Context, userID int64) error {
 	_, err := q.db.Exec(ctx, revokeUserSessions, userID)
 	return err
+}
+
+const updateSessionTokens = `-- name: UpdateSessionTokens :one
+UPDATE sessions
+SET access_token = $2,
+    refresh_token = $3,
+    access_token_expires_at = $4,
+    refresh_token_expires_at = $5
+WHERE id = $1
+RETURNING id, user_id, access_token, refresh_token, access_token_expires_at, refresh_token_expires_at, user_agent, client_ip, is_revoked, created_at
+`
+
+type UpdateSessionTokensParams struct {
+	ID                    int64     `json:"id"`
+	AccessToken           string    `json:"access_token"`
+	RefreshToken          string    `json:"refresh_token"`
+	AccessTokenExpiresAt  time.Time `json:"access_token_expires_at"`
+	RefreshTokenExpiresAt time.Time `json:"refresh_token_expires_at"`
+}
+
+func (q *Queries) UpdateSessionTokens(ctx context.Context, arg UpdateSessionTokensParams) (Session, error) {
+	row := q.db.QueryRow(ctx, updateSessionTokens,
+		arg.ID,
+		arg.AccessToken,
+		arg.RefreshToken,
+		arg.AccessTokenExpiresAt,
+		arg.RefreshTokenExpiresAt,
+	)
+	var i Session
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.AccessToken,
+		&i.RefreshToken,
+		&i.AccessTokenExpiresAt,
+		&i.RefreshTokenExpiresAt,
+		&i.UserAgent,
+		&i.ClientIp,
+		&i.IsRevoked,
+		&i.CreatedAt,
+	)
+	return i, err
 }

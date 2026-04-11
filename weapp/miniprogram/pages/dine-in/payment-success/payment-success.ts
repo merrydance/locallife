@@ -7,23 +7,28 @@ Page({
     data: {
         orderId: 0,
         paymentAmount: 0,
-        merchantInfo: null as any,
-        tableInfo: null as any,
-        countdown: 5
+        merchantInfo: null as { name: string } | null,
+        tableInfo: null as { table_number: string } | null,
+        countdown: 5,
+        navBarHeight: 88
     },
 
-    onLoad(options: any) {
-        const { order_id, amount, merchant_name, table_number } = options;
+    onNavHeight(e: WechatMiniprogram.CustomEvent<{ navBarHeight?: number }>) {
+        this.setData({ navBarHeight: e.detail.navBarHeight })
+    },
+
+    onLoad(options: { order_id?: string, amount?: string, merchant_name?: string, table_number?: string }) {
+        const { order_id, amount, merchant_name, table_number } = options
 
         this.setData({
-            orderId: parseInt(order_id) || 0,
-            paymentAmount: parseFloat(amount) || 0,
-            merchantInfo: { name: merchant_name },
-            tableInfo: { table_number }
-        });
+            orderId: parseInt(order_id || '0', 10) || 0,
+            paymentAmount: parseFloat(amount || '0') || 0,
+            merchantInfo: merchant_name ? { name: merchant_name } : null,
+            tableInfo: table_number ? { table_number } : null
+        })
 
         // 开始倒计时
-        this.startCountdown();
+        this.startCountdown()
     },
 
     /**
@@ -31,16 +36,16 @@ Page({
      */
     startCountdown() {
         const timer = setInterval(() => {
-            const { countdown } = this.data;
+            const { countdown } = this.data
             if (countdown <= 1) {
-                clearInterval(timer);
-                this.goToOrderDetail();
+                clearInterval(timer)
+                this.goToOrderDetail()
             } else {
                 this.setData({
                     countdown: countdown - 1
-                });
+                })
             }
-        }, 1000);
+        }, 1000)
     },
 
     /**
@@ -48,8 +53,8 @@ Page({
      */
     goToOrderDetail() {
         wx.redirectTo({
-            url: `/pages/order/detail/detail?id=${this.data.orderId}&type=dine_in`
-        });
+            url: `/pages/orders/detail/index?id=${this.data.orderId}&type=dine_in`
+        })
     },
 
     /**
@@ -58,7 +63,7 @@ Page({
     goToTakeout() {
         wx.switchTab({
             url: '/pages/takeout/index'
-        });
+        })
     },
 
     /**
@@ -67,7 +72,7 @@ Page({
     goToReservation() {
         wx.switchTab({
             url: '/pages/reservation/index'
-        });
+        })
     },
 
     /**
@@ -76,6 +81,6 @@ Page({
     goToHome() {
         wx.switchTab({
             url: '/pages/takeout/index'
-        });
+        })
     }
-});
+})

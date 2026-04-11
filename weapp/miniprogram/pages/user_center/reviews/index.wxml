@@ -1,52 +1,107 @@
-<custom-navbar title="我的评价" showBack="{{true}}" bind:navheight="onNavHeight" />
+<custom-navbar title="我的评价" showBack="{{true}}" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px;">
-  <t-tabs value="{{activeTab}}" bind:change="onTabChange" sticky>
-    <t-tab-panel label="待评价" value="{{0}}" />
-    <t-tab-panel label="已评价" value="{{1}}" />
-  </t-tabs>
+<view class="page-container" style="padding-top: {{navBarHeight}}px">
+  
+  <!-- 1. 骨架屏 -->
+  <view wx:if="{{initialLoading}}" class="skeleton-wrap">
+    <t-skeleton 
+      wx:for="{{3}}" 
+      wx:key="index"
+      rowCol="{{ [ { size: '48rpx', type: 'rect' }, { width: '40%' }, { height: '160rpx', width: '100%' } ] }}" 
+      t-class="skeleton-item" 
+    />
+  </view>
 
-
-
-  <view class="reviews-list">
-    <view wx:if="{{reviews.length === 0 && !loading}}" class="empty">
-      <t-empty description="暂无评价记录" />
+  <block wx:else>
+    <!-- 2. 空状态 -->
+    <view wx:if="{{reviews.length === 0}}" class="empty-state animate-fade-in">
+      <t-empty icon="chat" description="还没有评价过订单" />
+      <t-button theme="primary" size="small" shape="round" bindtap="onGoHome">去探索美食</t-button>
     </view>
 
-    <view wx:else>
-      <view wx:for="{{reviews}}" wx:key="id" class="review-card">
-        <view class="card-header">
-          <text class="shop-name">{{item.restaurant_name}}</text>
-          <text class="time">{{item.created_at}}</text>
-        </view>
-        
-        <view class="rating-row">
-          <t-rate value="{{item.rating}}" size="14" readonly />
+    <!-- 3. 评价列表 -->
+    <scroll-view 
+      scroll-y 
+      class="review-scroll"
+      bindscrolltolower="onReachBottom"
+      refresher-enabled
+      bindrefresherrefresh="onPullDownRefresh"
+      refresher-triggered="{{refreshing}}"
+    >
+      <view class="list-inner">
+        <view 
+          class="review-card animate-slide-up" 
+          wx:for="{{reviews}}" 
+          wx:key="id"
+          style="animation-delay: {{index * 0.05}}s"
+        >
+          <!-- 商家简头 -->
+          <view class="card-header" bindtap="onMerchantClick" data-id="{{item.merchantId}}">
+            <view class="shop-title">
+              <t-icon name="shop" size="32rpx" color="#666" />
+              <text class="name">{{item.merchantName}}</text>
+              <t-icon name="chevron-right" size="32rpx" color="#ccc" />
+            </view>
+            <view class="date">{{item.createdAt}}</view>
+          </view>
+
+          <!-- 新增：星级评分 -->
+          <view class="rating-row" style="margin-bottom: 16rpx; display: flex; align-items: center;">
+            <t-rate value="{{item.rating}}" size="28" readonly disabled />
+          </view>
+
+          <!-- 标签行 -->
+          <view class="tag-row" wx:if="{{item.tags && item.tags.length > 0}}">
+            <t-tag wx:for="{{item.tags}}" wx:key="*this" size="small" variant="dark" theme="default" shape="round">{{item}}</t-tag>
+          </view>
+
+          <!-- 评价内容 -->
+          <view class="card-body">
+            <view class="content-text">{{item.content}}</view>
+            
+            <!-- 图片九宫格/单图 -->
+            <view class="media-grid" wx:if="{{item.images.length > 0}}">
+              <view 
+                class="media-item {{item.images.length === 1 ? 'large' : ''}}"
+                wx:for="{{item.images}}"
+                wx:for-item="img"
+                wx:key="*this"
+                catchtap="onImagePreview"
+                data-urls="{{item.images}}"
+                data-current="{{img}}"
+              >
+                <t-image src="{{img}}" mode="aspectFill" width="100%" height="100%" />
+              </view>
+            </view>
+          </view>
+
+          <!-- 商家回复面板 -->
+          <view class="reply-box" wx:if="{{item.merchantReply}}">
+            <view class="reply-header">
+              <text class="label">商家回复</text>
+              <text class="reply-date">{{item.repliedAt}}</text>
+            </view>
+            <view class="reply-content">{{item.merchantReply}}</view>
+          </view>
+
+          <!-- 操作栏(逻辑暂留) -->
+          <view class="card-footer">
+            <view class="visibility-status {{item.isVisible ? 'public' : 'audit'}}">
+              <t-icon name="{{item.isVisible ? 'check-circle' : 'error-circle'}}" size="28rpx" />
+              <text>{{item.isVisible ? '公开展示' : '安全审核中'}}</text>
+            </view>
+          </view>
         </view>
 
-        <text class="content">{{item.content}}</text>
-
-        <view wx:if="{{item.images.length > 0}}" class="images-grid">
-          <t-image 
-            wx:for="{{item.images}}" 
-            wx:key="*this" 
-            wx:for-item="img"
-            src="{{img}}" 
-            mode="aspectFill" 
-            width="160rpx" 
-            height="160rpx" 
-            class="review-img"
-          />
+        <!-- 加载状态 -->
+        <view class="load-more" wx:if="{{loading && !refreshing}}">
+          <t-loading theme="circular" size="32rpx" text="正在搜寻更多记忆..." />
         </view>
-
-        <view wx:if="{{item.reply}}" class="merchant-reply">
-          <text class="reply-label">商家回复：</text>
-          <text>{{item.reply}}</text>
+        <view class="no-more" wx:if="{{!hasMore && reviews.length > 0}}">
+          已加载全部评价
         </view>
       </view>
+    </scroll-view>
+  </block>
 
-      <t-loading wx:if="{{loading}}" theme="circular" size="40rpx" class="loading-more" text="加载中..." />
-      <view wx:if="{{!hasMore && reviews.length > 0}}" class="no-more">没有更多了</view>
-    </view>
-  </view>
 </view>

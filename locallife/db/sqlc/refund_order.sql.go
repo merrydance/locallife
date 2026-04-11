@@ -7,6 +7,7 @@ package db
 
 import (
 	"context"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -68,6 +69,23 @@ func (q *Queries) CreateRefundOrder(ctx context.Context, arg CreateRefundOrderPa
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const getPendingRiderDepositRefundAmountByUserID = `-- name: GetPendingRiderDepositRefundAmountByUserID :one
+SELECT COALESCE(SUM(ro.refund_amount), 0)::bigint AS pending_rider_deposit_refund_amount
+FROM refund_orders ro
+JOIN payment_orders po ON po.id = ro.payment_order_id
+WHERE po.user_id = $1
+    AND po.business_type = 'rider_deposit'
+    AND ro.refund_type = 'rider_deposit'
+    AND ro.status IN ('pending', 'processing')
+`
+
+func (q *Queries) GetPendingRiderDepositRefundAmountByUserID(ctx context.Context, userID int64) (int64, error) {
+	row := q.db.QueryRow(ctx, getPendingRiderDepositRefundAmountByUserID, userID)
+	var pending_rider_deposit_refund_amount int64
+	err := row.Scan(&pending_rider_deposit_refund_amount)
+	return pending_rider_deposit_refund_amount, err
 }
 
 const getRefundOrder = `-- name: GetRefundOrder :one
@@ -178,7 +196,7 @@ func (q *Queries) GetRefundOrderForUpdate(ctx context.Context, id int64) (Refund
 const getTotalRefundedByPaymentOrder = `-- name: GetTotalRefundedByPaymentOrder :one
 SELECT COALESCE(SUM(refund_amount), 0)::bigint as total_refunded
 FROM refund_orders
-WHERE payment_order_id = $1 AND status = 'success'
+WHERE payment_order_id = $1 AND status IN ('pending', 'processing', 'success')
 `
 
 func (q *Queries) GetTotalRefundedByPaymentOrder(ctx context.Context, paymentOrderID int64) (int64, error) {
@@ -186,6 +204,120 @@ func (q *Queries) GetTotalRefundedByPaymentOrder(ctx context.Context, paymentOrd
 	var total_refunded int64
 	err := row.Scan(&total_refunded)
 	return total_refunded, err
+}
+
+const listEcommerceRefundOrdersForReconciliation = `-- name: ListEcommerceRefundOrdersForReconciliation :many
+SELECT r.id, r.out_refund_no, r.refund_id, r.refund_amount, r.status
+FROM refund_orders r
+JOIN payment_orders p ON p.id = r.payment_order_id
+WHERE r.status = 'success'
+  AND r.refunded_at >= $1
+  AND r.refunded_at < $2
+  AND p.payment_type = 'profit_sharing'
+`
+
+type ListEcommerceRefundOrdersForReconciliationParams struct {
+	RefundedAt   pgtype.Timestamptz `json:"refunded_at"`
+	RefundedAt_2 pgtype.Timestamptz `json:"refunded_at_2"`
+}
+
+type ListEcommerceRefundOrdersForReconciliationRow struct {
+	ID           int64       `json:"id"`
+	OutRefundNo  string      `json:"out_refund_no"`
+	RefundID     pgtype.Text `json:"refund_id"`
+	RefundAmount int64       `json:"refund_amount"`
+	Status       string      `json:"status"`
+}
+
+// 获取指定日期范围内收付通退款成功记录（payment_type='profit_sharing'）
+// 对应微信 /v3/ecommerce/refunds/apply 产生的退款账单
+func (q *Queries) ListEcommerceRefundOrdersForReconciliation(ctx context.Context, arg ListEcommerceRefundOrdersForReconciliationParams) ([]ListEcommerceRefundOrdersForReconciliationRow, error) {
+	rows, err := q.db.Query(ctx, listEcommerceRefundOrdersForReconciliation, arg.RefundedAt, arg.RefundedAt_2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListEcommerceRefundOrdersForReconciliationRow{}
+	for rows.Next() {
+		var i ListEcommerceRefundOrdersForReconciliationRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OutRefundNo,
+			&i.RefundID,
+			&i.RefundAmount,
+			&i.Status,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPendingReservationRefundOrdersForRecovery = `-- name: ListPendingReservationRefundOrdersForRecovery :many
+SELECT
+    ro.id,
+    ro.payment_order_id,
+    ro.refund_amount,
+    ro.refund_reason,
+    ro.out_refund_no,
+    po.reservation_id,
+    po.business_type
+FROM refund_orders ro
+JOIN payment_orders po ON po.id = ro.payment_order_id
+WHERE ro.status = 'pending'
+    AND po.status = 'paid'
+    AND po.reservation_id IS NOT NULL
+    AND po.business_type IN ('reservation', 'reservation_addon')
+    AND ro.created_at < $1
+ORDER BY ro.created_at ASC
+LIMIT $2::int
+`
+
+type ListPendingReservationRefundOrdersForRecoveryParams struct {
+	CreatedBefore time.Time `json:"created_before"`
+	Limit         int32     `json:"limit"`
+}
+
+type ListPendingReservationRefundOrdersForRecoveryRow struct {
+	ID             int64       `json:"id"`
+	PaymentOrderID int64       `json:"payment_order_id"`
+	RefundAmount   int64       `json:"refund_amount"`
+	RefundReason   pgtype.Text `json:"refund_reason"`
+	OutRefundNo    string      `json:"out_refund_no"`
+	ReservationID  pgtype.Int8 `json:"reservation_id"`
+	BusinessType   string      `json:"business_type"`
+}
+
+func (q *Queries) ListPendingReservationRefundOrdersForRecovery(ctx context.Context, arg ListPendingReservationRefundOrdersForRecoveryParams) ([]ListPendingReservationRefundOrdersForRecoveryRow, error) {
+	rows, err := q.db.Query(ctx, listPendingReservationRefundOrdersForRecovery, arg.CreatedBefore, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListPendingReservationRefundOrdersForRecoveryRow{}
+	for rows.Next() {
+		var i ListPendingReservationRefundOrdersForRecoveryRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PaymentOrderID,
+			&i.RefundAmount,
+			&i.RefundReason,
+			&i.OutRefundNo,
+			&i.ReservationID,
+			&i.BusinessType,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listRefundOrdersByPaymentOrder = `-- name: ListRefundOrdersByPaymentOrder :many
@@ -275,11 +407,118 @@ func (q *Queries) ListRefundOrdersByStatus(ctx context.Context, arg ListRefundOr
 	return items, nil
 }
 
+const listRefundOrdersForReconciliation = `-- name: ListRefundOrdersForReconciliation :many
+SELECT r.id, r.out_refund_no, r.refund_id, r.refund_amount, r.status
+FROM refund_orders r
+JOIN payment_orders p ON p.id = r.payment_order_id
+WHERE r.status = 'success'
+  AND r.refunded_at >= $1
+  AND r.refunded_at < $2
+  AND p.payment_type != 'profit_sharing'
+`
+
+type ListRefundOrdersForReconciliationParams struct {
+	RefundedAt   pgtype.Timestamptz `json:"refunded_at"`
+	RefundedAt_2 pgtype.Timestamptz `json:"refunded_at_2"`
+}
+
+type ListRefundOrdersForReconciliationRow struct {
+	ID           int64       `json:"id"`
+	OutRefundNo  string      `json:"out_refund_no"`
+	RefundID     pgtype.Text `json:"refund_id"`
+	RefundAmount int64       `json:"refund_amount"`
+	Status       string      `json:"status"`
+}
+
+// 获取指定日期范围内直连支付（miniprogram/deposit等）成功退款订单（用于每日对账）
+// 通过 JOIN payment_orders 过滤 payment_type，排除收付通退款（已单独对账）
+func (q *Queries) ListRefundOrdersForReconciliation(ctx context.Context, arg ListRefundOrdersForReconciliationParams) ([]ListRefundOrdersForReconciliationRow, error) {
+	rows, err := q.db.Query(ctx, listRefundOrdersForReconciliation, arg.RefundedAt, arg.RefundedAt_2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListRefundOrdersForReconciliationRow{}
+	for rows.Next() {
+		var i ListRefundOrdersForReconciliationRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OutRefundNo,
+			&i.RefundID,
+			&i.RefundAmount,
+			&i.Status,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listStuckProcessingRefundOrders = `-- name: ListStuckProcessingRefundOrders :many
+SELECT ro.id, ro.out_refund_no, ro.refund_id, ro.refund_amount, ro.status, ro.created_at,
+       po.payment_type
+FROM refund_orders ro
+JOIN payment_orders po ON po.id = ro.payment_order_id
+WHERE ro.status = 'processing'
+  AND ro.created_at < $1
+ORDER BY ro.created_at ASC
+LIMIT $2::int
+`
+
+type ListStuckProcessingRefundOrdersParams struct {
+	CreatedBefore time.Time `json:"created_before"`
+	Limit         int32     `json:"limit"`
+}
+
+type ListStuckProcessingRefundOrdersRow struct {
+	ID           int64       `json:"id"`
+	OutRefundNo  string      `json:"out_refund_no"`
+	RefundID     pgtype.Text `json:"refund_id"`
+	RefundAmount int64       `json:"refund_amount"`
+	Status       string      `json:"status"`
+	CreatedAt    time.Time   `json:"created_at"`
+	PaymentType  string      `json:"payment_type"`
+}
+
+// 查找持续处于 processing 状态超过阈值时间的退款单（微信回调可能永久丢失）
+// 用于运营告警，让人工核查微信商户平台退款结果
+func (q *Queries) ListStuckProcessingRefundOrders(ctx context.Context, arg ListStuckProcessingRefundOrdersParams) ([]ListStuckProcessingRefundOrdersRow, error) {
+	rows, err := q.db.Query(ctx, listStuckProcessingRefundOrders, arg.CreatedBefore, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListStuckProcessingRefundOrdersRow{}
+	for rows.Next() {
+		var i ListStuckProcessingRefundOrdersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OutRefundNo,
+			&i.RefundID,
+			&i.RefundAmount,
+			&i.Status,
+			&i.CreatedAt,
+			&i.PaymentType,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateRefundOrderToClosed = `-- name: UpdateRefundOrderToClosed :one
 UPDATE refund_orders
 SET
     status = 'closed'
-WHERE id = $1 AND status = 'pending'
+WHERE id = $1 AND status IN ('pending', 'processing')
 RETURNING id, payment_order_id, refund_type, refund_amount, refund_reason, out_refund_no, refund_id, platform_refund, operator_refund, merchant_refund, status, refunded_at, created_at
 `
 
@@ -373,7 +612,7 @@ UPDATE refund_orders
 SET
     status = 'success',
     refunded_at = now()
-WHERE id = $1 AND status = 'processing'
+WHERE id = $1 AND status IN ('pending', 'processing')
 RETURNING id, payment_order_id, refund_type, refund_amount, refund_reason, out_refund_no, refund_id, platform_refund, operator_refund, merchant_refund, status, refunded_at, created_at
 `
 

@@ -1,13 +1,14 @@
 package api
 
 import (
-	"database/sql"
 	"errors"
 	"net/http"
 	"strconv"
 
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
+
+	"github.com/merrydance/locallife/media"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -16,13 +17,15 @@ import (
 // ==================== 收藏 API ====================
 
 type favoriteMerchantResponse struct {
-	ID           int64  `json:"id"`
-	MerchantID   int64  `json:"merchant_id"`
-	MerchantName string `json:"merchant_name"`
-	MerchantLogo string `json:"merchant_logo,omitempty"`
-	Address      string `json:"address"`
-	Status       string `json:"status"`
-	CreatedAt    string `json:"created_at"`
+	ID                  int64  `json:"id"`
+	MerchantID          int64  `json:"merchant_id"`
+	MerchantName        string `json:"merchant_name"`
+	MerchantLogoAssetID *int64 `json:"-"`
+	MerchantLogoURL     string `json:"merchant_logo_url,omitempty"`
+	Address             string `json:"address"`
+	Status              string `json:"status"`
+	IsOrderingSuspended bool   `json:"is_ordering_suspended"`
+	CreatedAt           string `json:"created_at"`
 }
 
 type favoriteDishResponse struct {
@@ -30,6 +33,7 @@ type favoriteDishResponse struct {
 	DishID       int64  `json:"dish_id"`
 	DishName     string `json:"dish_name"`
 	Description  string `json:"description,omitempty"`
+	ImageAssetID *int64 `json:"-"`
 	ImageURL     string `json:"image_url,omitempty"`
 	Price        int64  `json:"price"`
 	MemberPrice  *int64 `json:"member_price,omitempty"`
@@ -37,6 +41,41 @@ type favoriteDishResponse struct {
 	MerchantID   int64  `json:"merchant_id"`
 	MerchantName string `json:"merchant_name"`
 	CreatedAt    string `json:"created_at"`
+}
+
+type favoriteActionResponse struct {
+	Message    string `json:"message"`
+	MerchantID *int64 `json:"merchant_id,omitempty"`
+	DishID     *int64 `json:"dish_id,omitempty"`
+}
+
+type listFavoriteMerchantsResponse struct {
+	Merchants  []favoriteMerchantResponse `json:"merchants"`
+	Total      int64                      `json:"total"`
+	Page       int32                      `json:"page"`
+	PageID     int32                      `json:"page_id"`
+	PageSize   int32                      `json:"page_size"`
+	TotalPages int                        `json:"total_pages"`
+	TotalPage  int                        `json:"total_page"`
+}
+
+type listFavoriteDishesResponse struct {
+	Dishes     []favoriteDishResponse `json:"dishes"`
+	Total      int64                  `json:"total"`
+	Page       int32                  `json:"page"`
+	PageID     int32                  `json:"page_id"`
+	PageSize   int32                  `json:"page_size"`
+	TotalPages int                    `json:"total_pages"`
+	TotalPage  int                    `json:"total_page"`
+}
+
+type favoritesSummaryResponse struct {
+	MerchantCount int64 `json:"merchant_count"`
+	DishCount     int64 `json:"dish_count"`
+}
+
+type favoriteStatusResponse struct {
+	Exists bool `json:"exists"`
 }
 
 type addFavoriteMerchantRequest struct {
@@ -75,7 +114,7 @@ func (server *Server) addFavoriteMerchant(ctx *gin.Context) {
 	// 验证商户存在
 	_, err := server.store.GetMerchant(ctx, req.MerchantID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -92,9 +131,10 @@ func (server *Server) addFavoriteMerchant(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"message":     "merchant added to favorites",
-		"merchant_id": req.MerchantID,
+	merchantID64 := req.MerchantID
+	ctx.JSON(http.StatusOK, favoriteActionResponse{
+		Message:    "merchant added to favorites",
+		MerchantID: &merchantID64,
 	})
 }
 
@@ -127,7 +167,7 @@ func (server *Server) listFavoriteMerchants(ctx *gin.Context) {
 		req.PageSize = 20
 	}
 
-	offset := (req.Page - 1) * req.PageSize
+	offset := pageOffset(req.Page, req.PageSize)
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
@@ -150,13 +190,14 @@ func (server *Server) listFavoriteMerchants(ctx *gin.Context) {
 	var response []favoriteMerchantResponse
 	for _, m := range merchants {
 		response = append(response, favoriteMerchantResponse{
-			ID:           m.ID,
-			MerchantID:   m.MerchantID,
-			MerchantName: m.MerchantName,
-			MerchantLogo: normalizeUploadURLForClient(m.MerchantLogo.String),
-			Address:      m.MerchantAddress,
-			Status:       m.MerchantStatus,
-			CreatedAt:    m.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+			ID:                  m.ID,
+			MerchantID:          m.MerchantID,
+			MerchantName:        m.MerchantName,
+			MerchantLogoAssetID: int64PtrFromPgInt8(m.MerchantLogoMediaAssetID),
+			Address:             m.MerchantAddress,
+			Status:              m.MerchantStatus,
+			IsOrderingSuspended: m.MerchantIsOrderingSuspended,
+			CreatedAt:           m.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		})
 	}
 
@@ -164,13 +205,65 @@ func (server *Server) listFavoriteMerchants(ctx *gin.Context) {
 		response = []favoriteMerchantResponse{}
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"merchants":  response,
-		"total":      count,
-		"page":       req.Page,
-		"page_size":  req.PageSize,
-		"total_page": (int(count) + int(req.PageSize) - 1) / int(req.PageSize),
+	// 批量填充商户 Logo URL
+	logoAssetIDs := make([]int64, 0, len(response))
+	for _, r := range response {
+		if r.MerchantLogoAssetID != nil {
+			logoAssetIDs = append(logoAssetIDs, *r.MerchantLogoAssetID)
+		}
+	}
+	if len(logoAssetIDs) > 0 {
+		logoURLs := server.batchPublicImageURLs(ctx, logoAssetIDs, media.VariantCard)
+		for i := range response {
+			if response[i].MerchantLogoAssetID != nil {
+				response[i].MerchantLogoURL = logoURLs[*response[i].MerchantLogoAssetID]
+			}
+		}
+	}
+
+	totalPages := (int(count) + int(req.PageSize) - 1) / int(req.PageSize)
+	ctx.JSON(http.StatusOK, listFavoriteMerchantsResponse{
+		Merchants:  response,
+		Total:      count,
+		Page:       req.Page,
+		PageID:     req.Page,
+		PageSize:   req.PageSize,
+		TotalPages: totalPages,
+		TotalPage:  totalPages,
 	})
+}
+
+// getFavoriteMerchantStatus godoc
+// @Summary 获取商户收藏状态
+// @Description 返回当前用户是否已收藏指定商户
+// @Tags 收藏管理
+// @Accept json
+// @Produce json
+// @Param id path int64 true "商户ID"
+// @Success 200 {object} favoriteStatusResponse "收藏状态"
+// @Failure 400 {object} ErrorResponse "参数错误"
+// @Failure 401 {object} ErrorResponse "未认证"
+// @Failure 500 {object} ErrorResponse "服务器错误"
+// @Router /v1/favorites/merchants/{id} [get]
+// @Security BearerAuth
+func (server *Server) getFavoriteMerchantStatus(ctx *gin.Context) {
+	merchantID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid merchant id")))
+		return
+	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	exists, err := server.store.IsMerchantFavorited(ctx, db.IsMerchantFavoritedParams{
+		UserID:     authPayload.UserID,
+		MerchantID: pgtype.Int8{Int64: merchantID, Valid: true},
+	})
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, favoriteStatusResponse{Exists: exists})
 }
 
 // deleteFavoriteMerchant godoc
@@ -205,9 +298,9 @@ func (server *Server) deleteFavoriteMerchant(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"message":     "merchant removed from favorites",
-		"merchant_id": merchantID,
+	ctx.JSON(http.StatusOK, favoriteActionResponse{
+		Message:    "merchant removed from favorites",
+		MerchantID: &merchantID,
 	})
 }
 
@@ -241,7 +334,7 @@ func (server *Server) addFavoriteDish(ctx *gin.Context) {
 	// 验证菜品存在
 	_, err := server.store.GetDish(ctx, req.DishID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("dish not found")))
 			return
 		}
@@ -258,9 +351,10 @@ func (server *Server) addFavoriteDish(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"message": "dish added to favorites",
-		"dish_id": req.DishID,
+	dishID64 := req.DishID
+	ctx.JSON(http.StatusOK, favoriteActionResponse{
+		Message: "dish added to favorites",
+		DishID:  &dishID64,
 	})
 }
 
@@ -293,7 +387,7 @@ func (server *Server) listFavoriteDishes(ctx *gin.Context) {
 		req.PageSize = 20
 	}
 
-	offset := (req.Page - 1) * req.PageSize
+	offset := pageOffset(req.Page, req.PageSize)
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
@@ -320,7 +414,7 @@ func (server *Server) listFavoriteDishes(ctx *gin.Context) {
 			DishID:       d.DishID,
 			DishName:     d.DishName,
 			Description:  d.DishDescription.String,
-			ImageURL:     normalizeUploadURLForClient(d.DishImageUrl.String),
+			ImageAssetID: int64PtrFromPgInt8(d.DishImageMediaAssetID),
 			Price:        d.DishPrice,
 			IsAvailable:  d.DishIsAvailable,
 			MerchantID:   d.MerchantID,
@@ -337,12 +431,94 @@ func (server *Server) listFavoriteDishes(ctx *gin.Context) {
 		response = []favoriteDishResponse{}
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"dishes":     response,
-		"total":      count,
-		"page":       req.Page,
-		"page_size":  req.PageSize,
-		"total_page": (int(count) + int(req.PageSize) - 1) / int(req.PageSize),
+	// 批量填充菜品图片 URL
+	imgAssetIDs := make([]int64, 0, len(response))
+	for _, r := range response {
+		if r.ImageAssetID != nil {
+			imgAssetIDs = append(imgAssetIDs, *r.ImageAssetID)
+		}
+	}
+	if len(imgAssetIDs) > 0 {
+		imgURLs := server.batchPublicImageURLs(ctx, imgAssetIDs, media.VariantCard)
+		for i := range response {
+			if response[i].ImageAssetID != nil {
+				response[i].ImageURL = imgURLs[*response[i].ImageAssetID]
+			}
+		}
+	}
+
+	totalPages := (int(count) + int(req.PageSize) - 1) / int(req.PageSize)
+	ctx.JSON(http.StatusOK, listFavoriteDishesResponse{
+		Dishes:     response,
+		Total:      count,
+		Page:       req.Page,
+		PageID:     req.Page,
+		PageSize:   req.PageSize,
+		TotalPages: totalPages,
+		TotalPage:  totalPages,
+	})
+}
+
+// getFavoriteDishStatus godoc
+// @Summary 获取菜品收藏状态
+// @Description 返回当前用户是否已收藏指定菜品
+// @Tags 收藏管理
+// @Accept json
+// @Produce json
+// @Param id path int64 true "菜品ID"
+// @Success 200 {object} favoriteStatusResponse "收藏状态"
+// @Failure 400 {object} ErrorResponse "参数错误"
+// @Failure 401 {object} ErrorResponse "未认证"
+// @Failure 500 {object} ErrorResponse "服务器错误"
+// @Router /v1/favorites/dishes/{id} [get]
+// @Security BearerAuth
+func (server *Server) getFavoriteDishStatus(ctx *gin.Context) {
+	dishID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid dish id")))
+		return
+	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	exists, err := server.store.IsDishFavorited(ctx, db.IsDishFavoritedParams{
+		UserID: authPayload.UserID,
+		DishID: pgtype.Int8{Int64: dishID, Valid: true},
+	})
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, favoriteStatusResponse{Exists: exists})
+}
+
+// getFavoritesSummary godoc
+// @Summary 获取收藏汇总
+// @Description 返回当前用户收藏商户数和收藏菜品数
+// @Tags 收藏管理
+// @Accept json
+// @Produce json
+// @Success 200 {object} favoritesSummaryResponse "收藏汇总"
+// @Failure 401 {object} ErrorResponse "未认证"
+// @Failure 500 {object} ErrorResponse "服务器错误"
+// @Router /v1/favorites/summary [get]
+// @Security BearerAuth
+func (server *Server) getFavoritesSummary(ctx *gin.Context) {
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	merchantCount, err := server.store.CountFavoriteMerchants(ctx, authPayload.UserID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	dishCount, err := server.store.CountFavoriteDishes(ctx, authPayload.UserID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, favoritesSummaryResponse{
+		MerchantCount: merchantCount,
+		DishCount:     dishCount,
 	})
 }
 
@@ -378,8 +554,8 @@ func (server *Server) deleteFavoriteDish(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"message": "dish removed from favorites",
-		"dish_id": dishID,
+	ctx.JSON(http.StatusOK, favoriteActionResponse{
+		Message: "dish removed from favorites",
+		DishID:  &dishID,
 	})
 }

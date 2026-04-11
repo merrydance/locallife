@@ -32,9 +32,13 @@ RETURNING *;
 -- 更新身份证信息
 UPDATE rider_applications
 SET 
-    id_card_front_url = COALESCE(sqlc.narg(id_card_front_url), id_card_front_url),
-    id_card_back_url = COALESCE(sqlc.narg(id_card_back_url), id_card_back_url),
-    id_card_ocr = COALESCE(sqlc.narg(id_card_ocr), id_card_ocr),
+    id_card_front_media_asset_id = COALESCE(sqlc.narg(id_card_front_media_asset_id), id_card_front_media_asset_id),
+    id_card_back_media_asset_id = COALESCE(sqlc.narg(id_card_back_media_asset_id), id_card_back_media_asset_id),
+    id_card_ocr = CASE
+        WHEN sqlc.narg(id_card_ocr)::jsonb IS NULL THEN id_card_ocr
+        WHEN id_card_ocr IS NULL THEN sqlc.narg(id_card_ocr)::jsonb
+        ELSE id_card_ocr || sqlc.narg(id_card_ocr)::jsonb
+    END,
     -- OCR识别出姓名时自动更新real_name
     real_name = COALESCE(sqlc.narg(real_name), real_name),
     updated_at = now()
@@ -45,8 +49,73 @@ RETURNING *;
 -- 更新健康证信息
 UPDATE rider_applications
 SET 
-    health_cert_url = COALESCE(sqlc.narg(health_cert_url), health_cert_url),
+    health_cert_media_asset_id = COALESCE(sqlc.narg(health_cert_media_asset_id), health_cert_media_asset_id),
     health_cert_ocr = COALESCE(sqlc.narg(health_cert_ocr), health_cert_ocr),
+    updated_at = now()
+WHERE id = $1 AND status = 'draft'
+RETURNING *;
+
+-- name: ClearRiderApplicationIDCardFront :one
+-- 清空身份证正面媒体与对应 OCR 字段，保留背面有效期信息
+UPDATE rider_applications
+SET
+    id_card_front_media_asset_id = NULL,
+    id_card_ocr = CASE
+        WHEN id_card_ocr IS NULL THEN NULL
+        ELSE NULLIF(
+            id_card_ocr
+                - 'status'
+                - 'error'
+                - 'error_code'
+                - 'alert_emitted_at'
+                - 'queued_at'
+                - 'started_at'
+                - 'ocr_job_id'
+                - 'ocr_at'
+                - 'name'
+                - 'id_number'
+                - 'gender'
+                - 'nation'
+                - 'address',
+            '{}'::jsonb
+        )
+    END,
+    updated_at = now()
+WHERE id = $1 AND status = 'draft'
+RETURNING *;
+
+-- name: ClearRiderApplicationIDCardBack :one
+-- 清空身份证背面媒体与对应 OCR 字段，保留正面实名信息
+UPDATE rider_applications
+SET
+    id_card_back_media_asset_id = NULL,
+    id_card_ocr = CASE
+        WHEN id_card_ocr IS NULL THEN NULL
+        ELSE NULLIF(
+            id_card_ocr
+                - 'status'
+                - 'error'
+                - 'error_code'
+                - 'alert_emitted_at'
+                - 'queued_at'
+                - 'started_at'
+                - 'ocr_job_id'
+                - 'ocr_at'
+                - 'valid_start'
+                - 'valid_end',
+            '{}'::jsonb
+        )
+    END,
+    updated_at = now()
+WHERE id = $1 AND status = 'draft'
+RETURNING *;
+
+-- name: ClearRiderApplicationHealthCert :one
+-- 清空健康证媒体与 OCR 结果
+UPDATE rider_applications
+SET
+    health_cert_media_asset_id = NULL,
+    health_cert_ocr = NULL,
     updated_at = now()
 WHERE id = $1 AND status = 'draft'
 RETURNING *;
@@ -72,20 +141,21 @@ SET
 WHERE id = $1 AND status = 'submitted'
 RETURNING *;
 
--- name: RejectRiderApplication :one
--- 拒绝骑手申请
+-- name: ReturnRiderApplicationToDraft :one
+-- 审核未通过后退回草稿，保留失败原因
 UPDATE rider_applications
 SET 
-    status = 'rejected',
+    status = 'draft',
     reject_reason = $2,
     reviewed_by = sqlc.narg(reviewed_by),
     reviewed_at = now(),
+    submitted_at = NULL,
     updated_at = now()
 WHERE id = $1 AND status = 'submitted'
 RETURNING *;
 
 -- name: ResetRiderApplicationToDraft :one
--- 重置申请为草稿状态（被拒绝后可重新编辑）
+-- 手动重置申请为草稿状态，并清空审核痕迹
 UPDATE rider_applications
 SET 
     status = 'draft',
@@ -94,7 +164,7 @@ SET
     reviewed_at = NULL,
     submitted_at = NULL,
     updated_at = now()
-WHERE id = $1 AND status = 'rejected'
+WHERE id = $1 AND status = 'submitted'
 RETURNING *;
 
 -- name: ListRiderApplications :many

@@ -2,7 +2,13 @@
     "navigationBarTitleText": "全局数据分析",
     "usingComponents": {
         "custom-navbar": "/components/custom-navbar/index",
-        "ec-canvas": "../components/ec-canvas/index",
-        "t-icon": "tdesign-miniprogram/icon/icon"
+        "t-icon": "tdesign-miniprogram/icon/icon",
+        "t-button": "tdesign-miniprogram/button/button",
+        "t-empty": "tdesign-miniprogram/empty/empty",
+        "t-loading": "tdesign-miniprogram/loading/loading",
+        "t-tabs": "tdesign-miniprogram/tabs/tabs",
+        "t-tab-panel": "tdesign-miniprogram/tab-panel/tab-panel",
+        "card-skeleton": "/components/card-skeleton/index",
+        "list-skeleton": "/components/list-skeleton/index"
     }
 }

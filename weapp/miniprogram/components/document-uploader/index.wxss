@@ -13,6 +13,10 @@
   border: 2rpx dashed #DCDCDC; /* Default dashed border */
 }
 
+.uploader-container.has-feedback {
+  margin-bottom: 32rpx;
+}
+
 /* Has value - solid border? or no border? */
 .uploader-container.has-value {
   border-style: solid;
@@ -130,4 +134,71 @@
   align-items: center;
   color: #666;
   font-size: 24rpx;
+}
+
+.feedback-panel {
+  position: absolute;
+  left: 16rpx;
+  right: 16rpx;
+  bottom: 16rpx;
+  display: flex;
+  align-items: flex-start;
+  gap: 12rpx;
+  padding: 16rpx 18rpx;
+  border-radius: 16rpx;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(10rpx);
+  box-sizing: border-box;
+}
+
+.feedback-processing {
+  border: 2rpx solid rgba(0, 82, 217, 0.12);
+}
+
+.feedback-success {
+  border: 2rpx solid rgba(43, 164, 113, 0.14);
+}
+
+.feedback-error {
+  border: 2rpx solid rgba(213, 73, 65, 0.14);
+}
+
+.feedback-icon {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 2rpx;
+}
+
+.feedback-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+}
+
+.feedback-title {
+  font-size: 24rpx;
+  line-height: 1.4;
+  color: #1F2733;
+  font-weight: 600;
+}
+
+.feedback-title-processing {
+  color: #0052D9;
+}
+
+.feedback-title-success {
+  color: #2BA471;
+}
+
+.feedback-title-error {
+  color: #D54941;
+}
+
+.feedback-desc {
+  font-size: 22rpx;
+  line-height: 1.5;
+  color: #5F6B7A;
 }

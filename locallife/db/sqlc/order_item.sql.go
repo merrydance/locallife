@@ -23,6 +23,18 @@ type BatchCreateOrderItemsParams struct {
 	Customizations []byte      `json:"customizations"`
 }
 
+const countOrderItems = `-- name: CountOrderItems :one
+SELECT COALESCE(SUM(quantity), 0)::bigint FROM order_items
+WHERE order_id = $1
+`
+
+func (q *Queries) CountOrderItems(ctx context.Context, orderID int64) (int64, error) {
+	row := q.db.QueryRow(ctx, countOrderItems, orderID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const createOrderItem = `-- name: CreateOrderItem :one
 INSERT INTO order_items (
     order_id,
@@ -149,7 +161,7 @@ func (q *Queries) ListOrderItemsByOrder(ctx context.Context, orderID int64) ([]O
 const listOrderItemsWithDishByOrder = `-- name: ListOrderItemsWithDishByOrder :many
 SELECT 
     oi.id, oi.order_id, oi.dish_id, oi.combo_id, oi.name, oi.unit_price, oi.quantity, oi.subtotal, oi.customizations, oi.created_at,
-    d.image_url as dish_image_url
+    d.image_media_asset_id as dish_image_media_asset_id
 FROM order_items oi
 LEFT JOIN dishes d ON oi.dish_id = d.id
 WHERE oi.order_id = $1
@@ -157,17 +169,17 @@ ORDER BY oi.id
 `
 
 type ListOrderItemsWithDishByOrderRow struct {
-	ID             int64       `json:"id"`
-	OrderID        int64       `json:"order_id"`
-	DishID         pgtype.Int8 `json:"dish_id"`
-	ComboID        pgtype.Int8 `json:"combo_id"`
-	Name           string      `json:"name"`
-	UnitPrice      int64       `json:"unit_price"`
-	Quantity       int16       `json:"quantity"`
-	Subtotal       int64       `json:"subtotal"`
-	Customizations []byte      `json:"customizations"`
-	CreatedAt      time.Time   `json:"created_at"`
-	DishImageUrl   pgtype.Text `json:"dish_image_url"`
+	ID                    int64       `json:"id"`
+	OrderID               int64       `json:"order_id"`
+	DishID                pgtype.Int8 `json:"dish_id"`
+	ComboID               pgtype.Int8 `json:"combo_id"`
+	Name                  string      `json:"name"`
+	UnitPrice             int64       `json:"unit_price"`
+	Quantity              int16       `json:"quantity"`
+	Subtotal              int64       `json:"subtotal"`
+	Customizations        []byte      `json:"customizations"`
+	CreatedAt             time.Time   `json:"created_at"`
+	DishImageMediaAssetID pgtype.Int8 `json:"dish_image_media_asset_id"`
 }
 
 func (q *Queries) ListOrderItemsWithDishByOrder(ctx context.Context, orderID int64) ([]ListOrderItemsWithDishByOrderRow, error) {
@@ -190,7 +202,7 @@ func (q *Queries) ListOrderItemsWithDishByOrder(ctx context.Context, orderID int
 			&i.Subtotal,
 			&i.Customizations,
 			&i.CreatedAt,
-			&i.DishImageUrl,
+			&i.DishImageMediaAssetID,
 		); err != nil {
 			return nil, err
 		}

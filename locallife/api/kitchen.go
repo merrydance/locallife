@@ -1,12 +1,13 @@
 package api
 
 import (
-	"database/sql"
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/media"
 	"github.com/merrydance/locallife/token"
 
 	"github.com/gin-gonic/gin"
@@ -34,9 +35,11 @@ const (
 type kitchenOrderItem struct {
 	ID             int64                    `json:"id"`
 	Name           string                   `json:"name"`
+	CategoryName   string                   `json:"category_name,omitempty"`
 	Quantity       int16                    `json:"quantity"`
 	Customizations []orderCustomizationItem `json:"customizations,omitempty"`
-	ImageURL       *string                  `json:"image_url,omitempty"`
+	ImageAssetID   *int64                   `json:"-"`
+	ImageURL       string                   `json:"image_url,omitempty"`
 	PrepareTime    int16                    `json:"prepare_time"` // 预估制作时间（分钟）
 }
 
@@ -135,9 +138,9 @@ func (server *Server) listKitchenOrders(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.resolveMerchantForUser(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
 		}
@@ -222,7 +225,7 @@ func (server *Server) listKitchenOrders(ctx *gin.Context) {
 	calcStartTime := now.AddDate(0, 0, -AvgPrepareTimeCalcDays)
 	avgPrepareTime, err := server.store.GetMerchantAvgPrepareTime(ctx, db.GetMerchantAvgPrepareTimeParams{
 		MerchantID: merchant.ID,
-		CreatedAt:  calcStartTime,
+		StartAt:    calcStartTime,
 	})
 	if err != nil || avgPrepareTime <= 0 {
 		// 如果没有历史数据或查询失败，使用默认值
@@ -268,9 +271,9 @@ func (server *Server) startPreparing(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.resolveMerchantForUser(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
 		}
@@ -278,10 +281,10 @@ func (server *Server) startPreparing(ctx *gin.Context) {
 		return
 	}
 
-	// 获取订单
+	// 获取订单（仅用于归属校验）
 	order, err := server.store.GetOrder(ctx, uri.OrderID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("order not found")))
 			return
 		}
@@ -295,18 +298,14 @@ func (server *Server) startPreparing(ctx *gin.Context) {
 		return
 	}
 
-	// 验证订单状态
-	if order.Status != "paid" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("order is not in paid status")))
-		return
-	}
-
-	// 更新订单状态为 preparing
-	updatedOrder, err := server.store.UpdateOrderStatus(ctx, db.UpdateOrderStatusParams{
-		ID:     uri.OrderID,
-		Status: "preparing",
-	})
+	// P1-035 修复：使用带状态条件的原子 UPDATE，防止并发竞态
+	// WHERE id = $1 AND status = 'paid'，如果状态不匹配则返回 no rows
+	updatedOrder, err := server.store.UpdateOrderToPreparing(ctx, uri.OrderID)
 	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("order is not in paid status or already being processed")))
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -346,9 +345,9 @@ func (server *Server) markKitchenOrderReady(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.resolveMerchantForUser(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
 		}
@@ -356,10 +355,10 @@ func (server *Server) markKitchenOrderReady(ctx *gin.Context) {
 		return
 	}
 
-	// 获取订单
+	// 获取订单（仅用于归属校验和通知）
 	order, err := server.store.GetOrder(ctx, uri.OrderID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("order not found")))
 			return
 		}
@@ -373,21 +372,27 @@ func (server *Server) markKitchenOrderReady(ctx *gin.Context) {
 		return
 	}
 
-	// 验证订单状态
-	if order.Status != "preparing" && order.Status != "paid" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("order is not in preparing or paid status")))
-		return
-	}
-
-	// 更新订单状态为 ready
-	updatedOrder, err := server.store.UpdateOrderStatus(ctx, db.UpdateOrderStatusParams{
-		ID:     uri.OrderID,
-		Status: "ready",
-	})
+	// P1-035 修复：使用带状态条件的原子 UPDATE，防止并发竞态
+	// WHERE id = $1 AND status IN ('paid', 'preparing')，如果状态不匹配则返回 no rows
+	updatedOrder, err := server.store.UpdateOrderToReady(ctx, uri.OrderID)
 	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("order is not in preparing or paid status, or already being processed")))
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
+
+	// 发送出餐通知给用户
+	_ = server.SendNotification(ctx, SendNotificationParams{
+		UserID:      order.UserID,
+		Title:       "您的订单已出餐",
+		Content:     fmt.Sprintf("订单 %s 已准备就绪，请及时取餐/等待配送", order.OrderNo),
+		Type:        "order_ready",
+		RelatedType: "order",
+		RelatedID:   order.ID,
+	})
 
 	// 转换为厨房订单响应
 	ko, err := server.convertToKitchenOrder(ctx, updatedOrder)
@@ -424,9 +429,9 @@ func (server *Server) getKitchenOrderDetails(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.resolveMerchantForUser(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
 		}
@@ -437,7 +442,7 @@ func (server *Server) getKitchenOrderDetails(ctx *gin.Context) {
 	// 获取订单
 	order, err := server.store.GetOrder(ctx, uri.OrderID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("order not found")))
 			return
 		}
@@ -481,17 +486,26 @@ func (server *Server) convertToKitchenOrder(ctx *gin.Context, order db.Order) (k
 			_ = parseJSON(item.Customizations, &customizations)
 		}
 
-		var imageURL *string
+		var imageAssetID *int64
 		var prepareTime int16 = DefaultAvgPrepareTimeMinutes // 默认值
+		var categoryName string
 
 		if item.DishID.Valid {
 			dish, err := server.store.GetDish(ctx, item.DishID.Int64)
 			if err == nil {
-				if dish.ImageUrl.Valid {
-					img := normalizeUploadURLForClient(dish.ImageUrl.String)
-					imageURL = &img
+				if dish.ImageMediaAssetID.Valid {
+					v := dish.ImageMediaAssetID.Int64
+					imageAssetID = &v
 				}
 				prepareTime = dish.PrepareTime
+
+				// 获取分类名称
+				if dish.CategoryID.Valid {
+					category, err := server.store.GetDishCategory(ctx, dish.CategoryID.Int64)
+					if err == nil {
+						categoryName = category.Name
+					}
+				}
 			}
 		}
 
@@ -503,13 +517,28 @@ func (server *Server) convertToKitchenOrder(ctx *gin.Context, order db.Order) (k
 		kitchenItems = append(kitchenItems, kitchenOrderItem{
 			ID:             item.ID,
 			Name:           item.Name,
+			CategoryName:   categoryName,
 			Quantity:       item.Quantity,
 			Customizations: customizations,
-			ImageURL:       imageURL,
+			ImageAssetID:   imageAssetID,
 			PrepareTime:    prepareTime,
 		})
 	}
-
+	// 批量解析菜品图片 URL
+	kitchenAssetIDs := make([]int64, 0, len(kitchenItems))
+	for _, ki := range kitchenItems {
+		if ki.ImageAssetID != nil {
+			kitchenAssetIDs = append(kitchenAssetIDs, *ki.ImageAssetID)
+		}
+	}
+	if len(kitchenAssetIDs) > 0 {
+		imgURLs := server.batchPublicImageURLs(ctx, kitchenAssetIDs, media.VariantThumb)
+		for i := range kitchenItems {
+			if kitchenItems[i].ImageAssetID != nil {
+				kitchenItems[i].ImageURL = imgURLs[*kitchenItems[i].ImageAssetID]
+			}
+		}
+	}
 	// 获取桌台号（堂食订单）
 	var tableNo *string
 	if order.TableID.Valid {

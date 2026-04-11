@@ -1,536 +1,482 @@
-/**
- * 套餐管理 - 桌面级 SaaS 实现
- * 对齐后端 API：
- * - GET/POST/PUT/DELETE /v1/combos - 套餐 CRUD
- * - PUT /v1/combos/{id}/online - 上下架
- * - POST /v1/combos/{id}/dishes - 添加菜品
- * - DELETE /v1/combos/{id}/dishes/{dish_id} - 移除菜品
- */
-
-import { ComboManagementService, ComboSetResponse, ComboSetWithDetailsResponse, DishManagementService, DishResponse, TagService, TagInfo } from '../../../api/dish'
+import { getStableBarHeights } from '../../../utils/responsive'
+import { ComboManagementService, ComboSetResponse } from '../../../api/dish'
+import { getPublicImageUrl } from '../../../utils/image'
 import { logger } from '../../../utils/logger'
-import { formatPriceNoSymbol } from '../../../utils/util'
+import { getErrorUserMessage } from '../../../utils/user-facing'
+import {
+  ensureMerchantConsoleAccess,
+  getMerchantConsoleAccessErrorMessage,
+  isMerchantConsoleAccessDenied,
+  isMerchantConsoleAccessGranted
+} from '../../../utils/console-access'
 
-const app = getApp<IAppOption>()
+type ComboFilterKey = 'all' | 'online' | 'offline'
 
-// 类型定义
-interface ComboItem extends ComboSetWithDetailsResponse {
-    dish_count?: number
+interface ComboViewItem extends ComboSetResponse {
+  coverImageUrl: string
+  imageCount: number
+  savingsAmount: number
+  hasDiscount: boolean
+  statusPending: boolean
+  deletePending: boolean
 }
 
-interface DishWithSelection extends DishResponse {
-    selected?: boolean
-    quantity?: number
+interface ComboFilterOption {
+  key: ComboFilterKey
+  label: string
+}
+
+const COMBO_FILTER_OPTIONS: ComboFilterOption[] = [
+  { key: 'all', label: '全部' },
+  { key: 'online', label: '已上架' },
+  { key: 'offline', label: '未上架' }
+]
+
+const COMBO_AUTO_REFRESH_WINDOW_MS = 60 * 1000
+const getErrorMessage = getErrorUserMessage
+
+function normalizeComboImages(urls?: string[]): string[] {
+  if (!Array.isArray(urls)) return []
+  return urls.map((url) => getPublicImageUrl(url)).filter((url) => !!url)
+}
+
+function buildComboViewItem(combo: ComboSetResponse): ComboViewItem {
+  const imageUrls = normalizeComboImages(combo.dish_image_urls)
+
+  return {
+    ...combo,
+    dish_image_urls: imageUrls,
+    coverImageUrl: imageUrls[0] || '',
+    imageCount: imageUrls.length,
+    savingsAmount: Math.max((combo.original_price || 0) - (combo.combo_price || 0), 0),
+    hasDiscount: (combo.original_price || 0) > (combo.combo_price || 0),
+    statusPending: false,
+    deletePending: false
+  }
+}
+
+function buildResultSummaryText(params: { visibleCount: number, currentFilter: ComboFilterKey }) {
+  if (params.currentFilter === 'all') {
+    return `当前共 ${params.visibleCount} 套套餐`
+  }
+
+  return `${params.currentFilter === 'online' ? '已上架' : '未上架'}下共 ${params.visibleCount} 套套餐`
+}
+
+function buildEmptyDescription(currentFilter: ComboFilterKey) {
+  if (currentFilter === 'all') {
+    return '还没有套餐，先新增一个'
+  }
+
+  return '暂无符合当前筛选条件的套餐'
+}
+
+function buildPresentationUpdate(combos: ComboViewItem[], currentFilter: ComboFilterKey) {
+  return {
+    combos,
+    resultSummaryText: buildResultSummaryText({
+      visibleCount: combos.length,
+      currentFilter
+    }),
+    emptyDescription: buildEmptyDescription(currentFilter)
+  }
+}
+
+function resolveHasMore(total: number | undefined, loadedCount: number, pageSize: number, lastPageLength: number) {
+  if (typeof total === 'number' && total >= 0) {
+    return loadedCount < total
+  }
+
+  return lastPageLength >= pageSize
+}
+
+interface LoadCombosOptions {
+  showLoading?: boolean
+  preserveCurrent?: boolean
 }
 
 Page({
-    data: {
-        // 布局状态
-        sidebarCollapsed: false,
-        merchantName: '',
-        isOpen: true,
-
-        // 套餐
-        combos: [] as ComboItem[],
-        filteredCombos: [] as ComboItem[],
-        selectedCombo: null as ComboItem | null,
-
-        // 状态
-        loading: true,
-        saving: false,
-        searchKeyword: '',
-        isAdding: false,
-
-        // 菜品选择弹窗
-        showDishPicker: false,
-        allDishes: [] as DishWithSelection[],
-        filteredDishes: [] as DishWithSelection[],
-        dishSearchKeyword: '',
-        pickerSelectedIds: [] as number[],
-        pickerDishCount: 0,
-
-        // 属性标签
-        availableTags: [] as TagInfo[],
-        selectedTagIds: [] as number[],
-
-        // 计算字段
-        originalPrice: ''
-    },
-
-    onLoad() {
-        this.initData()
-    },
-
-    goBack() {
-        wx.navigateBack()
-    },
-
-    onSidebarCollapse(e: any) {
-        this.setData({ sidebarCollapsed: e.detail.collapsed })
-    },
-
-    async initData() {
-        const merchantId = app.globalData.merchantId
-        if (merchantId) {
-            await this.loadCombos()
-            await this.loadAllDishes()
-            await this.loadAvailableTags()
-        } else {
-            app.userInfoReadyCallback = async () => {
-                if (app.globalData.merchantId) {
-                    await this.loadCombos()
-                    await this.loadAllDishes()
-                    await this.loadAvailableTags()
-                }
-            }
-        }
-    },
-
-    async loadAvailableTags() {
-        try {
-            const tags = await TagService.listDishTags()
-            this.setData({ availableTags: tags })
-        } catch (error) {
-            logger.error('加载标签失败', error, 'Combos')
-        }
-    },
-
-    async loadCombos() {
-        this.setData({ loading: true })
-
-        try {
-            console.log('[Combos] 开始加载套餐列表...')
-            const response = await ComboManagementService.listCombos({
-                page_id: 1,
-                page_size: 50
-            })
-
-            console.log('[Combos] API 响应:', JSON.stringify(response))
-
-            // 后端返回的是 combo_sets 字段
-            const combos = (response.combo_sets || []).map(combo => ({
-                ...combo,
-                comboPriceDisplay: formatPriceNoSymbol(combo.combo_price || 0),
-                dishes: [],
-                dish_count: 0
-            }))
-
-            console.log('[Combos] 加载套餐成功，数量:', combos.length)
-
-            this.setData({
-                combos,
-                filteredCombos: combos,
-                loading: false
-            })
-        } catch (error) {
-            console.error('[Combos] 加载套餐失败:', error)
-            logger.error('加载套餐失败', error, 'Combos')
-            this.setData({ loading: false })
-        }
-    },
-
-    async loadAllDishes() {
-        try {
-            const response = await DishManagementService.listDishes({
-                page_id: 1,
-                page_size: 50
-            })
-            console.log('[Combos] 加载菜品成功，数量:', response.dishes?.length || 0)
-            // 预处理价格
-            const dishesWithPrice = (response.dishes || []).map(d => ({
-                ...d,
-                priceDisplay: formatPriceNoSymbol(d.price || 0)
-            }))
-            this.setData({
-                allDishes: dishesWithPrice,
-                filteredDishes: dishesWithPrice
-            })
-        } catch (error) {
-            console.error('[Combos] 加载菜品失败:', error)
-            logger.error('加载菜品失败', error, 'Combos')
-        }
-    },
-
-    onSearch(e: any) {
-        const keyword = e.detail.value.toLowerCase()
-        this.setData({ searchKeyword: keyword })
-        this.filterCombos()
-    },
-
-    filterCombos() {
-        const { combos, searchKeyword } = this.data
-        if (!searchKeyword) {
-            this.setData({ filteredCombos: combos })
-            return
-        }
-        const filtered = combos.filter(c => c.name.toLowerCase().includes(searchKeyword))
-        this.setData({ filteredCombos: filtered })
-    },
-
-    onSelectCombo(e: any) {
-        const item = e.currentTarget.dataset.item
-
-        // 立即设置选中状态，提供即时反馈
-        this.setData({
-            selectedCombo: item,
-            isAdding: false,
-            selectedTagIds: []
-        })
-
-        // 然后异步加载完整详情
-        this.loadComboDetail(item.id)
-    },
-
-    async loadComboDetail(id: number) {
-        const requestedId = id  // 记录本次请求的套餐ID
-
-        try {
-            const detail = await ComboManagementService.getComboDetail(id)
-            console.log('[Combos] 套餐详情:', JSON.stringify(detail))
-
-            // 检查是否已经选择了其他套餐（防止旧请求覆盖新选择）
-            if (this.data.selectedCombo?.id !== requestedId) {
-                console.log('[loadComboDetail] 已选择其他套餐，忽略旧响应', requestedId)
-                return
-            }
-
-            // 回填已有标签
-            const tagIds = (detail.tags || []).map((t: any) => t.id)
-
-            // 更新完整数据
-            this.setData({
-                selectedCombo: { ...detail, dish_count: detail.dishes?.length || 0 },
-                selectedTagIds: tagIds
-            })
-            this.calculateOriginalPrice()
-        } catch (error) {
-            logger.error('加载套餐详情失败', error, 'Combos')
-        }
-    },
-
-    calculateOriginalPrice() {
-        const { selectedCombo } = this.data
-        if (!selectedCombo || !selectedCombo.dishes || selectedCombo.dishes.length === 0) {
-            this.setData({ originalPrice: '' })
-            return
-        }
-        // 计算总价：单价 × 数量
-        const total = selectedCombo.dishes.reduce((sum: number, d: any) => {
-            const price = d.dish_price || d.price || 0
-            const qty = d.quantity || 1
-            return sum + (price * qty)
-        }, 0)
-        this.setData({ originalPrice: (total / 100).toFixed(2) })
-    },
-
-    onAddCombo() {
-        this.setData({
-            isAdding: true,
-            selectedCombo: {
-                id: 0,
-                name: '',
-                description: '',
-                combo_price: 0,
-                is_online: true,
-                dishes: [],
-                tags: []
-            } as ComboItem,
-            originalPrice: '',
-            selectedTagIds: []  // 清空标签选中
-        })
-    },
-
-    onCancelEdit() {
-        this.setData({
-            isAdding: false,
-            selectedCombo: null,
-            originalPrice: ''
-        })
-    },
-
-    onFieldChange(e: any) {
-        const { field } = e.currentTarget.dataset
-        const { value } = e.detail
-        this.setData({
-            [`selectedCombo.${field}`]: value
-        })
-    },
-
-    onPriceFieldChange(e: any) {
-        const value = e.detail.value
-        const priceInCents = value ? Math.round(parseFloat(value) * 100) : 0
-        this.setData({
-            'selectedCombo.combo_price': priceInCents
-        })
-    },
-
-    onToggleOnline() {
-        const { selectedCombo } = this.data
-        if (!selectedCombo) return
-        this.setData({
-            'selectedCombo.is_online': !selectedCombo.is_online
-        })
-    },
-
-    async onSaveCombo() {
-        const { selectedCombo, isAdding } = this.data
-
-        if (!selectedCombo) return
-
-        // 验证
-        if (!selectedCombo.name || selectedCombo.name.trim().length < 1) {
-            wx.showToast({ title: '请输入套餐名称', icon: 'none' })
-            return
-        }
-        if (!selectedCombo.combo_price || selectedCombo.combo_price < 1) {
-            wx.showToast({ title: '请输入有效价格', icon: 'none' })
-            return
-        }
-
-        this.setData({ saving: true })
-        wx.showLoading({ title: '保存中...' })
-
-        try {
-            if (isAdding) {
-                // 创建套餐：传递带数量的菜品列表
-                const dishes = (selectedCombo.dishes || []).map((d: any) => ({
-                    dish_id: d.dish_id || d.id,
-                    quantity: d.quantity || 1
-                }))
-                await ComboManagementService.createCombo({
-                    name: selectedCombo.name.trim(),
-                    description: selectedCombo.description || '',
-                    combo_price: selectedCombo.combo_price,
-                    is_online: selectedCombo.is_online !== false,
-                    dishes: dishes,
-                    tag_ids: this.data.selectedTagIds  // 包含标签
-                })
-                wx.hideLoading()
-                wx.showToast({ title: '创建成功', icon: 'success', duration: 2000 })
-            } else {
-                // 更新套餐：传递带数量的菜品列表
-                const dishes = (selectedCombo.dishes || []).map((d: any) => ({
-                    dish_id: d.dish_id || d.id,
-                    quantity: d.quantity || 1
-                }))
-                await ComboManagementService.updateCombo(selectedCombo.id, {
-                    name: selectedCombo.name.trim(),
-                    description: selectedCombo.description || '',
-                    combo_price: selectedCombo.combo_price,
-                    is_online: selectedCombo.is_online,
-                    dishes: dishes,
-                    tag_ids: this.data.selectedTagIds  // 包含标签
-                })
-                wx.hideLoading()
-                wx.showToast({ title: '保存成功', icon: 'success', duration: 2000 })
-            }
-
-            this.setData({
-                isAdding: false,
-                selectedCombo: null,
-                saving: false
-            })
-
-            // 延迟刷新列表，让 Toast 有时间显示
-            setTimeout(() => {
-                this.loadCombos()
-            }, 500)
-        } catch (error: any) {
-            wx.hideLoading()
-            console.error('[Combos] 保存失败:', error)
-            logger.error('保存套餐失败', error, 'Combos')
-            wx.showToast({ title: error.message || '保存失败', icon: 'error', duration: 2000 })
-            this.setData({ saving: false })
-        }
-    },
-
-    async onDeleteCombo() {
-        const { selectedCombo } = this.data
-        if (!selectedCombo || !selectedCombo.id) return
-
-        const res = await wx.showModal({
-            title: '确认删除',
-            content: `确定要删除套餐「${selectedCombo.name}」吗？此操作不可恢复。`,
-            confirmColor: '#ff4d4f'
-        })
-
-        if (res.confirm) {
-            wx.showLoading({ title: '删除中...' })
-            try {
-                await ComboManagementService.deleteCombo(selectedCombo.id)
-                wx.hideLoading()
-                wx.showToast({ title: '已删除', icon: 'success' })
-                this.setData({ selectedCombo: null })
-                await this.loadCombos()
-            } catch (error) {
-                wx.hideLoading()
-                logger.error('删除套餐失败', error, 'Combos')
-                wx.showToast({ title: '删除失败', icon: 'error' })
-            }
-        }
-    },
-
-    // ========== 菜品选择弹窗 ==========
-    onOpenDishPicker() {
-        const { selectedCombo, allDishes } = this.data
-        // 从当前套餐获取已选菜品及数量（使用后端格式 dish_id）
-        const dishQuantityMap = new Map<number, number>()
-            ; (selectedCombo?.dishes || []).forEach((d: any) => {
-                // 兼容两种格式：dish_id（后端格式）和 id（前端格式）
-                const dishId = d.dish_id || d.id
-                dishQuantityMap.set(dishId, d.quantity || 1)
-            })
-
-        const dishesWithQuantity = allDishes.map(d => ({
-            ...d,
-            quantity: dishQuantityMap.get(d.id) || 0
-        }))
-
-        this.setData({
-            showDishPicker: true,
-            filteredDishes: dishesWithQuantity,
-            dishSearchKeyword: ''
-        })
-        this.updatePickerDishCount()
-    },
-
-    onCloseDishPicker() {
-        this.setData({ showDishPicker: false })
-    },
-
-    onDishSearch(e: any) {
-        const keyword = e.detail.value.toLowerCase()
-        this.setData({ dishSearchKeyword: keyword })
-        this.updateFilteredDishes(keyword)
-    },
-
-    updateFilteredDishes(keyword: string = '') {
-        const { allDishes, filteredDishes } = this.data
-
-        // 保留当前的数量设置
-        const qtyMap = new Map(filteredDishes.map(d => [d.id, d.quantity || 0]))
-
-        let filtered = allDishes.map(d => ({
-            ...d,
-            quantity: qtyMap.get(d.id) || 0
-        }))
-
-        if (keyword) {
-            filtered = filtered.filter(d => d.name.toLowerCase().includes(keyword))
-        }
-
-        this.setData({ filteredDishes: filtered })
-    },
-
-    // 点击菜品名称快速添加/移除
-    onToggleDish(e: any) {
-        const item = e.currentTarget.dataset.item
-        const { filteredDishes } = this.data
-
-        const updated = filteredDishes.map(d => ({
-            ...d,
-            quantity: d.id === item.id ? (d.quantity ? 0 : 1) : d.quantity
-        }))
-
-        this.setData({ filteredDishes: updated })
-        this.updatePickerDishCount()
-    },
-
-    // 增加数量
-    onIncreaseDishQty(e: any) {
-        const dishId = e.currentTarget.dataset.id
-        const { filteredDishes } = this.data
-
-        const updated = filteredDishes.map(d => ({
-            ...d,
-            quantity: d.id === dishId ? (d.quantity || 0) + 1 : d.quantity
-        }))
-
-        this.setData({ filteredDishes: updated })
-        this.updatePickerDishCount()
-    },
-
-    // 减少数量
-    onDecreaseDishQty(e: any) {
-        const dishId = e.currentTarget.dataset.id
-        const { filteredDishes } = this.data
-
-        const updated = filteredDishes.map(d => ({
-            ...d,
-            quantity: d.id === dishId ? Math.max(0, (d.quantity || 0) - 1) : d.quantity
-        }))
-
-        this.setData({ filteredDishes: updated })
-        this.updatePickerDishCount()
-    },
-
-    // 更新已选菜品数量统计（优化：直接从 filteredDishes 统计）
-    updatePickerDishCount() {
-        const { filteredDishes } = this.data
-        const count = filteredDishes.filter(d => (d.quantity || 0) > 0).length
-        this.setData({ pickerDishCount: count })
-    },
-
-    onConfirmDishSelection() {
-        const { filteredDishes, allDishes, selectedCombo } = this.data
-        if (!selectedCombo) return
-
-        // 合并数量到完整列表
-        const qtyMap = new Map(filteredDishes.map(d => [d.id, d.quantity || 0]))
-
-        // 获取所有数量 > 0 的菜品，并转换为后端格式（dish_id, dish_name, dish_price）
-        const selectedDishes = allDishes
-            .map(d => ({
-                dish_id: d.id,
-                dish_name: d.name,
-                dish_price: d.price,
-                dishPriceDisplay: formatPriceNoSymbol(d.price || 0),
-                dish_image_url: d.image_url,
-                quantity: qtyMap.get(d.id) || 0
-            }))
-            .filter(d => d.quantity > 0)
-
-        this.setData({
-            'selectedCombo.dishes': selectedDishes,
-            showDishPicker: false
-        })
-
-        this.calculateOriginalPrice()
-    },
-
-    onRemoveDish(e: any) {
-        const dishId = e.currentTarget.dataset.id
-        const { selectedCombo } = this.data
-        if (!selectedCombo) return
-
-        // 使用 dish_id 字段进行过滤（后端格式）
-        const updatedDishes = (selectedCombo.dishes || []).filter((d: any) => d.dish_id !== dishId)
-        this.setData({
-            'selectedCombo.dishes': updatedDishes
-        })
-
-        this.calculateOriginalPrice()
-    },
-
-    // ========== 标签选择 ==========
-    onTagToggle(e: any) {
-        const tagId = e.currentTarget.dataset.id
-        const { selectedTagIds } = this.data
-
-        let newTagIds: number[]
-        if (selectedTagIds.includes(tagId)) {
-            // 已选中，移除
-            newTagIds = selectedTagIds.filter(id => id !== tagId)
-        } else {
-            // 未选中，添加（最多10个）
-            if (selectedTagIds.length >= 10) {
-                wx.showToast({ title: '最多选择10个标签', icon: 'none' })
-                return
-            }
-            newTagIds = [...selectedTagIds, tagId]
-        }
-
-        this.setData({ selectedTagIds: newTagIds })
+  data: {
+    navBarHeight: 88,
+    accessReady: false,
+    accessDenied: false,
+    accessErrorMessage: '',
+    initialLoading: true,
+    initialError: false,
+    initialErrorMessage: '',
+    refreshErrorMessage: '',
+    loading: false,
+    filterOptions: COMBO_FILTER_OPTIONS,
+    currentFilter: 'all' as ComboFilterKey,
+    combos: [] as ComboViewItem[],
+    resultSummaryText: '当前共 0 套套餐',
+    emptyDescription: '还没有套餐，先新增一个',
+    pageId: 1,
+    pageSize: 20,
+    hasMore: true,
+    lastLoadedAt: 0,
+    needsReloadOnShow: false,
+    deleteDialogVisible: false,
+    deleteDialogSubmitting: false,
+    deleteDialogComboId: 0,
+    deleteDialogComboName: ''
+  },
+
+  async onLoad() {
+    const { navBarHeight } = getStableBarHeights()
+    this.setData({ navBarHeight })
+    await this.initializePage()
+  },
+
+  onShow() {
+    if (
+      !this.data.accessReady ||
+      this.data.accessDenied ||
+      this.data.accessErrorMessage ||
+      this.data.initialLoading ||
+      this.data.loading
+    ) {
+      return
     }
-})
 
+    const shouldRefresh =
+      this.data.needsReloadOnShow ||
+      Date.now() - this.data.lastLoadedAt >= COMBO_AUTO_REFRESH_WINDOW_MS
+
+    if (!shouldRefresh) {
+      return
+    }
+
+    const preserveCurrent = this.data.combos.length > 0
+    this.setData({ needsReloadOnShow: false })
+    void this.loadCombos(true, {
+      showLoading: !preserveCurrent,
+      preserveCurrent
+    })
+  },
+
+  async initializePage() {
+    const accessResult = await ensureMerchantConsoleAccess()
+    this.setData({
+      accessReady: true,
+      accessDenied: isMerchantConsoleAccessDenied(accessResult),
+      accessErrorMessage: getMerchantConsoleAccessErrorMessage(accessResult)
+    })
+
+    if (!isMerchantConsoleAccessGranted(accessResult)) {
+      this.setData({ initialLoading: false, loading: false })
+      wx.stopPullDownRefresh()
+      return
+    }
+
+    await this.loadCombos(true)
+  },
+
+  async loadCombos(reset = false, options?: LoadCombosOptions) {
+    if (this.data.loading) return
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return
+    if (!reset && !this.data.hasMore) return
+
+    const hasExistingCombos = this.data.combos.length > 0
+    const preserveCurrent = !!options?.preserveCurrent && reset && hasExistingCombos
+    const showLoading = options?.showLoading !== false
+    const usePageLoading = reset && showLoading && !hasExistingCombos
+
+    this.setData({
+      loading: true,
+      ...(usePageLoading
+        ? {
+            initialLoading: true,
+            initialError: false,
+            initialErrorMessage: '',
+            refreshErrorMessage: ''
+          }
+        : showLoading
+          ? {
+              initialError: false,
+              initialErrorMessage: '',
+              refreshErrorMessage: ''
+            }
+          : preserveCurrent
+            ? { refreshErrorMessage: '' }
+            : {})
+    })
+
+    try {
+      const pageId = reset ? 1 : this.data.pageId
+      const isOnline = this.data.currentFilter === 'all'
+        ? undefined
+        : this.data.currentFilter === 'online'
+          ? true
+          : false
+      const response = await ComboManagementService.listCombos({
+        page_id: pageId,
+        page_size: this.data.pageSize,
+        ...(typeof isOnline === 'boolean' ? { is_online: isOnline } : {})
+      })
+
+      const combos = Array.isArray(response?.combo_sets)
+        ? response.combo_sets.filter((combo): combo is ComboSetResponse => !!combo).map(buildComboViewItem)
+        : []
+
+      const nextCombos = reset ? combos : [...this.data.combos, ...combos]
+      const total = typeof response?.total === 'number' ? response.total : undefined
+
+      this.setData({
+        ...buildPresentationUpdate(nextCombos, this.data.currentFilter),
+        pageId: pageId + 1,
+        hasMore: resolveHasMore(total, nextCombos.length, this.data.pageSize, combos.length),
+        initialLoading: false,
+        initialError: false,
+        initialErrorMessage: '',
+        refreshErrorMessage: '',
+        lastLoadedAt: Date.now()
+      })
+    } catch (err) {
+      logger.error('Load combos failed', err)
+      const message = getErrorMessage(err, '加载套餐失败，请稍后重试')
+
+      if (this.data.initialLoading || (!hasExistingCombos && reset)) {
+        this.setData({
+          ...buildPresentationUpdate([], this.data.currentFilter),
+          initialLoading: false,
+          initialError: true,
+          initialErrorMessage: message,
+          refreshErrorMessage: ''
+        })
+      } else if (hasExistingCombos) {
+        this.setData({ refreshErrorMessage: `${message}，当前已保留上次同步结果` })
+      } else {
+        wx.showToast({ title: message, icon: 'none' })
+      }
+    } finally {
+      this.setData({ loading: false })
+      wx.stopPullDownRefresh()
+    }
+  },
+
+  onPullDownRefresh() {
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) {
+      void this.onRetryAccess()
+      return
+    }
+
+    void this.loadCombos(true, {
+      showLoading: false,
+      preserveCurrent: this.data.combos.length > 0
+    })
+  },
+
+  onSelectFilter(e: WechatMiniprogram.TouchEvent) {
+    const { key } = e.currentTarget.dataset as { key?: ComboFilterKey }
+    if (!key || key === this.data.currentFilter) return
+
+    this.setData(
+      {
+        currentFilter: key,
+        pageId: 1,
+        hasMore: true
+      },
+      () => {
+        void this.loadCombos(true, {
+          showLoading: this.data.combos.length === 0,
+          preserveCurrent: this.data.combos.length > 0
+        })
+      }
+    )
+  },
+
+  onReachBottom() {
+    this.loadCombos()
+  },
+
+  async onToggleOnline(e: WechatMiniprogram.CustomEvent<{ value: boolean }>) {
+    const { id } = e.currentTarget.dataset as { id?: number }
+    if (!id) return
+
+    const targetCombo = this.data.combos.find((combo) => combo.id === id)
+    if (!targetCombo || targetCombo.statusPending || targetCombo.deletePending) return
+
+    const targetStatus = !!e.detail?.value
+
+    if (targetStatus === targetCombo.is_online) return
+
+    const pendingCombos = this.data.combos.map((combo) => (
+      combo.id === id ? { ...combo, statusPending: true } : combo
+    ))
+
+    this.setData(buildPresentationUpdate(pendingCombos, this.data.currentFilter))
+
+    try {
+      const updated = await ComboManagementService.updateComboOnlineStatus(id, {
+        is_online: targetStatus
+      })
+      if (this.data.currentFilter !== 'all') {
+        void this.loadCombos(true, {
+          showLoading: false,
+          preserveCurrent: this.data.combos.length > 0
+        })
+      } else {
+        const nextCombos = pendingCombos.map((combo) => (
+          combo.id === id
+            ? { ...combo, is_online: updated.is_online, statusPending: false }
+            : combo
+        ))
+
+        this.setData(buildPresentationUpdate(nextCombos, this.data.currentFilter))
+      }
+    } catch (err) {
+      logger.error('Toggle combo status failed', err)
+      const restoredCombos = pendingCombos.map((combo) => (
+        combo.id === id ? { ...combo, statusPending: false } : combo
+      ))
+
+      this.setData(buildPresentationUpdate(restoredCombos, this.data.currentFilter))
+      wx.showToast({ title: getErrorMessage(err, '操作失败，请稍后重试'), icon: 'none' })
+    }
+  },
+
+  onActionsCatch() {},
+
+  onComboImageError(e: WechatMiniprogram.TouchEvent) {
+    const { id } = e.currentTarget.dataset as { id?: number }
+    if (!id) return
+
+    const nextCombos = this.data.combos.map((combo) => {
+      if (combo.id !== id || combo.coverImageUrl === '/assets/icons/empty.svg') {
+        return combo
+      }
+
+      return {
+        ...combo,
+        coverImageUrl: '/assets/icons/empty.svg'
+      }
+    })
+
+    this.setData(buildPresentationUpdate(nextCombos, this.data.currentFilter))
+  },
+
+  onEditCombo(e: WechatMiniprogram.TouchEvent) {
+    const { id } = e.currentTarget.dataset as { id?: number }
+    if (!id) return
+    this.setData({ needsReloadOnShow: true })
+    wx.navigateTo({ url: `/pages/merchant/combos/edit/index?id=${id}` })
+  },
+
+  onRequestDeleteCombo(e: WechatMiniprogram.TouchEvent) {
+    const { id } = e.currentTarget.dataset as { id?: number }
+    if (!id) return
+
+    const targetCombo = this.data.combos.find((combo) => combo.id === id)
+    if (!targetCombo || targetCombo.deletePending) return
+
+    this.setData({
+      deleteDialogVisible: true,
+      deleteDialogSubmitting: false,
+      deleteDialogComboId: id,
+      deleteDialogComboName: targetCombo.name || '该套餐'
+    })
+  },
+
+  onCancelDeleteDialog() {
+    if (this.data.deleteDialogSubmitting) return
+
+    this.setData({
+      deleteDialogVisible: false,
+      deleteDialogSubmitting: false,
+      deleteDialogComboId: 0,
+      deleteDialogComboName: ''
+    })
+  },
+
+  async onConfirmDeleteCombo() {
+    const id = Number(this.data.deleteDialogComboId || 0)
+    if (!id) {
+      this.onCancelDeleteDialog()
+      return
+    }
+
+    const targetCombo = this.data.combos.find((combo) => combo.id === id)
+    if (!targetCombo) {
+      this.onCancelDeleteDialog()
+      return
+    }
+
+    const pendingCombos = this.data.combos.map((combo) => (
+      combo.id === id ? { ...combo, deletePending: true } : combo
+    ))
+
+    this.setData({
+      deleteDialogSubmitting: true,
+      ...buildPresentationUpdate(pendingCombos, this.data.currentFilter)
+    })
+
+    try {
+      await ComboManagementService.deleteCombo(id)
+      const nextCombos = pendingCombos.filter((combo) => combo.id !== id)
+
+      this.setData({
+        deleteDialogVisible: false,
+        deleteDialogSubmitting: false,
+        deleteDialogComboId: 0,
+        deleteDialogComboName: '',
+        ...buildPresentationUpdate(nextCombos, this.data.currentFilter)
+      })
+    } catch (err) {
+      logger.error('Delete combo failed', err)
+      const restoredCombos = pendingCombos.map((combo) => (
+        combo.id === id ? { ...combo, deletePending: false } : combo
+      ))
+
+      this.setData({
+        deleteDialogSubmitting: false,
+        ...buildPresentationUpdate(restoredCombos, this.data.currentFilter)
+      })
+      wx.showToast({ title: getErrorMessage(err, '删除失败，请稍后重试'), icon: 'none' })
+    }
+  },
+
+  onRetry() {
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) {
+      void this.onRetryAccess()
+      return
+    }
+
+    void this.loadCombos(true)
+  },
+
+  async onRetryAccess() {
+    this.setData({
+      accessReady: false,
+      accessDenied: false,
+      accessErrorMessage: '',
+      initialLoading: true,
+      initialError: false,
+      initialErrorMessage: '',
+      refreshErrorMessage: '',
+      loading: false,
+      ...buildPresentationUpdate([], this.data.currentFilter),
+      pageId: 1,
+      hasMore: true,
+      lastLoadedAt: 0,
+      deleteDialogVisible: false,
+      deleteDialogSubmitting: false,
+      deleteDialogComboId: 0,
+      deleteDialogComboName: ''
+    })
+
+    await this.initializePage()
+  },
+
+  onRetryRefresh() {
+    void this.loadCombos(true, {
+      showLoading: false,
+      preserveCurrent: this.data.combos.length > 0
+    })
+  },
+
+  onCreateCombo() {
+    this.setData({ needsReloadOnShow: true })
+    wx.navigateTo({ url: '/pages/merchant/combos/edit/index' })
+  }
+})

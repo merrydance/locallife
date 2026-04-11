@@ -1,8 +1,13 @@
 package weather
 
 import (
+	"context"
+	"encoding/json"
 	"strconv"
 	"strings"
+
+	"github.com/jackc/pgx/v5/pgtype"
+	db "github.com/merrydance/locallife/db/sqlc"
 )
 
 // WeatherCoefficient 天气系数计算结果
@@ -22,7 +27,7 @@ type WeatherCoefficient struct {
 }
 
 // CalculateCoefficient 根据天气数据计算运费系数
-func CalculateCoefficient(weather *WeatherNow, warnings []WarningAlert) *WeatherCoefficient {
+func CalculateCoefficient(ctx context.Context, store db.Store, regionID int64, weather *WeatherNow, warnings []WarningAlert) *WeatherCoefficient {
 	result := &WeatherCoefficient{
 		Coefficient:        1.00,
 		WarningCoefficient: 1.00,
@@ -51,7 +56,7 @@ func CalculateCoefficient(weather *WeatherNow, warnings []WarningAlert) *Weather
 	result.WeatherType = classifyWeatherType(weather.Text)
 
 	// 计算基础天气系数
-	result.Coefficient = calculateBaseCoefficient(result.WeatherType, temp, windScale, vis)
+	result.Coefficient = calculateBaseCoefficient(ctx, store, regionID, result.WeatherType, temp, windScale, vis)
 
 	// 极端天气暂停配送
 	if result.WeatherType == "extreme" {
@@ -113,23 +118,101 @@ func classifyWeatherType(text string) string {
 }
 
 // calculateBaseCoefficient 计算基础天气系数
-func calculateBaseCoefficient(weatherType string, temp, windScale, visibility int) float64 {
+func calculateBaseCoefficient(ctx context.Context, store db.Store, regionID int64, weatherType string, temp, windScale, visibility int) float64 {
 	coefficient := 1.00
 
-	// 根据天气类型调整
+	// 1. 获取基础倍数配置
+	// 默认值
+	defaultMultipliers := map[string]float64{
+		"extreme":       2.00,
+		"heavy_rain":    1.80,
+		"heavy_snow":    1.80,
+		"moderate_rain": 1.30,
+		"moderate_snow": 1.30,
+		"light_rain":    1.10,
+		"light_snow":    1.10,
+	}
+
+	var regionRuleConfig db.RegionRuleConfig
+	hasRegionRuleConfig := false
+	if store != nil {
+		if cfg, err := store.GetRegionRuleConfigByRegion(ctx, regionID); err == nil {
+			regionRuleConfig = cfg
+			hasRegionRuleConfig = true
+		}
+	}
+
+	// 尝试从 DB 读取配置覆盖默认值
+	getConfig := func(key string) float64 {
+		// 先检查是否有默认值
+		defVal := 1.00
+		if v, ok := defaultMultipliers[key]; ok {
+			defVal = v
+		}
+
+		if hasRegionRuleConfig {
+			var v pgtype.Numeric
+			switch key {
+			case "extreme":
+				v = regionRuleConfig.WeatherCoeffExtreme
+			case "heavy_rain", "heavy_snow":
+				v = regionRuleConfig.WeatherCoeffHeavy
+			case "moderate_rain", "moderate_snow":
+				v = regionRuleConfig.WeatherCoeffModerate
+			case "light_rain", "light_snow":
+				v = regionRuleConfig.WeatherCoeffLight
+			}
+
+			if v.Valid {
+				if f, err := v.Float64Value(); err == nil {
+					return f.Float64
+				}
+			}
+		}
+
+		// DB Map Key
+		dbKey := ""
+		switch key {
+		case "extreme":
+			dbKey = "WEATHER_COEFF_EXTREME"
+		case "heavy_rain", "heavy_snow":
+			dbKey = "WEATHER_COEFF_HEAVY"
+		case "moderate_rain", "moderate_snow":
+			dbKey = "WEATHER_COEFF_MODERATE"
+		case "light_rain", "light_snow":
+			dbKey = "WEATHER_COEFF_LIGHT"
+		}
+
+		if dbKey != "" && store != nil {
+			conf, err := store.GetPlatformConfig(ctx, db.GetPlatformConfigParams{
+				ConfigKey: dbKey,
+				ScopeType: "city",
+				ScopeID:   pgtype.Int8{Int64: regionID, Valid: true},
+			})
+			if err == nil {
+				var val float64
+				if err := json.Unmarshal(conf.ConfigValue, &val); err == nil {
+					return val
+				}
+			}
+		}
+		return defVal
+	}
+
+	// 根据天气类型设置基础系数
 	switch weatherType {
 	case "extreme":
-		coefficient = 2.00 // 极端天气，系数最高
+		coefficient = getConfig("extreme")
 	case "heavy_rain", "heavy_snow":
-		coefficient = 1.50 // 暴雨/暴雪
+		coefficient = getConfig("heavy_rain")
 	case "moderate_rain", "moderate_snow":
-		coefficient = 1.30 // 中雨/中雪、大雨/大雪
+		coefficient = getConfig("moderate_rain")
 	case "light_rain", "light_snow":
-		coefficient = 1.10 // 小雨/小雪
+		coefficient = getConfig("light_rain")
 	case "cloudy":
-		coefficient = 1.00 // 多云/阴天，正常
+		coefficient = 1.00
 	case "sunny":
-		coefficient = 1.00 // 晴天，正常
+		coefficient = 1.00
 	}
 
 	// 高温补贴 (>35℃)

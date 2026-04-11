@@ -146,26 +146,13 @@ func (rl *RateLimiter) Middleware() gin.HandlerFunc {
 // SensitiveAPIMiddleware 敏感接口限流（更严格）
 // 用于短信验证码、支付等接口
 func (rl *RateLimiter) SensitiveAPIMiddleware(ratePerMinute int) gin.HandlerFunc {
-	// 敏感接口使用独立的限流器映射
-	sensitiveVisitors := make(map[string]*visitor)
-	var mu sync.RWMutex
-
 	return func(ctx *gin.Context) {
 		clientIP := ctx.ClientIP()
 		key := "sensitive:" + clientIP
 
-		mu.Lock()
-		v, exists := sensitiveVisitors[key]
-		if !exists {
-			// 敏感接口：每分钟 N 次
-			limiter := rate.NewLimiter(rate.Limit(float64(ratePerMinute)/60.0), ratePerMinute)
-			sensitiveVisitors[key] = &visitor{limiter: limiter, lastSeen: time.Now()}
-			v = sensitiveVisitors[key]
-		}
-		v.lastSeen = time.Now()
-		mu.Unlock()
-
-		if !v.limiter.Allow() {
+		// 敏感接口：每分钟 N 次（复用主限流器并共享清理协程）
+		limiter := rl.getVisitor(key, rate.Limit(float64(ratePerMinute)/60.0), ratePerMinute)
+		if !limiter.Allow() {
 			ctx.AbortWithStatusJSON(http.StatusTooManyRequests, ErrorResponse{
 				Error: "too many requests for this operation, please try again later",
 			})

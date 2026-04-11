@@ -1,31 +1,93 @@
+/* Pages User Center Addresses Edit */
 .page-container {
-  padding: 24rpx;
-  padding-bottom: env(safe-area-inset-bottom);
+  min-height: 100vh;
+  background-color: var(--td-bg-color-page);
+  padding: var(--spacer-md);
+  padding-bottom: calc(180rpx + env(safe-area-inset-bottom));
+}
+
+.form-title {
+  font-size: var(--font-size-base);
+  color: var(--td-text-color-secondary);
+  margin: var(--spacer-lg) 0 var(--spacer-sm) var(--spacer-sm);
+}
+.form-title:first-child {
+  margin-top: 0;
+}
+
+.form-hint {
+  margin: 16rpx 8rpx 0;
+  color: var(--td-text-color-secondary);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
 }
 
 .form-group {
-  background: #fff;
-  border-radius: 12rpx;
+  background: var(--td-bg-color-container);
+  border-radius: var(--radius-md);
   overflow: hidden;
-  margin-bottom: 24rpx;
+  margin-bottom: var(--spacer-md);
 }
 
 .gender-group {
-  padding: 0 32rpx;
-  background: #fff;
+  padding: 0 var(--spacer-lg);
+  background: var(--td-bg-color-container);
 }
 
-.button-group {
-  margin-top: 48rpx;
+.map-placeholder {
+  display: flex;
+  align-items: center;
+  gap: var(--spacer-xs);
+  color: var(--td-text-color-placeholder);
+  font-size: var(--font-size-base);
+}
+.map-placeholder.has-value {
+  color: var(--td-text-color-primary);
 }
 
-.delete-btn {
-  margin-top: 24rpx;
+/* Bottom Bar */
+.bottom-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--td-bg-color-container);
+  padding: var(--spacer-md) var(--spacer-lg) calc(var(--spacer-md) + env(safe-area-inset-bottom));
+  box-shadow: 0 -2rpx 10rpx rgba(0,0,0,0.05);
+  z-index: var(--z-index-fixed);
+  display: flex;
+  gap: var(--spacer-md);
+}
+
+.delete-btn-area {
+  margin-top: var(--spacer-xl);
+  padding: 0 var(--spacer-md);
 }
 
 /* TDesign Override */
 .t-radio-group {
   display: flex;
-  gap: 32rpx;
+  gap: var(--spacer-lg);
 }
 
+/* TDesign Component Overrides if needed */
+.t-input__label {
+  color: var(--td-text-color-primary) !important;
+}
+
+/* 异常状态 */
+.error-container {
+  padding: 120rpx 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* 骨架屏 */
+.form-skeleton {
+  padding: var(--spacer-md);
+}
+
+.skeleton-item {
+  margin-bottom: var(--spacer-md);
+}

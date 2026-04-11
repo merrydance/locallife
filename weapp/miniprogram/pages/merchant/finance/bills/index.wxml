@@ -1,0 +1,85 @@
+<custom-navbar title="经营分析" showBack="{{true}}" />
+
+<view
+  class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
+  style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: 32rpx;"
+>
+  <view wx:if="{{!accessReady}}" class="state-block">
+    <t-loading theme="circular" size="40rpx" text="校验权限中..." vertical />
+  </view>
+
+  <view wx:elif="{{accessDenied}}" class="state-block">
+    <t-empty icon="lock-on" description="当前账号无商户权限，请返回“我的”切换身份" />
+  </view>
+
+  <view wx:elif="{{accessErrorMessage}}" class="state-block">
+    <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
+    <t-button theme="primary" shape="round" bind:tap="onRetryAccess">重新校验</t-button>
+  </view>
+
+  <view wx:elif="{{initialLoading}}" class="state-block">
+    <t-loading theme="circular" size="40rpx" text="加载账单中..." vertical />
+  </view>
+
+  <view wx:elif="{{initialError}}" class="state-block">
+    <t-empty icon="error-circle" description="{{initialErrorMessage || '账单数据加载失败，请重试'}}" />
+    <t-button theme="primary" shape="round" bind:tap="onRetry">重新加载</t-button>
+  </view>
+
+  <view wx:else class="page-content">
+    <t-notice-bar
+      wx:if="{{refreshErrorMessage}}"
+      visible="{{true}}"
+      theme="warning"
+      content="{{refreshErrorMessage}}"
+      prefixIcon="error-circle"
+      t-class="page-notice"
+    />
+
+    <t-tabs
+      value="{{currentRange}}"
+      bind:change="onRangeChange"
+      theme="tag"
+      space-evenly="{{false}}"
+      split="{{false}}"
+      t-class="finance-range-tabs"
+    >
+      <t-tab-panel wx:for="{{rangeOptions}}" wx:key="key" label="{{item.label}}" value="{{item.key}}" />
+    </t-tabs>
+
+    <view class="meta-tags">
+      <t-tag size="small" theme="primary" variant="light-outline">{{dateRangeLabel}}</t-tag>
+      <t-tag size="small" theme="default" variant="light-outline">更新 {{updatedAtLabel}}</t-tag>
+    </view>
+
+    <t-grid column="4" gutter="12" theme="card" border="{{false}}" t-class="finance-grid finance-summary-grid">
+      <t-grid-item
+        wx:for="{{overviewTiles}}"
+        wx:key="id"
+        icon="{{item.icon}}"
+        text="{{item.label}}"
+        description="{{item.value}}"
+        t-class="finance-summary-item"
+        t-class-content="finance-summary-content"
+        t-class-text="finance-summary-text"
+        t-class-description="finance-grid-description"
+      />
+    </t-grid>
+
+    <t-grid column="3" gutter="12" theme="card" border="{{false}}" hover="{{true}}" t-class="finance-grid finance-entry-grid">
+      <t-grid-item
+        wx:for="{{analysisEntries}}"
+        wx:key="id"
+        icon="{{item.icon}}"
+        text="{{item.title}}"
+        description="{{item.value}}"
+        url="{{item.url}}"
+        jump-type="navigate-to"
+        t-class="finance-entry-item"
+        t-class-content="finance-entry-content"
+        t-class-text="finance-entry-text"
+        t-class-description="finance-entry-description"
+      />
+    </t-grid>
+  </view>
+</view>

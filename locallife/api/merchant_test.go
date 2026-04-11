@@ -2,11 +2,10 @@ package api
 
 import (
 	"bytes"
-	"database/sql"
 	"encoding/json"
-	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 	"time"
 
@@ -22,241 +21,25 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-func TestUploadMerchantImageAPI(t *testing.T) {
+// TestUploadMerchantImageAPI_Gone verifies the old upload endpoint returns 410 Gone.
+// The endpoint has been replaced by the media upload flow (POST /v1/media/upload-sessions).
+func TestUploadMerchantImageAPI_Gone(t *testing.T) {
 	user, _ := randomUser(t)
 
-	testCases := []struct {
-		name          string
-		category      string
-		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
-		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
-	}{
-		{
-			name:     "OK",
-			category: "business_license",
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
-				var response uploadImageResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
-				require.NotEmpty(t, response.ImageURL)
-				require.Contains(t, response.ImageURL, "merchants")
-				require.Contains(t, response.ImageURL, "business_license")
-			},
-		},
-		{
-			name:     "InvalidCategory",
-			category: "invalid",
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusBadRequest, recorder.Code)
-			},
-		},
-		{
-			name:     "NoAuthorization",
-			category: "logo",
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				// No authorization
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusUnauthorized, recorder.Code)
-			},
-		},
-	}
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
 
-	for i := range testCases {
-		tc := testCases[i]
-		t.Run(tc.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
+	store := mockdb.NewMockStore(ctrl)
+	wechatClient := mockwechat.NewMockWechatClient(ctrl)
+	server := newTestServerWithWechat(t, store, wechatClient)
 
-			store := mockdb.NewMockStore(ctrl)
-			wechatClient := mockwechat.NewMockWechatClient(ctrl)
-			if tc.name == "OK" {
-				// business_license no longer goes through ImgSecCheck
-			}
-			server := newTestServerWithWechat(t, store, wechatClient)
+	request, err := http.NewRequest(http.MethodPost, "/v1/merchants/images/upload", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 
-			// Create multipart form
-			body := &bytes.Buffer{}
-			writer := multipart.NewWriter(body)
-			writer.WriteField("category", tc.category)
-
-			// Add fake image file
-			part, err := writer.CreateFormFile("image", "test.jpg")
-			require.NoError(t, err)
-			part.Write([]byte("fake image data"))
-			writer.Close()
-
-			url := "/v1/merchants/images/upload"
-			request, err := http.NewRequest(http.MethodPost, url, body)
-			require.NoError(t, err)
-			request.Header.Set("Content-Type", writer.FormDataContentType())
-
-			tc.setupAuth(t, request, server.tokenMaker)
-
-			recorder := httptest.NewRecorder()
-			server.router.ServeHTTP(recorder, request)
-			tc.checkResponse(t, recorder)
-		})
-	}
-}
-
-func TestCreateMerchantApplicationAPI(t *testing.T) {
-	user, _ := randomUser(t)
-
-	testCases := []struct {
-		name          string
-		body          gin.H
-		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
-		buildStubs    func(store *mockdb.MockStore)
-		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
-	}{
-		{
-			name: "OK",
-			body: gin.H{
-				"merchant_name":              "Test Restaurant",
-				"business_license_number":    "123456789",
-				"business_license_image_url": "uploads/merchants/1/business_license/test.jpg",
-				"legal_person_name":          "Test Person",
-				"legal_person_id_number":     "110101199001011234",
-				"legal_person_id_front_url":  "uploads/merchants/1/id_front/test.jpg",
-				"legal_person_id_back_url":   "uploads/merchants/1/id_back/test.jpg",
-				"contact_phone":              "13800138000",
-				"business_address":           "Test Address",
-				"longitude":                  "116.404",
-				"latitude":                   "39.915",
-				"business_scope":             "餐饮服务",
-				"region_id":                  1, // 前端上报的区域ID
-			},
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				// Check existing application
-				store.EXPECT().
-					GetUserMerchantApplication(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(db.MerchantApplication{}, sql.ErrNoRows)
-
-				// Create application
-				store.EXPECT().
-					CreateMerchantApplication(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.MerchantApplication{
-						ID:                      1,
-						UserID:                  user.ID,
-						MerchantName:            "Test Restaurant",
-						BusinessLicenseNumber:   "123456789",
-						BusinessLicenseImageUrl: "uploads/merchants/1/business_license/test.jpg",
-						LegalPersonName:         "Test Person",
-						LegalPersonIDNumber:     "110101199001011234",
-						LegalPersonIDFrontUrl:   "uploads/merchants/1/id_front/test.jpg",
-						LegalPersonIDBackUrl:    "uploads/merchants/1/id_back/test.jpg",
-						ContactPhone:            "13800138000",
-						BusinessAddress:         "Test Address",
-						Status:                  "pending",
-						CreatedAt:               time.Now(),
-						UpdatedAt:               time.Now(),
-					}, nil)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
-				var response merchantApplicationResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
-				require.Equal(t, user.ID, response.UserID)
-				require.Equal(t, "Test Restaurant", response.MerchantName)
-				require.Equal(t, "pending", response.Status)
-			},
-		},
-		{
-			name: "AlreadyHasPendingApplication",
-			body: gin.H{
-				"merchant_name":              "Test Restaurant",
-				"business_license_number":    "123456789",
-				"business_license_image_url": "test.jpg",
-				"legal_person_name":          "Test Person",
-				"legal_person_id_number":     "110101199001011234",
-				"legal_person_id_front_url":  "test.jpg",
-				"legal_person_id_back_url":   "test.jpg",
-				"contact_phone":              "13800138000",
-				"business_address":           "Test Address",
-				"longitude":                  "116.404",
-				"latitude":                   "39.915",
-				"region_id":                  1,
-			},
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetUserMerchantApplication(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(db.MerchantApplication{
-						ID:     1,
-						Status: "pending",
-					}, nil)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusConflict, recorder.Code)
-			},
-		},
-		{
-			name: "NoAuthorization",
-			body: gin.H{
-				"merchant_name":              "Test Restaurant",
-				"business_license_number":    "123456789",
-				"business_license_image_url": "test.jpg",
-				"legal_person_name":          "Test Person",
-				"legal_person_id_number":     "110101199001011234",
-				"legal_person_id_front_url":  "test.jpg",
-				"legal_person_id_back_url":   "test.jpg",
-				"contact_phone":              "13800138000",
-				"business_address":           "Test Address",
-			},
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				// No authorization
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				// No calls expected
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusUnauthorized, recorder.Code)
-			},
-		},
-	}
-
-	for i := range testCases {
-		tc := testCases[i]
-		t.Run(tc.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
-
-			store := mockdb.NewMockStore(ctrl)
-			tc.buildStubs(store)
-
-			server := newTestServer(t, store)
-
-			data, err := json.Marshal(tc.body)
-			require.NoError(t, err)
-
-			url := "/v1/merchants/applications"
-			request, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(data))
-			require.NoError(t, err)
-
-			tc.setupAuth(t, request, server.tokenMaker)
-
-			recorder := httptest.NewRecorder()
-			server.router.ServeHTTP(recorder, request)
-			tc.checkResponse(t, recorder)
-		})
-	}
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusGone, recorder.Code)
 }
 
 func TestGetCurrentMerchantAPI(t *testing.T) {
@@ -275,16 +58,12 @@ func TestGetCurrentMerchantAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var response merchantResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, merchant.ID, response.ID)
 				require.Equal(t, merchant.Name, response.Name)
 			},
@@ -295,10 +74,7 @@ func TestGetCurrentMerchantAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(db.Merchant{}, sql.ErrNoRows)
+				expectResolveNoAccessibleMerchants(store, user.ID)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -364,10 +140,7 @@ func TestUpdateCurrentMerchantAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					UpdateMerchant(gomock.Any(), gomock.Any()).
@@ -388,8 +161,7 @@ func TestUpdateCurrentMerchantAPI(t *testing.T) {
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var response merchantResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, "Updated Name", response.Name)
 			},
 		},
@@ -403,10 +175,7 @@ func TestUpdateCurrentMerchantAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(db.Merchant{}, sql.ErrNoRows)
+				expectResolveNoAccessibleMerchants(store, user.ID)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -425,15 +194,53 @@ func TestUpdateCurrentMerchantAPI(t *testing.T) {
 				merchantWithNewVersion := merchant
 				merchantWithNewVersion.Version = 2 // 数据库中已是版本2
 
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchantWithNewVersion, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchantWithNewVersion)
 
 				// UpdateMerchant不会被调用，因为version检查在之前
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusConflict, recorder.Code)
+			},
+		},
+		{
+			name: "ClearLogo",
+			body: gin.H{
+				"clear_logo": true,
+				"version":    1,
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				merchantWithLogo := merchant
+				merchantWithLogo.LogoMediaAssetID = pgtype.Int8{Int64: 88, Valid: true}
+
+				expectResolveSingleOwnedMerchant(store, user.ID, merchantWithLogo)
+
+				store.EXPECT().
+					ClearMerchantLogo(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.Merchant{
+						ID:               merchant.ID,
+						OwnerUserID:      merchant.OwnerUserID,
+						Name:             merchant.Name,
+						Description:      merchant.Description,
+						Phone:            merchant.Phone,
+						Address:          merchant.Address,
+						Status:           merchant.Status,
+						Version:          2,
+						LogoMediaAssetID: pgtype.Int8{Valid: false},
+						CreatedAt:        merchant.CreatedAt,
+						UpdatedAt:        time.Now(),
+					}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var response merchantResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Nil(t, response.LogoAssetID)
+				require.Empty(t, response.LogoURL)
+				require.Equal(t, int32(2), response.Version)
 			},
 		},
 	}
@@ -471,6 +278,7 @@ func randomMerchant(ownerID int64) db.Merchant {
 	return db.Merchant{
 		ID:          util.RandomInt(1, 1000),
 		OwnerUserID: ownerID,
+		RegionID:    util.RandomInt(1, 1000),
 		Name:        util.RandomString(10),
 		Description: pgtype.Text{String: util.RandomString(50), Valid: true},
 		Phone:       "13800138000",
@@ -482,459 +290,168 @@ func randomMerchant(ownerID int64) db.Merchant {
 	}
 }
 
-func randomMerchantApplication(userID int64) db.MerchantApplication {
-	return db.MerchantApplication{
-		ID:                      util.RandomInt(1, 1000),
-		UserID:                  userID,
-		MerchantName:            util.RandomString(10),
-		BusinessLicenseNumber:   util.RandomString(18),
-		BusinessLicenseImageUrl: "uploads/merchants/test/license.jpg",
-		LegalPersonName:         util.RandomString(6),
-		LegalPersonIDNumber:     "110101199001011234",
-		LegalPersonIDFrontUrl:   "uploads/merchants/test/id_front.jpg",
-		LegalPersonIDBackUrl:    "uploads/merchants/test/id_back.jpg",
-		ContactPhone:            "13800138000",
-		BusinessAddress:         util.RandomString(30),
-		BusinessScope:           pgtype.Text{String: "餐饮服务", Valid: true},
-		Status:                  "pending",
-		CreatedAt:               time.Now(),
-		UpdatedAt:               time.Now(),
+// TestGetCurrentMerchantAPI_WithLogoURL 回归测试（Phase 5.4）：
+// 当商户设置了 logo_media_asset_id 时，GET /v1/merchants/me 响应中应包含 CDN logo_url。
+func TestGetCurrentMerchantAPI_WithLogoURL(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	merchant.LogoMediaAssetID = pgtype.Int8{Int64: 42, Valid: true}
+
+	const assetID int64 = 42
+	logoAsset := db.MediaAsset{
+		ID:               assetID,
+		ObjectKey:        "merchant/logo/1/logo_card.jpg",
+		Visibility:       "public",
+		ModerationStatus: "approved",
 	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+	store.EXPECT().
+		GetMediaAssetByID(gomock.Any(), assetID).
+		Times(1).
+		Return(logoAsset, nil)
+
+	server, _ := newTestServerForMedia(t, store)
+
+	request, err := http.NewRequest(http.MethodGet, "/v1/merchants/me", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp merchantResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Contains(t, resp.LogoURL, "https://cdn.test.example.com", "logo_url 应指向 CDN 域名")
+	require.Contains(t, resp.LogoURL, logoAsset.ObjectKey, "logo_url 应包含 object key")
 }
 
-// ==================== 获取用户入驻申请测试 ====================
+func TestGetPublicMerchantDetail_RewritesCoverImageInLocalMode(t *testing.T) {
+	merchant := randomMerchant(util.RandomInt(1, 1000))
+	storefrontImages, err := json.Marshal([]string{"uploads/merchants/12/storefront/cover.jpg"})
+	require.NoError(t, err)
+	application := randomMerchantAppDraft(merchant.OwnerUserID)
+	application.StorefrontImages = storefrontImages
 
-func TestGetUserMerchantApplicationAPI(t *testing.T) {
-	user, _ := randomUser(t)
-	application := randomMerchantApplication(user.ID)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
 
-	testCases := []struct {
-		name          string
-		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
-		buildStubs    func(store *mockdb.MockStore)
-		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
-	}{
-		{
-			name: "OK",
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetUserMerchantApplication(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(application, nil)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
-				var response merchantApplicationResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
-				require.Equal(t, application.ID, response.ID)
-				require.Equal(t, application.MerchantName, response.MerchantName)
-			},
-		},
-		{
-			name: "NotFound",
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetUserMerchantApplication(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(db.MerchantApplication{}, sql.ErrNoRows)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusNotFound, recorder.Code)
-			},
-		},
-		{
-			name: "NoAuthorization",
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				// No authorization
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetUserMerchantApplication(gomock.Any(), gomock.Any()).
-					Times(0)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusUnauthorized, recorder.Code)
-			},
-		},
-	}
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetMerchant(gomock.Any(), merchant.ID).
+		Times(1).
+		Return(merchant, nil)
+	store.EXPECT().
+		GetMerchantApplicationDraft(gomock.Any(), merchant.OwnerUserID).
+		Times(1).
+		Return(application, nil)
+	store.EXPECT().
+		ListMerchantTags(gomock.Any(), merchant.ID).
+		Times(1).
+		Return([]db.Tag{}, nil)
+	store.EXPECT().
+		ListMerchantSystemLabels(gomock.Any(), merchant.ID).
+		Times(1).
+		Return([]db.Tag{{Name: db.SystemTagNoOpenKitchen}}, nil)
+	store.EXPECT().
+		GetMerchantProfile(gomock.Any(), merchant.ID).
+		Times(1).
+		Return(db.GetMerchantProfileRow{}, nil)
+	store.EXPECT().
+		GetMerchantAvgPrepMinutes(gomock.Any(), merchant.ID).
+		Times(1).
+		Return(int32(0), nil)
+	store.EXPECT().
+		ListMerchantBusinessHours(gomock.Any(), merchant.ID).
+		Times(1).
+		Return([]db.MerchantBusinessHour{}, nil)
+	store.EXPECT().
+		ListMerchantActiveDiscountRules(gomock.Any(), merchant.ID).
+		Times(1).
+		Return([]db.DiscountRule{}, nil)
+	store.EXPECT().
+		ListMerchantActiveVouchers(gomock.Any(), merchant.ID).
+		Times(1).
+		Return([]db.Voucher{}, nil)
+	store.EXPECT().
+		ListMerchantActiveDeliveryPromotions(gomock.Any(), merchant.ID).
+		Times(1).
+		Return([]db.MerchantDeliveryPromotion{}, nil)
 
-	for i := range testCases {
-		tc := testCases[i]
-		t.Run(tc.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
+	server := newTestServer(t, store)
+	server.config.FileStorageProvider = "local"
 
-			store := mockdb.NewMockStore(ctrl)
-			tc.buildStubs(store)
+	request, err := http.NewRequest(http.MethodGet, "/v1/public/merchants/"+strconv.FormatInt(merchant.ID, 10), nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, merchant.OwnerUserID, time.Minute)
 
-			server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
 
-			url := "/v1/merchants/applications/me"
-			request, err := http.NewRequest(http.MethodGet, url, nil)
-			require.NoError(t, err)
-
-			tc.setupAuth(t, request, server.tokenMaker)
-
-			recorder := httptest.NewRecorder()
-			server.router.ServeHTTP(recorder, request)
-			tc.checkResponse(t, recorder)
-		})
-	}
+	var resp publicMerchantDetailResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.NotNil(t, resp.CoverImage)
+	require.Equal(t, "/dev/uploads/merchants/12/storefront/cover.jpg", *resp.CoverImage)
+	require.Equal(t, []string{db.SystemTagNoOpenKitchen}, resp.SystemLabels)
 }
 
-// ==================== 商户申请列表测试 ====================
+func TestGetPublicMerchantDetail_ReturnsOrderingSuspendedFlag(t *testing.T) {
+	merchant := randomMerchant(util.RandomInt(1, 1000))
 
-func TestListMerchantApplicationsAPI(t *testing.T) {
-	user, _ := randomUser(t)
-	applications := make([]db.MerchantApplication, 3)
-	for i := 0; i < 3; i++ {
-		applications[i] = randomMerchantApplication(user.ID)
-	}
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
 
-	testCases := []struct {
-		name          string
-		query         string
-		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
-		buildStubs    func(store *mockdb.MockStore)
-		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
-	}{
-		{
-			name:  "OK",
-			query: "?page_id=1&page_size=10",
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				// Admin role check
-				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), db.GetUserRoleByTypeParams{
-						UserID: user.ID,
-						Role:   "admin",
-					}).
-					Times(1).
-					Return(db.UserRole{ID: 1, UserID: user.ID, Role: "admin"}, nil)
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetMerchant(gomock.Any(), merchant.ID).
+		Times(1).
+		Return(merchant, nil)
+	store.EXPECT().
+		ListMerchantTags(gomock.Any(), merchant.ID).
+		Times(1).
+		Return([]db.Tag{}, nil)
+	store.EXPECT().
+		ListMerchantSystemLabels(gomock.Any(), merchant.ID).
+		Times(1).
+		Return([]db.Tag{}, nil)
+	store.EXPECT().
+		GetMerchantProfile(gomock.Any(), merchant.ID).
+		Times(1).
+		Return(db.GetMerchantProfileRow{IsTakeoutSuspended: true}, nil)
+	store.EXPECT().
+		GetMerchantAvgPrepMinutes(gomock.Any(), merchant.ID).
+		Times(1).
+		Return(int32(0), nil)
+	store.EXPECT().
+		ListMerchantActiveDiscountRules(gomock.Any(), merchant.ID).
+		Times(1).
+		Return([]db.DiscountRule{}, nil)
+	store.EXPECT().
+		ListMerchantActiveVouchers(gomock.Any(), merchant.ID).
+		Times(1).
+		Return([]db.Voucher{}, nil)
+	store.EXPECT().
+		ListMerchantActiveDeliveryPromotions(gomock.Any(), merchant.ID).
+		Times(1).
+		Return([]db.MerchantDeliveryPromotion{}, nil)
 
-				arg := db.ListAllMerchantApplicationsParams{
-					Limit:  10,
-					Offset: 0,
-				}
-				store.EXPECT().
-					ListAllMerchantApplications(gomock.Any(), gomock.Eq(arg)).
-					Times(1).
-					Return(applications, nil)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
-				var response []merchantApplicationResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
-				require.Len(t, response, 3)
-			},
-		},
-		{
-			name:  "WithStatusFilter",
-			query: "?page_id=1&page_size=10&status=pending",
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				// Admin role check
-				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), db.GetUserRoleByTypeParams{
-						UserID: user.ID,
-						Role:   "admin",
-					}).
-					Times(1).
-					Return(db.UserRole{ID: 1, UserID: user.ID, Role: "admin"}, nil)
+	server := newTestServer(t, store)
 
-				arg := db.ListMerchantApplicationsParams{
-					Status: "pending",
-					Limit:  10,
-					Offset: 0,
-				}
-				store.EXPECT().
-					ListMerchantApplications(gomock.Any(), gomock.Eq(arg)).
-					Times(1).
-					Return(applications, nil)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
-			},
-		},
-		{
-			name:  "NoAuthorization",
-			query: "?page_id=1&page_size=10",
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				// No authorization
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), gomock.Any()).
-					Times(0)
-				store.EXPECT().
-					ListAllMerchantApplications(gomock.Any(), gomock.Any()).
-					Times(0)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusUnauthorized, recorder.Code)
-			},
-		},
-		{
-			name:  "InvalidPageID",
-			query: "?page_id=0&page_size=10",
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), gomock.Any()).
-					Times(0)
-				store.EXPECT().
-					ListAllMerchantApplications(gomock.Any(), gomock.Any()).
-					Times(0)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusBadRequest, recorder.Code)
-			},
-		},
-	}
+	request, err := http.NewRequest(http.MethodGet, "/v1/public/merchants/"+strconv.FormatInt(merchant.ID, 10)+"?lite=true", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, merchant.OwnerUserID, time.Minute)
 
-	for i := range testCases {
-		tc := testCases[i]
-		t.Run(tc.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
 
-			store := mockdb.NewMockStore(ctrl)
-			tc.buildStubs(store)
-
-			server := newTestServer(t, store)
-
-			url := "/v1/admin/merchants/applications" + tc.query
-			request, err := http.NewRequest(http.MethodGet, url, nil)
-			require.NoError(t, err)
-
-			tc.setupAuth(t, request, server.tokenMaker)
-
-			recorder := httptest.NewRecorder()
-			server.router.ServeHTTP(recorder, request)
-			tc.checkResponse(t, recorder)
-		})
-	}
-}
-
-// ==================== 审核商户申请测试 ====================
-
-func TestReviewMerchantApplicationAPI(t *testing.T) {
-	user, _ := randomUser(t)
-	application := randomMerchantApplication(user.ID)
-	application.Status = "pending"
-
-	testCases := []struct {
-		name          string
-		body          gin.H
-		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
-		buildStubs    func(store *mockdb.MockStore)
-		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
-	}{
-		{
-			name: "ApproveOK",
-			body: gin.H{
-				"application_id": application.ID,
-				"approve":        true,
-			},
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				// Admin role check
-				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), db.GetUserRoleByTypeParams{
-						UserID: user.ID,
-						Role:   "admin",
-					}).
-					Times(1).
-					Return(db.UserRole{ID: 1, UserID: user.ID, Role: "admin"}, nil)
-
-				store.EXPECT().
-					GetMerchantApplication(gomock.Any(), gomock.Eq(application.ID)).
-					Times(1).
-					Return(application, nil)
-
-				store.EXPECT().
-					UpdateMerchantApplicationStatus(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.MerchantApplication{
-						ID:           application.ID,
-						UserID:       application.UserID,
-						MerchantName: application.MerchantName,
-						Status:       "approved",
-					}, nil)
-
-				store.EXPECT().
-					CreateMerchant(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.Merchant{
-						ID:          1,
-						OwnerUserID: application.UserID,
-						Name:        application.MerchantName,
-						Status:      "approved",
-					}, nil)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
-			},
-		},
-		{
-			name: "RejectOK",
-			body: gin.H{
-				"application_id": application.ID,
-				"approve":        false,
-				"reject_reason":  "资料不完整",
-			},
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				// Admin role check
-				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), db.GetUserRoleByTypeParams{
-						UserID: user.ID,
-						Role:   "admin",
-					}).
-					Times(1).
-					Return(db.UserRole{ID: 1, UserID: user.ID, Role: "admin"}, nil)
-
-				store.EXPECT().
-					GetMerchantApplication(gomock.Any(), gomock.Eq(application.ID)).
-					Times(1).
-					Return(application, nil)
-
-				store.EXPECT().
-					UpdateMerchantApplicationStatus(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.MerchantApplication{
-						ID:           application.ID,
-						UserID:       application.UserID,
-						MerchantName: application.MerchantName,
-						Status:       "rejected",
-					}, nil)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
-			},
-		},
-		{
-			name: "NotFound",
-			body: gin.H{
-				"application_id": 99999,
-				"approve":        true,
-			},
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				// Admin role check
-				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), db.GetUserRoleByTypeParams{
-						UserID: user.ID,
-						Role:   "admin",
-					}).
-					Times(1).
-					Return(db.UserRole{ID: 1, UserID: user.ID, Role: "admin"}, nil)
-
-				store.EXPECT().
-					GetMerchantApplication(gomock.Any(), gomock.Eq(int64(99999))).
-					Times(1).
-					Return(db.MerchantApplication{}, sql.ErrNoRows)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusNotFound, recorder.Code)
-			},
-		},
-		{
-			name: "NoAuthorization",
-			body: gin.H{
-				"application_id": application.ID,
-				"approve":        true,
-			},
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				// No authorization
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), gomock.Any()).
-					Times(0)
-				store.EXPECT().
-					GetMerchantApplication(gomock.Any(), gomock.Any()).
-					Times(0)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusUnauthorized, recorder.Code)
-			},
-		},
-		{
-			name: "AlreadyReviewed",
-			body: gin.H{
-				"application_id": application.ID,
-				"approve":        true,
-			},
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				// Admin role check
-				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), db.GetUserRoleByTypeParams{
-						UserID: user.ID,
-						Role:   "admin",
-					}).
-					Times(1).
-					Return(db.UserRole{ID: 1, UserID: user.ID, Role: "admin"}, nil)
-
-				approvedApp := application
-				approvedApp.Status = "approved"
-				store.EXPECT().
-					GetMerchantApplication(gomock.Any(), gomock.Eq(application.ID)).
-					Times(1).
-					Return(approvedApp, nil)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusBadRequest, recorder.Code)
-			},
-		},
-	}
-
-	for i := range testCases {
-		tc := testCases[i]
-		t.Run(tc.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
-
-			store := mockdb.NewMockStore(ctrl)
-			tc.buildStubs(store)
-
-			server := newTestServer(t, store)
-
-			data, err := json.Marshal(tc.body)
-			require.NoError(t, err)
-
-			url := "/v1/admin/merchants/applications/review"
-			request, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(data))
-			require.NoError(t, err)
-
-			tc.setupAuth(t, request, server.tokenMaker)
-
-			recorder := httptest.NewRecorder()
-			server.router.ServeHTTP(recorder, request)
-			tc.checkResponse(t, recorder)
-		})
-	}
+	var resp publicMerchantDetailResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.True(t, resp.IsOrderingSuspended)
 }

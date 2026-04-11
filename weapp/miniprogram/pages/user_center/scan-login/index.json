@@ -1,0 +1,10 @@
+{
+    "usingComponents": {
+        "t-button": "tdesign-miniprogram/button/button",
+        "t-icon": "tdesign-miniprogram/icon/icon",
+        "t-result": "tdesign-miniprogram/result/result",
+        "t-loading": "tdesign-miniprogram/loading/loading",
+        "custom-navbar": "/components/custom-navbar/index"
+    },
+    "navigationStyle": "custom"
+}

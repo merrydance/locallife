@@ -4,7 +4,7 @@
 
 type EventHandler = (data?: unknown) => void
 
-class EventBus {
+export class EventBus {
   private events: Map<string, EventHandler[]> = new Map()
 
   /**

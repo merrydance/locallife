@@ -21,14 +21,35 @@ export interface LocationInfo {
     street_number?: string // 门牌号
 }
 
+interface GlobalLocationData {
+    name?: string
+    address?: string
+    province?: string
+    city?: string
+    district?: string
+}
+
+export interface OpenLocationOptions {
+    latitude?: number | null
+    longitude?: number | null
+    name?: string
+    address?: string
+    scale?: number
+    failMessage?: string
+}
+
 /**
  * 位置服务类
  */
 class LocationService {
+    private hasValidCoordinates(latitude?: number | null, longitude?: number | null): boolean {
+        return Number.isFinite(latitude) && Number.isFinite(longitude)
+    }
+
     /**
      * 获取当前位置（经纬度）
      */
-    async getCurrentLocation(): Promise<{ latitude: number; longitude: number }> {
+    async getCurrentLocation(): Promise<{ latitude: number, longitude: number }> {
         return new Promise((resolve, reject) => {
             wx.getLocation({
                 type: 'gcj02', // 返回可以用于wx.openLocation的坐标
@@ -128,6 +149,46 @@ class LocationService {
         })
     }
 
+    async openLocation(options: OpenLocationOptions): Promise<boolean> {
+        const {
+            latitude,
+            longitude,
+            name,
+            address,
+            scale = 18,
+            failMessage = '暂时无法打开导航，请稍后重试'
+        } = options
+
+        if (!this.hasValidCoordinates(latitude, longitude)) {
+            wx.showToast({ title: '当前缺少可导航坐标', icon: 'none' })
+            return false
+        }
+
+        return new Promise((resolve) => {
+            wx.openLocation({
+                latitude: Number(latitude),
+                longitude: Number(longitude),
+                name: name || address || '目的地',
+                address: address || name || '目的地',
+                scale,
+                fail: (err) => {
+                    logger.warn('打开位置失败', err, 'LocationService.openLocation')
+                    wx.showToast({ title: failMessage, icon: 'none' })
+                    resolve(false)
+                },
+                success: () => {
+                    logger.info('打开位置成功', {
+                        latitude,
+                        longitude,
+                        name,
+                        address
+                    }, 'LocationService.openLocation')
+                    resolve(true)
+                }
+            })
+        })
+    }
+
     /**
      * 获取完整的位置信息（位置+地址）
      */
@@ -171,7 +232,7 @@ class LocationService {
         try {
             const app = getApp<IAppOption>()
             if (app && app.globalData && app.globalData.latitude && app.globalData.longitude) {
-                const location = app.globalData.location as any
+                const location = app.globalData.location as GlobalLocationData | undefined
                 return {
                     latitude: app.globalData.latitude,
                     longitude: app.globalData.longitude,
@@ -267,7 +328,7 @@ export function getDeviceId(): string {
 
     // 优先使用缓存的device_id
     try {
-        let deviceId = wx.getStorageSync(STORAGE_KEY)
+        const deviceId = wx.getStorageSync(STORAGE_KEY)
         if (deviceId) {
             return deviceId
         }

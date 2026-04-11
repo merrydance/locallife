@@ -3,16 +3,19 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/util"
+	"github.com/merrydance/locallife/wechat"
+	wechatmock "github.com/merrydance/locallife/wechat/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
@@ -28,255 +31,18 @@ func randomRider(userID int64) db.Rider {
 		DepositAmount: 30000, // 300元
 		FrozenDeposit: 0,
 		IsOnline:      false,
+		RegionID:      pgtype.Int8{Int64: 1, Valid: true},
 		TotalOrders:   0,
 		TotalEarnings: 0,
 		CreatedAt:     time.Now(),
 	}
 }
 
-func TestApplyRiderAPI(t *testing.T) {
-	user, _ := randomUser(t)
-
-	testCases := []struct {
-		name          string
-		body          map[string]interface{}
-		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
-		buildStubs    func(store *mockdb.MockStore)
-		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
-	}{
-		{
-			name: "OK",
-			body: map[string]interface{}{
-				"real_name":  "张三",
-				"phone":      "13812345678",
-				"id_card_no": "110101199001011234",
-			},
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				// First check if already applied - should return not found
-				store.EXPECT().
-					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(db.Rider{}, pgx.ErrNoRows)
-
-				rider := randomRider(user.ID)
-				store.EXPECT().
-					CreateRider(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(rider, nil)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusCreated, recorder.Code)
-			},
-		},
-		{
-			name: "NoAuthorization",
-			body: map[string]interface{}{
-				"real_name":  "张三",
-				"phone":      "13812345678",
-				"id_card_no": "110101199001011234",
-			},
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetRiderByUserID(gomock.Any(), gomock.Any()).
-					Times(0)
-				store.EXPECT().
-					CreateRider(gomock.Any(), gomock.Any()).
-					Times(0)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusUnauthorized, recorder.Code)
-			},
-		},
-		{
-			name: "MissingField",
-			body: map[string]interface{}{
-				"real_name": "张三",
-				"phone":     "13812345678",
-				// missing id_card_no
-			},
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetRiderByUserID(gomock.Any(), gomock.Any()).
-					Times(0)
-				store.EXPECT().
-					CreateRider(gomock.Any(), gomock.Any()).
-					Times(0)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusBadRequest, recorder.Code)
-			},
-		},
-		{
-			name: "AlreadyApplied",
-			body: map[string]interface{}{
-				"real_name":  "张三",
-				"phone":      "13812345678",
-				"id_card_no": "110101199001011234",
-			},
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				// 已经申请过骑手
-				existingRider := randomRider(user.ID)
-				store.EXPECT().
-					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(existingRider, nil)
-				store.EXPECT().
-					CreateRider(gomock.Any(), gomock.Any()).
-					Times(0)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusConflict, recorder.Code)
-			},
-		},
-		{
-			name: "InvalidPhone_TooShort",
-			body: map[string]interface{}{
-				"real_name":  "张三",
-				"phone":      "1381234567", // 只有10位
-				"id_card_no": "110101199001011234",
-			},
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetRiderByUserID(gomock.Any(), gomock.Any()).
-					Times(0)
-				store.EXPECT().
-					CreateRider(gomock.Any(), gomock.Any()).
-					Times(0)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusBadRequest, recorder.Code)
-			},
-		},
-		{
-			name: "InvalidPhone_WrongPrefix",
-			body: map[string]interface{}{
-				"real_name":  "张三",
-				"phone":      "12812345678", // 以12开头
-				"id_card_no": "110101199001011234",
-			},
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetRiderByUserID(gomock.Any(), gomock.Any()).
-					Times(0)
-				store.EXPECT().
-					CreateRider(gomock.Any(), gomock.Any()).
-					Times(0)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusBadRequest, recorder.Code)
-			},
-		},
-		{
-			name: "InvalidIDCard_WrongLength",
-			body: map[string]interface{}{
-				"real_name":  "张三",
-				"phone":      "13812345678",
-				"id_card_no": "1101011990010112", // 只有16位
-			},
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetRiderByUserID(gomock.Any(), gomock.Any()).
-					Times(0)
-				store.EXPECT().
-					CreateRider(gomock.Any(), gomock.Any()).
-					Times(0)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusBadRequest, recorder.Code)
-			},
-		},
-		{
-			name: "InvalidIDCard_InvalidCharacter",
-			body: map[string]interface{}{
-				"real_name":  "张三",
-				"phone":      "13812345678",
-				"id_card_no": "11010119900101123A", // A不是有效字符
-			},
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetRiderByUserID(gomock.Any(), gomock.Any()).
-					Times(0)
-				store.EXPECT().
-					CreateRider(gomock.Any(), gomock.Any()).
-					Times(0)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusBadRequest, recorder.Code)
-			},
-		},
-		{
-			name: "RealNameTooShort",
-			body: map[string]interface{}{
-				"real_name":  "李", // 只有1个字
-				"phone":      "13812345678",
-				"id_card_no": "110101199001011234",
-			},
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetRiderByUserID(gomock.Any(), gomock.Any()).
-					Times(0)
-				store.EXPECT().
-					CreateRider(gomock.Any(), gomock.Any()).
-					Times(0)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusBadRequest, recorder.Code)
-			},
-		},
-	}
-
-	for i := range testCases {
-		tc := testCases[i]
-
-		t.Run(tc.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
-
-			store := mockdb.NewMockStore(ctrl)
-			tc.buildStubs(store)
-
-			server := newTestServer(t, store)
-			recorder := httptest.NewRecorder()
-
-			data, err := json.Marshal(tc.body)
-			require.NoError(t, err)
-
-			url := "/v1/rider/apply"
-			request, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(data))
-			require.NoError(t, err)
-
-			request.Header.Set("Content-Type", "application/json")
-			tc.setupAuth(t, request, server.tokenMaker)
-			server.router.ServeHTTP(recorder, request)
-			tc.checkResponse(t, recorder)
-		})
-	}
+func expectRiderThresholdFromOperator(store *mockdb.MockStore, rider db.Rider, threshold int64) {
+	store.EXPECT().
+		GetActiveOperatorByRegion(gomock.Any(), rider.RegionID.Int64).
+		Times(1).
+		Return(db.Operator{ID: 1, RiderDeposit: threshold}, nil)
 }
 
 func TestGetRiderMeAPI(t *testing.T) {
@@ -313,7 +79,7 @@ func TestGetRiderMeAPI(t *testing.T) {
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
-					Return(db.Rider{}, pgx.ErrNoRows)
+					Return(db.Rider{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -355,7 +121,7 @@ func TestGoOnlineAPI(t *testing.T) {
 		name          string
 		body          map[string]interface{}
 		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
-		buildStubs    func(store *mockdb.MockStore)
+		buildStubs    func(store *mockdb.MockStore, paymentClient *wechatmock.MockPaymentClientInterface)
 		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
 	}{
 		{
@@ -367,11 +133,12 @@ func TestGoOnlineAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {
+			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockPaymentClientInterface) {
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
 					Return(rider, nil)
+				expectRiderThresholdFromOperator(store, rider, db.DefaultRiderDepositThresholdFen)
 
 				updatedRider := rider
 				updatedRider.IsOnline = true
@@ -385,6 +152,27 @@ func TestGoOnlineAPI(t *testing.T) {
 			},
 		},
 		{
+			name: "BadRequest_ApprovedRider",
+			body: map[string]interface{}{
+				"longitude": 116.404,
+				"latitude":  39.915,
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockPaymentClientInterface) {
+				approvedRider := rider
+				approvedRider.Status = db.RiderStatusApproved
+				store.EXPECT().
+					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(approvedRider, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
 			name: "InsufficientDeposit",
 			body: map[string]interface{}{
 				"longitude": 116.404,
@@ -393,13 +181,14 @@ func TestGoOnlineAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {
+			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockPaymentClientInterface) {
 				insufficientRider := rider
 				insufficientRider.DepositAmount = 0
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
 					Return(insufficientRider, nil)
+				expectRiderThresholdFromOperator(store, insufficientRider, db.DefaultRiderDepositThresholdFen)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -414,7 +203,7 @@ func TestGoOnlineAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {
+			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockPaymentClientInterface) {
 				pendingRider := rider
 				pendingRider.Status = "pending"
 				store.EXPECT().
@@ -436,9 +225,10 @@ func TestGoOnlineAPI(t *testing.T) {
 			defer ctrl.Finish()
 
 			store := mockdb.NewMockStore(ctrl)
-			tc.buildStubs(store)
+			paymentClient := wechatmock.NewMockPaymentClientInterface(ctrl)
+			tc.buildStubs(store, paymentClient)
 
-			server := newTestServer(t, store)
+			server := newTestServerWithPayment(t, store, paymentClient)
 			recorder := httptest.NewRecorder()
 
 			data, err := json.Marshal(tc.body)
@@ -454,6 +244,49 @@ func TestGoOnlineAPI(t *testing.T) {
 			tc.checkResponse(t, recorder)
 		})
 	}
+}
+
+func TestGoOnlineAPI_UsesConfiguredDepositThreshold(t *testing.T) {
+	user, _ := randomUser(t)
+	rider := randomRider(user.ID)
+	rider.Status = db.RiderStatusActive
+	rider.DepositAmount = 25000
+	rider.RegionID = pgtype.Int8{Int64: 66, Valid: true}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	thresholdConfig, err := json.Marshal(depositConfigValue{AmountFen: 26000})
+	require.NoError(t, err)
+
+	store.EXPECT().
+		GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
+		Times(1).
+		Return(rider, nil)
+	store.EXPECT().
+		GetActiveOperatorByRegion(gomock.Any(), int64(66)).
+		Times(1).
+		Return(db.Operator{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		GetPlatformConfig(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(db.PlatformConfig{ConfigValue: thresholdConfig}, nil)
+	store.EXPECT().
+		UpdateRiderOnlineStatus(gomock.Any(), gomock.Any()).
+		Times(0)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	request, err := http.NewRequest(http.MethodPost, "/v1/rider/online", bytes.NewReader([]byte(`{}`)))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
 }
 
 func TestGoOfflineAPI(t *testing.T) {
@@ -569,6 +402,12 @@ func TestDepositRiderAPI(t *testing.T) {
 					Times(1).
 					Return(rider, nil)
 
+				// 幂等检查：无已有 pending 支付单
+				store.EXPECT().
+					GetPendingPaymentOrderByUserAndBusinessType(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.PaymentOrder{}, db.ErrRecordNotFound)
+
 				// 创建支付订单
 				store.EXPECT().
 					CreatePaymentOrder(gomock.Any(), gomock.Any()).
@@ -576,9 +415,9 @@ func TestDepositRiderAPI(t *testing.T) {
 					Return(db.PaymentOrder{
 						ID:           1,
 						UserID:       user.ID,
-						PaymentType:  "mini_program",
+						PaymentType:  "miniprogram",
 						BusinessType: "rider_deposit",
-						Amount:       10000,
+						Amount:       100 * fenPerYuan,
 						Status:       "pending",
 						OutTradeNo:   "test_order_123",
 					}, nil)
@@ -587,8 +426,7 @@ func TestDepositRiderAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				// 验证返回支付订单信息
 				var resp map[string]interface{}
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Contains(t, resp, "payment_order_id")
 				require.Contains(t, resp, "out_trade_no")
 			},
@@ -614,7 +452,7 @@ func TestDepositRiderAPI(t *testing.T) {
 		{
 			name: "RiderNotFound",
 			body: map[string]interface{}{
-				"amount": 10000,
+				"amount": 100 * fenPerYuan,
 				"remark": "充值押金",
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
@@ -624,7 +462,7 @@ func TestDepositRiderAPI(t *testing.T) {
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
-					Return(db.Rider{}, pgx.ErrNoRows)
+					Return(db.Rider{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -633,7 +471,7 @@ func TestDepositRiderAPI(t *testing.T) {
 		{
 			name: "RiderNotActive",
 			body: map[string]interface{}{
-				"amount": 10000,
+				"amount": 100 * fenPerYuan,
 				"remark": "充值押金",
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
@@ -684,8 +522,8 @@ func TestDepositRiderAPI(t *testing.T) {
 func TestGetRiderDepositBalanceAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	rider := randomRider(user.ID)
-	rider.DepositAmount = 50000 // 500元
-	rider.FrozenDeposit = 5000  // 冻结50元
+	rider.DepositAmount = 500 * fenPerYuan
+	rider.FrozenDeposit = 50 * fenPerYuan
 
 	testCases := []struct {
 		name          string
@@ -703,15 +541,39 @@ func TestGetRiderDepositBalanceAPI(t *testing.T) {
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
 					Return(rider, nil)
+				store.EXPECT().
+					GetPendingRiderDepositRefundAmountByUserID(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(int64(20*fenPerYuan), nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var resp depositBalanceResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
-				require.Equal(t, int64(50000), resp.TotalDeposit)
-				require.Equal(t, int64(5000), resp.FrozenDeposit)
-				require.Equal(t, int64(45000), resp.AvailableDeposit)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Equal(t, int64(500*fenPerYuan), resp.TotalDeposit)
+				require.Equal(t, int64(50*fenPerYuan), resp.FrozenDeposit)
+				require.Equal(t, int64(30*fenPerYuan), resp.DeliveryFrozenDeposit)
+				require.Equal(t, int64(20*fenPerYuan), resp.WithdrawalProcessingAmount)
+				require.Equal(t, int64(450*fenPerYuan), resp.AvailableDeposit)
+			},
+		},
+		{
+			name: "PendingRefundAmountError",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(rider, nil)
+				store.EXPECT().
+					GetPendingRiderDepositRefundAmountByUserID(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(int64(0), errors.New("query failed"))
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusInternalServerError, recorder.Code)
 			},
 		},
 		{
@@ -723,7 +585,10 @@ func TestGetRiderDepositBalanceAPI(t *testing.T) {
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
-					Return(db.Rider{}, pgx.ErrNoRows)
+					Return(db.Rider{}, db.ErrRecordNotFound)
+				store.EXPECT().
+					GetPendingRiderDepositRefundAmountByUserID(gomock.Any(), gomock.Any()).
+					Times(0)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -737,6 +602,9 @@ func TestGetRiderDepositBalanceAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), gomock.Any()).
+					Times(0)
+				store.EXPECT().
+					GetPendingRiderDepositRefundAmountByUserID(gomock.Any(), gomock.Any()).
 					Times(0)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
@@ -773,26 +641,26 @@ func TestWithdrawRiderAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	rider := randomRider(user.ID)
 	rider.Status = "active"
-	rider.DepositAmount = 50000 // 500元
-	rider.FrozenDeposit = 5000  // 冻结50元
+	rider.DepositAmount = 500 * fenPerYuan
+	rider.FrozenDeposit = 0
 
 	testCases := []struct {
 		name          string
 		body          map[string]interface{}
 		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
-		buildStubs    func(store *mockdb.MockStore)
+		buildStubs    func(store *mockdb.MockStore, paymentClient *wechatmock.MockPaymentClientInterface)
 		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
 	}{
 		{
 			name: "OK",
 			body: map[string]interface{}{
-				"amount": 10000, // 100元
+				"amount": 100 * fenPerYuan,
 				"remark": "提现押金",
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {
+			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockPaymentClientInterface) {
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
@@ -804,32 +672,37 @@ func TestWithdrawRiderAPI(t *testing.T) {
 					Times(1).
 					Return([]db.Delivery{}, nil)
 
-				// 执行提现事务
 				store.EXPECT().
-					WithdrawDepositTx(gomock.Any(), gomock.Any()).
+					PrepareRiderDepositRefundTx(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.WithdrawDepositTxResult{
+					Return(db.PrepareRiderDepositRefundTxResult{
 						Rider: db.Rider{
 							ID:            rider.ID,
-							DepositAmount: 40000,
-							FrozenDeposit: 5000,
+							DepositAmount: 500 * fenPerYuan,
+							FrozenDeposit: 150 * fenPerYuan,
 						},
-						DepositLog: db.RiderDeposit{
-							ID:           1,
-							RiderID:      rider.ID,
-							Amount:       10000,
-							Type:         "withdraw",
-							BalanceAfter: 40000,
-						},
+						RefundPlans: []db.RiderDepositRefundPlan{{
+							RefundOrder:        db.RefundOrder{ID: 1, PaymentOrderID: 91, RefundAmount: 100 * fenPerYuan, OutRefundNo: "RTEST123"},
+							SourcePaymentOrder: db.PaymentOrder{ID: 91, OutTradeNo: "PTEST123", Amount: 100 * fenPerYuan},
+						}},
 					}, nil)
+
+				paymentClient.EXPECT().
+					CreateRefund(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(&wechat.RefundResponse{RefundID: "wx_refund_1", Status: wechat.RefundStatusProcessing}, nil)
+
+				store.EXPECT().
+					UpdateRefundOrderToProcessing(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.RefundOrder{ID: 1, RefundAmount: 100 * fenPerYuan, OutRefundNo: "RTEST123", Status: "processing"}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
-				var resp depositResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
-				require.Equal(t, int64(10000), resp.Amount)
-				require.Equal(t, "withdraw", resp.Type)
+				require.Equal(t, http.StatusAccepted, recorder.Code)
+				var resp riderWithdrawResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Equal(t, int64(100*fenPerYuan), resp.AcceptedAmount)
+				require.Equal(t, riderWithdrawProcessingStatus, resp.Status)
 			},
 		},
 		{
@@ -841,7 +714,7 @@ func TestWithdrawRiderAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {
+			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockPaymentClientInterface) {
 				// 不应该调用任何 store 方法
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), gomock.Any()).
@@ -860,7 +733,7 @@ func TestWithdrawRiderAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {
+			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockPaymentClientInterface) {
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), gomock.Any()).
 					Times(0)
@@ -872,13 +745,13 @@ func TestWithdrawRiderAPI(t *testing.T) {
 		{
 			name: "RiderNotActive",
 			body: map[string]interface{}{
-				"amount": 10000,
+				"amount": 100 * fenPerYuan,
 				"remark": "提现押金",
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {
+			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockPaymentClientInterface) {
 				pendingRider := rider
 				pendingRider.Status = "pending"
 				store.EXPECT().
@@ -893,13 +766,13 @@ func TestWithdrawRiderAPI(t *testing.T) {
 		{
 			name: "InsufficientBalance",
 			body: map[string]interface{}{
-				"amount": 100000, // 超过可用余额 45000
+				"amount": 1000 * fenPerYuan,
 				"remark": "提现押金",
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {
+			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockPaymentClientInterface) {
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
@@ -910,15 +783,43 @@ func TestWithdrawRiderAPI(t *testing.T) {
 			},
 		},
 		{
-			name: "HasActiveDeliveries",
+			name: "FrozenDepositBlocked",
 			body: map[string]interface{}{
-				"amount": 10000,
+				"amount": 100 * fenPerYuan,
 				"remark": "提现押金",
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {
+			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockPaymentClientInterface) {
+				frozenRider := rider
+				frozenRider.FrozenDeposit = 50 * fenPerYuan
+				store.EXPECT().
+					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(frozenRider, nil)
+
+				store.EXPECT().
+					ListRiderActiveDeliveries(gomock.Any(), gomock.Any()).
+					Times(0)
+				store.EXPECT().
+					PrepareRiderDepositRefundTx(gomock.Any(), gomock.Any()).
+					Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusConflict, recorder.Code)
+			},
+		},
+		{
+			name: "HasActiveDeliveries",
+			body: map[string]interface{}{
+				"amount": 100 * fenPerYuan,
+				"remark": "提现押金",
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockPaymentClientInterface) {
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
@@ -943,9 +844,10 @@ func TestWithdrawRiderAPI(t *testing.T) {
 			defer ctrl.Finish()
 
 			store := mockdb.NewMockStore(ctrl)
-			tc.buildStubs(store)
+			paymentClient := wechatmock.NewMockPaymentClientInterface(ctrl)
+			tc.buildStubs(store, paymentClient)
 
-			server := newTestServer(t, store)
+			server := newTestServerWithPayment(t, store, paymentClient)
 			recorder := httptest.NewRecorder()
 
 			data, err := json.Marshal(tc.body)
@@ -969,8 +871,8 @@ func TestListRiderDepositsAPI(t *testing.T) {
 
 	// 创建测试押金流水
 	deposits := []db.RiderDeposit{
-		{ID: 1, RiderID: rider.ID, Amount: 10000, Type: "deposit", BalanceAfter: 10000},
-		{ID: 2, RiderID: rider.ID, Amount: 5000, Type: "withdraw", BalanceAfter: 5000},
+		{ID: 1, RiderID: rider.ID, Amount: 100 * fenPerYuan, Type: "deposit", BalanceAfter: 100 * fenPerYuan},
+		{ID: 2, RiderID: rider.ID, Amount: 50 * fenPerYuan, Type: "withdraw", BalanceAfter: 50 * fenPerYuan},
 	}
 
 	testCases := []struct {
@@ -1000,13 +902,18 @@ func TestListRiderDepositsAPI(t *testing.T) {
 					}).
 					Times(1).
 					Return(deposits, nil)
+
+				store.EXPECT().
+					CountRiderDeposits(gomock.Any(), gomock.Eq(rider.ID)).
+					Times(1).
+					Return(int64(23), nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
-				var resp []depositResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
-				require.Len(t, resp, 2)
+				var resp listRiderDepositsResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Len(t, resp.Deposits, 2)
+				require.Equal(t, int64(23), resp.Total)
 			},
 		},
 		{
@@ -1029,6 +936,11 @@ func TestListRiderDepositsAPI(t *testing.T) {
 					}).
 					Times(1).
 					Return(deposits, nil)
+
+				store.EXPECT().
+					CountRiderDeposits(gomock.Any(), gomock.Eq(rider.ID)).
+					Times(1).
+					Return(int64(23), nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -1050,14 +962,19 @@ func TestListRiderDepositsAPI(t *testing.T) {
 					ListRiderDeposits(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return([]db.RiderDeposit{}, nil) // 空列表
+
+				store.EXPECT().
+					CountRiderDeposits(gomock.Any(), gomock.Eq(rider.ID)).
+					Times(1).
+					Return(int64(0), nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
-				var resp []depositResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
-				require.NotNil(t, resp) // 确保返回空数组而非 null
-				require.Len(t, resp, 0)
+				var resp listRiderDepositsResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.NotNil(t, resp.Deposits) // 确保返回空数组而非 null
+				require.Len(t, resp.Deposits, 0)
+				require.Equal(t, int64(0), resp.Total)
 			},
 		},
 	}
@@ -1116,12 +1033,12 @@ func TestGetRiderStatusAPI(t *testing.T) {
 					ListRiderActiveDeliveries(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return([]db.Delivery{}, nil)
+				expectRiderThresholdFromOperator(store, rider, db.DefaultRiderDepositThresholdFen)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var resp riderStatusResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Equal(t, "active", resp.Status)
 				require.True(t, resp.IsOnline)
 				require.Equal(t, "online", resp.OnlineStatus)
@@ -1145,12 +1062,12 @@ func TestGetRiderStatusAPI(t *testing.T) {
 					ListRiderActiveDeliveries(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return([]db.Delivery{{ID: 1}}, nil)
+				expectRiderThresholdFromOperator(store, rider, db.DefaultRiderDepositThresholdFen)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var resp riderStatusResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Equal(t, "delivering", resp.OnlineStatus)
 				require.Equal(t, 1, resp.ActiveDeliveries)
 				require.False(t, resp.CanGoOffline) // 有配送中订单不能下线
@@ -1173,12 +1090,12 @@ func TestGetRiderStatusAPI(t *testing.T) {
 					ListRiderActiveDeliveries(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return([]db.Delivery{}, nil)
+				expectRiderThresholdFromOperator(store, offlineRider, db.DefaultRiderDepositThresholdFen)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var resp riderStatusResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Equal(t, "offline", resp.OnlineStatus)
 				require.False(t, resp.CanGoOffline) // 已经离线，不能再下线
 			},
@@ -1201,12 +1118,41 @@ func TestGetRiderStatusAPI(t *testing.T) {
 					ListRiderActiveDeliveries(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return([]db.Delivery{}, nil)
+				expectRiderThresholdFromOperator(store, insufficientRider, db.DefaultRiderDepositThresholdFen)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var resp riderStatusResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.False(t, resp.CanGoOnline)
+				require.Contains(t, resp.OnlineBlockReason, "押金不足")
+			},
+		},
+		{
+			name: "OK_ApprovedRiderCannotGoOnline",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				approvedRider := rider
+				approvedRider.Status = db.RiderStatusApproved
+				approvedRider.IsOnline = false
+				store.EXPECT().
+					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(approvedRider, nil)
+
+				store.EXPECT().
+					ListRiderActiveDeliveries(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return([]db.Delivery{}, nil)
+				expectRiderThresholdFromOperator(store, approvedRider, db.DefaultRiderDepositThresholdFen)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var resp riderStatusResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Equal(t, "approved", resp.Status)
 				require.False(t, resp.CanGoOnline)
 				require.Contains(t, resp.OnlineBlockReason, "押金不足")
 			},
@@ -1220,7 +1166,7 @@ func TestGetRiderStatusAPI(t *testing.T) {
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
-					Return(db.Rider{}, pgx.ErrNoRows)
+					Return(db.Rider{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -1318,8 +1264,7 @@ func TestUpdateRiderLocationAPI(t *testing.T) {
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var resp map[string]interface{}
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Equal(t, "位置更新成功", resp["message"])
 				require.Equal(t, float64(1), resp["count"])
 			},
@@ -1372,8 +1317,7 @@ func TestUpdateRiderLocationAPI(t *testing.T) {
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var resp map[string]interface{}
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Equal(t, float64(3), resp["count"])
 			},
 		},
@@ -1515,7 +1459,7 @@ func TestUpdateRiderLocationAPI(t *testing.T) {
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
-					Return(db.Rider{}, pgx.ErrNoRows)
+					Return(db.Rider{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -1570,333 +1514,95 @@ func TestUpdateRiderLocationAPI(t *testing.T) {
 	}
 }
 
-// ==================== 高值单资格积分测试 ====================
-
-func TestGetRiderPremiumScoreAPI(t *testing.T) {
+func TestUpdateRiderLocationGeofenceEvents(t *testing.T) {
 	user, _ := randomUser(t)
 	rider := randomRider(user.ID)
+	rider.Status = "active"
+	rider.IsOnline = true
 
-	testCases := []struct {
-		name          string
-		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
-		buildStubs    func(store *mockdb.MockStore)
-		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
-	}{
-		{
-			name: "OK_CanAcceptPremiumOrder",
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetRiderByUserID(gomock.Any(), user.ID).
-					Times(1).
-					Return(rider, nil)
+	now := time.Now()
+	deliveryID := int64(101)
+	orderID := int64(202)
 
-				store.EXPECT().
-					GetRiderPremiumScoreWithProfile(gomock.Any(), rider.ID).
-					Times(1).
-					Return(db.GetRiderPremiumScoreWithProfileRow{
-						RiderID:               rider.ID,
-						RealName:              rider.RealName,
-						PremiumScore:          5,
-						CanAcceptPremiumOrder: true,
-					}, nil)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
-				var resp riderPremiumScoreResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
-				require.Equal(t, rider.ID, resp.RiderID)
-				require.Equal(t, int16(5), resp.PremiumScore)
-				require.True(t, resp.CanAcceptPremiumOrder)
-			},
-		},
-		{
-			name: "OK_CannotAcceptPremiumOrder",
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetRiderByUserID(gomock.Any(), user.ID).
-					Times(1).
-					Return(rider, nil)
+	delivery := db.Delivery{
+		ID:              deliveryID,
+		OrderID:         orderID,
+		RiderID:         pgtype.Int8{Int64: rider.ID, Valid: true},
+		PickupLongitude: numericFromFloat(116.404),
+		PickupLatitude:  numericFromFloat(39.915),
+		Status:          "assigned",
+	}
 
-				store.EXPECT().
-					GetRiderPremiumScoreWithProfile(gomock.Any(), rider.ID).
-					Times(1).
-					Return(db.GetRiderPremiumScoreWithProfileRow{
-						RiderID:               rider.ID,
-						RealName:              rider.RealName,
-						PremiumScore:          -2,
-						CanAcceptPremiumOrder: false,
-					}, nil)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
-				var resp riderPremiumScoreResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
-				require.Equal(t, int16(-2), resp.PremiumScore)
-				require.False(t, resp.CanAcceptPremiumOrder)
-			},
-		},
-		{
-			name: "NotARider",
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetRiderByUserID(gomock.Any(), user.ID).
-					Times(1).
-					Return(db.Rider{}, pgx.ErrNoRows)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusNotFound, recorder.Code)
-			},
-		},
-		{
-			name: "ProfileNotFound",
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetRiderByUserID(gomock.Any(), user.ID).
-					Times(1).
-					Return(rider, nil)
-
-				store.EXPECT().
-					GetRiderPremiumScoreWithProfile(gomock.Any(), rider.ID).
-					Times(1).
-					Return(db.GetRiderPremiumScoreWithProfileRow{}, pgx.ErrNoRows)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusNotFound, recorder.Code)
-			},
-		},
-		{
-			name: "NoAuthorization",
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusUnauthorized, recorder.Code)
+	body := map[string]interface{}{
+		"locations": []map[string]interface{}{
+			{
+				"delivery_id": deliveryID,
+				"longitude":   116.404,
+				"latitude":    39.915,
+				"accuracy":    10.0,
+				"recorded_at": now.Format(time.RFC3339),
+				"source":      "gps",
 			},
 		},
 	}
 
-	for i := range testCases {
-		tc := testCases[i]
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
 
-		t.Run(tc.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
+	store := mockdb.NewMockStore(ctrl)
 
-			store := mockdb.NewMockStore(ctrl)
-			tc.buildStubs(store)
+	store.EXPECT().
+		GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
+		Times(1).
+		Return(rider, nil)
 
-			server := newTestServer(t, store)
-			recorder := httptest.NewRecorder()
+	store.EXPECT().
+		ListRiderActiveDeliveries(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return([]db.Delivery{delivery}, nil)
 
-			url := "/v1/rider/score"
-			request, err := http.NewRequest(http.MethodGet, url, nil)
-			require.NoError(t, err)
+	store.EXPECT().
+		BatchCreateRiderLocations(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(int64(1), nil)
 
-			tc.setupAuth(t, request, server.tokenMaker)
-			server.router.ServeHTTP(recorder, request)
-			tc.checkResponse(t, recorder)
-		})
-	}
-}
+	store.EXPECT().
+		UpdateRiderLocation(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(rider, nil)
 
-func TestListRiderPremiumScoreHistoryAPI(t *testing.T) {
-	user, _ := randomUser(t)
-	rider := randomRider(user.ID)
+	store.EXPECT().
+		GetDelivery(gomock.Any(), gomock.Eq(deliveryID)).
+		Times(1).
+		Return(delivery, nil)
 
-	testCases := []struct {
-		name          string
-		query         string
-		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
-		buildStubs    func(store *mockdb.MockStore)
-		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
-	}{
-		{
-			name:  "OK",
-			query: "?page_id=1&page_size=10",
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetRiderByUserID(gomock.Any(), user.ID).
-					Times(1).
-					Return(rider, nil)
+	store.EXPECT().
+		CreateDeliveryLocationEvent(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(db.DeliveryLocationEvent{}, nil)
 
-				store.EXPECT().
-					GetRiderPremiumScore(gomock.Any(), rider.ID).
-					Times(1).
-					Return(int16(3), nil)
+	store.EXPECT().
+		ListDeliveryLocationsSince(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return([]db.RiderLocation{}, nil)
 
-				store.EXPECT().
-					CountRiderPremiumScoreLogs(gomock.Any(), rider.ID).
-					Times(1).
-					Return(int64(2), nil)
+	server := newTestServer(t, store)
+	server.config.GeofenceRadiusMeters = 80
+	server.config.GeofenceDwellMinSeconds = 60
+	server.config.GeofenceDwellMinSamples = 3
+	server.config.GeofenceMinAccuracyMeters = 80
+	server.config.GeofenceAutoAdvanceEnabled = false
 
-				store.EXPECT().
-					ListRiderPremiumScoreLogs(gomock.Any(), db.ListRiderPremiumScoreLogsParams{
-						RiderID: rider.ID,
-						Limit:   10,
-						Offset:  0,
-					}).
-					Times(1).
-					Return([]db.RiderPremiumScoreLog{
-						{
-							ID:           1,
-							RiderID:      rider.ID,
-							ChangeAmount: 1,
-							OldScore:     2,
-							NewScore:     3,
-							ChangeType:   "normal_order",
-							CreatedAt:    time.Now(),
-						},
-						{
-							ID:           2,
-							RiderID:      rider.ID,
-							ChangeAmount: -3,
-							OldScore:     5,
-							NewScore:     2,
-							ChangeType:   "premium_order",
-							CreatedAt:    time.Now().Add(-time.Hour),
-						},
-					}, nil)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
-				var resp listRiderPremiumScoreHistoryResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
-				require.Equal(t, int16(3), resp.CurrentScore)
-				require.Equal(t, int64(2), resp.Total)
-				require.Len(t, resp.Logs, 2)
-				require.Equal(t, "完成普通单", resp.Logs[0].ChangeTypeName)
-				require.Equal(t, "完成高值单", resp.Logs[1].ChangeTypeName)
-			},
-		},
-		{
-			name:  "OK_EmptyHistory",
-			query: "?page_id=1&page_size=10",
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetRiderByUserID(gomock.Any(), user.ID).
-					Times(1).
-					Return(rider, nil)
+	recorder := httptest.NewRecorder()
+	url := "/v1/rider/location"
+	requestBody, err := json.Marshal(body)
+	require.NoError(t, err)
 
-				store.EXPECT().
-					GetRiderPremiumScore(gomock.Any(), rider.ID).
-					Times(1).
-					Return(int16(0), nil)
+	request, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(requestBody))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 
-				store.EXPECT().
-					CountRiderPremiumScoreLogs(gomock.Any(), rider.ID).
-					Times(1).
-					Return(int64(0), nil)
-
-				store.EXPECT().
-					ListRiderPremiumScoreLogs(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return([]db.RiderPremiumScoreLog{}, nil)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
-				var resp listRiderPremiumScoreHistoryResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
-				require.Equal(t, int16(0), resp.CurrentScore)
-				require.Equal(t, int64(0), resp.Total)
-				require.Len(t, resp.Logs, 0)
-			},
-		},
-		{
-			name:  "InvalidPageID",
-			query: "?page_id=0&page_size=10",
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusBadRequest, recorder.Code)
-			},
-		},
-		{
-			name:  "InvalidPageSize",
-			query: "?page_id=1&page_size=100",
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusBadRequest, recorder.Code)
-			},
-		},
-		{
-			name:  "NotARider",
-			query: "?page_id=1&page_size=10",
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetRiderByUserID(gomock.Any(), user.ID).
-					Times(1).
-					Return(db.Rider{}, pgx.ErrNoRows)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusNotFound, recorder.Code)
-			},
-		},
-		{
-			name:  "NoAuthorization",
-			query: "?page_id=1&page_size=10",
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusUnauthorized, recorder.Code)
-			},
-		},
-	}
-
-	for i := range testCases {
-		tc := testCases[i]
-
-		t.Run(tc.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
-
-			store := mockdb.NewMockStore(ctrl)
-			tc.buildStubs(store)
-
-			server := newTestServer(t, store)
-			recorder := httptest.NewRecorder()
-
-			url := "/v1/rider/score/history" + tc.query
-			request, err := http.NewRequest(http.MethodGet, url, nil)
-			require.NoError(t, err)
-
-			tc.setupAuth(t, request, server.tokenMaker)
-			server.router.ServeHTTP(recorder, request)
-			tc.checkResponse(t, recorder)
-		})
-	}
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
 }

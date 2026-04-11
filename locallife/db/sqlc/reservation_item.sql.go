@@ -114,13 +114,46 @@ func (q *Queries) GetReservationItemsByReservation(ctx context.Context, reservat
 	return items, nil
 }
 
+const listReservationDishSummary = `-- name: ListReservationDishSummary :many
+SELECT dish_id, SUM(quantity)::int4 as quantity
+FROM reservation_items
+WHERE reservation_id = $1 AND dish_id IS NOT NULL
+GROUP BY dish_id
+ORDER BY dish_id
+`
+
+type ListReservationDishSummaryRow struct {
+	DishID   pgtype.Int8 `json:"dish_id"`
+	Quantity int32       `json:"quantity"`
+}
+
+func (q *Queries) ListReservationDishSummary(ctx context.Context, reservationID int64) ([]ListReservationDishSummaryRow, error) {
+	rows, err := q.db.Query(ctx, listReservationDishSummary, reservationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListReservationDishSummaryRow{}
+	for rows.Next() {
+		var i ListReservationDishSummaryRow
+		if err := rows.Scan(&i.DishID, &i.Quantity); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listReservationItems = `-- name: ListReservationItems :many
 SELECT 
     ri.id, ri.reservation_id, ri.dish_id, ri.combo_id, ri.quantity, ri.unit_price, ri.total_price, ri.created_at,
     d.name as dish_name,
-    d.image_url as dish_image_url,
+    d.image_media_asset_id as dish_image_media_asset_id,
     cs.name as combo_name,
-    cs.image_url as combo_image_url
+    cs.image_media_asset_id as combo_image_media_asset_id
 FROM reservation_items ri
 LEFT JOIN dishes d ON ri.dish_id = d.id
 LEFT JOIN combo_sets cs ON ri.combo_id = cs.id
@@ -129,18 +162,18 @@ ORDER BY ri.id
 `
 
 type ListReservationItemsRow struct {
-	ID            int64       `json:"id"`
-	ReservationID int64       `json:"reservation_id"`
-	DishID        pgtype.Int8 `json:"dish_id"`
-	ComboID       pgtype.Int8 `json:"combo_id"`
-	Quantity      int16       `json:"quantity"`
-	UnitPrice     int64       `json:"unit_price"`
-	TotalPrice    int64       `json:"total_price"`
-	CreatedAt     time.Time   `json:"created_at"`
-	DishName      pgtype.Text `json:"dish_name"`
-	DishImageUrl  pgtype.Text `json:"dish_image_url"`
-	ComboName     pgtype.Text `json:"combo_name"`
-	ComboImageUrl pgtype.Text `json:"combo_image_url"`
+	ID                     int64       `json:"id"`
+	ReservationID          int64       `json:"reservation_id"`
+	DishID                 pgtype.Int8 `json:"dish_id"`
+	ComboID                pgtype.Int8 `json:"combo_id"`
+	Quantity               int16       `json:"quantity"`
+	UnitPrice              int64       `json:"unit_price"`
+	TotalPrice             int64       `json:"total_price"`
+	CreatedAt              time.Time   `json:"created_at"`
+	DishName               pgtype.Text `json:"dish_name"`
+	DishImageMediaAssetID  pgtype.Int8 `json:"dish_image_media_asset_id"`
+	ComboName              pgtype.Text `json:"combo_name"`
+	ComboImageMediaAssetID pgtype.Int8 `json:"combo_image_media_asset_id"`
 }
 
 func (q *Queries) ListReservationItems(ctx context.Context, reservationID int64) ([]ListReservationItemsRow, error) {
@@ -162,9 +195,9 @@ func (q *Queries) ListReservationItems(ctx context.Context, reservationID int64)
 			&i.TotalPrice,
 			&i.CreatedAt,
 			&i.DishName,
-			&i.DishImageUrl,
+			&i.DishImageMediaAssetID,
 			&i.ComboName,
-			&i.ComboImageUrl,
+			&i.ComboImageMediaAssetID,
 		); err != nil {
 			return nil, err
 		}

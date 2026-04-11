@@ -1,0 +1,130 @@
+<custom-navbar title="提现申请" show-back="{{true}}" bind:navheight="onNavHeight" />
+
+<view class="page" style="padding-top: {{navBarHeight}}px;">
+  <scroll-view
+    class="content"
+    scroll-y
+    refresher-enabled
+    bindrefresherrefresh="onPullDownRefresh"
+  >
+    <view class="card summary-card">
+      <view class="card-title">资金概览</view>
+
+      <view wx:if="{{loadingOverview}}" class="skeleton-wrap">
+        <view class="skeleton-line skeleton-lg skeleton-shimmer"></view>
+        <view class="skeleton-row">
+          <view class="skeleton-line skeleton-sm skeleton-shimmer"></view>
+          <view class="skeleton-line skeleton-sm skeleton-shimmer"></view>
+        </view>
+      </view>
+
+      <view wx:elif="{{loadError}}" class="state-wrap">
+        <t-empty icon="info-circle" description="{{loadError}}">
+          <t-button slot="action" theme="primary" shape="round" size="small" bindtap="onRetryLoad">重试</t-button>
+        </t-empty>
+      </view>
+
+      <view wx:else>
+        <view class="balance-label">可提现余额（元）</view>
+        <view class="balance-value">¥{{formatFen(availableAmountFen)}}</view>
+        <view class="metrics-row">
+          <view class="metric-item">
+            <text class="metric-label">累计可得</text>
+            <text class="metric-value">¥{{formatFen(totalIncomeFen)}}</text>
+          </view>
+          <view class="metric-divider"></view>
+          <view class="metric-item">
+            <text class="metric-label">本月可得</text>
+            <text class="metric-value">¥{{formatFen(currentMonthIncomeFen)}}</text>
+          </view>
+        </view>
+        <view class="share-ratio">运营商分成比例：{{formatShareRatio(operatorShareRatio)}}</view>
+      </view>
+    </view>
+
+    <view class="card form-card">
+      <view class="card-title">发起提现</view>
+
+      <view wx:if="{{loadingOverview}}" class="skeleton-wrap">
+        <view class="skeleton-line skeleton-input skeleton-shimmer"></view>
+        <view class="skeleton-line skeleton-btn skeleton-shimmer"></view>
+      </view>
+
+      <view wx:elif="{{loadError}}" class="state-wrap">
+        <t-empty description="资金数据异常，暂不可提现">
+          <t-button slot="action" theme="primary" shape="round" size="small" bindtap="onRetryLoad">重试</t-button>
+        </t-empty>
+      </view>
+
+      <view wx:elif="{{availableAmountFen <= 0}}" class="state-wrap">
+        <t-empty description="暂无可提现金额">
+          <t-button slot="action" theme="primary" shape="round" size="small" bindtap="onBack">返回</t-button>
+        </t-empty>
+      </view>
+
+      <view wx:else>
+        <t-input
+          label="提现金额"
+          placeholder="请输入金额（元）"
+          type="number"
+          value="{{amountInput}}"
+          bindchange="onAmountChange"
+          suffix="元"
+        />
+
+        <view class="hint-row">
+          <text>最低提现 ¥1.00</text>
+          <text>最多可提 ¥{{formatFen(availableAmountFen)}}</text>
+        </view>
+        <view wx:if="{{amountError}}" class="error-text">{{amountError}}</view>
+
+        <t-button
+          theme="primary"
+          variant="base"
+          shape="round"
+          block
+          size="large"
+          loading="{{submitting}}"
+          disabled="{{submitDisabled}}"
+          bindtap="onSubmit"
+        >
+          提交提现申请
+        </t-button>
+      </view>
+    </view>
+
+    <view class="card summary-card">
+      <view class="card-title">近期佣金明细</view>
+
+      <view wx:if="{{commissionLoading}}" class="skeleton-wrap">
+        <view class="skeleton-line skeleton-input skeleton-shimmer"></view>
+        <view class="skeleton-line skeleton-input skeleton-shimmer"></view>
+      </view>
+
+      <view wx:elif="{{commissionError}}" class="state-wrap">
+        <t-empty icon="info-circle" description="{{commissionError}}">
+          <t-button slot="action" theme="primary" shape="round" size="small" bindtap="onRetryLoad">重试</t-button>
+        </t-empty>
+      </view>
+
+      <view wx:elif="{{commissionRows.length === 0}}" class="state-wrap">
+        <t-empty description="暂无佣金明细" />
+      </view>
+
+      <view wx:else class="commission-list">
+        <view wx:for="{{commissionRows}}" wx:key="date" class="commission-item">
+          <view class="commission-header">
+            <text class="commission-date">{{item.date}}</text>
+            <text class="commission-value">¥{{formatFen(item.total_commission_fen)}}</text>
+          </view>
+          <view class="commission-meta">
+            <text>订单 {{item.order_count}}</text>
+            <text>GMV ¥{{formatFen(item.total_gmv_fen)}}</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <view class="safe-bottom"></view>
+  </scroll-view>
+</view>

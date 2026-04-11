@@ -1,0 +1,76 @@
+<custom-navbar title="消息通知" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px">
+
+  <!-- 筛选 Tabs -->
+  <view class="tabs-bar">
+    <t-tabs value="{{activeType}}" bind:change="onTypeChange" theme="tag" space-evenly="{{false}}">
+      <t-tab-panel wx:for="{{typeTabs}}" wx:key="value" label="{{item.label}}" value="{{item.value}}" />
+    </t-tabs>
+    <view class="read-all-btn" bindtap="onMarkAllRead" wx:if="{{unreadCount > 0}}">
+      <t-icon name="check" size="28rpx" color="#666" />
+      <text class="read-all-text">全部已读</text>
+    </view>
+  </view>
+
+  <!-- 骨架屏 -->
+  <view wx:if="{{initialLoading}}" class="skeleton-wrap">
+    <t-skeleton
+      wx:for="{{5}}"
+      wx:key="index"
+      rowCol="{{[{width:'10%',type:'circle',size:'80rpx'},{width:'60%'},{width:'40%'}]}}"
+      t-class="skeleton-item"
+    />
+  </view>
+
+  <block wx:else>
+    <!-- 空状态 -->
+    <view wx:if="{{notifications.length === 0}}" class="empty-state">
+      <t-empty icon="notification" description="暂无消息通知" />
+    </view>
+
+    <!-- 通知列表 -->
+    <scroll-view
+      scroll-y
+      class="list-scroll"
+      bindscrolltolower="onReachBottom"
+      refresher-enabled
+      bindrefresherrefresh="onPullRefresh"
+      refresher-triggered="{{refreshing}}"
+    >
+      <view class="list-inner">
+        <view
+          class="notif-card {{item.is_read ? 'read' : 'unread'}}"
+          wx:for="{{notifications}}"
+          wx:key="id"
+          bindtap="onNotifTap"
+          data-item="{{item}}"
+        >
+          <!-- 类型图标 -->
+          <view class="notif-icon-wrap {{item.typeClass}}">
+            <t-icon name="{{item.typeIcon}}" size="40rpx" color="#fff" />
+            <view class="unread-dot" wx:if="{{!item.is_read}}" />
+          </view>
+
+          <!-- 内容 -->
+          <view class="notif-body">
+            <view class="notif-header">
+              <text class="notif-title">{{item.title}}</text>
+              <text class="notif-time">{{item.timeDisplay}}</text>
+            </view>
+            <view class="notif-content">{{item.content}}</view>
+          </view>
+        </view>
+
+        <!-- 加载更多 -->
+        <view class="load-more" wx:if="{{loading && !refreshing}}">
+          <t-loading theme="circular" size="32rpx" />
+        </view>
+        <view class="no-more" wx:if="{{!hasMore && notifications.length > 0}}">
+          已加载全部消息
+        </view>
+      </view>
+    </scroll-view>
+  </block>
+
+</view>

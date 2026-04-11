@@ -12,26 +12,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const blacklistUser = `-- name: BlacklistUser :exec
-UPDATE user_profiles
-SET is_blacklisted = true,
-    blacklist_reason = $3,
-    blacklisted_at = NOW(),
-    updated_at = NOW()
-WHERE user_id = $1 AND role = $2
-`
-
-type BlacklistUserParams struct {
-	UserID          int64       `json:"user_id"`
-	Role            string      `json:"role"`
-	BlacklistReason pgtype.Text `json:"blacklist_reason"`
-}
-
-func (q *Queries) BlacklistUser(ctx context.Context, arg BlacklistUserParams) error {
-	_, err := q.db.Exec(ctx, blacklistUser, arg.UserID, arg.Role, arg.BlacklistReason)
-	return err
-}
-
 const confirmFraudPattern = `-- name: ConfirmFraudPattern :exec
 UPDATE fraud_patterns
 SET is_confirmed = true,
@@ -58,13 +38,13 @@ WHERE created_at >= $1
 `
 
 type CountDistinctUsersInClaimWindowParams struct {
-	CreatedAt   time.Time `json:"created_at"`
-	CreatedAt_2 time.Time `json:"created_at_2"`
+	StartAt time.Time `json:"start_at"`
+	EndAt   time.Time `json:"end_at"`
 }
 
 // 统计时间窗口内发起索赔的不同用户数
 func (q *Queries) CountDistinctUsersInClaimWindow(ctx context.Context, arg CountDistinctUsersInClaimWindowParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countDistinctUsersInClaimWindow, arg.CreatedAt, arg.CreatedAt_2)
+	row := q.db.QueryRow(ctx, countDistinctUsersInClaimWindow, arg.StartAt, arg.EndAt)
 	var user_count int64
 	err := row.Scan(&user_count)
 	return user_count, err
@@ -115,23 +95,6 @@ func (q *Queries) CountRecentClaimsByUsers(ctx context.Context, arg CountRecentC
 	var claim_count int64
 	err := row.Scan(&claim_count)
 	return claim_count, err
-}
-
-const countRegionPendingClaims = `-- name: CountRegionPendingClaims :one
-SELECT COUNT(*) as total
-FROM claims c
-JOIN orders o ON c.order_id = o.id
-JOIN merchants m ON o.merchant_id = m.id
-WHERE m.region_id = $1
-  AND c.status = 'manual-review'
-`
-
-// 统计运营商区域内待人工审核的索赔数量
-func (q *Queries) CountRegionPendingClaims(ctx context.Context, regionID int64) (int64, error) {
-	row := q.db.QueryRow(ctx, countRegionPendingClaims, regionID)
-	var total int64
-	err := row.Scan(&total)
-	return total, err
 }
 
 const countRiderDamageClaims = `-- name: CountRiderDamageClaims :one
@@ -231,24 +194,24 @@ INSERT INTO claims (
     user_id,
     claim_type,
     description,
-    evidence_urls,
     claim_amount,
     approved_amount,
     status,
     approval_type,
-    trust_score_snapshot,
     is_malicious,
     lookback_result,
     auto_approval_reason,
     rejection_reason,
     reviewer_id,
     review_notes,
+    decision_version,
+    decision_reason,
     created_at,
     reviewed_at,
     paid_at
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19
-) RETURNING id, order_id, user_id, claim_type, description, evidence_urls, claim_amount, approved_amount, status, approval_type, trust_score_snapshot, is_malicious, lookback_result, auto_approval_reason, rejection_reason, reviewer_id, review_notes, created_at, reviewed_at, paid_at
+  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19
+) RETURNING id, order_id, user_id, claim_type, description, claim_amount, approved_amount, status, approval_type, is_malicious, lookback_result, auto_approval_reason, rejection_reason, reviewer_id, review_notes, created_at, reviewed_at, paid_at, decision_version, decision_reason
 `
 
 type CreateClaimParams struct {
@@ -256,18 +219,18 @@ type CreateClaimParams struct {
 	UserID             int64              `json:"user_id"`
 	ClaimType          string             `json:"claim_type"`
 	Description        string             `json:"description"`
-	EvidenceUrls       []string           `json:"evidence_urls"`
 	ClaimAmount        int64              `json:"claim_amount"`
 	ApprovedAmount     pgtype.Int8        `json:"approved_amount"`
 	Status             string             `json:"status"`
 	ApprovalType       pgtype.Text        `json:"approval_type"`
-	TrustScoreSnapshot pgtype.Int2        `json:"trust_score_snapshot"`
 	IsMalicious        bool               `json:"is_malicious"`
 	LookbackResult     []byte             `json:"lookback_result"`
 	AutoApprovalReason pgtype.Text        `json:"auto_approval_reason"`
 	RejectionReason    pgtype.Text        `json:"rejection_reason"`
 	ReviewerID         pgtype.Int8        `json:"reviewer_id"`
 	ReviewNotes        pgtype.Text        `json:"review_notes"`
+	DecisionVersion    pgtype.Text        `json:"decision_version"`
+	DecisionReason     pgtype.Text        `json:"decision_reason"`
 	CreatedAt          time.Time          `json:"created_at"`
 	ReviewedAt         pgtype.Timestamptz `json:"reviewed_at"`
 	PaidAt             pgtype.Timestamptz `json:"paid_at"`
@@ -282,18 +245,18 @@ func (q *Queries) CreateClaim(ctx context.Context, arg CreateClaimParams) (Claim
 		arg.UserID,
 		arg.ClaimType,
 		arg.Description,
-		arg.EvidenceUrls,
 		arg.ClaimAmount,
 		arg.ApprovedAmount,
 		arg.Status,
 		arg.ApprovalType,
-		arg.TrustScoreSnapshot,
 		arg.IsMalicious,
 		arg.LookbackResult,
 		arg.AutoApprovalReason,
 		arg.RejectionReason,
 		arg.ReviewerID,
 		arg.ReviewNotes,
+		arg.DecisionVersion,
+		arg.DecisionReason,
 		arg.CreatedAt,
 		arg.ReviewedAt,
 		arg.PaidAt,
@@ -305,12 +268,10 @@ func (q *Queries) CreateClaim(ctx context.Context, arg CreateClaimParams) (Claim
 		&i.UserID,
 		&i.ClaimType,
 		&i.Description,
-		&i.EvidenceUrls,
 		&i.ClaimAmount,
 		&i.ApprovedAmount,
 		&i.Status,
 		&i.ApprovalType,
-		&i.TrustScoreSnapshot,
 		&i.IsMalicious,
 		&i.LookbackResult,
 		&i.AutoApprovalReason,
@@ -320,6 +281,8 @@ func (q *Queries) CreateClaim(ctx context.Context, arg CreateClaimParams) (Claim
 		&i.CreatedAt,
 		&i.ReviewedAt,
 		&i.PaidAt,
+		&i.DecisionVersion,
+		&i.DecisionReason,
 	)
 	return i, err
 }
@@ -332,7 +295,6 @@ INSERT INTO food_safety_incidents (
     user_id,
     incident_type,
     description,
-    evidence_urls,
     order_snapshot,
     merchant_snapshot,
     rider_snapshot,
@@ -342,8 +304,8 @@ INSERT INTO food_safety_incidents (
     created_at,
     resolved_at
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
-) RETURNING id, order_id, merchant_id, user_id, incident_type, description, evidence_urls, order_snapshot, merchant_snapshot, rider_snapshot, status, investigation_report, resolution, created_at, resolved_at
+  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+) RETURNING id, order_id, merchant_id, user_id, incident_type, description, order_snapshot, merchant_snapshot, rider_snapshot, status, investigation_report, resolution, created_at, resolved_at
 `
 
 type CreateFoodSafetyIncidentParams struct {
@@ -352,7 +314,6 @@ type CreateFoodSafetyIncidentParams struct {
 	UserID              int64              `json:"user_id"`
 	IncidentType        string             `json:"incident_type"`
 	Description         string             `json:"description"`
-	EvidenceUrls        []string           `json:"evidence_urls"`
 	OrderSnapshot       []byte             `json:"order_snapshot"`
 	MerchantSnapshot    []byte             `json:"merchant_snapshot"`
 	RiderSnapshot       []byte             `json:"rider_snapshot"`
@@ -373,7 +334,6 @@ func (q *Queries) CreateFoodSafetyIncident(ctx context.Context, arg CreateFoodSa
 		arg.UserID,
 		arg.IncidentType,
 		arg.Description,
-		arg.EvidenceUrls,
 		arg.OrderSnapshot,
 		arg.MerchantSnapshot,
 		arg.RiderSnapshot,
@@ -391,7 +351,6 @@ func (q *Queries) CreateFoodSafetyIncident(ctx context.Context, arg CreateFoodSa
 		&i.UserID,
 		&i.IncidentType,
 		&i.Description,
-		&i.EvidenceUrls,
 		&i.OrderSnapshot,
 		&i.MerchantSnapshot,
 		&i.RiderSnapshot,
@@ -494,29 +453,54 @@ func (q *Queries) CreateFraudPattern(ctx context.Context, arg CreateFraudPattern
 
 const createMerchantProfile = `-- name: CreateMerchantProfile :one
 
+
 INSERT INTO merchant_profiles (
-    merchant_id,
-    trust_score
+  merchant_id
 ) VALUES (
-    $1, $2
-) RETURNING id, merchant_id, trust_score, total_orders, total_sales, completed_orders, total_claims, foreign_object_claims, food_safety_incidents, timeout_count, refuse_order_count, recent_7d_claims, recent_7d_incidents, recent_30d_claims, recent_30d_incidents, recent_30d_timeouts, recent_90d_claims, recent_90d_incidents, is_suspended, suspend_reason, suspended_at, suspend_until, updated_at
+  $1
+) RETURNING id, merchant_id, total_orders, total_sales, completed_orders, total_claims, foreign_object_claims, food_safety_incidents, timeout_count, refuse_order_count, recent_7d_claims, recent_7d_incidents, recent_30d_claims, recent_30d_incidents, recent_30d_timeouts, recent_90d_claims, recent_90d_incidents, is_suspended, suspend_reason, suspended_at, suspend_until, is_takeout_suspended, takeout_suspend_reason, takeout_suspended_at, takeout_suspend_until, updated_at
 `
 
-type CreateMerchantProfileParams struct {
-	MerchantID int64 `json:"merchant_id"`
-	TrustScore int16 `json:"trust_score"`
+type CreateMerchantProfileRow struct {
+	ID                   int64              `json:"id"`
+	MerchantID           int64              `json:"merchant_id"`
+	TotalOrders          int32              `json:"total_orders"`
+	TotalSales           int64              `json:"total_sales"`
+	CompletedOrders      int32              `json:"completed_orders"`
+	TotalClaims          int32              `json:"total_claims"`
+	ForeignObjectClaims  int32              `json:"foreign_object_claims"`
+	FoodSafetyIncidents  int32              `json:"food_safety_incidents"`
+	TimeoutCount         int32              `json:"timeout_count"`
+	RefuseOrderCount     int32              `json:"refuse_order_count"`
+	Recent7dClaims       int32              `json:"recent_7d_claims"`
+	Recent7dIncidents    int32              `json:"recent_7d_incidents"`
+	Recent30dClaims      int32              `json:"recent_30d_claims"`
+	Recent30dIncidents   int32              `json:"recent_30d_incidents"`
+	Recent30dTimeouts    int32              `json:"recent_30d_timeouts"`
+	Recent90dClaims      int32              `json:"recent_90d_claims"`
+	Recent90dIncidents   int32              `json:"recent_90d_incidents"`
+	IsSuspended          bool               `json:"is_suspended"`
+	SuspendReason        pgtype.Text        `json:"suspend_reason"`
+	SuspendedAt          pgtype.Timestamptz `json:"suspended_at"`
+	SuspendUntil         pgtype.Timestamptz `json:"suspend_until"`
+	IsTakeoutSuspended   bool               `json:"is_takeout_suspended"`
+	TakeoutSuspendReason pgtype.Text        `json:"takeout_suspend_reason"`
+	TakeoutSuspendedAt   pgtype.Timestamptz `json:"takeout_suspended_at"`
+	TakeoutSuspendUntil  pgtype.Timestamptz `json:"takeout_suspend_until"`
+	UpdatedAt            time.Time          `json:"updated_at"`
 }
 
+// M9: TrustScore信任分系统查询
+// 设计理念：信用驱动，非证据驱动
 // ==========================================
 // merchant_profiles（商户信任画像）
 // ==========================================
-func (q *Queries) CreateMerchantProfile(ctx context.Context, arg CreateMerchantProfileParams) (MerchantProfile, error) {
-	row := q.db.QueryRow(ctx, createMerchantProfile, arg.MerchantID, arg.TrustScore)
-	var i MerchantProfile
+func (q *Queries) CreateMerchantProfile(ctx context.Context, merchantID int64) (CreateMerchantProfileRow, error) {
+	row := q.db.QueryRow(ctx, createMerchantProfile, merchantID)
+	var i CreateMerchantProfileRow
 	err := row.Scan(
 		&i.ID,
 		&i.MerchantID,
-		&i.TrustScore,
 		&i.TotalOrders,
 		&i.TotalSales,
 		&i.CompletedOrders,
@@ -536,6 +520,10 @@ func (q *Queries) CreateMerchantProfile(ctx context.Context, arg CreateMerchantP
 		&i.SuspendReason,
 		&i.SuspendedAt,
 		&i.SuspendUntil,
+		&i.IsTakeoutSuspended,
+		&i.TakeoutSuspendReason,
+		&i.TakeoutSuspendedAt,
+		&i.TakeoutSuspendUntil,
 		&i.UpdatedAt,
 	)
 	return i, err
@@ -544,28 +532,21 @@ func (q *Queries) CreateMerchantProfile(ctx context.Context, arg CreateMerchantP
 const createRiderProfile = `-- name: CreateRiderProfile :one
 
 INSERT INTO rider_profiles (
-    rider_id,
-    trust_score
+  rider_id
 ) VALUES (
-    $1, $2
-) RETURNING id, rider_id, trust_score, total_deliveries, completed_deliveries, on_time_deliveries, delayed_deliveries, cancelled_deliveries, total_damage_incidents, customer_complaints, timeout_incidents, recent_7d_damages, recent_7d_delays, recent_30d_damages, recent_30d_delays, recent_30d_complaints, recent_90d_damages, recent_90d_delays, total_online_hours, is_suspended, suspend_reason, suspended_at, suspend_until, updated_at, premium_score
+  $1
+) RETURNING id, rider_id, total_deliveries, completed_deliveries, on_time_deliveries, delayed_deliveries, cancelled_deliveries, total_damage_incidents, customer_complaints, timeout_incidents, recent_7d_damages, recent_7d_delays, recent_30d_damages, recent_30d_delays, recent_30d_complaints, recent_90d_damages, recent_90d_delays, total_online_hours, is_suspended, suspend_reason, suspended_at, suspend_until, updated_at
 `
-
-type CreateRiderProfileParams struct {
-	RiderID    int64 `json:"rider_id"`
-	TrustScore int16 `json:"trust_score"`
-}
 
 // ==========================================
 // rider_profiles（骑手信任画像）
 // ==========================================
-func (q *Queries) CreateRiderProfile(ctx context.Context, arg CreateRiderProfileParams) (RiderProfile, error) {
-	row := q.db.QueryRow(ctx, createRiderProfile, arg.RiderID, arg.TrustScore)
+func (q *Queries) CreateRiderProfile(ctx context.Context, riderID int64) (RiderProfile, error) {
+	row := q.db.QueryRow(ctx, createRiderProfile, riderID)
 	var i RiderProfile
 	err := row.Scan(
 		&i.ID,
 		&i.RiderID,
-		&i.TrustScore,
 		&i.TotalDeliveries,
 		&i.CompletedDeliveries,
 		&i.OnTimeDeliveries,
@@ -587,79 +568,6 @@ func (q *Queries) CreateRiderProfile(ctx context.Context, arg CreateRiderProfile
 		&i.SuspendedAt,
 		&i.SuspendUntil,
 		&i.UpdatedAt,
-		&i.PremiumScore,
-	)
-	return i, err
-}
-
-const createTrustScoreChange = `-- name: CreateTrustScoreChange :one
-
-INSERT INTO trust_score_changes (
-    entity_type,
-    entity_id,
-    old_score,
-    new_score,
-    score_change,
-    reason_type,
-    reason_description,
-    related_type,
-    related_id,
-    is_auto,
-    operator_id,
-    created_at
-) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
-) RETURNING id, entity_type, entity_id, old_score, new_score, score_change, reason_type, reason_description, related_type, related_id, is_auto, operator_id, created_at
-`
-
-type CreateTrustScoreChangeParams struct {
-	EntityType        string      `json:"entity_type"`
-	EntityID          int64       `json:"entity_id"`
-	OldScore          int16       `json:"old_score"`
-	NewScore          int16       `json:"new_score"`
-	ScoreChange       int16       `json:"score_change"`
-	ReasonType        string      `json:"reason_type"`
-	ReasonDescription string      `json:"reason_description"`
-	RelatedType       pgtype.Text `json:"related_type"`
-	RelatedID         pgtype.Int8 `json:"related_id"`
-	IsAuto            bool        `json:"is_auto"`
-	OperatorID        pgtype.Int8 `json:"operator_id"`
-	CreatedAt         time.Time   `json:"created_at"`
-}
-
-// ==========================================
-// trust_score_changes（信任分变更日志）
-// ==========================================
-func (q *Queries) CreateTrustScoreChange(ctx context.Context, arg CreateTrustScoreChangeParams) (TrustScoreChange, error) {
-	row := q.db.QueryRow(ctx, createTrustScoreChange,
-		arg.EntityType,
-		arg.EntityID,
-		arg.OldScore,
-		arg.NewScore,
-		arg.ScoreChange,
-		arg.ReasonType,
-		arg.ReasonDescription,
-		arg.RelatedType,
-		arg.RelatedID,
-		arg.IsAuto,
-		arg.OperatorID,
-		arg.CreatedAt,
-	)
-	var i TrustScoreChange
-	err := row.Scan(
-		&i.ID,
-		&i.EntityType,
-		&i.EntityID,
-		&i.OldScore,
-		&i.NewScore,
-		&i.ScoreChange,
-		&i.ReasonType,
-		&i.ReasonDescription,
-		&i.RelatedType,
-		&i.RelatedID,
-		&i.IsAuto,
-		&i.OperatorID,
-		&i.CreatedAt,
 	)
 	return i, err
 }
@@ -703,119 +611,8 @@ func (q *Queries) CreateUserClaimWarning(ctx context.Context, arg CreateUserClai
 	return i, err
 }
 
-const createUserProfile = `-- name: CreateUserProfile :one
-
-
-INSERT INTO user_profiles (
-    user_id,
-    role,
-    trust_score,
-    total_orders,
-    completed_orders,
-    cancelled_orders,
-    total_claims,
-    malicious_claims,
-    food_safety_reports,
-    verified_violations,
-    recent_7d_claims,
-    recent_7d_orders,
-    recent_30d_claims,
-    recent_30d_orders,
-    recent_30d_cancels,
-    recent_90d_claims,
-    recent_90d_orders,
-    is_blacklisted,
-    blacklist_reason,
-    blacklisted_at,
-    updated_at
-) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21
-) RETURNING id, user_id, role, trust_score, total_orders, completed_orders, cancelled_orders, total_claims, malicious_claims, food_safety_reports, verified_violations, recent_7d_claims, recent_7d_orders, recent_30d_claims, recent_30d_orders, recent_30d_cancels, recent_90d_claims, recent_90d_orders, is_blacklisted, blacklist_reason, blacklisted_at, updated_at
-`
-
-type CreateUserProfileParams struct {
-	UserID             int64              `json:"user_id"`
-	Role               string             `json:"role"`
-	TrustScore         int16              `json:"trust_score"`
-	TotalOrders        int32              `json:"total_orders"`
-	CompletedOrders    int32              `json:"completed_orders"`
-	CancelledOrders    int32              `json:"cancelled_orders"`
-	TotalClaims        int32              `json:"total_claims"`
-	MaliciousClaims    int32              `json:"malicious_claims"`
-	FoodSafetyReports  int32              `json:"food_safety_reports"`
-	VerifiedViolations int32              `json:"verified_violations"`
-	Recent7dClaims     int32              `json:"recent_7d_claims"`
-	Recent7dOrders     int32              `json:"recent_7d_orders"`
-	Recent30dClaims    int32              `json:"recent_30d_claims"`
-	Recent30dOrders    int32              `json:"recent_30d_orders"`
-	Recent30dCancels   int32              `json:"recent_30d_cancels"`
-	Recent90dClaims    int32              `json:"recent_90d_claims"`
-	Recent90dOrders    int32              `json:"recent_90d_orders"`
-	IsBlacklisted      bool               `json:"is_blacklisted"`
-	BlacklistReason    pgtype.Text        `json:"blacklist_reason"`
-	BlacklistedAt      pgtype.Timestamptz `json:"blacklisted_at"`
-	UpdatedAt          time.Time          `json:"updated_at"`
-}
-
-// M9: TrustScore信任分系统查询
-// 设计理念：信用驱动，非证据驱动
-// ==========================================
-// user_profiles（顾客信任画像）
-// ==========================================
-func (q *Queries) CreateUserProfile(ctx context.Context, arg CreateUserProfileParams) (UserProfile, error) {
-	row := q.db.QueryRow(ctx, createUserProfile,
-		arg.UserID,
-		arg.Role,
-		arg.TrustScore,
-		arg.TotalOrders,
-		arg.CompletedOrders,
-		arg.CancelledOrders,
-		arg.TotalClaims,
-		arg.MaliciousClaims,
-		arg.FoodSafetyReports,
-		arg.VerifiedViolations,
-		arg.Recent7dClaims,
-		arg.Recent7dOrders,
-		arg.Recent30dClaims,
-		arg.Recent30dOrders,
-		arg.Recent30dCancels,
-		arg.Recent90dClaims,
-		arg.Recent90dOrders,
-		arg.IsBlacklisted,
-		arg.BlacklistReason,
-		arg.BlacklistedAt,
-		arg.UpdatedAt,
-	)
-	var i UserProfile
-	err := row.Scan(
-		&i.ID,
-		&i.UserID,
-		&i.Role,
-		&i.TrustScore,
-		&i.TotalOrders,
-		&i.CompletedOrders,
-		&i.CancelledOrders,
-		&i.TotalClaims,
-		&i.MaliciousClaims,
-		&i.FoodSafetyReports,
-		&i.VerifiedViolations,
-		&i.Recent7dClaims,
-		&i.Recent7dOrders,
-		&i.Recent30dClaims,
-		&i.Recent30dOrders,
-		&i.Recent30dCancels,
-		&i.Recent90dClaims,
-		&i.Recent90dOrders,
-		&i.IsBlacklisted,
-		&i.BlacklistReason,
-		&i.BlacklistedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
 const getActiveFoodSafetyIncidents = `-- name: GetActiveFoodSafetyIncidents :many
-SELECT id, order_id, merchant_id, user_id, incident_type, description, evidence_urls, order_snapshot, merchant_snapshot, rider_snapshot, status, investigation_report, resolution, created_at, resolved_at FROM food_safety_incidents
+SELECT id, order_id, merchant_id, user_id, incident_type, description, order_snapshot, merchant_snapshot, rider_snapshot, status, investigation_report, resolution, created_at, resolved_at FROM food_safety_incidents
 WHERE status IN ('reported', 'investigating', 'merchant-suspended')
 ORDER BY created_at DESC
 LIMIT $1
@@ -837,7 +634,6 @@ func (q *Queries) GetActiveFoodSafetyIncidents(ctx context.Context, limit int32)
 			&i.UserID,
 			&i.IncidentType,
 			&i.Description,
-			&i.EvidenceUrls,
 			&i.OrderSnapshot,
 			&i.MerchantSnapshot,
 			&i.RiderSnapshot,
@@ -858,7 +654,7 @@ func (q *Queries) GetActiveFoodSafetyIncidents(ctx context.Context, limit int32)
 }
 
 const getClaim = `-- name: GetClaim :one
-SELECT id, order_id, user_id, claim_type, description, evidence_urls, claim_amount, approved_amount, status, approval_type, trust_score_snapshot, is_malicious, lookback_result, auto_approval_reason, rejection_reason, reviewer_id, review_notes, created_at, reviewed_at, paid_at FROM claims
+SELECT id, order_id, user_id, claim_type, description, claim_amount, approved_amount, status, approval_type, is_malicious, lookback_result, auto_approval_reason, rejection_reason, reviewer_id, review_notes, created_at, reviewed_at, paid_at, decision_version, decision_reason FROM claims
 WHERE id = $1
 LIMIT 1
 `
@@ -872,12 +668,10 @@ func (q *Queries) GetClaim(ctx context.Context, id int64) (Claim, error) {
 		&i.UserID,
 		&i.ClaimType,
 		&i.Description,
-		&i.EvidenceUrls,
 		&i.ClaimAmount,
 		&i.ApprovedAmount,
 		&i.Status,
 		&i.ApprovalType,
-		&i.TrustScoreSnapshot,
 		&i.IsMalicious,
 		&i.LookbackResult,
 		&i.AutoApprovalReason,
@@ -887,12 +681,14 @@ func (q *Queries) GetClaim(ctx context.Context, id int64) (Claim, error) {
 		&i.CreatedAt,
 		&i.ReviewedAt,
 		&i.PaidAt,
+		&i.DecisionVersion,
+		&i.DecisionReason,
 	)
 	return i, err
 }
 
 const getClaimForUpdate = `-- name: GetClaimForUpdate :one
-SELECT id, order_id, user_id, claim_type, description, evidence_urls, claim_amount, approved_amount, status, approval_type, trust_score_snapshot, is_malicious, lookback_result, auto_approval_reason, rejection_reason, reviewer_id, review_notes, created_at, reviewed_at, paid_at FROM claims
+SELECT id, order_id, user_id, claim_type, description, claim_amount, approved_amount, status, approval_type, is_malicious, lookback_result, auto_approval_reason, rejection_reason, reviewer_id, review_notes, created_at, reviewed_at, paid_at, decision_version, decision_reason FROM claims
 WHERE id = $1
 LIMIT 1
 FOR UPDATE
@@ -907,12 +703,10 @@ func (q *Queries) GetClaimForUpdate(ctx context.Context, id int64) (Claim, error
 		&i.UserID,
 		&i.ClaimType,
 		&i.Description,
-		&i.EvidenceUrls,
 		&i.ClaimAmount,
 		&i.ApprovedAmount,
 		&i.Status,
 		&i.ApprovalType,
-		&i.TrustScoreSnapshot,
 		&i.IsMalicious,
 		&i.LookbackResult,
 		&i.AutoApprovalReason,
@@ -922,12 +716,14 @@ func (q *Queries) GetClaimForUpdate(ctx context.Context, id int64) (Claim, error
 		&i.CreatedAt,
 		&i.ReviewedAt,
 		&i.PaidAt,
+		&i.DecisionVersion,
+		&i.DecisionReason,
 	)
 	return i, err
 }
 
 const getClaimWithDetails = `-- name: GetClaimWithDetails :one
-SELECT c.id, c.order_id, c.user_id, c.claim_type, c.description, c.evidence_urls, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.trust_score_snapshot, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at,
+SELECT c.id, c.order_id, c.user_id, c.claim_type, c.description, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at, c.decision_version, c.decision_reason,
        o.order_no,
        o.merchant_id,
        o.total_amount as order_amount,
@@ -951,12 +747,10 @@ type GetClaimWithDetailsRow struct {
 	UserID             int64              `json:"user_id"`
 	ClaimType          string             `json:"claim_type"`
 	Description        string             `json:"description"`
-	EvidenceUrls       []string           `json:"evidence_urls"`
 	ClaimAmount        int64              `json:"claim_amount"`
 	ApprovedAmount     pgtype.Int8        `json:"approved_amount"`
 	Status             string             `json:"status"`
 	ApprovalType       pgtype.Text        `json:"approval_type"`
-	TrustScoreSnapshot pgtype.Int2        `json:"trust_score_snapshot"`
 	IsMalicious        bool               `json:"is_malicious"`
 	LookbackResult     []byte             `json:"lookback_result"`
 	AutoApprovalReason pgtype.Text        `json:"auto_approval_reason"`
@@ -966,6 +760,8 @@ type GetClaimWithDetailsRow struct {
 	CreatedAt          time.Time          `json:"created_at"`
 	ReviewedAt         pgtype.Timestamptz `json:"reviewed_at"`
 	PaidAt             pgtype.Timestamptz `json:"paid_at"`
+	DecisionVersion    pgtype.Text        `json:"decision_version"`
+	DecisionReason     pgtype.Text        `json:"decision_reason"`
 	OrderNo            string             `json:"order_no"`
 	MerchantID         int64              `json:"merchant_id"`
 	OrderAmount        int64              `json:"order_amount"`
@@ -987,12 +783,10 @@ func (q *Queries) GetClaimWithDetails(ctx context.Context, id int64) (GetClaimWi
 		&i.UserID,
 		&i.ClaimType,
 		&i.Description,
-		&i.EvidenceUrls,
 		&i.ClaimAmount,
 		&i.ApprovedAmount,
 		&i.Status,
 		&i.ApprovalType,
-		&i.TrustScoreSnapshot,
 		&i.IsMalicious,
 		&i.LookbackResult,
 		&i.AutoApprovalReason,
@@ -1002,6 +796,8 @@ func (q *Queries) GetClaimWithDetails(ctx context.Context, id int64) (GetClaimWi
 		&i.CreatedAt,
 		&i.ReviewedAt,
 		&i.PaidAt,
+		&i.DecisionVersion,
+		&i.DecisionReason,
 		&i.OrderNo,
 		&i.MerchantID,
 		&i.OrderAmount,
@@ -1017,7 +813,7 @@ func (q *Queries) GetClaimWithDetails(ctx context.Context, id int64) (GetClaimWi
 
 const getClaimsByFraudPattern = `-- name: GetClaimsByFraudPattern :many
 
-SELECT c.id, c.order_id, c.user_id, c.claim_type, c.description, c.evidence_urls, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.trust_score_snapshot, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at, o.merchant_id, d.rider_id
+SELECT c.id, c.order_id, c.user_id, c.claim_type, c.description, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at, c.decision_version, c.decision_reason, o.merchant_id, d.rider_id
 FROM claims c
 JOIN orders o ON c.order_id = o.id
 LEFT JOIN deliveries d ON o.id = d.order_id
@@ -1031,12 +827,10 @@ type GetClaimsByFraudPatternRow struct {
 	UserID             int64              `json:"user_id"`
 	ClaimType          string             `json:"claim_type"`
 	Description        string             `json:"description"`
-	EvidenceUrls       []string           `json:"evidence_urls"`
 	ClaimAmount        int64              `json:"claim_amount"`
 	ApprovedAmount     pgtype.Int8        `json:"approved_amount"`
 	Status             string             `json:"status"`
 	ApprovalType       pgtype.Text        `json:"approval_type"`
-	TrustScoreSnapshot pgtype.Int2        `json:"trust_score_snapshot"`
 	IsMalicious        bool               `json:"is_malicious"`
 	LookbackResult     []byte             `json:"lookback_result"`
 	AutoApprovalReason pgtype.Text        `json:"auto_approval_reason"`
@@ -1046,6 +840,8 @@ type GetClaimsByFraudPatternRow struct {
 	CreatedAt          time.Time          `json:"created_at"`
 	ReviewedAt         pgtype.Timestamptz `json:"reviewed_at"`
 	PaidAt             pgtype.Timestamptz `json:"paid_at"`
+	DecisionVersion    pgtype.Text        `json:"decision_version"`
+	DecisionReason     pgtype.Text        `json:"decision_reason"`
 	MerchantID         int64              `json:"merchant_id"`
 	RiderID            pgtype.Int8        `json:"rider_id"`
 }
@@ -1069,12 +865,10 @@ func (q *Queries) GetClaimsByFraudPattern(ctx context.Context, dollar_1 []int64)
 			&i.UserID,
 			&i.ClaimType,
 			&i.Description,
-			&i.EvidenceUrls,
 			&i.ClaimAmount,
 			&i.ApprovedAmount,
 			&i.Status,
 			&i.ApprovalType,
-			&i.TrustScoreSnapshot,
 			&i.IsMalicious,
 			&i.LookbackResult,
 			&i.AutoApprovalReason,
@@ -1084,6 +878,8 @@ func (q *Queries) GetClaimsByFraudPattern(ctx context.Context, dollar_1 []int64)
 			&i.CreatedAt,
 			&i.ReviewedAt,
 			&i.PaidAt,
+			&i.DecisionVersion,
+			&i.DecisionReason,
 			&i.MerchantID,
 			&i.RiderID,
 		); err != nil {
@@ -1098,7 +894,7 @@ func (q *Queries) GetClaimsByFraudPattern(ctx context.Context, dollar_1 []int64)
 }
 
 const getClaimsWithSameAddress = `-- name: GetClaimsWithSameAddress :many
-SELECT DISTINCT c.id, c.order_id, c.user_id, c.claim_type, c.description, c.evidence_urls, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.trust_score_snapshot, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at, c.user_id
+SELECT DISTINCT c.id, c.order_id, c.user_id, c.claim_type, c.description, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at, c.decision_version, c.decision_reason, c.user_id
 FROM claims c
 JOIN orders o ON c.order_id = o.id
 WHERE o.address_id = $1
@@ -1119,12 +915,10 @@ type GetClaimsWithSameAddressRow struct {
 	UserID             int64              `json:"user_id"`
 	ClaimType          string             `json:"claim_type"`
 	Description        string             `json:"description"`
-	EvidenceUrls       []string           `json:"evidence_urls"`
 	ClaimAmount        int64              `json:"claim_amount"`
 	ApprovedAmount     pgtype.Int8        `json:"approved_amount"`
 	Status             string             `json:"status"`
 	ApprovalType       pgtype.Text        `json:"approval_type"`
-	TrustScoreSnapshot pgtype.Int2        `json:"trust_score_snapshot"`
 	IsMalicious        bool               `json:"is_malicious"`
 	LookbackResult     []byte             `json:"lookback_result"`
 	AutoApprovalReason pgtype.Text        `json:"auto_approval_reason"`
@@ -1134,6 +928,8 @@ type GetClaimsWithSameAddressRow struct {
 	CreatedAt          time.Time          `json:"created_at"`
 	ReviewedAt         pgtype.Timestamptz `json:"reviewed_at"`
 	PaidAt             pgtype.Timestamptz `json:"paid_at"`
+	DecisionVersion    pgtype.Text        `json:"decision_version"`
+	DecisionReason     pgtype.Text        `json:"decision_reason"`
 	UserID_2           int64              `json:"user_id_2"`
 }
 
@@ -1153,12 +949,10 @@ func (q *Queries) GetClaimsWithSameAddress(ctx context.Context, arg GetClaimsWit
 			&i.UserID,
 			&i.ClaimType,
 			&i.Description,
-			&i.EvidenceUrls,
 			&i.ClaimAmount,
 			&i.ApprovedAmount,
 			&i.Status,
 			&i.ApprovalType,
-			&i.TrustScoreSnapshot,
 			&i.IsMalicious,
 			&i.LookbackResult,
 			&i.AutoApprovalReason,
@@ -1168,6 +962,8 @@ func (q *Queries) GetClaimsWithSameAddress(ctx context.Context, arg GetClaimsWit
 			&i.CreatedAt,
 			&i.ReviewedAt,
 			&i.PaidAt,
+			&i.DecisionVersion,
+			&i.DecisionReason,
 			&i.UserID_2,
 		); err != nil {
 			return nil, err
@@ -1181,7 +977,7 @@ func (q *Queries) GetClaimsWithSameAddress(ctx context.Context, arg GetClaimsWit
 }
 
 const getDevicesByUserID = `-- name: GetDevicesByUserID :many
-SELECT id, user_id, device_id, device_type, device_model, os_version, app_version, user_agent, ip_address, last_login_at, created_at, first_seen, last_seen, updated_at
+SELECT id, user_id, device_id, device_type, device_model, os_version, app_version, user_agent, ip_address, last_login_at, created_at, first_seen, last_seen, updated_at, device_fingerprint
 FROM user_devices
 WHERE user_id = $1
 ORDER BY last_seen DESC
@@ -1211,6 +1007,7 @@ func (q *Queries) GetDevicesByUserID(ctx context.Context, userID int64) ([]UserD
 			&i.FirstSeen,
 			&i.LastSeen,
 			&i.UpdatedAt,
+			&i.DeviceFingerprint,
 		); err != nil {
 			return nil, err
 		}
@@ -1223,7 +1020,7 @@ func (q *Queries) GetDevicesByUserID(ctx context.Context, userID int64) ([]UserD
 }
 
 const getFoodSafetyIncident = `-- name: GetFoodSafetyIncident :one
-SELECT id, order_id, merchant_id, user_id, incident_type, description, evidence_urls, order_snapshot, merchant_snapshot, rider_snapshot, status, investigation_report, resolution, created_at, resolved_at FROM food_safety_incidents
+SELECT id, order_id, merchant_id, user_id, incident_type, description, order_snapshot, merchant_snapshot, rider_snapshot, status, investigation_report, resolution, created_at, resolved_at FROM food_safety_incidents
 WHERE id = $1
 LIMIT 1
 `
@@ -1238,7 +1035,6 @@ func (q *Queries) GetFoodSafetyIncident(ctx context.Context, id int64) (FoodSafe
 		&i.UserID,
 		&i.IncidentType,
 		&i.Description,
-		&i.EvidenceUrls,
 		&i.OrderSnapshot,
 		&i.MerchantSnapshot,
 		&i.RiderSnapshot,
@@ -1377,7 +1173,7 @@ func (q *Queries) GetFraudPatternsByUsers(ctx context.Context, dollar_1 []int64)
 }
 
 const getMaliciousClaims = `-- name: GetMaliciousClaims :many
-SELECT id, order_id, user_id, claim_type, description, evidence_urls, claim_amount, approved_amount, status, approval_type, trust_score_snapshot, is_malicious, lookback_result, auto_approval_reason, rejection_reason, reviewer_id, review_notes, created_at, reviewed_at, paid_at FROM claims
+SELECT id, order_id, user_id, claim_type, description, claim_amount, approved_amount, status, approval_type, is_malicious, lookback_result, auto_approval_reason, rejection_reason, reviewer_id, review_notes, created_at, reviewed_at, paid_at, decision_version, decision_reason FROM claims
 WHERE is_malicious = true
   AND created_at >= $1
 ORDER BY created_at DESC
@@ -1398,12 +1194,10 @@ func (q *Queries) GetMaliciousClaims(ctx context.Context, createdAt time.Time) (
 			&i.UserID,
 			&i.ClaimType,
 			&i.Description,
-			&i.EvidenceUrls,
 			&i.ClaimAmount,
 			&i.ApprovedAmount,
 			&i.Status,
 			&i.ApprovalType,
-			&i.TrustScoreSnapshot,
 			&i.IsMalicious,
 			&i.LookbackResult,
 			&i.AutoApprovalReason,
@@ -1413,6 +1207,8 @@ func (q *Queries) GetMaliciousClaims(ctx context.Context, createdAt time.Time) (
 			&i.CreatedAt,
 			&i.ReviewedAt,
 			&i.PaidAt,
+			&i.DecisionVersion,
+			&i.DecisionReason,
 		); err != nil {
 			return nil, err
 		}
@@ -1425,18 +1221,47 @@ func (q *Queries) GetMaliciousClaims(ctx context.Context, createdAt time.Time) (
 }
 
 const getMerchantProfile = `-- name: GetMerchantProfile :one
-SELECT id, merchant_id, trust_score, total_orders, total_sales, completed_orders, total_claims, foreign_object_claims, food_safety_incidents, timeout_count, refuse_order_count, recent_7d_claims, recent_7d_incidents, recent_30d_claims, recent_30d_incidents, recent_30d_timeouts, recent_90d_claims, recent_90d_incidents, is_suspended, suspend_reason, suspended_at, suspend_until, updated_at FROM merchant_profiles
+SELECT id, merchant_id, total_orders, total_sales, completed_orders, total_claims, foreign_object_claims, food_safety_incidents, timeout_count, refuse_order_count, recent_7d_claims, recent_7d_incidents, recent_30d_claims, recent_30d_incidents, recent_30d_timeouts, recent_90d_claims, recent_90d_incidents, is_suspended, suspend_reason, suspended_at, suspend_until, is_takeout_suspended, takeout_suspend_reason, takeout_suspended_at, takeout_suspend_until, updated_at
+FROM merchant_profiles
 WHERE merchant_id = $1
 LIMIT 1
 `
 
-func (q *Queries) GetMerchantProfile(ctx context.Context, merchantID int64) (MerchantProfile, error) {
+type GetMerchantProfileRow struct {
+	ID                   int64              `json:"id"`
+	MerchantID           int64              `json:"merchant_id"`
+	TotalOrders          int32              `json:"total_orders"`
+	TotalSales           int64              `json:"total_sales"`
+	CompletedOrders      int32              `json:"completed_orders"`
+	TotalClaims          int32              `json:"total_claims"`
+	ForeignObjectClaims  int32              `json:"foreign_object_claims"`
+	FoodSafetyIncidents  int32              `json:"food_safety_incidents"`
+	TimeoutCount         int32              `json:"timeout_count"`
+	RefuseOrderCount     int32              `json:"refuse_order_count"`
+	Recent7dClaims       int32              `json:"recent_7d_claims"`
+	Recent7dIncidents    int32              `json:"recent_7d_incidents"`
+	Recent30dClaims      int32              `json:"recent_30d_claims"`
+	Recent30dIncidents   int32              `json:"recent_30d_incidents"`
+	Recent30dTimeouts    int32              `json:"recent_30d_timeouts"`
+	Recent90dClaims      int32              `json:"recent_90d_claims"`
+	Recent90dIncidents   int32              `json:"recent_90d_incidents"`
+	IsSuspended          bool               `json:"is_suspended"`
+	SuspendReason        pgtype.Text        `json:"suspend_reason"`
+	SuspendedAt          pgtype.Timestamptz `json:"suspended_at"`
+	SuspendUntil         pgtype.Timestamptz `json:"suspend_until"`
+	IsTakeoutSuspended   bool               `json:"is_takeout_suspended"`
+	TakeoutSuspendReason pgtype.Text        `json:"takeout_suspend_reason"`
+	TakeoutSuspendedAt   pgtype.Timestamptz `json:"takeout_suspended_at"`
+	TakeoutSuspendUntil  pgtype.Timestamptz `json:"takeout_suspend_until"`
+	UpdatedAt            time.Time          `json:"updated_at"`
+}
+
+func (q *Queries) GetMerchantProfile(ctx context.Context, merchantID int64) (GetMerchantProfileRow, error) {
 	row := q.db.QueryRow(ctx, getMerchantProfile, merchantID)
-	var i MerchantProfile
+	var i GetMerchantProfileRow
 	err := row.Scan(
 		&i.ID,
 		&i.MerchantID,
-		&i.TrustScore,
 		&i.TotalOrders,
 		&i.TotalSales,
 		&i.CompletedOrders,
@@ -1456,25 +1281,58 @@ func (q *Queries) GetMerchantProfile(ctx context.Context, merchantID int64) (Mer
 		&i.SuspendReason,
 		&i.SuspendedAt,
 		&i.SuspendUntil,
+		&i.IsTakeoutSuspended,
+		&i.TakeoutSuspendReason,
+		&i.TakeoutSuspendedAt,
+		&i.TakeoutSuspendUntil,
 		&i.UpdatedAt,
 	)
 	return i, err
 }
 
 const getMerchantProfileForUpdate = `-- name: GetMerchantProfileForUpdate :one
-SELECT id, merchant_id, trust_score, total_orders, total_sales, completed_orders, total_claims, foreign_object_claims, food_safety_incidents, timeout_count, refuse_order_count, recent_7d_claims, recent_7d_incidents, recent_30d_claims, recent_30d_incidents, recent_30d_timeouts, recent_90d_claims, recent_90d_incidents, is_suspended, suspend_reason, suspended_at, suspend_until, updated_at FROM merchant_profiles
+SELECT id, merchant_id, total_orders, total_sales, completed_orders, total_claims, foreign_object_claims, food_safety_incidents, timeout_count, refuse_order_count, recent_7d_claims, recent_7d_incidents, recent_30d_claims, recent_30d_incidents, recent_30d_timeouts, recent_90d_claims, recent_90d_incidents, is_suspended, suspend_reason, suspended_at, suspend_until, is_takeout_suspended, takeout_suspend_reason, takeout_suspended_at, takeout_suspend_until, updated_at
+FROM merchant_profiles
 WHERE merchant_id = $1
 LIMIT 1
 FOR UPDATE
 `
 
-func (q *Queries) GetMerchantProfileForUpdate(ctx context.Context, merchantID int64) (MerchantProfile, error) {
+type GetMerchantProfileForUpdateRow struct {
+	ID                   int64              `json:"id"`
+	MerchantID           int64              `json:"merchant_id"`
+	TotalOrders          int32              `json:"total_orders"`
+	TotalSales           int64              `json:"total_sales"`
+	CompletedOrders      int32              `json:"completed_orders"`
+	TotalClaims          int32              `json:"total_claims"`
+	ForeignObjectClaims  int32              `json:"foreign_object_claims"`
+	FoodSafetyIncidents  int32              `json:"food_safety_incidents"`
+	TimeoutCount         int32              `json:"timeout_count"`
+	RefuseOrderCount     int32              `json:"refuse_order_count"`
+	Recent7dClaims       int32              `json:"recent_7d_claims"`
+	Recent7dIncidents    int32              `json:"recent_7d_incidents"`
+	Recent30dClaims      int32              `json:"recent_30d_claims"`
+	Recent30dIncidents   int32              `json:"recent_30d_incidents"`
+	Recent30dTimeouts    int32              `json:"recent_30d_timeouts"`
+	Recent90dClaims      int32              `json:"recent_90d_claims"`
+	Recent90dIncidents   int32              `json:"recent_90d_incidents"`
+	IsSuspended          bool               `json:"is_suspended"`
+	SuspendReason        pgtype.Text        `json:"suspend_reason"`
+	SuspendedAt          pgtype.Timestamptz `json:"suspended_at"`
+	SuspendUntil         pgtype.Timestamptz `json:"suspend_until"`
+	IsTakeoutSuspended   bool               `json:"is_takeout_suspended"`
+	TakeoutSuspendReason pgtype.Text        `json:"takeout_suspend_reason"`
+	TakeoutSuspendedAt   pgtype.Timestamptz `json:"takeout_suspended_at"`
+	TakeoutSuspendUntil  pgtype.Timestamptz `json:"takeout_suspend_until"`
+	UpdatedAt            time.Time          `json:"updated_at"`
+}
+
+func (q *Queries) GetMerchantProfileForUpdate(ctx context.Context, merchantID int64) (GetMerchantProfileForUpdateRow, error) {
 	row := q.db.QueryRow(ctx, getMerchantProfileForUpdate, merchantID)
-	var i MerchantProfile
+	var i GetMerchantProfileForUpdateRow
 	err := row.Scan(
 		&i.ID,
 		&i.MerchantID,
-		&i.TrustScore,
 		&i.TotalOrders,
 		&i.TotalSales,
 		&i.CompletedOrders,
@@ -1494,13 +1352,17 @@ func (q *Queries) GetMerchantProfileForUpdate(ctx context.Context, merchantID in
 		&i.SuspendReason,
 		&i.SuspendedAt,
 		&i.SuspendUntil,
+		&i.IsTakeoutSuspended,
+		&i.TakeoutSuspendReason,
+		&i.TakeoutSuspendedAt,
+		&i.TakeoutSuspendUntil,
 		&i.UpdatedAt,
 	)
 	return i, err
 }
 
 const getMerchantRecentFoodSafetyReports = `-- name: GetMerchantRecentFoodSafetyReports :many
-SELECT id, order_id, merchant_id, user_id, incident_type, description, evidence_urls, order_snapshot, merchant_snapshot, rider_snapshot, status, investigation_report, resolution, created_at, resolved_at FROM food_safety_incidents
+SELECT id, order_id, merchant_id, user_id, incident_type, description, order_snapshot, merchant_snapshot, rider_snapshot, status, investigation_report, resolution, created_at, resolved_at FROM food_safety_incidents
 WHERE merchant_id = $1
   AND created_at >= NOW() - INTERVAL '1 hour'
 ORDER BY created_at DESC
@@ -1522,7 +1384,6 @@ func (q *Queries) GetMerchantRecentFoodSafetyReports(ctx context.Context, mercha
 			&i.UserID,
 			&i.IncidentType,
 			&i.Description,
-			&i.EvidenceUrls,
 			&i.OrderSnapshot,
 			&i.MerchantSnapshot,
 			&i.RiderSnapshot,
@@ -1580,7 +1441,7 @@ func (q *Queries) GetOrdersMerchantAndRider(ctx context.Context, dollar_1 []int6
 }
 
 const getPendingClaims = `-- name: GetPendingClaims :many
-SELECT id, order_id, user_id, claim_type, description, evidence_urls, claim_amount, approved_amount, status, approval_type, trust_score_snapshot, is_malicious, lookback_result, auto_approval_reason, rejection_reason, reviewer_id, review_notes, created_at, reviewed_at, paid_at FROM claims
+SELECT id, order_id, user_id, claim_type, description, claim_amount, approved_amount, status, approval_type, is_malicious, lookback_result, auto_approval_reason, rejection_reason, reviewer_id, review_notes, created_at, reviewed_at, paid_at, decision_version, decision_reason FROM claims
 WHERE status = 'pending'
 ORDER BY created_at ASC
 LIMIT $1
@@ -1601,12 +1462,10 @@ func (q *Queries) GetPendingClaims(ctx context.Context, limit int32) ([]Claim, e
 			&i.UserID,
 			&i.ClaimType,
 			&i.Description,
-			&i.EvidenceUrls,
 			&i.ClaimAmount,
 			&i.ApprovedAmount,
 			&i.Status,
 			&i.ApprovalType,
-			&i.TrustScoreSnapshot,
 			&i.IsMalicious,
 			&i.LookbackResult,
 			&i.AutoApprovalReason,
@@ -1616,53 +1475,8 @@ func (q *Queries) GetPendingClaims(ctx context.Context, limit int32) ([]Claim, e
 			&i.CreatedAt,
 			&i.ReviewedAt,
 			&i.PaidAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getRecentTrustScoreChanges = `-- name: GetRecentTrustScoreChanges :many
-SELECT id, entity_type, entity_id, old_score, new_score, score_change, reason_type, reason_description, related_type, related_id, is_auto, operator_id, created_at FROM trust_score_changes
-WHERE entity_type = $1 AND entity_id = $2
-  AND created_at >= $3
-ORDER BY created_at DESC
-`
-
-type GetRecentTrustScoreChangesParams struct {
-	EntityType string    `json:"entity_type"`
-	EntityID   int64     `json:"entity_id"`
-	CreatedAt  time.Time `json:"created_at"`
-}
-
-func (q *Queries) GetRecentTrustScoreChanges(ctx context.Context, arg GetRecentTrustScoreChangesParams) ([]TrustScoreChange, error) {
-	rows, err := q.db.Query(ctx, getRecentTrustScoreChanges, arg.EntityType, arg.EntityID, arg.CreatedAt)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []TrustScoreChange{}
-	for rows.Next() {
-		var i TrustScoreChange
-		if err := rows.Scan(
-			&i.ID,
-			&i.EntityType,
-			&i.EntityID,
-			&i.OldScore,
-			&i.NewScore,
-			&i.ScoreChange,
-			&i.ReasonType,
-			&i.ReasonDescription,
-			&i.RelatedType,
-			&i.RelatedID,
-			&i.IsAuto,
-			&i.OperatorID,
-			&i.CreatedAt,
+			&i.DecisionVersion,
+			&i.DecisionReason,
 		); err != nil {
 			return nil, err
 		}
@@ -1711,7 +1525,7 @@ func (q *Queries) GetRiderDeliveryStats(ctx context.Context, arg GetRiderDeliver
 }
 
 const getRiderProfile = `-- name: GetRiderProfile :one
-SELECT id, rider_id, trust_score, total_deliveries, completed_deliveries, on_time_deliveries, delayed_deliveries, cancelled_deliveries, total_damage_incidents, customer_complaints, timeout_incidents, recent_7d_damages, recent_7d_delays, recent_30d_damages, recent_30d_delays, recent_30d_complaints, recent_90d_damages, recent_90d_delays, total_online_hours, is_suspended, suspend_reason, suspended_at, suspend_until, updated_at, premium_score FROM rider_profiles
+SELECT id, rider_id, total_deliveries, completed_deliveries, on_time_deliveries, delayed_deliveries, cancelled_deliveries, total_damage_incidents, customer_complaints, timeout_incidents, recent_7d_damages, recent_7d_delays, recent_30d_damages, recent_30d_delays, recent_30d_complaints, recent_90d_damages, recent_90d_delays, total_online_hours, is_suspended, suspend_reason, suspended_at, suspend_until, updated_at FROM rider_profiles
 WHERE rider_id = $1
 LIMIT 1
 `
@@ -1722,7 +1536,6 @@ func (q *Queries) GetRiderProfile(ctx context.Context, riderID int64) (RiderProf
 	err := row.Scan(
 		&i.ID,
 		&i.RiderID,
-		&i.TrustScore,
 		&i.TotalDeliveries,
 		&i.CompletedDeliveries,
 		&i.OnTimeDeliveries,
@@ -1744,13 +1557,12 @@ func (q *Queries) GetRiderProfile(ctx context.Context, riderID int64) (RiderProf
 		&i.SuspendedAt,
 		&i.SuspendUntil,
 		&i.UpdatedAt,
-		&i.PremiumScore,
 	)
 	return i, err
 }
 
 const getRiderProfileForUpdate = `-- name: GetRiderProfileForUpdate :one
-SELECT id, rider_id, trust_score, total_deliveries, completed_deliveries, on_time_deliveries, delayed_deliveries, cancelled_deliveries, total_damage_incidents, customer_complaints, timeout_incidents, recent_7d_damages, recent_7d_delays, recent_30d_damages, recent_30d_delays, recent_30d_complaints, recent_90d_damages, recent_90d_delays, total_online_hours, is_suspended, suspend_reason, suspended_at, suspend_until, updated_at, premium_score FROM rider_profiles
+SELECT id, rider_id, total_deliveries, completed_deliveries, on_time_deliveries, delayed_deliveries, cancelled_deliveries, total_damage_incidents, customer_complaints, timeout_incidents, recent_7d_damages, recent_7d_delays, recent_30d_damages, recent_30d_delays, recent_30d_complaints, recent_90d_damages, recent_90d_delays, total_online_hours, is_suspended, suspend_reason, suspended_at, suspend_until, updated_at FROM rider_profiles
 WHERE rider_id = $1
 LIMIT 1
 FOR UPDATE
@@ -1762,7 +1574,6 @@ func (q *Queries) GetRiderProfileForUpdate(ctx context.Context, riderID int64) (
 	err := row.Scan(
 		&i.ID,
 		&i.RiderID,
-		&i.TrustScore,
 		&i.TotalDeliveries,
 		&i.CompletedDeliveries,
 		&i.OnTimeDeliveries,
@@ -1784,110 +1595,8 @@ func (q *Queries) GetRiderProfileForUpdate(ctx context.Context, riderID int64) (
 		&i.SuspendedAt,
 		&i.SuspendUntil,
 		&i.UpdatedAt,
-		&i.PremiumScore,
 	)
 	return i, err
-}
-
-const getTotalScoreChangeByReason = `-- name: GetTotalScoreChangeByReason :one
-SELECT COALESCE(SUM(score_change), 0) as total_change
-FROM trust_score_changes
-WHERE entity_type = $1 AND entity_id = $2
-  AND reason_type = $3
-`
-
-type GetTotalScoreChangeByReasonParams struct {
-	EntityType string `json:"entity_type"`
-	EntityID   int64  `json:"entity_id"`
-	ReasonType string `json:"reason_type"`
-}
-
-func (q *Queries) GetTotalScoreChangeByReason(ctx context.Context, arg GetTotalScoreChangeByReasonParams) (interface{}, error) {
-	row := q.db.QueryRow(ctx, getTotalScoreChangeByReason, arg.EntityType, arg.EntityID, arg.ReasonType)
-	var total_change interface{}
-	err := row.Scan(&total_change)
-	return total_change, err
-}
-
-const getTrustScoreChange = `-- name: GetTrustScoreChange :one
-SELECT id, entity_type, entity_id, old_score, new_score, score_change, reason_type, reason_description, related_type, related_id, is_auto, operator_id, created_at FROM trust_score_changes
-WHERE id = $1
-LIMIT 1
-`
-
-func (q *Queries) GetTrustScoreChange(ctx context.Context, id int64) (TrustScoreChange, error) {
-	row := q.db.QueryRow(ctx, getTrustScoreChange, id)
-	var i TrustScoreChange
-	err := row.Scan(
-		&i.ID,
-		&i.EntityType,
-		&i.EntityID,
-		&i.OldScore,
-		&i.NewScore,
-		&i.ScoreChange,
-		&i.ReasonType,
-		&i.ReasonDescription,
-		&i.RelatedType,
-		&i.RelatedID,
-		&i.IsAuto,
-		&i.OperatorID,
-		&i.CreatedAt,
-	)
-	return i, err
-}
-
-const getTrustScoreChangesByReason = `-- name: GetTrustScoreChangesByReason :many
-SELECT id, entity_type, entity_id, old_score, new_score, score_change, reason_type, reason_description, related_type, related_id, is_auto, operator_id, created_at FROM trust_score_changes
-WHERE entity_type = $1 AND entity_id = $2
-  AND reason_type = $3
-ORDER BY created_at DESC
-LIMIT $4
-`
-
-type GetTrustScoreChangesByReasonParams struct {
-	EntityType string `json:"entity_type"`
-	EntityID   int64  `json:"entity_id"`
-	ReasonType string `json:"reason_type"`
-	Limit      int32  `json:"limit"`
-}
-
-func (q *Queries) GetTrustScoreChangesByReason(ctx context.Context, arg GetTrustScoreChangesByReasonParams) ([]TrustScoreChange, error) {
-	rows, err := q.db.Query(ctx, getTrustScoreChangesByReason,
-		arg.EntityType,
-		arg.EntityID,
-		arg.ReasonType,
-		arg.Limit,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []TrustScoreChange{}
-	for rows.Next() {
-		var i TrustScoreChange
-		if err := rows.Scan(
-			&i.ID,
-			&i.EntityType,
-			&i.EntityID,
-			&i.OldScore,
-			&i.NewScore,
-			&i.ScoreChange,
-			&i.ReasonType,
-			&i.ReasonDescription,
-			&i.RelatedType,
-			&i.RelatedID,
-			&i.IsAuto,
-			&i.OperatorID,
-			&i.CreatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }
 
 const getUnconfirmedFraudPatterns = `-- name: GetUnconfirmedFraudPatterns :many
@@ -1994,91 +1703,8 @@ func (q *Queries) GetUserClaimWarningStatus(ctx context.Context, userID int64) (
 	return i, err
 }
 
-const getUserProfile = `-- name: GetUserProfile :one
-SELECT id, user_id, role, trust_score, total_orders, completed_orders, cancelled_orders, total_claims, malicious_claims, food_safety_reports, verified_violations, recent_7d_claims, recent_7d_orders, recent_30d_claims, recent_30d_orders, recent_30d_cancels, recent_90d_claims, recent_90d_orders, is_blacklisted, blacklist_reason, blacklisted_at, updated_at FROM user_profiles
-WHERE user_id = $1 AND role = $2
-LIMIT 1
-`
-
-type GetUserProfileParams struct {
-	UserID int64  `json:"user_id"`
-	Role   string `json:"role"`
-}
-
-func (q *Queries) GetUserProfile(ctx context.Context, arg GetUserProfileParams) (UserProfile, error) {
-	row := q.db.QueryRow(ctx, getUserProfile, arg.UserID, arg.Role)
-	var i UserProfile
-	err := row.Scan(
-		&i.ID,
-		&i.UserID,
-		&i.Role,
-		&i.TrustScore,
-		&i.TotalOrders,
-		&i.CompletedOrders,
-		&i.CancelledOrders,
-		&i.TotalClaims,
-		&i.MaliciousClaims,
-		&i.FoodSafetyReports,
-		&i.VerifiedViolations,
-		&i.Recent7dClaims,
-		&i.Recent7dOrders,
-		&i.Recent30dClaims,
-		&i.Recent30dOrders,
-		&i.Recent30dCancels,
-		&i.Recent90dClaims,
-		&i.Recent90dOrders,
-		&i.IsBlacklisted,
-		&i.BlacklistReason,
-		&i.BlacklistedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const getUserProfileForUpdate = `-- name: GetUserProfileForUpdate :one
-SELECT id, user_id, role, trust_score, total_orders, completed_orders, cancelled_orders, total_claims, malicious_claims, food_safety_reports, verified_violations, recent_7d_claims, recent_7d_orders, recent_30d_claims, recent_30d_orders, recent_30d_cancels, recent_90d_claims, recent_90d_orders, is_blacklisted, blacklist_reason, blacklisted_at, updated_at FROM user_profiles
-WHERE user_id = $1 AND role = $2
-LIMIT 1
-FOR UPDATE
-`
-
-type GetUserProfileForUpdateParams struct {
-	UserID int64  `json:"user_id"`
-	Role   string `json:"role"`
-}
-
-func (q *Queries) GetUserProfileForUpdate(ctx context.Context, arg GetUserProfileForUpdateParams) (UserProfile, error) {
-	row := q.db.QueryRow(ctx, getUserProfileForUpdate, arg.UserID, arg.Role)
-	var i UserProfile
-	err := row.Scan(
-		&i.ID,
-		&i.UserID,
-		&i.Role,
-		&i.TrustScore,
-		&i.TotalOrders,
-		&i.CompletedOrders,
-		&i.CancelledOrders,
-		&i.TotalClaims,
-		&i.MaliciousClaims,
-		&i.FoodSafetyReports,
-		&i.VerifiedViolations,
-		&i.Recent7dClaims,
-		&i.Recent7dOrders,
-		&i.Recent30dClaims,
-		&i.Recent30dOrders,
-		&i.Recent30dCancels,
-		&i.Recent90dClaims,
-		&i.Recent90dOrders,
-		&i.IsBlacklisted,
-		&i.BlacklistReason,
-		&i.BlacklistedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
 const getUserRecentClaims = `-- name: GetUserRecentClaims :many
-SELECT id, order_id, user_id, claim_type, description, evidence_urls, claim_amount, approved_amount, status, approval_type, trust_score_snapshot, is_malicious, lookback_result, auto_approval_reason, rejection_reason, reviewer_id, review_notes, created_at, reviewed_at, paid_at FROM claims
+SELECT id, order_id, user_id, claim_type, description, claim_amount, approved_amount, status, approval_type, is_malicious, lookback_result, auto_approval_reason, rejection_reason, reviewer_id, review_notes, created_at, reviewed_at, paid_at, decision_version, decision_reason FROM claims
 WHERE user_id = $1
   AND created_at >= NOW() - INTERVAL '30 days'
 ORDER BY created_at DESC
@@ -2100,12 +1726,10 @@ func (q *Queries) GetUserRecentClaims(ctx context.Context, userID int64) ([]Clai
 			&i.UserID,
 			&i.ClaimType,
 			&i.Description,
-			&i.EvidenceUrls,
 			&i.ClaimAmount,
 			&i.ApprovedAmount,
 			&i.Status,
 			&i.ApprovalType,
-			&i.TrustScoreSnapshot,
 			&i.IsMalicious,
 			&i.LookbackResult,
 			&i.AutoApprovalReason,
@@ -2115,6 +1739,8 @@ func (q *Queries) GetUserRecentClaims(ctx context.Context, userID int64) ([]Clai
 			&i.CreatedAt,
 			&i.ReviewedAt,
 			&i.PaidAt,
+			&i.DecisionVersion,
+			&i.DecisionReason,
 		); err != nil {
 			return nil, err
 		}
@@ -2165,11 +1791,36 @@ func (q *Queries) GetUsersByAddressID(ctx context.Context, id int64) ([]GetUsers
 	return items, nil
 }
 
+const getUsersByDeviceFingerprint = `-- name: GetUsersByDeviceFingerprint :many
+SELECT DISTINCT user_id
+FROM user_devices
+WHERE device_fingerprint = $1
+`
+
+func (q *Queries) GetUsersByDeviceFingerprint(ctx context.Context, deviceFingerprint pgtype.Text) ([]int64, error) {
+	rows, err := q.db.Query(ctx, getUsersByDeviceFingerprint, deviceFingerprint)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []int64{}
+	for rows.Next() {
+		var user_id int64
+		if err := rows.Scan(&user_id); err != nil {
+			return nil, err
+		}
+		items = append(items, user_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getUsersByDeviceID = `-- name: GetUsersByDeviceID :many
 SELECT DISTINCT user_id
 FROM user_devices
 WHERE device_id = $1
-ORDER BY last_seen DESC
 `
 
 func (q *Queries) GetUsersByDeviceID(ctx context.Context, deviceID string) ([]int64, error) {
@@ -2309,26 +1960,6 @@ func (q *Queries) IncrementRiderDamageIncident(ctx context.Context, riderID int6
 	return err
 }
 
-const incrementUserClaimCount = `-- name: IncrementUserClaimCount :exec
-UPDATE user_profiles
-SET total_claims = total_claims + 1,
-    recent_7d_claims = recent_7d_claims + 1,
-    recent_30d_claims = recent_30d_claims + 1,
-    recent_90d_claims = recent_90d_claims + 1,
-    updated_at = NOW()
-WHERE user_id = $1 AND role = $2
-`
-
-type IncrementUserClaimCountParams struct {
-	UserID int64  `json:"user_id"`
-	Role   string `json:"role"`
-}
-
-func (q *Queries) IncrementUserClaimCount(ctx context.Context, arg IncrementUserClaimCountParams) error {
-	_, err := q.db.Exec(ctx, incrementUserClaimCount, arg.UserID, arg.Role)
-	return err
-}
-
 const incrementUserClaimWarning = `-- name: IncrementUserClaimWarning :exec
 UPDATE user_claim_warnings
 SET warning_count = warning_count + 1,
@@ -2373,7 +2004,7 @@ func (q *Queries) IncrementUserPlatformPayCount(ctx context.Context, arg Increme
 
 const listClaimsByTimeWindow = `-- name: ListClaimsByTimeWindow :many
 
-SELECT c.id, c.order_id, c.user_id, c.claim_type, c.description, c.evidence_urls, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.trust_score_snapshot, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at, o.address_id
+SELECT c.id, c.order_id, c.user_id, c.claim_type, c.description, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at, c.decision_version, c.decision_reason, o.address_id
 FROM claims c
 JOIN orders o ON c.order_id = o.id
 WHERE c.created_at >= $1
@@ -2383,9 +2014,9 @@ ORDER BY c.created_at DESC
 `
 
 type ListClaimsByTimeWindowParams struct {
-	CreatedAt   time.Time `json:"created_at"`
-	CreatedAt_2 time.Time `json:"created_at_2"`
-	ID          int64     `json:"id"`
+	StartAt   time.Time `json:"start_at"`
+	EndAt     time.Time `json:"end_at"`
+	ExcludeID int64     `json:"exclude_id"`
 }
 
 type ListClaimsByTimeWindowRow struct {
@@ -2394,12 +2025,10 @@ type ListClaimsByTimeWindowRow struct {
 	UserID             int64              `json:"user_id"`
 	ClaimType          string             `json:"claim_type"`
 	Description        string             `json:"description"`
-	EvidenceUrls       []string           `json:"evidence_urls"`
 	ClaimAmount        int64              `json:"claim_amount"`
 	ApprovedAmount     pgtype.Int8        `json:"approved_amount"`
 	Status             string             `json:"status"`
 	ApprovalType       pgtype.Text        `json:"approval_type"`
-	TrustScoreSnapshot pgtype.Int2        `json:"trust_score_snapshot"`
 	IsMalicious        bool               `json:"is_malicious"`
 	LookbackResult     []byte             `json:"lookback_result"`
 	AutoApprovalReason pgtype.Text        `json:"auto_approval_reason"`
@@ -2409,6 +2038,8 @@ type ListClaimsByTimeWindowRow struct {
 	CreatedAt          time.Time          `json:"created_at"`
 	ReviewedAt         pgtype.Timestamptz `json:"reviewed_at"`
 	PaidAt             pgtype.Timestamptz `json:"paid_at"`
+	DecisionVersion    pgtype.Text        `json:"decision_version"`
+	DecisionReason     pgtype.Text        `json:"decision_reason"`
 	AddressID          pgtype.Int8        `json:"address_id"`
 }
 
@@ -2417,7 +2048,7 @@ type ListClaimsByTimeWindowRow struct {
 // ==========================================
 // 查询指定时间窗口内的索赔（用于协同欺诈检测）
 func (q *Queries) ListClaimsByTimeWindow(ctx context.Context, arg ListClaimsByTimeWindowParams) ([]ListClaimsByTimeWindowRow, error) {
-	rows, err := q.db.Query(ctx, listClaimsByTimeWindow, arg.CreatedAt, arg.CreatedAt_2, arg.ID)
+	rows, err := q.db.Query(ctx, listClaimsByTimeWindow, arg.StartAt, arg.EndAt, arg.ExcludeID)
 	if err != nil {
 		return nil, err
 	}
@@ -2431,12 +2062,10 @@ func (q *Queries) ListClaimsByTimeWindow(ctx context.Context, arg ListClaimsByTi
 			&i.UserID,
 			&i.ClaimType,
 			&i.Description,
-			&i.EvidenceUrls,
 			&i.ClaimAmount,
 			&i.ApprovedAmount,
 			&i.Status,
 			&i.ApprovalType,
-			&i.TrustScoreSnapshot,
 			&i.IsMalicious,
 			&i.LookbackResult,
 			&i.AutoApprovalReason,
@@ -2446,60 +2075,9 @@ func (q *Queries) ListClaimsByTimeWindow(ctx context.Context, arg ListClaimsByTi
 			&i.CreatedAt,
 			&i.ReviewedAt,
 			&i.PaidAt,
+			&i.DecisionVersion,
+			&i.DecisionReason,
 			&i.AddressID,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listEntityTrustScoreChanges = `-- name: ListEntityTrustScoreChanges :many
-SELECT id, entity_type, entity_id, old_score, new_score, score_change, reason_type, reason_description, related_type, related_id, is_auto, operator_id, created_at FROM trust_score_changes
-WHERE entity_type = $1 AND entity_id = $2
-ORDER BY created_at DESC
-LIMIT $3 OFFSET $4
-`
-
-type ListEntityTrustScoreChangesParams struct {
-	EntityType string `json:"entity_type"`
-	EntityID   int64  `json:"entity_id"`
-	Limit      int32  `json:"limit"`
-	Offset     int32  `json:"offset"`
-}
-
-func (q *Queries) ListEntityTrustScoreChanges(ctx context.Context, arg ListEntityTrustScoreChangesParams) ([]TrustScoreChange, error) {
-	rows, err := q.db.Query(ctx, listEntityTrustScoreChanges,
-		arg.EntityType,
-		arg.EntityID,
-		arg.Limit,
-		arg.Offset,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []TrustScoreChange{}
-	for rows.Next() {
-		var i TrustScoreChange
-		if err := rows.Scan(
-			&i.ID,
-			&i.EntityType,
-			&i.EntityID,
-			&i.OldScore,
-			&i.NewScore,
-			&i.ScoreChange,
-			&i.ReasonType,
-			&i.ReasonDescription,
-			&i.RelatedType,
-			&i.RelatedID,
-			&i.IsAuto,
-			&i.OperatorID,
-			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -2570,7 +2148,7 @@ func (q *Queries) ListFraudPatterns(ctx context.Context, arg ListFraudPatternsPa
 }
 
 const listMerchantClaims = `-- name: ListMerchantClaims :many
-SELECT c.id, c.order_id, c.user_id, c.claim_type, c.description, c.evidence_urls, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.trust_score_snapshot, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at FROM claims c
+SELECT c.id, c.order_id, c.user_id, c.claim_type, c.description, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at, c.decision_version, c.decision_reason FROM claims c
 JOIN orders o ON c.order_id = o.id
 WHERE o.merchant_id = $1
   AND c.created_at >= $2
@@ -2597,12 +2175,10 @@ func (q *Queries) ListMerchantClaims(ctx context.Context, arg ListMerchantClaims
 			&i.UserID,
 			&i.ClaimType,
 			&i.Description,
-			&i.EvidenceUrls,
 			&i.ClaimAmount,
 			&i.ApprovedAmount,
 			&i.Status,
 			&i.ApprovalType,
-			&i.TrustScoreSnapshot,
 			&i.IsMalicious,
 			&i.LookbackResult,
 			&i.AutoApprovalReason,
@@ -2612,6 +2188,8 @@ func (q *Queries) ListMerchantClaims(ctx context.Context, arg ListMerchantClaims
 			&i.CreatedAt,
 			&i.ReviewedAt,
 			&i.PaidAt,
+			&i.DecisionVersion,
+			&i.DecisionReason,
 		); err != nil {
 			return nil, err
 		}
@@ -2624,7 +2202,7 @@ func (q *Queries) ListMerchantClaims(ctx context.Context, arg ListMerchantClaims
 }
 
 const listMerchantClaimsByTypeInPeriod = `-- name: ListMerchantClaimsByTypeInPeriod :many
-SELECT c.id, c.order_id, c.user_id, c.claim_type, c.description, c.evidence_urls, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.trust_score_snapshot, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at
+SELECT c.id, c.order_id, c.user_id, c.claim_type, c.description, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at, c.decision_version, c.decision_reason
 FROM claims c
 JOIN orders o ON c.order_id = o.id
 WHERE o.merchant_id = $1
@@ -2655,12 +2233,10 @@ func (q *Queries) ListMerchantClaimsByTypeInPeriod(ctx context.Context, arg List
 			&i.UserID,
 			&i.ClaimType,
 			&i.Description,
-			&i.EvidenceUrls,
 			&i.ClaimAmount,
 			&i.ApprovedAmount,
 			&i.Status,
 			&i.ApprovalType,
-			&i.TrustScoreSnapshot,
 			&i.IsMalicious,
 			&i.LookbackResult,
 			&i.AutoApprovalReason,
@@ -2670,6 +2246,8 @@ func (q *Queries) ListMerchantClaimsByTypeInPeriod(ctx context.Context, arg List
 			&i.CreatedAt,
 			&i.ReviewedAt,
 			&i.PaidAt,
+			&i.DecisionVersion,
+			&i.DecisionReason,
 		); err != nil {
 			return nil, err
 		}
@@ -2682,7 +2260,7 @@ func (q *Queries) ListMerchantClaimsByTypeInPeriod(ctx context.Context, arg List
 }
 
 const listMerchantFoodSafetyIncidents = `-- name: ListMerchantFoodSafetyIncidents :many
-SELECT id, order_id, merchant_id, user_id, incident_type, description, evidence_urls, order_snapshot, merchant_snapshot, rider_snapshot, status, investigation_report, resolution, created_at, resolved_at FROM food_safety_incidents
+SELECT id, order_id, merchant_id, user_id, incident_type, description, order_snapshot, merchant_snapshot, rider_snapshot, status, investigation_report, resolution, created_at, resolved_at FROM food_safety_incidents
 WHERE merchant_id = $1
   AND created_at >= $2
 ORDER BY created_at DESC
@@ -2709,7 +2287,6 @@ func (q *Queries) ListMerchantFoodSafetyIncidents(ctx context.Context, arg ListM
 			&i.UserID,
 			&i.IncidentType,
 			&i.Description,
-			&i.EvidenceUrls,
 			&i.OrderSnapshot,
 			&i.MerchantSnapshot,
 			&i.RiderSnapshot,
@@ -2729,110 +2306,8 @@ func (q *Queries) ListMerchantFoodSafetyIncidents(ctx context.Context, arg ListM
 	return items, nil
 }
 
-const listRegionPendingClaims = `-- name: ListRegionPendingClaims :many
-
-SELECT c.id, c.order_id, c.user_id, c.claim_type, c.description, c.evidence_urls, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.trust_score_snapshot, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at, 
-       o.order_no,
-       o.merchant_id,
-       m.name as merchant_name,
-       u.phone as user_phone,
-       m.region_id
-FROM claims c
-JOIN orders o ON c.order_id = o.id
-JOIN merchants m ON o.merchant_id = m.id
-JOIN users u ON c.user_id = u.id
-WHERE m.region_id = $1
-  AND c.status = 'manual-review'
-ORDER BY c.created_at ASC
-LIMIT $2 OFFSET $3
-`
-
-type ListRegionPendingClaimsParams struct {
-	RegionID int64 `json:"region_id"`
-	Limit    int32 `json:"limit"`
-	Offset   int32 `json:"offset"`
-}
-
-type ListRegionPendingClaimsRow struct {
-	ID                 int64              `json:"id"`
-	OrderID            int64              `json:"order_id"`
-	UserID             int64              `json:"user_id"`
-	ClaimType          string             `json:"claim_type"`
-	Description        string             `json:"description"`
-	EvidenceUrls       []string           `json:"evidence_urls"`
-	ClaimAmount        int64              `json:"claim_amount"`
-	ApprovedAmount     pgtype.Int8        `json:"approved_amount"`
-	Status             string             `json:"status"`
-	ApprovalType       pgtype.Text        `json:"approval_type"`
-	TrustScoreSnapshot pgtype.Int2        `json:"trust_score_snapshot"`
-	IsMalicious        bool               `json:"is_malicious"`
-	LookbackResult     []byte             `json:"lookback_result"`
-	AutoApprovalReason pgtype.Text        `json:"auto_approval_reason"`
-	RejectionReason    pgtype.Text        `json:"rejection_reason"`
-	ReviewerID         pgtype.Int8        `json:"reviewer_id"`
-	ReviewNotes        pgtype.Text        `json:"review_notes"`
-	CreatedAt          time.Time          `json:"created_at"`
-	ReviewedAt         pgtype.Timestamptz `json:"reviewed_at"`
-	PaidAt             pgtype.Timestamptz `json:"paid_at"`
-	OrderNo            string             `json:"order_no"`
-	MerchantID         int64              `json:"merchant_id"`
-	MerchantName       string             `json:"merchant_name"`
-	UserPhone          pgtype.Text        `json:"user_phone"`
-	RegionID           int64              `json:"region_id"`
-}
-
-// ==========================================
-// 运营商索赔管理（区域内待审核索赔）
-// ==========================================
-// 获取运营商区域内待人工审核的索赔列表
-func (q *Queries) ListRegionPendingClaims(ctx context.Context, arg ListRegionPendingClaimsParams) ([]ListRegionPendingClaimsRow, error) {
-	rows, err := q.db.Query(ctx, listRegionPendingClaims, arg.RegionID, arg.Limit, arg.Offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ListRegionPendingClaimsRow{}
-	for rows.Next() {
-		var i ListRegionPendingClaimsRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.OrderID,
-			&i.UserID,
-			&i.ClaimType,
-			&i.Description,
-			&i.EvidenceUrls,
-			&i.ClaimAmount,
-			&i.ApprovedAmount,
-			&i.Status,
-			&i.ApprovalType,
-			&i.TrustScoreSnapshot,
-			&i.IsMalicious,
-			&i.LookbackResult,
-			&i.AutoApprovalReason,
-			&i.RejectionReason,
-			&i.ReviewerID,
-			&i.ReviewNotes,
-			&i.CreatedAt,
-			&i.ReviewedAt,
-			&i.PaidAt,
-			&i.OrderNo,
-			&i.MerchantID,
-			&i.MerchantName,
-			&i.UserPhone,
-			&i.RegionID,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listRiderClaims = `-- name: ListRiderClaims :many
-SELECT c.id, c.order_id, c.user_id, c.claim_type, c.description, c.evidence_urls, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.trust_score_snapshot, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at FROM claims c
+SELECT c.id, c.order_id, c.user_id, c.claim_type, c.description, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at, c.decision_version, c.decision_reason FROM claims c
 JOIN orders o ON c.order_id = o.id
 JOIN deliveries d ON o.id = d.order_id
 WHERE d.rider_id = $1
@@ -2860,12 +2335,10 @@ func (q *Queries) ListRiderClaims(ctx context.Context, arg ListRiderClaimsParams
 			&i.UserID,
 			&i.ClaimType,
 			&i.Description,
-			&i.EvidenceUrls,
 			&i.ClaimAmount,
 			&i.ApprovedAmount,
 			&i.Status,
 			&i.ApprovalType,
-			&i.TrustScoreSnapshot,
 			&i.IsMalicious,
 			&i.LookbackResult,
 			&i.AutoApprovalReason,
@@ -2875,6 +2348,8 @@ func (q *Queries) ListRiderClaims(ctx context.Context, arg ListRiderClaimsParams
 			&i.CreatedAt,
 			&i.ReviewedAt,
 			&i.PaidAt,
+			&i.DecisionVersion,
+			&i.DecisionReason,
 		); err != nil {
 			return nil, err
 		}
@@ -2887,7 +2362,7 @@ func (q *Queries) ListRiderClaims(ctx context.Context, arg ListRiderClaimsParams
 }
 
 const listUserClaims = `-- name: ListUserClaims :many
-SELECT id, order_id, user_id, claim_type, description, evidence_urls, claim_amount, approved_amount, status, approval_type, trust_score_snapshot, is_malicious, lookback_result, auto_approval_reason, rejection_reason, reviewer_id, review_notes, created_at, reviewed_at, paid_at FROM claims
+SELECT id, order_id, user_id, claim_type, description, claim_amount, approved_amount, status, approval_type, is_malicious, lookback_result, auto_approval_reason, rejection_reason, reviewer_id, review_notes, created_at, reviewed_at, paid_at, decision_version, decision_reason FROM claims
 WHERE user_id = $1
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3
@@ -2914,12 +2389,10 @@ func (q *Queries) ListUserClaims(ctx context.Context, arg ListUserClaimsParams) 
 			&i.UserID,
 			&i.ClaimType,
 			&i.Description,
-			&i.EvidenceUrls,
 			&i.ClaimAmount,
 			&i.ApprovedAmount,
 			&i.Status,
 			&i.ApprovalType,
-			&i.TrustScoreSnapshot,
 			&i.IsMalicious,
 			&i.LookbackResult,
 			&i.AutoApprovalReason,
@@ -2929,6 +2402,8 @@ func (q *Queries) ListUserClaims(ctx context.Context, arg ListUserClaimsParams) 
 			&i.CreatedAt,
 			&i.ReviewedAt,
 			&i.PaidAt,
+			&i.DecisionVersion,
+			&i.DecisionReason,
 		); err != nil {
 			return nil, err
 		}
@@ -2941,7 +2416,7 @@ func (q *Queries) ListUserClaims(ctx context.Context, arg ListUserClaimsParams) 
 }
 
 const listUserClaimsInPeriod = `-- name: ListUserClaimsInPeriod :many
-SELECT id, order_id, user_id, claim_type, description, evidence_urls, claim_amount, approved_amount, status, approval_type, trust_score_snapshot, is_malicious, lookback_result, auto_approval_reason, rejection_reason, reviewer_id, review_notes, created_at, reviewed_at, paid_at FROM claims
+SELECT id, order_id, user_id, claim_type, description, claim_amount, approved_amount, status, approval_type, is_malicious, lookback_result, auto_approval_reason, rejection_reason, reviewer_id, review_notes, created_at, reviewed_at, paid_at, decision_version, decision_reason FROM claims
 WHERE user_id = $1
   AND created_at >= $2
 ORDER BY created_at DESC
@@ -2967,12 +2442,10 @@ func (q *Queries) ListUserClaimsInPeriod(ctx context.Context, arg ListUserClaims
 			&i.UserID,
 			&i.ClaimType,
 			&i.Description,
-			&i.EvidenceUrls,
 			&i.ClaimAmount,
 			&i.ApprovedAmount,
 			&i.Status,
 			&i.ApprovalType,
-			&i.TrustScoreSnapshot,
 			&i.IsMalicious,
 			&i.LookbackResult,
 			&i.AutoApprovalReason,
@@ -2982,6 +2455,8 @@ func (q *Queries) ListUserClaimsInPeriod(ctx context.Context, arg ListUserClaims
 			&i.CreatedAt,
 			&i.ReviewedAt,
 			&i.PaidAt,
+			&i.DecisionVersion,
+			&i.DecisionReason,
 		); err != nil {
 			return nil, err
 		}
@@ -3032,33 +2507,19 @@ func (q *Queries) ListUserRecentOrders(ctx context.Context, arg ListUserRecentOr
 	return items, nil
 }
 
-const reviewClaim = `-- name: ReviewClaim :exec
+const markClaimPaid = `-- name: MarkClaimPaid :exec
 UPDATE claims
-SET status = $2,
-    approved_amount = $3,
-    reviewer_id = $4,
-    review_notes = $5,
-    reviewed_at = NOW()
+SET paid_at = COALESCE(paid_at, $2)
 WHERE id = $1
 `
 
-type ReviewClaimParams struct {
-	ID             int64       `json:"id"`
-	Status         string      `json:"status"`
-	ApprovedAmount pgtype.Int8 `json:"approved_amount"`
-	ReviewerID     pgtype.Int8 `json:"reviewer_id"`
-	ReviewNotes    pgtype.Text `json:"review_notes"`
+type MarkClaimPaidParams struct {
+	ID     int64              `json:"id"`
+	PaidAt pgtype.Timestamptz `json:"paid_at"`
 }
 
-// 运营商审核索赔
-func (q *Queries) ReviewClaim(ctx context.Context, arg ReviewClaimParams) error {
-	_, err := q.db.Exec(ctx, reviewClaim,
-		arg.ID,
-		arg.Status,
-		arg.ApprovedAmount,
-		arg.ReviewerID,
-		arg.ReviewNotes,
-	)
+func (q *Queries) MarkClaimPaid(ctx context.Context, arg MarkClaimPaidParams) error {
+	_, err := q.db.Exec(ctx, markClaimPaid, arg.ID, arg.PaidAt)
 	return err
 }
 
@@ -3175,6 +2636,27 @@ func (q *Queries) SuspendMerchant(ctx context.Context, arg SuspendMerchantParams
 	return err
 }
 
+const suspendMerchantTakeout = `-- name: SuspendMerchantTakeout :exec
+UPDATE merchant_profiles
+SET is_takeout_suspended = true,
+    takeout_suspend_reason = $2,
+    takeout_suspended_at = NOW(),
+    takeout_suspend_until = $3,
+    updated_at = NOW()
+WHERE merchant_id = $1
+`
+
+type SuspendMerchantTakeoutParams struct {
+	MerchantID           int64              `json:"merchant_id"`
+	TakeoutSuspendReason pgtype.Text        `json:"takeout_suspend_reason"`
+	TakeoutSuspendUntil  pgtype.Timestamptz `json:"takeout_suspend_until"`
+}
+
+func (q *Queries) SuspendMerchantTakeout(ctx context.Context, arg SuspendMerchantTakeoutParams) error {
+	_, err := q.db.Exec(ctx, suspendMerchantTakeout, arg.MerchantID, arg.TakeoutSuspendReason, arg.TakeoutSuspendUntil)
+	return err
+}
+
 const suspendRider = `-- name: SuspendRider :exec
 UPDATE rider_profiles
 SET is_suspended = true,
@@ -3196,25 +2678,6 @@ func (q *Queries) SuspendRider(ctx context.Context, arg SuspendRiderParams) erro
 	return err
 }
 
-const unblacklistUser = `-- name: UnblacklistUser :exec
-UPDATE user_profiles
-SET is_blacklisted = false,
-    blacklist_reason = NULL,
-    blacklisted_at = NULL,
-    updated_at = NOW()
-WHERE user_id = $1 AND role = $2
-`
-
-type UnblacklistUserParams struct {
-	UserID int64  `json:"user_id"`
-	Role   string `json:"role"`
-}
-
-func (q *Queries) UnblacklistUser(ctx context.Context, arg UnblacklistUserParams) error {
-	_, err := q.db.Exec(ctx, unblacklistUser, arg.UserID, arg.Role)
-	return err
-}
-
 const unsuspendMerchant = `-- name: UnsuspendMerchant :exec
 UPDATE merchant_profiles
 SET is_suspended = false,
@@ -3227,6 +2690,21 @@ WHERE merchant_id = $1
 
 func (q *Queries) UnsuspendMerchant(ctx context.Context, merchantID int64) error {
 	_, err := q.db.Exec(ctx, unsuspendMerchant, merchantID)
+	return err
+}
+
+const unsuspendMerchantTakeout = `-- name: UnsuspendMerchantTakeout :exec
+UPDATE merchant_profiles
+SET is_takeout_suspended = false,
+    takeout_suspend_reason = NULL,
+    takeout_suspended_at = NULL,
+    takeout_suspend_until = NULL,
+    updated_at = NOW()
+WHERE merchant_id = $1
+`
+
+func (q *Queries) UnsuspendMerchantTakeout(ctx context.Context, merchantID int64) error {
+	_, err := q.db.Exec(ctx, unsuspendMerchantTakeout, merchantID)
 	return err
 }
 
@@ -3356,58 +2834,63 @@ func (q *Queries) UpdateFraudPatternReview(ctx context.Context, arg UpdateFraudP
 
 const updateMerchantProfile = `-- name: UpdateMerchantProfile :exec
 UPDATE merchant_profiles
-SET trust_score = COALESCE($2, trust_score),
-    total_orders = COALESCE($3, total_orders),
-    total_sales = COALESCE($4, total_sales),
-    completed_orders = COALESCE($5, completed_orders),
-    total_claims = COALESCE($6, total_claims),
-    foreign_object_claims = COALESCE($7, foreign_object_claims),
-    food_safety_incidents = COALESCE($8, food_safety_incidents),
-    timeout_count = COALESCE($9, timeout_count),
-    refuse_order_count = COALESCE($10, refuse_order_count),
-    recent_7d_claims = COALESCE($11, recent_7d_claims),
-    recent_7d_incidents = COALESCE($12, recent_7d_incidents),
-    recent_30d_claims = COALESCE($13, recent_30d_claims),
-    recent_30d_incidents = COALESCE($14, recent_30d_incidents),
-    recent_30d_timeouts = COALESCE($15, recent_30d_timeouts),
-    recent_90d_claims = COALESCE($16, recent_90d_claims),
-    recent_90d_incidents = COALESCE($17, recent_90d_incidents),
-    is_suspended = COALESCE($18, is_suspended),
-    suspend_reason = COALESCE($19, suspend_reason),
-    suspended_at = COALESCE($20, suspended_at),
-    suspend_until = COALESCE($21, suspend_until),
+SET total_orders = COALESCE($2, total_orders),
+    total_sales = COALESCE($3, total_sales),
+    completed_orders = COALESCE($4, completed_orders),
+    total_claims = COALESCE($5, total_claims),
+    foreign_object_claims = COALESCE($6, foreign_object_claims),
+    food_safety_incidents = COALESCE($7, food_safety_incidents),
+    timeout_count = COALESCE($8, timeout_count),
+    refuse_order_count = COALESCE($9, refuse_order_count),
+    recent_7d_claims = COALESCE($10, recent_7d_claims),
+    recent_7d_incidents = COALESCE($11, recent_7d_incidents),
+    recent_30d_claims = COALESCE($12, recent_30d_claims),
+    recent_30d_incidents = COALESCE($13, recent_30d_incidents),
+    recent_30d_timeouts = COALESCE($14, recent_30d_timeouts),
+    recent_90d_claims = COALESCE($15, recent_90d_claims),
+    recent_90d_incidents = COALESCE($16, recent_90d_incidents),
+    is_suspended = COALESCE($17, is_suspended),
+    suspend_reason = COALESCE($18, suspend_reason),
+    suspended_at = COALESCE($19, suspended_at),
+    suspend_until = COALESCE($20, suspend_until),
+    is_takeout_suspended = COALESCE($21, is_takeout_suspended),
+    takeout_suspend_reason = COALESCE($22, takeout_suspend_reason),
+    takeout_suspended_at = COALESCE($23, takeout_suspended_at),
+    takeout_suspend_until = COALESCE($24, takeout_suspend_until),
     updated_at = NOW()
 WHERE merchant_id = $1
 `
 
 type UpdateMerchantProfileParams struct {
-	MerchantID          int64              `json:"merchant_id"`
-	TrustScore          pgtype.Int2        `json:"trust_score"`
-	TotalOrders         pgtype.Int4        `json:"total_orders"`
-	TotalSales          pgtype.Int8        `json:"total_sales"`
-	CompletedOrders     pgtype.Int4        `json:"completed_orders"`
-	TotalClaims         pgtype.Int4        `json:"total_claims"`
-	ForeignObjectClaims pgtype.Int4        `json:"foreign_object_claims"`
-	FoodSafetyIncidents pgtype.Int4        `json:"food_safety_incidents"`
-	TimeoutCount        pgtype.Int4        `json:"timeout_count"`
-	RefuseOrderCount    pgtype.Int4        `json:"refuse_order_count"`
-	Recent7dClaims      pgtype.Int4        `json:"recent_7d_claims"`
-	Recent7dIncidents   pgtype.Int4        `json:"recent_7d_incidents"`
-	Recent30dClaims     pgtype.Int4        `json:"recent_30d_claims"`
-	Recent30dIncidents  pgtype.Int4        `json:"recent_30d_incidents"`
-	Recent30dTimeouts   pgtype.Int4        `json:"recent_30d_timeouts"`
-	Recent90dClaims     pgtype.Int4        `json:"recent_90d_claims"`
-	Recent90dIncidents  pgtype.Int4        `json:"recent_90d_incidents"`
-	IsSuspended         pgtype.Bool        `json:"is_suspended"`
-	SuspendReason       pgtype.Text        `json:"suspend_reason"`
-	SuspendedAt         pgtype.Timestamptz `json:"suspended_at"`
-	SuspendUntil        pgtype.Timestamptz `json:"suspend_until"`
+	MerchantID           int64              `json:"merchant_id"`
+	TotalOrders          pgtype.Int4        `json:"total_orders"`
+	TotalSales           pgtype.Int8        `json:"total_sales"`
+	CompletedOrders      pgtype.Int4        `json:"completed_orders"`
+	TotalClaims          pgtype.Int4        `json:"total_claims"`
+	ForeignObjectClaims  pgtype.Int4        `json:"foreign_object_claims"`
+	FoodSafetyIncidents  pgtype.Int4        `json:"food_safety_incidents"`
+	TimeoutCount         pgtype.Int4        `json:"timeout_count"`
+	RefuseOrderCount     pgtype.Int4        `json:"refuse_order_count"`
+	Recent7dClaims       pgtype.Int4        `json:"recent_7d_claims"`
+	Recent7dIncidents    pgtype.Int4        `json:"recent_7d_incidents"`
+	Recent30dClaims      pgtype.Int4        `json:"recent_30d_claims"`
+	Recent30dIncidents   pgtype.Int4        `json:"recent_30d_incidents"`
+	Recent30dTimeouts    pgtype.Int4        `json:"recent_30d_timeouts"`
+	Recent90dClaims      pgtype.Int4        `json:"recent_90d_claims"`
+	Recent90dIncidents   pgtype.Int4        `json:"recent_90d_incidents"`
+	IsSuspended          pgtype.Bool        `json:"is_suspended"`
+	SuspendReason        pgtype.Text        `json:"suspend_reason"`
+	SuspendedAt          pgtype.Timestamptz `json:"suspended_at"`
+	SuspendUntil         pgtype.Timestamptz `json:"suspend_until"`
+	IsTakeoutSuspended   pgtype.Bool        `json:"is_takeout_suspended"`
+	TakeoutSuspendReason pgtype.Text        `json:"takeout_suspend_reason"`
+	TakeoutSuspendedAt   pgtype.Timestamptz `json:"takeout_suspended_at"`
+	TakeoutSuspendUntil  pgtype.Timestamptz `json:"takeout_suspend_until"`
 }
 
 func (q *Queries) UpdateMerchantProfile(ctx context.Context, arg UpdateMerchantProfileParams) error {
 	_, err := q.db.Exec(ctx, updateMerchantProfile,
 		arg.MerchantID,
-		arg.TrustScore,
 		arg.TotalOrders,
 		arg.TotalSales,
 		arg.CompletedOrders,
@@ -3427,57 +2910,42 @@ func (q *Queries) UpdateMerchantProfile(ctx context.Context, arg UpdateMerchantP
 		arg.SuspendReason,
 		arg.SuspendedAt,
 		arg.SuspendUntil,
+		arg.IsTakeoutSuspended,
+		arg.TakeoutSuspendReason,
+		arg.TakeoutSuspendedAt,
+		arg.TakeoutSuspendUntil,
 	)
-	return err
-}
-
-const updateMerchantTrustScore = `-- name: UpdateMerchantTrustScore :exec
-UPDATE merchant_profiles
-SET trust_score = $2,
-    updated_at = NOW()
-WHERE merchant_id = $1
-`
-
-type UpdateMerchantTrustScoreParams struct {
-	MerchantID int64 `json:"merchant_id"`
-	TrustScore int16 `json:"trust_score"`
-}
-
-func (q *Queries) UpdateMerchantTrustScore(ctx context.Context, arg UpdateMerchantTrustScoreParams) error {
-	_, err := q.db.Exec(ctx, updateMerchantTrustScore, arg.MerchantID, arg.TrustScore)
 	return err
 }
 
 const updateRiderProfile = `-- name: UpdateRiderProfile :exec
 UPDATE rider_profiles
-SET trust_score = COALESCE($2, trust_score),
-    total_deliveries = COALESCE($3, total_deliveries),
-    completed_deliveries = COALESCE($4, completed_deliveries),
-    on_time_deliveries = COALESCE($5, on_time_deliveries),
-    delayed_deliveries = COALESCE($6, delayed_deliveries),
-    cancelled_deliveries = COALESCE($7, cancelled_deliveries),
-    total_damage_incidents = COALESCE($8, total_damage_incidents),
-    customer_complaints = COALESCE($9, customer_complaints),
-    timeout_incidents = COALESCE($10, timeout_incidents),
-    recent_7d_damages = COALESCE($11, recent_7d_damages),
-    recent_7d_delays = COALESCE($12, recent_7d_delays),
-    recent_30d_damages = COALESCE($13, recent_30d_damages),
-    recent_30d_delays = COALESCE($14, recent_30d_delays),
-    recent_30d_complaints = COALESCE($15, recent_30d_complaints),
-    recent_90d_damages = COALESCE($16, recent_90d_damages),
-    recent_90d_delays = COALESCE($17, recent_90d_delays),
-    total_online_hours = COALESCE($18, total_online_hours),
-    is_suspended = COALESCE($19, is_suspended),
-    suspend_reason = COALESCE($20, suspend_reason),
-    suspended_at = COALESCE($21, suspended_at),
-    suspend_until = COALESCE($22, suspend_until),
+SET total_deliveries = COALESCE($2, total_deliveries),
+    completed_deliveries = COALESCE($3, completed_deliveries),
+    on_time_deliveries = COALESCE($4, on_time_deliveries),
+    delayed_deliveries = COALESCE($5, delayed_deliveries),
+    cancelled_deliveries = COALESCE($6, cancelled_deliveries),
+    total_damage_incidents = COALESCE($7, total_damage_incidents),
+    customer_complaints = COALESCE($8, customer_complaints),
+    timeout_incidents = COALESCE($9, timeout_incidents),
+    recent_7d_damages = COALESCE($10, recent_7d_damages),
+    recent_7d_delays = COALESCE($11, recent_7d_delays),
+    recent_30d_damages = COALESCE($12, recent_30d_damages),
+    recent_30d_delays = COALESCE($13, recent_30d_delays),
+    recent_30d_complaints = COALESCE($14, recent_30d_complaints),
+    recent_90d_damages = COALESCE($15, recent_90d_damages),
+    recent_90d_delays = COALESCE($16, recent_90d_delays),
+    total_online_hours = COALESCE($17, total_online_hours),
+    is_suspended = COALESCE($18, is_suspended),
+    suspend_reason = COALESCE($19, suspend_reason),
+    suspended_at = COALESCE($20, suspended_at),
+    suspend_until = COALESCE($21, suspend_until),
     updated_at = NOW()
 WHERE rider_id = $1
 `
 
 type UpdateRiderProfileParams struct {
 	RiderID              int64              `json:"rider_id"`
-	TrustScore           pgtype.Int2        `json:"trust_score"`
 	TotalDeliveries      pgtype.Int4        `json:"total_deliveries"`
 	CompletedDeliveries  pgtype.Int4        `json:"completed_deliveries"`
 	OnTimeDeliveries     pgtype.Int4        `json:"on_time_deliveries"`
@@ -3503,7 +2971,6 @@ type UpdateRiderProfileParams struct {
 func (q *Queries) UpdateRiderProfile(ctx context.Context, arg UpdateRiderProfileParams) error {
 	_, err := q.db.Exec(ctx, updateRiderProfile,
 		arg.RiderID,
-		arg.TrustScore,
 		arg.TotalDeliveries,
 		arg.CompletedDeliveries,
 		arg.OnTimeDeliveries,
@@ -3528,142 +2995,42 @@ func (q *Queries) UpdateRiderProfile(ctx context.Context, arg UpdateRiderProfile
 	return err
 }
 
-const updateRiderTrustScore = `-- name: UpdateRiderTrustScore :exec
-UPDATE rider_profiles
-SET trust_score = $2,
-    updated_at = NOW()
-WHERE rider_id = $1
-`
-
-type UpdateRiderTrustScoreParams struct {
-	RiderID    int64 `json:"rider_id"`
-	TrustScore int16 `json:"trust_score"`
-}
-
-func (q *Queries) UpdateRiderTrustScore(ctx context.Context, arg UpdateRiderTrustScoreParams) error {
-	_, err := q.db.Exec(ctx, updateRiderTrustScore, arg.RiderID, arg.TrustScore)
-	return err
-}
-
-const updateUserProfile = `-- name: UpdateUserProfile :exec
-UPDATE user_profiles
-SET trust_score = COALESCE($3, trust_score),
-    total_orders = COALESCE($4, total_orders),
-    completed_orders = COALESCE($5, completed_orders),
-    cancelled_orders = COALESCE($6, cancelled_orders),
-    total_claims = COALESCE($7, total_claims),
-    malicious_claims = COALESCE($8, malicious_claims),
-    food_safety_reports = COALESCE($9, food_safety_reports),
-    verified_violations = COALESCE($10, verified_violations),
-    recent_7d_claims = COALESCE($11, recent_7d_claims),
-    recent_7d_orders = COALESCE($12, recent_7d_orders),
-    recent_30d_claims = COALESCE($13, recent_30d_claims),
-    recent_30d_orders = COALESCE($14, recent_30d_orders),
-    recent_30d_cancels = COALESCE($15, recent_30d_cancels),
-    recent_90d_claims = COALESCE($16, recent_90d_claims),
-    recent_90d_orders = COALESCE($17, recent_90d_orders),
-    is_blacklisted = COALESCE($18, is_blacklisted),
-    blacklist_reason = COALESCE($19, blacklist_reason),
-    blacklisted_at = COALESCE($20, blacklisted_at),
-    updated_at = NOW()
-WHERE user_id = $1 AND role = $2
-`
-
-type UpdateUserProfileParams struct {
-	UserID             int64              `json:"user_id"`
-	Role               string             `json:"role"`
-	TrustScore         pgtype.Int2        `json:"trust_score"`
-	TotalOrders        pgtype.Int4        `json:"total_orders"`
-	CompletedOrders    pgtype.Int4        `json:"completed_orders"`
-	CancelledOrders    pgtype.Int4        `json:"cancelled_orders"`
-	TotalClaims        pgtype.Int4        `json:"total_claims"`
-	MaliciousClaims    pgtype.Int4        `json:"malicious_claims"`
-	FoodSafetyReports  pgtype.Int4        `json:"food_safety_reports"`
-	VerifiedViolations pgtype.Int4        `json:"verified_violations"`
-	Recent7dClaims     pgtype.Int4        `json:"recent_7d_claims"`
-	Recent7dOrders     pgtype.Int4        `json:"recent_7d_orders"`
-	Recent30dClaims    pgtype.Int4        `json:"recent_30d_claims"`
-	Recent30dOrders    pgtype.Int4        `json:"recent_30d_orders"`
-	Recent30dCancels   pgtype.Int4        `json:"recent_30d_cancels"`
-	Recent90dClaims    pgtype.Int4        `json:"recent_90d_claims"`
-	Recent90dOrders    pgtype.Int4        `json:"recent_90d_orders"`
-	IsBlacklisted      pgtype.Bool        `json:"is_blacklisted"`
-	BlacklistReason    pgtype.Text        `json:"blacklist_reason"`
-	BlacklistedAt      pgtype.Timestamptz `json:"blacklisted_at"`
-}
-
-func (q *Queries) UpdateUserProfile(ctx context.Context, arg UpdateUserProfileParams) error {
-	_, err := q.db.Exec(ctx, updateUserProfile,
-		arg.UserID,
-		arg.Role,
-		arg.TrustScore,
-		arg.TotalOrders,
-		arg.CompletedOrders,
-		arg.CancelledOrders,
-		arg.TotalClaims,
-		arg.MaliciousClaims,
-		arg.FoodSafetyReports,
-		arg.VerifiedViolations,
-		arg.Recent7dClaims,
-		arg.Recent7dOrders,
-		arg.Recent30dClaims,
-		arg.Recent30dOrders,
-		arg.Recent30dCancels,
-		arg.Recent90dClaims,
-		arg.Recent90dOrders,
-		arg.IsBlacklisted,
-		arg.BlacklistReason,
-		arg.BlacklistedAt,
-	)
-	return err
-}
-
-const updateUserTrustScore = `-- name: UpdateUserTrustScore :exec
-UPDATE user_profiles
-SET trust_score = $3,
-    updated_at = NOW()
-WHERE user_id = $1 AND role = $2
-`
-
-type UpdateUserTrustScoreParams struct {
-	UserID     int64  `json:"user_id"`
-	Role       string `json:"role"`
-	TrustScore int16  `json:"trust_score"`
-}
-
-func (q *Queries) UpdateUserTrustScore(ctx context.Context, arg UpdateUserTrustScoreParams) error {
-	_, err := q.db.Exec(ctx, updateUserTrustScore, arg.UserID, arg.Role, arg.TrustScore)
-	return err
-}
-
 const upsertUserDevice = `-- name: UpsertUserDevice :one
 
 INSERT INTO user_devices (
     user_id,
     device_id,
+  device_fingerprint,
     device_type,
     first_seen,
     last_seen
 ) VALUES (
-    $1, $2, $3, NOW(), NOW()
+  $1, $2, $3, $4, NOW(), NOW()
 ) ON CONFLICT (user_id, device_id)
 DO UPDATE SET
+  device_fingerprint = COALESCE(EXCLUDED.device_fingerprint, user_devices.device_fingerprint),
     last_seen = NOW(),
     updated_at = NOW()
-RETURNING id, user_id, device_id, device_type, device_model, os_version, app_version, user_agent, ip_address, last_login_at, created_at, first_seen, last_seen, updated_at
+RETURNING id, user_id, device_id, device_type, device_model, os_version, app_version, user_agent, ip_address, last_login_at, created_at, first_seen, last_seen, updated_at, device_fingerprint
 `
 
 type UpsertUserDeviceParams struct {
-	UserID     int64  `json:"user_id"`
-	DeviceID   string `json:"device_id"`
-	DeviceType string `json:"device_type"`
+	UserID            int64       `json:"user_id"`
+	DeviceID          string      `json:"device_id"`
+	DeviceFingerprint pgtype.Text `json:"device_fingerprint"`
+	DeviceType        string      `json:"device_type"`
 }
 
 // ==========================================
 // 设备指纹查询（M9欺诈检测）
 // ==========================================
 func (q *Queries) UpsertUserDevice(ctx context.Context, arg UpsertUserDeviceParams) (UserDevice, error) {
-	row := q.db.QueryRow(ctx, upsertUserDevice, arg.UserID, arg.DeviceID, arg.DeviceType)
+	row := q.db.QueryRow(ctx, upsertUserDevice,
+		arg.UserID,
+		arg.DeviceID,
+		arg.DeviceFingerprint,
+		arg.DeviceType,
+	)
 	var i UserDevice
 	err := row.Scan(
 		&i.ID,
@@ -3680,6 +3047,7 @@ func (q *Queries) UpsertUserDevice(ctx context.Context, arg UpsertUserDevicePara
 		&i.FirstSeen,
 		&i.LastSeen,
 		&i.UpdatedAt,
+		&i.DeviceFingerprint,
 	)
 	return i, err
 }

@@ -8,22 +8,31 @@ import (
 	"net/http"
 	"net/url"
 	"time"
+
+	"github.com/rs/zerolog/log"
 )
 
 const (
 	baseURL = "https://apis.map.qq.com"
 
 	// 路径规划
-	bicyclingURL = "/ws/direction/v1/bicycling/" // 骑行
-	walkingURL   = "/ws/direction/v1/walking/"   // 步行
-	drivingURL   = "/ws/direction/v1/driving/"   // 驾车
+	ebicyclingURL = "/ws/direction/v1/ebicycling/" // 电动自行车
+	walkingURL    = "/ws/direction/v1/walking/"    // 步行
+	drivingURL    = "/ws/direction/v1/driving/"    // 驾车
 
 	// 距离矩阵
 	distanceMatrixURL = "/ws/distance/v1/matrix/"
 
-	// 地理编码
-	geocodeURL        = "/ws/geocoder/v1/" // 地址转坐标
-	reverseGeocodeURL = "/ws/geocoder/v1/" // 坐标转地址
+	// 地理编码 — 腾讯地图正向（地址→坐标）和反向（坐标→地址）编码共用同一路径，
+	// 通过不同的查询参数区分（address= 或 location=）。
+	// 参考：https://lbs.qq.com/service/webService/webServiceGuide/webServiceGeocoder
+	geocodeURL = "/ws/geocoder/v1/"
+)
+
+const (
+	MapProviderTencent  = "tencent"
+	MapProviderOSM      = "osm"
+	MapProviderTianditu = "tianditu"
 )
 
 // TencentMapClient 腾讯地图客户端
@@ -88,6 +97,7 @@ type GeocodeResult struct {
 
 // ReverseGeocodeResult 逆地理编码结果
 type ReverseGeocodeResult struct {
+	Provider         string `json:"provider"`
 	Address          string `json:"address"`
 	FormattedAddress string `json:"formatted_address"`
 	Province         string `json:"province"`
@@ -161,7 +171,7 @@ type reverseGeocodeAPIResult struct {
 
 // GetBicyclingRoute 获取骑行路线（外卖骑手用）
 func (c *TencentMapClient) GetBicyclingRoute(ctx context.Context, from, to Location) (*RouteResult, error) {
-	return c.getRoute(ctx, bicyclingURL, from, to)
+	return c.getRoute(ctx, ebicyclingURL, from, to)
 }
 
 // GetWalkingRoute 获取步行路线
@@ -297,7 +307,7 @@ func (c *TencentMapClient) ReverseGeocode(ctx context.Context, location Location
 	params.Set("location", location.String())
 	params.Set("key", c.key)
 
-	reqURL := baseURL + reverseGeocodeURL + "?" + params.Encode()
+	reqURL := baseURL + geocodeURL + "?" + params.Encode()
 
 	body, err := c.doRequest(ctx, reqURL)
 	if err != nil {
@@ -310,6 +320,7 @@ func (c *TencentMapClient) ReverseGeocode(ctx context.Context, location Location
 	}
 
 	return &ReverseGeocodeResult{
+		Provider:         MapProviderTencent,
 		Address:          result.Address,
 		FormattedAddress: result.FormattedAddress.Recommend,
 		Province:         result.AddressComponent.Province,
@@ -340,14 +351,14 @@ func (c *TencentMapClient) doRequest(ctx context.Context, reqURL string) ([]byte
 		return nil, fmt.Errorf("read response: %w", err)
 	}
 
-	// 调试日志：打印响应体（隐藏 key）
-	debugURL := reqURL
-	if idx := len(debugURL) - 40; idx > 0 {
-		// 简单隐藏 key
-		debugURL = debugURL[:idx] + "key=***"
+	if log.Debug().Enabled() {
+		// 仅在 debug 级别输出请求路径（隐藏 key 防止泄露）
+		debugURL := reqURL
+		if idx := len(debugURL) - 40; idx > 0 {
+			debugURL = debugURL[:idx] + "key=***"
+		}
+		log.Debug().Str("url", debugURL).Int("response_bytes", len(body)).Msg("TencentMap request")
 	}
-	fmt.Printf("[TencentMap] Request: %s\n", debugURL)
-	fmt.Printf("[TencentMap] Response: %s\n", string(body))
 
 	var apiResp apiResponse
 	if err := json.Unmarshal(body, &apiResp); err != nil {

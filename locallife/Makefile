@@ -1,66 +1,90 @@
-DB_URL=postgresql:///locallife_test?host=/var/run/postgresql&sslmode=disable
+DB_URL ?= $(if $(strip $(DB_SOURCE)),$(strip $(DB_SOURCE)),postgresql:///locallife_test?host=/var/run/postgresql&sslmode=disable)
 
-network:
-	docker network create bank-network
+＃ network:
+#	docker network create bank-network
 
-postgres:
-	docker run --name postgres --network bank-network -p 5432:5432 -e POSTGRES_USER=root -e POSTGRES_PASSWORD=secret -d postgres:14-alpine
+#postgres:
+#	docker run --name postgres --network bank-network -p 5432:5432 -e POSTGRES_USER=root -e POSTGRES_PASSWORD=secret -d postgres:14-alpine
 
-mysql:
-	docker run --name mysql8 -p 3306:3306  -e MYSQL_ROOT_PASSWORD=secret -d mysql:8
+#createdb:
+#	createdb locallife_test
 
-createdb:
-	createdb locallife_test
-
-dropdb:
-	dropdb locallife_test
+#dropdb:
+#	dropdb locallife_test
 
 migrateup:
-	migrate -path db/migration -database "$(DB_URL)" -verbose up
+	$(HOME)/go/bin/migrate -path db/migration -database "$(DB_URL)" -verbose up
 
 migrateup1:
-	migrate -path db/migration -database "$(DB_URL)" -verbose up 1
+	$(HOME)/go/bin/migrate -path db/migration -database "$(DB_URL)" -verbose up 1
 
 migratedown:
-	migrate -path db/migration -database "$(DB_URL)" -verbose down
+	$(HOME)/go/bin/migrate -path db/migration -database "$(DB_URL)" -verbose down
 
 migratedown1:
-	migrate -path db/migration -database "$(DB_URL)" -verbose down 1
+	$(HOME)/go/bin/migrate -path db/migration -database "$(DB_URL)" -verbose down 1
+
+migratestatus:
+	psql "$(DB_URL)" -c "SELECT version, dirty FROM schema_migrations;"
+
+migrateforce:
+	@test -n "$(version)" || (echo "usage: make migrateforce version=<migration_version>" && exit 1)
+	$(HOME)/go/bin/migrate -path db/migration -database "$(DB_URL)" force $(version)
 
 new_migration:
-	migrate create -ext sql -dir db/migration -seq $(name)
+	$(HOME)/go/bin/migrate create -ext sql -dir db/migration -seq $(name)
 
-db_docs:
-	dbdocs build doc/db.dbml
+#db_docs:
+#	dbdocs build doc/db.dbml
 
-db_schema:
-	dbml2sql --postgres -o doc/schema.sql doc/db.dbml
+#db_schema:
+#	dbml2sql --postgres -o doc/schema.sql doc/db.dbml
 
 sqlc:
-	sqlc generate
-	mockgen -package mockdb -destination db/mock/store.go github.com/merrydance/locallife/db/sqlc Store
-	mockgen -package mockwk -destination worker/mock/distributor.go github.com/merrydance/locallife/worker TaskDistributor
-	mockgen -package mockwechat -destination wechat/mock/wechat_client.go github.com/merrydance/locallife/wechat WechatClient
-	mockgen -package mockwechat -destination wechat/mock/payment_client.go github.com/merrydance/locallife/wechat PaymentClientInterface,EcommerceClientInterface
+	$(HOME)/go/bin/sqlc generate
+	$(HOME)/go/bin/mockgen -package mockdb -destination db/mock/store.go github.com/merrydance/locallife/db/sqlc Store
+	$(HOME)/go/bin/mockgen -package mockwk -destination worker/mock/distributor.go github.com/merrydance/locallife/worker TaskDistributor
+	$(HOME)/go/bin/mockgen -package mockwechat -destination wechat/mock/wechat_client.go github.com/merrydance/locallife/wechat WechatClient
+	$(HOME)/go/bin/mockgen -package mockwechat -destination wechat/mock/payment_client.go github.com/merrydance/locallife/wechat PaymentClientInterface,EcommerceClientInterface
 
 test:
 	go test -v -cover -short ./...
+
+test-unit:
+	go test -v -cover -short $$(go list ./... | grep -v '/integration$$')
+
+test-integration:
+	go test -v -cover -count=1 -p 1 ./integration
+
+test-safety:
+	./scripts/test_safety.sh
+
+check-generated:
+	./scripts/check_generated.sh
+
+doc-audit:
+	go run ./cmd/doc_audit -report docs/phase0/user_journey_coverage_report.md
 
 # Sync regions from Tencent LBS (Hebei + Guangzhou, up to level 3)
 sync_regions_test:
 	go run ./cmd/sync_regions_tencent -config . -db "$(DB_URL)"
 
 swagger:
-	swag init -g main.go -o docs --parseDependency --parseInternal
+	$(HOME)/go/bin/swag init -g main.go -o docs --parseDependency --parseInternal
+
+ocr-baseline:
+	@test -n "$(manifest)" || (echo "usage: make ocr-baseline manifest=<manifest.json> report=<run.json> [out=<summary.json>]" && exit 1)
+	@test -n "$(report)" || (echo "usage: make ocr-baseline manifest=<manifest.json> report=<run.json> [out=<summary.json>]" && exit 1)
+	go run ./cmd/ocr_baseline_eval -manifest "$(manifest)" -run "$(report)" $(if $(out),-out "$(out)",)
 
 server:
 	go run main.go
 
 mock:
-	mockgen -package mockdb -destination db/mock/store.go github.com/merrydance/locallife/db/sqlc Store
-	mockgen -package mockwk -destination worker/mock/distributor.go github.com/merrydance/locallife/worker TaskDistributor
-	mockgen -package mockwechat -destination wechat/mock/wechat_client.go github.com/merrydance/locallife/wechat WechatClient
-	mockgen -package mockwechat -destination wechat/mock/payment_client.go github.com/merrydance/locallife/wechat PaymentClientInterface,EcommerceClientInterface
+	$(HOME)/go/bin/mockgen -package mockdb -destination db/mock/store.go github.com/merrydance/locallife/db/sqlc Store
+	$(HOME)/go/bin/mockgen -package mockwk -destination worker/mock/distributor.go github.com/merrydance/locallife/worker TaskDistributor
+	$(HOME)/go/bin/mockgen -package mockwechat -destination wechat/mock/wechat_client.go github.com/merrydance/locallife/wechat WechatClient
+	$(HOME)/go/bin/mockgen -package mockwechat -destination wechat/mock/payment_client.go github.com/merrydance/locallife/wechat PaymentClientInterface,EcommerceClientInterface
 
 proto:
 	rm -f pb/*.go
@@ -78,4 +102,25 @@ evans:
 redis:
 	docker run --name redis -p 6379:6379 -d redis:7-alpine
 
-.PHONY: network postgres createdb dropdb migrateup migratedown migrateup1 migratedown1 new_migration db_docs db_schema sqlc swagger test server mock proto evans redis sync_regions_test
+# Handler/Logic 文件行数检查（上限 500 行，排除自动生成和测试文件）
+MAX_FILE_LINES ?= 500
+lint-filesize:
+	@echo "Checking Go files exceeding $(MAX_FILE_LINES) lines..."
+	@violations=0; \
+	for f in $$(find api logic worker -name '*.go' \
+	  ! -name '*_test.go' ! -name 'mock_*.go' ! -name '*.sql.go' \
+	  ! -path '*/mock/*' ! -path '*/sqlc/*.sql.go' 2>/dev/null); do \
+	  lines=$$(wc -l < "$$f"); \
+	  if [ "$$lines" -gt $(MAX_FILE_LINES) ]; then \
+	    echo "  ⚠️  $$f: $$lines lines (limit $(MAX_FILE_LINES))"; \
+	    violations=$$((violations + 1)); \
+	  fi; \
+	done; \
+	if [ "$$violations" -gt 0 ]; then \
+	  echo "\n❌ $$violations file(s) exceed $(MAX_FILE_LINES)-line limit"; \
+	  exit 1; \
+	else \
+	  echo "✅ All files within $(MAX_FILE_LINES)-line limit"; \
+	fi
+
+.PHONY: network postgres createdb dropdb migrateup migratedown migrateup1 migratedown1 new_migration db_docs db_schema sqlc swagger ocr-baseline test test-unit test-integration test-safety check-generated server mock proto evans redis sync_regions_test doc-audit lint-filesize

@@ -1,105 +1,124 @@
-<!-- 库存管理 - 桌面级 SaaS 界面 -->
+<custom-navbar title="库存设置" showBack="{{true}}" />
 
-<view class="saas-layout">
-    <!-- 侧边栏 -->
+<view class="page-container" style="padding-top: {{navBarHeight}}px">
+  <view wx:if="{{accessReady && accessDenied}}" class="state-block">
+    <t-empty icon="error-circle" description="当前账号无商户权限，请返回“我的”切换身份" />
+  </view>
 
-    <!-- 主区域 -->
-    <view class="main-area" style="margin-left: 0;">
-      <!-- 顶部栏 -->
-      <merchant-header 
-        merchant-name="{{merchantName}}"
-        is-open="{{isOpen}}"
-      />
+  <view wx:elif="{{accessReady && accessErrorMessage}}" class="state-block">
+    <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
+    <t-button theme="primary" size="small" shape="round" bind:tap="onRetryAccess">重新校验</t-button>
+  </view>
 
-      <!-- 页面内容 - 两栏布局 -->
-      <view class="page-container inventory-page">
-        <!-- 左侧分类列表 -->
-        <view class="category-panel">
-          <view class="panel-title">菜品分类</view>
-          <view class="category-list">
-            <view 
-              class="category-item {{activeCategoryId === 'all' ? 'active' : ''}}"
-              bindtap="onSelectCategory"
-              data-id="all"
-            >
-              <text class="category-name">全部菜品</text>
-              <text class="category-count">{{allDishes.length}}</text>
-            </view>
-            <view 
-              wx:for="{{categories}}"
-              wx:key="id"
-              class="category-item {{activeCategoryId === item.id ? 'active' : ''}}"
-              bindtap="onSelectCategory"
-              data-id="{{item.id}}"
-            >
-              <text class="category-name">{{item.name}}</text>
-              <text class="category-count">{{item.dish_count || 0}}</text>
-            </view>
-          </view>
+  <view wx:elif="{{initialLoading}}" class="state-block">
+    <t-loading theme="circular" size="40rpx" text="加载库存中..." vertical />
+  </view>
+
+  <view wx:elif="{{initialError}}" class="state-block">
+    <t-empty icon="error-circle" description="{{initialErrorMessage || '库存加载失败，请重试'}}" />
+    <t-button theme="primary" size="small" shape="round" bind:tap="onRetry">重新加载</t-button>
+  </view>
+
+  <block wx:else>
+    <view class="date-card">
+      <view class="date-card__body">
+        <view class="date-entry-wrap">
+          <t-button
+            t-class="date-entry-button"
+            size="medium"
+            theme="light"
+            shape="round"
+            bind:tap="onOpenDatePicker"
+          >{{date}}</t-button>
+        </view>
+      </view>
+    </view>
+
+    <view wx:if="{{refreshErrorMessage}}" class="refresh-banner">
+      <text class="refresh-banner__text">{{refreshErrorMessage}}</text>
+      <t-button size="small" theme="default" shape="round" bind:tap="onRetryRefresh">重试</t-button>
+    </view>
+
+    <view wx:if="{{loading && !hasInventories}}" class="loading-state">
+      <t-loading theme="circular" size="40rpx" text="加载中..." vertical />
+    </view>
+
+    <view wx:elif="{{!loading && !hasInventories}}" class="empty-state">
+      <t-empty icon="info-circle" description="当前日期暂无库存菜品" />
+    </view>
+
+    <view wx:else class="inventory-list">
+      <view class="inventory-card" wx:for="{{inventories}}" wx:key="id">
+        <view class="inventory-head">
+          <view class="dish-name">{{item.dish_name}}</view>
+          <text class="inventory-total">{{item.draft_total_quantity === -1 ? '今日限售 不限' : '今日限售 ' + item.draft_total_quantity + ' 份'}}</text>
         </view>
 
-        <!-- 右侧库存网格 -->
-        <view class="inventory-panel">
-          <!-- 工具栏 -->
-          <view class="panel-header">
-            <view class="header-title">
-              <text class="title-text">今日库存</text>
-              <text class="title-date">{{todayDate}}</text>
-            </view>
-            <button 
-              class="btn-save {{hasChanges ? 'active' : ''}}"
-              disabled="{{!hasChanges || saving}}"
-              bindtap="saveChanges"
-            >
-              {{saving ? '保存中...' : ('保存修改' + (changedDishIds.length > 0 ? '(' + changedDishIds.length + ')' : ''))}}
-            </button>
-          </view>
-          
-          <!-- 提示文字 -->
-          <view class="inventory-hint">
-            <text>💡 不填写库存默认为无限量供应。填写库存可防止当日超卖。</text>
-          </view>
+        <view class="inventory-stats">
+          <text class="inventory-stat">可用 {{item.draft_total_quantity === -1 ? '无限' : item.draft_available}}</text>
+          <text class="inventory-stat">已售 {{item.sold_quantity}}</text>
+          <text class="inventory-stat">预留 {{item.reserved_quantity}}</text>
+        </view>
 
-          <!-- 库存网格 -->
-          <view class="inventory-content">
-            <view wx:if="{{loading}}" class="loading-state">
-              <text>加载中...</text>
+        <view class="row actions">
+          <view class="unlimited-wrap">
+            <text class="unlimited-label">无限</text>
+            <t-switch
+              size="small"
+              value="{{item.draft_total_quantity === -1}}"
+              disabled="{{item.submitting}}"
+              data-index="{{index}}"
+              bind:change="onUnlimitedChange"
+            />
+          </view>
+          <view class="actions__middle">
+            <view wx:if="{{item.draft_total_quantity !== -1}}" class="input-wrap">
+              <view class="input-label">库存</view>
+              <t-input
+                t-class="qty-input"
+                t-class-input="qty-input__inner"
+                custom-style="--td-input-vertical-padding: 14rpx; --td-input-bg-color: var(--td-bg-color-page); --td-input-border-color: var(--td-brand-color-2, var(--td-component-border)); --td-input-border-left-space: 20rpx; --td-input-border-right-space: 20rpx;"
+                size="small"
+                borderless="{{false}}"
+                type="number"
+                align="right"
+                placeholder="数量"
+                suffix="份"
+                value="{{item.draft_total_quantity_text}}"
+                disabled="{{item.draft_total_quantity === -1 || item.submitting}}"
+                data-index="{{index}}"
+                bind:input="onQuantityDraftChange"
+                bind:change="onQuantityDraftChange"
+                bind:blur="onQuantityInput"
+                bind:enter="onQuantityInput"
+              />
             </view>
-            <view wx:elif="{{filteredDishes.length === 0}}" class="empty-state">
-              <text class="empty-icon">📦</text>
-              <text class="empty-text">暂无菜品</text>
-            </view>
-            <view wx:else class="inventory-grid">
-              <view 
-                wx:for="{{filteredDishes}}"
-                wx:key="id"
-                class="inventory-card"
-              >
-                <image 
-                  class="card-image" 
-                  src="{{item.image_url || '/assets/images/dish-placeholder.png'}}" 
-                  mode="aspectFill"
-                />
-                <view class="card-info">
-                  <text class="card-name">{{item.name}}</text>
-                  <text class="card-price">¥{{item.priceDisplay}}</text>
-                </view>
-                <view class="card-inventory">
-                  <text class="inventory-label">库存</text>
-                  <input 
-                    class="inventory-input {{item.inventory === 0 ? 'sold-out' : ''}}"
-                    type="text"
-                    value="{{item.inventory === -1 ? '' : item.inventory}}"
-                    placeholder="无限"
-                    data-dish-id="{{item.id}}"
-                    data-dish-name="{{item.name}}"
-                    bindinput="onInventoryInput"
-                  />
-                </view>
-              </view>
-            </view>
+          </view>
+          <view class="actions__save">
+            <t-button
+              size="small"
+              theme="{{item.save_disabled ? 'default' : 'primary'}}"
+              loading="{{item.submitting}}"
+              disabled="{{item.save_disabled}}"
+              data-index="{{index}}"
+              bind:tap="onSave"
+              shape="round"
+            >保存</t-button>
           </view>
         </view>
       </view>
     </view>
+
+    <t-date-time-picker
+      title="选择日期"
+      visible="{{datePickerVisible}}"
+      mode="date"
+      format="YYYY-MM-DD"
+      defaultValue="{{date}}"
+      bind:confirm="onDateConfirm"
+      bind:cancel="onCloseDatePicker"
+    />
+
+    <t-message id="t-message" />
+  </block>
 </view>

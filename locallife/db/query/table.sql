@@ -7,9 +7,10 @@ INSERT INTO tables (
     description,
     minimum_spend,
     qr_code_url,
-    status
+  status,
+  access_code_hash
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8
+  $1, $2, $3, $4, $5, $6, $7, $8, $9
 ) RETURNING *;
 
 -- name: GetTable :one
@@ -26,15 +27,53 @@ SELECT * FROM tables
 WHERE merchant_id = $1 AND table_no = $2 LIMIT 1;
 
 -- name: ListTablesByMerchant :many
-SELECT * FROM tables
-WHERE merchant_id = $1
-ORDER BY table_type, table_no;
+SELECT
+    t.id,
+    t.merchant_id,
+    t.table_no,
+    t.table_type,
+    t.capacity,
+    t.description,
+    t.minimum_spend,
+    t.qr_code_url,
+    t.status,
+    t.current_reservation_id,
+    t.created_at,
+    t.updated_at,
+    t.access_code_hash,
+    COALESCE(
+        (SELECT ti.media_asset_id FROM table_images ti WHERE ti.table_id = t.id AND ti.is_primary = TRUE LIMIT 1),
+        (SELECT ti.media_asset_id FROM table_images ti WHERE ti.table_id = t.id ORDER BY ti.sort_order ASC, ti.created_at ASC LIMIT 1),
+        0
+    ) AS primary_image_asset_id
+FROM tables t
+WHERE t.merchant_id = $1
+ORDER BY t.table_type, t.table_no;
 
 -- name: ListTablesByMerchantAndType :many
-SELECT * FROM tables
-WHERE merchant_id = $1 
-  AND table_type = $2
-ORDER BY table_no;
+SELECT
+    t.id,
+    t.merchant_id,
+    t.table_no,
+    t.table_type,
+    t.capacity,
+    t.description,
+    t.minimum_spend,
+    t.qr_code_url,
+    t.status,
+    t.current_reservation_id,
+    t.created_at,
+    t.updated_at,
+    t.access_code_hash,
+    COALESCE(
+        (SELECT ti.media_asset_id FROM table_images ti WHERE ti.table_id = t.id AND ti.is_primary = TRUE LIMIT 1),
+        (SELECT ti.media_asset_id FROM table_images ti WHERE ti.table_id = t.id ORDER BY ti.sort_order ASC, ti.created_at ASC LIMIT 1),
+        0
+    ) AS primary_image_asset_id
+FROM tables t
+WHERE t.merchant_id = $1
+  AND t.table_type = $2
+ORDER BY t.table_no;
 
 -- name: ListAvailableRooms :many
 SELECT * FROM tables
@@ -46,10 +85,12 @@ ORDER BY table_no;
 -- name: UpdateTable :one
 UPDATE tables
 SET table_no = COALESCE(sqlc.narg(table_no), table_no),
+    table_type = COALESCE(sqlc.narg(table_type), table_type),
     capacity = COALESCE(sqlc.narg(capacity), capacity),
     description = COALESCE(sqlc.narg(description), description),
     minimum_spend = COALESCE(sqlc.narg(minimum_spend), minimum_spend),
     qr_code_url = COALESCE(sqlc.narg(qr_code_url), qr_code_url),
+  access_code_hash = COALESCE(sqlc.narg(access_code_hash), access_code_hash),
     status = COALESCE(sqlc.narg(status), status),
     updated_at = now()
 WHERE id = sqlc.arg(id)
@@ -81,7 +122,7 @@ WHERE merchant_id = $1
 -- name: AddTableImage :one
 INSERT INTO table_images (
     table_id,
-    image_url,
+    media_asset_id,
     sort_order,
     is_primary
 ) VALUES (
@@ -132,12 +173,12 @@ SELECT
     t.status,
     t.created_at,
     m.name as merchant_name,
-    m.logo_url as merchant_logo,
+    m.logo_media_asset_id as merchant_logo_media_asset_id,
     m.address as merchant_address,
     m.latitude as merchant_latitude,
     m.longitude as merchant_longitude,
     m.phone as merchant_phone,
-    COALESCE((SELECT image_url FROM table_images WHERE table_id = t.id AND is_primary = TRUE LIMIT 1), '')::TEXT as primary_image,
+    COALESCE((SELECT media_asset_id FROM table_images WHERE table_id = t.id AND is_primary = TRUE LIMIT 1), 0) as primary_image_asset_id,
     (SELECT COUNT(*) FROM table_reservations tr 
      WHERE tr.table_id = t.id 
        AND tr.status IN ('confirmed', 'completed')
@@ -160,10 +201,10 @@ SELECT
     t.status,
     t.created_at,
     COALESCE(
-        (SELECT image_url FROM table_images WHERE table_id = t.id AND is_primary = TRUE LIMIT 1),
-        (SELECT image_url FROM table_images WHERE table_id = t.id ORDER BY sort_order ASC, created_at ASC LIMIT 1),
-        ''
-    )::TEXT as primary_image,
+        (SELECT media_asset_id FROM table_images WHERE table_id = t.id AND is_primary = TRUE LIMIT 1),
+        (SELECT media_asset_id FROM table_images WHERE table_id = t.id ORDER BY sort_order ASC, created_at ASC LIMIT 1),
+        0
+    ) as primary_image_asset_id,
     (SELECT COUNT(*) FROM table_reservations tr 
      WHERE tr.table_id = t.id 
        AND tr.status IN ('confirmed', 'completed')
@@ -183,7 +224,7 @@ SELECT
     t.description,
     t.minimum_spend,
     t.status,
-    COALESCE((SELECT image_url FROM table_images WHERE table_id = t.id AND is_primary = TRUE LIMIT 1), '')::TEXT as primary_image
+    COALESCE((SELECT media_asset_id FROM table_images WHERE table_id = t.id AND is_primary = TRUE LIMIT 1), 0) as primary_image_asset_id
 FROM tables t
 WHERE t.merchant_id = $1 
   AND t.table_type = 'room'
@@ -244,20 +285,24 @@ SELECT
     t.status,
     t.created_at,
     m.name as merchant_name,
-    m.logo_url as merchant_logo,
+    m.logo_media_asset_id as merchant_logo_media_asset_id,
     m.address as merchant_address,
     m.latitude as merchant_latitude,
     m.longitude as merchant_longitude
 FROM tables t
 INNER JOIN merchants m ON t.merchant_id = m.id
+LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
 WHERE t.table_type = 'room'
   AND t.status = 'available'
   AND m.status = 'active'
-  -- 按区域筛选（可选）
-  AND (sqlc.narg(region_id)::BIGINT IS NULL OR m.region_id = sqlc.narg(region_id))
+  AND COALESCE(mp.is_takeout_suspended, false) = false
+  -- 按区域筛选（必选）
+  AND m.region_id = sqlc.arg(region_id)
   -- 按人数筛选
   AND (sqlc.narg(min_capacity)::SMALLINT IS NULL OR t.capacity >= sqlc.narg(min_capacity))
   AND (sqlc.narg(max_capacity)::SMALLINT IS NULL OR t.capacity <= sqlc.narg(max_capacity))
+  -- 按最低消费下限筛选
+  AND (sqlc.narg(min_minimum_spend)::BIGINT IS NULL OR t.minimum_spend IS NULL OR t.minimum_spend >= sqlc.narg(min_minimum_spend))
   -- 按最低消费筛选
   AND (sqlc.narg(max_minimum_spend)::BIGINT IS NULL OR t.minimum_spend IS NULL OR t.minimum_spend <= sqlc.narg(max_minimum_spend))
   -- 排除已在指定日期时段被预定的包间
@@ -286,22 +331,28 @@ SELECT
     t.status,
     t.created_at,
     m.name as merchant_name,
-    m.logo_url as merchant_logo,
+    m.logo_media_asset_id as merchant_logo_media_asset_id,
     m.address as merchant_address,
     m.latitude as merchant_latitude,
     m.longitude as merchant_longitude
 FROM tables t
 INNER JOIN merchants m ON t.merchant_id = m.id
 INNER JOIN merchant_tags mt ON m.id = mt.merchant_id
+LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
 WHERE t.table_type = 'room'
   AND t.status = 'available'
   AND m.status = 'active'
+  AND COALESCE(mp.is_takeout_suspended, false) = false
   AND mt.tag_id = sqlc.arg(tag_id)
-  -- 按区域筛选（可选）
-  AND (sqlc.narg(region_id)::BIGINT IS NULL OR m.region_id = sqlc.narg(region_id))
+  -- 按区域筛选（必选）
+  AND m.region_id = sqlc.arg(region_id)
   -- 按人数筛选
   AND (sqlc.narg(min_capacity)::SMALLINT IS NULL OR t.capacity >= sqlc.narg(min_capacity))
   AND (sqlc.narg(max_capacity)::SMALLINT IS NULL OR t.capacity <= sqlc.narg(max_capacity))
+  -- 按最低消费下限筛选
+  AND (sqlc.narg(min_minimum_spend)::BIGINT IS NULL OR t.minimum_spend IS NULL OR t.minimum_spend >= sqlc.narg(min_minimum_spend))
+  -- 按最低消费上限筛选
+  AND (sqlc.narg(max_minimum_spend)::BIGINT IS NULL OR t.minimum_spend IS NULL OR t.minimum_spend <= sqlc.narg(max_minimum_spend))
   -- 排除已在指定日期时段被预定的包间
   AND NOT EXISTS (
     SELECT 1 FROM table_reservations tr
@@ -318,12 +369,15 @@ OFFSET sqlc.arg(page_offset);
 -- 统计搜索包间结果数量
 SELECT COUNT(*) FROM tables t
 INNER JOIN merchants m ON t.merchant_id = m.id
+LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
 WHERE t.table_type = 'room'
   AND t.status = 'available'
   AND m.status = 'active'
-  AND (sqlc.narg(region_id)::BIGINT IS NULL OR m.region_id = sqlc.narg(region_id))
+  AND COALESCE(mp.is_takeout_suspended, false) = false
+  AND m.region_id = sqlc.arg(region_id)
   AND (sqlc.narg(min_capacity)::SMALLINT IS NULL OR t.capacity >= sqlc.narg(min_capacity))
   AND (sqlc.narg(max_capacity)::SMALLINT IS NULL OR t.capacity <= sqlc.narg(max_capacity))
+  AND (sqlc.narg(min_minimum_spend)::BIGINT IS NULL OR t.minimum_spend IS NULL OR t.minimum_spend >= sqlc.narg(min_minimum_spend))
   AND (sqlc.narg(max_minimum_spend)::BIGINT IS NULL OR t.minimum_spend IS NULL OR t.minimum_spend <= sqlc.narg(max_minimum_spend))
   AND NOT EXISTS (
     SELECT 1 FROM table_reservations tr
@@ -347,16 +401,16 @@ SELECT
     t.status,
     t.created_at,
     m.name as merchant_name,
-    m.logo_url as merchant_logo,
+    m.logo_media_asset_id as merchant_logo_media_asset_id,
     m.address as merchant_address,
     m.latitude as merchant_latitude,
     m.longitude as merchant_longitude,
     m.phone as merchant_phone,
     COALESCE(
-        (SELECT ti.image_url FROM table_images ti WHERE ti.table_id = t.id AND ti.is_primary = true LIMIT 1),
-        (SELECT ti.image_url FROM table_images ti WHERE ti.table_id = t.id ORDER BY ti.sort_order ASC, ti.created_at ASC LIMIT 1),
-        ''
-    )::TEXT as primary_image,
+        (SELECT ti.media_asset_id FROM table_images ti WHERE ti.table_id = t.id AND ti.is_primary = true LIMIT 1),
+        (SELECT ti.media_asset_id FROM table_images ti WHERE ti.table_id = t.id ORDER BY ti.sort_order ASC, ti.created_at ASC LIMIT 1),
+        0
+    ) as primary_image_asset_id,
     (SELECT COUNT(*) FROM table_reservations tr 
      WHERE tr.table_id = t.id 
        AND tr.reservation_date >= CURRENT_DATE - INTERVAL '30 days'
@@ -364,14 +418,18 @@ SELECT
     )::INT as monthly_reservations
 FROM tables t
 INNER JOIN merchants m ON t.merchant_id = m.id
+LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
 WHERE t.table_type = 'room'
   AND t.status = 'available'
   AND m.status = 'active'
+  AND COALESCE(mp.is_takeout_suspended, false) = false
   -- 按区域筛选
-  AND (sqlc.narg(region_id)::BIGINT IS NULL OR m.region_id = sqlc.narg(region_id))
+  AND m.region_id = sqlc.arg(region_id)
   -- 按人数筛选
   AND (sqlc.narg(min_capacity)::SMALLINT IS NULL OR t.capacity >= sqlc.narg(min_capacity))
   AND (sqlc.narg(max_capacity)::SMALLINT IS NULL OR t.capacity <= sqlc.narg(max_capacity))
+  -- 按最低消费下限筛选
+  AND (sqlc.narg(min_minimum_spend)::BIGINT IS NULL OR t.minimum_spend IS NULL OR t.minimum_spend >= sqlc.narg(min_minimum_spend))
   -- 按最低消费筛选
   AND (sqlc.narg(max_minimum_spend)::BIGINT IS NULL OR t.minimum_spend IS NULL OR t.minimum_spend <= sqlc.narg(max_minimum_spend))
 ORDER BY monthly_reservations DESC, t.capacity
@@ -382,10 +440,12 @@ OFFSET sqlc.arg(page_offset);
 -- 统计可探索包间总数
 SELECT COUNT(*) FROM tables t
 INNER JOIN merchants m ON t.merchant_id = m.id
+LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
 WHERE t.table_type = 'room'
   AND t.status = 'available'
   AND m.status = 'active'
-  AND (sqlc.narg(region_id)::BIGINT IS NULL OR m.region_id = sqlc.narg(region_id))
+  AND COALESCE(mp.is_takeout_suspended, false) = false
+  AND m.region_id = sqlc.arg(region_id)
   AND (sqlc.narg(min_capacity)::SMALLINT IS NULL OR t.capacity >= sqlc.narg(min_capacity))
   AND (sqlc.narg(max_capacity)::SMALLINT IS NULL OR t.capacity <= sqlc.narg(max_capacity))
   AND (sqlc.narg(max_minimum_spend)::BIGINT IS NULL OR t.minimum_spend IS NULL OR t.minimum_spend <= sqlc.narg(max_minimum_spend));
@@ -404,21 +464,25 @@ SELECT
     t.status,
     t.created_at,
     m.name as merchant_name,
-    m.logo_url as merchant_logo,
+    m.logo_media_asset_id as merchant_logo_media_asset_id,
     m.address as merchant_address,
     m.latitude as merchant_latitude,
     m.longitude as merchant_longitude,
-    COALESCE((SELECT ti.image_url FROM table_images ti WHERE ti.table_id = t.id AND ti.is_primary = true LIMIT 1), '')::TEXT as primary_image
+    COALESCE((SELECT ti.media_asset_id FROM table_images ti WHERE ti.table_id = t.id AND ti.is_primary = true LIMIT 1), 0) as primary_image_asset_id
 FROM tables t
 INNER JOIN merchants m ON t.merchant_id = m.id
+LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
 WHERE t.table_type = 'room'
   AND t.status = 'available'
   AND m.status = 'active'
-  -- 按区域筛选（可选）
-  AND (sqlc.narg(region_id)::BIGINT IS NULL OR m.region_id = sqlc.narg(region_id))
+  AND COALESCE(mp.is_takeout_suspended, false) = false
+  -- 按区域筛选（必选）
+  AND m.region_id = sqlc.arg(region_id)
   -- 按人数筛选
   AND (sqlc.narg(min_capacity)::SMALLINT IS NULL OR t.capacity >= sqlc.narg(min_capacity))
   AND (sqlc.narg(max_capacity)::SMALLINT IS NULL OR t.capacity <= sqlc.narg(max_capacity))
+  -- 按最低消费下限筛选
+  AND (sqlc.narg(min_minimum_spend)::BIGINT IS NULL OR t.minimum_spend IS NULL OR t.minimum_spend >= sqlc.narg(min_minimum_spend))
   -- 按最低消费筛选
   AND (sqlc.narg(max_minimum_spend)::BIGINT IS NULL OR t.minimum_spend IS NULL OR t.minimum_spend <= sqlc.narg(max_minimum_spend))
   -- 排除已在指定日期时段被预定的包间

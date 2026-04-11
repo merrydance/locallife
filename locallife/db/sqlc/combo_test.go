@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -12,13 +13,13 @@ import (
 // 辅助函数：创建随机套餐
 func createRandomComboSet(t *testing.T, merchantID int64) ComboSet {
 	arg := CreateComboSetParams{
-		MerchantID:    merchantID,
-		Name:          util.RandomString(10),
-		Description:   pgtype.Text{String: util.RandomString(30), Valid: true},
-		ImageUrl:      pgtype.Text{String: "https://example.com/combo.jpg", Valid: true},
-		OriginalPrice: util.RandomMoney(),
-		ComboPrice:    util.RandomMoney(),
-		IsOnline:      true,
+		MerchantID:        merchantID,
+		Name:              util.RandomString(10),
+		Description:       pgtype.Text{String: util.RandomString(30), Valid: true},
+		ImageMediaAssetID: pgtype.Int8{},
+		OriginalPrice:     util.RandomMoney(),
+		ComboPrice:        util.RandomMoney(),
+		IsOnline:          true,
 	}
 
 	combo, err := testStore.CreateComboSet(context.Background(), arg)
@@ -34,6 +35,15 @@ func createRandomComboSet(t *testing.T, merchantID int64) ComboSet {
 	require.NotZero(t, combo.CreatedAt)
 
 	return combo
+}
+
+func newComboDishParams(comboID int64, dish Dish, quantity int16) AddComboDishParams {
+	return AddComboDishParams{
+		ComboID:               comboID,
+		DishID:                dish.ID,
+		Quantity:              quantity,
+		DishBasePriceSnapshot: dish.Price,
+	}
 }
 
 // ============================================
@@ -60,10 +70,20 @@ func TestGetComboSet(t *testing.T) {
 
 func TestListComboSetsByMerchant(t *testing.T) {
 	merchant := createRandomMerchantForDish(t)
+	category := createRandomDishCategory(t)
+	tag := createRandomTag(t, "combo")
 
 	// 创建多个套餐
 	for i := 0; i < 3; i++ {
-		createRandomComboSet(t, merchant.ID)
+		combo := createRandomComboSet(t, merchant.ID)
+		dish := createRandomDish(t, merchant.ID, category.ID)
+		_, err := testStore.AddComboDish(context.Background(), newComboDishParams(combo.ID, dish, 2))
+		require.NoError(t, err)
+		_, err = testStore.AddComboTag(context.Background(), AddComboTagParams{
+			ComboID: combo.ID,
+			TagID:   tag.ID,
+		})
+		require.NoError(t, err)
 	}
 
 	arg := ListComboSetsByMerchantParams{
@@ -77,8 +97,48 @@ func TestListComboSetsByMerchant(t *testing.T) {
 	require.GreaterOrEqual(t, len(combos), 3)
 
 	for _, combo := range combos {
-		require.Equal(t, merchant.ID, combo.MerchantID)
+		require.NotZero(t, combo.ID)
+		require.NotEmpty(t, combo.Name)
+		require.GreaterOrEqual(t, combo.DishCount, int64(1))
+		require.GreaterOrEqual(t, combo.DishTotalQuantity, int64(2))
+		require.NotNil(t, combo.Tags)
 	}
+}
+
+func TestListComboSetsByMerchantExcludesDeletedDishes(t *testing.T) {
+	merchant := createRandomMerchantForDish(t)
+	category := createRandomDishCategory(t)
+	combo := createRandomComboSet(t, merchant.ID)
+
+	activeDish := createRandomDish(t, merchant.ID, category.ID)
+	deletedDish := createRandomDish(t, merchant.ID, category.ID)
+
+	_, err := testStore.AddComboDish(context.Background(), newComboDishParams(combo.ID, activeDish, 2))
+	require.NoError(t, err)
+
+	_, err = testStore.AddComboDish(context.Background(), newComboDishParams(combo.ID, deletedDish, 3))
+	require.NoError(t, err)
+
+	err = testStore.DeleteDish(context.Background(), deletedDish.ID)
+	require.NoError(t, err)
+
+	rows, err := testStore.ListComboSetsByMerchant(context.Background(), ListComboSetsByMerchantParams{
+		MerchantID: merchant.ID,
+		Limit:      10,
+		Offset:     0,
+	})
+	require.NoError(t, err)
+
+	var target *ListComboSetsByMerchantRow
+	for i := range rows {
+		if rows[i].ID == combo.ID {
+			target = &rows[i]
+			break
+		}
+	}
+	require.NotNil(t, target)
+	require.Equal(t, int64(1), target.DishCount)
+	require.Equal(t, int64(2), target.DishTotalQuantity)
 }
 
 func TestListComboSetsByMerchantWithFilter(t *testing.T) {
@@ -98,6 +158,7 @@ func TestListComboSetsByMerchantWithFilter(t *testing.T) {
 
 	for _, combo := range combos {
 		require.True(t, combo.IsOnline)
+		require.NotZero(t, combo.ID)
 	}
 }
 
@@ -180,11 +241,15 @@ func TestAddComboDish(t *testing.T) {
 	category := createRandomDishCategory(t)
 	dish := createRandomDish(t, merchant.ID, category.ID)
 	combo := createRandomComboSet(t, merchant.ID)
+	customizations := []byte(`{"12":34,"meta_specs":"大杯 / 少冰"}`)
 
 	arg := AddComboDishParams{
-		ComboID:  combo.ID,
-		DishID:   dish.ID,
-		Quantity: int16(util.RandomInt(1, 5)),
+		ComboID:                 combo.ID,
+		DishID:                  dish.ID,
+		Quantity:                int16(util.RandomInt(1, 5)),
+		DishBasePriceSnapshot:   dish.Price,
+		Customizations:          customizations,
+		CustomizationExtraPrice: 300,
 	}
 
 	comboDish, err := testStore.AddComboDish(context.Background(), arg)
@@ -192,6 +257,9 @@ func TestAddComboDish(t *testing.T) {
 	require.NotEmpty(t, comboDish)
 	require.Equal(t, combo.ID, comboDish.ComboID)
 	require.Equal(t, dish.ID, comboDish.DishID)
+	require.Equal(t, dish.Price, comboDish.DishBasePriceSnapshot)
+	require.JSONEq(t, string(customizations), string(comboDish.Customizations))
+	require.Equal(t, int64(300), comboDish.CustomizationExtraPrice)
 
 	// 验证关联
 	dishes, err := testStore.ListComboDishes(context.Background(), combo.ID)
@@ -202,6 +270,9 @@ func TestAddComboDish(t *testing.T) {
 	for _, d := range dishes {
 		if d.ID == dish.ID {
 			found = true
+			require.Equal(t, dish.Price, d.DishBasePriceSnapshot)
+			require.JSONEq(t, string(customizations), string(d.Customizations))
+			require.Equal(t, int64(300), d.CustomizationExtraPrice)
 			break
 		}
 	}
@@ -216,11 +287,7 @@ func TestListComboDishes(t *testing.T) {
 	// 添加多个菜品到套餐
 	for i := 0; i < 3; i++ {
 		dish := createRandomDish(t, merchant.ID, category.ID)
-		_, err := testStore.AddComboDish(context.Background(), AddComboDishParams{
-			ComboID:  combo.ID,
-			DishID:   dish.ID,
-			Quantity: int16(1),
-		})
+		_, err := testStore.AddComboDish(context.Background(), newComboDishParams(combo.ID, dish, 1))
 		require.NoError(t, err)
 	}
 
@@ -236,11 +303,7 @@ func TestRemoveComboDish(t *testing.T) {
 	combo := createRandomComboSet(t, merchant.ID)
 
 	// 先添加
-	_, err := testStore.AddComboDish(context.Background(), AddComboDishParams{
-		ComboID:  combo.ID,
-		DishID:   dish.ID,
-		Quantity: 1,
-	})
+	_, err := testStore.AddComboDish(context.Background(), newComboDishParams(combo.ID, dish, 1))
 	require.NoError(t, err)
 
 	// 再移除
@@ -268,11 +331,7 @@ func TestRemoveAllComboDishes(t *testing.T) {
 	// 添加多个菜品
 	for i := 0; i < 3; i++ {
 		dish := createRandomDish(t, merchant.ID, category.ID)
-		_, err := testStore.AddComboDish(context.Background(), AddComboDishParams{
-			ComboID:  combo.ID,
-			DishID:   dish.ID,
-			Quantity: 1,
-		})
+		_, err := testStore.AddComboDish(context.Background(), newComboDishParams(combo.ID, dish, 1))
 		require.NoError(t, err)
 	}
 
@@ -372,17 +431,13 @@ func TestGetComboSetWithDetails(t *testing.T) {
 	// 添加菜品
 	dish1 := createRandomDish(t, merchant.ID, category.ID)
 	dish2 := createRandomDish(t, merchant.ID, category.ID)
-	_, err := testStore.AddComboDish(context.Background(), AddComboDishParams{
-		ComboID:  combo.ID,
-		DishID:   dish1.ID,
-		Quantity: 1,
-	})
+	arg1 := newComboDishParams(combo.ID, dish1, 1)
+	arg1.DishBasePriceSnapshot = dish1.Price + 500
+	arg1.Customizations = []byte(`{"12":34,"meta_specs":"大杯"}`)
+	arg1.CustomizationExtraPrice = 300
+	_, err := testStore.AddComboDish(context.Background(), arg1)
 	require.NoError(t, err)
-	_, err = testStore.AddComboDish(context.Background(), AddComboDishParams{
-		ComboID:  combo.ID,
-		DishID:   dish2.ID,
-		Quantity: 2,
-	})
+	_, err = testStore.AddComboDish(context.Background(), newComboDishParams(combo.ID, dish2, 2))
 	require.NoError(t, err)
 
 	// 添加标签
@@ -409,6 +464,54 @@ func TestGetComboSetWithDetails(t *testing.T) {
 	// 验证JSON字段不为空（具体解析在API层）
 	require.NotEmpty(t, comboDetails.Dishes)
 	require.NotEmpty(t, comboDetails.Tags)
+
+	payload, err := json.Marshal(comboDetails.Dishes)
+	require.NoError(t, err)
+
+	var dishes []struct {
+		DishID    int64 `json:"dish_id"`
+		DishPrice int64 `json:"dish_price"`
+	}
+	err = json.Unmarshal(payload, &dishes)
+	require.NoError(t, err)
+	require.Len(t, dishes, 2)
+	dishPriceByID := make(map[int64]int64, len(dishes))
+	for _, dish := range dishes {
+		dishPriceByID[dish.DishID] = dish.DishPrice
+	}
+	require.Equal(t, arg1.DishBasePriceSnapshot+arg1.CustomizationExtraPrice, dishPriceByID[dish1.ID])
+}
+
+func TestGetComboSetWithDetailsExcludesDeletedDishes(t *testing.T) {
+	merchant := createRandomMerchantForDish(t)
+	category := createRandomDishCategory(t)
+	combo := createRandomComboSet(t, merchant.ID)
+
+	activeDish := createRandomDish(t, merchant.ID, category.ID)
+	deletedDish := createRandomDish(t, merchant.ID, category.ID)
+
+	_, err := testStore.AddComboDish(context.Background(), newComboDishParams(combo.ID, activeDish, 1))
+	require.NoError(t, err)
+
+	_, err = testStore.AddComboDish(context.Background(), newComboDishParams(combo.ID, deletedDish, 2))
+	require.NoError(t, err)
+
+	err = testStore.DeleteDish(context.Background(), deletedDish.ID)
+	require.NoError(t, err)
+
+	comboDetails, err := testStore.GetComboSetWithDetails(context.Background(), combo.ID)
+	require.NoError(t, err)
+
+	payload, err := json.Marshal(comboDetails.Dishes)
+	require.NoError(t, err)
+
+	var dishes []struct {
+		DishID int64 `json:"dish_id"`
+	}
+	err = json.Unmarshal(payload, &dishes)
+	require.NoError(t, err)
+	require.Len(t, dishes, 1)
+	require.Equal(t, activeDish.ID, dishes[0].DishID)
 }
 
 // ============================================
@@ -499,4 +602,51 @@ func TestGetCombosWithMerchantByIDs_FilterOffline(t *testing.T) {
 	results, err := testStore.GetCombosWithMerchantByIDs(context.Background(), []int64{offlineCombo.ID})
 	require.NoError(t, err)
 	require.Empty(t, results, "下架套餐不应被返回")
+}
+
+func TestSearchCombosGlobal_ExcludesTakeoutSuspendedMerchants(t *testing.T) {
+	merchant := createRandomMerchantForDish(t)
+	uniqueName := "SuspendedCombo_" + util.RandomString(8)
+
+	_, err := testStore.CreateComboSet(context.Background(), CreateComboSetParams{
+		MerchantID:    merchant.ID,
+		Name:          uniqueName,
+		OriginalPrice: util.RandomMoney(),
+		ComboPrice:    util.RandomMoney(),
+		IsOnline:      true,
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.CreateMerchantProfile(context.Background(), merchant.ID)
+	require.NoError(t, err)
+
+	err = testStore.SuspendMerchantTakeout(context.Background(), SuspendMerchantTakeoutParams{
+		MerchantID:           merchant.ID,
+		TakeoutSuspendReason: pgtype.Text{String: "claim recovery overdue", Valid: true},
+	})
+	require.NoError(t, err)
+
+	combos, err := testStore.SearchCombosGlobal(context.Background(), SearchCombosGlobalParams{
+		Column1: uniqueName,
+		Limit:   10,
+		Offset:  0,
+		Column4: 39.9282,
+		Column5: 116.4507,
+		RegionID: pgtype.Int8{
+			Int64: merchant.RegionID,
+			Valid: true,
+		},
+	})
+	require.NoError(t, err)
+	require.Empty(t, combos)
+
+	count, err := testStore.CountSearchCombosGlobal(context.Background(), CountSearchCombosGlobalParams{
+		Column1: uniqueName,
+		RegionID: pgtype.Int8{
+			Int64: merchant.RegionID,
+			Valid: true,
+		},
+	})
+	require.NoError(t, err)
+	require.Zero(t, count)
 }

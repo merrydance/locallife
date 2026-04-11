@@ -1,179 +1,288 @@
 <custom-navbar title="运营商入驻" showBack="{{true}}" bind:navheight="onNavHeight" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px; padding-bottom: 200rpx;">
-  <view class="form-container">
-    <!-- 1. 证照上传 (置顶) -->
-    <view class="section-header">证照上传 (自动识别)</view>
-    
-    <view class="upload-group">
-      <view class="upload-item">
-        <view class="upload-label">营业执照 (必传)</view>
-        <t-upload 
-          mediaType="{{['image']}}" 
-          files="{{licenseImages}}" 
-          max="1" 
-          bind:success="onLicenseUpload" 
+<view class="page-container" style="padding-top: {{navBarHeight}}px; padding-bottom: calc(140rpx + env(safe-area-inset-bottom));">
+  
+  <view class="steps-container" wx:if="{{currentStep > 0 && currentStep < 4}}">
+    <t-steps current="{{currentStep - 1}}">
+      <t-step-item title="选择区域" />
+      <t-step-item title="资质上传" />
+      <t-step-item title="提交申请" />
+    </t-steps>
+  </view>
+
+  <view class="form-content">
+    <!-- Step 0: 城市合伙人招募 -->
+    <view class="step-view animate-fade-in" wx:if="{{currentStep === 0}}">
+      <view class="hero-card">
+        <view class="partner-badge">CITY PARTNER</view>
+        <view class="hero-title">成为 LocalLife 城市合伙人</view>
+        <view class="hero-subtitle">共享数字化本地生活万亿蓝海市场</view>
+        
+        <view class="feature-list">
+          <view class="feature-item">
+            <view class="feature-icon"><t-icon name="location-setting" size="48rpx" color="var(--td-brand-color)" /></view>
+            <view class="feature-info">
+              <text class="feature-title">区域独占经营</text>
+              <text class="feature-desc">一区一商，锁定行政区域经营权</text>
+            </view>
+          </view>
+          <view class="feature-item">
+            <view class="feature-icon"><t-icon name="chart-bubble" size="48rpx" color="var(--td-brand-color)" /></view>
+            <view class="feature-info">
+              <text class="feature-title">高比例分佣</text>
+              <text class="feature-desc">区域内所有商家流水均可获得收益分成</text>
+            </view>
+          </view>
+          <view class="feature-item">
+            <view class="feature-icon"><t-icon name="view-module" size="48rpx" color="var(--td-brand-color)" /></view>
+            <view class="feature-info">
+              <text class="feature-title">全套系统赋能</text>
+              <text class="feature-desc">提供成熟的商家/骑手管理与营销工具</text>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <view class="operation-flow">
+        <view class="flow-title">入驻标准流程</view>
+        <view class="flow-steps">
+          <view class="flow-node">选择区域</view>
+          <view class="flow-line"></view>
+          <view class="flow-node">上传资质</view>
+          <view class="flow-line"></view>
+          <view class="flow-node">总部面试</view>
+          <view class="flow-line"></view>
+          <view class="flow-node">正式签约</view>
+        </view>
+      </view>
+    </view>
+
+    <!-- Step 1: 区域选择与联系信息 -->
+    <view class="step-view animate-fade-in" wx:if="{{currentStep === 1}}">
+      <view class="section-title">申请区域</view>
+      <view class="card-group">
+        <t-cell title="目标运营区" arrow hover bindtap="onOpenRegionPopup">
+          <view slot="note" class="cell-value {{formData.regionName ? '' : 'placeholder'}}">
+            {{formData.regionName || '点击搜索意向区域'}}
+          </view>
+        </t-cell>
+      </view>
+
+      <view class="section-title">运营商基本信息</view>
+      <view class="card-group">
+        <t-input 
+          label="运营商名称" 
+          placeholder="可选，留空将自动使用个人姓名" 
+          value="{{formData.name}}" 
+          bindchange="onInput" 
+          data-field="name" 
+        />
+        <t-input 
+          label="联系人姓名" 
+          placeholder="负责人真實姓名" 
+          value="{{formData.contactName}}" 
+          bindchange="onInput" 
+          data-field="contactName" 
+        />
+        <view class="field-block {{phoneError ? 'field-block-error' : ''}}">
+          <t-input 
+            label="联系人电话" 
+            type="number" 
+            placeholder="请输入负责人手机号" 
+            value="{{formData.contactPhone}}" 
+            bindchange="onInput" 
+            data-field="contactPhone" 
+          />
+        </view>
+        <view class="field-error-text" wx:if="{{phoneError}}">{{phoneError}}</view>
+      </view>
+
+      <view class="section-title">合伙方案</view>
+      <view class="card-group">
+        <t-cell title="申请合同期限">
+           <t-stepper 
+             value="{{formData.years}}" 
+             min="{{1}}" 
+             max="{{10}}" 
+             theme="gray" 
+             bind:change="onYearsChange" 
+             slot="note" 
+           />
+           <text slot="note" class="unit-text">年</text>
+        </t-cell>
+      </view>
+    </view>
+
+    <!-- Step 2: 企业与法人资质 -->
+    <view class="step-view animate-fade-in" wx:if="{{currentStep === 2}}">
+      <view class="section-title">资质上传（身份证必填，营业执照可选）</view>
+      <view class="upload-section">
+        <view class="label-row">
+          <text class="label">企业营业执照（可选）</text>
+        </view>
+        <document-uploader 
+          type="license" 
+          title="点击上传企业营业执照" 
+          value="{{license.url}}" 
+          rawUrl="{{license.rawUrl}}"
+          feedbackState="{{uploadFeedback.license.state}}"
+          feedbackTitle="{{uploadFeedback.license.title}}"
+          feedbackDescription="{{uploadFeedback.license.description}}"
+          bind:change="onLicenseUpload"
           bind:remove="onLicenseRemove" 
         />
       </view>
-      <view class="upload-item">
-        <view class="upload-label">开户许可证 (必传)</view>
-        <t-upload 
-          mediaType="{{['image']}}" 
-          files="{{accountPermitImages}}" 
-          max="1" 
-          bind:success="onAccountPermitUpload" 
-          bind:remove="onAccountPermitRemove" 
-        />
+
+      <view class="upload-section">
+        <view class="label-row">
+          <text class="label required">法人身份证正反面</text>
+        </view>
+        <view class="upload-stack">
+          <document-uploader 
+            type="id-front" 
+            title="法人身份证人像面" 
+            value="{{idFront.url}}" 
+            rawUrl="{{idFront.rawUrl}}"
+            feedbackState="{{uploadFeedback.idFront.state}}"
+            feedbackTitle="{{uploadFeedback.idFront.title}}"
+            feedbackDescription="{{uploadFeedback.idFront.description}}"
+            bind:change="onIdFrontUpload"
+            bind:remove="onIdFrontRemove" 
+          />
+          <view class="upload-spacer"></view>
+          <document-uploader 
+            type="id-back" 
+            title="法人身份证国徽面" 
+            value="{{idBack.url}}" 
+            rawUrl="{{idBack.rawUrl}}"
+            feedbackState="{{uploadFeedback.idBack.state}}"
+            feedbackTitle="{{uploadFeedback.idBack.title}}"
+            feedbackDescription="{{uploadFeedback.idBack.description}}"
+            bind:change="onIdBackUpload"
+            bind:remove="onIdBackRemove" 
+          />
+        </view>
       </view>
     </view>
 
-    <view class="upload-group">
-      <view class="upload-item">
-        <view class="upload-label">法人身份证正面 (必传)</view>
-        <t-upload 
-          mediaType="{{['image']}}" 
-          files="{{idCardFrontImages}}" 
-          max="1" 
-          bind:success="onIdCardFrontUpload" 
-          bind:remove="onIdCardFrontRemove" 
-        />
+    <!-- Step 3: 确认提交 -->
+    <view class="step-view animate-fade-in" wx:if="{{currentStep === 3}}">
+      <view class="ocr-status-banner" wx:if="{{ocrDisplayState.idCard === 'processing' || ocrDisplayState.businessLicense === 'processing'}}">
+        系统仍在核验资质图片，本页不再展示字段级占位，避免把不同证照的进度混在一起。
       </view>
-      
-      <view class="upload-item">
-        <view class="upload-label">法人身份证反面 (必传)</view>
-        <t-upload 
-          mediaType="{{['image']}}" 
-          files="{{idCardBackImages}}" 
-          max="1" 
-          bind:success="onIdCardBackUpload" 
-          bind:remove="onIdCardBackRemove" 
-        />
+      <view class="final-check">
+        <t-icon name="check-circle-filled" size="120rpx" color="var(--td-brand-color)" />
+        <view class="check-title">确认以上信息真实有效</view>
+        <view class="check-desc">提交后将进入总部人工审核，预计 2 个工作日内会有专人联系面试</view>
+      </view>
+
+      <view class="summary-list">
+        <t-cell title="申请区域" note="{{formData.regionName}}" />
+        <t-cell title="运营商" note="{{formData.name}}" />
+        <t-cell title="负责人" note="{{formData.contactName}}" />
+        <t-cell title="手机号" note="{{formData.contactPhone}}" />
       </view>
     </view>
 
-    <view class="upload-group">
-      <view class="upload-item">
-        <view class="upload-label">合作计划书 (选填)</view>
-        <t-upload 
-          mediaType="{{['image']}}" 
-          files="{{planImages}}" 
-          max="5" 
-          bind:success="onPlanUpload" 
-          bind:remove="onPlanRemove" 
-        />
+    <!-- Step 4: 结果反馈 -->
+    <view class="step-view center" wx:if="{{currentStep === 4}}">
+       <view class="result-status">
+         <t-icon name="time-filled" size="160rpx" color="#FF9800" />
+         <view class="status-text">申请已提交，审核中</view>
+         <view class="status-hint">我们的合伙人经理将在 24 小时内致电与您进行初选沟通，请保持电话畅通。</view>
+       </view>
+       <t-button theme="primary" ghost block size="large" bindtap="onBackHome" shape="round">返回个人中心</t-button>
+    </view>
+
+  </view>
+
+  <!-- Navigation -->
+  <view class="bottom-action animate-slide-up" wx:if="{{currentStep < 4}}">
+    <view class="consent-row" wx:if="{{currentStep === 0 || currentStep === 3}}">
+      <checkbox-group bindchange="onConsentChange">
+        <label class="consent-label">
+          <checkbox value="agree" checked="{{consentChecked}}" color="var(--td-brand-color)" />
+          <text>我已阅读并同意</text>
+        </label>
+      </checkbox-group>
+      <view class="consent-links">
+        <text class="consent-link" data-type="USER_AGREEMENT" data-title="用户服务协议" catchtap="onViewAgreement">《用户服务协议》</text>
+        <text>和</text>
+        <text class="consent-link" data-type="PRIVACY_POLICY" data-title="隐私政策" catchtap="onViewAgreement">《隐私政策》</text>
       </view>
     </view>
 
-    <!-- 2. 基本信息 -->
-    <view class="section-header">基本信息</view>
-    <t-cell-group theme="card">
-      <t-cell title="公司名称" required>
-        <input class="input" placeholder="请输入公司名称" value="{{formData.companyName}}" bindinput="onCompanyNameInput" />
-      </t-cell>
-      <t-cell title="联系人" required>
-        <input class="input" placeholder="请输入联系人姓名" value="{{formData.contactName}}" bindinput="onContactNameInput" />
-      </t-cell>
-      <t-cell title="联系电话" required>
-        <input class="input" type="number" placeholder="请输入联系电话" value="{{formData.phone}}" bindinput="onPhoneInput" />
-      </t-cell>
-      <t-cell title="公司地址" required arrow bind:click="onChooseAddress">
-        <view class="picker-text {{formData.address ? '' : 'placeholder'}}">
-          {{formData.address || '请选择公司地址'}}
-        </view>
-      </t-cell>
-      <t-cell title="详细地址" required>
-        <input class="input" placeholder="门牌号、楼层等" value="{{formData.addressDetail}}" bindinput="onAddressDetailInput" />
-      </t-cell>
-      <t-cell title="运营区域" arrow bind:click="onChooseRegion">
-        <view class="picker-text {{formData.operationRegion ? '' : 'placeholder'}}">
-          {{formData.operationRegion || '请选择运营区域'}}
-        </view>
-      </t-cell>
-      <t-cell title="预计投入" arrow bind:click="onChooseInvestment">
-        <view class="picker-text {{formData.investment ? '' : 'placeholder'}}">
-          {{formData.investment || '请选择预计投入'}}
-        </view>
-      </t-cell>
-    </t-cell-group>
-
-    <!-- 3. 证照信息 (自动回填) -->
-    <view class="section-header">证照信息</view>
-    <t-cell-group theme="card">
-      <t-cell title="统一信用代码" required>
-        <input class="input" placeholder="识别回填" value="{{formData.creditCode}}" bindinput="onCreditCodeInput" />
-      </t-cell>
-      <t-cell title="注册地址" required>
-        <input class="input" placeholder="识别回填" value="{{formData.registerAddress}}" bindinput="onRegisterAddressInput" />
-      </t-cell>
-      <t-cell title="营业期限" required>
-        <input class="input" placeholder="例如: 2099-12-31 或 长期" value="{{formData.licenseValidity}}" bindinput="onLicenseValidityInput" />
-      </t-cell>
-      <t-cell title="经营范围" required>
-        <input class="input" placeholder="识别回填" value="{{formData.businessScope}}" bindinput="onBusinessScopeInput" />
-      </t-cell>
-    </t-cell-group>
-
-    <!-- 4. 法人信息 (自动回填) -->
-    <view class="section-header">法人信息</view>
-    <t-cell-group theme="card">
-      <t-cell title="法人姓名" required>
-        <input class="input" placeholder="识别回填" value="{{formData.legalPerson}}" bindinput="onLegalPersonInput" />
-      </t-cell>
-      <t-cell title="身份证号" required>
-        <input class="input" placeholder="识别回填" value="{{formData.idCard}}" bindinput="onIdCardInput" />
-      </t-cell>
-      <t-cell title="性别" required>
-        <input class="input" placeholder="识别回填" value="{{formData.gender}}" bindinput="onGenderInput" />
-      </t-cell>
-      <t-cell title="籍贯地址" required>
-        <input class="input" placeholder="识别回填" value="{{formData.hometown}}" bindinput="onHometownInput" />
-      </t-cell>
-      <t-cell title="当前住址">
-        <input class="input" placeholder="选填" value="{{formData.currentAddress}}" bindinput="onCurrentAddressInput" />
-      </t-cell>
-      <t-cell title="身份证有效期" required>
-        <input class="input" placeholder="识别回填" value="{{formData.idCardValidity}}" bindinput="onIdCardValidityInput" />
-      </t-cell>
-    </t-cell-group>
-
-    <!-- 5. 结算信息 -->
-    <view class="section-header">结算信息</view>
-    <t-cell-group theme="card">
-      <t-cell title="开户行">
-        <input class="input" placeholder="请输入开户行" value="{{formData.bankName}}" bindinput="onBankNameInput" />
-      </t-cell>
-      <t-cell title="银行账号">
-        <input class="input" type="number" placeholder="请输入银行账号" value="{{formData.bankAccount}}" bindinput="onBankAccountInput" />
-      </t-cell>
-      <t-cell title="开户名">
-        <input class="input" placeholder="请输入开户名" value="{{formData.accountName}}" bindinput="onAccountNameInput" />
-      </t-cell>
-    </t-cell-group>
+    <block wx:if="{{currentStep === 0}}">
+      <t-button block theme="primary" size="large" bindtap="onNext" shape="round">立即申请区域合伙人</t-button>
+    </block>
+    <block wx:else>
+      <view class="btn-group">
+        <t-button block size="large" bindtap="onPrev" shape="round">上一步</t-button>
+        <t-button block theme="primary" size="large" bindtap="onNextOrSubmit" loading="{{isSubmitting}}" shape="round">
+          {{currentStep === 3 ? '确认提交申请' : '下一步'}}
+        </t-button>
+      </view>
+    </block>
   </view>
 </view>
 
-<!-- 底部提交按钮 -->
-<view class="submit-bar">
-  <t-button class="submit-btn" theme="primary" size="large" bindtap="onSubmit">
-    提交申请
-  </t-button>
-</view>
+<t-popup visible="{{consentPopupVisible}}" placement="bottom" bind:visible-change="closeConsentPopup">
+  <view class="consent-popup">
+    <view class="consent-popup-title">入驻协议确认</view>
+    <view class="consent-popup-desc">继续入驻前，请阅读并同意以下协议：</view>
+    <view class="consent-popup-links">
+      <text class="consent-link" data-type="USER_AGREEMENT" data-title="用户服务协议" catchtap="onViewAgreement">《用户服务协议》</text>
+      <text class="consent-link" data-type="PRIVACY_POLICY" data-title="隐私政策" catchtap="onViewAgreement">《隐私政策》</text>
+    </view>
+    <t-button block theme="primary" size="large" bindtap="onConfirmConsent" shape="round">我已阅读并同意，继续</t-button>
+    <t-button block variant="text" size="large" bindtap="closeConsentPopup">暂不继续</t-button>
+  </view>
+</t-popup>
 
-<!-- 运营区域选择器 -->
-<t-picker
-  visible="{{regionPickerVisible}}"
-  value="{{regionPickerValue}}"
-  data-source="{{regionOptions}}"
-  bind:confirm="onRegionConfirm"
-  bind:cancel="onRegionCancel"
-/>
-
-<!-- 投入选择器 -->
-<t-picker
-  visible="{{investmentPickerVisible}}"
-  value="{{investmentPickerValue}}"
-  data-source="{{investmentOptions}}"
-  bind:confirm="onInvestmentConfirm"
-  bind:cancel="onInvestmentCancel"
-/>
+<!-- 区域搜索选择弹出层 -->
+<t-popup visible="{{regionPopupVisible}}" placement="bottom" bind:visible-change="onCloseRegionPopup">
+  <view class="popup-container">
+    <view class="popup-header">
+      <text class="popup-title">选择运营区域</text>
+      <t-icon name="close" size="48rpx" bindtap="onCloseRegionPopup" />
+    </view>
+    <view class="search-bar">
+      <picker
+        mode="selector"
+        range="{{cityOptions}}"
+        range-key="label"
+        value="{{selectedCityIndex}}"
+        bindchange="onCityChange"
+      >
+        <view class="city-picker">
+          <text class="city-picker-label">所属城市</text>
+          <text class="city-picker-value {{selectedCityName ? '' : 'placeholder'}}">
+            {{selectedCityName || '请选择城市'}}
+          </text>
+        </view>
+      </picker>
+      <t-search
+        model:value="{{regionKeyword}}"
+        placeholder="搜索当前城市下的区县"
+        bind:input="onRegionSearch"
+        bind:change="onRegionSearch"
+        bind:clear="onRegionSearchClear"
+      />
+    </view>
+    <scroll-view scroll-y class="region-list-scroll">
+      <t-radio-group value="{{formData.regionId}}" bind:change="onSelectRegion">
+        <block wx:for="{{filteredRegions}}" wx:key="value">
+          <t-radio value="{{item.value}}" align="right">
+            <view class="region-item-content">
+              <text class="r-name">{{item.label}}</text>
+              <text class="r-parent">{{item.secondary}}</text>
+            </view>
+          </t-radio>
+        </block>
+      </t-radio-group>
+      <view class="empty-hint" wx:if="{{filteredRegions.length === 0}}">
+        未找到相关的可用区域
+      </view>
+    </scroll-view>
+  </view>
+</t-popup>

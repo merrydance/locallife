@@ -1,14 +1,15 @@
 package api
 
 import (
-	"database/sql"
 	"errors"
 	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/token"
 )
 
 // ==================== 区域统计 ====================
@@ -29,6 +30,13 @@ type regionStatsResponse struct {
 	TotalOrders     int32  `json:"total_orders"`
 	TotalGMV        int64  `json:"total_gmv"`
 	TotalCommission int64  `json:"total_commission"`
+}
+
+type operatorRegionListResponse struct {
+	Regions []regionResponse `json:"regions"`
+	Total   int              `json:"total"`
+	Page    int32            `json:"page"`
+	Limit   int32            `json:"limit"`
 }
 
 // getRegionStats 获取区域统计
@@ -60,21 +68,8 @@ func (server *Server) getRegionStats(ctx *gin.Context) {
 		return
 	}
 
-	// 解析日期
-	startDate, err := time.Parse("2006-01-02", query.StartDate)
+	startDate, endDate, err := parseDateRange(query.StartDate, query.EndDate, 365)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid start_date format, expected YYYY-MM-DD")))
-		return
-	}
-
-	endDate, err := time.Parse("2006-01-02", query.EndDate)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid end_date format, expected YYYY-MM-DD")))
-		return
-	}
-
-	// 验证日期范围 (最长365天)
-	if err := validateDateRange(startDate, endDate, 365); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
@@ -87,12 +82,12 @@ func (server *Server) getRegionStats(ctx *gin.Context) {
 
 	// 查询区域统计
 	stats, err := server.store.GetRegionStats(ctx, db.GetRegionStatsParams{
-		ID:          uri.RegionID,
-		CreatedAt:   startDate,
-		CreatedAt_2: endDate,
+		RegionID: uri.RegionID,
+		StartAt:  startDate,
+		EndAt:    endDate,
 	})
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("region not found")))
 			return
 		}
@@ -107,6 +102,106 @@ func (server *Server) getRegionStats(ctx *gin.Context) {
 		TotalOrders:     stats.TotalOrders,
 		TotalGMV:        stats.TotalGmv,
 		TotalCommission: stats.TotalCommission,
+	})
+}
+
+type listOperatorRegionsRequest struct {
+	Page  int32 `form:"page" binding:"omitempty,min=1"`
+	Limit int32 `form:"limit" binding:"omitempty,min=1,max=100"`
+}
+
+// listOperatorRegions 获取运营商管理的区域列表
+// @Summary 获取管理的区域
+// @Description 获取当前运营商管理的所有区域
+// @Tags 运营商数据统计
+// @Accept json
+// @Produce json
+// @Param page query int false "页码"
+// @Param limit query int false "每页数量"
+// @Success 200 {object} map[string]interface{} "区域列表"
+// @Failure 400 {object} ErrorResponse "参数错误"
+// @Failure 403 {object} ErrorResponse "无权限"
+// @Failure 500 {object} ErrorResponse "服务器内部错误"
+// @Security BearerAuth
+// @Router /v1/operator/regions [get]
+func (server *Server) listOperatorRegions(ctx *gin.Context) {
+	var req listOperatorRegionsRequest
+	if err := ctx.ShouldBindQuery(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	// 默认分页参数
+	if req.Page == 0 {
+		req.Page = 1
+	}
+	if req.Limit == 0 {
+		req.Limit = 20
+	}
+
+	response := make([]regionResponse, 0)
+
+	// 优先使用 operator_regions 关系表（权限判断同源，避免返回无权限区域）
+	if op, ok := GetOperatorFromContext(ctx); ok {
+		regionRelations, err := server.store.ListOperatorRegions(ctx, op.ID)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+
+		if len(regionRelations) > 0 {
+			// 先收集已在 operator_regions 中的区域 ID（用于去重）
+			seenRegionIDs := make(map[int64]bool)
+			for _, rel := range regionRelations {
+				seenRegionIDs[rel.RegionID] = true
+				region, regionErr := server.store.GetRegion(ctx, rel.RegionID)
+				if regionErr != nil {
+					ctx.JSON(http.StatusInternalServerError, internalError(ctx, regionErr))
+					return
+				}
+				response = append(response, newRegionResponse(region))
+			}
+			// 兼容旧模型：如果 operator.region_id 不在 operator_regions 中（入驻审批早于多区域支持），
+			// 仍需将其包含进来，避免旧运营商的初始区域丢失
+			if op.RegionID > 0 && !seenRegionIDs[op.RegionID] {
+				region, regionErr := server.store.GetRegion(ctx, op.RegionID)
+				if regionErr == nil {
+					response = append([]regionResponse{newRegionResponse(region)}, response...)
+				}
+			}
+		} else if op.RegionID > 0 {
+			// 兼容旧模型：operator.region_id（无任何 operator_regions 记录时）
+			region, regionErr := server.store.GetRegion(ctx, op.RegionID)
+			if regionErr != nil {
+				ctx.JSON(http.StatusInternalServerError, internalError(ctx, regionErr))
+				return
+			}
+			response = append(response, newRegionResponse(region))
+		}
+	}
+
+	// 兜底：旧鉴权模型（user_roles.related_entity_id）
+	if len(response) == 0 {
+		regionID, err := server.getOperatorRegionID(ctx)
+		if err != nil {
+			ctx.JSON(http.StatusForbidden, errorResponse(err))
+			return
+		}
+
+		region, err := server.store.GetRegion(ctx, regionID)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+
+		response = append(response, newRegionResponse(region))
+	}
+
+	ctx.JSON(http.StatusOK, operatorRegionListResponse{
+		Regions: response,
+		Total:   len(response),
+		Page:    req.Page,
+		Limit:   req.Limit,
 	})
 }
 
@@ -165,33 +260,20 @@ func (server *Server) getOperatorMerchantRanking(ctx *gin.Context) {
 	if req.Limit == 0 {
 		req.Limit = 20
 	}
-	offset := (req.Page - 1) * req.Limit
+	offset := pageOffset(req.Page, req.Limit)
 
-	// 解析日期
-	startDate, err := time.Parse("2006-01-02", req.StartDate)
+	startDate, endDate, err := parseDateRange(req.StartDate, req.EndDate, 365)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid start_date format, expected YYYY-MM-DD")))
-		return
-	}
-
-	endDate, err := time.Parse("2006-01-02", req.EndDate)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid end_date format, expected YYYY-MM-DD")))
-		return
-	}
-
-	// 验证日期范围 (最长365天)
-	if err := validateDateRange(startDate, endDate, 365); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
 
 	merchants, err := server.store.GetOperatorMerchantRanking(ctx, db.GetOperatorMerchantRankingParams{
-		RegionID:    regionID,
-		CreatedAt:   startDate,
-		CreatedAt_2: endDate,
-		Limit:       req.Limit,
-		Offset:      offset,
+		RegionID: regionID,
+		StartAt:  startDate,
+		EndAt:    endDate,
+		Limit:    req.Limit,
+		Offset:   offset,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -216,12 +298,13 @@ func (server *Server) getOperatorMerchantRanking(ctx *gin.Context) {
 // ==================== 区域骑手排行 ====================
 
 type operatorRiderRankingRow struct {
-	RiderID                int64  `json:"rider_id"`
-	RiderName              string `json:"rider_name"`
-	DeliveryCount          int32  `json:"delivery_count"`
-	CompletedCount         int32  `json:"completed_count"`
-	AvgDeliveryTimeSeconds int32  `json:"avg_delivery_time_seconds"`
-	TotalEarnings          int64  `json:"total_earnings"`
+	RiderID                int64   `json:"rider_id"`
+	RiderName              string  `json:"rider_name"`
+	DeliveryCount          int32   `json:"delivery_count"`
+	CompletedCount         int32   `json:"completed_count"`
+	AvgDeliveryTimeSeconds int32   `json:"avg_delivery_time_seconds"`
+	TotalEarnings          int64   `json:"total_earnings"`
+	CompletionRate         float64 `json:"completion_rate"`
 }
 
 // getOperatorRiderRanking 获取区域骑手排行
@@ -261,33 +344,20 @@ func (server *Server) getOperatorRiderRanking(ctx *gin.Context) {
 	if req.Limit == 0 {
 		req.Limit = 20
 	}
-	offset := (req.Page - 1) * req.Limit
+	offset := pageOffset(req.Page, req.Limit)
 
-	// 解析日期
-	startDate, err := time.Parse("2006-01-02", req.StartDate)
+	startDate, endDate, err := parseDateRange(req.StartDate, req.EndDate, 365)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid start_date format, expected YYYY-MM-DD")))
-		return
-	}
-
-	endDate, err := time.Parse("2006-01-02", req.EndDate)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid end_date format, expected YYYY-MM-DD")))
-		return
-	}
-
-	// 验证日期范围 (最长365天)
-	if err := validateDateRange(startDate, endDate, 365); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
 
 	riders, err := server.store.GetOperatorRiderRanking(ctx, db.GetOperatorRiderRankingParams{
-		RegionID:    regionID,
-		CreatedAt:   startDate,
-		CreatedAt_2: endDate,
-		Limit:       req.Limit,
-		Offset:      offset,
+		RegionID: regionID,
+		StartAt:  startDate,
+		EndAt:    endDate,
+		Limit:    req.Limit,
+		Offset:   offset,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -303,6 +373,10 @@ func (server *Server) getOperatorRiderRanking(ctx *gin.Context) {
 			CompletedCount:         rider.CompletedCount,
 			AvgDeliveryTimeSeconds: rider.AvgDeliveryTime,
 			TotalEarnings:          rider.TotalEarnings,
+			CompletionRate:         0,
+		}
+		if rider.DeliveryCount > 0 {
+			result[i].CompletionRate = float64(rider.CompletedCount) / float64(rider.DeliveryCount) * 100
 		}
 	}
 
@@ -316,6 +390,7 @@ type regionDailyTrendRow struct {
 	OrderCount      int32  `json:"order_count"`
 	TotalGMV        int64  `json:"total_gmv"`
 	TotalCommission int64  `json:"total_commission"`
+	OperatorIncome  int64  `json:"operator_income"` // 运营商当日可得金额
 	ActiveMerchants int32  `json:"active_merchants"`
 	ActiveUsers     int32  `json:"active_users"`
 }
@@ -323,6 +398,18 @@ type regionDailyTrendRow struct {
 type getOperatorStatsRequest struct {
 	StartDate string `form:"start_date" binding:"required"`
 	EndDate   string `form:"end_date" binding:"required"`
+}
+
+func (server *Server) getCurrentOperatorID(ctx *gin.Context) (int64, error) {
+	if operator, ok := GetOperatorFromContext(ctx); ok {
+		return operator.ID, nil
+	}
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	operator, err := server.store.GetOperatorByUser(ctx, authPayload.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return operator.ID, nil
 }
 
 // getRegionDailyTrend 获取区域日趋势
@@ -353,42 +440,55 @@ func (server *Server) getRegionDailyTrend(ctx *gin.Context) {
 		return
 	}
 
-	// 解析日期
-	startDate, err := time.Parse("2006-01-02", req.StartDate)
+	startDate, endDate, err := parseDateRange(req.StartDate, req.EndDate, 365)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid start_date format, expected YYYY-MM-DD")))
-		return
-	}
-
-	endDate, err := time.Parse("2006-01-02", req.EndDate)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid end_date format, expected YYYY-MM-DD")))
-		return
-	}
-
-	// 验证日期范围 (最长365天)
-	if err := validateDateRange(startDate, endDate, 365); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
 
 	trends, err := server.store.GetRegionDailyTrend(ctx, db.GetRegionDailyTrendParams{
-		RegionID:    regionID,
-		CreatedAt:   startDate,
-		CreatedAt_2: endDate,
+		RegionID: regionID,
+		StartAt:  startDate,
+		EndAt:    endDate,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
+	operatorID, err := server.getCurrentOperatorID(ctx)
+	if err != nil {
+		ctx.JSON(http.StatusForbidden, errorResponse(err))
+		return
+	}
+
 	result := make([]regionDailyTrendRow, len(trends))
 	for i, trend := range trends {
+		dayStart := time.Date(
+			trend.Date.Time.Year(),
+			trend.Date.Time.Month(),
+			trend.Date.Time.Day(),
+			0, 0, 0, 0,
+			time.Local,
+		)
+		dayEnd := dayStart.Add(24*time.Hour - time.Second)
+
+		operatorStats, opErr := server.store.GetOperatorProfitSharingStats(ctx, db.GetOperatorProfitSharingStatsParams{
+			OperatorID: pgtype.Int8{Int64: operatorID, Valid: true},
+			StartAt:    dayStart,
+			EndAt:      dayEnd,
+		})
+		operatorIncome := int64(0)
+		if opErr == nil {
+			operatorIncome = operatorStats.TotalOperatorCommission
+		}
+
 		result[i] = regionDailyTrendRow{
 			Date:            trend.Date.Time.Format("2006-01-02"),
 			OrderCount:      trend.OrderCount,
 			TotalGMV:        trend.TotalGmv,
 			TotalCommission: trend.Commission,
+			OperatorIncome:  operatorIncome,
 			ActiveMerchants: trend.ActiveMerchants,
 			ActiveUsers:     trend.ActiveUsers,
 		}
@@ -403,7 +503,8 @@ type operatorFinanceOverviewResponse struct {
 	// 当月统计
 	CurrentMonth struct {
 		TotalGMV          int64 `json:"total_gmv"`          // 区域总交易额
-		TotalCommission   int64 `json:"total_commission"`   // 平台佣金（运营商可分得 60%）
+		TotalCommission   int64 `json:"total_commission"`   // 平台佣金总额
+		OperatorIncome    int64 `json:"operator_income"`    // 运营商可得金额（佣金 * 分成比例）
 		TotalOrders       int32 `json:"total_orders"`       // 订单数
 		SettledCommission int64 `json:"settled_commission"` // 已完成分账佣金
 		PendingCommission int64 `json:"pending_commission"` // 待分账佣金（当月订单尚未分账部分）
@@ -413,12 +514,14 @@ type operatorFinanceOverviewResponse struct {
 	Total struct {
 		TotalGMV          int64 `json:"total_gmv"`          // 累计交易额
 		TotalCommission   int64 `json:"total_commission"`   // 累计平台佣金
+		OperatorIncome    int64 `json:"operator_income"`    // 累计运营商可得金额
 		SettledCommission int64 `json:"settled_commission"` // 已结算（分账完成）
 	} `json:"total"`
 
 	// 区域信息
-	RegionID   int64  `json:"region_id"`
-	RegionName string `json:"region_name"`
+	RegionID           int64   `json:"region_id"`
+	RegionName         string  `json:"region_name"`
+	OperatorShareRatio float64 `json:"operator_share_ratio"` // 运营商分成比例（如 0.6 表示 60%）
 }
 
 // getOperatorFinanceOverview 获取运营商财务概览
@@ -433,11 +536,30 @@ type operatorFinanceOverviewResponse struct {
 // @Security BearerAuth
 // @Router /v1/operators/me/finance/overview [get]
 func (server *Server) getOperatorFinanceOverview(ctx *gin.Context) {
-	// 获取运营商管理的区域ID
-	regionID, err := server.getOperatorRegionID(ctx)
+	operatorID, err := server.getCurrentOperatorID(ctx)
 	if err != nil {
 		ctx.JSON(http.StatusForbidden, errorResponse(err))
 		return
+	}
+
+	// 优先使用前端传入的 region_id（区域切换场景），无则取默认区域
+	var regionID int64
+	if qRegionID := ctx.Query("region_id"); qRegionID != "" {
+		var parsed int64
+		if _, err := fmt.Sscanf(qRegionID, "%d", &parsed); err == nil && parsed > 0 {
+			if _, err := server.checkOperatorManagesRegion(ctx, parsed); err != nil {
+				ctx.JSON(http.StatusForbidden, errorResponse(err))
+				return
+			}
+			regionID = parsed
+		}
+	}
+	if regionID == 0 {
+		regionID, err = server.getOperatorRegionID(ctx)
+		if err != nil {
+			ctx.JSON(http.StatusForbidden, errorResponse(err))
+			return
+		}
 	}
 
 	// 获取区域信息
@@ -459,9 +581,9 @@ func (server *Server) getOperatorFinanceOverview(ctx *gin.Context) {
 
 	// 查询当月统计（从 profit_sharing_orders 实时计算，只统计分账成功的）
 	monthStats, err := server.store.GetRegionStats(ctx, db.GetRegionStatsParams{
-		ID:          regionID,
-		CreatedAt:   monthStart,
-		CreatedAt_2: monthEnd,
+		RegionID: regionID,
+		StartAt:  monthStart,
+		EndAt:    monthEnd,
 	})
 	if err == nil {
 		response.CurrentMonth.TotalGMV = monthStats.TotalGmv
@@ -473,20 +595,47 @@ func (server *Server) getOperatorFinanceOverview(ctx *gin.Context) {
 		response.CurrentMonth.PendingCommission = 0
 	}
 
+	monthOperatorStats, monthOperatorErr := server.store.GetOperatorProfitSharingStatsByRegion(ctx, db.GetOperatorProfitSharingStatsByRegionParams{
+		OperatorID: pgtype.Int8{Int64: operatorID, Valid: true},
+		RegionID:   regionID,
+		StartAt:    monthStart,
+		EndAt:      monthEnd,
+	})
+	if monthOperatorErr == nil {
+		response.CurrentMonth.OperatorIncome = monthOperatorStats.TotalOperatorCommission
+	}
+
 	// 查询累计统计（全部历史分账成功的订单）
 	// 使用一个很早的开始时间和很晚的结束时间来获取全部历史数据
-	allTimeStart := time.Date(2020, 1, 1, 0, 0, 0, 0, time.Local)
-	allTimeEnd := time.Date(2099, 12, 31, 23, 59, 59, 0, time.Local)
+	allTimeStart := time.Date(StatsStartYear, 1, 1, 0, 0, 0, 0, time.Local)
+	allTimeEnd := time.Date(StatsEndYear, 12, 31, 23, 59, 59, 0, time.Local)
 
 	totalStats, err := server.store.GetRegionStats(ctx, db.GetRegionStatsParams{
-		ID:          regionID,
-		CreatedAt:   allTimeStart,
-		CreatedAt_2: allTimeEnd,
+		RegionID: regionID,
+		StartAt:  allTimeStart,
+		EndAt:    allTimeEnd,
 	})
 	if err == nil {
 		response.Total.TotalGMV = totalStats.TotalGmv
 		response.Total.TotalCommission = totalStats.TotalCommission
 		response.Total.SettledCommission = totalStats.TotalCommission // 全部是已分账的
+	}
+
+	totalOperatorStats, totalOperatorErr := server.store.GetOperatorProfitSharingStatsByRegion(ctx, db.GetOperatorProfitSharingStatsByRegionParams{
+		OperatorID: pgtype.Int8{Int64: operatorID, Valid: true},
+		RegionID:   regionID,
+		StartAt:    allTimeStart,
+		EndAt:      allTimeEnd,
+	})
+	if totalOperatorErr == nil {
+		response.Total.OperatorIncome = totalOperatorStats.TotalOperatorCommission
+	}
+
+	// 添加分成比例信息（基于实时累计结果计算）
+	if response.Total.TotalCommission > 0 {
+		response.OperatorShareRatio = float64(response.Total.OperatorIncome) / float64(response.Total.TotalCommission)
+	} else {
+		response.OperatorShareRatio = 0
 	}
 
 	ctx.JSON(http.StatusOK, response)
@@ -552,21 +701,8 @@ func (server *Server) getOperatorCommission(ctx *gin.Context) {
 		return
 	}
 
-	// 解析日期
-	startDate, err := time.Parse("2006-01-02", req.StartDate)
+	startDate, endDate, err := parseDateRange(req.StartDate, req.EndDate, 365)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid start_date format, expected YYYY-MM-DD")))
-		return
-	}
-
-	endDate, err := time.Parse("2006-01-02", req.EndDate)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid end_date format, expected YYYY-MM-DD")))
-		return
-	}
-
-	// 验证日期范围 (最长365天)
-	if err := validateDateRange(startDate, endDate, 365); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
@@ -583,9 +719,9 @@ func (server *Server) getOperatorCommission(ctx *gin.Context) {
 
 	// 获取每日佣金趋势数据
 	trends, err := server.store.GetRegionDailyTrend(ctx, db.GetRegionDailyTrendParams{
-		RegionID:    regionID,
-		CreatedAt:   startDate,
-		CreatedAt_2: endDate,
+		RegionID: regionID,
+		StartAt:  startDate,
+		EndAt:    endDate,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -613,7 +749,7 @@ func (server *Server) getOperatorCommission(ctx *gin.Context) {
 	response.Total = totalCommission
 
 	// 分页处理
-	startIdx := int((page - 1) * limit)
+	startIdx := int(pageOffset(page, limit))
 	endIdx := startIdx + int(limit)
 	if startIdx >= len(trends) {
 		ctx.JSON(http.StatusOK, response)
@@ -626,7 +762,7 @@ func (server *Server) getOperatorCommission(ctx *gin.Context) {
 	// 转换数据
 	for _, trend := range trends[startIdx:endIdx] {
 		// 计算佣金率
-		rate := "3.0%"
+		rate := "N/A" // 没有交易时显示 N/A
 		if trend.TotalGmv > 0 {
 			actualRate := float64(trend.Commission) / float64(trend.TotalGmv) * 100
 			rate = formatCommissionRate(actualRate)
@@ -651,16 +787,4 @@ func formatCommissionRate(rate float64) string {
 	}
 	// 使用 fmt.Sprintf 正确格式化佣金率（保留一位小数）
 	return fmt.Sprintf("%.1f%%", rate)
-}
-
-// validateDateRange 验证日期范围
-// 返回错误如果：startDate > endDate 或者日期范围超过 maxDays 天
-func validateDateRange(startDate, endDate time.Time, maxDays int) error {
-	if startDate.After(endDate) {
-		return errors.New("start_date must be before or equal to end_date")
-	}
-	if maxDays > 0 && endDate.Sub(startDate).Hours()/24 > float64(maxDays) {
-		return fmt.Errorf("date range cannot exceed %d days", maxDays)
-	}
-	return nil
 }

@@ -2,7 +2,7 @@ package api
 
 import (
 	"bytes"
-	"database/sql"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -47,20 +46,8 @@ func TestListOperatorMerchantsAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				// CasbinRoleMiddleware
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Return([]db.UserRole{{
-						UserID:          user.ID,
-						Role:            "operator",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: operator.RegionID, Valid: true},
-					}}, nil)
-
-				// LoadOperatorMiddleware
-				store.EXPECT().
-					GetOperatorByUser(gomock.Any(), user.ID).
-					Return(operator, nil)
+				expectActiveOperatorAuth(store, user.ID, operator)
+				expectOperatorManagesRegion(store, operator, operator.RegionID, true)
 
 				store.EXPECT().
 					ListMerchantsByRegion(gomock.Any(), db.ListMerchantsByRegionParams{
@@ -78,8 +65,7 @@ func TestListOperatorMerchantsAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp listOperatorMerchantsResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Len(t, resp.Merchants, 2)
 				require.Equal(t, int64(2), resp.Total)
 			},
@@ -91,18 +77,8 @@ func TestListOperatorMerchantsAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Return([]db.UserRole{{
-						UserID:          user.ID,
-						Role:            "operator",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: operator.RegionID, Valid: true},
-					}}, nil)
-
-				store.EXPECT().
-					GetOperatorByUser(gomock.Any(), user.ID).
-					Return(operator, nil)
+				expectActiveOperatorAuth(store, user.ID, operator)
+				expectOperatorManagesRegion(store, operator, operator.RegionID, true)
 
 				store.EXPECT().
 					ListMerchantsByRegionWithStatus(gomock.Any(), db.ListMerchantsByRegionWithStatusParams{
@@ -142,18 +118,7 @@ func TestListOperatorMerchantsAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Return([]db.UserRole{{
-						UserID:          user.ID,
-						Role:            "operator",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: operator.RegionID, Valid: true},
-					}}, nil)
-
-				store.EXPECT().
-					GetOperatorByUser(gomock.Any(), user.ID).
-					Return(operator, nil)
+				expectActiveOperatorAuth(store, user.ID, operator)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -166,18 +131,7 @@ func TestListOperatorMerchantsAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Return([]db.UserRole{{
-						UserID:          user.ID,
-						Role:            "operator",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: operator.RegionID, Valid: true},
-					}}, nil)
-
-				store.EXPECT().
-					GetOperatorByUser(gomock.Any(), user.ID).
-					Return(operator, nil)
+				expectActiveOperatorAuth(store, user.ID, operator)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -250,36 +204,19 @@ func TestGetOperatorMerchantAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Return([]db.UserRole{{
-						UserID:          user.ID,
-						Role:            "operator",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: operator.RegionID, Valid: true},
-					}}, nil)
-
-				store.EXPECT().
-					GetOperatorByUser(gomock.Any(), user.ID).
-					Return(operator, nil)
+				expectActiveOperatorAuth(store, user.ID, operator)
 
 				store.EXPECT().
 					GetMerchant(gomock.Any(), merchant.ID).
 					Return(merchant, nil)
 
-				store.EXPECT().
-					CheckOperatorManagesRegion(gomock.Any(), db.CheckOperatorManagesRegionParams{
-						OperatorID: operator.ID,
-						RegionID:   merchant.RegionID,
-					}).
-					Return(true, nil)
+				expectOperatorManagesRegion(store, operator, merchant.RegionID, true)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp merchantDetailResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Equal(t, merchant.ID, resp.ID)
 				require.Equal(t, merchant.Name, resp.Name)
 			},
@@ -291,22 +228,11 @@ func TestGetOperatorMerchantAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Return([]db.UserRole{{
-						UserID:          user.ID,
-						Role:            "operator",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: operator.RegionID, Valid: true},
-					}}, nil)
-
-				store.EXPECT().
-					GetOperatorByUser(gomock.Any(), user.ID).
-					Return(operator, nil)
+				expectActiveOperatorAuth(store, user.ID, operator)
 
 				store.EXPECT().
 					GetMerchant(gomock.Any(), int64(9999)).
-					Return(db.Merchant{}, sql.ErrNoRows)
+					Return(db.Merchant{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -319,18 +245,7 @@ func TestGetOperatorMerchantAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Return([]db.UserRole{{
-						UserID:          user.ID,
-						Role:            "operator",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: operator.RegionID, Valid: true},
-					}}, nil)
-
-				store.EXPECT().
-					GetOperatorByUser(gomock.Any(), user.ID).
-					Return(operator, nil)
+				expectActiveOperatorAuth(store, user.ID, operator)
 
 				differentRegionMerchant := merchant
 				differentRegionMerchant.RegionID = operator.RegionID + 1
@@ -338,12 +253,7 @@ func TestGetOperatorMerchantAPI(t *testing.T) {
 					GetMerchant(gomock.Any(), merchant.ID).
 					Return(differentRegionMerchant, nil)
 
-				store.EXPECT().
-					CheckOperatorManagesRegion(gomock.Any(), db.CheckOperatorManagesRegionParams{
-						OperatorID: operator.ID,
-						RegionID:   differentRegionMerchant.RegionID,
-					}).
-					Return(false, nil)
+				expectOperatorManagesRegion(store, operator, differentRegionMerchant.RegionID, false)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -373,369 +283,144 @@ func TestGetOperatorMerchantAPI(t *testing.T) {
 	}
 }
 
-func TestSuspendOperatorMerchantAPI(t *testing.T) {
+func TestGetOperatorMerchantCapabilitiesAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	operator := randomOperator(user.ID)
 	merchant := randomMerchantInRegionForOp(operator.RegionID)
-
-	testCases := []struct {
-		name          string
-		merchantID    int64
-		body          gin.H
-		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
-		buildStubs    func(store *mockdb.MockStore)
-		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
-	}{
-		{
-			name:       "OK",
-			merchantID: merchant.ID,
-			body: gin.H{
-				"reason":         "违规操作，需要暂停经营资格",
-				"duration_hours": 24,
-			},
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Return([]db.UserRole{{
-						UserID:          user.ID,
-						Role:            "operator",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: operator.RegionID, Valid: true},
-					}}, nil)
-
-				store.EXPECT().
-					GetOperatorByUser(gomock.Any(), user.ID).
-					Return(operator, nil)
-
-				store.EXPECT().
-					GetMerchant(gomock.Any(), merchant.ID).
-					Return(merchant, nil)
-
-				store.EXPECT().
-					CheckOperatorManagesRegion(gomock.Any(), db.CheckOperatorManagesRegionParams{
-						OperatorID: operator.ID,
-						RegionID:   merchant.RegionID,
-					}).
-					Return(true, nil)
-
-				store.EXPECT().
-					UpdateMerchantStatus(gomock.Any(), gomock.Any()).
-					Return(db.Merchant{}, nil)
-
-				// 记录暂停信息到merchant_profiles（忽略错误）
-				store.EXPECT().
-					SuspendMerchant(gomock.Any(), gomock.Any()).
-					Return(nil).
-					AnyTimes()
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
-			},
-		},
-		{
-			name:       "MerchantAlreadySuspended",
-			merchantID: merchant.ID,
-			body: gin.H{
-				"reason":         "违规操作，需要暂停经营资格",
-				"duration_hours": 24,
-			},
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Return([]db.UserRole{{
-						UserID:          user.ID,
-						Role:            "operator",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: operator.RegionID, Valid: true},
-					}}, nil)
-
-				store.EXPECT().
-					GetOperatorByUser(gomock.Any(), user.ID).
-					Return(operator, nil)
-
-				suspendedMerchant := merchant
-				suspendedMerchant.Status = "suspended"
-				store.EXPECT().
-					GetMerchant(gomock.Any(), merchant.ID).
-					Return(suspendedMerchant, nil)
-
-				store.EXPECT().
-					CheckOperatorManagesRegion(gomock.Any(), db.CheckOperatorManagesRegionParams{
-						OperatorID: operator.ID,
-						RegionID:   suspendedMerchant.RegionID,
-					}).
-					Return(true, nil)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusBadRequest, recorder.Code)
-			},
-		},
-		{
-			name:       "ReasonTooShort",
-			merchantID: merchant.ID,
-			body: gin.H{
-				"reason":         "短",
-				"duration_hours": 24,
-			},
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Return([]db.UserRole{{
-						UserID:          user.ID,
-						Role:            "operator",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: operator.RegionID, Valid: true},
-					}}, nil)
-
-				store.EXPECT().
-					GetOperatorByUser(gomock.Any(), user.ID).
-					Return(operator, nil)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusBadRequest, recorder.Code)
-			},
-		},
-		{
-			name:       "DurationTooLong",
-			merchantID: merchant.ID,
-			body: gin.H{
-				"reason":         "违规操作，需要暂停经营资格",
-				"duration_hours": 800,
-			},
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Return([]db.UserRole{{
-						UserID:          user.ID,
-						Role:            "operator",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: operator.RegionID, Valid: true},
-					}}, nil)
-
-				store.EXPECT().
-					GetOperatorByUser(gomock.Any(), user.ID).
-					Return(operator, nil)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusBadRequest, recorder.Code)
-			},
-		},
-		{
-			name:       "MissingReason",
-			merchantID: merchant.ID,
-			body: gin.H{
-				"duration_hours": 24,
-			},
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Return([]db.UserRole{{
-						UserID:          user.ID,
-						Role:            "operator",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: operator.RegionID, Valid: true},
-					}}, nil)
-
-				store.EXPECT().
-					GetOperatorByUser(gomock.Any(), user.ID).
-					Return(operator, nil)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusBadRequest, recorder.Code)
-			},
-		},
-		{
-			name:       "MissingDurationHours",
-			merchantID: merchant.ID,
-			body: gin.H{
-				"reason": "违规操作，需要暂停经营资格",
-			},
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Return([]db.UserRole{{
-						UserID:          user.ID,
-						Role:            "operator",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: operator.RegionID, Valid: true},
-					}}, nil)
-
-				store.EXPECT().
-					GetOperatorByUser(gomock.Any(), user.ID).
-					Return(operator, nil)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusBadRequest, recorder.Code)
-			},
-		},
+	capability := db.MerchantCapability{
+		MerchantID:        merchant.ID,
+		OpenKitchenStatus: db.MerchantCapabilityStatusUnknown,
+		DineInStatus:      db.MerchantCapabilityStatusNo,
+		Source:            db.MerchantCapabilitySourceManualReview,
 	}
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
 
-			store := mockdb.NewMockStore(ctrl)
-			tc.buildStubs(store)
+	store := mockdb.NewMockStore(ctrl)
+	expectActiveOperatorAuth(store, user.ID, operator)
+	store.EXPECT().
+		GetMerchant(gomock.Any(), merchant.ID).
+		Return(merchant, nil)
+	expectOperatorManagesRegion(store, operator, merchant.RegionID, true)
+	store.EXPECT().
+		GetMerchantCapabilities(gomock.Any(), merchant.ID).
+		Return(capability, nil)
+	store.EXPECT().
+		ListMerchantSystemLabels(gomock.Any(), merchant.ID).
+		Return([]db.Tag{{Name: db.SystemTagNoOpenKitchen}, {Name: db.SystemTagNoDineIn}}, nil)
 
-			server := newTestServer(t, store)
-			recorder := httptest.NewRecorder()
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodGet, fmt.Sprintf("/v1/operator/merchants/%d/capabilities", merchant.ID), nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 
-			body, _ := json.Marshal(tc.body)
-			url := fmt.Sprintf("/v1/operator/merchants/%d/suspend", tc.merchantID)
-			request, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
-			require.NoError(t, err)
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
 
-			tc.setupAuth(t, request, server.tokenMaker)
-			server.router.ServeHTTP(recorder, request)
-			tc.checkResponse(t, recorder)
-		})
-	}
+	var resp merchantCapabilitiesResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Equal(t, merchant.ID, resp.MerchantID)
+	require.Equal(t, db.MerchantCapabilityStatusUnknown, resp.OpenKitchenStatus)
+	require.Equal(t, db.MerchantCapabilityStatusNo, resp.DineInStatus)
+	require.Equal(t, []string{db.SystemTagNoOpenKitchen, db.SystemTagNoDineIn}, resp.SystemLabels)
 }
 
-func TestResumeOperatorMerchantAPI(t *testing.T) {
+func TestGetOperatorMerchantCapabilitiesAPI_FallsBackToDerivedDefaultsWhenCapabilityMissing(t *testing.T) {
 	user, _ := randomUser(t)
 	operator := randomOperator(user.ID)
 	merchant := randomMerchantInRegionForOp(operator.RegionID)
-	merchant.Status = "suspended"
 
-	testCases := []struct {
-		name          string
-		merchantID    int64
-		body          gin.H
-		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
-		buildStubs    func(store *mockdb.MockStore)
-		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
-	}{
-		{
-			name:       "OK",
-			merchantID: merchant.ID,
-			body: gin.H{
-				"reason": "商户整改完成，符合恢复运营条件",
-			},
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Return([]db.UserRole{{
-						UserID:          user.ID,
-						Role:            "operator",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: operator.RegionID, Valid: true},
-					}}, nil)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
 
-				store.EXPECT().
-					GetOperatorByUser(gomock.Any(), user.ID).
-					Return(operator, nil)
+	store := mockdb.NewMockStore(ctrl)
+	expectActiveOperatorAuth(store, user.ID, operator)
+	store.EXPECT().
+		GetMerchant(gomock.Any(), merchant.ID).
+		Return(merchant, nil)
+	expectOperatorManagesRegion(store, operator, merchant.RegionID, true)
+	store.EXPECT().
+		GetMerchantCapabilities(gomock.Any(), merchant.ID).
+		Return(db.MerchantCapability{}, db.ErrRecordNotFound)
 
-				store.EXPECT().
-					GetMerchant(gomock.Any(), merchant.ID).
-					Return(merchant, nil)
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodGet, fmt.Sprintf("/v1/operator/merchants/%d/capabilities", merchant.ID), nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 
-				store.EXPECT().
-					CheckOperatorManagesRegion(gomock.Any(), db.CheckOperatorManagesRegionParams{
-						OperatorID: operator.ID,
-						RegionID:   merchant.RegionID,
-					}).
-					Return(true, nil)
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
 
-				store.EXPECT().
-					UpdateMerchantStatus(gomock.Any(), gomock.Any()).
-					Return(db.Merchant{}, nil)
+	var resp merchantCapabilitiesResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Equal(t, merchant.ID, resp.MerchantID)
+	require.Equal(t, db.MerchantCapabilityStatusUnknown, resp.OpenKitchenStatus)
+	require.Equal(t, db.MerchantCapabilityStatusUnknown, resp.DineInStatus)
+	require.Equal(t, db.MerchantCapabilitySourceSystemDefault, resp.Source)
+	require.Empty(t, resp.UpdatedAt)
+	require.Equal(t, []string{db.SystemTagNoOpenKitchen}, resp.SystemLabels)
+}
 
-				// 清除暂停信息（忽略错误）
-				store.EXPECT().
-					UnsuspendMerchant(gomock.Any(), merchant.ID).
-					Return(nil).
-					AnyTimes()
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
-			},
-		},
-		{
-			name:       "MerchantNotSuspended",
-			merchantID: merchant.ID,
-			body: gin.H{
-				"reason": "商户整改完成，符合恢复运营条件",
-			},
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Return([]db.UserRole{{
-						UserID:          user.ID,
-						Role:            "operator",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: operator.RegionID, Valid: true},
-					}}, nil)
-
-				store.EXPECT().
-					GetOperatorByUser(gomock.Any(), user.ID).
-					Return(operator, nil)
-
-				activeMerchant := merchant
-				activeMerchant.Status = "approved"
-				store.EXPECT().
-					GetMerchant(gomock.Any(), merchant.ID).
-					Return(activeMerchant, nil)
-
-				store.EXPECT().
-					CheckOperatorManagesRegion(gomock.Any(), db.CheckOperatorManagesRegionParams{
-						OperatorID: operator.ID,
-						RegionID:   activeMerchant.RegionID,
-					}).
-					Return(true, nil)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusBadRequest, recorder.Code)
-			},
-		},
+func TestUpdateOperatorMerchantCapabilitiesAPI(t *testing.T) {
+	user, _ := randomUser(t)
+	operator := randomOperator(user.ID)
+	merchant := randomMerchantInRegionForOp(operator.RegionID)
+	updatedCapability := db.MerchantCapability{
+		MerchantID:        merchant.ID,
+		OpenKitchenStatus: db.MerchantCapabilityStatusYes,
+		DineInStatus:      db.MerchantCapabilityStatusNo,
+		Source:            db.MerchantCapabilitySourceManualReview,
 	}
+	body, err := json.Marshal(updateMerchantCapabilitiesRequest{
+		OpenKitchenStatus: stringPtr(db.MerchantCapabilityStatusYes),
+		DineInStatus:      stringPtr(db.MerchantCapabilityStatusNo),
+	})
+	require.NoError(t, err)
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
 
-			store := mockdb.NewMockStore(ctrl)
-			tc.buildStubs(store)
-
-			server := newTestServer(t, store)
-			recorder := httptest.NewRecorder()
-
-			body, _ := json.Marshal(tc.body)
-			url := fmt.Sprintf("/v1/operator/merchants/%d/resume", tc.merchantID)
-			request, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
-			require.NoError(t, err)
-
-			tc.setupAuth(t, request, server.tokenMaker)
-			server.router.ServeHTTP(recorder, request)
-			tc.checkResponse(t, recorder)
+	store := mockdb.NewMockStore(ctrl)
+	expectActiveOperatorAuth(store, user.ID, operator)
+	store.EXPECT().
+		GetMerchant(gomock.Any(), merchant.ID).
+		Return(merchant, nil)
+	expectOperatorManagesRegion(store, operator, merchant.RegionID, true)
+	store.EXPECT().
+		UpdateMerchantCapabilitiesTx(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.UpdateMerchantCapabilitiesTxParams) (db.UpdateMerchantCapabilitiesTxResult, error) {
+			require.Equal(t, merchant.ID, arg.MerchantID)
+			require.True(t, arg.OpenKitchenStatus.Valid)
+			require.Equal(t, db.MerchantCapabilityStatusYes, arg.OpenKitchenStatus.String)
+			require.True(t, arg.DineInStatus.Valid)
+			require.Equal(t, db.MerchantCapabilityStatusNo, arg.DineInStatus.String)
+			return db.UpdateMerchantCapabilitiesTxResult{
+				Capability:   updatedCapability,
+				SystemLabels: []db.Tag{{Name: db.SystemTagHasOpenKitchen}, {Name: db.SystemTagNoDineIn}},
+			}, nil
 		})
-	}
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodPatch, fmt.Sprintf("/v1/operator/merchants/%d/capabilities", merchant.ID), bytes.NewReader(body))
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp merchantCapabilitiesResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Equal(t, []string{db.SystemTagHasOpenKitchen, db.SystemTagNoDineIn}, resp.SystemLabels)
+	require.Equal(t, db.MerchantCapabilityStatusYes, resp.OpenKitchenStatus)
+	require.Equal(t, db.MerchantCapabilityStatusNo, resp.DineInStatus)
+}
+
+func stringPtr(value string) *string {
+	return &value
 }
 
 // ============================================================================
@@ -764,18 +449,7 @@ func TestListOperatorRidersAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Return([]db.UserRole{{
-						UserID:          user.ID,
-						Role:            "operator",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: operator.RegionID, Valid: true},
-					}}, nil)
-
-				store.EXPECT().
-					GetOperatorByUser(gomock.Any(), user.ID).
-					Return(operator, nil)
+				expectActiveOperatorAuth(store, user.ID, operator)
 
 				store.EXPECT().
 					ListRidersByRegion(gomock.Any(), db.ListRidersByRegionParams{
@@ -793,8 +467,7 @@ func TestListOperatorRidersAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp listOperatorRidersResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Len(t, resp.Riders, 2)
 				require.Equal(t, int64(2), resp.Total)
 			},
@@ -806,18 +479,7 @@ func TestListOperatorRidersAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Return([]db.UserRole{{
-						UserID:          user.ID,
-						Role:            "operator",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: operator.RegionID, Valid: true},
-					}}, nil)
-
-				store.EXPECT().
-					GetOperatorByUser(gomock.Any(), user.ID).
-					Return(operator, nil)
+				expectActiveOperatorAuth(store, user.ID, operator)
 
 				store.EXPECT().
 					ListRidersByRegionWithStatus(gomock.Any(), db.ListRidersByRegionWithStatusParams{
@@ -882,40 +544,20 @@ func TestGetOperatorRiderAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Return([]db.UserRole{{
-						UserID:          user.ID,
-						Role:            "operator",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: operator.RegionID, Valid: true},
-					}}, nil)
-
-				store.EXPECT().
-					GetOperatorByUser(gomock.Any(), user.ID).
-					Return(operator, nil)
+				expectActiveOperatorAuth(store, user.ID, operator)
 
 				store.EXPECT().
 					GetRider(gomock.Any(), rider.ID).
 					Return(rider, nil)
 
-				store.EXPECT().
-					CheckOperatorManagesRegion(gomock.Any(), db.CheckOperatorManagesRegionParams{
-						OperatorID: operator.ID,
-						RegionID:   rider.RegionID.Int64,
-					}).
-					Return(true, nil)
+				expectOperatorManagesRegion(store, operator, rider.RegionID.Int64, true)
 
-				store.EXPECT().
-					GetRiderPremiumScore(gomock.Any(), rider.ID).
-					Return(int16(80), nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp riderDetailResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Equal(t, rider.ID, resp.ID)
 				require.Equal(t, rider.RealName, resp.RealName)
 			},
@@ -927,22 +569,11 @@ func TestGetOperatorRiderAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Return([]db.UserRole{{
-						UserID:          user.ID,
-						Role:            "operator",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: operator.RegionID, Valid: true},
-					}}, nil)
-
-				store.EXPECT().
-					GetOperatorByUser(gomock.Any(), user.ID).
-					Return(operator, nil)
+				expectActiveOperatorAuth(store, user.ID, operator)
 
 				store.EXPECT().
 					GetRider(gomock.Any(), int64(9999)).
-					Return(db.Rider{}, sql.ErrNoRows)
+					Return(db.Rider{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -955,29 +586,17 @@ func TestGetOperatorRiderAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Return([]db.UserRole{{
-						UserID:          user.ID,
-						Role:            "operator",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: operator.RegionID, Valid: true},
-					}}, nil)
+				differentRegionRider := rider
+				differentRegionRider.RegionID = pgtype.Int8{Int64: operator.RegionID + 1, Valid: true}
 
-				store.EXPECT().
-					GetOperatorByUser(gomock.Any(), user.ID).
-					Return(operator, nil)
+				expectActiveOperatorAuth(store, user.ID, operator)
 
 				store.EXPECT().
 					GetRider(gomock.Any(), rider.ID).
-					Return(rider, nil)
+					Return(differentRegionRider, nil)
 
-				store.EXPECT().
-					CheckOperatorManagesRegion(gomock.Any(), db.CheckOperatorManagesRegionParams{
-						OperatorID: operator.ID,
-						RegionID:   rider.RegionID.Int64,
-					}).
-					Return(false, nil)
+				expectOperatorManagesRegion(store, operator, differentRegionRider.RegionID.Int64, false)
+
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -998,268 +617,6 @@ func TestGetOperatorRiderAPI(t *testing.T) {
 
 			url := fmt.Sprintf("/v1/operator/riders/%d", tc.riderID)
 			request, err := http.NewRequest(http.MethodGet, url, nil)
-			require.NoError(t, err)
-
-			tc.setupAuth(t, request, server.tokenMaker)
-			server.router.ServeHTTP(recorder, request)
-			tc.checkResponse(t, recorder)
-		})
-	}
-}
-
-func TestSuspendOperatorRiderAPI(t *testing.T) {
-	user, _ := randomUser(t)
-	operator := randomOperator(user.ID)
-	rider := randomRiderInRegionForOp(operator.RegionID)
-
-	testCases := []struct {
-		name          string
-		riderID       int64
-		body          gin.H
-		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
-		buildStubs    func(store *mockdb.MockStore)
-		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
-	}{
-		{
-			name:    "OK",
-			riderID: rider.ID,
-			body: gin.H{
-				"reason":         "违规操作，需要暂停配送资格",
-				"duration_hours": 24,
-			},
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Return([]db.UserRole{{
-						UserID:          user.ID,
-						Role:            "operator",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: operator.RegionID, Valid: true},
-					}}, nil)
-
-				store.EXPECT().
-					GetOperatorByUser(gomock.Any(), user.ID).
-					Return(operator, nil)
-
-				store.EXPECT().
-					GetRider(gomock.Any(), rider.ID).
-					Return(rider, nil)
-
-				store.EXPECT().
-					CheckOperatorManagesRegion(gomock.Any(), db.CheckOperatorManagesRegionParams{
-						OperatorID: operator.ID,
-						RegionID:   rider.RegionID.Int64,
-					}).
-					Return(true, nil)
-
-				store.EXPECT().
-					UpdateRiderStatus(gomock.Any(), gomock.Any()).
-					Return(db.Rider{}, nil)
-
-				// 骑手在线时会被下线
-				if rider.IsOnline {
-					store.EXPECT().
-						UpdateRiderOnlineStatus(gomock.Any(), gomock.Any()).
-						Return(db.Rider{}, nil)
-				}
-
-				// 记录暂停信息到rider_profiles（忽略错误）
-				store.EXPECT().
-					SuspendRider(gomock.Any(), gomock.Any()).
-					Return(nil).
-					AnyTimes()
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
-			},
-		},
-		{
-			name:    "RiderAlreadySuspended",
-			riderID: rider.ID,
-			body: gin.H{
-				"reason":         "违规操作，需要暂停配送资格",
-				"duration_hours": 24,
-			},
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Return([]db.UserRole{{
-						UserID:          user.ID,
-						Role:            "operator",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: operator.RegionID, Valid: true},
-					}}, nil)
-
-				store.EXPECT().
-					GetOperatorByUser(gomock.Any(), user.ID).
-					Return(operator, nil)
-
-				suspendedRider := rider
-				suspendedRider.Status = "suspended"
-				store.EXPECT().
-					GetRider(gomock.Any(), rider.ID).
-					Return(suspendedRider, nil)
-
-				store.EXPECT().
-					CheckOperatorManagesRegion(gomock.Any(), db.CheckOperatorManagesRegionParams{
-						OperatorID: operator.ID,
-						RegionID:   suspendedRider.RegionID.Int64,
-					}).
-					Return(true, nil)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusBadRequest, recorder.Code)
-			},
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
-
-			store := mockdb.NewMockStore(ctrl)
-			tc.buildStubs(store)
-
-			server := newTestServer(t, store)
-			recorder := httptest.NewRecorder()
-
-			body, _ := json.Marshal(tc.body)
-			url := fmt.Sprintf("/v1/operator/riders/%d/suspend", tc.riderID)
-			request, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
-			require.NoError(t, err)
-
-			tc.setupAuth(t, request, server.tokenMaker)
-			server.router.ServeHTTP(recorder, request)
-			tc.checkResponse(t, recorder)
-		})
-	}
-}
-
-func TestResumeOperatorRiderAPI(t *testing.T) {
-	user, _ := randomUser(t)
-	operator := randomOperator(user.ID)
-	rider := randomRiderInRegionForOp(operator.RegionID)
-	rider.Status = "suspended"
-
-	testCases := []struct {
-		name          string
-		riderID       int64
-		body          gin.H
-		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
-		buildStubs    func(store *mockdb.MockStore)
-		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
-	}{
-		{
-			name:    "OK",
-			riderID: rider.ID,
-			body: gin.H{
-				"reason": "骑手整改完成，符合恢复配送资格条件",
-			},
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Return([]db.UserRole{{
-						UserID:          user.ID,
-						Role:            "operator",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: operator.RegionID, Valid: true},
-					}}, nil)
-
-				store.EXPECT().
-					GetOperatorByUser(gomock.Any(), user.ID).
-					Return(operator, nil)
-
-				store.EXPECT().
-					GetRider(gomock.Any(), rider.ID).
-					Return(rider, nil)
-
-				store.EXPECT().
-					CheckOperatorManagesRegion(gomock.Any(), db.CheckOperatorManagesRegionParams{
-						OperatorID: operator.ID,
-						RegionID:   rider.RegionID.Int64,
-					}).
-					Return(true, nil)
-
-				store.EXPECT().
-					UpdateRiderStatus(gomock.Any(), gomock.Any()).
-					Return(db.Rider{}, nil)
-
-				// 清除暂停信息（忽略错误）
-				store.EXPECT().
-					UnsuspendRider(gomock.Any(), rider.ID).
-					Return(nil).
-					AnyTimes()
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
-			},
-		},
-		{
-			name:    "RiderNotSuspended",
-			riderID: rider.ID,
-			body: gin.H{
-				"reason": "骑手整改完成，符合恢复配送资格条件",
-			},
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Return([]db.UserRole{{
-						UserID:          user.ID,
-						Role:            "operator",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: operator.RegionID, Valid: true},
-					}}, nil)
-
-				store.EXPECT().
-					GetOperatorByUser(gomock.Any(), user.ID).
-					Return(operator, nil)
-
-				activeRider := rider
-				activeRider.Status = "active"
-				store.EXPECT().
-					GetRider(gomock.Any(), rider.ID).
-					Return(activeRider, nil)
-
-				store.EXPECT().
-					CheckOperatorManagesRegion(gomock.Any(), db.CheckOperatorManagesRegionParams{
-						OperatorID: operator.ID,
-						RegionID:   activeRider.RegionID.Int64,
-					}).
-					Return(true, nil)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusBadRequest, recorder.Code)
-			},
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
-
-			store := mockdb.NewMockStore(ctrl)
-			tc.buildStubs(store)
-
-			server := newTestServer(t, store)
-			recorder := httptest.NewRecorder()
-
-			body, _ := json.Marshal(tc.body)
-			url := fmt.Sprintf("/v1/operator/riders/%d/resume", tc.riderID)
-			request, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
 			require.NoError(t, err)
 
 			tc.setupAuth(t, request, server.tokenMaker)

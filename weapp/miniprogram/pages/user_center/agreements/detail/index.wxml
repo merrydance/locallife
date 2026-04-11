@@ -1,0 +1,34 @@
+<custom-navbar title="{{title}}" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<scroll-view 
+  scroll-y 
+  class="page-scroll page-shell page-shell--with-nav page-shell--bottom-safe"
+  style="height: {{scrollViewHeight}}px; --page-shell-nav-height: {{navBarHeight}}px;"
+  enhanced="{{true}}"
+  show-scrollbar="{{false}}"
+>
+  <view class="content-section">
+    <view wx:if="{{loading}}" class="loading-state">
+      <t-loading theme="circular" size="64rpx" text="加载中..." vertical />
+    </view>
+    
+    <block wx:elif="{{agreement}}">
+      <view class="agreement-article">
+        <view class="article-header">
+          <view class="article-meta">
+            <text>版本: {{agreement.version}}</text>
+            <text wx:if="{{agreement.published_on}}">发布日期: {{agreement.published_on}}</text>
+          </view>
+        </view>
+        
+        <view class="article-content">
+          <rich-text nodes="{{agreement.content}}" />
+        </view>
+        
+        <view class="article-footer">
+          <text>乐客来福 平台管理中心</text>
+        </view>
+      </view>
+    </block>
+  </view>
+</scroll-view>

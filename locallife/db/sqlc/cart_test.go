@@ -76,21 +76,31 @@ func TestCreateCart(t *testing.T) {
 	require.NotZero(t, cart.UpdatedAt)
 }
 
-func TestCreateCart_UpsertSameUserMerchant(t *testing.T) {
+func TestCreateCart_SameUserMerchantWithoutReservation(t *testing.T) {
 	owner := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, owner.ID)
 	user := createRandomUser(t)
+	table := createRandomTable(t, merchant.ID)
 
-	// 创建第一个购物车
-	cart1 := createRandomCart(t, user.ID, merchant.ID)
+	// 创建第一个购物车（堂食场景，含桌台ID）
+	cart1, err := testStore.CreateCart(context.Background(), CreateCartParams{
+		UserID:     user.ID,
+		MerchantID: merchant.ID,
+		OrderType:  "dine_in",
+		TableID:    pgtype.Int8{Int64: table.ID, Valid: true},
+	})
+	require.NoError(t, err)
+	require.NotZero(t, cart1.ID)
 
-	// 再次创建相同的用户-商户购物车（应该更新而不是创建新的）
+	// 再次创建相同的用户-商户购物车（reservation_id 为空时允许新增）
 	cart2, err := testStore.CreateCart(context.Background(), CreateCartParams{
 		UserID:     user.ID,
 		MerchantID: merchant.ID,
+		OrderType:  "dine_in",
+		TableID:    pgtype.Int8{Int64: table.ID, Valid: true},
 	})
 	require.NoError(t, err)
-	require.Equal(t, cart1.ID, cart2.ID) // 应该是同一个购物车
+	require.NotEqual(t, cart1.ID, cart2.ID)
 }
 
 func TestCreateCart_DifferentMerchants(t *testing.T) {

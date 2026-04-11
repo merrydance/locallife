@@ -1,18 +1,20 @@
-/* 预订页面 - 使用统一设计 Token */
+/* 预订页面 - 严格遵循 Design System $v1.0 */
 
-/* Skyline 滚动容器 */
 .page-scroll {
-  background-color: #FAFAFA;
+  background-color: var(--td-bg-color-page);
   box-sizing: border-box;
 }
 
-/* Top Bar */
+/* 顶部栏：搜索 + 过滤 */
 .top-bar {
   display: flex;
   align-items: center;
-  padding: var(--customer-card-margin) var(--customer-page-padding);
-  background: #fff;
-  gap: var(--customer-card-margin);
+  padding: 0 var(--spacer-md) var(--spacer-sm);
+  background: var(--td-bg-color-page);
+  gap: var(--spacer-sm);
+  position: sticky;
+  top: 0;
+  z-index: var(--z-index-sticky);
 }
 
 .filter-btn-new {
@@ -23,37 +25,46 @@
   flex: 1;
 }
 
-/* Tabs Section */
+/* 选项卡区域 */
 .tabs-section {
-  background: #fff;
-  margin-bottom: 12rpx;
+  background: var(--td-bg-color-page);
+  margin-bottom: var(--spacer-xs);
 }
 
-/* 内容区域 - 与 takeout 完全一致 */
+/* 内容列表区域 */
 .content-section {
   display: flex;
   flex-direction: column;
-  padding: 12rpx 20rpx 24rpx;
+  padding: var(--spacer-sm) var(--spacer-md) var(--spacer-lg);
+  gap: var(--spacer-sm);
 }
 
 .loading-more {
   display: flex;
   justify-content: center;
-  padding: 32rpx 0;
+  padding: var(--spacer-lg) 0;
+  color: var(--td-text-color-secondary);
 }
 
 .no-more {
   text-align: center;
-  padding: 32rpx 0;
-  color: #999;
-  font-size: var(--customer-subtitle-size);
+  padding: var(--spacer-lg) 0;
+  color: var(--td-text-color-placeholder);
+  font-size: var(--font-size-sm);
 }
 
-/* Filter Drawer */
+.empty-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-sm);
+  padding: var(--spacer-sm) var(--spacer-md) 0;
+}
+
+/* 筛选侧边栏 (Drawer) */
 .filter-drawer {
-  width: 600rpx;
+  width: 620rpx;
   height: 100vh;
-  background: #fff;
+  background: var(--td-bg-color-container);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -63,47 +74,47 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 32rpx;
-  border-bottom: 1rpx solid #f0f0f0;
+  padding: var(--spacer-md) var(--spacer-lg);
+  border-bottom: 1rpx solid var(--td-bg-color-secondarycontainer);
   flex-shrink: 0;
 }
 
 .drawer-title {
-  font-size: 32rpx;
+  font-size: var(--font-size-heading);
   font-weight: 600;
-  color: #333;
+  color: var(--td-text-color-primary);
 }
 
 .drawer-content {
   flex: 1;
-  padding: var(--customer-page-padding);
-  overflow-y: auto;
+  padding: var(--spacer-lg) var(--spacer-md);
 }
 
 .filter-group {
-  margin-bottom: 32rpx;
+  margin-bottom: var(--spacer-lg);
 }
 
 .group-title {
-  font-size: var(--customer-title-size);
-  font-weight: 500;
-  color: #333;
-  margin-bottom: 16rpx;
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+  margin-bottom: var(--spacer-sm);
 }
 
 .tags-container {
   display: flex;
   flex-wrap: wrap;
-  gap: 16rpx;
+  gap: var(--spacer-sm);
 }
 
+/* 侧边栏底部按钮 */
 .drawer-footer {
   display: flex;
-  gap: var(--customer-page-padding);
-  padding: var(--customer-page-padding);
-  border-top: 1rpx solid #f0f0f0;
+  gap: var(--spacer-md);
+  padding: var(--spacer-md) var(--spacer-md) calc(var(--spacer-md) + var(--safe-area-bottom));
+  border-top: 1rpx solid var(--td-bg-color-secondarycontainer);
   flex-shrink: 0;
-  background: #fff;
+  background: var(--td-bg-color-container);
 }
 
 .drawer-footer .t-button {

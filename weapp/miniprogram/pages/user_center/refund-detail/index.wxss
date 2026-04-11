@@ -1,125 +1,161 @@
-.page {
+.page-container {
   min-height: 100vh;
-  padding: 0 32rpx 80rpx;
-  background: #f5f6fb;
+  background-color: var(--td-bg-color-page);
+  padding-left: var(--spacer-md);
+  padding-right: var(--spacer-md);
 }
 
-.loading {
+.loading-center {
+  padding-top: 200rpx;
   display: flex;
   justify-content: center;
-  padding-top: 200rpx;
+}
+
+.detail-content {
+  padding: var(--spacer-md) 0;
 }
 
 /* 状态卡片 */
 .status-card {
-  background: #fff;
-  border-radius: 28rpx;
-  padding: 48rpx 32rpx;
-  margin-top: 24rpx;
-  text-align: center;
-  box-shadow: 0 8rpx 24rpx rgba(18, 30, 63, 0.08);
+  background: #FFFFFF;
+  border-radius: var(--radius-lg);
+  padding: var(--spacer-lg);
+  box-shadow: var(--shadow-sm);
+  margin-bottom: var(--spacer-md);
 }
 
-.status-icon {
-  margin-bottom: 16rpx;
+.status-content {
+  display: flex;
+  align-items: center;
+}
+
+.status-badge {
+  width: 96rpx;
+  height: 96rpx;
+  border-radius: 50%;
+  background: var(--td-brand-color-light);
+  color: var(--td-brand-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: var(--spacer-md);
+}
+
+.status-card.success .status-badge { background: var(--td-success-color-light); color: var(--td-success-color); }
+.status-card.processing .status-badge { background: var(--td-warning-color-light); color: var(--td-warning-color); }
+.status-card.failed .status-badge { background: var(--td-error-color-light); color: var(--td-error-color); }
+.status-card.default .status-badge { background: #eef1f6; color: var(--td-text-color-secondary); }
+
+.status-main {
+  display: flex;
+  flex-direction: column;
 }
 
 .status-text {
-  font-size: 32rpx;
+  font-size: var(--font-size-base);
+  color: var(--td-text-color-secondary);
+  margin-bottom: 4rpx;
+}
+
+.amount-display {
+  display: flex;
+  align-items: baseline;
+}
+
+.amount-display .symbol {
+  font-size: var(--font-size-title);
   font-weight: 600;
-  color: #1d2750;
-  margin-bottom: 12rpx;
+  margin-right: 4rpx;
 }
 
-.amount {
-  font-size: 56rpx;
-  font-weight: 700;
-  color: #1d2750;
+.amount-display .amount-val {
+  font-size: var(--font-size-display);
+  font-weight: bold;
 }
 
-/* 进度卡片 */
-.progress-card {
-  background: #fff;
-  border-radius: 28rpx;
-  padding: 32rpx;
-  margin-top: 24rpx;
-  box-shadow: 0 8rpx 24rpx rgba(18, 30, 63, 0.08);
+/* 区块通用 */
+.section-container {
+  margin-top: var(--spacer-lg);
 }
 
-.card-title {
-  font-size: 30rpx;
+.section-title {
+  font-size: var(--font-size-heading);
   font-weight: 600;
-  color: #1d2750;
-  margin-bottom: 24rpx;
-  padding-bottom: 16rpx;
-  border-bottom: 1rpx solid #edf0fb;
-}
-
-.progress-list {
+  margin-bottom: var(--spacer-sm);
   padding-left: 8rpx;
 }
 
-.progress-item {
+.refund-list {
   display: flex;
-  position: relative;
-  padding-bottom: 32rpx;
+  flex-direction: column;
+  gap: var(--spacer-sm);
 }
 
-.progress-item:last-child {
-  padding-bottom: 0;
+.refund-card {
+  background: var(--td-bg-color-container);
+  border-radius: var(--radius-md);
+  padding: var(--spacer-md);
+  box-shadow: var(--shadow-sm);
 }
 
-.progress-dot {
-  width: 20rpx;
-  height: 20rpx;
-  border-radius: 50%;
-  background: #e0e4f0;
-  margin-top: 6rpx;
-  z-index: 1;
+.refund-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12rpx;
 }
 
-.progress-item.done .progress-dot {
-  background: #1d63ff;
+.refund-card-amount {
+  font-size: var(--font-size-heading);
+  font-weight: 600;
+  color: var(--td-text-color-primary);
 }
 
-.progress-item.active .progress-dot {
-  background: #1d63ff;
-  box-shadow: 0 0 0 8rpx rgba(29, 99, 255, 0.2);
+.refund-card-status {
+  font-size: var(--font-size-sm);
+  color: var(--td-text-color-secondary);
 }
 
-.progress-line {
-  position: absolute;
-  left: 9rpx;
-  top: 26rpx;
-  width: 2rpx;
-  height: calc(100% - 26rpx);
-  background: #e0e4f0;
-}
-
-.progress-item.done .progress-line {
-  background: #1d63ff;
-}
-
-.progress-content {
-  flex: 1;
-  margin-left: 20rpx;
+.refund-card-body {
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
 
-.progress-title {
-  font-size: 28rpx;
-  color: #9aa4c2;
+.refund-reason {
+  font-size: var(--font-size-sm);
+  color: var(--td-text-color-secondary);
 }
 
-.progress-item.done .progress-title,
-.progress-item.active .progress-title {
-  color: #1d2750;
-  font-weight: 500;
+.refund-time {
+  font-size: var(--font-size-xxs);
+  color: var(--td-text-color-placeholder);
 }
 
-.progress-time {
+/* 进度步骤条 */
+.progress-box {
+  background: #FFFFFF;
+  border-radius: var(--radius-md);
+  padding: var(--spacer-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.step-item {
+  position: relative;
+  display: flex;
+  padding-bottom: var(--spacer-lg);
+}
+
+.step-item:last-child {
+  padding-bottom: 0;
+}
+
+.step-line {
+  position: absolute;
+  left: 15rpx;
+  top: 30rpx;
+  bottom: -10rpx;
+  width: 2rpx;
   font-size: 24rpx;
   color: #9aa4c2;
 }
@@ -170,6 +206,23 @@
   color: #865900;
 }
 
-.empty {
+.empty-center {
   padding-top: 200rpx;
+}
+
+/* 异常状态 */
+.error-container {
+  padding: 120rpx 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* 骨架屏 */
+.detail-skeleton {
+  padding: var(--spacer-md) 0;
+}
+
+.skeleton-item {
+  margin-bottom: var(--spacer-md);
 }

@@ -16,19 +16,29 @@ import (
 
 // createRandomRegion 创建测试用的区域
 func createRandomRegion(t *testing.T) Region {
-	arg := CreateRegionParams{
-		Code:      util.RandomString(6),
-		Name:      util.RandomString(10),
-		Level:     1,
-		ParentID:  pgtype.Int8{Valid: false},
-		Longitude: pgtype.Numeric{},
-		Latitude:  pgtype.Numeric{},
+	for i := 0; i < 5; i++ {
+		code := fmt.Sprintf("REG_%d_%s", time.Now().UnixNano(), util.RandomString(4))
+		arg := CreateRegionParams{
+			Code:      code,
+			Name:      util.RandomString(10),
+			Level:     1,
+			ParentID:  pgtype.Int8{Valid: false},
+			Longitude: pgtype.Numeric{},
+			Latitude:  pgtype.Numeric{},
+		}
+
+		region, err := testStore.CreateRegion(context.Background(), arg)
+		if err == nil {
+			require.NotEmpty(t, region)
+			return region
+		}
+		if ErrorCode(err) != UniqueViolation {
+			require.NoError(t, err)
+		}
 	}
 
-	region, err := testStore.CreateRegion(context.Background(), arg)
-	require.NoError(t, err)
-	require.NotEmpty(t, region)
-	return region
+	t.Fatalf("failed to create unique region")
+	return Region{}
 }
 
 func createRandomMerchantForTest(t *testing.T) Merchant {
@@ -45,12 +55,11 @@ func createRandomMerchantWithOwner(t *testing.T, ownerID int64) Merchant {
 		OwnerUserID:     ownerID,
 		Name:            util.RandomString(10),
 		Description:     pgtype.Text{String: util.RandomString(50), Valid: true},
-		LogoUrl:         pgtype.Text{String: "https://example.com/logo.jpg", Valid: true},
 		Phone:           "13800138000",
 		Address:         util.RandomString(30),
-		Latitude:        pgtype.Numeric{},
-		Longitude:       pgtype.Numeric{},
-		Status:          "approved",
+		Latitude:        numericFromFloat(39.9282),
+		Longitude:       numericFromFloat(116.4507),
+		Status:          "active",
 		ApplicationData: appData,
 		RegionID:        region.ID, // 添加区域ID
 	}
@@ -68,6 +77,24 @@ func createRandomMerchantWithOwner(t *testing.T, ownerID int64) Merchant {
 	return merchant
 }
 
+func createActiveMerchantInRegion(t *testing.T, regionID int64, name string, latitude, longitude float64) Merchant {
+	user := createRandomUser(t)
+	appData, _ := json.Marshal(map[string]string{"test": "data"})
+	merchant, err := testStore.CreateMerchant(context.Background(), CreateMerchantParams{
+		OwnerUserID:     user.ID,
+		Name:            name,
+		Phone:           fmt.Sprintf("138%08d", util.RandomInt(10000000, 99999999)),
+		Address:         "test address " + util.RandomString(10),
+		Latitude:        numericFromFloat(latitude),
+		Longitude:       numericFromFloat(longitude),
+		Status:          "active",
+		ApplicationData: appData,
+		RegionID:        regionID,
+	})
+	require.NoError(t, err)
+	return merchant
+}
+
 func createRandomMerchantApplication(t *testing.T) MerchantApplication {
 	user := createRandomUser(t)
 	return createRandomMerchantApplicationWithUser(t, user.ID)
@@ -75,17 +102,14 @@ func createRandomMerchantApplication(t *testing.T) MerchantApplication {
 
 func createRandomMerchantApplicationWithUser(t *testing.T, userID int64) MerchantApplication {
 	arg := CreateMerchantApplicationParams{
-		UserID:                  userID,
-		MerchantName:            util.RandomString(10),
-		BusinessLicenseNumber:   util.RandomString(18),
-		BusinessLicenseImageUrl: "uploads/merchants/test/license.jpg",
-		LegalPersonName:         util.RandomString(6),
-		LegalPersonIDNumber:     "110101199001011234",
-		LegalPersonIDFrontUrl:   "uploads/merchants/test/id_front.jpg",
-		LegalPersonIDBackUrl:    "uploads/merchants/test/id_back.jpg",
-		ContactPhone:            "13800138000",
-		BusinessAddress:         util.RandomString(30),
-		BusinessScope:           pgtype.Text{String: "餐饮服务", Valid: true},
+		UserID:                userID,
+		MerchantName:          util.RandomString(10),
+		BusinessLicenseNumber: util.RandomString(18),
+		LegalPersonName:       util.RandomString(6),
+		LegalPersonIDNumber:   "110101199001011234",
+		ContactPhone:          "13800138000",
+		BusinessAddress:       util.RandomString(30),
+		BusinessScope:         pgtype.Text{String: "餐饮服务", Valid: true},
 	}
 
 	application, err := testStore.CreateMerchantApplication(context.Background(), arg)
@@ -152,7 +176,7 @@ func TestListMerchants(t *testing.T) {
 	}
 
 	arg := ListMerchantsParams{
-		Status: "approved",
+		Status: "active",
 		Limit:  10,
 		Offset: 0,
 	}
@@ -162,7 +186,7 @@ func TestListMerchants(t *testing.T) {
 	require.GreaterOrEqual(t, len(merchants), 3)
 
 	for _, m := range merchants {
-		require.Equal(t, "approved", m.Status)
+		require.Equal(t, "active", m.Status)
 	}
 }
 
@@ -173,15 +197,15 @@ func TestUpdateMerchant(t *testing.T) {
 	newPhone := "13900139000"
 
 	arg := UpdateMerchantParams{
-		ID:          merchant1.ID,
-		Version:     merchant1.Version, // ✅ 必须传入当前version
-		Name:        pgtype.Text{String: newName, Valid: true},
-		Phone:       pgtype.Text{String: newPhone, Valid: true},
-		Description: pgtype.Text{}, // 不更新
-		LogoUrl:     pgtype.Text{},
-		Address:     pgtype.Text{},
-		Latitude:    pgtype.Numeric{},
-		Longitude:   pgtype.Numeric{},
+		ID:               merchant1.ID,
+		Version:          merchant1.Version, // ✅ 必须传入当前version
+		Name:             pgtype.Text{String: newName, Valid: true},
+		Phone:            pgtype.Text{String: newPhone, Valid: true},
+		Description:      pgtype.Text{}, // 不更新
+		LogoMediaAssetID: pgtype.Int8{},
+		Address:          pgtype.Text{},
+		Latitude:         pgtype.Numeric{},
+		Longitude:        pgtype.Numeric{},
 	}
 
 	merchant2, err := testStore.UpdateMerchant(context.Background(), arg)
@@ -231,7 +255,7 @@ func TestSearchMerchants(t *testing.T) {
 		Name:            uniqueName,
 		Phone:           fmt.Sprintf("138%08d", util.RandomInt(10000000, 99999999)),
 		Address:         "test address " + util.RandomString(10),
-		Status:          "approved",
+		Status:          "active",
 		ApplicationData: appData,
 		RegionID:        region.ID,
 	}
@@ -240,9 +264,15 @@ func TestSearchMerchants(t *testing.T) {
 
 	// 搜索
 	searchArg := SearchMerchantsParams{
-		Column1: pgtype.Text{String: "SEARCHABLE_MERCHANT", Valid: true},
-		Limit:   10,
 		Offset:  0,
+		Limit:   10,
+		Column3: "SEARCHABLE_MERCHANT",
+		Column4: 39.9282,
+		Column5: 116.4507,
+		RegionID: pgtype.Int8{
+			Int64: region.ID,
+			Valid: true,
+		},
 	}
 
 	merchants, err := testStore.SearchMerchants(context.Background(), searchArg)
@@ -263,7 +293,7 @@ func TestCountSearchMerchants(t *testing.T) {
 			Name:            prefix + util.RandomString(4),
 			Phone:           fmt.Sprintf("138%08d", util.RandomInt(10000000, 99999999)),
 			Address:         "test address " + util.RandomString(10),
-			Status:          "approved",
+			Status:          "active",
 			ApplicationData: appData,
 			RegionID:        region.ID,
 		}
@@ -272,13 +302,19 @@ func TestCountSearchMerchants(t *testing.T) {
 	}
 
 	// 计数
-	count, err := testStore.CountSearchMerchants(context.Background(), pgtype.Text{String: prefix, Valid: true})
+	count, err := testStore.CountSearchMerchants(context.Background(), CountSearchMerchantsParams{
+		Column1:  pgtype.Text{String: prefix, Valid: true},
+		RegionID: pgtype.Int8{Int64: region.ID, Valid: true},
+	})
 	require.NoError(t, err)
 	require.Equal(t, int64(3), count)
 }
 
 func TestCountSearchMerchants_EmptyResult(t *testing.T) {
-	count, err := testStore.CountSearchMerchants(context.Background(), pgtype.Text{String: "NonExistentMerchantName99999", Valid: true})
+	count, err := testStore.CountSearchMerchants(context.Background(), CountSearchMerchantsParams{
+		Column1:  pgtype.Text{String: "NonExistentMerchantName99999", Valid: true},
+		RegionID: pgtype.Int8{Valid: false},
+	})
 	require.NoError(t, err)
 	require.Equal(t, int64(0), count)
 }
@@ -295,7 +331,7 @@ func TestCountSearchMerchants_PartialMatch(t *testing.T) {
 		Name:            prefix + "_SUFFIX",
 		Phone:           fmt.Sprintf("138%08d", util.RandomInt(10000000, 99999999)),
 		Address:         "test address " + util.RandomString(10),
-		Status:          "approved",
+		Status:          "active",
 		ApplicationData: appData,
 		RegionID:        region.ID,
 	}
@@ -303,9 +339,114 @@ func TestCountSearchMerchants_PartialMatch(t *testing.T) {
 	require.NoError(t, err)
 
 	// 部分匹配应该能找到
-	count, err := testStore.CountSearchMerchants(context.Background(), pgtype.Text{String: prefix, Valid: true})
+	count, err := testStore.CountSearchMerchants(context.Background(), CountSearchMerchantsParams{
+		Column1:  pgtype.Text{String: prefix, Valid: true},
+		RegionID: pgtype.Int8{Int64: region.ID, Valid: true},
+	})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), count)
+}
+
+func TestSearchMerchants_ExcludesTakeoutSuspendedMerchants(t *testing.T) {
+	user := createRandomUser(t)
+	region := createRandomRegion(t)
+	uniqueName := "SUSPENDED_SEARCH_MERCHANT_" + util.RandomString(5)
+
+	merchant, err := testStore.CreateMerchant(context.Background(), CreateMerchantParams{
+		OwnerUserID: user.ID,
+		Name:        uniqueName,
+		Phone:       fmt.Sprintf("138%08d", util.RandomInt(10000000, 99999999)),
+		Address:     "test address " + util.RandomString(10),
+		Status:      "active",
+		RegionID:    region.ID,
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.CreateMerchantProfile(context.Background(), merchant.ID)
+	require.NoError(t, err)
+
+	err = testStore.SuspendMerchantTakeout(context.Background(), SuspendMerchantTakeoutParams{
+		MerchantID:           merchant.ID,
+		TakeoutSuspendReason: pgtype.Text{String: "claim recovery overdue", Valid: true},
+	})
+	require.NoError(t, err)
+
+	merchants, err := testStore.SearchMerchants(context.Background(), SearchMerchantsParams{
+		Offset:  0,
+		Limit:   10,
+		Column3: "SUSPENDED_SEARCH_MERCHANT",
+		Column4: 39.9282,
+		Column5: 116.4507,
+		RegionID: pgtype.Int8{
+			Int64: region.ID,
+			Valid: true,
+		},
+	})
+	require.NoError(t, err)
+	require.Empty(t, merchants)
+
+	count, err := testStore.CountSearchMerchants(context.Background(), CountSearchMerchantsParams{
+		Column1:  pgtype.Text{String: "SUSPENDED_SEARCH_MERCHANT", Valid: true},
+		RegionID: pgtype.Int8{Int64: region.ID, Valid: true},
+	})
+	require.NoError(t, err)
+	require.Zero(t, count)
+}
+
+func TestSearchMerchants_DistanceSort(t *testing.T) {
+	region := createRandomRegion(t)
+	keyword := "DISTANCE_SORT_MERCHANT_" + util.RandomString(6)
+	nearMerchant := createActiveMerchantInRegion(t, region.ID, keyword+"_near", 39.9080, 116.3970)
+	farMerchant := createActiveMerchantInRegion(t, region.ID, keyword+"_far", 39.9680, 116.4870)
+
+	merchants, err := testStore.SearchMerchants(context.Background(), SearchMerchantsParams{
+		Offset:  0,
+		Limit:   10,
+		Column3: keyword,
+		Column4: 39.9082,
+		Column5: 116.3975,
+		SortBy:  "distance",
+		RegionID: pgtype.Int8{
+			Int64: region.ID,
+			Valid: true,
+		},
+	})
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, len(merchants), 2)
+	require.Equal(t, nearMerchant.ID, merchants[0].ID)
+	require.Equal(t, farMerchant.ID, merchants[1].ID)
+	require.LessOrEqual(t, merchants[0].DistanceMeters, merchants[1].DistanceMeters)
+}
+
+func TestSearchMerchantsByTag_DistanceSort(t *testing.T) {
+	region := createRandomRegion(t)
+	tag := createRandomTag(t, "merchant")
+	keyword := "TAG_DISTANCE_SORT_MERCHANT_" + util.RandomString(6)
+	nearMerchant := createActiveMerchantInRegion(t, region.ID, keyword+"_near", 39.9080, 116.3970)
+	farMerchant := createActiveMerchantInRegion(t, region.ID, keyword+"_far", 39.9680, 116.4870)
+
+	err := testStore.AddMerchantTag(context.Background(), AddMerchantTagParams{MerchantID: nearMerchant.ID, TagID: tag.ID})
+	require.NoError(t, err)
+	err = testStore.AddMerchantTag(context.Background(), AddMerchantTagParams{MerchantID: farMerchant.ID, TagID: tag.ID})
+	require.NoError(t, err)
+
+	merchants, err := testStore.SearchMerchantsByTag(context.Background(), SearchMerchantsByTagParams{
+		TagID:   tag.ID,
+		UserLat: 39.9082,
+		UserLng: 116.3975,
+		SortBy:  "distance",
+		RegionID: pgtype.Int8{
+			Int64: region.ID,
+			Valid: true,
+		},
+		Limit:  10,
+		Offset: 0,
+	})
+	require.NoError(t, err)
+	require.Len(t, merchants, 2)
+	require.Equal(t, nearMerchant.ID, merchants[0].ID)
+	require.Equal(t, farMerchant.ID, merchants[1].ID)
+	require.LessOrEqual(t, merchants[0].DistanceMeters, merchants[1].DistanceMeters)
 }
 
 // ==================== Merchant Application Tests ====================
@@ -716,7 +857,7 @@ func TestListMerchantsWithTagCount(t *testing.T) {
 	}
 
 	arg := ListMerchantsWithTagCountParams{
-		Status: "approved",
+		Status: "active",
 		Limit:  10,
 		Offset: 0,
 	}
@@ -731,9 +872,13 @@ func TestGetPopularMerchants(t *testing.T) {
 	// sqlc 生成代码时不会校验 SQL 是否引用了不存在的列，所以必须通过集成测试兜底。
 	_ = createRandomMerchantForTest(t)
 
-	rows, err := testStore.GetPopularMerchants(context.Background(), 10)
+	rows, err := testStore.GetPopularMerchants(context.Background(), GetPopularMerchantsParams{
+		Limit:   10,
+		Column2: 0, // Lat
+		Column3: 0, // Lng
+	})
 	require.NoError(t, err)
-	// 至少应返回 1 条（刚创建的是 approved 商户）
+	// 至少应返回 1 条（刚创建的是 active 商户）
 	require.NotEmpty(t, rows)
 }
 
@@ -758,32 +903,10 @@ func TestGetMerchantsWithStatsByIDs(t *testing.T) {
 		require.NotEmpty(t, r.Name)
 		require.NotEmpty(t, r.Address)
 		require.NotZero(t, r.RegionID)
-		require.Equal(t, "approved", r.Status)
-		// TrustScore 默认是500
-		require.GreaterOrEqual(t, r.TrustScore, int16(0))
+		require.Equal(t, "active", r.Status)
 		// MonthlyOrders 新商户应该是0
 		require.GreaterOrEqual(t, r.MonthlyOrders, int32(0))
 	}
-}
-
-func TestGetMerchantsWithStatsByIDs_WithTrustScore(t *testing.T) {
-	merchant := createRandomMerchantForTest(t)
-
-	// 创建商户档案（包含信任分）
-	trustScore := int16(800)
-	_, err := testStore.CreateMerchantProfile(context.Background(), CreateMerchantProfileParams{
-		MerchantID: merchant.ID,
-		TrustScore: trustScore,
-	})
-	require.NoError(t, err)
-
-	// 查询
-	results, err := testStore.GetMerchantsWithStatsByIDs(context.Background(), []int64{merchant.ID})
-	require.NoError(t, err)
-	require.Len(t, results, 1)
-
-	// 验证信任分
-	require.Equal(t, trustScore, results[0].TrustScore)
 }
 
 func TestGetMerchantsWithStatsByIDs_EmptyIDs(t *testing.T) {
@@ -841,7 +964,6 @@ func createMerchantInRegion(t *testing.T, regionID int64, status string) Merchan
 		OwnerUserID:     user.ID,
 		Name:            util.RandomString(10),
 		Description:     pgtype.Text{String: util.RandomString(50), Valid: true},
-		LogoUrl:         pgtype.Text{String: "https://example.com/logo.jpg", Valid: true},
 		Phone:           "13800138000",
 		Address:         util.RandomString(30),
 		Latitude:        pgtype.Numeric{},

@@ -10,11 +10,10 @@ INSERT INTO appeals (
     claim_id,
     appellant_type,
     appellant_id,
-    reason,
-    evidence_urls,
+  reason,
     region_id
 ) VALUES (
-    $1, $2, $3, $4, $5, $6
+  $1, $2, $3, $4, $5
 ) RETURNING *;
 
 -- name: GetAppeal :one
@@ -24,9 +23,10 @@ WHERE id = $1
 LIMIT 1;
 
 -- name: GetAppealByClaim :one
--- 根据索赔ID获取申诉
+-- 根据索赔ID与申诉方类型获取申诉
 SELECT * FROM appeals
 WHERE claim_id = $1
+  AND appellant_type = $2
 LIMIT 1;
 
 -- name: GetAppealWithDetails :one
@@ -37,7 +37,6 @@ SELECT
     c.claim_amount,
     c.approved_amount AS claim_approved_amount,
     c.description AS claim_description,
-    c.evidence_urls AS claim_evidence_urls,
     c.status AS claim_status,
     c.created_at AS claim_created_at,
     o.order_no,
@@ -67,15 +66,17 @@ FROM appeals a
 JOIN claims c ON a.claim_id = c.id
 JOIN orders o ON c.order_id = o.id
 WHERE a.appellant_type = 'merchant'
-  AND a.appellant_id = $1
+  AND a.appellant_id = sqlc.arg('appellant_id')
+  AND (sqlc.narg('status')::text IS NULL OR a.status = sqlc.narg('status')::text)
 ORDER BY a.created_at DESC
-LIMIT $2 OFFSET $3;
+LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
 -- name: CountMerchantAppealsForMerchant :one
 -- 商户申诉计数
 SELECT COUNT(*) FROM appeals
 WHERE appellant_type = 'merchant'
-  AND appellant_id = $1;
+  AND appellant_id = sqlc.arg('appellant_id')
+  AND (sqlc.narg('status')::text IS NULL OR status = sqlc.narg('status')::text);
 
 -- name: GetMerchantAppealDetail :one
 -- 商户查看自己的申诉详情
@@ -85,7 +86,6 @@ SELECT
     c.claim_amount,
     c.approved_amount AS claim_approved_amount,
     c.description AS claim_description,
-    c.evidence_urls AS claim_evidence_urls,
     o.order_no,
     o.total_amount AS order_amount,
     u.phone AS user_phone
@@ -107,23 +107,75 @@ SELECT
     u.phone AS user_phone,
     u.full_name AS user_name,
     a.id AS appeal_id,
-    a.status AS appeal_status
+    a.status AS appeal_status,
+    cr.status AS recovery_status
 FROM claims c
 JOIN orders o ON c.order_id = o.id
 JOIN users u ON c.user_id = u.id
 LEFT JOIN appeals a ON a.claim_id = c.id AND a.appellant_type = 'merchant'
-WHERE o.merchant_id = $1
+LEFT JOIN LATERAL (
+    SELECT status
+    FROM claim_recoveries
+    WHERE claim_id = c.id
+    ORDER BY id DESC
+    LIMIT 1
+) cr ON TRUE
+WHERE o.merchant_id = sqlc.arg('merchant_id')
   AND c.status IN ('approved', 'auto-approved')
+  AND (
+    sqlc.narg('bucket')::text IS NULL
+    OR (
+      sqlc.narg('bucket')::text = 'pending_action'
+      AND (
+        cr.status IN ('pending', 'overdue')
+        OR (a.status = 'rejected' AND COALESCE(cr.status, '') NOT IN ('paid', 'waived'))
+      )
+    )
+    OR (
+      sqlc.narg('bucket')::text = 'appealed'
+      AND (a.status = 'pending' OR cr.status = 'appealed')
+    )
+    OR (
+      sqlc.narg('bucket')::text = 'closed'
+      AND (cr.status IN ('paid', 'waived') OR a.status IN ('approved', 'compensated'))
+    )
+  )
 ORDER BY c.created_at DESC
-LIMIT $2 OFFSET $3;
+LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
 -- name: CountMerchantClaimsForMerchant :one
 -- 商户收到的索赔计数
 SELECT COUNT(*) 
 FROM claims c
 JOIN orders o ON c.order_id = o.id
-WHERE o.merchant_id = $1
-  AND c.status IN ('approved', 'auto-approved');
+LEFT JOIN appeals a ON a.claim_id = c.id AND a.appellant_type = 'merchant'
+LEFT JOIN LATERAL (
+    SELECT status
+    FROM claim_recoveries
+    WHERE claim_id = c.id
+    ORDER BY id DESC
+    LIMIT 1
+) cr ON TRUE
+WHERE o.merchant_id = sqlc.arg('merchant_id')
+  AND c.status IN ('approved', 'auto-approved')
+  AND (
+    sqlc.narg('bucket')::text IS NULL
+    OR (
+      sqlc.narg('bucket')::text = 'pending_action'
+      AND (
+        cr.status IN ('pending', 'overdue')
+        OR (a.status = 'rejected' AND COALESCE(cr.status, '') NOT IN ('paid', 'waived'))
+      )
+    )
+    OR (
+      sqlc.narg('bucket')::text = 'appealed'
+      AND (a.status = 'pending' OR cr.status = 'appealed')
+    )
+    OR (
+      sqlc.narg('bucket')::text = 'closed'
+      AND (cr.status IN ('paid', 'waived') OR a.status IN ('approved', 'compensated'))
+    )
+  );
 
 -- name: GetMerchantClaimDetailForMerchant :one
 -- 商户查看索赔详情
@@ -178,7 +230,6 @@ SELECT
     c.claim_amount,
     c.approved_amount AS claim_approved_amount,
     c.description AS claim_description,
-    c.evidence_urls AS claim_evidence_urls,
     o.order_no,
     o.total_amount AS order_amount,
     u.phone AS user_phone
@@ -200,14 +251,40 @@ SELECT
     u.phone AS user_phone,
     u.full_name AS user_name,
     a.id AS appeal_id,
-    a.status AS appeal_status
+  a.status AS appeal_status,
+  cr.status AS recovery_status
 FROM claims c
 JOIN orders o ON c.order_id = o.id
 JOIN deliveries d ON d.order_id = o.id
 JOIN users u ON c.user_id = u.id
 LEFT JOIN appeals a ON a.claim_id = c.id AND a.appellant_type = 'rider'
+LEFT JOIN LATERAL (
+  SELECT status
+  FROM claim_recoveries
+  WHERE claim_id = c.id
+  ORDER BY id DESC
+  LIMIT 1
+) cr ON TRUE
 WHERE d.rider_id = $1
   AND c.status IN ('approved', 'auto-approved')
+  AND (
+    sqlc.narg('bucket')::text IS NULL
+    OR (
+      sqlc.narg('bucket')::text = 'pending_action'
+      AND (
+        cr.status IN ('pending', 'overdue')
+        OR (a.status = 'rejected' AND COALESCE(cr.status, '') NOT IN ('paid', 'waived'))
+      )
+    )
+    OR (
+      sqlc.narg('bucket')::text = 'appealed'
+      AND (a.status = 'pending' OR cr.status = 'appealed')
+    )
+    OR (
+      sqlc.narg('bucket')::text = 'closed'
+      AND (cr.status IN ('paid', 'waived') OR a.status IN ('approved', 'compensated'))
+    )
+  )
 ORDER BY c.created_at DESC
 LIMIT $2 OFFSET $3;
 
@@ -217,8 +294,34 @@ SELECT COUNT(*)
 FROM claims c
 JOIN orders o ON c.order_id = o.id
 JOIN deliveries d ON d.order_id = o.id
+LEFT JOIN appeals a ON a.claim_id = c.id AND a.appellant_type = 'rider'
+LEFT JOIN LATERAL (
+  SELECT status
+  FROM claim_recoveries
+  WHERE claim_id = c.id
+  ORDER BY id DESC
+  LIMIT 1
+) cr ON TRUE
 WHERE d.rider_id = $1
-  AND c.status IN ('approved', 'auto-approved');
+  AND c.status IN ('approved', 'auto-approved')
+  AND (
+    sqlc.narg('bucket')::text IS NULL
+    OR (
+      sqlc.narg('bucket')::text = 'pending_action'
+      AND (
+        cr.status IN ('pending', 'overdue')
+        OR (a.status = 'rejected' AND COALESCE(cr.status, '') NOT IN ('paid', 'waived'))
+      )
+    )
+    OR (
+      sqlc.narg('bucket')::text = 'appealed'
+      AND (a.status = 'pending' OR cr.status = 'appealed')
+    )
+    OR (
+      sqlc.narg('bucket')::text = 'closed'
+      AND (cr.status IN ('paid', 'waived') OR a.status IN ('approved', 'compensated'))
+    )
+  );
 
 -- name: GetRiderClaimDetailForRider :one
 -- 骑手查看索赔详情
@@ -232,12 +335,20 @@ SELECT
     a.id AS appeal_id,
     a.status AS appeal_status,
     a.reason AS appeal_reason,
-    a.review_notes AS appeal_review_notes
+  a.review_notes AS appeal_review_notes,
+  cr.status AS recovery_status
 FROM claims c
 JOIN orders o ON c.order_id = o.id
 JOIN deliveries d ON d.order_id = o.id
 JOIN users u ON c.user_id = u.id
 LEFT JOIN appeals a ON a.claim_id = c.id AND a.appellant_type = 'rider'
+LEFT JOIN LATERAL (
+  SELECT status
+  FROM claim_recoveries
+  WHERE claim_id = c.id
+  ORDER BY id DESC
+  LIMIT 1
+) cr ON TRUE
 WHERE c.id = $1
   AND d.rider_id = $2
 LIMIT 1;
@@ -283,9 +394,7 @@ SELECT
     c.claim_amount,
     c.approved_amount AS claim_approved_amount,
     c.description AS claim_description,
-    c.evidence_urls AS claim_evidence_urls,
     c.status AS claim_status,
-    c.trust_score_snapshot AS user_trust_score,
     c.lookback_result,
     c.created_at AS claim_created_at,
     o.order_no,
@@ -316,17 +425,22 @@ SET status = @status,
     review_notes = @review_notes,
     reviewed_at = NOW(),
     compensation_amount = CASE WHEN @status = 'approved' THEN sqlc.narg(compensation_amount)::bigint ELSE NULL END,
-    compensated_at = CASE WHEN @status = 'approved' THEN NOW() ELSE NULL END
+    compensated_at = NULL
 WHERE id = @id
   AND status = 'pending'
 RETURNING *;
 
+-- name: MarkAppealCompensated :exec
+UPDATE appeals
+SET compensated_at = COALESCE(compensated_at, $2)
+WHERE id = $1;
+
 -- =========================== 通用查询 ===========================
 
 -- name: CheckAppealExists :one
--- 检查索赔是否已有申诉
+-- 检查索赔是否已有指定申诉方类型的申诉
 SELECT EXISTS (
-    SELECT 1 FROM appeals WHERE claim_id = $1
+  SELECT 1 FROM appeals WHERE claim_id = $1 AND appellant_type = $2
 ) AS exists;
 
 -- name: GetAppealForPostProcess :one

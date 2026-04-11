@@ -5,7 +5,7 @@
  */
 
 import { request } from '../utils/request'
-import type { DishResponse } from './dish'
+import type { CustomizationGroup } from './dish'
 
 // ==================== 数据类型定义 ====================
 
@@ -15,6 +15,8 @@ export type TableStatus =
     | 'occupied'    // 占用中
     | 'reserved'    // 已预定
     | 'disabled'    // 已停用
+
+export type TableStatusTheme = 'success' | 'warning' | 'danger' | 'default'
 
 /** 桌台类型枚举 */
 export type TableType =
@@ -50,7 +52,7 @@ export interface ScanTableCategoryInfo {
     id: number
     name: string
     sort_order: number
-    dishes: DishResponse[]
+    dishes: ScanTableDishInfo[]
 }
 
 /** 扫码点餐套餐信息 - 对齐 api.scanTableComboInfo */
@@ -62,6 +64,7 @@ export interface ScanTableComboInfo {
     name: string
     original_price?: number
     price: number
+    tags?: string[]
 }
 
 /** 扫码点餐促销信息 - 对齐 api.scanTablePromotionInfo */
@@ -118,6 +121,57 @@ export interface TagResponse {
     name: string                                 // 标签名称
 }
 
+export function getTableStatusDisplay(status?: TableStatus | string) {
+    const normalizedStatus = String(status || 'available') as TableStatus | string
+
+    switch (normalizedStatus) {
+        case 'occupied':
+            return {
+                normalizedStatus,
+                label: '占用中',
+                theme: 'warning' as TableStatusTheme,
+                badgeClass: 'is-occupied',
+                canRelease: true,
+                canShowCode: false,
+                isAvailableLike: false
+            }
+        case 'reserved':
+            return {
+                normalizedStatus,
+                label: '已预订',
+                theme: 'danger' as TableStatusTheme,
+                badgeClass: 'is-reserved',
+                canRelease: true,
+                canShowCode: false,
+                isAvailableLike: false
+            }
+        case 'disabled':
+            return {
+                normalizedStatus,
+                label: '停用',
+                theme: 'default' as TableStatusTheme,
+                badgeClass: 'is-disabled',
+                canRelease: false,
+                canShowCode: true,
+                isAvailableLike: false
+            }
+        default:
+            return {
+                normalizedStatus: 'available' as TableStatus,
+                label: '空闲',
+                theme: 'success' as TableStatusTheme,
+                badgeClass: 'is-idle',
+                canRelease: false,
+                canShowCode: true,
+                isAvailableLike: true
+            }
+    }
+}
+
+export function isTableStatusDisabled(status?: TableStatus | string): boolean {
+    return getTableStatusDisplay(status).normalizedStatus === 'disabled'
+}
+
 /** 更新桌台状态请求 - 对齐 api.updateTableStatusRequest */
 export interface UpdateTableStatusRequest extends Record<string, unknown> {
     current_reservation_id?: number              // 当前预定ID
@@ -146,15 +200,19 @@ export interface GenerateTableQRCodeResponse {
 /** 扫码点餐菜品信息 - 对齐 api.scanTableDishInfo */
 export interface ScanTableDishInfo {
     id: number                                   // 菜品ID
+    merchant_id: number                          // 商户ID
     name: string                                 // 菜品名称
     description?: string                         // 菜品描述
     price: number                                // 价格（分）
     member_price?: number                        // 会员价（分）
     image_url?: string                           // 图片URL
     is_available: boolean                        // 是否可用
+    is_online: boolean                           // 是否上架
     category_id: number                          // 分类ID
-    category_name: string                        // 分类名称
+    category_name: string                        // 分入名称
     sort_order: number                           // 排序
+    tags?: string[]                              // 标签
+    customization_groups?: CustomizationGroup[]  // 定制化分组
 }
 
 // ==================== API接口函数 ====================
@@ -187,41 +245,6 @@ export async function getTableDetail(tableId: number): Promise<TableResponse> {
 // ==================== 注意 ====================
 // 商户端桌台管理功能已迁移到 table-device-management.ts
 // 包括：桌台CRUD、状态管理、二维码管理、图片管理、标签管理等
-
-// ==================== 便捷方法 ====================
-
-/**
- * 通过二维码URL解析商户和桌台信息
- * @param qrCodeUrl 二维码URL
- */
-export function parseQRCodeUrl(qrCodeUrl: string): { merchantId: number; tableNo: string } | null {
-    try {
-        const url = new URL(qrCodeUrl)
-        const merchantId = url.searchParams.get('merchant_id')
-        const tableNo = url.searchParams.get('table_no')
-
-        if (merchantId && tableNo) {
-            return {
-                merchantId: parseInt(merchantId),
-                tableNo
-            }
-        }
-    } catch (error) {
-        console.error('Invalid QR code URL:', error)
-    }
-
-    return null
-}
-
-/**
- * 生成桌台二维码URL
- * @param merchantId 商户ID
- * @param tableNo 桌台编号
- * @param baseUrl 基础URL
- */
-export function generateQRCodeUrl(merchantId: number, tableNo: string, baseUrl: string = 'https://api.example.com'): string {
-    return `${baseUrl}/v1/scan/table?merchant_id=${merchantId}&table_no=${encodeURIComponent(tableNo)}`
-}
 
 // ==================== 便捷函数已迁移 ====================
 // getAvailableTables 和 getPrivateRooms 等商户端功能

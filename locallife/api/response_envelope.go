@@ -170,9 +170,14 @@ func (w *bodyCaptureWriter) Status() int {
 // - WeChat/Payment webhooks under /v1/webhooks (they have strict response format expectations)
 func ResponseEnvelopeMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Client opt-in: only wrap responses when the client explicitly requests the envelope.
-		// This avoids breaking existing clients while allowing the mini-program to rely on {code,message,data}.
-		if c.GetHeader("X-Response-Envelope") != "1" {
+		// Default on: wrap JSON responses unless client explicitly opts out.
+		// Opt-out with: X-Response-Envelope: 0
+		if c.GetHeader("X-Response-Envelope") == "0" {
+			c.Next()
+			return
+		}
+
+		if strings.Contains(c.GetHeader("Accept"), "text/event-stream") {
 			c.Next()
 			return
 		}

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,13 +12,13 @@ import (
 	"time"
 
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/media"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/util"
-	"github.com/merrydance/locallife/wechat"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/rs/zerolog/log"
 )
 
 // 中国经纬度范围常量
@@ -27,17 +28,6 @@ const (
 	minLatitude  = 3.0   // 中国最南端
 	maxLatitude  = 54.0  // 中国最北端
 )
-
-// validateCoordinates 验证经纬度是否在有效范围内
-func validateCoordinates(longitude, latitude float64) error {
-	if longitude < minLongitude || longitude > maxLongitude {
-		return fmt.Errorf("经度必须在 %.1f 到 %.1f 之间", minLongitude, maxLongitude)
-	}
-	if latitude < minLatitude || latitude > maxLatitude {
-		return fmt.Errorf("纬度必须在 %.1f 到 %.1f 之间", minLatitude, maxLatitude)
-	}
-	return nil
-}
 
 // parseNumericString 将字符串转换为 pgtype.Numeric（用于经纬度等数值字段）
 func parseNumericString(s string) (pgtype.Numeric, error) {
@@ -77,507 +67,40 @@ func parseNumericString(s string) (pgtype.Numeric, error) {
 	}, nil
 }
 
-// ==================== 文件上传 ====================
-
-type uploadImageRequest struct {
-	Category string `form:"category" binding:"required,oneof=business_license id_front id_back logo storefront environment"`
+// resolveMerchantForUser returns the merchant currently associated with the user.
+// The association may come from owner_user_id or active merchant_staff records.
+func (server *Server) resolveMerchantForUser(ctx *gin.Context, userID int64) (db.Merchant, error) {
+	return server.getMerchantFromContextOrStore(ctx, userID)
 }
 
-type uploadImageResponse struct {
-	ImageURL string `json:"image_url"`
+type merchantVersionConflictResponse struct {
+	Error          string `json:"error"`
+	CurrentVersion int32  `json:"current_version"`
+	YourVersion    int32  `json:"your_version"`
+}
+
+type merchantSuspendedResponse struct {
+	Error         string      `json:"error"`
+	SuspendReason string      `json:"suspend_reason"`
+	SuspendUntil  interface{} `json:"suspend_until"`
+}
+
+type merchantHasOrderedResponse struct {
+	HasOrdered bool `json:"has_ordered"`
 }
 
 // uploadMerchantImage godoc
-// @Summary 上传商户图片
-// @Description 上传商户入驻所需图片（营业执照、身份证、Logo、门头照、环境照）
+// @Summary [Deprecated] 上传商户图片
+// @Description **已下线**。请改用媒体上传三步流程：POST /v1/media/upload-sessions → 直传 OSS → POST /v1/media/complete，然后将 media_asset_id 提交至商户接口。
 // @Tags 商户
-// @Accept multipart/form-data
 // @Produce json
-// @Param category formData string true "图片类别" Enums(business_license, id_front, id_back, logo, storefront, environment)
-// @Param image formData file true "图片文件"
-// @Success 200 {object} uploadImageResponse "上传成功"
-// @Failure 400 {object} ErrorResponse "请求参数错误"
-// @Failure 401 {object} ErrorResponse "未授权"
-// @Failure 500 {object} ErrorResponse "服务器内部错误"
+// @Success 410 {object} ErrorResponse "接口已停用"
 // @Router /v1/merchants/images/upload [post]
 // @Security BearerAuth
 func (server *Server) uploadMerchantImage(ctx *gin.Context) {
-	var req uploadImageRequest
-	if err := ctx.ShouldBind(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
-		return
-	}
-
-	// 获取认证信息
-	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-
-	// 获取上传的文件
-	file, header, err := ctx.Request.FormFile("image")
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("failed to get file: %w", err)))
-		return
-	}
-	defer file.Close()
-
-	// 商户入驻证照（营业执照/身份证）在审核通过前仅本人可见，不走内容安全；
-	// 仅对会公开展示的图片（如 logo）执行内容安全检测。
-	if req.Category == "logo" {
-		if err := server.wechatClient.ImgSecCheck(ctx, file); err != nil {
-			if errors.Is(err, wechat.ErrRiskyContent) {
-				ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("图片内容安全检测未通过")))
-				return
-			}
-
-			// 开发环境详尽报错
-			errMsg := "微信图片安全检测服务异常"
-			if server.config.Environment == "development" {
-				errMsg = fmt.Sprintf("微信图片安全检测失败: %v", err)
-			}
-			ctx.JSON(http.StatusBadGateway, errorResponse(errors.New(errMsg)))
-
-			internalError(ctx, fmt.Errorf("wechat img sec check (logo): %w", err))
-			return
-		}
-		if _, err := file.Seek(0, 0); err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-	}
-
-	// 上传文件
-	uploader := util.NewFileUploader("uploads")
-	relativePath, err := uploader.UploadMerchantImage(authPayload.UserID, req.Category, file, header)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
-		return
-	}
-
-	// 返回文件URL（相对路径）
-	ctx.JSON(http.StatusOK, uploadImageResponse{
-		ImageURL: normalizeUploadURLForClient(relativePath),
-	})
-}
-
-// ==================== 商户入驻申请 ====================
-
-type createMerchantApplicationRequest struct {
-	MerchantName            string  `json:"merchant_name" binding:"required,min=2,max=50"`
-	BusinessLicenseNumber   string  `json:"business_license_number" binding:"required,min=8,max=30"` // 统一社会信用代码或注册号
-	BusinessLicenseImageURL string  `json:"business_license_image_url" binding:"required,max=500"`
-	LegalPersonName         string  `json:"legal_person_name" binding:"required,min=2,max=30"`
-	LegalPersonIDNumber     string  `json:"legal_person_id_number" binding:"required,min=15,max=18"` // 身份证15或18位
-	LegalPersonIDFrontURL   string  `json:"legal_person_id_front_url" binding:"required,max=500"`
-	LegalPersonIDBackURL    string  `json:"legal_person_id_back_url" binding:"required,max=500"`
-	ContactPhone            string  `json:"contact_phone" binding:"required,min=11,max=11"`
-	BusinessAddress         string  `json:"business_address" binding:"required,min=5,max=200"`
-	Longitude               *string `json:"longitude" binding:"required"` // 经度，前端地图选点
-	Latitude                *string `json:"latitude" binding:"required"`  // 纬度，前端地图选点
-	BusinessScope           string  `json:"business_scope" binding:"omitempty,max=200"`
-	RegionID                int64   `json:"region_id" binding:"required,min=1"` // 区域ID，前端上报
-}
-
-type merchantApplicationResponse struct {
-	ID                      int64      `json:"id"`
-	UserID                  int64      `json:"user_id"`
-	MerchantName            string     `json:"merchant_name"`
-	BusinessLicenseNumber   string     `json:"business_license_number"`
-	BusinessLicenseImageURL string     `json:"business_license_image_url"`
-	LegalPersonName         string     `json:"legal_person_name"`
-	LegalPersonIDNumber     string     `json:"legal_person_id_number"`
-	LegalPersonIDFrontURL   string     `json:"legal_person_id_front_url"`
-	LegalPersonIDBackURL    string     `json:"legal_person_id_back_url"`
-	ContactPhone            string     `json:"contact_phone"`
-	BusinessAddress         string     `json:"business_address"`
-	BusinessScope           *string    `json:"business_scope,omitempty"`
-	Status                  string     `json:"status"`
-	RejectReason            *string    `json:"reject_reason,omitempty"`
-	ReviewedBy              *int64     `json:"reviewed_by,omitempty"`
-	ReviewedAt              *time.Time `json:"reviewed_at,omitempty"`
-	CreatedAt               time.Time  `json:"created_at"`
-	UpdatedAt               time.Time  `json:"updated_at"`
-}
-
-func newMerchantApplicationResponse(app db.MerchantApplication) merchantApplicationResponse {
-	resp := merchantApplicationResponse{
-		ID:                      app.ID,
-		UserID:                  app.UserID,
-		MerchantName:            app.MerchantName,
-		BusinessLicenseNumber:   app.BusinessLicenseNumber,
-		BusinessLicenseImageURL: app.BusinessLicenseImageUrl,
-		LegalPersonName:         app.LegalPersonName,
-		LegalPersonIDNumber:     app.LegalPersonIDNumber,
-		LegalPersonIDFrontURL:   app.LegalPersonIDFrontUrl,
-		LegalPersonIDBackURL:    app.LegalPersonIDBackUrl,
-		ContactPhone:            app.ContactPhone,
-		BusinessAddress:         app.BusinessAddress,
-		Status:                  app.Status,
-		CreatedAt:               app.CreatedAt,
-		UpdatedAt:               app.UpdatedAt,
-	}
-
-	if app.BusinessScope.Valid {
-		resp.BusinessScope = &app.BusinessScope.String
-	}
-	if app.RejectReason.Valid {
-		resp.RejectReason = &app.RejectReason.String
-	}
-	if app.ReviewedBy.Valid {
-		resp.ReviewedBy = &app.ReviewedBy.Int64
-	}
-	if app.ReviewedAt.Valid {
-		resp.ReviewedAt = &app.ReviewedAt.Time
-	}
-
-	return resp
-}
-
-// createMerchantApplication godoc
-// @Summary 提交商户入驻申请
-// @Description 提交商户入驻申请，包括营业执照、法人身份证等信息
-// @Tags 商户
-// @Accept json
-// @Produce json
-// @Param request body createMerchantApplicationRequest true "商户入驻申请信息"
-// @Success 200 {object} merchantApplicationResponse "申请提交成功"
-// @Failure 400 {object} ErrorResponse "请求参数错误"
-// @Failure 401 {object} ErrorResponse "未授权"
-// @Failure 409 {object} ErrorResponse "已存在待审核或已通过的申请"
-// @Failure 500 {object} ErrorResponse "服务器内部错误"
-// @Router /v1/merchants/applications [post]
-// @Security BearerAuth
-func (server *Server) createMerchantApplication(ctx *gin.Context) {
-	var req createMerchantApplicationRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
-		return
-	}
-
-	// 获取认证信息
-	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-
-	// 检查用户是否已有待审核或已通过的申请
-	existingApp, err := server.store.GetUserMerchantApplication(ctx, authPayload.UserID)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-	if existingApp.ID != 0 && (existingApp.Status == "pending" || existingApp.Status == "approved") {
-		ctx.JSON(http.StatusConflict, errorResponse(fmt.Errorf("you already have a %s application", existingApp.Status)))
-		return
-	}
-
-	// 可选功能：OCR识别营业执照和身份证
-	// 当前版本需要用户手动填写信息，可通过 server.wechatClient.OCRBusinessLicense 集成
-	// 示例: licenseOCR, err := server.wechatClient.OCRBusinessLicense(ctx, req.BusinessLicenseImageURL)
-
-	// 解析经纬度
-	longitude, err := parseNumericString(*req.Longitude)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("invalid longitude: %w", err)))
-		return
-	}
-	latitude, err := parseNumericString(*req.Latitude)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("invalid latitude: %w", err)))
-		return
-	}
-
-	// 验证经纬度范围
-	lonFloat, _ := strconv.ParseFloat(*req.Longitude, 64)
-	latFloat, _ := strconv.ParseFloat(*req.Latitude, 64)
-	if err := validateCoordinates(lonFloat, latFloat); err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
-		return
-	}
-
-	// 创建申请记录
-	arg := db.CreateMerchantApplicationParams{
-		UserID:                  authPayload.UserID,
-		MerchantName:            req.MerchantName,
-		BusinessLicenseNumber:   req.BusinessLicenseNumber,
-		BusinessLicenseImageUrl: normalizeImageURLForStorage(req.BusinessLicenseImageURL),
-		LegalPersonName:         req.LegalPersonName,
-		LegalPersonIDNumber:     req.LegalPersonIDNumber,
-		LegalPersonIDFrontUrl:   normalizeImageURLForStorage(req.LegalPersonIDFrontURL),
-		LegalPersonIDBackUrl:    normalizeImageURLForStorage(req.LegalPersonIDBackURL),
-		ContactPhone:            req.ContactPhone,
-		BusinessAddress:         req.BusinessAddress,
-		Longitude:               longitude,
-		Latitude:                latitude,
-		RegionID:                pgtype.Int8{Int64: req.RegionID, Valid: true},
-	}
-
-	if req.BusinessScope != "" {
-		arg.BusinessScope = pgtype.Text{
-			String: req.BusinessScope,
-			Valid:  true,
-		}
-	}
-
-	application, err := server.store.CreateMerchantApplication(ctx, arg)
-	if err != nil {
-		// 检查是否是唯一约束冲突
-		if db.ErrorCode(err) == db.UniqueViolation {
-			ctx.JSON(http.StatusConflict, errorResponse(fmt.Errorf("business license already registered")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	ctx.JSON(http.StatusOK, newMerchantApplicationResponse(application))
-}
-
-// getUserMerchantApplication godoc
-// @Summary 获取当前用户的商户入驻申请
-// @Description 获取当前用户提交的商户入驻申请状态和详情
-// @Tags 商户
-// @Accept json
-// @Produce json
-// @Success 200 {object} merchantApplicationResponse "申请详情"
-// @Failure 401 {object} ErrorResponse "未授权"
-// @Failure 404 {object} ErrorResponse "未找到申请记录"
-// @Failure 500 {object} ErrorResponse "服务器内部错误"
-// @Router /v1/merchants/applications/me [get]
-// @Security BearerAuth
-func (server *Server) getUserMerchantApplication(ctx *gin.Context) {
-	// 获取认证信息
-	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-
-	application, err := server.store.GetUserMerchantApplication(ctx, authPayload.UserID)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("no application found")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	ctx.JSON(http.StatusOK, newMerchantApplicationResponse(application))
-}
-
-// ==================== 商户审核（管理员）====================
-
-type listMerchantApplicationsRequest struct {
-	Status   string `form:"status" binding:"omitempty,oneof=pending approved rejected"`
-	PageID   int32  `form:"page_id" binding:"required,min=1"`
-	PageSize int32  `form:"page_size" binding:"required,min=5,max=50"`
-}
-
-// listMerchantApplications godoc
-// @Summary 获取商户入驻申请列表（管理员）
-// @Description 分页获取商户入驻申请列表，仅管理员可用
-// @Tags 商户管理
-// @Accept json
-// @Produce json
-// @Param status query string false "按状态筛选" Enums(pending, approved, rejected)
-// @Param page_id query int true "页码" minimum(1)
-// @Param page_size query int true "每页数量" minimum(5) maximum(50)
-// @Success 200 {array} merchantApplicationResponse "申请列表"
-// @Failure 400 {object} ErrorResponse "请求参数错误"
-// @Failure 401 {object} ErrorResponse "未授权"
-// @Failure 403 {object} ErrorResponse "无管理员权限"
-// @Failure 500 {object} ErrorResponse "服务器内部错误"
-// @Router /v1/admin/merchants/applications [get]
-// @Security BearerAuth
-func (server *Server) listMerchantApplications(ctx *gin.Context) {
-	var req listMerchantApplicationsRequest
-	if err := ctx.ShouldBindQuery(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
-		return
-	}
-
-	// 检查管理员权限
-	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	_, err := server.store.GetUserRoleByType(ctx, db.GetUserRoleByTypeParams{
-		UserID: authPayload.UserID,
-		Role:   "admin",
-	})
-	if err != nil {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("admin role required")))
-		return
-	}
-
-	var applications []db.MerchantApplication
-
-	if req.Status != "" {
-		arg := db.ListMerchantApplicationsParams{
-			Status: req.Status,
-			Limit:  req.PageSize,
-			Offset: (req.PageID - 1) * req.PageSize,
-		}
-		applications, err = server.store.ListMerchantApplications(ctx, arg)
-	} else {
-		arg := db.ListAllMerchantApplicationsParams{
-			Limit:  req.PageSize,
-			Offset: (req.PageID - 1) * req.PageSize,
-		}
-		applications, err = server.store.ListAllMerchantApplications(ctx, arg)
-	}
-
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 转换为响应格式
-	responses := make([]merchantApplicationResponse, len(applications))
-	for i, app := range applications {
-		responses[i] = newMerchantApplicationResponse(app)
-	}
-
-	ctx.JSON(http.StatusOK, responses)
-}
-
-type reviewMerchantApplicationRequest struct {
-	ApplicationID int64  `json:"application_id" binding:"required,min=1"`
-	Approve       *bool  `json:"approve" binding:"required"`
-	RejectReason  string `json:"reject_reason" binding:"omitempty,max=500"`
-}
-
-// reviewMerchantApplication godoc
-// @Summary 审核商户入驻申请（管理员）
-// @Description 通过或拒绝商户入驻申请，仅管理员可用
-// @Tags 商户管理
-// @Accept json
-// @Produce json
-// @Param request body reviewMerchantApplicationRequest true "审核决定"
-// @Success 200 {object} merchantApplicationResponse "审核结果"
-// @Failure 400 {object} ErrorResponse "请求参数错误"
-// @Failure 401 {object} ErrorResponse "未授权"
-// @Failure 403 {object} ErrorResponse "无管理员权限"
-// @Failure 404 {object} ErrorResponse "申请不存在"
-// @Failure 500 {object} ErrorResponse "服务器内部错误"
-// @Router /v1/admin/merchants/applications/review [post]
-// @Security BearerAuth
-func (server *Server) reviewMerchantApplication(ctx *gin.Context) {
-	var req reviewMerchantApplicationRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
-		return
-	}
-
-	// 获取认证信息
-	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-
-	// 检查管理员权限
-	_, err := server.store.GetUserRoleByType(ctx, db.GetUserRoleByTypeParams{
-		UserID: authPayload.UserID,
-		Role:   "admin",
-	})
-	if err != nil {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("admin role required")))
-		return
-	}
-
-	// 获取申请详情
-	application, err := server.store.GetMerchantApplication(ctx, req.ApplicationID)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("application not found")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 检查申请状态
-	if application.Status != "pending" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("application already %s", application.Status)))
-		return
-	}
-
-	// 更新申请状态
-	now := time.Now()
-	status := "rejected"
-	if *req.Approve {
-		status = "approved"
-	}
-
-	var rejectReason pgtype.Text
-	if !*req.Approve && req.RejectReason != "" {
-		rejectReason = pgtype.Text{
-			String: req.RejectReason,
-			Valid:  true,
-		}
-	}
-
-	updatedApp, err := server.store.UpdateMerchantApplicationStatus(ctx, db.UpdateMerchantApplicationStatusParams{
-		ID:           req.ApplicationID,
-		Status:       status,
-		RejectReason: rejectReason,
-		ReviewedBy: pgtype.Int8{
-			Int64: authPayload.UserID,
-			Valid: true,
-		},
-		ReviewedAt: pgtype.Timestamptz{
-			Time:  now,
-			Valid: true,
-		},
-	})
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 如果审核通过，创建商户记录
-	if *req.Approve {
-		// 构造application_data JSON（包含所有证照和门店照片）
-		appDataMap := map[string]interface{}{
-			"business_license_number":    application.BusinessLicenseNumber,
-			"legal_person_name":          application.LegalPersonName,
-			"legal_person_id_number":     application.LegalPersonIDNumber,
-			"business_license_image_url": application.BusinessLicenseImageUrl,
-			"legal_person_id_front_url":  application.LegalPersonIDFrontUrl,
-			"legal_person_id_back_url":   application.LegalPersonIDBackUrl,
-		}
-		// 食品经营许可证
-		if application.FoodPermitUrl.Valid {
-			appDataMap["food_permit_url"] = application.FoodPermitUrl.String
-		}
-		// 门头照（jsonb数组）
-		if len(application.StorefrontImages) > 0 {
-			var storefrontImages []string
-			if json.Unmarshal(application.StorefrontImages, &storefrontImages) == nil {
-				appDataMap["storefront_images"] = storefrontImages
-			}
-		}
-		// 环境照（jsonb数组）
-		if len(application.EnvironmentImages) > 0 {
-			var environmentImages []string
-			if json.Unmarshal(application.EnvironmentImages, &environmentImages) == nil {
-				appDataMap["environment_images"] = environmentImages
-			}
-		}
-		appData, err := json.Marshal(appDataMap)
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-
-		// 创建商户记录，状态为 pending_bindbank（待开户）
-		// 商户需要完成微信支付开户后才能正常营业
-		_, err = server.store.CreateMerchant(ctx, db.CreateMerchantParams{
-			OwnerUserID:     application.UserID,
-			Name:            application.MerchantName,
-			Description:     pgtype.Text{},
-			LogoUrl:         pgtype.Text{},
-			Phone:           application.ContactPhone,
-			Address:         application.BusinessAddress,
-			Latitude:        application.Latitude,  // 从申请记录获取
-			Longitude:       application.Longitude, // 从申请记录获取
-			Status:          "pending_bindbank",    // 待开户
-			ApplicationData: appData,
-			RegionID:        application.RegionID.Int64, // 从申请记录获取区域ID
-		})
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-	}
-
-	ctx.JSON(http.StatusOK, newMerchantApplicationResponse(updatedApp))
+	ctx.JSON(http.StatusGone, errorResponse(errors.New(
+		"此接口已停用。请改用媒体上传接口：POST /v1/media/upload-sessions",
+	)))
 }
 
 // ==================== 商户管理 ====================
@@ -588,7 +111,8 @@ type merchantResponse struct {
 	RegionID    int64     `json:"region_id"`
 	Name        string    `json:"name"`
 	Description *string   `json:"description,omitempty"`
-	LogoURL     *string   `json:"logo_url,omitempty"`
+	LogoAssetID *int64    `json:"-"`
+	LogoURL     string    `json:"logo_url,omitempty"`
 	Phone       string    `json:"phone"`
 	Address     string    `json:"address"`
 	Latitude    *string   `json:"latitude,omitempty"`
@@ -596,6 +120,8 @@ type merchantResponse struct {
 	Status      string    `json:"status"`
 	IsOpen      bool      `json:"is_open"`
 	Version     int32     `json:"version"`
+	GroupID     *int64    `json:"group_id,omitempty"`
+	BrandID     *int64    `json:"brand_id,omitempty"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }
@@ -618,10 +144,7 @@ func newMerchantResponse(merchant db.Merchant) merchantResponse {
 	if merchant.Description.Valid {
 		resp.Description = &merchant.Description.String
 	}
-	if merchant.LogoUrl.Valid {
-		logo := normalizeUploadURLForClient(merchant.LogoUrl.String)
-		resp.LogoURL = &logo
-	}
+	resp.LogoAssetID = int64PtrFromPgInt8(merchant.LogoMediaAssetID)
 	if merchant.Latitude.Valid {
 		lat, _ := parseNumericToFloat(merchant.Latitude)
 		latStr := fmt.Sprintf("%.6f", lat)
@@ -631,6 +154,13 @@ func newMerchantResponse(merchant db.Merchant) merchantResponse {
 		lng, _ := parseNumericToFloat(merchant.Longitude)
 		lngStr := fmt.Sprintf("%.6f", lng)
 		resp.Longitude = &lngStr
+	}
+
+	if merchant.GroupID.Valid {
+		resp.GroupID = &merchant.GroupID.Int64
+	}
+	if merchant.BrandID.Valid {
+		resp.BrandID = &merchant.BrandID.Int64
 	}
 
 	return resp
@@ -652,9 +182,12 @@ func (server *Server) getCurrentMerchant(ctx *gin.Context) {
 	// 获取认证信息
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.resolveMerchantForUser(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if writeMerchantSelectionError(ctx, err) {
+			return
+		}
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -662,7 +195,9 @@ func (server *Server) getCurrentMerchant(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, newMerchantResponse(merchant))
+	resp := newMerchantResponse(merchant)
+	resp.LogoURL = server.publicImageURL(ctx, resp.LogoAssetID, media.VariantCard)
+	ctx.JSON(http.StatusOK, resp)
 }
 
 // listMyMerchants godoc
@@ -680,7 +215,7 @@ func (server *Server) listMyMerchants(ctx *gin.Context) {
 	// 获取认证信息
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-	merchants, err := server.store.ListMerchantsByOwner(ctx, authPayload.UserID)
+	merchants, err := server.listAccessibleMerchants(ctx, authPayload.UserID)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
@@ -692,13 +227,29 @@ func (server *Server) listMyMerchants(ctx *gin.Context) {
 		responses[i] = newMerchantResponse(m)
 	}
 
+	logoAssetIDs := make([]int64, 0, len(responses))
+	for _, r := range responses {
+		if r.LogoAssetID != nil {
+			logoAssetIDs = append(logoAssetIDs, *r.LogoAssetID)
+		}
+	}
+	if len(logoAssetIDs) > 0 {
+		logoURLs := server.batchPublicImageURLs(ctx, logoAssetIDs, media.VariantCard)
+		for i := range responses {
+			if responses[i].LogoAssetID != nil {
+				responses[i].LogoURL = logoURLs[*responses[i].LogoAssetID]
+			}
+		}
+	}
+
 	ctx.JSON(http.StatusOK, responses)
 }
 
 type updateMerchantRequest struct {
 	Name        *string `json:"name" binding:"omitempty,min=2,max=50"`
 	Description *string `json:"description" binding:"omitempty,max=500"`
-	LogoURL     *string `json:"logo_url" binding:"omitempty,max=500"`
+	LogoAssetID *int64  `json:"logo_asset_id" binding:"omitempty,min=1"`
+	ClearLogo   bool    `json:"clear_logo"`
 	Phone       *string `json:"phone" binding:"omitempty,min=11,max=11"`
 	Address     *string `json:"address" binding:"omitempty,min=5,max=200"`
 	Latitude    *string `json:"latitude"`
@@ -732,9 +283,12 @@ func (server *Server) updateCurrentMerchant(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户ID
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.resolveMerchantForUser(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if writeMerchantSelectionError(ctx, err) {
+			return
+		}
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -744,78 +298,185 @@ func (server *Server) updateCurrentMerchant(ctx *gin.Context) {
 
 	// ✅ P1-2: 检查版本号，防止并发更新冲突
 	if merchant.Version != req.Version {
-		ctx.JSON(http.StatusConflict, gin.H{
-			"error":           "merchant has been modified by another request",
-			"current_version": merchant.Version,
-			"your_version":    req.Version,
+		ctx.JSON(http.StatusConflict, merchantVersionConflictResponse{
+			Error:          "merchant has been modified by another request",
+			CurrentVersion: merchant.Version,
+			YourVersion:    req.Version,
 		})
 		return
 	}
 
-	// 构造更新参数
-	arg := db.UpdateMerchantParams{
-		ID:      merchant.ID,
-		Version: req.Version,
+	if req.ClearLogo && req.LogoAssetID != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("clear_logo and logo_asset_id cannot be set together")))
+		return
 	}
 
-	if req.Name != nil {
-		arg.Name = pgtype.Text{String: *req.Name, Valid: true}
-	}
-	if req.Description != nil {
-		arg.Description = pgtype.Text{String: *req.Description, Valid: true}
-	}
-	if req.LogoURL != nil {
-		arg.LogoUrl = pgtype.Text{String: normalizeImageURLForStorage(*req.LogoURL), Valid: true}
-	}
-	if req.Phone != nil {
-		arg.Phone = pgtype.Text{String: *req.Phone, Valid: true}
-	}
-	if req.Address != nil {
-		arg.Address = pgtype.Text{String: *req.Address, Valid: true}
-	}
-	if req.Latitude != nil {
-		// 将 string 转换为 pgtype.Numeric
-		if lat, err := parseNumericString(*req.Latitude); err == nil {
-			latFloat, _ := strconv.ParseFloat(*req.Latitude, 64)
-			if latFloat < minLatitude || latFloat > maxLatitude {
-				ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("纬度必须在 %.1f 到 %.1f 之间", minLatitude, maxLatitude)))
-				return
-			}
-			arg.Latitude = lat
-		} else {
-			ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("invalid latitude: %w", err)))
-			return
+	var updatedMerchant db.Merchant
+	if req.ClearLogo {
+		updatedMerchant, err = server.store.ClearMerchantLogo(ctx, db.ClearMerchantLogoParams{
+			ID:      merchant.ID,
+			Version: req.Version,
+		})
+	} else {
+		// 构造更新参数
+		arg := db.UpdateMerchantParams{
+			ID:      merchant.ID,
+			Version: req.Version,
 		}
-	}
-	if req.Longitude != nil {
-		// 将 string 转换为 pgtype.Numeric
-		if lng, err := parseNumericString(*req.Longitude); err == nil {
-			lngFloat, _ := strconv.ParseFloat(*req.Longitude, 64)
-			if lngFloat < minLongitude || lngFloat > maxLongitude {
-				ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("经度必须在 %.1f 到 %.1f 之间", minLongitude, maxLongitude)))
-				return
-			}
-			arg.Longitude = lng
-		} else {
-			ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("invalid longitude: %w", err)))
-			return
-		}
-	}
 
-	updatedMerchant, err := server.store.UpdateMerchant(ctx, arg)
+		if req.Name != nil {
+			arg.Name = pgtype.Text{String: *req.Name, Valid: true}
+		}
+		if req.Description != nil {
+			arg.Description = pgtype.Text{String: *req.Description, Valid: true}
+		}
+		if req.LogoAssetID != nil {
+			arg.LogoMediaAssetID = pgtype.Int8{Int64: *req.LogoAssetID, Valid: true}
+		}
+		if req.Phone != nil {
+			arg.Phone = pgtype.Text{String: *req.Phone, Valid: true}
+		}
+		if req.Address != nil {
+			arg.Address = pgtype.Text{String: *req.Address, Valid: true}
+		}
+		if req.Latitude != nil {
+			// 将 string 转换为 pgtype.Numeric
+			if lat, err := parseNumericString(*req.Latitude); err == nil {
+				latFloat, _ := strconv.ParseFloat(*req.Latitude, 64)
+				if latFloat < minLatitude || latFloat > maxLatitude {
+					ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("latitude must be between %.1f and %.1f", minLatitude, maxLatitude)))
+					return
+				}
+				arg.Latitude = lat
+			} else {
+				ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("invalid latitude: %w", err)))
+				return
+			}
+		}
+		if req.Longitude != nil {
+			// 将 string 转换为 pgtype.Numeric
+			if lng, err := parseNumericString(*req.Longitude); err == nil {
+				lngFloat, _ := strconv.ParseFloat(*req.Longitude, 64)
+				if lngFloat < minLongitude || lngFloat > maxLongitude {
+					ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("longitude must be between %.1f and %.1f", minLongitude, maxLongitude)))
+					return
+				}
+				arg.Longitude = lng
+			} else {
+				ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("invalid longitude: %w", err)))
+				return
+			}
+		}
+
+		updatedMerchant, err = server.store.UpdateMerchant(ctx, arg)
+	}
 	if err != nil {
 		// 检查是否是乐观锁冲突（没有返回结果 = version不匹配）
-		if errors.Is(err, pgx.ErrNoRows) {
-			ctx.JSON(http.StatusConflict, gin.H{
-				"error": "merchant has been modified, please refresh and try again",
-			})
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusConflict, errorResponse(errors.New("merchant has been modified, please refresh and try again")))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	ctx.JSON(http.StatusOK, newMerchantResponse(updatedMerchant))
+	resp := newMerchantResponse(updatedMerchant)
+	resp.LogoURL = server.publicImageURL(ctx, resp.LogoAssetID, media.VariantCard)
+	ctx.JSON(http.StatusOK, resp)
+}
+
+// ==================== 商户门头照/环境照更新（已通过审核后） ====================
+
+type updateCurrentMerchantShopImagesRequest struct {
+	StorefrontImages  []string `json:"storefront_images"`
+	EnvironmentImages []string `json:"environment_images"`
+}
+
+type updateCurrentMerchantShopImagesResponse struct {
+	StorefrontImages  []string `json:"storefront_images"`
+	EnvironmentImages []string `json:"environment_images"`
+}
+
+// updateCurrentMerchantShopImages godoc
+// @Summary 更新商户门头照和环境照
+// @Description 允许已审核通过的商户更新店铺外观图片（门头照最多3张，环境照最多5张）
+// @Tags 商户
+// @Accept json
+// @Produce json
+// @Param request body updateCurrentMerchantShopImagesRequest true "图片URL数组"
+// @Success 200 {object} updateCurrentMerchantShopImagesResponse "更新成功"
+// @Failure 400 {object} ErrorResponse "参数错误"
+// @Failure 401 {object} ErrorResponse "未授权"
+// @Failure 404 {object} ErrorResponse "申请记录不存在"
+// @Failure 500 {object} ErrorResponse "服务器内部错误"
+// @Router /v1/merchants/me/shop-images [patch]
+// @Security BearerAuth
+func (server *Server) updateCurrentMerchantShopImages(ctx *gin.Context) {
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
+	var req updateCurrentMerchantShopImagesRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+	if len(req.StorefrontImages) > 3 {
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrTooManyStorefrontPhotos))
+		return
+	}
+	if len(req.EnvironmentImages) > 5 {
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrTooManyAmbientPhotos))
+		return
+	}
+
+	arg := db.UpdateMerchantApplicationShopImagesParams{
+		UserID: authPayload.UserID,
+	}
+	if req.StorefrontImages != nil {
+		for i, img := range req.StorefrontImages {
+			req.StorefrontImages[i] = normalizeImageURLForStorage(img)
+		}
+		jsonData, _ := json.Marshal(req.StorefrontImages)
+		arg.StorefrontImages = jsonData
+	}
+	if req.EnvironmentImages != nil {
+		for i, img := range req.EnvironmentImages {
+			req.EnvironmentImages[i] = normalizeImageURLForStorage(img)
+		}
+		jsonData, _ := json.Marshal(req.EnvironmentImages)
+		arg.EnvironmentImages = jsonData
+	}
+
+	updatedApp, err := server.store.UpdateMerchantApplicationShopImages(ctx, arg)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrApplicationNotFound))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	resp := updateCurrentMerchantShopImagesResponse{}
+	if len(updatedApp.StorefrontImages) > 0 {
+		var images []string
+		if json.Unmarshal(updatedApp.StorefrontImages, &images) == nil {
+			for i, img := range images {
+				images[i] = server.resolvePublicUploadURLForClient(img)
+			}
+			resp.StorefrontImages = images
+		}
+	}
+	if len(updatedApp.EnvironmentImages) > 0 {
+		var images []string
+		if json.Unmarshal(updatedApp.EnvironmentImages, &images) == nil {
+			for i, img := range images {
+				images[i] = server.resolvePublicUploadURLForClient(img)
+			}
+			resp.EnvironmentImages = images
+		}
+	}
+
+	ctx.JSON(http.StatusOK, resp)
 }
 
 // ==================== 商户营业状态管理 ====================
@@ -856,9 +517,12 @@ func (server *Server) updateMerchantOpenStatus(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.resolveMerchantForUser(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if writeMerchantSelectionError(ctx, err) {
+			return
+		}
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
 		}
@@ -869,12 +533,29 @@ func (server *Server) updateMerchantOpenStatus(ctx *gin.Context) {
 	// 检查商户是否被暂停（食安熔断）
 	merchantProfile, err := server.store.GetMerchantProfile(ctx, merchant.ID)
 	if err == nil && merchantProfile.IsSuspended {
-		ctx.JSON(http.StatusForbidden, gin.H{
-			"error":          "merchant is suspended due to food safety issues",
-			"suspend_reason": merchantProfile.SuspendReason.String,
-			"suspend_until":  merchantProfile.SuspendUntil.Time,
+		ctx.JSON(http.StatusForbidden, merchantSuspendedResponse{
+			Error:         "merchant is suspended due to food safety issues",
+			SuspendReason: merchantProfile.SuspendReason.String,
+			SuspendUntil:  merchantProfile.SuspendUntil.Time,
 		})
 		return
+	}
+
+	if *req.IsOpen {
+		paymentConfig, err := server.store.GetMerchantPaymentConfig(ctx, merchant.ID)
+		if err != nil {
+			if isNotFoundError(err) {
+				ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("尚未开通收付通账户，请先完成进件流程")))
+				return
+			}
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+
+		if paymentConfig.SubMchID == "" || paymentConfig.Status != "active" {
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("收付通账户未激活，请先完成进件签约后再开业")))
+			return
+		}
 	}
 
 	// 解析自动打烊时间
@@ -939,9 +620,12 @@ func (server *Server) getMerchantOpenStatus(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.resolveMerchantForUser(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if writeMerchantSelectionError(ctx, err) {
+			return
+		}
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
 		}
@@ -978,27 +662,31 @@ func (server *Server) getMerchantOpenStatus(ctx *gin.Context) {
 // ==================== 商户营业时间管理 ====================
 
 type businessHourItem struct {
-	DayOfWeek int32  `json:"day_of_week" binding:"min=0,max=6"`   // 0=周日, 1=周一, ..., 6=周六
-	OpenTime  string `json:"open_time" binding:"required,len=5"`  // HH:MM 格式
-	CloseTime string `json:"close_time" binding:"required,len=5"` // HH:MM 格式
-	IsClosed  bool   `json:"is_closed"`                           // 是否休息
+	DayOfWeek   int32   `json:"day_of_week" binding:"min=0,max=6"`   // 0=周日, 1=周一, ..., 6=周六
+	OpenTime    string  `json:"open_time" binding:"required,len=5"`  // HH:MM 格式
+	CloseTime   string  `json:"close_time" binding:"required,len=5"` // HH:MM 格式
+	IsClosed    bool    `json:"is_closed"`                           // 是否休息
+	SpecialDate *string `json:"special_date,omitempty"`              // YYYY-MM-DD 格式
 }
 
 type setBusinessHoursRequest struct {
-	Hours []businessHourItem `json:"hours" binding:"required,min=1,max=7,dive"` // 一周的营业时间
+	Hours                   []businessHourItem `json:"hours" binding:"required,min=0,max=50,dive"` // 营业时间
+	AutoOpenByBusinessHours bool               `json:"auto_open_by_business_hours"`
 }
 
 type businessHourResponse struct {
-	ID        int64  `json:"id"`
-	DayOfWeek int32  `json:"day_of_week"`
-	DayName   string `json:"day_name"`
-	OpenTime  string `json:"open_time"`
-	CloseTime string `json:"close_time"`
-	IsClosed  bool   `json:"is_closed"`
+	ID          int64  `json:"id"`
+	DayOfWeek   int32  `json:"day_of_week"`
+	DayName     string `json:"day_name"`
+	OpenTime    string `json:"open_time"`
+	CloseTime   string `json:"close_time"`
+	IsClosed    bool   `json:"is_closed"`
+	SpecialDate string `json:"special_date,omitempty"` // YYYY-MM-DD
 }
 
 type businessHoursListResponse struct {
-	Hours []businessHourResponse `json:"hours"`
+	Hours                   []businessHourResponse `json:"hours"`
+	AutoOpenByBusinessHours bool                   `json:"auto_open_by_business_hours"`
 }
 
 // getDayName 获取星期名称
@@ -1012,6 +700,9 @@ func getDayName(dayOfWeek int32) string {
 
 // parseTimeString 解析 HH:MM 格式的时间字符串
 func parseTimeString(s string) (pgtype.Time, error) {
+	if s == "" {
+		return pgtype.Time{}, nil
+	}
 	t, err := time.Parse("15:04", s)
 	if err != nil {
 		return pgtype.Time{}, fmt.Errorf("invalid time format, expected HH:MM")
@@ -1021,6 +712,21 @@ func parseTimeString(s string) (pgtype.Time, error) {
 	return pgtype.Time{
 		Microseconds: microseconds,
 		Valid:        true,
+	}, nil
+}
+
+// parseDateString 解析 YYYY-MM-DD 格式的日期字符串
+func parseDateString(s string) (pgtype.Date, error) {
+	if s == "" {
+		return pgtype.Date{Valid: false}, nil
+	}
+	t, err := time.Parse("2006-01-02", s)
+	if err != nil {
+		return pgtype.Date{Valid: false}, fmt.Errorf("invalid date format, expected YYYY-MM-DD")
+	}
+	return pgtype.Date{
+		Time:  t,
+		Valid: true,
 	}, nil
 }
 
@@ -1061,9 +767,12 @@ func (server *Server) setMerchantBusinessHours(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.resolveMerchantForUser(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if writeMerchantSelectionError(ctx, err) {
+			return
+		}
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
 		}
@@ -1071,41 +780,34 @@ func (server *Server) setMerchantBusinessHours(ctx *gin.Context) {
 		return
 	}
 
-	// 验证没有重复的星期
-	daySet := make(map[int32]bool)
-	for _, h := range req.Hours {
-		if daySet[h.DayOfWeek] {
-			ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("duplicate day_of_week: %d", h.DayOfWeek)))
-			return
-		}
-		daySet[h.DayOfWeek] = true
-	}
+	// 允许同一天有多个时段（移除重复星期校验）
+	// 但特殊日期如果设置了，DayOfWeek 应该与日期一致
 
 	// 预先解析所有时间，避免事务中途失败
 	hoursInput := make([]db.BusinessHourInput, 0, len(req.Hours))
 	for _, h := range req.Hours {
-		openTime, err := parseTimeString(h.OpenTime)
+		openTime, _ := parseTimeString(h.OpenTime)
+		closeTime, _ := parseTimeString(h.CloseTime)
+		specialDate, err := parseDateString(util.ValueOrDefault(h.SpecialDate, ""))
 		if err != nil {
-			ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("invalid open_time for day %d: %v", h.DayOfWeek, err)))
+			ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("invalid special_date: %v", err)))
 			return
 		}
-		closeTime, err := parseTimeString(h.CloseTime)
-		if err != nil {
-			ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("invalid close_time for day %d: %v", h.DayOfWeek, err)))
-			return
-		}
+
 		hoursInput = append(hoursInput, db.BusinessHourInput{
-			DayOfWeek: h.DayOfWeek,
-			OpenTime:  openTime,
-			CloseTime: closeTime,
-			IsClosed:  h.IsClosed,
+			DayOfWeek:   h.DayOfWeek,
+			OpenTime:    openTime,
+			CloseTime:   closeTime,
+			IsClosed:    h.IsClosed,
+			SpecialDate: specialDate,
 		})
 	}
 
 	// 使用事务设置营业时间（原子操作）
 	result, err := server.store.SetBusinessHoursTx(ctx, db.SetBusinessHoursTxParams{
-		MerchantID: merchant.ID,
-		Hours:      hoursInput,
+		MerchantID:              merchant.ID,
+		Hours:                   hoursInput,
+		AutoOpenByBusinessHours: req.AutoOpenByBusinessHours,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -1115,17 +817,25 @@ func (server *Server) setMerchantBusinessHours(ctx *gin.Context) {
 	// 构建响应
 	var results []businessHourResponse
 	for _, bh := range result.Hours {
+		dateStr := ""
+		if bh.SpecialDate.Valid {
+			dateStr = bh.SpecialDate.Time.Format("2006-01-02")
+		}
 		results = append(results, businessHourResponse{
-			ID:        bh.ID,
-			DayOfWeek: bh.DayOfWeek,
-			DayName:   getDayName(bh.DayOfWeek),
-			OpenTime:  formatTimeFromPgtype(bh.OpenTime),
-			CloseTime: formatTimeFromPgtype(bh.CloseTime),
-			IsClosed:  bh.IsClosed,
+			ID:          bh.ID,
+			DayOfWeek:   bh.DayOfWeek,
+			DayName:     getDayName(bh.DayOfWeek),
+			OpenTime:    formatTimeFromPgtype(bh.OpenTime),
+			CloseTime:   formatTimeFromPgtype(bh.CloseTime),
+			IsClosed:    bh.IsClosed,
+			SpecialDate: dateStr,
 		})
 	}
 
-	ctx.JSON(http.StatusOK, businessHoursListResponse{Hours: results})
+	ctx.JSON(http.StatusOK, businessHoursListResponse{
+		Hours:                   results,
+		AutoOpenByBusinessHours: result.AutoOpenByBusinessHours,
+	})
 }
 
 // getMerchantBusinessHours godoc
@@ -1144,9 +854,12 @@ func (server *Server) getMerchantBusinessHours(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.resolveMerchantForUser(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if writeMerchantSelectionError(ctx, err) {
+			return
+		}
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
 		}
@@ -1154,26 +867,39 @@ func (server *Server) getMerchantBusinessHours(ctx *gin.Context) {
 		return
 	}
 
-	// 获取营业时间列表
-	hours, err := server.store.ListMerchantBusinessHours(ctx, merchant.ID)
+	// 获取营业时间列表 (包括特殊日期)
+	hours, err := server.store.ListMerchantBusinessHoursAll(ctx, merchant.ID)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
+		// 如果 ListMerchantBusinessHoursAll 不存在，退而求其次
+		hours, err = server.store.ListMerchantBusinessHours(ctx, merchant.ID)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
 	}
 
 	var results []businessHourResponse
 	for _, h := range hours {
+		dateStr := ""
+		if h.SpecialDate.Valid {
+			dateStr = h.SpecialDate.Time.Format("2006-01-02")
+		}
+
 		results = append(results, businessHourResponse{
-			ID:        h.ID,
-			DayOfWeek: h.DayOfWeek,
-			DayName:   getDayName(h.DayOfWeek),
-			OpenTime:  formatTimeFromPgtype(h.OpenTime),
-			CloseTime: formatTimeFromPgtype(h.CloseTime),
-			IsClosed:  h.IsClosed,
+			ID:          h.ID,
+			DayOfWeek:   h.DayOfWeek,
+			DayName:     getDayName(h.DayOfWeek),
+			OpenTime:    formatTimeFromPgtype(h.OpenTime),
+			CloseTime:   formatTimeFromPgtype(h.CloseTime),
+			IsClosed:    h.IsClosed,
+			SpecialDate: dateStr,
 		})
 	}
 
-	ctx.JSON(http.StatusOK, businessHoursListResponse{Hours: results})
+	ctx.JSON(http.StatusOK, businessHoursListResponse{
+		Hours:                   results,
+		AutoOpenByBusinessHours: merchant.AutoOpenByBusinessHours,
+	})
 }
 
 // ==================== 餐厅优惠活动 API ====================
@@ -1192,12 +918,14 @@ func (server *Server) getMerchantBusinessHours(ctx *gin.Context) {
 // 下方 getMerchantPromotions 是聚合展示接口，用于 C 端用户查看商户所有优惠
 
 type promotionItem struct {
-	Type        string `json:"type"`        // delivery_fee_return, discount, voucher
-	Title       string `json:"title"`       // 优惠标题
-	Description string `json:"description"` // 优惠描述
-	MinAmount   int64  `json:"min_amount"`  // 起点金额（分）
-	Value       int64  `json:"value"`       // 优惠金额或比例
-	ValidUntil  string `json:"valid_until"` // 有效期
+	Type        string `json:"type"`         // delivery_fee_return, discount, voucher, recharge
+	Title       string `json:"title"`        // 优惠标题
+	Description string `json:"description"`  // 优惠描述
+	MinAmount   int64  `json:"min_amount"`   // 起点金额（分）
+	Value       int64  `json:"value"`        // 优惠金额或比例
+	BonusAmount int64  `json:"bonus_amount"` // 赠送金额(充值活动用)
+	ValidUntil  string `json:"valid_until"`  // 有效期
+	RuleID      int64  `json:"rule_id"`      // 规则ID（充值活动用）
 }
 
 type merchantPromotionsResponse struct {
@@ -1205,11 +933,12 @@ type merchantPromotionsResponse struct {
 	DeliveryFeeRules []promotionItem `json:"delivery_fee_rules"` // 满返运费
 	DiscountRules    []promotionItem `json:"discount_rules"`     // 满减活动
 	Vouchers         []promotionItem `json:"vouchers"`           // 可领优惠券
+	RechargeRules    []promotionItem `json:"recharge_rules"`     // 充值活动
 }
 
 // getMerchantPromotions godoc
 // @Summary 获取商户优惠活动
-// @Description 获取商户所有活跃的优惠活动（满返运费、满减、可领优惠券）
+// @Description 获取商户所有活跃的优惠活动（满返运费、满减、可领优惠券、充值活动）
 // @Tags 商户
 // @Accept json
 // @Produce json
@@ -1229,7 +958,7 @@ func (server *Server) getMerchantPromotions(ctx *gin.Context) {
 	// 检查商户是否存在
 	_, err = server.store.GetMerchant(ctx, merchantID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -1242,18 +971,20 @@ func (server *Server) getMerchantPromotions(ctx *gin.Context) {
 		DeliveryFeeRules: []promotionItem{},
 		DiscountRules:    []promotionItem{},
 		Vouchers:         []promotionItem{},
+		RechargeRules:    []promotionItem{},
 	}
 
 	// 获取满返运费规则
 	deliveryPromos, err := server.store.ListActiveDeliveryPromotionsByMerchant(ctx, merchantID)
 	if err == nil {
 		for _, promo := range deliveryPromos {
+			minAmountYuan := fenToYuanString(promo.MinOrderAmount, 0)
 			response.DeliveryFeeRules = append(response.DeliveryFeeRules, promotionItem{
 				Type:        "delivery_fee_return",
-				Title:       fmt.Sprintf("满%d返运费", promo.MinOrderAmount/100),
-				Description: fmt.Sprintf("订单满%d元，返还运费", promo.MinOrderAmount/100),
+				Title:       fmt.Sprintf("满%s返运费", minAmountYuan),
+				Description: fmt.Sprintf("订单满%s元，返还运费", minAmountYuan),
 				MinAmount:   promo.MinOrderAmount,
-				Value:       0, // 全额返还
+				Value:       promo.DiscountAmount, // 实际返还金额
 				ValidUntil:  promo.ValidUntil.Format("2006-01-02"),
 			})
 		}
@@ -1263,10 +994,12 @@ func (server *Server) getMerchantPromotions(ctx *gin.Context) {
 	discounts, err := server.store.ListActiveDiscountRules(ctx, merchantID)
 	if err == nil {
 		for _, d := range discounts {
+			minAmountYuan := fenToYuanString(d.MinOrderAmount, 0)
+			discountYuan := fenToYuanString(d.DiscountAmount, 0)
 			response.DiscountRules = append(response.DiscountRules, promotionItem{
 				Type:        "discount",
-				Title:       fmt.Sprintf("满%d减%d", d.MinOrderAmount/100, d.DiscountAmount/100),
-				Description: fmt.Sprintf("订单满%d元，立减%d元", d.MinOrderAmount/100, d.DiscountAmount/100),
+				Title:       fmt.Sprintf("满%s减%s", minAmountYuan, discountYuan),
+				Description: fmt.Sprintf("订单满%s元，立减%s元", minAmountYuan, discountYuan),
 				MinAmount:   d.MinOrderAmount,
 				Value:       d.DiscountAmount,
 				ValidUntil:  d.ValidUntil.Format("2006-01-02"),
@@ -1284,15 +1017,39 @@ func (server *Server) getMerchantPromotions(ctx *gin.Context) {
 		for _, v := range vouchers {
 			remaining := v.TotalQuantity - v.ClaimedQuantity
 			if remaining > 0 {
+				minAmountYuan := fenToYuanString(v.MinOrderAmount, 0)
+				voucherAmountYuan := fenToYuanString(v.Amount, 0)
 				response.Vouchers = append(response.Vouchers, promotionItem{
 					Type:        "voucher",
 					Title:       v.Name,
-					Description: fmt.Sprintf("满%d可用，减%d元", v.MinOrderAmount/100, v.Amount/100),
+					Description: fmt.Sprintf("满%s可用，减%s元", minAmountYuan, voucherAmountYuan),
 					MinAmount:   v.MinOrderAmount,
 					Value:       v.Amount,
 					ValidUntil:  v.ValidUntil.Format("2006-01-02"),
+					RuleID:      v.ID, // 用于领券API
 				})
 			}
+		}
+	}
+
+	// 获取充值活动
+	rechargeRules, err := server.store.ListActiveRechargeRules(ctx, merchantID)
+	if err == nil {
+		for _, r := range rechargeRules {
+			total := r.RechargeAmount + r.BonusAmount
+			rechargeYuan := fenToYuanString(r.RechargeAmount, 0)
+			bonusYuan := fenToYuanString(r.BonusAmount, 0)
+			totalYuan := fenToYuanString(total, 0)
+			response.RechargeRules = append(response.RechargeRules, promotionItem{
+				Type:        "recharge",
+				Title:       fmt.Sprintf("充%s送%s", rechargeYuan, bonusYuan),
+				Description: fmt.Sprintf("充值%s元，赠送%s元，到账%s元", rechargeYuan, bonusYuan, totalYuan),
+				MinAmount:   r.RechargeAmount,
+				Value:       r.BonusAmount,
+				BonusAmount: r.BonusAmount,
+				ValidUntil:  r.ValidUntil.Format("2006-01-02"),
+				RuleID:      r.ID,
+			})
 		}
 	}
 
@@ -1311,7 +1068,8 @@ type publicMerchantDetailResponse struct {
 	ID                      int64                     `json:"id"`
 	Name                    string                    `json:"name"`
 	Description             *string                   `json:"description,omitempty"`
-	LogoURL                 *string                   `json:"logo_url,omitempty"`
+	LogoAssetID             *int64                    `json:"-"`
+	LogoURL                 string                    `json:"logo_url,omitempty"`
 	CoverImage              *string                   `json:"cover_image,omitempty"` // 门头照/招牌图
 	Phone                   string                    `json:"phone"`
 	Address                 string                    `json:"address"`
@@ -1319,9 +1077,10 @@ type publicMerchantDetailResponse struct {
 	Longitude               float64                   `json:"longitude"`
 	RegionID                int64                     `json:"region_id"`
 	IsOpen                  bool                      `json:"is_open"`
+	IsOrderingSuspended     bool                      `json:"is_ordering_suspended"`
 	Tags                    []string                  `json:"tags"`                                 // 商户标签（如：快餐、川菜）
+	SystemLabels            []string                  `json:"system_labels,omitempty"`              // 商户系统标签（如：无明厨亮灶）
 	MonthlySales            int32                     `json:"monthly_sales"`                        // 近30天订单量
-	TrustScore              int16                     `json:"trust_score"`                          // 信誉分
 	AvgPrepMinutes          int32                     `json:"avg_prep_minutes"`                     // 平均出餐时间（分钟）
 	BusinessLicenseImageURL *string                   `json:"business_license_image_url,omitempty"` // 营业执照
 	FoodPermitURL           *string                   `json:"food_permit_url,omitempty"`            // 食品经营许可证
@@ -1356,8 +1115,9 @@ type publicDeliveryPromotion struct {
 
 // getPublicMerchantDetail godoc
 // @Summary 获取商户详情（消费者端）
-// @Description 公开接口，获取商户详细信息，无需商户权限
+// @Description 需登录访问（消费者端），获取商户详细信息
 // @Tags 公开接口
+// @Security BearerAuth
 // @Accept json
 // @Produce json
 // @Param id path int true "商户ID"
@@ -1373,10 +1133,14 @@ func (server *Server) getPublicMerchantDetail(ctx *gin.Context) {
 		return
 	}
 
+	// lite=true：Feed 卡片专用，跳过资质图片 presign 和 GetMerchantApplicationDraft，
+	// 只返回促销/出餐时间等首页需要展示的字段，减少不必要的 DB 查询和签名运算。
+	liteMode := ctx.Query("lite") == "true"
+
 	// 获取商户基本信息
 	merchant, err := server.store.GetMerchant(ctx, req.ID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -1405,10 +1169,8 @@ func (server *Server) getPublicMerchantDetail(ctx *gin.Context) {
 	if merchant.Description.Valid {
 		resp.Description = &merchant.Description.String
 	}
-	if merchant.LogoUrl.Valid {
-		logo := normalizeUploadURLForClient(merchant.LogoUrl.String)
-		resp.LogoURL = &logo
-	}
+	resp.LogoAssetID = int64PtrFromPgInt8(merchant.LogoMediaAssetID)
+	resp.LogoURL = server.publicImageURL(ctx, resp.LogoAssetID, media.VariantCard)
 	if merchant.Latitude.Valid {
 		lat, _ := parseNumericToFloat(merchant.Latitude)
 		resp.Latitude = lat
@@ -1418,23 +1180,32 @@ func (server *Server) getPublicMerchantDetail(ctx *gin.Context) {
 		resp.Longitude = lng
 	}
 
-	// 解析 application_data 获取证照信息和门头照
-	if merchant.ApplicationData != nil {
+	// 解析 application_data 获取证照信息（lite 模式跳过）
+	if !liteMode && merchant.ApplicationData != nil {
 		var appData map[string]interface{}
 		if err := json.Unmarshal(merchant.ApplicationData, &appData); err == nil {
-			if licenseURL, ok := appData["business_license_image_url"].(string); ok && licenseURL != "" {
-				normalized := normalizeUploadURLForClient(licenseURL)
-				resp.BusinessLicenseImageURL = &normalized
+			if v, ok := appData["business_license_media_asset_id"].(float64); ok && v > 0 {
+				id := int64(v)
+				url := server.publicImageURL(ctx, &id, media.VariantOriginal)
+				resp.BusinessLicenseImageURL = &url
 			}
-			if permitURL, ok := appData["food_permit_url"].(string); ok && permitURL != "" {
-				normalized := normalizeUploadURLForClient(permitURL)
-				resp.FoodPermitURL = &normalized
+			if v, ok := appData["food_permit_media_asset_id"].(float64); ok && v > 0 {
+				id := int64(v)
+				url := server.publicImageURL(ctx, &id, media.VariantOriginal)
+				resp.FoodPermitURL = &url
 			}
-			// 门头照数组（取第一张作为封面图）
-			if storefrontImages, ok := appData["storefront_images"].([]interface{}); ok && len(storefrontImages) > 0 {
-				if firstImage, ok := storefrontImages[0].(string); ok && firstImage != "" {
-					normalized := normalizeUploadURLForClient(firstImage)
-					resp.CoverImage = &normalized
+		}
+	}
+
+	// 门头照从 merchant_applications 活数据读取（lite 模式跳过额外的 DB 查询）
+	if !liteMode {
+		application, appErr := server.store.GetMerchantApplicationDraft(ctx, merchant.OwnerUserID)
+		if appErr == nil && len(application.StorefrontImages) > 0 {
+			var storefrontImages []string
+			if json.Unmarshal(application.StorefrontImages, &storefrontImages) == nil && len(storefrontImages) > 0 {
+				url := server.resolvePublicUploadURLForClient(storefrontImages[0])
+				if url != "" {
+					resp.CoverImage = &url
 				}
 			}
 		}
@@ -1448,35 +1219,44 @@ func (server *Server) getPublicMerchantDetail(ctx *gin.Context) {
 			resp.Tags[i] = tag.Name
 		}
 	}
+	systemLabels, err := server.store.ListMerchantSystemLabels(ctx, merchant.ID)
+	if err == nil && len(systemLabels) > 0 {
+		resp.SystemLabels = make([]string, len(systemLabels))
+		for i, label := range systemLabels {
+			resp.SystemLabels[i] = label.Name
+		}
+	}
 
-	// 获取商户 profile（订单量、信誉分）
+	// 获取商户 profile（订单量）
 	profile, err := server.store.GetMerchantProfile(ctx, merchant.ID)
 	if err == nil {
 		resp.MonthlySales = profile.CompletedOrders // 使用已完成订单数
-		resp.TrustScore = profile.TrustScore
+		resp.IsOrderingSuspended = profile.IsTakeoutSuspended
 	} else {
 		resp.MonthlySales = 0
-		resp.TrustScore = 850 // 默认信誉分
 	}
 
-	// 获取平均出餐时间
+	// 获取平均出餐时间。
+	// 查询成功但结果为 0 时同样回退默认值，避免前端拿到 0 后不展示。
 	avgPrepMinutes, err := server.store.GetMerchantAvgPrepMinutes(ctx, merchant.ID)
-	if err == nil {
-		resp.AvgPrepMinutes = avgPrepMinutes
+	if err != nil || avgPrepMinutes <= 0 {
+		resp.AvgPrepMinutes = DefaultAvgPrepareTimeMinutes
 	} else {
-		resp.AvgPrepMinutes = 15 // 默认 15 分钟
+		resp.AvgPrepMinutes = avgPrepMinutes
 	}
 
-	// 获取营业时间
-	hours, err := server.store.ListMerchantBusinessHours(ctx, merchant.ID)
-	if err == nil && len(hours) > 0 {
-		resp.BusinessHours = make([]businessHourItem, len(hours))
-		for i, h := range hours {
-			resp.BusinessHours[i] = businessHourItem{
-				DayOfWeek: int32(h.DayOfWeek),
-				OpenTime:  formatTimeForResponse(h.OpenTime),
-				CloseTime: formatTimeForResponse(h.CloseTime),
-				IsClosed:  h.IsClosed,
+	// 获取营业时间（Feed 卡片用不到，lite 模式跳过）
+	if !liteMode {
+		hours, err := server.store.ListMerchantBusinessHours(ctx, merchant.ID)
+		if err == nil && len(hours) > 0 {
+			resp.BusinessHours = make([]businessHourItem, len(hours))
+			for i, h := range hours {
+				resp.BusinessHours[i] = businessHourItem{
+					DayOfWeek: int32(h.DayOfWeek),
+					OpenTime:  formatTimeForResponse(h.OpenTime),
+					CloseTime: formatTimeForResponse(h.CloseTime),
+					IsClosed:  h.IsClosed,
+				}
 			}
 		}
 	}
@@ -1544,17 +1324,19 @@ type publicDishCategoryItem struct {
 }
 
 type publicDishItem struct {
-	ID           int64    `json:"id"`
-	Name         string   `json:"name"`
-	Description  string   `json:"description,omitempty"`
-	Price        int64    `json:"price"`
-	MemberPrice  *int64   `json:"member_price,omitempty"`
-	ImageURL     string   `json:"image_url,omitempty"`
-	CategoryID   int64    `json:"category_id"`
-	CategoryName string   `json:"category_name"`
-	MonthlySales int32    `json:"monthly_sales"`
-	PrepareTime  int16    `json:"prepare_time"`
-	Tags         []string `json:"tags"`
+	ID                  int64                `json:"id"`
+	Name                string               `json:"name"`
+	Description         string               `json:"description,omitempty"`
+	Price               int64                `json:"price"`
+	MemberPrice         *int64               `json:"member_price,omitempty"`
+	ImageAssetID        *int64               `json:"-"`
+	ImageURL            string               `json:"image_url,omitempty"`
+	CategoryID          int64                `json:"category_id"`
+	CategoryName        string               `json:"category_name"`
+	MonthlySales        int32                `json:"monthly_sales"`
+	PrepareTime         int16                `json:"prepare_time"`
+	Tags                []string             `json:"tags"`
+	CustomizationGroups []customizationGroup `json:"customization_groups,omitempty"`
 }
 
 type publicMerchantDishesResponse struct {
@@ -1564,8 +1346,9 @@ type publicMerchantDishesResponse struct {
 
 // getPublicMerchantDishes godoc
 // @Summary 获取商户菜品列表（消费者端）
-// @Description 公开接口，获取商户所有在线菜品及分类
+// @Description 需登录访问（消费者端），获取商户所有在线菜品及分类
 // @Tags 公开接口
+// @Security BearerAuth
 // @Accept json
 // @Produce json
 // @Param id path int true "商户ID"
@@ -1603,9 +1386,7 @@ func (server *Server) getPublicMerchantDishes(ctx *gin.Context) {
 		// 解析标签
 		var tags []string
 		if d.Tags != nil {
-			if tagBytes, ok := d.Tags.([]byte); ok {
-				json.Unmarshal(tagBytes, &tags)
-			}
+			_ = parseJSON(d.Tags, &tags)
 		}
 		if tags == nil {
 			tags = []string{}
@@ -1625,27 +1406,52 @@ func (server *Server) getPublicMerchantDishes(ctx *gin.Context) {
 		}
 
 		dish := publicDishItem{
-			ID:           d.ID,
-			Name:         d.Name,
-			Price:        d.Price,
-			CategoryID:   d.CategoryID,
-			CategoryName: d.CategoryName,
-			MonthlySales: monthlySales,
-			PrepareTime:  d.PrepareTime,
-			Tags:         tags,
+			ID:                  d.ID,
+			Name:                d.Name,
+			Price:               d.Price,
+			CategoryID:          d.CategoryID,
+			CategoryName:        d.CategoryName,
+			MonthlySales:        monthlySales,
+			PrepareTime:         d.PrepareTime,
+			Tags:                tags,
+			CustomizationGroups: []customizationGroup{},
+		}
+
+		if d.CustomizationGroups != nil {
+			_ = parseJSON(d.CustomizationGroups, &dish.CustomizationGroups)
+		}
+		if dish.CustomizationGroups == nil {
+			dish.CustomizationGroups = []customizationGroup{}
 		}
 
 		if d.Description.Valid {
 			dish.Description = d.Description.String
 		}
-		if d.ImageUrl.Valid {
-			dish.ImageURL = normalizeUploadURLForClient(d.ImageUrl.String)
+		if d.ImageMediaAssetID.Valid {
+			v := d.ImageMediaAssetID.Int64
+			dish.ImageAssetID = &v
 		}
 		if d.MemberPrice.Valid {
 			dish.MemberPrice = &d.MemberPrice.Int64
 		}
 
 		dishList = append(dishList, dish)
+	}
+
+	// 批量解析菜品图片 URL
+	dishAssetIDs := make([]int64, 0, len(dishList))
+	for _, d := range dishList {
+		if d.ImageAssetID != nil {
+			dishAssetIDs = append(dishAssetIDs, *d.ImageAssetID)
+		}
+	}
+	if len(dishAssetIDs) > 0 {
+		imgURLs := server.batchPublicImageURLs(ctx, dishAssetIDs, media.VariantCard)
+		for i := range dishList {
+			if dishList[i].ImageAssetID != nil {
+				dishList[i].ImageURL = imgURLs[*dishList[i].ImageAssetID]
+			}
+		}
 	}
 
 	// 构建分类列表
@@ -1672,10 +1478,13 @@ type publicComboItem struct {
 	ID            int64           `json:"id"`
 	Name          string          `json:"name"`
 	Description   string          `json:"description,omitempty"`
+	ImageAssetID  *int64          `json:"-"`
 	ImageURL      string          `json:"image_url,omitempty"`
 	ComboPrice    int64           `json:"combo_price"`
 	OriginalPrice int64           `json:"original_price"`
 	Dishes        []comboDishItem `json:"dishes"`
+	Tags          []string        `json:"tags"`
+	DishImageURLs []string        `json:"dish_image_urls,omitempty"` // 子菜品图片 CDN URL 列表
 }
 
 type publicMerchantCombosResponse struct {
@@ -1684,8 +1493,9 @@ type publicMerchantCombosResponse struct {
 
 // getPublicMerchantCombos godoc
 // @Summary 获取商户套餐列表（消费者端）
-// @Description 公开接口，获取商户所有在线套餐
+// @Description 需登录访问（消费者端），获取商户所有在线套餐
 // @Tags 公开接口
+// @Security BearerAuth
 // @Accept json
 // @Produce json
 // @Param id path int true "商户ID"
@@ -1714,13 +1524,15 @@ func (server *Server) getPublicMerchantCombos(ctx *gin.Context) {
 			ComboPrice:    c.ComboPrice,
 			OriginalPrice: c.OriginalPrice,
 			Dishes:        []comboDishItem{},
+			Tags:          []string{},
 		}
 
 		if c.Description.Valid {
 			combo.Description = c.Description.String
 		}
-		if c.ImageUrl.Valid {
-			combo.ImageURL = normalizeUploadURLForClient(c.ImageUrl.String)
+		if c.ImageMediaAssetID.Valid {
+			v := c.ImageMediaAssetID.Int64
+			combo.ImageAssetID = &v
 		}
 
 		// 解析菜品
@@ -1731,8 +1543,20 @@ func (server *Server) getPublicMerchantCombos(ctx *gin.Context) {
 			}
 		}
 
+		// 解析标签
+		if c.Tags != nil {
+			var tags []string
+			if tagBytes, ok := c.Tags.([]byte); ok {
+				_ = json.Unmarshal(tagBytes, &tags)
+				combo.Tags = tags
+			}
+		}
+
 		comboList = append(comboList, combo)
 	}
+
+	// 批量填充图片
+	server.enrichPublicComboListImages(ctx, comboList)
 
 	ctx.JSON(http.StatusOK, publicMerchantCombosResponse{
 		Combos: comboList,
@@ -1742,15 +1566,16 @@ func (server *Server) getPublicMerchantCombos(ctx *gin.Context) {
 // ==================== 消费者端包间列表 ====================
 
 type publicRoomItem struct {
-	ID           int64    `json:"id"`
-	Name         string   `json:"name"`
-	Capacity     int16    `json:"capacity"`
-	MinimumSpend *int64   `json:"minimum_spend,omitempty"`
-	Description  string   `json:"description,omitempty"`
-	PrimaryImage string   `json:"primary_image,omitempty"` // 统一字段名：包间主图
-	MonthlySales int64    `json:"monthly_sales"`
-	Status       string   `json:"status"`
-	Tags         []string `json:"tags"`
+	ID                  int64    `json:"id"`
+	Name                string   `json:"name"`
+	Capacity            int16    `json:"capacity"`
+	MinimumSpend        *int64   `json:"minimum_spend,omitempty"`
+	Description         string   `json:"description,omitempty"`
+	PrimaryImageAssetID int64    `json:"-"`
+	ImageURL            string   `json:"image_url,omitempty"`
+	MonthlySales        int64    `json:"monthly_sales"`
+	Status              string   `json:"status"`
+	Tags                []string `json:"tags"`
 }
 
 type publicMerchantRoomsResponse struct {
@@ -1759,8 +1584,9 @@ type publicMerchantRoomsResponse struct {
 
 // getPublicMerchantRooms godoc
 // @Summary 获取商户包间列表（消费者端）
-// @Description 公开接口，获取商户所有包间信息，帮助消费者决策
+// @Description 需登录访问（消费者端），获取商户所有包间信息，帮助消费者决策
 // @Tags 公开接口
+// @Security BearerAuth
 // @Accept json
 // @Produce json
 // @Param id path int true "商户ID"
@@ -1798,8 +1624,10 @@ func (server *Server) getPublicMerchantRooms(ctx *gin.Context) {
 		if r.MinimumSpend.Valid {
 			room.MinimumSpend = &r.MinimumSpend.Int64
 		}
-		if r.PrimaryImage != "" {
-			room.PrimaryImage = normalizeUploadURLForClient(r.PrimaryImage)
+		if r.PrimaryImageAssetID != nil {
+			if v, ok := r.PrimaryImageAssetID.(int64); ok {
+				room.PrimaryImageAssetID = v
+			}
 		}
 
 		// 获取包间标签
@@ -1813,7 +1641,93 @@ func (server *Server) getPublicMerchantRooms(ctx *gin.Context) {
 		roomList = append(roomList, room)
 	}
 
+	server.enrichPublicRoomImageURLs(ctx, roomList)
 	ctx.JSON(http.StatusOK, publicMerchantRoomsResponse{
 		Rooms: roomList,
 	})
+}
+
+// getPublicMerchantHasOrdered godoc
+// @Summary 查询当前用户是否曾在该商户成功下单
+// @Tags Merchant
+// @Produce json
+// @Param id path int true "商户ID"
+// @Success 200 {object} map[string]bool "has_ordered"
+// @Failure 400 {object} ErrorResponse "参数错误"
+// @Failure 500 {object} ErrorResponse "服务器错误"
+// @Security BearerAuth
+// @Router /v1/public/merchants/{id}/has-ordered [get]
+func (server *Server) getPublicMerchantHasOrdered(ctx *gin.Context) {
+	var req publicMerchantDetailRequest
+	if err := ctx.ShouldBindUri(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	hasOrdered, err := server.store.HasUserOrderedFromMerchant(ctx, db.HasUserOrderedFromMerchantParams{
+		UserID:     authPayload.UserID,
+		MerchantID: req.ID,
+	})
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, merchantHasOrderedResponse{HasOrdered: hasOrdered})
+}
+
+// enrichPublicComboListImages godoc
+func (server *Server) enrichPublicComboListImages(ctx context.Context, combos []publicComboItem) {
+	if len(combos) == 0 {
+		return
+	}
+
+	comboIDs := make([]int64, 0, len(combos))
+	for _, c := range combos {
+		comboIDs = append(comboIDs, c.ID)
+	}
+
+	// 批量查询成员图片
+	memberImages, err := server.store.GetComboMemberImagesByCombos(ctx, comboIDs)
+	if err != nil {
+		log.Error().Err(err).Msg("enrichPublicComboListImages: failed to get images")
+		return
+	}
+
+	// 按 combo_id 组织成员图片 asset IDs
+	imgMap := make(map[int64][]int64)
+	for _, row := range memberImages {
+		if row.ImageMediaAssetID.Valid {
+			imgMap[row.ComboID] = append(imgMap[row.ComboID], row.ImageMediaAssetID.Int64)
+		}
+	}
+
+	// 收集所有需要解析的 asset ID（套餐自身图 + 成员图）
+	allAssetIDs := make([]int64, 0, len(combos)+len(memberImages))
+	for _, c := range combos {
+		if c.ImageAssetID != nil {
+			allAssetIDs = append(allAssetIDs, *c.ImageAssetID)
+		}
+	}
+	for _, ids := range imgMap {
+		allAssetIDs = append(allAssetIDs, ids...)
+	}
+	imgURLs := server.batchPublicImageURLs(ctx, allAssetIDs, media.VariantCard)
+
+	// 回填
+	for i := range combos {
+		if combos[i].ImageAssetID != nil {
+			combos[i].ImageURL = imgURLs[*combos[i].ImageAssetID]
+		}
+		if imgs, ok := imgMap[combos[i].ID]; ok {
+			urls := make([]string, 0, len(imgs))
+			for _, id := range imgs {
+				if u, ok2 := imgURLs[id]; ok2 {
+					urls = append(urls, u)
+				}
+			}
+			combos[i].DishImageURLs = urls
+		}
+	}
 }

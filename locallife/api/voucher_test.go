@@ -2,7 +2,6 @@ package api
 
 import (
 	"bytes"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -18,6 +17,62 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
+
+func TestBuildVoucherStatusResponse(t *testing.T) {
+	now := time.Now()
+	testCases := []struct {
+		name      string
+		voucher   db.Voucher
+		wantCode  string
+		wantLabel string
+		wantTheme string
+	}{
+		{
+			name:      "Inactive",
+			voucher:   db.Voucher{IsActive: false, ValidFrom: now.Add(-time.Hour), ValidUntil: now.Add(time.Hour), TotalQuantity: 10, ClaimedQuantity: 1},
+			wantCode:  "inactive",
+			wantLabel: "已停用",
+			wantTheme: "default",
+		},
+		{
+			name:      "Expired",
+			voucher:   db.Voucher{IsActive: true, ValidFrom: now.Add(-2 * time.Hour), ValidUntil: now.Add(-time.Hour), TotalQuantity: 10, ClaimedQuantity: 1},
+			wantCode:  "expired",
+			wantLabel: "已过期",
+			wantTheme: "danger",
+		},
+		{
+			name:      "Scheduled",
+			voucher:   db.Voucher{IsActive: true, ValidFrom: now.Add(time.Hour), ValidUntil: now.Add(2 * time.Hour), TotalQuantity: 10, ClaimedQuantity: 1},
+			wantCode:  "scheduled",
+			wantLabel: "未开始",
+			wantTheme: "warning",
+		},
+		{
+			name:      "Depleted",
+			voucher:   db.Voucher{IsActive: true, ValidFrom: now.Add(-time.Hour), ValidUntil: now.Add(time.Hour), TotalQuantity: 10, ClaimedQuantity: 10},
+			wantCode:  "depleted",
+			wantLabel: "已领完",
+			wantTheme: "warning",
+		},
+		{
+			name:      "Active",
+			voucher:   db.Voucher{IsActive: true, ValidFrom: now.Add(-time.Hour), ValidUntil: now.Add(time.Hour), TotalQuantity: 10, ClaimedQuantity: 1},
+			wantCode:  "active",
+			wantLabel: "发放中",
+			wantTheme: "success",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			statusCode, statusLabel, statusTheme := buildVoucherStatusResponse(tc.voucher, now)
+			require.Equal(t, tc.wantCode, statusCode)
+			require.Equal(t, tc.wantLabel, statusLabel)
+			require.Equal(t, tc.wantTheme, statusTheme)
+		})
+	}
+}
 
 func TestCreateVoucherAPI(t *testing.T) {
 	merchantOwner, _ := randomUser(t)
@@ -49,15 +104,7 @@ func TestCreateVoucherAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				// Mock GetUserRoleByType to verify merchant permission
-				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.UserRole{
-						UserID:          merchantOwner.ID,
-						Role:            "merchant",
-						RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true},
-					}, nil)
+				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
 
 				// Mock CreateVoucher
 				store.EXPECT().
@@ -68,8 +115,8 @@ func TestCreateVoucherAPI(t *testing.T) {
 						MerchantID:      merchant.ID,
 						Code:            "VOUCHER001",
 						Name:            "新用户券",
-						Amount:          1000,
-						MinOrderAmount:  5000,
+						Amount:          10 * fenPerYuan,
+						MinOrderAmount:  50 * fenPerYuan,
 						TotalQuantity:   100,
 						ClaimedQuantity: 0,
 						UsedQuantity:    0,
@@ -79,7 +126,7 @@ func TestCreateVoucherAPI(t *testing.T) {
 					}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
+				require.Equal(t, http.StatusCreated, recorder.Code)
 			},
 		},
 		{
@@ -99,11 +146,7 @@ func TestCreateVoucherAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, regularUser.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				// Mock GetUserRoleByType returns not found
-				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.UserRole{}, sql.ErrNoRows)
+				expectResolveNoAccessibleMerchants(store, regularUser.ID)
 
 				store.EXPECT().
 					CreateVoucher(gomock.Any(), gomock.Any()).
@@ -128,9 +171,7 @@ func TestCreateVoucherAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), gomock.Any()).
-					Times(0)
+				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
 				store.EXPECT().
 					CreateVoucher(gomock.Any(), gomock.Any()).
 					Times(0)
@@ -237,7 +278,7 @@ func TestClaimVoucherAPI(t *testing.T) {
 				store.EXPECT().
 					ClaimVoucherTx(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.ClaimVoucherTxResult{}, sql.ErrNoRows)
+					Return(db.ClaimVoucherTxResult{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -311,7 +352,7 @@ func TestListUserAvailableVouchersAPI(t *testing.T) {
 							ID:        1,
 							VoucherID: 1,
 							Status:    "unused",
-							Amount:    1000,
+							Amount:    10 * fenPerYuan,
 						},
 					}, nil)
 			},
@@ -387,19 +428,12 @@ func TestUpdateVoucherAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
+
 				store.EXPECT().
 					GetVoucher(gomock.Any(), gomock.Eq(voucher.ID)).
 					Times(1).
 					Return(voucher, nil)
-
-				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.UserRole{
-						UserID:          merchantOwner.ID,
-						Role:            "merchant",
-						RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true},
-					}, nil)
 
 				store.EXPECT().
 					UpdateVoucher(gomock.Any(), gomock.Any()).
@@ -421,10 +455,12 @@ func TestUpdateVoucherAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
+
 				store.EXPECT().
 					GetVoucher(gomock.Any(), gomock.Eq(int64(999))).
 					Times(1).
-					Return(db.Voucher{}, sql.ErrNoRows)
+					Return(db.Voucher{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -441,15 +477,11 @@ func TestUpdateVoucherAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, otherUser.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetVoucher(gomock.Any(), gomock.Eq(voucher.ID)).
-					Times(1).
-					Return(voucher, nil)
+				expectResolveNoAccessibleMerchants(store, otherUser.ID)
 
 				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.UserRole{}, sql.ErrNoRows)
+					GetVoucher(gomock.Any(), gomock.Any()).
+					Times(0)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -467,19 +499,12 @@ func TestUpdateVoucherAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
+
 				store.EXPECT().
 					GetVoucher(gomock.Any(), gomock.Eq(voucher.ID)).
 					Times(1).
 					Return(voucher, nil)
-
-				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.UserRole{
-						UserID:          merchantOwner.ID,
-						Role:            "merchant",
-						RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true},
-					}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -536,19 +561,12 @@ func TestDeleteVoucherAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
+
 				store.EXPECT().
 					GetVoucher(gomock.Any(), gomock.Eq(voucher.ID)).
 					Times(1).
 					Return(voucher, nil)
-
-				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.UserRole{
-						UserID:          merchantOwner.ID,
-						Role:            "merchant",
-						RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true},
-					}, nil)
 
 				// 没有未使用的用户代金券
 				store.EXPECT().
@@ -573,10 +591,12 @@ func TestDeleteVoucherAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
+
 				store.EXPECT().
 					GetVoucher(gomock.Any(), gomock.Eq(int64(999))).
 					Times(1).
-					Return(db.Voucher{}, sql.ErrNoRows)
+					Return(db.Voucher{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -590,15 +610,11 @@ func TestDeleteVoucherAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, otherUser.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetVoucher(gomock.Any(), gomock.Eq(voucher.ID)).
-					Times(1).
-					Return(voucher, nil)
+				expectResolveNoAccessibleMerchants(store, otherUser.ID)
 
 				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.UserRole{}, sql.ErrNoRows)
+					GetVoucher(gomock.Any(), gomock.Any()).
+					Times(0)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -612,19 +628,12 @@ func TestDeleteVoucherAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
+
 				store.EXPECT().
 					GetVoucher(gomock.Any(), gomock.Eq(voucher.ID)).
 					Times(1).
 					Return(voucher, nil)
-
-				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.UserRole{
-						UserID:          merchantOwner.ID,
-						Role:            "merchant",
-						RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true},
-					}, nil)
 
 				// 有5个用户领取了代金券但未使用
 				store.EXPECT().
@@ -703,6 +712,8 @@ func TestListMerchantVouchersAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
 				store.EXPECT().
 					ListMerchantVouchers(gomock.Any(), gomock.Any()).
 					Times(0)
@@ -748,8 +759,8 @@ func randomVoucher(merchantID int64) db.Voucher {
 		Code:            util.RandomString(10),
 		Name:            "测试优惠券",
 		Description:     pgtype.Text{String: "测试用", Valid: true},
-		Amount:          1000,
-		MinOrderAmount:  5000,
+		Amount:          10 * fenPerYuan,
+		MinOrderAmount:  50 * fenPerYuan,
 		TotalQuantity:   100,
 		ClaimedQuantity: 0,
 		UsedQuantity:    0,

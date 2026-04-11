@@ -1,8 +1,7 @@
 
 <view class="auth-image {{className}}" style="{{customStyle}}">
   <!-- 加载中 -->
-  <view wx:if="{{loading}}" class="loading-state">
-    <t-loading theme="circular" size="40rpx" inherit-color />
+  <view wx:if="{{loading}}" class="loading-state skeleton-shimmer">
   </view>
 
   <!-- 加载失败 -->

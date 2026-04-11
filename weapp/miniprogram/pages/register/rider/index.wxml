@@ -1,119 +1,242 @@
 <custom-navbar title="骑手入驻" showBack="{{true}}" bind:navheight="onNavHeight" />
 
-<view class="page-container has-fixed-bottom" style="padding-top: {{navBarHeight}}px;">
-  <view class="form-container">
-    <!-- 1. 证照上传 (置顶) -->
-    <view class="section-header">证照上传 (自动识别)</view>
-    
-    <view class="upload-group">
-      <view class="upload-item">
-        <view class="upload-label required">身份证正面</view>
-        <t-upload 
-          mediaType="{{['image']}}" 
-          files="{{idCardFrontImages}}" 
-          max="1" 
-          bind:success="onIdCardFrontUpload" 
-          bind:remove="onIdCardFrontRemove" 
-        />
+<view class="page-container page-shell page-shell--with-nav page-shell--bottom-safe" style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: 140rpx;">
+
+  <view class="steps-container" wx:if="{{currentStep > 0 && currentStep < 4}}">
+    <t-steps current="{{currentStep - 1}}">
+      <t-step-item title="上传证照" />
+      <t-step-item title="核对信息" />
+      <t-step-item title="审核结果" />
+    </t-steps>
+  </view>
+
+  <view class="form-content">
+    <!-- Step 0: 介绍预览 -->
+    <view class="step-view animate-fade-in" wx:if="{{currentStep === 0}}">
+      <view class="hero-card">
+        <view class="hero-icon">
+          <t-icon name="user-talk" size="120rpx" color="var(--td-brand-color)" />
+        </view>
+        <view class="hero-title">成为自主经营配送员</view>
+        <view class="hero-subtitle">无抽佣负担，每一分汗水都属于自己</view>
+        
+        <view class="benefit-grid">
+          <view class="benefit-item">
+            <t-icon name="money" size="40rpx" color="#FF9800" />
+            <text>0 抽佣</text>
+          </view>
+          <view class="benefit-item">
+            <t-icon name="gesture-click" size="40rpx" color="#4CAF50" />
+            <text>自主接单</text>
+          </view>
+          <view class="benefit-item">
+            <t-icon name="user-circle" size="40rpx" color="#0052D9" />
+            <text>个体经营</text>
+          </view>
+        </view>
       </view>
-      
-      <view class="upload-item">
-        <view class="upload-label required">身份证反面</view>
-        <t-upload 
-          mediaType="{{['image']}}" 
-          files="{{idCardBackImages}}" 
-          max="1" 
-          bind:success="onIdCardBackUpload" 
-          bind:remove="onIdCardBackRemove" 
-        />
+
+      <view class="notice-box">
+        <view class="notice-title">入驻须知</view>
+        <view class="notice-text">1. 年满 18 周岁，具备完全民事行为能力</view>
+        <view class="notice-text">2. 需提供本人真实有效的身份证信息</view>
+        <view class="notice-text">3. 必须持有有效的健康证，且在有效期内</view>
       </view>
     </view>
 
-    <view class="upload-group">
-      <view class="upload-item">
-        <view class="upload-label required">健康证</view>
-        <t-upload 
-          mediaType="{{['image']}}" 
-          files="{{healthCertImages}}" 
-          max="1" 
-          bind:success="onHealthCertUpload" 
+    <!-- Step 1: 证照上传 -->
+    <view class="step-view animate-fade-in" wx:if="{{currentStep === 1}}">
+      <view class="section-title">实名信息上传</view>
+      <view class="upload-section">
+        <view class="label-row">
+          <text class="label required">本人身份证</text>
+        </view>
+        <view class="upload-stack">
+          <document-uploader 
+            type="id-front" 
+            title="身份证人像面" 
+            value="{{idFront.url}}" 
+            rawUrl="{{idFront.rawUrl}}"
+            disabled="{{!riderStatusView.isDraft}}"
+            feedbackState="{{uploadFeedback.idFront.state}}"
+            feedbackTitle="{{uploadFeedback.idFront.title}}"
+            feedbackDescription="{{uploadFeedback.idFront.description}}"
+            bind:change="onIdFrontUpload"
+            bind:remove="onIdFrontRemove" 
+          />
+          <view class="upload-spacer"></view>
+          <document-uploader 
+            type="id-back" 
+            title="身份证国徽面" 
+            value="{{idBack.url}}" 
+            rawUrl="{{idBack.rawUrl}}"
+            disabled="{{!riderStatusView.isDraft}}"
+            feedbackState="{{uploadFeedback.idBack.state}}"
+            feedbackTitle="{{uploadFeedback.idBack.title}}"
+            feedbackDescription="{{uploadFeedback.idBack.description}}"
+            bind:change="onIdBackUpload"
+            bind:remove="onIdBackRemove" 
+          />
+        </view>
+      </view>
+
+      <view class="section-title">卫生资质上传</view>
+      <view class="upload-section">
+        <view class="label-row">
+          <text class="label required">外卖员健康证</text>
+        </view>
+        <document-uploader 
+          type="health-cert" 
+          title="点击上传本人健康证" 
+          value="{{healthCert.url}}" 
+          rawUrl="{{healthCert.rawUrl}}"
+          disabled="{{!riderStatusView.isDraft}}"
+          feedbackState="{{uploadFeedback.healthCert.state}}"
+          feedbackTitle="{{uploadFeedback.healthCert.title}}"
+          feedbackDescription="{{uploadFeedback.healthCert.description}}"
+          bind:change="onHealthCertUpload"
           bind:remove="onHealthCertRemove" 
         />
       </view>
     </view>
 
-    <!-- 2. 基本信息 -->
-    <view class="section-header">基本信息</view>
-    <t-cell-group theme="card">
-      <t-cell title="真实姓名" required>
-        <input class="input" placeholder="识别回填" value="{{formData.name}}" bindinput="onNameInput" />
-      </t-cell>
-      <t-cell title="联系电话" required>
-        <input class="input" type="number" placeholder="请输入联系电话" value="{{formData.phone}}" bindinput="onPhoneInput" />
-      </t-cell>
-      <t-cell title="身份证号" required>
-        <input class="input" placeholder="识别回填" value="{{formData.idCard}}" bindinput="onIdCardInput" />
-      </t-cell>
-      <t-cell title="常驻地址" required arrow bind:click="onChooseAddress">
-        <view class="picker-text {{formData.address ? '' : 'placeholder'}}">
-          {{formData.address || '请选择常驻地址'}}
+    <!-- Step 2: 信息确认 -->
+    <view class="step-view animate-fade-in" wx:if="{{currentStep === 2}}">
+      <view class="section-title">联系信息</view>
+      <view class="card-group">
+        <view class="field-block {{phoneError ? 'field-block-error' : ''}}">
+          <t-input 
+            label="联系电话" 
+            type="number" 
+            placeholder="请输入联系电话" 
+            value="{{formData.phone}}" 
+            bindchange="onInput" 
+            data-field="phone" 
+          />
         </view>
-      </t-cell>
-      <t-cell title="详细地址" required>
-        <input class="input" placeholder="门牌号、楼层等" value="{{formData.addressDetail}}" bindinput="onAddressDetailInput" />
-      </t-cell>
-      <t-cell title="配送工具" arrow bind:click="onChooseVehicle">
-        <view class="picker-text {{formData.vehicle ? '' : 'placeholder'}}">
-          {{formData.vehicle || '请选择配送工具'}}
-        </view>
-      </t-cell>
-      <t-cell title="可接单时段" arrow bind:click="onChooseTime">
-        <view class="picker-text {{formData.availableTime ? '' : 'placeholder'}}">
-          {{formData.availableTime || '请选择可接单时段'}}
-        </view>
-      </t-cell>
-    </t-cell-group>
+        <view class="field-error-text" wx:if="{{phoneError}}">{{phoneError}}</view>
+      </view>
 
-    <!-- 3. 身份信息 (自动回填) -->
-    <view class="section-header">身份信息</view>
-    <t-cell-group theme="card">
-      <t-cell title="性别" required>
-        <input class="input" placeholder="识别回填" value="{{formData.gender}}" bindinput="onGenderInput" />
-      </t-cell>
-      <t-cell title="籍贯地址" required>
-        <input class="input" placeholder="识别回填" value="{{formData.hometown}}" bindinput="onHometownInput" />
-      </t-cell>
-      <t-cell title="当前住址">
-        <input class="input" placeholder="选填" value="{{formData.currentAddress}}" bindinput="onCurrentAddressInput" />
-      </t-cell>
-      <t-cell title="身份证有效期" required>
-        <input class="input" placeholder="识别回填" value="{{formData.idCardValidity}}" bindinput="onIdCardValidityInput" />
-      </t-cell>
-    </t-cell-group>
+      <view class="section-title">资质信息回填</view>
+      <view class="card-group gray-bg ocr-section-card">
+        <view class="ocr-section-title">身份证信息</view>
+        <t-input 
+          label="真实姓名" 
+          placeholder="请填写真实姓名" 
+          value="{{formData.realName}}" 
+          bindchange="onInput" 
+          data-field="realName" 
+        />
+        <block wx:if="{{formData.idNumber || formData.idValidity}}">
+          <t-cell title="身份证号" note="{{formData.idNumber || '--'}}" />
+          <t-cell title="身份证有效期" note="{{formData.idValidity || '--'}}" />
+        </block>
+        <view class="ocr-status-card" wx:if="{{ocrPanelState.identityProcessing}}">
+          <view class="ocr-status-title">身份证识别中</view>
+          <view class="ocr-status-desc">已识别到的身份证字段会先展示，剩余字段完成后继续回填。</view>
+        </view>
+        <view class="ocr-status-card error" wx:if="{{ocrPanelState.identityFailed}}">
+          <view class="ocr-status-title">身份证识别失败</view>
+          <view class="ocr-status-desc">请重新上传清晰、完整的身份证正反面。</view>
+        </view>
+      </view>
+
+      <view class="card-group gray-bg ocr-section-card">
+        <view class="ocr-section-title">健康证信息</view>
+        <block wx:if="{{formData.healthCertNo || formData.healthCertDate}}">
+          <t-cell title="健康证号" note="{{formData.healthCertNo || '--'}}" />
+          <t-cell title="有效期至" note="{{formData.healthCertDate || '--'}}" />
+        </block>
+        <view class="ocr-status-card" wx:if="{{ocrPanelState.healthProcessing}}">
+          <view class="ocr-status-title">健康证识别中</view>
+          <view class="ocr-status-desc">已识别到的健康证字段会先展示，剩余字段完成后继续回填。</view>
+        </view>
+        <view class="ocr-status-card error" wx:if="{{ocrPanelState.healthFailed}}">
+          <view class="ocr-status-title">健康证识别失败</view>
+          <view class="ocr-status-desc">请重新上传清晰、无遮挡的健康证照片。</view>
+        </view>
+      </view>
+      <view class="info-tip">若识别还在进行中，可以先继续填写手机号。</view>
+    </view>
+
+    <!-- Step 3: 预览与提交 -->
+    <view class="step-view animate-fade-in" wx:if="{{currentStep === 3}}">
+      <view class="review-status">
+        <t-icon name="assignment" size="100rpx" color="var(--td-brand-color)" />
+        <view class="status-title">提交审核</view>
+        <view class="status-desc">系统将自动校验您的各项证照一致性</view>
+      </view>
+
+      <view class="summary-card">
+        <view class="summary-item">
+          <text class="label">入驻人</text>
+          <text class="value">{{formData.realName}}</text>
+        </view>
+        <view class="summary-item">
+          <text class="label">手机号</text>
+          <text class="value">{{formData.phone}}</text>
+        </view>
+        <view class="summary-item">
+          <text class="label">证照状态</text>
+          <view class="tag-row">
+            <t-tag size="small" variant="dark" theme="success">身份证已上传</t-tag>
+            <t-tag size="small" variant="dark" theme="success">健康证已上传</t-tag>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- Step 4: 处理中/结果页面 -->
+    <view class="step-view center" wx:if="{{currentStep === 4}}">
+      <t-loading theme="circular" size="80rpx" layout="vertical" text="系统正在核验您的资料..." />
+      <view class="loading-sub">核验大约需要 10-30 秒</view>
+    </view>
+
+  </view>
+
+  <!-- Navigation Bar -->
+  <view class="footer-bar animate-slide-up">
+    <view class="consent-row" wx:if="{{currentStep === 0 || currentStep === 3}}">
+      <checkbox-group bindchange="onConsentChange">
+        <label class="consent-label">
+          <checkbox value="agree" checked="{{consentChecked}}" color="var(--td-brand-color)" />
+          <text>我已阅读并同意</text>
+        </label>
+      </checkbox-group>
+      <view class="consent-links">
+        <text class="consent-link" data-type="USER_AGREEMENT" data-title="用户服务协议" catchtap="onViewAgreement">《用户服务协议》</text>
+        <text>和</text>
+        <text class="consent-link" data-type="PRIVACY_POLICY" data-title="隐私政策" catchtap="onViewAgreement">《隐私政策》</text>
+      </view>
+    </view>
+
+    <block wx:if="{{currentStep === 0}}">
+      <t-button block class="footer-action-btn" theme="primary" size="large" bindtap="onNext" shape="round">立即入驻</t-button>
+    </block>
+    <block wx:elif="{{currentStep === 3}}">
+      <view class="btn-group">
+        <t-button block class="footer-action-btn" size="large" bindtap="onPrev" shape="round">返回修改</t-button>
+        <t-button block class="footer-action-btn" theme="primary" size="large" bindtap="onSubmit" loading="{{isSubmitting}}" shape="round">确认并提交</t-button>
+      </view>
+    </block>
+    <block wx:elif="{{currentStep < 3}}">
+      <view class="btn-group">
+        <t-button block class="footer-action-btn" size="large" bindtap="onPrev" shape="round">上一步</t-button>
+        <t-button block class="footer-action-btn" theme="primary" size="large" bindtap="onNext" shape="round">下一步</t-button>
+      </view>
+    </block>
   </view>
 </view>
 
-<!-- 底部提交按钮 -->
-<view class="fixed-bottom-bar">
-  <t-button class="w-full" theme="primary" size="large" bindtap="onSubmit">
-    提交申请
-  </t-button>
-</view>
-
-<!-- 配送工具选择器 -->
-<t-picker
-  visible="{{vehiclePickerVisible}}"
-  value="{{vehiclePickerValue}}"
-  data-source="{{vehicleOptions}}"
-  bind:confirm="onVehicleConfirm"
-  bind:cancel="onVehicleCancel"
-/>
-
-<!-- 时段选择器 -->
-<t-picker
-  visible="{{timePickerVisible}}"
-  value="{{timePickerValue}}"
-  data-source="{{timeOptions}}"
-  bind:confirm="onTimeConfirm"
-  bind:cancel="onTimeCancel"
-/>
+<t-popup visible="{{consentPopupVisible}}" placement="bottom" bind:visible-change="closeConsentPopup">
+  <view class="consent-popup">
+    <view class="consent-popup-title">入驻协议确认</view>
+    <view class="consent-popup-desc">继续入驻前，请阅读并同意以下协议：</view>
+    <view class="consent-popup-links">
+      <text class="consent-link" data-type="USER_AGREEMENT" data-title="用户服务协议" catchtap="onViewAgreement">《用户服务协议》</text>
+      <text class="consent-link" data-type="PRIVACY_POLICY" data-title="隐私政策" catchtap="onViewAgreement">《隐私政策》</text>
+    </view>
+    <t-button block theme="primary" size="large" bindtap="onConfirmConsent" shape="round">我已阅读并同意，继续</t-button>
+    <t-button block variant="text" size="large" bindtap="closeConsentPopup">暂不继续</t-button>
+  </view>
+</t-popup>

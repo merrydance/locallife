@@ -1,16 +1,14 @@
 package api
 
 import (
-	"database/sql"
 	"errors"
-	"fmt"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/media"
 )
 
 // ============================================================================
@@ -29,9 +27,10 @@ func pgNumericToFloat64(n pgtype.Numeric) float64 {
 // ==================== 商户列表查询 ====================
 
 type listOperatorMerchantsRequest struct {
-	Status string `form:"status" binding:"omitempty,oneof=pending approved rejected suspended"`
-	Page   int32  `form:"page" binding:"omitempty,min=1"`
-	Limit  int32  `form:"limit" binding:"omitempty,min=1,max=100"`
+	Status   string `form:"status" binding:"omitempty,oneof=pending approved rejected suspended"`
+	RegionID int64  `form:"region_id" binding:"omitempty,min=1"`
+	Page     int32  `form:"page" binding:"omitempty,min=1"`
+	Limit    int32  `form:"limit" binding:"omitempty,min=1,max=100"`
 }
 
 type merchantListItem struct {
@@ -51,8 +50,18 @@ type merchantListItem struct {
 type listOperatorMerchantsResponse struct {
 	Merchants []merchantListItem `json:"merchants"`
 	Total     int64              `json:"total"`
+	PageID    int32              `json:"page_id"`
+	PageSize  int32              `json:"page_size"`
 	Page      int32              `json:"page"`
 	Limit     int32              `json:"limit"`
+}
+
+type operatorMerchantSummaryResponse struct {
+	Total     int64 `json:"total"`
+	Pending   int64 `json:"pending"`
+	Approved  int64 `json:"approved"`
+	Rejected  int64 `json:"rejected"`
+	Suspended int64 `json:"suspended"`
 }
 
 // listOperatorMerchants 获取运营商管辖区域内的商户列表
@@ -87,19 +96,29 @@ func (server *Server) listOperatorMerchants(ctx *gin.Context) {
 	}
 
 	// 从中间件获取运营商信息
-	operator, ok := GetOperatorFromContext(ctx)
-	if !ok {
+	if _, ok := GetOperatorFromContext(ctx); !ok {
 		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("operator not found in context")))
 		return
 	}
 
-	// 获取运营商管理的区域
-	if operator.RegionID == 0 {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("operator has no assigned region")))
-		return
+	// 确定目标区域 ID
+	targetRegionID := req.RegionID
+	if targetRegionID == 0 {
+		resolvedRegionID, err := server.getOperatorRegionID(ctx)
+		if err != nil {
+			ctx.JSON(http.StatusForbidden, errorResponse(err))
+			return
+		}
+		targetRegionID = resolvedRegionID
+	} else {
+		// 验证是否有权管理该特定区域
+		if _, err := server.checkOperatorManagesRegion(ctx, targetRegionID); err != nil {
+			ctx.JSON(http.StatusForbidden, errorResponse(err))
+			return
+		}
 	}
 
-	offset := (req.Page - 1) * req.Limit
+	offset := pageOffset(req.Page, req.Limit)
 
 	// 查询商户列表
 	var merchants []db.Merchant
@@ -108,7 +127,7 @@ func (server *Server) listOperatorMerchants(ctx *gin.Context) {
 
 	if req.Status == "" {
 		merchants, err = server.store.ListMerchantsByRegion(ctx, db.ListMerchantsByRegionParams{
-			RegionID: operator.RegionID,
+			RegionID: targetRegionID,
 			Limit:    req.Limit,
 			Offset:   offset,
 		})
@@ -117,10 +136,10 @@ func (server *Server) listOperatorMerchants(ctx *gin.Context) {
 			return
 		}
 
-		total, err = server.store.CountMerchantsByRegion(ctx, operator.RegionID)
+		total, err = server.store.CountMerchantsByRegion(ctx, targetRegionID)
 	} else {
 		merchants, err = server.store.ListMerchantsByRegionWithStatus(ctx, db.ListMerchantsByRegionWithStatusParams{
-			RegionID: operator.RegionID,
+			RegionID: targetRegionID,
 			Column2:  req.Status,
 			Limit:    req.Limit,
 			Offset:   offset,
@@ -131,7 +150,7 @@ func (server *Server) listOperatorMerchants(ctx *gin.Context) {
 		}
 
 		total, err = server.store.CountMerchantsByRegionWithStatus(ctx, db.CountMerchantsByRegionWithStatusParams{
-			RegionID: operator.RegionID,
+			RegionID: targetRegionID,
 			Column2:  req.Status,
 		})
 	}
@@ -162,8 +181,91 @@ func (server *Server) listOperatorMerchants(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, listOperatorMerchantsResponse{
 		Merchants: result,
 		Total:     total,
+		PageID:    req.Page,
+		PageSize:  req.Limit,
 		Page:      req.Page,
 		Limit:     req.Limit,
+	})
+}
+
+// getOperatorMerchantSummary 获取区域商户汇总
+// @Summary 获取区域商户汇总
+// @Description 运营商获取管辖区域内商户总数及各状态汇总，供工作台和审批入口使用
+// @Tags 运营商-商户骑手管理
+// @Accept json
+// @Produce json
+// @Param region_id query int false "区域ID"
+// @Success 200 {object} operatorMerchantSummaryResponse
+// @Failure 400 {object} errorMessage "请求参数错误"
+// @Failure 401 {object} errorMessage "未授权"
+// @Failure 403 {object} errorMessage "无权限"
+// @Failure 500 {object} errorMessage "服务器错误"
+// @Security BearerAuth
+// @Router /v1/operator/merchants/summary [get]
+func (server *Server) getOperatorMerchantSummary(ctx *gin.Context) {
+	var req listOperatorMerchantsRequest
+	if err := ctx.ShouldBindQuery(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	targetRegionID := req.RegionID
+	if targetRegionID == 0 {
+		resolvedRegionID, err := server.getOperatorRegionID(ctx)
+		if err != nil {
+			ctx.JSON(http.StatusForbidden, errorResponse(err))
+			return
+		}
+		targetRegionID = resolvedRegionID
+	} else {
+		if _, err := server.checkOperatorManagesRegion(ctx, targetRegionID); err != nil {
+			ctx.JSON(http.StatusForbidden, errorResponse(err))
+			return
+		}
+	}
+
+	countStatus := func(status string) (int64, error) {
+		if status == "" {
+			return server.store.CountMerchantsByRegion(ctx, targetRegionID)
+		}
+		return server.store.CountMerchantsByRegionWithStatus(ctx, db.CountMerchantsByRegionWithStatusParams{
+			RegionID: targetRegionID,
+			Column2:  status,
+		})
+	}
+
+	total, err := countStatus("")
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	pending, err := countStatus("pending")
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	approved, err := countStatus("approved")
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	rejected, err := countStatus("rejected")
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	suspended, err := countStatus("suspended")
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, operatorMerchantSummaryResponse{
+		Total:     total,
+		Pending:   pending,
+		Approved:  approved,
+		Rejected:  rejected,
+		Suspended: suspended,
 	})
 }
 
@@ -177,7 +279,8 @@ type merchantDetailResponse struct {
 	ID          int64   `json:"id"`
 	Name        string  `json:"name"`
 	Description string  `json:"description"`
-	LogoURL     string  `json:"logo_url"`
+	LogoAssetID int64   `json:"-"`
+	LogoURL     string  `json:"logo_url,omitempty"`
 	Phone       string  `json:"phone"`
 	Address     string  `json:"address"`
 	Status      string  `json:"status"`
@@ -189,6 +292,199 @@ type merchantDetailResponse struct {
 	Version     int32   `json:"version"`
 	CreatedAt   string  `json:"created_at"`
 	UpdatedAt   string  `json:"updated_at"`
+}
+
+type merchantCapabilitiesResponse struct {
+	MerchantID        int64    `json:"merchant_id"`
+	OpenKitchenStatus string   `json:"open_kitchen_status"`
+	DineInStatus      string   `json:"dine_in_status"`
+	SystemLabels      []string `json:"system_labels,omitempty"`
+	Source            string   `json:"source"`
+	Note              string   `json:"note,omitempty"`
+	UpdatedAt         string   `json:"updated_at,omitempty"`
+}
+
+type updateMerchantCapabilitiesRequest struct {
+	OpenKitchenStatus *string `json:"open_kitchen_status" binding:"omitempty,oneof=unknown yes no"`
+	DineInStatus      *string `json:"dine_in_status" binding:"omitempty,oneof=unknown yes no"`
+	Note              *string `json:"note" binding:"omitempty,max=500"`
+}
+
+func deriveMerchantSystemLabelNames(capability db.MerchantCapability) []string {
+	labels := make([]string, 0, 2)
+
+	switch capability.OpenKitchenStatus {
+	case db.MerchantCapabilityStatusYes:
+		labels = append(labels, db.SystemTagHasOpenKitchen)
+	case db.MerchantCapabilityStatusUnknown, db.MerchantCapabilityStatusNo:
+		labels = append(labels, db.SystemTagNoOpenKitchen)
+	}
+
+	if capability.DineInStatus == db.MerchantCapabilityStatusNo {
+		labels = append(labels, db.SystemTagNoDineIn)
+	}
+
+	return labels
+}
+
+func merchantCapabilitiesResponseFromModel(merchantID int64, capability db.MerchantCapability, labels []db.Tag) merchantCapabilitiesResponse {
+	resp := merchantCapabilitiesResponse{
+		MerchantID:        merchantID,
+		OpenKitchenStatus: capability.OpenKitchenStatus,
+		DineInStatus:      capability.DineInStatus,
+		Source:            capability.Source,
+	}
+	if !capability.UpdatedAt.IsZero() {
+		resp.UpdatedAt = capability.UpdatedAt.Format("2006-01-02 15:04:05")
+	}
+	if capability.Note.Valid {
+		resp.Note = capability.Note.String
+	}
+	if len(labels) > 0 {
+		resp.SystemLabels = make([]string, len(labels))
+		for i, label := range labels {
+			resp.SystemLabels[i] = label.Name
+		}
+	} else {
+		resp.SystemLabels = deriveMerchantSystemLabelNames(capability)
+	}
+	return resp
+}
+
+// getOperatorMerchantCapabilities 获取商户能力与系统标签
+// @Summary 获取商户能力标签
+// @Description 运营商获取其管辖区域内商户的能力真值及派生系统标签
+// @Tags 运营商-商户骑手管理
+// @Accept json
+// @Produce json
+// @Param id path int true "商户ID"
+// @Success 200 {object} merchantCapabilitiesResponse
+// @Failure 400 {object} errorMessage "请求参数错误"
+// @Failure 401 {object} errorMessage "未授权"
+// @Failure 403 {object} errorMessage "无权限"
+// @Failure 404 {object} errorMessage "商户不存在"
+// @Failure 500 {object} errorMessage "服务器错误"
+// @Security BearerAuth
+// @Router /v1/operator/merchants/{id}/capabilities [get]
+func (server *Server) getOperatorMerchantCapabilities(ctx *gin.Context) {
+	var req getOperatorMerchantRequest
+	if err := ctx.ShouldBindUri(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	merchant, err := server.store.GetMerchant(ctx, req.ID)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrMerchantNotFound))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	if _, err := server.checkOperatorManagesRegion(ctx, merchant.RegionID); err != nil {
+		ctx.JSON(http.StatusForbidden, errorResponse(err))
+		return
+	}
+
+	capabilityFound := true
+	capability, err := server.store.GetMerchantCapabilities(ctx, merchant.ID)
+	if err != nil {
+		if !isNotFoundError(err) {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		capabilityFound = false
+		capability = db.MerchantCapability{
+			MerchantID:        merchant.ID,
+			OpenKitchenStatus: db.MerchantCapabilityStatusUnknown,
+			DineInStatus:      db.MerchantCapabilityStatusUnknown,
+			Source:            db.MerchantCapabilitySourceSystemDefault,
+		}
+	}
+
+	var labels []db.Tag
+	if capabilityFound {
+		labels, err = server.store.ListMerchantSystemLabels(ctx, merchant.ID)
+		if err != nil && !isNotFoundError(err) {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+	}
+
+	ctx.JSON(http.StatusOK, merchantCapabilitiesResponseFromModel(merchant.ID, capability, labels))
+}
+
+// updateOperatorMerchantCapabilities 更新商户能力与系统标签
+// @Summary 更新商户能力标签
+// @Description 运营商更新其管辖区域内商户的能力真值，并同步派生系统标签
+// @Tags 运营商-商户骑手管理
+// @Accept json
+// @Produce json
+// @Param id path int true "商户ID"
+// @Param request body updateMerchantCapabilitiesRequest true "能力更新请求"
+// @Success 200 {object} merchantCapabilitiesResponse
+// @Failure 400 {object} errorMessage "请求参数错误"
+// @Failure 401 {object} errorMessage "未授权"
+// @Failure 403 {object} errorMessage "无权限"
+// @Failure 404 {object} errorMessage "商户不存在"
+// @Failure 500 {object} errorMessage "服务器错误"
+// @Security BearerAuth
+// @Router /v1/operator/merchants/{id}/capabilities [patch]
+func (server *Server) updateOperatorMerchantCapabilities(ctx *gin.Context) {
+	var uriReq getOperatorMerchantRequest
+	if err := ctx.ShouldBindUri(&uriReq); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+	var req updateMerchantCapabilitiesRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+	if req.OpenKitchenStatus == nil && req.DineInStatus == nil && req.Note == nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("at least one capability field is required")))
+		return
+	}
+
+	merchant, err := server.store.GetMerchant(ctx, uriReq.ID)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrMerchantNotFound))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	if _, err := server.checkOperatorManagesRegion(ctx, merchant.RegionID); err != nil {
+		ctx.JSON(http.StatusForbidden, errorResponse(err))
+		return
+	}
+
+	params := db.UpdateMerchantCapabilitiesTxParams{
+		MerchantID:        uriReq.ID,
+		Source:            db.MerchantCapabilitySourceManualReview,
+		OpenKitchenStatus: pgtype.Text{Valid: false},
+		DineInStatus:      pgtype.Text{Valid: false},
+		Note:              pgtype.Text{Valid: false},
+	}
+	if req.OpenKitchenStatus != nil {
+		params.OpenKitchenStatus = pgtype.Text{String: *req.OpenKitchenStatus, Valid: true}
+	}
+	if req.DineInStatus != nil {
+		params.DineInStatus = pgtype.Text{String: *req.DineInStatus, Valid: true}
+	}
+	if req.Note != nil {
+		params.Note = pgtype.Text{String: *req.Note, Valid: true}
+	}
+
+	result, err := server.store.UpdateMerchantCapabilitiesTx(ctx, params)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, merchantCapabilitiesResponseFromModel(uriReq.ID, result.Capability, result.SystemLabels))
 }
 
 // getOperatorMerchant 获取商户详情
@@ -216,8 +512,8 @@ func (server *Server) getOperatorMerchant(ctx *gin.Context) {
 	// 获取商户信息
 	merchant, err := server.store.GetMerchant(ctx, req.ID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("商户不存在")))
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrMerchantNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -230,11 +526,11 @@ func (server *Server) getOperatorMerchant(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, merchantDetailResponse{
+	resp := merchantDetailResponse{
 		ID:          merchant.ID,
 		Name:        merchant.Name,
 		Description: merchant.Description.String,
-		LogoURL:     normalizeUploadURLForClient(merchant.LogoUrl.String),
+		LogoAssetID: merchant.LogoMediaAssetID.Int64,
 		Phone:       merchant.Phone,
 		Address:     merchant.Address,
 		Status:      merchant.Status,
@@ -246,176 +542,151 @@ func (server *Server) getOperatorMerchant(ctx *gin.Context) {
 		Version:     merchant.Version,
 		CreatedAt:   merchant.CreatedAt.Format("2006-01-02 15:04:05"),
 		UpdatedAt:   merchant.UpdatedAt.Format("2006-01-02 15:04:05"),
-	})
+	}
+	if resp.LogoAssetID != 0 {
+		resp.LogoURL = server.publicImageURL(ctx, &resp.LogoAssetID, media.VariantCard)
+	}
+	ctx.JSON(http.StatusOK, resp)
 }
 
-// ==================== 暂停/恢复商户 ====================
+// ==================== 商户经营统计 ====================
 
-type suspendOperatorMerchantRequest struct {
-	Reason        string `json:"reason" binding:"required,min=5,max=500"`
-	DurationHours int    `json:"duration_hours" binding:"required,min=1,max=720"`
+type getOperatorMerchantStatsRequest struct {
+	ID   int64 `uri:"id" binding:"required,min=1"`
+	Days int   `form:"days" binding:"omitempty,min=1,max=365"`
 }
 
-// suspendOperatorMerchant 运营商暂停商户
-// @Summary 暂停商户
-// @Description 运营商暂停其管辖区域内的商户，最长可暂停30天（720小时）
+type merchantStatsDish struct {
+	DishName     string `json:"dish_name"`
+	TotalSold    int32  `json:"total_sold"`
+	TotalRevenue int64  `json:"total_revenue"`
+}
+
+type merchantStatsResponse struct {
+	Days                      int                 `json:"days"`
+	TotalOrders               int32               `json:"total_orders"`
+	TotalSales                int64               `json:"total_sales"`
+	TotalCommission           int64               `json:"total_commission"`
+	AvgDailySales             int32               `json:"avg_daily_sales"`
+	TotalCustomers            int32               `json:"total_customers"`
+	RepeatCustomers           int32               `json:"repeat_customers"`
+	RepurchaseRateBasisPoints int32               `json:"repurchase_rate_basis_points"`
+	AvgOrdersPerUserCents     int32               `json:"avg_orders_per_user_cents"`
+	TopDishes                 []merchantStatsDish `json:"top_dishes"`
+}
+
+// getOperatorMerchantStats 获取商户经营统计
+// @Summary 获取商户经营统计
+// @Description 运营商获取指定商户在指定天数范围内的经营统计数据
 // @Tags 运营商-商户骑手管理
 // @Accept json
 // @Produce json
 // @Param id path int true "商户ID"
-// @Param request body suspendOperatorMerchantRequest true "暂停原因和时长"
-// @Success 200 {object} MessageResponse "暂停成功"
+// @Param days query int false "统计天数（1~365，默认30）"
+// @Success 200 {object} merchantStatsResponse
 // @Failure 400 {object} errorMessage "请求参数错误"
 // @Failure 401 {object} errorMessage "未授权"
 // @Failure 403 {object} errorMessage "无权限"
 // @Failure 404 {object} errorMessage "商户不存在"
 // @Failure 500 {object} errorMessage "服务器错误"
 // @Security BearerAuth
-// @Router /v1/operator/merchants/{id}/suspend [post]
-func (server *Server) suspendOperatorMerchant(ctx *gin.Context) {
-	merchantIDStr := ctx.Param("id")
-	merchantID, err := strconv.ParseInt(merchantIDStr, 10, 64)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("无效的商户ID")))
-		return
-	}
-
-	var req suspendOperatorMerchantRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
+// @Router /v1/operator/merchants/{id}/stats [get]
+func (server *Server) getOperatorMerchantStats(ctx *gin.Context) {
+	var req getOperatorMerchantStatsRequest
+	if err := ctx.ShouldBindUri(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
+	if err := ctx.ShouldBindQuery(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+	if req.Days == 0 {
+		req.Days = 30
+	}
 
-	// 获取商户信息
-	merchant, err := server.store.GetMerchant(ctx, merchantID)
+	// 验证商户存在并属于运营商管辖区域
+	merchant, err := server.store.GetMerchant(ctx, req.ID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("商户不存在")))
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrMerchantNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
-
-	// 验证运营商是否管理该商户的区域
 	if _, err := server.checkOperatorManagesRegion(ctx, merchant.RegionID); err != nil {
 		ctx.JSON(http.StatusForbidden, errorResponse(err))
 		return
 	}
 
-	// 检查商户当前状态
-	if merchant.Status == "suspended" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("商户已处于暂停状态")))
-		return
-	}
+	endAt := time.Now()
+	startAt := endAt.AddDate(0, 0, -req.Days)
 
-	// 更新商户状态为暂停
-	_, err = server.store.UpdateMerchantStatus(ctx, db.UpdateMerchantStatusParams{
-		ID:     merchantID,
-		Status: "suspended",
+	// 概览统计
+	overview, err := server.store.GetMerchantOverview(ctx, db.GetMerchantOverviewParams{
+		MerchantID: req.ID,
+		StartAt:    startAt,
+		EndAt:      endAt,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	// 记录暂停信息到商户画像（用于审计追溯，忽略错误不影响主流程）
-	suspendUntil := time.Now().Add(time.Duration(req.DurationHours) * time.Hour)
-	_ = server.store.SuspendMerchant(ctx, db.SuspendMerchantParams{
-		MerchantID:    merchantID,
-		SuspendReason: pgtype.Text{String: req.Reason, Valid: true},
-		SuspendUntil:  pgtype.Timestamptz{Time: suspendUntil, Valid: true},
+	// 复购率
+	repurchase, err := server.store.GetMerchantRepurchaseRate(ctx, db.GetMerchantRepurchaseRateParams{
+		MerchantID: req.ID,
+		StartAt:    startAt,
+		EndAt:      endAt,
 	})
-
-	ctx.JSON(http.StatusOK, gin.H{
-		"message":        fmt.Sprintf("商户 %d 已暂停 %d 小时", merchantID, req.DurationHours),
-		"reason":         req.Reason,
-		"duration_hours": req.DurationHours,
-	})
-}
-
-type resumeOperatorMerchantRequest struct {
-	Reason string `json:"reason" binding:"required,min=5,max=500"`
-}
-
-// resumeOperatorMerchant 运营商恢复商户
-// @Summary 恢复商户
-// @Description 运营商恢复其管辖区域内被暂停的商户
-// @Tags 运营商-商户骑手管理
-// @Accept json
-// @Produce json
-// @Param id path int true "商户ID"
-// @Param request body resumeOperatorMerchantRequest true "恢复原因"
-// @Success 200 {object} MessageResponse "恢复成功"
-// @Failure 400 {object} errorMessage "请求参数错误"
-// @Failure 401 {object} errorMessage "未授权"
-// @Failure 403 {object} errorMessage "无权限"
-// @Failure 404 {object} errorMessage "商户不存在"
-// @Failure 500 {object} errorMessage "服务器错误"
-// @Security BearerAuth
-// @Router /v1/operator/merchants/{id}/resume [post]
-func (server *Server) resumeOperatorMerchant(ctx *gin.Context) {
-	merchantIDStr := ctx.Param("id")
-	merchantID, err := strconv.ParseInt(merchantIDStr, 10, 64)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("无效的商户ID")))
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	var req resumeOperatorMerchantRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+	// 热销菜品 Top 5
+	topDisheRows, err := server.store.GetTopSellingDishes(ctx, db.GetTopSellingDishesParams{
+		MerchantID: req.ID,
+		StartAt:    startAt,
+		EndAt:      endAt,
+		Limit:      5,
+	})
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	// 获取商户信息
-	merchant, err := server.store.GetMerchant(ctx, merchantID)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("商户不存在")))
-			return
+	topDishes := make([]merchantStatsDish, len(topDisheRows))
+	for i, d := range topDisheRows {
+		topDishes[i] = merchantStatsDish{
+			DishName:     d.DishName,
+			TotalSold:    d.TotalSold,
+			TotalRevenue: d.TotalRevenue,
 		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
 	}
 
-	// 验证运营商是否管理该商户的区域
-	if _, err := server.checkOperatorManagesRegion(ctx, merchant.RegionID); err != nil {
-		ctx.JSON(http.StatusForbidden, errorResponse(err))
-		return
-	}
-
-	// 检查商户当前状态
-	if merchant.Status != "suspended" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("商户未处于暂停状态")))
-		return
-	}
-
-	// 更新商户状态为正常
-	_, err = server.store.UpdateMerchantStatus(ctx, db.UpdateMerchantStatusParams{
-		ID:     merchantID,
-		Status: "approved",
-	})
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 清除商户画像中的暂停信息（忽略错误不影响主流程）
-	_ = server.store.UnsuspendMerchant(ctx, merchantID)
-
-	ctx.JSON(http.StatusOK, gin.H{
-		"message": fmt.Sprintf("商户 %d 已恢复上线", merchantID),
-		"reason":  req.Reason,
+	ctx.JSON(http.StatusOK, merchantStatsResponse{
+		Days:                      req.Days,
+		TotalOrders:               overview.TotalOrders,
+		TotalSales:                overview.TotalSales,
+		TotalCommission:           overview.TotalCommission,
+		AvgDailySales:             overview.AvgDailySales,
+		TotalCustomers:            repurchase.TotalCustomers,
+		RepeatCustomers:           repurchase.RepeatCustomers,
+		RepurchaseRateBasisPoints: repurchase.RepurchaseRateBasisPoints,
+		AvgOrdersPerUserCents:     repurchase.AvgOrdersPerUserCents,
+		TopDishes:                 topDishes,
 	})
 }
 
 // ==================== 骑手列表查询 ====================
 
 type listOperatorRidersRequest struct {
-	Status string `form:"status" binding:"omitempty,oneof=pending active suspended deactivated"`
-	Page   int32  `form:"page" binding:"omitempty,min=1"`
-	Limit  int32  `form:"limit" binding:"omitempty,min=1,max=100"`
+	Status   string `form:"status" binding:"omitempty,oneof=approved active suspended pending_approval rejected"`
+	RegionID int64  `form:"region_id" binding:"omitempty,min=1"`
+	Page     int32  `form:"page" binding:"omitempty,min=1"`
+	Limit    int32  `form:"limit" binding:"omitempty,min=1,max=100"`
 }
 
 type riderListItem struct {
@@ -433,10 +704,21 @@ type riderListItem struct {
 }
 
 type listOperatorRidersResponse struct {
-	Riders []riderListItem `json:"riders"`
-	Total  int64           `json:"total"`
-	Page   int32           `json:"page"`
-	Limit  int32           `json:"limit"`
+	Riders   []riderListItem `json:"riders"`
+	Total    int64           `json:"total"`
+	PageID   int32           `json:"page_id"`
+	PageSize int32           `json:"page_size"`
+	Page     int32           `json:"page"`
+	Limit    int32           `json:"limit"`
+}
+
+type operatorRiderSummaryResponse struct {
+	Total           int64 `json:"total"`
+	PendingApproval int64 `json:"pending_approval"`
+	Active          int64 `json:"active"`
+	Rejected        int64 `json:"rejected"`
+	Suspended       int64 `json:"suspended"`
+	Online          int64 `json:"online"`
 }
 
 // listOperatorRiders 获取运营商管辖区域内的骑手列表
@@ -445,7 +727,7 @@ type listOperatorRidersResponse struct {
 // @Tags 运营商-商户骑手管理
 // @Accept json
 // @Produce json
-// @Param status query string false "骑手状态" Enums(pending, active, suspended, deactivated)
+// @Param status query string false "骑手状态" Enums(approved, active, suspended, pending_approval, rejected)
 // @Param page query int false "页码" default(1)
 // @Param limit query int false "每页数量" default(20) maximum(100)
 // @Success 200 {object} listOperatorRidersResponse
@@ -462,6 +744,13 @@ func (server *Server) listOperatorRiders(ctx *gin.Context) {
 		return
 	}
 
+	// 从中间件获取运营商信息
+	operator, ok := GetOperatorFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("operator not found in context")))
+		return
+	}
+
 	// 设置默认值
 	if req.Page == 0 {
 		req.Page = 1
@@ -470,21 +759,25 @@ func (server *Server) listOperatorRiders(ctx *gin.Context) {
 		req.Limit = 20
 	}
 
-	// 从中间件获取运营商信息
-	operator, ok := GetOperatorFromContext(ctx)
-	if !ok {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("operator not found in context")))
-		return
+	// 确定目标区域 ID
+	targetRegionID := req.RegionID
+	if targetRegionID == 0 {
+		// 默认使用主区域
+		if operator.RegionID == 0 {
+			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("operator has no assigned region")))
+			return
+		}
+		targetRegionID = operator.RegionID
+	} else {
+		// 验证是否有权管理该特定区域
+		if _, err := server.checkOperatorManagesRegion(ctx, targetRegionID); err != nil {
+			ctx.JSON(http.StatusForbidden, errorResponse(err))
+			return
+		}
 	}
 
-	// 获取运营商管理的区域
-	if operator.RegionID == 0 {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("operator has no assigned region")))
-		return
-	}
-
-	offset := (req.Page - 1) * req.Limit
-	regionID := pgtype.Int8{Int64: operator.RegionID, Valid: true}
+	offset := pageOffset(req.Page, req.Limit)
+	regionID := pgtype.Int8{Int64: targetRegionID, Valid: true}
 
 	// 查询骑手列表
 	var riders []db.Rider
@@ -550,10 +843,105 @@ func (server *Server) listOperatorRiders(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, listOperatorRidersResponse{
-		Riders: result,
-		Total:  total,
-		Page:   req.Page,
-		Limit:  req.Limit,
+		Riders:   result,
+		Total:    total,
+		PageID:   req.Page,
+		PageSize: req.Limit,
+		Page:     req.Page,
+		Limit:    req.Limit,
+	})
+}
+
+// getOperatorRiderSummary 获取区域骑手汇总
+// @Summary 获取区域骑手汇总
+// @Description 运营商获取管辖区域内骑手总数及各状态汇总，供工作台和审批入口使用
+// @Tags 运营商-商户骑手管理
+// @Accept json
+// @Produce json
+// @Param region_id query int false "区域ID"
+// @Success 200 {object} operatorRiderSummaryResponse
+// @Failure 400 {object} errorMessage "请求参数错误"
+// @Failure 401 {object} errorMessage "未授权"
+// @Failure 403 {object} errorMessage "无权限"
+// @Failure 500 {object} errorMessage "服务器错误"
+// @Security BearerAuth
+// @Router /v1/operator/riders/summary [get]
+func (server *Server) getOperatorRiderSummary(ctx *gin.Context) {
+	var req listOperatorRidersRequest
+	if err := ctx.ShouldBindQuery(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	operator, ok := GetOperatorFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("operator not found in context")))
+		return
+	}
+
+	targetRegionID := req.RegionID
+	if targetRegionID == 0 {
+		if operator.RegionID == 0 {
+			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("operator has no assigned region")))
+			return
+		}
+		targetRegionID = operator.RegionID
+	} else {
+		if _, err := server.checkOperatorManagesRegion(ctx, targetRegionID); err != nil {
+			ctx.JSON(http.StatusForbidden, errorResponse(err))
+			return
+		}
+	}
+
+	regionID := pgtype.Int8{Int64: targetRegionID, Valid: true}
+	countStatus := func(status string) (int64, error) {
+		if status == "" {
+			return server.store.CountRidersByRegion(ctx, regionID)
+		}
+		return server.store.CountRidersByRegionWithStatus(ctx, db.CountRidersByRegionWithStatusParams{
+			RegionID: regionID,
+			Status:   status,
+		})
+	}
+
+	total, err := countStatus("")
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	pendingApproval, err := countStatus("pending_approval")
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	active, err := countStatus("active")
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	rejected, err := countStatus("rejected")
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	suspended, err := countStatus("suspended")
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	online, err := server.store.CountOnlineRidersByRegion(ctx, regionID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, operatorRiderSummaryResponse{
+		Total:           total,
+		PendingApproval: pendingApproval,
+		Active:          active,
+		Rejected:        rejected,
+		Suspended:       suspended,
+		Online:          online,
 	})
 }
 
@@ -564,25 +952,24 @@ type getOperatorRiderRequest struct {
 }
 
 type riderDetailResponse struct {
-	ID                 int64   `json:"id"`
-	UserID             int64   `json:"user_id"`
-	RealName           string  `json:"real_name"`
-	Phone              string  `json:"phone"`
-	IDCardNo           string  `json:"id_card_no"`
-	Status             string  `json:"status"`
-	IsOnline           bool    `json:"is_online"`
-	RegionID           int64   `json:"region_id"`
-	DepositAmount      int64   `json:"deposit_amount"`
-	FrozenDeposit      int64   `json:"frozen_deposit"`
-	TotalOrders        int32   `json:"total_orders"`
-	TotalEarnings      int64   `json:"total_earnings"`
-	CurrentLatitude    float64 `json:"current_latitude"`
-	CurrentLongitude   float64 `json:"current_longitude"`
-	LocationUpdatedAt  string  `json:"location_updated_at,omitempty"`
-	CreditScore        int16   `json:"credit_score"`
-	HighValueQualified bool    `json:"high_value_qualified"`
-	CreatedAt          string  `json:"created_at"`
-	UpdatedAt          string  `json:"updated_at"`
+	ID                int64   `json:"id"`
+	UserID            int64   `json:"user_id"`
+	RealName          string  `json:"real_name"`
+	Phone             string  `json:"phone"`
+	IDCardNo          string  `json:"id_card_no"`
+	Status            string  `json:"status"`
+	IsOnline          bool    `json:"is_online"`
+	RegionID          int64   `json:"region_id"`
+	DepositAmount     int64   `json:"deposit_amount"`
+	FrozenDeposit     int64   `json:"frozen_deposit"`
+	TotalOrders       int32   `json:"total_orders"`
+	TotalEarnings     int64   `json:"total_earnings"`
+	CurrentLatitude   float64 `json:"current_latitude"`
+	CurrentLongitude  float64 `json:"current_longitude"`
+	LocationUpdatedAt string  `json:"location_updated_at,omitempty"`
+	CreditScore       int16   `json:"credit_score"`
+	CreatedAt         string  `json:"created_at"`
+	UpdatedAt         string  `json:"updated_at"`
 }
 
 // getOperatorRider 获取骑手详情
@@ -610,8 +997,8 @@ func (server *Server) getOperatorRider(ctx *gin.Context) {
 	// 获取骑手信息
 	rider, err := server.store.GetRider(ctx, req.ID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("骑手不存在")))
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrRiderNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -620,7 +1007,7 @@ func (server *Server) getOperatorRider(ctx *gin.Context) {
 
 	// 验证骑手有区域
 	if !rider.RegionID.Valid {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("骑手未分配区域")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrRiderNoRegionAssigned))
 		return
 	}
 
@@ -630,34 +1017,29 @@ func (server *Server) getOperatorRider(ctx *gin.Context) {
 		return
 	}
 
-	// 获取高值单资格积分
-	premiumScore, _ := server.store.GetRiderPremiumScore(ctx, rider.ID)
-	highValueQualified := premiumScore >= 0
-
 	updatedAt := ""
 	if rider.UpdatedAt.Valid {
 		updatedAt = rider.UpdatedAt.Time.Format("2006-01-02 15:04:05")
 	}
 
 	resp := riderDetailResponse{
-		ID:                 rider.ID,
-		UserID:             rider.UserID,
-		RealName:           rider.RealName,
-		Phone:              rider.Phone,
-		IDCardNo:           maskIDCard(rider.IDCardNo),
-		Status:             rider.Status,
-		IsOnline:           rider.IsOnline,
-		RegionID:           rider.RegionID.Int64,
-		DepositAmount:      rider.DepositAmount,
-		FrozenDeposit:      rider.FrozenDeposit,
-		TotalOrders:        rider.TotalOrders,
-		TotalEarnings:      rider.TotalEarnings,
-		CurrentLatitude:    pgNumericToFloat64(rider.CurrentLatitude),
-		CurrentLongitude:   pgNumericToFloat64(rider.CurrentLongitude),
-		CreditScore:        rider.CreditScore,
-		HighValueQualified: highValueQualified,
-		CreatedAt:          rider.CreatedAt.Format("2006-01-02 15:04:05"),
-		UpdatedAt:          updatedAt,
+		ID:               rider.ID,
+		UserID:           rider.UserID,
+		RealName:         rider.RealName,
+		Phone:            rider.Phone,
+		IDCardNo:         maskIDCard(rider.IDCardNo),
+		Status:           rider.Status,
+		IsOnline:         rider.IsOnline,
+		RegionID:         rider.RegionID.Int64,
+		DepositAmount:    rider.DepositAmount,
+		FrozenDeposit:    rider.FrozenDeposit,
+		TotalOrders:      rider.TotalOrders,
+		TotalEarnings:    rider.TotalEarnings,
+		CurrentLatitude:  pgNumericToFloat64(rider.CurrentLatitude),
+		CurrentLongitude: pgNumericToFloat64(rider.CurrentLongitude),
+		CreditScore:      rider.CreditScore,
+		CreatedAt:        rider.CreatedAt.Format("2006-01-02 15:04:05"),
+		UpdatedAt:        updatedAt,
 	}
 
 	if rider.LocationUpdatedAt.Valid {
@@ -675,183 +1057,91 @@ func maskIDCard(idCard string) string {
 	return idCard[:6] + "********" + idCard[len(idCard)-4:]
 }
 
-// ==================== 暂停/恢复骑手 ====================
+// ==================== 骑手经营统计 ====================
 
-type suspendOperatorRiderRequest struct {
-	Reason        string `json:"reason" binding:"required,min=5,max=500"`
-	DurationHours int    `json:"duration_hours" binding:"required,min=1,max=720"`
+type getOperatorRiderStatsRequest struct {
+	ID   int64 `uri:"id" binding:"required,min=1"`
+	Days int   `form:"days" binding:"omitempty,min=1,max=365"`
 }
 
-// suspendOperatorRider 运营商暂停骑手
-// @Summary 暂停骑手
-// @Description 运营商暂停其管辖区域内的骑手，最长可暂停30天（720小时）
+type riderStatsResponse struct {
+	Days                      int   `json:"days"`
+	TotalDeliveries           int32 `json:"total_deliveries"`
+	CompletedDeliveries       int32 `json:"completed_deliveries"`
+	CompletionRateBasisPoints int32 `json:"completion_rate_basis_points"`
+	AvgDeliverySeconds        int32 `json:"avg_delivery_seconds"`
+	PeriodEarnings            int64 `json:"period_earnings"`
+	DelayedCount              int32 `json:"delayed_count"`
+}
+
+// getOperatorRiderStats 获取骑手配送统计
+// @Summary 获取骑手配送统计
+// @Description 运营商获取指定骑手在指定天数范围内的配送绩效统计
 // @Tags 运营商-商户骑手管理
 // @Accept json
 // @Produce json
 // @Param id path int true "骑手ID"
-// @Param request body suspendOperatorRiderRequest true "暂停原因和时长"
-// @Success 200 {object} MessageResponse "暂停成功"
+// @Param days query int false "统计天数（1~365，默认30）"
+// @Success 200 {object} riderStatsResponse
 // @Failure 400 {object} errorMessage "请求参数错误"
-// @Failure 401 {object} errorMessage "未授权"
 // @Failure 403 {object} errorMessage "无权限"
 // @Failure 404 {object} errorMessage "骑手不存在"
 // @Failure 500 {object} errorMessage "服务器错误"
 // @Security BearerAuth
-// @Router /v1/operator/riders/{id}/suspend [post]
-func (server *Server) suspendOperatorRider(ctx *gin.Context) {
-	riderIDStr := ctx.Param("id")
-	riderID, err := strconv.ParseInt(riderIDStr, 10, 64)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("无效的骑手ID")))
-		return
-	}
-
-	var req suspendOperatorRiderRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
+// @Router /v1/operator/riders/{id}/stats [get]
+func (server *Server) getOperatorRiderStats(ctx *gin.Context) {
+	var req getOperatorRiderStatsRequest
+	if err := ctx.ShouldBindUri(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
+	if err := ctx.ShouldBindQuery(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+	if req.Days == 0 {
+		req.Days = 30
+	}
 
-	// 获取骑手信息
-	rider, err := server.store.GetRider(ctx, riderID)
+	// 验证骑手存在并属于运营商区域
+	rider, err := server.store.GetRider(ctx, req.ID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("骑手不存在")))
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrRiderNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
-
-	// 验证骑手有区域
 	if !rider.RegionID.Valid {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("骑手未分配区域")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrRiderNoRegionAssigned))
 		return
 	}
-
-	// 验证运营商是否管理该骑手的区域
 	if _, err := server.checkOperatorManagesRegion(ctx, rider.RegionID.Int64); err != nil {
 		ctx.JSON(http.StatusForbidden, errorResponse(err))
 		return
 	}
 
-	// 检查骑手当前状态
-	if rider.Status == "suspended" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("骑手已处于暂停状态")))
-		return
-	}
+	endAt := time.Now()
+	startAt := endAt.AddDate(0, 0, -req.Days)
 
-	// 更新骑手状态为暂停
-	_, err = server.store.UpdateRiderStatus(ctx, db.UpdateRiderStatusParams{
-		ID:     riderID,
-		Status: "suspended",
+	stats, err := server.store.GetOperatorRiderStats(ctx, db.GetOperatorRiderStatsParams{
+		RiderID: pgtype.Int8{Int64: rider.ID, Valid: true},
+		StartAt: startAt,
+		EndAt:   endAt,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	// 同时下线骑手
-	if rider.IsOnline {
-		_, _ = server.store.UpdateRiderOnlineStatus(ctx, db.UpdateRiderOnlineStatusParams{
-			ID:       riderID,
-			IsOnline: false,
-		})
-	}
-
-	// 记录暂停信息到骑手画像（用于审计追溯，忽略错误不影响主流程）
-	suspendUntil := time.Now().Add(time.Duration(req.DurationHours) * time.Hour)
-	_ = server.store.SuspendRider(ctx, db.SuspendRiderParams{
-		RiderID:       riderID,
-		SuspendReason: pgtype.Text{String: req.Reason, Valid: true},
-		SuspendUntil:  pgtype.Timestamptz{Time: suspendUntil, Valid: true},
-	})
-
-	ctx.JSON(http.StatusOK, gin.H{
-		"message":        fmt.Sprintf("骑手 %d 已暂停 %d 小时", riderID, req.DurationHours),
-		"reason":         req.Reason,
-		"duration_hours": req.DurationHours,
-	})
-}
-
-type resumeOperatorRiderRequest struct {
-	Reason string `json:"reason" binding:"required,min=5,max=500"`
-}
-
-// resumeOperatorRider 运营商恢复骑手
-// @Summary 恢复骑手
-// @Description 运营商恢复其管辖区域内被暂停的骑手
-// @Tags 运营商-商户骑手管理
-// @Accept json
-// @Produce json
-// @Param id path int true "骑手ID"
-// @Param request body resumeOperatorRiderRequest true "恢复原因"
-// @Success 200 {object} MessageResponse "恢复成功"
-// @Failure 400 {object} errorMessage "请求参数错误"
-// @Failure 401 {object} errorMessage "未授权"
-// @Failure 403 {object} errorMessage "无权限"
-// @Failure 404 {object} errorMessage "骑手不存在"
-// @Failure 500 {object} errorMessage "服务器错误"
-// @Security BearerAuth
-// @Router /v1/operator/riders/{id}/resume [post]
-func (server *Server) resumeOperatorRider(ctx *gin.Context) {
-	riderIDStr := ctx.Param("id")
-	riderID, err := strconv.ParseInt(riderIDStr, 10, 64)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("无效的骑手ID")))
-		return
-	}
-
-	var req resumeOperatorRiderRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
-		return
-	}
-
-	// 获取骑手信息
-	rider, err := server.store.GetRider(ctx, riderID)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("骑手不存在")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 验证骑手有区域
-	if !rider.RegionID.Valid {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("骑手未分配区域")))
-		return
-	}
-
-	// 验证运营商是否管理该骑手的区域
-	if _, err := server.checkOperatorManagesRegion(ctx, rider.RegionID.Int64); err != nil {
-		ctx.JSON(http.StatusForbidden, errorResponse(err))
-		return
-	}
-
-	// 检查骑手当前状态
-	if rider.Status != "suspended" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("骑手未处于暂停状态")))
-		return
-	}
-
-	// 更新骑手状态为正常
-	_, err = server.store.UpdateRiderStatus(ctx, db.UpdateRiderStatusParams{
-		ID:     riderID,
-		Status: "active",
-	})
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 清除骑手画像中的暂停信息（忽略错误不影响主流程）
-	_ = server.store.UnsuspendRider(ctx, riderID)
-
-	ctx.JSON(http.StatusOK, gin.H{
-		"message": fmt.Sprintf("骑手 %d 已恢复上线资格", riderID),
-		"reason":  req.Reason,
+	ctx.JSON(http.StatusOK, riderStatsResponse{
+		Days:                      req.Days,
+		TotalDeliveries:           stats.TotalDeliveries,
+		CompletedDeliveries:       stats.CompletedDeliveries,
+		CompletionRateBasisPoints: stats.CompletionRateBasisPoints,
+		AvgDeliverySeconds:        stats.AvgDeliverySeconds,
+		PeriodEarnings:            stats.PeriodEarnings,
+		DelayedCount:              stats.DelayedCount,
 	})
 }

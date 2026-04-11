@@ -1,0 +1,10 @@
+{
+  "usingComponents": {
+    "custom-navbar": "/components/custom-navbar/index",
+    "t-upload": "tdesign-miniprogram/upload/upload",
+    "t-loading": "tdesign-miniprogram/loading/loading",
+    "t-divider": "tdesign-miniprogram/divider/divider",
+    "t-empty": "tdesign-miniprogram/empty/empty",
+    "t-button": "tdesign-miniprogram/button/button"
+  }
+}

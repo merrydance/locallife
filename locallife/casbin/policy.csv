@@ -28,27 +28,65 @@ g, rider, customer
 # Platform Statistics
 p, admin, /v1/platform/stats/*, GET
 
-# Merchant Application Review
-p, admin, /v1/admin/merchants/applications, GET
-p, admin, /v1/admin/merchants/applications/review, POST
+# Platform Profit Sharing Configs
+p, admin, /v1/platform/profit-sharing/*, GET
+p, admin, /v1/platform/profit-sharing/*, POST
+p, admin, /v1/platform/profit-sharing/*, PATCH
+p, admin, /v1/platform/finance/*, GET
+
+# Platform Rules
+p, admin, /v1/platform/rules, GET
+p, admin, /v1/platform/rules, POST
+p, admin, /v1/platform/rules/*, GET
+p, admin, /v1/platform/rules/*, POST
+p, admin, /v1/platform/operational-configs, GET
+p, admin, /v1/platform/operational-configs/:key, PATCH
+p, admin, /v1/platform/operator-rules, GET
+p, admin, /v1/platform/operator-rules/:key, PATCH
 
 # Rider Management
 p, admin, /v1/admin/riders, GET
 p, admin, /v1/admin/riders/:rider_id/approve, POST
 p, admin, /v1/admin/riders/:rider_id/reject, POST
 
-# Trust Score Management (admin-only actions)
-p, admin, /v1/trust-score/claims/:id/review, PATCH
-p, admin, /v1/trust-score/merchants/:id/suspend, PATCH
-p, admin, /v1/trust-score/fraud/detect, POST
+# Operator Application Review
+p, admin, /v1/admin/operators/applications, GET
+p, admin, /v1/admin/operators/applications/:id, GET
+p, admin, /v1/admin/operators/applications/:id/approve, POST
+p, admin, /v1/admin/operators/applications/:id/reject, POST
+
+# Operator Region Expansion Application Review
+p, admin, /v1/admin/operators/region-applications, GET
+p, admin, /v1/admin/operators/region-applications/:id/approve, POST
+p, admin, /v1/admin/operators/region-applications/:id/reject, POST
+
+# Tag Management
+p, admin, /v1/tags, POST
+
+# Claims & Risk Management (admin-only actions)
+p, admin, /v1/food-safety/merchants/:id/suspend, PATCH
+p, admin, /v1/fraud/detect, POST
+
+# Group Management
+p, admin, /v1/groups, POST
+p, admin, /v1/groups/applications/:id/review, POST
+p, admin, /v1/admin/groups/applications, GET
+p, admin, /v1/admin/groups/applications/:id, GET
+p, admin, /v1/admin/groups/applications/:id/review, POST
 
 # =============================================================================
 # Operator Policies - Regional management
 # =============================================================================
+# Region Expansion Applications
+p, operator, /v1/operator/region-expansion, POST
+p, operator, /v1/operator/region-expansion, GET
+
 # Regional Statistics
+p, operator, /v1/operator/regions, GET
 p, operator, /v1/operator/regions/:region_id/stats, GET
 p, operator, /v1/operator/regions/:region_id/peak-hours, POST
 p, operator, /v1/operator/regions/:region_id/peak-hours, GET
+p, operator, /v1/operator/stats/realtime, GET
 
 # Settlement Management
 p, operator, /v1/operator/settlements, GET
@@ -62,26 +100,39 @@ p, operator, /v1/operator/riders/ranking, GET
 p, operator, /v1/operator/trend/daily, GET
 p, operator, /v1/operator/peak-hours/:id, DELETE
 
-# Merchant Management (List, Detail, Suspend, Resume)
+# Merchant Management (List, Detail)
 p, operator, /v1/operator/merchants, GET
 p, operator, /v1/operator/merchants/:id, GET
-p, operator, /v1/operator/merchants/:id/suspend, POST
-p, operator, /v1/operator/merchants/:id/resume, POST
 
-# Rider Management (List, Detail, Suspend, Resume)
+# Rider Management (List, Detail)
 p, operator, /v1/operator/riders, GET
 p, operator, /v1/operator/riders/:id, GET
-p, operator, /v1/operator/riders/:id/suspend, POST
-p, operator, /v1/operator/riders/:id/resume, POST
+
+# Rider Review (Operator)
+p, operator, /v1/admin/riders, GET
+p, operator, /v1/admin/riders/:rider_id/approve, POST
+p, operator, /v1/admin/riders/:rider_id/reject, POST
 
 # Appeals Management
 p, operator, /v1/operator/appeals, GET
 p, operator, /v1/operator/appeals/:id, GET
 p, operator, /v1/operator/appeals/:id/review, POST
+p, operator, /v1/operator/claims/:id/recovery, GET
+p, operator, /v1/operator/claims/:id/recovery/waive, POST
+p, operator, /v1/operator/merchants/:id/resume, POST
+p, operator, /v1/operator/reports/safety, GET
+p, operator, /v1/operator/reports/safety, POST
+p, operator, /v1/operator/reports/safety/:id, GET
+p, operator, /v1/operator/reports/safety/:id/resolve, POST
 
 # Operator Finance
 p, operator, /v1/operators/me/finance/overview, GET
 p, operator, /v1/operators/me/commission, GET
+p, operator, /v1/operators/me/finance/account/balance, GET
+p, operator, /v1/operators/me/finance/withdraw, POST
+p, operator, /v1/operators/me/finance/withdrawals, GET
+p, operator, /v1/operators/me/finance/withdrawals/:id, GET
+p, operator, /v1/operators/me/profit-sharing/configs, GET
 
 # Operator Ecommerce Applyment (WeChat Secondary Merchant)
 p, operator, /v1/operator/applyment/bindbank, POST
@@ -91,19 +142,22 @@ p, operator, /v1/operator/applyment/status, GET
 p, operator, /v1/delivery-fee/regions/:region_id/config, POST
 p, operator, /v1/delivery-fee/regions/:region_id/config, PATCH
 
-# Region Recommendation Config
-p, operator, /v1/regions/:id/recommendation-config, GET
-p, operator, /v1/regions/:id/recommendation-config, PATCH
-
 # Review Moderation
 p, operator, /v1/reviews/:id, DELETE
+
+# Rule Management
+p, operator, /v1/operator/rules, GET
+p, operator, /v1/operator/rules/:key, PATCH
 
 # =============================================================================
 # Merchant Owner Policies - Store management
 # =============================================================================
 # Merchant Profile
-p, merchant_owner, /v1/merchants/applications, POST
-p, merchant_owner, /v1/merchants/applications/me, GET
+p, merchant_owner, /v1/merchant/application, GET
+p, merchant_owner, /v1/merchant/application/basic, PUT
+p, merchant_owner, /v1/merchant/application/images, PUT
+p, merchant_owner, /v1/merchant/application/submit, POST
+p, merchant_owner, /v1/merchant/application/reset, POST
 p, merchant_owner, /v1/merchants/me, GET
 p, merchant_owner, /v1/merchants/me, PATCH
 p, merchant_owner, /v1/merchants/me/status, GET
@@ -113,6 +167,7 @@ p, merchant_owner, /v1/merchants/me/business-hours, PUT
 p, merchant_owner, /v1/merchants/me/membership-settings, GET
 p, merchant_owner, /v1/merchants/me/membership-settings, PUT
 p, merchant_owner, /v1/merchants/images/upload, POST
+p, merchant_owner, /v1/merchants/me/shop-images, PATCH
 
 # Dish Management
 p, merchant_owner, /v1/dishes/categories, POST
@@ -167,6 +222,7 @@ p, merchant_owner, /v1/delivery-fee/promotions/:id, DELETE
 
 # Reservation Management (Merchant)
 p, merchant_owner, /v1/reservations/merchant, GET
+p, merchant_owner, /v1/reservations/merchant/dishes, GET
 p, merchant_owner, /v1/reservations/:id/confirm, POST
 p, merchant_owner, /v1/reservations/:id/complete, POST
 p, merchant_owner, /v1/reservations/:id/no-show, POST
@@ -190,6 +246,10 @@ p, merchant_owner, /v1/kitchen/orders/:id/ready, POST
 # Claims & Appeals (Merchant)
 p, merchant_owner, /v1/merchant/claims, GET
 p, merchant_owner, /v1/merchant/claims/:id, GET
+p, merchant_owner, /v1/merchant/claims/:id/decision, GET
+p, merchant_owner, /v1/merchant/claims/behavior-summary, GET
+p, merchant_owner, /v1/merchant/claims/:id/recovery, GET
+p, merchant_owner, /v1/merchant/claims/:id/recovery/pay, POST
 p, merchant_owner, /v1/merchant/appeals, POST
 p, merchant_owner, /v1/merchant/appeals, GET
 p, merchant_owner, /v1/merchant/appeals/:id, GET
@@ -258,8 +318,6 @@ p, merchant_owner, /v1/merchants/:id/recharge-rules/:id, PATCH
 p, merchant_owner, /v1/merchants/:id/recharge-rules/:id, DELETE
 
 # Trust Score (Merchant Recovery)
-p, merchant_owner, /v1/trust-score/recovery, POST
-p, merchant_owner, /v1/trust-score/appeals, POST
 
 # =============================================================================
 # Merchant Staff Policies - Limited store access
@@ -284,8 +342,17 @@ p, merchant_staff, /v1/inventory/stats, GET
 
 # Reservations (read-only + confirm)
 p, merchant_staff, /v1/reservations/merchant, GET
+p, merchant_staff, /v1/reservations/merchant/dishes, GET
 p, merchant_staff, /v1/reservations/:id/confirm, POST
 p, merchant_staff, /v1/reservations/:id/complete, POST
+
+# Claims (read-only + recovery)
+p, merchant_staff, /v1/merchant/claims, GET
+p, merchant_staff, /v1/merchant/claims/:id, GET
+p, merchant_staff, /v1/merchant/claims/:id/decision, GET
+p, merchant_staff, /v1/merchant/claims/behavior-summary, GET
+p, merchant_staff, /v1/merchant/claims/:id/recovery, GET
+p, merchant_staff, /v1/merchant/claims/:id/recovery/pay, POST
 
 # Tables (read-only)
 p, merchant_staff, /v1/tables, GET
@@ -295,7 +362,11 @@ p, merchant_staff, /v1/tables/:id, GET
 # Rider Policies - Delivery management
 # =============================================================================
 # Rider Registration & Profile
-p, rider, /v1/rider/apply, POST
+p, rider, /v1/rider/application, GET
+p, rider, /v1/rider/application/basic, PUT
+p, rider, /v1/rider/application/healthcert, POST
+p, rider, /v1/rider/application/submit, POST
+p, rider, /v1/rider/application/reset, POST
 p, rider, /v1/rider/me, GET
 
 # Deposit Management
@@ -341,8 +412,6 @@ p, rider, /v1/delivery/:delivery_id/track, GET
 p, rider, /v1/delivery/:delivery_id/rider-location, GET
 
 # Trust Score (Rider Recovery)
-p, rider, /v1/trust-score/recovery, POST
-p, rider, /v1/trust-score/appeals, POST
 
 # =============================================================================
 # Customer Policies - Basic user access
@@ -357,8 +426,6 @@ p, customer, /v1/operator/application, POST
 p, customer, /v1/operator/application, GET
 p, customer, /v1/operator/application/region, PUT
 p, customer, /v1/operator/application/basic, PUT
-p, customer, /v1/operator/application/license/ocr, POST
-p, customer, /v1/operator/application/idcard/ocr, POST
 p, customer, /v1/operator/application/submit, POST
 p, customer, /v1/operator/application/reset, POST
 
@@ -414,10 +481,8 @@ p, customer, /v1/notifications/preferences, PUT
 p, customer, /v1/ws, GET
 
 # Trust Score (View)
-p, customer, /v1/trust-score/profiles/:role/:id, GET
-p, customer, /v1/trust-score/history/:role/:id, GET
-p, customer, /v1/trust-score/claims, POST
-p, customer, /v1/trust-score/food-safety/report, POST
+p, customer, /v1/claims, POST
+p, customer, /v1/food-safety/report, POST
 
 # Claims (User)
 p, customer, /v1/claims, GET
@@ -454,14 +519,6 @@ p, customer, /v1/reviews, POST
 p, customer, /v1/reviews/:id, GET
 p, customer, /v1/reviews/me, GET
 p, customer, /v1/reviews/merchants/:id, GET
-
-# User Behaviors
-p, customer, /v1/behaviors/track, POST
-
-# Recommendations
-p, customer, /v1/recommendations/dishes, GET
-p, customer, /v1/recommendations/combos, GET
-p, customer, /v1/recommendations/merchants, GET
 
 # Vouchers (User)
 p, customer, /v1/vouchers/:voucher_id/claim, POST

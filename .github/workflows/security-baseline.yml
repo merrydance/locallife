@@ -1,0 +1,212 @@
+name: security-baseline
+
+on:
+  pull_request:
+    paths:
+      - 'locallife/**'
+      - 'web/**'
+      - 'weapp/**'
+      - '.github/scripts/govulncheck_unreachable_report.go'
+      - '.github/scripts/npm_audit_summary.js'
+      - '.github/standards/engineering/UNREACHABLE_DEPENDENCY_RISK_REGISTER.md'
+      - '.github/workflows/security-baseline.yml'
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'locallife/**'
+      - 'web/**'
+      - 'weapp/**'
+      - '.github/scripts/govulncheck_unreachable_report.go'
+      - '.github/scripts/npm_audit_summary.js'
+      - '.github/standards/engineering/UNREACHABLE_DEPENDENCY_RISK_REGISTER.md'
+      - '.github/workflows/security-baseline.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  secret-scan:
+    name: Secret Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  backend-govulncheck:
+    name: Backend Dependency Vulnerabilities
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: locallife
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: locallife/go.mod
+          cache-dependency-path: locallife/go.sum
+
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: Run govulncheck
+        run: |
+          "$HOME/go/bin/govulncheck" ./...
+
+      - name: Build unreachable dependency report
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/govulncheck"
+          "$HOME/go/bin/govulncheck" -json ./... > "$RUNNER_TEMP/govulncheck/govulncheck.jsonl"
+          go run ../.github/scripts/govulncheck_unreachable_report.go \
+            -input "$RUNNER_TEMP/govulncheck/govulncheck.jsonl" \
+            -register ../.github/standards/engineering/UNREACHABLE_DEPENDENCY_RISK_REGISTER.md \
+            -scan-command '"$HOME/go/bin/govulncheck" -json ./...' \
+            -scan-date "$(date -u +%F)" \
+            -report "$RUNNER_TEMP/govulncheck/unreachable-dependency-report.md" \
+            -template "$RUNNER_TEMP/govulncheck/unreachable-dependency-register-template.md"
+          cat "$RUNNER_TEMP/govulncheck/unreachable-dependency-report.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload govulncheck helper artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: govulncheck-unreachable-dependency-helper
+          path: |
+            ${{ runner.temp }}/govulncheck/govulncheck.jsonl
+            ${{ runner.temp }}/govulncheck/unreachable-dependency-report.md
+            ${{ runner.temp }}/govulncheck/unreachable-dependency-register-template.md
+
+      - name: Enforce unreachable dependency register coverage
+        run: |
+          set -euo pipefail
+          go run ../.github/scripts/govulncheck_unreachable_report.go \
+            -input "$RUNNER_TEMP/govulncheck/govulncheck.jsonl" \
+            -register ../.github/standards/engineering/UNREACHABLE_DEPENDENCY_RISK_REGISTER.md \
+            -scan-command '"$HOME/go/bin/govulncheck" -json ./...' \
+            -scan-date "$(date -u +%F)" \
+            -fail-on-unregistered >/dev/null
+
+  web-prod-audit:
+    name: Web Production Dependency Audit
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run production dependency audit
+        run: |
+          set +e
+          mkdir -p "$RUNNER_TEMP/web-audit"
+          npm audit --omit=dev --audit-level=high --json > "$RUNNER_TEMP/web-audit/npm-audit.json"
+          status=$?
+          echo "NPM_AUDIT_EXIT_CODE=$status" >> "$GITHUB_ENV"
+          exit 0
+
+      - name: Build audit summary
+        run: |
+          node ../.github/scripts/npm_audit_summary.js \
+            --input "$RUNNER_TEMP/web-audit/npm-audit.json" \
+            --report "$RUNNER_TEMP/web-audit/npm-audit-summary.md" \
+            --project web \
+            --registry https://registry.npmjs.org \
+            --exit-code "$NPM_AUDIT_EXIT_CODE"
+          cat "$RUNNER_TEMP/web-audit/npm-audit-summary.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload web audit artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-npm-audit-artifacts
+          path: |
+            ${{ runner.temp }}/web-audit/npm-audit.json
+            ${{ runner.temp }}/web-audit/npm-audit-summary.md
+
+      - name: Enforce web audit result
+        run: |
+          if [ "$NPM_AUDIT_EXIT_CODE" -ne 0 ]; then
+            echo "npm audit reported production dependency issues or an audit execution error."
+            exit "$NPM_AUDIT_EXIT_CODE"
+          fi
+
+  weapp-prod-audit:
+    name: Weapp Production Dependency Audit
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: weapp
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: weapp/package-lock.json
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run production dependency audit
+        run: |
+          set +e
+          mkdir -p "$RUNNER_TEMP/weapp-audit"
+          npm audit --omit=dev --audit-level=high --json > "$RUNNER_TEMP/weapp-audit/npm-audit.json"
+          status=$?
+          echo "NPM_AUDIT_EXIT_CODE=$status" >> "$GITHUB_ENV"
+          exit 0
+
+      - name: Build audit summary
+        run: |
+          node ../.github/scripts/npm_audit_summary.js \
+            --input "$RUNNER_TEMP/weapp-audit/npm-audit.json" \
+            --report "$RUNNER_TEMP/weapp-audit/npm-audit-summary.md" \
+            --project weapp \
+            --registry https://registry.npmjs.org \
+            --exit-code "$NPM_AUDIT_EXIT_CODE"
+          cat "$RUNNER_TEMP/weapp-audit/npm-audit-summary.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload weapp audit artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: weapp-npm-audit-artifacts
+          path: |
+            ${{ runner.temp }}/weapp-audit/npm-audit.json
+            ${{ runner.temp }}/weapp-audit/npm-audit-summary.md
+
+      - name: Enforce weapp audit result
+        run: |
+          if [ "$NPM_AUDIT_EXIT_CODE" -ne 0 ]; then
+            echo "npm audit reported production dependency issues or an audit execution error."
+            exit "$NPM_AUDIT_EXIT_CODE"
+          fi

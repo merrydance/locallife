@@ -1,47 +1,52 @@
 package api
 
 import (
-	"database/sql"
-	"fmt"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/media"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/wechat"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // ==================== 评价管理 ====================
 
-// 信用分阈值常量
-const (
-	TrustScoreVisibilityThreshold = 600 // 低于600分的用户评价不展示
-)
-
 // ==================== 请求/响应结构体 ====================
 
 type createReviewRequest struct {
-	OrderID int64    `json:"order_id" binding:"required,min=1"`
-	Content string   `json:"content" binding:"required,min=1,max=1000"`
-	Images  []string `json:"images,omitempty" binding:"omitempty,max=9,dive,min=1,max=500"` // 最多9张图片（本地 uploads 相对路径）
+	OrderID       int64   `json:"order_id" binding:"required,min=1"`
+	Content       string  `json:"content" binding:"required,min=1,max=1000"`
+	MediaAssetIDs []int64 `json:"media_asset_ids,omitempty" binding:"omitempty,max=9,dive,min=1"` // 最多9张图片（media_asset ID 列表）
 }
 
 type reviewResponse struct {
-	ID            int64    `json:"id"`
-	OrderID       int64    `json:"order_id"`
-	UserID        int64    `json:"user_id"`
-	MerchantID    int64    `json:"merchant_id"`
-	Content       string   `json:"content"`
-	Images        []string `json:"images,omitempty"`
-	IsVisible     bool     `json:"is_visible"`
-	MerchantReply *string  `json:"merchant_reply,omitempty"`
-	RepliedAt     *string  `json:"replied_at,omitempty"`
-	CreatedAt     string   `json:"created_at"`
+	ID                  int64    `json:"id"`
+	OrderID             int64    `json:"order_id"`
+	UserID              int64    `json:"user_id"`
+	MerchantID          int64    `json:"merchant_id"`
+	MerchantName        string   `json:"merchant_name,omitempty"`
+	MerchantLogoAssetID *int64   `json:"-"`
+	MerchantLogoURL     string   `json:"merchant_logo_url,omitempty"`
+	Content             string   `json:"content"`
+	IsVisible           bool     `json:"is_visible"`
+	MerchantReply       *string  `json:"merchant_reply,omitempty"`
+	RepliedAt           *string  `json:"replied_at,omitempty"`
+	CreatedAt           string   `json:"created_at"`
+	ImageAssetIDs       []int64  `json:"-"`
+	ImageURLs           []string `json:"image_urls,omitempty"`
+}
+
+type reviewListResponse struct {
+	Reviews  []reviewResponse `json:"reviews"`
+	Total    int64            `json:"total"`
+	PageID   int32            `json:"page_id"`
+	PageSize int32            `json:"page_size"`
 }
 
 type replyReviewRequest struct {
@@ -57,7 +62,7 @@ type listReviewsRequest struct {
 
 // createReview 创建评价
 // @Summary 创建评价
-// @Description 用户为已完成的订单创建评价。低信用用户（<600分）的评价将被标记为不可见。
+// @Description 用户为已完成的订单创建评价。
 // @Tags 评价管理
 // @Accept json
 // @Produce json
@@ -84,7 +89,7 @@ func (server *Server) createReview(ctx *gin.Context) {
 	// 1. 验证订单存在且属于该用户
 	order, err := server.store.GetOrder(ctx, req.OrderID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("order not found")))
 			return
 		}
@@ -110,33 +115,18 @@ func (server *Server) createReview(ctx *gin.Context) {
 		ctx.JSON(http.StatusConflict, errorResponse(errors.New("order already reviewed")))
 		return
 	}
-	if !errors.Is(err, pgx.ErrNoRows) {
+	if !isNotFoundError(err) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	// 4. 检查用户信用分决定评价是否可见
-	userProfile, err := server.store.GetUserProfile(ctx, db.GetUserProfileParams{
-		UserID: authPayload.UserID,
-		Role:   "customer",
-	})
+	// 4. 默认可见
 	isVisible := true
-	if err != nil {
-		if !errors.Is(err, pgx.ErrNoRows) {
-			// 如果查询失败（非记录不存在），记录错误但不阻塞评价创建
-			isVisible = true // 默认可见
-		}
-	} else {
-		// 根据信用分决定可见性
-		if userProfile.TrustScore < TrustScoreVisibilityThreshold {
-			isVisible = false
-		}
-	}
 
 	// 4.1 评价文本内容安全检测：先审后存
 	user, err := server.store.GetUser(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("user not found")))
 			return
 		}
@@ -149,34 +139,11 @@ func (server *Server) createReview(ctx *gin.Context) {
 	}
 	if err := server.wechatClient.MsgSecCheck(ctx, user.WechatOpenid, 2, req.Content); err != nil {
 		if errors.Is(err, wechat.ErrRiskyTextContent) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("文本内容安全检测未通过")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrTextContentSafetyFailed))
 			return
 		}
 		ctx.JSON(http.StatusBadGateway, internalError(ctx, fmt.Errorf("wechat msg sec check: %w", err)))
 		return
-	}
-
-	// 4.2 评价图片必须是本地 uploads 相对路径，且必须归属当前用户
-	if len(req.Images) > 0 {
-		normalizedImages := make([]string, 0, len(req.Images))
-		prefix := fmt.Sprintf("uploads/reviews/%d/", authPayload.UserID)
-		for _, p := range req.Images {
-			normalized := normalizeStoredUploadPath(p)
-			if normalized == "" || !strings.HasPrefix(normalized, "uploads/") {
-				ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("images 必须是本地 uploads 相对路径")))
-				return
-			}
-			if !strings.HasPrefix(normalized, prefix) {
-				ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("images 仅允许使用通过评价图片上传接口生成的路径")))
-				return
-			}
-			if !isUploadPathOwnedByUser(normalized, authPayload.UserID) {
-				ctx.JSON(http.StatusForbidden, errorResponse(errors.New("无权使用该图片")))
-				return
-			}
-			normalizedImages = append(normalizedImages, normalized)
-		}
-		req.Images = normalizedImages
 	}
 
 	// 5. 创建评价
@@ -185,7 +152,6 @@ func (server *Server) createReview(ctx *gin.Context) {
 		UserID:     authPayload.UserID,
 		MerchantID: order.MerchantID,
 		Content:    req.Content,
-		Images:     req.Images,
 		IsVisible:  isVisible,
 	})
 	if err != nil {
@@ -193,7 +159,26 @@ func (server *Server) createReview(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, newReviewResponse(review))
+	// 6. 写入评价图片
+	for i, assetID := range req.MediaAssetIDs {
+		_, _ = server.store.AddReviewImage(ctx, db.AddReviewImageParams{
+			ReviewID:     review.ID,
+			MediaAssetID: assetID,
+			SortOrder:    int32(i),
+		})
+	}
+
+	resp := newReviewResponse(review)
+	if len(req.MediaAssetIDs) > 0 {
+		resp.ImageAssetIDs = req.MediaAssetIDs
+		urls := server.batchPublicImageURLs(ctx, req.MediaAssetIDs, media.VariantOriginal)
+		for _, id := range req.MediaAssetIDs {
+			if u, ok := urls[id]; ok {
+				resp.ImageURLs = append(resp.ImageURLs, u)
+			}
+		}
+	}
+	ctx.JSON(http.StatusCreated, resp)
 }
 
 // getReview 获取评价详情
@@ -203,7 +188,7 @@ func (server *Server) createReview(ctx *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param id path int true "评价ID"
-// @Success 200 {object} reviewResponse "评价详情"
+// @Success 201 {object} reviewResponse "评价详情"
 // @Failure 400 {object} ErrorResponse "无效的评价ID"
 // @Failure 404 {object} ErrorResponse "评价不存在"
 // @Failure 500 {object} ErrorResponse "内部错误"
@@ -220,7 +205,7 @@ func (server *Server) getReview(ctx *gin.Context) {
 
 	review, err := server.store.GetReview(ctx, uri.ID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("review not found")))
 			return
 		}
@@ -228,7 +213,34 @@ func (server *Server) getReview(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, newReviewResponse(review))
+	resp := newReviewResponse(review)
+	server.enrichSingleReviewImages(ctx, &resp)
+	ctx.JSON(http.StatusOK, resp)
+}
+
+// getReviewByOrder 根据订单ID获取评价
+func (server *Server) getReviewByOrder(ctx *gin.Context) {
+	var uri struct {
+		ID int64 `uri:"id" binding:"required,min=1"`
+	}
+	if err := ctx.ShouldBindUri(&uri); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	review, err := server.store.GetReviewByOrderID(ctx, uri.ID)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("no review found for this order")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	resp := newReviewResponse(review)
+	server.enrichSingleReviewImages(ctx, &resp)
+	ctx.JSON(http.StatusOK, resp)
 }
 
 // listMerchantReviews 获取商户评价列表（顾客视角）
@@ -240,7 +252,7 @@ func (server *Server) getReview(ctx *gin.Context) {
 // @Param id path int true "商户ID"
 // @Param page_id query int true "页码" minimum(1)
 // @Param page_size query int true "每页数量" minimum(5) maximum(50)
-// @Success 200 {object} map[string]interface{} "评价列表"
+// @Success 200 {object} reviewListResponse "评价列表"
 // @Failure 400 {object} ErrorResponse "参数错误"
 // @Failure 500 {object} ErrorResponse "内部错误"
 // @Router /v1/reviews/merchants/{id} [get]
@@ -264,7 +276,7 @@ func (server *Server) listMerchantReviews(ctx *gin.Context) {
 	reviews, err := server.store.ListReviewsByMerchant(ctx, db.ListReviewsByMerchantParams{
 		MerchantID: uri.MerchantID,
 		Limit:      req.PageSize,
-		Offset:     (req.PageID - 1) * req.PageSize,
+		Offset:     pageOffset(req.PageID, req.PageSize),
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -278,12 +290,13 @@ func (server *Server) listMerchantReviews(ctx *gin.Context) {
 		return
 	}
 
-	response := gin.H{
-		"reviews":     newReviewListResponse(reviews),
-		"total_count": count,
-		"page_id":     req.PageID,
-		"page_size":   req.PageSize,
+	response := reviewListResponse{
+		Reviews:  newReviewListResponse(reviews),
+		Total:    count,
+		PageID:   req.PageID,
+		PageSize: req.PageSize,
 	}
+	server.enrichReviewListImages(ctx, response.Reviews)
 	ctx.JSON(http.StatusOK, response)
 }
 
@@ -296,7 +309,7 @@ func (server *Server) listMerchantReviews(ctx *gin.Context) {
 // @Param id path int true "商户ID"
 // @Param page_id query int true "页码" minimum(1)
 // @Param page_size query int true "每页数量" minimum(5) maximum(50)
-// @Success 200 {object} map[string]interface{} "评价列表"
+// @Success 200 {object} reviewListResponse "评价列表"
 // @Failure 400 {object} ErrorResponse "参数错误"
 // @Failure 401 {object} ErrorResponse "未授权"
 // @Failure 403 {object} ErrorResponse "无权访问该商户"
@@ -318,19 +331,14 @@ func (server *Server) listMerchantAllReviews(ctx *gin.Context) {
 		return
 	}
 
-	// 验证商户权限
-	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	merchantRole, err := server.store.GetUserRoleByType(ctx, db.GetUserRoleByTypeParams{
-		UserID: authPayload.UserID,
-		Role:   "merchant_owner",
-	})
-	if err != nil {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not authorized to access this merchant")))
+	merchant, ok := GetMerchantFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, errors.New("merchant not loaded, ensure MerchantStaffMiddleware is applied")))
 		return
 	}
 
 	// 验证请求的商户ID是否匹配
-	if !merchantRole.RelatedEntityID.Valid || merchantRole.RelatedEntityID.Int64 != uri.MerchantID {
+	if merchant.ID != uri.MerchantID {
 		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not authorized to access this merchant")))
 		return
 	}
@@ -339,7 +347,7 @@ func (server *Server) listMerchantAllReviews(ctx *gin.Context) {
 	reviews, err := server.store.ListAllReviewsByMerchant(ctx, db.ListAllReviewsByMerchantParams{
 		MerchantID: uri.MerchantID,
 		Limit:      req.PageSize,
-		Offset:     (req.PageID - 1) * req.PageSize,
+		Offset:     pageOffset(req.PageID, req.PageSize),
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -353,12 +361,13 @@ func (server *Server) listMerchantAllReviews(ctx *gin.Context) {
 		return
 	}
 
-	response := gin.H{
-		"reviews":     newReviewListResponse(reviews),
-		"total_count": count,
-		"page_id":     req.PageID,
-		"page_size":   req.PageSize,
+	response := reviewListResponse{
+		Reviews:  newReviewListResponse(reviews),
+		Total:    count,
+		PageID:   req.PageID,
+		PageSize: req.PageSize,
 	}
+	server.enrichReviewListImages(ctx, response.Reviews)
 	ctx.JSON(http.StatusOK, response)
 }
 
@@ -370,7 +379,7 @@ func (server *Server) listMerchantAllReviews(ctx *gin.Context) {
 // @Produce json
 // @Param page_id query int true "页码" minimum(1)
 // @Param page_size query int true "每页数量" minimum(5) maximum(50)
-// @Success 200 {object} map[string]interface{} "评价列表"
+// @Success 200 {object} reviewListResponse "评价列表"
 // @Failure 400 {object} ErrorResponse "参数错误"
 // @Failure 401 {object} ErrorResponse "未授权"
 // @Failure 500 {object} ErrorResponse "内部错误"
@@ -389,7 +398,7 @@ func (server *Server) listUserReviews(ctx *gin.Context) {
 	reviews, err := server.store.ListReviewsByUser(ctx, db.ListReviewsByUserParams{
 		UserID: authPayload.UserID,
 		Limit:  req.PageSize,
-		Offset: (req.PageID - 1) * req.PageSize,
+		Offset: pageOffset(req.PageID, req.PageSize),
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -403,12 +412,28 @@ func (server *Server) listUserReviews(ctx *gin.Context) {
 		return
 	}
 
-	response := gin.H{
-		"reviews":     newReviewListResponse(reviews),
-		"total_count": count,
-		"page_id":     req.PageID,
-		"page_size":   req.PageSize,
+	response := reviewListResponse{
+		Reviews:  newListReviewByUserResponse(reviews),
+		Total:    count,
+		PageID:   req.PageID,
+		PageSize: req.PageSize,
 	}
+	// 批量填充商户 Logo URL
+	logoAssetIDs := make([]int64, 0, len(response.Reviews))
+	for _, r := range response.Reviews {
+		if r.MerchantLogoAssetID != nil {
+			logoAssetIDs = append(logoAssetIDs, *r.MerchantLogoAssetID)
+		}
+	}
+	if len(logoAssetIDs) > 0 {
+		logoURLs := server.batchPublicImageURLs(ctx, logoAssetIDs, media.VariantCard)
+		for i := range response.Reviews {
+			if response.Reviews[i].MerchantLogoAssetID != nil {
+				response.Reviews[i].MerchantLogoURL = logoURLs[*response.Reviews[i].MerchantLogoAssetID]
+			}
+		}
+	}
+	server.enrichReviewListImages(ctx, response.Reviews)
 	ctx.JSON(http.StatusOK, response)
 }
 
@@ -446,7 +471,7 @@ func (server *Server) replyReview(ctx *gin.Context) {
 	// 1. 查询评价
 	review, err := server.store.GetReview(ctx, uri.ID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("review not found")))
 			return
 		}
@@ -454,27 +479,23 @@ func (server *Server) replyReview(ctx *gin.Context) {
 		return
 	}
 
-	// 2. 验证商户权限
-	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	merchantRole, err := server.store.GetUserRoleByType(ctx, db.GetUserRoleByTypeParams{
-		UserID: authPayload.UserID,
-		Role:   "merchant_owner",
-	})
-	if err != nil {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not authorized to reply this review")))
+	merchant, ok := GetMerchantFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, errors.New("merchant not loaded, ensure MerchantStaffMiddleware is applied")))
 		return
 	}
 
 	// 验证评价属于该商户
-	if !merchantRole.RelatedEntityID.Valid || merchantRole.RelatedEntityID.Int64 != review.MerchantID {
+	if merchant.ID != review.MerchantID {
 		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("review does not belong to your merchant")))
 		return
 	}
 
 	// 2.1 回复文本内容安全检测：先审后存
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 	merchantUser, err := server.store.GetUser(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("user not found")))
 			return
 		}
@@ -487,7 +508,7 @@ func (server *Server) replyReview(ctx *gin.Context) {
 	}
 	if err := server.wechatClient.MsgSecCheck(ctx, merchantUser.WechatOpenid, 2, req.Reply); err != nil {
 		if errors.Is(err, wechat.ErrRiskyTextContent) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("文本内容安全检测未通过")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrTextContentSafetyFailed))
 			return
 		}
 		ctx.JSON(http.StatusBadGateway, internalError(ctx, fmt.Errorf("wechat msg sec check: %w", err)))
@@ -504,7 +525,9 @@ func (server *Server) replyReview(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, newReviewResponse(updatedReview))
+	resp := newReviewResponse(updatedReview)
+	server.enrichSingleReviewImages(ctx, &resp)
+	ctx.JSON(http.StatusOK, resp)
 }
 
 // deleteReview 删除评价（运营商）
@@ -514,7 +537,7 @@ func (server *Server) replyReview(ctx *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param id path int true "评价ID"
-// @Success 200 {object} map[string]interface{} "删除成功"
+// @Success 200 {object} successMessageResponse "删除成功"
 // @Failure 400 {object} ErrorResponse "无效的评价ID"
 // @Failure 401 {object} ErrorResponse "未授权"
 // @Failure 403 {object} ErrorResponse "只能删除管辖区域商户的评价"
@@ -534,7 +557,7 @@ func (server *Server) deleteReview(ctx *gin.Context) {
 	// 获取评价信息
 	review, err := server.store.GetReview(ctx, uri.ID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("review not found")))
 			return
 		}
@@ -562,24 +585,18 @@ func (server *Server) deleteReview(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"message": "review deleted successfully"})
+	ctx.JSON(http.StatusOK, successMessage("review deleted successfully"))
 }
 
 // ==================== 辅助函数 ====================
 
 func newReviewResponse(review db.Review) reviewResponse {
-	images := make([]string, 0, len(review.Images))
-	for _, img := range review.Images {
-		images = append(images, normalizeUploadURLForClient(img))
-	}
-
 	resp := reviewResponse{
 		ID:         review.ID,
 		OrderID:    review.OrderID,
 		UserID:     review.UserID,
 		MerchantID: review.MerchantID,
 		Content:    review.Content,
-		Images:     images,
 		IsVisible:  review.IsVisible,
 		CreatedAt:  review.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 	}
@@ -600,6 +617,93 @@ func newReviewListResponse(reviews []db.Review) []reviewResponse {
 	responses := make([]reviewResponse, len(reviews))
 	for i, review := range reviews {
 		responses[i] = newReviewResponse(review)
+	}
+	return responses
+}
+
+// enrichSingleReviewImages loads and enriches image URLs for a single reviewResponse.
+func (server *Server) enrichSingleReviewImages(ctx *gin.Context, resp *reviewResponse) {
+	images, err := server.store.ListReviewImages(ctx, resp.ID)
+	if err != nil || len(images) == 0 {
+		return
+	}
+	assetIDs := make([]int64, len(images))
+	for i, img := range images {
+		assetIDs[i] = img.MediaAssetID
+	}
+	resp.ImageAssetIDs = assetIDs
+	urls := server.batchPublicImageURLs(ctx, assetIDs, media.VariantOriginal)
+	for _, id := range assetIDs {
+		if u, ok := urls[id]; ok {
+			resp.ImageURLs = append(resp.ImageURLs, u)
+		}
+	}
+}
+
+// enrichReviewListImages batch-loads and enriches image URLs for a slice of reviewResponse.
+func (server *Server) enrichReviewListImages(ctx *gin.Context, reviews []reviewResponse) {
+	if len(reviews) == 0 {
+		return
+	}
+	reviewIDs := make([]int64, len(reviews))
+	for i, r := range reviews {
+		reviewIDs[i] = r.ID
+	}
+	allImages, err := server.store.ListReviewImagesByReviews(ctx, reviewIDs)
+	if err != nil || len(allImages) == 0 {
+		return
+	}
+	// group by review_id
+	byReview := make(map[int64][]int64)
+	for _, img := range allImages {
+		byReview[img.ReviewID] = append(byReview[img.ReviewID], img.MediaAssetID)
+	}
+	// collect all asset IDs for batch URL resolution
+	allAssetIDs := make([]int64, 0, len(allImages))
+	for _, img := range allImages {
+		allAssetIDs = append(allAssetIDs, img.MediaAssetID)
+	}
+	urlMap := server.batchPublicImageURLs(ctx, allAssetIDs, media.VariantOriginal)
+	for i := range reviews {
+		assetIDs, ok := byReview[reviews[i].ID]
+		if !ok {
+			continue
+		}
+		reviews[i].ImageAssetIDs = assetIDs
+		for _, id := range assetIDs {
+			if u, ok := urlMap[id]; ok {
+				reviews[i].ImageURLs = append(reviews[i].ImageURLs, u)
+			}
+		}
+	}
+}
+
+func newListReviewByUserResponse(reviews []db.ListReviewsByUserRow) []reviewResponse {
+	responses := make([]reviewResponse, len(reviews))
+	for i, r := range reviews {
+		resp := reviewResponse{
+			ID:           r.ID,
+			OrderID:      r.OrderID,
+			UserID:       r.UserID,
+			MerchantID:   r.MerchantID,
+			MerchantName: r.MerchantName,
+			Content:      r.Content,
+			IsVisible:    r.IsVisible,
+			CreatedAt:    r.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		}
+		if r.MerchantLogoMediaAssetID.Valid {
+			v := r.MerchantLogoMediaAssetID.Int64
+			resp.MerchantLogoAssetID = &v
+		}
+
+		if r.MerchantReply.Valid {
+			resp.MerchantReply = &r.MerchantReply.String
+		}
+		if r.RepliedAt.Valid {
+			repliedAt := r.RepliedAt.Time.Format("2006-01-02T15:04:05Z07:00")
+			resp.RepliedAt = &repliedAt
+		}
+		responses[i] = resp
 	}
 	return responses
 }

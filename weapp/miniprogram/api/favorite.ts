@@ -24,6 +24,18 @@ export interface FavoriteItem {
     created_at: string
 }
 
+export interface FavoriteMerchantListItem {
+    id: number
+    merchant_id: number
+    merchant_name: string
+    merchant_logo_url?: string
+    merchant_logo?: string
+    address?: string
+    status?: string
+    is_ordering_suspended?: boolean
+    created_at?: string
+}
+
 /**
  * 收藏列表查询参数
  */
@@ -38,50 +50,72 @@ export interface FavoriteListParams {
 export class FavoriteService {
 
     /**
-     * 添加收藏
-     * POST /v1/favorites
+     * 添加收藏商户
+     * POST /v1/favorites/merchants
      */
-    static async addFavorite(type: FavoriteType, targetId: number): Promise<void> {
+    static async addFavoriteMerchant(merchantId: number): Promise<void> {
         return await request({
-            url: '/v1/favorites',
+            url: '/v1/favorites/merchants',
             method: 'POST',
-            data: { type, target_id: targetId }
+            data: { merchant_id: merchantId }
         })
     }
 
     /**
-     * 取消收藏
-     * POST /v1/favorites/remove
+     * 添加收藏菜品
+     * POST /v1/favorites/dishes
      */
-    static async removeFavorite(type: FavoriteType, targetId: number): Promise<void> {
+    static async addFavoriteDish(dishId: number): Promise<void> {
         return await request({
-            url: '/v1/favorites/remove',
+            url: '/v1/favorites/dishes',
             method: 'POST',
-            data: { type, target_id: targetId }
+            data: { dish_id: dishId }
         })
     }
 
     /**
-     * 获取收藏列表
-     * GET /v1/favorites
+     * 取消收藏商户
+     * DELETE /v1/favorites/merchants/:id
      */
-    static async getFavorites(params: FavoriteListParams): Promise<{ items: FavoriteItem[], total: number }> {
+    static async removeFavoriteMerchant(merchantId: number): Promise<void> {
         return await request({
-            url: '/v1/favorites',
-            method: 'GET',
-            data: params
+            url: `/v1/favorites/merchants/${merchantId}`,
+            method: 'DELETE'
         })
     }
 
     /**
-     * 检查是否已收藏
-     * GET /v1/favorites/check
+     * 取消收藏菜品
+     * DELETE /v1/favorites/dishes/:id
      */
-    static async checkFavorite(type: FavoriteType, targetId: number): Promise<{ is_favorite: boolean }> {
+    static async removeFavoriteDish(dishId: number): Promise<void> {
         return await request({
-            url: '/v1/favorites/check',
+            url: `/v1/favorites/dishes/${dishId}`,
+            method: 'DELETE'
+        })
+    }
+
+    /**
+     * 获取收藏商户列表
+     * GET /v1/favorites/merchants
+     */
+    static async getFavoriteMerchants(page: number = 1, pageSize: number = 20): Promise<{ merchants: FavoriteMerchantListItem[], total: number }> {
+        return await request({
+            url: '/v1/favorites/merchants',
             method: 'GET',
-            data: { type, target_id: targetId }
+            data: { page, page_size: pageSize }
+        })
+    }
+
+    /**
+     * 获取收藏菜品列表
+     * GET /v1/favorites/dishes
+     */
+    static async getFavoriteDishes(page: number = 1, pageSize: number = 20): Promise<{ dishes: Array<Record<string, unknown>>, total: number }> {
+        return await request({
+            url: '/v1/favorites/dishes',
+            method: 'GET',
+            data: { page, page_size: pageSize }
         })
     }
 }
