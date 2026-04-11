@@ -1,4 +1,5 @@
 import dayjs from 'dayjs'
+import { generateAppBindCode } from '../../../api/auth'
 import { getMerchantComplaintSummary } from '../../../api/merchant-complaints'
 import {
   getMyMerchantOpenStatus,
@@ -120,6 +121,16 @@ function createIcon(name: string, color: string): DashboardIconConfig {
   }
 }
 
+function formatAppBindRemaining(seconds: number) {
+  if (seconds <= 0) {
+    return '绑定码已过期，请重新生成'
+  }
+
+  const minutes = Math.floor(seconds / 60)
+  const remainderSeconds = seconds % 60
+  return `请在 ${String(minutes).padStart(2, '0')}:${String(remainderSeconds).padStart(2, '0')} 内在商户端 App 输入此绑定码`
+}
+
 async function captureDashboardRequest<T>(request: Promise<T>): Promise<DashboardRequestResult<T>> {
   try {
     return { ok: true, value: await request }
@@ -155,6 +166,7 @@ const DASHBOARD_SECTIONS: DashboardSectionDefinition[] = [
       { id: 'inventory', title: '库存管理', icon: createIcon('system-storage', 'var(--td-success-color)'), path: '/pages/merchant/inventory/index' },
       { id: 'display-config', title: '后厨协同', icon: createIcon('setting', 'var(--td-success-color)'), path: '/pages/merchant/settings/display-config/index' },
       { id: 'printers', title: '打印设备', icon: createIcon('print', 'var(--td-success-color)'), path: '/pages/merchant/printers/index' },
+      { id: 'bind-app', title: '绑定商户端App', icon: createIcon('setting', 'var(--td-success-color)'), path: '' },
       { id: 'group-join', title: '申请加入集团', icon: createIcon('cooperate', 'var(--td-success-color)'), path: '/pages/merchant/group/join/index' }
     ]
   },
@@ -192,7 +204,7 @@ const DASHBOARD_SECTIONS: DashboardSectionDefinition[] = [
   }
 ]
 
-const DEVICE_MANAGE_ENTRY_IDS = new Set(['display-config', 'printers'])
+const DEVICE_MANAGE_ENTRY_IDS = new Set(['display-config', 'printers', 'bind-app'])
 
 function formatMoney(fen: number | null | undefined) {
   if (typeof fen !== 'number' || !Number.isFinite(fen)) return '--'
@@ -296,6 +308,13 @@ Page({
     pendingComplaintsValue: null as number | null,
     canManageDeviceSettings: false,
     canManageMerchantApplyment: false,
+    appBindPopupVisible: false,
+    appBindLoading: false,
+    appBindError: false,
+    appBindErrorMessage: '',
+    appBindCode: '',
+    appBindRemainingSeconds: 0,
+    appBindRemainingLabel: formatAppBindRemaining(0),
     overviewMetrics: buildOverviewMetrics({
       monthlyOrders: null,
       monthlySales: null,
@@ -310,10 +329,16 @@ Page({
     skeletonRows: SKELETON_ROWS
   },
 
+  appBindCountdownTimer: 0 as number,
+
   async onLoad() {
     const { navBarHeight } = getStableBarHeights()
     this.setData({ navBarHeight })
     await this.bootstrapPage()
+  },
+
+  onUnload() {
+    this.clearAppBindCountdown()
   },
 
   async onShow() {
@@ -504,6 +529,91 @@ Page({
     this.loadDashboard({ silent: true }).catch((err) => logger.error('Merchant dashboard manual refresh failed', err))
   },
 
+  clearAppBindCountdown() {
+    if (this.appBindCountdownTimer) {
+      clearInterval(this.appBindCountdownTimer)
+      this.appBindCountdownTimer = 0
+    }
+  },
+
+  startAppBindCountdown(expiresIn: number) {
+    this.clearAppBindCountdown()
+
+    const tick = () => {
+      const nextSeconds = Math.max(0, this.data.appBindRemainingSeconds - 1)
+      this.setData({
+        appBindRemainingSeconds: nextSeconds,
+        appBindRemainingLabel: formatAppBindRemaining(nextSeconds)
+      })
+      if (nextSeconds <= 0) {
+        this.clearAppBindCountdown()
+      }
+    }
+
+    this.setData({
+      appBindRemainingSeconds: expiresIn,
+      appBindRemainingLabel: formatAppBindRemaining(expiresIn)
+    })
+
+    this.appBindCountdownTimer = setInterval(tick, 1000) as unknown as number
+  },
+
+  async openAppBindPopup() {
+    this.setData({
+      appBindPopupVisible: true,
+      appBindLoading: true,
+      appBindError: false,
+      appBindErrorMessage: '',
+      appBindCode: '',
+      appBindRemainingSeconds: 0,
+      appBindRemainingLabel: formatAppBindRemaining(0)
+    })
+
+    try {
+      const response = await generateAppBindCode()
+      this.setData({
+        appBindCode: response.code,
+        appBindLoading: false,
+        appBindError: false,
+        appBindErrorMessage: ''
+      })
+      this.startAppBindCountdown(response.expires_in)
+    } catch (error) {
+      logger.error('Generate app bind code failed', error, 'merchant-dashboard-app-bind')
+      this.clearAppBindCountdown()
+      this.setData({
+        appBindLoading: false,
+        appBindError: true,
+        appBindErrorMessage: getErrorMessage(error, '生成绑定码失败，请稍后重试'),
+        appBindCode: '',
+        appBindRemainingSeconds: 0,
+        appBindRemainingLabel: formatAppBindRemaining(0)
+      })
+    }
+  },
+
+  onCloseAppBindPopup() {
+    this.clearAppBindCountdown()
+    this.setData({ appBindPopupVisible: false })
+  },
+
+  onRetryAppBindCode() {
+    this.openAppBindPopup().catch((error) => logger.error('Retry app bind code failed', error, 'merchant-dashboard-app-bind'))
+  },
+
+  onCopyAppBindCode() {
+    if (!this.data.appBindCode) {
+      return
+    }
+
+    wx.setClipboardData({
+      data: this.data.appBindCode,
+      success: () => {
+        wx.showToast({ title: '绑定码已复制', icon: 'success' })
+      }
+    })
+  },
+
   async ensureCanResumeBusiness() {
     if (!this.data.canManageMerchantApplyment) {
       return true
@@ -597,7 +707,11 @@ Page({
 
   onTapEntry(e: WechatMiniprogram.TouchEvent) {
     if (this.data.accessDenied || this.data.accessErrorMessage || !this.data.accessReady) return
-    const { path } = e.currentTarget.dataset as { path?: string }
+    const { path, id } = e.currentTarget.dataset as { path?: string, id?: string }
+    if (id === 'bind-app') {
+      this.openAppBindPopup().catch((error) => logger.error('Open app bind popup failed', error, 'merchant-dashboard-app-bind'))
+      return
+    }
     if (!path) return
     wx.navigateTo({ url: path })
   }

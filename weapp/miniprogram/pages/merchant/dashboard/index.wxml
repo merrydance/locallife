@@ -87,6 +87,7 @@
                 icon="{{entry.icon}}"
                 text="{{entry.title}}"
                 badge-props="{{entry.badgeProps}}"
+                data-id="{{entry.id}}"
                 data-path="{{entry.path}}"
                 bind:click="onTapEntry"
                 t-class="dashboard-grid-item"
@@ -99,5 +100,34 @@
       </t-skeleton>
     </block>
   </block>
+
+  <t-popup wx:if="{{appBindPopupVisible}}" visible="{{appBindPopupVisible}}" placement="center" bind:visible-change="onCloseAppBindPopup">
+    <view class="app-bind-modal">
+      <view class="app-bind-header">
+        <text class="app-bind-title">绑定商户端 App</text>
+        <text class="app-bind-subtitle">打开商户端 App，在登录页输入下面的 6 位绑定码即可完成绑定。</text>
+      </view>
+
+      <view wx:if="{{appBindLoading}}" class="app-bind-state">
+        <t-loading theme="circular" size="40rpx" text="生成绑定码中..." vertical />
+      </view>
+
+      <view wx:elif="{{appBindError}}" class="app-bind-state">
+        <t-empty icon="error-circle" description="{{appBindErrorMessage || '生成绑定码失败，请重试'}}" />
+        <t-button theme="primary" size="small" shape="round" bind:tap="onRetryAppBindCode">重新生成</t-button>
+      </view>
+
+      <view wx:else class="app-bind-body">
+        <view class="app-bind-code-card">
+          <text class="app-bind-code">{{appBindCode}}</text>
+        </view>
+        <text class="app-bind-countdown">{{appBindRemainingLabel}}</text>
+        <view class="app-bind-actions">
+          <t-button theme="default" shape="round" size="medium" bind:tap="onRetryAppBindCode">重新生成</t-button>
+          <t-button theme="primary" shape="round" size="medium" bind:tap="onCopyAppBindCode">复制绑定码</t-button>
+        </view>
+      </view>
+    </view>
+  </t-popup>
 
 </view>
