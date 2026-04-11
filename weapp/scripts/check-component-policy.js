@@ -2,6 +2,7 @@ const fs = require('fs')
 const path = require('path')
 const {
   repoRoot,
+  getGateScope,
   getChangedEntries,
   getDiffBase,
   pathExistsInRevision
@@ -13,30 +14,38 @@ const ALLOWED_GROUPS = new Set(['feedback', 'data', 'navigation', 'base', 'form'
 const ALLOWED_DECISIONS = new Set(['tdesign-wrapper', 'local-component'])
 
 function main() {
+  const scope = getGateScope()
   const diffBase = getDiffBase()
-  const changedEntries = getChangedEntries()
+  const componentRootPath = path.join(repoRoot, COMPONENT_ROOT)
+  const componentDirs = scope === 'changed'
+    ? Array.from(new Set(
+      getChangedEntries()
+        .map((entry) => entry.filePath)
+        .filter((filePath) => filePath.startsWith(COMPONENT_ROOT))
+        .map((filePath) => filePath.slice(COMPONENT_ROOT.length).split('/')[0])
+        .filter(Boolean)
+    ))
+    : fs.existsSync(componentRootPath)
+      ? fs.readdirSync(componentRootPath, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => entry.name)
+      : []
 
-  const componentDirs = Array.from(new Set(
-    changedEntries
-      .map((entry) => entry.filePath)
-      .filter((filePath) => filePath.startsWith(COMPONENT_ROOT))
-      .map((filePath) => filePath.slice(COMPONENT_ROOT.length).split('/')[0])
-      .filter(Boolean)
-  ))
+  const targetComponentDirs = scope === 'changed'
+    ? componentDirs.filter((dirName) => {
+      const relativePath = `${COMPONENT_ROOT}${dirName}`
+      return !pathExistsInRevision(diffBase, relativePath)
+    })
+    : componentDirs
 
-  const newComponentDirs = componentDirs.filter((dirName) => {
-    const relativePath = `${COMPONENT_ROOT}${dirName}`
-    return !pathExistsInRevision(diffBase, relativePath)
-  })
-
-  if (newComponentDirs.length === 0) {
-    console.log('check-component-policy: no new shared Mini Program components detected')
+  if (targetComponentDirs.length === 0) {
+    console.log(`check-component-policy: no ${scope === 'changed' ? 'new' : 'scannable'} shared Mini Program components detected`)
     return
   }
 
   const failures = []
 
-  for (const dirName of newComponentDirs) {
+  for (const dirName of targetComponentDirs) {
     const policyPath = path.join(repoRoot, COMPONENT_ROOT, dirName, POLICY_FILE)
 
     if (!fs.existsSync(policyPath)) {
@@ -89,7 +98,7 @@ function main() {
   }
 
   if (failures.length > 0) {
-    console.error('Component policy gate failed. New shared components must declare why TDesign was not enough.')
+    console.error(`Component policy gate failed. ${scope === 'changed' ? 'New shared components' : 'Shared components'} must declare why TDesign was not enough.`)
     console.error('Required file: component-policy.json')
     console.error('Required fields: purpose, tdesignGroup, tdesignCandidates, decision, rationale')
     console.error('')
@@ -102,7 +111,8 @@ function main() {
     process.exit(1)
   }
 
-  console.log(`check-component-policy: validated ${newComponentDirs.length} new component directory(ies)`) 
+  console.log(`check-component-policy: validated ${targetComponentDirs.length} component directory(ies)`) 
 }
+
 
 main()

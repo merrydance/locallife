@@ -2,7 +2,8 @@ const fs = require('fs')
 const path = require('path')
 const {
   repoRoot,
-  getChangedEntries
+  getGateScope,
+  getScopedFiles
 } = require('./gate-utils')
 
 const WXML_ROOT = 'weapp/miniprogram/'
@@ -55,15 +56,10 @@ function collectMustacheExpressions(source) {
 }
 
 function main() {
-  const changedEntries = getChangedEntries()
-  const changedWxmlFiles = Array.from(new Set(
-    changedEntries
-      .map((entry) => entry.filePath)
-      .filter((filePath) => filePath.startsWith(WXML_ROOT) && filePath.endsWith('.wxml'))
-  ))
+  const changedWxmlFiles = getScopedFiles({ roots: [WXML_ROOT], extensions: ['.wxml'] })
 
   if (changedWxmlFiles.length === 0) {
-    console.log('check-wxml-expression-safety: no changed WXML files detected')
+    console.log(`check-wxml-expression-safety: no ${getGateScope() === 'changed' ? 'changed' : 'scannable'} WXML files detected`)
     return
   }
 
@@ -111,7 +107,7 @@ function main() {
     process.exit(1)
   }
 
-  console.log(`check-wxml-expression-safety: validated ${changedWxmlFiles.length} changed WXML file(s)`) 
+  console.log(`check-wxml-expression-safety: validated ${changedWxmlFiles.length} WXML file(s)`) 
 }
 
 main()

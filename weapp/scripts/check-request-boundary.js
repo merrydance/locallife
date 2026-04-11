@@ -2,7 +2,8 @@ const fs = require('fs')
 const path = require('path')
 const {
   repoRoot,
-  getChangedEntries
+  getGateScope,
+  getScopedFiles
 } = require('./gate-utils')
 
 const SURFACE_ROOTS = ['weapp/miniprogram/pages/', 'weapp/miniprogram/components/']
@@ -10,13 +11,10 @@ const DIRECT_REQUEST = /\bwx\.request\s*\(/
 const REQUEST_IMPORT = /from\s+['"][^'"]*utils\/request['"]|require\(\s*['"][^'"]*utils\/request['"]\s*\)/
 
 function main() {
-  const changedFiles = getChangedEntries()
-    .map((entry) => entry.filePath)
-    .filter((filePath) => SURFACE_ROOTS.some((root) => filePath.startsWith(root)))
-    .filter((filePath) => ['.ts', '.js'].includes(path.extname(filePath)))
+  const changedFiles = getScopedFiles({ roots: SURFACE_ROOTS, extensions: ['.ts', '.js'] })
 
   if (changedFiles.length === 0) {
-    console.log('check-request-boundary: no changed Mini Program page/component scripts detected')
+    console.log(`check-request-boundary: no ${getGateScope() === 'changed' ? 'changed' : 'scannable'} Mini Program page/component scripts detected`)
     return
   }
 
@@ -57,7 +55,7 @@ function main() {
     process.exit(1)
   }
 
-  console.log(`check-request-boundary: validated ${changedFiles.length} changed script file(s)`) 
+  console.log(`check-request-boundary: validated ${changedFiles.length} script file(s)`) 
 }
 
 main()

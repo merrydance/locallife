@@ -1,7 +1,7 @@
 const fs = require('fs')
 const path = require('path')
 const ts = require('typescript')
-const { repoRoot, getChangedEntries } = require('./gate-utils')
+const { repoRoot, getGateScope, getScopedFiles } = require('./gate-utils')
 
 const SURFACE_ROOTS = ['weapp/miniprogram/pages/', 'weapp/miniprogram/components/']
 const ALLOWLIST = new Set([
@@ -54,14 +54,11 @@ const BUSINESS_STATUS_LITERALS = new Set([
 ])
 
 function main() {
-  const changedFiles = getChangedEntries()
-    .map((entry) => entry.filePath)
-    .filter((filePath) => SURFACE_ROOTS.some((root) => filePath.startsWith(root)))
-    .filter((filePath) => ['.ts', '.js', '.wxml'].includes(path.extname(filePath)))
+  const changedFiles = getScopedFiles({ roots: SURFACE_ROOTS, extensions: ['.ts', '.js', '.wxml'] })
     .filter((filePath) => !ALLOWLIST.has(filePath))
 
   if (changedFiles.length === 0) {
-    console.log('check-business-status-boundary: no changed Mini Program page/component files detected')
+    console.log(`check-business-status-boundary: no ${getGateScope() === 'changed' ? 'changed' : 'scannable'} Mini Program page/component files detected`)
     return
   }
 
@@ -111,7 +108,7 @@ function main() {
     process.exit(1)
   }
 
-  console.log(`check-business-status-boundary: validated ${changedFiles.length} changed file(s)`) 
+  console.log(`check-business-status-boundary: validated ${changedFiles.length} file(s)`) 
 }
 
 function walk(node, visitor) {
