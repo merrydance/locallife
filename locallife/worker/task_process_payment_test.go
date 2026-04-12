@@ -657,6 +657,87 @@ func TestProcessTaskProfitSharing_UsesPersonalOperatorOpenID(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestProcessTaskProfitSharing_FailsWhenEnterpriseOperatorSubMchIDMissing(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+
+	paymentOrder := db.PaymentOrder{
+		ID:            905,
+		Amount:        10000,
+		TransactionID: pgtype.Text{String: "wx_txn_905", Valid: true},
+	}
+	order := db.Order{
+		ID:          81,
+		MerchantID:  19,
+		TotalAmount: 10000,
+		DeliveryFee: 0,
+		OrderType:   "takeout",
+		AddressID:   pgtype.Int8{Int64: 1003, Valid: true},
+	}
+	merchant := db.Merchant{ID: 19, RegionID: 16, Name: "商户企业运营商待开户"}
+	operator := db.Operator{
+		ID:          48,
+		UserID:      502,
+		Name:        "企业运营商待开户",
+		ContactName: "企业运营商联系人",
+	}
+	operatorApplication := db.OperatorApplication{
+		BusinessLicenseNumber: pgtype.Text{String: "91440300TEST123456", Valid: true},
+	}
+
+	store.EXPECT().
+		GetPaymentOrder(gomock.Any(), paymentOrder.ID).
+		Return(paymentOrder, nil)
+	store.EXPECT().
+		GetOrder(gomock.Any(), order.ID).
+		Return(order, nil)
+	store.EXPECT().
+		GetMerchant(gomock.Any(), merchant.ID).
+		Return(merchant, nil)
+	store.EXPECT().
+		GetMerchantPaymentConfig(gomock.Any(), merchant.ID).
+		Return(db.MerchantPaymentConfig{MerchantID: merchant.ID, SubMchID: "sub_mch_19"}, nil)
+	store.EXPECT().
+		GetActiveProfitSharingConfig(gomock.Any(), db.GetActiveProfitSharingConfigParams{
+			OrderSource: order.OrderType,
+			MerchantID:  pgtype.Int8{Int64: merchant.ID, Valid: true},
+			RegionID:    pgtype.Int8{Int64: merchant.RegionID, Valid: true},
+		}).
+		Return(db.ProfitSharingConfig{PlatformRate: 0, OperatorRate: 20, RiderEnabled: false}, nil)
+	store.EXPECT().
+		GetActiveOperatorByRegion(gomock.Any(), merchant.RegionID).
+		Return(operator, nil)
+	store.EXPECT().
+		GetProfitSharingOrderByPaymentOrder(gomock.Any(), paymentOrder.ID).
+		Return(db.ProfitSharingOrder{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		CreateProfitSharingOrder(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.CreateProfitSharingOrderParams) (db.ProfitSharingOrder, error) {
+			require.True(t, arg.OperatorID.Valid)
+			require.Equal(t, operator.ID, arg.OperatorID.Int64)
+			require.Equal(t, int64(2000), arg.OperatorCommission)
+			return db.ProfitSharingOrder{ID: 3005, OutOrderNo: arg.OutOrderNo}, nil
+		})
+	store.EXPECT().
+		GetApprovedOperatorApplicationByUserID(gomock.Any(), operator.UserID).
+		Return(operatorApplication, nil)
+
+	processor := worker.NewTestTaskProcessor(store, nil, nil, ecommerceClient)
+	payloadBytes, err := json.Marshal(worker.ProfitSharingPayload{
+		PaymentOrderID: paymentOrder.ID,
+		OrderID:        order.ID,
+	})
+	require.NoError(t, err)
+
+	task := asynq.NewTask(worker.TaskProcessProfitSharing, payloadBytes)
+	err = processor.ProcessTaskProfitSharing(context.Background(), task)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "resolve operator receiver: operator sub merchant id not configured")
+}
+
 func TestProcessTaskProfitSharing_UsesPaymentOrderAmountAsProfitSharingBase(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
