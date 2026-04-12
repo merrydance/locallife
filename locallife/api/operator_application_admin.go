@@ -360,7 +360,6 @@ func (server *Server) approveOperatorApplicationAdmin(ctx *gin.Context) {
 		WechatMchID: pgtype.Text{
 			Valid: false,
 		},
-		CommissionRate:    numericFromFloat(0.10),
 		Status:            "active",
 		ContractStartDate: startDate,
 		ContractEndDate:   endDate,

@@ -31,28 +31,26 @@ INSERT INTO operators (
     contact_name,
     contact_phone,
     wechat_mch_id,
-    commission_rate,
     status,
     contract_start_date,
     contract_end_date,
     contract_years
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
-) RETURNING id, user_id, region_id, name, contact_name, contact_phone, wechat_mch_id, commission_rate, status, created_at, updated_at, contract_start_date, contract_end_date, contract_years, sub_mch_id, balance, wallet_account, merchant_deposit, rider_deposit, weather_coeff_extreme, weather_coeff_heavy, weather_coeff_moderate, weather_coeff_light
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+) RETURNING id, user_id, region_id, name, contact_name, contact_phone, wechat_mch_id, status, created_at, updated_at, contract_start_date, contract_end_date, contract_years, sub_mch_id, balance, wallet_account, rider_deposit, weather_coeff_extreme, weather_coeff_heavy, weather_coeff_moderate, weather_coeff_light
 `
 
 type CreateOperatorParams struct {
-	UserID            int64          `json:"user_id"`
-	RegionID          int64          `json:"region_id"`
-	Name              string         `json:"name"`
-	ContactName       string         `json:"contact_name"`
-	ContactPhone      string         `json:"contact_phone"`
-	WechatMchID       pgtype.Text    `json:"wechat_mch_id"`
-	CommissionRate    pgtype.Numeric `json:"commission_rate"`
-	Status            string         `json:"status"`
-	ContractStartDate pgtype.Date    `json:"contract_start_date"`
-	ContractEndDate   pgtype.Date    `json:"contract_end_date"`
-	ContractYears     int32          `json:"contract_years"`
+	UserID            int64       `json:"user_id"`
+	RegionID          int64       `json:"region_id"`
+	Name              string      `json:"name"`
+	ContactName       string      `json:"contact_name"`
+	ContactPhone      string      `json:"contact_phone"`
+	WechatMchID       pgtype.Text `json:"wechat_mch_id"`
+	Status            string      `json:"status"`
+	ContractStartDate pgtype.Date `json:"contract_start_date"`
+	ContractEndDate   pgtype.Date `json:"contract_end_date"`
+	ContractYears     int32       `json:"contract_years"`
 }
 
 func (q *Queries) CreateOperator(ctx context.Context, arg CreateOperatorParams) (Operator, error) {
@@ -63,7 +61,6 @@ func (q *Queries) CreateOperator(ctx context.Context, arg CreateOperatorParams) 
 		arg.ContactName,
 		arg.ContactPhone,
 		arg.WechatMchID,
-		arg.CommissionRate,
 		arg.Status,
 		arg.ContractStartDate,
 		arg.ContractEndDate,
@@ -78,7 +75,6 @@ func (q *Queries) CreateOperator(ctx context.Context, arg CreateOperatorParams) 
 		&i.ContactName,
 		&i.ContactPhone,
 		&i.WechatMchID,
-		&i.CommissionRate,
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -88,7 +84,6 @@ func (q *Queries) CreateOperator(ctx context.Context, arg CreateOperatorParams) 
 		&i.SubMchID,
 		&i.Balance,
 		&i.WalletAccount,
-		&i.MerchantDeposit,
 		&i.RiderDeposit,
 		&i.WeatherCoeffExtreme,
 		&i.WeatherCoeffHeavy,
@@ -138,7 +133,7 @@ func (q *Queries) GetApprovedOperatorApplicationByUserID(ctx context.Context, us
 }
 
 const getOperator = `-- name: GetOperator :one
-SELECT id, user_id, region_id, name, contact_name, contact_phone, wechat_mch_id, commission_rate, status, created_at, updated_at, contract_start_date, contract_end_date, contract_years, sub_mch_id, balance, wallet_account, merchant_deposit, rider_deposit, weather_coeff_extreme, weather_coeff_heavy, weather_coeff_moderate, weather_coeff_light FROM operators
+SELECT id, user_id, region_id, name, contact_name, contact_phone, wechat_mch_id, status, created_at, updated_at, contract_start_date, contract_end_date, contract_years, sub_mch_id, balance, wallet_account, rider_deposit, weather_coeff_extreme, weather_coeff_heavy, weather_coeff_moderate, weather_coeff_light FROM operators
 WHERE id = $1 LIMIT 1
 `
 
@@ -153,7 +148,6 @@ func (q *Queries) GetOperator(ctx context.Context, id int64) (Operator, error) {
 		&i.ContactName,
 		&i.ContactPhone,
 		&i.WechatMchID,
-		&i.CommissionRate,
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -163,7 +157,6 @@ func (q *Queries) GetOperator(ctx context.Context, id int64) (Operator, error) {
 		&i.SubMchID,
 		&i.Balance,
 		&i.WalletAccount,
-		&i.MerchantDeposit,
 		&i.RiderDeposit,
 		&i.WeatherCoeffExtreme,
 		&i.WeatherCoeffHeavy,
@@ -174,7 +167,7 @@ func (q *Queries) GetOperator(ctx context.Context, id int64) (Operator, error) {
 }
 
 const getOperatorByUser = `-- name: GetOperatorByUser :one
-SELECT id, user_id, region_id, name, contact_name, contact_phone, wechat_mch_id, commission_rate, status, created_at, updated_at, contract_start_date, contract_end_date, contract_years, sub_mch_id, balance, wallet_account, merchant_deposit, rider_deposit, weather_coeff_extreme, weather_coeff_heavy, weather_coeff_moderate, weather_coeff_light FROM operators
+SELECT id, user_id, region_id, name, contact_name, contact_phone, wechat_mch_id, status, created_at, updated_at, contract_start_date, contract_end_date, contract_years, sub_mch_id, balance, wallet_account, rider_deposit, weather_coeff_extreme, weather_coeff_heavy, weather_coeff_moderate, weather_coeff_light FROM operators
 WHERE user_id = $1 LIMIT 1
 `
 
@@ -189,7 +182,6 @@ func (q *Queries) GetOperatorByUser(ctx context.Context, userID int64) (Operator
 		&i.ContactName,
 		&i.ContactPhone,
 		&i.WechatMchID,
-		&i.CommissionRate,
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -199,7 +191,6 @@ func (q *Queries) GetOperatorByUser(ctx context.Context, userID int64) (Operator
 		&i.SubMchID,
 		&i.Balance,
 		&i.WalletAccount,
-		&i.MerchantDeposit,
 		&i.RiderDeposit,
 		&i.WeatherCoeffExtreme,
 		&i.WeatherCoeffHeavy,
@@ -211,7 +202,7 @@ func (q *Queries) GetOperatorByUser(ctx context.Context, userID int64) (Operator
 
 const listExpiredOperators = `-- name: ListExpiredOperators :many
 SELECT 
-    o.id, o.user_id, o.region_id, o.name, o.contact_name, o.contact_phone, o.wechat_mch_id, o.commission_rate, o.status, o.created_at, o.updated_at, o.contract_start_date, o.contract_end_date, o.contract_years, o.sub_mch_id, o.balance, o.wallet_account, o.merchant_deposit, o.rider_deposit, o.weather_coeff_extreme, o.weather_coeff_heavy, o.weather_coeff_moderate, o.weather_coeff_light,
+    o.id, o.user_id, o.region_id, o.name, o.contact_name, o.contact_phone, o.wechat_mch_id, o.status, o.created_at, o.updated_at, o.contract_start_date, o.contract_end_date, o.contract_years, o.sub_mch_id, o.balance, o.wallet_account, o.rider_deposit, o.weather_coeff_extreme, o.weather_coeff_heavy, o.weather_coeff_moderate, o.weather_coeff_light,
     r.name as region_name
 FROM operators o
 INNER JOIN regions r ON o.region_id = r.id
@@ -228,7 +219,6 @@ type ListExpiredOperatorsRow struct {
 	ContactName          string             `json:"contact_name"`
 	ContactPhone         string             `json:"contact_phone"`
 	WechatMchID          pgtype.Text        `json:"wechat_mch_id"`
-	CommissionRate       pgtype.Numeric     `json:"commission_rate"`
 	Status               string             `json:"status"`
 	CreatedAt            time.Time          `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
@@ -238,7 +228,6 @@ type ListExpiredOperatorsRow struct {
 	SubMchID             pgtype.Text        `json:"sub_mch_id"`
 	Balance              int64              `json:"balance"`
 	WalletAccount        []byte             `json:"wallet_account"`
-	MerchantDeposit      int64              `json:"merchant_deposit"`
 	RiderDeposit         int64              `json:"rider_deposit"`
 	WeatherCoeffExtreme  pgtype.Numeric     `json:"weather_coeff_extreme"`
 	WeatherCoeffHeavy    pgtype.Numeric     `json:"weather_coeff_heavy"`
@@ -265,7 +254,6 @@ func (q *Queries) ListExpiredOperators(ctx context.Context) ([]ListExpiredOperat
 			&i.ContactName,
 			&i.ContactPhone,
 			&i.WechatMchID,
-			&i.CommissionRate,
 			&i.Status,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -275,7 +263,6 @@ func (q *Queries) ListExpiredOperators(ctx context.Context) ([]ListExpiredOperat
 			&i.SubMchID,
 			&i.Balance,
 			&i.WalletAccount,
-			&i.MerchantDeposit,
 			&i.RiderDeposit,
 			&i.WeatherCoeffExtreme,
 			&i.WeatherCoeffHeavy,
@@ -295,7 +282,7 @@ func (q *Queries) ListExpiredOperators(ctx context.Context) ([]ListExpiredOperat
 
 const listExpiringOperators = `-- name: ListExpiringOperators :many
 SELECT 
-    o.id, o.user_id, o.region_id, o.name, o.contact_name, o.contact_phone, o.wechat_mch_id, o.commission_rate, o.status, o.created_at, o.updated_at, o.contract_start_date, o.contract_end_date, o.contract_years, o.sub_mch_id, o.balance, o.wallet_account, o.merchant_deposit, o.rider_deposit, o.weather_coeff_extreme, o.weather_coeff_heavy, o.weather_coeff_moderate, o.weather_coeff_light,
+    o.id, o.user_id, o.region_id, o.name, o.contact_name, o.contact_phone, o.wechat_mch_id, o.status, o.created_at, o.updated_at, o.contract_start_date, o.contract_end_date, o.contract_years, o.sub_mch_id, o.balance, o.wallet_account, o.rider_deposit, o.weather_coeff_extreme, o.weather_coeff_heavy, o.weather_coeff_moderate, o.weather_coeff_light,
     r.name as region_name
 FROM operators o
 INNER JOIN regions r ON o.region_id = r.id
@@ -313,7 +300,6 @@ type ListExpiringOperatorsRow struct {
 	ContactName          string             `json:"contact_name"`
 	ContactPhone         string             `json:"contact_phone"`
 	WechatMchID          pgtype.Text        `json:"wechat_mch_id"`
-	CommissionRate       pgtype.Numeric     `json:"commission_rate"`
 	Status               string             `json:"status"`
 	CreatedAt            time.Time          `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
@@ -323,7 +309,6 @@ type ListExpiringOperatorsRow struct {
 	SubMchID             pgtype.Text        `json:"sub_mch_id"`
 	Balance              int64              `json:"balance"`
 	WalletAccount        []byte             `json:"wallet_account"`
-	MerchantDeposit      int64              `json:"merchant_deposit"`
 	RiderDeposit         int64              `json:"rider_deposit"`
 	WeatherCoeffExtreme  pgtype.Numeric     `json:"weather_coeff_extreme"`
 	WeatherCoeffHeavy    pgtype.Numeric     `json:"weather_coeff_heavy"`
@@ -350,7 +335,6 @@ func (q *Queries) ListExpiringOperators(ctx context.Context, dollar_1 int32) ([]
 			&i.ContactName,
 			&i.ContactPhone,
 			&i.WechatMchID,
-			&i.CommissionRate,
 			&i.Status,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -360,7 +344,6 @@ func (q *Queries) ListExpiringOperators(ctx context.Context, dollar_1 int32) ([]
 			&i.SubMchID,
 			&i.Balance,
 			&i.WalletAccount,
-			&i.MerchantDeposit,
 			&i.RiderDeposit,
 			&i.WeatherCoeffExtreme,
 			&i.WeatherCoeffHeavy,
@@ -380,7 +363,7 @@ func (q *Queries) ListExpiringOperators(ctx context.Context, dollar_1 int32) ([]
 
 const listOperators = `-- name: ListOperators :many
 SELECT 
-    o.id, o.user_id, o.region_id, o.name, o.contact_name, o.contact_phone, o.wechat_mch_id, o.commission_rate, o.status, o.created_at, o.updated_at, o.contract_start_date, o.contract_end_date, o.contract_years, o.sub_mch_id, o.balance, o.wallet_account, o.merchant_deposit, o.rider_deposit, o.weather_coeff_extreme, o.weather_coeff_heavy, o.weather_coeff_moderate, o.weather_coeff_light,
+    o.id, o.user_id, o.region_id, o.name, o.contact_name, o.contact_phone, o.wechat_mch_id, o.status, o.created_at, o.updated_at, o.contract_start_date, o.contract_end_date, o.contract_years, o.sub_mch_id, o.balance, o.wallet_account, o.rider_deposit, o.weather_coeff_extreme, o.weather_coeff_heavy, o.weather_coeff_moderate, o.weather_coeff_light,
     r.name as region_name
 FROM operators o
 INNER JOIN regions r ON o.region_id = r.id
@@ -401,7 +384,6 @@ type ListOperatorsRow struct {
 	ContactName          string             `json:"contact_name"`
 	ContactPhone         string             `json:"contact_phone"`
 	WechatMchID          pgtype.Text        `json:"wechat_mch_id"`
-	CommissionRate       pgtype.Numeric     `json:"commission_rate"`
 	Status               string             `json:"status"`
 	CreatedAt            time.Time          `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
@@ -411,7 +393,6 @@ type ListOperatorsRow struct {
 	SubMchID             pgtype.Text        `json:"sub_mch_id"`
 	Balance              int64              `json:"balance"`
 	WalletAccount        []byte             `json:"wallet_account"`
-	MerchantDeposit      int64              `json:"merchant_deposit"`
 	RiderDeposit         int64              `json:"rider_deposit"`
 	WeatherCoeffExtreme  pgtype.Numeric     `json:"weather_coeff_extreme"`
 	WeatherCoeffHeavy    pgtype.Numeric     `json:"weather_coeff_heavy"`
@@ -437,7 +418,6 @@ func (q *Queries) ListOperators(ctx context.Context, arg ListOperatorsParams) ([
 			&i.ContactName,
 			&i.ContactPhone,
 			&i.WechatMchID,
-			&i.CommissionRate,
 			&i.Status,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -447,7 +427,6 @@ func (q *Queries) ListOperators(ctx context.Context, arg ListOperatorsParams) ([
 			&i.SubMchID,
 			&i.Balance,
 			&i.WalletAccount,
-			&i.MerchantDeposit,
 			&i.RiderDeposit,
 			&i.WeatherCoeffExtreme,
 			&i.WeatherCoeffHeavy,
@@ -474,7 +453,7 @@ SET
     status = 'active',
     updated_at = now()
 WHERE id = $1
-RETURNING id, user_id, region_id, name, contact_name, contact_phone, wechat_mch_id, commission_rate, status, created_at, updated_at, contract_start_date, contract_end_date, contract_years, sub_mch_id, balance, wallet_account, merchant_deposit, rider_deposit, weather_coeff_extreme, weather_coeff_heavy, weather_coeff_moderate, weather_coeff_light
+RETURNING id, user_id, region_id, name, contact_name, contact_phone, wechat_mch_id, status, created_at, updated_at, contract_start_date, contract_end_date, contract_years, sub_mch_id, balance, wallet_account, rider_deposit, weather_coeff_extreme, weather_coeff_heavy, weather_coeff_moderate, weather_coeff_light
 `
 
 type RenewOperatorContractParams struct {
@@ -501,7 +480,6 @@ func (q *Queries) RenewOperatorContract(ctx context.Context, arg RenewOperatorCo
 		&i.ContactName,
 		&i.ContactPhone,
 		&i.WechatMchID,
-		&i.CommissionRate,
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -511,7 +489,6 @@ func (q *Queries) RenewOperatorContract(ctx context.Context, arg RenewOperatorCo
 		&i.SubMchID,
 		&i.Balance,
 		&i.WalletAccount,
-		&i.MerchantDeposit,
 		&i.RiderDeposit,
 		&i.WeatherCoeffExtreme,
 		&i.WeatherCoeffHeavy,
@@ -528,27 +505,25 @@ SET
     contact_name = COALESCE($3, contact_name),
     contact_phone = COALESCE($4, contact_phone),
     wechat_mch_id = COALESCE($5, wechat_mch_id),
-    commission_rate = COALESCE($6, commission_rate),
-    status = COALESCE($7, status),
-    contract_start_date = COALESCE($8, contract_start_date),
-    contract_end_date = COALESCE($9, contract_end_date),
-    contract_years = COALESCE($10, contract_years),
+    status = COALESCE($6, status),
+    contract_start_date = COALESCE($7, contract_start_date),
+    contract_end_date = COALESCE($8, contract_end_date),
+    contract_years = COALESCE($9, contract_years),
     updated_at = now()
 WHERE id = $1
-RETURNING id, user_id, region_id, name, contact_name, contact_phone, wechat_mch_id, commission_rate, status, created_at, updated_at, contract_start_date, contract_end_date, contract_years, sub_mch_id, balance, wallet_account, merchant_deposit, rider_deposit, weather_coeff_extreme, weather_coeff_heavy, weather_coeff_moderate, weather_coeff_light
+RETURNING id, user_id, region_id, name, contact_name, contact_phone, wechat_mch_id, status, created_at, updated_at, contract_start_date, contract_end_date, contract_years, sub_mch_id, balance, wallet_account, rider_deposit, weather_coeff_extreme, weather_coeff_heavy, weather_coeff_moderate, weather_coeff_light
 `
 
 type UpdateOperatorParams struct {
-	ID                int64          `json:"id"`
-	Name              pgtype.Text    `json:"name"`
-	ContactName       pgtype.Text    `json:"contact_name"`
-	ContactPhone      pgtype.Text    `json:"contact_phone"`
-	WechatMchID       pgtype.Text    `json:"wechat_mch_id"`
-	CommissionRate    pgtype.Numeric `json:"commission_rate"`
-	Status            pgtype.Text    `json:"status"`
-	ContractStartDate pgtype.Date    `json:"contract_start_date"`
-	ContractEndDate   pgtype.Date    `json:"contract_end_date"`
-	ContractYears     pgtype.Int4    `json:"contract_years"`
+	ID                int64       `json:"id"`
+	Name              pgtype.Text `json:"name"`
+	ContactName       pgtype.Text `json:"contact_name"`
+	ContactPhone      pgtype.Text `json:"contact_phone"`
+	WechatMchID       pgtype.Text `json:"wechat_mch_id"`
+	Status            pgtype.Text `json:"status"`
+	ContractStartDate pgtype.Date `json:"contract_start_date"`
+	ContractEndDate   pgtype.Date `json:"contract_end_date"`
+	ContractYears     pgtype.Int4 `json:"contract_years"`
 }
 
 func (q *Queries) UpdateOperator(ctx context.Context, arg UpdateOperatorParams) (Operator, error) {
@@ -558,7 +533,6 @@ func (q *Queries) UpdateOperator(ctx context.Context, arg UpdateOperatorParams) 
 		arg.ContactName,
 		arg.ContactPhone,
 		arg.WechatMchID,
-		arg.CommissionRate,
 		arg.Status,
 		arg.ContractStartDate,
 		arg.ContractEndDate,
@@ -573,7 +547,6 @@ func (q *Queries) UpdateOperator(ctx context.Context, arg UpdateOperatorParams) 
 		&i.ContactName,
 		&i.ContactPhone,
 		&i.WechatMchID,
-		&i.CommissionRate,
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -583,7 +556,6 @@ func (q *Queries) UpdateOperator(ctx context.Context, arg UpdateOperatorParams) 
 		&i.SubMchID,
 		&i.Balance,
 		&i.WalletAccount,
-		&i.MerchantDeposit,
 		&i.RiderDeposit,
 		&i.WeatherCoeffExtreme,
 		&i.WeatherCoeffHeavy,
@@ -599,7 +571,7 @@ SET
     status = $2,
     updated_at = now()
 WHERE id = $1
-RETURNING id, user_id, region_id, name, contact_name, contact_phone, wechat_mch_id, commission_rate, status, created_at, updated_at, contract_start_date, contract_end_date, contract_years, sub_mch_id, balance, wallet_account, merchant_deposit, rider_deposit, weather_coeff_extreme, weather_coeff_heavy, weather_coeff_moderate, weather_coeff_light
+RETURNING id, user_id, region_id, name, contact_name, contact_phone, wechat_mch_id, status, created_at, updated_at, contract_start_date, contract_end_date, contract_years, sub_mch_id, balance, wallet_account, rider_deposit, weather_coeff_extreme, weather_coeff_heavy, weather_coeff_moderate, weather_coeff_light
 `
 
 type UpdateOperatorStatusParams struct {
@@ -619,7 +591,6 @@ func (q *Queries) UpdateOperatorStatus(ctx context.Context, arg UpdateOperatorSt
 		&i.ContactName,
 		&i.ContactPhone,
 		&i.WechatMchID,
-		&i.CommissionRate,
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -629,7 +600,6 @@ func (q *Queries) UpdateOperatorStatus(ctx context.Context, arg UpdateOperatorSt
 		&i.SubMchID,
 		&i.Balance,
 		&i.WalletAccount,
-		&i.MerchantDeposit,
 		&i.RiderDeposit,
 		&i.WeatherCoeffExtreme,
 		&i.WeatherCoeffHeavy,
@@ -646,7 +616,7 @@ SET
     status = 'active',
     updated_at = now()
 WHERE id = $1
-RETURNING id, user_id, region_id, name, contact_name, contact_phone, wechat_mch_id, commission_rate, status, created_at, updated_at, contract_start_date, contract_end_date, contract_years, sub_mch_id, balance, wallet_account, merchant_deposit, rider_deposit, weather_coeff_extreme, weather_coeff_heavy, weather_coeff_moderate, weather_coeff_light
+RETURNING id, user_id, region_id, name, contact_name, contact_phone, wechat_mch_id, status, created_at, updated_at, contract_start_date, contract_end_date, contract_years, sub_mch_id, balance, wallet_account, rider_deposit, weather_coeff_extreme, weather_coeff_heavy, weather_coeff_moderate, weather_coeff_light
 `
 
 type UpdateOperatorSubMchIDParams struct {
@@ -666,7 +636,6 @@ func (q *Queries) UpdateOperatorSubMchID(ctx context.Context, arg UpdateOperator
 		&i.ContactName,
 		&i.ContactPhone,
 		&i.WechatMchID,
-		&i.CommissionRate,
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -676,7 +645,6 @@ func (q *Queries) UpdateOperatorSubMchID(ctx context.Context, arg UpdateOperator
 		&i.SubMchID,
 		&i.Balance,
 		&i.WalletAccount,
-		&i.MerchantDeposit,
 		&i.RiderDeposit,
 		&i.WeatherCoeffExtreme,
 		&i.WeatherCoeffHeavy,

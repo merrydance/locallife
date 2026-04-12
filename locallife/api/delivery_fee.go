@@ -1195,7 +1195,6 @@ type calculateDeliveryFeeResponse struct {
 // @Param request body calculateDeliveryFeeRequest true "Calculation parameters"
 // @Success 200 {object} DeliveryFeeResult
 // @Failure 400 {object} ErrorResponse
-// @Failure 404 {object} ErrorResponse "Config not found"
 // @Failure 500 {object} ErrorResponse
 // @Router /v1/delivery-fee/calculate [post]
 // @Security BearerAuth
@@ -1206,13 +1205,8 @@ func (server *Server) calculateDeliveryFee(ctx *gin.Context) {
 		return
 	}
 
-	// API 层严格检查：配置必须存在且激活
-	config, err := server.store.GetDeliveryFeeConfigByRegion(ctx, req.RegionID)
+	config, _, err := server.resolveEffectiveDeliveryFeeConfig(ctx, req.RegionID)
 	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(ErrDeliveryFeeConfigNotFound))
-			return
-		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -1260,20 +1254,10 @@ type DeliveryFeeResult struct {
 // ErrDeliveryFeeConfigNotFound 和 ErrDeliveryServiceDisabled 已迁移至 api/apierrors.go
 
 // calculateDeliveryFeeInternal 内部运费计算方法，供其他模块调用
-// 此方法会自动获取配置，如果配置不存在则使用默认值
+// 此方法会自动获取配置，按“区域配置 -> 平台默认 -> 系统默认”顺序回退
 func (server *Server) calculateDeliveryFeeInternal(ctx context.Context, regionID, merchantID int64, distance int32, orderAmount int64) (*DeliveryFeeResult, error) {
-	// 获取基础运费配置
-	config, err := server.store.GetDeliveryFeeConfigByRegion(ctx, regionID)
+	config, _, err := server.resolveEffectiveDeliveryFeeConfig(ctx, regionID)
 	if err != nil {
-		if isNotFoundError(err) {
-			// 没有配置，返回默认运费（内部调用降级处理）
-			return &DeliveryFeeResult{
-				BaseFee:             DefaultBaseFee,
-				FinalFee:            DefaultBaseFee,
-				WeatherCoefficient:  DefaultWeatherCoefficient,
-				PeakHourCoefficient: DefaultPeakHourCoefficient,
-			}, nil
-		}
 		return nil, err
 	}
 

@@ -1380,7 +1380,7 @@ func getOperatorApplymentStatusDesc(status string, canSubmit bool) string {
 		return "可提交开户信息"
 	}
 	if status == "active" && !canSubmit {
-		return "当前无需提交开户信息"
+		return "账户已开通"
 	}
 	if status == "frozen" && !canSubmit {
 		return "当前账号状态不可用"
@@ -1432,7 +1432,7 @@ func (server *Server) getOperatorApplymentStatus(ctx *gin.Context) {
 
 					ctx.JSON(http.StatusOK, operatorApplymentStatusResponse{
 						Status:      "active",
-						StatusDesc:  getOperatorApplymentStatusDesc("active", false),
+						StatusDesc:  "当前无需提交开户信息",
 						CanSubmit:   false,
 						BlockReason: getPersonalOperatorApplymentBlockReason(),
 						CreatedAt:   operator.CreatedAt,

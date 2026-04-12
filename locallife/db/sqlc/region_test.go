@@ -250,7 +250,6 @@ func TestRegionQueries_ListAvailableRegions_DefaultLevel3_ExcludesBoundOperators
 		ContactName:       "contact_" + util.RandomString(6),
 		ContactPhone:      "138" + util.RandomString(8),
 		WechatMchID:       pgtype.Text{Valid: false},
-		CommissionRate:    commissionRate,
 		Status:            "active",
 		ContractStartDate: pgtype.Date{Valid: false},
 		ContractEndDate:   pgtype.Date{Valid: false},

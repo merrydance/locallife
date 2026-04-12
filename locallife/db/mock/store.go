@@ -8879,36 +8879,6 @@ func (mr *MockStoreMockRecorder) GetPlatformDailyStats(ctx, arg any) *gomock.Cal
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPlatformDailyStats", reflect.TypeOf((*MockStore)(nil).GetPlatformDailyStats), ctx, arg)
 }
 
-// GetPlatformOperatorRuleBaselineFromOperator mocks base method.
-func (m *MockStore) GetPlatformOperatorRuleBaselineFromOperator(ctx context.Context) (db.GetPlatformOperatorRuleBaselineFromOperatorRow, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetPlatformOperatorRuleBaselineFromOperator", ctx)
-	ret0, _ := ret[0].(db.GetPlatformOperatorRuleBaselineFromOperatorRow)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetPlatformOperatorRuleBaselineFromOperator indicates an expected call of GetPlatformOperatorRuleBaselineFromOperator.
-func (mr *MockStoreMockRecorder) GetPlatformOperatorRuleBaselineFromOperator(ctx any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPlatformOperatorRuleBaselineFromOperator", reflect.TypeOf((*MockStore)(nil).GetPlatformOperatorRuleBaselineFromOperator), ctx)
-}
-
-// GetPlatformOperatorRuleBaselineFromRegion mocks base method.
-func (m *MockStore) GetPlatformOperatorRuleBaselineFromRegion(ctx context.Context) (db.GetPlatformOperatorRuleBaselineFromRegionRow, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetPlatformOperatorRuleBaselineFromRegion", ctx)
-	ret0, _ := ret[0].(db.GetPlatformOperatorRuleBaselineFromRegionRow)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetPlatformOperatorRuleBaselineFromRegion indicates an expected call of GetPlatformOperatorRuleBaselineFromRegion.
-func (mr *MockStoreMockRecorder) GetPlatformOperatorRuleBaselineFromRegion(ctx any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPlatformOperatorRuleBaselineFromRegion", reflect.TypeOf((*MockStore)(nil).GetPlatformOperatorRuleBaselineFromRegion), ctx)
-}
-
 // GetPlatformOverview mocks base method.
 func (m *MockStore) GetPlatformOverview(ctx context.Context, arg db.GetPlatformOverviewParams) (db.GetPlatformOverviewRow, error) {
 	m.ctrl.T.Helper()
@@ -16990,90 +16960,6 @@ func (m *MockStore) UnsuspendRider(ctx context.Context, riderID int64) error {
 func (mr *MockStoreMockRecorder) UnsuspendRider(ctx, riderID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnsuspendRider", reflect.TypeOf((*MockStore)(nil).UnsuspendRider), ctx, riderID)
-}
-
-// UpdateAllOperatorsCommissionRate mocks base method.
-func (m *MockStore) UpdateAllOperatorsCommissionRate(ctx context.Context, commissionRate pgtype.Numeric) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateAllOperatorsCommissionRate", ctx, commissionRate)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// UpdateAllOperatorsCommissionRate indicates an expected call of UpdateAllOperatorsCommissionRate.
-func (mr *MockStoreMockRecorder) UpdateAllOperatorsCommissionRate(ctx, commissionRate any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateAllOperatorsCommissionRate", reflect.TypeOf((*MockStore)(nil).UpdateAllOperatorsCommissionRate), ctx, commissionRate)
-}
-
-// UpdateAllOperatorsMerchantDeposit mocks base method.
-func (m *MockStore) UpdateAllOperatorsMerchantDeposit(ctx context.Context, merchantDeposit int64) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateAllOperatorsMerchantDeposit", ctx, merchantDeposit)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// UpdateAllOperatorsMerchantDeposit indicates an expected call of UpdateAllOperatorsMerchantDeposit.
-func (mr *MockStoreMockRecorder) UpdateAllOperatorsMerchantDeposit(ctx, merchantDeposit any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateAllOperatorsMerchantDeposit", reflect.TypeOf((*MockStore)(nil).UpdateAllOperatorsMerchantDeposit), ctx, merchantDeposit)
-}
-
-// UpdateAllOperatorsRiderDeposit mocks base method.
-func (m *MockStore) UpdateAllOperatorsRiderDeposit(ctx context.Context, riderDeposit int64) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateAllOperatorsRiderDeposit", ctx, riderDeposit)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// UpdateAllOperatorsRiderDeposit indicates an expected call of UpdateAllOperatorsRiderDeposit.
-func (mr *MockStoreMockRecorder) UpdateAllOperatorsRiderDeposit(ctx, riderDeposit any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateAllOperatorsRiderDeposit", reflect.TypeOf((*MockStore)(nil).UpdateAllOperatorsRiderDeposit), ctx, riderDeposit)
-}
-
-// UpdateAllRegionRuleConfigCommissionRate mocks base method.
-func (m *MockStore) UpdateAllRegionRuleConfigCommissionRate(ctx context.Context, commissionRate pgtype.Numeric) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateAllRegionRuleConfigCommissionRate", ctx, commissionRate)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// UpdateAllRegionRuleConfigCommissionRate indicates an expected call of UpdateAllRegionRuleConfigCommissionRate.
-func (mr *MockStoreMockRecorder) UpdateAllRegionRuleConfigCommissionRate(ctx, commissionRate any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateAllRegionRuleConfigCommissionRate", reflect.TypeOf((*MockStore)(nil).UpdateAllRegionRuleConfigCommissionRate), ctx, commissionRate)
-}
-
-// UpdateAllRegionRuleConfigMerchantDeposit mocks base method.
-func (m *MockStore) UpdateAllRegionRuleConfigMerchantDeposit(ctx context.Context, merchantDeposit int64) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateAllRegionRuleConfigMerchantDeposit", ctx, merchantDeposit)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// UpdateAllRegionRuleConfigMerchantDeposit indicates an expected call of UpdateAllRegionRuleConfigMerchantDeposit.
-func (mr *MockStoreMockRecorder) UpdateAllRegionRuleConfigMerchantDeposit(ctx, merchantDeposit any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateAllRegionRuleConfigMerchantDeposit", reflect.TypeOf((*MockStore)(nil).UpdateAllRegionRuleConfigMerchantDeposit), ctx, merchantDeposit)
-}
-
-// UpdateAllRegionRuleConfigRiderDeposit mocks base method.
-func (m *MockStore) UpdateAllRegionRuleConfigRiderDeposit(ctx context.Context, riderDeposit int64) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateAllRegionRuleConfigRiderDeposit", ctx, riderDeposit)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// UpdateAllRegionRuleConfigRiderDeposit indicates an expected call of UpdateAllRegionRuleConfigRiderDeposit.
-func (mr *MockStoreMockRecorder) UpdateAllRegionRuleConfigRiderDeposit(ctx, riderDeposit any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateAllRegionRuleConfigRiderDeposit", reflect.TypeOf((*MockStore)(nil).UpdateAllRegionRuleConfigRiderDeposit), ctx, riderDeposit)
 }
 
 // UpdateBehaviorActionExecution mocks base method.

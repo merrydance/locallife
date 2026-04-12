@@ -1304,6 +1304,26 @@ func TestCombinedCheckoutAPI(t *testing.T) {
 					GetDeliveryFeeConfigByRegion(gomock.Any(), gomock.Any()).
 					AnyTimes().
 					Return(db.DeliveryFeeConfig{}, db.ErrRecordNotFound)
+				store.EXPECT().
+					GetPlatformConfig(gomock.Any(), db.GetPlatformConfigParams{
+						ConfigKey: deliveryFeeDefaultConfigKey,
+						ScopeType: db.PlatformConfigScopeGlobal,
+						ScopeID:   pgtype.Int8{Valid: false},
+					}).
+					AnyTimes().
+					Return(db.PlatformConfig{}, db.ErrRecordNotFound)
+				store.EXPECT().
+					GetLatestWeatherCoefficient(gomock.Any(), gomock.Any()).
+					AnyTimes().
+					Return(db.WeatherCoefficient{}, db.ErrRecordNotFound)
+				store.EXPECT().
+					ListPeakHourConfigsByRegion(gomock.Any(), gomock.Any()).
+					AnyTimes().
+					Return([]db.PeakHourConfig{}, nil)
+				store.EXPECT().
+					ListActiveDeliveryPromotionsByMerchant(gomock.Any(), gomock.Any()).
+					AnyTimes().
+					Return([]db.MerchantDeliveryPromotion{}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				// 接受成功或尚未完全实现的响应

@@ -70,6 +70,7 @@ const (
 	RiderApplicationStatusApproved  = "approved"
 
 	PlatformConfigScopeGlobal        = "global"
+	PlatformConfigScopeOperator      = "operator"
 	PlatformConfigKeyRiderDepositFen = "platform_rule.rider_deposit_fen"
 	DefaultRiderDepositThresholdFen  = 20000
 

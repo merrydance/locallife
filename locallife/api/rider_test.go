@@ -43,6 +43,24 @@ func expectRiderThresholdFromOperator(store *mockdb.MockStore, rider db.Rider, t
 		GetActiveOperatorByRegion(gomock.Any(), rider.RegionID.Int64).
 		Times(1).
 		Return(db.Operator{ID: 1, RiderDeposit: threshold}, nil)
+	if threshold == db.DefaultRiderDepositThresholdFen {
+		store.EXPECT().
+			GetPlatformConfig(gomock.Any(), db.GetPlatformConfigParams{
+				ConfigKey: db.PlatformConfigKeyRiderDepositFen,
+				ScopeType: db.PlatformConfigScopeOperator,
+				ScopeID:   pgtype.Int8{Int64: 1, Valid: true},
+			}).
+			Times(1).
+			Return(db.PlatformConfig{}, db.ErrRecordNotFound)
+		store.EXPECT().
+			GetPlatformConfig(gomock.Any(), db.GetPlatformConfigParams{
+				ConfigKey: db.PlatformConfigKeyRiderDepositFen,
+				ScopeType: db.PlatformConfigScopeGlobal,
+				ScopeID:   pgtype.Int8{Valid: false},
+			}).
+			Times(1).
+			Return(db.PlatformConfig{}, db.ErrRecordNotFound)
+	}
 }
 
 func TestGetRiderMeAPI(t *testing.T) {

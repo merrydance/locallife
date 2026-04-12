@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -160,15 +161,14 @@ func randomWeatherCoefficient(regionID int64) db.WeatherCoefficient {
 // randomOperator 生成随机运营商
 func randomOperator(userID int64) db.Operator {
 	return db.Operator{
-		ID:             util.RandomInt(1, 1000),
-		UserID:         userID,
-		Name:           util.RandomString(10),
-		ContactName:    util.RandomString(6),
-		ContactPhone:   util.RandomString(11),
-		RegionID:       util.RandomInt(1, 100),
-		CommissionRate: pgtype.Numeric{},
-		Status:         "active",
-		CreatedAt:      time.Now(),
+		ID:           util.RandomInt(1, 1000),
+		UserID:       userID,
+		Name:         util.RandomString(10),
+		ContactName:  util.RandomString(6),
+		ContactPhone: util.RandomString(11),
+		RegionID:     util.RandomInt(1, 100),
+		Status:       "active",
+		CreatedAt:    time.Now(),
 	}
 }
 
@@ -573,7 +573,7 @@ func TestCalculateDeliveryFeeAPI(t *testing.T) {
 			},
 		},
 		{
-			name: "ConfigNotFound",
+			name: "ConfigNotFoundFallsBackToPlatformDefault",
 			body: gin.H{
 				"region_id":    regionID,
 				"merchant_id":  merchantID,
@@ -588,9 +588,41 @@ func TestCalculateDeliveryFeeAPI(t *testing.T) {
 					GetDeliveryFeeConfigByRegion(gomock.Any(), regionID).
 					Times(1).
 					Return(db.DeliveryFeeConfig{}, db.ErrRecordNotFound)
+				store.EXPECT().
+					GetPlatformConfig(gomock.Any(), db.GetPlatformConfigParams{
+						ConfigKey: deliveryFeeDefaultConfigKey,
+						ScopeType: db.PlatformConfigScopeGlobal,
+						ScopeID:   pgtype.Int8{Valid: false},
+					}).
+					Times(1).
+					Return(db.PlatformConfig{ConfigValue: mustMarshalDeliveryFeeDefaultConfig(t, deliveryFeeDefaultConfigValue{
+						BaseFee:       700,
+						BaseDistance:  3000,
+						ExtraFeePerKm: 100,
+						ValueRatio:    0.01,
+						MinFee:        500,
+					})}, nil)
+
+				store.EXPECT().
+					GetLatestWeatherCoefficient(gomock.Any(), regionID).
+					Times(1).
+					Return(weather, nil)
+
+				store.EXPECT().
+					ListPeakHourConfigsByRegion(gomock.Any(), regionID).
+					Times(1).
+					Return([]db.PeakHourConfig{}, nil)
+
+				store.EXPECT().
+					ListActiveDeliveryPromotionsByMerchant(gomock.Any(), merchantID).
+					Times(1).
+					Return([]db.MerchantDeliveryPromotion{}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusNotFound, recorder.Code)
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var response calculateDeliveryFeeResponse
+				err := json.NewDecoder(recorder.Body).Decode(&response)
+				require.NoError(t, err)
 			},
 		},
 		{
@@ -676,6 +708,47 @@ func TestCalculateDeliveryFeeAPI(t *testing.T) {
 			tc.checkResponse(t, recorder)
 		})
 	}
+}
+
+func TestCalculateDeliveryFeeInternal_UsesPlatformDefaultWhenRegionConfigMissing(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	server := newTestServer(t, store)
+
+	store.EXPECT().
+		GetDeliveryFeeConfigByRegion(gomock.Any(), int64(18)).
+		Return(db.DeliveryFeeConfig{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		GetPlatformConfig(gomock.Any(), db.GetPlatformConfigParams{
+			ConfigKey: deliveryFeeDefaultConfigKey,
+			ScopeType: db.PlatformConfigScopeGlobal,
+			ScopeID:   pgtype.Int8{Valid: false},
+		}).
+		Return(db.PlatformConfig{ConfigValue: mustMarshalDeliveryFeeDefaultConfig(t, deliveryFeeDefaultConfigValue{
+			BaseFee:       800,
+			BaseDistance:  3000,
+			ExtraFeePerKm: 200,
+			ValueRatio:    0.02,
+			MinFee:        500,
+		})}, nil)
+	store.EXPECT().
+		GetLatestWeatherCoefficient(gomock.Any(), int64(18)).
+		Return(db.WeatherCoefficient{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		ListPeakHourConfigsByRegion(gomock.Any(), int64(18)).
+		Return([]db.PeakHourConfig{}, nil)
+	store.EXPECT().
+		ListActiveDeliveryPromotionsByMerchant(gomock.Any(), int64(9)).
+		Return([]db.MerchantDeliveryPromotion{}, nil)
+
+	result, err := server.calculateDeliveryFeeInternal(context.Background(), 18, 9, 5000, 10000)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, int64(800), result.BaseFee)
+	require.Greater(t, result.FinalFee, int64(800))
+	require.False(t, result.DeliverySuspended)
 }
 
 // ==================== 高峰时段配置测试 ====================

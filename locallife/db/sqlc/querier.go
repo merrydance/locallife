@@ -874,8 +874,6 @@ type Querier interface {
 	GetPlatformConfig(ctx context.Context, arg GetPlatformConfigParams) (PlatformConfig, error)
 	// 平台日统计
 	GetPlatformDailyStats(ctx context.Context, arg GetPlatformDailyStatsParams) ([]GetPlatformDailyStatsRow, error)
-	GetPlatformOperatorRuleBaselineFromOperator(ctx context.Context) (GetPlatformOperatorRuleBaselineFromOperatorRow, error)
-	GetPlatformOperatorRuleBaselineFromRegion(ctx context.Context) (GetPlatformOperatorRuleBaselineFromRegionRow, error)
 	// M12: 平台端统计查询
 	// 平台全局概览
 	GetPlatformOverview(ctx context.Context, arg GetPlatformOverviewParams) (GetPlatformOverviewRow, error)
@@ -1583,12 +1581,6 @@ type Querier interface {
 	UnsuspendMerchant(ctx context.Context, merchantID int64) error
 	UnsuspendMerchantTakeout(ctx context.Context, merchantID int64) error
 	UnsuspendRider(ctx context.Context, riderID int64) error
-	UpdateAllOperatorsCommissionRate(ctx context.Context, commissionRate pgtype.Numeric) error
-	UpdateAllOperatorsMerchantDeposit(ctx context.Context, merchantDeposit int64) error
-	UpdateAllOperatorsRiderDeposit(ctx context.Context, riderDeposit int64) error
-	UpdateAllRegionRuleConfigCommissionRate(ctx context.Context, commissionRate pgtype.Numeric) error
-	UpdateAllRegionRuleConfigMerchantDeposit(ctx context.Context, merchantDeposit int64) error
-	UpdateAllRegionRuleConfigRiderDeposit(ctx context.Context, riderDeposit int64) error
 	UpdateBehaviorActionExecution(ctx context.Context, arg UpdateBehaviorActionExecutionParams) error
 	UpdateBehaviorActionStatus(ctx context.Context, arg UpdateBehaviorActionStatusParams) error
 	UpdateBehaviorAppealStatus(ctx context.Context, arg UpdateBehaviorAppealStatusParams) error

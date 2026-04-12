@@ -35,19 +35,26 @@ type operatorRulesQuery struct {
 }
 
 const (
-	operatorMerchantDepositConfigKey = "platform_rule.merchant_deposit_fen"
-	operatorRiderDepositConfigKey    = "platform_rule.rider_deposit_fen"
+	operatorRiderDepositConfigKey = "platform_rule.rider_deposit_fen"
 )
 
 type operatorDepositConfigValue struct {
 	AmountFen int64 `json:"amount_fen"`
 }
 
-func (server *Server) getOperatorGlobalDepositFen(ctx *gin.Context, configKey string) (int64, bool, error) {
+type weatherRuleValueSource string
+
+const (
+	weatherRuleValueSourceRegion   weatherRuleValueSource = "region"
+	weatherRuleValueSourcePlatform weatherRuleValueSource = "platform"
+	weatherRuleValueSourceDefault  weatherRuleValueSource = "default"
+)
+
+func (server *Server) getScopedDepositFen(ctx *gin.Context, configKey, scopeType string, scopeID pgtype.Int8) (int64, bool, error) {
 	config, err := server.store.GetPlatformConfig(ctx, db.GetPlatformConfigParams{
 		ConfigKey: configKey,
-		ScopeType: db.PlatformConfigScopeGlobal,
-		ScopeID:   pgtype.Int8{Valid: false},
+		ScopeType: scopeType,
+		ScopeID:   scopeID,
 	})
 	if err != nil {
 		if isNotFoundError(err) {
@@ -68,20 +75,50 @@ func (server *Server) getOperatorGlobalDepositFen(ctx *gin.Context, configKey st
 	return payload.AmountFen, true, nil
 }
 
-func (server *Server) getOperatorRiderDepositThreshold(ctx *gin.Context, operator db.Operator) (int64, error) {
-	if operator.RiderDeposit > 0 {
-		return operator.RiderDeposit, nil
+func (server *Server) getOperatorGlobalDepositFen(ctx *gin.Context, configKey string) (int64, bool, error) {
+	return server.getScopedDepositFen(ctx, configKey, db.PlatformConfigScopeGlobal, pgtype.Int8{Valid: false})
+}
+
+func (server *Server) getOperatorScopedDepositFen(ctx *gin.Context, configKey string, operatorID int64) (int64, bool, error) {
+	return server.getScopedDepositFen(ctx, configKey, db.PlatformConfigScopeOperator, pgtype.Int8{Int64: operatorID, Valid: true})
+}
+
+func (server *Server) upsertOperatorScopedDepositFen(ctx *gin.Context, configKey string, operatorID int64, amountFen int64) error {
+	payload, err := json.Marshal(operatorDepositConfigValue{AmountFen: amountFen})
+	if err != nil {
+		return err
 	}
 
-	configured, ok, err := server.getOperatorGlobalDepositFen(ctx, operatorRiderDepositConfigKey)
+	_, err = server.store.UpsertPlatformConfig(ctx, db.UpsertPlatformConfigParams{
+		ConfigKey:   configKey,
+		ConfigValue: payload,
+		ScopeType:   db.PlatformConfigScopeOperator,
+		ScopeID:     pgtype.Int8{Int64: operatorID, Valid: true},
+	})
+	return err
+}
+
+func (server *Server) getOperatorRiderDepositThreshold(ctx *gin.Context, operator db.Operator) (int64, db.RiderDepositThresholdSource, error) {
+	configured, ok, err := server.getOperatorScopedDepositFen(ctx, operatorRiderDepositConfigKey, operator.ID)
 	if err != nil {
-		return 0, err
+		return 0, "", err
 	}
 	if ok && configured > 0 {
-		return configured, nil
+		return configured, db.RiderDepositThresholdSourceOperator, nil
 	}
 
-	return db.DefaultRiderDepositThresholdFen, nil
+	globalConfigured := int64(0)
+	globalOK := false
+	if operator.RiderDeposit <= 0 || operator.RiderDeposit == db.DefaultRiderDepositThresholdFen {
+		var err error
+		globalConfigured, globalOK, err = server.getOperatorGlobalDepositFen(ctx, operatorRiderDepositConfigKey)
+		if err != nil {
+			return 0, "", err
+		}
+	}
+
+	threshold, source := db.ResolveRiderDepositThreshold(operator.RiderDeposit, globalConfigured, globalOK)
+	return threshold, source, nil
 }
 
 func weatherRuleKeyToPlatformConfigKey(key string) (string, error) {
@@ -97,6 +134,81 @@ func weatherRuleKeyToPlatformConfigKey(key string) (string, error) {
 	default:
 		return "", errors.New("unknown weather rule key")
 	}
+}
+
+func defaultWeatherRuleValue(key string) float64 {
+	switch key {
+	case "WEATHER_COEFF_EXTREME":
+		return 2.0
+	case "WEATHER_COEFF_HEAVY":
+		return 1.8
+	case "WEATHER_COEFF_MODERATE":
+		return 1.3
+	case "WEATHER_COEFF_LIGHT":
+		return 1.1
+	default:
+		return 1.0
+	}
+}
+
+func regionWeatherRuleValue(config *db.RegionRuleConfig, key string) (float64, bool) {
+	if config == nil {
+		return 0, false
+	}
+
+	var value pgtype.Numeric
+	switch key {
+	case "WEATHER_COEFF_EXTREME":
+		value = config.WeatherCoeffExtreme
+	case "WEATHER_COEFF_HEAVY":
+		value = config.WeatherCoeffHeavy
+	case "WEATHER_COEFF_MODERATE":
+		value = config.WeatherCoeffModerate
+	case "WEATHER_COEFF_LIGHT":
+		value = config.WeatherCoeffLight
+	default:
+		return 0, false
+	}
+
+	if !value.Valid {
+		return 0, false
+	}
+
+	parsed, err := value.Float64Value()
+	if err != nil {
+		return 0, false
+	}
+
+	return parsed.Float64, true
+}
+
+func (server *Server) resolveWeatherRuleValue(ctx *gin.Context, regionID int64, regionRuleConfig *db.RegionRuleConfig, key string) (float64, weatherRuleValueSource, error) {
+	if value, ok := regionWeatherRuleValue(regionRuleConfig, key); ok {
+		return value, weatherRuleValueSourceRegion, nil
+	}
+
+	configKey, err := weatherRuleKeyToPlatformConfigKey(key)
+	if err != nil {
+		return 0, "", err
+	}
+
+	config, err := server.store.GetPlatformConfig(ctx, db.GetPlatformConfigParams{
+		ConfigKey: configKey,
+		ScopeType: "city",
+		ScopeID:   pgtype.Int8{Int64: regionID, Valid: true},
+	})
+	if err == nil {
+		var value float64
+		if unmarshalErr := json.Unmarshal(config.ConfigValue, &value); unmarshalErr != nil {
+			return 0, "", unmarshalErr
+		}
+		return value, weatherRuleValueSourcePlatform, nil
+	}
+	if !isNotFoundError(err) {
+		return 0, "", err
+	}
+
+	return defaultWeatherRuleValue(key), weatherRuleValueSourceDefault, nil
 }
 
 func (server *Server) resolveOperatorRuleRegionID(ctx *gin.Context, operator db.Operator) (int64, error) {
@@ -155,28 +267,19 @@ func (server *Server) listOperatorRules(ctx *gin.Context) {
 
 	rules := []RuleItem{}
 
-	merchantDepositValue := operator.MerchantDeposit
-	riderDepositValue, err := server.getOperatorRiderDepositThreshold(ctx, operator)
+	riderDepositValue, riderDepositSource, err := server.getOperatorRiderDepositThreshold(ctx, operator)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
-	weatherCoeffExtreme := operator.WeatherCoeffExtreme
-	weatherCoeffHeavy := operator.WeatherCoeffHeavy
-	weatherCoeffModerate := operator.WeatherCoeffModerate
-	weatherCoeffLight := operator.WeatherCoeffLight
-
 	regionRuleConfig, configErr := server.store.GetRegionRuleConfigByRegion(ctx, targetRegionID)
+	var regionRuleConfigPtr *db.RegionRuleConfig
 	if configErr != nil && !isNotFoundError(configErr) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, configErr))
 		return
 	}
 	if configErr == nil {
-		merchantDepositValue = regionRuleConfig.MerchantDeposit
-		weatherCoeffExtreme = regionRuleConfig.WeatherCoeffExtreme
-		weatherCoeffHeavy = regionRuleConfig.WeatherCoeffHeavy
-		weatherCoeffModerate = regionRuleConfig.WeatherCoeffModerate
-		weatherCoeffLight = regionRuleConfig.WeatherCoeffLight
+		regionRuleConfigPtr = &regionRuleConfig
 	}
 
 	// 运营商抽成比例直接从 profit_sharing_configs 读取，与平台侧保持同源
@@ -193,34 +296,49 @@ func (server *Server) listOperatorRules(ctx *gin.Context) {
 		return
 	}
 
-	if configuredMerchantDeposit, ok, cfgErr := server.getOperatorGlobalDepositFen(ctx, operatorMerchantDepositConfigKey); cfgErr != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, cfgErr))
+	weatherExtreme, weatherExtremeSource, err := server.resolveWeatherRuleValue(ctx, targetRegionID, regionRuleConfigPtr, "WEATHER_COEFF_EXTREME")
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
-	} else if ok {
-		merchantDepositValue = configuredMerchantDeposit
+	}
+	weatherHeavy, weatherHeavySource, err := server.resolveWeatherRuleValue(ctx, targetRegionID, regionRuleConfigPtr, "WEATHER_COEFF_HEAVY")
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	weatherModerate, weatherModerateSource, err := server.resolveWeatherRuleValue(ctx, targetRegionID, regionRuleConfigPtr, "WEATHER_COEFF_MODERATE")
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	weatherLight, weatherLightSource, err := server.resolveWeatherRuleValue(ctx, targetRegionID, regionRuleConfigPtr, "WEATHER_COEFF_LIGHT")
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
 	}
 
-	// 1. 商户入驻保证金 (只读展示，平台维护)
-	merchantDeposit := fenToYuanString(merchantDepositValue, 2)
-	rules = append(rules, RuleItem{
-		ID:       "rule_1",
-		Name:     "商户入驻保证金",
-		Key:      "MERCHANT_DEPOSIT",
-		Value:    merchantDeposit,
-		Unit:     "元",
-		Desc:     "平台统一维护，运营商仅可查看",
-		Category: "delivery",
-		Editable: false,
-	})
+	weatherRuleDesc := func(base string, source weatherRuleValueSource) string {
+		switch source {
+		case weatherRuleValueSourcePlatform:
+			return base + "；当前使用平台城市默认值"
+		case weatherRuleValueSourceDefault:
+			return base + "；当前使用系统默认值"
+		default:
+			return base + "；当前使用区域配置"
+		}
+	}
 
-	// 2. 骑手入驻押金（运营商优先，平台默认值兜底）
+	// 1. 骑手入驻押金（运营商优先，平台默认值兜底）
 	riderDeposit := fenToYuanString(riderDepositValue, 2)
 	riderDepositDesc := "当前运营商配置，直接决定本运营商骑手押金门槛"
-	if operator.RiderDeposit <= 0 {
+	switch riderDepositSource {
+	case db.RiderDepositThresholdSourcePlatform:
 		riderDepositDesc = "当前使用平台默认值，运营商可单独修改覆盖"
+	case db.RiderDepositThresholdSourceDefault:
+		riderDepositDesc = "当前使用系统默认值，运营商可单独修改覆盖"
 	}
 	rules = append(rules, RuleItem{
-		ID:       "rule_2",
+		ID:       "rule_1",
 		Name:     "骑手入驻押金",
 		Key:      "RIDER_DEPOSIT",
 		Value:    riderDeposit,
@@ -230,9 +348,9 @@ func (server *Server) listOperatorRules(ctx *gin.Context) {
 		Editable: true,
 	})
 
-	// 3. 平台抽成比例 (只读展示，平台维护)
+	// 2. 平台抽成比例 (只读展示，平台维护)
 	rules = append(rules, RuleItem{
-		ID:       "rule_3",
+		ID:       "rule_2",
 		Name:     "运营商抽成比例",
 		Key:      "PLATFORM_COMMISSION",
 		Value:    fmt.Sprintf("%.1f", float64(operatorRateInt)),
@@ -243,162 +361,100 @@ func (server *Server) listOperatorRules(ctx *gin.Context) {
 	})
 
 	// 获取运费配置
-	feeConfig, err := server.store.GetActiveDeliveryFeeConfigByRegion(ctx, targetRegionID)
-	if err == nil {
-		// 4. 基础运费
-		// BaseFee 是分，转换为元
-		baseFee := fenToYuanString(feeConfig.BaseFee, 2)
-		rules = append(rules, RuleItem{
-			ID:       "rule_4",
-			Name:     "基础运费",
-			Key:      "BASE_DELIVERY_FEE",
-			Value:    baseFee,
-			Unit:     "元",
-			Desc:     "配送基础费用，运营商可调整",
-			Category: "delivery",
-			Editable: true,
-		})
-
-		// 5. 基础距离
-		rules = append(rules, RuleItem{
-			ID:       "rule_5",
-			Name:     "基础距离",
-			Key:      "BASE_DISTANCE",
-			Value:    fmt.Sprintf("%d", feeConfig.BaseDistance),
-			Unit:     "米",
-			Desc:     "基础运费包含的配送距离，运营商可调整",
-			Category: "delivery",
-			Editable: true,
-		})
-
-		// 6. 超距加价
-		// ExtraFeePerKm 是分，转换为元
-		extraFee := fenToYuanString(feeConfig.ExtraFeePerKm, 2)
-		rules = append(rules, RuleItem{
-			ID:       "rule_6",
-			Name:     "超距加价",
-			Key:      "EXTRA_FEE_PER_KM",
-			Value:    extraFee,
-			Unit:     "元/km",
-			Desc:     "超出基础距离后每公里的加价，运营商可调整",
-			Category: "delivery",
-			Editable: true,
-		})
-
-		// 8. 最低运费
-		minFee := fenToYuanString(feeConfig.MinFee, 2)
-		rules = append(rules, RuleItem{
-			ID:       "rule_8",
-			Name:     "最低运费",
-			Key:      "MIN_DELIVERY_FEE",
-			Value:    minFee,
-			Unit:     "元",
-			Desc:     "配送费的最低下限，运营商可调整",
-			Category: "delivery",
-			Editable: true,
-		})
-
-		// 9. 最高运费 (MaxFee is nullable)
-		maxFeeVal := "不限"
-		if feeConfig.MaxFee.Valid {
-			maxFeeVal = fenToYuanString(feeConfig.MaxFee.Int64, 2)
-		}
-		rules = append(rules, RuleItem{
-			ID:       "rule_9",
-			Name:     "最高运费",
-			Key:      "MAX_DELIVERY_FEE",
-			Value:    maxFeeVal,
-			Unit:     "元",
-			Desc:     "配送费的最高上限（0或不填代表不限），运营商可调整",
-			Category: "delivery",
-			Editable: true,
-		})
-
-		// 10. 货值费率（只读展示，平台维护）
-		valueRatio := pgNumericToFloat64(feeConfig.ValueRatio) * 100
-		rules = append(rules, RuleItem{
-			ID:       "rule_10",
-			Name:     "货值费率",
-			Key:      "DELIVERY_VALUE_RATIO",
-			Value:    fmt.Sprintf("%.2f", valueRatio),
-			Unit:     "%",
-			Desc:     "按订单货值收取的附加费率，运营商可调整",
-			Category: "delivery",
-			Editable: true,
-			Action:   "edit",
-		})
-
-	} else {
-		// 未配置时显示默认值或提示
-		if isNotFoundError(err) {
-			rules = append(rules, RuleItem{
-				ID:       "rule_4",
-				Name:     "基础运费",
-				Key:      "BASE_DELIVERY_FEE",
-				Value:    fenToYuanString(DefaultBaseFee, 2),
-				Unit:     "元",
-				Desc:     "配送基础费用，运营商可调整",
-				Category: "delivery",
-				Editable: true,
-			})
-
-			rules = append(rules, RuleItem{
-				ID:       "rule_5",
-				Name:     "基础距离",
-				Key:      "BASE_DISTANCE",
-				Value:    fmt.Sprintf("%d", DefaultBaseDistance),
-				Unit:     "米",
-				Desc:     "基础运费包含的配送距离，运营商可调整",
-				Category: "delivery",
-				Editable: true,
-			})
-
-			rules = append(rules, RuleItem{
-				ID:       "rule_6",
-				Name:     "超距加价",
-				Key:      "EXTRA_FEE_PER_KM",
-				Value:    fenToYuanString(DefaultExtraFeePerKm, 2),
-				Unit:     "元/km",
-				Desc:     "超出基础距离后每公里的加价，运营商可调整",
-				Category: "delivery",
-				Editable: true,
-			})
-
-			rules = append(rules, RuleItem{
-				ID:       "rule_8",
-				Name:     "最低运费",
-				Key:      "MIN_DELIVERY_FEE",
-				Value:    fenToYuanString(DefaultMinFee, 2),
-				Unit:     "元",
-				Desc:     "配送费的最低下限，运营商可调整",
-				Category: "delivery",
-				Editable: true,
-			})
-
-			rules = append(rules, RuleItem{
-				ID:       "rule_9",
-				Name:     "最高运费",
-				Key:      "MAX_DELIVERY_FEE",
-				Value:    "不限",
-				Unit:     "元",
-				Desc:     "配送费的最高上限（0或不填代表不限），运营商可调整",
-				Category: "delivery",
-				Editable: true,
-			})
-
-			rules = append(rules, RuleItem{
-				ID:       "rule_10",
-				Name:     "货值费率",
-				Key:      "DELIVERY_VALUE_RATIO",
-				Value:    fmt.Sprintf("%.2f", DefaultValueRatio*100),
-				Unit:     "%",
-				Desc:     "按订单货值收取的附加费率，运营商可调整",
-				Category: "delivery",
-				Editable: true,
-				Action:   "edit",
-			})
-		}
+	feeConfig, deliveryFeeSource, err := server.resolveOperatorRuleDeliveryFeeConfig(ctx, targetRegionID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
 	}
+
+	deliveryFeeDesc := "当前区域运费配置，运营商可调整"
+	switch deliveryFeeSource {
+	case deliveryFeeConfigSourcePlatform:
+		deliveryFeeDesc = "当前使用平台默认值；保存后会生成本区域独立配置"
+	case deliveryFeeConfigSourceDefault:
+		deliveryFeeDesc = "当前使用系统默认值；建议尽快补齐平台或区域配置"
+	}
+
+	// 3. 基础运费
+	baseFee := fenToYuanString(feeConfig.BaseFee, 2)
+	rules = append(rules, RuleItem{
+		ID:       "rule_3",
+		Name:     "基础运费",
+		Key:      "BASE_DELIVERY_FEE",
+		Value:    baseFee,
+		Unit:     "元",
+		Desc:     deliveryFeeDesc,
+		Category: "delivery",
+		Editable: true,
+	})
+
+	// 4. 基础距离
+	rules = append(rules, RuleItem{
+		ID:       "rule_4",
+		Name:     "基础距离",
+		Key:      "BASE_DISTANCE",
+		Value:    fmt.Sprintf("%d", feeConfig.BaseDistance),
+		Unit:     "米",
+		Desc:     deliveryFeeDesc,
+		Category: "delivery",
+		Editable: true,
+	})
+
+	// 6. 超距加价
+	extraFee := fenToYuanString(feeConfig.ExtraFeePerKm, 2)
+	rules = append(rules, RuleItem{
+		ID:       "rule_6",
+		Name:     "超距加价",
+		Key:      "EXTRA_FEE_PER_KM",
+		Value:    extraFee,
+		Unit:     "元/km",
+		Desc:     deliveryFeeDesc,
+		Category: "delivery",
+		Editable: true,
+	})
+
+	// 8. 最低运费
+	minFee := fenToYuanString(feeConfig.MinFee, 2)
+	rules = append(rules, RuleItem{
+		ID:       "rule_8",
+		Name:     "最低运费",
+		Key:      "MIN_DELIVERY_FEE",
+		Value:    minFee,
+		Unit:     "元",
+		Desc:     deliveryFeeDesc,
+		Category: "delivery",
+		Editable: true,
+	})
+
+	// 9. 最高运费 (MaxFee is nullable)
+	maxFeeVal := "不限"
+	if feeConfig.MaxFee.Valid {
+		maxFeeVal = fenToYuanString(feeConfig.MaxFee.Int64, 2)
+	}
+	rules = append(rules, RuleItem{
+		ID:       "rule_9",
+		Name:     "最高运费",
+		Key:      "MAX_DELIVERY_FEE",
+		Value:    maxFeeVal,
+		Unit:     "元",
+		Desc:     deliveryFeeDesc,
+		Category: "delivery",
+		Editable: true,
+	})
+
+	// 10. 货值费率
+	valueRatio := pgNumericToFloat64(feeConfig.ValueRatio) * 100
+	rules = append(rules, RuleItem{
+		ID:       "rule_10",
+		Name:     "货值费率",
+		Key:      "DELIVERY_VALUE_RATIO",
+		Value:    fmt.Sprintf("%.2f", valueRatio),
+		Unit:     "%",
+		Desc:     deliveryFeeDesc,
+		Category: "delivery",
+		Editable: true,
+		Action:   "edit",
+	})
 
 	// 15. 时段系数配置入口（按区域管理）
 	rules = append(rules, RuleItem{
@@ -414,53 +470,49 @@ func (server *Server) listOperatorRules(ctx *gin.Context) {
 	})
 
 	// 11. 恶劣天气加价倍数
-	weatherExtreme := pgNumericToFloat64(weatherCoeffExtreme)
 	rules = append(rules, RuleItem{
 		ID:       "rule_11",
 		Name:     "极端天气倍数",
 		Key:      "WEATHER_COEFF_EXTREME",
 		Value:    fmt.Sprintf("%.2f", weatherExtreme),
 		Unit:     "x",
-		Desc:     "台风/龙卷风等极端天气下的运费倍数",
+		Desc:     weatherRuleDesc("台风/龙卷风等极端天气下的运费倍数", weatherExtremeSource),
 		Category: "weather",
 		Editable: true,
 	})
 
 	// 12. 暴雨/雪加价倍数
-	weatherHeavy := pgNumericToFloat64(weatherCoeffHeavy)
 	rules = append(rules, RuleItem{
 		ID:       "rule_12",
 		Name:     "暴雨雪倍数",
 		Key:      "WEATHER_COEFF_HEAVY",
 		Value:    fmt.Sprintf("%.2f", weatherHeavy),
 		Unit:     "x",
-		Desc:     "暴雨/暴雪/特大暴雨下的运费倍数",
+		Desc:     weatherRuleDesc("暴雨/暴雪/特大暴雨下的运费倍数", weatherHeavySource),
 		Category: "weather",
 		Editable: true,
 	})
 
 	// 13. 中雨/雪加价倍数
-	weatherModerate := pgNumericToFloat64(weatherCoeffModerate)
 	rules = append(rules, RuleItem{
 		ID:       "rule_13",
 		Name:     "中雨雪倍数",
 		Key:      "WEATHER_COEFF_MODERATE",
 		Value:    fmt.Sprintf("%.2f", weatherModerate),
 		Unit:     "x",
-		Desc:     "中雨/中雪/大雨/大雪下的运费倍数",
+		Desc:     weatherRuleDesc("中雨/中雪/大雨/大雪下的运费倍数", weatherModerateSource),
 		Category: "weather",
 		Editable: true,
 	})
 
 	// 14. 小雨/雪加价倍数
-	weatherLight := pgNumericToFloat64(weatherCoeffLight)
 	rules = append(rules, RuleItem{
 		ID:       "rule_14",
 		Name:     "小雨雪倍数",
 		Key:      "WEATHER_COEFF_LIGHT",
 		Value:    fmt.Sprintf("%.2f", weatherLight),
 		Unit:     "x",
-		Desc:     "小雨/小雪下的运费倍数",
+		Desc:     weatherRuleDesc("小雨/小雪下的运费倍数", weatherLightSource),
 		Category: "weather",
 		Editable: true,
 	})
@@ -596,6 +648,10 @@ func (server *Server) updateOperatorRule(ctx *gin.Context) {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}
+		if err := server.upsertOperatorScopedDepositFen(ctx, operatorRiderDepositConfigKey, operator.ID, amountFen); err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
 		if err := server.syncRiderOperationalStatusesByRegion(ctx, targetRegionID); err != nil {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
@@ -603,21 +659,28 @@ func (server *Server) updateOperatorRule(ctx *gin.Context) {
 
 		auditMetadata["operator_id"] = operator.ID
 		auditMetadata["value_fen"] = amountFen
+		auditMetadata["platform_config_scope_type"] = db.PlatformConfigScopeOperator
+		auditMetadata["platform_config_scope_id"] = operator.ID
 
 	case "BASE_DELIVERY_FEE", "BASE_DISTANCE", "EXTRA_FEE_PER_KM", "MIN_DELIVERY_FEE", "MAX_DELIVERY_FEE", "DELIVERY_VALUE_RATIO":
 		// 1. 获取现有配置或初始化
-		feeConfig, err := server.store.GetActiveDeliveryFeeConfigByRegion(ctx, targetRegionID)
+		feeConfig, err := server.store.GetDeliveryFeeConfigByRegion(ctx, targetRegionID)
 		if err != nil {
 			if isNotFoundError(err) {
-				// 如果不存在，需要先创建
-				// 这里简化逻辑，如果不存在则初始化默认值
+				seedConfig, _, resolveErr := server.resolveOperatorRuleDeliveryFeeConfig(ctx, targetRegionID)
+				if resolveErr != nil {
+					ctx.JSON(http.StatusInternalServerError, internalError(ctx, resolveErr))
+					return
+				}
+
 				feeConfig, err = server.store.CreateDeliveryFeeConfig(ctx, db.CreateDeliveryFeeConfigParams{
 					RegionID:      targetRegionID,
-					BaseFee:       DefaultBaseFee,
-					BaseDistance:  DefaultBaseDistance,
-					ExtraFeePerKm: DefaultExtraFeePerKm,
-					ValueRatio:    numericFromFloat(DefaultValueRatio),
-					MinFee:        DefaultMinFee,
+					BaseFee:       seedConfig.BaseFee,
+					BaseDistance:  seedConfig.BaseDistance,
+					ExtraFeePerKm: seedConfig.ExtraFeePerKm,
+					ValueRatio:    seedConfig.ValueRatio,
+					MaxFee:        seedConfig.MaxFee,
+					MinFee:        seedConfig.MinFee,
 					IsActive:      true,
 				})
 				if err != nil {
@@ -754,33 +817,6 @@ func (server *Server) updateOperatorRule(ctx *gin.Context) {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}
-
-		configKey, keyErr := weatherRuleKeyToPlatformConfigKey(key)
-		if keyErr != nil {
-			ctx.JSON(http.StatusBadRequest, errorResponse(keyErr))
-			return
-		}
-		configValue, marshalErr := json.Marshal(val)
-		if marshalErr != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, marshalErr))
-			return
-		}
-
-		_, err = server.store.UpsertPlatformConfig(ctx, db.UpsertPlatformConfigParams{
-			ConfigKey:   configKey,
-			ConfigValue: configValue,
-			ScopeType:   "city",
-			ScopeID:     pgtype.Int8{Int64: targetRegionID, Valid: true},
-		})
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-
-		auditMetadata["dual_write"] = true
-		auditMetadata["platform_config_key"] = configKey
-		auditMetadata["platform_config_scope_type"] = "city"
-		auditMetadata["platform_config_scope_id"] = targetRegionID
 
 	default:
 		ctx.JSON(http.StatusNotFound, errorResponse(ErrUnknownRuleKey))

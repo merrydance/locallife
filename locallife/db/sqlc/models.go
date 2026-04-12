@@ -1236,15 +1236,14 @@ type Operator struct {
 	ID     int64 `json:"id"`
 	UserID int64 `json:"user_id"`
 	// 运营商的主要区域（已废弃UNIQUE约束，现通过operator_regions表管理多区域）
-	RegionID       int64              `json:"region_id"`
-	Name           string             `json:"name"`
-	ContactName    string             `json:"contact_name"`
-	ContactPhone   string             `json:"contact_phone"`
-	WechatMchID    pgtype.Text        `json:"wechat_mch_id"`
-	CommissionRate pgtype.Numeric     `json:"commission_rate"`
-	Status         string             `json:"status"`
-	CreatedAt      time.Time          `json:"created_at"`
-	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	RegionID     int64              `json:"region_id"`
+	Name         string             `json:"name"`
+	ContactName  string             `json:"contact_name"`
+	ContactPhone string             `json:"contact_phone"`
+	WechatMchID  pgtype.Text        `json:"wechat_mch_id"`
+	Status       string             `json:"status"`
+	CreatedAt    time.Time          `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 	// 合同开始日期
 	ContractStartDate pgtype.Date `json:"contract_start_date"`
 	// 合同到期日期
@@ -1255,7 +1254,6 @@ type Operator struct {
 	SubMchID             pgtype.Text    `json:"sub_mch_id"`
 	Balance              int64          `json:"balance"`
 	WalletAccount        []byte         `json:"wallet_account"`
-	MerchantDeposit      int64          `json:"merchant_deposit"`
 	RiderDeposit         int64          `json:"rider_deposit"`
 	WeatherCoeffExtreme  pgtype.Numeric `json:"weather_coeff_extreme"`
 	WeatherCoeffHeavy    pgtype.Numeric `json:"weather_coeff_heavy"`
@@ -1676,10 +1674,6 @@ type RegionRuleConfig struct {
 	ID int64 `json:"id"`
 	// 区县ID
 	RegionID int64 `json:"region_id"`
-	// 平台抽成比例（0.03=3%）
-	CommissionRate pgtype.Numeric `json:"commission_rate"`
-	// 商户押金（分）
-	MerchantDeposit int64 `json:"merchant_deposit"`
 	// 骑手押金（分）
 	RiderDeposit int64 `json:"rider_deposit"`
 	// 极端天气系数

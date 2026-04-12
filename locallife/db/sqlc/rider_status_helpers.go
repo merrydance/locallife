@@ -12,6 +12,14 @@ type riderDepositConfigValue struct {
 	AmountFen int64 `json:"amount_fen"`
 }
 
+type RiderDepositThresholdSource string
+
+const (
+	RiderDepositThresholdSourceOperator RiderDepositThresholdSource = "operator"
+	RiderDepositThresholdSourcePlatform RiderDepositThresholdSource = "platform"
+	RiderDepositThresholdSourceDefault  RiderDepositThresholdSource = "default"
+)
+
 type riderDepositThresholdReader interface {
 	GetPlatformConfig(ctx context.Context, arg GetPlatformConfigParams) (PlatformConfig, error)
 	GetActiveOperatorByRegion(ctx context.Context, regionID int64) (Operator, error)
@@ -48,18 +56,76 @@ func maybeSetRiderOfflineWhenNotEligible(ctx context.Context, q riderOperational
 	return updatedRider, nil
 }
 
+func ResolveRiderDepositThreshold(operatorDeposit int64, platformDeposit int64, hasPlatformConfig bool) (int64, RiderDepositThresholdSource) {
+	if operatorDeposit > 0 {
+		if operatorDeposit != DefaultRiderDepositThresholdFen {
+			return operatorDeposit, RiderDepositThresholdSourceOperator
+		}
+		if hasPlatformConfig && platformDeposit > 0 {
+			return platformDeposit, RiderDepositThresholdSourcePlatform
+		}
+		return operatorDeposit, RiderDepositThresholdSourceDefault
+	}
+
+	if hasPlatformConfig && platformDeposit > 0 {
+		return platformDeposit, RiderDepositThresholdSourcePlatform
+	}
+
+	return DefaultRiderDepositThresholdFen, RiderDepositThresholdSourceDefault
+}
+
+func decodeRiderDepositConfigAmount(config PlatformConfig) (int64, bool, error) {
+	if len(config.ConfigValue) == 0 {
+		return 0, false, nil
+	}
+
+	var payload riderDepositConfigValue
+	if err := json.Unmarshal(config.ConfigValue, &payload); err != nil {
+		return 0, false, fmt.Errorf("decode rider deposit config: %w", err)
+	}
+	if payload.AmountFen <= 0 {
+		return 0, false, nil
+	}
+
+	return payload.AmountFen, true, nil
+}
+
 func GetEffectiveRiderDepositThreshold(ctx context.Context, q riderDepositThresholdReader, regionID pgtype.Int8) (int64, error) {
+	operatorDeposit := int64(0)
+	operatorID := int64(0)
 	if regionID.Valid && regionID.Int64 > 0 {
 		operator, err := q.GetActiveOperatorByRegion(ctx, regionID.Int64)
 		if err == nil {
-			if operator.RiderDeposit > 0 {
-				return operator.RiderDeposit, nil
+			operatorID = operator.ID
+			operatorDeposit = operator.RiderDeposit
+			if operatorID > 0 && operatorDeposit == DefaultRiderDepositThresholdFen {
+				config, configErr := q.GetPlatformConfig(ctx, GetPlatformConfigParams{
+					ConfigKey: PlatformConfigKeyRiderDepositFen,
+					ScopeType: PlatformConfigScopeOperator,
+					ScopeID:   pgtype.Int8{Int64: operatorID, Valid: true},
+				})
+				if configErr == nil {
+					amountFen, configured, decodeErr := decodeRiderDepositConfigAmount(config)
+					if decodeErr != nil {
+						return 0, decodeErr
+					}
+					if configured {
+						return amountFen, nil
+					}
+				} else if configErr != ErrRecordNotFound {
+					return 0, fmt.Errorf("get operator-scoped rider deposit config: %w", configErr)
+				}
+			}
+			if operatorDeposit > 0 && operatorDeposit != DefaultRiderDepositThresholdFen {
+				return operatorDeposit, nil
 			}
 		} else if err != ErrRecordNotFound {
 			return 0, fmt.Errorf("get active operator by region: %w", err)
 		}
 	}
 
+	platformDeposit := int64(0)
+	hasPlatformConfig := false
 	config, err := q.GetPlatformConfig(ctx, GetPlatformConfigParams{
 		ConfigKey: PlatformConfigKeyRiderDepositFen,
 		ScopeType: PlatformConfigScopeGlobal,
@@ -67,24 +133,23 @@ func GetEffectiveRiderDepositThreshold(ctx context.Context, q riderDepositThresh
 	})
 	if err != nil {
 		if err == ErrRecordNotFound {
-			return DefaultRiderDepositThresholdFen, nil
+			threshold, _ := ResolveRiderDepositThreshold(operatorDeposit, 0, false)
+			return threshold, nil
 		}
 		return 0, fmt.Errorf("get rider deposit platform config: %w", err)
 	}
 
-	if len(config.ConfigValue) == 0 {
-		return DefaultRiderDepositThresholdFen, nil
+	amountFen, configured, decodeErr := decodeRiderDepositConfigAmount(config)
+	if decodeErr != nil {
+		return 0, decodeErr
+	}
+	if configured {
+		platformDeposit = amountFen
+		hasPlatformConfig = true
 	}
 
-	var payload riderDepositConfigValue
-	if err := json.Unmarshal(config.ConfigValue, &payload); err != nil {
-		return 0, fmt.Errorf("decode rider deposit platform config: %w", err)
-	}
-	if payload.AmountFen <= 0 {
-		return DefaultRiderDepositThresholdFen, nil
-	}
-
-	return payload.AmountFen, nil
+	threshold, _ := ResolveRiderDepositThreshold(operatorDeposit, platformDeposit, hasPlatformConfig)
+	return threshold, nil
 }
 
 func ReconcileRiderOperationalStatus(ctx context.Context, q riderOperationalStatusReconciler, rider Rider) (Rider, error) {

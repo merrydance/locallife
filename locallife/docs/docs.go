@@ -2758,12 +2758,6 @@ const docTemplate = `{
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
                     },
-                    "404": {
-                        "description": "Config not found",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
@@ -23020,7 +23014,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "获取平台维护的运营真实配置项，包括平台佣金、运营商佣金、商户保证金与骑手押金。",
+                "description": "获取平台维护的运营真实配置项，包括平台佣金、运营商佣金、骑手押金与运费默认值。",
                 "produces": [
                     "application/json"
                 ],
@@ -23077,7 +23071,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "配置Key (PLATFORM_COMMISSION, OPERATOR_COMMISSION, MERCHANT_DEPOSIT, RIDER_DEPOSIT)",
+                        "description": "配置Key (PLATFORM_COMMISSION, OPERATOR_COMMISSION, RIDER_DEPOSIT, BASE_DELIVERY_FEE, BASE_DISTANCE, EXTRA_FEE_PER_KM, MIN_DELIVERY_FEE, MAX_DELIVERY_FEE, DELIVERY_VALUE_RATIO)",
                         "name": "key",
                         "in": "path",
                         "required": true
@@ -23139,7 +23133,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "获取平台维护的运营真实配置项，包括平台佣金、运营商佣金、商户保证金与骑手押金。请迁移到 /v1/platform/operational-configs。",
+                "description": "获取平台维护的运营真实配置项，包括平台佣金、运营商佣金、骑手押金与运费默认值。请迁移到 /v1/platform/operational-configs。",
                 "produces": [
                     "application/json"
                 ],
@@ -23196,7 +23190,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "配置Key (PLATFORM_COMMISSION, OPERATOR_COMMISSION, MERCHANT_DEPOSIT, RIDER_DEPOSIT)",
+                        "description": "配置Key (PLATFORM_COMMISSION, OPERATOR_COMMISSION, RIDER_DEPOSIT, BASE_DELIVERY_FEE, BASE_DISTANCE, EXTRA_FEE_PER_KM, MIN_DELIVERY_FEE, MAX_DELIVERY_FEE, DELIVERY_VALUE_RATIO)",
                         "name": "key",
                         "in": "path",
                         "required": true

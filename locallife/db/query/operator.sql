@@ -6,13 +6,12 @@ INSERT INTO operators (
     contact_name,
     contact_phone,
     wechat_mch_id,
-    commission_rate,
     status,
     contract_start_date,
     contract_end_date,
     contract_years
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
 ) RETURNING *;
 
 -- name: GetOperator :one
@@ -39,7 +38,6 @@ SET
     contact_name = COALESCE(sqlc.narg(contact_name), contact_name),
     contact_phone = COALESCE(sqlc.narg(contact_phone), contact_phone),
     wechat_mch_id = COALESCE(sqlc.narg(wechat_mch_id), wechat_mch_id),
-    commission_rate = COALESCE(sqlc.narg(commission_rate), commission_rate),
     status = COALESCE(sqlc.narg(status), status),
     contract_start_date = COALESCE(sqlc.narg(contract_start_date), contract_start_date),
     contract_end_date = COALESCE(sqlc.narg(contract_end_date), contract_end_date),

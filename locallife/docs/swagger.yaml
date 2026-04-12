@@ -11265,10 +11265,6 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/api.ErrorResponse'
-        "404":
-          description: Config not found
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -24497,7 +24493,7 @@ paths:
       - 平台财务
   /v1/platform/operational-configs:
     get:
-      description: 获取平台维护的运营真实配置项，包括平台佣金、运营商佣金、商户保证金与骑手押金。
+      description: 获取平台维护的运营真实配置项，包括平台佣金、运营商佣金、骑手押金与运费默认值。
       produces:
       - application/json
       responses:
@@ -24528,8 +24524,9 @@ paths:
       - application/json
       description: 更新平台维护的运营真实配置项。
       parameters:
-      - description: 配置Key (PLATFORM_COMMISSION, OPERATOR_COMMISSION, MERCHANT_DEPOSIT,
-          RIDER_DEPOSIT)
+      - description: 配置Key (PLATFORM_COMMISSION, OPERATOR_COMMISSION, RIDER_DEPOSIT,
+          BASE_DELIVERY_FEE, BASE_DISTANCE, EXTRA_FEE_PER_KM, MIN_DELIVERY_FEE, MAX_DELIVERY_FEE,
+          DELIVERY_VALUE_RATIO)
         in: path
         name: key
         required: true
@@ -24574,7 +24571,7 @@ paths:
       - Platform
   /v1/platform/operator-rules:
     get:
-      description: 获取平台维护的运营真实配置项，包括平台佣金、运营商佣金、商户保证金与骑手押金。请迁移到 /v1/platform/operational-configs。
+      description: 获取平台维护的运营真实配置项，包括平台佣金、运营商佣金、骑手押金与运费默认值。请迁移到 /v1/platform/operational-configs。
       produces:
       - application/json
       responses:
@@ -24605,8 +24602,9 @@ paths:
       - application/json
       description: 更新平台维护的运营真实配置项。请迁移到 /v1/platform/operational-configs/{key}。
       parameters:
-      - description: 配置Key (PLATFORM_COMMISSION, OPERATOR_COMMISSION, MERCHANT_DEPOSIT,
-          RIDER_DEPOSIT)
+      - description: 配置Key (PLATFORM_COMMISSION, OPERATOR_COMMISSION, RIDER_DEPOSIT,
+          BASE_DELIVERY_FEE, BASE_DISTANCE, EXTRA_FEE_PER_KM, MIN_DELIVERY_FEE, MAX_DELIVERY_FEE,
+          DELIVERY_VALUE_RATIO)
         in: path
         name: key
         required: true

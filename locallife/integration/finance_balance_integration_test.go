@@ -112,7 +112,6 @@ func TestOperatorAccountDayEndBalanceIntegration(t *testing.T) {
 		ContactName:       "finance_contact",
 		ContactPhone:      "13800138001",
 		WechatMchID:       pgtype.Text{Valid: false},
-		CommissionRate:    commissionRate,
 		Status:            "active",
 		ContractStartDate: pgtype.Date{Valid: false},
 		ContractEndDate:   pgtype.Date{Valid: false},
