@@ -18,7 +18,10 @@ import (
 	"github.com/merrydance/locallife/wechat"
 )
 
-const currentTableQRCodeFilenameSuffix = "_qrcode_v2.png"
+const (
+	currentTableQRCodeFilenameSuffix      = "_qrcode_v2.png"
+	currentStorefrontQRCodeFilenameSuffix = "_storefront_qrcode_v1.png"
+)
 
 // =============================================================================
 // Scan Table API - 扫码点餐
@@ -460,6 +463,95 @@ func (server *Server) storeTableQRCode(ctx context.Context, uploaderID int64, me
 	}
 
 	return server.mediaResolver.PublicURL(objectKey, media.VariantOriginal), nil
+}
+
+func buildMerchantStorefrontQRCodeObjectKey(merchantID int64) string {
+	filename := fmt.Sprintf("storefront_m%d%s", merchantID, currentStorefrontQRCodeFilenameSuffix)
+	return fmt.Sprintf("merchant/storefront/%d/qrcodes/%s", merchantID, filename)
+}
+
+func wxaCodeEnvVersion(environment string) string {
+	switch strings.ToLower(strings.TrimSpace(environment)) {
+	case "prod", "production":
+		return "release"
+	default:
+		return "develop"
+	}
+}
+
+func (server *Server) ensureMerchantStorefrontQRCode(ctx context.Context, uploaderID int64, merchantID int64) (string, error) {
+	if server.wechatClient == nil {
+		return "", fmt.Errorf("wechat client is not initialized")
+	}
+	if server.mediaStorage == nil || server.mediaResolver == nil {
+		return "", fmt.Errorf("media storage is not initialized")
+	}
+
+	objectKey := buildMerchantStorefrontQRCodeObjectKey(merchantID)
+	asset, err := server.store.GetMediaAssetByObjectKey(ctx, objectKey)
+	switch {
+	case err == nil:
+		if asset.ModerationStatus != "approved" {
+			if _, err := server.store.SetMediaAssetModerationStatus(ctx, db.SetMediaAssetModerationStatusParams{
+				ID:               asset.ID,
+				ModerationStatus: "approved",
+			}); err != nil {
+				return "", err
+			}
+		}
+		return objectKey, nil
+	case !isNotFoundError(err):
+		return "", err
+	}
+
+	checkPath := false
+	wxaReq := &wechat.WXACodeRequest{
+		Scene:      "m_" + strconv.FormatInt(merchantID, 10),
+		Page:       "pages/takeout/restaurant-detail/index",
+		CheckPath:  &checkPath,
+		EnvVersion: wxaCodeEnvVersion(server.config.Environment),
+		Width:      430,
+	}
+
+	pngData, err := server.wechatClient.GetWXACodeUnlimited(ctx, wxaReq)
+	if err != nil {
+		return "", err
+	}
+
+	checksumBytes := sha256.Sum256(pngData)
+	checksum := hex.EncodeToString(checksumBytes[:])
+	if err := server.mediaStorage.PutObject(ctx, server.mediaStorage.PublicBucket(), objectKey, "image/png", bytes.NewReader(pngData), int64(len(pngData))); err != nil {
+		return "", err
+	}
+
+	asset, err = server.store.CreateMediaAsset(ctx, db.CreateMediaAssetParams{
+		ObjectKey:      objectKey,
+		Visibility:     string(media.VisibilityPublic),
+		MediaCategory:  string(media.CategoryStorefrontImage),
+		MimeType:       "image/png",
+		FileSize:       int64(len(pngData)),
+		ChecksumSha256: checksum,
+		UploadedBy:     uploaderID,
+		SourceClient:   "server",
+	})
+	if err != nil {
+		existing, lookupErr := server.store.GetMediaAssetByObjectKey(ctx, objectKey)
+		if lookupErr != nil {
+			return "", err
+		}
+		asset = existing
+	}
+
+	if asset.ModerationStatus != "approved" {
+		if _, err := server.store.SetMediaAssetModerationStatus(ctx, db.SetMediaAssetModerationStatusParams{
+			ID:               asset.ID,
+			ModerationStatus: "approved",
+		}); err != nil {
+			return "", err
+		}
+	}
+
+	return objectKey, nil
 }
 
 // generateTableQRCode godoc

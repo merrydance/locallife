@@ -1,4 +1,5 @@
 import dayjs from 'dayjs'
+import { type MerchantApplymentStatusView } from '../../../api/merchant-applyment'
 import {
   canManageMerchantApplyment,
   canUseMerchantDeviceManagementFallback,
@@ -22,9 +23,9 @@ import {
 } from '../../../services/merchant-console'
 import {
   buildOverviewMetrics,
+  buildMerchantBusinessStateView,
   buildSections,
   captureDashboardRequest,
-  DASHBOARD_STALE_MS,
   EMPTY_MERCHANT,
   formatAppBindRemaining,
   getErrorMessage,
@@ -50,9 +51,12 @@ Page({
     isPageSyncing: false,
     openStatusSubmitting: false,
     isOpen: true,
+    businessStateTitle: '营业中',
+    businessStateHint: '顾客当前可以正常下单。',
     monthRangeLabel: '',
     lastRefreshAt: 0,
     activeMerchant: EMPTY_MERCHANT,
+    applymentView: null as MerchantApplymentStatusView | null,
     gridGutter: GRID_GUTTER,
     monthlyOrdersValue: null as number | null,
     monthlySalesValue: null as number | null,
@@ -174,12 +178,16 @@ Page({
       const [
         profileResult,
         openStatusResult,
+        applymentStatusResult,
         overviewResult,
         orderSummaryResult,
         complaintSummaryResult
       ] = await Promise.all([
         captureDashboardRequest(fetchMerchantConsoleProfile()),
         captureDashboardRequest(fetchMerchantConsoleOpenStatus()),
+        this.data.canManageMerchantApplyment
+          ? captureDashboardRequest(fetchMerchantApplymentStatusView())
+          : Promise.resolve({ ok: true as const, value: null as MerchantApplymentStatusView | null }),
         captureDashboardRequest(fetchMerchantConsoleOverview(monthStart, monthEnd)),
         captureDashboardRequest(fetchMerchantConsoleOrderSummary()),
         captureDashboardRequest(fetchMerchantConsoleComplaintSummary())
@@ -204,6 +212,16 @@ Page({
         : trustedDataAvailable
           ? this.data.isOpen
           : profile.is_open
+      const applymentView = applymentStatusResult.ok
+        ? applymentStatusResult.value
+        : trustedDataAvailable
+          ? this.data.applymentView
+          : null
+      const businessStateView = buildMerchantBusinessStateView({
+        merchantStatus: profile.status,
+        isOpen,
+        applymentView
+      })
       const pendingOrders = isDashboardRequestOk(orderSummaryResult)
         ? (orderSummaryResult.value.paid_count || 0)
         : this.data.pendingOrdersValue
@@ -219,6 +237,7 @@ Page({
 
       const partialFailure = [
         openStatusResult,
+        applymentStatusResult,
         overviewResult,
         orderSummaryResult,
         complaintSummaryResult
@@ -234,6 +253,9 @@ Page({
         monthRangeLabel: `${dayjs(monthStart).format('MM.DD')} - ${dayjs(monthEnd).format('MM.DD')}`,
         activeMerchant: profile,
         isOpen,
+        businessStateTitle: businessStateView.title,
+        businessStateHint: businessStateView.hint,
+        applymentView,
         monthlyOrdersValue,
         monthlySalesValue,
         complaintBacklogValue: complaintBacklog,
@@ -438,8 +460,15 @@ Page({
 
     try {
       const response = await updateMerchantConsoleOpenStatus(nextIsOpen)
+      const businessStateView = buildMerchantBusinessStateView({
+        merchantStatus: this.data.activeMerchant.status,
+        isOpen: response.is_open,
+        applymentView: this.data.applymentView
+      })
       this.setData({
         isOpen: response.is_open,
+        businessStateTitle: businessStateView.title,
+        businessStateHint: businessStateView.hint,
         lastRefreshAt: Date.now(),
         refreshErrorMessage: ''
       })

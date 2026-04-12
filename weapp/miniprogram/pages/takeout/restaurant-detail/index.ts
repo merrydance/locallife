@@ -51,6 +51,36 @@ interface ComboView {
 const getErrorMessage = getErrorUserMessage
 
 const ORDERING_SUSPENDED_MESSAGE = '当前商户暂停接单，请稍后再试'
+const STORE_CLOSED_MESSAGE = '当前店铺暂未营业，仅支持查看店铺信息'
+
+type RestaurantPageOptions = {
+  id?: string
+  scene?: string
+  activeTab?: 'dishes' | 'combos' | 'rooms'
+}
+
+function resolveRestaurantId(options: RestaurantPageOptions): string {
+  const directId = (options.id || '').trim()
+  if (directId) {
+    return directId
+  }
+
+  const rawScene = options.scene ? decodeURIComponent(options.scene) : ''
+  if (!rawScene) {
+    return ''
+  }
+
+  const merchantMatch = rawScene.match(/(?:^|-)m_(\d+)(?:-|$)/)
+  if (merchantMatch) {
+    return merchantMatch[1]
+  }
+
+  if (/^\d+$/.test(rawScene)) {
+    return rawScene
+  }
+
+  return ''
+}
 
 Page({
   data: {
@@ -73,15 +103,15 @@ Page({
     headerCollapsed: false
   },
 
-  onLoad(options: { id?: string, activeTab?: 'dishes' | 'combos' | 'rooms' }) {
+  onLoad(options: RestaurantPageOptions) {
     wx.showShareMenu({
       withShareTicket: true,
       menus: ['shareAppMessage', 'shareTimeline']
     })
 
-    const restaurantId = options.id
+    const restaurantId = resolveRestaurantId(options)
     if (!restaurantId) {
-      wx.showToast({ title: '商家ID缺失', icon: 'error' })
+      wx.showToast({ title: '商家信息缺失', icon: 'error' })
       setTimeout(() => wx.navigateBack(), 1500)
       return
     }
@@ -296,8 +326,7 @@ Page({
   },
 
   onDishTap(e: WechatMiniprogram.CustomEvent) {
-    if (this.data.restaurant?.is_ordering_suspended) {
-      this.showOrderingSuspendedToast()
+    if (!this.canPlaceOrder()) {
       return
     }
     const id = e.currentTarget.dataset.id
@@ -305,8 +334,7 @@ Page({
   },
 
   onComboTap(e: WechatMiniprogram.CustomEvent) {
-    if (this.data.restaurant?.is_ordering_suspended) {
-      this.showOrderingSuspendedToast()
+    if (!this.canPlaceOrder()) {
       return
     }
     const id = e.currentTarget.dataset.id
@@ -326,8 +354,7 @@ Page({
   async onAddCart(e: WechatMiniprogram.CustomEvent) {
     const id = e.currentTarget.dataset.id
     const { restaurant } = this.data
-    if (restaurant?.is_ordering_suspended) {
-      this.showOrderingSuspendedToast()
+    if (!this.canPlaceOrder()) {
       return
     }
     const dish = this.data.dishes.find((d) => d.id === id)
@@ -348,8 +375,7 @@ Page({
   async onAddComboCart(e: WechatMiniprogram.CustomEvent) {
     const id = e.currentTarget.dataset.id
     const { restaurant } = this.data
-    if (restaurant?.is_ordering_suspended) {
-      this.showOrderingSuspendedToast()
+    if (!this.canPlaceOrder()) {
       return
     }
     const combo = this.data.combos.find((c) => c.id === id)
@@ -390,16 +416,14 @@ Page({
   },
 
   onCheckout() {
-    if (this.data.restaurant?.is_ordering_suspended) {
-      this.showOrderingSuspendedToast()
+    if (!this.canPlaceOrder()) {
       return
     }
     Navigation.toCart()
   },
 
   onCartTap() {
-    if (this.data.restaurant?.is_ordering_suspended) {
-      this.showOrderingSuspendedToast()
+    if (!this.canPlaceOrder()) {
       return
     }
     // 点击购物车栏跳转到购物车页面
@@ -440,8 +464,7 @@ Page({
   },
 
   onRoomTap(e: WechatMiniprogram.CustomEvent) {
-    if (this.data.restaurant?.is_ordering_suspended) {
-      this.showOrderingSuspendedToast()
+    if (!this.canPlaceOrder()) {
       return
     }
     const roomId = e.currentTarget.dataset.id
@@ -468,6 +491,26 @@ Page({
 
   showOrderingSuspendedToast() {
     wx.showToast({ title: ORDERING_SUSPENDED_MESSAGE, icon: 'none' })
+  },
+
+  showStoreClosedToast() {
+    wx.showToast({ title: STORE_CLOSED_MESSAGE, icon: 'none' })
+  },
+
+  canPlaceOrder() {
+    const { restaurant } = this.data
+    if (!restaurant) {
+      return false
+    }
+    if (restaurant.is_ordering_suspended) {
+      this.showOrderingSuspendedToast()
+      return false
+    }
+    if (restaurant.biz_status !== 'OPEN') {
+      this.showStoreClosedToast()
+      return false
+    }
+    return true
   },
 
   // Gap 8: 分享给朋友

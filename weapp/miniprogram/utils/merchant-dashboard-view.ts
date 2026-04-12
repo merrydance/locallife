@@ -1,5 +1,11 @@
+import { type MerchantApplymentStatusView } from '../api/merchant-applyment'
 import { getErrorUserMessage } from './user-facing'
 import type { MerchantConsoleProfile } from '../services/merchant-console'
+
+export interface MerchantBusinessStateView {
+  title: string
+  hint: string
+}
 
 export interface OverviewMetric {
   id: string
@@ -64,6 +70,85 @@ export const EMPTY_MERCHANT: MerchantConsoleProfile = {
   version: 0,
   created_at: '',
   updated_at: ''
+}
+
+const PRE_OPEN_PREPARATION_HINT = '主体审核通过后，可先完善菜品、桌台、套餐和门店配置；准备收款前再完成收付通进件。'
+
+export function buildMerchantBusinessStateView(params: {
+  merchantStatus?: string
+  isOpen: boolean
+  applymentView?: MerchantApplymentStatusView | null
+}): MerchantBusinessStateView {
+  const merchantStatus = String(params.merchantStatus || '').trim().toLowerCase()
+  const applymentView = params.applymentView || null
+
+  if (merchantStatus === 'suspended' || merchantStatus === 'expired') {
+    return {
+      title: '已停业',
+      hint: '当前店铺状态受限，暂不可对外营业。'
+    }
+  }
+
+  if (params.isOpen) {
+    return {
+      title: '营业中',
+      hint: '顾客当前可以正常下单。'
+    }
+  }
+
+  if (applymentView?.isOpened) {
+    return {
+      title: '打烊中',
+      hint: '收付通已开通，当前是自主打烊状态，可随时恢复营业。'
+    }
+  }
+
+  if (merchantStatus === 'bindbank_submitted') {
+    return {
+      title: '待开通',
+      hint: '收付通进件审核中，可继续完善菜品、桌台、套餐和门店配置。'
+    }
+  }
+
+  if (merchantStatus === 'approved' || merchantStatus === 'pending_bindbank') {
+    if (applymentView?.needsSign) {
+      return {
+        title: '待开通',
+        hint: '微信签约尚未完成，完成签约后即可恢复营业。'
+      }
+    }
+
+    if (applymentView?.isInReview) {
+      return {
+        title: '待开通',
+        hint: '收付通进件审核中，可继续完善菜品、桌台、套餐和门店配置。'
+      }
+    }
+
+    if (applymentView?.normalizedStatus === 'rejected') {
+      return {
+        title: '待处理',
+        hint: '收付通资料已被驳回，请修改后重新提交。'
+      }
+    }
+
+    if (applymentView?.blockReason || applymentView?.guideText) {
+      return {
+        title: '待开通',
+        hint: applymentView?.blockReason || applymentView?.guideText || PRE_OPEN_PREPARATION_HINT
+      }
+    }
+
+    return {
+      title: '待开通',
+      hint: PRE_OPEN_PREPARATION_HINT
+    }
+  }
+
+  return {
+    title: '打烊中',
+    hint: '当前是自主打烊状态，可随时恢复营业。'
+  }
 }
 
 export const SKELETON_ROWS = [

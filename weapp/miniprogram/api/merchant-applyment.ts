@@ -55,7 +55,7 @@ export const DEFAULT_MERCHANT_APPLYMENT_STATUS_VIEW: MerchantApplymentStatusView
   showRejectReason: false,
   hasApplyment: false,
   guideTheme: 'primary',
-  guideText: '当前尚未完成收付通进件，请填写结算账户并提交审核。',
+  guideText: '主体审核通过后，可先完善菜品、桌台、套餐和门店配置；准备收款前再填写结算账户并提交收付通进件。',
   submitActionLabel: '填写进件资料'
 }
 

@@ -2,10 +2,12 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"path"
 	"testing"
 	"time"
 
@@ -13,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/media"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/util"
 	"github.com/merrydance/locallife/wechat"
@@ -26,22 +29,29 @@ import (
 // newTestServerWithEcommerce 创建带 ecommerceClient 的测试服务器
 func newTestServerWithEcommerce(t *testing.T, store db.Store, ecommerceClient wechat.EcommerceClientInterface) *Server {
 	config := util.Config{
+		Environment:         "test",
 		TokenSymmetricKey:   util.RandomString(32),
 		AccessTokenDuration: time.Minute,
 		WebBaseURL:          "https://merchant.example.com",
 	}
 
-	tokenMaker, err := token.NewPasetoMaker(config.TokenSymmetricKey)
+	server, err := NewServer(config, store, nil, nil, NewNoopAuditWriter())
 	require.NoError(t, err)
+	server.SetEcommerceClientForTest(ecommerceClient)
+	server.wsHub = nil
+	server.wsPubSub = nil
 
-	server := &Server{
-		config:          config,
-		store:           store,
-		tokenMaker:      tokenMaker,
-		ecommerceClient: ecommerceClient,
-	}
+	tempDir := t.TempDir()
+	ls := media.NewLocalStorage("http://testserver", tempDir)
+	server.mediaRegistry = media.NewRegistry(store, ls)
+	server.mediaStorage = ls
+	server.mediaResolver = media.NewURLResolver(media.ResolverConfig{
+		CDNPublicBaseURL: "https://cdn.test.example.com",
+		ThumbWidth:       200,
+		CardWidth:        400,
+		DetailWidth:      960,
+	}, ls)
 
-	server.setupRouter()
 	return server
 }
 
@@ -98,11 +108,12 @@ func TestMerchantBindBankAPI(t *testing.T) {
 	applicationWithTestURL := application
 
 	testCases := []struct {
-		name          string
-		body          gin.H
-		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
-		buildStubs    func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface)
-		checkResponse func(recorder *httptest.ResponseRecorder)
+		name             string
+		body             gin.H
+		setupAuth        func(t *testing.T, request *http.Request, tokenMaker token.Maker)
+		buildStubs       func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface)
+		buildWechatStubs func(store *mockdb.MockStore, wechatClient *mockwechat.MockWechatClient)
+		checkResponse    func(recorder *httptest.ResponseRecorder)
 	}{
 		{
 			name: "OK_WithEcommerceClient",
@@ -164,6 +175,16 @@ func TestMerchantBindBankAPI(t *testing.T) {
 					Times(5). // 法人姓名、身份证号、账户名、账号、手机
 					Return("encrypted_data", nil)
 
+				expectedObjectKey := buildMerchantStorefrontQRCodeObjectKey(merchant.ID)
+				ecommerceClient.EXPECT().
+					UploadImage(gomock.Any(), path.Base(expectedObjectKey), gomock.Any()).
+					Times(1).
+					DoAndReturn(func(_ context.Context, filename string, fileData []byte) (*wechat.ImageUploadResponse, error) {
+						require.Equal(t, path.Base(expectedObjectKey), filename)
+						require.NotEmpty(t, fileData)
+						return &wechat.ImageUploadResponse{MediaID: "wx_store_qr_media_id"}, nil
+					})
+
 				// Mock 提交进件
 				ecommerceClient.EXPECT().
 					CreateEcommerceApplyment(gomock.Any(), gomock.Any()).
@@ -182,7 +203,8 @@ func TestMerchantBindBankAPI(t *testing.T) {
 						require.Empty(t, req.ContactInfo.ContactEmail)
 						require.NotNil(t, req.SalesSceneInfo)
 						require.Equal(t, applicationWithTestURL.MerchantName, req.SalesSceneInfo.StoreName)
-						require.Equal(t, "https://merchant.example.com", req.SalesSceneInfo.StoreURL)
+						require.Empty(t, req.SalesSceneInfo.StoreURL)
+						require.Equal(t, "wx_store_qr_media_id", req.SalesSceneInfo.StoreQRCode)
 						return &wechat.EcommerceApplymentResponse{ApplymentID: 123456789}, nil
 					})
 
@@ -197,6 +219,48 @@ func TestMerchantBindBankAPI(t *testing.T) {
 					UpdateMerchantStatus(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(db.Merchant{}, nil)
+			},
+			buildWechatStubs: func(store *mockdb.MockStore, wechatClient *mockwechat.MockWechatClient) {
+				expectedObjectKey := buildMerchantStorefrontQRCodeObjectKey(merchant.ID)
+				qrCodeData := buildTestQRCodePNG(t)
+
+				store.EXPECT().
+					GetMediaAssetByObjectKey(gomock.Any(), expectedObjectKey).
+					Times(1).
+					Return(db.MediaAsset{}, db.ErrRecordNotFound)
+
+				wechatClient.EXPECT().
+					GetWXACodeUnlimited(gomock.Any(), gomock.AssignableToTypeOf(&wechat.WXACodeRequest{})).
+					Times(1).
+					DoAndReturn(func(_ context.Context, req *wechat.WXACodeRequest) ([]byte, error) {
+						require.Equal(t, fmt.Sprintf("m_%d", merchant.ID), req.Scene)
+						require.Equal(t, "pages/takeout/restaurant-detail/index", req.Page)
+						require.NotNil(t, req.CheckPath)
+						require.False(t, *req.CheckPath)
+						require.Equal(t, "develop", req.EnvVersion)
+						require.Equal(t, 430, req.Width)
+						return qrCodeData, nil
+					})
+
+				store.EXPECT().
+					CreateMediaAsset(gomock.Any(), gomock.AssignableToTypeOf(db.CreateMediaAssetParams{})).
+					Times(1).
+					DoAndReturn(func(_ context.Context, arg db.CreateMediaAssetParams) (db.MediaAsset, error) {
+						require.Equal(t, expectedObjectKey, arg.ObjectKey)
+						require.Equal(t, string(media.VisibilityPublic), arg.Visibility)
+						require.Equal(t, string(media.CategoryStorefrontImage), arg.MediaCategory)
+						require.Equal(t, "image/png", arg.MimeType)
+						require.NotEmpty(t, arg.ChecksumSha256)
+						return db.MediaAsset{ID: util.RandomInt(1, 1000), ModerationStatus: "pending"}, nil
+					})
+
+				store.EXPECT().
+					SetMediaAssetModerationStatus(gomock.Any(), gomock.AssignableToTypeOf(db.SetMediaAssetModerationStatusParams{})).
+					Times(1).
+					DoAndReturn(func(_ context.Context, arg db.SetMediaAssetModerationStatusParams) (db.MediaAsset, error) {
+						require.Equal(t, "approved", arg.ModerationStatus)
+						return db.MediaAsset{ID: arg.ID, ModerationStatus: arg.ModerationStatus}, nil
+					})
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -433,9 +497,14 @@ func TestMerchantBindBankAPI(t *testing.T) {
 
 			store := mockdb.NewMockStore(ctrl)
 			ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+			wechatClient := mockwechat.NewMockWechatClient(ctrl)
 			tc.buildStubs(store, ecommerceClient)
+			if tc.buildWechatStubs != nil {
+				tc.buildWechatStubs(store, wechatClient)
+			}
 
 			server := newTestServerWithEcommerce(t, store, ecommerceClient)
+			server.wechatClient = wechatClient
 
 			data, err := json.Marshal(tc.body)
 			require.NoError(t, err)

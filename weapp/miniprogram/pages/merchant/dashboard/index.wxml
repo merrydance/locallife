@@ -50,15 +50,18 @@
               </view>
 
                 <view class="hero-status-row">
-                  <view class="hero-status-control">
-                    <text class="hero-status-text">{{isOpen ? '营业中' : '打烊中'}}</text>
-                    <t-switch
-                      value="{{isOpen}}"
-                      size="medium"
-                      loading="{{openStatusSubmitting}}"
-                      disabled="{{isPageSyncing}}"
-                      bind:change="onOpenStatusSwitchChange"
-                    />
+                  <view class="hero-status-stack">
+                    <view class="hero-status-control">
+                      <text class="hero-status-text">{{businessStateTitle}}</text>
+                      <t-switch
+                        value="{{isOpen}}"
+                        size="medium"
+                        loading="{{openStatusSubmitting}}"
+                        disabled="{{isPageSyncing}}"
+                        bind:change="onOpenStatusSwitchChange"
+                      />
+                    </view>
+                    <text wx:if="{{businessStateHint}}" class="hero-status-hint">{{businessStateHint}}</text>
                   </view>
                 </view>
             </view>

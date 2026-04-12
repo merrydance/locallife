@@ -3,7 +3,9 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"path"
 	"regexp"
 	"strings"
 	"time"
@@ -403,10 +405,34 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 		application.BusinessAddress,
 		&businessLicenseOCR,
 	)
-	storeURL := buildApplymentStoreURL(server.config)
 	storeName := strings.TrimSpace(application.MerchantName)
 	if storeName == "" {
 		storeName = merchant.Name
+	}
+	storeQRCodeObjectKey, err := server.ensureMerchantStorefrontQRCode(ctx, authPayload.UserID, merchant.ID)
+	if err != nil {
+		log.Error().Err(err).Msg("生成商户店铺首页小程序码失败")
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("生成店铺首页二维码失败: %w", err)))
+		return
+	}
+	storeQRCodeReader, err := server.mediaStorage.ReadObject(ctx, server.mediaStorage.PublicBucket(), storeQRCodeObjectKey)
+	if err != nil {
+		log.Error().Err(err).Str("object_key", storeQRCodeObjectKey).Msg("读取商户店铺首页小程序码失败")
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("读取店铺首页二维码失败: %w", err)))
+		return
+	}
+	storeQRCodeData, err := io.ReadAll(storeQRCodeReader)
+	_ = storeQRCodeReader.Close()
+	if err != nil {
+		log.Error().Err(err).Str("object_key", storeQRCodeObjectKey).Msg("读取商户店铺首页小程序码内容失败")
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("读取店铺首页二维码失败: %w", err)))
+		return
+	}
+	storeQRCodeUploadResp, err := server.ecommerceClient.UploadImage(ctx, path.Base(storeQRCodeObjectKey), storeQRCodeData)
+	if err != nil {
+		log.Error().Err(err).Msg("上传商户店铺首页小程序码到微信失败")
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("上传店铺首页二维码失败: %w", err)))
+		return
 	}
 
 	applymentReq := &wechat.EcommerceApplymentRequest{
@@ -431,8 +457,8 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 			MobilePhone:         wxEncryptedMobilePhone,
 		},
 		SalesSceneInfo: &wechat.ApplymentSalesSceneInfo{
-			StoreName: storeName,
-			StoreURL:  storeURL,
+			StoreName:   storeName,
+			StoreQRCode: storeQRCodeUploadResp.MediaID,
 		},
 	}
 

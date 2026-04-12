@@ -1113,6 +1113,41 @@ type publicDeliveryPromotion struct {
 
 // NOTE: businessHourItem is already defined at line ~961, reusing it here
 
+// 店铺二维码直达页需要在进件审核态保持可访问，但“可在顾客搜索/列表中被发现”仍由搜索 SQL 的 active 过滤控制。
+// 这里仅定义直达店铺详情页及其附属接口的可访问状态，不应被复用为 discoverability 规则。
+
+func isMerchantStatusPublicStorefrontAccessible(status string) bool {
+	switch status {
+	case "approved", "pending_bindbank", "bindbank_submitted", "active":
+		return true
+	default:
+		return false
+	}
+}
+
+func isMerchantPublicStorefrontOrderable(merchant db.Merchant) bool {
+	return merchant.Status == "active" && merchant.IsOpen
+}
+
+func (server *Server) loadPublicStorefrontMerchant(ctx *gin.Context, merchantID int64) (db.Merchant, bool) {
+	merchant, err := server.store.GetMerchant(ctx, merchantID)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
+			return db.Merchant{}, false
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get merchant: %w", err)))
+		return db.Merchant{}, false
+	}
+
+	if !isMerchantStatusPublicStorefrontAccessible(merchant.Status) {
+		ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant is not available")))
+		return db.Merchant{}, false
+	}
+
+	return merchant, true
+}
+
 // getPublicMerchantDetail godoc
 // @Summary 获取商户详情（消费者端）
 // @Description 需登录访问（消费者端），获取商户详细信息
@@ -1137,20 +1172,8 @@ func (server *Server) getPublicMerchantDetail(ctx *gin.Context) {
 	// 只返回促销/出餐时间等首页需要展示的字段，减少不必要的 DB 查询和签名运算。
 	liteMode := ctx.Query("lite") == "true"
 
-	// 获取商户基本信息
-	merchant, err := server.store.GetMerchant(ctx, req.ID)
-	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get merchant: %w", err)))
-		return
-	}
-
-	// 只返回已批准的商户
-	if merchant.Status != "approved" && merchant.Status != "active" {
-		ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant is not available")))
+	merchant, ok := server.loadPublicStorefrontMerchant(ctx, req.ID)
+	if !ok {
 		return
 	}
 
@@ -1161,7 +1184,7 @@ func (server *Server) getPublicMerchantDetail(ctx *gin.Context) {
 		Phone:    merchant.Phone,
 		Address:  merchant.Address,
 		RegionID: merchant.RegionID,
-		IsOpen:   merchant.IsOpen,
+		IsOpen:   isMerchantPublicStorefrontOrderable(merchant),
 		Tags:     []string{},
 	}
 
@@ -1363,6 +1386,10 @@ func (server *Server) getPublicMerchantDishes(ctx *gin.Context) {
 		return
 	}
 
+	if _, ok := server.loadPublicStorefrontMerchant(ctx, req.ID); !ok {
+		return
+	}
+
 	dishes, err := server.store.GetMerchantDishesWithCategory(ctx, req.ID)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -1510,6 +1537,10 @@ func (server *Server) getPublicMerchantCombos(ctx *gin.Context) {
 		return
 	}
 
+	if _, ok := server.loadPublicStorefrontMerchant(ctx, req.ID); !ok {
+		return
+	}
+
 	combos, err := server.store.GetMerchantOnlineCombos(ctx, req.ID)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -1598,6 +1629,10 @@ func (server *Server) getPublicMerchantRooms(ctx *gin.Context) {
 	var req publicMerchantDetailRequest
 	if err := ctx.ShouldBindUri(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	if _, ok := server.loadPublicStorefrontMerchant(ctx, req.ID); !ok {
 		return
 	}
 
