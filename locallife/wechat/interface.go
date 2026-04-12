@@ -144,6 +144,9 @@ type EcommerceClientInterface interface {
 	// accountNumberRule 为空时使用微信默认规则（ACCOUNT_NUMBER_RULE_MASK_V1）
 	QuerySubMerchantSettlement(ctx context.Context, subMchID string, accountNumberRule string) (*SubMerchantSettlementResponse, error)
 
+	// QuerySubMerchantLimitations 查询特约商户/二级商户管控情况
+	QuerySubMerchantLimitations(ctx context.Context, subMchID string) (*SubMerchantLimitationsResponse, error)
+
 	// ModifySubMerchantSettlement 修改特约商户/二级商户结算账户
 	ModifySubMerchantSettlement(ctx context.Context, subMchID string, req *ModifySubMerchantSettlementRequest) (*ModifySubMerchantSettlementResponse, error)
 

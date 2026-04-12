@@ -89,6 +89,13 @@ Page({
                 url: '/pages/platform/operational-configs/index'
             },
             {
+                id: 'merchant-limitations',
+                title: '商户管控查询',
+                desc: '按子商户号查询微信侧限制',
+                icon: 'search',
+                url: '/pages/platform/finance/merchant-limitations/index'
+            },
+            {
                 id: 'groups',
                 title: '集团申请审核',
                 desc: '审核集团入驻申请',

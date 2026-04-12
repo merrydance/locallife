@@ -541,6 +541,25 @@ definitions:
       status:
         type: string
     type: object
+  api.accountLimitationsResponse:
+    properties:
+      account_status:
+        type: string
+      limited_functions:
+        items:
+          type: string
+        type: array
+      mchid:
+        type: string
+      other_limited_functions:
+        type: string
+      recovery_specifications:
+        items:
+          $ref: '#/definitions/api.subMerchantLimitationRecoverySpecificationResponse'
+        type: array
+      status_desc:
+        type: string
+    type: object
   api.addCartItemRequest:
     properties:
       combo_id:
@@ -6067,6 +6086,21 @@ definitions:
       total_orders:
         type: integer
     type: object
+  api.platformSubMerchantLimitationsResponse:
+    properties:
+      limited_functions:
+        items:
+          type: string
+        type: array
+      mchid:
+        type: string
+      other_limited_functions:
+        type: string
+      recovery_specifications:
+        items:
+          $ref: '#/definitions/api.subMerchantLimitationRecoverySpecificationResponse'
+        type: array
+    type: object
   api.platformViolationNotificationConfigRequest:
     properties:
       notify_url:
@@ -7961,6 +7995,35 @@ definitions:
         type: string
       user_id:
         type: integer
+    type: object
+  api.subMerchantLimitationRecoverySpecificationResponse:
+    properties:
+      limitation_action_type:
+        type: string
+      limitation_case_id:
+        type: string
+      limitation_date:
+        type: string
+      limitation_reason:
+        type: string
+      limitation_reason_describe:
+        type: string
+      limitation_reason_type:
+        type: string
+      limitation_start_date:
+        type: string
+      other_relate_limitations:
+        type: string
+      recover_help_url:
+        type: string
+      recover_way:
+        type: string
+      recover_way_param:
+        type: string
+      relate_limitations:
+        items:
+          type: string
+        type: array
     type: object
   api.submitSafetyReportRequest:
     properties:
@@ -16857,6 +16920,37 @@ paths:
       summary: 更新订单展示配置
       tags:
       - 商户设备管理
+  /v1/merchant/finance/account/limitations:
+    get:
+      description: 商户查询自己名下收付通子商户的管控情况；未开通或未激活时返回 account_status 和 status_desc。
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.accountLimitationsResponse'
+        "403":
+          description: 无权限
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 商户不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "502":
+          description: 微信支付下游异常
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: 微信客户端未配置
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 查询商户收付通管控情况
+      tags:
+      - 商户财务
   /v1/merchant/finance/account/settlement-account:
     get:
       description: 商户查询自己的收付通结算账户（银行账户）信息，商户号从认证 session 取
@@ -22575,6 +22669,33 @@ paths:
       summary: 获取佣金明细
       tags:
       - 运营商数据统计
+  /v1/operators/me/finance/account/limitations:
+    get:
+      description: 运营商查询自己名下收付通子商户的管控情况；未开通时返回 account_status 和 status_desc。
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.accountLimitationsResponse'
+        "403":
+          description: 运营商未激活或无权限
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "502":
+          description: 微信支付下游异常
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: 微信客户端未配置
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 查询运营商收付通管控情况
+      tags:
+      - 运营商财务
   /v1/operators/me/finance/account/settlement-account:
     get:
       description: 运营商查询自己的收付通结算账户（银行账户）信息，商户号从认证 session 取
@@ -24258,6 +24379,47 @@ paths:
       security:
       - BearerAuth: []
       summary: 获取平台分账账单下载地址
+      tags:
+      - 平台财务
+  /v1/platform/finance/wechat-ecommerce/merchant-limitations/{sub_mch_id}:
+    get:
+      description: 平台管理员按 sub_mch_id 查询微信支付平台收付通子商户的管控情况。
+      parameters:
+      - description: 子商户号
+        in: path
+        name: sub_mch_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.platformSubMerchantLimitationsResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 无权限
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "502":
+          description: 微信支付下游异常
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: 微信客户端未配置
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 查询子商户收付通管控情况
       tags:
       - 平台财务
   /v1/platform/finance/wechat-ecommerce/violation-notification:
