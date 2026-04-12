@@ -152,7 +152,6 @@ func TestOperatorBindBankAPI(t *testing.T) {
 						require.Equal(t, "2030-01-01", req.IDCardInfo.IDCardValidTime)
 						require.NotNil(t, req.ContactInfo)
 						require.Equal(t, "encrypted_data", req.ContactInfo.MobilePhone)
-						require.Empty(t, req.ContactInfo.ContactEmail)
 						require.NotNil(t, req.SalesSceneInfo)
 						require.Equal(t, "https://merchant.example.com", req.SalesSceneInfo.StoreURL)
 						return &wechat.EcommerceApplymentResponse{ApplymentID: 123456789}, nil
@@ -227,7 +226,6 @@ func TestOperatorBindBankAPI(t *testing.T) {
 						require.Equal(t, "2028-09-29", req.IDCardInfo.IDCardValidTime)
 						require.NotNil(t, req.ContactInfo)
 						require.Equal(t, "encrypted_data", req.ContactInfo.MobilePhone)
-						require.Empty(t, req.ContactInfo.ContactEmail)
 						return &wechat.EcommerceApplymentResponse{ApplymentID: 123456789}, nil
 					})
 

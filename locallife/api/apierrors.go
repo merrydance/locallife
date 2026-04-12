@@ -257,6 +257,7 @@ var (
 	ErrInvalidAddress                          = apierr(40073, "invalid address")
 	ErrInvalidLatitudeFormat                   = apierr(40074, "invalid latitude format")
 	ErrInvalidLongitudeFormat                  = apierr(40075, "invalid longitude format")
+	ErrApplymentWebSceneDomainRequired         = apierr(40109, "web applyment domain is not configured")
 )
 
 // ==================== 必填字段/文件上传校验 (Required Fields / Document Upload) ====================

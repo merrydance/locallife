@@ -54,6 +54,7 @@ func TestCreateEcommerceApplyment_SetsWechatpaySerialHeader(t *testing.T) {
 
 			var body map[string]any
 			require.NoError(t, json.NewDecoder(req.Body).Decode(&body))
+			require.Equal(t, "applyment-test-001", body["out_request_no"])
 			require.Equal(t, "4", body["organization_type"])
 			require.Equal(t, false, body["finance_institution"])
 			require.NotContains(t, body, "need_account_info")
@@ -73,6 +74,16 @@ func TestCreateEcommerceApplyment_SetsWechatpaySerialHeader(t *testing.T) {
 			require.Equal(t, "2020-01-01", idCardInfo["id_card_valid_time_begin"])
 			require.Equal(t, "长期", idCardInfo["id_card_valid_time"])
 
+			salesSceneInfo, ok := body["sales_scene_info"].(map[string]any)
+			require.True(t, ok)
+			require.Equal(t, "测试门店", salesSceneInfo["store_name"])
+			require.Equal(t, "https://example.com/store", salesSceneInfo["store_url"])
+
+			settlementInfo, ok := body["settlement_info"].(map[string]any)
+			require.True(t, ok)
+			require.Equal(t, float64(719), settlementInfo["settlement_id"])
+			require.Equal(t, "餐饮", settlementInfo["qualification_type"])
+
 			return &http.Response{
 				StatusCode: http.StatusOK,
 				Header:     make(http.Header),
@@ -85,11 +96,13 @@ func TestCreateEcommerceApplyment_SetsWechatpaySerialHeader(t *testing.T) {
 		OutRequestNo:       "applyment-test-001",
 		OrganizationType:   "4",
 		FinanceInstitution: false,
+		BusinessLicense:    &BusinessLicenseInfo{BusinessLicenseCopy: "license_copy_media_id", BusinessLicenseNumber: "91440300TEST12345", MerchantName: "测试门店", LegalPerson: "张三", CompanyAddress: "深圳市南山区", BusinessTime: "[\"2020-01-01\",\"长期\"]"},
 		MerchantShortname:  "测试运营商",
 		IDCardInfo:         &ApplymentIDCardInfo{IDCardCopy: "copy_media_id", IDCardNational: "national_media_id", IDCardName: "encrypted_name", IDCardNumber: "encrypted_id_no", IDCardValidTimeBegin: "2020-01-01", IDCardValidTime: "长期"},
 		AccountInfo:        &ApplymentBankAccountInfo{BankAccountType: "ACCOUNT_TYPE_PRIVATE", AccountBank: "其他银行", AccountBankCode: 1099, AccountName: "encrypted_account_name", BankAddressCode: "440300", BankBranchID: "402584040001", BankName: "深圳前海微众银行深圳南山支行", AccountNumber: "encrypted_account_no"},
-		ContactInfo:        &ApplymentContactInfo{ContactType: "LEGAL", ContactName: "encrypted_contact_name", MobilePhone: "encrypted_mobile", ContactEmail: "encrypted_email@example.com"},
+		ContactInfo:        &ApplymentContactInfo{ContactType: "LEGAL", ContactName: "encrypted_contact_name", MobilePhone: "encrypted_mobile"},
 		SalesSceneInfo:     &ApplymentSalesSceneInfo{StoreName: "测试门店", StoreURL: "https://example.com/store"},
+		SettlementInfo:     &ApplymentSettlementInfo{SettlementID: 719, QualificationType: "餐饮"},
 	})
 	require.NoError(t, err)
 	require.Equal(t, int64(123456789), resp.ApplymentID)

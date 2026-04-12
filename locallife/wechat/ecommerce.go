@@ -435,7 +435,7 @@ type ApplymentBankAccountInfo struct {
 	AccountBank     string `json:"account_bank"`                // 开户银行
 	AccountBankCode int64  `json:"account_bank_code,omitempty"` // 开户银行编码
 	AccountName     string `json:"account_name"`                // 开户名称（需加密）
-	BankAddressCode string `json:"bank_address_code,omitempty"` // 开户银行省市编码（兼容旧接口）
+	BankAddressCode string `json:"bank_address_code,omitempty"` // 开户银行省市编码
 	BankBranchID    string `json:"bank_branch_id,omitempty"`    // 开户银行联行号
 	BankName        string `json:"bank_name,omitempty"`         // 开户银行全称（支行）
 	AccountNumber   string `json:"account_number"`              // 银行账号（需加密）
@@ -526,7 +526,6 @@ type ApplymentContactInfo struct {
 	ContactIDDocPeriodBegin string `json:"contact_id_doc_period_begin,omitempty"` // 联系人证件有效期开始时间
 	ContactIDDocPeriodEnd   string `json:"contact_id_doc_period_end,omitempty"`   // 联系人证件有效期结束时间
 	MobilePhone             string `json:"mobile_phone"`                          // 联系手机号（需加密）
-	ContactEmail            string `json:"contact_email,omitempty"`               // 联系邮箱（兼容旧调用，当前不主动上送）
 }
 
 // ApplymentSalesSceneInfo 经营场景信息
@@ -577,7 +576,6 @@ func (c *EcommerceClient) CreateEcommerceApplyment(ctx context.Context, req *Eco
 		"merchant_shortname":  req.MerchantShortname,
 	}
 
-	// 营业执照信息（个体户/企业必填）
 	if req.BusinessLicense != nil {
 		businessLicenseInfo := map[string]interface{}{
 			"business_license_copy":   req.BusinessLicense.BusinessLicenseCopy,
@@ -597,23 +595,21 @@ func (c *EcommerceClient) CreateEcommerceApplyment(ctx context.Context, req *Eco
 		body["business_license_info"] = businessLicenseInfo
 	}
 
-	// 身份证信息
 	body["id_card_info"] = map[string]interface{}{
 		"id_card_copy":             req.IDCardInfo.IDCardCopy,
 		"id_card_national":         req.IDCardInfo.IDCardNational,
-		"id_card_name":             req.IDCardInfo.IDCardName,   // 需加密
-		"id_card_number":           req.IDCardInfo.IDCardNumber, // 需加密
+		"id_card_name":             req.IDCardInfo.IDCardName,
+		"id_card_number":           req.IDCardInfo.IDCardNumber,
 		"id_card_valid_time_begin": req.IDCardInfo.IDCardValidTimeBegin,
 		"id_card_valid_time":       req.IDCardInfo.IDCardValidTime,
 	}
 
-	// 银行账户信息
 	if req.AccountInfo != nil {
 		accountInfo := map[string]interface{}{
 			"bank_account_type": normalizeEcommerceBankAccountType(req.AccountInfo.BankAccountType),
 			"account_bank":      req.AccountInfo.AccountBank,
-			"account_name":      req.AccountInfo.AccountName,   // 需加密
-			"account_number":    req.AccountInfo.AccountNumber, // 需加密
+			"account_name":      req.AccountInfo.AccountName,
+			"account_number":    req.AccountInfo.AccountNumber,
 		}
 		if req.AccountInfo.AccountBankCode > 0 {
 			accountInfo["account_bank_code"] = req.AccountInfo.AccountBankCode
@@ -630,17 +626,16 @@ func (c *EcommerceClient) CreateEcommerceApplyment(ctx context.Context, req *Eco
 		body["account_info"] = accountInfo
 	}
 
-	// 联系人信息
 	contactInfo := map[string]interface{}{
 		"contact_type": normalizeEcommerceContactType(req.ContactInfo.ContactType),
-		"contact_name": req.ContactInfo.ContactName, // 需加密
-		"mobile_phone": req.ContactInfo.MobilePhone, // 需加密
+		"contact_name": req.ContactInfo.ContactName,
+		"mobile_phone": req.ContactInfo.MobilePhone,
 	}
 	if req.ContactInfo.ContactIDDocType != "" {
 		contactInfo["contact_id_doc_type"] = req.ContactInfo.ContactIDDocType
 	}
 	if req.ContactInfo.ContactIDCardNumber != "" {
-		contactInfo["contact_id_card_number"] = req.ContactInfo.ContactIDCardNumber // 需加密
+		contactInfo["contact_id_card_number"] = req.ContactInfo.ContactIDCardNumber
 	}
 	if req.ContactInfo.ContactIDDocCopy != "" {
 		contactInfo["contact_id_doc_copy"] = req.ContactInfo.ContactIDDocCopy
@@ -656,7 +651,6 @@ func (c *EcommerceClient) CreateEcommerceApplyment(ctx context.Context, req *Eco
 	}
 	body["contact_info"] = contactInfo
 
-	// 经营场景信息
 	salesScene := map[string]interface{}{
 		"store_name": req.SalesSceneInfo.StoreName,
 	}
@@ -684,12 +678,9 @@ func (c *EcommerceClient) CreateEcommerceApplyment(ctx context.Context, req *Eco
 		}
 	}
 
-	// 特殊资质
 	if len(req.Qualifications) > 0 {
 		body["qualifications"] = req.Qualifications
 	}
-
-	// 补充材料
 	if len(req.BusinessAdditionPics) > 0 {
 		body["business_addition_pics"] = req.BusinessAdditionPics
 	}
@@ -707,7 +698,6 @@ func (c *EcommerceClient) CreateEcommerceApplyment(ctx context.Context, req *Eco
 	if err := json.Unmarshal(respBody, &resp); err != nil {
 		return nil, fmt.Errorf("unmarshal response: %w", err)
 	}
-
 	return &resp, nil
 }
 

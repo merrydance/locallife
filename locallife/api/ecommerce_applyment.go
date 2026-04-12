@@ -181,7 +181,6 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 		return
 	}
 
-	// 解析身份证OCR信息
 	var idCardBackOCR MerchantIDCardOCRData
 	if len(application.IDCardBackOcr) > 0 {
 		if err := json.Unmarshal(application.IDCardBackOcr, &idCardBackOCR); err != nil {
@@ -195,7 +194,6 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 			log.Error().Err(err).Msg("解析营业执照OCR失败")
 		}
 	}
-
 	// 生成业务申请编号
 	outRequestNo := fmt.Sprintf("M%d%d", merchant.ID, time.Now().Unix())
 
@@ -237,7 +235,6 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("数据加密失败")))
 		return
 	}
-
 	// 解析媒体资产 URL 用于存档
 	bizLicenseURL := server.publicImageURL(ctx, pgInt8ToPtr(application.BusinessLicenseMediaAssetID), media.VariantOriginal)
 	idCardFrontURL := server.publicImageURL(ctx, pgInt8ToPtr(application.IDCardFrontMediaAssetID), media.VariantOriginal)
@@ -1113,7 +1110,7 @@ func (server *Server) operatorBindBank(ctx *gin.Context) {
 		BusinessLicenseCopy:   pgtype.Text{String: businessLicenseURL, Valid: businessLicenseURL != ""},
 		MerchantName:          operatorName,
 		LegalPerson:           legalPersonName,
-		IDCardNumber:          encryptedIDCardNumber, // AES 加密存储
+		IDCardNumber:          encryptedIDCardNumber,
 		IDCardName:            legalPersonName,
 		IDCardValidTime:       idCardValidTime,
 		IDCardFrontCopy:       idCardFrontURL,
@@ -1126,10 +1123,10 @@ func (server *Server) operatorBindBank(ctx *gin.Context) {
 		BankAddressCode:       req.BankAddressCode,
 		BankBranchID:          pgtype.Text{String: req.BankBranchID, Valid: req.BankBranchID != ""},
 		BankName:              pgtype.Text{String: req.BankName, Valid: req.BankName != ""},
-		AccountNumber:         encryptedAccountNumber, // AES 加密存储
+		AccountNumber:         encryptedAccountNumber,
 		AccountName:           req.AccountName,
 		ContactName:           legalPersonName,
-		ContactIDCardNumber:   pgtype.Text{String: encryptedContactIDCardNumber, Valid: true}, // AES 加密存储
+		ContactIDCardNumber:   pgtype.Text{String: encryptedContactIDCardNumber, Valid: true},
 		MobilePhone:           contactPhone,
 		MerchantShortname:     operatorName,
 		Qualifications:        []byte("[]"),
@@ -1141,11 +1138,8 @@ func (server *Server) operatorBindBank(ctx *gin.Context) {
 		return
 	}
 
-	// 检查是否配置了微信支付客户端
 	if server.ecommerceClient == nil {
 		log.Warn().Msg("微信支付客户端未配置，跳过提交微信进件")
-
-		// 更新运营商状态
 		_, _ = server.store.UpdateOperatorStatus(ctx, db.UpdateOperatorStatusParams{
 			ID:     operator.ID,
 			Status: "bindbank_submitted",
@@ -1262,6 +1256,10 @@ func (server *Server) operatorBindBank(ctx *gin.Context) {
 		&businessLicenseOCR,
 	)
 	storeURL := buildApplymentStoreURL(server.config)
+	if storeURL == "" {
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrApplymentWebSceneDomainRequired))
+		return
+	}
 
 	applymentReq := &wechat.EcommerceApplymentRequest{
 		OutRequestNo:       outRequestNo,
