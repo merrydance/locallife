@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/media"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/util"
@@ -141,27 +143,6 @@ func (f applymentContactFields) resolve(legalPersonName, legalPersonIDNumber str
 	}
 }
 
-func buildWechatApplymentContactInfo(contact resolvedApplymentContact, encryptedContactName, encryptedContactIDCardNumber, encryptedMobilePhone string) *wechat.ApplymentContactInfo {
-	info := &wechat.ApplymentContactInfo{
-		ContactType:         contact.ContactType,
-		ContactName:         encryptedContactName,
-		ContactIDCardNumber: encryptedContactIDCardNumber,
-		MobilePhone:         encryptedMobilePhone,
-	}
-
-	if contact.ContactIDDocType != "" {
-		info.ContactIDDocType = contact.ContactIDDocType
-	}
-	if contact.ContactIDDocPeriodBegin != "" {
-		info.ContactIDDocPeriodBegin = contact.ContactIDDocPeriodBegin
-	}
-	if contact.ContactIDDocPeriodEnd != "" {
-		info.ContactIDDocPeriodEnd = contact.ContactIDDocPeriodEnd
-	}
-
-	return info
-}
-
 func (c resolvedApplymentContact) requiresIdentityDocumentAssets() bool {
 	return c.ContactType == "SUPER"
 }
@@ -211,19 +192,6 @@ func (f applymentBindBankFields) validateSelection() error {
 		}
 	}
 	return nil
-}
-
-func (f applymentBindBankFields) toWechatAccountInfo(encryptedAccountName, encryptedAccountNumber string) *wechat.ApplymentBankAccountInfo {
-	return &wechat.ApplymentBankAccountInfo{
-		BankAccountType: f.AccountType,
-		AccountBank:     f.AccountBank,
-		AccountBankCode: f.AccountBankCode,
-		AccountName:     encryptedAccountName,
-		BankAddressCode: f.BankAddressCode,
-		BankBranchID:    f.BankBranchID,
-		BankName:        f.BankName,
-		AccountNumber:   encryptedAccountNumber,
-	}
 }
 
 // merchantBindBankRequest 商户绑定银行卡请求
@@ -280,26 +248,25 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 	}
 
 	// 检查商户状态：必须是 approved 或 pending_bindbank
-	if merchant.Status != "approved" && merchant.Status != "pending_bindbank" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("invalid merchant status: %s", merchant.Status)))
-		return
-	}
-
 	// 检查是否已有进行中的进件申请
 	existingApplyment, err := server.store.GetLatestEcommerceApplymentBySubject(ctx, db.GetLatestEcommerceApplymentBySubjectParams{
 		SubjectType: "merchant",
 		SubjectID:   merchant.ID,
 	})
+	var existingApplymentRecord *db.EcommerceApplyment
 	if err == nil {
-		// 已有申请，检查状态
-		if isApplymentPendingSubmissionStatus(existingApplyment.Status) {
+		existingApplymentRecord = &existingApplyment
+	}
+	if validateErr := logic.ValidateMerchantApplymentSubmissionState(merchant.Status, existingApplymentRecord); validateErr != nil {
+		switch {
+		case errors.Is(validateErr, logic.ErrApplymentSubmissionPending):
 			ctx.JSON(http.StatusBadRequest, errorResponse(ErrAccountApplymentPending))
-			return
-		}
-		if existingApplyment.Status == "finish" {
+		case errors.Is(validateErr, logic.ErrApplymentAlreadyRegistered):
 			ctx.JSON(http.StatusBadRequest, errorResponse(ErrAccountAlreadyRegistered))
-			return
+		default:
+			ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("invalid merchant status: %s", merchant.Status)))
 		}
+		return
 	}
 
 	// 获取商户申请信息（包含营业执照、身份证等OCR数据）
@@ -331,7 +298,7 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 	// 生成业务申请编号
 	outRequestNo := fmt.Sprintf("M%d%d", merchant.ID, time.Now().Unix())
 
-	organizationType := resolveApplymentOrganizationType(
+	organizationType := logic.ResolveApplymentOrganizationType(
 		application.BusinessLicenseNumber,
 		businessLicenseOCR.TypeOfEnterprise,
 		application.MerchantName,
@@ -347,7 +314,7 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 		return
 	}
 
-	idCardValidTimeBegin, idCardValidTime := parseIDCardValidPeriod(idCardBackOCR.ValidDate)
+	idCardValidTimeBegin, idCardValidTime := logic.ParseApplymentIDCardValidPeriod(idCardBackOCR.ValidDate)
 	if err := validateApplymentIDCardValidity(idCardValidTimeBegin, idCardValidTime); err != nil {
 		log.Warn().Int64("merchant_id", merchant.ID).Str("valid_date", idCardBackOCR.ValidDate).Msg("商户身份证有效期无效，拒绝提交微信进件")
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
@@ -395,61 +362,65 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 	idCardBackURL := server.publicImageURL(ctx, pgInt8ToPtr(application.IDCardBackMediaAssetID), media.VariantOriginal)
 
 	// 创建进件记录
-	applyment, err := server.store.CreateEcommerceApplyment(ctx, db.CreateEcommerceApplymentParams{
+	applyment, err := server.store.CreateEcommerceApplyment(ctx, logic.BuildCreateEcommerceApplymentParams(logic.ApplymentLocalRecordInput{
 		SubjectType:           "merchant",
 		SubjectID:             merchant.ID,
 		OutRequestNo:          outRequestNo,
 		OrganizationType:      organizationType,
-		BusinessLicenseNumber: pgtype.Text{String: application.BusinessLicenseNumber, Valid: application.BusinessLicenseNumber != ""},
-		BusinessLicenseCopy:   pgtype.Text{String: bizLicenseURL, Valid: bizLicenseURL != ""},
+		BusinessLicenseNumber: application.BusinessLicenseNumber,
+		BusinessLicenseCopy:   bizLicenseURL,
 		MerchantName:          application.MerchantName,
 		LegalPerson:           application.LegalPersonName,
-		IDCardNumber:          encryptedIDCardNumber, // AES 加密存储
+		IDCardNumber:          encryptedIDCardNumber,
 		IDCardName:            application.LegalPersonName,
 		IDCardValidTime:       idCardValidTime,
 		IDCardFrontCopy:       idCardFrontURL,
 		IDCardBackCopy:        idCardBackURL,
 		AccountType:           req.AccountType,
 		AccountBank:           req.AccountBank,
-		AccountBankCode:       pgtype.Int8{Int64: req.AccountBankCode, Valid: req.AccountBankCode > 0},
-		BankAlias:             pgtype.Text{String: req.BankAlias, Valid: req.BankAlias != ""},
-		BankAliasCode:         pgtype.Text{String: req.BankAliasCode, Valid: req.BankAliasCode != ""},
+		AccountBankCode:       req.AccountBankCode,
+		BankAlias:             req.BankAlias,
+		BankAliasCode:         req.BankAliasCode,
 		BankAddressCode:       req.BankAddressCode,
-		BankBranchID:          pgtype.Text{String: req.BankBranchID, Valid: req.BankBranchID != ""},
-		BankName:              pgtype.Text{String: req.BankName, Valid: req.BankName != ""},
-		AccountNumber:         encryptedAccountNumber, // AES 加密存储
+		BankBranchID:          req.BankBranchID,
+		BankName:              req.BankName,
+		AccountNumber:         encryptedAccountNumber,
 		AccountName:           req.AccountName,
 		ContactName:           resolvedContact.ContactName,
-		ContactIDCardNumber:   pgtype.Text{String: encryptedContactIDCardNumber, Valid: true}, // AES 加密存储
+		ContactIDCardNumber:   encryptedContactIDCardNumber,
 		MobilePhone:           contactPhone,
 		MerchantShortname:     merchant.Name,
-		Qualifications:        []byte("[]"),
-		BusinessAdditionPics:  []string{},
-		BusinessAdditionDesc:  pgtype.Text{},
-	})
+	}))
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("创建进件记录失败: %w", err)))
 		return
 	}
+	updateMerchantStatus := func(updateCtx context.Context, status string) error {
+		_, updateErr := server.store.UpdateMerchantStatus(updateCtx, db.UpdateMerchantStatusParams{
+			ID:     merchant.ID,
+			Status: status,
+		})
+		if updateErr != nil {
+			log.Error().Err(updateErr).Msg("更新商户状态失败")
+		}
+		return updateErr
+	}
 
 	// 检查是否配置了微信支付客户端
 	if server.ecommerceClient == nil {
-		// 没有配置微信客户端，仅保存记录，不提交微信
 		log.Warn().Msg("微信支付客户端未配置，跳过提交微信进件")
-
-		// 更新商户状态
-		_, err = server.store.UpdateMerchantStatus(ctx, db.UpdateMerchantStatusParams{
-			ID:     merchant.ID,
-			Status: "bindbank_submitted",
+		submissionResult, submitErr := logic.SubmitEcommerceApplyment(ctx, server.store, nil, updateMerchantStatus, logic.SubmitEcommerceApplymentInput{
+			Applyment: applyment,
 		})
-		if err != nil {
-			log.Error().Err(err).Msg("更新商户状态失败")
+		if submitErr != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, submitErr))
+			return
 		}
 
 		ctx.JSON(http.StatusOK, merchantBindBankResponse{
-			ApplymentID: applyment.ID,
-			Status:      "submitted",
-			Message:     "银行卡信息已保存，待人工处理",
+			ApplymentID: submissionResult.ApplymentID,
+			Status:      submissionResult.Status,
+			Message:     submissionResult.Message,
 		})
 		return
 	}
@@ -457,118 +428,63 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 	// ==================== 下载证件图片并上传到微信获取 MediaID ====================
 	idCardFrontMediaID := ""
 	if application.IDCardFrontMediaAssetID.Valid {
-		fname, fdata, dlErr := server.mediaRegistry.DownloadObject(ctx, application.IDCardFrontMediaAssetID.Int64)
-		if dlErr != nil {
-			log.Error().Err(dlErr).Msg("下载商户身份证正面失败")
+		idCardFrontMediaID, err = logic.UploadApplymentAsset(ctx, server.mediaRegistry, server.ecommerceClient, application.IDCardFrontMediaAssetID.Int64)
+		if err != nil {
+			log.Error().Err(err).Msg("下载商户身份证正面失败")
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("获取身份证图片失败")))
 			return
 		}
-		upResp, upErr := server.ecommerceClient.UploadImage(ctx, fname, fdata)
-		if upErr != nil {
-			log.Error().Err(upErr).Msg("上传商户身份证正面到微信失败")
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("上传证件图片失败")))
-			return
-		}
-		idCardFrontMediaID = upResp.MediaID
 	}
 
 	idCardBackMediaID := ""
 	if application.IDCardBackMediaAssetID.Valid {
-		fname, fdata, dlErr := server.mediaRegistry.DownloadObject(ctx, application.IDCardBackMediaAssetID.Int64)
-		if dlErr != nil {
-			log.Error().Err(dlErr).Msg("下载商户身份证背面失败")
+		idCardBackMediaID, err = logic.UploadApplymentAsset(ctx, server.mediaRegistry, server.ecommerceClient, application.IDCardBackMediaAssetID.Int64)
+		if err != nil {
+			log.Error().Err(err).Msg("下载商户身份证背面失败")
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("获取身份证图片失败")))
 			return
 		}
-		upResp, upErr := server.ecommerceClient.UploadImage(ctx, fname, fdata)
-		if upErr != nil {
-			log.Error().Err(upErr).Msg("上传商户身份证背面到微信失败")
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("上传证件图片失败")))
-			return
-		}
-		idCardBackMediaID = upResp.MediaID
 	}
 
 	var businessLicenseMediaID string
 	if application.BusinessLicenseMediaAssetID.Valid {
-		fname, fdata, dlErr := server.mediaRegistry.DownloadObject(ctx, application.BusinessLicenseMediaAssetID.Int64)
-		if dlErr != nil {
-			log.Error().Err(dlErr).Msg("下载商户营业执照失败")
+		businessLicenseMediaID, err = logic.UploadApplymentAsset(ctx, server.mediaRegistry, server.ecommerceClient, application.BusinessLicenseMediaAssetID.Int64)
+		if err != nil {
+			log.Error().Err(err).Msg("下载商户营业执照失败")
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("获取营业执照图片失败")))
 			return
 		}
-		upResp, upErr := server.ecommerceClient.UploadImage(ctx, fname, fdata)
-		if upErr != nil {
-			log.Error().Err(upErr).Msg("上传商户营业执照到微信失败")
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("上传证件图片失败")))
-			return
-		}
-		businessLicenseMediaID = upResp.MediaID
 	}
 
 	// ==================== 加密敏感信息（用于发送给微信） ====================
-	// 加密身份证姓名
-	wxEncryptedIDCardName, err := server.ecommerceClient.EncryptSensitiveData(application.LegalPersonName)
+	encryptedWechatFields, err := logic.EncryptApplymentWechatSensitiveFields(server.ecommerceClient, logic.ApplymentWechatSensitiveInput{
+		IDCardName:          application.LegalPersonName,
+		IDCardNumber:        application.LegalPersonIDNumber,
+		ContactName:         resolvedContact.ContactName,
+		ContactIDCardNumber: resolvedContact.ContactIDCardNumber,
+		AccountName:         req.AccountName,
+		AccountNumber:       req.AccountNumber,
+		MobilePhone:         contactPhone,
+	})
 	if err != nil {
-		log.Error().Err(err).Msg("加密身份证姓名失败")
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("加密敏感信息失败")))
-		return
-	}
-
-	// 加密身份证号码
-	wxEncryptedIDCardNumber, err := server.ecommerceClient.EncryptSensitiveData(application.LegalPersonIDNumber)
-	if err != nil {
-		log.Error().Err(err).Msg("加密身份证号码失败")
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("加密敏感信息失败")))
-		return
-	}
-
-	wxEncryptedContactName, err := server.ecommerceClient.EncryptSensitiveData(resolvedContact.ContactName)
-	if err != nil {
-		log.Error().Err(err).Msg("加密联系人姓名失败")
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("加密敏感信息失败")))
-		return
-	}
-
-	wxEncryptedContactIDCardNumber, err := server.ecommerceClient.EncryptSensitiveData(resolvedContact.ContactIDCardNumber)
-	if err != nil {
-		log.Error().Err(err).Msg("加密联系人身份证号码失败")
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("加密敏感信息失败")))
-		return
-	}
-
-	// 加密银行账户名
-	wxEncryptedAccountName, err := server.ecommerceClient.EncryptSensitiveData(req.AccountName)
-	if err != nil {
-		log.Error().Err(err).Msg("加密银行账户名失败")
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("加密敏感信息失败")))
-		return
-	}
-
-	// 加密银行账号
-	wxEncryptedAccountNumber, err := server.ecommerceClient.EncryptSensitiveData(req.AccountNumber)
-	if err != nil {
-		log.Error().Err(err).Msg("加密银行账号失败")
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("加密敏感信息失败")))
-		return
-	}
-
-	// 加密联系手机号
-	wxEncryptedMobilePhone, err := server.ecommerceClient.EncryptSensitiveData(contactPhone)
-	if err != nil {
-		log.Error().Err(err).Msg("加密联系手机号失败")
+		var encryptionErr *logic.ApplymentSensitiveEncryptionError
+		if errors.As(err, &encryptionErr) {
+			log.Error().Err(err).Str("field", encryptionErr.Field).Msg("加密敏感信息失败")
+		} else {
+			log.Error().Err(err).Msg("加密敏感信息失败")
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("加密敏感信息失败")))
 		return
 	}
 
 	// ==================== 构建微信进件请求 ====================
-	businessLicenseInfo := buildApplymentBusinessLicenseInfo(
+	businessLicenseInfo := logic.BuildApplymentBusinessLicenseInfo(
 		businessLicenseMediaID,
 		application.BusinessLicenseNumber,
 		application.MerchantName,
 		application.LegalPersonName,
 		application.BusinessAddress,
-		&businessLicenseOCR,
+		logic.ApplymentBusinessLicenseOCRInput{Address: businessLicenseOCR.Address, ValidPeriod: businessLicenseOCR.ValidPeriod},
 	)
 	storeName := strings.TrimSpace(application.MerchantName)
 	if storeName == "" {
@@ -600,89 +516,82 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 		return
 	}
 
-	contactInfo := buildWechatApplymentContactInfo(resolvedContact, wxEncryptedContactName, wxEncryptedContactIDCardNumber, wxEncryptedMobilePhone)
+	contactInfo := logic.BuildWechatApplymentContactInfo(logic.ApplymentWechatContactInput{
+		ContactType:             resolvedContact.ContactType,
+		ContactName:             encryptedWechatFields.ContactName,
+		ContactIDDocType:        resolvedContact.ContactIDDocType,
+		ContactIDCardNumber:     encryptedWechatFields.ContactIDCardNumber,
+		ContactIDDocPeriodBegin: resolvedContact.ContactIDDocPeriodBegin,
+		ContactIDDocPeriodEnd:   resolvedContact.ContactIDDocPeriodEnd,
+		MobilePhone:             encryptedWechatFields.MobilePhone,
+	})
 	if resolvedContact.requiresIdentityDocumentAssets() {
-		fname, fdata, dlErr := server.mediaRegistry.DownloadObject(ctx, resolvedContact.ContactIDDocCopyAssetID)
-		if dlErr != nil {
-			log.Error().Err(dlErr).Int64("asset_id", resolvedContact.ContactIDDocCopyAssetID).Msg("下载超级管理员身份证人像面失败")
+		contactInfo.ContactIDDocCopy, err = logic.UploadApplymentAsset(ctx, server.mediaRegistry, server.ecommerceClient, resolvedContact.ContactIDDocCopyAssetID)
+		if err != nil {
+			log.Error().Err(err).Int64("asset_id", resolvedContact.ContactIDDocCopyAssetID).Msg("下载超级管理员身份证人像面失败")
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("获取超级管理员证件图片失败")))
 			return
 		}
-		upResp, upErr := server.ecommerceClient.UploadImage(ctx, fname, fdata)
-		if upErr != nil {
-			log.Error().Err(upErr).Int64("asset_id", resolvedContact.ContactIDDocCopyAssetID).Msg("上传超级管理员身份证人像面到微信失败")
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("上传超级管理员证件图片失败")))
-			return
-		}
-		contactInfo.ContactIDDocCopy = upResp.MediaID
 
-		fname, fdata, dlErr = server.mediaRegistry.DownloadObject(ctx, resolvedContact.ContactIDDocCopyBackAssetID)
-		if dlErr != nil {
-			log.Error().Err(dlErr).Int64("asset_id", resolvedContact.ContactIDDocCopyBackAssetID).Msg("下载超级管理员身份证国徽面失败")
+		contactInfo.ContactIDDocCopyBack, err = logic.UploadApplymentAsset(ctx, server.mediaRegistry, server.ecommerceClient, resolvedContact.ContactIDDocCopyBackAssetID)
+		if err != nil {
+			log.Error().Err(err).Int64("asset_id", resolvedContact.ContactIDDocCopyBackAssetID).Msg("下载超级管理员身份证国徽面失败")
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("获取超级管理员证件图片失败")))
 			return
 		}
-		upResp, upErr = server.ecommerceClient.UploadImage(ctx, fname, fdata)
-		if upErr != nil {
-			log.Error().Err(upErr).Int64("asset_id", resolvedContact.ContactIDDocCopyBackAssetID).Msg("上传超级管理员身份证国徽面到微信失败")
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("上传超级管理员证件图片失败")))
-			return
-		}
-		contactInfo.ContactIDDocCopyBack = upResp.MediaID
 	}
 
-	applymentReq := &wechat.EcommerceApplymentRequest{
-		OutRequestNo:       outRequestNo,
-		OrganizationType:   organizationType,
-		FinanceInstitution: false,
-		BusinessLicense:    businessLicenseInfo,
-		MerchantShortname:  merchant.Name,
+	applymentReq := logic.BuildWechatApplymentRequest(logic.ApplymentWechatRequestInput{
+		OutRequestNo:      outRequestNo,
+		OrganizationType:  organizationType,
+		BusinessLicense:   businessLicenseInfo,
+		MerchantShortname: merchant.Name,
 		IDCardInfo: &wechat.ApplymentIDCardInfo{
 			IDCardCopy:           idCardFrontMediaID,
 			IDCardNational:       idCardBackMediaID,
-			IDCardName:           wxEncryptedIDCardName,
-			IDCardNumber:         wxEncryptedIDCardNumber,
+			IDCardName:           encryptedWechatFields.IDCardName,
+			IDCardNumber:         encryptedWechatFields.IDCardNumber,
 			IDCardValidTimeBegin: idCardValidTimeBegin,
 			IDCardValidTime:      idCardValidTime,
 		},
-		AccountInfo: req.toWechatAccountInfo(wxEncryptedAccountName, wxEncryptedAccountNumber),
-		ContactInfo: contactInfo,
-		SalesSceneInfo: &wechat.ApplymentSalesSceneInfo{
-			StoreName:   storeName,
-			StoreQRCode: storeQRCodeUploadResp.MediaID,
+		AccountInfo: logic.ApplymentWechatAccountInput{
+			AccountType:     req.AccountType,
+			AccountBank:     req.AccountBank,
+			AccountBankCode: req.AccountBankCode,
+			AccountName:     encryptedWechatFields.AccountName,
+			BankAddressCode: req.BankAddressCode,
+			BankBranchID:    req.BankBranchID,
+			BankName:        req.BankName,
+			AccountNumber:   encryptedWechatFields.AccountNumber,
 		},
-	}
+		ContactInfo: logic.ApplymentWechatContactInput{
+			ContactType:             contactInfo.ContactType,
+			ContactName:             contactInfo.ContactName,
+			ContactIDDocType:        contactInfo.ContactIDDocType,
+			ContactIDCardNumber:     contactInfo.ContactIDCardNumber,
+			ContactIDDocPeriodBegin: contactInfo.ContactIDDocPeriodBegin,
+			ContactIDDocPeriodEnd:   contactInfo.ContactIDDocPeriodEnd,
+			ContactIDDocCopy:        contactInfo.ContactIDDocCopy,
+			ContactIDDocCopyBack:    contactInfo.ContactIDDocCopyBack,
+			MobilePhone:             contactInfo.MobilePhone,
+		},
+		StoreName:   storeName,
+		StoreQRCode: storeQRCodeUploadResp.MediaID,
+	})
 
-	// 提交微信进件
-	resp, err := server.ecommerceClient.CreateEcommerceApplyment(ctx, applymentReq)
+	submissionResult, err := logic.SubmitEcommerceApplyment(ctx, server.store, server.ecommerceClient, updateMerchantStatus, logic.SubmitEcommerceApplymentInput{
+		Applyment:     applyment,
+		WechatRequest: applymentReq,
+	})
 	if err != nil {
-		log.Error().Err(err).Msg("提交微信进件失败")
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("提交微信开户失败: %w", err)))
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	// 更新进件记录状态
-	_, err = server.store.UpdateEcommerceApplymentToSubmitted(ctx, db.UpdateEcommerceApplymentToSubmittedParams{
-		ID:          applyment.ID,
-		ApplymentID: pgtype.Int8{Int64: resp.ApplymentID, Valid: true},
-	})
-	if err != nil {
-		log.Error().Err(err).Msg("更新进件状态失败")
-	}
-
-	// 更新商户状态为 bindbank_submitted
-	_, err = server.store.UpdateMerchantStatus(ctx, db.UpdateMerchantStatusParams{
-		ID:     merchant.ID,
-		Status: "bindbank_submitted",
-	})
-	if err != nil {
-		log.Error().Err(err).Msg("更新商户状态失败")
-	}
-
 	ctx.JSON(http.StatusOK, merchantBindBankResponse{
-		ApplymentID: resp.ApplymentID,
-		Status:      "submitted",
-		Message:     "开户申请已提交，请等待微信审核（通常1-3个工作日）",
+		ApplymentID: submissionResult.ApplymentID,
+		Status:      submissionResult.Status,
+		Message:     submissionResult.Message,
 	})
 }
 
@@ -762,13 +671,37 @@ func buildApplymentAccountValidationResponse(validation *wechat.EcommerceApplyme
 	}
 }
 
-func isApplymentPendingSubmissionStatus(status string) bool {
-	switch strings.TrimSpace(status) {
-	case "submitted", "checking", "auditing", "account_need_verify", "to_be_confirmed", "to_be_signed", "signing":
-		return true
-	default:
-		return false
+func shouldQueryApplymentRemoteStatus(applyment db.EcommerceApplyment, subjectStatus string) bool {
+	normalizedStatus := normalizeApplymentStatus(applyment.Status, applyment.SubMchID.Valid && strings.TrimSpace(applyment.SubMchID.String) != "")
+	return logic.IsApplymentSubmissionInFlight(normalizedStatus, subjectStatus, applyment.OutRequestNo)
+}
+
+func (server *Server) queryEcommerceApplymentStatus(ctx context.Context, applyment db.EcommerceApplyment) (*wechat.EcommerceApplymentQueryResponse, error) {
+	if server.ecommerceClient == nil {
+		return nil, fmt.Errorf("ecommerce client not configured")
 	}
+
+	if applyment.ApplymentID.Valid {
+		resp, err := server.ecommerceClient.QueryEcommerceApplymentByID(ctx, applyment.ApplymentID.Int64)
+		if err == nil {
+			return resp, nil
+		}
+		if strings.TrimSpace(applyment.OutRequestNo) == "" {
+			return nil, err
+		}
+
+		log.Warn().Err(err).
+			Int64("applyment_id", applyment.ID).
+			Int64("wechat_applyment_id", applyment.ApplymentID.Int64).
+			Str("out_request_no", applyment.OutRequestNo).
+			Msg("query applyment by id failed, fallback to out_request_no")
+	}
+
+	if strings.TrimSpace(applyment.OutRequestNo) == "" {
+		return nil, fmt.Errorf("applyment out_request_no is empty")
+	}
+
+	return server.ecommerceClient.QueryEcommerceApplymentByOutRequestNo(ctx, applyment.OutRequestNo)
 }
 
 func buildApplymentText(value string) pgtype.Text {
@@ -838,12 +771,19 @@ func (server *Server) getMerchantApplymentStatus(ctx *gin.Context) {
 	var remoteAccountValidation *applymentAccountValidationResponse
 	decryptor := resolveApplymentSensitiveDecryptor(server.ecommerceClient)
 
-	// 如果有微信申请单号且客户端可用，查询最新状态
-	if applyment.ApplymentID.Valid && server.ecommerceClient != nil {
-		wxResp, err := server.ecommerceClient.QueryEcommerceApplymentByID(ctx, applyment.ApplymentID.Int64)
+	// 进件处理中时优先查询微信实时状态；若本地丢失 applyment_id，则回退到 out_request_no。
+	if server.ecommerceClient != nil && shouldQueryApplymentRemoteStatus(applyment, merchant.Status) {
+		wxResp, err := server.queryEcommerceApplymentStatus(ctx, applyment)
 		if err != nil {
-			log.Error().Err(err).Msg("查询微信进件状态失败")
+			log.Error().Err(err).
+				Int64("applyment_id", applyment.ID).
+				Str("out_request_no", applyment.OutRequestNo).
+				Msg("查询微信进件状态失败")
 		} else {
+			if !applyment.ApplymentID.Valid && wxResp.ApplymentID > 0 {
+				applyment.ApplymentID = pgtype.Int8{Int64: wxResp.ApplymentID, Valid: true}
+			}
+
 			updateStatus := mapWechatApplymentStatus(wxResp.ApplymentState)
 			nextRejectReason := getRejectReasonFromAuditDetail(wxResp.AuditDetail)
 			nextSignURL := buildApplymentText(wxResp.SignURL)
@@ -932,32 +872,6 @@ func (server *Server) getMerchantApplymentStatus(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, resp)
-}
-
-func parseIDCardValidPeriod(validDate string) (string, string) {
-	begin, end := parseApplymentDateRange(validDate)
-	if begin == "" && end == "" {
-		return "", "长期"
-	}
-	return begin, end
-}
-
-func parseOperatorIDCardValidPeriod(ocr OperatorIDCardBackOCR) (string, string) {
-	start := normalizeApplymentDate(ocr.ValidStart)
-	end := normalizeApplymentDate(ocr.ValidEnd)
-	if start != "" && end != "" {
-		return start, end
-	}
-
-	if begin, rangedEnd := parseApplymentDateRange(ocr.ValidEnd); begin != "" || rangedEnd != "" {
-		return begin, rangedEnd
-	}
-
-	if begin, rangedEnd := parseApplymentDateRange(ocr.ValidStart); begin != "" || rangedEnd != "" {
-		return begin, rangedEnd
-	}
-
-	return start, end
 }
 
 func parseApplymentDateRange(raw string) (string, string) {
@@ -1083,89 +997,6 @@ func normalizeApplymentDate(raw string) string {
 	}
 
 	return normalized
-}
-
-func buildApplymentBusinessLicenseInfo(copyMediaID, businessLicenseNumber, merchantName, legalPerson, fallbackAddress string, ocr *BusinessLicenseOCRData) *wechat.BusinessLicenseInfo {
-	if copyMediaID == "" {
-		return nil
-	}
-
-	info := &wechat.BusinessLicenseInfo{
-		BusinessLicenseCopy:   copyMediaID,
-		BusinessLicenseNumber: businessLicenseNumber,
-		MerchantName:          merchantName,
-		LegalPerson:           legalPerson,
-	}
-
-	if ocr != nil {
-		if address := strings.TrimSpace(ocr.Address); address != "" {
-			info.CompanyAddress = address
-		}
-		if businessTime := buildApplymentBusinessTime(ocr.ValidPeriod); businessTime != "" {
-			info.BusinessTime = businessTime
-		}
-	}
-
-	if info.CompanyAddress == "" {
-		info.CompanyAddress = strings.TrimSpace(fallbackAddress)
-	}
-
-	return info
-}
-
-func buildApplymentBusinessTime(validPeriod string) string {
-	trimmed := strings.TrimSpace(validPeriod)
-	if trimmed == "" || trimmed == "长期" {
-		return ""
-	}
-
-	start, end := parseApplymentDateRange(trimmed)
-	if start == "" || end == "" {
-		return ""
-	}
-
-	return fmt.Sprintf("[\"%s\",\"%s\"]", start, end)
-}
-
-func buildApplymentStoreURL(config util.Config) string {
-	if base := strings.TrimSpace(config.WebBaseURL); base != "" {
-		return strings.TrimRight(base, "/")
-	}
-	if base := strings.TrimSpace(config.ExternalBaseURL); base != "" {
-		return strings.TrimRight(base, "/")
-	}
-	return ""
-}
-
-func resolveApplymentOrganizationType(businessLicenseNumber, licenseType, subjectName, defaultLicensedType string) string {
-	if strings.TrimSpace(businessLicenseNumber) == "" {
-		return "2401"
-	}
-
-	trimmedType := strings.TrimSpace(licenseType)
-	switch {
-	case strings.Contains(trimmedType, "个体"):
-		return "4"
-	case strings.Contains(trimmedType, "事业单位"):
-		return "3"
-	case strings.Contains(trimmedType, "政府"):
-		return "2502"
-	case strings.Contains(trimmedType, "社会组织"), strings.Contains(trimmedType, "社会团体"), strings.Contains(trimmedType, "基金会"), strings.Contains(trimmedType, "民办非企业"), strings.Contains(trimmedType, "基层群众性自治组织"), strings.Contains(trimmedType, "农村集体经济组织"):
-		return "1708"
-	case strings.Contains(trimmedType, "公司"), strings.Contains(trimmedType, "企业"), strings.Contains(trimmedType, "合伙"), strings.Contains(trimmedType, "股份"):
-		return "2"
-	}
-
-	trimmedName := strings.TrimSpace(subjectName)
-	if strings.Contains(trimmedName, "公司") || strings.Contains(trimmedName, "有限") {
-		return "2"
-	}
-
-	if defaultLicensedType != "" {
-		return defaultLicensedType
-	}
-
-	return "4"
 }
 
 func isMerchantApplymentOrganizationTypeSupported(organizationType string) bool {
@@ -1344,25 +1175,25 @@ func (server *Server) operatorBindBank(ctx *gin.Context) {
 	}
 
 	// 检查运营商状态：已入驻（active）或绑卡进件进行中（bindbank_submitted）均可提交/重新提交绑卡
-	if operator.Status != "active" && operator.Status != "bindbank_submitted" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("invalid operator status: %s", operator.Status)))
-		return
-	}
-
 	// 检查是否已有进行中的进件申请
 	existingApplyment, err := server.store.GetLatestEcommerceApplymentBySubject(ctx, db.GetLatestEcommerceApplymentBySubjectParams{
 		SubjectType: "operator",
 		SubjectID:   operator.ID,
 	})
+	var existingOperatorApplyment *db.EcommerceApplyment
 	if err == nil {
-		if isApplymentPendingSubmissionStatus(existingApplyment.Status) {
+		existingOperatorApplyment = &existingApplyment
+	}
+	if validateErr := logic.ValidateOperatorApplymentSubmissionState(operator.Status, existingOperatorApplyment); validateErr != nil {
+		switch {
+		case errors.Is(validateErr, logic.ErrApplymentSubmissionPending):
 			ctx.JSON(http.StatusBadRequest, errorResponse(ErrAccountApplymentPending))
-			return
-		}
-		if existingApplyment.Status == "finish" {
+		case errors.Is(validateErr, logic.ErrApplymentAlreadyRegistered):
 			ctx.JSON(http.StatusBadRequest, errorResponse(ErrAccountAlreadyRegistered))
-			return
+		default:
+			ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("invalid operator status: %s", operator.Status)))
 		}
+		return
 	}
 
 	// 获取运营商审核通过的申请信息（包含营业执照、身份证等OCR数据）
@@ -1421,7 +1252,7 @@ func (server *Server) operatorBindBank(ctx *gin.Context) {
 		return
 	}
 
-	idCardValidTimeBegin, idCardValidTime := parseOperatorIDCardValidPeriod(idCardBackOCR)
+	idCardValidTimeBegin, idCardValidTime := logic.ParseApplymentOperatorIDCardValidPeriod(idCardBackOCR.ValidStart, idCardBackOCR.ValidEnd)
 	if idCardValidTime == "" {
 		idCardValidTime = "长期"
 	}
@@ -1449,7 +1280,7 @@ func (server *Server) operatorBindBank(ctx *gin.Context) {
 
 	// 生成业务申请编号
 	outRequestNo := fmt.Sprintf("O%d%d", operator.ID, time.Now().Unix())
-	organizationType := resolveApplymentOrganizationType(
+	organizationType := logic.ResolveApplymentOrganizationType(
 		businessLicenseNumber,
 		businessLicenseOCR.TypeOfEnterprise,
 		operatorName,
@@ -1486,13 +1317,13 @@ func (server *Server) operatorBindBank(ctx *gin.Context) {
 	}
 
 	// 创建进件记录
-	applyment, err := server.store.CreateEcommerceApplyment(ctx, db.CreateEcommerceApplymentParams{
+	applyment, err := server.store.CreateEcommerceApplyment(ctx, logic.BuildCreateEcommerceApplymentParams(logic.ApplymentLocalRecordInput{
 		SubjectType:           "operator",
 		SubjectID:             operator.ID,
 		OutRequestNo:          outRequestNo,
 		OrganizationType:      organizationType,
-		BusinessLicenseNumber: pgtype.Text{String: businessLicenseNumber, Valid: businessLicenseNumber != ""},
-		BusinessLicenseCopy:   pgtype.Text{String: businessLicenseURL, Valid: businessLicenseURL != ""},
+		BusinessLicenseNumber: businessLicenseNumber,
+		BusinessLicenseCopy:   businessLicenseURL,
 		MerchantName:          operatorName,
 		LegalPerson:           legalPersonName,
 		IDCardNumber:          encryptedIDCardNumber,
@@ -1502,38 +1333,48 @@ func (server *Server) operatorBindBank(ctx *gin.Context) {
 		IDCardBackCopy:        idCardBackURL,
 		AccountType:           req.AccountType,
 		AccountBank:           req.AccountBank,
-		AccountBankCode:       pgtype.Int8{Int64: req.AccountBankCode, Valid: req.AccountBankCode > 0},
-		BankAlias:             pgtype.Text{String: req.BankAlias, Valid: req.BankAlias != ""},
-		BankAliasCode:         pgtype.Text{String: req.BankAliasCode, Valid: req.BankAliasCode != ""},
+		AccountBankCode:       req.AccountBankCode,
+		BankAlias:             req.BankAlias,
+		BankAliasCode:         req.BankAliasCode,
 		BankAddressCode:       req.BankAddressCode,
-		BankBranchID:          pgtype.Text{String: req.BankBranchID, Valid: req.BankBranchID != ""},
-		BankName:              pgtype.Text{String: req.BankName, Valid: req.BankName != ""},
+		BankBranchID:          req.BankBranchID,
+		BankName:              req.BankName,
 		AccountNumber:         encryptedAccountNumber,
 		AccountName:           req.AccountName,
 		ContactName:           resolvedContact.ContactName,
-		ContactIDCardNumber:   pgtype.Text{String: encryptedContactIDCardNumber, Valid: true},
+		ContactIDCardNumber:   encryptedContactIDCardNumber,
 		MobilePhone:           contactPhone,
 		MerchantShortname:     operatorName,
-		Qualifications:        []byte("[]"),
-		BusinessAdditionPics:  []string{},
-		BusinessAdditionDesc:  pgtype.Text{},
-	})
+	}))
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("创建进件记录失败: %w", err)))
 		return
 	}
+	updateOperatorStatus := func(updateCtx context.Context, status string) error {
+		_, updateErr := server.store.UpdateOperatorStatus(updateCtx, db.UpdateOperatorStatusParams{
+			ID:     operator.ID,
+			Status: status,
+		})
+		if updateErr != nil {
+			log.Error().Err(updateErr).Msg("更新运营商状态失败")
+		}
+		return updateErr
+	}
 
 	if server.ecommerceClient == nil {
 		log.Warn().Msg("微信支付客户端未配置，跳过提交微信进件")
-		_, _ = server.store.UpdateOperatorStatus(ctx, db.UpdateOperatorStatusParams{
-			ID:     operator.ID,
-			Status: "bindbank_submitted",
+		submissionResult, submitErr := logic.SubmitEcommerceApplyment(ctx, server.store, nil, updateOperatorStatus, logic.SubmitEcommerceApplymentInput{
+			Applyment: applyment,
 		})
+		if submitErr != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, submitErr))
+			return
+		}
 
 		ctx.JSON(http.StatusOK, operatorBindBankResponse{
-			ApplymentID: applyment.ID,
-			Status:      "submitted",
-			Message:     "银行卡信息已保存，待人工处理",
+			ApplymentID: submissionResult.ApplymentID,
+			Status:      submissionResult.Status,
+			Message:     submissionResult.Message,
 		})
 		return
 	}
@@ -1541,205 +1382,146 @@ func (server *Server) operatorBindBank(ctx *gin.Context) {
 	// ==================== 下载证件图片并上传到微信获取 MediaID ====================
 	idCardFrontMediaID := ""
 	if application.IDCardFrontMediaAssetID.Valid {
-		fname, fdata, dlErr := server.mediaRegistry.DownloadObject(ctx, application.IDCardFrontMediaAssetID.Int64)
-		if dlErr != nil {
-			log.Error().Err(dlErr).Msg("下载运营商身份证正面失败")
+		idCardFrontMediaID, err = logic.UploadApplymentAsset(ctx, server.mediaRegistry, server.ecommerceClient, application.IDCardFrontMediaAssetID.Int64)
+		if err != nil {
+			log.Error().Err(err).Msg("下载运营商身份证正面失败")
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("获取身份证图片失败")))
 			return
 		}
-		upResp, upErr := server.ecommerceClient.UploadImage(ctx, fname, fdata)
-		if upErr != nil {
-			log.Error().Err(upErr).Msg("上传运营商身份证正面到微信失败")
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("上传证件图片失败")))
-			return
-		}
-		idCardFrontMediaID = upResp.MediaID
 	}
 
 	idCardBackMediaID := ""
 	if application.IDCardBackMediaAssetID.Valid {
-		fname, fdata, dlErr := server.mediaRegistry.DownloadObject(ctx, application.IDCardBackMediaAssetID.Int64)
-		if dlErr != nil {
-			log.Error().Err(dlErr).Msg("下载运营商身份证背面失败")
+		idCardBackMediaID, err = logic.UploadApplymentAsset(ctx, server.mediaRegistry, server.ecommerceClient, application.IDCardBackMediaAssetID.Int64)
+		if err != nil {
+			log.Error().Err(err).Msg("下载运营商身份证背面失败")
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("获取身份证图片失败")))
 			return
 		}
-		upResp, upErr := server.ecommerceClient.UploadImage(ctx, fname, fdata)
-		if upErr != nil {
-			log.Error().Err(upErr).Msg("上传运营商身份证背面到微信失败")
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("上传证件图片失败")))
-			return
-		}
-		idCardBackMediaID = upResp.MediaID
 	}
 
 	var businessLicenseMediaID string
 	if application.BusinessLicenseMediaAssetID.Valid {
-		fname, fdata, dlErr := server.mediaRegistry.DownloadObject(ctx, application.BusinessLicenseMediaAssetID.Int64)
-		if dlErr != nil {
-			log.Error().Err(dlErr).Msg("下载运营商营业执照失败")
+		businessLicenseMediaID, err = logic.UploadApplymentAsset(ctx, server.mediaRegistry, server.ecommerceClient, application.BusinessLicenseMediaAssetID.Int64)
+		if err != nil {
+			log.Error().Err(err).Msg("下载运营商营业执照失败")
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("获取营业执照图片失败")))
 			return
 		}
-		upResp, upErr := server.ecommerceClient.UploadImage(ctx, fname, fdata)
-		if upErr != nil {
-			log.Error().Err(upErr).Msg("上传运营商营业执照到微信失败")
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("上传证件图片失败")))
-			return
-		}
-		businessLicenseMediaID = upResp.MediaID
 	}
 
 	// ==================== 加密敏感信息（用于发送给微信） ====================
-	// 加密身份证姓名
-	wxEncryptedIDCardName, err := server.ecommerceClient.EncryptSensitiveData(legalPersonName)
+	encryptedWechatFields, err := logic.EncryptApplymentWechatSensitiveFields(server.ecommerceClient, logic.ApplymentWechatSensitiveInput{
+		IDCardName:          legalPersonName,
+		IDCardNumber:        legalPersonIDNumber,
+		ContactName:         resolvedContact.ContactName,
+		ContactIDCardNumber: resolvedContact.ContactIDCardNumber,
+		AccountName:         req.AccountName,
+		AccountNumber:       req.AccountNumber,
+		MobilePhone:         contactPhone,
+	})
 	if err != nil {
-		log.Error().Err(err).Msg("加密运营商身份证姓名失败")
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("加密敏感信息失败")))
-		return
-	}
-
-	// 加密身份证号码
-	wxEncryptedIDCardNumber, err := server.ecommerceClient.EncryptSensitiveData(legalPersonIDNumber)
-	if err != nil {
-		log.Error().Err(err).Msg("加密运营商身份证号码失败")
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("加密敏感信息失败")))
-		return
-	}
-
-	wxEncryptedContactName, err := server.ecommerceClient.EncryptSensitiveData(resolvedContact.ContactName)
-	if err != nil {
-		log.Error().Err(err).Msg("加密运营商联系人姓名失败")
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("加密敏感信息失败")))
-		return
-	}
-
-	wxEncryptedContactIDCardNumber, err := server.ecommerceClient.EncryptSensitiveData(resolvedContact.ContactIDCardNumber)
-	if err != nil {
-		log.Error().Err(err).Msg("加密运营商联系人身份证号码失败")
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("加密敏感信息失败")))
-		return
-	}
-
-	// 加密银行账户名
-	wxEncryptedAccountName, err := server.ecommerceClient.EncryptSensitiveData(req.AccountName)
-	if err != nil {
-		log.Error().Err(err).Msg("加密运营商银行账户名失败")
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("加密敏感信息失败")))
-		return
-	}
-
-	// 加密银行账号
-	wxEncryptedAccountNumber, err := server.ecommerceClient.EncryptSensitiveData(req.AccountNumber)
-	if err != nil {
-		log.Error().Err(err).Msg("加密运营商银行账号失败")
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("加密敏感信息失败")))
-		return
-	}
-
-	// 加密联系手机号
-	wxEncryptedMobilePhone, err := server.ecommerceClient.EncryptSensitiveData(contactPhone)
-	if err != nil {
-		log.Error().Err(err).Msg("加密运营商联系手机号失败")
+		var encryptionErr *logic.ApplymentSensitiveEncryptionError
+		if errors.As(err, &encryptionErr) {
+			log.Error().Err(err).Str("field", encryptionErr.Field).Msg("加密敏感信息失败")
+		} else {
+			log.Error().Err(err).Msg("加密敏感信息失败")
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("加密敏感信息失败")))
 		return
 	}
 
 	// ==================== 构建微信进件请求 ====================
-	businessLicenseInfo := buildApplymentBusinessLicenseInfo(
+	businessLicenseInfo := logic.BuildApplymentBusinessLicenseInfo(
 		businessLicenseMediaID,
 		businessLicenseNumber,
 		operatorName,
 		legalPersonName,
 		"",
-		&businessLicenseOCR,
+		logic.ApplymentBusinessLicenseOCRInput{Address: businessLicenseOCR.Address, ValidPeriod: businessLicenseOCR.ValidPeriod},
 	)
-	storeURL := buildApplymentStoreURL(server.config)
+	storeURL := logic.BuildApplymentStoreURL(server.config.WebBaseURL, server.config.ExternalBaseURL)
 	if storeURL == "" {
 		ctx.JSON(http.StatusBadRequest, errorResponse(ErrApplymentWebSceneDomainRequired))
 		return
 	}
 
-	contactInfo := buildWechatApplymentContactInfo(resolvedContact, wxEncryptedContactName, wxEncryptedContactIDCardNumber, wxEncryptedMobilePhone)
+	contactInfo := logic.BuildWechatApplymentContactInfo(logic.ApplymentWechatContactInput{
+		ContactType:             resolvedContact.ContactType,
+		ContactName:             encryptedWechatFields.ContactName,
+		ContactIDDocType:        resolvedContact.ContactIDDocType,
+		ContactIDCardNumber:     encryptedWechatFields.ContactIDCardNumber,
+		ContactIDDocPeriodBegin: resolvedContact.ContactIDDocPeriodBegin,
+		ContactIDDocPeriodEnd:   resolvedContact.ContactIDDocPeriodEnd,
+		MobilePhone:             encryptedWechatFields.MobilePhone,
+	})
 	if resolvedContact.requiresIdentityDocumentAssets() {
-		fname, fdata, dlErr := server.mediaRegistry.DownloadObject(ctx, resolvedContact.ContactIDDocCopyAssetID)
-		if dlErr != nil {
-			log.Error().Err(dlErr).Int64("asset_id", resolvedContact.ContactIDDocCopyAssetID).Msg("下载运营商超级管理员身份证人像面失败")
+		contactInfo.ContactIDDocCopy, err = logic.UploadApplymentAsset(ctx, server.mediaRegistry, server.ecommerceClient, resolvedContact.ContactIDDocCopyAssetID)
+		if err != nil {
+			log.Error().Err(err).Int64("asset_id", resolvedContact.ContactIDDocCopyAssetID).Msg("下载运营商超级管理员身份证人像面失败")
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("获取超级管理员证件图片失败")))
 			return
 		}
-		upResp, upErr := server.ecommerceClient.UploadImage(ctx, fname, fdata)
-		if upErr != nil {
-			log.Error().Err(upErr).Int64("asset_id", resolvedContact.ContactIDDocCopyAssetID).Msg("上传运营商超级管理员身份证人像面到微信失败")
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("上传超级管理员证件图片失败")))
-			return
-		}
-		contactInfo.ContactIDDocCopy = upResp.MediaID
 
-		fname, fdata, dlErr = server.mediaRegistry.DownloadObject(ctx, resolvedContact.ContactIDDocCopyBackAssetID)
-		if dlErr != nil {
-			log.Error().Err(dlErr).Int64("asset_id", resolvedContact.ContactIDDocCopyBackAssetID).Msg("下载运营商超级管理员身份证国徽面失败")
+		contactInfo.ContactIDDocCopyBack, err = logic.UploadApplymentAsset(ctx, server.mediaRegistry, server.ecommerceClient, resolvedContact.ContactIDDocCopyBackAssetID)
+		if err != nil {
+			log.Error().Err(err).Int64("asset_id", resolvedContact.ContactIDDocCopyBackAssetID).Msg("下载运营商超级管理员身份证国徽面失败")
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("获取超级管理员证件图片失败")))
 			return
 		}
-		upResp, upErr = server.ecommerceClient.UploadImage(ctx, fname, fdata)
-		if upErr != nil {
-			log.Error().Err(upErr).Int64("asset_id", resolvedContact.ContactIDDocCopyBackAssetID).Msg("上传运营商超级管理员身份证国徽面到微信失败")
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("上传超级管理员证件图片失败")))
-			return
-		}
-		contactInfo.ContactIDDocCopyBack = upResp.MediaID
 	}
 
-	applymentReq := &wechat.EcommerceApplymentRequest{
-		OutRequestNo:       outRequestNo,
-		OrganizationType:   organizationType,
-		FinanceInstitution: false,
-		BusinessLicense:    businessLicenseInfo,
-		MerchantShortname:  operatorName,
+	applymentReq := logic.BuildWechatApplymentRequest(logic.ApplymentWechatRequestInput{
+		OutRequestNo:      outRequestNo,
+		OrganizationType:  organizationType,
+		BusinessLicense:   businessLicenseInfo,
+		MerchantShortname: operatorName,
 		IDCardInfo: &wechat.ApplymentIDCardInfo{
 			IDCardCopy:           idCardFrontMediaID,
 			IDCardNational:       idCardBackMediaID,
-			IDCardName:           wxEncryptedIDCardName,
-			IDCardNumber:         wxEncryptedIDCardNumber,
+			IDCardName:           encryptedWechatFields.IDCardName,
+			IDCardNumber:         encryptedWechatFields.IDCardNumber,
 			IDCardValidTimeBegin: idCardValidTimeBegin,
 			IDCardValidTime:      idCardValidTime,
 		},
-		AccountInfo: req.toWechatAccountInfo(wxEncryptedAccountName, wxEncryptedAccountNumber),
-		ContactInfo: contactInfo,
-		SalesSceneInfo: &wechat.ApplymentSalesSceneInfo{
-			StoreName: operatorName,
-			StoreURL:  storeURL,
+		AccountInfo: logic.ApplymentWechatAccountInput{
+			AccountType:     req.AccountType,
+			AccountBank:     req.AccountBank,
+			AccountBankCode: req.AccountBankCode,
+			AccountName:     encryptedWechatFields.AccountName,
+			BankAddressCode: req.BankAddressCode,
+			BankBranchID:    req.BankBranchID,
+			BankName:        req.BankName,
+			AccountNumber:   encryptedWechatFields.AccountNumber,
 		},
-	}
+		ContactInfo: logic.ApplymentWechatContactInput{
+			ContactType:             contactInfo.ContactType,
+			ContactName:             contactInfo.ContactName,
+			ContactIDDocType:        contactInfo.ContactIDDocType,
+			ContactIDCardNumber:     contactInfo.ContactIDCardNumber,
+			ContactIDDocPeriodBegin: contactInfo.ContactIDDocPeriodBegin,
+			ContactIDDocPeriodEnd:   contactInfo.ContactIDDocPeriodEnd,
+			ContactIDDocCopy:        contactInfo.ContactIDDocCopy,
+			ContactIDDocCopyBack:    contactInfo.ContactIDDocCopyBack,
+			MobilePhone:             contactInfo.MobilePhone,
+		},
+		StoreName: operatorName,
+		StoreURL:  storeURL,
+	})
 
-	// 提交微信进件
-	resp, err := server.ecommerceClient.CreateEcommerceApplyment(ctx, applymentReq)
+	submissionResult, err := logic.SubmitEcommerceApplyment(ctx, server.store, server.ecommerceClient, updateOperatorStatus, logic.SubmitEcommerceApplymentInput{
+		Applyment:     applyment,
+		WechatRequest: applymentReq,
+	})
 	if err != nil {
-		log.Error().Err(err).Msg("提交微信运营商进件失败")
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("提交微信开户失败: %w", err)))
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	// 更新进件记录状态
-	_, err = server.store.UpdateEcommerceApplymentToSubmitted(ctx, db.UpdateEcommerceApplymentToSubmittedParams{
-		ID:          applyment.ID,
-		ApplymentID: pgtype.Int8{Int64: resp.ApplymentID, Valid: true},
-	})
-	if err != nil {
-		log.Error().Err(err).Msg("更新运营商进件状态失败")
-	}
-
-	// 更新运营商状态
-	_, _ = server.store.UpdateOperatorStatus(ctx, db.UpdateOperatorStatusParams{
-		ID:     operator.ID,
-		Status: "bindbank_submitted",
-	})
-
 	ctx.JSON(http.StatusOK, operatorBindBankResponse{
-		ApplymentID: resp.ApplymentID,
-		Status:      "submitted",
-		Message:     "开户申请已提交，请等待微信审核（通常1-3个工作日）",
+		ApplymentID: submissionResult.ApplymentID,
+		Status:      submissionResult.Status,
+		Message:     submissionResult.Message,
 	})
 }
 
@@ -1858,56 +1640,62 @@ func (server *Server) getOperatorApplymentStatus(ctx *gin.Context) {
 	var remoteAccountValidation *applymentAccountValidationResponse
 	decryptor := resolveApplymentSensitiveDecryptor(server.ecommerceClient)
 
-	// 如果状态是已提交且配置了微信客户端，尝试查询微信最新状态
-	if applyment.ApplymentID.Valid && server.ecommerceClient != nil {
-		if applyment.Status == "submitted" || applyment.Status == "checking" || applyment.Status == "auditing" ||
-			applyment.Status == "account_need_verify" || applyment.Status == "to_be_confirmed" ||
-			applyment.Status == "to_be_signed" || applyment.Status == "signing" {
-			wxResp, err := server.ecommerceClient.QueryEcommerceApplymentByID(ctx, applyment.ApplymentID.Int64)
-			if err == nil {
-				newStatus := mapWechatApplymentStatus(wxResp.ApplymentState)
-				nextRejectReason := getRejectReasonFromAuditDetail(wxResp.AuditDetail)
-				nextSignURL := buildApplymentText(wxResp.SignURL)
-				nextSignState := buildApplymentText(wxResp.SignState)
-				nextSubMchID := buildApplymentText(wxResp.SubMchID)
-				if newStatus == "rejected" || newStatus == "canceled" {
-					_, _ = server.store.UpdateOperatorStatus(ctx, db.UpdateOperatorStatusParams{
-						ID:     operator.ID,
-						Status: "active",
-					})
-				}
-				if newStatus != applyment.Status ||
-					applymentTextChanged(applyment.RejectReason, nextRejectReason) ||
-					applymentTextChanged(applyment.SignUrl, nextSignURL) ||
-					applymentTextChanged(applyment.SignState, nextSignState) ||
-					applymentTextChanged(applyment.SubMchID, nextSubMchID) {
-					_, _ = server.store.UpdateEcommerceApplymentStatus(ctx, db.UpdateEcommerceApplymentStatusParams{
-						ID:           applyment.ID,
-						Status:       newStatus,
-						RejectReason: nextRejectReason,
-						SignUrl:      nextSignURL,
-						SignState:    nextSignState,
-						SubMchID:     nextSubMchID,
-					})
-				}
-
-				if wxResp.SubMchID != "" {
-					_, _ = server.store.UpdateOperatorSubMchID(ctx, db.UpdateOperatorSubMchIDParams{
-						ID:       operator.ID,
-						SubMchID: pgtype.Text{String: wxResp.SubMchID, Valid: true},
-					})
-					applyment.SubMchID = pgtype.Text{String: wxResp.SubMchID, Valid: true}
-					operator.SubMchID = pgtype.Text{String: wxResp.SubMchID, Valid: true}
-				}
-
-				applyment.Status = newStatus
-				applyment.RejectReason = nextRejectReason
-				applyment.SignUrl = nextSignURL
-				applyment.SignState = nextSignState
-				remoteStatusDesc = strings.TrimSpace(wxResp.ApplymentStateDesc)
-				remoteLegalValidationURL = strings.TrimSpace(wxResp.LegalValidationURL)
-				remoteAccountValidation = buildApplymentAccountValidationResponse(wxResp.AccountValidation, decryptor)
+	// 进件处理中时优先查询微信实时状态；若本地丢失 applyment_id，则回退到 out_request_no。
+	if server.ecommerceClient != nil && shouldQueryApplymentRemoteStatus(applyment, operator.Status) {
+		wxResp, err := server.queryEcommerceApplymentStatus(ctx, applyment)
+		if err == nil {
+			if !applyment.ApplymentID.Valid && wxResp.ApplymentID > 0 {
+				applyment.ApplymentID = pgtype.Int8{Int64: wxResp.ApplymentID, Valid: true}
 			}
+
+			newStatus := mapWechatApplymentStatus(wxResp.ApplymentState)
+			nextRejectReason := getRejectReasonFromAuditDetail(wxResp.AuditDetail)
+			nextSignURL := buildApplymentText(wxResp.SignURL)
+			nextSignState := buildApplymentText(wxResp.SignState)
+			nextSubMchID := buildApplymentText(wxResp.SubMchID)
+			if newStatus == "rejected" || newStatus == "canceled" {
+				_, _ = server.store.UpdateOperatorStatus(ctx, db.UpdateOperatorStatusParams{
+					ID:     operator.ID,
+					Status: "active",
+				})
+			}
+			if newStatus != applyment.Status ||
+				applymentTextChanged(applyment.RejectReason, nextRejectReason) ||
+				applymentTextChanged(applyment.SignUrl, nextSignURL) ||
+				applymentTextChanged(applyment.SignState, nextSignState) ||
+				applymentTextChanged(applyment.SubMchID, nextSubMchID) {
+				_, _ = server.store.UpdateEcommerceApplymentStatus(ctx, db.UpdateEcommerceApplymentStatusParams{
+					ID:           applyment.ID,
+					Status:       newStatus,
+					RejectReason: nextRejectReason,
+					SignUrl:      nextSignURL,
+					SignState:    nextSignState,
+					SubMchID:     nextSubMchID,
+				})
+			}
+
+			if wxResp.SubMchID != "" {
+				_, _ = server.store.UpdateOperatorSubMchID(ctx, db.UpdateOperatorSubMchIDParams{
+					ID:       operator.ID,
+					SubMchID: pgtype.Text{String: wxResp.SubMchID, Valid: true},
+				})
+				applyment.SubMchID = pgtype.Text{String: wxResp.SubMchID, Valid: true}
+				operator.SubMchID = pgtype.Text{String: wxResp.SubMchID, Valid: true}
+			}
+
+			applyment.Status = newStatus
+			applyment.RejectReason = nextRejectReason
+			applyment.SignUrl = nextSignURL
+			applyment.SignState = nextSignState
+			remoteStatusDesc = strings.TrimSpace(wxResp.ApplymentStateDesc)
+			remoteLegalValidationURL = strings.TrimSpace(wxResp.LegalValidationURL)
+			remoteAccountValidation = buildApplymentAccountValidationResponse(wxResp.AccountValidation, decryptor)
+		}
+		if err != nil {
+			log.Error().Err(err).
+				Int64("applyment_id", applyment.ID).
+				Str("out_request_no", applyment.OutRequestNo).
+				Msg("查询运营商微信进件状态失败")
 		}
 	}
 

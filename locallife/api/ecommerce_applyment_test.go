@@ -538,6 +538,10 @@ func TestMerchantBindBankAPI(t *testing.T) {
 				invalidMerchant := merchant
 				invalidMerchant.Status = "pending" // 还未审核通过
 				expectResolveSingleOwnedMerchant(store, user.ID, invalidMerchant)
+				store.EXPECT().
+					GetLatestEcommerceApplymentBySubject(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.EcommerceApplyment{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -931,76 +935,6 @@ func TestValidateApplymentBusinessLicenseValidity(t *testing.T) {
 				return
 			}
 			require.NoError(t, err)
-		})
-	}
-}
-
-func TestBuildApplymentBusinessTime(t *testing.T) {
-	t.Parallel()
-
-	require.Empty(t, buildApplymentBusinessTime("长期"))
-	require.Empty(t, buildApplymentBusinessTime("永久有效"))
-	require.Equal(t, `["2020-01-01","长期"]`, buildApplymentBusinessTime("2020年01月01日至长期"))
-}
-
-func TestResolveApplymentOrganizationType(t *testing.T) {
-	t.Parallel()
-
-	testCases := []struct {
-		name               string
-		businessLicenseNum string
-		licenseType        string
-		subjectName        string
-		defaultType        string
-		want               string
-	}{
-		{
-			name:               "NoBusinessLicenseFallsBackToMicro",
-			businessLicenseNum: "",
-			defaultType:        "4",
-			want:               "2401",
-		},
-		{
-			name:               "IndividualLicenseUses4",
-			businessLicenseNum: "91440300TEST123456",
-			licenseType:        "个体工商户",
-			defaultType:        "4",
-			want:               "4",
-		},
-		{
-			name:               "EnterpriseLicenseUses2",
-			businessLicenseNum: "91440300TEST123456",
-			licenseType:        "有限责任公司",
-			defaultType:        "4",
-			want:               "2",
-		},
-		{
-			name:               "InstitutionUses3",
-			businessLicenseNum: "91440300TEST123456",
-			licenseType:        "事业单位法人",
-			defaultType:        "4",
-			want:               "3",
-		},
-		{
-			name:               "GovernmentUses2502",
-			businessLicenseNum: "91440300TEST123456",
-			licenseType:        "政府机关",
-			defaultType:        "4",
-			want:               "2502",
-		},
-		{
-			name:               "SocialOrganizationUses1708",
-			businessLicenseNum: "91440300TEST123456",
-			licenseType:        "社会团体",
-			defaultType:        "4",
-			want:               "1708",
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			got := resolveApplymentOrganizationType(tc.businessLicenseNum, tc.licenseType, tc.subjectName, tc.defaultType)
-			require.Equal(t, tc.want, got)
 		})
 	}
 }
@@ -1464,6 +1398,112 @@ func TestMerchantBindBankEncryptFailed(t *testing.T) {
 	require.NoError(t, err)
 	request.Header.Set("Content-Type", "application/json")
 
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusInternalServerError, recorder.Code)
+}
+
+func TestMerchantBindBankSubmittedStateSyncFailed(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchantForApplyment(user.ID)
+	application := randomMerchantApplicationForApplyment(user.ID)
+	applicationWithTestURL := application
+	applyment := randomEcommerceApplymentForTest("merchant", merchant.ID)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	wechatClient := mockwechat.NewMockWechatClient(ctrl)
+
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+	store.EXPECT().
+		GetLatestEcommerceApplymentBySubject(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(db.EcommerceApplyment{}, db.ErrRecordNotFound)
+
+	store.EXPECT().
+		GetUserMerchantApplication(gomock.Any(), user.ID).
+		Times(1).
+		Return(applicationWithTestURL, nil)
+
+	store.EXPECT().
+		CreateEcommerceApplyment(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(applyment, nil)
+
+	ecommerceClient.EXPECT().
+		EncryptSensitiveData(gomock.Any()).
+		Times(7).
+		Return("encrypted_data", nil)
+
+	expectedObjectKey := buildMerchantStorefrontQRCodeObjectKey(merchant.ID)
+	qrCodeData := buildTestQRCodePNG(t)
+
+	store.EXPECT().
+		GetMediaAssetByObjectKey(gomock.Any(), expectedObjectKey).
+		Times(1).
+		Return(db.MediaAsset{}, db.ErrRecordNotFound)
+
+	wechatClient.EXPECT().
+		GetWXACodeUnlimited(gomock.Any(), gomock.AssignableToTypeOf(&wechat.WXACodeRequest{})).
+		Times(1).
+		Return(qrCodeData, nil)
+
+	store.EXPECT().
+		CreateMediaAsset(gomock.Any(), gomock.AssignableToTypeOf(db.CreateMediaAssetParams{})).
+		Times(1).
+		Return(db.MediaAsset{ID: util.RandomInt(1, 1000), ModerationStatus: "pending"}, nil)
+
+	store.EXPECT().
+		SetMediaAssetModerationStatus(gomock.Any(), gomock.AssignableToTypeOf(db.SetMediaAssetModerationStatusParams{})).
+		Times(1).
+		Return(db.MediaAsset{ID: util.RandomInt(1, 1000), ModerationStatus: "approved"}, nil)
+
+	ecommerceClient.EXPECT().
+		UploadImage(gomock.Any(), path.Base(expectedObjectKey), gomock.Any()).
+		Times(1).
+		Return(&wechat.ImageUploadResponse{MediaID: "wx_store_qr_media_id"}, nil)
+
+	ecommerceClient.EXPECT().
+		CreateEcommerceApplyment(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(&wechat.EcommerceApplymentResponse{ApplymentID: 123456789}, nil)
+
+	store.EXPECT().
+		UpdateEcommerceApplymentToSubmitted(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(db.EcommerceApplyment{}, fmt.Errorf("update submitted failed"))
+
+	store.EXPECT().
+		UpdateMerchantStatus(gomock.Any(), db.UpdateMerchantStatusParams{
+			ID:     merchant.ID,
+			Status: "bindbank_submitted",
+		}).
+		Times(1).
+		Return(db.Merchant{}, nil)
+
+	server := newTestServerWithEcommerce(t, store, ecommerceClient)
+	server.wechatClient = wechatClient
+
+	body := gin.H{
+		"account_type":      "ACCOUNT_TYPE_PRIVATE",
+		"account_bank":      "招商银行",
+		"bank_address_code": "440300",
+		"account_number":    "6214830012345678",
+		"account_name":      "张三",
+	}
+	data, err := json.Marshal(body)
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPost, "/v1/merchant/applyment/bindbank", bytes.NewReader(data))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
 	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 
 	recorder := httptest.NewRecorder()

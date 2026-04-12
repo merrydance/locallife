@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -497,6 +498,10 @@ func TestOperatorBindBankAPI(t *testing.T) {
 					GetOperatorByUser(gomock.Any(), user.ID).
 					Times(1).
 					Return(invalidOperator, nil)
+				store.EXPECT().
+					GetLatestEcommerceApplymentBySubject(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.EcommerceApplyment{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -1129,4 +1134,192 @@ func TestGetOperatorApplymentStatusAPI_QueryBackfillsSubMchIDWhenStatusUnchanged
 	require.Equal(t, "auditing", response.Status)
 	require.Equal(t, "1900005678", response.SubMchID)
 	require.False(t, response.CanSubmit)
+}
+
+func TestGetOperatorApplymentStatusAPI_QueryByOutRequestNoWhenApplymentIDMissing(t *testing.T) {
+	user, _ := randomUser(t)
+	operator := randomOperatorForApplyment(user.ID)
+	operator.Status = "bindbank_submitted"
+	applyment := randomEcommerceApplymentForTest("operator", operator.ID)
+	applyment.Status = "pending"
+	applyment.ApplymentID = pgtype.Int8{}
+	applyment.OutRequestNo = "OP_APPLYMENT_001"
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+
+	store.EXPECT().
+		GetOperatorByUser(gomock.Any(), user.ID).
+		Times(1).
+		Return(operator, nil)
+
+	store.EXPECT().
+		GetLatestEcommerceApplymentBySubject(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(applyment, nil)
+
+	ecommerceClient.EXPECT().
+		QueryEcommerceApplymentByOutRequestNo(gomock.Any(), applyment.OutRequestNo).
+		Times(1).
+		Return(&wechat.EcommerceApplymentQueryResponse{
+			ApplymentID:    987654321,
+			OutRequestNo:   applyment.OutRequestNo,
+			ApplymentState: "AUDITING",
+		}, nil)
+
+	store.EXPECT().
+		UpdateEcommerceApplymentStatus(gomock.Any(), db.UpdateEcommerceApplymentStatusParams{
+			ID:           applyment.ID,
+			Status:       "auditing",
+			RejectReason: pgtype.Text{},
+			SignUrl:      pgtype.Text{},
+			SignState:    pgtype.Text{},
+			SubMchID:     pgtype.Text{},
+		}).
+		Times(1).
+		Return(applyment, nil)
+
+	server := newTestServerWithEcommerce(t, store, ecommerceClient)
+
+	request, err := http.NewRequest(http.MethodGet, "/v1/operator/applyment/status", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var response operatorApplymentStatusResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+	require.Equal(t, "auditing", response.Status)
+	require.NotNil(t, response.ApplymentID)
+	require.EqualValues(t, 987654321, *response.ApplymentID)
+	require.False(t, response.CanSubmit)
+}
+
+func TestOperatorBindBankSubmittedStateSyncFailed(t *testing.T) {
+	user, _ := randomUser(t)
+	operator := randomOperatorForApplyment(user.ID)
+	application := randomOperatorApplicationForApplyment(user.ID)
+	applyment := randomEcommerceApplymentForTest("operator", operator.ID)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+
+	store.EXPECT().
+		GetOperatorByUser(gomock.Any(), user.ID).
+		Times(1).
+		Return(operator, nil)
+
+	store.EXPECT().
+		GetLatestEcommerceApplymentBySubject(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(db.EcommerceApplyment{}, db.ErrRecordNotFound)
+
+	store.EXPECT().
+		GetApprovedOperatorApplicationByUserID(gomock.Any(), user.ID).
+		Times(1).
+		Return(application, nil)
+
+	store.EXPECT().
+		CreateEcommerceApplyment(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(applyment, nil)
+
+	ecommerceClient.EXPECT().
+		EncryptSensitiveData(gomock.Any()).
+		Times(7).
+		Return("encrypted_data", nil)
+
+	ecommerceClient.EXPECT().
+		CreateEcommerceApplyment(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(&wechat.EcommerceApplymentResponse{ApplymentID: 123456789}, nil)
+
+	store.EXPECT().
+		UpdateEcommerceApplymentToSubmitted(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(db.EcommerceApplyment{}, fmt.Errorf("update submitted failed"))
+
+	store.EXPECT().
+		UpdateOperatorStatus(gomock.Any(), db.UpdateOperatorStatusParams{
+			ID:     operator.ID,
+			Status: "bindbank_submitted",
+		}).
+		Times(1).
+		Return(db.Operator{}, nil)
+
+	server := newTestServerWithEcommerce(t, store, ecommerceClient)
+
+	body := gin.H{
+		"account_type":      "ACCOUNT_TYPE_BUSINESS",
+		"account_bank":      "招商银行",
+		"bank_address_code": "440300",
+		"account_number":    "6214830012345678",
+		"account_name":      "张三",
+	}
+	data, err := json.Marshal(body)
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPost, "/v1/operator/applyment/bindbank", bytes.NewReader(data))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusInternalServerError, recorder.Code)
+}
+
+func TestOperatorBindBankRejectsRecoveringPendingApplyment(t *testing.T) {
+	user, _ := randomUser(t)
+	operator := randomOperatorForApplyment(user.ID)
+	operator.Status = "bindbank_submitted"
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+
+	store.EXPECT().
+		GetOperatorByUser(gomock.Any(), user.ID).
+		Times(1).
+		Return(operator, nil)
+
+	existingApplyment := randomEcommerceApplymentForTest("operator", operator.ID)
+	existingApplyment.Status = "pending"
+	existingApplyment.OutRequestNo = "OPERATOR_APPLYMENT_RECOVER_001"
+	store.EXPECT().
+		GetLatestEcommerceApplymentBySubject(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(existingApplyment, nil)
+
+	server := newTestServer(t, store)
+
+	body := gin.H{
+		"account_type":      "ACCOUNT_TYPE_BUSINESS",
+		"account_bank":      "招商银行",
+		"bank_address_code": "440300",
+		"account_number":    "6214830012345678",
+		"account_name":      "张三",
+	}
+	data, err := json.Marshal(body)
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPost, "/v1/operator/applyment/bindbank", bytes.NewReader(data))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
 }
