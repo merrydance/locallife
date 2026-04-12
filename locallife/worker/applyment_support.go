@@ -13,7 +13,11 @@ func mapWechatApplymentStateToStatus(wechatState string) string {
 	switch strings.TrimSpace(wechatState) {
 	case "APPLYMENT_STATE_EDITTING":
 		return "pending"
-	case "CHECKING", "ACCOUNT_NEED_VERIFY", "APPLYMENT_STATE_AUDITING", "AUDITING":
+	case "CHECKING":
+		return "checking"
+	case "ACCOUNT_NEED_VERIFY":
+		return "account_need_verify"
+	case "APPLYMENT_STATE_AUDITING", "AUDITING":
 		return "auditing"
 	case "APPLYMENT_STATE_REJECTED", "REJECTED":
 		return "rejected"
@@ -50,7 +54,7 @@ func resolveApplymentResultStatus(payload ApplymentResultPayload) string {
 
 func applymentStatusNeedsAsyncFollowUp(status string) bool {
 	switch status {
-	case "finish", "rejected", "to_be_confirmed", "to_be_signed":
+	case "finish", "rejected", "account_need_verify", "to_be_confirmed", "to_be_signed":
 		return true
 	default:
 		return false
@@ -59,7 +63,7 @@ func applymentStatusNeedsAsyncFollowUp(status string) bool {
 
 func applymentStatusNeedsRemoteQuery(status string) bool {
 	switch status {
-	case "submitted", "auditing", "to_be_confirmed", "to_be_signed", "signing":
+	case "submitted", "checking", "auditing", "account_need_verify", "to_be_confirmed", "to_be_signed", "signing":
 		return true
 	default:
 		return false

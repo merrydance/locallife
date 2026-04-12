@@ -12,7 +12,7 @@ import { getPrivateMediaUrl } from '../../../utils/image-security'
 import { logger } from '../../../utils/logger'
 import Navigation from '../../../utils/navigation'
 import { buildAgreementConsentPayload } from '../../../api/agreement-consent'
-import { buildMerchantApplicationOCRStatusView, type ApplicationStatus } from '../../../api/onboarding'
+import { type ApplicationStatus } from '../../../api/onboarding'
 import { getErrorDebugMessage, getErrorUserMessage } from '../../../utils/user-facing'
 import {
   buildRiderOCRPanelState,
@@ -23,12 +23,10 @@ import {
   DEFAULT_RIDER_OCR_PANEL_STATE,
   DEFAULT_RIDER_UPLOAD_FEEDBACK,
   EMPTY_UPLOAD_FEEDBACK,
-  hasHealthCertKeyFields,
   isDocumentCorrectionError,
   isRejectedRiderApplication,
   pickOCRText,
   type OCRDisplayStateValue,
-  type RiderOCRDisplayState,
   type RiderUploadFeedback,
   type UploadFeedback,
   type UploadField,

@@ -34,7 +34,7 @@ func (store *SQLStore) ListEcommerceApplymentsPendingFollowUp(ctx context.Contex
 		       reject_reason, sub_mch_id, updated_at, result_task_processed_state, result_task_processed_at
 		FROM ecommerce_applyments
 		WHERE updated_at <= $1
-		  AND status IN ('submitted', 'auditing', 'to_be_signed', 'to_be_confirmed', 'signing', 'finish', 'rejected')
+		  AND status IN ('submitted', 'checking', 'auditing', 'account_need_verify', 'to_be_signed', 'to_be_confirmed', 'signing', 'finish', 'rejected')
 		ORDER BY updated_at ASC, id ASC
 		LIMIT $2`,
 		arg.UpdatedBefore,

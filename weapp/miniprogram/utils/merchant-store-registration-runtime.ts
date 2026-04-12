@@ -27,6 +27,7 @@ import Navigation from './navigation'
 import { buildAgreementConsentPayload } from '../api/agreement-consent'
 import { getCurrentRegion, reverseGeocode, searchRegions, type RegionSearchResult } from '../api/location'
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type MerchantStoreRegistrationPageContext = WechatMiniprogram.Page.Instance<Record<string, any>, Record<string, any>> & Record<string, any>
 
 const DRAFT_KEY = 'merchant_register_draft'

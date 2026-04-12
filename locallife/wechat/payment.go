@@ -644,6 +644,30 @@ func (c *PaymentClient) EncryptSensitiveData(plaintext string) (string, error) {
 	return base64.StdEncoding.EncodeToString(ciphertext), nil
 }
 
+// DecryptSensitiveResponseData 解密微信返回的敏感字段。
+// 微信对查询响应中的敏感字段使用商户 API 证书公钥加密，需由商户私钥解密。
+func (c *PaymentClient) DecryptSensitiveResponseData(ciphertext string) (string, error) {
+	trimmedCiphertext := strings.TrimSpace(ciphertext)
+	if trimmedCiphertext == "" {
+		return "", nil
+	}
+	if c.privateKey == nil {
+		return "", fmt.Errorf("merchant private key not loaded")
+	}
+
+	decodedCiphertext, err := base64.StdEncoding.DecodeString(trimmedCiphertext)
+	if err != nil {
+		return "", fmt.Errorf("decode ciphertext: %w", err)
+	}
+
+	plaintext, err := rsa.DecryptOAEP(sha1.New(), rand.Reader, c.privateKey, decodedCiphertext, nil)
+	if err != nil {
+		return "", fmt.Errorf("decrypt ciphertext: %w", err)
+	}
+
+	return string(plaintext), nil
+}
+
 // GetPlatformCertificateSerial 获取微信支付平台证书序列号或平台公钥ID
 // 用于设置请求头中的 Wechatpay-Serial
 // 如果使用平台公钥，返回公钥ID；如果使用平台证书，返回证书序列号

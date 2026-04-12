@@ -13,16 +13,34 @@
       <block wx:else>
         <view wx:if="{{statusView.guideText}}" class="guide-text">{{statusView.guideText}}</view>
         <view wx:if="{{statusView.showRejectReason}}" class="result-note result-note--warning">{{statusView.rejectReason}}</view>
+        <view wx:if="{{statusView.signStateText}}" class="status-item">签约状态：{{statusView.signStateText}}</view>
 
         <view wx:if="{{statusView.canSubmitOpenInfo}}">
-          <applyment-bank-form apiBasePath="/v1/operator/applyment" initialDraft="{{bindBankDraft}}" defaultAccountType="ACCOUNT_TYPE_PRIVATE" preloadCatalogs="{{statusView.canSubmitOpenInfo}}" submitLabel="提交微信支付开户" submitting="{{submitting}}" bind:submit="onSubmit" bind:cancel="onCancelForm" bind:draftchange="onBindDraftChange" />
+          <applyment-bank-form apiBasePath="/v1/operator/applyment" uploadBusinessType="operator" initialDraft="{{bindBankDraft}}" defaultAccountType="ACCOUNT_TYPE_PRIVATE" preloadCatalogs="{{statusView.canSubmitOpenInfo}}" showContactFields="{{true}}" submitLabel="提交微信支付开户" submitting="{{submitting}}" bind:submit="onSubmit" bind:cancel="onCancelForm" bind:draftchange="onBindDraftChange" />
         </view>
 
         <view wx:else class="result-note result-note--{{statusView.guideTheme}}">{{statusView.guideText}}</view>
         <view wx:if="{{statusView.applymentId !== '-'}}" class="status-item">申请单号：{{statusView.applymentId}}</view>
+        <view wx:if="{{statusView.needsAccountValidation}}" class="status-item">待处理事项：请先完成账户验证后再刷新状态</view>
+        <view wx:if="{{statusView.needsConfirmation}}" class="status-item">待处理事项：请按微信支付指引完成确认</view>
+        <view wx:if="{{statusView.needsLegalValidation}}" class="status-item">法人验证：可优先复制链接并使用法人微信扫码完成验证</view>
+        <block wx:if="{{statusView.accountValidation}}">
+          <view class="status-item">汇款金额：{{statusView.accountValidation.payAmountText}}</view>
+          <view class="status-item">付款户名：{{statusView.accountValidation.accountName}}</view>
+          <view class="status-item">付款卡号：{{statusView.accountValidation.accountNo}}</view>
+          <view class="status-item">收款卡号：{{statusView.accountValidation.destinationAccountNumber}}</view>
+          <view class="status-item">收款户名：{{statusView.accountValidation.destinationAccountName}}</view>
+          <view class="status-item">开户银行：{{statusView.accountValidation.destinationAccountBank}}</view>
+          <view class="status-item">省市信息：{{statusView.accountValidation.city}}</view>
+          <view class="status-item">汇款备注：{{statusView.accountValidation.remark}}</view>
+          <view class="status-item">汇款截止时间：{{statusView.accountValidation.deadline}}</view>
+        </block>
         <view wx:if="{{statusView.signURL}}" class="sign-url">{{statusView.signURL}}</view>
         <view wx:if="{{!statusView.canSubmitOpenInfo}}" class="action-row">
           <t-button wx:if="{{statusView.signURL}}" theme="primary" shape="round" bindtap="onOpenSignUrl">复制签约链接</t-button>
+          <t-button wx:if="{{statusView.needsLegalValidation && statusView.legalValidationURL}}" theme="primary" variant="outline" shape="round" bindtap="onCopyLegalValidationUrl">复制法人验证链接</t-button>
+          <t-button wx:if="{{statusView.accountValidation && statusView.accountValidation.destinationAccountNumber !== '-'}}" theme="default" variant="outline" shape="round" bindtap="onCopyValidationAccountNumber">复制收款卡号</t-button>
+          <t-button wx:if="{{statusView.accountValidation && statusView.accountValidation.remark !== '-'}}" theme="default" variant="outline" shape="round" bindtap="onCopyValidationRemark">复制汇款备注</t-button>
           <t-button theme="default" variant="outline" shape="round" loading="{{refreshingStatus}}" bindtap="onRefreshStatus">刷新状态</t-button>
         </view>
       </block>

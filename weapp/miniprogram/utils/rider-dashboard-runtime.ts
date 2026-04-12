@@ -10,6 +10,7 @@ import { wsManager, WSMessageType } from './websocket'
 import { networkMonitor } from './network-monitor'
 import { getConsoleDashboardErrorMessage, getConsoleDashboardErrorState } from './console-dashboard'
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type RiderDashboardPageContext = WechatMiniprogram.Page.Instance<Record<string, any>, Record<string, any>> & Record<string, any>
 
 const MAX_GRAB_DISTANCE = 5000

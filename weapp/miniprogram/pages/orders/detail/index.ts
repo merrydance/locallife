@@ -2,7 +2,6 @@ import Navigation from '../../../utils/navigation'
 import { logger } from '../../../utils/logger'
 import CartService from '../../../services/cart'
 import {
-  getOrderDetail,
   confirmOrder,
   cancelOrder,
   urgeOrder,

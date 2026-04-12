@@ -1,6 +1,7 @@
 {
   "component": true,
   "usingComponents": {
+    "document-uploader": "../document-uploader/index",
     "t-button": "tdesign-miniprogram/button/button",
     "t-cell": "tdesign-miniprogram/cell/cell",
     "t-cell-group": "tdesign-miniprogram/cell-group/cell-group",

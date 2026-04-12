@@ -8,6 +8,7 @@ import { logger } from '../../../utils/logger'
 import { ReservationCardAdapter, ReservationCardViewModel } from '../../../adapters/reservation-card'
 import { processPayment, PaymentCancelledError } from '../../../api/payment'
 import Navigation from '../../../utils/navigation'
+import { mapReservationPaymentStatusToResultKind } from '../../../utils/reservation-payment-result-view'
 
 // 状态筛选选项
 const STATUS_TABS = [
@@ -176,7 +177,7 @@ Page({
             Navigation.toReservationPaymentResult({
                 reservationId: String(id),
                 amount: res?.depositDisplay?.replace('¥', '') || '0.00',
-                result: paymentResult.status === 'paid' ? 'success' : paymentResult.status,
+                result: mapReservationPaymentStatusToResultKind(paymentResult.status),
                 source: 'list',
                 returnStatus: this.data.currentStatus || 'all'
             })

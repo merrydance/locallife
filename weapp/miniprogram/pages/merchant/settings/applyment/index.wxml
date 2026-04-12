@@ -48,8 +48,27 @@
           </view>
         </t-cell>
         <t-cell wx:if="{{applymentView.statusDesc}}" title="状态说明" note="{{applymentView.statusDesc}}" />
+        <t-cell wx:if="{{applymentView.signStateText}}" title="签约状态" note="{{applymentView.signStateText}}" />
         <t-cell wx:if="{{applymentView.subMchId !== '-'}}" title="子商户号" note="{{applymentView.subMchId}}" />
         <t-cell wx:if="{{applymentView.showRejectReason}}" title="拒绝原因" note="{{applymentView.rejectReason}}" />
+      </t-cell-group>
+
+      <t-cell-group wx:if="{{applymentView.hasPendingActions && !showBindForm}}" theme="card">
+        <t-cell wx:if="{{applymentView.needsAccountValidation}}" title="待处理事项" note="请先完成账户验证后再刷新状态" />
+        <t-cell wx:if="{{applymentView.needsConfirmation}}" title="待确认" note="请按微信支付指引完成确认" />
+        <t-cell wx:if="{{applymentView.needsLegalValidation}}" title="法人扫码验证" note="可优先使用法人微信扫码完成验证" />
+      </t-cell-group>
+
+      <t-cell-group wx:if="{{applymentView.accountValidation && !showBindForm}}" theme="card">
+        <t-cell title="汇款金额" note="{{applymentView.accountValidation.payAmountText}}" />
+        <t-cell title="付款户名" note="{{applymentView.accountValidation.accountName}}" />
+        <t-cell title="付款卡号" note="{{applymentView.accountValidation.accountNo}}" />
+        <t-cell title="收款卡号" note="{{applymentView.accountValidation.destinationAccountNumber}}" />
+        <t-cell title="收款户名" note="{{applymentView.accountValidation.destinationAccountName}}" />
+        <t-cell title="开户银行" note="{{applymentView.accountValidation.destinationAccountBank}}" />
+        <t-cell title="省市信息" note="{{applymentView.accountValidation.city}}" />
+        <t-cell title="汇款备注" note="{{applymentView.accountValidation.remark}}" />
+        <t-cell title="汇款截止时间" note="{{applymentView.accountValidation.deadline}}" />
       </t-cell-group>
 
       <view wx:if="{{!showBindForm}}" class="action-row">
@@ -67,7 +86,28 @@
           bind:tap="onCopySignUrl"
         >复制签约链接</t-button>
         <t-button
-          wx:if="{{!applymentView.isOpened && !applymentView.canSubmitOpenInfo}}"
+          wx:if="{{applymentView.needsLegalValidation && applymentView.legalValidationURL}}"
+          theme="primary"
+          variant="outline"
+          shape="round"
+          bind:tap="onCopyLegalValidationUrl"
+        >复制法人验证链接</t-button>
+        <t-button
+          wx:if="{{applymentView.accountValidation && applymentView.accountValidation.destinationAccountNumber !== '-'}}"
+          theme="default"
+          variant="outline"
+          shape="round"
+          bind:tap="onCopyValidationAccountNumber"
+        >复制收款卡号</t-button>
+        <t-button
+          wx:if="{{applymentView.accountValidation && applymentView.accountValidation.remark !== '-'}}"
+          theme="default"
+          variant="outline"
+          shape="round"
+          bind:tap="onCopyValidationRemark"
+        >复制汇款备注</t-button>
+        <t-button
+          wx:if="{{applymentView.hasPendingActions || (!applymentView.isOpened && !applymentView.canSubmitOpenInfo)}}"
           theme="default"
           shape="round"
           loading="{{refreshingStatus}}"
@@ -82,8 +122,10 @@
       </view>
       <applyment-bank-form
         apiBasePath="/v1/merchant/applyment"
+        uploadBusinessType="merchant"
         initialDraft="{{bindBankDraft}}"
         defaultAccountType="ACCOUNT_TYPE_BUSINESS"
+        showContactFields="{{true}}"
         submitLabel="提交银行账户信息"
         submitting="{{submittingBind}}"
         bind:submit="onSubmitBindBank"

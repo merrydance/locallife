@@ -26,7 +26,6 @@ import {
   buildTakeoutCreateOrderRequest,
   buildTodaySlots,
   CheckoutSnapshotPayload,
-  formatEtaWindow,
   getCombinedPaymentPageMessage,
   isWechatPayCancelled,
   mapWithConcurrency,

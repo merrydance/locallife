@@ -2829,6 +2829,85 @@ func TestHandleApplymentStateNotifyIdempotency(t *testing.T) {
 	}
 }
 
+func TestHandleApplymentStateNotify_PreservesStoredSignFields(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := newMockStoreWithAlertSink(ctrl)
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	paymentClient := mockwechat.NewMockPaymentClientInterface(ctrl)
+
+	server := newTestServerWithPayment(t, store, paymentClient)
+	server.SetEcommerceClientForTest(ecommerceClient)
+
+	notificationID := util.RandomString(32)
+	applyment := db.EcommerceApplyment{
+		ID:           88,
+		SubjectType:  "merchant",
+		SubjectID:    200,
+		OutRequestNo: "APPLY_M_88_1234567890",
+		SignUrl:      pgtype.Text{String: "https://sign.example.com/keep", Valid: true},
+		SignState:    pgtype.Text{String: "UNSIGNED", Valid: true},
+	}
+
+	ecommerceClient.EXPECT().
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(nil)
+
+	store.EXPECT().
+		TryClaimWechatNotification(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(true, nil)
+
+	paymentClient.EXPECT().
+		DecryptNotificationRaw(gomock.Any()).
+		Times(1).
+		Return([]byte(`{"applyment_id":88,"out_request_no":"APPLY_M_88_1234567890","applyment_state":"ACCOUNT_NEED_VERIFY"}`), nil)
+
+	store.EXPECT().
+		GetEcommerceApplymentByOutRequestNo(gomock.Any(), "APPLY_M_88_1234567890").
+		Times(1).
+		Return(applyment, nil)
+
+	store.EXPECT().
+		UpdateEcommerceApplymentStatus(gomock.Any(), db.UpdateEcommerceApplymentStatusParams{
+			ID:           applyment.ID,
+			Status:       "account_need_verify",
+			RejectReason: pgtype.Text{},
+			SignUrl:      applyment.SignUrl,
+			SignState:    applyment.SignState,
+			SubMchID:     applyment.SubMchID,
+		}).
+		Times(1).
+		Return(applyment, nil)
+
+	recorder := httptest.NewRecorder()
+	requestBody := map[string]interface{}{
+		"id":            notificationID,
+		"event_type":    "APPLYMENT_STATE.CHANGE",
+		"resource_type": "encrypt-resource",
+		"resource": map[string]interface{}{
+			"algorithm":       "AEAD_AES_256_GCM",
+			"ciphertext":      "mock_encrypted_data",
+			"nonce":           "mock_nonce",
+			"associated_data": "applyment",
+		},
+	}
+	bodyBytes, err := json.Marshal(requestBody)
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPost, "/v1/webhooks/wechat-ecommerce/applyment-notify", bytes.NewReader(bodyBytes))
+	require.NoError(t, err)
+	request.Header.Set("Wechatpay-Timestamp", "1234567890")
+	request.Header.Set("Wechatpay-Nonce", "test_nonce")
+	request.Header.Set("Wechatpay-Signature", "test_signature")
+	request.Header.Set("Wechatpay-Serial", "test_serial")
+
+	server.router.ServeHTTP(recorder, request)
+	assertWechatNoContentResponse(t, recorder)
+}
+
 // TestHandleProfitSharingNotifyIdempotency 测试分账回调的幂等性检查
 func TestHandleProfitSharingNotifyIdempotency(t *testing.T) {
 	notificationID := util.RandomString(32)

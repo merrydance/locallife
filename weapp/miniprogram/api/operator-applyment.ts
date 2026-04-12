@@ -1,4 +1,6 @@
 import { request } from '../utils/request'
+import type { ApplymentContactDocType, ApplymentContactType } from './applyment-bank'
+import type { ApplymentAccountValidationResponse } from './merchant-finance'
 
 export interface OperatorBindBankRequest {
   account_type: 'ACCOUNT_TYPE_BUSINESS' | 'ACCOUNT_TYPE_PRIVATE'
@@ -12,6 +14,14 @@ export interface OperatorBindBankRequest {
   bank_name?: string
   account_number: string
   account_name: string
+  contact_type?: ApplymentContactType
+  contact_name?: string
+  contact_id_doc_type?: ApplymentContactDocType
+  contact_id_card_number?: string
+  contact_id_doc_copy_asset_id?: number
+  contact_id_doc_copy_back_asset_id?: number
+  contact_id_doc_period_begin?: string
+  contact_id_doc_period_end?: string
 }
 
 export interface OperatorBindBankResponse {
@@ -28,6 +38,9 @@ export interface OperatorApplymentStatusResponse {
   applyment_id?: number
   sub_mch_id?: string
   sign_url?: string
+  sign_state?: string
+  legal_validation_url?: string
+  account_validation?: ApplymentAccountValidationResponse
   reject_reason?: string
   created_at: string
   updated_at: string
@@ -46,6 +59,19 @@ export type OperatorApplymentNormalizedStatus =
 
 export type OperatorApplymentGuideTheme = 'primary' | 'warning'
 
+export interface OperatorApplymentAccountValidationView {
+  accountName: string
+  accountNo: string
+  payAmount: number
+  payAmountText: string
+  destinationAccountNumber: string
+  destinationAccountName: string
+  destinationAccountBank: string
+  city: string
+  remark: string
+  deadline: string
+}
+
 export interface OperatorApplymentStatusView {
   statusCode: string
   normalizedStatus: OperatorApplymentNormalizedStatus
@@ -57,14 +83,21 @@ export interface OperatorApplymentStatusView {
   rejectReason: string
   blockReason: string
   signURL: string
+  signStateText: string
+  legalValidationURL: string
   hasExistingApplyment: boolean
   isOpened: boolean
   canSubmitOpenInfo: boolean
   isInReview: boolean
   needsSign: boolean
+  needsAccountValidation: boolean
+  needsConfirmation: boolean
+  needsLegalValidation: boolean
+  hasPendingActions: boolean
   showRejectReason: boolean
   guideTheme: OperatorApplymentGuideTheme
   guideText: string
+  accountValidation: OperatorApplymentAccountValidationView | null
 }
 
 export const DEFAULT_OPERATOR_APPLYMENT_STATUS_VIEW: OperatorApplymentStatusView = {
@@ -78,22 +111,33 @@ export const DEFAULT_OPERATOR_APPLYMENT_STATUS_VIEW: OperatorApplymentStatusView
   rejectReason: '-',
   blockReason: '',
   signURL: '',
+  signStateText: '',
+  legalValidationURL: '',
   hasExistingApplyment: false,
   isOpened: false,
   canSubmitOpenInfo: true,
   isInReview: false,
   needsSign: false,
+  needsAccountValidation: false,
+  needsConfirmation: false,
+  needsLegalValidation: false,
+  hasPendingActions: false,
   showRejectReason: false,
   guideTheme: 'primary',
-  guideText: '当前尚未开通微信支付商户，请提交必要信息完成开户。'
+  guideText: '当前尚未开通微信支付商户，请提交必要信息完成开户。',
+  accountValidation: null
 }
 
 const APPLYMENT_IN_REVIEW_STATUSES = new Set([
   'bindbank_submitted',
   'submitted',
-  'auditing',
   'checking',
-  'account_need_verify'
+  'auditing',
+  'account_need_verify',
+  'to_be_confirmed',
+  'to_be_signed',
+  'signing',
+  'need_sign'
 ])
 
 const APPLYMENT_NEEDS_SIGN_STATUSES = new Set(['to_be_signed', 'signing', 'need_sign'])
@@ -147,8 +191,9 @@ function getDefaultOperatorApplymentStatusDesc(statusCode: string): string {
     bindbank_submitted: '开户信息已提交',
     submitted: '微信审核中',
     auditing: '微信审核中',
-    checking: '微信审核中',
+    checking: '资料校验中',
     account_need_verify: '账户验证中',
+    to_be_confirmed: '待确认',
     to_be_signed: '待签约确认',
     signing: '签约处理中',
     need_sign: '待签约确认',
@@ -160,6 +205,41 @@ function getDefaultOperatorApplymentStatusDesc(statusCode: string): string {
     cancelled: '开户已取消'
   }
   return statusDescMap[statusCode] || statusCode || '未提交'
+}
+
+function getOperatorSignStateText(signState?: string) {
+  switch (String(signState || '').trim().toUpperCase()) {
+    case 'UNSIGNED':
+      return '未签约'
+    case 'SIGNED':
+      return '已签约'
+    case 'NOT_SIGNABLE':
+      return '当前不可签约'
+    default:
+      return ''
+  }
+}
+
+function buildOperatorApplymentAccountValidationView(
+  validation?: ApplymentAccountValidationResponse | null
+): OperatorApplymentAccountValidationView | null {
+  if (!validation) {
+    return null
+  }
+
+  const payAmount = typeof validation.pay_amount === 'number' ? validation.pay_amount : 0
+  return {
+    accountName: validation.account_name || '-',
+    accountNo: validation.account_no || '-',
+    payAmount,
+    payAmountText: payAmount > 0 ? `${(payAmount / 100).toFixed(2)}元` : '-',
+    destinationAccountNumber: validation.destination_account_number || '-',
+    destinationAccountName: validation.destination_account_name || '-',
+    destinationAccountBank: validation.destination_account_bank || '-',
+    city: validation.city || '-',
+    remark: validation.remark || '-',
+    deadline: validation.deadline || '-'
+  }
 }
 
 function getDefaultCanSubmitOpenInfo(
@@ -187,9 +267,16 @@ export function buildOperatorApplymentStatusView(
   const rejectReason = status.reject_reason || '-'
   const blockReason = status.block_reason || ''
   const signURL = status.sign_url || ''
+  const signStateText = getOperatorSignStateText(status.sign_state)
+  const accountValidation = buildOperatorApplymentAccountValidationView(status.account_validation)
+  const legalValidationURL = status.legal_validation_url || ''
   const isOpened = normalizedStatus === 'opened'
-  const needsSign = normalizedStatus === 'needs_sign'
-  const isInReview = normalizedStatus === 'in_review' || needsSign
+  const needsSign = String(status.sign_state || '').trim().toUpperCase() === 'UNSIGNED' || APPLYMENT_NEEDS_SIGN_STATUSES.has(statusCode)
+  const needsAccountValidation = statusCode === 'account_need_verify' || Boolean(accountValidation)
+  const needsConfirmation = statusCode === 'to_be_confirmed'
+  const needsLegalValidation = Boolean(legalValidationURL)
+  const hasPendingActions = needsAccountValidation || needsConfirmation || needsSign
+  const isInReview = normalizedStatus === 'in_review' && !hasPendingActions
   const canSubmitOpenInfo = typeof status.can_submit === 'boolean'
     ? status.can_submit
     : getDefaultCanSubmitOpenInfo(normalizedStatus, statusCode)
@@ -199,12 +286,25 @@ export function buildOperatorApplymentStatusView(
   if (normalizedStatus === 'rejected') {
     guideText = '开户被拒，请根据拒绝原因修改信息后重新提交。'
     tagTheme = 'danger'
-  } else if (normalizedStatus === 'in_review') {
-    guideText = '微信支付正在审核开户信息，审核期间无需重复提交。'
-    tagTheme = 'warning'
+  } else if (needsAccountValidation && needsSign) {
+    guideText = needsLegalValidation
+      ? '当前申请同时存在账户验证和签约待处理，可优先使用法人扫码验证并完成签约。'
+      : '当前申请同时存在账户验证和签约待处理，请按页面指引逐项完成。'
+    tagTheme = 'primary'
+  } else if (needsAccountValidation) {
+    guideText = needsLegalValidation
+      ? '当前申请待账户验证，可优先使用法人扫码验证；若无法扫码，请按汇款指引完成验证。'
+      : '当前申请待账户验证，请先按汇款指引完成验证。'
+    tagTheme = 'primary'
+  } else if (needsConfirmation) {
+    guideText = '当前申请待确认，请先按微信支付指引完成确认。'
+    tagTheme = 'primary'
   } else if (needsSign) {
     guideText = '微信支付已进入签约阶段，请尽快完成签约确认。'
     tagTheme = 'primary'
+  } else if (normalizedStatus === 'in_review') {
+    guideText = '微信支付正在审核开户信息，审核期间无需重复提交。'
+    tagTheme = 'warning'
   } else if (normalizedStatus === 'frozen') {
     guideText = blockReason || statusDesc || '当前账号状态不可用，暂不支持提交微信支付开户。'
     tagTheme = 'danger'
@@ -228,14 +328,21 @@ export function buildOperatorApplymentStatusView(
     rejectReason,
     blockReason,
     signURL,
+    signStateText,
+    legalValidationURL,
     hasExistingApplyment: normalizedStatus !== 'pending',
     isOpened,
     canSubmitOpenInfo,
     isInReview,
     needsSign,
+    needsAccountValidation,
+    needsConfirmation,
+    needsLegalValidation,
+    hasPendingActions,
     showRejectReason: canSubmitOpenInfo && rejectReason !== '-',
     guideTheme: needsSign ? 'warning' : 'primary',
-    guideText
+    guideText,
+    accountValidation
   }
 }
 

@@ -548,16 +548,31 @@ type EcommerceApplymentResponse struct {
 	OutRequestNo string `json:"out_request_no"` // 业务申请编号
 }
 
+// EcommerceApplymentAccountValidation 汇款账户验证信息。
+type EcommerceApplymentAccountValidation struct {
+	AccountName              string `json:"account_name,omitempty"`
+	AccountNo                string `json:"account_no,omitempty"`
+	PayAmount                int64  `json:"pay_amount,omitempty"`
+	DestinationAccountNumber string `json:"destination_account_number,omitempty"`
+	DestinationAccountName   string `json:"destination_account_name,omitempty"`
+	DestinationAccountBank   string `json:"destination_account_bank,omitempty"`
+	City                     string `json:"city,omitempty"`
+	Remark                   string `json:"remark,omitempty"`
+	Deadline                 string `json:"deadline,omitempty"`
+}
+
 // EcommerceApplymentQueryResponse 二级商户进件查询响应
 type EcommerceApplymentQueryResponse struct {
-	ApplymentID        int64                  `json:"applyment_id"`           // 微信支付申请单号
-	OutRequestNo       string                 `json:"out_request_no"`         // 业务申请编号
-	ApplymentState     string                 `json:"applyment_state"`        // 申请状态
-	ApplymentStateDesc string                 `json:"applyment_state_desc"`   // 申请状态描述
-	SignURL            string                 `json:"sign_url,omitempty"`     // 签约链接
-	SignState          string                 `json:"sign_state,omitempty"`   // 签约状态
-	SubMchID           string                 `json:"sub_mchid,omitempty"`    // 特约商户号
-	AuditDetail        []ApplymentAuditDetail `json:"audit_detail,omitempty"` // 驳回详情
+	ApplymentID        int64                                `json:"applyment_id"`                   // 微信支付申请单号
+	OutRequestNo       string                               `json:"out_request_no"`                 // 业务申请编号
+	ApplymentState     string                               `json:"applyment_state"`                // 申请状态
+	ApplymentStateDesc string                               `json:"applyment_state_desc"`           // 申请状态描述
+	SignURL            string                               `json:"sign_url,omitempty"`             // 签约链接
+	SignState          string                               `json:"sign_state,omitempty"`           // 签约状态
+	SubMchID           string                               `json:"sub_mchid,omitempty"`            // 特约商户号
+	AccountValidation  *EcommerceApplymentAccountValidation `json:"account_validation,omitempty"`   // 汇款账户验证信息
+	LegalValidationURL string                               `json:"legal_validation_url,omitempty"` // 法人扫码验证链接
+	AuditDetail        []ApplymentAuditDetail               `json:"audit_detail,omitempty"`         // 驳回详情
 }
 
 // ApplymentAuditDetail 进件审核详情

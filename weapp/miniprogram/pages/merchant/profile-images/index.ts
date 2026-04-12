@@ -1,9 +1,7 @@
 import { logger } from '../../../utils/logger'
-import { uploadMerchantImage, getMerchantApplication, waitForPublicMediaDisplayUrl } from '../../../api/onboarding'
+import { uploadMerchantImage, getMerchantApplication } from '../../../api/onboarding'
 import { getMyMerchantProfile, updateMyMerchantLogo } from '../../../api/merchant'
 import {
-  areImageListsEqual,
-  areUploadRenderImagesEqual,
   buildControlledUploadImages,
   buildUploadRenderImages,
   CONTINUE_SYNC_TOAST,
@@ -12,7 +10,6 @@ import {
   hasAnyImages,
   ImageItem,
   isAmbiguousSyncFailure,
-  isLocallyTrackedShopImagePendingPersistence,
   mergeServerAndLocalImages,
   mergeServerAndLocalLogo,
   PROFILE_IMAGES_AUTO_REFRESH_WINDOW_MS,

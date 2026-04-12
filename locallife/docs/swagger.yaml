@@ -777,6 +777,27 @@ definitions:
     required:
     - region_id
     type: object
+  api.applymentAccountValidationResponse:
+    properties:
+      account_name:
+        type: string
+      account_no:
+        type: string
+      city:
+        type: string
+      deadline:
+        type: string
+      destination_account_bank:
+        type: string
+      destination_account_name:
+        type: string
+      destination_account_number:
+        type: string
+      pay_amount:
+        type: integer
+      remark:
+        type: string
+    type: object
   api.applymentBankListResponse:
     properties:
       banks:
@@ -4248,14 +4269,24 @@ definitions:
     type: object
   api.merchantApplymentStatusResponse:
     properties:
+      account_validation:
+        allOf:
+        - $ref: '#/definitions/api.applymentAccountValidationResponse'
+        description: 汇款验证信息
       block_reason:
         description: 不允许提交时的阻塞原因
         type: string
       can_submit:
         description: 是否允许提交或重新提交进件
         type: boolean
+      legal_validation_url:
+        description: 法人扫码验证链接
+        type: string
       reject_reason:
         description: 拒绝原因
+        type: string
+      sign_state:
+        description: 签约状态
         type: string
       sign_url:
         description: 签约链接
@@ -4296,6 +4327,33 @@ definitions:
       bank_branch_id:
         type: string
       bank_name:
+        type: string
+      contact_id_card_number:
+        maxLength: 32
+        minLength: 15
+        type: string
+      contact_id_doc_copy_asset_id:
+        type: integer
+      contact_id_doc_copy_back_asset_id:
+        type: integer
+      contact_id_doc_period_begin:
+        type: string
+      contact_id_doc_period_end:
+        type: string
+      contact_id_doc_type:
+        enum:
+        - IDENTIFICATION_TYPE_IDCARD
+        type: string
+      contact_name:
+        maxLength: 64
+        minLength: 2
+        type: string
+      contact_type:
+        enum:
+        - LEGAL
+        - SUPER
+        - "65"
+        - "66"
         type: string
       need_bank_branch:
         type: boolean
@@ -5235,6 +5293,10 @@ definitions:
     type: object
   api.operatorApplymentStatusResponse:
     properties:
+      account_validation:
+        allOf:
+        - $ref: '#/definitions/api.applymentAccountValidationResponse'
+        description: 汇款验证信息
       applyment_id:
         description: 微信进件ID
         type: integer
@@ -5246,8 +5308,14 @@ definitions:
         type: boolean
       created_at:
         type: string
+      legal_validation_url:
+        description: 法人扫码验证链接
+        type: string
       reject_reason:
         description: 拒绝原因
+        type: string
+      sign_state:
+        description: 签约状态
         type: string
       sign_url:
         description: 签约链接
@@ -5290,6 +5358,33 @@ definitions:
       bank_branch_id:
         type: string
       bank_name:
+        type: string
+      contact_id_card_number:
+        maxLength: 32
+        minLength: 15
+        type: string
+      contact_id_doc_copy_asset_id:
+        type: integer
+      contact_id_doc_copy_back_asset_id:
+        type: integer
+      contact_id_doc_period_begin:
+        type: string
+      contact_id_doc_period_end:
+        type: string
+      contact_id_doc_type:
+        enum:
+        - IDENTIFICATION_TYPE_IDCARD
+        type: string
+      contact_name:
+        maxLength: 64
+        minLength: 2
+        type: string
+      contact_type:
+        enum:
+        - LEGAL
+        - SUPER
+        - "65"
+        - "66"
         type: string
       need_bank_branch:
         type: boolean

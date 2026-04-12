@@ -13,9 +13,7 @@ import { logger } from '../../../utils/logger'
 import Navigation from '../../../utils/navigation'
 import { buildAgreementConsentPayload } from '../../../api/agreement-consent'
 import {
-  buildAvailableRegionsPatch,
   buildCityChangePatch,
-  buildCityOptionsPatch,
   buildOperatorApplicationPatch,
   buildOperatorBasicPayload,
   buildSelectedRegionPatch,
@@ -23,10 +21,7 @@ import {
   createUploadFeedback,
   DEFAULT_OPERATOR_OCR_DISPLAY_STATE,
   DEFAULT_OPERATOR_UPLOAD_FEEDBACK,
-  EMPTY_UPLOAD_FEEDBACK,
   extractRegionSearchKeyword,
-  findMatchedCityOption,
-  findMatchedDistrictOption,
   FormDataValue,
   getErrorText,
   getOperatorDocumentRemovalData,

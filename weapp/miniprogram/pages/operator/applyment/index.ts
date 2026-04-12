@@ -6,8 +6,22 @@ import {
   type OperatorApplymentStatusResponse,
   type OperatorApplymentStatusView
 } from '../../../api/operator-applyment'
-import type { ApplymentBindBankPayload } from '../../../api/applyment-bank'
+import type { ApplymentBindBankDraftPayload, ApplymentBindBankPayload } from '../../../api/applyment-bank'
 import { getErrorUserMessage } from '../../../utils/user-facing'
+
+function copyText(data: string, successTitle: string) {
+  const trimmed = String(data || '').trim()
+  if (!trimmed) {
+    return
+  }
+
+  wx.setClipboardData({
+    data: trimmed,
+    success: () => {
+      wx.showToast({ title: successTitle, icon: 'success' })
+    }
+  })
+}
 
 function buildSubmitSuccessMessage(message: string, applymentId: string): string {
   const content = [message || '开户申请已提交']
@@ -34,7 +48,7 @@ Page({
     submitting: false,
     refreshingStatus: false,
     error: '',
-    bindBankDraft: null as ApplymentBindBankPayload | null,
+    bindBankDraft: null as ApplymentBindBankDraftPayload | null,
     status: null as OperatorApplymentStatusResponse | null,
     statusView: { ...DEFAULT_OPERATOR_APPLYMENT_STATUS_VIEW } as OperatorApplymentStatusView
   },
@@ -95,7 +109,7 @@ Page({
     this.setData({ error: '' })
   },
 
-  onBindDraftChange(e: WechatMiniprogram.CustomEvent<ApplymentBindBankPayload>) {
+  onBindDraftChange(e: WechatMiniprogram.CustomEvent<ApplymentBindBankDraftPayload>) {
     this.setData({ bindBankDraft: e.detail })
   },
 
@@ -131,8 +145,18 @@ Page({
   },
 
   onOpenSignUrl() {
-    const signURL = this.data.statusView.signURL
-    if (!signURL) return
-    wx.setClipboardData({ data: signURL })
+    copyText(this.data.statusView.signURL, '签约链接已复制')
+  },
+
+  onCopyLegalValidationUrl() {
+    copyText(this.data.statusView.legalValidationURL, '验证链接已复制')
+  },
+
+  onCopyValidationAccountNumber() {
+    copyText(this.data.statusView.accountValidation?.destinationAccountNumber || '', '收款卡号已复制')
+  },
+
+  onCopyValidationRemark() {
+    copyText(this.data.statusView.accountValidation?.remark || '', '汇款备注已复制')
   }
 })

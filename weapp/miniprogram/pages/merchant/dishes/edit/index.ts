@@ -6,8 +6,7 @@ import {
   UpdateDishRequest,
   TagService,
   TagInfo,
-  CustomizationGroup,
-  CustomizationGroupInput
+  CustomizationGroup
 } from '../../../../api/dish'
 import { waitForPublicMediaDisplayUrl } from '../../../../api/onboarding'
 import { logger } from '../../../../utils/logger'
@@ -142,7 +141,7 @@ Page({
 
       const detail = this.data.isEdit && isSettledFulfilled(detailResult) ? detailResult.value : null
       const categoryOptions = buildCategoryOptions(categoriesResult.value || [])
-      const categorySelection = resolveCategorySelection(
+      resolveCategorySelection(
         categoryOptions,
         detail?.category_id || this.data.formData.category_id,
         detail?.category_name || this.data.selectedCategoryName,

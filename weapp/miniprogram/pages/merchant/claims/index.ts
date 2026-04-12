@@ -3,10 +3,23 @@ import {
   ClaimResponse
 } from '../../../api/appeals-customer-service'
 import { logger } from '../../../utils/logger'
+import {
+  ClaimTagTheme,
+  formatAppealStatus,
+  formatClaimStatus,
+  formatClaimType,
+  formatCompensationSource,
+  formatMoney,
+  formatRecoveryStatus,
+  formatResponsibleParty,
+  formatTime,
+  getAppealStatusTheme,
+  getClaimStatusTheme,
+  getMerchantClaimListActionState,
+  getRecoveryStatusTheme
+} from '../../../utils/merchant-claim-detail-view'
 import { getStableBarHeights } from '../../../utils/responsive'
 import { getErrorUserMessage } from '../../../utils/user-facing'
-
-type ClaimTagTheme = 'primary' | 'warning' | 'success' | 'danger' | 'default'
 
 interface MerchantClaimView {
   id: number
@@ -48,141 +61,10 @@ interface ClaimSummary {
   closed: number
 }
 
-function formatMoney(cents?: number): string {
-  const value = typeof cents === 'number' ? cents : 0
-  return `¥${(value / 100).toFixed(2)}`
-}
-
-function formatClaimType(claimType: string): string {
-  const map: Record<string, string> = {
-    refund: '退款',
-    compensation: '补偿',
-    quality_issue: '质量问题',
-    delivery_issue: '配送问题',
-    'foreign-object': '异物',
-    damage: '餐损',
-    timeout: '超时',
-    'food-safety': '食安'
-  }
-  return map[claimType] || claimType
-}
-
 function getClaimTypeTheme(claimType: string): ClaimTagTheme {
   if (claimType === 'food-safety' || claimType === 'foreign-object') return 'danger'
   if (claimType === 'damage' || claimType === 'quality_issue') return 'warning'
   return 'primary'
-}
-
-function formatClaimStatus(status: string): string {
-  const map: Record<string, string> = {
-    pending: '待审核',
-    approved: '已通过',
-    rejected: '已驳回',
-    compensated: '已赔付'
-  }
-  return map[status] || status
-}
-
-function getClaimStatusTheme(status: string): ClaimTagTheme {
-  if (status === 'approved') return 'warning'
-  if (status === 'compensated') return 'success'
-  if (status === 'rejected') return 'default'
-  return 'primary'
-}
-
-function formatAppealStatus(status?: string): string {
-  const map: Record<string, string> = {
-    pending: '异议待审核',
-    approved: '异议已通过',
-    rejected: '异议已驳回',
-    compensated: '异议已赔付'
-  }
-  if (!status) return '未提交异议'
-  return map[status] || status
-}
-
-function getAppealStatusTheme(status?: string): ClaimTagTheme {
-  if (!status) return 'default'
-  if (status === 'pending') return 'warning'
-  if (status === 'approved' || status === 'compensated') return 'success'
-  if (status === 'rejected') return 'danger'
-  return 'default'
-}
-
-function formatTime(value?: string): string {
-  if (!value) return '暂无'
-  return value.replace('T', ' ').slice(0, 16)
-}
-
-function formatResponsibleParty(party?: string): string {
-  const map: Record<string, string> = {
-    merchant: '商户责任',
-    rider: '骑手责任',
-    user: '用户责任',
-    platform_fallback: '平台兜底',
-    unknown: '待判定'
-  }
-  if (!party) return '责任待拉取'
-  return map[party] || party
-}
-
-function formatCompensationSource(source?: string): string {
-  const map: Record<string, string> = {
-    merchant: '商户承担',
-    rider: '骑手承担',
-    platform: '平台先赔'
-  }
-  if (!source) return '赔付来源待拉取'
-  return map[source] || source
-}
-
-function formatRecoveryStatus(status?: string): string {
-  const map: Record<string, string> = {
-    pending: '待回款',
-    overdue: '已逾期',
-    paid: '已支付',
-    waived: '已核销',
-    appealed: '异议中'
-  }
-  if (!status) return '无追偿单'
-  return map[status] || status
-}
-
-function getRecoveryStatusTheme(status?: string): ClaimTagTheme {
-  if (!status) return 'default'
-  if (status === 'pending' || status === 'overdue') return 'warning'
-  if (status === 'paid' || status === 'waived') return 'success'
-  if (status === 'appealed') return 'danger'
-  return 'default'
-}
-
-function getActionHint(options: {
-  status: string
-  appealStatus?: string
-  recoveryStatus?: string
-}) {
-  if (options.recoveryStatus === 'appealed' || options.appealStatus === 'pending') {
-    return '异议已提交，等待平台复核结果。'
-  }
-
-  if (options.recoveryStatus === 'pending' || options.recoveryStatus === 'overdue' || options.appealStatus === 'rejected') {
-    return '平台已生成追偿单，建议尽快支付追偿款或先提交异议。'
-  }
-
-  if (
-    options.recoveryStatus === 'paid' ||
-    options.recoveryStatus === 'waived' ||
-    options.appealStatus === 'approved' ||
-    options.appealStatus === 'compensated'
-  ) {
-    return '当前索赔已进入结案态，可进入详情核对最终结果。'
-  }
-
-  if (options.status === 'approved' || options.status === 'auto-approved') {
-    return '责任已判定，可进入详情查看依据并决定是否提交异议。'
-  }
-
-  return '点击查看索赔详情与处理进度。'
 }
 
 const getErrorMessage = getErrorUserMessage
@@ -191,9 +73,11 @@ function buildBaseClaimView(claim: ClaimResponse): MerchantClaimView {
   const appealStatus = claim.appeal_status
   const recoveryStatus = claim.recovery_status
   const hasAppeal = Boolean(claim.appeal_id)
-  const isPendingAction = recoveryStatus === 'pending' || recoveryStatus === 'overdue' || (appealStatus === 'rejected' && recoveryStatus !== 'paid' && recoveryStatus !== 'waived')
-  const isAppealedFlow = recoveryStatus === 'appealed' || appealStatus === 'pending'
-  const isClosedFlow = recoveryStatus === 'paid' || recoveryStatus === 'waived' || appealStatus === 'approved' || appealStatus === 'compensated'
+  const actionState = getMerchantClaimListActionState({
+    status: claim.status,
+    appealStatus,
+    recoveryStatus
+  })
 
   return {
     id: claim.id,
@@ -217,15 +101,11 @@ function buildBaseClaimView(claim: ClaimResponse): MerchantClaimView {
     compensationSourceLabel: '赔付来源待拉取',
     recoveryStatusLabel: formatRecoveryStatus(recoveryStatus),
     recoveryStatusTheme: getRecoveryStatusTheme(recoveryStatus),
-    actionHint: getActionHint({
-      status: claim.status,
-      appealStatus,
-      recoveryStatus
-    }),
+    actionHint: actionState.actionHint,
     hasAppeal,
-    isPendingAction,
-    isAppealedFlow,
-    isClosedFlow
+    isPendingAction: actionState.isPendingAction,
+    isAppealedFlow: actionState.isAppealedFlow,
+    isClosedFlow: actionState.isClosedFlow
   }
 }
 

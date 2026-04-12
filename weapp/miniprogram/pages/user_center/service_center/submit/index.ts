@@ -2,7 +2,7 @@ import { claimManagementService } from '../../../../api/appeals-customer-service
 import type { UserClaimType, SubmitClaimResponse } from '../../../../api/appeals-customer-service'
 import { getOrderDetail } from '../../../../api/order'
 import { logger } from '../../../../utils/logger'
-import { getSubmitResultPresentation, type SubmitResultPresentation } from '../../../../utils/user-claim-submit-view'
+import { getSubmitResultPresentation } from '../../../../utils/user-claim-submit-view'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
 
 const SUPPORTED_USER_CLAIM_TYPES: UserClaimType[] = ['foreign-object', 'damage', 'timeout']

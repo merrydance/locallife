@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -22,6 +23,8 @@ import (
 
 var applymentDateTokenPattern = regexp.MustCompile(`\d{4}年\d{1,2}月\d{1,2}日|\d{4}[./-]\d{1,2}[./-]\d{1,2}|\d{8}|长期|永久`)
 
+const applymentDefaultContactIDDocType = "IDENTIFICATION_TYPE_IDCARD"
+
 // ==================== 商户开户 ====================
 
 type applymentBindBankFields struct {
@@ -38,6 +41,28 @@ type applymentBindBankFields struct {
 	AccountName     string `json:"account_name" binding:"required,max=128"`
 }
 
+type applymentContactFields struct {
+	ContactType                 string `json:"contact_type" binding:"omitempty,oneof=LEGAL SUPER 65 66"`
+	ContactName                 string `json:"contact_name" binding:"omitempty,min=2,max=64"`
+	ContactIDDocType            string `json:"contact_id_doc_type" binding:"omitempty,oneof=IDENTIFICATION_TYPE_IDCARD"`
+	ContactIDCardNumber         string `json:"contact_id_card_number" binding:"omitempty,min=15,max=32"`
+	ContactIDDocCopyAssetID     int64  `json:"contact_id_doc_copy_asset_id"`
+	ContactIDDocCopyBackAssetID int64  `json:"contact_id_doc_copy_back_asset_id"`
+	ContactIDDocPeriodBegin     string `json:"contact_id_doc_period_begin"`
+	ContactIDDocPeriodEnd       string `json:"contact_id_doc_period_end"`
+}
+
+type resolvedApplymentContact struct {
+	ContactType                 string
+	ContactName                 string
+	ContactIDDocType            string
+	ContactIDCardNumber         string
+	ContactIDDocCopyAssetID     int64
+	ContactIDDocCopyBackAssetID int64
+	ContactIDDocPeriodBegin     string
+	ContactIDDocPeriodEnd       string
+}
+
 func (f *applymentBindBankFields) normalize() {
 	f.AccountType = strings.TrimSpace(f.AccountType)
 	f.AccountBank = strings.TrimSpace(f.AccountBank)
@@ -51,6 +76,114 @@ func (f *applymentBindBankFields) normalize() {
 	if f.AccountBank == "" && f.BankAlias != "" {
 		f.AccountBank = f.BankAlias
 	}
+}
+
+func (f *applymentContactFields) normalize() {
+	f.ContactType = strings.ToUpper(strings.TrimSpace(f.ContactType))
+	f.ContactName = strings.TrimSpace(f.ContactName)
+	f.ContactIDDocType = strings.ToUpper(strings.TrimSpace(f.ContactIDDocType))
+	f.ContactIDCardNumber = strings.TrimSpace(f.ContactIDCardNumber)
+	f.ContactIDDocPeriodBegin = strings.TrimSpace(f.ContactIDDocPeriodBegin)
+	f.ContactIDDocPeriodEnd = strings.TrimSpace(f.ContactIDDocPeriodEnd)
+}
+
+func (f applymentContactFields) resolve(legalPersonName, legalPersonIDNumber string) (resolvedApplymentContact, error) {
+	switch f.ContactType {
+	case "", "LEGAL", "65":
+		if strings.TrimSpace(legalPersonName) == "" || strings.TrimSpace(legalPersonIDNumber) == "" {
+			return resolvedApplymentContact{}, fmt.Errorf("legal person identity is required")
+		}
+		return resolvedApplymentContact{
+			ContactType:         "LEGAL",
+			ContactName:         strings.TrimSpace(legalPersonName),
+			ContactIDCardNumber: strings.TrimSpace(legalPersonIDNumber),
+		}, nil
+	case "SUPER", "66":
+		if f.ContactName == "" {
+			return resolvedApplymentContact{}, fmt.Errorf("contact_name is required when contact_type is SUPER")
+		}
+		if f.ContactIDCardNumber == "" {
+			return resolvedApplymentContact{}, fmt.Errorf("contact_id_card_number is required when contact_type is SUPER")
+		}
+		if f.ContactIDDocCopyAssetID <= 0 {
+			return resolvedApplymentContact{}, fmt.Errorf("contact_id_doc_copy_asset_id is required when contact_type is SUPER")
+		}
+		if f.ContactIDDocCopyBackAssetID <= 0 {
+			return resolvedApplymentContact{}, fmt.Errorf("contact_id_doc_copy_back_asset_id is required when contact_type is SUPER")
+		}
+
+		contactIDDocType := f.ContactIDDocType
+		if contactIDDocType == "" {
+			contactIDDocType = applymentDefaultContactIDDocType
+		}
+		if contactIDDocType != applymentDefaultContactIDDocType {
+			return resolvedApplymentContact{}, fmt.Errorf("unsupported contact_id_doc_type: %s", contactIDDocType)
+		}
+
+		periodBegin := normalizeApplymentDate(f.ContactIDDocPeriodBegin)
+		periodEnd := normalizeApplymentDate(f.ContactIDDocPeriodEnd)
+		if err := validateApplymentIDCardValidity(periodBegin, periodEnd); err != nil {
+			return resolvedApplymentContact{}, fmt.Errorf("contact_id_doc_period is invalid")
+		}
+
+		return resolvedApplymentContact{
+			ContactType:                 "SUPER",
+			ContactName:                 f.ContactName,
+			ContactIDDocType:            contactIDDocType,
+			ContactIDCardNumber:         f.ContactIDCardNumber,
+			ContactIDDocCopyAssetID:     f.ContactIDDocCopyAssetID,
+			ContactIDDocCopyBackAssetID: f.ContactIDDocCopyBackAssetID,
+			ContactIDDocPeriodBegin:     periodBegin,
+			ContactIDDocPeriodEnd:       periodEnd,
+		}, nil
+	default:
+		return resolvedApplymentContact{}, fmt.Errorf("unsupported contact_type: %s", f.ContactType)
+	}
+}
+
+func buildWechatApplymentContactInfo(contact resolvedApplymentContact, encryptedContactName, encryptedContactIDCardNumber, encryptedMobilePhone string) *wechat.ApplymentContactInfo {
+	info := &wechat.ApplymentContactInfo{
+		ContactType:         contact.ContactType,
+		ContactName:         encryptedContactName,
+		ContactIDCardNumber: encryptedContactIDCardNumber,
+		MobilePhone:         encryptedMobilePhone,
+	}
+
+	if contact.ContactIDDocType != "" {
+		info.ContactIDDocType = contact.ContactIDDocType
+	}
+	if contact.ContactIDDocPeriodBegin != "" {
+		info.ContactIDDocPeriodBegin = contact.ContactIDDocPeriodBegin
+	}
+	if contact.ContactIDDocPeriodEnd != "" {
+		info.ContactIDDocPeriodEnd = contact.ContactIDDocPeriodEnd
+	}
+
+	return info
+}
+
+func (c resolvedApplymentContact) requiresIdentityDocumentAssets() bool {
+	return c.ContactType == "SUPER"
+}
+
+func (server *Server) validateApplymentContactDocumentAsset(ctx context.Context, userID, assetID int64, expectedCategory media.Category) error {
+	asset, err := server.store.GetMediaAssetByID(ctx, assetID)
+	if err != nil {
+		return fmt.Errorf("contact document asset %d not found", assetID)
+	}
+	if asset.UploadedBy != userID {
+		return fmt.Errorf("contact document asset %d does not belong to current user", assetID)
+	}
+	if asset.Visibility != string(media.VisibilityPrivate) {
+		return fmt.Errorf("contact document asset %d must be private", assetID)
+	}
+	if asset.MediaCategory != string(expectedCategory) {
+		return fmt.Errorf("contact document asset %d category is invalid", assetID)
+	}
+	if asset.UploadStatus == "deleted" {
+		return fmt.Errorf("contact document asset %d is unavailable", assetID)
+	}
+	return nil
 }
 
 func (f applymentBindBankFields) validateSelection() error {
@@ -96,6 +229,7 @@ func (f applymentBindBankFields) toWechatAccountInfo(encryptedAccountName, encry
 // merchantBindBankRequest 商户绑定银行卡请求
 type merchantBindBankRequest struct {
 	applymentBindBankFields
+	applymentContactFields
 }
 
 // merchantBindBankResponse 商户绑定银行卡响应
@@ -124,7 +258,8 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
-	req.normalize()
+	req.applymentBindBankFields.normalize()
+	req.applymentContactFields.normalize()
 	if err := req.validateSelection(); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
@@ -157,8 +292,7 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 	})
 	if err == nil {
 		// 已有申请，检查状态
-		if existingApplyment.Status == "submitted" || existingApplyment.Status == "auditing" ||
-			existingApplyment.Status == "to_be_signed" || existingApplyment.Status == "signing" {
+		if isApplymentPendingSubmissionStatus(existingApplyment.Status) {
 			ctx.JSON(http.StatusBadRequest, errorResponse(ErrAccountApplymentPending))
 			return
 		}
@@ -220,6 +354,22 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 		return
 	}
 
+	resolvedContact, err := req.applymentContactFields.resolve(application.LegalPersonName, application.LegalPersonIDNumber)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+	if resolvedContact.requiresIdentityDocumentAssets() {
+		if err := server.validateApplymentContactDocumentAsset(ctx, authPayload.UserID, resolvedContact.ContactIDDocCopyAssetID, media.CategoryIDCardFront); err != nil {
+			ctx.JSON(http.StatusBadRequest, errorResponse(err))
+			return
+		}
+		if err := server.validateApplymentContactDocumentAsset(ctx, authPayload.UserID, resolvedContact.ContactIDDocCopyBackAssetID, media.CategoryIDCardBack); err != nil {
+			ctx.JSON(http.StatusBadRequest, errorResponse(err))
+			return
+		}
+	}
+
 	// 加密敏感数据（本地存储）
 	encryptedIDCardNumber, err := util.EncryptSensitiveField(server.dataEncryptor, application.LegalPersonIDNumber)
 	if err != nil {
@@ -233,7 +383,7 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("数据加密失败")))
 		return
 	}
-	encryptedContactIDCardNumber, err := util.EncryptSensitiveField(server.dataEncryptor, application.LegalPersonIDNumber)
+	encryptedContactIDCardNumber, err := util.EncryptSensitiveField(server.dataEncryptor, resolvedContact.ContactIDCardNumber)
 	if err != nil {
 		log.Error().Err(err).Msg("加密联系人身份证号失败")
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("数据加密失败")))
@@ -269,7 +419,7 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 		BankName:              pgtype.Text{String: req.BankName, Valid: req.BankName != ""},
 		AccountNumber:         encryptedAccountNumber, // AES 加密存储
 		AccountName:           req.AccountName,
-		ContactName:           application.LegalPersonName,
+		ContactName:           resolvedContact.ContactName,
 		ContactIDCardNumber:   pgtype.Text{String: encryptedContactIDCardNumber, Valid: true}, // AES 加密存储
 		MobilePhone:           contactPhone,
 		MerchantShortname:     merchant.Name,
@@ -373,6 +523,20 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 		return
 	}
 
+	wxEncryptedContactName, err := server.ecommerceClient.EncryptSensitiveData(resolvedContact.ContactName)
+	if err != nil {
+		log.Error().Err(err).Msg("加密联系人姓名失败")
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("加密敏感信息失败")))
+		return
+	}
+
+	wxEncryptedContactIDCardNumber, err := server.ecommerceClient.EncryptSensitiveData(resolvedContact.ContactIDCardNumber)
+	if err != nil {
+		log.Error().Err(err).Msg("加密联系人身份证号码失败")
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("加密敏感信息失败")))
+		return
+	}
+
 	// 加密银行账户名
 	wxEncryptedAccountName, err := server.ecommerceClient.EncryptSensitiveData(req.AccountName)
 	if err != nil {
@@ -436,6 +600,37 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 		return
 	}
 
+	contactInfo := buildWechatApplymentContactInfo(resolvedContact, wxEncryptedContactName, wxEncryptedContactIDCardNumber, wxEncryptedMobilePhone)
+	if resolvedContact.requiresIdentityDocumentAssets() {
+		fname, fdata, dlErr := server.mediaRegistry.DownloadObject(ctx, resolvedContact.ContactIDDocCopyAssetID)
+		if dlErr != nil {
+			log.Error().Err(dlErr).Int64("asset_id", resolvedContact.ContactIDDocCopyAssetID).Msg("下载超级管理员身份证人像面失败")
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("获取超级管理员证件图片失败")))
+			return
+		}
+		upResp, upErr := server.ecommerceClient.UploadImage(ctx, fname, fdata)
+		if upErr != nil {
+			log.Error().Err(upErr).Int64("asset_id", resolvedContact.ContactIDDocCopyAssetID).Msg("上传超级管理员身份证人像面到微信失败")
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("上传超级管理员证件图片失败")))
+			return
+		}
+		contactInfo.ContactIDDocCopy = upResp.MediaID
+
+		fname, fdata, dlErr = server.mediaRegistry.DownloadObject(ctx, resolvedContact.ContactIDDocCopyBackAssetID)
+		if dlErr != nil {
+			log.Error().Err(dlErr).Int64("asset_id", resolvedContact.ContactIDDocCopyBackAssetID).Msg("下载超级管理员身份证国徽面失败")
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("获取超级管理员证件图片失败")))
+			return
+		}
+		upResp, upErr = server.ecommerceClient.UploadImage(ctx, fname, fdata)
+		if upErr != nil {
+			log.Error().Err(upErr).Int64("asset_id", resolvedContact.ContactIDDocCopyBackAssetID).Msg("上传超级管理员身份证国徽面到微信失败")
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("上传超级管理员证件图片失败")))
+			return
+		}
+		contactInfo.ContactIDDocCopyBack = upResp.MediaID
+	}
+
 	applymentReq := &wechat.EcommerceApplymentRequest{
 		OutRequestNo:       outRequestNo,
 		OrganizationType:   organizationType,
@@ -451,12 +646,7 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 			IDCardValidTime:      idCardValidTime,
 		},
 		AccountInfo: req.toWechatAccountInfo(wxEncryptedAccountName, wxEncryptedAccountNumber),
-		ContactInfo: &wechat.ApplymentContactInfo{
-			ContactType:         "65",
-			ContactName:         wxEncryptedIDCardName,
-			ContactIDCardNumber: wxEncryptedIDCardNumber,
-			MobilePhone:         wxEncryptedMobilePhone,
-		},
+		ContactInfo: contactInfo,
 		SalesSceneInfo: &wechat.ApplymentSalesSceneInfo{
 			StoreName:   storeName,
 			StoreQRCode: storeQRCodeUploadResp.MediaID,
@@ -497,14 +687,103 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 }
 
 // merchantApplymentStatusResponse 商户开户状态响应
+type applymentAccountValidationResponse struct {
+	AccountName              string `json:"account_name,omitempty"`
+	AccountNo                string `json:"account_no,omitempty"`
+	PayAmount                int64  `json:"pay_amount,omitempty"`
+	DestinationAccountNumber string `json:"destination_account_number,omitempty"`
+	DestinationAccountName   string `json:"destination_account_name,omitempty"`
+	DestinationAccountBank   string `json:"destination_account_bank,omitempty"`
+	City                     string `json:"city,omitempty"`
+	Remark                   string `json:"remark,omitempty"`
+	Deadline                 string `json:"deadline,omitempty"`
+}
+
 type merchantApplymentStatusResponse struct {
-	Status       string  `json:"status"`                  // 状态
-	StatusDesc   string  `json:"status_desc"`             // 状态描述
-	CanSubmit    bool    `json:"can_submit"`              // 是否允许提交或重新提交进件
-	BlockReason  string  `json:"block_reason,omitempty"`  // 不允许提交时的阻塞原因
-	SignURL      *string `json:"sign_url,omitempty"`      // 签约链接
-	SubMchID     *string `json:"sub_mch_id,omitempty"`    // 二级商户号
-	RejectReason *string `json:"reject_reason,omitempty"` // 拒绝原因
+	Status             string                              `json:"status"`                         // 状态
+	StatusDesc         string                              `json:"status_desc"`                    // 状态描述
+	CanSubmit          bool                                `json:"can_submit"`                     // 是否允许提交或重新提交进件
+	BlockReason        string                              `json:"block_reason,omitempty"`         // 不允许提交时的阻塞原因
+	SignURL            *string                             `json:"sign_url,omitempty"`             // 签约链接
+	SignState          *string                             `json:"sign_state,omitempty"`           // 签约状态
+	LegalValidationURL *string                             `json:"legal_validation_url,omitempty"` // 法人扫码验证链接
+	AccountValidation  *applymentAccountValidationResponse `json:"account_validation,omitempty"`   // 汇款验证信息
+	SubMchID           *string                             `json:"sub_mch_id,omitempty"`           // 二级商户号
+	RejectReason       *string                             `json:"reject_reason,omitempty"`        // 拒绝原因
+}
+
+type applymentSensitiveDecryptor interface {
+	DecryptSensitiveResponseData(ciphertext string) (string, error)
+}
+
+func resolveApplymentSensitiveDecryptor(client wechat.EcommerceClientInterface) applymentSensitiveDecryptor {
+	if client == nil {
+		return nil
+	}
+	decryptor, ok := client.(applymentSensitiveDecryptor)
+	if !ok {
+		return nil
+	}
+	return decryptor
+}
+
+func decryptApplymentSensitiveField(decryptor applymentSensitiveDecryptor, ciphertext string) string {
+	trimmedCiphertext := strings.TrimSpace(ciphertext)
+	if trimmedCiphertext == "" {
+		return ""
+	}
+	if decryptor == nil {
+		return ""
+	}
+
+	plaintext, err := decryptor.DecryptSensitiveResponseData(trimmedCiphertext)
+	if err != nil {
+		log.Warn().Err(err).Msg("failed to decrypt applyment sensitive response field")
+		return ""
+	}
+	return strings.TrimSpace(plaintext)
+}
+
+func buildApplymentAccountValidationResponse(validation *wechat.EcommerceApplymentAccountValidation, decryptor applymentSensitiveDecryptor) *applymentAccountValidationResponse {
+	if validation == nil {
+		return nil
+	}
+
+	return &applymentAccountValidationResponse{
+		AccountName:              decryptApplymentSensitiveField(decryptor, validation.AccountName),
+		AccountNo:                decryptApplymentSensitiveField(decryptor, validation.AccountNo),
+		PayAmount:                validation.PayAmount,
+		DestinationAccountNumber: strings.TrimSpace(validation.DestinationAccountNumber),
+		DestinationAccountName:   strings.TrimSpace(validation.DestinationAccountName),
+		DestinationAccountBank:   strings.TrimSpace(validation.DestinationAccountBank),
+		City:                     strings.TrimSpace(validation.City),
+		Remark:                   strings.TrimSpace(validation.Remark),
+		Deadline:                 strings.TrimSpace(validation.Deadline),
+	}
+}
+
+func isApplymentPendingSubmissionStatus(status string) bool {
+	switch strings.TrimSpace(status) {
+	case "submitted", "checking", "auditing", "account_need_verify", "to_be_confirmed", "to_be_signed", "signing":
+		return true
+	default:
+		return false
+	}
+}
+
+func buildApplymentText(value string) pgtype.Text {
+	trimmed := strings.TrimSpace(value)
+	return pgtype.Text{String: trimmed, Valid: trimmed != ""}
+}
+
+func applymentTextChanged(current, next pgtype.Text) bool {
+	if current.Valid != next.Valid {
+		return true
+	}
+	if !current.Valid {
+		return false
+	}
+	return current.String != next.String
 }
 
 // @Summary 查询商户开户状态
@@ -554,34 +833,52 @@ func (server *Server) getMerchantApplymentStatus(ctx *gin.Context) {
 		return
 	}
 
+	var remoteStatusDesc string
+	var remoteLegalValidationURL string
+	var remoteAccountValidation *applymentAccountValidationResponse
+	decryptor := resolveApplymentSensitiveDecryptor(server.ecommerceClient)
+
 	// 如果有微信申请单号且客户端可用，查询最新状态
 	if applyment.ApplymentID.Valid && server.ecommerceClient != nil {
 		wxResp, err := server.ecommerceClient.QueryEcommerceApplymentByID(ctx, applyment.ApplymentID.Int64)
 		if err != nil {
 			log.Error().Err(err).Msg("查询微信进件状态失败")
 		} else {
-			// 更新本地状态
 			updateStatus := mapWechatApplymentStatus(wxResp.ApplymentState)
-			if updateStatus != applyment.Status {
+			nextRejectReason := getRejectReasonFromAuditDetail(wxResp.AuditDetail)
+			nextSignURL := buildApplymentText(wxResp.SignURL)
+			nextSignState := buildApplymentText(wxResp.SignState)
+			nextSubMchID := buildApplymentText(wxResp.SubMchID)
+
+			if updateStatus != applyment.Status ||
+				applymentTextChanged(applyment.RejectReason, nextRejectReason) ||
+				applymentTextChanged(applyment.SignUrl, nextSignURL) ||
+				applymentTextChanged(applyment.SignState, nextSignState) ||
+				applymentTextChanged(applyment.SubMchID, nextSubMchID) {
 				_, err = server.store.UpdateEcommerceApplymentStatus(ctx, db.UpdateEcommerceApplymentStatusParams{
 					ID:           applyment.ID,
 					Status:       updateStatus,
-					RejectReason: getRejectReasonFromAuditDetail(wxResp.AuditDetail),
-					SignUrl:      pgtype.Text{String: wxResp.SignURL, Valid: wxResp.SignURL != ""},
-					SignState:    pgtype.Text{String: wxResp.SignState, Valid: wxResp.SignState != ""},
-					SubMchID:     pgtype.Text{String: wxResp.SubMchID, Valid: wxResp.SubMchID != ""},
+					RejectReason: nextRejectReason,
+					SignUrl:      nextSignURL,
+					SignState:    nextSignState,
+					SubMchID:     nextSubMchID,
 				})
 				if err != nil {
 					log.Error().Err(err).Msg("更新进件状态失败")
 				}
-				applyment.Status = updateStatus
-				applyment.SignUrl = pgtype.Text{String: wxResp.SignURL, Valid: wxResp.SignURL != ""}
-				applyment.SubMchID = pgtype.Text{String: wxResp.SubMchID, Valid: wxResp.SubMchID != ""}
 			}
+
+			applyment.Status = updateStatus
+			applyment.RejectReason = nextRejectReason
+			applyment.SignUrl = nextSignURL
+			applyment.SignState = nextSignState
+			applyment.SubMchID = nextSubMchID
+			remoteStatusDesc = strings.TrimSpace(wxResp.ApplymentStateDesc)
+			remoteLegalValidationURL = strings.TrimSpace(wxResp.LegalValidationURL)
+			remoteAccountValidation = buildApplymentAccountValidationResponse(wxResp.AccountValidation, decryptor)
 
 			// 如果开户成功，更新商户状态和支付配置
 			if wxResp.SubMchID != "" && merchant.Status != "active" {
-				// 创建或更新商户支付配置
 				_, err = server.store.CreateMerchantPaymentConfig(ctx, db.CreateMerchantPaymentConfigParams{
 					MerchantID: merchant.ID,
 					SubMchID:   wxResp.SubMchID,
@@ -591,7 +888,6 @@ func (server *Server) getMerchantApplymentStatus(ctx *gin.Context) {
 					log.Error().Err(err).Msg("创建商户支付配置失败")
 				}
 
-				// 更新商户状态为active
 				_, err = server.store.UpdateMerchantStatus(ctx, db.UpdateMerchantStatusParams{
 					ID:     merchant.ID,
 					Status: "active",
@@ -604,16 +900,29 @@ func (server *Server) getMerchantApplymentStatus(ctx *gin.Context) {
 	}
 
 	normalizedStatus := normalizeApplymentStatus(applyment.Status, applyment.SubMchID.Valid && applyment.SubMchID.String != "")
+	statusDesc := getApplymentStatusDesc(normalizedStatus)
+	if remoteStatusDesc != "" {
+		statusDesc = remoteStatusDesc
+	}
 	canSubmit, blockReason := getMerchantApplymentSubmitCapability(merchant.Status, normalizedStatus)
 	resp := merchantApplymentStatusResponse{
 		Status:      normalizedStatus,
-		StatusDesc:  getApplymentStatusDesc(normalizedStatus),
+		StatusDesc:  statusDesc,
 		CanSubmit:   canSubmit,
 		BlockReason: blockReason,
 	}
 
 	if applyment.SignUrl.Valid && applyment.SignUrl.String != "" {
 		resp.SignURL = &applyment.SignUrl.String
+	}
+	if applyment.SignState.Valid && applyment.SignState.String != "" {
+		resp.SignState = &applyment.SignState.String
+	}
+	if remoteLegalValidationURL != "" {
+		resp.LegalValidationURL = &remoteLegalValidationURL
+	}
+	if remoteAccountValidation != nil {
+		resp.AccountValidation = remoteAccountValidation
 	}
 	if applyment.SubMchID.Valid && applyment.SubMchID.String != "" {
 		resp.SubMchID = &applyment.SubMchID.String
@@ -899,11 +1208,19 @@ func mapWechatApplymentStatus(wxStatus string) string {
 	switch wxStatus {
 	case "APPLYMENT_STATE_EDITTING":
 		return "pending"
-	case "CHECKING", "ACCOUNT_NEED_VERIFY", "APPLYMENT_STATE_AUDITING", "AUDITING":
+	case "CHECKING":
+		return "checking"
+	case "ACCOUNT_NEED_VERIFY":
+		return "account_need_verify"
+	case "APPLYMENT_STATE_AUDITING", "AUDITING":
 		return "auditing"
-	case "APPLYMENT_STATE_REJECTED", "REJECTED", "APPLYMENT_STATE_CANCELED", "CANCELED":
+	case "APPLYMENT_STATE_REJECTED", "REJECTED":
 		return "rejected"
-	case "APPLYMENT_STATE_TO_BE_CONFIRMED", "APPLYMENT_STATE_TO_BE_SIGNED", "NEED_SIGN":
+	case "APPLYMENT_STATE_CANCELED", "CANCELED":
+		return "canceled"
+	case "APPLYMENT_STATE_TO_BE_CONFIRMED":
+		return "to_be_confirmed"
+	case "APPLYMENT_STATE_TO_BE_SIGNED", "NEED_SIGN":
 		return "to_be_signed"
 	case "APPLYMENT_STATE_SIGNING":
 		return "signing"
@@ -925,10 +1242,18 @@ func getApplymentStatusDesc(status string) string {
 		return "待提交"
 	case "submitted":
 		return "已提交，等待审核"
+	case "checking":
+		return "资料校验中"
+	case "account_need_verify":
+		return "待账户验证"
 	case "auditing":
 		return "审核中"
+	case "to_be_confirmed":
+		return "待确认"
 	case "rejected":
 		return "审核被拒绝"
+	case "canceled":
+		return "已作废"
 	case "frozen":
 		return "已冻结"
 	case "to_be_signed":
@@ -967,6 +1292,7 @@ func getRejectReasonFromAuditDetail(details []wechat.ApplymentAuditDetail) pgtyp
 // operatorBindBankRequest 运营商绑定银行卡请求
 type operatorBindBankRequest struct {
 	applymentBindBankFields
+	applymentContactFields
 }
 
 // operatorBindBankResponse 运营商绑定银行卡响应
@@ -996,7 +1322,8 @@ func (server *Server) operatorBindBank(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
-	req.normalize()
+	req.applymentBindBankFields.normalize()
+	req.applymentContactFields.normalize()
 	if err := req.validateSelection(); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
@@ -1028,8 +1355,7 @@ func (server *Server) operatorBindBank(ctx *gin.Context) {
 		SubjectID:   operator.ID,
 	})
 	if err == nil {
-		if existingApplyment.Status == "submitted" || existingApplyment.Status == "auditing" ||
-			existingApplyment.Status == "to_be_signed" || existingApplyment.Status == "signing" {
+		if isApplymentPendingSubmissionStatus(existingApplyment.Status) {
 			ctx.JSON(http.StatusBadRequest, errorResponse(ErrAccountApplymentPending))
 			return
 		}
@@ -1105,6 +1431,22 @@ func (server *Server) operatorBindBank(ctx *gin.Context) {
 		return
 	}
 
+	resolvedContact, err := req.applymentContactFields.resolve(legalPersonName, legalPersonIDNumber)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+	if resolvedContact.requiresIdentityDocumentAssets() {
+		if err := server.validateApplymentContactDocumentAsset(ctx, authPayload.UserID, resolvedContact.ContactIDDocCopyAssetID, media.CategoryIDCardFront); err != nil {
+			ctx.JSON(http.StatusBadRequest, errorResponse(err))
+			return
+		}
+		if err := server.validateApplymentContactDocumentAsset(ctx, authPayload.UserID, resolvedContact.ContactIDDocCopyBackAssetID, media.CategoryIDCardBack); err != nil {
+			ctx.JSON(http.StatusBadRequest, errorResponse(err))
+			return
+		}
+	}
+
 	// 生成业务申请编号
 	outRequestNo := fmt.Sprintf("O%d%d", operator.ID, time.Now().Unix())
 	organizationType := resolveApplymentOrganizationType(
@@ -1136,7 +1478,7 @@ func (server *Server) operatorBindBank(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("数据加密失败")))
 		return
 	}
-	encryptedContactIDCardNumber, err := util.EncryptSensitiveField(server.dataEncryptor, legalPersonIDNumber)
+	encryptedContactIDCardNumber, err := util.EncryptSensitiveField(server.dataEncryptor, resolvedContact.ContactIDCardNumber)
 	if err != nil {
 		log.Error().Err(err).Msg("加密运营商联系人身份证号失败")
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("数据加密失败")))
@@ -1168,7 +1510,7 @@ func (server *Server) operatorBindBank(ctx *gin.Context) {
 		BankName:              pgtype.Text{String: req.BankName, Valid: req.BankName != ""},
 		AccountNumber:         encryptedAccountNumber,
 		AccountName:           req.AccountName,
-		ContactName:           legalPersonName,
+		ContactName:           resolvedContact.ContactName,
 		ContactIDCardNumber:   pgtype.Text{String: encryptedContactIDCardNumber, Valid: true},
 		MobilePhone:           contactPhone,
 		MerchantShortname:     operatorName,
@@ -1265,6 +1607,20 @@ func (server *Server) operatorBindBank(ctx *gin.Context) {
 		return
 	}
 
+	wxEncryptedContactName, err := server.ecommerceClient.EncryptSensitiveData(resolvedContact.ContactName)
+	if err != nil {
+		log.Error().Err(err).Msg("加密运营商联系人姓名失败")
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("加密敏感信息失败")))
+		return
+	}
+
+	wxEncryptedContactIDCardNumber, err := server.ecommerceClient.EncryptSensitiveData(resolvedContact.ContactIDCardNumber)
+	if err != nil {
+		log.Error().Err(err).Msg("加密运营商联系人身份证号码失败")
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("加密敏感信息失败")))
+		return
+	}
+
 	// 加密银行账户名
 	wxEncryptedAccountName, err := server.ecommerceClient.EncryptSensitiveData(req.AccountName)
 	if err != nil {
@@ -1304,6 +1660,37 @@ func (server *Server) operatorBindBank(ctx *gin.Context) {
 		return
 	}
 
+	contactInfo := buildWechatApplymentContactInfo(resolvedContact, wxEncryptedContactName, wxEncryptedContactIDCardNumber, wxEncryptedMobilePhone)
+	if resolvedContact.requiresIdentityDocumentAssets() {
+		fname, fdata, dlErr := server.mediaRegistry.DownloadObject(ctx, resolvedContact.ContactIDDocCopyAssetID)
+		if dlErr != nil {
+			log.Error().Err(dlErr).Int64("asset_id", resolvedContact.ContactIDDocCopyAssetID).Msg("下载运营商超级管理员身份证人像面失败")
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("获取超级管理员证件图片失败")))
+			return
+		}
+		upResp, upErr := server.ecommerceClient.UploadImage(ctx, fname, fdata)
+		if upErr != nil {
+			log.Error().Err(upErr).Int64("asset_id", resolvedContact.ContactIDDocCopyAssetID).Msg("上传运营商超级管理员身份证人像面到微信失败")
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("上传超级管理员证件图片失败")))
+			return
+		}
+		contactInfo.ContactIDDocCopy = upResp.MediaID
+
+		fname, fdata, dlErr = server.mediaRegistry.DownloadObject(ctx, resolvedContact.ContactIDDocCopyBackAssetID)
+		if dlErr != nil {
+			log.Error().Err(dlErr).Int64("asset_id", resolvedContact.ContactIDDocCopyBackAssetID).Msg("下载运营商超级管理员身份证国徽面失败")
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("获取超级管理员证件图片失败")))
+			return
+		}
+		upResp, upErr = server.ecommerceClient.UploadImage(ctx, fname, fdata)
+		if upErr != nil {
+			log.Error().Err(upErr).Int64("asset_id", resolvedContact.ContactIDDocCopyBackAssetID).Msg("上传运营商超级管理员身份证国徽面到微信失败")
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("上传超级管理员证件图片失败")))
+			return
+		}
+		contactInfo.ContactIDDocCopyBack = upResp.MediaID
+	}
+
 	applymentReq := &wechat.EcommerceApplymentRequest{
 		OutRequestNo:       outRequestNo,
 		OrganizationType:   organizationType,
@@ -1319,12 +1706,7 @@ func (server *Server) operatorBindBank(ctx *gin.Context) {
 			IDCardValidTime:      idCardValidTime,
 		},
 		AccountInfo: req.toWechatAccountInfo(wxEncryptedAccountName, wxEncryptedAccountNumber),
-		ContactInfo: &wechat.ApplymentContactInfo{
-			ContactType:         "65",
-			ContactName:         wxEncryptedIDCardName,
-			ContactIDCardNumber: wxEncryptedIDCardNumber,
-			MobilePhone:         wxEncryptedMobilePhone,
-		},
+		ContactInfo: contactInfo,
 		SalesSceneInfo: &wechat.ApplymentSalesSceneInfo{
 			StoreName: operatorName,
 			StoreURL:  storeURL,
@@ -1363,16 +1745,19 @@ func (server *Server) operatorBindBank(ctx *gin.Context) {
 
 // operatorApplymentStatusResponse 运营商开户状态响应
 type operatorApplymentStatusResponse struct {
-	Status       string    `json:"status"`                  // 状态
-	StatusDesc   string    `json:"status_desc"`             // 状态描述
-	CanSubmit    bool      `json:"can_submit"`              // 是否允许提交或重新提交进件
-	BlockReason  string    `json:"block_reason,omitempty"`  // 不允许提交时的阻塞原因
-	ApplymentID  *int64    `json:"applyment_id,omitempty"`  // 微信进件ID
-	SubMchID     string    `json:"sub_mch_id,omitempty"`    // 二级商户号（开户成功后返回）
-	SignURL      *string   `json:"sign_url,omitempty"`      // 签约链接
-	RejectReason string    `json:"reject_reason,omitempty"` // 拒绝原因
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	Status             string                              `json:"status"`                         // 状态
+	StatusDesc         string                              `json:"status_desc"`                    // 状态描述
+	CanSubmit          bool                                `json:"can_submit"`                     // 是否允许提交或重新提交进件
+	BlockReason        string                              `json:"block_reason,omitempty"`         // 不允许提交时的阻塞原因
+	ApplymentID        *int64                              `json:"applyment_id,omitempty"`         // 微信进件ID
+	SubMchID           string                              `json:"sub_mch_id,omitempty"`           // 二级商户号（开户成功后返回）
+	SignURL            *string                             `json:"sign_url,omitempty"`             // 签约链接
+	SignState          *string                             `json:"sign_state,omitempty"`           // 签约状态
+	LegalValidationURL *string                             `json:"legal_validation_url,omitempty"` // 法人扫码验证链接
+	AccountValidation  *applymentAccountValidationResponse `json:"account_validation,omitempty"`   // 汇款验证信息
+	RejectReason       string                              `json:"reject_reason,omitempty"`        // 拒绝原因
+	CreatedAt          time.Time                           `json:"created_at"`
+	UpdatedAt          time.Time                           `json:"updated_at"`
 }
 
 func getOperatorApplymentStatusDesc(status string, canSubmit bool) string {
@@ -1468,52 +1853,60 @@ func (server *Server) getOperatorApplymentStatus(ctx *gin.Context) {
 		return
 	}
 
+	var remoteStatusDesc string
+	var remoteLegalValidationURL string
+	var remoteAccountValidation *applymentAccountValidationResponse
+	decryptor := resolveApplymentSensitiveDecryptor(server.ecommerceClient)
+
 	// 如果状态是已提交且配置了微信客户端，尝试查询微信最新状态
 	if applyment.ApplymentID.Valid && server.ecommerceClient != nil {
-		if applyment.Status == "submitted" || applyment.Status == "auditing" ||
+		if applyment.Status == "submitted" || applyment.Status == "checking" || applyment.Status == "auditing" ||
+			applyment.Status == "account_need_verify" || applyment.Status == "to_be_confirmed" ||
 			applyment.Status == "to_be_signed" || applyment.Status == "signing" {
 			wxResp, err := server.ecommerceClient.QueryEcommerceApplymentByID(ctx, applyment.ApplymentID.Int64)
 			if err == nil {
 				newStatus := mapWechatApplymentStatus(wxResp.ApplymentState)
-				if newStatus == "finish" && wxResp.SubMchID == "" {
-					newStatus = "submitted"
-				}
+				nextRejectReason := getRejectReasonFromAuditDetail(wxResp.AuditDetail)
+				nextSignURL := buildApplymentText(wxResp.SignURL)
+				nextSignState := buildApplymentText(wxResp.SignState)
+				nextSubMchID := buildApplymentText(wxResp.SubMchID)
 				if newStatus == "rejected" || newStatus == "canceled" {
 					_, _ = server.store.UpdateOperatorStatus(ctx, db.UpdateOperatorStatusParams{
 						ID:     operator.ID,
 						Status: "active",
 					})
 				}
-				needsSubMchBackfill := wxResp.SubMchID != "" && (!applyment.SubMchID.Valid || applyment.SubMchID.String == "")
-				if newStatus != applyment.Status || needsSubMchBackfill {
-					// 状态有变化，更新数据库
-					updateParams := db.UpdateEcommerceApplymentStatusParams{
+				if newStatus != applyment.Status ||
+					applymentTextChanged(applyment.RejectReason, nextRejectReason) ||
+					applymentTextChanged(applyment.SignUrl, nextSignURL) ||
+					applymentTextChanged(applyment.SignState, nextSignState) ||
+					applymentTextChanged(applyment.SubMchID, nextSubMchID) {
+					_, _ = server.store.UpdateEcommerceApplymentStatus(ctx, db.UpdateEcommerceApplymentStatusParams{
 						ID:           applyment.ID,
 						Status:       newStatus,
-						RejectReason: getRejectReasonFromAuditDetail(wxResp.AuditDetail),
-					}
-
-					if wxResp.SubMchID != "" {
-						// 开户成功，保存二级商户号
-						_, _ = server.store.UpdateEcommerceApplymentSubMchID(ctx, db.UpdateEcommerceApplymentSubMchIDParams{
-							ID:       applyment.ID,
-							SubMchID: pgtype.Text{String: wxResp.SubMchID, Valid: true},
-						})
-						// 更新运营商的二级商户号
-						_, _ = server.store.UpdateOperatorSubMchID(ctx, db.UpdateOperatorSubMchIDParams{
-							ID:       operator.ID,
-							SubMchID: pgtype.Text{String: wxResp.SubMchID, Valid: true},
-						})
-						applyment.SubMchID = pgtype.Text{String: wxResp.SubMchID, Valid: true}
-						operator.SubMchID = pgtype.Text{String: wxResp.SubMchID, Valid: true}
-					} else {
-						_, _ = server.store.UpdateEcommerceApplymentStatus(ctx, updateParams)
-					}
-					applyment.Status = newStatus
-					if len(wxResp.AuditDetail) > 0 {
-						applyment.RejectReason = getRejectReasonFromAuditDetail(wxResp.AuditDetail)
-					}
+						RejectReason: nextRejectReason,
+						SignUrl:      nextSignURL,
+						SignState:    nextSignState,
+						SubMchID:     nextSubMchID,
+					})
 				}
+
+				if wxResp.SubMchID != "" {
+					_, _ = server.store.UpdateOperatorSubMchID(ctx, db.UpdateOperatorSubMchIDParams{
+						ID:       operator.ID,
+						SubMchID: pgtype.Text{String: wxResp.SubMchID, Valid: true},
+					})
+					applyment.SubMchID = pgtype.Text{String: wxResp.SubMchID, Valid: true}
+					operator.SubMchID = pgtype.Text{String: wxResp.SubMchID, Valid: true}
+				}
+
+				applyment.Status = newStatus
+				applyment.RejectReason = nextRejectReason
+				applyment.SignUrl = nextSignURL
+				applyment.SignState = nextSignState
+				remoteStatusDesc = strings.TrimSpace(wxResp.ApplymentStateDesc)
+				remoteLegalValidationURL = strings.TrimSpace(wxResp.LegalValidationURL)
+				remoteAccountValidation = buildApplymentAccountValidationResponse(wxResp.AccountValidation, decryptor)
 			}
 		}
 	}
@@ -1522,6 +1915,9 @@ func (server *Server) getOperatorApplymentStatus(ctx *gin.Context) {
 	normalizedStatus := normalizeApplymentStatus(applyment.Status, effectiveSubMchID != "")
 	canSubmit, blockReason := getOperatorApplymentSubmitCapability(operator.Status, normalizedStatus)
 	statusDesc := getOperatorApplymentStatusDesc(normalizedStatus, canSubmit)
+	if remoteStatusDesc != "" {
+		statusDesc = remoteStatusDesc
+	}
 	resp := operatorApplymentStatusResponse{
 		Status:      normalizedStatus,
 		StatusDesc:  statusDesc,
@@ -1539,6 +1935,15 @@ func (server *Server) getOperatorApplymentStatus(ctx *gin.Context) {
 	}
 	if applyment.SignUrl.Valid {
 		resp.SignURL = &applyment.SignUrl.String
+	}
+	if applyment.SignState.Valid {
+		resp.SignState = &applyment.SignState.String
+	}
+	if remoteLegalValidationURL != "" {
+		resp.LegalValidationURL = &remoteLegalValidationURL
+	}
+	if remoteAccountValidation != nil {
+		resp.AccountValidation = remoteAccountValidation
 	}
 	if applyment.RejectReason.Valid {
 		resp.RejectReason = applyment.RejectReason.String
@@ -1577,8 +1982,23 @@ func getMerchantApplymentSubmitCapability(merchantStatus, applymentStatus string
 			return false, "当前商户状态不可用，暂不支持提交收付通进件。"
 		}
 		return false, "当前商户状态暂不支持提交收付通进件。"
-	case "submitted", "auditing", "bindbank_submitted":
+	case "canceled":
+		if merchantStatus == "approved" || merchantStatus == "pending_bindbank" {
+			return true, ""
+		}
+		if merchantStatus == "active" {
+			return false, "当前账户已开通，无需重复提交进件资料。"
+		}
+		if merchantStatus == "suspended" || merchantStatus == "expired" {
+			return false, "当前商户状态不可用，暂不支持提交收付通进件。"
+		}
+		return false, "当前商户状态暂不支持提交收付通进件。"
+	case "submitted", "checking", "auditing", "bindbank_submitted":
 		return false, "当前资料正在审核中，暂不支持重复提交。"
+	case "account_need_verify":
+		return false, "当前申请待账户验证，请先完成验证后再刷新状态。"
+	case "to_be_confirmed":
+		return false, "当前申请待确认，请先完成确认后再刷新状态。"
 	case "to_be_signed", "signing":
 		return false, "当前已进入微信签约环节，请先完成签约。"
 	case "finish", "active":
@@ -1592,7 +2012,7 @@ func getMerchantApplymentSubmitCapability(merchantStatus, applymentStatus string
 
 func getOperatorApplymentSubmitCapability(operatorStatus, applymentStatus string) (bool, string) {
 	switch applymentStatus {
-	case "pending", "active", "rejected", "rejected_sign":
+	case "pending", "active", "rejected", "rejected_sign", "canceled":
 		if operatorStatus == "active" || operatorStatus == "bindbank_submitted" {
 			return true, ""
 		}
@@ -1600,8 +2020,12 @@ func getOperatorApplymentSubmitCapability(operatorStatus, applymentStatus string
 			return false, "当前运营商状态不可用，暂不支持提交微信支付开户。"
 		}
 		return false, "当前运营商状态暂不支持提交微信支付开户。"
-	case "submitted", "auditing", "bindbank_submitted":
+	case "submitted", "checking", "auditing", "bindbank_submitted":
 		return false, "微信支付正在审核开户信息，审核期间无需重复提交。"
+	case "account_need_verify":
+		return false, "微信支付要求先完成账户验证，请先处理验证后再刷新状态。"
+	case "to_be_confirmed":
+		return false, "微信支付要求先完成确认，请先处理后再刷新状态。"
 	case "to_be_signed", "signing":
 		return false, "微信支付已进入签约阶段，请先完成签约确认。"
 	case "finish":

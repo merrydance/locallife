@@ -11,7 +11,6 @@ import {
   isPermissionDeniedError,
   isUserCancelledError,
   normalizeQRCodeUrl,
-  normalizeTableBusinessStatus,
   saveTableQRCodePosterToAlbum,
   TABLE_UPLOAD_FILE_STATUS,
   toSafeTableImages,

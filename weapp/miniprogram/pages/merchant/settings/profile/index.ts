@@ -2,8 +2,6 @@ import {
   getAvailableMerchantTags,
   getMyMerchantProfile,
   getMyMerchantTags,
-  MerchantCategoryTag,
-  MerchantOperatorResponse,
   setMyMerchantTags,
   updateMyMerchantProfile
 } from '../../../../api/merchant'
@@ -28,7 +26,6 @@ import {
   shouldAutoRefresh,
   validateBeforeSubmit,
   type CategoryPickerOption,
-  type LocationViewState,
   type MerchantProfileForm,
   type TagItem
 } from '../../../../utils/merchant-profile-view'

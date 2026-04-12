@@ -8,6 +8,7 @@ import { createReservation, CreateReservationRequest } from '../../../api/reserv
 import { checkRoomAvailability } from '../../../api/room'
 import { processPayment, PaymentCancelledError } from '../../../api/payment'
 import Navigation from '../../../utils/navigation'
+import { mapReservationPaymentStatusToResultKind } from '../../../utils/reservation-payment-result-view'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 
 interface TimeSlot {
@@ -273,7 +274,7 @@ Page({
           Navigation.toReservationPaymentResult({
             reservationId: String(reservation.id),
             amount: resultAmount,
-            result: paymentResult.status === 'paid' ? 'success' : paymentResult.status,
+            result: mapReservationPaymentStatusToResultKind(paymentResult.status),
             source: 'confirm'
           })
         } catch (payErr) {

@@ -5,9 +5,7 @@ import { getStableBarHeights } from './responsive'
 import {
   buildUploadRenderImages,
   clearPendingSyncFromImages,
-  CONTINUE_SYNC_TOAST,
   getCurrentMerchantIdFromStorage,
-  getErrorMessage,
   getPendingDeletedShopImagesStorageKey,
   hasAnyImages,
   ImageItem,
@@ -28,6 +26,7 @@ import {
   shouldAutoRefresh
 } from './merchant-profile-images-view'
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type MerchantProfileImagesPageContext = WechatMiniprogram.Page.Instance<Record<string, any>, Record<string, any>> & Record<string, any>
 
 function defineMerchantProfileImagesLifecycleMethods<T extends Record<string, unknown>>(methods: T & ThisType<MerchantProfileImagesPageContext>) {

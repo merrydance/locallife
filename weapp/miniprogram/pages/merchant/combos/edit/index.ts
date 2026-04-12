@@ -20,7 +20,6 @@ import {
   buildSelectedTagIds,
   buildSelectedTagState,
   formatFenToYuanInput,
-  normalizeComboCustomizations,
   normalizeDishQuantity,
   parsePriceInputToFen,
   syncDishCustomizationSelection,
@@ -28,7 +27,6 @@ import {
   type CreatePopupMode,
   type DishOption,
   type FormInputDetail,
-  type SelectedComboDishState,
   type SelectedSpecState
 } from '../../../../utils/combo-edit-view'
 

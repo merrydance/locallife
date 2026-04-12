@@ -1,6 +1,8 @@
 import { request } from '../utils/request'
 
 export type ApplymentAccountType = 'ACCOUNT_TYPE_BUSINESS' | 'ACCOUNT_TYPE_PRIVATE'
+export type ApplymentContactType = 'LEGAL' | 'SUPER'
+export type ApplymentContactDocType = 'IDENTIFICATION_TYPE_IDCARD'
 
 export interface ApplymentBankOption {
   bank_alias: string
@@ -71,6 +73,21 @@ export interface ApplymentBindBankPayload {
   bank_name?: string
   account_number: string
   account_name: string
+  contact_type?: ApplymentContactType
+  contact_name?: string
+  contact_id_doc_type?: ApplymentContactDocType
+  contact_id_card_number?: string
+  contact_id_doc_copy_asset_id?: number
+  contact_id_doc_copy_back_asset_id?: number
+  contact_id_doc_period_begin?: string
+  contact_id_doc_period_end?: string
+}
+
+export interface ApplymentBindBankDraftPayload extends ApplymentBindBankPayload {
+  contact_id_doc_copy_url?: string
+  contact_id_doc_copy_raw_url?: string
+  contact_id_doc_copy_back_url?: string
+  contact_id_doc_copy_back_raw_url?: string
 }
 
 export function listApplymentBanks(apiBasePath: string, accountType: ApplymentAccountType) {

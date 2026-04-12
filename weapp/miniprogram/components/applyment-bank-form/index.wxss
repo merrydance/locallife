@@ -37,6 +37,29 @@
   gap: var(--spacer-sm);
 }
 
+.tag-check-list--subtle {
+  padding: 0 var(--spacer-xs);
+}
+
+.document-hint,
+.document-tip {
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+  color: var(--td-text-color-secondary);
+}
+
+.document-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--spacer-sm);
+}
+
+@media (max-width: 640rpx) {
+  .document-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .form-actions {
   display: flex;
   flex-direction: column;

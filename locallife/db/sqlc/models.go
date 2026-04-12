@@ -646,7 +646,7 @@ type EcommerceApplyment struct {
 	Qualifications        []byte      `json:"qualifications"`
 	BusinessAdditionPics  []string    `json:"business_addition_pics"`
 	BusinessAdditionDesc  pgtype.Text `json:"business_addition_desc"`
-	// 进件状态: pending-待提交, submitted-已提交, auditing-审核中, rejected-已驳回, frozen-冻结, to_be_signed-待签约, signing-签约中, rejected_sign-签约失败, finish-完成
+	// 进件状态: pending-待提交, submitted-已提交, checking-资料校验中, auditing-审核中, account_need_verify-待账户验证, to_be_confirmed-待确认, rejected-已驳回, frozen-冻结, to_be_signed-待签约, signing-签约中, rejected_sign-签约失败, finish-完成, canceled-已作废
 	Status                   string             `json:"status"`
 	SignUrl                  pgtype.Text        `json:"sign_url"`
 	SignState                pgtype.Text        `json:"sign_state"`

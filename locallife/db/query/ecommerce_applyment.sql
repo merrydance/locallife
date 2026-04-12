@@ -76,7 +76,7 @@ LIMIT $2 OFFSET $3;
 
 -- name: ListPendingEcommerceApplyments :many
 SELECT * FROM ecommerce_applyments
-WHERE status IN ('submitted', 'auditing', 'to_be_signed', 'signing')
+WHERE status IN ('submitted', 'checking', 'auditing', 'account_need_verify', 'to_be_confirmed', 'to_be_signed', 'signing')
 ORDER BY created_at ASC
 LIMIT $1 OFFSET $2;
 

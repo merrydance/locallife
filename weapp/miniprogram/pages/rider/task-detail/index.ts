@@ -4,6 +4,14 @@ import { logger } from '../../../utils/logger'
 import { locationService } from '../../../utils/location'
 import { normalizeLocationError, syncRiderDeliveryLocation } from '../../../utils/rider-location'
 import { riderLiveLocationSession, RiderLiveLocationState } from '../../../utils/rider-live-location'
+import {
+    getRiderDeliveryActionState,
+    getRiderDeliveryDeadline,
+    getRiderDeliveryStep,
+    isExpectedDeliveryStatusReached,
+    isRiderDeliveryTrackedStatus,
+    RiderDeliveryActionKey
+} from '../../../utils/rider-delivery-view'
 import { getStableBarHeights } from '../../../utils/responsive'
 
 interface RiderTaskDetailOptions {
@@ -26,29 +34,16 @@ type TagTheme = 'primary' | 'success' | 'warning' | 'danger' | 'default'
 
 let taskDetailLocationUnsubscribe: null | (() => void) = null
 
+const DELIVERY_ACTION_METHODS: Record<Exclude<RiderDeliveryActionKey, ''>, DeliveryAction> = {
+    start_pickup: DeliveryService.startPickup,
+    confirm_pickup: DeliveryService.confirmPickup,
+    start_delivery: DeliveryService.startDelivery,
+    confirm_delivery: DeliveryService.confirmDelivery
+}
+
 function getUserMessage(err: unknown, fallback: string) {
     const userMessage = (err as UserMessageError).userMessage
     return typeof userMessage === 'string' && userMessage ? userMessage : fallback
-}
-
-function isExpectedStatusReached(status: Delivery['status'], expectedStatus: Delivery['status']) {
-    if (expectedStatus === 'delivered') {
-        return status === 'delivered' || status === 'completed'
-    }
-
-    return status === expectedStatus
-}
-
-function getDeliveryActionLabel(status: Delivery['status']): string {
-    if (status === 'assigned') return '我已到达商家'
-    if (status === 'picking') return '确认取餐'
-    if (status === 'picked') return '开始配送'
-    if (status === 'delivering') return '确认已送达'
-    return ''
-}
-
-function canUpdateDeliveryStatus(status: Delivery['status']): boolean {
-    return status === 'assigned' || status === 'picking' || status === 'picked' || status === 'delivering'
 }
 
 function formatRelativeTime(timeStr: string): string {
@@ -76,10 +71,6 @@ function toMapPoint(point: DeliveryLocationPoint | null): MapPoint | null {
         latitude: point.latitude,
         longitude: point.longitude
     }
-}
-
-function isLocationTrackedStatus(status: Delivery['status']): boolean {
-    return status === 'assigned' || status === 'picking' || status === 'picked' || status === 'delivering'
 }
 
 Page({
@@ -129,7 +120,7 @@ Page({
     },
 
     onShow() {
-        if (this.data.delivery && isLocationTrackedStatus(this.data.delivery.status)) {
+        if (this.data.delivery && isRiderDeliveryTrackedStatus(this.data.delivery.status)) {
             void riderLiveLocationSession.setActiveDelivery(this.data.delivery.id, 'rider_task_detail_show')
         }
     },
@@ -158,7 +149,7 @@ Page({
 
             await this.loadLocationMap(deliveryView)
 
-            if (isLocationTrackedStatus(deliveryView.status)) {
+            if (isRiderDeliveryTrackedStatus(deliveryView.status)) {
                 await riderLiveLocationSession.setActiveDelivery(deliveryView.id, 'rider_task_detail_fetch')
             }
 
@@ -175,7 +166,7 @@ Page({
     async reconcileDeliveryState(expectedStatus: Delivery['status']) {
         try {
             const latest = await DeliveryService.getDeliveryByOrder(this.data.orderId)
-            if (!isExpectedStatusReached(latest.status, expectedStatus)) {
+            if (!isExpectedDeliveryStatusReached(latest.status, expectedStatus)) {
                 return false
             }
 
@@ -194,28 +185,19 @@ Page({
     },
 
     decorateDelivery(delivery: Delivery): DeliveryView {
-        const deadline = delivery.status === 'assigned' || delivery.status === 'picking'
-            ? delivery.estimated_pickup_at
-            : delivery.estimated_delivery_at
+        const actionState = getRiderDeliveryActionState(delivery.status)
+        const deadline = getRiderDeliveryDeadline(delivery)
 
         return {
             ...delivery,
             deadline_desc: this.formatDeadline(deadline),
-            can_update_status: canUpdateDeliveryStatus(delivery.status),
-            action_label: getDeliveryActionLabel(delivery.status)
+            can_update_status: actionState.canUpdate,
+            action_label: actionState.label
         }
     },
 
     mapStatusToStep(status: string): number {
-        const statusMap: Record<string, number> = {
-            'assigned': 0,
-            'picking': 1,
-            'picked': 2,
-            'delivering': 2,
-            'delivered': 3,
-            'completed': 3
-        }
-        return statusMap[status] ?? 0
+        return getRiderDeliveryStep(status)
     },
 
     formatDeadline(timeStr?: string) {
@@ -249,12 +231,12 @@ Page({
     buildLocationView(state: RiderLiveLocationState | null, fallbackRecordedAt: string) {
         if (!state || !state.activeDeliveryId || !this.data.delivery || state.activeDeliveryId !== this.data.delivery.id) {
             return {
-                locationStatusText: isLocationTrackedStatus(this.data.delivery?.status || 'pending') ? '等待连续定位启动' : '当前状态无需定位',
+                locationStatusText: isRiderDeliveryTrackedStatus(this.data.delivery?.status) ? '等待连续定位启动' : '当前状态无需定位',
                 locationStatusTheme: 'default' as TagTheme,
                 locationPendingText: '',
                 locationUpdatedText: fallbackRecordedAt ? `最近轨迹 ${formatRelativeTime(fallbackRecordedAt)}` : '暂无定位记录',
                 locationActionText: '立即刷新',
-                showLocationAction: !!this.data.delivery && isLocationTrackedStatus(this.data.delivery.status),
+                showLocationAction: !!this.data.delivery && isRiderDeliveryTrackedStatus(this.data.delivery.status),
                 needsLocationPermission: false
             }
         }
@@ -404,60 +386,28 @@ Page({
     async onUpdateStatus() {
         if (!this.data.delivery) return
         const { id, status } = this.data.delivery
-        
-        let nextAction = ''
-        let actionMethod: DeliveryAction | null = null
-        let expectedStatus: Delivery['status'] | null = null
+        const actionState = getRiderDeliveryActionState(status)
 
-        if (status === 'assigned') {
-            nextAction = '到达商家'
-            actionMethod = DeliveryService.startPickup
-            expectedStatus = 'picking'
-        } else if (status === 'picking') {
-            nextAction = '确认取餐'
-            actionMethod = DeliveryService.confirmPickup
-            expectedStatus = 'picked'
-        } else if (status === 'picked') {
-            nextAction = '开始配送'
-            actionMethod = DeliveryService.startDelivery
-            expectedStatus = 'delivering'
-        } else if (status === 'delivering') {
-            nextAction = '确认送达'
-            actionMethod = DeliveryService.confirmDelivery
-            expectedStatus = 'delivered'
-        }
-
-        if (!actionMethod || !expectedStatus) return
-        const method = actionMethod
-        const nextExpectedStatus = expectedStatus
-        const locationSourceMap: Record<NonNullable<Delivery['status']>, string> = {
-            pending: 'rider_task_detail_pending',
-            assigned: 'rider_task_detail_start_pickup',
-            picking: 'rider_task_detail_confirm_pickup',
-            picked: 'rider_task_detail_start_delivery',
-            delivering: 'rider_task_detail_confirm_delivery',
-            delivered: 'rider_task_detail_delivered',
-            completed: 'rider_task_detail_completed',
-            cancelled: 'rider_task_detail_cancelled',
-            exception: 'rider_task_detail_exception'
-        }
+        if (!actionState.canUpdate || !actionState.expectedStatus || !actionState.actionKey) return
+        const method = DELIVERY_ACTION_METHODS[actionState.actionKey]
+        const nextExpectedStatus = actionState.expectedStatus
 
         wx.showModal({
             title: '状态更新',
-            content: `确定已完成 ${nextAction} 吗？`,
+            content: `确定已完成 ${actionState.label.replace('我已', '')} 吗？`,
             success: async (res) => {
                 if (res.confirm) {
                     wx.showLoading({ title: '同步中...' })
                     try {
-                        await this.syncDeliveryLocation(id, locationSourceMap[status] || 'rider_task_detail_action')
+                        await this.syncDeliveryLocation(id, actionState.locationSource)
                         const updated = await method(id)
                         const updatedView = this.decorateDelivery(updated)
                         this.setData({ 
                             delivery: updatedView,
                             currentStep: this.mapStatusToStep(updated.status)
                         })
-                        
-                        if (updated.status === 'completed' || updated.status === 'delivered') {
+
+                        if (isExpectedDeliveryStatusReached(updated.status, 'delivered')) {
                             wx.navigateBack()
                             return
                         }
@@ -465,7 +415,7 @@ Page({
                         const reconciled = await this.reconcileDeliveryState(nextExpectedStatus)
                         if (reconciled) {
                             const latestStatus = this.data.delivery?.status
-                            if (latestStatus === 'completed' || latestStatus === 'delivered') {
+                            if (latestStatus && isExpectedDeliveryStatusReached(latestStatus, 'delivered')) {
                                 wx.navigateBack()
                                 return
                             }
@@ -522,7 +472,7 @@ Page({
 
     async onRetryLocationSync() {
         const delivery = this.data.delivery
-        if (!delivery || !isLocationTrackedStatus(delivery.status)) {
+        if (!delivery || !isRiderDeliveryTrackedStatus(delivery.status)) {
             return
         }
 

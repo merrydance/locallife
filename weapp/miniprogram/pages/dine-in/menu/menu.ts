@@ -3,7 +3,6 @@
  * 堂食仅允许基于已建立的用餐会话进入；预订点菜允许 reservation 直达。
  */
 
-import { formatPriceNoSymbol } from '../../../utils/util'
 import { getStableBarHeights } from '../../../utils/responsive'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 import { clearDineInSessionContext, getDineInSessionContext, saveDineInSessionFromMenu } from '../../../services/dine-in-session'
@@ -15,15 +14,8 @@ import {
     loadReservationMenuSource,
     removeMenuCartItem,
     updateMenuCartItem,
-    type MenuCart,
-    type MenuCartItem,
-    type MenuCategoryInfo,
     type MenuComboInfo,
-    type MenuCustomizationGroup,
-    type MenuDishInfo,
-    type MenuMerchantInfo,
-    type MenuPromotionInfo,
-    type MenuTableInfo
+    type MenuPromotionInfo
 } from '../../../services/dine-in-menu'
 import {
     buildDishQtyUpdate,

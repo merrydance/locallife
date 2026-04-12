@@ -39,9 +39,10 @@ func (store *SQLStore) ClaimPayoutTx(ctx context.Context, arg ClaimPayoutTxParam
 		var err error
 
 		// 1. 幂等检查：是否已经赔付过
-		existingLog, err := q.GetUserBalanceLogByRelated(ctx, GetUserBalanceLogByRelatedParams{
+		existingLog, err := q.GetUserBalanceLogByRelatedAndType(ctx, GetUserBalanceLogByRelatedAndTypeParams{
 			RelatedType: pgtype.Text{String: "claim", Valid: true},
 			RelatedID:   pgtype.Int8{Int64: arg.ClaimID, Valid: true},
+			Type:        "claim_payout",
 		})
 		if err == nil && existingLog.ID > 0 {
 			// 已经赔付过，返回成功（幂等）

@@ -83,6 +83,34 @@ func TestProcessTaskApplymentResult_Success(t *testing.T) {
 			},
 		},
 		{
+			name: "运营商进件成功_发送通知",
+			payload: worker.ApplymentResultPayload{
+				ApplymentID:    12,
+				OutRequestNo:   "APPLY_O_12_1234567890",
+				ApplymentState: "APPLYMENT_STATE_FINISHED",
+				SubMchID:       "2234567890",
+				SubjectType:    "operator",
+				SubjectID:      300,
+			},
+			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface, distributor *mockwk.MockTaskDistributor) {
+				store.EXPECT().
+					GetOperator(gomock.Any(), int64(300)).
+					Return(db.Operator{ID: 300, UserID: 3001, Name: "测试运营商"}, nil)
+
+				distributor.EXPECT().
+					DistributeTaskSendNotification(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ context.Context, payload *worker.SendNotificationPayload, _ ...asynq.Option) error {
+						require.Equal(t, int64(3001), payload.UserID)
+						require.Equal(t, "微信支付开户成功", payload.Title)
+						require.Contains(t, payload.Content, "测试运营商")
+						return nil
+					})
+			},
+			checkResult: func(t *testing.T, err error) {
+				require.NoError(t, err)
+			},
+		},
+		{
 			name: "进件成功_添加接收方失败但不影响流程",
 			payload: worker.ApplymentResultPayload{
 				ApplymentID:    3,
@@ -233,6 +261,42 @@ func TestProcessTaskApplymentResult_Rejected(t *testing.T) {
 			},
 		},
 		{
+			name: "运营商进件被驳回_发送通知",
+			payload: worker.ApplymentResultPayload{
+				ApplymentID:    13,
+				OutRequestNo:   "APPLY_O_13_1234567890",
+				ApplymentState: "APPLYMENT_STATE_REJECTED",
+				SubjectType:    "operator",
+				SubjectID:      300,
+			},
+			buildStubs: func(store *mockdb.MockStore, distributor *mockwk.MockTaskDistributor) {
+				store.EXPECT().
+					GetEcommerceApplyment(gomock.Any(), int64(13)).
+					Return(db.EcommerceApplyment{
+						ID:           13,
+						SubjectType:  "operator",
+						SubjectID:    300,
+						RejectReason: pgtype.Text{String: "资料不完整", Valid: true},
+					}, nil)
+
+				store.EXPECT().
+					GetOperator(gomock.Any(), int64(300)).
+					Return(db.Operator{ID: 300, UserID: 3001, Name: "测试运营商"}, nil)
+
+				distributor.EXPECT().
+					DistributeTaskSendNotification(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ context.Context, payload *worker.SendNotificationPayload, _ ...asynq.Option) error {
+						require.Equal(t, int64(3001), payload.UserID)
+						require.Equal(t, "微信支付开户被驳回", payload.Title)
+						require.Contains(t, payload.Content, "资料不完整")
+						return nil
+					})
+			},
+			checkResult: func(t *testing.T, err error) {
+				require.NoError(t, err)
+			},
+		},
+		{
 			name: "进件被驳回_无驳回原因",
 			payload: worker.ApplymentResultPayload{
 				ApplymentID:    7,
@@ -345,6 +409,33 @@ func TestProcessTaskApplymentResult_Pending(t *testing.T) {
 				SubjectID:      200,
 			},
 			buildStubs: func(store *mockdb.MockStore, distributor *mockwk.MockTaskDistributor) {
+			},
+			checkResult: func(t *testing.T, err error) {
+				require.NoError(t, err)
+			},
+		},
+		{
+			name: "运营商待账户验证_发送提醒通知",
+			payload: worker.ApplymentResultPayload{
+				ApplymentID:     14,
+				OutRequestNo:    "APPLY_O_14_1234567890",
+				ApplymentStatus: "account_need_verify",
+				SubjectType:     "operator",
+				SubjectID:       300,
+			},
+			buildStubs: func(store *mockdb.MockStore, distributor *mockwk.MockTaskDistributor) {
+				store.EXPECT().
+					GetOperator(gomock.Any(), int64(300)).
+					Return(db.Operator{ID: 300, UserID: 3001, Name: "测试运营商"}, nil)
+
+				distributor.EXPECT().
+					DistributeTaskSendNotification(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ context.Context, payload *worker.SendNotificationPayload, _ ...asynq.Option) error {
+						require.Equal(t, int64(3001), payload.UserID)
+						require.Equal(t, "微信支付开户待处理", payload.Title)
+						require.Contains(t, payload.Content, "账户验证")
+						return nil
+					})
 			},
 			checkResult: func(t *testing.T, err error) {
 				require.NoError(t, err)

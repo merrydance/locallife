@@ -1,6 +1,9 @@
+import { buildDeliveryCardView } from '../../utils/delivery-card-view'
+
 type DeliveryTask = {
   id?: number
   status?: string | number
+  fee?: number
   merchant_phone?: string
   customer_phone?: string
 }
@@ -13,18 +16,21 @@ Component({
     }
   },
 
+  data: {
+    taskView: buildDeliveryCardView()
+  },
+
+  observers: {
+    task(task: DeliveryTask) {
+      this.setData({ taskView: buildDeliveryCardView(task) })
+    }
+  },
+
   methods: {
     onAction() {
       const task = this.properties.task as DeliveryTask
       if (!task || !task.id) return
-
-      let nextAction = ''
-      const s = task.status
-            
-      // Handle both string and numeric status
-      if (s === 'PENDING' || s === 'CONFIRMED' || s === 'CREATED' || s === 0) nextAction = 'accept'
-      else if (s === 'ACCEPTED' || s === 1) nextAction = 'pickup'
-      else if (s === 'PICKED_UP' || s === 'DELIVERING' || s === 2) nextAction = 'deliver'
+      const nextAction = this.data.taskView.nextAction
 
       if (nextAction) {
         this.triggerEvent('action', { id: task.id, action: nextAction })

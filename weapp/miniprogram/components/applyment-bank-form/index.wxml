@@ -90,6 +90,115 @@
     </t-cell-group>
   </view>
 
+  <view wx:if="{{showContactFields}}" class="section-panel">
+    <view class="section-top">
+      <text class="section-title">联系人身份</text>
+    </view>
+
+    <view class="tag-check-list">
+      <t-check-tag
+        checked="{{form.contact_type === 'LEGAL'}}"
+        content="法人"
+        shape="round"
+        data-value="LEGAL"
+        bind:change="onContactTypeChange"
+      />
+      <t-check-tag
+        checked="{{form.contact_type === 'SUPER'}}"
+        content="超级管理员"
+        shape="round"
+        data-value="SUPER"
+        bind:change="onContactTypeChange"
+      />
+    </view>
+
+    <t-cell-group theme="card">
+      <t-cell wx:if="{{form.contact_type === 'LEGAL'}}" title="联系人说明" note="将直接使用法人姓名和身份证号作为联系人信息。" />
+
+      <block wx:if="{{form.contact_type === 'SUPER'}}">
+        <t-cell title="证件类型" note="中国大陆居民身份证" />
+
+        <t-input
+          label="联系人姓名"
+          placeholder="请输入超级管理员姓名"
+          value="{{form.contact_name}}"
+          data-field="contact_name"
+          bind:change="onTextFieldChange"
+          required
+        />
+
+        <t-input
+          label="联系人身份证号"
+          placeholder="请输入超级管理员身份证号"
+          value="{{form.contact_id_card_number}}"
+          data-field="contact_id_card_number"
+          bind:change="onTextFieldChange"
+          required
+        />
+
+        <view class="document-hint">请上传超级管理员身份证人像面与国徽面，确保头像、号码和有效期清晰完整。</view>
+
+        <view class="document-grid">
+          <document-uploader
+            type="id-front"
+            title="上传人像面"
+            value="{{form.contact_id_doc_copy_url}}"
+            rawUrl="{{form.contact_id_doc_copy_raw_url}}"
+            feedbackState="{{contactDocCopyFeedbackState}}"
+            feedbackTitle="{{contactDocCopyFeedbackTitle}}"
+            feedbackDescription="{{contactDocCopyFeedbackDescription}}"
+            bind:change="onContactIDDocCopyChange"
+            bind:remove="onContactIDDocCopyRemove"
+          />
+
+          <document-uploader
+            type="id-back"
+            title="上传国徽面"
+            value="{{form.contact_id_doc_copy_back_url}}"
+            rawUrl="{{form.contact_id_doc_copy_back_raw_url}}"
+            feedbackState="{{contactDocCopyBackFeedbackState}}"
+            feedbackTitle="{{contactDocCopyBackFeedbackTitle}}"
+            feedbackDescription="{{contactDocCopyBackFeedbackDescription}}"
+            bind:change="onContactIDDocCopyBackChange"
+            bind:remove="onContactIDDocCopyBackRemove"
+          />
+        </view>
+
+        <t-input
+          label="证件有效期开始"
+          placeholder="例如 2020-01-01"
+          value="{{form.contact_id_doc_period_begin}}"
+          data-field="contact_id_doc_period_begin"
+          bind:change="onTextFieldChange"
+          required
+        />
+
+        <view class="tag-check-list tag-check-list--subtle">
+          <t-check-tag
+            checked="{{form.contact_id_doc_period_end === '长期'}}"
+            content="长期有效"
+            shape="round"
+            bind:change="onContactDocLongTermToggle"
+          />
+        </view>
+
+        <t-cell wx:if="{{form.contact_id_doc_period_end === '长期'}}" title="证件有效期结束" note="长期" />
+
+        <t-input
+          wx:else
+          label="证件有效期结束"
+          placeholder="例如 2030-01-01 或填写 长期"
+          value="{{form.contact_id_doc_period_end}}"
+          data-field="contact_id_doc_period_end"
+          bind:change="onTextFieldChange"
+          required
+        />
+
+        <view class="document-tip">有效期建议按证件原文填写，支持 YYYY-MM-DD 和“长期”两种格式。</view>
+      </block>
+    </t-cell-group>
+  </view>
+
   <view class="form-actions">
     <t-button theme="primary" size="large" shape="round" block loading="{{submitting}}" disabled="{{submitting || !canSubmit}}" bind:tap="onSubmit">{{submitLabel}}</t-button>
     <t-button theme="default" variant="outline" size="large" shape="round" block disabled="{{submitting}}" bind:tap="onCancel">取消</t-button>

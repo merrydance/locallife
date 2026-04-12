@@ -18,6 +18,7 @@ import {
   toPersistedImageUrls
 } from './merchant-profile-images-view'
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type MerchantProfileImagesPageContext = WechatMiniprogram.Page.Instance<Record<string, any>, Record<string, any>> & Record<string, any>
 
 function defineMerchantProfileImagesRecoveryMethods<T extends Record<string, unknown>>(methods: T & ThisType<MerchantProfileImagesPageContext>) {

@@ -1,7 +1,6 @@
 import {
   buildMerchantApplicationStatusView,
   type MerchantApplicationDraftResponse,
-  type OCRStatus as MerchantApplicationOCRStatus,
   getMerchantApplication,
   getMyApplication,
   ocrBusinessLicense,
@@ -33,9 +32,7 @@ import {
   getBadgeColor,
   getMerchantApplicationValidationMessage,
   getMerchantApplicationUploadingKey,
-  getOcrTagTheme,
   hasApplicationFormChanged,
-  hasUploadedDocument,
   resolveDraftPublicAssetUrl,
   shouldAutoRefresh,
   shouldFallbackToLatestApplication,

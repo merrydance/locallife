@@ -55,6 +55,19 @@ func newTestServerWithEcommerce(t *testing.T, store db.Store, ecommerceClient we
 	return server
 }
 
+func seedPrivateContactDocumentAsset(t *testing.T, server *Server, objectKey string, content []byte) {
+	t.Helper()
+	err := server.mediaStorage.PutObject(
+		context.Background(),
+		server.mediaStorage.PrivateBucket(),
+		objectKey,
+		"image/png",
+		bytes.NewReader(content),
+		int64(len(content)),
+	)
+	require.NoError(t, err)
+}
+
 // randomMerchantForApplyment 创建随机商户（进件测试专用）
 func randomMerchantForApplyment(ownerID int64) db.Merchant {
 	return db.Merchant{
@@ -113,6 +126,7 @@ func TestMerchantBindBankAPI(t *testing.T) {
 		setupAuth        func(t *testing.T, request *http.Request, tokenMaker token.Maker)
 		buildStubs       func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface)
 		buildWechatStubs func(store *mockdb.MockStore, wechatClient *mockwechat.MockWechatClient)
+		prepareServer    func(t *testing.T, server *Server)
 		checkResponse    func(recorder *httptest.ResponseRecorder)
 	}{
 		{
@@ -172,7 +186,7 @@ func TestMerchantBindBankAPI(t *testing.T) {
 				// Mock 加密
 				ecommerceClient.EXPECT().
 					EncryptSensitiveData(gomock.Any()).
-					Times(5). // 法人姓名、身份证号、账户名、账号、手机
+					Times(7). // 法人信息、联系人信息、账户名、账号、手机
 					Return("encrypted_data", nil)
 
 				expectedObjectKey := buildMerchantStorefrontQRCodeObjectKey(merchant.ID)
@@ -270,6 +284,207 @@ func TestMerchantBindBankAPI(t *testing.T) {
 			},
 		},
 		{
+			name: "OK_WithSuperAdministratorContact",
+			body: gin.H{
+				"account_type":                      "ACCOUNT_TYPE_PRIVATE",
+				"account_bank":                      "其他银行",
+				"account_bank_code":                 1099,
+				"bank_alias":                        "深圳前海微众银行",
+				"bank_alias_code":                   "1000009561",
+				"need_bank_branch":                  true,
+				"bank_address_code":                 "440300",
+				"bank_branch_id":                    "402584040001",
+				"bank_name":                         "深圳前海微众银行深圳南山支行",
+				"account_number":                    "6214830012345678",
+				"account_name":                      "张三",
+				"contact_type":                      "SUPER",
+				"contact_name":                      "李四",
+				"contact_id_doc_type":               "IDENTIFICATION_TYPE_IDCARD",
+				"contact_id_card_number":            "110101199202023456",
+				"contact_id_doc_copy_asset_id":      501,
+				"contact_id_doc_copy_back_asset_id": 502,
+				"contact_id_doc_period_begin":       "2020-01-01",
+				"contact_id_doc_period_end":         "2030-01-01",
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetMediaAssetByID(gomock.Any(), int64(501)).
+					AnyTimes().
+					Return(db.MediaAsset{
+						ID:               501,
+						ObjectKey:        "id_card/front/1/20240101/contact-front.png",
+						Visibility:       string(media.VisibilityPrivate),
+						MediaCategory:    string(media.CategoryIDCardFront),
+						MimeType:         "image/png",
+						UploadedBy:       user.ID,
+						UploadStatus:     "confirmed",
+						ModerationStatus: "approved",
+					}, nil)
+				store.EXPECT().
+					GetMediaAssetByID(gomock.Any(), int64(502)).
+					AnyTimes().
+					Return(db.MediaAsset{
+						ID:               502,
+						ObjectKey:        "id_card/back/1/20240101/contact-back.png",
+						Visibility:       string(media.VisibilityPrivate),
+						MediaCategory:    string(media.CategoryIDCardBack),
+						MimeType:         "image/png",
+						UploadedBy:       user.ID,
+						UploadStatus:     "confirmed",
+						ModerationStatus: "approved",
+					}, nil)
+
+				store.EXPECT().
+					GetLatestEcommerceApplymentBySubject(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.EcommerceApplyment{}, db.ErrRecordNotFound)
+
+				store.EXPECT().
+					GetUserMerchantApplication(gomock.Any(), user.ID).
+					Times(1).
+					Return(applicationWithTestURL, nil)
+
+				store.EXPECT().
+					CreateEcommerceApplyment(gomock.Any(), gomock.Any()).
+					Times(1).
+					DoAndReturn(func(_ any, arg db.CreateEcommerceApplymentParams) (db.EcommerceApplyment, error) {
+						require.Equal(t, "李四", arg.ContactName)
+						require.True(t, arg.ContactIDCardNumber.Valid)
+						require.NotEmpty(t, arg.ContactIDCardNumber.String)
+						require.Equal(t, applicationWithTestURL.ContactPhone, arg.MobilePhone)
+						return randomEcommerceApplymentForTest("merchant", merchant.ID), nil
+					})
+
+				ecommerceClient.EXPECT().
+					EncryptSensitiveData(gomock.Any()).
+					Times(7).
+					Return("encrypted_data", nil)
+
+				expectedObjectKey := buildMerchantStorefrontQRCodeObjectKey(merchant.ID)
+				ecommerceClient.EXPECT().
+					UploadImage(gomock.Any(), "contact-front.png", gomock.Any()).
+					Times(1).
+					Return(&wechat.ImageUploadResponse{MediaID: "wx_super_contact_front_media_id"}, nil)
+				ecommerceClient.EXPECT().
+					UploadImage(gomock.Any(), "contact-back.png", gomock.Any()).
+					Times(1).
+					Return(&wechat.ImageUploadResponse{MediaID: "wx_super_contact_back_media_id"}, nil)
+				ecommerceClient.EXPECT().
+					UploadImage(gomock.Any(), path.Base(expectedObjectKey), gomock.Any()).
+					Times(1).
+					DoAndReturn(func(_ context.Context, filename string, fileData []byte) (*wechat.ImageUploadResponse, error) {
+						require.Equal(t, path.Base(expectedObjectKey), filename)
+						require.NotEmpty(t, fileData)
+						return &wechat.ImageUploadResponse{MediaID: "wx_store_qr_media_id"}, nil
+					})
+
+				ecommerceClient.EXPECT().
+					CreateEcommerceApplyment(gomock.Any(), gomock.Any()).
+					Times(1).
+					DoAndReturn(func(_ any, req *wechat.EcommerceApplymentRequest) (*wechat.EcommerceApplymentResponse, error) {
+						require.NotNil(t, req.ContactInfo)
+						require.Equal(t, "SUPER", req.ContactInfo.ContactType)
+						require.Equal(t, "encrypted_data", req.ContactInfo.ContactName)
+						require.Equal(t, "IDENTIFICATION_TYPE_IDCARD", req.ContactInfo.ContactIDDocType)
+						require.Equal(t, "encrypted_data", req.ContactInfo.ContactIDCardNumber)
+						require.Equal(t, "wx_super_contact_front_media_id", req.ContactInfo.ContactIDDocCopy)
+						require.Equal(t, "wx_super_contact_back_media_id", req.ContactInfo.ContactIDDocCopyBack)
+						require.Equal(t, "2020-01-01", req.ContactInfo.ContactIDDocPeriodBegin)
+						require.Equal(t, "2030-01-01", req.ContactInfo.ContactIDDocPeriodEnd)
+						return &wechat.EcommerceApplymentResponse{ApplymentID: 22334455}, nil
+					})
+
+				store.EXPECT().
+					UpdateEcommerceApplymentToSubmitted(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.EcommerceApplyment{}, nil)
+
+				store.EXPECT().
+					UpdateMerchantStatus(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.Merchant{}, nil)
+			},
+			buildWechatStubs: func(store *mockdb.MockStore, wechatClient *mockwechat.MockWechatClient) {
+				expectedObjectKey := buildMerchantStorefrontQRCodeObjectKey(merchant.ID)
+				qrCodeData := buildTestQRCodePNG(t)
+
+				store.EXPECT().
+					GetMediaAssetByObjectKey(gomock.Any(), expectedObjectKey).
+					Times(1).
+					Return(db.MediaAsset{}, db.ErrRecordNotFound)
+
+				wechatClient.EXPECT().
+					GetWXACodeUnlimited(gomock.Any(), gomock.AssignableToTypeOf(&wechat.WXACodeRequest{})).
+					Times(1).
+					Return(qrCodeData, nil)
+
+				store.EXPECT().
+					CreateMediaAsset(gomock.Any(), gomock.AssignableToTypeOf(db.CreateMediaAssetParams{})).
+					Times(1).
+					Return(db.MediaAsset{ID: util.RandomInt(1, 1000), ModerationStatus: "pending"}, nil)
+
+				store.EXPECT().
+					SetMediaAssetModerationStatus(gomock.Any(), gomock.AssignableToTypeOf(db.SetMediaAssetModerationStatusParams{})).
+					Times(1).
+					Return(db.MediaAsset{ID: util.RandomInt(1, 1000), ModerationStatus: "approved"}, nil)
+			},
+			prepareServer: func(t *testing.T, server *Server) {
+				content := buildTestQRCodePNG(t)
+				seedPrivateContactDocumentAsset(t, server, "id_card/front/1/20240101/contact-front.png", content)
+				seedPrivateContactDocumentAsset(t, server, "id_card/back/1/20240101/contact-back.png", content)
+			},
+			checkResponse: func(recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var response merchantBindBankResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Equal(t, int64(22334455), response.ApplymentID)
+				require.Equal(t, "submitted", response.Status)
+			},
+		},
+		{
+			name: "BadRequest_MissingSuperAdministratorDocumentFields",
+			body: gin.H{
+				"account_type":           "ACCOUNT_TYPE_PRIVATE",
+				"account_bank":           "其他银行",
+				"account_bank_code":      1099,
+				"bank_alias":             "深圳前海微众银行",
+				"bank_alias_code":        "1000009561",
+				"need_bank_branch":       true,
+				"bank_address_code":      "440300",
+				"bank_branch_id":         "402584040001",
+				"bank_name":              "深圳前海微众银行深圳南山支行",
+				"account_number":         "6214830012345678",
+				"account_name":           "张三",
+				"contact_type":           "SUPER",
+				"contact_name":           "李四",
+				"contact_id_card_number": "110101199202023456",
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetLatestEcommerceApplymentBySubject(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.EcommerceApplyment{}, db.ErrRecordNotFound)
+
+				store.EXPECT().
+					GetUserMerchantApplication(gomock.Any(), user.ID).
+					Times(1).
+					Return(applicationWithTestURL, nil)
+			},
+			checkResponse: func(recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
 			name: "MerchantNotFound",
 			body: gin.H{
 				"account_type":      "ACCOUNT_TYPE_PRIVATE",
@@ -346,6 +561,84 @@ func TestMerchantBindBankAPI(t *testing.T) {
 				// 已有进行中的申请
 				existingApplyment := randomEcommerceApplymentForTest("merchant", merchant.ID)
 				existingApplyment.Status = "auditing"
+				store.EXPECT().
+					GetLatestEcommerceApplymentBySubject(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(existingApplyment, nil)
+			},
+			checkResponse: func(recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
+			name: "AlreadyHasPendingApplyment_AccountNeedVerify",
+			body: gin.H{
+				"account_type":      "ACCOUNT_TYPE_PRIVATE",
+				"account_bank":      "招商银行",
+				"bank_address_code": "440300",
+				"account_number":    "6214830012345678",
+				"account_name":      "张三",
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				existingApplyment := randomEcommerceApplymentForTest("merchant", merchant.ID)
+				existingApplyment.Status = "account_need_verify"
+				store.EXPECT().
+					GetLatestEcommerceApplymentBySubject(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(existingApplyment, nil)
+			},
+			checkResponse: func(recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
+			name: "AlreadyHasPendingApplyment_Checking",
+			body: gin.H{
+				"account_type":      "ACCOUNT_TYPE_PRIVATE",
+				"account_bank":      "招商银行",
+				"bank_address_code": "440300",
+				"account_number":    "6214830012345678",
+				"account_name":      "张三",
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				existingApplyment := randomEcommerceApplymentForTest("merchant", merchant.ID)
+				existingApplyment.Status = "checking"
+				store.EXPECT().
+					GetLatestEcommerceApplymentBySubject(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(existingApplyment, nil)
+			},
+			checkResponse: func(recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
+			name: "AlreadyHasPendingApplyment_ToBeConfirmed",
+			body: gin.H{
+				"account_type":      "ACCOUNT_TYPE_PRIVATE",
+				"account_bank":      "招商银行",
+				"bank_address_code": "440300",
+				"account_number":    "6214830012345678",
+				"account_name":      "张三",
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				existingApplyment := randomEcommerceApplymentForTest("merchant", merchant.ID)
+				existingApplyment.Status = "to_be_confirmed"
 				store.EXPECT().
 					GetLatestEcommerceApplymentBySubject(gomock.Any(), gomock.Any()).
 					Times(1).
@@ -574,6 +867,9 @@ func TestMerchantBindBankAPI(t *testing.T) {
 
 			server := newTestServerWithEcommerce(t, store, ecommerceClient)
 			server.wechatClient = wechatClient
+			if tc.prepareServer != nil {
+				tc.prepareServer(t, server)
+			}
 
 			data, err := json.Marshal(tc.body)
 			require.NoError(t, err)
@@ -891,12 +1187,17 @@ func TestMapWechatApplymentStatus(t *testing.T) {
 		{
 			name:     "LatestChecking",
 			wxStatus: "CHECKING",
-			expected: "auditing",
+			expected: "checking",
 		},
 		{
 			name:     "LatestAccountNeedVerify",
 			wxStatus: "ACCOUNT_NEED_VERIFY",
-			expected: "auditing",
+			expected: "account_need_verify",
+		},
+		{
+			name:     "LatestToBeConfirmed",
+			wxStatus: "APPLYMENT_STATE_TO_BE_CONFIRMED",
+			expected: "to_be_confirmed",
 		},
 		{
 			name:     "LatestNeedSign",
@@ -911,7 +1212,7 @@ func TestMapWechatApplymentStatus(t *testing.T) {
 		{
 			name:     "LatestCanceled",
 			wxStatus: "CANCELED",
-			expected: "rejected",
+			expected: "canceled",
 		},
 		{
 			name:     "LatestFrozen",

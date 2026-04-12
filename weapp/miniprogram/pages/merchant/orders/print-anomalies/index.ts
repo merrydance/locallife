@@ -4,6 +4,11 @@ import {
   OrderManagementAdapter
 } from '../../../../api/order-management'
 import { logger } from '../../../../utils/logger'
+import {
+  formatPrintAnomalyRetryHint,
+  getPrintAnomalyStatusView,
+  PrintAnomalyTheme
+} from '../../../../utils/merchant-print-anomaly-view'
 import { getStableBarHeights } from '../../../../utils/responsive'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
 import { ensureMerchantConsoleAccess } from '../../../../utils/console-access'
@@ -12,8 +17,6 @@ import dayjs from 'dayjs'
 const PRINT_ANOMALIES_AUTO_REFRESH_WINDOW_MS = 60 * 1000
 
 type PrintAnomalyFilter = 'all' | 'failed' | 'pending'
-type PrintAnomalyTheme = 'warning' | 'danger' | 'default'
-
 interface PrintAnomalyView extends MerchantPrintAnomalyItem {
   status_label: string
   status_theme: PrintAnomalyTheme
@@ -23,17 +26,6 @@ interface PrintAnomalyView extends MerchantPrintAnomalyItem {
   retry_hint_label: string
   error_message_label: string
   vendor_order_id_label: string
-}
-
-function formatRetryHint(retryHint?: string) {
-  if (!retryHint) return ''
-  if (retryHint === 'printer is inactive') {
-    return '该打印机当前已停用，请先启用打印机后再重试。'
-  }
-  if (retryHint === 'printer type is not supported for retry') {
-    return '当前打印机类型暂不支持小程序端重试，请到设备配置中核对品牌类型。'
-  }
-  return retryHint
 }
 
 const FILTER_OPTIONS: Array<{ key: PrintAnomalyFilter, label: string }> = [
@@ -50,40 +42,17 @@ function shouldAutoRefresh(lastLoadedAt: number, freshnessWindowMs: number) {
   return !lastLoadedAt || Date.now() - lastLoadedAt >= freshnessWindowMs
 }
 
-function formatPrintAnomalyStatus(status: string) {
-  if (status === 'failed') return '打印失败'
-  if (status === 'pending') return '待回执'
-  return '状态同步中'
-}
-
-function getPrintAnomalyTheme(status: string): PrintAnomalyTheme {
-  if (status === 'failed') return 'danger'
-  if (status === 'pending') return 'warning'
-  return 'default'
-}
-
-function getPrintAnomalySummary(item: MerchantPrintAnomalyItem) {
-  if (item.retry_hint) {
-    return formatRetryHint(item.retry_hint)
-  }
-  if (item.error_message && item.local_status === 'failed') {
-    return '最近一次打印已明确失败，请先查看失败原因，再决定是否重试补打。'
-  }
-  if (item.local_status === 'pending') {
-    return '打印任务仍未收到回执，请确认门店设备和云打印平台状态。'
-  }
-  return '打印任务状态异常，请尽快处理。'
-}
-
 function buildPrintAnomalyView(item: MerchantPrintAnomalyItem): PrintAnomalyView {
+  const statusView = getPrintAnomalyStatusView(item)
+
   return {
     ...item,
-    status_label: formatPrintAnomalyStatus(item.local_status),
-    status_theme: getPrintAnomalyTheme(item.local_status),
+    status_label: statusView.label,
+    status_theme: statusView.theme,
     order_type_label: OrderManagementAdapter.formatOrderType(item.order_type),
     last_attempt_label: dayjs(item.last_attempt_at).format('MM-DD HH:mm'),
-    summary: getPrintAnomalySummary(item),
-    retry_hint_label: formatRetryHint(item.retry_hint),
+    summary: statusView.summary,
+    retry_hint_label: formatPrintAnomalyRetryHint(item.retry_hint),
     error_message_label: item.error_message || '',
     vendor_order_id_label: item.vendor_order_id || ''
   }

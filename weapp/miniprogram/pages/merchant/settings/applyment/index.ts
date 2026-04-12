@@ -5,7 +5,7 @@ import {
   getMerchantApplymentStatus,
   merchantBindBank
 } from '../../../../api/merchant-applyment'
-import type { ApplymentBindBankPayload } from '../../../../api/applyment-bank'
+import type { ApplymentBindBankDraftPayload, ApplymentBindBankPayload } from '../../../../api/applyment-bank'
 import {
   ensureMerchantApplymentAccess,
   getMerchantConsoleAccessErrorMessage,
@@ -27,6 +27,20 @@ const getErrorMessage = getErrorUserMessage
 
 let applymentRequestPending = false
 
+function copyText(data: string, successTitle: string) {
+  const trimmed = String(data || '').trim()
+  if (!trimmed) {
+    return
+  }
+
+  wx.setClipboardData({
+    data: trimmed,
+    success: () => {
+      wx.showToast({ title: successTitle, icon: 'success' })
+    }
+  })
+}
+
 function shouldAutoRefresh(lastLoadedAt: number, freshnessWindowMs: number) {
   return !lastLoadedAt || Date.now() - lastLoadedAt >= freshnessWindowMs
 }
@@ -47,7 +61,7 @@ Page({
     statusLoaded: false,
     applymentStatus: EMPTY_APPLYMENT as ApplymentStatusResponse | null,
     applymentView: { ...DEFAULT_MERCHANT_APPLYMENT_STATUS_VIEW },
-    bindBankDraft: null as ApplymentBindBankPayload | null,
+    bindBankDraft: null as ApplymentBindBankDraftPayload | null,
     showBindForm: false,
     submittingBind: false,
     refreshingStatus: false
@@ -253,7 +267,7 @@ Page({
     this.setData({ showBindForm: false })
   },
 
-  onBindDraftChange(e: WechatMiniprogram.CustomEvent<ApplymentBindBankPayload>) {
+  onBindDraftChange(e: WechatMiniprogram.CustomEvent<ApplymentBindBankDraftPayload>) {
     this.setData({ bindBankDraft: e.detail })
   },
 
@@ -287,16 +301,19 @@ Page({
 
   onCopySignUrl() {
     const signURL = this.data.applymentView.signURL
-    if (!signURL) {
-      return
-    }
+    copyText(signURL, '签约链接已复制')
+  },
 
-    wx.setClipboardData({
-      data: signURL,
-      success: () => {
-        wx.showToast({ title: '签约链接已复制', icon: 'success' })
-      }
-    })
+  onCopyLegalValidationUrl() {
+    copyText(this.data.applymentView.legalValidationURL, '验证链接已复制')
+  },
+
+  onCopyValidationAccountNumber() {
+    copyText(this.data.applymentView.accountValidation?.destinationAccountNumber || '', '收款卡号已复制')
+  },
+
+  onCopyValidationRemark() {
+    copyText(this.data.applymentView.accountValidation?.remark || '', '汇款备注已复制')
   },
 
   async onRefreshStatus() {

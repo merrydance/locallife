@@ -472,6 +472,6 @@ Page({
 
   onRetry() {
     this.loadDetail(false)
-  },
+  }
 
 })

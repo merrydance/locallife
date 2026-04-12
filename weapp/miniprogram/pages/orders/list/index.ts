@@ -3,7 +3,6 @@ import {
   cancelOrder,
   OrderStatus,
   getOrderDetail,
-  OrderResponse,
   OrderType,
   ListOrdersParams
 } from '../../../api/order'
@@ -16,7 +15,6 @@ import {
   CombinedPaymentOrderResponse,
   createCombinedPaymentOrder,
   createOrderPayment,
-  getCombinedPaymentFollowupMessage,
   getPaymentProcessOutcomeMessage,
   isCombinedPaymentSuccessful,
   isPaymentProcessSuccessful,

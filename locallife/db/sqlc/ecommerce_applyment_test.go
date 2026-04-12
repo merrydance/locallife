@@ -183,6 +183,18 @@ func TestUpdateEcommerceApplymentStatus(t *testing.T) {
 			newStatus: "auditing",
 		},
 		{
+			name:      "Update to checking",
+			newStatus: "checking",
+		},
+		{
+			name:      "Update to account_need_verify",
+			newStatus: "account_need_verify",
+		},
+		{
+			name:      "Update to to_be_confirmed",
+			newStatus: "to_be_confirmed",
+		},
+		{
 			name:         "Update to rejected",
 			newStatus:    "rejected",
 			rejectReason: "资料不符合要求",
@@ -201,6 +213,10 @@ func TestUpdateEcommerceApplymentStatus(t *testing.T) {
 			name:      "Update to finish",
 			newStatus: "finish",
 			subMchID:  "1234567890",
+		},
+		{
+			name:      "Update to canceled",
+			newStatus: "canceled",
 		},
 	}
 
@@ -313,23 +329,84 @@ func TestListEcommerceApplymentsByStatus(t *testing.T) {
 }
 
 func TestListPendingEcommerceApplyments(t *testing.T) {
-	// 创建一个并设置为已提交状态
-	applyment := createRandomEcommerceApplymentForMerchant(t)
-	_, err := testStore.UpdateEcommerceApplymentToSubmitted(context.Background(), UpdateEcommerceApplymentToSubmittedParams{
-		ID:          applyment.ID,
-		ApplymentID: pgtype.Int8{Int64: 123456789, Valid: true},
-	})
+	sqlStore, ok := testStore.(*SQLStore)
+	require.True(t, ok)
+
+	var pendingCountBefore int64
+	err := sqlStore.connPool.QueryRow(context.Background(), `
+		SELECT count(*)
+		FROM ecommerce_applyments
+		WHERE status IN ('submitted', 'checking', 'auditing', 'account_need_verify', 'to_be_confirmed', 'to_be_signed', 'signing')
+	`).Scan(&pendingCountBefore)
 	require.NoError(t, err)
+
+	testCases := []struct {
+		status    string
+		signURL   string
+		signState string
+	}{
+		{status: "submitted"},
+		{status: "checking"},
+		{status: "auditing"},
+		{status: "account_need_verify"},
+		{status: "to_be_confirmed"},
+		{status: "to_be_signed", signURL: "https://pay.weixin.qq.com/sign/xxxx"},
+		{status: "signing", signState: "SIGNING"},
+	}
+
+	createdStatuses := make(map[int64]string, len(testCases))
+	for index, tc := range testCases {
+		applyment := createRandomEcommerceApplymentForMerchant(t)
+		createdStatuses[applyment.ID] = tc.status
+
+		if tc.status == "submitted" {
+			_, err = testStore.UpdateEcommerceApplymentToSubmitted(context.Background(), UpdateEcommerceApplymentToSubmittedParams{
+				ID:          applyment.ID,
+				ApplymentID: pgtype.Int8{Int64: int64(123456789 + index), Valid: true},
+			})
+			require.NoError(t, err)
+			continue
+		}
+
+		_, err = testStore.UpdateEcommerceApplymentStatus(context.Background(), UpdateEcommerceApplymentStatusParams{
+			ID:           applyment.ID,
+			Status:       tc.status,
+			RejectReason: pgtype.Text{},
+			SignUrl:      pgtype.Text{String: tc.signURL, Valid: tc.signURL != ""},
+			SignState:    pgtype.Text{String: tc.signState, Valid: tc.signState != ""},
+			SubMchID:     pgtype.Text{},
+		})
+		require.NoError(t, err)
+	}
 
 	applyments, err := testStore.ListPendingEcommerceApplyments(context.Background(), ListPendingEcommerceApplymentsParams{
-		Limit:  10,
-		Offset: 0,
+		Limit:  int32(len(testCases)),
+		Offset: int32(pendingCountBefore),
 	})
 	require.NoError(t, err)
 
-	// 验证所有记录都是待处理状态
+	expectedStatuses := map[string]struct{}{
+		"submitted":           {},
+		"checking":            {},
+		"auditing":            {},
+		"account_need_verify": {},
+		"to_be_confirmed":     {},
+		"to_be_signed":        {},
+		"signing":             {},
+	}
+
+	foundStatuses := make(map[int64]string, len(createdStatuses))
 	for _, a := range applyments {
-		require.Contains(t, []string{"submitted", "auditing", "to_be_signed", "signing"}, a.Status)
+		_, ok := expectedStatuses[a.Status]
+		require.True(t, ok, "unexpected pending applyment status: %s", a.Status)
+		if _, exists := createdStatuses[a.ID]; exists {
+			foundStatuses[a.ID] = a.Status
+		}
+	}
+
+	require.Len(t, foundStatuses, len(createdStatuses))
+	for id, status := range createdStatuses {
+		require.Equal(t, status, foundStatuses[id])
 	}
 }
 

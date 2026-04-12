@@ -1,7 +1,6 @@
 import { getStableBarHeights } from '../../../../utils/responsive'
 import {
   MerchantOrderManagementService,
-  MerchantOrderPrintJobStatusResponse,
   OrderResponse,
   OrderManagementAdapter,
   MERCHANT_REJECT_REASON_OPTIONS

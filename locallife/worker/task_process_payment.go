@@ -2794,8 +2794,8 @@ func (processor *RedisTaskProcessor) ProcessTaskApplymentResult(ctx context.Cont
 			return err
 		}
 
-	case "to_be_confirmed", "to_be_signed":
-		// 待确认/待签约，发送提醒通知
+	case "account_need_verify", "to_be_confirmed", "to_be_signed":
+		// 待账户验证/待确认/待签约，发送提醒通知
 		if err := processor.handleApplymentPending(ctx, &payload); err != nil {
 			return err
 		}
@@ -2862,6 +2862,14 @@ func (processor *RedisTaskProcessor) handleApplymentSuccess(ctx context.Context,
 	case "merchant":
 		userID = merchant.OwnerUserID
 		notifyContent = fmt.Sprintf("您的商户「%s」已完成微信支付开户，可以开始接单收款了！", merchant.Name)
+	case "operator":
+		operator, err := processor.store.GetOperator(ctx, payload.SubjectID)
+		if err != nil {
+			log.Error().Err(err).Int64("operator_id", payload.SubjectID).Msg("get operator for applyment success")
+			return nil
+		}
+		userID = operator.UserID
+		notifyContent = fmt.Sprintf("您的运营账号「%s」已完成微信支付开户，可以开始结算与运营管理了！", operator.Name)
 	}
 
 	if userID > 0 && processor.distributor != nil {
@@ -2905,6 +2913,14 @@ func (processor *RedisTaskProcessor) handleApplymentRejected(ctx context.Context
 		}
 		userID = merchant.OwnerUserID
 		notifyContent = fmt.Sprintf("您的商户「%s」微信支付开户申请被驳回，原因：%s", merchant.Name, rejectReason)
+	case "operator":
+		operator, err := processor.store.GetOperator(ctx, payload.SubjectID)
+		if err != nil {
+			log.Error().Err(err).Int64("operator_id", payload.SubjectID).Msg("get operator")
+			return nil
+		}
+		userID = operator.UserID
+		notifyContent = fmt.Sprintf("您的运营账号「%s」微信支付开户申请被驳回，原因：%s", operator.Name, rejectReason)
 	}
 
 	if userID > 0 && processor.distributor != nil {
@@ -2923,10 +2939,11 @@ func (processor *RedisTaskProcessor) handleApplymentRejected(ctx context.Context
 	return nil
 }
 
-// handleApplymentPending 处理待确认/待签约
+// handleApplymentPending 处理待账户验证/待确认/待签约
 func (processor *RedisTaskProcessor) handleApplymentPending(ctx context.Context, payload *ApplymentResultPayload) error {
 	var userID int64
 	var notifyContent string
+	resolvedStatus := resolveApplymentResultStatus(*payload)
 
 	switch payload.SubjectType {
 	case "merchant":
@@ -2935,10 +2952,27 @@ func (processor *RedisTaskProcessor) handleApplymentPending(ctx context.Context,
 			return nil
 		}
 		userID = merchant.OwnerUserID
-		if resolveApplymentResultStatus(*payload) == "to_be_confirmed" {
+		switch resolvedStatus {
+		case "account_need_verify":
+			notifyContent = fmt.Sprintf("您的商户「%s」微信支付开户需要完成账户验证，请按页面指引完成汇款验证或法人扫码验证", merchant.Name)
+		case "to_be_confirmed":
 			notifyContent = fmt.Sprintf("您的商户「%s」微信支付开户需要确认，请登录微信支付商户平台完成确认", merchant.Name)
-		} else {
+		default:
 			notifyContent = fmt.Sprintf("您的商户「%s」微信支付开户需要签约，请登录微信支付商户平台完成签约", merchant.Name)
+		}
+	case "operator":
+		operator, err := processor.store.GetOperator(ctx, payload.SubjectID)
+		if err != nil {
+			return nil
+		}
+		userID = operator.UserID
+		switch resolvedStatus {
+		case "account_need_verify":
+			notifyContent = fmt.Sprintf("您的运营账号「%s」微信支付开户需要完成账户验证，请按页面指引完成汇款验证或法人扫码验证", operator.Name)
+		case "to_be_confirmed":
+			notifyContent = fmt.Sprintf("您的运营账号「%s」微信支付开户需要确认，请登录微信支付商户平台完成确认", operator.Name)
+		default:
+			notifyContent = fmt.Sprintf("您的运营账号「%s」微信支付开户需要签约，请登录微信支付商户平台完成签约", operator.Name)
 		}
 	}
 

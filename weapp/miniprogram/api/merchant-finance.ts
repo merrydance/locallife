@@ -1,4 +1,5 @@
 import { request } from '../utils/request'
+import type { ApplymentContactDocType, ApplymentContactType } from './applyment-bank'
 
 export interface MerchantAccountBalanceResponse {
   sub_mch_id: string
@@ -290,30 +291,48 @@ export async function listMerchantSettlementTimeline(
 
 /* ─────────────────────────── 收付通进件 ─────────────────────────── */
 
+export interface ApplymentAccountValidationResponse {
+  account_name?: string
+  account_no?: string
+  pay_amount?: number
+  destination_account_number?: string
+  destination_account_name?: string
+  destination_account_bank?: string
+  city?: string
+  remark?: string
+  deadline?: string
+}
+
 export interface ApplymentStatusResponse {
   status: string
   status_desc: string
   can_submit?: boolean
   block_reason?: string
   sign_url?: string
+  sign_state?: string
+  legal_validation_url?: string
+  account_validation?: ApplymentAccountValidationResponse
   sub_mch_id?: string
   reject_reason?: string
 }
 
 const MERCHANT_APPLYMENT_ACTIVE_STATUSES = new Set(['active', 'finish'])
 const MERCHANT_APPLYMENT_SIGNING_STATUSES = new Set(['to_be_signed', 'signing', 'need_sign'])
+const MERCHANT_APPLYMENT_ACTION_STATUSES = new Set(['account_need_verify', 'to_be_confirmed', 'to_be_signed', 'signing'])
 
 export function getMerchantApplymentStatusView(status?: string, statusDesc?: string, blockReason?: string) {
   const normalizedStatus = String(status || '').trim().toLowerCase()
   const isActivated = MERCHANT_APPLYMENT_ACTIVE_STATUSES.has(normalizedStatus)
   const needsSign = MERCHANT_APPLYMENT_SIGNING_STATUSES.has(normalizedStatus)
+  const needsAction = MERCHANT_APPLYMENT_ACTION_STATUSES.has(normalizedStatus)
 
   return {
     normalizedStatus,
     isActivated,
     needsSign,
+    needsAction,
     statusDesc: statusDesc || '',
-    blockReason: blockReason || (needsSign
+    blockReason: blockReason || ((needsAction || needsSign)
       ? '收付通签约尚未完成，请先完成签约后再营业。'
       : '营业前需要先完成收付通进件并激活账户。')
   }
@@ -372,6 +391,14 @@ export interface MerchantBindBankRequest {
   bank_name?: string
   account_number: string
   account_name: string
+  contact_type?: ApplymentContactType
+  contact_name?: string
+  contact_id_doc_type?: ApplymentContactDocType
+  contact_id_card_number?: string
+  contact_id_doc_copy_asset_id?: number
+  contact_id_doc_copy_back_asset_id?: number
+  contact_id_doc_period_begin?: string
+  contact_id_doc_period_end?: string
 }
 
 export interface MerchantBindBankResponse {

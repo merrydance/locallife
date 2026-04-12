@@ -53,6 +53,19 @@ export interface MerchantUserRiskView {
   reminderText: string
 }
 
+export type ClaimTagTheme = 'primary' | 'warning' | 'success' | 'danger' | 'default'
+
+interface MerchantClaimListActionState {
+  actionHint: string
+  isPendingAction: boolean
+  isAppealedFlow: boolean
+  isClosedFlow: boolean
+}
+
+const WARNING_RECOVERY_STATUSES = new Set(['pending', 'overdue'])
+const SUCCESS_RECOVERY_STATUSES = new Set(['paid', 'waived'])
+const SUCCESS_APPEAL_STATUSES = new Set(['approved', 'compensated'])
+
 export function formatMoney(cents?: number): string {
   const value = typeof cents === 'number' ? cents : 0
   return `¥${(value / 100).toFixed(2)}`
@@ -90,6 +103,15 @@ export function formatClaimStatus(status?: string): string {
   return map[status] || status
 }
 
+export function getClaimStatusTheme(status?: string): ClaimTagTheme {
+  const normalizedStatus = String(status || '').trim().toLowerCase()
+
+  if (normalizedStatus === 'approved') return 'warning'
+  if (normalizedStatus === 'compensated') return 'success'
+  if (normalizedStatus === 'rejected') return 'default'
+  return 'primary'
+}
+
 export function formatAppealStatus(status?: string): string {
   const map: Record<string, string> = {
     pending: '异议待审核',
@@ -99,6 +121,16 @@ export function formatAppealStatus(status?: string): string {
   }
   if (!status) return '未提交异议'
   return map[status] || status
+}
+
+export function getAppealStatusTheme(status?: string): ClaimTagTheme {
+  const normalizedStatus = String(status || '').trim().toLowerCase()
+
+  if (!normalizedStatus) return 'default'
+  if (normalizedStatus === 'pending') return 'warning'
+  if (SUCCESS_APPEAL_STATUSES.has(normalizedStatus)) return 'success'
+  if (normalizedStatus === 'rejected') return 'danger'
+  return 'default'
 }
 
 export function formatRecoveryStatus(status?: string): string {
@@ -111,6 +143,16 @@ export function formatRecoveryStatus(status?: string): string {
   }
   if (!status) return '无追偿单'
   return map[status] || status
+}
+
+export function getRecoveryStatusTheme(status?: string): ClaimTagTheme {
+  const normalizedStatus = String(status || '').trim().toLowerCase()
+
+  if (!normalizedStatus) return 'default'
+  if (WARNING_RECOVERY_STATUSES.has(normalizedStatus)) return 'warning'
+  if (SUCCESS_RECOVERY_STATUSES.has(normalizedStatus)) return 'success'
+  if (normalizedStatus === 'appealed') return 'danger'
+  return 'default'
 }
 
 export function formatResponsibleParty(party?: string): string {
@@ -230,6 +272,64 @@ export function getMerchantClaimProgressCurrent(claimStatus?: string, recoverySt
     return 1
   }
   return 0
+}
+
+export function getMerchantClaimListActionState(input: {
+  status?: string
+  appealStatus?: string
+  recoveryStatus?: string
+}): MerchantClaimListActionState {
+  const appealStatus = String(input.appealStatus || '').trim().toLowerCase()
+  const recoveryStatus = String(input.recoveryStatus || '').trim().toLowerCase()
+  const claimStatus = String(input.status || '').trim().toLowerCase()
+  const isPendingAction = WARNING_RECOVERY_STATUSES.has(recoveryStatus)
+    || (appealStatus === 'rejected' && !SUCCESS_RECOVERY_STATUSES.has(recoveryStatus))
+  const isAppealedFlow = recoveryStatus === 'appealed' || appealStatus === 'pending'
+  const isClosedFlow = SUCCESS_RECOVERY_STATUSES.has(recoveryStatus)
+    || SUCCESS_APPEAL_STATUSES.has(appealStatus)
+
+  if (isAppealedFlow) {
+    return {
+      actionHint: '异议已提交，等待平台复核结果。',
+      isPendingAction,
+      isAppealedFlow,
+      isClosedFlow
+    }
+  }
+
+  if (isPendingAction) {
+    return {
+      actionHint: '平台已生成追偿单，建议尽快支付追偿款或先提交异议。',
+      isPendingAction,
+      isAppealedFlow,
+      isClosedFlow
+    }
+  }
+
+  if (isClosedFlow) {
+    return {
+      actionHint: '当前索赔已进入结案态，可进入详情核对最终结果。',
+      isPendingAction,
+      isAppealedFlow,
+      isClosedFlow
+    }
+  }
+
+  if (claimStatus === 'approved' || claimStatus === 'auto-approved') {
+    return {
+      actionHint: '责任已判定，可进入详情查看依据并决定是否提交异议。',
+      isPendingAction,
+      isAppealedFlow,
+      isClosedFlow
+    }
+  }
+
+  return {
+    actionHint: '点击查看索赔详情与处理进度。',
+    isPendingAction,
+    isAppealedFlow,
+    isClosedFlow
+  }
 }
 
 export function canSubmitMerchantClaimAppeal(claimStatus?: string, appealId?: number | null) {

@@ -32484,6 +32484,38 @@ const docTemplate = `{
                 }
             }
         },
+        "api.applymentAccountValidationResponse": {
+            "type": "object",
+            "properties": {
+                "account_name": {
+                    "type": "string"
+                },
+                "account_no": {
+                    "type": "string"
+                },
+                "city": {
+                    "type": "string"
+                },
+                "deadline": {
+                    "type": "string"
+                },
+                "destination_account_bank": {
+                    "type": "string"
+                },
+                "destination_account_name": {
+                    "type": "string"
+                },
+                "destination_account_number": {
+                    "type": "string"
+                },
+                "pay_amount": {
+                    "type": "integer"
+                },
+                "remark": {
+                    "type": "string"
+                }
+            }
+        },
         "api.applymentBankListResponse": {
             "type": "object",
             "properties": {
@@ -37564,6 +37596,14 @@ const docTemplate = `{
         "api.merchantApplymentStatusResponse": {
             "type": "object",
             "properties": {
+                "account_validation": {
+                    "description": "汇款验证信息",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/api.applymentAccountValidationResponse"
+                        }
+                    ]
+                },
                 "block_reason": {
                     "description": "不允许提交时的阻塞原因",
                     "type": "string"
@@ -37572,8 +37612,16 @@ const docTemplate = `{
                     "description": "是否允许提交或重新提交进件",
                     "type": "boolean"
                 },
+                "legal_validation_url": {
+                    "description": "法人扫码验证链接",
+                    "type": "string"
+                },
                 "reject_reason": {
                     "description": "拒绝原因",
+                    "type": "string"
+                },
+                "sign_state": {
+                    "description": "签约状态",
                     "type": "string"
                 },
                 "sign_url": {
@@ -37638,6 +37686,43 @@ const docTemplate = `{
                 },
                 "bank_name": {
                     "type": "string"
+                },
+                "contact_id_card_number": {
+                    "type": "string",
+                    "maxLength": 32,
+                    "minLength": 15
+                },
+                "contact_id_doc_copy_asset_id": {
+                    "type": "integer"
+                },
+                "contact_id_doc_copy_back_asset_id": {
+                    "type": "integer"
+                },
+                "contact_id_doc_period_begin": {
+                    "type": "string"
+                },
+                "contact_id_doc_period_end": {
+                    "type": "string"
+                },
+                "contact_id_doc_type": {
+                    "type": "string",
+                    "enum": [
+                        "IDENTIFICATION_TYPE_IDCARD"
+                    ]
+                },
+                "contact_name": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "minLength": 2
+                },
+                "contact_type": {
+                    "type": "string",
+                    "enum": [
+                        "LEGAL",
+                        "SUPER",
+                        "65",
+                        "66"
+                    ]
                 },
                 "need_bank_branch": {
                     "type": "boolean"
@@ -39037,6 +39122,14 @@ const docTemplate = `{
         "api.operatorApplymentStatusResponse": {
             "type": "object",
             "properties": {
+                "account_validation": {
+                    "description": "汇款验证信息",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/api.applymentAccountValidationResponse"
+                        }
+                    ]
+                },
                 "applyment_id": {
                     "description": "微信进件ID",
                     "type": "integer"
@@ -39052,8 +39145,16 @@ const docTemplate = `{
                 "created_at": {
                     "type": "string"
                 },
+                "legal_validation_url": {
+                    "description": "法人扫码验证链接",
+                    "type": "string"
+                },
                 "reject_reason": {
                     "description": "拒绝原因",
+                    "type": "string"
+                },
+                "sign_state": {
+                    "description": "签约状态",
                     "type": "string"
                 },
                 "sign_url": {
@@ -39121,6 +39222,43 @@ const docTemplate = `{
                 },
                 "bank_name": {
                     "type": "string"
+                },
+                "contact_id_card_number": {
+                    "type": "string",
+                    "maxLength": 32,
+                    "minLength": 15
+                },
+                "contact_id_doc_copy_asset_id": {
+                    "type": "integer"
+                },
+                "contact_id_doc_copy_back_asset_id": {
+                    "type": "integer"
+                },
+                "contact_id_doc_period_begin": {
+                    "type": "string"
+                },
+                "contact_id_doc_period_end": {
+                    "type": "string"
+                },
+                "contact_id_doc_type": {
+                    "type": "string",
+                    "enum": [
+                        "IDENTIFICATION_TYPE_IDCARD"
+                    ]
+                },
+                "contact_name": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "minLength": 2
+                },
+                "contact_type": {
+                    "type": "string",
+                    "enum": [
+                        "LEGAL",
+                        "SUPER",
+                        "65",
+                        "66"
+                    ]
                 },
                 "need_bank_branch": {
                     "type": "boolean"

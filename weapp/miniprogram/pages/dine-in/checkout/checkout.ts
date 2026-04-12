@@ -12,8 +12,7 @@ import {
     loadCheckoutMerchantDetail,
     loadDineInCheckoutSession,
     type CheckoutCalculationResponse,
-    type CheckoutCartResponse,
-    type CheckoutMerchantDetail
+    type CheckoutCartResponse
 } from '../../../services/dine-in-checkout'
 import {
     buildCheckoutRenderState,

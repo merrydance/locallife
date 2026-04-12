@@ -638,7 +638,7 @@ func (q *Queries) ListEcommerceApplymentsBySubject(ctx context.Context, arg List
 
 const listPendingEcommerceApplyments = `-- name: ListPendingEcommerceApplyments :many
 SELECT id, subject_type, subject_id, out_request_no, applyment_id, organization_type, business_license_number, business_license_copy, merchant_name, legal_person, id_card_number, id_card_name, id_card_valid_time, id_card_front_copy, id_card_back_copy, account_type, account_bank, bank_address_code, bank_name, account_number, account_name, contact_name, contact_id_card_number, mobile_phone, contact_email, merchant_shortname, qualifications, business_addition_pics, business_addition_desc, status, sign_url, sign_state, reject_reason, sub_mch_id, created_at, submitted_at, audited_at, updated_at, result_task_processed_state, result_task_processed_at, account_bank_code, bank_alias, bank_alias_code, bank_branch_id FROM ecommerce_applyments
-WHERE status IN ('submitted', 'auditing', 'to_be_signed', 'signing')
+WHERE status IN ('submitted', 'checking', 'auditing', 'account_need_verify', 'to_be_confirmed', 'to_be_signed', 'signing')
 ORDER BY created_at ASC
 LIMIT $1 OFFSET $2
 `

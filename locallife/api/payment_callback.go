@@ -2735,7 +2735,10 @@ func (server *Server) handleApplymentStateNotify(ctx *gin.Context) {
 		_, err = server.store.UpdateEcommerceApplymentStatus(ctx, db.UpdateEcommerceApplymentStatusParams{
 			ID:           applyment.ID,
 			Status:       newStatus,
-			RejectReason: pgtype.Text{}, // 如果有驳回原因需要主动查询
+			RejectReason: pgtype.Text{},     // 如果有驳回原因需要主动查询
+			SignUrl:      applyment.SignUrl, // 回调资源不带签约字段，保留已落库值避免被清空
+			SignState:    applyment.SignState,
+			SubMchID:     applyment.SubMchID,
 		})
 		if err != nil {
 			log.Error().Err(err).Int64("applyment_id", applyment.ID).Msg("update applyment status")
@@ -2791,10 +2794,14 @@ func (server *Server) handleApplymentStateNotify(ctx *gin.Context) {
 func mapApplymentStateToDBStatus(wechatState string) string {
 	switch wechatState {
 	case "APPLYMENT_STATE_EDITTING":
-		return "editing"
+		return "pending"
 	case "APPLYMENT_STATE_AUDITING":
 		return "auditing"
-	case "CHECKING", "ACCOUNT_NEED_VERIFY", "AUDITING":
+	case "CHECKING":
+		return "checking"
+	case "ACCOUNT_NEED_VERIFY":
+		return "account_need_verify"
+	case "AUDITING":
 		return "auditing"
 	case "APPLYMENT_STATE_REJECTED":
 		return "rejected"

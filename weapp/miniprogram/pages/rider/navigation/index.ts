@@ -4,6 +4,10 @@ import { getStableBarHeights } from '../../../utils/responsive'
 import { riderLiveLocationSession, RiderLiveLocationState } from '../../../utils/rider-live-location'
 import { locationService } from '../../../utils/location'
 import { logger } from '../../../utils/logger'
+import {
+  getRiderNavigationNextStop,
+  isRiderDeliveryTrackedStatus
+} from '../../../utils/rider-delivery-view'
 
 interface RiderNavigationOptions {
   id?: string
@@ -26,10 +30,6 @@ function formatRelativeTime(timeStr: string): string {
   const hours = Math.floor(minutes / 60)
   if (hours < 24) return `${hours} 小时前`
   return `${Math.floor(hours / 24)} 天前`
-}
-
-function isTrackableDelivery(status: Delivery['status']): boolean {
-  return status === 'assigned' || status === 'picking' || status === 'picked' || status === 'delivering'
 }
 
 function toMapPoint(point: DeliveryLocationPoint | null): MapPoint | null {
@@ -77,7 +77,7 @@ Page({
 
   onShow() {
     const { delivery } = this.data
-    if (delivery && isTrackableDelivery(delivery.status)) {
+    if (delivery && isRiderDeliveryTrackedStatus(delivery.status)) {
       void riderLiveLocationSession.setActiveDelivery(delivery.id, 'rider_navigation_show')
     }
   },
@@ -126,7 +126,7 @@ Page({
         latestUpdateText: latestResult?.recorded_at ? `最近上传 ${formatRelativeTime(latestResult.recorded_at)}` : '暂无定位记录'
       })
 
-      if (isTrackableDelivery(delivery.status)) {
+      if (isRiderDeliveryTrackedStatus(delivery.status)) {
         await riderLiveLocationSession.setActiveDelivery(delivery.id, 'rider_navigation_fetch')
       }
 
@@ -148,19 +148,7 @@ Page({
   },
 
   updateNextStop(delivery: Delivery) {
-    const nextStop = delivery.status === 'assigned' || delivery.status === 'picking'
-      ? {
-          title: '下一站 · 商家',
-          address: delivery.pickup_address,
-          latitude: delivery.pickup_latitude,
-          longitude: delivery.pickup_longitude
-        }
-      : {
-          title: '下一站 · 顾客',
-          address: delivery.delivery_address,
-          latitude: delivery.delivery_latitude,
-          longitude: delivery.delivery_longitude
-        }
+    const nextStop = getRiderNavigationNextStop(delivery)
 
     this.setData({
       nextStopTitle: nextStop.title,

@@ -1,10 +1,15 @@
 import dayjs from 'dayjs'
 import { AppealResponse, AppealStatus, appealManagementService } from '../../../api/appeals-customer-service'
 import { logger } from '../../../utils/logger'
+import {
+  getMerchantAppealResultHint,
+  getMerchantAppealStatusView,
+  MerchantAppealTagTheme
+} from '../../../utils/merchant-appeal-view'
 import { getStableBarHeights } from '../../../utils/responsive'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 
-type AppealTagTheme = 'warning' | 'success' | 'danger' | 'primary'
+type AppealTagTheme = MerchantAppealTagTheme
 
 interface AppealRecordView {
   id: number
@@ -41,24 +46,6 @@ function formatMoney(cents?: number): string {
   return `¥${(cents / 100).toFixed(2)}`
 }
 
-function formatAppealStatus(status?: string): string {
-  const map: Record<string, string> = {
-    pending: '待审核',
-    approved: '已通过',
-    rejected: '已驳回',
-    compensated: '已赔付'
-  }
-  if (!status) return '-'
-  return map[status] || status
-}
-
-function getAppealTheme(status?: string): AppealTagTheme {
-  if (status === 'pending') return 'warning'
-  if (status === 'approved' || status === 'compensated') return 'success'
-  if (status === 'rejected') return 'danger'
-  return 'primary'
-}
-
 function formatClaimType(claimType?: string): string {
   const map: Record<string, string> = {
     refund: '退款',
@@ -80,13 +67,6 @@ function formatTime(value?: string) {
   return parsed.isValid() ? parsed.format('YYYY-MM-DD HH:mm') : value
 }
 
-function getResultHint(appeal: AppealResponse) {
-  if (appeal.status === 'pending') return '等待平台复核，建议保留责任与证据材料。'
-  if (appeal.status === 'approved') return '异议已通过，进入结果生效阶段。'
-  if (appeal.status === 'compensated') return '平台已完成复核补偿，当前异议已收口。'
-  return '平台已驳回异议，需继续按原结果处理。'
-}
-
 const getErrorMessage = getErrorUserMessage
 
 function toAppealStatus(tab: AppealTab): AppealStatus | undefined {
@@ -94,13 +74,15 @@ function toAppealStatus(tab: AppealTab): AppealStatus | undefined {
 }
 
 function mapAppealRecord(appeal: AppealResponse): AppealRecordView {
+  const statusView = getMerchantAppealStatusView(appeal.status, '-')
+
   return {
     id: appeal.id,
     claimId: appeal.claim_id,
     orderNo: appeal.order_no || `#${appeal.claim_id}`,
     claimDescription: appeal.claim_description || '暂无索赔说明',
-    statusLabel: formatAppealStatus(appeal.status),
-    statusTheme: getAppealTheme(appeal.status),
+    statusLabel: statusView.label,
+    statusTheme: statusView.theme,
     reason: appeal.reason,
     claimTypeLabel: formatClaimType(appeal.claim_type),
     claimAmountText: formatMoney(appeal.claim_amount),
@@ -108,7 +90,7 @@ function mapAppealRecord(appeal: AppealResponse): AppealRecordView {
     reviewNotes: appeal.review_notes,
     reviewedAtLabel: formatTime(appeal.reviewed_at),
     createdAtLabel: formatTime(appeal.created_at),
-    resultHint: getResultHint(appeal),
+    resultHint: getMerchantAppealResultHint(appeal.status),
     rawStatus: appeal.status
   }
 }

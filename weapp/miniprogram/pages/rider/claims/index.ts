@@ -5,10 +5,19 @@ import {
   ClaimResponse
 } from '../../../api/appeals-customer-service'
 import { logger } from '../../../utils/logger'
+import {
+  buildRiderAppealViewStatus,
+  ClaimTagTheme,
+  formatClaimType,
+  formatMoney,
+  formatTime,
+  getRiderAppealStatusView,
+  getRiderClaimActionHint,
+  getRiderClaimStatusView,
+  getRiderRecoveryStatusView
+} from '../../../utils/rider-claims-view'
 import { getStableBarHeights } from '../../../utils/responsive'
 import { getErrorUserMessage } from '../../../utils/user-facing'
-
-type ClaimTagTheme = 'primary' | 'warning' | 'success' | 'danger' | 'default'
 type ClaimBucketTab = 'all' | 'pending_action' | 'appealed' | 'closed'
 type ClaimsSectionTab = 'claims' | 'appeals'
 
@@ -51,119 +60,19 @@ interface ClaimSummary {
   closed: number
 }
 
-function formatMoney(cents?: number): string {
-  const value = typeof cents === 'number' ? cents : 0
-  return `¥${(value / 100).toFixed(2)}`
-}
-
-function formatClaimType(claimType: string): string {
-  const map: Record<string, string> = {
-    refund: '退款',
-    compensation: '补偿',
-    quality_issue: '质量问题',
-    delivery_issue: '配送问题',
-    'foreign-object': '异物',
-    damage: '餐损',
-    timeout: '超时',
-    'food-safety': '食安'
-  }
-  return map[claimType] || claimType
-}
-
 function getClaimTypeTheme(claimType: string): ClaimTagTheme {
   if (claimType === 'food-safety' || claimType === 'foreign-object') return 'danger'
   if (claimType === 'damage' || claimType === 'quality_issue') return 'warning'
   return 'primary'
 }
 
-function formatClaimStatus(status: string): string {
-  const map: Record<string, string> = {
-    pending: '待审核',
-    approved: '已通过',
-    rejected: '已驳回',
-    compensated: '已赔付',
-    'auto-approved': '已通过'
-  }
-  return map[status] || status
-}
-
-function getClaimStatusTheme(status: string): ClaimTagTheme {
-  if (status === 'approved' || status === 'auto-approved') return 'warning'
-  if (status === 'compensated') return 'success'
-  if (status === 'rejected') return 'default'
-  return 'primary'
-}
-
-function formatAppealStatus(status?: string): string {
-  const map: Record<string, string> = {
-    pending: '申诉处理中',
-    approved: '申诉通过',
-    rejected: '申诉驳回',
-    compensated: '申诉已赔付'
-  }
-  if (!status) return '未提交申诉'
-  return map[status] || status
-}
-
-function getAppealStatusTheme(status?: string): ClaimTagTheme {
-  if (!status) return 'default'
-  if (status === 'pending') return 'warning'
-  if (status === 'approved' || status === 'compensated') return 'success'
-  if (status === 'rejected') return 'danger'
-  return 'default'
-}
-
-function formatRecoveryStatus(status?: string): string {
-  const map: Record<string, string> = {
-    pending: '待支付追偿',
-    overdue: '追偿已逾期',
-    paid: '追偿已支付',
-    waived: '追偿已豁免',
-    appealed: '追偿申诉中'
-  }
-  if (!status) return '暂无追偿'
-  return map[status] || status
-}
-
-function getRecoveryStatusTheme(status?: string): ClaimTagTheme {
-  if (!status) return 'default'
-  if (status === 'pending' || status === 'overdue') return 'warning'
-  if (status === 'paid' || status === 'waived') return 'success'
-  if (status === 'appealed') return 'danger'
-  return 'default'
-}
-
-function formatTime(value?: string): string {
-  if (!value) return '暂无'
-  return value.replace('T', ' ').slice(0, 16)
-}
-
-function getActionHint(claim: ClaimResponse): string {
-  const appealStatus = claim.appeal_status
-  const recoveryStatus = claim.recovery_status
-
-  if (recoveryStatus === 'appealed' || appealStatus === 'pending') {
-    return '平台正在复核申诉，进入详情可查看最新处理进度。'
-  }
-
-  if (recoveryStatus === 'pending' || recoveryStatus === 'overdue') {
-    return '当前有待处理追偿，进入详情可支付追偿款或提交申诉。'
-  }
-
-  if (appealStatus === 'rejected') {
-    return '申诉已驳回，请进入详情核对复核说明和追偿状态。'
-  }
-
-  if (appealStatus === 'approved' || appealStatus === 'compensated' || recoveryStatus === 'paid' || recoveryStatus === 'waived') {
-    return '这笔索赔已进入结案阶段，进入详情可查看最终结果。'
-  }
-
-  return '进入详情查看责任判定，并决定是否申诉或支付追偿。'
-}
-
 const getErrorMessage = getErrorUserMessage
 
 function buildClaimView(claim: ClaimResponse): RiderClaimView {
+  const claimStatusView = getRiderClaimStatusView(String(claim.status))
+  const appealStatusView = getRiderAppealStatusView(claim.appeal_status)
+  const recoveryStatusView = getRiderRecoveryStatusView(claim.recovery_status)
+
   return {
     id: claim.id,
     orderNo: claim.order_no || `#${claim.order_id}`,
@@ -171,26 +80,28 @@ function buildClaimView(claim: ClaimResponse): RiderClaimView {
     claimTypeTheme: getClaimTypeTheme(claim.claim_type),
     claimAmountText: formatMoney(claim.claim_amount),
     approvedAmountText: formatMoney(claim.approved_amount || claim.claim_amount),
-    statusLabel: formatClaimStatus(String(claim.status)),
-    statusTheme: getClaimStatusTheme(String(claim.status)),
+    statusLabel: claimStatusView.label,
+    statusTheme: claimStatusView.theme,
     description: claim.description,
-    appealStatusLabel: formatAppealStatus(claim.appeal_status),
-    appealStatusTheme: getAppealStatusTheme(claim.appeal_status),
-    recoveryStatusLabel: formatRecoveryStatus(claim.recovery_status),
-    recoveryStatusTheme: getRecoveryStatusTheme(claim.recovery_status),
+    appealStatusLabel: appealStatusView.label,
+    appealStatusTheme: appealStatusView.theme,
+    recoveryStatusLabel: recoveryStatusView.label,
+    recoveryStatusTheme: recoveryStatusView.theme,
     createdAtLabel: formatTime(claim.created_at),
-    actionHint: getActionHint(claim)
+    actionHint: getRiderClaimActionHint(claim)
   }
 }
 
 function buildAppealView(appeal: AppealResponse): RiderAppealView {
+  const appealStatusView = buildRiderAppealViewStatus(appeal.status)
+
   return {
     id: appeal.id,
     claimId: appeal.claim_id,
     orderNo: appeal.order_no || `#${appeal.claim_id}`,
     claimTypeLabel: formatClaimType(appeal.claim_type || 'compensation'),
-    statusLabel: formatAppealStatus(appeal.status),
-    statusTheme: getAppealStatusTheme(appeal.status),
+    statusLabel: appealStatusView.label,
+    statusTheme: appealStatusView.theme,
     reason: appeal.reason,
     createdAtLabel: formatTime(appeal.created_at),
     reviewNotes: appeal.review_notes

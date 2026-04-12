@@ -34,6 +34,20 @@ func TestMerchantApplymentSubmitCapability(t *testing.T) {
 			expectedReason:    "当前资料正在审核中，暂不支持重复提交。",
 		},
 		{
+			name:              "AccountNeedVerifyCannotSubmit",
+			merchantStatus:    "pending_bindbank",
+			applymentStatus:   "account_need_verify",
+			expectedCanSubmit: false,
+			expectedReason:    "当前申请待账户验证，请先完成验证后再刷新状态。",
+		},
+		{
+			name:              "ToBeConfirmedCannotSubmit",
+			merchantStatus:    "pending_bindbank",
+			applymentStatus:   "to_be_confirmed",
+			expectedCanSubmit: false,
+			expectedReason:    "当前申请待确认，请先完成确认后再刷新状态。",
+		},
+		{
 			name:              "SignedMerchantCannotSubmit",
 			merchantStatus:    "active",
 			applymentStatus:   "active",
@@ -79,11 +93,31 @@ func TestOperatorApplymentSubmitCapability(t *testing.T) {
 			expectedCanSubmit: true,
 		},
 		{
+			name:              "CancelledOperatorCanResubmit",
+			operatorStatus:    "active",
+			applymentStatus:   "canceled",
+			expectedCanSubmit: true,
+		},
+		{
 			name:              "ReviewingOperatorCannotSubmit",
 			operatorStatus:    "bindbank_submitted",
 			applymentStatus:   "submitted",
 			expectedCanSubmit: false,
 			expectedReason:    "微信支付正在审核开户信息，审核期间无需重复提交。",
+		},
+		{
+			name:              "AccountNeedVerifyOperatorCannotSubmit",
+			operatorStatus:    "bindbank_submitted",
+			applymentStatus:   "account_need_verify",
+			expectedCanSubmit: false,
+			expectedReason:    "微信支付要求先完成账户验证，请先处理验证后再刷新状态。",
+		},
+		{
+			name:              "ToBeConfirmedOperatorCannotSubmit",
+			operatorStatus:    "bindbank_submitted",
+			applymentStatus:   "to_be_confirmed",
+			expectedCanSubmit: false,
+			expectedReason:    "微信支付要求先完成确认，请先处理后再刷新状态。",
 		},
 		{
 			name:              "SigningOperatorCannotSubmit",
@@ -134,6 +168,24 @@ func TestOperatorApplymentStatusDesc(t *testing.T) {
 			status:       "frozen",
 			canSubmit:    false,
 			expectedDesc: "当前账号状态不可用",
+		},
+		{
+			name:         "CheckingAccount",
+			status:       "checking",
+			canSubmit:    false,
+			expectedDesc: "资料校验中",
+		},
+		{
+			name:         "AccountNeedVerify",
+			status:       "account_need_verify",
+			canSubmit:    false,
+			expectedDesc: "待账户验证",
+		},
+		{
+			name:         "ToBeConfirmed",
+			status:       "to_be_confirmed",
+			canSubmit:    false,
+			expectedDesc: "待确认",
 		},
 	}
 
