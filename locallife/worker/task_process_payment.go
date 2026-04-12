@@ -230,6 +230,71 @@ func (processor *RedisTaskProcessor) ensurePersonalProfitSharingReceiver(ctx con
 	return nil
 }
 
+type operatorProfitSharingReceiverTarget struct {
+	ReceiverType string
+	Account      string
+	ReceiverName string
+	RelationType string
+	IsPersonal   bool
+}
+
+func operatorApplicationHasBusinessLicense(application db.OperatorApplication) bool {
+	return application.BusinessLicenseNumber.Valid && strings.TrimSpace(application.BusinessLicenseNumber.String) != ""
+}
+
+func resolveOperatorMerchantReceiverAccount(operator db.Operator) string {
+	if operator.SubMchID.Valid && strings.TrimSpace(operator.SubMchID.String) != "" {
+		return strings.TrimSpace(operator.SubMchID.String)
+	}
+	if operator.WechatMchID.Valid && strings.TrimSpace(operator.WechatMchID.String) != "" {
+		return strings.TrimSpace(operator.WechatMchID.String)
+	}
+	return ""
+}
+
+func resolveOperatorReceiverName(operator db.Operator) string {
+	if name := strings.TrimSpace(operator.ContactName); name != "" {
+		return name
+	}
+	return strings.TrimSpace(operator.Name)
+}
+
+func (processor *RedisTaskProcessor) resolveOperatorProfitSharingReceiver(ctx context.Context, operator db.Operator) (*operatorProfitSharingReceiverTarget, error) {
+	application, err := processor.store.GetApprovedOperatorApplicationByUserID(ctx, operator.UserID)
+	if err != nil && !errors.Is(err, db.ErrRecordNotFound) {
+		return nil, fmt.Errorf("get operator application: %w", err)
+	}
+
+	if err == nil && !operatorApplicationHasBusinessLicense(application) {
+		user, userErr := processor.store.GetUser(ctx, operator.UserID)
+		if userErr != nil {
+			return nil, fmt.Errorf("get operator user: %w", userErr)
+		}
+		if strings.TrimSpace(user.WechatOpenid) == "" {
+			return nil, fmt.Errorf("operator wechat openid not configured")
+		}
+		return &operatorProfitSharingReceiverTarget{
+			ReceiverType: wechat.ReceiverTypePersonal,
+			Account:      strings.TrimSpace(user.WechatOpenid),
+			ReceiverName: resolveOperatorReceiverName(operator),
+			RelationType: wechat.RelationOthers,
+			IsPersonal:   true,
+		}, nil
+	}
+
+	merchantAccount := resolveOperatorMerchantReceiverAccount(operator)
+	if merchantAccount == "" {
+		return nil, fmt.Errorf("operator sub merchant id not configured")
+	}
+
+	return &operatorProfitSharingReceiverTarget{
+		ReceiverType: wechat.ReceiverTypeMerchant,
+		Account:      merchantAccount,
+		ReceiverName: resolveOperatorReceiverName(operator),
+		RelationType: wechat.RelationDistributor,
+	}, nil
+}
+
 func (processor *RedisTaskProcessor) finishProfitSharingOrder(
 	ctx context.Context,
 	profitSharingOrderID int64,
@@ -1411,6 +1476,14 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharing(ctx context.Contex
 		return fmt.Errorf("ecommerce client not configured for profit sharing: %w", asynq.SkipRetry)
 	}
 
+	var operatorTarget *operatorProfitSharingReceiverTarget
+	if hasOperator && operatorCommission > 0 {
+		operatorTarget, err = processor.resolveOperatorProfitSharingReceiver(ctx, operator)
+		if err != nil {
+			return fmt.Errorf("resolve operator receiver: %w", err)
+		}
+	}
+
 	// 构建分账接收方列表
 	var receivers []wechat.ProfitSharingReceiver
 
@@ -1426,11 +1499,15 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharing(ctx context.Contex
 	}
 
 	// 运营商佣金
-	if hasOperator && operatorCommission > 0 && operator.WechatMchID.Valid {
+	if operatorTarget != nil {
+		receiverName := ""
+		if operatorTarget.ReceiverType == wechat.ReceiverTypeMerchant {
+			receiverName = operatorTarget.ReceiverName
+		}
 		receivers = append(receivers, wechat.ProfitSharingReceiver{
-			Type:            "MERCHANT_ID",
-			ReceiverAccount: operator.WechatMchID.String,
-			ReceiverName:    strings.TrimSpace(operator.Name),
+			Type:            operatorTarget.ReceiverType,
+			ReceiverAccount: operatorTarget.Account,
+			ReceiverName:    receiverName,
 			Amount:          operatorCommission,
 			Description:     "运营商服务费",
 		})
@@ -1455,13 +1532,21 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharing(ctx context.Contex
 		return nil
 	}
 
-	if hasOperator && operatorCommission > 0 && operator.WechatMchID.Valid {
-		if err := processor.ensureMerchantProfitSharingReceiver(ctx, operator.WechatMchID.String, operator.Name, wechat.RelationDistributor); err != nil {
-			log.Error().Err(err).
+	if operatorTarget != nil {
+		var ensureErr error
+		switch operatorTarget.ReceiverType {
+		case wechat.ReceiverTypeMerchant:
+			ensureErr = processor.ensureMerchantProfitSharingReceiver(ctx, operatorTarget.Account, operatorTarget.ReceiverName, operatorTarget.RelationType)
+		case wechat.ReceiverTypePersonal:
+			ensureErr = processor.ensurePersonalProfitSharingReceiver(ctx, operatorTarget.Account, operatorTarget.ReceiverName)
+		}
+		if ensureErr != nil {
+			log.Error().Err(ensureErr).
 				Int64("profit_sharing_order_id", profitSharingOrder.ID).
-				Str("operator_mchid", operator.WechatMchID.String).
+				Str("operator_receiver_type", operatorTarget.ReceiverType).
+				Str("operator_receiver_account", operatorTarget.Account).
 				Msg("ensure operator profit sharing receiver failed")
-			return fmt.Errorf("ensure operator receiver: %w", err)
+			return fmt.Errorf("ensure operator receiver: %w", ensureErr)
 		}
 	}
 
@@ -1490,8 +1575,13 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharing(ctx context.Contex
 			Str("out_order_no", outOrderNo).
 			Msg("create profit sharing failed, retry once after re-ensuring receivers")
 
-		if hasOperator && operatorCommission > 0 && operator.WechatMchID.Valid {
-			_ = processor.ensureMerchantProfitSharingReceiver(ctx, operator.WechatMchID.String, operator.Name, wechat.RelationDistributor)
+		if operatorTarget != nil {
+			switch operatorTarget.ReceiverType {
+			case wechat.ReceiverTypeMerchant:
+				_ = processor.ensureMerchantProfitSharingReceiver(ctx, operatorTarget.Account, operatorTarget.ReceiverName, operatorTarget.RelationType)
+			case wechat.ReceiverTypePersonal:
+				_ = processor.ensurePersonalProfitSharingReceiver(ctx, operatorTarget.Account, operatorTarget.ReceiverName)
+			}
 		}
 		if hasRider && riderAmount > 0 && riderUserOpenID != "" {
 			_ = processor.ensurePersonalProfitSharingReceiver(ctx, riderUserOpenID, rider.RealName)
@@ -1761,7 +1851,7 @@ func (processor *RedisTaskProcessor) ProcessTaskInitiateRefund(ctx context.Conte
 			return fmt.Errorf("profit sharing order id missing")
 		}
 
-		var operator db.Operator
+		var operatorTarget *operatorProfitSharingReceiverTarget
 		if profitSharingOrder.OperatorCommission > 0 {
 			if !profitSharingOrder.OperatorID.Valid {
 				if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
@@ -1776,13 +1866,33 @@ func (processor *RedisTaskProcessor) ProcessTaskInitiateRefund(ctx context.Conte
 				}
 				return fmt.Errorf("get operator: %w", err)
 			}
-			if !op.WechatMchID.Valid || op.WechatMchID.String == "" {
+			target, targetErr := processor.resolveOperatorProfitSharingReceiver(ctx, op)
+			if targetErr != nil {
 				if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
-					return fmt.Errorf("mark refund order as failed: %w", dbErr)
+					return errors.Join(fmt.Errorf("resolve operator receiver: %w", targetErr), fmt.Errorf("mark refund order as failed: %w", dbErr))
 				}
-				return fmt.Errorf("operator wechat mchid not configured")
+				return fmt.Errorf("resolve operator receiver: %w", targetErr)
 			}
-			operator = op
+			operatorTarget = target
+			if operatorTarget.IsPersonal {
+				blockingErr := fmt.Errorf("订单包含个人分账，当前不支持自动退款")
+				if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
+					return errors.Join(blockingErr, fmt.Errorf("mark refund order as failed: %w", dbErr))
+				}
+				processor.publishAlert(ctx, AlertData{
+					AlertType:   AlertTypeRefundFailed,
+					Level:       AlertLevelCritical,
+					Title:       "退款被阻断：存在个人运营商分账",
+					Message:     fmt.Sprintf("退款单 %d 包含个人运营商分账金额 %.2f 元，微信暂不支持个人接收方分账回退，已自动阻断并标记失败，请平台人工处理。", refundOrder.ID, float64(profitSharingOrder.OperatorCommission)/100),
+					RelatedID:   refundOrder.ID,
+					RelatedType: "refund_order",
+					Extra: mergeAlertExtra(
+						refundOrderAlertExtra(paymentOrder, refundOrder, profitSharingOrder.MerchantID, nil),
+						profitSharingOrderAlertExtra(profitSharingOrder, nil),
+					),
+				})
+				return fmt.Errorf("%w: %w", blockingErr, asynq.SkipRetry)
+			}
 		}
 
 		riderOpenID := ""
@@ -1964,7 +2074,7 @@ func (processor *RedisTaskProcessor) ProcessTaskInitiateRefund(ctx context.Conte
 		}
 		if profitSharingOrder.OperatorCommission > 0 {
 			outReturnNo := fmt.Sprintf("PR%dOP", refundOrder.ID)
-			if err := processReturn(outReturnNo, wechat.ReceiverTypeMerchant, operator.WechatMchID.String, "运营商分账回退", profitSharingOrder.OperatorCommission); err != nil {
+			if err := processReturn(outReturnNo, operatorTarget.ReceiverType, operatorTarget.Account, "运营商分账回退", profitSharingOrder.OperatorCommission); err != nil {
 				if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
 					return errors.Join(fmt.Errorf("profit sharing return failed"), fmt.Errorf("mark refund order as failed: %w", dbErr))
 				}

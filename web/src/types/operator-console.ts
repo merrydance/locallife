@@ -263,6 +263,8 @@ export interface OperatorWithdrawalsResponse {
 export interface OperatorApplymentStatusResponse {
   status: string;
   status_desc: string;
+  can_submit?: boolean;
+  block_reason?: string;
   applyment_id?: number;
   sub_mch_id?: string;
   sign_url?: string;
@@ -290,8 +292,6 @@ export interface OperatorBindBankRequest {
   bank_name?: string;
   account_number: string;
   account_name: string;
-  contact_phone: string;
-  contact_email?: string;
 }
 
 export interface OperatorBindBankResponse {

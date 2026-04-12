@@ -247,17 +247,21 @@ var (
 // ==================== 文件/图片路径 (File / Image Path) ====================
 
 var (
-	ErrInvalidFilePath                         = apierr(40066, "path must be a relative path under the uploads directory")
-	ErrInvalidTableImageURL                    = apierr(40067, "invalid table image URL: must use URL from the table image upload API")
-	ErrInvalidReviewImageURL                   = apierr(40068, "invalid review image URL: must use URL from the review image upload API")
-	ErrApplymentIDCardValidityInvalid          = apierr(40069, "ID card validity period is incomplete or invalid: please re-upload the ID card back image")
-	ErrApplymentBusinessLicenseValidityInvalid = apierr(40071, "business license validity period is invalid: please re-upload the business license image")
-	ErrInvalidTypeParam                        = apierr(40070, "type must be merchant or dish")
-	ErrInvalidTableID                          = apierr(40072, "invalid table ID")
-	ErrInvalidAddress                          = apierr(40073, "invalid address")
-	ErrInvalidLatitudeFormat                   = apierr(40074, "invalid latitude format")
-	ErrInvalidLongitudeFormat                  = apierr(40075, "invalid longitude format")
-	ErrApplymentWebSceneDomainRequired         = apierr(40109, "web applyment domain is not configured")
+	ErrInvalidFilePath                          = apierr(40066, "path must be a relative path under the uploads directory")
+	ErrInvalidTableImageURL                     = apierr(40067, "invalid table image URL: must use URL from the table image upload API")
+	ErrInvalidReviewImageURL                    = apierr(40068, "invalid review image URL: must use URL from the review image upload API")
+	ErrApplymentIDCardValidityInvalid           = apierr(40069, "ID card validity period is incomplete or invalid: please re-upload the ID card back image")
+	ErrApplymentBusinessLicenseValidityInvalid  = apierr(40071, "business license validity period is invalid: please re-upload the business license image")
+	ErrInvalidTypeParam                         = apierr(40070, "type must be merchant or dish")
+	ErrInvalidTableID                           = apierr(40072, "invalid table ID")
+	ErrInvalidAddress                           = apierr(40073, "invalid address")
+	ErrInvalidLatitudeFormat                    = apierr(40074, "invalid latitude format")
+	ErrInvalidLongitudeFormat                   = apierr(40075, "invalid longitude format")
+	ErrMerchantApplymentOrganizationUnsupported = apierr(40086, "merchant applyment only supports individual businesses or enterprises")
+	ErrOperatorPersonalApplymentUnsupported     = apierr(40087, "personal operators use WeChat openid profit sharing and do not need to submit a payment applyment")
+	ErrOperatorApplymentOrganizationUnsupported = apierr(40088, "operator applyment only supports enterprise subjects")
+	ErrApplymentEnterprisePublicAccountRequired = apierr(40089, "enterprise applyment must use a business bank account")
+	ErrApplymentWebSceneDomainRequired          = apierr(40109, "web applyment domain is not configured")
 )
 
 // ==================== 必填字段/文件上传校验 (Required Fields / Document Upload) ====================

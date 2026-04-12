@@ -487,6 +487,9 @@ func TestProcessTaskProfitSharing_UsesMerchantRegionActiveOperator(t *testing.T)
 		GetActiveOperatorByRegion(gomock.Any(), merchant.RegionID).
 		Return(operator, nil)
 	store.EXPECT().
+		GetApprovedOperatorApplicationByUserID(gomock.Any(), operator.UserID).
+		Return(db.OperatorApplication{}, db.ErrRecordNotFound)
+	store.EXPECT().
 		GetProfitSharingOrderByPaymentOrder(gomock.Any(), paymentOrder.ID).
 		Return(db.ProfitSharingOrder{}, db.ErrRecordNotFound)
 	store.EXPECT().
@@ -528,6 +531,119 @@ func TestProcessTaskProfitSharing_UsesMerchantRegionActiveOperator(t *testing.T)
 			SharingOrderID: pgtype.Text{String: "ps_wx_3001", Valid: true},
 		}).
 		Return(db.ProfitSharingOrder{ID: 3001, Status: "processing"}, nil)
+
+	processor := worker.NewTestTaskProcessor(store, nil, nil, ecommerceClient)
+	payloadBytes, err := json.Marshal(worker.ProfitSharingPayload{
+		PaymentOrderID: paymentOrder.ID,
+		OrderID:        order.ID,
+	})
+	require.NoError(t, err)
+
+	task := asynq.NewTask(worker.TaskProcessProfitSharing, payloadBytes)
+	err = processor.ProcessTaskProfitSharing(context.Background(), task)
+	require.NoError(t, err)
+}
+
+func TestProcessTaskProfitSharing_UsesPersonalOperatorOpenID(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+
+	paymentOrder := db.PaymentOrder{
+		ID:            904,
+		Amount:        10000,
+		TransactionID: pgtype.Text{String: "wx_txn_904", Valid: true},
+	}
+	order := db.Order{
+		ID:          80,
+		MerchantID:  18,
+		TotalAmount: 10000,
+		DeliveryFee: 0,
+		OrderType:   "takeout",
+		AddressID:   pgtype.Int8{Int64: 1002, Valid: true},
+	}
+	merchant := db.Merchant{ID: 18, RegionID: 15, Name: "商户个人运营商分账"}
+	operator := db.Operator{
+		ID:          47,
+		UserID:      501,
+		Name:        "个人运营商",
+		ContactName: "个人运营商联系人",
+	}
+	operatorUser := db.User{ID: operator.UserID, WechatOpenid: "operator_openid_47", FullName: "个人运营商联系人"}
+	operatorApplication := db.OperatorApplication{}
+
+	store.EXPECT().
+		GetPaymentOrder(gomock.Any(), paymentOrder.ID).
+		Return(paymentOrder, nil)
+	store.EXPECT().
+		GetOrder(gomock.Any(), order.ID).
+		Return(order, nil)
+	store.EXPECT().
+		GetMerchant(gomock.Any(), merchant.ID).
+		Return(merchant, nil)
+	store.EXPECT().
+		GetMerchantPaymentConfig(gomock.Any(), merchant.ID).
+		Return(db.MerchantPaymentConfig{MerchantID: merchant.ID, SubMchID: "sub_mch_18"}, nil)
+	store.EXPECT().
+		GetActiveProfitSharingConfig(gomock.Any(), db.GetActiveProfitSharingConfigParams{
+			OrderSource: order.OrderType,
+			MerchantID:  pgtype.Int8{Int64: merchant.ID, Valid: true},
+			RegionID:    pgtype.Int8{Int64: merchant.RegionID, Valid: true},
+		}).
+		Return(db.ProfitSharingConfig{PlatformRate: 0, OperatorRate: 20, RiderEnabled: false}, nil)
+	store.EXPECT().
+		GetActiveOperatorByRegion(gomock.Any(), merchant.RegionID).
+		Return(operator, nil)
+	store.EXPECT().
+		GetProfitSharingOrderByPaymentOrder(gomock.Any(), paymentOrder.ID).
+		Return(db.ProfitSharingOrder{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		CreateProfitSharingOrder(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.CreateProfitSharingOrderParams) (db.ProfitSharingOrder, error) {
+			require.True(t, arg.OperatorID.Valid)
+			require.Equal(t, operator.ID, arg.OperatorID.Int64)
+			require.Equal(t, int64(2000), arg.OperatorCommission)
+			return db.ProfitSharingOrder{ID: 3004, OutOrderNo: arg.OutOrderNo}, nil
+		})
+	store.EXPECT().
+		GetApprovedOperatorApplicationByUserID(gomock.Any(), operator.UserID).
+		Return(operatorApplication, nil)
+	store.EXPECT().
+		GetUser(gomock.Any(), operator.UserID).
+		Return(operatorUser, nil)
+	ecommerceClient.EXPECT().
+		GetSpAppID().
+		Return("wx_sp_app_1")
+	ecommerceClient.EXPECT().
+		EncryptSensitiveData(operator.ContactName).
+		Return("encrypted_operator_name", nil)
+	ecommerceClient.EXPECT().
+		AddProfitSharingReceiver(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, req *wechat.AddReceiverRequest) (*wechat.AddReceiverResponse, error) {
+			require.Equal(t, wechat.ReceiverTypePersonal, req.Type)
+			require.Equal(t, operatorUser.WechatOpenid, req.Account)
+			require.Equal(t, "encrypted_operator_name", req.EncryptedName)
+			return &wechat.AddReceiverResponse{}, nil
+		})
+	ecommerceClient.EXPECT().
+		CreateProfitSharing(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, req *wechat.ProfitSharingRequest) (*wechat.ProfitSharingResponse, error) {
+			require.Equal(t, "sub_mch_18", req.SubMchID)
+			require.Len(t, req.Receivers, 1)
+			require.Equal(t, wechat.ReceiverTypePersonal, req.Receivers[0].Type)
+			require.Equal(t, operatorUser.WechatOpenid, req.Receivers[0].ReceiverAccount)
+			require.Empty(t, req.Receivers[0].ReceiverName)
+			require.Equal(t, int64(2000), req.Receivers[0].Amount)
+			return &wechat.ProfitSharingResponse{OrderID: "ps_wx_3004", Status: "PROCESSING"}, nil
+		})
+	store.EXPECT().
+		UpdateProfitSharingOrderToProcessing(gomock.Any(), db.UpdateProfitSharingOrderToProcessingParams{
+			ID:             3004,
+			SharingOrderID: pgtype.Text{String: "ps_wx_3004", Valid: true},
+		}).
+		Return(db.ProfitSharingOrder{ID: 3004, Status: "processing"}, nil)
 
 	processor := worker.NewTestTaskProcessor(store, nil, nil, ecommerceClient)
 	payloadBytes, err := json.Marshal(worker.ProfitSharingPayload{
@@ -590,6 +706,9 @@ func TestProcessTaskProfitSharing_UsesPaymentOrderAmountAsProfitSharingBase(t *t
 	store.EXPECT().
 		GetActiveOperatorByRegion(gomock.Any(), merchant.RegionID).
 		Return(operator, nil)
+	store.EXPECT().
+		GetApprovedOperatorApplicationByUserID(gomock.Any(), operator.UserID).
+		Return(db.OperatorApplication{}, db.ErrRecordNotFound)
 	store.EXPECT().
 		GetProfitSharingOrderByPaymentOrder(gomock.Any(), paymentOrder.ID).
 		Return(db.ProfitSharingOrder{}, db.ErrRecordNotFound)

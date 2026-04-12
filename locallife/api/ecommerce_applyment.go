@@ -203,6 +203,10 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 		application.MerchantName,
 		"4",
 	)
+	if err := validateMerchantApplymentScope(organizationType, req.AccountType); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
 	if err := validateApplymentBusinessLicenseValidity(businessLicenseOCR.ValidPeriod); err != nil {
 		log.Warn().Int64("merchant_id", merchant.ID).Str("valid_period", businessLicenseOCR.ValidPeriod).Msg("商户营业期限无效，拒绝提交微信进件")
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
@@ -855,6 +859,41 @@ func resolveApplymentOrganizationType(businessLicenseNumber, licenseType, subjec
 	return "4"
 }
 
+func isMerchantApplymentOrganizationTypeSupported(organizationType string) bool {
+	return organizationType == "2" || organizationType == "4"
+}
+
+func validateMerchantApplymentScope(organizationType, accountType string) error {
+	if !isMerchantApplymentOrganizationTypeSupported(organizationType) {
+		return ErrMerchantApplymentOrganizationUnsupported
+	}
+	if organizationType == "2" && accountType != "ACCOUNT_TYPE_BUSINESS" {
+		return ErrApplymentEnterprisePublicAccountRequired
+	}
+	return nil
+}
+
+func operatorApplicationHasBusinessLicense(application db.OperatorApplication) bool {
+	return application.BusinessLicenseNumber.Valid && strings.TrimSpace(application.BusinessLicenseNumber.String) != ""
+}
+
+func validateOperatorApplymentScope(application db.OperatorApplication, organizationType, accountType string) error {
+	if !operatorApplicationHasBusinessLicense(application) {
+		return ErrOperatorPersonalApplymentUnsupported
+	}
+	if organizationType != "2" {
+		return ErrOperatorApplymentOrganizationUnsupported
+	}
+	if accountType != "ACCOUNT_TYPE_BUSINESS" {
+		return ErrApplymentEnterprisePublicAccountRequired
+	}
+	return nil
+}
+
+func getPersonalOperatorApplymentBlockReason() string {
+	return "个人运营商默认按微信 openid 分账，无需提交微信支付开户信息。"
+}
+
 // mapWechatApplymentStatus 映射微信进件状态到本地状态
 func mapWechatApplymentStatus(wxStatus string) string {
 	switch wxStatus {
@@ -1074,6 +1113,10 @@ func (server *Server) operatorBindBank(ctx *gin.Context) {
 		operatorName,
 		"2",
 	)
+	if err := validateOperatorApplymentScope(application, organizationType, req.AccountType); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
 	if err := validateApplymentBusinessLicenseValidity(businessLicenseOCR.ValidPeriod); err != nil {
 		log.Warn().Int64("operator_id", operator.ID).Str("valid_period", businessLicenseOCR.ValidPeriod).Msg("运营商营业期限无效，拒绝提交微信进件")
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
@@ -1336,6 +1379,9 @@ func getOperatorApplymentStatusDesc(status string, canSubmit bool) string {
 	if status == "active" && canSubmit {
 		return "可提交开户信息"
 	}
+	if status == "active" && !canSubmit {
+		return "当前无需提交开户信息"
+	}
 	if status == "frozen" && !canSubmit {
 		return "当前账号状态不可用"
 	}
@@ -1376,6 +1422,30 @@ func (server *Server) getOperatorApplymentStatus(ctx *gin.Context) {
 	})
 	if err != nil {
 		if isNotFoundError(err) {
+			if operator.Status == "active" || operator.Status == "bindbank_submitted" {
+				application, appErr := server.store.GetApprovedOperatorApplicationByUserID(ctx, authPayload.UserID)
+				if appErr == nil && !operatorApplicationHasBusinessLicense(application) {
+					updatedAt := operator.CreatedAt
+					if operator.UpdatedAt.Valid {
+						updatedAt = operator.UpdatedAt.Time
+					}
+
+					ctx.JSON(http.StatusOK, operatorApplymentStatusResponse{
+						Status:      "active",
+						StatusDesc:  getOperatorApplymentStatusDesc("active", false),
+						CanSubmit:   false,
+						BlockReason: getPersonalOperatorApplymentBlockReason(),
+						CreatedAt:   operator.CreatedAt,
+						UpdatedAt:   updatedAt,
+					})
+					return
+				}
+				if appErr != nil && !isNotFoundError(appErr) {
+					ctx.JSON(http.StatusInternalServerError, internalError(ctx, appErr))
+					return
+				}
+			}
+
 			status := mapOperatorStatusToApplymentStatus(operator.Status)
 			canSubmit, blockReason := getOperatorApplymentSubmitCapability(operator.Status, status)
 			statusDesc := getOperatorApplymentStatusDesc(status, canSubmit)

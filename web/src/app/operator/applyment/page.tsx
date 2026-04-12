@@ -4,7 +4,11 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { PageContent, PageHeader, PageShell } from "@/components/merchant/layout/page-shell";
+import {
+  PageContent,
+  PageHeader,
+  PageShell,
+} from "@/components/merchant/layout/page-shell";
 import { ApplymentBankForm } from "@/components/applyment/applyment-bank-form";
 import { apiGet, apiPost } from "@/lib/api";
 import type {
@@ -15,10 +19,16 @@ import type {
 import type { ApplymentBindBankPayload } from "@/types/applyment-bank";
 
 function isNotFoundError(message: string) {
-  return message.includes("Request failed: 404") || message.includes("服务未找到") || message.includes("未找到");
+  return (
+    message.includes("Request failed: 404") ||
+    message.includes("服务未找到") ||
+    message.includes("未找到")
+  );
 }
 
-function mapApplicationStatusToApplymentStatus(applicationStatus: string): string {
+function mapApplicationStatusToApplymentStatus(
+  applicationStatus: string,
+): string {
   switch (applicationStatus) {
     case "bindbank_submitted":
       return "submitted";
@@ -62,6 +72,8 @@ function mapApplicationToApplymentStatus(
   return {
     status,
     status_desc: mapApplymentStatusDesc(status),
+    can_submit: status === "pending",
+    block_reason: "",
     reject_reason: application.reject_reason,
     created_at: application.created_at,
     updated_at: application.updated_at,
@@ -69,26 +81,35 @@ function mapApplicationToApplymentStatus(
 }
 
 export default function OperatorApplymentPage() {
-  const [status, setStatus] = useState<OperatorApplymentStatusResponse | null>(null);
+  const [status, setStatus] = useState<OperatorApplymentStatusResponse | null>(
+    null,
+  );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
   const loadStatus = useCallback(async () => {
     try {
-      const res = await apiGet<OperatorApplymentStatusResponse>("/operator/applyment/status");
+      const res = await apiGet<OperatorApplymentStatusResponse>(
+        "/operator/applyment/status",
+      );
       setStatus(res);
       setError(null);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "获取开户状态失败";
       if (isNotFoundError(message)) {
         try {
-          const application = await apiGet<OperatorApplicationStatusResponse>("/operator/application");
+          const application = await apiGet<OperatorApplicationStatusResponse>(
+            "/operator/application",
+          );
           setStatus(mapApplicationToApplymentStatus(application));
           setError(null);
           return;
         } catch (fallbackErr: unknown) {
-          const fallbackMessage = fallbackErr instanceof Error ? fallbackErr.message : "获取开户状态失败";
+          const fallbackMessage =
+            fallbackErr instanceof Error
+              ? fallbackErr.message
+              : "获取开户状态失败";
           setError(fallbackMessage);
           return;
         }
@@ -115,15 +136,28 @@ export default function OperatorApplymentPage() {
 
   const statusCode = status?.status || "pending";
   const isOpened = statusCode === "finish" && Boolean(status?.sub_mch_id);
-  const canSubmitOpenInfo = statusCode === "pending" || statusCode === "rejected" || statusCode === "rejected_sign";
-  const isInReview = statusCode === "submitted" || statusCode === "auditing" || statusCode === "to_be_signed" || statusCode === "signing";
+  const canSubmitOpenInfo =
+    typeof status?.can_submit === "boolean"
+      ? status.can_submit
+      : statusCode === "pending" ||
+        statusCode === "rejected" ||
+        statusCode === "rejected_sign";
+  const isInReview =
+    statusCode === "submitted" ||
+    statusCode === "auditing" ||
+    statusCode === "to_be_signed" ||
+    statusCode === "signing";
+  const blockReason = status?.block_reason || "";
 
   const onSubmit = async (payload: ApplymentBindBankPayload) => {
     setSubmitting(true);
     setSuccess(null);
     setError(null);
     try {
-      const res = await apiPost<OperatorBindBankResponse>("/operator/applyment/bindbank", payload);
+      const res = await apiPost<OperatorBindBankResponse>(
+        "/operator/applyment/bindbank",
+        payload,
+      );
       setSuccess(res.message || "开户申请已提交，请等待微信审核");
       await loadStatus();
     } catch (err: unknown) {
@@ -138,7 +172,7 @@ export default function OperatorApplymentPage() {
     <PageShell>
       <PageHeader
         title="微信支付开户"
-        description="完成运营商微信支付商户进件，开户成功后才可正常经营与提现"
+        description="企业运营商通过微信支付开户后使用子商户结算，个人运营商默认按微信 openid 分账"
         actions={<Badge variant="secondary">运营商</Badge>}
       />
       <PageContent className="space-y-4">
@@ -152,7 +186,12 @@ export default function OperatorApplymentPage() {
             <div>子商户号：{status?.sub_mch_id || "-"}</div>
             <div>拒绝原因：{status?.reject_reason || "-"}</div>
             {status?.sign_url && (
-              <a className="text-primary underline" href={status.sign_url} target="_blank" rel="noreferrer">
+              <a
+                className="text-primary underline"
+                href={status.sign_url}
+                target="_blank"
+                rel="noreferrer"
+              >
                 前往微信签约
               </a>
             )}
@@ -184,6 +223,17 @@ export default function OperatorApplymentPage() {
           </Card>
         )}
 
+        {!canSubmitOpenInfo && !isOpened && !isInReview && blockReason && (
+          <Card>
+            <CardHeader>
+              <CardTitle>当前无需提交开户</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              <div>{blockReason}</div>
+            </CardContent>
+          </Card>
+        )}
+
         {canSubmitOpenInfo && !isOpened && (
           <Card>
             <CardHeader>
@@ -195,7 +245,7 @@ export default function OperatorApplymentPage() {
               </div>
               <ApplymentBankForm
                 apiBasePath="/operator/applyment"
-                defaultAccountType="ACCOUNT_TYPE_PRIVATE"
+                defaultAccountType="ACCOUNT_TYPE_BUSINESS"
                 submitting={submitting}
                 submitLabel="提交微信支付开户"
                 onSubmit={onSubmit}

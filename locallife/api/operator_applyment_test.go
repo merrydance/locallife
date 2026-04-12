@@ -77,7 +77,7 @@ func TestOperatorBindBankAPI(t *testing.T) {
 		{
 			name: "OK_WithEcommerceClient",
 			body: gin.H{
-				"account_type":      "ACCOUNT_TYPE_PRIVATE",
+				"account_type":      "ACCOUNT_TYPE_BUSINESS",
 				"account_bank":      "其他银行",
 				"account_bank_code": 1099,
 				"bank_alias":        "深圳前海微众银行",
@@ -180,7 +180,7 @@ func TestOperatorBindBankAPI(t *testing.T) {
 		{
 			name: "OK_WithRangeStoredInValidEnd",
 			body: gin.H{
-				"account_type":      "ACCOUNT_TYPE_PRIVATE",
+				"account_type":      "ACCOUNT_TYPE_BUSINESS",
 				"account_bank":      "招商银行",
 				"bank_address_code": "440300",
 				"bank_name":         "招商银行深圳分行",
@@ -245,6 +245,81 @@ func TestOperatorBindBankAPI(t *testing.T) {
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, int64(123456789), response.ApplymentID)
 				require.Equal(t, "submitted", response.Status)
+			},
+		},
+		{
+			name: "PersonalOperatorDoesNotNeedApplyment",
+			body: gin.H{
+				"account_type":      "ACCOUNT_TYPE_PRIVATE",
+				"account_bank":      "招商银行",
+				"bank_address_code": "440300",
+				"account_number":    "6214830012345678",
+				"account_name":      "张三",
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
+				store.EXPECT().
+					GetOperatorByUser(gomock.Any(), user.ID).
+					Times(1).
+					Return(operator, nil)
+
+				store.EXPECT().
+					GetLatestEcommerceApplymentBySubject(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.EcommerceApplyment{}, db.ErrRecordNotFound)
+
+				personalApplication := applicationWithTestURL
+				personalApplication.BusinessLicenseNumber = pgtype.Text{}
+				personalApplication.BusinessLicenseOcr = nil
+				store.EXPECT().
+					GetApprovedOperatorApplicationByUserID(gomock.Any(), user.ID).
+					Times(1).
+					Return(personalApplication, nil)
+			},
+			checkResponse: func(recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				var response ErrorResponse
+				require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
+				require.Equal(t, ErrOperatorPersonalApplymentUnsupported.Code, response.Code)
+				require.Equal(t, ErrOperatorPersonalApplymentUnsupported.Message, response.Error)
+			},
+		},
+		{
+			name: "EnterpriseOperatorRequiresBusinessAccount",
+			body: gin.H{
+				"account_type":      "ACCOUNT_TYPE_PRIVATE",
+				"account_bank":      "招商银行",
+				"bank_address_code": "440300",
+				"account_number":    "6214830012345678",
+				"account_name":      "张三",
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
+				store.EXPECT().
+					GetOperatorByUser(gomock.Any(), user.ID).
+					Times(1).
+					Return(operator, nil)
+
+				store.EXPECT().
+					GetLatestEcommerceApplymentBySubject(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.EcommerceApplyment{}, db.ErrRecordNotFound)
+
+				store.EXPECT().
+					GetApprovedOperatorApplicationByUserID(gomock.Any(), user.ID).
+					Times(1).
+					Return(applicationWithTestURL, nil)
+			},
+			checkResponse: func(recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				var response ErrorResponse
+				require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
+				require.Equal(t, ErrApplymentEnterprisePublicAccountRequired.Code, response.Code)
+				require.Equal(t, ErrApplymentEnterprisePublicAccountRequired.Message, response.Error)
 			},
 		},
 		{
@@ -354,7 +429,7 @@ func TestOperatorBindBankAPI(t *testing.T) {
 		{
 			name: "InvalidIDCardValidityPeriod",
 			body: gin.H{
-				"account_type":      "ACCOUNT_TYPE_PRIVATE",
+				"account_type":      "ACCOUNT_TYPE_BUSINESS",
 				"account_bank":      "招商银行",
 				"bank_address_code": "440300",
 				"account_number":    "6214830012345678",
@@ -392,7 +467,7 @@ func TestOperatorBindBankAPI(t *testing.T) {
 		{
 			name: "InvalidBusinessLicenseValidityPeriod",
 			body: gin.H{
-				"account_type":      "ACCOUNT_TYPE_PRIVATE",
+				"account_type":      "ACCOUNT_TYPE_BUSINESS",
 				"account_bank":      "招商银行",
 				"bank_address_code": "440300",
 				"account_number":    "6214830012345678",
@@ -633,6 +708,11 @@ func TestGetOperatorApplymentStatusAPI(t *testing.T) {
 					GetLatestEcommerceApplymentBySubject(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(db.EcommerceApplyment{}, db.ErrRecordNotFound)
+
+				store.EXPECT().
+					GetApprovedOperatorApplicationByUserID(gomock.Any(), user.ID).
+					Times(1).
+					Return(randomOperatorApplicationForApplyment(user.ID), nil)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -641,6 +721,40 @@ func TestGetOperatorApplymentStatusAPI(t *testing.T) {
 				require.Equal(t, "active", response.Status)
 				require.Equal(t, "可提交开户信息", response.StatusDesc)
 				require.True(t, response.CanSubmit)
+			},
+		},
+		{
+			name: "NoApplyment_PersonalOperator",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetOperatorByUser(gomock.Any(), user.ID).
+					Times(1).
+					Return(operator, nil)
+
+				store.EXPECT().
+					GetLatestEcommerceApplymentBySubject(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.EcommerceApplyment{}, db.ErrRecordNotFound)
+
+				personalApplication := randomOperatorApplicationForApplyment(user.ID)
+				personalApplication.BusinessLicenseNumber = pgtype.Text{}
+				personalApplication.BusinessLicenseOcr = nil
+				store.EXPECT().
+					GetApprovedOperatorApplicationByUserID(gomock.Any(), user.ID).
+					Times(1).
+					Return(personalApplication, nil)
+			},
+			checkResponse: func(recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var response operatorApplymentStatusResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Equal(t, "active", response.Status)
+				require.Equal(t, "当前无需提交开户信息", response.StatusDesc)
+				require.False(t, response.CanSubmit)
+				require.Equal(t, getPersonalOperatorApplymentBlockReason(), response.BlockReason)
 			},
 		},
 		{

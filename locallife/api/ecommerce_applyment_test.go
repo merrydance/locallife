@@ -426,6 +426,76 @@ func TestMerchantBindBankAPI(t *testing.T) {
 			},
 		},
 		{
+			name: "EnterpriseMerchantRequiresBusinessAccount",
+			body: gin.H{
+				"account_type":      "ACCOUNT_TYPE_PRIVATE",
+				"account_bank":      "招商银行",
+				"bank_address_code": "440300",
+				"account_number":    "6214830012345678",
+				"account_name":      "张三",
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetLatestEcommerceApplymentBySubject(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.EcommerceApplyment{}, db.ErrRecordNotFound)
+
+				enterpriseApplication := applicationWithTestURL
+				enterpriseApplication.BusinessLicenseOcr = []byte(`{"type_of_enterprise":"有限责任公司","address":"深圳市南山区","valid_period":"2020年01月01日至长期"}`)
+				store.EXPECT().
+					GetUserMerchantApplication(gomock.Any(), user.ID).
+					Times(1).
+					Return(enterpriseApplication, nil)
+			},
+			checkResponse: func(recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				var response ErrorResponse
+				require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
+				require.Equal(t, ErrApplymentEnterprisePublicAccountRequired.Code, response.Code)
+				require.Equal(t, ErrApplymentEnterprisePublicAccountRequired.Message, response.Error)
+			},
+		},
+		{
+			name: "UnsupportedMerchantOrganizationType",
+			body: gin.H{
+				"account_type":      "ACCOUNT_TYPE_BUSINESS",
+				"account_bank":      "招商银行",
+				"bank_address_code": "440300",
+				"account_number":    "6214830012345678",
+				"account_name":      "张三",
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetLatestEcommerceApplymentBySubject(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.EcommerceApplyment{}, db.ErrRecordNotFound)
+
+				unsupportedApplication := applicationWithTestURL
+				unsupportedApplication.BusinessLicenseOcr = []byte(`{"type_of_enterprise":"事业单位法人","address":"深圳市南山区","valid_period":"2020年01月01日至长期"}`)
+				store.EXPECT().
+					GetUserMerchantApplication(gomock.Any(), user.ID).
+					Times(1).
+					Return(unsupportedApplication, nil)
+			},
+			checkResponse: func(recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				var response ErrorResponse
+				require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
+				require.Equal(t, ErrMerchantApplymentOrganizationUnsupported.Code, response.Code)
+				require.Equal(t, ErrMerchantApplymentOrganizationUnsupported.Message, response.Error)
+			},
+		},
+		{
 			name: "AlreadyFinished",
 			body: gin.H{
 				"account_type":      "ACCOUNT_TYPE_PRIVATE",
