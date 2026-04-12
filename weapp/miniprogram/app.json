@@ -67,7 +67,6 @@
       "name": "platform",
       "pages": [
         "dashboard/dashboard",
-        "finance/merchant-limitations/index",
         "operators/index",
         "operators/detail",
         "operational-configs/index",

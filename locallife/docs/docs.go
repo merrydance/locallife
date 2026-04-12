@@ -11356,55 +11356,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/v1/merchant/finance/account/limitations": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "商户查询自己名下收付通子商户的管控情况；未开通或未激活时返回 account_status 和 status_desc。",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "商户财务"
-                ],
-                "summary": "查询商户收付通管控情况",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/api.accountLimitationsResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "无权限",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "商户不存在",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "502": {
-                        "description": "微信支付下游异常",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "503": {
-                        "description": "微信客户端未配置",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/v1/merchant/finance/account/settlement-account": {
             "get": {
                 "security": [
@@ -20187,49 +20138,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/v1/operators/me/finance/account/limitations": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "运营商查询自己名下收付通子商户的管控情况；未开通时返回 account_status 和 status_desc。",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "运营商财务"
-                ],
-                "summary": "查询运营商收付通管控情况",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/api.accountLimitationsResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "运营商未激活或无权限",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "502": {
-                        "description": "微信支付下游异常",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "503": {
-                        "description": "微信客户端未配置",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/v1/operators/me/finance/account/settlement-account": {
             "get": {
                 "security": [
@@ -22731,70 +22639,6 @@ const docTemplate = `{
                     },
                     "503": {
                         "description": "微信支付未配置",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/platform/finance/wechat-ecommerce/merchant-limitations/{sub_mch_id}": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "平台管理员按 sub_mch_id 查询微信支付平台收付通子商户的管控情况。",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "平台财务"
-                ],
-                "summary": "查询子商户收付通管控情况",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "子商户号",
-                        "name": "sub_mch_id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/api.platformSubMerchantLimitationsResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "未认证",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "无权限",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "502": {
-                        "description": "微信支付下游异常",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "503": {
-                        "description": "微信客户端未配置",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -32304,35 +32148,6 @@ const docTemplate = `{
                 }
             }
         },
-        "api.accountLimitationsResponse": {
-            "type": "object",
-            "properties": {
-                "account_status": {
-                    "type": "string"
-                },
-                "limited_functions": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "mchid": {
-                    "type": "string"
-                },
-                "other_limited_functions": {
-                    "type": "string"
-                },
-                "recovery_specifications": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/api.subMerchantLimitationRecoverySpecificationResponse"
-                    }
-                },
-                "status_desc": {
-                    "type": "string"
-                }
-            }
-        },
         "api.addCartItemRequest": {
             "type": "object",
             "required": [
@@ -40413,29 +40228,6 @@ const docTemplate = `{
                 }
             }
         },
-        "api.platformSubMerchantLimitationsResponse": {
-            "type": "object",
-            "properties": {
-                "limited_functions": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "mchid": {
-                    "type": "string"
-                },
-                "other_limited_functions": {
-                    "type": "string"
-                },
-                "recovery_specifications": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/api.subMerchantLimitationRecoverySpecificationResponse"
-                    }
-                }
-            }
-        },
         "api.platformViolationNotificationConfigRequest": {
             "type": "object",
             "properties": {
@@ -43265,50 +43057,6 @@ const docTemplate = `{
                 },
                 "user_id": {
                     "type": "integer"
-                }
-            }
-        },
-        "api.subMerchantLimitationRecoverySpecificationResponse": {
-            "type": "object",
-            "properties": {
-                "limitation_action_type": {
-                    "type": "string"
-                },
-                "limitation_case_id": {
-                    "type": "string"
-                },
-                "limitation_date": {
-                    "type": "string"
-                },
-                "limitation_reason": {
-                    "type": "string"
-                },
-                "limitation_reason_describe": {
-                    "type": "string"
-                },
-                "limitation_reason_type": {
-                    "type": "string"
-                },
-                "limitation_start_date": {
-                    "type": "string"
-                },
-                "other_relate_limitations": {
-                    "type": "string"
-                },
-                "recover_help_url": {
-                    "type": "string"
-                },
-                "recover_way": {
-                    "type": "string"
-                },
-                "recover_way_param": {
-                    "type": "string"
-                },
-                "relate_limitations": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
                 }
             }
         },

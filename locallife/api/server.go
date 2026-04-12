@@ -1216,7 +1216,6 @@ func (server *Server) setupRouter() {
 		merchantFinanceGroup.GET("/settlement-timeline", server.listMerchantSettlementTimeline)
 		merchantFinanceGroup.GET("/account/balance", server.getMerchantAccountBalance)
 		merchantFinanceGroup.GET("/account/settlement-account", server.getMerchantSettlementAccount)
-		merchantFinanceGroup.GET("/account/limitations", server.getMerchantAccountLimitations)
 		merchantFinanceGroup.GET("/account/withdrawals", server.listMerchantAccountWithdrawals)
 		merchantFinanceGroup.GET("/account/withdrawals/:id", server.getMerchantAccountWithdrawal)
 	}
@@ -1332,7 +1331,6 @@ func (server *Server) setupRouter() {
 		operatorsGroup.GET("/commission", server.getOperatorCommission)
 		operatorsGroup.GET("/finance/account/balance", server.getOperatorAccountBalance)
 		operatorsGroup.GET("/finance/account/settlement-account", server.getOperatorSettlementAccount)
-		operatorsGroup.GET("/finance/account/limitations", server.getOperatorAccountLimitations)
 		operatorsGroup.POST("/finance/account/settlement-account", server.modifyOperatorSettlementAccount)
 		operatorsGroup.GET("/finance/account/settlement-account/applications/:application_no", server.getOperatorSettlementApplication)
 		operatorsGroup.POST("/finance/withdraw", server.withdrawOperator) // New
@@ -1415,7 +1413,6 @@ func (server *Server) setupRouter() {
 		platformFinanceGroup.GET("/account/balance", server.getPlatformAccountBalance)
 		platformFinanceGroup.GET("/bills/fund-flow/download-url", server.getPlatformFundFlowBillDownloadURL)
 		platformFinanceGroup.GET("/bills/profit-sharing/download-url", server.getPlatformProfitSharingBillDownloadURL)
-		platformFinanceGroup.GET("/wechat-ecommerce/merchant-limitations/:sub_mch_id", server.getPlatformSubMerchantLimitations)
 		platformFinanceGroup.GET("/wechat-ecommerce/violation-notification", server.getPlatformViolationNotificationConfig)
 		platformFinanceGroup.POST("/wechat-ecommerce/violation-notification", server.createPlatformViolationNotificationConfig)
 		platformFinanceGroup.PUT("/wechat-ecommerce/violation-notification", server.updatePlatformViolationNotificationConfig)
