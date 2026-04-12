@@ -151,7 +151,7 @@ func (s *ApplymentRecoveryScheduler) reconcileApplymentStatus(ctx context.Contex
 	resolvedStatus := normalizeApplymentFollowUpStatus(mapWechatApplymentStateToStatus(queryResp.ApplymentState), queryResp.SubMchID)
 	resolvedSubMchID := queryResp.SubMchID
 
-	if resolvedSubMchID != "" {
+	if resolvedStatus == "finish" && resolvedSubMchID != "" {
 		if err := s.store.ApplymentSubMchActivationTx(ctx, db.ApplymentSubMchActivationTxParams{
 			ApplymentID: applyment.ID,
 			SubjectType: applyment.SubjectType,
@@ -185,7 +185,7 @@ func (s *ApplymentRecoveryScheduler) reconcileApplymentStatus(ctx context.Contex
 		RejectReason: getRejectReasonFromApplymentAuditDetail(queryResp.AuditDetail),
 		SignUrl:      pgtype.Text{String: queryResp.SignURL, Valid: queryResp.SignURL != ""},
 		SignState:    pgtype.Text{String: queryResp.SignState, Valid: queryResp.SignState != ""},
-		SubMchID:     pgtype.Text{},
+		SubMchID:     pgtype.Text{String: resolvedSubMchID, Valid: resolvedSubMchID != ""},
 	}); err != nil {
 		return "", "", err
 	}

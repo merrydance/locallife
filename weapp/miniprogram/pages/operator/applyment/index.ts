@@ -23,17 +23,6 @@ function copyText(data: string, successTitle: string) {
   })
 }
 
-function buildSubmitSuccessMessage(message: string, applymentId: string): string {
-  const content = [message || '开户申请已提交']
-
-  if (applymentId && applymentId !== '-') {
-    content.push(`申请单号：${applymentId}`)
-  }
-
-  content.push('接下来：微信支付通常会在1-3个工作日内完成审核，审核中无需重复提交。')
-  return content.join('\n')
-}
-
 function buildSubmitFailureMessage(message: string): string {
   return [
     message || '提交开户申请失败，请稍后重试',
@@ -118,18 +107,10 @@ Page({
 
     this.setData({ submitting: true, error: '' })
     try {
-      const resp = await operatorBindBank(e.detail)
+      await operatorBindBank(e.detail)
       this.setData({ bindBankDraft: null })
-      await this.loadStatus()
-
-      const applymentId = resp.applyment_id ? String(resp.applyment_id) : this.data.statusView.applymentId
-      const message = encodeURIComponent(buildSubmitSuccessMessage(resp.message || '开户申请已提交', applymentId))
-      const query = [`message=${message}`]
-      if (applymentId && applymentId !== '-') {
-        query.push(`applymentId=${encodeURIComponent(applymentId)}`)
-      }
       wx.redirectTo({
-        url: `/pages/operator/applyment/success/index?${query.join('&')}`
+        url: '/pages/operator/applyment/completed/index'
       })
     } catch (error: unknown) {
       const message = getErrorUserMessage(error, '提交开户申请失败，请稍后重试')

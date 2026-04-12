@@ -673,6 +673,9 @@ func buildApplymentAccountValidationResponse(validation *wechat.EcommerceApplyme
 
 func shouldQueryApplymentRemoteStatus(applyment db.EcommerceApplyment, subjectStatus string) bool {
 	normalizedStatus := normalizeApplymentStatus(applyment.Status, applyment.SubMchID.Valid && strings.TrimSpace(applyment.SubMchID.String) != "")
+	if normalizedStatus == "finish" {
+		return applyment.ApplymentID.Valid || strings.TrimSpace(applyment.OutRequestNo) != ""
+	}
 	return logic.IsApplymentSubmissionInFlight(normalizedStatus, subjectStatus, applyment.OutRequestNo)
 }
 
@@ -817,8 +820,8 @@ func (server *Server) getMerchantApplymentStatus(ctx *gin.Context) {
 			remoteLegalValidationURL = strings.TrimSpace(wxResp.LegalValidationURL)
 			remoteAccountValidation = buildApplymentAccountValidationResponse(wxResp.AccountValidation, decryptor)
 
-			// 如果开户成功，更新商户状态和支付配置
-			if wxResp.SubMchID != "" && merchant.Status != "active" {
+			// 仅在申请单真正完成时才激活支付能力；提前返回 sub_mch_id 只用于后续签约/验证流程。
+			if updateStatus == "finish" && wxResp.SubMchID != "" && merchant.Status != "active" {
 				_, err = server.store.CreateMerchantPaymentConfig(ctx, db.CreateMerchantPaymentConfigParams{
 					MerchantID: merchant.ID,
 					SubMchID:   wxResp.SubMchID,
@@ -1674,7 +1677,7 @@ func (server *Server) getOperatorApplymentStatus(ctx *gin.Context) {
 				})
 			}
 
-			if wxResp.SubMchID != "" {
+			if newStatus == "finish" && wxResp.SubMchID != "" {
 				_, _ = server.store.UpdateOperatorSubMchID(ctx, db.UpdateOperatorSubMchIDParams{
 					ID:       operator.ID,
 					SubMchID: pgtype.Text{String: wxResp.SubMchID, Valid: true},
@@ -1687,6 +1690,7 @@ func (server *Server) getOperatorApplymentStatus(ctx *gin.Context) {
 			applyment.RejectReason = nextRejectReason
 			applyment.SignUrl = nextSignURL
 			applyment.SignState = nextSignState
+			applyment.SubMchID = nextSubMchID
 			remoteStatusDesc = strings.TrimSpace(wxResp.ApplymentStateDesc)
 			remoteLegalValidationURL = strings.TrimSpace(wxResp.LegalValidationURL)
 			remoteAccountValidation = buildApplymentAccountValidationResponse(wxResp.AccountValidation, decryptor)

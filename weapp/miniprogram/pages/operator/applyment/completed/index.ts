@@ -48,7 +48,7 @@ Page({
       })
     } catch (error: unknown) {
       this.setData({
-        error: getErrorUserMessage(error, '加载开户完成信息失败，请稍后重试')
+        error: getErrorUserMessage(error, '加载开户结果失败，请稍后重试')
       })
     } finally {
       this.setData({ loading: false })

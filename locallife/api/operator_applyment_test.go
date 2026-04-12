@@ -1111,14 +1111,6 @@ func TestGetOperatorApplymentStatusAPI_QueryBackfillsSubMchIDWhenStatusUnchanged
 		Times(1).
 		Return(applyment, nil)
 
-	store.EXPECT().
-		UpdateOperatorSubMchID(gomock.Any(), db.UpdateOperatorSubMchIDParams{
-			ID:       operator.ID,
-			SubMchID: pgtype.Text{String: "1900005678", Valid: true},
-		}).
-		Times(1).
-		Return(operator, nil)
-
 	server := newTestServerWithEcommerce(t, store, ecommerceClient)
 
 	request, err := http.NewRequest(http.MethodGet, "/v1/operator/applyment/status", nil)
@@ -1133,6 +1125,68 @@ func TestGetOperatorApplymentStatusAPI_QueryBackfillsSubMchIDWhenStatusUnchanged
 	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 	require.Equal(t, "auditing", response.Status)
 	require.Equal(t, "1900005678", response.SubMchID)
+	require.False(t, response.CanSubmit)
+}
+
+func TestGetOperatorApplymentStatusAPI_RequeriesLocalFinishStatus(t *testing.T) {
+	user, _ := randomUser(t)
+	operator := randomOperatorForApplyment(user.ID)
+	applyment := randomEcommerceApplymentForTest("operator", operator.ID)
+	applyment.Status = "finish"
+	applyment.ApplymentID = pgtype.Int8{Int64: 22334455, Valid: true}
+	applyment.SubMchID = pgtype.Text{String: "1900007788", Valid: true}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+
+	store.EXPECT().
+		GetOperatorByUser(gomock.Any(), user.ID).
+		Times(1).
+		Return(operator, nil)
+
+	store.EXPECT().
+		GetLatestEcommerceApplymentBySubject(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(applyment, nil)
+
+	ecommerceClient.EXPECT().
+		QueryEcommerceApplymentByID(gomock.Any(), applyment.ApplymentID.Int64).
+		Times(1).
+		Return(&wechat.EcommerceApplymentQueryResponse{
+			ApplymentID:    applyment.ApplymentID.Int64,
+			ApplymentState: "ACCOUNT_NEED_VERIFY",
+			SubMchID:       "1900007788",
+		}, nil)
+
+	store.EXPECT().
+		UpdateEcommerceApplymentStatus(gomock.Any(), db.UpdateEcommerceApplymentStatusParams{
+			ID:           applyment.ID,
+			Status:       "account_need_verify",
+			RejectReason: pgtype.Text{},
+			SignUrl:      pgtype.Text{},
+			SignState:    pgtype.Text{},
+			SubMchID:     pgtype.Text{String: "1900007788", Valid: true},
+		}).
+		Times(1).
+		Return(applyment, nil)
+
+	server := newTestServerWithEcommerce(t, store, ecommerceClient)
+
+	request, err := http.NewRequest(http.MethodGet, "/v1/operator/applyment/status", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var response operatorApplymentStatusResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+	require.Equal(t, "account_need_verify", response.Status)
+	require.Equal(t, "1900007788", response.SubMchID)
 	require.False(t, response.CanSubmit)
 }
 

@@ -154,3 +154,56 @@ func TestApplymentRecoverySchedulerRunOnceQueriesOperatorRejectedAndRequeues(t *
 	scheduler := worker.NewApplymentRecoveryScheduler(store, distributor, ecommerceClient)
 	scheduler.RunOnce()
 }
+
+func TestApplymentRecoverySchedulerRunOncePersistsSubMchIDWithoutActivationBeforeFinish(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	distributor := mockwk.NewMockTaskDistributor(ctrl)
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+
+	store.EXPECT().
+		ListEcommerceApplymentsPendingFollowUp(gomock.Any(), gomock.Any()).
+		Return([]db.EcommerceApplymentPendingFollowUp{{
+			ID:           71,
+			SubjectType:  "operator",
+			SubjectID:    81,
+			OutRequestNo: "APPLY_RECOVERY_004",
+			ApplymentID:  pgtype.Int8{Int64: 7711, Valid: true},
+			Status:       "submitted",
+			UpdatedAt:    time.Now().Add(-5 * time.Minute),
+		}}, nil)
+
+	ecommerceClient.EXPECT().
+		QueryEcommerceApplymentByID(gomock.Any(), int64(7711)).
+		Return(&wechat.EcommerceApplymentQueryResponse{
+			ApplymentID:    7711,
+			OutRequestNo:   "APPLY_RECOVERY_004",
+			ApplymentState: "ACCOUNT_NEED_VERIFY",
+			SubMchID:       "sub_mch_7711",
+		}, nil)
+
+	store.EXPECT().
+		UpdateEcommerceApplymentStatus(gomock.Any(), db.UpdateEcommerceApplymentStatusParams{
+			ID:           71,
+			Status:       "account_need_verify",
+			RejectReason: pgtype.Text{},
+			SignUrl:      pgtype.Text{},
+			SignState:    pgtype.Text{},
+			SubMchID:     pgtype.Text{String: "sub_mch_7711", Valid: true},
+		}).
+		Return(db.EcommerceApplyment{ID: 71, Status: "account_need_verify"}, nil)
+
+	distributor.EXPECT().
+		DistributeTaskProcessApplymentResult(gomock.Any(), gomock.AssignableToTypeOf(&worker.ApplymentResultPayload{}), gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, payload *worker.ApplymentResultPayload, _ ...asynq.Option) error {
+			require.Equal(t, "ACCOUNT_NEED_VERIFY", payload.ApplymentState)
+			require.Equal(t, "account_need_verify", payload.ApplymentStatus)
+			require.Equal(t, "sub_mch_7711", payload.SubMchID)
+			return nil
+		})
+
+	scheduler := worker.NewApplymentRecoveryScheduler(store, distributor, ecommerceClient)
+	scheduler.RunOnce()
+}

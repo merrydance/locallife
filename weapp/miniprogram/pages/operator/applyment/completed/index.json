@@ -1,5 +1,5 @@
 {
-  "navigationBarTitleText": "开户完成",
+  "navigationBarTitleText": "开户结果",
   "usingComponents": {
     "custom-navbar": "/components/custom-navbar/index",
     "t-button": "tdesign-miniprogram/button/button",
