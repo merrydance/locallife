@@ -38,3 +38,9 @@
 - `G2` / `G3` review 默认使用 `REVIEW_CHECKLIST.md`，避免 review 只看代码风格不看恢复与误操作风险。
 - Flutter 的 UI 反馈标准复用 `.github/standards/frontend/USER_FEEDBACK_STANDARDS.md` 的核心原则（一次操作一个反馈、不泄漏原始错误）。
 - 与后端推送网关相关的改动，同时参考 `.github/standards/backend/README.md`。
+
+## CI 与门禁
+
+- `merchant_app/` 目录变更会触发 `.github/workflows/flutter-quality.yml`。
+- CI 默认执行 `flutter analyze` 和 `flutter test`。
+- changed-file architecture guard 会拦截 widget 或 page 层直接导入 `Dio`、`FlutterSecureStorage`、`sqflite`、`ApiClient` 这类基础设施，以及 `lib/config/env.dart` 之外的硬编码接口地址。

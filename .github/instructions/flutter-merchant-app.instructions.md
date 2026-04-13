@@ -53,6 +53,8 @@ Open the smallest relevant Flutter deep docs for the current task:
 
 - `flutter analyze` must pass with zero issues.
 - `flutter test` for unit tests.
+- CI now enforces `flutter analyze`, `flutter test`, and a changed-file architecture guard for `merchant_app/` changes.
+- The changed-file guard blocks widget or page files that import `Dio`, `FlutterSecureStorage`, `sqflite`, or direct `ApiClient` infrastructure, and blocks hardcoded endpoints outside `lib/config/env.dart`.
 - Manual testing required on Huawei, Xiaomi, OPPO, vivo devices.
 
 ## Completion Contract
