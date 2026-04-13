@@ -666,6 +666,22 @@ type EcommerceApplyment struct {
 	BankAliasCode pgtype.Text `json:"bank_alias_code"`
 	// 微信收付通支行联行号
 	BankBranchID pgtype.Text `json:"bank_branch_id"`
+	// 商户首笔支付成功时间，用于 0.01 结算卡验卡三日巡检
+	SettlementVerifyFirstTradeAt pgtype.Timestamptz `json:"settlement_verify_first_trade_at"`
+	// 最近一次查询微信结算卡验卡结果的时间
+	SettlementVerifyLastCheckedAt pgtype.Timestamptz `json:"settlement_verify_last_checked_at"`
+	// 已执行的每日验卡巡检次数，最多三次
+	SettlementVerifyCheckCount int32 `json:"settlement_verify_check_count"`
+	// 结算卡验卡巡检状态: verifying-巡检中, success-巡检结束且未发现失败, fail-巡检发现失败
+	SettlementVerifyStatus pgtype.Text `json:"settlement_verify_status"`
+	// 微信返回的结算卡验卡失败原因
+	SettlementVerifyFailReason pgtype.Text `json:"settlement_verify_fail_reason"`
+	// 运营商已收到结算卡失败通知的时间
+	SettlementVerifyFailedNotifiedAt pgtype.Timestamptz `json:"settlement_verify_failed_notified_at"`
+	// 微信进件返回的法人扫码验证链接
+	LegalValidationUrl pgtype.Text `json:"legal_validation_url"`
+	// 微信进件返回的汇款账户验证原始信息，敏感字段保持微信返回密文
+	AccountValidation []byte `json:"account_validation"`
 }
 
 // 用户收藏表

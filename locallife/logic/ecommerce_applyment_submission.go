@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
+	"github.com/rs/zerolog/log"
 )
 
 var applymentDateTokenPattern = regexp.MustCompile(`\d{4}年\d{1,2}月\d{1,2}日|\d{4}[./-]\d{1,2}[./-]\d{1,2}|\d{8}|长期|永久`)
@@ -18,8 +19,9 @@ var applymentDateTokenPattern = regexp.MustCompile(`\d{4}年\d{1,2}月\d{1,2}日
 const (
 	ApplymentSubjectStatusBindbankSubmitted = "bindbank_submitted"
 	ApplymentSubmissionResultStatus         = "submitted"
-	ApplymentSubmissionSuccessMessage       = "开户申请已提交，请等待微信审核（通常1-3个工作日）"
+	ApplymentSubmissionSuccessMessage       = "开户申请已提交，请立即进入状态页查看签约与账户验证进度，审核将并行进行"
 	ApplymentSubmissionFallbackMessage      = "银行卡信息已保存，待人工处理"
+	applymentInitialQueryDelay              = 3 * time.Second
 )
 
 var (
@@ -31,6 +33,7 @@ var (
 
 type ApplymentSubmissionStore interface {
 	UpdateEcommerceApplymentToSubmitted(ctx context.Context, arg db.UpdateEcommerceApplymentToSubmittedParams) (db.EcommerceApplyment, error)
+	UpdateEcommerceApplymentStatus(ctx context.Context, arg db.UpdateEcommerceApplymentStatusParams) (db.EcommerceApplyment, error)
 }
 
 type ApplymentAssetDownloader interface {
@@ -53,9 +56,75 @@ type SubmitEcommerceApplymentInput struct {
 }
 
 type SubmitEcommerceApplymentResult struct {
-	ApplymentID int64
-	Status      string
-	Message     string
+	ApplymentID          int64
+	Status               string
+	StatusDesc           string
+	Message              string
+	InitialQueryResponse *wechat.EcommerceApplymentQueryResponse
+}
+
+func waitApplymentInitialQuery(ctx context.Context, delay time.Duration) error {
+	if delay <= 0 {
+		return nil
+	}
+
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
+func buildApplymentSubmissionText(value string) pgtype.Text {
+	trimmed := strings.TrimSpace(value)
+	return pgtype.Text{String: trimmed, Valid: trimmed != ""}
+}
+
+func getRejectReasonFromApplymentAuditDetails(details []wechat.ApplymentAuditDetail) pgtype.Text {
+	if len(details) == 0 {
+		return pgtype.Text{}
+	}
+
+	parts := make([]string, 0, len(details))
+	for _, detail := range details {
+		parts = append(parts, fmt.Sprintf("%s: %s", detail.ParamName, detail.RejectReason))
+	}
+
+	return pgtype.Text{String: strings.Join(parts, "; "), Valid: true}
+}
+
+func syncInitialApplymentQueryResult(
+	ctx context.Context,
+	store ApplymentSubmissionStore,
+	localApplymentID int64,
+	queryResp *wechat.EcommerceApplymentQueryResponse,
+) error {
+	if queryResp == nil {
+		return nil
+	}
+
+	mappedStatus := mapWechatApplymentStateToSubmissionStatus(queryResp.ApplymentState)
+	if mappedStatus == "" {
+		mappedStatus = ApplymentSubmissionResultStatus
+	}
+	resolvedStatus := normalizeApplymentSubmissionStatus(mappedStatus, queryResp.SubMchID)
+
+	_, err := store.UpdateEcommerceApplymentStatus(ctx, db.UpdateEcommerceApplymentStatusParams{
+		ID:                 localApplymentID,
+		ApplymentID:        pgtype.Int8{Int64: queryResp.ApplymentID, Valid: queryResp.ApplymentID > 0},
+		Status:             resolvedStatus,
+		RejectReason:       getRejectReasonFromApplymentAuditDetails(queryResp.AuditDetail),
+		SignUrl:            buildApplymentSubmissionText(queryResp.SignURL),
+		SignState:          buildApplymentSubmissionText(queryResp.SignState),
+		LegalValidationUrl: buildApplymentSubmissionText(queryResp.LegalValidationURL),
+		AccountValidation:  wechat.MarshalEcommerceApplymentAccountValidation(queryResp.AccountValidation),
+		SubMchID:           buildApplymentSubmissionText(queryResp.SubMchID),
+	})
+	return err
 }
 
 type ApplymentLocalRecordInput struct {
@@ -64,28 +133,31 @@ type ApplymentLocalRecordInput struct {
 	OutRequestNo          string
 	OrganizationType      string
 	BusinessLicenseNumber string
-	BusinessLicenseCopy   string
-	MerchantName          string
-	LegalPerson           string
-	IDCardNumber          string
-	IDCardName            string
-	IDCardValidTime       string
-	IDCardFrontCopy       string
-	IDCardBackCopy        string
-	AccountType           string
-	AccountBank           string
-	AccountBankCode       int64
-	BankAlias             string
-	BankAliasCode         string
-	BankAddressCode       string
-	BankBranchID          string
-	BankName              string
-	AccountNumber         string
-	AccountName           string
-	ContactName           string
-	ContactIDCardNumber   string
-	MobilePhone           string
-	MerchantShortname     string
+	// Snapshot URL for audit/display only. Future resubmission must re-upload from asset IDs instead of reusing this value as a WeChat media_id.
+	BusinessLicenseCopy string
+	MerchantName        string
+	LegalPerson         string
+	IDCardNumber        string
+	IDCardName          string
+	IDCardValidTime     string
+	// Snapshot URL for audit/display only. Future resubmission must re-upload from asset IDs instead of reusing this value as a WeChat media_id.
+	IDCardFrontCopy string
+	// Snapshot URL for audit/display only. Future resubmission must re-upload from asset IDs instead of reusing this value as a WeChat media_id.
+	IDCardBackCopy      string
+	AccountType         string
+	AccountBank         string
+	AccountBankCode     int64
+	BankAlias           string
+	BankAliasCode       string
+	BankAddressCode     string
+	BankBranchID        string
+	BankName            string
+	AccountNumber       string
+	AccountName         string
+	ContactName         string
+	ContactIDCardNumber string
+	MobilePhone         string
+	MerchantShortname   string
 }
 
 type ApplymentWechatAccountInput struct {
@@ -587,6 +659,7 @@ func SubmitEcommerceApplyment(
 		}
 		result.ApplymentID = input.Applyment.ID
 		result.Status = ApplymentSubmissionResultStatus
+		result.StatusDesc = ApplymentSubmissionFallbackMessage
 		result.Message = ApplymentSubmissionFallbackMessage
 		return result, nil
 	}
@@ -613,8 +686,155 @@ func SubmitEcommerceApplyment(
 
 	result.ApplymentID = resp.ApplymentID
 	result.Status = ApplymentSubmissionResultStatus
+	result.StatusDesc = ApplymentSubmissionSuccessMessage
 	result.Message = ApplymentSubmissionSuccessMessage
+	if err := waitApplymentInitialQuery(ctx, applymentInitialQueryDelay); err != nil {
+		return result, nil
+	}
+
+	initialQueryResp, err := queryInitialApplymentStatus(ctx, ecommerceClient, resp.ApplymentID, input.Applyment.OutRequestNo)
+	if err == nil && initialQueryResp != nil {
+		mappedStatus := mapWechatApplymentStateToSubmissionStatus(initialQueryResp.ApplymentState)
+		if mappedStatus == "" {
+			mappedStatus = ApplymentSubmissionResultStatus
+		}
+		resolvedStatus := normalizeApplymentSubmissionStatus(mappedStatus, initialQueryResp.SubMchID)
+		statusDesc := getApplymentSubmissionStatusDesc(resolvedStatus)
+		if statusDesc == "未知状态" && strings.TrimSpace(initialQueryResp.ApplymentStateDesc) != "" {
+			statusDesc = strings.TrimSpace(initialQueryResp.ApplymentStateDesc)
+		}
+
+		result.Status = resolvedStatus
+		result.StatusDesc = statusDesc
+		result.Message = statusDesc
+		result.InitialQueryResponse = initialQueryResp
+
+		if syncErr := syncInitialApplymentQueryResult(ctx, store, input.Applyment.ID, initialQueryResp); syncErr != nil {
+			log.Error().Err(syncErr).
+				Int64("local_applyment_id", input.Applyment.ID).
+				Int64("wechat_applyment_id", initialQueryResp.ApplymentID).
+				Msg("sync initial applyment query result failed")
+		}
+	}
+
 	return result, nil
+}
+
+func queryInitialApplymentStatus(
+	ctx context.Context,
+	ecommerceClient wechat.EcommerceClientInterface,
+	applymentID int64,
+	outRequestNo string,
+) (*wechat.EcommerceApplymentQueryResponse, error) {
+	if ecommerceClient == nil {
+		return nil, nil
+	}
+
+	resp, err := ecommerceClient.QueryEcommerceApplymentByID(ctx, applymentID)
+	if err == nil {
+		log.Info().
+			Str("query_key", "applyment_id").
+			Int64("wechat_applyment_id", resp.ApplymentID).
+			Str("out_request_no", strings.TrimSpace(resp.OutRequestNo)).
+			Str("applyment_state", strings.TrimSpace(resp.ApplymentState)).
+			Str("sign_state", strings.TrimSpace(resp.SignState)).
+			Bool("has_sign_url", strings.TrimSpace(resp.SignURL) != "").
+			Bool("has_legal_validation_url", strings.TrimSpace(resp.LegalValidationURL) != "").
+			Bool("has_account_validation", resp.AccountValidation != nil).
+			Msg("query initial applyment status succeeded")
+		return resp, nil
+	}
+	if strings.TrimSpace(outRequestNo) == "" {
+		return nil, err
+	}
+
+	resp, err = ecommerceClient.QueryEcommerceApplymentByOutRequestNo(ctx, outRequestNo)
+	if err == nil {
+		log.Info().
+			Str("query_key", "out_request_no").
+			Int64("wechat_applyment_id", resp.ApplymentID).
+			Str("out_request_no", strings.TrimSpace(resp.OutRequestNo)).
+			Str("applyment_state", strings.TrimSpace(resp.ApplymentState)).
+			Str("sign_state", strings.TrimSpace(resp.SignState)).
+			Bool("has_sign_url", strings.TrimSpace(resp.SignURL) != "").
+			Bool("has_legal_validation_url", strings.TrimSpace(resp.LegalValidationURL) != "").
+			Bool("has_account_validation", resp.AccountValidation != nil).
+			Msg("query initial applyment status succeeded")
+	}
+	return resp, err
+}
+
+func mapWechatApplymentStateToSubmissionStatus(wechatState string) string {
+	switch strings.TrimSpace(wechatState) {
+	case "APPLYMENT_STATE_EDITTING":
+		return "pending"
+	case "CHECKING":
+		return "checking"
+	case "ACCOUNT_NEED_VERIFY":
+		return "account_need_verify"
+	case "APPLYMENT_STATE_AUDITING", "AUDITING":
+		return "auditing"
+	case "APPLYMENT_STATE_REJECTED", "REJECTED":
+		return "rejected"
+	case "APPLYMENT_STATE_TO_BE_CONFIRMED":
+		return "to_be_confirmed"
+	case "APPLYMENT_STATE_TO_BE_SIGNED", "NEED_SIGN":
+		return "to_be_signed"
+	case "APPLYMENT_STATE_SIGNING":
+		return "signing"
+	case "APPLYMENT_STATE_FINISHED", "FINISH":
+		return "finish"
+	case "APPLYMENT_STATE_FROZEN", "FROZEN":
+		return "frozen"
+	case "APPLYMENT_STATE_CANCELED", "CANCELED":
+		return "canceled"
+	default:
+		return ""
+	}
+}
+
+func normalizeApplymentSubmissionStatus(status, subMchID string) string {
+	if status == "finish" && strings.TrimSpace(subMchID) == "" {
+		return ApplymentSubmissionResultStatus
+	}
+	return status
+}
+
+func getApplymentSubmissionStatusDesc(status string) string {
+	switch status {
+	case "not_applied":
+		return "尚未提交开户申请"
+	case "pending":
+		return "待提交"
+	case ApplymentSubmissionResultStatus:
+		return "已提交，请立即进入状态页查看签约与账户验证进度"
+	case "checking":
+		return "资料校验中"
+	case "account_need_verify":
+		return "待账户验证"
+	case "auditing":
+		return "审核中"
+	case "to_be_confirmed":
+		return "待确认"
+	case "rejected":
+		return "审核被拒绝"
+	case "canceled":
+		return "已作废"
+	case "frozen":
+		return "已冻结"
+	case "to_be_signed":
+		return "待签约，请点击签约链接完成签约"
+	case "signing":
+		return "签约中"
+	case "rejected_sign":
+		return "签约失败"
+	case "finish":
+		return "开户成功"
+	case "active":
+		return "账户已开通"
+	default:
+		return "未知状态"
+	}
 }
 
 func isApplymentPendingSubmissionStatus(status string) bool {

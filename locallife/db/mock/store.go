@@ -12564,6 +12564,21 @@ func (mr *MockStoreMockRecorder) ListMerchantApplications(ctx, arg any) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListMerchantApplications", reflect.TypeOf((*MockStore)(nil).ListMerchantApplications), ctx, arg)
 }
 
+// ListMerchantApplymentsPendingSettlementVerification mocks base method.
+func (m *MockStore) ListMerchantApplymentsPendingSettlementVerification(ctx context.Context, arg db.ListMerchantApplymentsPendingSettlementVerificationParams) ([]db.ListMerchantApplymentsPendingSettlementVerificationRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListMerchantApplymentsPendingSettlementVerification", ctx, arg)
+	ret0, _ := ret[0].([]db.ListMerchantApplymentsPendingSettlementVerificationRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListMerchantApplymentsPendingSettlementVerification indicates an expected call of ListMerchantApplymentsPendingSettlementVerification.
+func (mr *MockStoreMockRecorder) ListMerchantApplymentsPendingSettlementVerification(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListMerchantApplymentsPendingSettlementVerification", reflect.TypeOf((*MockStore)(nil).ListMerchantApplymentsPendingSettlementVerification), ctx, arg)
+}
+
 // ListMerchantBrandsByGroup mocks base method.
 func (m *MockStore) ListMerchantBrandsByGroup(ctx context.Context, groupID int64) ([]db.MerchantBrand, error) {
 	m.ctrl.T.Helper()
@@ -15245,6 +15260,21 @@ func (mr *MockStoreMockRecorder) MarkEcommerceApplymentResultProcessed(ctx, arg 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkEcommerceApplymentResultProcessed", reflect.TypeOf((*MockStore)(nil).MarkEcommerceApplymentResultProcessed), ctx, arg)
 }
 
+// MarkEcommerceApplymentSettlementVerifyFailedNotified mocks base method.
+func (m *MockStore) MarkEcommerceApplymentSettlementVerifyFailedNotified(ctx context.Context, id int64) (db.EcommerceApplyment, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MarkEcommerceApplymentSettlementVerifyFailedNotified", ctx, id)
+	ret0, _ := ret[0].(db.EcommerceApplyment)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MarkEcommerceApplymentSettlementVerifyFailedNotified indicates an expected call of MarkEcommerceApplymentSettlementVerifyFailedNotified.
+func (mr *MockStoreMockRecorder) MarkEcommerceApplymentSettlementVerifyFailedNotified(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkEcommerceApplymentSettlementVerifyFailedNotified", reflect.TypeOf((*MockStore)(nil).MarkEcommerceApplymentSettlementVerifyFailedNotified), ctx, id)
+}
+
 // MarkNoShowTx mocks base method.
 func (m *MockStore) MarkNoShowTx(ctx context.Context, arg db.MarkNoShowTxParams) (db.MarkNoShowTxResult, error) {
 	m.ctrl.T.Helper()
@@ -17607,6 +17637,21 @@ func (m *MockStore) UpdateDishesCategory(ctx context.Context, arg db.UpdateDishe
 func (mr *MockStoreMockRecorder) UpdateDishesCategory(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDishesCategory", reflect.TypeOf((*MockStore)(nil).UpdateDishesCategory), ctx, arg)
+}
+
+// UpdateEcommerceApplymentSettlementVerification mocks base method.
+func (m *MockStore) UpdateEcommerceApplymentSettlementVerification(ctx context.Context, arg db.UpdateEcommerceApplymentSettlementVerificationParams) (db.EcommerceApplyment, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateEcommerceApplymentSettlementVerification", ctx, arg)
+	ret0, _ := ret[0].(db.EcommerceApplyment)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateEcommerceApplymentSettlementVerification indicates an expected call of UpdateEcommerceApplymentSettlementVerification.
+func (mr *MockStoreMockRecorder) UpdateEcommerceApplymentSettlementVerification(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateEcommerceApplymentSettlementVerification", reflect.TypeOf((*MockStore)(nil).UpdateEcommerceApplymentSettlementVerification), ctx, arg)
 }
 
 // UpdateEcommerceApplymentStatus mocks base method.

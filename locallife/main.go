@@ -201,6 +201,7 @@ func main() {
 	schedulerManager.Register("profit-sharing-recovery", worker.NewProfitSharingRecoveryScheduler(store, taskDistributor))
 	schedulerManager.Register("refund-recovery", worker.NewRefundRecoveryScheduler(store, taskDistributor, claimPayoutPaymentClient, ecommerceClient))
 	schedulerManager.Register("applyment-recovery", worker.NewApplymentRecoveryScheduler(store, taskDistributor, ecommerceClient))
+	schedulerManager.Register("applyment-settlement-verification", worker.NewApplymentSettlementVerificationScheduler(store, taskDistributor, ecommerceClient))
 	schedulerManager.Register("merchant-withdraw-recovery", worker.NewMerchantWithdrawRecoveryScheduler(store, taskDistributor))
 	if claimPayoutPaymentClient != nil {
 		schedulerManager.Register("claim-payout-recovery", worker.NewClaimPayoutRecoveryScheduler(store, claimPayoutPaymentClient))

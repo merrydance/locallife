@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -202,9 +203,16 @@ type merchantBindBankRequest struct {
 
 // merchantBindBankResponse 商户绑定银行卡响应
 type merchantBindBankResponse struct {
-	ApplymentID int64  `json:"applyment_id"` // 微信申请单号
-	Status      string `json:"status"`       // 状态
-	Message     string `json:"message"`      // 消息
+	ApplymentID        int64                               `json:"applyment_id"`                   // 微信申请单号
+	Status             string                              `json:"status"`                         // 状态
+	StatusDesc         string                              `json:"status_desc,omitempty"`          // 状态描述
+	Message            string                              `json:"message"`                        // 消息
+	SignURL            *string                             `json:"sign_url,omitempty"`             // 签约链接
+	SignState          *string                             `json:"sign_state,omitempty"`           // 签约状态
+	LegalValidationURL *string                             `json:"legal_validation_url,omitempty"` // 法人扫码验证链接
+	AccountValidation  *applymentAccountValidationResponse `json:"account_validation,omitempty"`   // 汇款验证信息
+	SubMchID           *string                             `json:"sub_mch_id,omitempty"`           // 二级商户号
+	RejectReason       *string                             `json:"reject_reason,omitempty"`        // 拒绝原因
 }
 
 // @Summary 商户绑定银行卡并提交微信开户
@@ -356,7 +364,8 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("数据加密失败")))
 		return
 	}
-	// 解析媒体资产 URL 用于存档
+	// 解析媒体资产 URL 用于存档。
+	// 这些快照字段不能作为未来重提微信进件时的 media_id 来源；若要重提，必须回到 media asset ID 并重新上传微信拿新的 media_id。
 	bizLicenseURL := server.publicImageURL(ctx, pgInt8ToPtr(application.BusinessLicenseMediaAssetID), media.VariantOriginal)
 	idCardFrontURL := server.publicImageURL(ctx, pgInt8ToPtr(application.IDCardFrontMediaAssetID), media.VariantOriginal)
 	idCardBackURL := server.publicImageURL(ctx, pgInt8ToPtr(application.IDCardBackMediaAssetID), media.VariantOriginal)
@@ -420,6 +429,7 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, merchantBindBankResponse{
 			ApplymentID: submissionResult.ApplymentID,
 			Status:      submissionResult.Status,
+			StatusDesc:  submissionResult.StatusDesc,
 			Message:     submissionResult.Message,
 		})
 		return
@@ -587,11 +597,19 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
+	snapshot := buildApplymentSubmissionStatusSnapshot(submissionResult, server.ecommerceClient)
 
 	ctx.JSON(http.StatusOK, merchantBindBankResponse{
-		ApplymentID: submissionResult.ApplymentID,
-		Status:      submissionResult.Status,
-		Message:     submissionResult.Message,
+		ApplymentID:        submissionResult.ApplymentID,
+		Status:             snapshot.Status,
+		StatusDesc:         snapshot.StatusDesc,
+		Message:            snapshot.Message,
+		SignURL:            snapshot.SignURL,
+		SignState:          snapshot.SignState,
+		LegalValidationURL: snapshot.LegalValidationURL,
+		AccountValidation:  snapshot.AccountValidation,
+		SubMchID:           snapshot.SubMchID,
+		RejectReason:       snapshot.RejectReason,
 	})
 }
 
@@ -671,6 +689,74 @@ func buildApplymentAccountValidationResponse(validation *wechat.EcommerceApplyme
 	}
 }
 
+func buildStoredApplymentAccountValidationResponse(raw []byte, decryptor applymentSensitiveDecryptor) *applymentAccountValidationResponse {
+	validation, err := wechat.UnmarshalEcommerceApplymentAccountValidation(raw)
+	if err != nil {
+		log.Warn().Err(err).Msg("failed to unmarshal stored applyment account validation")
+		return nil
+	}
+
+	return buildApplymentAccountValidationResponse(validation, decryptor)
+}
+
+type applymentSubmissionStatusSnapshot struct {
+	Status             string
+	StatusDesc         string
+	Message            string
+	SignURL            *string
+	SignState          *string
+	LegalValidationURL *string
+	AccountValidation  *applymentAccountValidationResponse
+	SubMchID           *string
+	RejectReason       *string
+}
+
+func buildApplymentSubmissionStatusSnapshot(result logic.SubmitEcommerceApplymentResult, ecommerceClient wechat.EcommerceClientInterface) applymentSubmissionStatusSnapshot {
+	snapshot := applymentSubmissionStatusSnapshot{
+		Status:     result.Status,
+		StatusDesc: result.StatusDesc,
+		Message:    result.Message,
+	}
+
+	queryResp := result.InitialQueryResponse
+	if queryResp == nil {
+		return snapshot
+	}
+
+	decryptor := resolveApplymentSensitiveDecryptor(ecommerceClient)
+	trimmedSignURL := strings.TrimSpace(queryResp.SignURL)
+	if trimmedSignURL != "" {
+		snapshot.SignURL = &trimmedSignURL
+	}
+	trimmedSignState := strings.TrimSpace(queryResp.SignState)
+	if trimmedSignState != "" {
+		snapshot.SignState = &trimmedSignState
+	}
+	trimmedLegalValidationURL := strings.TrimSpace(queryResp.LegalValidationURL)
+	if trimmedLegalValidationURL != "" {
+		snapshot.LegalValidationURL = &trimmedLegalValidationURL
+	}
+	trimmedSubMchID := strings.TrimSpace(queryResp.SubMchID)
+	if trimmedSubMchID != "" {
+		snapshot.SubMchID = &trimmedSubMchID
+	}
+	if accountValidation := buildApplymentAccountValidationResponse(queryResp.AccountValidation, decryptor); accountValidation != nil {
+		snapshot.AccountValidation = accountValidation
+	}
+	if rejectReason := getRejectReasonFromAuditDetail(queryResp.AuditDetail); rejectReason.Valid {
+		snapshot.RejectReason = &rejectReason.String
+	}
+
+	if snapshot.StatusDesc == "" {
+		snapshot.StatusDesc = getApplymentStatusDesc(snapshot.Status)
+	}
+	if snapshot.Message == "" {
+		snapshot.Message = snapshot.StatusDesc
+	}
+
+	return snapshot
+}
+
 func shouldQueryApplymentRemoteStatus(applyment db.EcommerceApplyment, subjectStatus string) bool {
 	normalizedStatus := normalizeApplymentStatus(applyment.Status, applyment.SubMchID.Valid && strings.TrimSpace(applyment.SubMchID.String) != "")
 	if normalizedStatus == "finish" {
@@ -687,6 +773,17 @@ func (server *Server) queryEcommerceApplymentStatus(ctx context.Context, applyme
 	if applyment.ApplymentID.Valid {
 		resp, err := server.ecommerceClient.QueryEcommerceApplymentByID(ctx, applyment.ApplymentID.Int64)
 		if err == nil {
+			log.Info().
+				Int64("applyment_id", applyment.ID).
+				Str("query_key", "applyment_id").
+				Int64("wechat_applyment_id", resp.ApplymentID).
+				Str("out_request_no", strings.TrimSpace(resp.OutRequestNo)).
+				Str("applyment_state", strings.TrimSpace(resp.ApplymentState)).
+				Str("sign_state", strings.TrimSpace(resp.SignState)).
+				Bool("has_sign_url", strings.TrimSpace(resp.SignURL) != "").
+				Bool("has_legal_validation_url", strings.TrimSpace(resp.LegalValidationURL) != "").
+				Bool("has_account_validation", resp.AccountValidation != nil).
+				Msg("query applyment status succeeded")
 			return resp, nil
 		}
 		if strings.TrimSpace(applyment.OutRequestNo) == "" {
@@ -704,12 +801,53 @@ func (server *Server) queryEcommerceApplymentStatus(ctx context.Context, applyme
 		return nil, fmt.Errorf("applyment out_request_no is empty")
 	}
 
-	return server.ecommerceClient.QueryEcommerceApplymentByOutRequestNo(ctx, applyment.OutRequestNo)
+	resp, err := server.ecommerceClient.QueryEcommerceApplymentByOutRequestNo(ctx, applyment.OutRequestNo)
+	if err == nil {
+		log.Info().
+			Int64("applyment_id", applyment.ID).
+			Str("query_key", "out_request_no").
+			Int64("wechat_applyment_id", resp.ApplymentID).
+			Str("out_request_no", strings.TrimSpace(resp.OutRequestNo)).
+			Str("applyment_state", strings.TrimSpace(resp.ApplymentState)).
+			Str("sign_state", strings.TrimSpace(resp.SignState)).
+			Bool("has_sign_url", strings.TrimSpace(resp.SignURL) != "").
+			Bool("has_legal_validation_url", strings.TrimSpace(resp.LegalValidationURL) != "").
+			Bool("has_account_validation", resp.AccountValidation != nil).
+			Msg("query applyment status succeeded")
+	}
+	return resp, err
 }
 
 func buildApplymentText(value string) pgtype.Text {
 	trimmed := strings.TrimSpace(value)
 	return pgtype.Text{String: trimmed, Valid: trimmed != ""}
+}
+
+func resolveRemoteApplymentStatus(currentStatus, remoteStatus string) string {
+	if strings.TrimSpace(remoteStatus) == "" {
+		return currentStatus
+	}
+	return remoteStatus
+}
+
+func shouldUseRemoteApplymentStatusDesc(status string, signState, legalValidationURL pgtype.Text, accountValidation []byte) bool {
+	normalizedStatus := strings.TrimSpace(status)
+	if normalizedStatus == "" || normalizedStatus == "submitted" {
+		return false
+	}
+
+	normalizedSignState := strings.ToUpper(strings.TrimSpace(signState.String))
+	if signState.Valid && normalizedSignState == "UNSIGNED" {
+		return false
+	}
+
+	hasLegalValidation := legalValidationURL.Valid && strings.TrimSpace(legalValidationURL.String) != ""
+	hasAccountValidation := len(accountValidation) > 0
+	if normalizedStatus == "account_need_verify" || normalizedStatus == "to_be_confirmed" || normalizedStatus == "to_be_signed" || normalizedStatus == "signing" || hasLegalValidation || hasAccountValidation {
+		return false
+	}
+
+	return true
 }
 
 func applymentTextChanged(current, next pgtype.Text) bool {
@@ -787,24 +925,32 @@ func (server *Server) getMerchantApplymentStatus(ctx *gin.Context) {
 				applyment.ApplymentID = pgtype.Int8{Int64: wxResp.ApplymentID, Valid: true}
 			}
 
-			updateStatus := mapWechatApplymentStatus(wxResp.ApplymentState)
+			updateStatus := resolveRemoteApplymentStatus(applyment.Status, mapWechatApplymentStatus(wxResp.ApplymentState))
 			nextRejectReason := getRejectReasonFromAuditDetail(wxResp.AuditDetail)
 			nextSignURL := buildApplymentText(wxResp.SignURL)
 			nextSignState := buildApplymentText(wxResp.SignState)
+			nextLegalValidationURL := buildApplymentText(wxResp.LegalValidationURL)
+			nextAccountValidation := wechat.MarshalEcommerceApplymentAccountValidation(wxResp.AccountValidation)
 			nextSubMchID := buildApplymentText(wxResp.SubMchID)
 
 			if updateStatus != applyment.Status ||
+				(!applyment.ApplymentID.Valid && wxResp.ApplymentID > 0) ||
 				applymentTextChanged(applyment.RejectReason, nextRejectReason) ||
 				applymentTextChanged(applyment.SignUrl, nextSignURL) ||
 				applymentTextChanged(applyment.SignState, nextSignState) ||
+				applymentTextChanged(applyment.LegalValidationUrl, nextLegalValidationURL) ||
+				!bytes.Equal(applyment.AccountValidation, nextAccountValidation) ||
 				applymentTextChanged(applyment.SubMchID, nextSubMchID) {
 				_, err = server.store.UpdateEcommerceApplymentStatus(ctx, db.UpdateEcommerceApplymentStatusParams{
-					ID:           applyment.ID,
-					Status:       updateStatus,
-					RejectReason: nextRejectReason,
-					SignUrl:      nextSignURL,
-					SignState:    nextSignState,
-					SubMchID:     nextSubMchID,
+					ID:                 applyment.ID,
+					ApplymentID:        pgtype.Int8{Int64: wxResp.ApplymentID, Valid: wxResp.ApplymentID > 0},
+					Status:             updateStatus,
+					RejectReason:       nextRejectReason,
+					SignUrl:            nextSignURL,
+					SignState:          nextSignState,
+					LegalValidationUrl: nextLegalValidationURL,
+					AccountValidation:  nextAccountValidation,
+					SubMchID:           nextSubMchID,
 				})
 				if err != nil {
 					log.Error().Err(err).Msg("更新进件状态失败")
@@ -815,8 +961,12 @@ func (server *Server) getMerchantApplymentStatus(ctx *gin.Context) {
 			applyment.RejectReason = nextRejectReason
 			applyment.SignUrl = nextSignURL
 			applyment.SignState = nextSignState
+			applyment.LegalValidationUrl = nextLegalValidationURL
+			applyment.AccountValidation = nextAccountValidation
 			applyment.SubMchID = nextSubMchID
-			remoteStatusDesc = strings.TrimSpace(wxResp.ApplymentStateDesc)
+			if shouldUseRemoteApplymentStatusDesc(updateStatus, nextSignState, nextLegalValidationURL, nextAccountValidation) {
+				remoteStatusDesc = strings.TrimSpace(wxResp.ApplymentStateDesc)
+			}
 			remoteLegalValidationURL = strings.TrimSpace(wxResp.LegalValidationURL)
 			remoteAccountValidation = buildApplymentAccountValidationResponse(wxResp.AccountValidation, decryptor)
 
@@ -860,6 +1010,12 @@ func (server *Server) getMerchantApplymentStatus(ctx *gin.Context) {
 	}
 	if applyment.SignState.Valid && applyment.SignState.String != "" {
 		resp.SignState = &applyment.SignState.String
+	}
+	if applyment.LegalValidationUrl.Valid && applyment.LegalValidationUrl.String != "" {
+		resp.LegalValidationURL = &applyment.LegalValidationUrl.String
+	}
+	if storedAccountValidation := buildStoredApplymentAccountValidationResponse(applyment.AccountValidation, decryptor); storedAccountValidation != nil {
+		resp.AccountValidation = storedAccountValidation
 	}
 	if remoteLegalValidationURL != "" {
 		resp.LegalValidationURL = &remoteLegalValidationURL
@@ -1063,7 +1219,7 @@ func mapWechatApplymentStatus(wxStatus string) string {
 	case "APPLYMENT_STATE_FROZEN", "FROZEN":
 		return "frozen"
 	default:
-		return "submitted"
+		return ""
 	}
 }
 
@@ -1075,7 +1231,7 @@ func getApplymentStatusDesc(status string) string {
 	case "pending":
 		return "待提交"
 	case "submitted":
-		return "已提交，等待审核"
+		return "已提交，请立即进入状态页查看签约与账户验证进度"
 	case "checking":
 		return "资料校验中"
 	case "account_need_verify":
@@ -1131,9 +1287,16 @@ type operatorBindBankRequest struct {
 
 // operatorBindBankResponse 运营商绑定银行卡响应
 type operatorBindBankResponse struct {
-	ApplymentID int64  `json:"applyment_id"` // 微信申请单号
-	Status      string `json:"status"`       // 状态
-	Message     string `json:"message"`      // 消息
+	ApplymentID        int64                               `json:"applyment_id"`                   // 微信申请单号
+	Status             string                              `json:"status"`                         // 状态
+	StatusDesc         string                              `json:"status_desc,omitempty"`          // 状态描述
+	Message            string                              `json:"message"`                        // 消息
+	SignURL            *string                             `json:"sign_url,omitempty"`             // 签约链接
+	SignState          *string                             `json:"sign_state,omitempty"`           // 签约状态
+	LegalValidationURL *string                             `json:"legal_validation_url,omitempty"` // 法人扫码验证链接
+	AccountValidation  *applymentAccountValidationResponse `json:"account_validation,omitempty"`   // 汇款验证信息
+	SubMchID           *string                             `json:"sub_mch_id,omitempty"`           // 二级商户号
+	RejectReason       *string                             `json:"reject_reason,omitempty"`        // 拒绝原因
 }
 
 // operatorBindBank godoc
@@ -1237,6 +1400,7 @@ func (server *Server) operatorBindBank(ctx *gin.Context) {
 	if application.LegalPersonIDNumber.Valid {
 		legalPersonIDNumber = application.LegalPersonIDNumber.String
 	}
+	// 这些本地 URL 快照仅用于审计与状态展示，不能在未来重提时直接当成 WeChat media_id 使用。
 	idCardFrontURL := server.publicImageURL(ctx, pgInt8ToPtr(application.IDCardFrontMediaAssetID), media.VariantOriginal)
 	idCardBackURL := server.publicImageURL(ctx, pgInt8ToPtr(application.IDCardBackMediaAssetID), media.VariantOriginal)
 	businessLicenseURL := server.publicImageURL(ctx, pgInt8ToPtr(application.BusinessLicenseMediaAssetID), media.VariantOriginal)
@@ -1377,6 +1541,7 @@ func (server *Server) operatorBindBank(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, operatorBindBankResponse{
 			ApplymentID: submissionResult.ApplymentID,
 			Status:      submissionResult.Status,
+			StatusDesc:  submissionResult.StatusDesc,
 			Message:     submissionResult.Message,
 		})
 		return
@@ -1520,11 +1685,19 @@ func (server *Server) operatorBindBank(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
+	snapshot := buildApplymentSubmissionStatusSnapshot(submissionResult, server.ecommerceClient)
 
 	ctx.JSON(http.StatusOK, operatorBindBankResponse{
-		ApplymentID: submissionResult.ApplymentID,
-		Status:      submissionResult.Status,
-		Message:     submissionResult.Message,
+		ApplymentID:        submissionResult.ApplymentID,
+		Status:             snapshot.Status,
+		StatusDesc:         snapshot.StatusDesc,
+		Message:            snapshot.Message,
+		SignURL:            snapshot.SignURL,
+		SignState:          snapshot.SignState,
+		LegalValidationURL: snapshot.LegalValidationURL,
+		AccountValidation:  snapshot.AccountValidation,
+		SubMchID:           snapshot.SubMchID,
+		RejectReason:       snapshot.RejectReason,
 	})
 }
 
@@ -1651,10 +1824,12 @@ func (server *Server) getOperatorApplymentStatus(ctx *gin.Context) {
 				applyment.ApplymentID = pgtype.Int8{Int64: wxResp.ApplymentID, Valid: true}
 			}
 
-			newStatus := mapWechatApplymentStatus(wxResp.ApplymentState)
+			newStatus := resolveRemoteApplymentStatus(applyment.Status, mapWechatApplymentStatus(wxResp.ApplymentState))
 			nextRejectReason := getRejectReasonFromAuditDetail(wxResp.AuditDetail)
 			nextSignURL := buildApplymentText(wxResp.SignURL)
 			nextSignState := buildApplymentText(wxResp.SignState)
+			nextLegalValidationURL := buildApplymentText(wxResp.LegalValidationURL)
+			nextAccountValidation := wechat.MarshalEcommerceApplymentAccountValidation(wxResp.AccountValidation)
 			nextSubMchID := buildApplymentText(wxResp.SubMchID)
 			if newStatus == "rejected" || newStatus == "canceled" {
 				_, _ = server.store.UpdateOperatorStatus(ctx, db.UpdateOperatorStatusParams{
@@ -1663,17 +1838,23 @@ func (server *Server) getOperatorApplymentStatus(ctx *gin.Context) {
 				})
 			}
 			if newStatus != applyment.Status ||
+				(!applyment.ApplymentID.Valid && wxResp.ApplymentID > 0) ||
 				applymentTextChanged(applyment.RejectReason, nextRejectReason) ||
 				applymentTextChanged(applyment.SignUrl, nextSignURL) ||
 				applymentTextChanged(applyment.SignState, nextSignState) ||
+				applymentTextChanged(applyment.LegalValidationUrl, nextLegalValidationURL) ||
+				!bytes.Equal(applyment.AccountValidation, nextAccountValidation) ||
 				applymentTextChanged(applyment.SubMchID, nextSubMchID) {
 				_, _ = server.store.UpdateEcommerceApplymentStatus(ctx, db.UpdateEcommerceApplymentStatusParams{
-					ID:           applyment.ID,
-					Status:       newStatus,
-					RejectReason: nextRejectReason,
-					SignUrl:      nextSignURL,
-					SignState:    nextSignState,
-					SubMchID:     nextSubMchID,
+					ID:                 applyment.ID,
+					ApplymentID:        pgtype.Int8{Int64: wxResp.ApplymentID, Valid: wxResp.ApplymentID > 0},
+					Status:             newStatus,
+					RejectReason:       nextRejectReason,
+					SignUrl:            nextSignURL,
+					SignState:          nextSignState,
+					LegalValidationUrl: nextLegalValidationURL,
+					AccountValidation:  nextAccountValidation,
+					SubMchID:           nextSubMchID,
 				})
 			}
 
@@ -1690,8 +1871,12 @@ func (server *Server) getOperatorApplymentStatus(ctx *gin.Context) {
 			applyment.RejectReason = nextRejectReason
 			applyment.SignUrl = nextSignURL
 			applyment.SignState = nextSignState
+			applyment.LegalValidationUrl = nextLegalValidationURL
+			applyment.AccountValidation = nextAccountValidation
 			applyment.SubMchID = nextSubMchID
-			remoteStatusDesc = strings.TrimSpace(wxResp.ApplymentStateDesc)
+			if shouldUseRemoteApplymentStatusDesc(newStatus, nextSignState, nextLegalValidationURL, nextAccountValidation) {
+				remoteStatusDesc = strings.TrimSpace(wxResp.ApplymentStateDesc)
+			}
 			remoteLegalValidationURL = strings.TrimSpace(wxResp.LegalValidationURL)
 			remoteAccountValidation = buildApplymentAccountValidationResponse(wxResp.AccountValidation, decryptor)
 		}
@@ -1730,6 +1915,12 @@ func (server *Server) getOperatorApplymentStatus(ctx *gin.Context) {
 	}
 	if applyment.SignState.Valid {
 		resp.SignState = &applyment.SignState.String
+	}
+	if applyment.LegalValidationUrl.Valid && applyment.LegalValidationUrl.String != "" {
+		resp.LegalValidationURL = &applyment.LegalValidationUrl.String
+	}
+	if storedAccountValidation := buildStoredApplymentAccountValidationResponse(applyment.AccountValidation, decryptor); storedAccountValidation != nil {
+		resp.AccountValidation = storedAccountValidation
 	}
 	if remoteLegalValidationURL != "" {
 		resp.LegalValidationURL = &remoteLegalValidationURL

@@ -195,6 +195,46 @@ func TestProcessTaskApplymentResult_Success(t *testing.T) {
 	}
 }
 
+func TestProcessTaskApplymentResult_AuditingUnsignedStillTriggersPendingNotification(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	distributor := mockwk.NewMockTaskDistributor(ctrl)
+
+	store.EXPECT().
+		GetMerchant(gomock.Any(), int64(100)).
+		Return(db.Merchant{
+			ID:          100,
+			OwnerUserID: 1001,
+			Name:        "测试商户",
+		}, nil)
+
+	distributor.EXPECT().
+		DistributeTaskSendNotification(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, payload *worker.SendNotificationPayload, _ ...asynq.Option) error {
+			require.Equal(t, int64(1001), payload.UserID)
+			require.Equal(t, "微信支付开户待处理", payload.Title)
+			require.Contains(t, payload.Content, "需要签约")
+			return nil
+		})
+
+	processor := worker.NewTestTaskProcessor(store, distributor, nil, nil)
+	payload, err := json.Marshal(worker.ApplymentResultPayload{
+		ApplymentID:     15,
+		OutRequestNo:    "APPLY_M_15_1234567890",
+		ApplymentStatus: "auditing",
+		SignState:       "UNSIGNED",
+		SubjectType:     "merchant",
+		SubjectID:       100,
+	})
+	require.NoError(t, err)
+
+	task := asynq.NewTask(worker.TaskProcessApplymentResult, payload)
+	err = processor.ProcessTaskApplymentResult(context.Background(), task)
+	require.NoError(t, err)
+}
+
 func TestProcessTaskApplymentResult_Rejected(t *testing.T) {
 	testCases := []struct {
 		name        string

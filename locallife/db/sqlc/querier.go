@@ -1218,6 +1218,7 @@ type Querier interface {
 	// 商户查询自己的申诉列表
 	ListMerchantAppealsForMerchant(ctx context.Context, arg ListMerchantAppealsForMerchantParams) ([]ListMerchantAppealsForMerchantRow, error)
 	ListMerchantApplications(ctx context.Context, arg ListMerchantApplicationsParams) ([]MerchantApplication, error)
+	ListMerchantApplymentsPendingSettlementVerification(ctx context.Context, arg ListMerchantApplymentsPendingSettlementVerificationParams) ([]ListMerchantApplymentsPendingSettlementVerificationRow, error)
 	ListMerchantBrandsByGroup(ctx context.Context, groupID int64) ([]MerchantBrand, error)
 	ListMerchantBusinessHours(ctx context.Context, merchantID int64) ([]MerchantBusinessHour, error)
 	ListMerchantBusinessHoursAll(ctx context.Context, merchantID int64) ([]MerchantBusinessHour, error)
@@ -1452,6 +1453,7 @@ type Querier interface {
 	MarkClaimRecoveryPaid(ctx context.Context, id int64) (ClaimRecovery, error)
 	MarkClaimRecoveryPending(ctx context.Context, id int64) (ClaimRecovery, error)
 	MarkClaimRecoveryWaived(ctx context.Context, id int64) (ClaimRecovery, error)
+	MarkEcommerceApplymentSettlementVerifyFailedNotified(ctx context.Context, id int64) (EcommerceApplyment, error)
 	MarkNotificationAsPushed(ctx context.Context, id int64) error
 	MarkNotificationAsRead(ctx context.Context, arg MarkNotificationAsReadParams) (Notification, error)
 	MarkOCRJobProcessing(ctx context.Context, arg MarkOCRJobProcessingParams) (OcrJob, error)
@@ -1621,6 +1623,7 @@ type Querier interface {
 	UpdateDishOnlineStatus(ctx context.Context, arg UpdateDishOnlineStatusParams) error
 	UpdateDishStats(ctx context.Context, arg UpdateDishStatsParams) error
 	UpdateDishesCategory(ctx context.Context, arg UpdateDishesCategoryParams) error
+	UpdateEcommerceApplymentSettlementVerification(ctx context.Context, arg UpdateEcommerceApplymentSettlementVerificationParams) (EcommerceApplyment, error)
 	UpdateEcommerceApplymentStatus(ctx context.Context, arg UpdateEcommerceApplymentStatusParams) (EcommerceApplyment, error)
 	UpdateEcommerceApplymentSubMchID(ctx context.Context, arg UpdateEcommerceApplymentSubMchIDParams) (EcommerceApplyment, error)
 	UpdateEcommerceApplymentToSubmitted(ctx context.Context, arg UpdateEcommerceApplymentToSubmittedParams) (EcommerceApplyment, error)

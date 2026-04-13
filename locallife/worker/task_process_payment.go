@@ -391,6 +391,7 @@ type ApplymentResultPayload struct {
 	OutRequestNo    string `json:"out_request_no"`   // 业务申请编号
 	ApplymentState  string `json:"applyment_state"`  // 进件状态
 	ApplymentStatus string `json:"applyment_status"` // 本地映射状态
+	SignState       string `json:"sign_state"`       // 签约状态
 	SubMchID        string `json:"sub_mch_id"`       // 二级商户号（开户成功时返回）
 	SubjectType     string `json:"subject_type"`     // 主体类型：merchant/operator
 	SubjectID       int64  `json:"subject_id"`       // 主体ID
@@ -583,6 +584,7 @@ func (distributor *RedisTaskDistributor) DistributeTaskProcessApplymentResult(
 		Str("queue", info.Queue).
 		Int64("applyment_id", payload.ApplymentID).
 		Str("applyment_state", payload.ApplymentState).
+		Str("sign_state", payload.SignState).
 		Msg("enqueued applyment result task")
 
 	return nil
@@ -2765,6 +2767,7 @@ func (processor *RedisTaskProcessor) ProcessTaskApplymentResult(ctx context.Cont
 		Int64("applyment_id", payload.ApplymentID).
 		Str("applyment_state", payload.ApplymentState).
 		Str("applyment_status", payload.ApplymentStatus).
+		Str("sign_state", payload.SignState).
 		Str("sub_mch_id", payload.SubMchID).
 		Msg("processing applyment result")
 

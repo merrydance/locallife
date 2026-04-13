@@ -2842,12 +2842,14 @@ func TestHandleApplymentStateNotify_PreservesStoredSignFields(t *testing.T) {
 
 	notificationID := util.RandomString(32)
 	applyment := db.EcommerceApplyment{
-		ID:           88,
-		SubjectType:  "merchant",
-		SubjectID:    200,
-		OutRequestNo: "APPLY_M_88_1234567890",
-		SignUrl:      pgtype.Text{String: "https://sign.example.com/keep", Valid: true},
-		SignState:    pgtype.Text{String: "UNSIGNED", Valid: true},
+		ID:                 88,
+		SubjectType:        "merchant",
+		SubjectID:          200,
+		OutRequestNo:       "APPLY_M_88_1234567890",
+		SignUrl:            pgtype.Text{String: "https://sign.example.com/keep", Valid: true},
+		SignState:          pgtype.Text{String: "UNSIGNED", Valid: true},
+		LegalValidationUrl: pgtype.Text{String: "https://wx.example.com/legal-keep", Valid: true},
+		AccountValidation:  wechat.MarshalEcommerceApplymentAccountValidation(&wechat.EcommerceApplymentAccountValidation{Remark: "keep-existing-validation"}),
 	}
 
 	ecommerceClient.EXPECT().
@@ -2872,12 +2874,14 @@ func TestHandleApplymentStateNotify_PreservesStoredSignFields(t *testing.T) {
 
 	store.EXPECT().
 		UpdateEcommerceApplymentStatus(gomock.Any(), db.UpdateEcommerceApplymentStatusParams{
-			ID:           applyment.ID,
-			Status:       "account_need_verify",
-			RejectReason: pgtype.Text{},
-			SignUrl:      applyment.SignUrl,
-			SignState:    applyment.SignState,
-			SubMchID:     applyment.SubMchID,
+			ID:                 applyment.ID,
+			Status:             "account_need_verify",
+			RejectReason:       pgtype.Text{},
+			SignUrl:            applyment.SignUrl,
+			SignState:          applyment.SignState,
+			LegalValidationUrl: applyment.LegalValidationUrl,
+			AccountValidation:  applyment.AccountValidation,
+			SubMchID:           applyment.SubMchID,
 		}).
 		Times(1).
 		Return(applyment, nil)
@@ -2983,6 +2987,11 @@ func TestHandleApplymentStateNotify_PersistsSubMchIDBeforeFinishWithoutActivatio
 
 	server.router.ServeHTTP(recorder, request)
 	assertWechatNoContentResponse(t, recorder)
+}
+
+func TestResolveApplymentCallbackStatus(t *testing.T) {
+	require.Equal(t, "auditing", resolveApplymentCallbackStatus("auditing", "NEW_UPSTREAM_STATE"))
+	require.Equal(t, "account_need_verify", resolveApplymentCallbackStatus("auditing", "ACCOUNT_NEED_VERIFY"))
 }
 
 // TestHandleProfitSharingNotifyIdempotency 测试分账回调的幂等性检查

@@ -232,6 +232,20 @@ func TestMerchantBindBankAPI(t *testing.T) {
 					UpdateMerchantStatus(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(db.Merchant{}, nil)
+
+				store.EXPECT().
+					UpdateEcommerceApplymentStatus(gomock.Any(), gomock.AssignableToTypeOf(db.UpdateEcommerceApplymentStatusParams{})).
+					Times(1).
+					Return(db.EcommerceApplyment{}, nil)
+
+				ecommerceClient.EXPECT().
+					QueryEcommerceApplymentByID(gomock.Any(), int64(123456789)).
+					Times(1).
+					Return(&wechat.EcommerceApplymentQueryResponse{
+						ApplymentID:    123456789,
+						ApplymentState: "NEED_SIGN",
+						SignURL:        "https://wx.example.com/sign/merchant",
+					}, nil)
 			},
 			buildWechatStubs: func(store *mockdb.MockStore, wechatClient *mockwechat.MockWechatClient) {
 				expectedObjectKey := buildMerchantStorefrontQRCodeObjectKey(merchant.ID)
@@ -280,7 +294,10 @@ func TestMerchantBindBankAPI(t *testing.T) {
 				var response merchantBindBankResponse
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, int64(123456789), response.ApplymentID)
-				require.Equal(t, "submitted", response.Status)
+				require.Equal(t, "to_be_signed", response.Status)
+				require.Equal(t, "待签约，请点击签约链接完成签约", response.StatusDesc)
+				require.NotNil(t, response.SignURL)
+				require.Equal(t, "https://wx.example.com/sign/merchant", *response.SignURL)
 			},
 		},
 		{
@@ -408,6 +425,19 @@ func TestMerchantBindBankAPI(t *testing.T) {
 					UpdateMerchantStatus(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(db.Merchant{}, nil)
+
+				store.EXPECT().
+					UpdateEcommerceApplymentStatus(gomock.Any(), gomock.AssignableToTypeOf(db.UpdateEcommerceApplymentStatusParams{})).
+					Times(1).
+					Return(db.EcommerceApplyment{}, nil)
+
+				ecommerceClient.EXPECT().
+					QueryEcommerceApplymentByID(gomock.Any(), int64(22334455)).
+					Times(1).
+					Return(&wechat.EcommerceApplymentQueryResponse{
+						ApplymentID:    22334455,
+						ApplymentState: "AUDITING",
+					}, nil)
 			},
 			buildWechatStubs: func(store *mockdb.MockStore, wechatClient *mockwechat.MockWechatClient) {
 				expectedObjectKey := buildMerchantStorefrontQRCodeObjectKey(merchant.ID)
@@ -443,7 +473,8 @@ func TestMerchantBindBankAPI(t *testing.T) {
 				var response merchantBindBankResponse
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, int64(22334455), response.ApplymentID)
-				require.Equal(t, "submitted", response.Status)
+				require.Equal(t, "auditing", response.Status)
+				require.Equal(t, "审核中", response.StatusDesc)
 			},
 		},
 		{
@@ -1153,6 +1184,11 @@ func TestMapWechatApplymentStatus(t *testing.T) {
 			wxStatus: "FROZEN",
 			expected: "frozen",
 		},
+		{
+			name:     "UnknownState",
+			wxStatus: "NEW_UPSTREAM_STATE",
+			expected: "",
+		},
 	}
 
 	for i := range testCases {
@@ -1161,6 +1197,33 @@ func TestMapWechatApplymentStatus(t *testing.T) {
 			require.Equal(t, tc.expected, mapWechatApplymentStatus(tc.wxStatus))
 		})
 	}
+}
+
+func TestShouldUseRemoteApplymentStatusDesc(t *testing.T) {
+	require.False(t, shouldUseRemoteApplymentStatusDesc(
+		"submitted",
+		pgtype.Text{},
+		pgtype.Text{},
+		nil,
+	))
+	require.False(t, shouldUseRemoteApplymentStatusDesc(
+		"auditing",
+		pgtype.Text{String: "UNSIGNED", Valid: true},
+		pgtype.Text{},
+		nil,
+	))
+	require.False(t, shouldUseRemoteApplymentStatusDesc(
+		"auditing",
+		pgtype.Text{},
+		pgtype.Text{String: "https://wx.example.com/legal", Valid: true},
+		nil,
+	))
+	require.True(t, shouldUseRemoteApplymentStatusDesc(
+		"auditing",
+		pgtype.Text{},
+		pgtype.Text{},
+		nil,
+	))
 }
 
 // ==================== 进件回调测试 ====================

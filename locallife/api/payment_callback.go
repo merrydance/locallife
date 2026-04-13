@@ -2686,9 +2686,10 @@ func (server *Server) handleApplymentStateNotify(ctx *gin.Context) {
 		return
 	}
 
-	// 映射状态
-	newStatus := mapApplymentStateToDBStatus(resource.ApplymentState)
-	if newStatus == "finish" && resource.SubMchID == "" {
+	// 映射状态；未知上游状态时保持本地状态，避免查询/回调入口写入不一致语义。
+	mappedStatus := mapApplymentStateToDBStatus(resource.ApplymentState)
+	newStatus := resolveApplymentCallbackStatus(applyment.Status, resource.ApplymentState)
+	if mappedStatus == "finish" && resource.SubMchID == "" {
 		newStatus = "submitted"
 	}
 	shouldActivate := newStatus == "finish" && resource.SubMchID != ""
@@ -2738,12 +2739,15 @@ func (server *Server) handleApplymentStateNotify(ctx *gin.Context) {
 		}
 		// 更新进件状态
 		_, err = server.store.UpdateEcommerceApplymentStatus(ctx, db.UpdateEcommerceApplymentStatusParams{
-			ID:           applyment.ID,
-			Status:       newStatus,
-			RejectReason: pgtype.Text{},     // 如果有驳回原因需要主动查询
-			SignUrl:      applyment.SignUrl, // 回调资源不带签约字段，保留已落库值避免被清空
-			SignState:    applyment.SignState,
-			SubMchID:     nextSubMchID,
+			ID:                 applyment.ID,
+			ApplymentID:        applyment.ApplymentID,
+			Status:             newStatus,
+			RejectReason:       pgtype.Text{},     // 如果有驳回原因需要主动查询
+			SignUrl:            applyment.SignUrl, // 回调资源不带签约字段，保留已落库值避免被清空
+			SignState:          applyment.SignState,
+			LegalValidationUrl: applyment.LegalValidationUrl,
+			AccountValidation:  applyment.AccountValidation,
+			SubMchID:           nextSubMchID,
 		})
 		if err != nil {
 			log.Error().Err(err).Int64("applyment_id", applyment.ID).Msg("update applyment status")
@@ -2772,6 +2776,7 @@ func (server *Server) handleApplymentStateNotify(ctx *gin.Context) {
 				OutRequestNo:    resource.OutRequestNo,
 				ApplymentState:  resource.ApplymentState,
 				ApplymentStatus: newStatus,
+				SignState:       strings.TrimSpace(applyment.SignState.String),
 				SubMchID:        resource.SubMchID,
 				SubjectType:     applyment.SubjectType,
 				SubjectID:       applyment.SubjectID,
@@ -2831,8 +2836,16 @@ func mapApplymentStateToDBStatus(wechatState string) string {
 	case "CANCELED":
 		return "canceled"
 	default:
-		return wechatState
+		return ""
 	}
+}
+
+func resolveApplymentCallbackStatus(currentStatus, wechatState string) string {
+	mappedStatus := mapApplymentStateToDBStatus(wechatState)
+	if strings.TrimSpace(mappedStatus) == "" {
+		return currentStatus
+	}
+	return mappedStatus
 }
 
 // handleOrderSettlementNotify 处理微信订单结算事件通知

@@ -250,6 +250,35 @@ func TestUpdateEcommerceApplymentStatus(t *testing.T) {
 	}
 }
 
+func TestUpdateEcommerceApplymentStatusPersistsVerificationFields(t *testing.T) {
+	applyment := createRandomEcommerceApplymentForMerchant(t)
+	accountValidation := []byte(`{"pay_amount":66,"destination_account_number":"6222000000001234","remark":"verify"}`)
+
+	updated, err := testStore.UpdateEcommerceApplymentStatus(context.Background(), UpdateEcommerceApplymentStatusParams{
+		ID:                 applyment.ID,
+		ApplymentID:        pgtype.Int8{Int64: 55667788, Valid: true},
+		Status:             "account_need_verify",
+		RejectReason:       pgtype.Text{},
+		SignUrl:            pgtype.Text{},
+		SignState:          pgtype.Text{},
+		LegalValidationUrl: pgtype.Text{String: "https://wx.example.com/legal-check", Valid: true},
+		AccountValidation:  accountValidation,
+		SubMchID:           pgtype.Text{},
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(55667788), updated.ApplymentID.Int64)
+	require.True(t, updated.LegalValidationUrl.Valid)
+	require.Equal(t, "https://wx.example.com/legal-check", updated.LegalValidationUrl.String)
+	require.JSONEq(t, string(accountValidation), string(updated.AccountValidation))
+
+	found, err := testStore.GetEcommerceApplyment(context.Background(), applyment.ID)
+	require.NoError(t, err)
+	require.Equal(t, int64(55667788), found.ApplymentID.Int64)
+	require.True(t, found.LegalValidationUrl.Valid)
+	require.Equal(t, "https://wx.example.com/legal-check", found.LegalValidationUrl.String)
+	require.JSONEq(t, string(accountValidation), string(found.AccountValidation))
+}
+
 func TestUpdateEcommerceApplymentSubMchID(t *testing.T) {
 	applyment := createRandomEcommerceApplymentForMerchant(t)
 

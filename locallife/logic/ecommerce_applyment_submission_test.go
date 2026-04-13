@@ -370,3 +370,125 @@ func TestSubmitEcommerceApplymentSubmittedSyncFailure(t *testing.T) {
 	require.ErrorContains(t, err, "同步微信进件提交状态失败")
 	require.Equal(t, ApplymentSubjectStatusBindbankSubmitted, updatedStatus)
 }
+
+func TestSubmitEcommerceApplymentReturnsInitialQueryStatus(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	applyment := db.EcommerceApplyment{ID: util.RandomInt(1, 1000), OutRequestNo: "OUT_REQ_002"}
+	updatedStatus := ""
+
+	ecommerceClient.EXPECT().
+		CreateEcommerceApplyment(gomock.Any(), gomock.AssignableToTypeOf(&wechat.EcommerceApplymentRequest{})).
+		Return(&wechat.EcommerceApplymentResponse{ApplymentID: 22334455}, nil)
+
+	store.EXPECT().
+		UpdateEcommerceApplymentToSubmitted(gomock.Any(), db.UpdateEcommerceApplymentToSubmittedParams{
+			ID:          applyment.ID,
+			ApplymentID: pgtype.Int8{Int64: 22334455, Valid: true},
+		}).
+		Return(db.EcommerceApplyment{}, nil)
+
+	store.EXPECT().
+		UpdateEcommerceApplymentStatus(gomock.Any(), db.UpdateEcommerceApplymentStatusParams{
+			ID:                 applyment.ID,
+			ApplymentID:        pgtype.Int8{Int64: 22334455, Valid: true},
+			Status:             "account_need_verify",
+			RejectReason:       pgtype.Text{},
+			SignUrl:            pgtype.Text{String: "https://wx.example.com/sign", Valid: true},
+			SignState:          pgtype.Text{},
+			LegalValidationUrl: pgtype.Text{},
+			AccountValidation:  nil,
+			SubMchID:           pgtype.Text{},
+		}).
+		Return(db.EcommerceApplyment{}, nil)
+
+	ecommerceClient.EXPECT().
+		QueryEcommerceApplymentByID(gomock.Any(), int64(22334455)).
+		Return(&wechat.EcommerceApplymentQueryResponse{
+			ApplymentID:    22334455,
+			OutRequestNo:   "OUT_REQ_002",
+			ApplymentState: "ACCOUNT_NEED_VERIFY",
+			SignURL:        "https://wx.example.com/sign",
+		}, nil)
+
+	result, err := SubmitEcommerceApplyment(context.Background(), store, ecommerceClient, func(_ context.Context, status string) error {
+		updatedStatus = status
+		return nil
+	}, SubmitEcommerceApplymentInput{
+		Applyment:     applyment,
+		WechatRequest: &wechat.EcommerceApplymentRequest{OutRequestNo: "OUT_REQ_002"},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, ApplymentSubjectStatusBindbankSubmitted, updatedStatus)
+	require.Equal(t, "account_need_verify", result.Status)
+	require.Equal(t, "待账户验证", result.StatusDesc)
+	require.Equal(t, "待账户验证", result.Message)
+	require.NotNil(t, result.InitialQueryResponse)
+	require.Equal(t, "https://wx.example.com/sign", result.InitialQueryResponse.SignURL)
+}
+
+func TestSubmitEcommerceApplymentFallsBackToOutRequestNoForInitialQuery(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	applyment := db.EcommerceApplyment{ID: util.RandomInt(1, 1000), OutRequestNo: "OUT_REQ_003"}
+
+	ecommerceClient.EXPECT().
+		CreateEcommerceApplyment(gomock.Any(), gomock.AssignableToTypeOf(&wechat.EcommerceApplymentRequest{})).
+		Return(&wechat.EcommerceApplymentResponse{ApplymentID: 99887766}, nil)
+
+	store.EXPECT().
+		UpdateEcommerceApplymentToSubmitted(gomock.Any(), db.UpdateEcommerceApplymentToSubmittedParams{
+			ID:          applyment.ID,
+			ApplymentID: pgtype.Int8{Int64: 99887766, Valid: true},
+		}).
+		Return(db.EcommerceApplyment{}, nil)
+
+	store.EXPECT().
+		UpdateEcommerceApplymentStatus(gomock.Any(), db.UpdateEcommerceApplymentStatusParams{
+			ID:                 applyment.ID,
+			ApplymentID:        pgtype.Int8{Int64: 99887766, Valid: true},
+			Status:             "to_be_signed",
+			RejectReason:       pgtype.Text{},
+			SignUrl:            pgtype.Text{},
+			SignState:          pgtype.Text{},
+			LegalValidationUrl: pgtype.Text{},
+			AccountValidation:  nil,
+			SubMchID:           pgtype.Text{},
+		}).
+		Return(db.EcommerceApplyment{}, nil)
+
+	ecommerceClient.EXPECT().
+		QueryEcommerceApplymentByID(gomock.Any(), int64(99887766)).
+		Return(nil, fmt.Errorf("query by id failed"))
+
+	ecommerceClient.EXPECT().
+		QueryEcommerceApplymentByOutRequestNo(gomock.Any(), "OUT_REQ_003").
+		Return(&wechat.EcommerceApplymentQueryResponse{
+			ApplymentID:        99887766,
+			OutRequestNo:       "OUT_REQ_003",
+			ApplymentState:     "NEED_SIGN",
+			ApplymentStateDesc: "待签约",
+		}, nil)
+
+	result, err := SubmitEcommerceApplyment(context.Background(), store, ecommerceClient, nil, SubmitEcommerceApplymentInput{
+		Applyment:     applyment,
+		WechatRequest: &wechat.EcommerceApplymentRequest{OutRequestNo: "OUT_REQ_003"},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, "to_be_signed", result.Status)
+	require.Equal(t, "待签约，请点击签约链接完成签约", result.StatusDesc)
+	require.NotNil(t, result.InitialQueryResponse)
+}
+
+func TestMapWechatApplymentStateToSubmissionStatus(t *testing.T) {
+	require.Equal(t, "to_be_signed", mapWechatApplymentStateToSubmissionStatus("NEED_SIGN"))
+	require.Equal(t, "", mapWechatApplymentStateToSubmissionStatus("NEW_UPSTREAM_STATE"))
+}

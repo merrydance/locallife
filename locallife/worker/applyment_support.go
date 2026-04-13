@@ -9,6 +9,23 @@ import (
 	"github.com/merrydance/locallife/wechat"
 )
 
+func normalizeApplymentSignState(signState string) string {
+	return strings.ToUpper(strings.TrimSpace(signState))
+}
+
+func applymentNeedsSignFollowUp(status, signState string) bool {
+	if normalizeApplymentSignState(signState) != "UNSIGNED" {
+		return false
+	}
+
+	switch status {
+	case "submitted", "checking", "auditing", "signing", "to_be_signed":
+		return true
+	default:
+		return false
+	}
+}
+
 func mapWechatApplymentStateToStatus(wechatState string) string {
 	switch strings.TrimSpace(wechatState) {
 	case "APPLYMENT_STATE_EDITTING":
@@ -34,7 +51,7 @@ func mapWechatApplymentStateToStatus(wechatState string) string {
 	case "APPLYMENT_STATE_CANCELED", "CANCELED":
 		return "canceled"
 	default:
-		return wechatState
+		return ""
 	}
 }
 
@@ -47,12 +64,28 @@ func normalizeApplymentFollowUpStatus(status, subMchID string) string {
 
 func resolveApplymentResultStatus(payload ApplymentResultPayload) string {
 	if payload.ApplymentStatus != "" {
-		return normalizeApplymentFollowUpStatus(payload.ApplymentStatus, payload.SubMchID)
+		status := normalizeApplymentFollowUpStatus(payload.ApplymentStatus, payload.SubMchID)
+		if applymentNeedsSignFollowUp(status, payload.SignState) {
+			return "to_be_signed"
+		}
+		return status
 	}
-	return normalizeApplymentFollowUpStatus(mapWechatApplymentStateToStatus(payload.ApplymentState), payload.SubMchID)
+	mappedStatus := mapWechatApplymentStateToStatus(payload.ApplymentState)
+	if mappedStatus == "" {
+		return ""
+	}
+	status := normalizeApplymentFollowUpStatus(mappedStatus, payload.SubMchID)
+	if applymentNeedsSignFollowUp(status, payload.SignState) {
+		return "to_be_signed"
+	}
+	return status
 }
 
-func applymentStatusNeedsAsyncFollowUp(status string) bool {
+func applymentStatusNeedsAsyncFollowUp(status, signState string) bool {
+	if applymentNeedsSignFollowUp(status, signState) {
+		return true
+	}
+
 	switch status {
 	case "finish", "rejected", "account_need_verify", "to_be_confirmed", "to_be_signed":
 		return true
@@ -90,12 +123,13 @@ func textValue(value pgtype.Text) string {
 	return value.String
 }
 
-func buildApplymentResultPayload(record db.EcommerceApplymentPendingFollowUp, applymentState, applymentStatus, subMchID string) *ApplymentResultPayload {
+func buildApplymentResultPayload(record db.EcommerceApplymentPendingFollowUp, applymentState, applymentStatus, signState, subMchID string) *ApplymentResultPayload {
 	return &ApplymentResultPayload{
 		ApplymentID:     record.ID,
 		OutRequestNo:    record.OutRequestNo,
 		ApplymentState:  applymentState,
 		ApplymentStatus: normalizeApplymentFollowUpStatus(applymentStatus, subMchID),
+		SignState:       strings.TrimSpace(signState),
 		SubMchID:        strings.TrimSpace(subMchID),
 		SubjectType:     record.SubjectType,
 		SubjectID:       record.SubjectID,

@@ -171,13 +171,30 @@ func TestOperatorBindBankAPI(t *testing.T) {
 					UpdateOperatorStatus(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(db.Operator{}, nil)
+
+				store.EXPECT().
+					UpdateEcommerceApplymentStatus(gomock.Any(), gomock.AssignableToTypeOf(db.UpdateEcommerceApplymentStatusParams{})).
+					Times(1).
+					Return(db.EcommerceApplyment{}, nil)
+
+				ecommerceClient.EXPECT().
+					QueryEcommerceApplymentByID(gomock.Any(), int64(123456789)).
+					Times(1).
+					Return(&wechat.EcommerceApplymentQueryResponse{
+						ApplymentID:    123456789,
+						ApplymentState: "NEED_SIGN",
+						SignURL:        "https://wx.example.com/sign/operator",
+					}, nil)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var response operatorBindBankResponse
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, int64(123456789), response.ApplymentID)
-				require.Equal(t, "submitted", response.Status)
+				require.Equal(t, "to_be_signed", response.Status)
+				require.Equal(t, "待签约，请点击签约链接完成签约", response.StatusDesc)
+				require.NotNil(t, response.SignURL)
+				require.Equal(t, "https://wx.example.com/sign/operator", *response.SignURL)
 			},
 		},
 		{
@@ -298,13 +315,27 @@ func TestOperatorBindBankAPI(t *testing.T) {
 					UpdateOperatorStatus(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(db.Operator{}, nil)
+
+				store.EXPECT().
+					UpdateEcommerceApplymentStatus(gomock.Any(), gomock.AssignableToTypeOf(db.UpdateEcommerceApplymentStatusParams{})).
+					Times(1).
+					Return(db.EcommerceApplyment{}, nil)
+
+				ecommerceClient.EXPECT().
+					QueryEcommerceApplymentByID(gomock.Any(), int64(99887766)).
+					Times(1).
+					Return(&wechat.EcommerceApplymentQueryResponse{
+						ApplymentID:    99887766,
+						ApplymentState: "AUDITING",
+					}, nil)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var response operatorBindBankResponse
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, int64(99887766), response.ApplymentID)
-				require.Equal(t, "submitted", response.Status)
+				require.Equal(t, "auditing", response.Status)
+				require.Equal(t, "审核中", response.StatusDesc)
 			},
 			prepareServer: func(t *testing.T, server *Server) {
 				content := buildTestQRCodePNG(t)
@@ -373,13 +404,27 @@ func TestOperatorBindBankAPI(t *testing.T) {
 					UpdateOperatorStatus(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(db.Operator{}, nil)
+
+				store.EXPECT().
+					UpdateEcommerceApplymentStatus(gomock.Any(), gomock.AssignableToTypeOf(db.UpdateEcommerceApplymentStatusParams{})).
+					Times(1).
+					Return(db.EcommerceApplyment{}, nil)
+
+				ecommerceClient.EXPECT().
+					QueryEcommerceApplymentByID(gomock.Any(), int64(123456789)).
+					Times(1).
+					Return(&wechat.EcommerceApplymentQueryResponse{
+						ApplymentID:    123456789,
+						ApplymentState: "AUDITING",
+					}, nil)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var response operatorBindBankResponse
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, int64(123456789), response.ApplymentID)
-				require.Equal(t, "submitted", response.Status)
+				require.Equal(t, "auditing", response.Status)
+				require.Equal(t, "审核中", response.StatusDesc)
 			},
 		},
 		{
@@ -1101,12 +1146,15 @@ func TestGetOperatorApplymentStatusAPI_QueryBackfillsSubMchIDWhenStatusUnchanged
 
 	store.EXPECT().
 		UpdateEcommerceApplymentStatus(gomock.Any(), db.UpdateEcommerceApplymentStatusParams{
-			ID:           applyment.ID,
-			Status:       "auditing",
-			RejectReason: pgtype.Text{},
-			SignUrl:      pgtype.Text{},
-			SignState:    pgtype.Text{},
-			SubMchID:     pgtype.Text{String: "1900005678", Valid: true},
+			ID:                 applyment.ID,
+			ApplymentID:        pgtype.Int8{Int64: applyment.ApplymentID.Int64, Valid: true},
+			Status:             "auditing",
+			RejectReason:       pgtype.Text{},
+			SignUrl:            pgtype.Text{},
+			SignState:          pgtype.Text{},
+			LegalValidationUrl: pgtype.Text{},
+			AccountValidation:  nil,
+			SubMchID:           pgtype.Text{String: "1900005678", Valid: true},
 		}).
 		Times(1).
 		Return(applyment, nil)
@@ -1163,12 +1211,15 @@ func TestGetOperatorApplymentStatusAPI_RequeriesLocalFinishStatus(t *testing.T) 
 
 	store.EXPECT().
 		UpdateEcommerceApplymentStatus(gomock.Any(), db.UpdateEcommerceApplymentStatusParams{
-			ID:           applyment.ID,
-			Status:       "account_need_verify",
-			RejectReason: pgtype.Text{},
-			SignUrl:      pgtype.Text{},
-			SignState:    pgtype.Text{},
-			SubMchID:     pgtype.Text{String: "1900007788", Valid: true},
+			ID:                 applyment.ID,
+			ApplymentID:        pgtype.Int8{Int64: applyment.ApplymentID.Int64, Valid: true},
+			Status:             "account_need_verify",
+			RejectReason:       pgtype.Text{},
+			SignUrl:            pgtype.Text{},
+			SignState:          pgtype.Text{},
+			LegalValidationUrl: pgtype.Text{},
+			AccountValidation:  nil,
+			SubMchID:           pgtype.Text{String: "1900007788", Valid: true},
 		}).
 		Times(1).
 		Return(applyment, nil)
@@ -1226,12 +1277,15 @@ func TestGetOperatorApplymentStatusAPI_QueryByOutRequestNoWhenApplymentIDMissing
 
 	store.EXPECT().
 		UpdateEcommerceApplymentStatus(gomock.Any(), db.UpdateEcommerceApplymentStatusParams{
-			ID:           applyment.ID,
-			Status:       "auditing",
-			RejectReason: pgtype.Text{},
-			SignUrl:      pgtype.Text{},
-			SignState:    pgtype.Text{},
-			SubMchID:     pgtype.Text{},
+			ID:                 applyment.ID,
+			ApplymentID:        pgtype.Int8{Int64: 987654321, Valid: true},
+			Status:             "auditing",
+			RejectReason:       pgtype.Text{},
+			SignUrl:            pgtype.Text{},
+			SignState:          pgtype.Text{},
+			LegalValidationUrl: pgtype.Text{},
+			AccountValidation:  nil,
+			SubMchID:           pgtype.Text{},
 		}).
 		Times(1).
 		Return(applyment, nil)
@@ -1251,6 +1305,78 @@ func TestGetOperatorApplymentStatusAPI_QueryByOutRequestNoWhenApplymentIDMissing
 	require.Equal(t, "auditing", response.Status)
 	require.NotNil(t, response.ApplymentID)
 	require.EqualValues(t, 987654321, *response.ApplymentID)
+	require.False(t, response.CanSubmit)
+}
+
+func TestGetOperatorApplymentStatusAPI_UsesStoredVerificationFieldsWhenRemoteQueryFails(t *testing.T) {
+	user, _ := randomUser(t)
+	operator := randomOperatorForApplyment(user.ID)
+	operator.Status = "bindbank_submitted"
+	applyment := randomEcommerceApplymentForTest("operator", operator.ID)
+	applyment.Status = "account_need_verify"
+	applyment.ApplymentID = pgtype.Int8{Int64: 55667788, Valid: true}
+	applyment.LegalValidationUrl = pgtype.Text{String: "https://wx.example.com/legal-check", Valid: true}
+	applyment.AccountValidation = wechat.MarshalEcommerceApplymentAccountValidation(&wechat.EcommerceApplymentAccountValidation{
+		PayAmount:                88,
+		DestinationAccountNumber: "6222000000001234",
+		DestinationAccountName:   "深圳市财付通科技有限公司",
+		DestinationAccountBank:   "招商银行",
+		City:                     "深圳",
+		Remark:                   "验证汇款",
+		Deadline:                 "2026-04-30",
+	})
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+
+	store.EXPECT().
+		GetOperatorByUser(gomock.Any(), user.ID).
+		Times(1).
+		Return(operator, nil)
+
+	store.EXPECT().
+		GetLatestEcommerceApplymentBySubject(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(applyment, nil)
+
+	ecommerceClient.EXPECT().
+		QueryEcommerceApplymentByID(gomock.Any(), applyment.ApplymentID.Int64).
+		Times(1).
+		Return(nil, fmt.Errorf("wechat unavailable"))
+
+	ecommerceClient.EXPECT().
+		QueryEcommerceApplymentByOutRequestNo(gomock.Any(), applyment.OutRequestNo).
+		Times(1).
+		Return(nil, fmt.Errorf("wechat unavailable"))
+
+	server := newTestServerWithEcommerce(t, store, ecommerceClient)
+
+	request, err := http.NewRequest(http.MethodGet, "/v1/operator/applyment/status", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var response operatorApplymentStatusResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+	require.Equal(t, "account_need_verify", response.Status)
+	require.NotNil(t, response.ApplymentID)
+	require.EqualValues(t, 55667788, *response.ApplymentID)
+	require.NotNil(t, response.LegalValidationURL)
+	require.Equal(t, "https://wx.example.com/legal-check", *response.LegalValidationURL)
+	require.NotNil(t, response.AccountValidation)
+	require.Equal(t, int64(88), response.AccountValidation.PayAmount)
+	require.Equal(t, "6222000000001234", response.AccountValidation.DestinationAccountNumber)
+	require.Equal(t, "深圳市财付通科技有限公司", response.AccountValidation.DestinationAccountName)
+	require.Equal(t, "招商银行", response.AccountValidation.DestinationAccountBank)
+	require.Equal(t, "深圳", response.AccountValidation.City)
+	require.Equal(t, "验证汇款", response.AccountValidation.Remark)
+	require.Equal(t, "2026-04-30", response.AccountValidation.Deadline)
 	require.False(t, response.CanSubmit)
 }
 

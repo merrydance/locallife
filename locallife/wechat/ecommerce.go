@@ -561,6 +561,32 @@ type EcommerceApplymentAccountValidation struct {
 	Deadline                 string `json:"deadline,omitempty"`
 }
 
+func MarshalEcommerceApplymentAccountValidation(validation *EcommerceApplymentAccountValidation) []byte {
+	if validation == nil {
+		return nil
+	}
+
+	payload, err := json.Marshal(validation)
+	if err != nil {
+		return nil
+	}
+
+	return payload
+}
+
+func UnmarshalEcommerceApplymentAccountValidation(raw []byte) (*EcommerceApplymentAccountValidation, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+
+	var validation EcommerceApplymentAccountValidation
+	if err := json.Unmarshal(raw, &validation); err != nil {
+		return nil, err
+	}
+
+	return &validation, nil
+}
+
 // EcommerceApplymentQueryResponse 二级商户进件查询响应
 type EcommerceApplymentQueryResponse struct {
 	ApplymentID        int64                                `json:"applyment_id"`                   // 微信支付申请单号
