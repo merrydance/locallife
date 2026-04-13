@@ -21,12 +21,20 @@ func writeTestConfigFile(t *testing.T, content string) string {
 	return dir
 }
 
+func testWeChatKey(seed string) string {
+	if len(seed) >= 32 {
+		return seed[:32]
+	}
+
+	return seed + strings.Repeat("!", 32-len(seed))
+}
+
 func testWechatPayAPIV3Key() string {
-	return strings.Repeat("a", 32)
+	return testWeChatKey("wechat-pay-config-test")
 }
 
 func testWechatEcommerceAPIV3Key() string {
-	return strings.Repeat("b", 32)
+	return testWeChatKey("wechat-ecommerce-config-test")
 }
 
 func TestLoadConfig_DefaultsAndTrimQuotes(t *testing.T) {

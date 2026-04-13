@@ -32,8 +32,16 @@ func (fn paymentRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, err
 	return fn(req)
 }
 
+func testWeChatKey(seed string) string {
+	if len(seed) >= 32 {
+		return seed[:32]
+	}
+
+	return seed + strings.Repeat("!", 32-len(seed))
+}
+
 func testAPIV3Key() string {
-	return strings.Repeat("a", 32)
+	return testWeChatKey("wechat-pay-client-test")
 }
 
 // 生成测试用的 RSA 密钥对
