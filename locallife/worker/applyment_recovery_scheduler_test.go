@@ -101,13 +101,12 @@ func TestApplymentRecoverySchedulerRunOnceQueriesSubmittedMerchantAndReconcilesS
 	scheduler.RunOnce()
 }
 
-func TestApplymentRecoverySchedulerRunOnceQueriesOperatorRejectedAndRequeues(t *testing.T) {
+func TestApplymentRecoverySchedulerRunOnceIgnoresOperatorRecords(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
 	distributor := mockwk.NewMockTaskDistributor(ctrl)
-	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
 
 	store.EXPECT().
 		ListEcommerceApplymentsPendingFollowUp(gomock.Any(), gomock.Any()).
@@ -120,49 +119,16 @@ func TestApplymentRecoverySchedulerRunOnceQueriesOperatorRejectedAndRequeues(t *
 			UpdatedAt:    time.Now().Add(-5 * time.Minute),
 		}}, nil)
 
-	ecommerceClient.EXPECT().
-		QueryEcommerceApplymentByOutRequestNo(gomock.Any(), "APPLY_RECOVERY_003").
-		Return(&wechat.EcommerceApplymentQueryResponse{
-			OutRequestNo:   "APPLY_RECOVERY_003",
-			ApplymentState: "REJECTED",
-			AuditDetail: []wechat.ApplymentAuditDetail{{
-				ParamName:    "contact_info.mobile_phone",
-				RejectReason: "手机号不正确",
-			}},
-		}, nil)
-
-	store.EXPECT().
-		UpdateEcommerceApplymentStatus(gomock.Any(), gomock.AssignableToTypeOf(db.UpdateEcommerceApplymentStatusParams{})).
-		DoAndReturn(func(_ context.Context, arg db.UpdateEcommerceApplymentStatusParams) (db.EcommerceApplyment, error) {
-			require.Equal(t, int64(51), arg.ID)
-			require.Equal(t, "rejected", arg.Status)
-			require.True(t, arg.RejectReason.Valid)
-			return db.EcommerceApplyment{ID: arg.ID, Status: arg.Status}, nil
-		})
-
-	store.EXPECT().
-		UpdateOperatorStatus(gomock.Any(), db.UpdateOperatorStatusParams{ID: 61, Status: "active"}).
-		Return(db.Operator{ID: 61, Status: "active"}, nil)
-
-	distributor.EXPECT().
-		DistributeTaskProcessApplymentResult(gomock.Any(), gomock.AssignableToTypeOf(&worker.ApplymentResultPayload{}), gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, payload *worker.ApplymentResultPayload, _ ...asynq.Option) error {
-			require.Equal(t, "REJECTED", payload.ApplymentState)
-			require.Equal(t, "rejected", payload.ApplymentStatus)
-			return nil
-		})
-
-	scheduler := worker.NewApplymentRecoveryScheduler(store, distributor, ecommerceClient)
+	scheduler := worker.NewApplymentRecoveryScheduler(store, distributor, nil)
 	scheduler.RunOnce()
 }
 
-func TestApplymentRecoverySchedulerRunOncePersistsSubMchIDWithoutActivationBeforeFinish(t *testing.T) {
+func TestApplymentRecoverySchedulerRunOnceIgnoresOperatorSubmittedRecords(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
 	distributor := mockwk.NewMockTaskDistributor(ctrl)
-	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
 
 	store.EXPECT().
 		ListEcommerceApplymentsPendingFollowUp(gomock.Any(), gomock.Any()).
@@ -176,39 +142,7 @@ func TestApplymentRecoverySchedulerRunOncePersistsSubMchIDWithoutActivationBefor
 			UpdatedAt:    time.Now().Add(-5 * time.Minute),
 		}}, nil)
 
-	ecommerceClient.EXPECT().
-		QueryEcommerceApplymentByID(gomock.Any(), int64(7711)).
-		Return(&wechat.EcommerceApplymentQueryResponse{
-			ApplymentID:    7711,
-			OutRequestNo:   "APPLY_RECOVERY_004",
-			ApplymentState: "ACCOUNT_NEED_VERIFY",
-			SubMchID:       "sub_mch_7711",
-		}, nil)
-
-	store.EXPECT().
-		UpdateEcommerceApplymentStatus(gomock.Any(), db.UpdateEcommerceApplymentStatusParams{
-			ID:                 71,
-			ApplymentID:        pgtype.Int8{Int64: 7711, Valid: true},
-			Status:             "account_need_verify",
-			RejectReason:       pgtype.Text{},
-			SignUrl:            pgtype.Text{},
-			SignState:          pgtype.Text{},
-			LegalValidationUrl: pgtype.Text{},
-			AccountValidation:  nil,
-			SubMchID:           pgtype.Text{String: "sub_mch_7711", Valid: true},
-		}).
-		Return(db.EcommerceApplyment{ID: 71, Status: "account_need_verify"}, nil)
-
-	distributor.EXPECT().
-		DistributeTaskProcessApplymentResult(gomock.Any(), gomock.AssignableToTypeOf(&worker.ApplymentResultPayload{}), gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, payload *worker.ApplymentResultPayload, _ ...asynq.Option) error {
-			require.Equal(t, "ACCOUNT_NEED_VERIFY", payload.ApplymentState)
-			require.Equal(t, "account_need_verify", payload.ApplymentStatus)
-			require.Equal(t, "sub_mch_7711", payload.SubMchID)
-			return nil
-		})
-
-	scheduler := worker.NewApplymentRecoveryScheduler(store, distributor, ecommerceClient)
+	scheduler := worker.NewApplymentRecoveryScheduler(store, distributor, nil)
 	scheduler.RunOnce()
 }
 

@@ -588,8 +588,6 @@ type Querier interface {
 	// 获取申诉详情（包含索赔和订单信息）
 	GetAppealWithDetails(ctx context.Context, id int64) (GetAppealWithDetailsRow, error)
 	GetApplicableDiscountRules(ctx context.Context, arg GetApplicableDiscountRulesParams) ([]DiscountRule, error)
-	// 获取用户审核通过的运营商申请（用于绑卡开户）
-	GetApprovedOperatorApplicationByUserID(ctx context.Context, userID int64) (OperatorApplication, error)
 	GetBehaviorAction(ctx context.Context, id int64) (BehaviorAction, error)
 	GetBehaviorDecision(ctx context.Context, id int64) (BehaviorDecision, error)
 	GetBehaviorEffectSummary(ctx context.Context, arg GetBehaviorEffectSummaryParams) (GetBehaviorEffectSummaryRow, error)
@@ -1664,6 +1662,7 @@ type Querier interface {
 	UpdateMerchantIsOpen(ctx context.Context, arg UpdateMerchantIsOpenParams) (Merchant, error)
 	UpdateMerchantMembershipSettings(ctx context.Context, arg UpdateMerchantMembershipSettingsParams) (MerchantMembershipSetting, error)
 	UpdateMerchantPaymentConfig(ctx context.Context, arg UpdateMerchantPaymentConfigParams) (MerchantPaymentConfig, error)
+	UpdateMerchantPaymentConfigSettlementApplication(ctx context.Context, arg UpdateMerchantPaymentConfigSettlementApplicationParams) (MerchantPaymentConfig, error)
 	UpdateMerchantProfile(ctx context.Context, arg UpdateMerchantProfileParams) error
 	UpdateMerchantReply(ctx context.Context, arg UpdateMerchantReplyParams) (Review, error)
 	// 更新角色时同时激活员工（从 pending 变为 active）
@@ -1687,8 +1686,6 @@ type Querier interface {
 	UpdateOperatorRules(ctx context.Context, arg UpdateOperatorRulesParams) (Operator, error)
 	// 更新运营商状态（用于过期处理等）
 	UpdateOperatorStatus(ctx context.Context, arg UpdateOperatorStatusParams) (Operator, error)
-	// 更新运营商的微信二级商户号（开户成功后调用）
-	UpdateOperatorSubMchID(ctx context.Context, arg UpdateOperatorSubMchIDParams) (Operator, error)
 	UpdateOrderDisplayConfig(ctx context.Context, arg UpdateOrderDisplayConfigParams) (OrderDisplayConfig, error)
 	UpdateOrderExceptionState(ctx context.Context, arg UpdateOrderExceptionStateParams) (Order, error)
 	UpdateOrderStatus(ctx context.Context, arg UpdateOrderStatusParams) (Order, error)

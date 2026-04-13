@@ -26,7 +26,6 @@ const (
 
 var (
 	ErrMerchantApplymentSubmissionStatusInvalid = errors.New("merchant status does not allow applyment submission")
-	ErrOperatorApplymentSubmissionStatusInvalid = errors.New("operator status does not allow applyment submission")
 	ErrApplymentSubmissionPending               = errors.New("applyment submission pending")
 	ErrApplymentAlreadyRegistered               = errors.New("applyment already registered")
 )
@@ -242,22 +241,6 @@ func ValidateMerchantApplymentSubmissionState(merchantStatus string, existing *d
 		return nil
 	}
 	if IsApplymentSubmissionInFlight(existing.Status, merchantStatus, existing.OutRequestNo) {
-		return ErrApplymentSubmissionPending
-	}
-	if existing.Status == "finish" {
-		return ErrApplymentAlreadyRegistered
-	}
-	return nil
-}
-
-func ValidateOperatorApplymentSubmissionState(operatorStatus string, existing *db.EcommerceApplyment) error {
-	if operatorStatus != "active" && operatorStatus != ApplymentSubjectStatusBindbankSubmitted {
-		return fmt.Errorf("%w: %s", ErrOperatorApplymentSubmissionStatusInvalid, operatorStatus)
-	}
-	if existing == nil {
-		return nil
-	}
-	if IsApplymentSubmissionInFlight(existing.Status, operatorStatus, existing.OutRequestNo) {
 		return ErrApplymentSubmissionPending
 	}
 	if existing.Status == "finish" {

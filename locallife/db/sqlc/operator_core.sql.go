@@ -12,7 +12,7 @@ import (
 )
 
 const getOperatorForUpdate = `-- name: GetOperatorForUpdate :one
-SELECT id, user_id, region_id, name, contact_name, contact_phone, wechat_mch_id, status, created_at, updated_at, contract_start_date, contract_end_date, contract_years, sub_mch_id, balance, wallet_account, rider_deposit, weather_coeff_extreme, weather_coeff_heavy, weather_coeff_moderate, weather_coeff_light FROM operators
+SELECT id, user_id, region_id, name, contact_name, contact_phone, wechat_mch_id, status, created_at, updated_at, contract_start_date, contract_end_date, contract_years, sub_mch_id, balance, wallet_account, rider_deposit, weather_coeff_extreme, weather_coeff_heavy, weather_coeff_moderate, weather_coeff_light, latest_settlement_application_no, latest_settlement_application_submitted_at FROM operators
 WHERE id = $1 LIMIT 1 FOR NO KEY UPDATE
 `
 
@@ -41,6 +41,8 @@ func (q *Queries) GetOperatorForUpdate(ctx context.Context, id int64) (Operator,
 		&i.WeatherCoeffHeavy,
 		&i.WeatherCoeffModerate,
 		&i.WeatherCoeffLight,
+		&i.LatestSettlementApplicationNo,
+		&i.LatestSettlementApplicationSubmittedAt,
 	)
 	return i, err
 }
@@ -65,7 +67,7 @@ const updateOperatorBalance = `-- name: UpdateOperatorBalance :one
 UPDATE operators
 SET balance = balance + $1
 WHERE id = $2
-RETURNING id, user_id, region_id, name, contact_name, contact_phone, wechat_mch_id, status, created_at, updated_at, contract_start_date, contract_end_date, contract_years, sub_mch_id, balance, wallet_account, rider_deposit, weather_coeff_extreme, weather_coeff_heavy, weather_coeff_moderate, weather_coeff_light
+RETURNING id, user_id, region_id, name, contact_name, contact_phone, wechat_mch_id, status, created_at, updated_at, contract_start_date, contract_end_date, contract_years, sub_mch_id, balance, wallet_account, rider_deposit, weather_coeff_extreme, weather_coeff_heavy, weather_coeff_moderate, weather_coeff_light, latest_settlement_application_no, latest_settlement_application_submitted_at
 `
 
 type UpdateOperatorBalanceParams struct {
@@ -98,6 +100,8 @@ func (q *Queries) UpdateOperatorBalance(ctx context.Context, arg UpdateOperatorB
 		&i.WeatherCoeffHeavy,
 		&i.WeatherCoeffModerate,
 		&i.WeatherCoeffLight,
+		&i.LatestSettlementApplicationNo,
+		&i.LatestSettlementApplicationSubmittedAt,
 	)
 	return i, err
 }
@@ -112,7 +116,7 @@ SET
     weather_coeff_light = COALESCE($5, weather_coeff_light),
     updated_at = NOW()
 WHERE id = $6
-RETURNING id, user_id, region_id, name, contact_name, contact_phone, wechat_mch_id, status, created_at, updated_at, contract_start_date, contract_end_date, contract_years, sub_mch_id, balance, wallet_account, rider_deposit, weather_coeff_extreme, weather_coeff_heavy, weather_coeff_moderate, weather_coeff_light
+RETURNING id, user_id, region_id, name, contact_name, contact_phone, wechat_mch_id, status, created_at, updated_at, contract_start_date, contract_end_date, contract_years, sub_mch_id, balance, wallet_account, rider_deposit, weather_coeff_extreme, weather_coeff_heavy, weather_coeff_moderate, weather_coeff_light, latest_settlement_application_no, latest_settlement_application_submitted_at
 `
 
 type UpdateOperatorRulesParams struct {
@@ -156,6 +160,8 @@ func (q *Queries) UpdateOperatorRules(ctx context.Context, arg UpdateOperatorRul
 		&i.WeatherCoeffHeavy,
 		&i.WeatherCoeffModerate,
 		&i.WeatherCoeffLight,
+		&i.LatestSettlementApplicationNo,
+		&i.LatestSettlementApplicationSubmittedAt,
 	)
 	return i, err
 }

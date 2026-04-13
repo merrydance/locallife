@@ -83,7 +83,7 @@ func TestProcessTaskApplymentResult_Success(t *testing.T) {
 			},
 		},
 		{
-			name: "运营商进件成功_发送通知",
+			name: "运营商进件成功结果被忽略",
 			payload: worker.ApplymentResultPayload{
 				ApplymentID:    12,
 				OutRequestNo:   "APPLY_O_12_1234567890",
@@ -93,18 +93,6 @@ func TestProcessTaskApplymentResult_Success(t *testing.T) {
 				SubjectID:      300,
 			},
 			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface, distributor *mockwk.MockTaskDistributor) {
-				store.EXPECT().
-					GetOperator(gomock.Any(), int64(300)).
-					Return(db.Operator{ID: 300, UserID: 3001, Name: "测试运营商"}, nil)
-
-				distributor.EXPECT().
-					DistributeTaskSendNotification(gomock.Any(), gomock.Any()).
-					DoAndReturn(func(_ context.Context, payload *worker.SendNotificationPayload, _ ...asynq.Option) error {
-						require.Equal(t, int64(3001), payload.UserID)
-						require.Equal(t, "微信支付开户成功", payload.Title)
-						require.Contains(t, payload.Content, "测试运营商")
-						return nil
-					})
 			},
 			checkResult: func(t *testing.T, err error) {
 				require.NoError(t, err)
@@ -301,7 +289,7 @@ func TestProcessTaskApplymentResult_Rejected(t *testing.T) {
 			},
 		},
 		{
-			name: "运营商进件被驳回_发送通知",
+			name: "运营商进件驳回结果被忽略",
 			payload: worker.ApplymentResultPayload{
 				ApplymentID:    13,
 				OutRequestNo:   "APPLY_O_13_1234567890",
@@ -310,27 +298,6 @@ func TestProcessTaskApplymentResult_Rejected(t *testing.T) {
 				SubjectID:      300,
 			},
 			buildStubs: func(store *mockdb.MockStore, distributor *mockwk.MockTaskDistributor) {
-				store.EXPECT().
-					GetEcommerceApplyment(gomock.Any(), int64(13)).
-					Return(db.EcommerceApplyment{
-						ID:           13,
-						SubjectType:  "operator",
-						SubjectID:    300,
-						RejectReason: pgtype.Text{String: "资料不完整", Valid: true},
-					}, nil)
-
-				store.EXPECT().
-					GetOperator(gomock.Any(), int64(300)).
-					Return(db.Operator{ID: 300, UserID: 3001, Name: "测试运营商"}, nil)
-
-				distributor.EXPECT().
-					DistributeTaskSendNotification(gomock.Any(), gomock.Any()).
-					DoAndReturn(func(_ context.Context, payload *worker.SendNotificationPayload, _ ...asynq.Option) error {
-						require.Equal(t, int64(3001), payload.UserID)
-						require.Equal(t, "微信支付开户被驳回", payload.Title)
-						require.Contains(t, payload.Content, "资料不完整")
-						return nil
-					})
 			},
 			checkResult: func(t *testing.T, err error) {
 				require.NoError(t, err)
@@ -455,7 +422,7 @@ func TestProcessTaskApplymentResult_Pending(t *testing.T) {
 			},
 		},
 		{
-			name: "运营商待账户验证_发送提醒通知",
+			name: "运营商待账户验证结果被忽略",
 			payload: worker.ApplymentResultPayload{
 				ApplymentID:     14,
 				OutRequestNo:    "APPLY_O_14_1234567890",
@@ -464,18 +431,6 @@ func TestProcessTaskApplymentResult_Pending(t *testing.T) {
 				SubjectID:       300,
 			},
 			buildStubs: func(store *mockdb.MockStore, distributor *mockwk.MockTaskDistributor) {
-				store.EXPECT().
-					GetOperator(gomock.Any(), int64(300)).
-					Return(db.Operator{ID: 300, UserID: 3001, Name: "测试运营商"}, nil)
-
-				distributor.EXPECT().
-					DistributeTaskSendNotification(gomock.Any(), gomock.Any()).
-					DoAndReturn(func(_ context.Context, payload *worker.SendNotificationPayload, _ ...asynq.Option) error {
-						require.Equal(t, int64(3001), payload.UserID)
-						require.Equal(t, "微信支付开户待处理", payload.Title)
-						require.Contains(t, payload.Content, "账户验证")
-						return nil
-					})
 			},
 			checkResult: func(t *testing.T, err error) {
 				require.NoError(t, err)
@@ -590,10 +545,11 @@ func TestProcessTaskProfitSharing_UsesMerchantRegionActiveOperator(t *testing.T)
 	}
 	merchant := db.Merchant{ID: 15, RegionID: 12, Name: "商户A"}
 	operator := db.Operator{
-		ID:          44,
-		Name:        "区域运营商A",
-		WechatMchID: pgtype.Text{String: "op_mch_44", Valid: true},
+		ID:     44,
+		UserID: 440,
+		Name:   "区域运营商A",
 	}
+	operatorUser := db.User{ID: operator.UserID, WechatOpenid: "operator_openid_44", FullName: "区域运营商A"}
 
 	store.EXPECT().
 		GetPaymentOrder(gomock.Any(), paymentOrder.ID).
@@ -618,8 +574,8 @@ func TestProcessTaskProfitSharing_UsesMerchantRegionActiveOperator(t *testing.T)
 		GetActiveOperatorByRegion(gomock.Any(), merchant.RegionID).
 		Return(operator, nil)
 	store.EXPECT().
-		GetApprovedOperatorApplicationByUserID(gomock.Any(), operator.UserID).
-		Return(db.OperatorApplication{}, db.ErrRecordNotFound)
+		GetUser(gomock.Any(), operator.UserID).
+		Return(operatorUser, nil)
 	store.EXPECT().
 		GetProfitSharingOrderByPaymentOrder(gomock.Any(), paymentOrder.ID).
 		Return(db.ProfitSharingOrder{}, db.ErrRecordNotFound)
@@ -638,11 +594,14 @@ func TestProcessTaskProfitSharing_UsesMerchantRegionActiveOperator(t *testing.T)
 		GetSpAppID().
 		Return("wx_sp_app_1")
 	ecommerceClient.EXPECT().
+		EncryptSensitiveData(operator.Name).
+		Return("encrypted_operator_44", nil)
+	ecommerceClient.EXPECT().
 		AddProfitSharingReceiver(gomock.Any(), gomock.Any()).
 		DoAndReturn(func(_ context.Context, req *wechat.AddReceiverRequest) (*wechat.AddReceiverResponse, error) {
-			require.Equal(t, wechat.ReceiverTypeMerchant, req.Type)
-			require.Equal(t, "op_mch_44", req.Account)
-			require.Equal(t, "区域运营商A", req.Name)
+			require.Equal(t, wechat.ReceiverTypePersonal, req.Type)
+			require.Equal(t, operatorUser.WechatOpenid, req.Account)
+			require.Equal(t, "encrypted_operator_44", req.EncryptedName)
 			return &wechat.AddReceiverResponse{}, nil
 		})
 	ecommerceClient.EXPECT().
@@ -651,8 +610,9 @@ func TestProcessTaskProfitSharing_UsesMerchantRegionActiveOperator(t *testing.T)
 			require.Equal(t, "sub_mch_15", req.SubMchID)
 			require.Equal(t, "wx_txn_901", req.TransactionID)
 			require.Len(t, req.Receivers, 1)
-			require.Equal(t, "op_mch_44", req.Receivers[0].ReceiverAccount)
-			require.Equal(t, "区域运营商A", req.Receivers[0].ReceiverName)
+			require.Equal(t, wechat.ReceiverTypePersonal, req.Receivers[0].Type)
+			require.Equal(t, operatorUser.WechatOpenid, req.Receivers[0].ReceiverAccount)
+			require.Empty(t, req.Receivers[0].ReceiverName)
 			require.Equal(t, int64(2000), req.Receivers[0].Amount)
 			return &wechat.ProfitSharingResponse{OrderID: "ps_wx_3001", Status: "PROCESSING"}, nil
 		})
@@ -703,7 +663,6 @@ func TestProcessTaskProfitSharing_UsesPersonalOperatorOpenID(t *testing.T) {
 		ContactName: "个人运营商联系人",
 	}
 	operatorUser := db.User{ID: operator.UserID, WechatOpenid: "operator_openid_47", FullName: "个人运营商联系人"}
-	operatorApplication := db.OperatorApplication{}
 
 	store.EXPECT().
 		GetPaymentOrder(gomock.Any(), paymentOrder.ID).
@@ -738,9 +697,6 @@ func TestProcessTaskProfitSharing_UsesPersonalOperatorOpenID(t *testing.T) {
 			require.Equal(t, int64(2000), arg.OperatorCommission)
 			return db.ProfitSharingOrder{ID: 3004, OutOrderNo: arg.OutOrderNo}, nil
 		})
-	store.EXPECT().
-		GetApprovedOperatorApplicationByUserID(gomock.Any(), operator.UserID).
-		Return(operatorApplication, nil)
 	store.EXPECT().
 		GetUser(gomock.Any(), operator.UserID).
 		Return(operatorUser, nil)
@@ -788,7 +744,7 @@ func TestProcessTaskProfitSharing_UsesPersonalOperatorOpenID(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestProcessTaskProfitSharing_FailsWhenEnterpriseOperatorSubMchIDMissing(t *testing.T) {
+func TestProcessTaskProfitSharing_FailsWhenOperatorOpenIDMissing(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -815,9 +771,7 @@ func TestProcessTaskProfitSharing_FailsWhenEnterpriseOperatorSubMchIDMissing(t *
 		Name:        "企业运营商待开户",
 		ContactName: "企业运营商联系人",
 	}
-	operatorApplication := db.OperatorApplication{
-		BusinessLicenseNumber: pgtype.Text{String: "91440300TEST123456", Valid: true},
-	}
+	operatorUser := db.User{ID: operator.UserID}
 
 	store.EXPECT().
 		GetPaymentOrder(gomock.Any(), paymentOrder.ID).
@@ -853,8 +807,8 @@ func TestProcessTaskProfitSharing_FailsWhenEnterpriseOperatorSubMchIDMissing(t *
 			return db.ProfitSharingOrder{ID: 3005, OutOrderNo: arg.OutOrderNo}, nil
 		})
 	store.EXPECT().
-		GetApprovedOperatorApplicationByUserID(gomock.Any(), operator.UserID).
-		Return(operatorApplication, nil)
+		GetUser(gomock.Any(), operator.UserID).
+		Return(operatorUser, nil)
 
 	processor := worker.NewTestTaskProcessor(store, nil, nil, ecommerceClient)
 	payloadBytes, err := json.Marshal(worker.ProfitSharingPayload{
@@ -866,7 +820,7 @@ func TestProcessTaskProfitSharing_FailsWhenEnterpriseOperatorSubMchIDMissing(t *
 	task := asynq.NewTask(worker.TaskProcessProfitSharing, payloadBytes)
 	err = processor.ProcessTaskProfitSharing(context.Background(), task)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "resolve operator receiver: operator sub merchant id not configured")
+	require.Contains(t, err.Error(), "resolve operator receiver: operator wechat openid not configured")
 }
 
 func TestProcessTaskProfitSharing_UsesPaymentOrderAmountAsProfitSharingBase(t *testing.T) {
@@ -891,10 +845,11 @@ func TestProcessTaskProfitSharing_UsesPaymentOrderAmountAsProfitSharingBase(t *t
 	}
 	merchant := db.Merchant{ID: 16, RegionID: 13, Name: "商户B"}
 	operator := db.Operator{
-		ID:          45,
-		Name:        "区域运营商B",
-		WechatMchID: pgtype.Text{String: "op_mch_45", Valid: true},
+		ID:     45,
+		UserID: 450,
+		Name:   "区域运营商B",
 	}
+	operatorUser := db.User{ID: operator.UserID, WechatOpenid: "operator_openid_45", FullName: "区域运营商B"}
 
 	store.EXPECT().
 		GetPaymentOrder(gomock.Any(), paymentOrder.ID).
@@ -919,8 +874,8 @@ func TestProcessTaskProfitSharing_UsesPaymentOrderAmountAsProfitSharingBase(t *t
 		GetActiveOperatorByRegion(gomock.Any(), merchant.RegionID).
 		Return(operator, nil)
 	store.EXPECT().
-		GetApprovedOperatorApplicationByUserID(gomock.Any(), operator.UserID).
-		Return(db.OperatorApplication{}, db.ErrRecordNotFound)
+		GetUser(gomock.Any(), operator.UserID).
+		Return(operatorUser, nil)
 	store.EXPECT().
 		GetProfitSharingOrderByPaymentOrder(gomock.Any(), paymentOrder.ID).
 		Return(db.ProfitSharingOrder{}, db.ErrRecordNotFound)
@@ -936,16 +891,22 @@ func TestProcessTaskProfitSharing_UsesPaymentOrderAmountAsProfitSharingBase(t *t
 		GetSpAppID().
 		Return("wx_sp_app_1")
 	ecommerceClient.EXPECT().
+		EncryptSensitiveData(operator.Name).
+		Return("encrypted_operator_45", nil)
+	ecommerceClient.EXPECT().
 		AddProfitSharingReceiver(gomock.Any(), gomock.Any()).
 		DoAndReturn(func(_ context.Context, req *wechat.AddReceiverRequest) (*wechat.AddReceiverResponse, error) {
-			require.Equal(t, "op_mch_45", req.Account)
-			require.Equal(t, "区域运营商B", req.Name)
+			require.Equal(t, wechat.ReceiverTypePersonal, req.Type)
+			require.Equal(t, operatorUser.WechatOpenid, req.Account)
+			require.Equal(t, "encrypted_operator_45", req.EncryptedName)
 			return &wechat.AddReceiverResponse{}, nil
 		})
 	ecommerceClient.EXPECT().
 		CreateProfitSharing(gomock.Any(), gomock.Any()).
 		DoAndReturn(func(_ context.Context, req *wechat.ProfitSharingRequest) (*wechat.ProfitSharingResponse, error) {
-			require.Equal(t, "区域运营商B", req.Receivers[0].ReceiverName)
+			require.Equal(t, wechat.ReceiverTypePersonal, req.Receivers[0].Type)
+			require.Equal(t, operatorUser.WechatOpenid, req.Receivers[0].ReceiverAccount)
+			require.Empty(t, req.Receivers[0].ReceiverName)
 			require.Equal(t, int64(1400), req.Receivers[0].Amount)
 			return &wechat.ProfitSharingResponse{OrderID: "ps_wx_3002", Status: "PROCESSING"}, nil
 		})

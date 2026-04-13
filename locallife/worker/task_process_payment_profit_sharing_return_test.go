@@ -197,7 +197,6 @@ func TestProcessTaskInitiateRefund_BlocksPersonalOperatorProfitSharingReturn(t *
 		OperatorCommission: 900,
 	}
 	operator := db.Operator{ID: 72, UserID: 502, Name: "个人运营商"}
-	operatorApplication := db.OperatorApplication{}
 	operatorUser := db.User{ID: operator.UserID, WechatOpenid: "operator_openid_72"}
 
 	store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil)
@@ -213,7 +212,6 @@ func TestProcessTaskInitiateRefund_BlocksPersonalOperatorProfitSharingReturn(t *
 	}).Return(db.CreateRefundOrderTxResult{RefundOrder: refundOrder}, nil)
 	store.EXPECT().GetProfitSharingOrderByPaymentOrder(gomock.Any(), paymentOrder.ID).Return(profitSharingOrder, nil)
 	store.EXPECT().GetOperator(gomock.Any(), operator.ID).Return(operator, nil)
-	store.EXPECT().GetApprovedOperatorApplicationByUserID(gomock.Any(), operator.UserID).Return(operatorApplication, nil)
 	store.EXPECT().GetUser(gomock.Any(), operator.UserID).Return(operatorUser, nil)
 	store.EXPECT().UpdateRefundOrderToFailed(gomock.Any(), refundOrder.ID).Return(db.RefundOrder{ID: refundOrder.ID, Status: "failed"}, nil)
 

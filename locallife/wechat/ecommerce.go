@@ -2190,7 +2190,7 @@ type ModifySubMerchantSettlementRequest struct {
 	BankName      string `json:"bank_name,omitempty"`      // 开户银行全称（含支行）
 	BankBranchID  string `json:"bank_branch_id,omitempty"` // 开户银行联行号
 	AccountNumber string `json:"account_number"`           // 银行账号（微信支付公钥加密）
-	AccountName   string `json:"account_name,omitempty"`   // 开户名称（微信支付公钥加密，选填）
+	AccountName   string `json:"account_name"`             // 开户名称（微信支付公钥加密，必填）
 }
 
 // ModifySubMerchantSettlementResponse 修改结算账户应答
@@ -2202,7 +2202,7 @@ type ModifySubMerchantSettlementResponse struct {
 func (c *EcommerceClient) ModifySubMerchantSettlement(ctx context.Context, subMchID string, req *ModifySubMerchantSettlementRequest) (*ModifySubMerchantSettlementResponse, error) {
 	requestURL := fmt.Sprintf(apply4subModifySettlementURL, subMchID)
 
-	respBody, err := c.doRequest(ctx, http.MethodPost, requestURL, req)
+	respBody, err := c.doRequestWithWechatSerial(ctx, http.MethodPost, requestURL, req)
 	if err != nil {
 		return nil, fmt.Errorf("modify sub merchant settlement: %w", err)
 	}

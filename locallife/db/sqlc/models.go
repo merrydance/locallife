@@ -1103,6 +1103,10 @@ type MerchantPaymentConfig struct {
 	Status    string    `json:"status"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+	// 最近一次结算银行卡变更申请单号
+	LatestSettlementApplicationNo pgtype.Text `json:"latest_settlement_application_no"`
+	// 最近一次结算银行卡变更申请提交时间
+	LatestSettlementApplicationSubmittedAt pgtype.Timestamptz `json:"latest_settlement_application_submitted_at"`
 }
 
 // 商户信任画像表 - 信用分驱动食安熔断
@@ -1275,6 +1279,10 @@ type Operator struct {
 	WeatherCoeffHeavy    pgtype.Numeric `json:"weather_coeff_heavy"`
 	WeatherCoeffModerate pgtype.Numeric `json:"weather_coeff_moderate"`
 	WeatherCoeffLight    pgtype.Numeric `json:"weather_coeff_light"`
+	// 最近一次结算银行卡变更申请单号
+	LatestSettlementApplicationNo pgtype.Text `json:"latest_settlement_application_no"`
+	// 最近一次结算银行卡变更申请提交时间
+	LatestSettlementApplicationSubmittedAt pgtype.Timestamptz `json:"latest_settlement_application_submitted_at"`
 }
 
 // 运营商入驻申请表，支持草稿保存和人工审核

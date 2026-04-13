@@ -2912,7 +2912,7 @@ func TestHandleApplymentStateNotify_PreservesStoredSignFields(t *testing.T) {
 	assertWechatNoContentResponse(t, recorder)
 }
 
-func TestHandleApplymentStateNotify_PersistsSubMchIDBeforeFinishWithoutActivation(t *testing.T) {
+func TestHandleApplymentStateNotify_IgnoresOperatorApplymentAfterRemoval(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -2948,18 +2948,6 @@ func TestHandleApplymentStateNotify_PersistsSubMchIDBeforeFinishWithoutActivatio
 
 	store.EXPECT().
 		GetEcommerceApplymentByOutRequestNo(gomock.Any(), "APPLY_OP_108_1234567890").
-		Times(1).
-		Return(applyment, nil)
-
-	store.EXPECT().
-		UpdateEcommerceApplymentStatus(gomock.Any(), db.UpdateEcommerceApplymentStatusParams{
-			ID:           applyment.ID,
-			Status:       "account_need_verify",
-			RejectReason: pgtype.Text{},
-			SignUrl:      applyment.SignUrl,
-			SignState:    applyment.SignState,
-			SubMchID:     pgtype.Text{String: "sub_mch_op_108", Valid: true},
-		}).
 		Times(1).
 		Return(applyment, nil)
 

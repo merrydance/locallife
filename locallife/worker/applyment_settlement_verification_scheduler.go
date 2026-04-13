@@ -146,6 +146,22 @@ func (s *ApplymentSettlementVerificationScheduler) verifyApplymentSettlement(ctx
 		return
 	}
 
+	logger := log.Info()
+	if status == "fail" {
+		logger = log.Warn()
+	}
+	logger.
+		Int64("applyment_id", item.ID).
+		Int64("merchant_id", item.SubjectID).
+		Str("sub_mch_id", subMchID).
+		Time("first_trade_at", firstTradeAt).
+		Time("checked_at", runAt).
+		Int32("check_count", item.SettlementVerifyCheckCount+1).
+		Str("verify_result", strings.TrimSpace(resp.VerifyResult)).
+		Str("settlement_verify_status", status).
+		Bool("has_verify_fail_reason", failReason != "").
+		Msg("settlement verification state updated")
+
 	if status != "fail" || item.SettlementVerifyFailedNotifiedAt.Valid {
 		return
 	}

@@ -27,17 +27,6 @@ type integrationMerchantAccountBalanceResponse struct {
 	StatusDesc         string `json:"status_desc"`
 }
 
-type integrationOperatorAccountBalanceResponse struct {
-	SubMchID           string `json:"sub_mch_id"`
-	AvailableAmount    int64  `json:"available_amount"`
-	PendingAmount      int64  `json:"pending_amount"`
-	WithdrawableAmount int64  `json:"withdrawable_amount"`
-	AccountType        string `json:"account_type"`
-	BalanceDate        string `json:"balance_date"`
-	AccountStatus      string `json:"account_status"`
-	StatusDesc         string `json:"status_desc"`
-}
-
 type integrationPlatformAccountBalanceResponse struct {
 	AccountType     string `json:"account_type"`
 	BalanceDate     string `json:"balance_date"`
@@ -94,75 +83,6 @@ func TestMerchantAccountDayEndBalanceIntegration(t *testing.T) {
 	require.Equal(t, "2026-04-05", resp.BalanceDate)
 	require.Equal(t, "active", resp.AccountStatus)
 	require.Equal(t, "收付通账户已激活", resp.StatusDesc)
-}
-
-func TestOperatorAccountDayEndBalanceIntegration(t *testing.T) {
-	server, store := initIntegrationServer(t)
-	resetIntegrationData(t)
-
-	ctx := context.Background()
-	region := createIntegrationRegion(t, store)
-	operatorUser := createIntegrationUser(t, store)
-	commissionRate := pgtype.Numeric{}
-	_ = commissionRate.Scan("0.03")
-	operator, err := store.CreateOperator(ctx, db.CreateOperatorParams{
-		UserID:            operatorUser.ID,
-		RegionID:          region.ID,
-		Name:              "op_finance_" + operatorUser.WechatOpenid[:6],
-		ContactName:       "finance_contact",
-		ContactPhone:      "13800138001",
-		WechatMchID:       pgtype.Text{Valid: false},
-		Status:            "active",
-		ContractStartDate: pgtype.Date{Valid: false},
-		ContractEndDate:   pgtype.Date{Valid: false},
-		ContractYears:     1,
-	})
-	require.NoError(t, err)
-	operator, err = store.UpdateOperatorSubMchID(ctx, db.UpdateOperatorSubMchIDParams{
-		ID:       operator.ID,
-		SubMchID: pgtype.Text{String: "sub_mch_operator_finance_001", Valid: true},
-	})
-	require.NoError(t, err)
-	_, err = store.CreateUserRole(ctx, db.CreateUserRoleParams{
-		UserID:          operatorUser.ID,
-		Role:            api.RoleOperator,
-		Status:          "active",
-		RelatedEntityID: pgtype.Int8{Int64: operator.ID, Valid: true},
-	})
-	require.NoError(t, err)
-
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-	mockEcommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
-	mockEcommerceClient.EXPECT().
-		QueryEcommerceFundDayEndBalance(gomock.Any(), "sub_mch_operator_finance_001", "2026-04-05", "DEPOSIT").
-		Return(&wechat.EcommerceFundBalanceResponse{
-			SubMchID:           "sub_mch_operator_finance_001",
-			AvailableAmount:    8900,
-			PendingAmount:      10,
-			AccountType:        "DEPOSIT",
-			WithdrawableAmount: 8900,
-		}, nil)
-	server.SetEcommerceClientForTest(mockEcommerceClient)
-	defer server.SetEcommerceClientForTest(nil)
-
-	req, err := http.NewRequest(http.MethodGet, "/v1/operators/me/finance/account/balance?date=2026-04-05&account_type=deposit", nil)
-	require.NoError(t, err)
-	addAuthorization(t, req, integrationTokenMaker, operatorUser.ID, time.Minute)
-
-	recorder := httptest.NewRecorder()
-	server.Handler().ServeHTTP(recorder, req)
-	require.Equal(t, http.StatusOK, recorder.Code)
-
-	var resp integrationOperatorAccountBalanceResponse
-	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
-	require.Equal(t, "sub_mch_operator_finance_001", resp.SubMchID)
-	require.Equal(t, int64(8900), resp.AvailableAmount)
-	require.Equal(t, int64(10), resp.PendingAmount)
-	require.Equal(t, int64(8900), resp.WithdrawableAmount)
-	require.Equal(t, "DEPOSIT", resp.AccountType)
-	require.Equal(t, "2026-04-05", resp.BalanceDate)
-	require.Equal(t, "active", resp.AccountStatus)
 }
 
 func TestPlatformAccountBalanceIntegration(t *testing.T) {

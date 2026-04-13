@@ -1,0 +1,7 @@
+ALTER TABLE operators
+DROP COLUMN IF EXISTS latest_settlement_application_submitted_at,
+DROP COLUMN IF EXISTS latest_settlement_application_no;
+
+ALTER TABLE merchant_payment_configs
+DROP COLUMN IF EXISTS latest_settlement_application_submitted_at,
+DROP COLUMN IF EXISTS latest_settlement_application_no;

@@ -1367,6 +1367,143 @@ func decryptEcommerceTestCiphertext(t *testing.T, privateKey *rsa.PrivateKey, ci
 	return string(plaintext)
 }
 
+func TestQuerySubMerchantSettlement_UsesAccountNumberRule(t *testing.T) {
+	merchantPrivateKey, _ := generateTestKeyPair(t)
+	platformPrivateKey, platformPublicKey := generateTestKeyPair(t)
+
+	tempDir := t.TempDir()
+	privateKeyPath := createTestPrivateKeyFile(t, tempDir, merchantPrivateKey)
+	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
+
+	client, err := NewEcommerceClient(EcommerceClientConfig{
+		PaymentClientConfig: PaymentClientConfig{
+			MchID:                 "test_mch_id",
+			AppID:                 "test_app_id",
+			SerialNumber:          "test_serial",
+			APIV3Key:              testAPIV3Key(),
+			PrivateKeyPath:        privateKeyPath,
+			PlatformPublicKeyPath: publicKeyPath,
+			PlatformPublicKeyID:   "PUB_KEY_ID_0123456789",
+			NotifyURL:             "https://example.com/notify",
+		},
+	})
+	require.NoError(t, err)
+
+	client.httpClient = &http.Client{
+		Transport: signedEcommerceTransport(t, platformPrivateKey, "PUB_KEY_ID_0123456789", func(req *http.Request) (*http.Response, error) {
+			require.Equal(t, http.MethodGet, req.Method)
+			require.Equal(t, "/v3/apply4sub/sub_merchants/1900006491/settlement", req.URL.Path)
+			require.Equal(t, "account_number_rule=ACCOUNT_NUMBER_RULE_MASK_V2", req.URL.RawQuery)
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader(`{"account_type":"ACCOUNT_TYPE_BUSINESS","account_bank":"工商银行","account_number":"622202******8888","verify_result":"VERIFY_SUCCESS"}`)),
+			}, nil
+		}),
+	}
+
+	resp, err := client.QuerySubMerchantSettlement(context.Background(), "1900006491", "ACCOUNT_NUMBER_RULE_MASK_V2")
+	require.NoError(t, err)
+	require.Equal(t, "ACCOUNT_TYPE_BUSINESS", resp.AccountType)
+	require.Equal(t, "VERIFY_SUCCESS", resp.VerifyResult)
+}
+
+func TestModifySubMerchantSettlement_PostsEncryptedPayload(t *testing.T) {
+	merchantPrivateKey, _ := generateTestKeyPair(t)
+	platformPrivateKey, platformPublicKey := generateTestKeyPair(t)
+
+	tempDir := t.TempDir()
+	privateKeyPath := createTestPrivateKeyFile(t, tempDir, merchantPrivateKey)
+	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
+
+	client, err := NewEcommerceClient(EcommerceClientConfig{
+		PaymentClientConfig: PaymentClientConfig{
+			MchID:                 "test_mch_id",
+			AppID:                 "test_app_id",
+			SerialNumber:          "test_serial",
+			APIV3Key:              testAPIV3Key(),
+			PrivateKeyPath:        privateKeyPath,
+			PlatformPublicKeyPath: publicKeyPath,
+			PlatformPublicKeyID:   "PUB_KEY_ID_0123456789",
+			NotifyURL:             "https://example.com/notify",
+		},
+	})
+	require.NoError(t, err)
+
+	client.httpClient = &http.Client{
+		Transport: signedEcommerceTransport(t, platformPrivateKey, "PUB_KEY_ID_0123456789", func(req *http.Request) (*http.Response, error) {
+			require.Equal(t, http.MethodPost, req.Method)
+			require.Equal(t, "/v3/apply4sub/sub_merchants/1900006491/modify-settlement", req.URL.Path)
+			require.Equal(t, "PUB_KEY_ID_0123456789", req.Header.Get("Wechatpay-Serial"))
+
+			var body map[string]any
+			require.NoError(t, json.NewDecoder(req.Body).Decode(&body))
+			require.Equal(t, "ACCOUNT_TYPE_BUSINESS", body["account_type"])
+			require.Equal(t, "工商银行", body["account_bank"])
+			require.Equal(t, "402713354941", body["bank_branch_id"])
+			require.Equal(t, "cipher-account-number", body["account_number"])
+			require.Equal(t, "cipher-account-name", body["account_name"])
+
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader(`{"application_no":"102329389XXXX"}`)),
+			}, nil
+		}),
+	}
+
+	resp, err := client.ModifySubMerchantSettlement(context.Background(), "1900006491", &ModifySubMerchantSettlementRequest{
+		AccountType:   "ACCOUNT_TYPE_BUSINESS",
+		AccountBank:   "工商银行",
+		BankBranchID:  "402713354941",
+		AccountNumber: "cipher-account-number",
+		AccountName:   "cipher-account-name",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "102329389XXXX", resp.ApplicationNo)
+}
+
+func TestQuerySubMerchantSettlementApplication_UsesApplicationAndMaskRule(t *testing.T) {
+	merchantPrivateKey, _ := generateTestKeyPair(t)
+	platformPrivateKey, platformPublicKey := generateTestKeyPair(t)
+
+	tempDir := t.TempDir()
+	privateKeyPath := createTestPrivateKeyFile(t, tempDir, merchantPrivateKey)
+	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
+
+	client, err := NewEcommerceClient(EcommerceClientConfig{
+		PaymentClientConfig: PaymentClientConfig{
+			MchID:                 "test_mch_id",
+			AppID:                 "test_app_id",
+			SerialNumber:          "test_serial",
+			APIV3Key:              testAPIV3Key(),
+			PrivateKeyPath:        privateKeyPath,
+			PlatformPublicKeyPath: publicKeyPath,
+			PlatformPublicKeyID:   "PUB_KEY_ID_0123456789",
+			NotifyURL:             "https://example.com/notify",
+		},
+	})
+	require.NoError(t, err)
+
+	client.httpClient = &http.Client{
+		Transport: signedEcommerceTransport(t, platformPrivateKey, "PUB_KEY_ID_0123456789", func(req *http.Request) (*http.Response, error) {
+			require.Equal(t, http.MethodGet, req.Method)
+			require.Equal(t, "/v3/apply4sub/sub_merchants/1511101111/application/102329389XXXX", req.URL.Path)
+			require.Equal(t, "account_number_rule=ACCOUNT_NUMBER_RULE_MASK_V2", req.URL.RawQuery)
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader(`{"account_name":"张*","account_type":"ACCOUNT_TYPE_BUSINESS","account_bank":"工商银行","account_number":"622202******8888","verify_result":"VERIFY_SUCCESS","verify_finish_time":"2015-05-20T13:29:35+08:00"}`)),
+			}, nil
+		}),
+	}
+
+	resp, err := client.QuerySubMerchantSettlementApplication(context.Background(), "1511101111", "102329389XXXX", "ACCOUNT_NUMBER_RULE_MASK_V2")
+	require.NoError(t, err)
+	require.Equal(t, "张*", resp.AccountName)
+	require.Equal(t, "VERIFY_SUCCESS", resp.VerifyResult)
+}
+
 func encryptEcommerceNotificationResource(t *testing.T, apiV3Key, plaintext, associatedData, nonce string) string {
 	t.Helper()
 	block, err := aes.NewCipher([]byte(apiV3Key))

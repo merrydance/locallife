@@ -131,15 +131,7 @@ p, operator, /v1/operator/reports/safety/:id/resolve, POST
 # Operator Finance
 p, operator, /v1/operators/me/finance/overview, GET
 p, operator, /v1/operators/me/commission, GET
-p, operator, /v1/operators/me/finance/account/balance, GET
-p, operator, /v1/operators/me/finance/withdraw, POST
-p, operator, /v1/operators/me/finance/withdrawals, GET
-p, operator, /v1/operators/me/finance/withdrawals/:id, GET
 p, operator, /v1/operators/me/profit-sharing/configs, GET
-
-# Operator Ecommerce Applyment (WeChat Secondary Merchant)
-p, operator, /v1/operator/applyment/bindbank, POST
-p, operator, /v1/operator/applyment/status, GET
 
 # Delivery Fee Config Management
 p, operator, /v1/delivery-fee/regions/:region_id/config, POST

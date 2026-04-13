@@ -24,6 +24,15 @@ SET
 WHERE merchant_id = $1
 RETURNING *;
 
+-- name: UpdateMerchantPaymentConfigSettlementApplication :one
+UPDATE merchant_payment_configs
+SET
+    latest_settlement_application_no = COALESCE(sqlc.narg(latest_settlement_application_no), latest_settlement_application_no),
+    latest_settlement_application_submitted_at = COALESCE(sqlc.narg(latest_settlement_application_submitted_at), latest_settlement_application_submitted_at),
+    updated_at = now()
+WHERE merchant_id = $1
+RETURNING *;
+
 -- name: DeleteMerchantPaymentConfig :exec
 DELETE FROM merchant_payment_configs
 WHERE merchant_id = $1;

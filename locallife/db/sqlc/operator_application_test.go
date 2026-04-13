@@ -436,33 +436,3 @@ func TestGetPendingOperatorApplicationByRegion(t *testing.T) {
 	require.Equal(t, region.ID, pendingApp.RegionID)
 	require.Equal(t, "submitted", pendingApp.Status)
 }
-
-// ==================== Approved Application for Bindbank ====================
-
-func TestGetApprovedOperatorApplicationByUserID(t *testing.T) {
-	app := createCompleteOperatorApplication(t)
-
-	// 提交
-	submitted, err := testStore.SubmitOperatorApplication(context.Background(), app.ID)
-	require.NoError(t, err)
-	require.Equal(t, "submitted", submitted.Status)
-
-	// 审核员
-	reviewer := createRandomUser(t)
-
-	// 审核通过
-	approved, err := testStore.ApproveOperatorApplication(context.Background(), ApproveOperatorApplicationParams{
-		ID:         app.ID,
-		ReviewedBy: pgtype.Int8{Int64: reviewer.ID, Valid: true},
-	})
-	require.NoError(t, err)
-	require.Equal(t, "approved", approved.Status)
-
-	// 获取审核通过的申请（用于绑卡）
-	fetched, err := testStore.GetApprovedOperatorApplicationByUserID(context.Background(), approved.UserID)
-	require.NoError(t, err)
-	require.Equal(t, app.ID, fetched.ID)
-	require.Equal(t, "approved", fetched.Status)
-	require.True(t, fetched.LegalPersonName.Valid)
-	require.True(t, fetched.LegalPersonIDNumber.Valid)
-}

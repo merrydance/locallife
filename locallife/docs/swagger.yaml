@@ -4365,14 +4365,36 @@ definitions:
     type: object
   api.merchantBindBankResponse:
     properties:
+      account_validation:
+        allOf:
+        - $ref: '#/definitions/api.applymentAccountValidationResponse'
+        description: 汇款验证信息
       applyment_id:
         description: 微信申请单号
         type: integer
+      legal_validation_url:
+        description: 法人扫码验证链接
+        type: string
       message:
         description: 消息
         type: string
+      reject_reason:
+        description: 拒绝原因
+        type: string
+      sign_state:
+        description: 签约状态
+        type: string
+      sign_url:
+        description: 签约链接
+        type: string
       status:
         description: 状态
+        type: string
+      status_desc:
+        description: 状态描述
+        type: string
+      sub_mch_id:
+        description: 二级商户号
         type: string
     type: object
   api.merchantCapabilitiesResponse:
@@ -4968,6 +4990,8 @@ definitions:
         $ref: '#/definitions/api.settlementAccountInfo'
       account_status:
         type: string
+      latest_application_no:
+        type: string
       status_desc:
         type: string
     type: object
@@ -5066,19 +5090,30 @@ definitions:
   api.modifySettlementAccountRequest:
     properties:
       account_bank:
+        maxLength: 128
         type: string
       account_name:
+        maxLength: 128
         type: string
       account_number:
+        maxLength: 32
         type: string
       account_type:
+        enum:
+        - ACCOUNT_TYPE_BUSINESS
+        - ACCOUNT_TYPE_PRIVATE
         type: string
       bank_branch_id:
+        maxLength: 128
         type: string
       bank_name:
+        maxLength: 128
         type: string
+      need_bank_branch:
+        type: boolean
     required:
     - account_bank
+    - account_name
     - account_number
     - account_type
     type: object
@@ -5291,121 +5326,6 @@ definitions:
       user_id:
         type: integer
     type: object
-  api.operatorApplymentStatusResponse:
-    properties:
-      account_validation:
-        allOf:
-        - $ref: '#/definitions/api.applymentAccountValidationResponse'
-        description: 汇款验证信息
-      applyment_id:
-        description: 微信进件ID
-        type: integer
-      block_reason:
-        description: 不允许提交时的阻塞原因
-        type: string
-      can_submit:
-        description: 是否允许提交或重新提交进件
-        type: boolean
-      created_at:
-        type: string
-      legal_validation_url:
-        description: 法人扫码验证链接
-        type: string
-      reject_reason:
-        description: 拒绝原因
-        type: string
-      sign_state:
-        description: 签约状态
-        type: string
-      sign_url:
-        description: 签约链接
-        type: string
-      status:
-        description: 状态
-        type: string
-      status_desc:
-        description: 状态描述
-        type: string
-      sub_mch_id:
-        description: 二级商户号（开户成功后返回）
-        type: string
-      updated_at:
-        type: string
-    type: object
-  api.operatorBindBankRequest:
-    properties:
-      account_bank:
-        maxLength: 128
-        type: string
-      account_bank_code:
-        type: integer
-      account_name:
-        maxLength: 128
-        type: string
-      account_number:
-        type: string
-      account_type:
-        enum:
-        - ACCOUNT_TYPE_BUSINESS
-        - ACCOUNT_TYPE_PRIVATE
-        type: string
-      bank_address_code:
-        type: string
-      bank_alias:
-        type: string
-      bank_alias_code:
-        type: string
-      bank_branch_id:
-        type: string
-      bank_name:
-        type: string
-      contact_id_card_number:
-        maxLength: 32
-        minLength: 15
-        type: string
-      contact_id_doc_copy_asset_id:
-        type: integer
-      contact_id_doc_copy_back_asset_id:
-        type: integer
-      contact_id_doc_period_begin:
-        type: string
-      contact_id_doc_period_end:
-        type: string
-      contact_id_doc_type:
-        enum:
-        - IDENTIFICATION_TYPE_IDCARD
-        type: string
-      contact_name:
-        maxLength: 64
-        minLength: 2
-        type: string
-      contact_type:
-        enum:
-        - LEGAL
-        - SUPER
-        - "65"
-        - "66"
-        type: string
-      need_bank_branch:
-        type: boolean
-    required:
-    - account_bank
-    - account_name
-    - account_number
-    - account_type
-    type: object
-  api.operatorBindBankResponse:
-    properties:
-      applyment_id:
-        description: 微信申请单号
-        type: integer
-      message:
-        description: 消息
-        type: string
-      status:
-        description: 状态
-        type: string
-    type: object
   api.operatorCommissionItem:
     properties:
       commission:
@@ -5564,15 +5484,6 @@ definitions:
         type: integer
       total:
         type: integer
-    type: object
-  api.operatorSettlementAccountResponse:
-    properties:
-      account:
-        $ref: '#/definitions/api.settlementAccountInfo'
-      account_status:
-        type: string
-      status_desc:
-        type: string
     type: object
   api.orderBadge:
     properties:
@@ -9327,20 +9238,6 @@ definitions:
         type: integer
       user:
         $ref: '#/definitions/api.userResponse'
-    type: object
-  api.withdrawOperatorRequest:
-    properties:
-      amount:
-        minimum: 100
-        type: integer
-      out_request_no:
-        maxLength: 64
-        type: string
-      remark:
-        maxLength: 128
-        type: string
-    required:
-    - amount
     type: object
   api.withdrawRequest:
     properties:
@@ -16951,6 +16848,11 @@ paths:
   /v1/merchant/finance/account/settlement-account:
     get:
       description: 商户查询自己的收付通结算账户（银行账户）信息，商户号从认证 session 取
+      parameters:
+      - description: 银行账号展示规则（默认 ACCOUNT_NUMBER_RULE_MASK_V1）
+        in: query
+        name: account_number_rule
+        type: string
       produces:
       - application/json
       responses:
@@ -21150,256 +21052,6 @@ paths:
       summary: 提交运营商入驻申请
       tags:
       - 运营商申请
-  /v1/operator/applyment/areas/provinces:
-    get:
-      consumes:
-      - application/json
-      description: 查询微信收付通支行检索所需的省份列表
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.applymentProvinceListResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "503":
-          description: Service Unavailable
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 查询开户省份列表
-      tags:
-      - 开户
-  /v1/operator/applyment/areas/provinces/{province_code}/cities:
-    get:
-      consumes:
-      - application/json
-      description: 根据省份编码查询微信收付通支行检索所需的城市列表
-      parameters:
-      - description: 省份编码
-        in: path
-        name: province_code
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.applymentCityListResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "503":
-          description: Service Unavailable
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 查询开户城市列表
-      tags:
-      - 开户
-  /v1/operator/applyment/banks:
-    get:
-      consumes:
-      - application/json
-      description: 查询微信收付通支持的对公或对私开户银行列表，返回后端缓存快照
-      parameters:
-      - description: 账户类型
-        enum:
-        - ACCOUNT_TYPE_BUSINESS
-        - ACCOUNT_TYPE_PRIVATE
-        in: query
-        name: account_type
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.applymentBankListResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "503":
-          description: Service Unavailable
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 查询进件银行列表
-      tags:
-      - 开户
-  /v1/operator/applyment/banks/{bank_alias_code}/branches:
-    get:
-      consumes:
-      - application/json
-      description: 根据银行别名编码和城市编码查询微信收付通支行列表
-      parameters:
-      - description: 银行别名编码
-        in: path
-        name: bank_alias_code
-        required: true
-        type: string
-      - description: 城市编码
-        in: query
-        name: city_code
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.applymentBranchListResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "503":
-          description: Service Unavailable
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 查询开户支行列表
-      tags:
-      - 开户
-  /v1/operator/applyment/banks/search-by-bank-account:
-    get:
-      consumes:
-      - application/json
-      description: 根据个人银行卡号识别开户银行候选，仅适用于对私账户
-      parameters:
-      - description: 账户类型
-        enum:
-        - ACCOUNT_TYPE_BUSINESS
-        - ACCOUNT_TYPE_PRIVATE
-        in: query
-        name: account_type
-        required: true
-        type: string
-      - description: 银行卡号
-        in: query
-        name: account_number
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.applymentBankSearchResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "503":
-          description: Service Unavailable
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 识别对私银行卡开户银行
-      tags:
-      - 开户
-  /v1/operator/applyment/bindbank:
-    post:
-      consumes:
-      - application/json
-      description: 运营商审核通过后，绑定银行卡信息并提交微信二级商户进件
-      parameters:
-      - description: 银行卡信息
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/api.operatorBindBankRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.operatorBindBankResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 运营商绑定银行卡并提交微信开户
-      tags:
-      - 运营商
-  /v1/operator/applyment/status:
-    get:
-      consumes:
-      - application/json
-      description: 获取运营商微信支付开户申请状态
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.operatorApplymentStatusResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 获取运营商开户状态
-      tags:
-      - 运营商
   /v1/operator/claims/{id}/recovery:
     get:
       consumes:
@@ -22666,121 +22318,6 @@ paths:
       summary: 获取佣金明细
       tags:
       - 运营商数据统计
-  /v1/operators/me/finance/account/settlement-account:
-    get:
-      description: 运营商查询自己的收付通结算账户（银行账户）信息，商户号从认证 session 取
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.operatorSettlementAccountResponse'
-        "403":
-          description: 无权限
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "503":
-          description: 微信客户端未配置
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 查询运营商结算账户
-      tags:
-      - 运营商财务
-    post:
-      consumes:
-      - application/json
-      description: 运营商修改自己的收付通结算银行账户。account_number 和 account_name 传入明文，服务端负责加密后转发给微信支付。
-      parameters:
-      - description: 修改结算账户请求
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/api.modifySettlementAccountRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.modifySettlementAccountApplicationResponse'
-        "400":
-          description: 参数错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "403":
-          description: 运营商未激活或无权限
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "422":
-          description: 运营商收付通账户未激活
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: 加密失败
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "502":
-          description: 微信支付下游异常
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "503":
-          description: 微信客户端未配置
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 修改运营商结算账户
-      tags:
-      - 运营商财务
-  /v1/operators/me/finance/account/settlement-account/applications/{application_no}:
-    get:
-      description: 运营商查询自己的结算账户修改申请审核结果。
-      parameters:
-      - description: 修改结算账户申请单号
-        in: path
-        name: application_no
-        required: true
-        type: string
-      - description: 银行账号展示规则（默认 ACCOUNT_NUMBER_RULE_MASK_V1）
-        in: query
-        name: account_number_rule
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.settlementApplicationResponse'
-        "403":
-          description: 运营商未激活或无权限
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "404":
-          description: 申请单不存在
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "422":
-          description: 运营商收付通账户未激活
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "502":
-          description: 微信支付下游异常
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "503":
-          description: 微信客户端未配置
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 查询运营商结算账户修改申请状态
-      tags:
-      - 运营商财务
   /v1/operators/me/finance/overview:
     get:
       consumes:
@@ -22806,43 +22343,6 @@ paths:
       summary: 获取财务概览
       tags:
       - 运营商数据统计
-  /v1/operators/me/finance/withdraw:
-    post:
-      consumes:
-      - application/json
-      description: 运营商发起收付通提现到绑定银行卡
-      parameters:
-      - description: 提现请求
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/api.withdrawOperatorRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 提现申请提交成功
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: 参数错误或余额不足
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "403":
-          description: 无权限
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: 服务器内部错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 运营商提现
-      tags:
-      - 运营商财务
   /v1/operators/me/profit-sharing/configs:
     get:
       consumes:

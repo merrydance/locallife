@@ -92,20 +92,3 @@ SET
     updated_at = now()
 WHERE id = $1
 RETURNING *;
-
--- name: UpdateOperatorSubMchID :one
--- 更新运营商的微信二级商户号（开户成功后调用）
-UPDATE operators
-SET
-    sub_mch_id = $2,
-    status = 'active',
-    updated_at = now()
-WHERE id = $1
-RETURNING *;
-
--- name: GetApprovedOperatorApplicationByUserID :one
--- 获取用户审核通过的运营商申请（用于绑卡开户）
-SELECT * FROM operator_applications
-WHERE user_id = $1 AND status = 'approved'
-ORDER BY reviewed_at DESC
-LIMIT 1;

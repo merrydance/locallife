@@ -356,31 +356,6 @@ func (server *Server) syncWithdrawalRecordWithWechat(ctx *gin.Context, record db
 				return record, fmt.Errorf("persist merchant withdraw account info: %w", err)
 			}
 		}
-	case operatorWithdrawChannel:
-		info := parseOperatorWithdrawAccountInfo(record.AccountInfo)
-		if info.OutRequestNo != "" && info.OutRequestNo != resource.OutRequestNo {
-			return record, fmt.Errorf("operator withdraw out_request_no mismatch")
-		}
-		if info.SubMchID != "" && resource.SubMchID != "" && info.SubMchID != resource.SubMchID {
-			return record, fmt.Errorf("operator withdraw sub_mchid mismatch")
-		}
-		if resource.WithdrawID != "" && info.WithdrawID != resource.WithdrawID {
-			info.WithdrawID = resource.WithdrawID
-			if info.OutRequestNo == "" {
-				info.OutRequestNo = resource.OutRequestNo
-			}
-			if info.SubMchID == "" {
-				info.SubMchID = resource.SubMchID
-			}
-			raw, err := json.Marshal(info)
-			if err != nil {
-				return record, fmt.Errorf("marshal operator withdraw account info: %w", err)
-			}
-			record, err = server.persistWithdrawalRecordAccountInfo(ctx, record, raw)
-			if err != nil {
-				return record, fmt.Errorf("persist operator withdraw account info: %w", err)
-			}
-		}
 	default:
 		return record, fmt.Errorf("unsupported withdrawal channel: %s", record.Channel)
 	}
@@ -2676,11 +2651,11 @@ func (server *Server) handleApplymentStateNotify(ctx *gin.Context) {
 		})
 		return
 	}
-	if applyment.SubjectType != "merchant" && applyment.SubjectType != "operator" {
+	if applyment.SubjectType != "merchant" {
 		log.Warn().
 			Int64("applyment_id", applyment.ID).
 			Str("subject_type", applyment.SubjectType).
-			Msg("ignore unsupported applyment subject type")
+			Msg("ignore non-merchant applyment subject type")
 		server.markNotificationProcessed(ctx, notification.ID, "", "")
 		writeWechatNotifySuccess(ctx, "applyment")
 		return
@@ -2712,26 +2687,6 @@ func (server *Server) handleApplymentStateNotify(ctx *gin.Context) {
 			ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{Code: "FAIL", Message: "internal error"})
 			return
 		}
-		// 非商户主体的额外更新（不在激活事务内，但各自幂等安全）
-		switch applyment.SubjectType {
-		case "operator":
-			if _, err = server.store.UpdateOperatorSubMchID(ctx, db.UpdateOperatorSubMchIDParams{
-				ID:       applyment.SubjectID,
-				SubMchID: pgtype.Text{String: resource.SubMchID, Valid: true},
-			}); err != nil {
-				log.Error().Err(err).Int64("operator_id", applyment.SubjectID).Msg("update operator sub_mch_id")
-				server.releaseNotification(ctx, notification.ID, "applyment")
-				ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{Code: "FAIL", Message: "internal error"})
-				return
-			}
-			// 绑卡成功，恢复到 active（清除 bindbank_submitted 瞬时状态）
-			if _, err = server.store.UpdateOperatorStatus(ctx, db.UpdateOperatorStatusParams{
-				ID:     applyment.SubjectID,
-				Status: "active",
-			}); err != nil {
-				log.Error().Err(err).Int64("operator_id", applyment.SubjectID).Msg("reset operator status to active after sub_mch_id binding")
-			}
-		}
 	} else {
 		nextSubMchID := applyment.SubMchID
 		if resource.SubMchID != "" {
@@ -2753,16 +2708,6 @@ func (server *Server) handleApplymentStateNotify(ctx *gin.Context) {
 			log.Error().Err(err).Int64("applyment_id", applyment.ID).Msg("update applyment status")
 		}
 
-		if applyment.SubjectType == "operator" && (newStatus == "rejected" || newStatus == "canceled") {
-			// 绑卡被拒/撤销，回到 active（绑卡是可选步骤，不阻塞运营）
-			_, err = server.store.UpdateOperatorStatus(ctx, db.UpdateOperatorStatusParams{
-				ID:     applyment.SubjectID,
-				Status: "active",
-			})
-			if err != nil {
-				log.Error().Err(err).Int64("operator_id", applyment.SubjectID).Msg("reset operator status to active after bindbank rejection")
-			}
-		}
 	}
 
 	// 通知ID已在 tryClaimApplymentNotification 中原子写入，无需重复记录

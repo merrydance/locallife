@@ -11365,6 +11365,14 @@ const docTemplate = `{
                     "商户财务"
                 ],
                 "summary": "查询商户结算账户",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "银行账号展示规则（默认 ACCOUNT_NUMBER_RULE_MASK_V1）",
+                        "name": "account_number_rule",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -17789,397 +17797,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/v1/operator/applyment/areas/provinces": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "查询微信收付通支行检索所需的省份列表",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "开户"
-                ],
-                "summary": "查询开户省份列表",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/api.applymentProvinceListResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "503": {
-                        "description": "Service Unavailable",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/operator/applyment/areas/provinces/{province_code}/cities": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "根据省份编码查询微信收付通支行检索所需的城市列表",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "开户"
-                ],
-                "summary": "查询开户城市列表",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "省份编码",
-                        "name": "province_code",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/api.applymentCityListResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "503": {
-                        "description": "Service Unavailable",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/operator/applyment/banks": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "查询微信收付通支持的对公或对私开户银行列表，返回后端缓存快照",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "开户"
-                ],
-                "summary": "查询进件银行列表",
-                "parameters": [
-                    {
-                        "enum": [
-                            "ACCOUNT_TYPE_BUSINESS",
-                            "ACCOUNT_TYPE_PRIVATE"
-                        ],
-                        "type": "string",
-                        "description": "账户类型",
-                        "name": "account_type",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/api.applymentBankListResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "503": {
-                        "description": "Service Unavailable",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/operator/applyment/banks/search-by-bank-account": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "根据个人银行卡号识别开户银行候选，仅适用于对私账户",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "开户"
-                ],
-                "summary": "识别对私银行卡开户银行",
-                "parameters": [
-                    {
-                        "enum": [
-                            "ACCOUNT_TYPE_BUSINESS",
-                            "ACCOUNT_TYPE_PRIVATE"
-                        ],
-                        "type": "string",
-                        "description": "账户类型",
-                        "name": "account_type",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "银行卡号",
-                        "name": "account_number",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/api.applymentBankSearchResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "503": {
-                        "description": "Service Unavailable",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/operator/applyment/banks/{bank_alias_code}/branches": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "根据银行别名编码和城市编码查询微信收付通支行列表",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "开户"
-                ],
-                "summary": "查询开户支行列表",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "银行别名编码",
-                        "name": "bank_alias_code",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "城市编码",
-                        "name": "city_code",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/api.applymentBranchListResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "503": {
-                        "description": "Service Unavailable",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/operator/applyment/bindbank": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "运营商审核通过后，绑定银行卡信息并提交微信二级商户进件",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "运营商"
-                ],
-                "summary": "运营商绑定银行卡并提交微信开户",
-                "parameters": [
-                    {
-                        "description": "银行卡信息",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/api.operatorBindBankRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/api.operatorBindBankResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/operator/applyment/status": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "获取运营商微信支付开户申请状态",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "运营商"
-                ],
-                "summary": "获取运营商开户状态",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/api.operatorApplymentStatusResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/v1/operator/claims/{id}/recovery": {
             "get": {
                 "security": [
@@ -20132,186 +19749,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/v1/operators/me/finance/account/settlement-account": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "运营商查询自己的收付通结算账户（银行账户）信息，商户号从认证 session 取",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "运营商财务"
-                ],
-                "summary": "查询运营商结算账户",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/api.operatorSettlementAccountResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "无权限",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "503": {
-                        "description": "微信客户端未配置",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            },
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "运营商修改自己的收付通结算银行账户。account_number 和 account_name 传入明文，服务端负责加密后转发给微信支付。",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "运营商财务"
-                ],
-                "summary": "修改运营商结算账户",
-                "parameters": [
-                    {
-                        "description": "修改结算账户请求",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/api.modifySettlementAccountRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/api.modifySettlementAccountApplicationResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "运营商未激活或无权限",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "422": {
-                        "description": "运营商收付通账户未激活",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "加密失败",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "502": {
-                        "description": "微信支付下游异常",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "503": {
-                        "description": "微信客户端未配置",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/operators/me/finance/account/settlement-account/applications/{application_no}": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "运营商查询自己的结算账户修改申请审核结果。",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "运营商财务"
-                ],
-                "summary": "查询运营商结算账户修改申请状态",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "修改结算账户申请单号",
-                        "name": "application_no",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "银行账号展示规则（默认 ACCOUNT_NUMBER_RULE_MASK_V1）",
-                        "name": "account_number_rule",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/api.settlementApplicationResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "运营商未激活或无权限",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "申请单不存在",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "422": {
-                        "description": "运营商收付通账户未激活",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "502": {
-                        "description": "微信支付下游异常",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "503": {
-                        "description": "微信客户端未配置",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/v1/operators/me/finance/overview": {
             "get": {
                 "security": [
@@ -20335,64 +19772,6 @@ const docTemplate = `{
                         "description": "财务概览",
                         "schema": {
                             "$ref": "#/definitions/api.operatorFinanceOverviewResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "无权限",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "服务器内部错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/operators/me/finance/withdraw": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "运营商发起收付通提现到绑定银行卡",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "运营商财务"
-                ],
-                "summary": "运营商提现",
-                "parameters": [
-                    {
-                        "description": "提现请求",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/api.withdrawOperatorRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "提现申请提交成功",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "参数错误或余额不足",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
                         }
                     },
                     "403": {
@@ -37732,16 +37111,48 @@ const docTemplate = `{
         "api.merchantBindBankResponse": {
             "type": "object",
             "properties": {
+                "account_validation": {
+                    "description": "汇款验证信息",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/api.applymentAccountValidationResponse"
+                        }
+                    ]
+                },
                 "applyment_id": {
                     "description": "微信申请单号",
                     "type": "integer"
+                },
+                "legal_validation_url": {
+                    "description": "法人扫码验证链接",
+                    "type": "string"
                 },
                 "message": {
                     "description": "消息",
                     "type": "string"
                 },
+                "reject_reason": {
+                    "description": "拒绝原因",
+                    "type": "string"
+                },
+                "sign_state": {
+                    "description": "签约状态",
+                    "type": "string"
+                },
+                "sign_url": {
+                    "description": "签约链接",
+                    "type": "string"
+                },
                 "status": {
                     "description": "状态",
+                    "type": "string"
+                },
+                "status_desc": {
+                    "description": "状态描述",
+                    "type": "string"
+                },
+                "sub_mch_id": {
+                    "description": "二级商户号",
                     "type": "string"
                 }
             }
@@ -38631,6 +38042,9 @@ const docTemplate = `{
                 "account_status": {
                     "type": "string"
                 },
+                "latest_application_no": {
+                    "type": "string"
+                },
                 "status_desc": {
                     "type": "string"
                 }
@@ -38781,27 +38195,40 @@ const docTemplate = `{
             "type": "object",
             "required": [
                 "account_bank",
+                "account_name",
                 "account_number",
                 "account_type"
             ],
             "properties": {
                 "account_bank": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 128
                 },
                 "account_name": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 128
                 },
                 "account_number": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 32
                 },
                 "account_type": {
-                    "type": "string"
+                    "type": "string",
+                    "enum": [
+                        "ACCOUNT_TYPE_BUSINESS",
+                        "ACCOUNT_TYPE_PRIVATE"
+                    ]
                 },
                 "bank_branch_id": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 128
                 },
                 "bank_name": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 128
+                },
+                "need_bank_branch": {
+                    "type": "boolean"
                 }
             }
         },
@@ -39119,169 +38546,6 @@ const docTemplate = `{
                 }
             }
         },
-        "api.operatorApplymentStatusResponse": {
-            "type": "object",
-            "properties": {
-                "account_validation": {
-                    "description": "汇款验证信息",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/api.applymentAccountValidationResponse"
-                        }
-                    ]
-                },
-                "applyment_id": {
-                    "description": "微信进件ID",
-                    "type": "integer"
-                },
-                "block_reason": {
-                    "description": "不允许提交时的阻塞原因",
-                    "type": "string"
-                },
-                "can_submit": {
-                    "description": "是否允许提交或重新提交进件",
-                    "type": "boolean"
-                },
-                "created_at": {
-                    "type": "string"
-                },
-                "legal_validation_url": {
-                    "description": "法人扫码验证链接",
-                    "type": "string"
-                },
-                "reject_reason": {
-                    "description": "拒绝原因",
-                    "type": "string"
-                },
-                "sign_state": {
-                    "description": "签约状态",
-                    "type": "string"
-                },
-                "sign_url": {
-                    "description": "签约链接",
-                    "type": "string"
-                },
-                "status": {
-                    "description": "状态",
-                    "type": "string"
-                },
-                "status_desc": {
-                    "description": "状态描述",
-                    "type": "string"
-                },
-                "sub_mch_id": {
-                    "description": "二级商户号（开户成功后返回）",
-                    "type": "string"
-                },
-                "updated_at": {
-                    "type": "string"
-                }
-            }
-        },
-        "api.operatorBindBankRequest": {
-            "type": "object",
-            "required": [
-                "account_bank",
-                "account_name",
-                "account_number",
-                "account_type"
-            ],
-            "properties": {
-                "account_bank": {
-                    "type": "string",
-                    "maxLength": 128
-                },
-                "account_bank_code": {
-                    "type": "integer"
-                },
-                "account_name": {
-                    "type": "string",
-                    "maxLength": 128
-                },
-                "account_number": {
-                    "type": "string"
-                },
-                "account_type": {
-                    "type": "string",
-                    "enum": [
-                        "ACCOUNT_TYPE_BUSINESS",
-                        "ACCOUNT_TYPE_PRIVATE"
-                    ]
-                },
-                "bank_address_code": {
-                    "type": "string"
-                },
-                "bank_alias": {
-                    "type": "string"
-                },
-                "bank_alias_code": {
-                    "type": "string"
-                },
-                "bank_branch_id": {
-                    "type": "string"
-                },
-                "bank_name": {
-                    "type": "string"
-                },
-                "contact_id_card_number": {
-                    "type": "string",
-                    "maxLength": 32,
-                    "minLength": 15
-                },
-                "contact_id_doc_copy_asset_id": {
-                    "type": "integer"
-                },
-                "contact_id_doc_copy_back_asset_id": {
-                    "type": "integer"
-                },
-                "contact_id_doc_period_begin": {
-                    "type": "string"
-                },
-                "contact_id_doc_period_end": {
-                    "type": "string"
-                },
-                "contact_id_doc_type": {
-                    "type": "string",
-                    "enum": [
-                        "IDENTIFICATION_TYPE_IDCARD"
-                    ]
-                },
-                "contact_name": {
-                    "type": "string",
-                    "maxLength": 64,
-                    "minLength": 2
-                },
-                "contact_type": {
-                    "type": "string",
-                    "enum": [
-                        "LEGAL",
-                        "SUPER",
-                        "65",
-                        "66"
-                    ]
-                },
-                "need_bank_branch": {
-                    "type": "boolean"
-                }
-            }
-        },
-        "api.operatorBindBankResponse": {
-            "type": "object",
-            "properties": {
-                "applyment_id": {
-                    "description": "微信申请单号",
-                    "type": "integer"
-                },
-                "message": {
-                    "description": "消息",
-                    "type": "string"
-                },
-                "status": {
-                    "description": "状态",
-                    "type": "string"
-                }
-            }
-        },
         "api.operatorCommissionItem": {
             "type": "object",
             "properties": {
@@ -39515,20 +38779,6 @@ const docTemplate = `{
                 },
                 "total": {
                     "type": "integer"
-                }
-            }
-        },
-        "api.operatorSettlementAccountResponse": {
-            "type": "object",
-            "properties": {
-                "account": {
-                    "$ref": "#/definitions/api.settlementAccountInfo"
-                },
-                "account_status": {
-                    "type": "string"
-                },
-                "status_desc": {
-                    "type": "string"
                 }
             }
         },
@@ -45034,26 +44284,6 @@ const docTemplate = `{
                 },
                 "user": {
                     "$ref": "#/definitions/api.userResponse"
-                }
-            }
-        },
-        "api.withdrawOperatorRequest": {
-            "type": "object",
-            "required": [
-                "amount"
-            ],
-            "properties": {
-                "amount": {
-                    "type": "integer",
-                    "minimum": 100
-                },
-                "out_request_no": {
-                    "type": "string",
-                    "maxLength": 64
-                },
-                "remark": {
-                    "type": "string",
-                    "maxLength": 128
                 }
             }
         },

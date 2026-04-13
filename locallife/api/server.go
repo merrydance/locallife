@@ -616,18 +616,6 @@ func (server *Server) setupRouter() {
 	authGroup.POST("/operator/application/submit", server.submitOperatorApplication)      // 提交申请
 	authGroup.POST("/operator/application/reset", server.resetOperatorApplicationToDraft) // 重置为草稿
 
-	// M5.2: 运营商开户（微信支付二级商户进件）
-	operatorApplymentGroup := authGroup.Group("/operator/applyment")
-	{
-		operatorApplymentGroup.GET("/banks", server.listApplymentBanks)
-		operatorApplymentGroup.GET("/banks/search-by-bank-account", server.searchApplymentBanksByAccount)
-		operatorApplymentGroup.GET("/banks/:bank_alias_code/branches", server.listApplymentBankBranches)
-		operatorApplymentGroup.GET("/areas/provinces", server.listApplymentProvinces)
-		operatorApplymentGroup.GET("/areas/provinces/:province_code/cities", server.listApplymentCities)
-		operatorApplymentGroup.POST("/bindbank", server.operatorBindBank)        // 绑定银行卡开户
-		operatorApplymentGroup.GET("/status", server.getOperatorApplymentStatus) // 获取开户状态
-	}
-
 	// M1: 用户相关路由
 	authGroup.GET("/users/me", server.getCurrentUser)
 	authGroup.PATCH("/users/me", server.updateCurrentUser)
@@ -1329,13 +1317,6 @@ func (server *Server) setupRouter() {
 	{
 		operatorsGroup.GET("/finance/overview", server.getOperatorFinanceOverview)
 		operatorsGroup.GET("/commission", server.getOperatorCommission)
-		operatorsGroup.GET("/finance/account/balance", server.getOperatorAccountBalance)
-		operatorsGroup.GET("/finance/account/settlement-account", server.getOperatorSettlementAccount)
-		operatorsGroup.POST("/finance/account/settlement-account", server.modifyOperatorSettlementAccount)
-		operatorsGroup.GET("/finance/account/settlement-account/applications/:application_no", server.getOperatorSettlementApplication)
-		operatorsGroup.POST("/finance/withdraw", server.withdrawOperator) // New
-		operatorsGroup.GET("/finance/withdrawals", server.listOperatorWithdrawals)
-		operatorsGroup.GET("/finance/withdrawals/:id", server.getOperatorWithdrawal)
 		operatorsGroup.GET("/profit-sharing/configs", server.listOperatorProfitSharingConfigs)
 
 		// 用户投诉管理（运营商视角：查看所有待处理投诉，可完结投诉）

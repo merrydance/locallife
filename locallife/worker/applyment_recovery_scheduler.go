@@ -101,6 +101,14 @@ func (s *ApplymentRecoveryScheduler) runOnce(ctx context.Context) {
 	}
 
 	for _, applyment := range applyments {
+		if applyment.SubjectType != "merchant" {
+			log.Info().
+				Int64("applyment_id", applyment.ID).
+				Str("subject_type", applyment.SubjectType).
+				Msg("skip non-merchant applyment recovery record")
+			continue
+		}
+
 		status := normalizeApplymentFollowUpStatus(applyment.Status, textValue(applyment.SubMchID))
 		processedState := normalizeApplymentFollowUpStatus(textValue(applyment.ResultTaskProcessedState), textValue(applyment.SubMchID))
 		signState := textValue(applyment.SignState)
@@ -221,21 +229,6 @@ func (s *ApplymentRecoveryScheduler) reconcileApplymentStatus(ctx context.Contex
 			return "", "", err
 		}
 
-		if applyment.SubjectType == "operator" {
-			if _, err := s.store.UpdateOperatorSubMchID(ctx, db.UpdateOperatorSubMchIDParams{
-				ID:       applyment.SubjectID,
-				SubMchID: pgtype.Text{String: resolvedSubMchID, Valid: true},
-			}); err != nil {
-				return "", "", err
-			}
-			if _, err := s.store.UpdateOperatorStatus(ctx, db.UpdateOperatorStatusParams{
-				ID:     applyment.SubjectID,
-				Status: "active",
-			}); err != nil {
-				return "", "", err
-			}
-		}
-
 		return normalizeApplymentFollowUpStatus("finish", resolvedSubMchID), resolvedSubMchID, nil
 	}
 
@@ -251,15 +244,6 @@ func (s *ApplymentRecoveryScheduler) reconcileApplymentStatus(ctx context.Contex
 		SubMchID:           pgtype.Text{String: resolvedSubMchID, Valid: resolvedSubMchID != ""},
 	}); err != nil {
 		return "", "", err
-	}
-
-	if applyment.SubjectType == "operator" && (resolvedStatus == "rejected" || resolvedStatus == "canceled") {
-		if _, err := s.store.UpdateOperatorStatus(ctx, db.UpdateOperatorStatusParams{
-			ID:     applyment.SubjectID,
-			Status: "active",
-		}); err != nil {
-			return "", "", err
-		}
 	}
 
 	return resolvedStatus, resolvedSubMchID, nil

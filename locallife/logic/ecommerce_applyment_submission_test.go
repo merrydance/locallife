@@ -80,18 +80,9 @@ func TestValidateMerchantApplymentSubmissionState(t *testing.T) {
 	require.True(t, errors.Is(ValidateMerchantApplymentSubmissionState("approved", &db.EcommerceApplyment{Status: "finish"}), ErrApplymentAlreadyRegistered))
 }
 
-func TestValidateOperatorApplymentSubmissionState(t *testing.T) {
-	existing := &db.EcommerceApplyment{Status: "pending", OutRequestNo: "OUT_002"}
-	require.NoError(t, ValidateOperatorApplymentSubmissionState("active", nil))
-	require.NoError(t, ValidateOperatorApplymentSubmissionState("bindbank_submitted", nil))
-	require.True(t, errors.Is(ValidateOperatorApplymentSubmissionState("suspended", nil), ErrOperatorApplymentSubmissionStatusInvalid))
-	require.True(t, errors.Is(ValidateOperatorApplymentSubmissionState("bindbank_submitted", existing), ErrApplymentSubmissionPending))
-	require.True(t, errors.Is(ValidateOperatorApplymentSubmissionState("active", &db.EcommerceApplyment{Status: "finish"}), ErrApplymentAlreadyRegistered))
-}
-
 func TestBuildCreateEcommerceApplymentParams(t *testing.T) {
 	params := BuildCreateEcommerceApplymentParams(ApplymentLocalRecordInput{
-		SubjectType:           "operator",
+		SubjectType:           "merchant",
 		SubjectID:             42,
 		OutRequestNo:          "OUT_003",
 		OrganizationType:      "2",

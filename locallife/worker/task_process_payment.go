@@ -184,25 +184,6 @@ func isProfitSharingReceiverAlreadyExistsErr(err error) bool {
 	return strings.Contains(msg, "already exists") || strings.Contains(msg, "已存在")
 }
 
-func (processor *RedisTaskProcessor) ensureMerchantProfitSharingReceiver(ctx context.Context, mchID, receiverName, relationType string) error {
-	if processor.ecommerceClient == nil || mchID == "" {
-		return nil
-	}
-
-	_, err := processor.ecommerceClient.AddProfitSharingReceiver(ctx, &wechat.AddReceiverRequest{
-		AppID:        processor.ecommerceClient.GetSpAppID(),
-		Type:         wechat.ReceiverTypeMerchant,
-		Account:      mchID,
-		Name:         strings.TrimSpace(receiverName),
-		RelationType: relationType,
-	})
-	if err != nil && !isProfitSharingReceiverAlreadyExistsErr(err) {
-		return err
-	}
-
-	return nil
-}
-
 func (processor *RedisTaskProcessor) ensurePersonalProfitSharingReceiver(ctx context.Context, openid, realName string) error {
 	if processor.ecommerceClient == nil || openid == "" {
 		return nil
@@ -238,20 +219,6 @@ type operatorProfitSharingReceiverTarget struct {
 	IsPersonal   bool
 }
 
-func operatorApplicationHasBusinessLicense(application db.OperatorApplication) bool {
-	return application.BusinessLicenseNumber.Valid && strings.TrimSpace(application.BusinessLicenseNumber.String) != ""
-}
-
-func resolveOperatorMerchantReceiverAccount(operator db.Operator) string {
-	if operator.SubMchID.Valid && strings.TrimSpace(operator.SubMchID.String) != "" {
-		return strings.TrimSpace(operator.SubMchID.String)
-	}
-	if operator.WechatMchID.Valid && strings.TrimSpace(operator.WechatMchID.String) != "" {
-		return strings.TrimSpace(operator.WechatMchID.String)
-	}
-	return ""
-}
-
 func resolveOperatorReceiverName(operator db.Operator) string {
 	if name := strings.TrimSpace(operator.ContactName); name != "" {
 		return name
@@ -260,38 +227,20 @@ func resolveOperatorReceiverName(operator db.Operator) string {
 }
 
 func (processor *RedisTaskProcessor) resolveOperatorProfitSharingReceiver(ctx context.Context, operator db.Operator) (*operatorProfitSharingReceiverTarget, error) {
-	application, err := processor.store.GetApprovedOperatorApplicationByUserID(ctx, operator.UserID)
-	if err != nil && !errors.Is(err, db.ErrRecordNotFound) {
-		return nil, fmt.Errorf("get operator application: %w", err)
+	user, err := processor.store.GetUser(ctx, operator.UserID)
+	if err != nil {
+		return nil, fmt.Errorf("get operator user: %w", err)
 	}
-
-	if err == nil && !operatorApplicationHasBusinessLicense(application) {
-		user, userErr := processor.store.GetUser(ctx, operator.UserID)
-		if userErr != nil {
-			return nil, fmt.Errorf("get operator user: %w", userErr)
-		}
-		if strings.TrimSpace(user.WechatOpenid) == "" {
-			return nil, fmt.Errorf("operator wechat openid not configured")
-		}
-		return &operatorProfitSharingReceiverTarget{
-			ReceiverType: wechat.ReceiverTypePersonal,
-			Account:      strings.TrimSpace(user.WechatOpenid),
-			ReceiverName: resolveOperatorReceiverName(operator),
-			RelationType: wechat.RelationOthers,
-			IsPersonal:   true,
-		}, nil
-	}
-
-	merchantAccount := resolveOperatorMerchantReceiverAccount(operator)
-	if merchantAccount == "" {
-		return nil, fmt.Errorf("operator sub merchant id not configured")
+	if strings.TrimSpace(user.WechatOpenid) == "" {
+		return nil, fmt.Errorf("operator wechat openid not configured")
 	}
 
 	return &operatorProfitSharingReceiverTarget{
-		ReceiverType: wechat.ReceiverTypeMerchant,
-		Account:      merchantAccount,
+		ReceiverType: wechat.ReceiverTypePersonal,
+		Account:      strings.TrimSpace(user.WechatOpenid),
 		ReceiverName: resolveOperatorReceiverName(operator),
-		RelationType: wechat.RelationDistributor,
+		RelationType: wechat.RelationOthers,
+		IsPersonal:   true,
 	}, nil
 }
 
@@ -1502,14 +1451,9 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharing(ctx context.Contex
 
 	// 运营商佣金
 	if operatorTarget != nil {
-		receiverName := ""
-		if operatorTarget.ReceiverType == wechat.ReceiverTypeMerchant {
-			receiverName = operatorTarget.ReceiverName
-		}
 		receivers = append(receivers, wechat.ProfitSharingReceiver{
 			Type:            operatorTarget.ReceiverType,
 			ReceiverAccount: operatorTarget.Account,
-			ReceiverName:    receiverName,
 			Amount:          operatorCommission,
 			Description:     "运营商服务费",
 		})
@@ -1535,13 +1479,7 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharing(ctx context.Contex
 	}
 
 	if operatorTarget != nil {
-		var ensureErr error
-		switch operatorTarget.ReceiverType {
-		case wechat.ReceiverTypeMerchant:
-			ensureErr = processor.ensureMerchantProfitSharingReceiver(ctx, operatorTarget.Account, operatorTarget.ReceiverName, operatorTarget.RelationType)
-		case wechat.ReceiverTypePersonal:
-			ensureErr = processor.ensurePersonalProfitSharingReceiver(ctx, operatorTarget.Account, operatorTarget.ReceiverName)
-		}
+		ensureErr := processor.ensurePersonalProfitSharingReceiver(ctx, operatorTarget.Account, operatorTarget.ReceiverName)
 		if ensureErr != nil {
 			log.Error().Err(ensureErr).
 				Int64("profit_sharing_order_id", profitSharingOrder.ID).
@@ -1578,12 +1516,7 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharing(ctx context.Contex
 			Msg("create profit sharing failed, retry once after re-ensuring receivers")
 
 		if operatorTarget != nil {
-			switch operatorTarget.ReceiverType {
-			case wechat.ReceiverTypeMerchant:
-				_ = processor.ensureMerchantProfitSharingReceiver(ctx, operatorTarget.Account, operatorTarget.ReceiverName, operatorTarget.RelationType)
-			case wechat.ReceiverTypePersonal:
-				_ = processor.ensurePersonalProfitSharingReceiver(ctx, operatorTarget.Account, operatorTarget.ReceiverName)
-			}
+			_ = processor.ensurePersonalProfitSharingReceiver(ctx, operatorTarget.Account, operatorTarget.ReceiverName)
 		}
 		if hasRider && riderAmount > 0 && riderUserOpenID != "" {
 			_ = processor.ensurePersonalProfitSharingReceiver(ctx, riderUserOpenID, rider.RealName)
@@ -2771,11 +2704,11 @@ func (processor *RedisTaskProcessor) ProcessTaskApplymentResult(ctx context.Cont
 		Str("sub_mch_id", payload.SubMchID).
 		Msg("processing applyment result")
 
-	if payload.SubjectType != "merchant" && payload.SubjectType != "operator" {
+	if payload.SubjectType != "merchant" {
 		log.Warn().
 			Int64("applyment_id", payload.ApplymentID).
 			Str("subject_type", payload.SubjectType).
-			Msg("skip unsupported applyment subject type")
+			Msg("skip non-merchant applyment subject type")
 		return nil
 	}
 
@@ -2858,22 +2791,8 @@ func (processor *RedisTaskProcessor) handleApplymentSuccess(ctx context.Context,
 	}
 
 	// 2. 发送成功通知
-	var userID int64
-	var notifyContent string
-
-	switch payload.SubjectType {
-	case "merchant":
-		userID = merchant.OwnerUserID
-		notifyContent = fmt.Sprintf("您的商户「%s」已完成微信支付开户，可以开始接单收款了！", merchant.Name)
-	case "operator":
-		operator, err := processor.store.GetOperator(ctx, payload.SubjectID)
-		if err != nil {
-			log.Error().Err(err).Int64("operator_id", payload.SubjectID).Msg("get operator for applyment success")
-			return nil
-		}
-		userID = operator.UserID
-		notifyContent = fmt.Sprintf("您的运营账号「%s」已完成微信支付开户，可以开始结算与运营管理了！", operator.Name)
-	}
+	userID := merchant.OwnerUserID
+	notifyContent := fmt.Sprintf("您的商户「%s」已完成微信支付开户，可以开始接单收款了！", merchant.Name)
 
 	if userID > 0 && processor.distributor != nil {
 		expiresAt := time.Now().Add(7 * 24 * time.Hour)
@@ -2900,31 +2819,17 @@ func (processor *RedisTaskProcessor) handleApplymentRejected(ctx context.Context
 		return nil
 	}
 
-	var userID int64
-	var notifyContent string
 	rejectReason := "请登录后台查看详情"
 	if applyment.RejectReason.Valid {
 		rejectReason = applyment.RejectReason.String
 	}
-
-	switch payload.SubjectType {
-	case "merchant":
-		merchant, err := processor.store.GetMerchant(ctx, payload.SubjectID)
-		if err != nil {
-			log.Error().Err(err).Int64("merchant_id", payload.SubjectID).Msg("get merchant")
-			return nil
-		}
-		userID = merchant.OwnerUserID
-		notifyContent = fmt.Sprintf("您的商户「%s」微信支付开户申请被驳回，原因：%s", merchant.Name, rejectReason)
-	case "operator":
-		operator, err := processor.store.GetOperator(ctx, payload.SubjectID)
-		if err != nil {
-			log.Error().Err(err).Int64("operator_id", payload.SubjectID).Msg("get operator")
-			return nil
-		}
-		userID = operator.UserID
-		notifyContent = fmt.Sprintf("您的运营账号「%s」微信支付开户申请被驳回，原因：%s", operator.Name, rejectReason)
+	merchant, err := processor.store.GetMerchant(ctx, payload.SubjectID)
+	if err != nil {
+		log.Error().Err(err).Int64("merchant_id", payload.SubjectID).Msg("get merchant")
+		return nil
 	}
+	userID := merchant.OwnerUserID
+	notifyContent := fmt.Sprintf("您的商户「%s」微信支付开户申请被驳回，原因：%s", merchant.Name, rejectReason)
 
 	if userID > 0 && processor.distributor != nil {
 		expiresAt := time.Now().Add(7 * 24 * time.Hour)
@@ -2944,39 +2849,20 @@ func (processor *RedisTaskProcessor) handleApplymentRejected(ctx context.Context
 
 // handleApplymentPending 处理待账户验证/待确认/待签约
 func (processor *RedisTaskProcessor) handleApplymentPending(ctx context.Context, payload *ApplymentResultPayload) error {
-	var userID int64
-	var notifyContent string
 	resolvedStatus := resolveApplymentResultStatus(*payload)
-
-	switch payload.SubjectType {
-	case "merchant":
-		merchant, err := processor.store.GetMerchant(ctx, payload.SubjectID)
-		if err != nil {
-			return nil
-		}
-		userID = merchant.OwnerUserID
-		switch resolvedStatus {
-		case "account_need_verify":
-			notifyContent = fmt.Sprintf("您的商户「%s」微信支付开户需要完成账户验证，请按页面指引完成汇款验证或法人扫码验证", merchant.Name)
-		case "to_be_confirmed":
-			notifyContent = fmt.Sprintf("您的商户「%s」微信支付开户需要确认，请登录微信支付商户平台完成确认", merchant.Name)
-		default:
-			notifyContent = fmt.Sprintf("您的商户「%s」微信支付开户需要签约，请登录微信支付商户平台完成签约", merchant.Name)
-		}
-	case "operator":
-		operator, err := processor.store.GetOperator(ctx, payload.SubjectID)
-		if err != nil {
-			return nil
-		}
-		userID = operator.UserID
-		switch resolvedStatus {
-		case "account_need_verify":
-			notifyContent = fmt.Sprintf("您的运营账号「%s」微信支付开户需要完成账户验证，请按页面指引完成汇款验证或法人扫码验证", operator.Name)
-		case "to_be_confirmed":
-			notifyContent = fmt.Sprintf("您的运营账号「%s」微信支付开户需要确认，请登录微信支付商户平台完成确认", operator.Name)
-		default:
-			notifyContent = fmt.Sprintf("您的运营账号「%s」微信支付开户需要签约，请登录微信支付商户平台完成签约", operator.Name)
-		}
+	merchant, err := processor.store.GetMerchant(ctx, payload.SubjectID)
+	if err != nil {
+		return nil
+	}
+	userID := merchant.OwnerUserID
+	var notifyContent string
+	switch resolvedStatus {
+	case "account_need_verify":
+		notifyContent = fmt.Sprintf("您的商户「%s」微信支付开户需要完成账户验证，请按页面指引完成汇款验证或法人扫码验证", merchant.Name)
+	case "to_be_confirmed":
+		notifyContent = fmt.Sprintf("您的商户「%s」微信支付开户需要确认，请登录微信支付商户平台完成确认", merchant.Name)
+	default:
+		notifyContent = fmt.Sprintf("您的商户「%s」微信支付开户需要签约，请登录微信支付商户平台完成签约", merchant.Name)
 	}
 
 	if userID > 0 && processor.distributor != nil {

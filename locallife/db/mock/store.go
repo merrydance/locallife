@@ -5879,21 +5879,6 @@ func (mr *MockStoreMockRecorder) GetApplicableDiscountRules(ctx, arg any) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetApplicableDiscountRules", reflect.TypeOf((*MockStore)(nil).GetApplicableDiscountRules), ctx, arg)
 }
 
-// GetApprovedOperatorApplicationByUserID mocks base method.
-func (m *MockStore) GetApprovedOperatorApplicationByUserID(ctx context.Context, userID int64) (db.OperatorApplication, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetApprovedOperatorApplicationByUserID", ctx, userID)
-	ret0, _ := ret[0].(db.OperatorApplication)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetApprovedOperatorApplicationByUserID indicates an expected call of GetApprovedOperatorApplicationByUserID.
-func (mr *MockStoreMockRecorder) GetApprovedOperatorApplicationByUserID(ctx, userID any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetApprovedOperatorApplicationByUserID", reflect.TypeOf((*MockStore)(nil).GetApprovedOperatorApplicationByUserID), ctx, userID)
-}
-
 // GetBehaviorAction mocks base method.
 func (m *MockStore) GetBehaviorAction(ctx context.Context, id int64) (db.BehaviorAction, error) {
 	m.ctrl.T.Helper()
@@ -18085,6 +18070,21 @@ func (mr *MockStoreMockRecorder) UpdateMerchantPaymentConfig(ctx, arg any) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateMerchantPaymentConfig", reflect.TypeOf((*MockStore)(nil).UpdateMerchantPaymentConfig), ctx, arg)
 }
 
+// UpdateMerchantPaymentConfigSettlementApplication mocks base method.
+func (m *MockStore) UpdateMerchantPaymentConfigSettlementApplication(ctx context.Context, arg db.UpdateMerchantPaymentConfigSettlementApplicationParams) (db.MerchantPaymentConfig, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateMerchantPaymentConfigSettlementApplication", ctx, arg)
+	ret0, _ := ret[0].(db.MerchantPaymentConfig)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateMerchantPaymentConfigSettlementApplication indicates an expected call of UpdateMerchantPaymentConfigSettlementApplication.
+func (mr *MockStoreMockRecorder) UpdateMerchantPaymentConfigSettlementApplication(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateMerchantPaymentConfigSettlementApplication", reflect.TypeOf((*MockStore)(nil).UpdateMerchantPaymentConfigSettlementApplication), ctx, arg)
+}
+
 // UpdateMerchantProfile mocks base method.
 func (m *MockStore) UpdateMerchantProfile(ctx context.Context, arg db.UpdateMerchantProfileParams) error {
 	m.ctrl.T.Helper()
@@ -18307,21 +18307,6 @@ func (m *MockStore) UpdateOperatorStatus(ctx context.Context, arg db.UpdateOpera
 func (mr *MockStoreMockRecorder) UpdateOperatorStatus(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateOperatorStatus", reflect.TypeOf((*MockStore)(nil).UpdateOperatorStatus), ctx, arg)
-}
-
-// UpdateOperatorSubMchID mocks base method.
-func (m *MockStore) UpdateOperatorSubMchID(ctx context.Context, arg db.UpdateOperatorSubMchIDParams) (db.Operator, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateOperatorSubMchID", ctx, arg)
-	ret0, _ := ret[0].(db.Operator)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// UpdateOperatorSubMchID indicates an expected call of UpdateOperatorSubMchID.
-func (mr *MockStoreMockRecorder) UpdateOperatorSubMchID(ctx, arg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateOperatorSubMchID", reflect.TypeOf((*MockStore)(nil).UpdateOperatorSubMchID), ctx, arg)
 }
 
 // UpdateOrderDisplayConfig mocks base method.
@@ -19907,19 +19892,4 @@ func (m *MockStore) UseVoucherTx(ctx context.Context, arg db.UseVoucherTxParams)
 func (mr *MockStoreMockRecorder) UseVoucherTx(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UseVoucherTx", reflect.TypeOf((*MockStore)(nil).UseVoucherTx), ctx, arg)
-}
-
-// WithdrawOperatorTx mocks base method.
-func (m *MockStore) WithdrawOperatorTx(ctx context.Context, arg db.WithdrawOperatorTxParams) (db.WithdrawOperatorTxResult, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "WithdrawOperatorTx", ctx, arg)
-	ret0, _ := ret[0].(db.WithdrawOperatorTxResult)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// WithdrawOperatorTx indicates an expected call of WithdrawOperatorTx.
-func (mr *MockStoreMockRecorder) WithdrawOperatorTx(ctx, arg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WithdrawOperatorTx", reflect.TypeOf((*MockStore)(nil).WithdrawOperatorTx), ctx, arg)
 }

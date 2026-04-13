@@ -18,7 +18,7 @@ INSERT INTO merchant_payment_configs (
     status
 ) VALUES (
     $1, $2, $3
-) RETURNING id, merchant_id, sub_mch_id, status, created_at, updated_at
+) RETURNING id, merchant_id, sub_mch_id, status, created_at, updated_at, latest_settlement_application_no, latest_settlement_application_submitted_at
 `
 
 type CreateMerchantPaymentConfigParams struct {
@@ -37,6 +37,8 @@ func (q *Queries) CreateMerchantPaymentConfig(ctx context.Context, arg CreateMer
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.LatestSettlementApplicationNo,
+		&i.LatestSettlementApplicationSubmittedAt,
 	)
 	return i, err
 }
@@ -52,7 +54,7 @@ func (q *Queries) DeleteMerchantPaymentConfig(ctx context.Context, merchantID in
 }
 
 const getMerchantPaymentConfig = `-- name: GetMerchantPaymentConfig :one
-SELECT id, merchant_id, sub_mch_id, status, created_at, updated_at FROM merchant_payment_configs
+SELECT id, merchant_id, sub_mch_id, status, created_at, updated_at, latest_settlement_application_no, latest_settlement_application_submitted_at FROM merchant_payment_configs
 WHERE merchant_id = $1 LIMIT 1
 `
 
@@ -66,12 +68,14 @@ func (q *Queries) GetMerchantPaymentConfig(ctx context.Context, merchantID int64
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.LatestSettlementApplicationNo,
+		&i.LatestSettlementApplicationSubmittedAt,
 	)
 	return i, err
 }
 
 const getMerchantPaymentConfigBySubMchID = `-- name: GetMerchantPaymentConfigBySubMchID :one
-SELECT id, merchant_id, sub_mch_id, status, created_at, updated_at FROM merchant_payment_configs
+SELECT id, merchant_id, sub_mch_id, status, created_at, updated_at, latest_settlement_application_no, latest_settlement_application_submitted_at FROM merchant_payment_configs
 WHERE sub_mch_id = $1 LIMIT 1
 `
 
@@ -85,6 +89,8 @@ func (q *Queries) GetMerchantPaymentConfigBySubMchID(ctx context.Context, subMch
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.LatestSettlementApplicationNo,
+		&i.LatestSettlementApplicationSubmittedAt,
 	)
 	return i, err
 }
@@ -96,7 +102,7 @@ SET
     status = COALESCE($3, status),
     updated_at = now()
 WHERE merchant_id = $1
-RETURNING id, merchant_id, sub_mch_id, status, created_at, updated_at
+RETURNING id, merchant_id, sub_mch_id, status, created_at, updated_at, latest_settlement_application_no, latest_settlement_application_submitted_at
 `
 
 type UpdateMerchantPaymentConfigParams struct {
@@ -115,6 +121,40 @@ func (q *Queries) UpdateMerchantPaymentConfig(ctx context.Context, arg UpdateMer
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.LatestSettlementApplicationNo,
+		&i.LatestSettlementApplicationSubmittedAt,
+	)
+	return i, err
+}
+
+const updateMerchantPaymentConfigSettlementApplication = `-- name: UpdateMerchantPaymentConfigSettlementApplication :one
+UPDATE merchant_payment_configs
+SET
+    latest_settlement_application_no = COALESCE($2, latest_settlement_application_no),
+    latest_settlement_application_submitted_at = COALESCE($3, latest_settlement_application_submitted_at),
+    updated_at = now()
+WHERE merchant_id = $1
+RETURNING id, merchant_id, sub_mch_id, status, created_at, updated_at, latest_settlement_application_no, latest_settlement_application_submitted_at
+`
+
+type UpdateMerchantPaymentConfigSettlementApplicationParams struct {
+	MerchantID                             int64              `json:"merchant_id"`
+	LatestSettlementApplicationNo          pgtype.Text        `json:"latest_settlement_application_no"`
+	LatestSettlementApplicationSubmittedAt pgtype.Timestamptz `json:"latest_settlement_application_submitted_at"`
+}
+
+func (q *Queries) UpdateMerchantPaymentConfigSettlementApplication(ctx context.Context, arg UpdateMerchantPaymentConfigSettlementApplicationParams) (MerchantPaymentConfig, error) {
+	row := q.db.QueryRow(ctx, updateMerchantPaymentConfigSettlementApplication, arg.MerchantID, arg.LatestSettlementApplicationNo, arg.LatestSettlementApplicationSubmittedAt)
+	var i MerchantPaymentConfig
+	err := row.Scan(
+		&i.ID,
+		&i.MerchantID,
+		&i.SubMchID,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.LatestSettlementApplicationNo,
+		&i.LatestSettlementApplicationSubmittedAt,
 	)
 	return i, err
 }
