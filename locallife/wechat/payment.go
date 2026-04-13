@@ -30,7 +30,8 @@ import (
 
 // 错误定义
 var (
-	ErrInvalidSignature = errors.New("invalid signature")
+	ErrInvalidSignature           = errors.New("invalid signature")
+	nonceRandomReader   io.Reader = rand.Reader
 )
 
 // WechatPayError 微信支付API错误响应
@@ -1072,7 +1073,7 @@ func (c *PaymentClient) signWithRSA(message string) (string, error) {
 // generateNonceStr 生成随机字符串。极少数情况下 crypto/rand 不可用时返回 error。
 func generateNonceStr() (string, error) {
 	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
+	if _, err := io.ReadFull(nonceRandomReader, b); err != nil {
 		return "", fmt.Errorf("crypto/rand.Read failed: %w", err)
 	}
 	return fmt.Sprintf("%x", b), nil

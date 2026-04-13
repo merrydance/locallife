@@ -1,16 +1,21 @@
 package wechat
 
 import (
+	"bytes"
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha1"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
+	"mime"
+	"mime/multipart"
 	"net/http"
 	"strings"
 	"testing"
@@ -23,6 +28,470 @@ type ecommerceRoundTripFunc func(*http.Request) (*http.Response, error)
 
 func (fn ecommerceRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return fn(req)
+}
+
+const tinyPNGBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+nX6sAAAAASUVORK5CYII="
+
+func decodeTinyPNG(t *testing.T) []byte {
+	t.Helper()
+	decoded, err := base64.StdEncoding.DecodeString(tinyPNGBase64)
+	require.NoError(t, err)
+	return decoded
+}
+
+func minimalBMP() []byte {
+	return []byte{
+		0x42, 0x4d, 0x36, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x36, 0x00, 0x00, 0x00, 0x28, 0x00,
+		0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00,
+		0x00, 0x00, 0x01, 0x00, 0x18, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	}
+}
+
+func parseUploadImageMultipartRequest(t *testing.T, req *http.Request) (map[string]string, []byte, string, string) {
+	t.Helper()
+	bodyBytes, err := io.ReadAll(req.Body)
+	require.NoError(t, err)
+	require.NoError(t, req.Body.Close())
+	req.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+
+	mediaType, params, err := mime.ParseMediaType(req.Header.Get("Content-Type"))
+	require.NoError(t, err)
+	require.Equal(t, "multipart/form-data", mediaType)
+	require.NotEmpty(t, params["boundary"])
+
+	reader := multipart.NewReader(bytes.NewReader(bodyBytes), params["boundary"])
+	meta := map[string]string{}
+	var fileBytes []byte
+	var fileName string
+	var fileContentType string
+
+	for {
+		part, err := reader.NextPart()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		require.NoError(t, err)
+
+		partData, readErr := io.ReadAll(part)
+		require.NoError(t, readErr)
+
+		switch part.FormName() {
+		case "meta":
+			require.Equal(t, "application/json", part.Header.Get("Content-Type"))
+			require.NoError(t, json.Unmarshal(partData, &meta))
+		case "file":
+			fileName = part.FileName()
+			fileContentType = part.Header.Get("Content-Type")
+			fileBytes = partData
+		}
+	}
+
+	require.NotEmpty(t, meta)
+	require.NotEmpty(t, fileName)
+	require.NotEmpty(t, fileBytes)
+	return meta, fileBytes, fileName, fileContentType
+}
+
+type scriptedNonceReader struct {
+	callIndex   int
+	failOnCalls map[int]error
+}
+
+func (r *scriptedNonceReader) Read(p []byte) (int, error) {
+	r.callIndex++
+	if err := r.failOnCalls[r.callIndex]; err != nil {
+		return 0, err
+	}
+	for index := range p {
+		p[index] = byte(r.callIndex + index + 1)
+	}
+	return len(p), nil
+}
+
+func withNonceRandomReaderForTest(t *testing.T, reader io.Reader) {
+	t.Helper()
+	previous := nonceRandomReader
+	nonceRandomReader = reader
+	t.Cleanup(func() {
+		nonceRandomReader = previous
+	})
+}
+
+func newTestUploadImageClient(t *testing.T, spMchID string) *EcommerceClient {
+	t.Helper()
+
+	merchantPrivateKey, _ := generateTestKeyPair(t)
+	_, platformPublicKey := generateTestKeyPair(t)
+
+	tempDir := t.TempDir()
+	privateKeyPath := createTestPrivateKeyFile(t, tempDir, merchantPrivateKey)
+	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
+
+	client, err := NewEcommerceClient(EcommerceClientConfig{
+		PaymentClientConfig: PaymentClientConfig{
+			MchID:                 "base-mchid-001",
+			AppID:                 "service-appid-001",
+			SerialNumber:          "test_serial",
+			APIV3Key:              testAPIV3Key(),
+			PrivateKeyPath:        privateKeyPath,
+			PlatformPublicKeyPath: publicKeyPath,
+			PlatformPublicKeyID:   "PUB_KEY_ID_0123456789",
+			NotifyURL:             "https://example.com/notify",
+		},
+		SpMchID: spMchID,
+		SpAppID: "service-appid-001",
+	})
+	require.NoError(t, err)
+	return client
+}
+
+func TestUploadImage_SendsValidatedMultipartBodyWithServiceProviderMchID(t *testing.T) {
+	merchantPrivateKey, _ := generateTestKeyPair(t)
+	platformPrivateKey, platformPublicKey := generateTestKeyPair(t)
+
+	tempDir := t.TempDir()
+	privateKeyPath := createTestPrivateKeyFile(t, tempDir, merchantPrivateKey)
+	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
+
+	client, err := NewEcommerceClient(EcommerceClientConfig{
+		PaymentClientConfig: PaymentClientConfig{
+			MchID:                 "ignored_base_mchid",
+			AppID:                 "service-appid-001",
+			SerialNumber:          "test_serial",
+			APIV3Key:              testAPIV3Key(),
+			PrivateKeyPath:        privateKeyPath,
+			PlatformPublicKeyPath: publicKeyPath,
+			PlatformPublicKeyID:   "PUB_KEY_ID_0123456789",
+			NotifyURL:             "https://example.com/notify",
+		},
+		SpMchID: "service-mchid-001",
+		SpAppID: "service-appid-001",
+	})
+	require.NoError(t, err)
+
+	fileBytes := decodeTinyPNG(t)
+	expectedHash := sha256.Sum256(fileBytes)
+	expectedHashHex := fmt.Sprintf("%x", expectedHash)
+
+	client.httpClient = &http.Client{
+		Transport: signedEcommerceTransport(t, platformPrivateKey, "PUB_KEY_ID_0123456789", func(req *http.Request) (*http.Response, error) {
+			require.Equal(t, http.MethodPost, req.Method)
+			require.Equal(t, merchantMediaUploadURL, req.URL.Path)
+			require.Equal(t, "application/json", req.Header.Get("Accept"))
+			require.NotEmpty(t, req.Header.Get("Request-ID"))
+			authorization := req.Header.Get("Authorization")
+			require.Contains(t, authorization, `mchid="service-mchid-001"`)
+			require.NotContains(t, authorization, "ignored_base_mchid")
+
+			meta, uploadedFile, uploadedFileName, uploadedContentType := parseUploadImageMultipartRequest(t, req)
+			require.Equal(t, "tiny.png", meta["filename"])
+			require.Equal(t, expectedHashHex, meta["sha256"])
+			require.Equal(t, "tiny.png", uploadedFileName)
+			require.Equal(t, "image/png", uploadedContentType)
+			require.Equal(t, fileBytes, uploadedFile)
+
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader(`{"media_id":"wx-media-id-001"}`)),
+			}, nil
+		}),
+	}
+
+	resp, err := client.UploadImage(context.Background(), "tiny.png", fileBytes)
+	require.NoError(t, err)
+	require.Equal(t, "wx-media-id-001", resp.MediaID)
+}
+
+func TestUploadImage_AcceptsBMPPayload(t *testing.T) {
+	merchantPrivateKey, _ := generateTestKeyPair(t)
+	platformPrivateKey, platformPublicKey := generateTestKeyPair(t)
+
+	tempDir := t.TempDir()
+	privateKeyPath := createTestPrivateKeyFile(t, tempDir, merchantPrivateKey)
+	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
+
+	client, err := NewEcommerceClient(EcommerceClientConfig{
+		PaymentClientConfig: PaymentClientConfig{
+			MchID:                 "ignored_base_mchid",
+			AppID:                 "service-appid-001",
+			SerialNumber:          "test_serial",
+			APIV3Key:              testAPIV3Key(),
+			PrivateKeyPath:        privateKeyPath,
+			PlatformPublicKeyPath: publicKeyPath,
+			PlatformPublicKeyID:   "PUB_KEY_ID_0123456789",
+			NotifyURL:             "https://example.com/notify",
+		},
+		SpMchID: "service-mchid-001",
+		SpAppID: "service-appid-001",
+	})
+	require.NoError(t, err)
+
+	fileBytes := minimalBMP()
+	expectedHash := sha256.Sum256(fileBytes)
+	expectedHashHex := fmt.Sprintf("%x", expectedHash)
+
+	client.httpClient = &http.Client{
+		Transport: signedEcommerceTransport(t, platformPrivateKey, "PUB_KEY_ID_0123456789", func(req *http.Request) (*http.Response, error) {
+			require.Equal(t, http.MethodPost, req.Method)
+			require.Equal(t, merchantMediaUploadURL, req.URL.Path)
+
+			meta, uploadedFile, uploadedFileName, uploadedContentType := parseUploadImageMultipartRequest(t, req)
+			require.Equal(t, "tiny.bmp", meta["filename"])
+			require.Equal(t, expectedHashHex, meta["sha256"])
+			require.Equal(t, "tiny.bmp", uploadedFileName)
+			require.Equal(t, "image/bmp", uploadedContentType)
+			require.Equal(t, fileBytes, uploadedFile)
+
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader(`{"media_id":"wx-media-id-bmp"}`)),
+			}, nil
+		}),
+	}
+
+	resp, err := client.UploadImage(context.Background(), "tiny.bmp", fileBytes)
+	require.NoError(t, err)
+	require.Equal(t, "wx-media-id-bmp", resp.MediaID)
+}
+
+func TestUploadImage_RejectsEmptyFile(t *testing.T) {
+	merchantPrivateKey, _ := generateTestKeyPair(t)
+	_, platformPublicKey := generateTestKeyPair(t)
+
+	tempDir := t.TempDir()
+	privateKeyPath := createTestPrivateKeyFile(t, tempDir, merchantPrivateKey)
+	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
+
+	client, err := NewEcommerceClient(EcommerceClientConfig{
+		PaymentClientConfig: PaymentClientConfig{
+			MchID:                 "ignored_base_mchid",
+			AppID:                 "service-appid-001",
+			SerialNumber:          "test_serial",
+			APIV3Key:              testAPIV3Key(),
+			PrivateKeyPath:        privateKeyPath,
+			PlatformPublicKeyPath: publicKeyPath,
+			PlatformPublicKeyID:   "PUB_KEY_ID_0123456789",
+			NotifyURL:             "https://example.com/notify",
+		},
+		SpMchID: "service-mchid-001",
+		SpAppID: "service-appid-001",
+	})
+	require.NoError(t, err)
+
+	client.httpClient = &http.Client{
+		Transport: ecommerceRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+			t.Fatalf("unexpected HTTP request: %s %s", req.Method, req.URL.String())
+			return nil, nil
+		}),
+	}
+
+	_, err = client.UploadImage(context.Background(), "empty.png", nil)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "file is empty")
+}
+
+func TestUploadImage_RejectsNonImagePayload(t *testing.T) {
+	merchantPrivateKey, _ := generateTestKeyPair(t)
+	_, platformPublicKey := generateTestKeyPair(t)
+
+	tempDir := t.TempDir()
+	privateKeyPath := createTestPrivateKeyFile(t, tempDir, merchantPrivateKey)
+	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
+
+	client, err := NewEcommerceClient(EcommerceClientConfig{
+		PaymentClientConfig: PaymentClientConfig{
+			MchID:                 "ignored_base_mchid",
+			AppID:                 "service-appid-001",
+			SerialNumber:          "test_serial",
+			APIV3Key:              testAPIV3Key(),
+			PrivateKeyPath:        privateKeyPath,
+			PlatformPublicKeyPath: publicKeyPath,
+			PlatformPublicKeyID:   "PUB_KEY_ID_0123456789",
+			NotifyURL:             "https://example.com/notify",
+		},
+		SpMchID: "service-mchid-001",
+		SpAppID: "service-appid-001",
+	})
+	require.NoError(t, err)
+
+	client.httpClient = &http.Client{
+		Transport: ecommerceRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+			t.Fatalf("unexpected HTTP request: %s %s", req.Method, req.URL.String())
+			return nil, nil
+		}),
+	}
+
+	_, err = client.UploadImage(context.Background(), "fake.jpg", []byte("not-a-real-image"))
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "provide a real JPEG image")
+}
+
+func TestUploadImage_RejectsOversizedPayload(t *testing.T) {
+	merchantPrivateKey, _ := generateTestKeyPair(t)
+	_, platformPublicKey := generateTestKeyPair(t)
+
+	tempDir := t.TempDir()
+	privateKeyPath := createTestPrivateKeyFile(t, tempDir, merchantPrivateKey)
+	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
+
+	client, err := NewEcommerceClient(EcommerceClientConfig{
+		PaymentClientConfig: PaymentClientConfig{
+			MchID:                 "ignored_base_mchid",
+			AppID:                 "service-appid-001",
+			SerialNumber:          "test_serial",
+			APIV3Key:              testAPIV3Key(),
+			PrivateKeyPath:        privateKeyPath,
+			PlatformPublicKeyPath: publicKeyPath,
+			PlatformPublicKeyID:   "PUB_KEY_ID_0123456789",
+			NotifyURL:             "https://example.com/notify",
+		},
+		SpMchID: "service-mchid-001",
+		SpAppID: "service-appid-001",
+	})
+	require.NoError(t, err)
+
+	oversized := bytes.Repeat([]byte{0x01}, merchantMediaUploadMaxBytes+1)
+	_, err = client.UploadImage(context.Background(), "too-large.png", oversized)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "exceeds the 2MB WeChat merchant media upload limit")
+}
+
+func TestUploadImage_RejectsMissingMediaIDInSuccessResponse(t *testing.T) {
+	merchantPrivateKey, _ := generateTestKeyPair(t)
+	platformPrivateKey, platformPublicKey := generateTestKeyPair(t)
+
+	tempDir := t.TempDir()
+	privateKeyPath := createTestPrivateKeyFile(t, tempDir, merchantPrivateKey)
+	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
+
+	client, err := NewEcommerceClient(EcommerceClientConfig{
+		PaymentClientConfig: PaymentClientConfig{
+			MchID:                 "ignored_base_mchid",
+			AppID:                 "service-appid-001",
+			SerialNumber:          "test_serial",
+			APIV3Key:              testAPIV3Key(),
+			PrivateKeyPath:        privateKeyPath,
+			PlatformPublicKeyPath: publicKeyPath,
+			PlatformPublicKeyID:   "PUB_KEY_ID_0123456789",
+			NotifyURL:             "https://example.com/notify",
+		},
+		SpMchID: "service-mchid-001",
+		SpAppID: "service-appid-001",
+	})
+	require.NoError(t, err)
+
+	client.httpClient = &http.Client{
+		Transport: signedEcommerceTransport(t, platformPrivateKey, "PUB_KEY_ID_0123456789", func(req *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader(`{}`)),
+			}, nil
+		}),
+	}
+
+	_, err = client.UploadImage(context.Background(), "tiny.png", decodeTinyPNG(t))
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "missing media_id")
+	require.Contains(t, err.Error(), "request_id=")
+}
+
+func TestUploadImage_WrapsWechatErrorsWithRequestID(t *testing.T) {
+	merchantPrivateKey, _ := generateTestKeyPair(t)
+	platformPrivateKey, platformPublicKey := generateTestKeyPair(t)
+
+	tempDir := t.TempDir()
+	privateKeyPath := createTestPrivateKeyFile(t, tempDir, merchantPrivateKey)
+	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
+
+	client, err := NewEcommerceClient(EcommerceClientConfig{
+		PaymentClientConfig: PaymentClientConfig{
+			MchID:                 "ignored_base_mchid",
+			AppID:                 "service-appid-001",
+			SerialNumber:          "test_serial",
+			APIV3Key:              testAPIV3Key(),
+			PrivateKeyPath:        privateKeyPath,
+			PlatformPublicKeyPath: publicKeyPath,
+			PlatformPublicKeyID:   "PUB_KEY_ID_0123456789",
+			NotifyURL:             "https://example.com/notify",
+		},
+		SpMchID: "service-mchid-001",
+		SpAppID: "service-appid-001",
+	})
+	require.NoError(t, err)
+
+	client.httpClient = &http.Client{
+		Transport: signedEcommerceTransport(t, platformPrivateKey, "PUB_KEY_ID_0123456789", func(req *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusForbidden,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader(`{"code":"NO_AUTH","message":"商户权限异常"}`)),
+			}, nil
+		}),
+	}
+
+	_, err = client.UploadImage(context.Background(), "tiny.png", decodeTinyPNG(t))
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "request_id=")
+	require.Contains(t, err.Error(), "NO_AUTH")
+
+	var wxErr *WechatPayError
+	require.True(t, errors.As(err, &wxErr))
+	require.Equal(t, "NO_AUTH", wxErr.Code)
+	require.Equal(t, http.StatusForbidden, wxErr.StatusCode)
+}
+
+func TestUploadImage_RejectsImplicitServiceProviderMchIDFallback(t *testing.T) {
+	client := newTestUploadImageClient(t, "")
+	client.httpClient = &http.Client{
+		Transport: ecommerceRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+			t.Fatalf("unexpected HTTP request: %s %s", req.Method, req.URL.String())
+			return nil, nil
+		}),
+	}
+
+	_, err := client.UploadImage(context.Background(), "tiny.png", decodeTinyPNG(t))
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "request_id=")
+	require.Contains(t, err.Error(), "service provider merchant id must be configured explicitly")
+}
+
+func TestUploadImage_ReturnsRequestIDWhenRequestIDGenerationFails(t *testing.T) {
+	client := newTestUploadImageClient(t, "service-mchid-001")
+	client.httpClient = &http.Client{
+		Transport: ecommerceRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+			t.Fatalf("unexpected HTTP request: %s %s", req.Method, req.URL.String())
+			return nil, nil
+		}),
+	}
+	withNonceRandomReaderForTest(t, &scriptedNonceReader{failOnCalls: map[int]error{1: errors.New("rand unavailable")}})
+
+	_, err := client.UploadImage(context.Background(), "tiny.png", decodeTinyPNG(t))
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "request_id=merchant-media-upload-")
+	require.Contains(t, err.Error(), "failed to generate request id")
+}
+
+func TestUploadImage_ReturnsRequestIDWhenSigningNonceGenerationFails(t *testing.T) {
+	client := newTestUploadImageClient(t, "service-mchid-001")
+	client.httpClient = &http.Client{
+		Transport: ecommerceRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+			t.Fatalf("unexpected HTTP request: %s %s", req.Method, req.URL.String())
+			return nil, nil
+		}),
+	}
+	withNonceRandomReaderForTest(t, &scriptedNonceReader{failOnCalls: map[int]error{2: errors.New("rand unavailable")}})
+
+	_, err := client.UploadImage(context.Background(), "tiny.png", decodeTinyPNG(t))
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "request_id=")
+	require.Contains(t, err.Error(), "failed to generate signing nonce")
 }
 
 func TestCreateEcommerceApplyment_SetsWechatpaySerialHeader(t *testing.T) {
@@ -62,7 +531,6 @@ func TestCreateEcommerceApplyment_SetsWechatpaySerialHeader(t *testing.T) {
 			accountInfo, ok := body["account_info"].(map[string]any)
 			require.True(t, ok)
 			require.Equal(t, "75", accountInfo["bank_account_type"])
-			require.Equal(t, float64(1099), accountInfo["account_bank_code"])
 			require.Equal(t, "402584040001", accountInfo["bank_branch_id"])
 
 			contactInfo, ok := body["contact_info"].(map[string]any)
@@ -99,7 +567,7 @@ func TestCreateEcommerceApplyment_SetsWechatpaySerialHeader(t *testing.T) {
 		BusinessLicense:    &BusinessLicenseInfo{BusinessLicenseCopy: "license_copy_media_id", BusinessLicenseNumber: "91440300TEST12345", MerchantName: "测试门店", LegalPerson: "张三", CompanyAddress: "深圳市南山区", BusinessTime: "[\"2020-01-01\",\"长期\"]"},
 		MerchantShortname:  "测试运营商",
 		IDCardInfo:         &ApplymentIDCardInfo{IDCardCopy: "copy_media_id", IDCardNational: "national_media_id", IDCardName: "encrypted_name", IDCardNumber: "encrypted_id_no", IDCardValidTimeBegin: "2020-01-01", IDCardValidTime: "长期"},
-		AccountInfo:        &ApplymentBankAccountInfo{BankAccountType: "ACCOUNT_TYPE_PRIVATE", AccountBank: "其他银行", AccountBankCode: 1099, AccountName: "encrypted_account_name", BankAddressCode: "440300", BankBranchID: "402584040001", BankName: "深圳前海微众银行深圳南山支行", AccountNumber: "encrypted_account_no"},
+		AccountInfo:        &ApplymentBankAccountInfo{BankAccountType: "ACCOUNT_TYPE_PRIVATE", AccountBank: "其他银行", AccountName: "encrypted_account_name", BankAddressCode: "440300", BankBranchID: "402584040001", BankName: "深圳前海微众银行深圳南山支行", AccountNumber: "encrypted_account_no"},
 		ContactInfo:        &ApplymentContactInfo{ContactType: "LEGAL", ContactName: "encrypted_contact_name", MobilePhone: "encrypted_mobile"},
 		SalesSceneInfo:     &ApplymentSalesSceneInfo{StoreName: "测试门店", StoreURL: "https://example.com/store"},
 		SettlementInfo:     &ApplymentSettlementInfo{SettlementID: 719, QualificationType: "餐饮"},

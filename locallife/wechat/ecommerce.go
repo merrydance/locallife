@@ -7,9 +7,13 @@ import (
 	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image"
+	_ "image/jpeg"
+	_ "image/png"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -18,12 +22,16 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/rs/zerolog/log"
 )
 
 // 微信支付平台收付通 API 端点
 const (
 	// 图片上传
 	merchantMediaUploadURL = "/v3/merchant/media/upload"
+	// 微信支付该接口的业务错误表明确限制图片不能超过 2MB。
+	merchantMediaUploadMaxBytes = 2 * 1024 * 1024
 
 	// 二级商户进件
 	ecommerceApplymentsURL      = "/v3/ecommerce/applyments/"
@@ -83,6 +91,7 @@ const (
 type EcommerceClient struct {
 	*PaymentClient            // 复用基础支付客户端
 	spMchID            string // 服务商商户号
+	explicitSpMchID    bool
 	spAppID            string // 服务商 AppID
 	spMchName          string // 服务商名称（可选）
 	partnerNotifyURL   string
@@ -94,7 +103,7 @@ type EcommerceClient struct {
 // EcommerceClientConfig 平台收付通客户端配置
 type EcommerceClientConfig struct {
 	PaymentClientConfig        // 嵌入基础配置
-	SpMchID             string // 服务商商户号（如与 MchID 相同可不填）
+	SpMchID             string // 服务商商户号（UploadImage 要求显式配置；即使与 MchID 相同也应填写）
 	SpAppID             string // 服务商 AppID（如与 AppID 相同可不填）
 	SpMchName           string // 服务商名称（可选）
 	PartnerNotifyURL    string // 收付通普通支付回调地址（空则回退到 PaymentClientConfig.NotifyURL）
@@ -199,14 +208,15 @@ func NewEcommerceClient(cfg EcommerceClientConfig) (*EcommerceClient, error) {
 		return nil, fmt.Errorf("create base payment client: %w", err)
 	}
 
-	spMchID := cfg.SpMchID
+	spMchID := strings.TrimSpace(cfg.SpMchID)
+	explicitSpMchID := spMchID != ""
 	if spMchID == "" {
-		spMchID = cfg.MchID
+		spMchID = strings.TrimSpace(cfg.MchID)
 	}
 
-	spAppID := cfg.SpAppID
+	spAppID := strings.TrimSpace(cfg.SpAppID)
 	if spAppID == "" {
-		spAppID = cfg.AppID
+		spAppID = strings.TrimSpace(cfg.AppID)
 	}
 
 	spMchName := strings.TrimSpace(cfg.SpMchName)
@@ -227,6 +237,7 @@ func NewEcommerceClient(cfg EcommerceClientConfig) (*EcommerceClient, error) {
 	return &EcommerceClient{
 		PaymentClient:      baseClient,
 		spMchID:            spMchID,
+		explicitSpMchID:    explicitSpMchID,
 		spAppID:            spAppID,
 		spMchName:          spMchName,
 		partnerNotifyURL:   partnerNotifyURL,
@@ -433,7 +444,6 @@ type ApplymentIDCardInfo struct {
 type ApplymentBankAccountInfo struct {
 	BankAccountType string `json:"bank_account_type"`           // ACCOUNT_TYPE_BUSINESS-对公, ACCOUNT_TYPE_PRIVATE-对私
 	AccountBank     string `json:"account_bank"`                // 开户银行
-	AccountBankCode int64  `json:"account_bank_code,omitempty"` // 开户银行编码
 	AccountName     string `json:"account_name"`                // 开户名称（需加密）
 	BankAddressCode string `json:"bank_address_code,omitempty"` // 开户银行省市编码
 	BankBranchID    string `json:"bank_branch_id,omitempty"`    // 开户银行联行号
@@ -651,9 +661,6 @@ func (c *EcommerceClient) CreateEcommerceApplyment(ctx context.Context, req *Eco
 			"account_bank":      req.AccountInfo.AccountBank,
 			"account_name":      req.AccountInfo.AccountName,
 			"account_number":    req.AccountInfo.AccountNumber,
-		}
-		if req.AccountInfo.AccountBankCode > 0 {
-			accountInfo["account_bank_code"] = req.AccountInfo.AccountBankCode
 		}
 		if req.AccountInfo.BankAddressCode != "" {
 			accountInfo["bank_address_code"] = req.AccountInfo.BankAddressCode
@@ -2509,22 +2516,82 @@ type ImageUploadResponse struct {
 	MediaID string `json:"media_id"` // 媒体文件标识ID
 }
 
+// UploadImageValidationError represents a caller-fixable local validation failure
+// before the WeChat merchant media upload request is sent.
+type UploadImageValidationError struct {
+	Message string
+}
+
+func (e *UploadImageValidationError) Error() string {
+	if e == nil || strings.TrimSpace(e.Message) == "" {
+		return "upload image validation failed"
+	}
+	return e.Message
+}
+
+func IsUploadImageValidationError(err error) bool {
+	var target *UploadImageValidationError
+	return errors.As(err, &target)
+}
+
 // UploadImage 上传图片到微信支付
 // filename: 文件名（需要包含扩展名如 .jpg, .png）
 // fileData: 文件二进制数据
 // 返回 MediaID 用于进件申请
 func (c *EcommerceClient) UploadImage(ctx context.Context, filename string, fileData []byte) (*ImageUploadResponse, error) {
+	requestID, err := generateNonceStr()
+	if err != nil {
+		requestID = fallbackMerchantMediaUploadRequestID()
+		wrappedErr := fmt.Errorf("upload image: failed to generate request id: %w", err)
+		log.Error().
+			Str("request_id", requestID).
+			Str("filename", filename).
+			Int("file_size", len(fileData)).
+			Err(wrappedErr).
+			Msg("wechat merchant media upload request id generation failed")
+		return nil, fmt.Errorf("request_id=%s: %w", requestID, wrappedErr)
+	}
+
+	if !c.explicitSpMchID {
+		err := errors.New("upload image: service provider merchant id must be configured explicitly for /v3/merchant/media/upload")
+		log.Error().
+			Str("request_id", requestID).
+			Str("filename", filename).
+			Int("file_size", len(fileData)).
+			Bool("sp_mchid_explicit", c.explicitSpMchID).
+			Err(err).
+			Msg("wechat merchant media upload missing explicit service provider merchant id")
+		return nil, fmt.Errorf("request_id=%s: %w", requestID, err)
+	}
+
+	normalizedFilename, contentType, err := validateMerchantMediaUploadImage(filename, fileData)
+	if err != nil {
+		log.Error().
+			Str("request_id", requestID).
+			Str("filename", filename).
+			Int("file_size", len(fileData)).
+			Err(err).
+			Msg("wechat merchant media upload validation failed")
+		return nil, err
+	}
+
 	// 计算文件 SHA256 哈希
 	fileHash := sha256.Sum256(fileData)
 	sha256Hex := fmt.Sprintf("%x", fileHash)
 
 	// 构造 meta 信息
 	meta := map[string]string{
-		"filename": filename,
+		"filename": normalizedFilename,
 		"sha256":   sha256Hex,
 	}
 	metaBytes, err := json.Marshal(meta)
 	if err != nil {
+		log.Error().
+			Str("request_id", requestID).
+			Str("filename", normalizedFilename).
+			Int("file_size", len(fileData)).
+			Err(err).
+			Msg("wechat merchant media upload meta marshal failed")
 		return nil, fmt.Errorf("marshal meta: %w", err)
 	}
 
@@ -2538,26 +2605,58 @@ func (c *EcommerceClient) UploadImage(ctx context.Context, filename string, file
 	metaHeader.Set("Content-Type", "application/json")
 	metaPart, err := writer.CreatePart(metaHeader)
 	if err != nil {
+		log.Error().
+			Str("request_id", requestID).
+			Str("filename", normalizedFilename).
+			Int("file_size", len(fileData)).
+			Err(err).
+			Msg("wechat merchant media upload meta part creation failed")
 		return nil, fmt.Errorf("create meta part: %w", err)
 	}
 	if _, err := metaPart.Write(metaBytes); err != nil {
+		log.Error().
+			Str("request_id", requestID).
+			Str("filename", normalizedFilename).
+			Int("file_size", len(fileData)).
+			Err(err).
+			Msg("wechat merchant media upload meta part write failed")
 		return nil, fmt.Errorf("write meta part: %w", err)
 	}
 
 	// 添加 file 字段
-	contentType := getImageContentType(filename)
 	fileHeader := make(textproto.MIMEHeader)
-	fileHeader.Set("Content-Disposition", fmt.Sprintf(`form-data; name="file"; filename="%s"`, filename))
+	fileHeader.Set("Content-Disposition", fmt.Sprintf(`form-data; name="file"; filename="%s"`, normalizedFilename))
 	fileHeader.Set("Content-Type", contentType)
 	filePart, err := writer.CreatePart(fileHeader)
 	if err != nil {
+		log.Error().
+			Str("request_id", requestID).
+			Str("filename", normalizedFilename).
+			Str("content_type", contentType).
+			Int("file_size", len(fileData)).
+			Err(err).
+			Msg("wechat merchant media upload file part creation failed")
 		return nil, fmt.Errorf("create file part: %w", err)
 	}
-	if _, err := filePart.Write(fileData); err != nil {
+	if _, err := io.Copy(filePart, bytes.NewReader(fileData)); err != nil {
+		log.Error().
+			Str("request_id", requestID).
+			Str("filename", normalizedFilename).
+			Str("content_type", contentType).
+			Int("file_size", len(fileData)).
+			Err(err).
+			Msg("wechat merchant media upload file part write failed")
 		return nil, fmt.Errorf("write file part: %w", err)
 	}
 
 	if err := writer.Close(); err != nil {
+		log.Error().
+			Str("request_id", requestID).
+			Str("filename", normalizedFilename).
+			Str("content_type", contentType).
+			Int("file_size", len(fileData)).
+			Err(err).
+			Msg("wechat merchant media upload multipart close failed")
 		return nil, fmt.Errorf("close multipart writer: %w", err)
 	}
 
@@ -2565,73 +2664,244 @@ func (c *EcommerceClient) UploadImage(ctx context.Context, filename string, file
 	url := wxPayBaseURL + merchantMediaUploadURL
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, &buf)
 	if err != nil {
+		log.Error().
+			Str("request_id", requestID).
+			Str("filename", normalizedFilename).
+			Str("content_type", contentType).
+			Int("file_size", len(fileData)).
+			Err(err).
+			Msg("wechat merchant media upload request creation failed")
 		return nil, fmt.Errorf("create request: %w", err)
 	}
 
 	// 设置请求头
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Request-ID", requestID)
 
 	// 生成签名（对于文件上传，body 使用 meta JSON）
 	timestamp := fmt.Sprintf("%d", time.Now().Unix())
 	nonceStr, err := generateNonceStr()
 	if err != nil {
-		return nil, err
+		wrappedErr := fmt.Errorf("upload image: failed to generate signing nonce: %w", err)
+		log.Error().
+			Str("request_id", requestID).
+			Str("filename", normalizedFilename).
+			Str("content_type", contentType).
+			Int("file_size", len(fileData)).
+			Err(wrappedErr).
+			Msg("wechat merchant media upload signing nonce generation failed")
+		return nil, fmt.Errorf("request_id=%s: %w", requestID, wrappedErr)
 	}
 	signature, err := c.generateSignature(http.MethodPost, merchantMediaUploadURL, timestamp, nonceStr, metaBytes)
 	if err != nil {
+		log.Error().
+			Str("request_id", requestID).
+			Str("filename", normalizedFilename).
+			Str("content_type", contentType).
+			Int("file_size", len(fileData)).
+			Err(err).
+			Msg("wechat merchant media upload signature generation failed")
 		return nil, fmt.Errorf("generate signature: %w", err)
 	}
 
 	// 设置 Authorization 头
 	authHeader := fmt.Sprintf(`WECHATPAY2-SHA256-RSA2048 mchid="%s",nonce_str="%s",timestamp="%s",serial_no="%s",signature="%s"`,
-		c.mchID, nonceStr, timestamp, c.serialNo, signature)
+		c.spMchID, nonceStr, timestamp, c.serialNo, signature)
 	req.Header.Set("Authorization", authHeader)
 
 	// 发送请求
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("send request: %w", err)
+		log.Error().
+			Str("request_id", requestID).
+			Str("filename", normalizedFilename).
+			Str("content_type", contentType).
+			Int("file_size", len(fileData)).
+			Err(err).
+			Msg("wechat merchant media upload request failed")
+		return nil, fmt.Errorf("send request (request_id=%s): %w", requestID, err)
 	}
 	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 	if err != nil {
+		log.Error().
+			Str("request_id", requestID).
+			Str("filename", normalizedFilename).
+			Str("content_type", contentType).
+			Int("file_size", len(fileData)).
+			Err(err).
+			Msg("wechat merchant media upload response read failed")
 		return nil, fmt.Errorf("read response: %w", err)
 	}
 
 	// 检查响应状态码
 	if err := c.verifyHTTPResponseSignature(resp, respBody); err != nil {
-		return nil, fmt.Errorf("verify response signature: %w", err)
+		log.Error().
+			Str("request_id", requestID).
+			Str("filename", normalizedFilename).
+			Str("content_type", contentType).
+			Int("file_size", len(fileData)).
+			Err(err).
+			Msg("wechat merchant media upload response signature verification failed")
+		return nil, fmt.Errorf("verify response signature (request_id=%s): %w", requestID, err)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		var wxErr WechatPayError
 		wxErr.StatusCode = resp.StatusCode
 		if err := json.Unmarshal(respBody, &wxErr); err == nil && wxErr.Code != "" {
-			return nil, &wxErr
+			log.Error().
+				Str("request_id", requestID).
+				Str("filename", normalizedFilename).
+				Str("content_type", contentType).
+				Int("file_size", len(fileData)).
+				Int("status_code", resp.StatusCode).
+				Str("wechat_code", wxErr.Code).
+				Str("wechat_message", wxErr.Message).
+				Str("wechat_detail", wxErr.Detail).
+				Msg("wechat merchant media upload rejected by upstream")
+			return nil, fmt.Errorf("request_id=%s: %s: %w", requestID, uploadImageWechatErrorGuide(&wxErr), &wxErr)
 		}
-		return nil, fmt.Errorf("upload image failed: status=%d, body=%s", resp.StatusCode, string(respBody))
+		log.Error().
+			Str("request_id", requestID).
+			Str("filename", normalizedFilename).
+			Str("content_type", contentType).
+			Int("file_size", len(fileData)).
+			Int("status_code", resp.StatusCode).
+			Bytes("response_body", respBody).
+			Msg("wechat merchant media upload failed with unparseable upstream error")
+		return nil, fmt.Errorf("wechat pay api error: status=%d, body=%s, request_id=%s", resp.StatusCode, string(respBody), requestID)
 	}
 
 	var result ImageUploadResponse
 	if err := json.Unmarshal(respBody, &result); err != nil {
+		log.Error().
+			Str("request_id", requestID).
+			Str("filename", normalizedFilename).
+			Str("content_type", contentType).
+			Int("file_size", len(fileData)).
+			Err(err).
+			Msg("wechat merchant media upload response decode failed")
 		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+	if strings.TrimSpace(result.MediaID) == "" {
+		err := errors.New("upload image: wechat response missing media_id")
+		log.Error().
+			Str("request_id", requestID).
+			Str("filename", normalizedFilename).
+			Str("content_type", contentType).
+			Int("file_size", len(fileData)).
+			Err(err).
+			Msg("wechat merchant media upload response missing media_id")
+		return nil, fmt.Errorf("request_id=%s: %w", requestID, err)
 	}
 
 	return &result, nil
 }
 
-// getImageContentType 根据文件名获取 Content-Type
-func getImageContentType(filename string) string {
-	ext := strings.ToLower(filepath.Ext(filename))
+func validateMerchantMediaUploadImage(filename string, fileData []byte) (string, string, error) {
+	normalizedFilename := strings.TrimSpace(filepath.Base(filename))
+	if normalizedFilename == "" || normalizedFilename == "." {
+		return "", "", newUploadImageValidationError("filename is required and must end with .jpg, .jpeg, .png, or .bmp")
+	}
+	if len(fileData) == 0 {
+		return "", "", newUploadImageValidationError("file is empty; provide a non-empty JPG, JPEG, PNG, or BMP image")
+	}
+	if len(fileData) > merchantMediaUploadMaxBytes {
+		return "", "", newUploadImageValidationError("file size %d exceeds the 2MB WeChat merchant media upload limit; compress the image and retry", len(fileData))
+	}
+
+	ext := strings.ToLower(filepath.Ext(normalizedFilename))
 	switch ext {
 	case ".jpg", ".jpeg":
-		return "image/jpeg"
+		if err := validateDecodedImageFormat(fileData, "jpeg"); err != nil {
+			return "", "", newUploadImageValidationError("file content does not match %s; provide a real JPEG image", ext)
+		}
+		return normalizedFilename, "image/jpeg", nil
 	case ".png":
-		return "image/png"
+		if err := validateDecodedImageFormat(fileData, "png"); err != nil {
+			return "", "", newUploadImageValidationError("file content does not match .png; provide a real PNG image")
+		}
+		return normalizedFilename, "image/png", nil
 	case ".bmp":
-		return "image/bmp"
+		if err := validateBMPImage(fileData); err != nil {
+			return "", "", newUploadImageValidationError("file content does not match .bmp; provide a real BMP image")
+		}
+		return normalizedFilename, "image/bmp", nil
 	default:
-		return "application/octet-stream"
+		return "", "", newUploadImageValidationError("unsupported file extension %q; only .jpg, .jpeg, .png, and .bmp are allowed", ext)
+	}
+}
+
+func validateDecodedImageFormat(fileData []byte, expectedFormat string) error {
+	config, format, err := image.DecodeConfig(bytes.NewReader(fileData))
+	if err != nil {
+		return err
+	}
+	if config.Width <= 0 || config.Height <= 0 {
+		return errors.New("image has invalid dimensions")
+	}
+	if format != expectedFormat {
+		return fmt.Errorf("decoded image format %q does not match expected %q", format, expectedFormat)
+	}
+	return nil
+}
+
+func validateBMPImage(fileData []byte) error {
+	if len(fileData) < 54 {
+		return errors.New("bmp payload is too small")
+	}
+	if fileData[0] != 'B' || fileData[1] != 'M' {
+		return errors.New("bmp signature is missing")
+	}
+	declaredSize := binary.LittleEndian.Uint32(fileData[2:6])
+	if declaredSize < 54 || declaredSize > uint32(len(fileData)) {
+		return errors.New("bmp file size header is invalid")
+	}
+	pixelOffset := binary.LittleEndian.Uint32(fileData[10:14])
+	if pixelOffset < 54 || pixelOffset > uint32(len(fileData)) {
+		return errors.New("bmp pixel offset is invalid")
+	}
+	dibHeaderSize := binary.LittleEndian.Uint32(fileData[14:18])
+	if dibHeaderSize < 40 {
+		return errors.New("bmp dib header is invalid")
+	}
+	width := int32(binary.LittleEndian.Uint32(fileData[18:22]))
+	height := int32(binary.LittleEndian.Uint32(fileData[22:26]))
+	if width <= 0 || height == 0 {
+		return errors.New("bmp dimensions are invalid")
+	}
+	if binary.LittleEndian.Uint16(fileData[28:30]) == 0 {
+		return errors.New("bmp bits per pixel is invalid")
+	}
+	return nil
+}
+
+func newUploadImageValidationError(format string, args ...any) error {
+	return &UploadImageValidationError{Message: fmt.Sprintf("upload image: "+format, args...)}
+}
+
+func fallbackMerchantMediaUploadRequestID() string {
+	return fmt.Sprintf("merchant-media-upload-%d", time.Now().UnixNano())
+}
+
+func uploadImageWechatErrorGuide(wxErr *WechatPayError) string {
+	if wxErr == nil {
+		return "upload image failed"
+	}
+	switch wxErr.Code {
+	case "PARAM_ERROR":
+		return "upload image rejected by wechat; verify filename suffix, image content, sha256, and file size before retrying"
+	case "NO_AUTH":
+		return "upload image rejected by wechat; confirm the service provider merchant has media upload permission"
+	case "FREQUENCY_LIMIT_EXCEED":
+		return "upload image rejected by wechat due to frequency limits; retry later with a lower request rate"
+	case "SIGN_ERROR":
+		return "upload image rejected by wechat because signature verification failed; verify merchant credentials and signing inputs"
+	case "SYSTEM_ERROR":
+		return "upload image failed because wechat reported a system error; retry later with the same parameters"
+	default:
+		return fmt.Sprintf("upload image failed with wechat error code %s", wxErr.Code)
 	}
 }
