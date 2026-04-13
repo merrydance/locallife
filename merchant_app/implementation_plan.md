@@ -595,6 +595,22 @@ func (j *JPushProvider) Send(ctx context.Context, req PushRequest) (string, erro
 }
 ```
 
+  ### vivo 授权模式补充要求
+
+  如果 vivo 开放平台或 JPush 厂商通道配置要求使用“授权模式”开通 vivo 推送，后端还需要补一条服务端回调能力。这不是商户 App 调用的业务接口，而是后端对接 vivo 平台时使用的授权回调地址。
+
+  建议约定如下：
+
+  - 推荐回调路径：`/v1/integrations/vivo/oauth/callback`
+  - 必须使用公网 HTTPS，且能被 vivo 服务器访问
+  - 收到 vivo 返回的 `code` 后，由服务端按 vivo 账号接入文档完成校验或换取授权结果
+  - 必须校验 `state` 或等效防重放字段，不能把 `code` 直接透传给客户端处理
+  - 必须记录授权结果、失败原因、最近一次回调时间，便于排查 vivo 通道开通失败
+  - 如果生产、预发使用不同地址，需要提前在 vivo 平台登记；多个回调地址按平台要求使用 `|` 分隔
+
+  > [!NOTE]
+  > 这是 vivo 授权模式专用要求，不等同于通知渠道 `channel_id`。只有在 vivo 平台明确要求授权模式时，这条后端能力才是接入阻塞项。
+
 ---
 
 ## 六、小票打印方案

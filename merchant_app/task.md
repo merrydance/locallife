@@ -1,5 +1,7 @@
 # 乐客来福商户端 Android App — 开发进度
 
+> 注：本清单已按当前代码库实际落地情况同步。部分功能虽然代码已落地，但仍可能依赖后端接口联调或真机验证。
+
 ## Phase 0：提示词工程 & 规范文档
 - [x] 根目录 `CLAUDE.md` 创建
 - [x] `merchant_app/CLAUDE.md` 创建
@@ -38,32 +40,32 @@
 - [ ] 超时未接单定时任务
 
 ### Flutter App
-- [ ] 项目骨架搭建 + 依赖配置
-- [ ] 主题 / 配置 / 环境变量
-- [ ] 绑定码登录模块 (bind_code_page + auth_service)
-  - [ ] 输入 6 位码 UI
-  - [ ] 调用 `/v1/auth/app-bind/verify`
-  - [ ] `flutter_secure_storage` Token 存储
-  - [ ] Dio 拦截器自动续期
-  - [ ] 启动时自动登录 (tryAutoLogin)
-- [ ] WebSocket 客户端对接
-- [ ] 前台服务 (Foreground Service)
-- [ ] 语音播报 (预录音频 + TTS)
-- [ ] 全屏接单弹窗 (Full-Screen Intent)
-- [ ] 消息去重机制
-- [ ] 轮询兜底 (30s)
-- [ ] JPush 集成
-- [ ] 接单确认交互
-- [ ] 订单列表页
+- [x] 项目骨架搭建 + 依赖配置
+- [x] 主题 / 配置 / 环境变量
+- [x] 绑定码登录模块 (bind_code_page + auth_service)
+  - [x] 输入 6 位码 UI
+  - [x] 调用 `/v1/auth/app-bind/verify`
+  - [x] `flutter_secure_storage` Token 存储
+  - [x] Dio 拦截器自动续期
+  - [x] 启动时自动登录 (tryAutoLogin)
+- [x] WebSocket 客户端对接
+- [x] 前台服务 (Foreground Service)
+- [x] 语音播报 (预录音频 + TTS)
+- [x] 全屏接单弹窗 (Full-Screen Intent)
+- [x] 消息去重机制
+- [x] 轮询兜底 (30s)
+- [x] JPush 集成
+- [x] 接单确认交互
+- [x] 订单列表页
 - [ ] 云打印对接 (飞鹅)
-- [ ] OTA 自更新
-- [ ] 权限引导页
-- [ ] 连接状态指示器
+- [x] OTA 自更新（前端检查流程与弹窗）
+- [x] 权限引导页
+- [x] 连接状态指示器
 
 ### 小程序端
-- [ ] 新增"绑定商户端 App"入口页面
-- [ ] 调用 `POST /v1/auth/app-bind/code`
-- [ ] 展示 6 位绑定码 + 倒计时
+- [x] 新增"绑定商户端 App"入口与弹窗
+- [x] 调用 `POST /v1/auth/app-bind/code`
+- [x] 展示 6 位绑定码 + 倒计时
 
 ## Phase 2：测试 & 打磨
 - [ ] 推送网关单元测试
