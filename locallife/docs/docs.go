@@ -11412,7 +11412,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "商户修改自己的收付通结算银行账户。account_number 和 account_name 传入明文，服务端负责加密后转发给微信支付。",
+                "description": "商户修改自己的收付通结算银行账户。account_number 传入明文后由服务端加密；account_name 仅在需要修改开户名称时传明文，未传时保持当前开户名称不变。",
                 "consumes": [
                     "application/json"
                 ],
@@ -11447,6 +11447,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
                     },
+                    "401": {
+                        "description": "微信签名失败",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
                     "403": {
                         "description": "无权限",
                         "schema": {
@@ -11465,14 +11471,14 @@ const docTemplate = `{
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
                     },
-                    "500": {
-                        "description": "加密失败",
+                    "429": {
+                        "description": "请求过于频繁",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
                     },
-                    "502": {
-                        "description": "微信支付下游异常",
+                    "500": {
+                        "description": "加密失败",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -11510,6 +11516,10 @@ const docTemplate = `{
                         "required": true
                     },
                     {
+                        "enum": [
+                            "ACCOUNT_NUMBER_RULE_MASK_V1",
+                            "ACCOUNT_NUMBER_RULE_MASK_V2"
+                        ],
                         "type": "string",
                         "description": "银行账号展示规则（默认 ACCOUNT_NUMBER_RULE_MASK_V1）",
                         "name": "account_number_rule",
@@ -11521,6 +11531,18 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/api.settlementApplicationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "微信签名失败",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
                         }
                     },
                     "403": {
@@ -11541,14 +11563,14 @@ const docTemplate = `{
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
                     },
-                    "500": {
-                        "description": "内部错误",
+                    "429": {
+                        "description": "请求过于频繁",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
                     },
-                    "502": {
-                        "description": "微信支付下游异常",
+                    "500": {
+                        "description": "内部错误",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -38207,7 +38229,6 @@ const docTemplate = `{
             "type": "object",
             "required": [
                 "account_bank",
-                "account_name",
                 "account_number",
                 "account_type"
             ],
@@ -42395,6 +42416,13 @@ const docTemplate = `{
         },
         "api.settlementApplicationResponse": {
             "type": "object",
+            "required": [
+                "account_bank",
+                "account_name",
+                "account_number",
+                "account_type",
+                "verify_result"
+            ],
             "properties": {
                 "account_bank": {
                     "type": "string"
@@ -42406,7 +42434,11 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "account_type": {
-                    "type": "string"
+                    "type": "string",
+                    "enum": [
+                        "ACCOUNT_TYPE_BUSINESS",
+                        "ACCOUNT_TYPE_PRIVATE"
+                    ]
                 },
                 "bank_branch_id": {
                     "type": "string"
@@ -42421,7 +42453,12 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "verify_result": {
-                    "type": "string"
+                    "type": "string",
+                    "enum": [
+                        "AUDIT_SUCCESS",
+                        "AUDITING",
+                        "AUDIT_FAIL"
+                    ]
                 }
             }
         },

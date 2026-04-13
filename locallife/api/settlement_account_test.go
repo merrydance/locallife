@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -252,6 +253,57 @@ func TestGetMerchantSettlementAccountInvalidMaskRule(t *testing.T) {
 
 	server.router.ServeHTTP(recorder, req)
 	require.Equal(t, http.StatusBadRequest, recorder.Code)
+}
+
+func TestGetMerchantSettlementAccountInvalidWechatResponse(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := db.Merchant{
+		ID:          1,
+		RegionID:    1,
+		OwnerUserID: user.ID,
+		Name:        "测试商户",
+		Status:      "approved",
+		IsOpen:      true,
+		CreatedAt:   time.Now(),
+	}
+	paymentConfig := db.MerchantPaymentConfig{
+		MerchantID: merchant.ID,
+		SubMchID:   "sub_mch_123",
+		Status:     "active",
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ecommerce := mockwechat.NewMockEcommerceClientInterface(ctrl)
+
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+	store.EXPECT().
+		GetMerchantPaymentConfig(gomock.Any(), merchant.ID).
+		Times(1).
+		Return(paymentConfig, nil)
+
+	ecommerce.EXPECT().
+		QuerySubMerchantSettlement(gomock.Any(), paymentConfig.SubMchID, "").
+		Times(1).
+		Return(nil, &wechat.SubMerchantSettlementContractError{Message: "query sub merchant settlement: wechat response missing verify_result"})
+
+	server := newTestServer(t, store)
+	server.SetEcommerceClientForTest(ecommerce)
+
+	recorder := httptest.NewRecorder()
+	req, err := http.NewRequest(http.MethodGet, "/v1/merchant/finance/account/settlement-account", nil)
+	require.NoError(t, err)
+	addAuthorization(t, req, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, req)
+	require.Equal(t, http.StatusBadGateway, recorder.Code)
+
+	var resp ErrorResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, ErrSettlementWechatInvalidResponse.Code, resp.Code)
+	require.Equal(t, ErrSettlementWechatInvalidResponse.Message, resp.Error)
 }
 
 // ==================== 商户修改结算账户测试 ====================
@@ -543,7 +595,7 @@ func TestModifyMerchantSettlementAccountNonNumericAccountNumber(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, recorder.Code)
 }
 
-func TestModifyMerchantSettlementAccountMissingAccountName(t *testing.T) {
+func TestModifyMerchantSettlementAccountAllowsMissingAccountName(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := db.Merchant{
 		ID:          1,
@@ -560,8 +612,53 @@ func TestModifyMerchantSettlementAccountMissingAccountName(t *testing.T) {
 
 	store := mockdb.NewMockStore(ctrl)
 	ecommerce := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	paymentConfig := db.MerchantPaymentConfig{
+		MerchantID: merchant.ID,
+		SubMchID:   "sub_mch_123",
+		Status:     "active",
+	}
 
 	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+	store.EXPECT().
+		GetMerchantPaymentConfig(gomock.Any(), merchant.ID).
+		Times(1).
+		Return(paymentConfig, nil)
+	store.EXPECT().
+		GetLatestEcommerceApplymentBySubject(gomock.Any(), db.GetLatestEcommerceApplymentBySubjectParams{
+			SubjectType: "merchant",
+			SubjectID:   merchant.ID,
+		}).
+		Times(1).
+		Return(db.EcommerceApplyment{OrganizationType: "4"}, nil)
+	ecommerce.EXPECT().
+		ListCorporateBankingBanks(gomock.Any(), 0, applymentCatalogPageSize).
+		Times(1).
+		Return(&wechat.CapitalBankListResponse{
+			TotalCount: 1,
+			Count:      1,
+			Data: []wechat.CapitalBank{{
+				BankAlias:      "工商银行",
+				BankAliasCode:  "1002",
+				AccountBank:    "工商银行",
+				NeedBankBranch: false,
+			}},
+		}, nil)
+	ecommerce.EXPECT().
+		EncryptSensitiveData("6222020202020202").
+		Times(1).
+		Return("wx_encrypted_account_number", nil)
+	ecommerce.EXPECT().
+		ModifySubMerchantSettlement(gomock.Any(), paymentConfig.SubMchID, &wechat.ModifySubMerchantSettlementRequest{
+			AccountType:   "ACCOUNT_TYPE_BUSINESS",
+			AccountBank:   "工商银行",
+			AccountNumber: "wx_encrypted_account_number",
+		}).
+		Times(1).
+		Return(&wechat.ModifySubMerchantSettlementResponse{ApplicationNo: "APP_NO_NAME_001"}, nil)
+	store.EXPECT().
+		UpdateMerchantPaymentConfigSettlementApplication(gomock.Any(), gomock.AssignableToTypeOf(db.UpdateMerchantPaymentConfigSettlementApplicationParams{})).
+		Times(1).
+		Return(paymentConfig, nil)
 
 	server := newTestServer(t, store)
 	server.SetEcommerceClientForTest(ecommerce)
@@ -581,7 +678,11 @@ func TestModifyMerchantSettlementAccountMissingAccountName(t *testing.T) {
 	addAuthorization(t, req, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 
 	server.router.ServeHTTP(recorder, req)
-	require.Equal(t, http.StatusBadRequest, recorder.Code)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp modifySettlementAccountApplicationResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Equal(t, "APP_NO_NAME_001", resp.ApplicationNo)
 }
 
 func TestModifyMerchantSettlementAccountMissingBranchSelectionWhenRequired(t *testing.T) {
@@ -653,6 +754,10 @@ func TestModifyMerchantSettlementAccountMissingBranchSelectionWhenRequired(t *te
 
 	server.router.ServeHTTP(recorder, req)
 	require.Equal(t, http.StatusBadRequest, recorder.Code)
+
+	var resp ErrorResponse
+	require.NoError(t, json.Unmarshal(unwrapAPIResponseData(t, recorder.Body.Bytes()), &resp))
+	require.Equal(t, errSettlementBankBranchRequired.Error(), resp.Error)
 }
 
 func TestModifyMerchantSettlementAccountEncryptFails(t *testing.T) {
@@ -824,7 +929,7 @@ func TestModifyMerchantSettlementAccountIgnoresFrontendNeedBankBranchHint(t *tes
 	require.Equal(t, http.StatusOK, recorder.Code)
 }
 
-func TestModifyMerchantSettlementAccountWechatRequestRejected(t *testing.T) {
+func TestModifyMerchantSettlementAccountWechatParamError(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := db.Merchant{
 		ID:          1,
@@ -909,12 +1014,128 @@ func TestModifyMerchantSettlementAccountWechatRequestRejected(t *testing.T) {
 	addAuthorization(t, req, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 
 	server.router.ServeHTTP(recorder, req)
-	require.Equal(t, http.StatusBadGateway, recorder.Code)
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+
+	var resp ErrorResponse
+	require.NoError(t, json.Unmarshal(unwrapAPIResponseData(t, recorder.Body.Bytes()), &resp))
+	require.Equal(t, errSettlementWechatParamError.Error(), resp.Error)
+}
+
+func TestModifyMerchantSettlementAccountWechatNoAuth(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := db.Merchant{ID: 1, RegionID: 1, OwnerUserID: user.ID, Name: "测试商户", Status: "approved", IsOpen: true, CreatedAt: time.Now()}
+	paymentConfig := db.MerchantPaymentConfig{MerchantID: merchant.ID, SubMchID: "sub_mch_123", Status: "active"}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ecommerce := mockwechat.NewMockEcommerceClientInterface(ctrl)
+
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+	store.EXPECT().GetMerchantPaymentConfig(gomock.Any(), merchant.ID).Times(1).Return(paymentConfig, nil)
+	store.EXPECT().GetLatestEcommerceApplymentBySubject(gomock.Any(), db.GetLatestEcommerceApplymentBySubjectParams{SubjectType: "merchant", SubjectID: merchant.ID}).Times(1).Return(db.EcommerceApplyment{OrganizationType: "4"}, nil)
+	ecommerce.EXPECT().ListCorporateBankingBanks(gomock.Any(), 0, applymentCatalogPageSize).Times(1).Return(&wechat.CapitalBankListResponse{TotalCount: 1, Count: 1, Data: []wechat.CapitalBank{{BankAlias: "建设银行", AccountBank: "建设银行"}}}, nil)
+	ecommerce.EXPECT().EncryptSensitiveData("6222020202020202").Times(1).Return("wx_encrypted_account_number", nil)
+	ecommerce.EXPECT().ModifySubMerchantSettlement(gomock.Any(), paymentConfig.SubMchID, &wechat.ModifySubMerchantSettlementRequest{AccountType: "ACCOUNT_TYPE_BUSINESS", AccountBank: "建设银行", AccountNumber: "wx_encrypted_account_number"}).Times(1).Return(nil, fmt.Errorf("modify sub merchant settlement: %w", &wechat.WechatPayError{StatusCode: http.StatusForbidden, Code: "NO_AUTH", Message: "商户权限异常"}))
+
+	server := newTestServer(t, store)
+	server.SetEcommerceClientForTest(ecommerce)
+
+	bodyBytes, err := json.Marshal(modifySettlementAccountRequest{AccountType: "ACCOUNT_TYPE_BUSINESS", AccountBank: "建设银行", AccountNumber: "6222020202020202"})
+	require.NoError(t, err)
+
+	recorder := httptest.NewRecorder()
+	req, err := http.NewRequest(http.MethodPost, "/v1/merchant/finance/account/settlement-account", bytes.NewReader(bodyBytes))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, req, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, req)
+	require.Equal(t, http.StatusForbidden, recorder.Code)
 
 	var resp ErrorResponse
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
-	require.Equal(t, ErrSettlementWechatParamError.Code, resp.Code)
-	require.Equal(t, ErrSettlementWechatParamError.Message, resp.Error)
+	require.Equal(t, ErrSettlementWechatNoAuth.Code, resp.Code)
+	require.Equal(t, ErrSettlementWechatNoAuth.Message, resp.Error)
+}
+
+func TestModifyMerchantSettlementAccountWechatFrequencyLimit(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := db.Merchant{ID: 1, RegionID: 1, OwnerUserID: user.ID, Name: "测试商户", Status: "approved", IsOpen: true, CreatedAt: time.Now()}
+	paymentConfig := db.MerchantPaymentConfig{MerchantID: merchant.ID, SubMchID: "sub_mch_123", Status: "active"}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ecommerce := mockwechat.NewMockEcommerceClientInterface(ctrl)
+
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+	store.EXPECT().GetMerchantPaymentConfig(gomock.Any(), merchant.ID).Times(1).Return(paymentConfig, nil)
+	store.EXPECT().GetLatestEcommerceApplymentBySubject(gomock.Any(), db.GetLatestEcommerceApplymentBySubjectParams{SubjectType: "merchant", SubjectID: merchant.ID}).Times(1).Return(db.EcommerceApplyment{OrganizationType: "4"}, nil)
+	ecommerce.EXPECT().ListCorporateBankingBanks(gomock.Any(), 0, applymentCatalogPageSize).Times(1).Return(&wechat.CapitalBankListResponse{TotalCount: 1, Count: 1, Data: []wechat.CapitalBank{{BankAlias: "建设银行", AccountBank: "建设银行"}}}, nil)
+	ecommerce.EXPECT().EncryptSensitiveData("6222020202020202").Times(1).Return("wx_encrypted_account_number", nil)
+	ecommerce.EXPECT().ModifySubMerchantSettlement(gomock.Any(), paymentConfig.SubMchID, &wechat.ModifySubMerchantSettlementRequest{AccountType: "ACCOUNT_TYPE_BUSINESS", AccountBank: "建设银行", AccountNumber: "wx_encrypted_account_number"}).Times(1).Return(nil, fmt.Errorf("modify sub merchant settlement: %w", &wechat.WechatPayError{StatusCode: http.StatusTooManyRequests, Code: "FREQENCY_LIMIT", Message: "频率超限"}))
+
+	server := newTestServer(t, store)
+	server.SetEcommerceClientForTest(ecommerce)
+
+	bodyBytes, err := json.Marshal(modifySettlementAccountRequest{AccountType: "ACCOUNT_TYPE_BUSINESS", AccountBank: "建设银行", AccountNumber: "6222020202020202"})
+	require.NoError(t, err)
+
+	recorder := httptest.NewRecorder()
+	req, err := http.NewRequest(http.MethodPost, "/v1/merchant/finance/account/settlement-account", bytes.NewReader(bodyBytes))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, req, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, req)
+	require.Equal(t, http.StatusTooManyRequests, recorder.Code)
+
+	var resp ErrorResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, ErrSettlementWechatFrequencyLimit.Code, resp.Code)
+	require.Equal(t, ErrSettlementWechatFrequencyLimit.Message, resp.Error)
+}
+
+func TestModifyMerchantSettlementAccountWechatNameMismatch(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := db.Merchant{ID: 1, RegionID: 1, OwnerUserID: user.ID, Name: "测试商户", Status: "approved", IsOpen: true, CreatedAt: time.Now()}
+	paymentConfig := db.MerchantPaymentConfig{MerchantID: merchant.ID, SubMchID: "sub_mch_123", Status: "active"}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ecommerce := mockwechat.NewMockEcommerceClientInterface(ctrl)
+
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+	store.EXPECT().GetMerchantPaymentConfig(gomock.Any(), merchant.ID).Times(1).Return(paymentConfig, nil)
+	store.EXPECT().GetLatestEcommerceApplymentBySubject(gomock.Any(), db.GetLatestEcommerceApplymentBySubjectParams{SubjectType: "merchant", SubjectID: merchant.ID}).Times(1).Return(db.EcommerceApplyment{OrganizationType: "4"}, nil)
+	ecommerce.EXPECT().ListCorporateBankingBanks(gomock.Any(), 0, applymentCatalogPageSize).Times(1).Return(&wechat.CapitalBankListResponse{TotalCount: 1, Count: 1, Data: []wechat.CapitalBank{{BankAlias: "建设银行", AccountBank: "建设银行"}}}, nil)
+	ecommerce.EXPECT().EncryptSensitiveData("6222020202020202").Times(1).Return("wx_encrypted_account_number", nil)
+	ecommerce.EXPECT().EncryptSensitiveData("新的开户名").Times(1).Return("wx_encrypted_account_name", nil)
+	ecommerce.EXPECT().ModifySubMerchantSettlement(gomock.Any(), paymentConfig.SubMchID, &wechat.ModifySubMerchantSettlementRequest{AccountType: "ACCOUNT_TYPE_BUSINESS", AccountBank: "建设银行", AccountNumber: "wx_encrypted_account_number", AccountName: "wx_encrypted_account_name"}).Times(1).Return(nil, fmt.Errorf("modify sub merchant settlement: %w", &wechat.WechatPayError{StatusCode: http.StatusBadRequest, Code: "INVALID_REQUEST", Message: "无效请求", Detail: "你的开户名称与主体名称不一致，请修改后重试"}))
+
+	server := newTestServer(t, store)
+	server.SetEcommerceClientForTest(ecommerce)
+
+	bodyBytes, err := json.Marshal(modifySettlementAccountRequest{AccountType: "ACCOUNT_TYPE_BUSINESS", AccountBank: "建设银行", AccountNumber: "6222020202020202", AccountName: "新的开户名"})
+	require.NoError(t, err)
+
+	recorder := httptest.NewRecorder()
+	req, err := http.NewRequest(http.MethodPost, "/v1/merchant/finance/account/settlement-account", bytes.NewReader(bodyBytes))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, req, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, req)
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+
+	var resp ErrorResponse
+	require.NoError(t, json.Unmarshal(unwrapAPIResponseData(t, recorder.Body.Bytes()), &resp))
+	require.Equal(t, errSettlementWechatNameMismatch.Error(), resp.Error)
 }
 
 // ==================== 商户查询结算账户修改申请状态 ====================
@@ -956,7 +1177,7 @@ func TestGetMerchantSettlementApplicationOK(t *testing.T) {
 			AccountType:      "ACCOUNT_TYPE_BUSINESS",
 			AccountBank:      "工商银行",
 			AccountNumber:    "62***78",
-			VerifyResult:     "VERIFY_SUCCESS",
+			VerifyResult:     "AUDIT_SUCCESS",
 			VerifyFinishTime: "2015-05-20T13:29:35+08:00",
 		}, nil)
 
@@ -982,7 +1203,7 @@ func TestGetMerchantSettlementApplicationOK(t *testing.T) {
 
 	var resp settlementApplicationResponse
 	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
-	require.Equal(t, "VERIFY_SUCCESS", resp.VerifyResult)
+	require.Equal(t, "AUDIT_SUCCESS", resp.VerifyResult)
 	require.Equal(t, "62***78", resp.AccountNumber)
 	require.Equal(t, "工商银行", resp.AccountBank)
 }
@@ -1060,7 +1281,7 @@ func TestGetMerchantSettlementApplicationWechatNotFound(t *testing.T) {
 	ecommerce.EXPECT().
 		QuerySubMerchantSettlementApplication(gomock.Any(), paymentConfig.SubMchID, "APP_404", "").
 		Times(1).
-		Return(nil, fmt.Errorf("query sub merchant settlement application: %w", &wechat.WechatPayError{StatusCode: http.StatusNotFound, Code: "RESOURCE_NOT_EXISTS", Message: "申请单不存在"}))
+		Return(nil, fmt.Errorf("query sub merchant settlement application: %w", &wechat.WechatPayError{StatusCode: http.StatusNotFound, Code: "ORDER_NOT_EXIST", Message: "申请单不存在"}))
 
 	server := newTestServer(t, store)
 	server.SetEcommerceClientForTest(ecommerce)
@@ -1077,6 +1298,57 @@ func TestGetMerchantSettlementApplicationWechatNotFound(t *testing.T) {
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
 	require.Equal(t, ErrSettlementApplicationNotFound.Code, resp.Code)
 	require.Equal(t, ErrSettlementApplicationNotFound.Message, resp.Error)
+}
+
+func TestGetMerchantSettlementApplicationInvalidWechatResponse(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := db.Merchant{
+		ID:          1,
+		RegionID:    1,
+		OwnerUserID: user.ID,
+		Name:        "测试商户",
+		Status:      "approved",
+		IsOpen:      true,
+		CreatedAt:   time.Now(),
+	}
+	paymentConfig := db.MerchantPaymentConfig{
+		MerchantID: merchant.ID,
+		SubMchID:   "sub_mch_123",
+		Status:     "active",
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ecommerce := mockwechat.NewMockEcommerceClientInterface(ctrl)
+
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+	store.EXPECT().
+		GetMerchantPaymentConfig(gomock.Any(), merchant.ID).
+		Times(1).
+		Return(paymentConfig, nil)
+
+	ecommerce.EXPECT().
+		QuerySubMerchantSettlementApplication(gomock.Any(), paymentConfig.SubMchID, "APP_BAD", "").
+		Times(1).
+		Return(nil, &wechat.SubMerchantSettlementApplicationContractError{Message: "query sub merchant settlement application: wechat response missing account_name"})
+
+	server := newTestServer(t, store)
+	server.SetEcommerceClientForTest(ecommerce)
+
+	recorder := httptest.NewRecorder()
+	req, err := http.NewRequest(http.MethodGet, "/v1/merchant/finance/account/settlement-account/applications/APP_BAD", nil)
+	require.NoError(t, err)
+	addAuthorization(t, req, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, req)
+	require.Equal(t, http.StatusBadGateway, recorder.Code)
+
+	var resp ErrorResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, ErrSettlementWechatInvalidResponse.Code, resp.Code)
+	require.Equal(t, ErrSettlementWechatInvalidResponse.Message, resp.Error)
 }
 
 func TestGetMerchantSettlementApplicationInvalidMaskRule(t *testing.T) {
@@ -1109,4 +1381,41 @@ func TestGetMerchantSettlementApplicationInvalidMaskRule(t *testing.T) {
 
 	server.router.ServeHTTP(recorder, req)
 	require.Equal(t, http.StatusBadRequest, recorder.Code)
+}
+
+func TestGetMerchantSettlementApplicationTooLongApplicationNo(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := db.Merchant{
+		ID:          1,
+		RegionID:    1,
+		OwnerUserID: user.ID,
+		Name:        "测试商户",
+		Status:      "approved",
+		IsOpen:      true,
+		CreatedAt:   time.Now(),
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ecommerce := mockwechat.NewMockEcommerceClientInterface(ctrl)
+
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+	server := newTestServer(t, store)
+	server.SetEcommerceClientForTest(ecommerce)
+
+	applicationNo := strings.Repeat("A", settlementApplicationNoMaxLength+1)
+	recorder := httptest.NewRecorder()
+	req, err := http.NewRequest(http.MethodGet, "/v1/merchant/finance/account/settlement-account/applications/"+applicationNo, nil)
+	require.NoError(t, err)
+	addAuthorization(t, req, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, req)
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+
+	var resp ErrorResponse
+	require.NoError(t, json.Unmarshal(unwrapAPIResponseData(t, recorder.Body.Bytes()), &resp))
+	require.Equal(t, "application_no must not exceed 64 characters", resp.Error)
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -137,7 +138,6 @@ func TestBuildWechatApplymentRequest(t *testing.T) {
 		AccountInfo: ApplymentWechatAccountInput{
 			AccountType:     "ACCOUNT_TYPE_BUSINESS",
 			AccountBank:     "招商银行",
-			AccountBankCode: 1001,
 			AccountName:     "encrypted-account-name",
 			BankAddressCode: "440300",
 			BankBranchID:    "4025",
@@ -147,7 +147,7 @@ func TestBuildWechatApplymentRequest(t *testing.T) {
 		ContactInfo: ApplymentWechatContactInput{
 			ContactType:             "SUPER",
 			ContactName:             "encrypted-contact-name",
-			ContactIDDocType:        "IDENTIFICATION_TYPE_IDCARD",
+			ContactIDDocType:        "IDENTIFICATION_TYPE_MAINLAND_IDCARD",
 			ContactIDCardNumber:     "encrypted-contact-id",
 			ContactIDDocPeriodBegin: "2020-01-01",
 			ContactIDDocPeriodEnd:   "2030-01-01",
@@ -261,6 +261,24 @@ func TestUploadApplymentAssetEmptyMediaID(t *testing.T) {
 
 	require.Error(t, err)
 	require.ErrorContains(t, err, "empty media id")
+}
+
+func TestUploadApplymentAssetValidationErrorBecomesRequestError(t *testing.T) {
+	downloader := &testApplymentAssetDownloader{
+		filename: "id-card-front.png",
+		fileData: []byte("png-data"),
+	}
+	uploader := &testApplymentImageUploader{
+		err: &wechat.UploadImageValidationError{Message: "upload image: file is empty; provide a non-empty JPG, JPEG, PNG, or BMP image"},
+	}
+
+	_, err := UploadApplymentAsset(context.Background(), downloader, uploader, 99)
+
+	require.Error(t, err)
+	var reqErr *RequestError
+	require.ErrorAs(t, err, &reqErr)
+	require.Equal(t, http.StatusBadRequest, reqErr.Status)
+	require.ErrorContains(t, reqErr.Err, "file is empty")
 }
 
 func TestEncryptApplymentWechatSensitiveFields(t *testing.T) {

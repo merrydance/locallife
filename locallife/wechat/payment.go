@@ -948,17 +948,6 @@ func (c *PaymentClient) doRequestWithoutResponseVerification(ctx context.Context
 	return respBody, err
 }
 
-// doRequestWithSerial 发送请求，支持指定微信支付平台证书序列号
-func (c *PaymentClient) doRequestWithSerial(ctx context.Context, method, path string, body interface{}, wechatSerial string) ([]byte, error) {
-	respBody, _, err := c.doRequestWithSerialAndRequestID(ctx, method, path, body, wechatSerial)
-	return respBody, err
-}
-
-func (c *PaymentClient) doRequestWithOptions(ctx context.Context, method, path string, body interface{}, wechatSerial string, verifyResponse bool) ([]byte, error) {
-	respBody, _, err := c.doRequestWithOptionsAndRequestID(ctx, method, path, body, wechatSerial, verifyResponse)
-	return respBody, err
-}
-
 func (c *PaymentClient) doRequestWithRequestID(ctx context.Context, method, path string, body interface{}) ([]byte, string, error) {
 	return c.doRequestWithSerialAndRequestID(ctx, method, path, body, "")
 }

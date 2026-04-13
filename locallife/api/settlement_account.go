@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -38,6 +39,19 @@ type settlementAccountQuery struct {
 	AccountNumberRule string `form:"account_number_rule" binding:"omitempty,oneof=ACCOUNT_NUMBER_RULE_MASK_V1 ACCOUNT_NUMBER_RULE_MASK_V2"`
 }
 
+const settlementApplicationNoMaxLength = 64
+
+func validateSettlementApplicationNo(applicationNo string) error {
+	normalized := strings.TrimSpace(applicationNo)
+	if normalized == "" {
+		return errors.New("application_no is required")
+	}
+	if utf8.RuneCountInString(normalized) > settlementApplicationNoMaxLength {
+		return fmt.Errorf("application_no must not exceed %d characters", settlementApplicationNoMaxLength)
+	}
+	return nil
+}
+
 // modifySettlementAccountRequest 修改结算账户请求体
 type modifySettlementAccountRequest struct {
 	AccountType    string `json:"account_type" binding:"required,oneof=ACCOUNT_TYPE_BUSINESS ACCOUNT_TYPE_PRIVATE"`
@@ -46,7 +60,7 @@ type modifySettlementAccountRequest struct {
 	BankName       string `json:"bank_name" binding:"omitempty,max=128"`
 	BankBranchID   string `json:"bank_branch_id" binding:"omitempty,max=128"`
 	AccountNumber  string `json:"account_number" binding:"required,numeric,max=32"`
-	AccountName    string `json:"account_name" binding:"required,max=128"`
+	AccountName    string `json:"account_name" binding:"omitempty,max=128"`
 }
 
 func (req *modifySettlementAccountRequest) normalize() {
@@ -58,16 +72,9 @@ func (req *modifySettlementAccountRequest) normalize() {
 	req.AccountName = strings.TrimSpace(req.AccountName)
 }
 
-func (req modifySettlementAccountRequest) validateSelection() error {
-	if req.AccountName == "" {
-		return fmt.Errorf("account_name is required")
-	}
-	return nil
-}
-
 func (req modifySettlementAccountRequest) validateResolvedSelection(needBankBranch bool) error {
 	if needBankBranch && req.BankBranchID == "" && req.BankName == "" {
-		return fmt.Errorf("bank_branch_id or bank_name is required when bank branch selection is needed")
+		return errSettlementBankBranchRequired
 	}
 	return nil
 }
@@ -135,60 +142,6 @@ func (server *Server) resolveSettlementBankOption(ctx context.Context, req modif
 	return nil, ErrSettlementAccountBankUnsupported
 }
 
-func settlementWechatErrorResponse(ctx *gin.Context, operation string, subjectType string, subjectID int64, subMchID string, applicationNo string, err error) (int, ErrorResponse) {
-	_ = ctx.Error(err)
-
-	var wxErr *wechat.WechatPayError
-	if errors.As(err, &wxErr) {
-		evt := log.Error()
-		if wxErr.StatusCode < http.StatusInternalServerError {
-			evt = log.Warn()
-		}
-		evt.
-			Err(err).
-			Str("request_id", GetRequestID(ctx)).
-			Str("operation", operation).
-			Str("subject_type", subjectType).
-			Int64("subject_id", subjectID).
-			Str("sub_mch_id", strings.TrimSpace(subMchID)).
-			Str("application_no", strings.TrimSpace(applicationNo)).
-			Int("wechat_status_code", wxErr.StatusCode).
-			Str("wechat_error_code", strings.TrimSpace(wxErr.Code)).
-			Str("wechat_error_message", strings.TrimSpace(wxErr.Message)).
-			Str("wechat_error_detail", strings.TrimSpace(wxErr.Detail)).
-			Msg("wechat settlement request failed")
-
-		if operation == "query_settlement_application" && wxErr.StatusCode == http.StatusNotFound {
-			return http.StatusNotFound, errorResponse(ErrSettlementApplicationNotFound)
-		}
-		if wxErr.StatusCode == http.StatusBadRequest || wxErr.StatusCode == http.StatusUnauthorized || wxErr.StatusCode == http.StatusForbidden || wxErr.StatusCode == http.StatusUnprocessableEntity {
-			switch strings.TrimSpace(wxErr.Code) {
-			case "PARAM_ERROR":
-				return http.StatusBadGateway, errorResponse(ErrSettlementWechatParamError)
-			case "INVALID_REQUEST":
-				return http.StatusBadGateway, errorResponse(ErrSettlementWechatInvalidRequest)
-			case "SIGN_ERROR":
-				return http.StatusBadGateway, errorResponse(ErrSettlementWechatSignError)
-			default:
-				return http.StatusBadGateway, errorResponse(ErrSettlementWechatRequestRejected)
-			}
-		}
-		return http.StatusBadGateway, errorResponse(ErrSettlementWechatServiceUnavailable)
-	}
-
-	log.Error().
-		Err(err).
-		Str("request_id", GetRequestID(ctx)).
-		Str("operation", operation).
-		Str("subject_type", subjectType).
-		Int64("subject_id", subjectID).
-		Str("sub_mch_id", strings.TrimSpace(subMchID)).
-		Str("application_no", strings.TrimSpace(applicationNo)).
-		Msg("wechat settlement request failed")
-
-	return http.StatusBadGateway, errorResponse(ErrSettlementWechatServiceUnavailable)
-}
-
 func (server *Server) validateMerchantSettlementAccountScope(ctx *gin.Context, merchantID int64, accountType string) error {
 	applyment, err := server.store.GetLatestEcommerceApplymentBySubject(ctx, db.GetLatestEcommerceApplymentBySubjectParams{
 		SubjectType: "merchant",
@@ -220,12 +173,27 @@ type modifySettlementAccountApplicationResponse struct {
 // @Router /v1/merchant/finance/account/settlement-account [get]
 func (server *Server) getMerchantSettlementAccount(ctx *gin.Context) {
 	if server.ecommerceClient == nil {
+		err := errors.New("ecommerce client not configured")
+		_ = ctx.Error(err)
+		log.Error().
+			Err(err).
+			Str("request_id", GetRequestID(ctx)).
+			Str("path", ctx.Request.URL.Path).
+			Str("method", ctx.Request.Method).
+			Msg("merchant settlement account query rejected because ecommerce client is not configured")
 		ctx.JSON(http.StatusServiceUnavailable, errorResponse(errors.New("ecommerce client not configured")))
 		return
 	}
 
 	var query settlementAccountQuery
 	if err := ctx.ShouldBindQuery(&query); err != nil {
+		_ = ctx.Error(err)
+		log.Warn().
+			Err(err).
+			Str("request_id", GetRequestID(ctx)).
+			Str("path", ctx.Request.URL.Path).
+			Str("method", ctx.Request.Method).
+			Msg("merchant settlement account query rejected invalid query parameters")
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
@@ -285,37 +253,34 @@ func (server *Server) getMerchantSettlementAccount(ctx *gin.Context) {
 
 // modifyMerchantSettlementAccount 修改商户结算账户
 // @Summary 修改商户结算账户
-// @Description 商户修改自己的收付通结算银行账户。account_number 和 account_name 传入明文，服务端负责加密后转发给微信支付。
+// @Description 商户修改自己的收付通结算银行账户。account_number 传入明文后由服务端加密；account_name 仅在需要修改开户名称时传明文，未传时保持当前开户名称不变。
 // @Tags 商户财务
 // @Accept json
 // @Produce json
 // @Param body body modifySettlementAccountRequest true "修改结算账户请求"
 // @Success 200 {object} modifySettlementAccountApplicationResponse
 // @Failure 400 {object} ErrorResponse "参数错误"
+// @Failure 401 {object} ErrorResponse "微信签名失败"
 // @Failure 403 {object} ErrorResponse "无权限"
 // @Failure 404 {object} ErrorResponse "商户不存在"
+// @Failure 429 {object} ErrorResponse "请求过于频繁"
 // @Failure 422 {object} ErrorResponse "商户收付通账户未激活"
 // @Failure 500 {object} ErrorResponse "加密失败"
-// @Failure 502 {object} ErrorResponse "微信支付下游异常"
 // @Failure 503 {object} ErrorResponse "微信客户端未配置"
 // @Security BearerAuth
 // @Router /v1/merchant/finance/account/settlement-account [post]
 func (server *Server) modifyMerchantSettlementAccount(ctx *gin.Context) {
 	if server.ecommerceClient == nil {
-		ctx.JSON(http.StatusServiceUnavailable, errorResponse(errors.New("ecommerce client not configured")))
+		respondSettlementClientError(ctx, http.StatusServiceUnavailable, "modify_settlement_account", "merchant", 0, "", "", ErrSettlementServiceUnavailable)
 		return
 	}
 
 	var req modifySettlementAccountRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		respondSettlementClientError(ctx, http.StatusBadRequest, "modify_settlement_account", "merchant", 0, "", "", err)
 		return
 	}
 	req.normalize()
-	if err := req.validateSelection(); err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
-		return
-	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 	merchant, paymentConfig, accountStatus, _, err := server.getFinanceViewerPaymentConfigState(ctx, authPayload.UserID)
@@ -327,17 +292,21 @@ func (server *Server) modifyMerchantSettlementAccount(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
+	subMchID := ""
+	if paymentConfig != nil {
+		subMchID = paymentConfig.SubMchID
+	}
 	if paymentConfig == nil || accountStatus != "active" {
-		ctx.JSON(http.StatusUnprocessableEntity, errorResponse(errors.New("merchant payment account is not active")))
+		respondSettlementClientError(ctx, http.StatusUnprocessableEntity, "modify_settlement_account", "merchant", merchant.ID, subMchID, "", ErrSettlementAccountInactive)
 		return
 	}
 	if err := server.validateMerchantSettlementAccountScope(ctx, merchant.ID, req.AccountType); err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("merchant applyment not found")))
+			respondSettlementClientError(ctx, http.StatusBadRequest, "modify_settlement_account", "merchant", merchant.ID, paymentConfig.SubMchID, "", errSettlementMerchantApplymentNotFound)
 			return
 		}
 		if errors.Is(err, ErrMerchantApplymentOrganizationUnsupported) || errors.Is(err, ErrApplymentEnterprisePublicAccountRequired) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(err))
+			respondSettlementClientError(ctx, http.StatusBadRequest, "modify_settlement_account", "merchant", merchant.ID, paymentConfig.SubMchID, "", err)
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -346,7 +315,7 @@ func (server *Server) modifyMerchantSettlementAccount(ctx *gin.Context) {
 	bankOption, err := server.resolveSettlementBankOption(ctx.Request.Context(), req)
 	if err != nil {
 		if errors.Is(err, ErrSettlementAccountBankUnsupported) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(err))
+			respondSettlementClientError(ctx, http.StatusBadRequest, "modify_settlement_account", "merchant", merchant.ID, paymentConfig.SubMchID, "", err)
 			return
 		}
 		status, resp := settlementWechatErrorResponse(ctx, "resolve_settlement_bank", "merchant", merchant.ID, paymentConfig.SubMchID, "", err)
@@ -354,7 +323,7 @@ func (server *Server) modifyMerchantSettlementAccount(ctx *gin.Context) {
 		return
 	}
 	if err := req.validateResolvedSelection(bankOption.NeedBankBranch); err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		respondSettlementClientError(ctx, http.StatusBadRequest, "modify_settlement_account", "merchant", merchant.ID, paymentConfig.SubMchID, "", err)
 		return
 	}
 	req.AccountBank = bankOption.AccountBank
@@ -366,11 +335,14 @@ func (server *Server) modifyMerchantSettlementAccount(ctx *gin.Context) {
 		return
 	}
 
-	// 加密开户名称（必填敏感字段）
-	encryptedAccountName, err := server.ecommerceClient.EncryptSensitiveData(req.AccountName)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("encrypt account name: %w", err)))
-		return
+	// 开户名称仅在需要修改时才加密并下发给微信。
+	encryptedAccountName := ""
+	if req.AccountName != "" {
+		encryptedAccountName, err = server.ecommerceClient.EncryptSensitiveData(req.AccountName)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("encrypt account name: %w", err)))
+			return
+		}
 	}
 
 	wxResp, err := server.ecommerceClient.ModifySubMerchantSettlement(ctx, paymentConfig.SubMchID, &wechat.ModifySubMerchantSettlementRequest{
@@ -406,13 +378,13 @@ func (server *Server) modifyMerchantSettlementAccount(ctx *gin.Context) {
 
 // settlementApplicationResponse 结算账户修改申请状态响应
 type settlementApplicationResponse struct {
-	AccountName      string `json:"account_name"`
-	AccountType      string `json:"account_type"`
-	AccountBank      string `json:"account_bank"`
+	AccountName      string `json:"account_name" binding:"required"`
+	AccountType      string `json:"account_type" binding:"required" enums:"ACCOUNT_TYPE_BUSINESS,ACCOUNT_TYPE_PRIVATE"`
+	AccountBank      string `json:"account_bank" binding:"required"`
 	BankName         string `json:"bank_name,omitempty"`
 	BankBranchID     string `json:"bank_branch_id,omitempty"`
-	AccountNumber    string `json:"account_number"`
-	VerifyResult     string `json:"verify_result"`
+	AccountNumber    string `json:"account_number" binding:"required"`
+	VerifyResult     string `json:"verify_result" binding:"required" enums:"AUDIT_SUCCESS,AUDITING,AUDIT_FAIL"`
 	VerifyFailReason string `json:"verify_fail_reason,omitempty"`
 	VerifyFinishTime string `json:"verify_finish_time,omitempty"`
 }
@@ -425,31 +397,33 @@ type settlementApplicationResponse struct {
 // @Tags 商户财务
 // @Produce json
 // @Param application_no path string true "修改结算账户申请单号"
-// @Param account_number_rule query string false "银行账号展示规则（默认 ACCOUNT_NUMBER_RULE_MASK_V1）"
+// @Param account_number_rule query string false "银行账号展示规则（默认 ACCOUNT_NUMBER_RULE_MASK_V1）" Enums(ACCOUNT_NUMBER_RULE_MASK_V1,ACCOUNT_NUMBER_RULE_MASK_V2)
 // @Success 200 {object} settlementApplicationResponse
+// @Failure 400 {object} ErrorResponse "参数错误"
+// @Failure 401 {object} ErrorResponse "微信签名失败"
 // @Failure 403 {object} ErrorResponse "无权限"
 // @Failure 404 {object} ErrorResponse "商户或申请单不存在"
+// @Failure 429 {object} ErrorResponse "请求过于频繁"
 // @Failure 422 {object} ErrorResponse "商户收付通账户未激活"
 // @Failure 500 {object} ErrorResponse "内部错误"
-// @Failure 502 {object} ErrorResponse "微信支付下游异常"
 // @Failure 503 {object} ErrorResponse "微信客户端未配置"
 // @Security BearerAuth
 // @Router /v1/merchant/finance/account/settlement-account/applications/{application_no} [get]
 func (server *Server) getMerchantSettlementApplication(ctx *gin.Context) {
 	if server.ecommerceClient == nil {
-		ctx.JSON(http.StatusServiceUnavailable, errorResponse(errors.New("ecommerce client not configured")))
+		respondSettlementClientError(ctx, http.StatusServiceUnavailable, "query_settlement_application", "merchant", 0, "", "", ErrSettlementServiceUnavailable)
 		return
 	}
 
 	applicationNo := ctx.Param("application_no")
-	if applicationNo == "" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("application_no is required")))
+	if err := validateSettlementApplicationNo(applicationNo); err != nil {
+		respondSettlementClientError(ctx, http.StatusBadRequest, "query_settlement_application", "merchant", 0, "", applicationNo, err)
 		return
 	}
 
 	var query settlementAccountQuery
 	if err := ctx.ShouldBindQuery(&query); err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		respondSettlementClientError(ctx, http.StatusBadRequest, "query_settlement_application", "merchant", 0, "", applicationNo, err)
 		return
 	}
 
@@ -457,15 +431,19 @@ func (server *Server) getMerchantSettlementApplication(ctx *gin.Context) {
 	merchant, paymentConfig, accountStatus, _, err := server.getFinanceViewerPaymentConfigState(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(ErrMerchantNotFound))
+			respondSettlementClientError(ctx, http.StatusNotFound, "query_settlement_application", "merchant", 0, "", applicationNo, ErrMerchantNotFound)
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
+	subMchID := ""
+	if paymentConfig != nil {
+		subMchID = paymentConfig.SubMchID
+	}
 
 	if paymentConfig == nil || accountStatus != "active" {
-		ctx.JSON(http.StatusUnprocessableEntity, errorResponse(errors.New("merchant payment account is not active")))
+		respondSettlementClientError(ctx, http.StatusUnprocessableEntity, "query_settlement_application", "merchant", merchant.ID, subMchID, applicationNo, ErrSettlementAccountInactive)
 		return
 	}
 

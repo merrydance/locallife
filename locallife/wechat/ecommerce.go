@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -638,13 +639,72 @@ type ApplymentAuditDetail struct {
 	RejectReason string `json:"reject_reason"` // 驳回原因
 }
 
-const ecommerceApplymentOutRequestNoMaxLength = 124
+const (
+	ecommerceApplymentOutRequestNoMaxLength      = 124
+	subMerchantSettlementMchIDLength             = 10
+	subMerchantSettlementApplicationNoMaxLength  = 64
+	subMerchantSettlementAccountNameMaxLength    = 1024
+	subMerchantSettlementFieldMaxLength          = 128
+	subMerchantSettlementFailReasonMaxLength     = 1024
+	subMerchantSettlementAccountNumberRuleV1     = "ACCOUNT_NUMBER_RULE_MASK_V1"
+	subMerchantSettlementAccountNumberRuleV2     = "ACCOUNT_NUMBER_RULE_MASK_V2"
+	subMerchantSettlementVerifyResultSuccess     = "VERIFY_SUCCESS"
+	subMerchantSettlementVerifyResultFail        = "VERIFY_FAIL"
+	subMerchantSettlementVerifyResultVerifying   = "VERIFYING"
+	subMerchantSettlementApplicationAuditSuccess = "AUDIT_SUCCESS"
+	subMerchantSettlementApplicationAuditing     = "AUDITING"
+	subMerchantSettlementApplicationAuditFail    = "AUDIT_FAIL"
+)
 
 type EcommerceApplymentQueryValidationError struct {
 	Message string
 }
 
 func (e *EcommerceApplymentQueryValidationError) Error() string {
+	return e.Message
+}
+
+type SubMerchantSettlementQueryValidationError struct {
+	Message string
+}
+
+func (e *SubMerchantSettlementQueryValidationError) Error() string {
+	if e == nil || strings.TrimSpace(e.Message) == "" {
+		return "query sub merchant settlement: validation failed"
+	}
+	return e.Message
+}
+
+type SubMerchantSettlementContractError struct {
+	Message string
+}
+
+func (e *SubMerchantSettlementContractError) Error() string {
+	if e == nil || strings.TrimSpace(e.Message) == "" {
+		return "query sub merchant settlement: upstream contract validation failed"
+	}
+	return e.Message
+}
+
+type SubMerchantSettlementApplicationQueryValidationError struct {
+	Message string
+}
+
+func (e *SubMerchantSettlementApplicationQueryValidationError) Error() string {
+	if e == nil || strings.TrimSpace(e.Message) == "" {
+		return "query sub merchant settlement application: validation failed"
+	}
+	return e.Message
+}
+
+type SubMerchantSettlementApplicationContractError struct {
+	Message string
+}
+
+func (e *SubMerchantSettlementApplicationContractError) Error() string {
+	if e == nil || strings.TrimSpace(e.Message) == "" {
+		return "query sub merchant settlement application: upstream contract validation failed"
+	}
 	return e.Message
 }
 
@@ -681,8 +741,46 @@ var allowedEcommerceApplymentSignStates = map[string]struct{}{
 	"NOT_SIGNABLE": {},
 }
 
+var allowedSubMerchantSettlementAccountNumberRules = map[string]struct{}{
+	subMerchantSettlementAccountNumberRuleV1: {},
+	subMerchantSettlementAccountNumberRuleV2: {},
+}
+
+var allowedSubMerchantSettlementAccountTypes = map[string]struct{}{
+	"ACCOUNT_TYPE_BUSINESS": {},
+	"ACCOUNT_TYPE_PRIVATE":  {},
+}
+
+var allowedSubMerchantSettlementVerifyResults = map[string]struct{}{
+	subMerchantSettlementVerifyResultSuccess:   {},
+	subMerchantSettlementVerifyResultFail:      {},
+	subMerchantSettlementVerifyResultVerifying: {},
+}
+
+var allowedSubMerchantSettlementApplicationVerifyResults = map[string]struct{}{
+	subMerchantSettlementApplicationAuditSuccess: {},
+	subMerchantSettlementApplicationAuditing:     {},
+	subMerchantSettlementApplicationAuditFail:    {},
+}
+
 func newEcommerceApplymentQueryValidationError(format string, args ...any) error {
 	return &EcommerceApplymentQueryValidationError{Message: fmt.Sprintf("query ecommerce applyment: "+format, args...)}
+}
+
+func newSubMerchantSettlementQueryValidationError(format string, args ...any) error {
+	return &SubMerchantSettlementQueryValidationError{Message: fmt.Sprintf("query sub merchant settlement: "+format, args...)}
+}
+
+func newSubMerchantSettlementContractError(format string, args ...any) error {
+	return &SubMerchantSettlementContractError{Message: fmt.Sprintf("query sub merchant settlement: "+format, args...)}
+}
+
+func newSubMerchantSettlementApplicationQueryValidationError(format string, args ...any) error {
+	return &SubMerchantSettlementApplicationQueryValidationError{Message: fmt.Sprintf("query sub merchant settlement application: "+format, args...)}
+}
+
+func newSubMerchantSettlementApplicationContractError(format string, args ...any) error {
+	return &SubMerchantSettlementApplicationContractError{Message: fmt.Sprintf("query sub merchant settlement application: "+format, args...)}
 }
 
 func normalizeEcommerceApplymentQueryState(state string) string {
@@ -761,6 +859,253 @@ func validateEcommerceApplymentOutRequestNo(outRequestNo string) (string, error)
 		return "", newEcommerceApplymentQueryValidationError("out_request_no must not exceed %d characters", ecommerceApplymentOutRequestNoMaxLength)
 	}
 	return normalized, nil
+}
+
+func validateSubMerchantSettlementSubMchID(subMchID string) (string, error) {
+	normalized := strings.TrimSpace(subMchID)
+	if normalized == "" {
+		return "", newSubMerchantSettlementQueryValidationError("sub_mchid is required")
+	}
+	if len(normalized) != subMerchantSettlementMchIDLength {
+		return "", newSubMerchantSettlementQueryValidationError("sub_mchid must be exactly %d digits", subMerchantSettlementMchIDLength)
+	}
+	for _, ch := range normalized {
+		if ch < '0' || ch > '9' {
+			return "", newSubMerchantSettlementQueryValidationError("sub_mchid must contain only digits")
+		}
+	}
+	return normalized, nil
+}
+
+func validateSubMerchantSettlementAccountNumberRule(accountNumberRule string) (string, error) {
+	normalized := strings.TrimSpace(accountNumberRule)
+	if normalized == "" {
+		return "", nil
+	}
+	if _, ok := allowedSubMerchantSettlementAccountNumberRules[normalized]; !ok {
+		return "", newSubMerchantSettlementQueryValidationError("account_number_rule must be one of %s or %s", subMerchantSettlementAccountNumberRuleV1, subMerchantSettlementAccountNumberRuleV2)
+	}
+	return normalized, nil
+}
+
+func validateSubMerchantSettlementApplicationNo(applicationNo string) (string, error) {
+	normalized := strings.TrimSpace(applicationNo)
+	if normalized == "" {
+		return "", newSubMerchantSettlementApplicationQueryValidationError("application_no is required")
+	}
+	if utf8.RuneCountInString(normalized) > subMerchantSettlementApplicationNoMaxLength {
+		return "", newSubMerchantSettlementApplicationQueryValidationError("application_no must not exceed %d characters", subMerchantSettlementApplicationNoMaxLength)
+	}
+	return normalized, nil
+}
+
+func validateSubMerchantSettlementFieldLength(fieldName, value string, maxRunes int) error {
+	if utf8.RuneCountInString(value) > maxRunes {
+		return newSubMerchantSettlementContractError("wechat response %s exceeds %d characters", fieldName, maxRunes)
+	}
+	return nil
+}
+
+func validateSubMerchantSettlementResponse(resp *SubMerchantSettlementResponse) error {
+	if resp == nil {
+		return newSubMerchantSettlementContractError("empty wechat response")
+	}
+
+	resp.AccountType = strings.TrimSpace(resp.AccountType)
+	resp.AccountBank = strings.TrimSpace(resp.AccountBank)
+	resp.BankName = strings.TrimSpace(resp.BankName)
+	resp.BankBranchID = strings.TrimSpace(resp.BankBranchID)
+	resp.AccountNumber = strings.TrimSpace(resp.AccountNumber)
+	resp.VerifyResult = strings.TrimSpace(resp.VerifyResult)
+	resp.VerifyFailReason = strings.TrimSpace(resp.VerifyFailReason)
+
+	if resp.AccountType == "" {
+		return newSubMerchantSettlementContractError("wechat response missing account_type")
+	}
+	if _, ok := allowedSubMerchantSettlementAccountTypes[resp.AccountType]; !ok {
+		return newSubMerchantSettlementContractError("unsupported account_type %q", resp.AccountType)
+	}
+	if resp.AccountBank == "" {
+		return newSubMerchantSettlementContractError("wechat response missing account_bank")
+	}
+	if resp.AccountNumber == "" {
+		return newSubMerchantSettlementContractError("wechat response missing account_number")
+	}
+	if resp.VerifyResult == "" {
+		return newSubMerchantSettlementContractError("wechat response missing verify_result")
+	}
+	if _, ok := allowedSubMerchantSettlementVerifyResults[resp.VerifyResult]; !ok {
+		return newSubMerchantSettlementContractError("unsupported verify_result %q", resp.VerifyResult)
+	}
+	if err := validateSubMerchantSettlementFieldLength("account_bank", resp.AccountBank, subMerchantSettlementFieldMaxLength); err != nil {
+		return err
+	}
+	if err := validateSubMerchantSettlementFieldLength("bank_name", resp.BankName, subMerchantSettlementFieldMaxLength); err != nil {
+		return err
+	}
+	if err := validateSubMerchantSettlementFieldLength("bank_branch_id", resp.BankBranchID, subMerchantSettlementFieldMaxLength); err != nil {
+		return err
+	}
+	if err := validateSubMerchantSettlementFieldLength("account_number", resp.AccountNumber, subMerchantSettlementFieldMaxLength); err != nil {
+		return err
+	}
+	if err := validateSubMerchantSettlementFieldLength("verify_fail_reason", resp.VerifyFailReason, subMerchantSettlementFailReasonMaxLength); err != nil {
+		return err
+	}
+
+	if resp.VerifyResult == subMerchantSettlementVerifyResultFail {
+		if resp.VerifyFailReason == "" {
+			return newSubMerchantSettlementContractError("verify_fail_reason is required when verify_result=%s", subMerchantSettlementVerifyResultFail)
+		}
+		return nil
+	}
+	if resp.VerifyFailReason != "" {
+		return newSubMerchantSettlementContractError("verify_fail_reason is only allowed when verify_result=%s", subMerchantSettlementVerifyResultFail)
+	}
+
+	return nil
+}
+
+func validateSubMerchantSettlementApplicationResponse(resp *QuerySubMerchantSettlementApplicationResponse) error {
+	if resp == nil {
+		return newSubMerchantSettlementApplicationContractError("empty wechat response")
+	}
+
+	resp.AccountName = strings.TrimSpace(resp.AccountName)
+	resp.AccountType = strings.TrimSpace(resp.AccountType)
+	resp.AccountBank = strings.TrimSpace(resp.AccountBank)
+	resp.BankName = strings.TrimSpace(resp.BankName)
+	resp.BankBranchID = strings.TrimSpace(resp.BankBranchID)
+	resp.AccountNumber = strings.TrimSpace(resp.AccountNumber)
+	resp.VerifyResult = strings.TrimSpace(resp.VerifyResult)
+	resp.VerifyFailReason = strings.TrimSpace(resp.VerifyFailReason)
+	resp.VerifyFinishTime = strings.TrimSpace(resp.VerifyFinishTime)
+
+	if resp.AccountName == "" {
+		return newSubMerchantSettlementApplicationContractError("wechat response missing account_name")
+	}
+	if err := validateSubMerchantSettlementFieldLength("account_name", resp.AccountName, subMerchantSettlementAccountNameMaxLength); err != nil {
+		return newSubMerchantSettlementApplicationContractError("%s", strings.TrimPrefix(err.Error(), "query sub merchant settlement: "))
+	}
+	if resp.AccountType == "" {
+		return newSubMerchantSettlementApplicationContractError("wechat response missing account_type")
+	}
+	if _, ok := allowedSubMerchantSettlementAccountTypes[resp.AccountType]; !ok {
+		return newSubMerchantSettlementApplicationContractError("unsupported account_type %q", resp.AccountType)
+	}
+	if resp.AccountBank == "" {
+		return newSubMerchantSettlementApplicationContractError("wechat response missing account_bank")
+	}
+	if err := validateSubMerchantSettlementFieldLength("account_bank", resp.AccountBank, subMerchantSettlementFieldMaxLength); err != nil {
+		return newSubMerchantSettlementApplicationContractError("%s", strings.TrimPrefix(err.Error(), "query sub merchant settlement: "))
+	}
+	if err := validateSubMerchantSettlementFieldLength("bank_name", resp.BankName, subMerchantSettlementFieldMaxLength); err != nil {
+		return newSubMerchantSettlementApplicationContractError("%s", strings.TrimPrefix(err.Error(), "query sub merchant settlement: "))
+	}
+	if err := validateSubMerchantSettlementFieldLength("bank_branch_id", resp.BankBranchID, subMerchantSettlementFieldMaxLength); err != nil {
+		return newSubMerchantSettlementApplicationContractError("%s", strings.TrimPrefix(err.Error(), "query sub merchant settlement: "))
+	}
+	if resp.AccountNumber == "" {
+		return newSubMerchantSettlementApplicationContractError("wechat response missing account_number")
+	}
+	if err := validateSubMerchantSettlementFieldLength("account_number", resp.AccountNumber, subMerchantSettlementFieldMaxLength); err != nil {
+		return newSubMerchantSettlementApplicationContractError("%s", strings.TrimPrefix(err.Error(), "query sub merchant settlement: "))
+	}
+	if resp.VerifyResult == "" {
+		return newSubMerchantSettlementApplicationContractError("wechat response missing verify_result")
+	}
+	if _, ok := allowedSubMerchantSettlementApplicationVerifyResults[resp.VerifyResult]; !ok {
+		return newSubMerchantSettlementApplicationContractError("unsupported verify_result %q", resp.VerifyResult)
+	}
+	if resp.VerifyResult == subMerchantSettlementApplicationAuditFail {
+		if resp.VerifyFailReason == "" {
+			return newSubMerchantSettlementApplicationContractError("verify_fail_reason is required when verify_result=%s", subMerchantSettlementApplicationAuditFail)
+		}
+	} else if resp.VerifyFailReason != "" {
+		return newSubMerchantSettlementApplicationContractError("verify_fail_reason is only allowed when verify_result=%s", subMerchantSettlementApplicationAuditFail)
+	}
+	if resp.VerifyFinishTime != "" {
+		if _, err := time.Parse(time.RFC3339, resp.VerifyFinishTime); err != nil {
+			return newSubMerchantSettlementApplicationContractError("verify_finish_time must be RFC3339: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func subMerchantSettlementQueryWechatErrorGuide(wxErr *WechatPayError) string {
+	if wxErr == nil {
+		return "wechat sub merchant settlement query failed"
+	}
+	switch wxErr.Code {
+	case "PARAM_ERROR":
+		return "verify sub_mchid and account_number_rule, then retry"
+	case "INVALID_REQUEST":
+		return "verify the request URL, merchant configuration, and signing input, then retry"
+	case "SIGN_ERROR":
+		return "verify the merchant certificate, private key, and authorization signature, then retry"
+	case "SYSTEM_ERROR":
+		return "wechat settlement query failed due to an upstream system error; retry with backoff and escalate if it persists"
+	case "RATELIMIT_EXCEEDED":
+		return "wechat rate limited the settlement query; keep the query rate below 100 requests per second and retry later"
+	default:
+		return fmt.Sprintf("wechat sub merchant settlement query failed with upstream code %s; inspect the upstream message and request_id", wxErr.Code)
+	}
+}
+
+func wrapSubMerchantSettlementQueryError(err error) error {
+	var wxErr *WechatPayError
+	if errors.As(err, &wxErr) {
+		return fmt.Errorf("query sub merchant settlement: %s: %w", subMerchantSettlementQueryWechatErrorGuide(wxErr), err)
+	}
+	return fmt.Errorf("query sub merchant settlement: %w", err)
+}
+
+func subMerchantSettlementApplicationQueryWechatErrorGuide(wxErr *WechatPayError) string {
+	if wxErr == nil {
+		return "wechat settlement application query failed"
+	}
+	switch wxErr.Code {
+	case "PARAM_ERROR":
+		return "verify sub_mchid, application_no, and account_number_rule, then retry"
+	case "INVALID_REQUEST":
+		return "verify the request URL, merchant configuration, and signing input, then retry"
+	case "NO_AUTH":
+		return "verify that the sub-merchant belongs to the current service provider before retrying"
+	case "SIGN_ERROR":
+		return "verify the merchant certificate, private key, and authorization signature, then retry"
+	case "ORDER_NOT_EXIST":
+		return "verify application_no and sub_mchid, then retry"
+	case "FREQENCY_LIMIT", "RATELIMIT_EXCEEDED":
+		return "wechat rate limited the settlement application query; keep the query rate below 100 requests per second and retry later"
+	case "SYSTEM_ERROR":
+		return "wechat settlement application query failed due to an upstream system error; retry with backoff and escalate if it persists"
+	default:
+		return fmt.Sprintf("wechat settlement application query failed with upstream code %s; inspect the upstream message and request_id", wxErr.Code)
+	}
+}
+
+func wrapSubMerchantSettlementApplicationQueryError(err error) error {
+	var wxErr *WechatPayError
+	if errors.As(err, &wxErr) {
+		return fmt.Errorf("query sub merchant settlement application: %s: %w", subMerchantSettlementApplicationQueryWechatErrorGuide(wxErr), err)
+	}
+	return fmt.Errorf("query sub merchant settlement application: %w", err)
+}
+
+func querySubMerchantSettlementLogEvent(requestID, subMchID, accountNumberRule string) *zerolog.Event {
+	return log.Error().
+		Str("request_id", strings.TrimSpace(requestID)).
+		Str("sub_mchid", strings.TrimSpace(subMchID)).
+		Str("account_number_rule", strings.TrimSpace(accountNumberRule))
+}
+
+func querySubMerchantSettlementApplicationLogEvent(requestID, subMchID, applicationNo, accountNumberRule string) *zerolog.Event {
+	return log.Error().
+		Str("request_id", strings.TrimSpace(requestID)).
+		Str("sub_mchid", strings.TrimSpace(subMchID)).
+		Str("application_no", strings.TrimSpace(applicationNo)).
+		Str("account_number_rule", strings.TrimSpace(accountNumberRule))
 }
 
 func validateEcommerceApplymentAccountValidation(validation *EcommerceApplymentAccountValidation) error {
@@ -2571,19 +2916,63 @@ type SubMerchantSettlementResponse struct {
 //
 // subMchID: 特约商户号；accountNumberRule: 账号展示规则（空字符串使用微信默认 ACCOUNT_NUMBER_RULE_MASK_V1）
 func (c *EcommerceClient) QuerySubMerchantSettlement(ctx context.Context, subMchID string, accountNumberRule string) (*SubMerchantSettlementResponse, error) {
-	requestURL := fmt.Sprintf(apply4subSettlementURL, subMchID)
-	if accountNumberRule != "" {
-		requestURL += "?account_number_rule=" + url.QueryEscape(accountNumberRule)
+	normalizedSubMchID, err := validateSubMerchantSettlementSubMchID(subMchID)
+	if err != nil {
+		log.Error().
+			Str("sub_mchid", strings.TrimSpace(subMchID)).
+			Str("account_number_rule", strings.TrimSpace(accountNumberRule)).
+			Err(err).
+			Msg("wechat sub merchant settlement query rejected invalid input")
+		return nil, err
+	}
+	normalizedAccountNumberRule, err := validateSubMerchantSettlementAccountNumberRule(accountNumberRule)
+	if err != nil {
+		log.Error().
+			Str("sub_mchid", normalizedSubMchID).
+			Str("account_number_rule", strings.TrimSpace(accountNumberRule)).
+			Err(err).
+			Msg("wechat sub merchant settlement query rejected invalid input")
+		return nil, err
 	}
 
-	respBody, err := c.doRequest(ctx, http.MethodGet, requestURL, nil)
+	requestURL := fmt.Sprintf(apply4subSettlementURL, url.PathEscape(normalizedSubMchID))
+	if normalizedAccountNumberRule != "" {
+		requestURL += "?account_number_rule=" + url.QueryEscape(normalizedAccountNumberRule)
+	}
+
+	respBody, requestID, err := c.doRequestWithRequestID(ctx, http.MethodGet, requestURL, nil)
 	if err != nil {
-		return nil, fmt.Errorf("query sub merchant settlement: %w", err)
+		wrappedErr := wrapSubMerchantSettlementQueryError(err)
+		evt := querySubMerchantSettlementLogEvent(requestID, normalizedSubMchID, normalizedAccountNumberRule)
+		var wxErr *WechatPayError
+		if errors.As(err, &wxErr) {
+			evt = evt.
+				Int("status_code", wxErr.StatusCode).
+				Str("wechat_code", wxErr.Code).
+				Str("wechat_message", wxErr.Message).
+				Str("wechat_detail", wxErr.Detail)
+		}
+		evt.Err(wrappedErr).Msg("wechat sub merchant settlement query failed")
+		return nil, wrappedErr
 	}
 
 	var resp SubMerchantSettlementResponse
 	if err := json.Unmarshal(respBody, &resp); err != nil {
-		return nil, fmt.Errorf("unmarshal sub merchant settlement: %w", err)
+		wrappedErr := fmt.Errorf("query sub merchant settlement: request_id=%s: decode response: %w", requestID, err)
+		querySubMerchantSettlementLogEvent(requestID, normalizedSubMchID, normalizedAccountNumberRule).
+			Err(wrappedErr).
+			Msg("wechat sub merchant settlement response decode failed")
+		return nil, wrappedErr
+	}
+	if err := validateSubMerchantSettlementResponse(&resp); err != nil {
+		wrappedErr := fmt.Errorf("query sub merchant settlement: request_id=%s: %w", requestID, err)
+		querySubMerchantSettlementLogEvent(requestID, normalizedSubMchID, normalizedAccountNumberRule).
+			Str("account_type", resp.AccountType).
+			Str("verify_result", resp.VerifyResult).
+			Bool("has_verify_fail_reason", strings.TrimSpace(resp.VerifyFailReason) != "").
+			Err(wrappedErr).
+			Msg("wechat sub merchant settlement response contract validation failed")
+		return nil, wrappedErr
 	}
 
 	return &resp, nil
@@ -2598,7 +2987,7 @@ type ModifySubMerchantSettlementRequest struct {
 	BankName      string `json:"bank_name,omitempty"`      // 开户银行全称（含支行）
 	BankBranchID  string `json:"bank_branch_id,omitempty"` // 开户银行联行号
 	AccountNumber string `json:"account_number"`           // 银行账号（微信支付公钥加密）
-	AccountName   string `json:"account_name"`             // 开户名称（微信支付公钥加密，必填）
+	AccountName   string `json:"account_name,omitempty"`   // 开户名称（微信支付公钥加密，可选）
 }
 
 // ModifySubMerchantSettlementResponse 修改结算账户应答
@@ -2633,7 +3022,7 @@ type QuerySubMerchantSettlementApplicationResponse struct {
 	BankName         string `json:"bank_name,omitempty"` // 开户银行全称（含支行）
 	BankBranchID     string `json:"bank_branch_id,omitempty"`
 	AccountNumber    string `json:"account_number"` // 银行账号（掩码）
-	VerifyResult     string `json:"verify_result"`  // 审核状态
+	VerifyResult     string `json:"verify_result"`  // 审核状态：AUDIT_SUCCESS / AUDITING / AUDIT_FAIL
 	VerifyFailReason string `json:"verify_fail_reason,omitempty"`
 	VerifyFinishTime string `json:"verify_finish_time,omitempty"`
 }
@@ -2642,19 +3031,78 @@ type QuerySubMerchantSettlementApplicationResponse struct {
 //
 // subMchID: 特约商户号；applicationNo: 申请单号；accountNumberRule: 账号展示规则（空字符串使用微信默认）
 func (c *EcommerceClient) QuerySubMerchantSettlementApplication(ctx context.Context, subMchID, applicationNo, accountNumberRule string) (*QuerySubMerchantSettlementApplicationResponse, error) {
-	requestURL := fmt.Sprintf(apply4subModifySettlementQueryURL, subMchID, applicationNo)
-	if accountNumberRule != "" {
-		requestURL += "?account_number_rule=" + url.QueryEscape(accountNumberRule)
+	normalizedSubMchID, err := validateSubMerchantSettlementSubMchID(subMchID)
+	if err != nil {
+		wrappedErr := newSubMerchantSettlementApplicationQueryValidationError("%s", strings.TrimPrefix(err.Error(), "query sub merchant settlement: "))
+		log.Error().
+			Str("sub_mchid", strings.TrimSpace(subMchID)).
+			Str("application_no", strings.TrimSpace(applicationNo)).
+			Str("account_number_rule", strings.TrimSpace(accountNumberRule)).
+			Err(wrappedErr).
+			Msg("wechat sub merchant settlement application query rejected invalid input")
+		return nil, wrappedErr
+	}
+	normalizedApplicationNo, err := validateSubMerchantSettlementApplicationNo(applicationNo)
+	if err != nil {
+		log.Error().
+			Str("sub_mchid", normalizedSubMchID).
+			Str("application_no", strings.TrimSpace(applicationNo)).
+			Str("account_number_rule", strings.TrimSpace(accountNumberRule)).
+			Err(err).
+			Msg("wechat sub merchant settlement application query rejected invalid input")
+		return nil, err
+	}
+	normalizedAccountNumberRule, err := validateSubMerchantSettlementAccountNumberRule(accountNumberRule)
+	if err != nil {
+		wrappedErr := newSubMerchantSettlementApplicationQueryValidationError("%s", strings.TrimPrefix(err.Error(), "query sub merchant settlement: "))
+		log.Error().
+			Str("sub_mchid", normalizedSubMchID).
+			Str("application_no", normalizedApplicationNo).
+			Str("account_number_rule", strings.TrimSpace(accountNumberRule)).
+			Err(wrappedErr).
+			Msg("wechat sub merchant settlement application query rejected invalid input")
+		return nil, wrappedErr
 	}
 
-	respBody, err := c.doRequest(ctx, http.MethodGet, requestURL, nil)
+	requestURL := fmt.Sprintf(apply4subModifySettlementQueryURL, url.PathEscape(normalizedSubMchID), url.PathEscape(normalizedApplicationNo))
+	if normalizedAccountNumberRule != "" {
+		requestURL += "?account_number_rule=" + url.QueryEscape(normalizedAccountNumberRule)
+	}
+
+	respBody, requestID, err := c.doRequestWithRequestID(ctx, http.MethodGet, requestURL, nil)
 	if err != nil {
-		return nil, fmt.Errorf("query sub merchant settlement application: %w", err)
+		wrappedErr := wrapSubMerchantSettlementApplicationQueryError(err)
+		evt := querySubMerchantSettlementApplicationLogEvent(requestID, normalizedSubMchID, normalizedApplicationNo, normalizedAccountNumberRule)
+		var wxErr *WechatPayError
+		if errors.As(err, &wxErr) {
+			evt = evt.
+				Int("status_code", wxErr.StatusCode).
+				Str("wechat_code", wxErr.Code).
+				Str("wechat_message", wxErr.Message).
+				Str("wechat_detail", wxErr.Detail)
+		}
+		evt.Err(wrappedErr).Msg("wechat sub merchant settlement application query failed")
+		return nil, wrappedErr
 	}
 
 	var resp QuerySubMerchantSettlementApplicationResponse
 	if err := json.Unmarshal(respBody, &resp); err != nil {
-		return nil, fmt.Errorf("unmarshal sub merchant settlement application: %w", err)
+		wrappedErr := fmt.Errorf("query sub merchant settlement application: request_id=%s: decode response: %w", requestID, err)
+		querySubMerchantSettlementApplicationLogEvent(requestID, normalizedSubMchID, normalizedApplicationNo, normalizedAccountNumberRule).
+			Err(wrappedErr).
+			Msg("wechat sub merchant settlement application response decode failed")
+		return nil, wrappedErr
+	}
+	if err := validateSubMerchantSettlementApplicationResponse(&resp); err != nil {
+		wrappedErr := fmt.Errorf("query sub merchant settlement application: request_id=%s: %w", requestID, err)
+		querySubMerchantSettlementApplicationLogEvent(requestID, normalizedSubMchID, normalizedApplicationNo, normalizedAccountNumberRule).
+			Str("account_type", resp.AccountType).
+			Str("verify_result", resp.VerifyResult).
+			Bool("has_verify_fail_reason", strings.TrimSpace(resp.VerifyFailReason) != "").
+			Bool("has_verify_finish_time", strings.TrimSpace(resp.VerifyFinishTime) != "").
+			Err(wrappedErr).
+			Msg("wechat sub merchant settlement application response contract validation failed")
+		return nil, wrappedErr
 	}
 
 	return &resp, nil

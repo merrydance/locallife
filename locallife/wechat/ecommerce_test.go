@@ -2227,6 +2227,79 @@ func TestQuerySubMerchantSettlement_UsesAccountNumberRule(t *testing.T) {
 	require.Equal(t, "VERIFY_SUCCESS", resp.VerifyResult)
 }
 
+func TestQuerySubMerchantSettlement_RejectsInvalidInput(t *testing.T) {
+	client := newSignedEcommerceClientForTest(t, func(req *http.Request) (*http.Response, error) {
+		t.Fatalf("unexpected request: %s", req.URL.String())
+		return nil, nil
+	})
+
+	_, err := client.QuerySubMerchantSettlement(context.Background(), "", "")
+	require.Error(t, err)
+	require.ErrorContains(t, err, "sub_mchid is required")
+
+	_, err = client.QuerySubMerchantSettlement(context.Background(), "190000649A", "")
+	require.Error(t, err)
+	require.ErrorContains(t, err, "sub_mchid must contain only digits")
+
+	_, err = client.QuerySubMerchantSettlement(context.Background(), "1900006491", "MASK_V3")
+	require.Error(t, err)
+	require.ErrorContains(t, err, "account_number_rule must be one of")
+
+	var validationErr *SubMerchantSettlementQueryValidationError
+	require.ErrorAs(t, err, &validationErr)
+}
+
+func TestQuerySubMerchantSettlement_RejectsMissingRequiredResponseField(t *testing.T) {
+	client := newSignedEcommerceClientForTest(t, func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader(`{"account_type":"ACCOUNT_TYPE_BUSINESS","account_bank":"工商银行","account_number":"62*************78"}`)),
+		}, nil
+	})
+
+	_, err := client.QuerySubMerchantSettlement(context.Background(), "1900006491", "")
+	require.Error(t, err)
+	require.ErrorContains(t, err, "wechat response missing verify_result")
+
+	var contractErr *SubMerchantSettlementContractError
+	require.ErrorAs(t, err, &contractErr)
+}
+
+func TestQuerySubMerchantSettlement_RejectsUnsupportedResponseEnum(t *testing.T) {
+	client := newSignedEcommerceClientForTest(t, func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader(`{"account_type":"ACCOUNT_TYPE_UNKNOWN","account_bank":"工商银行","account_number":"62*************78","verify_result":"VERIFY_SUCCESS"}`)),
+		}, nil
+	})
+
+	_, err := client.QuerySubMerchantSettlement(context.Background(), "1900006491", "")
+	require.Error(t, err)
+	require.ErrorContains(t, err, "unsupported account_type")
+
+	var contractErr *SubMerchantSettlementContractError
+	require.ErrorAs(t, err, &contractErr)
+}
+
+func TestQuerySubMerchantSettlement_RejectsUnexpectedVerifyFailReason(t *testing.T) {
+	client := newSignedEcommerceClientForTest(t, func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader(`{"account_type":"ACCOUNT_TYPE_BUSINESS","account_bank":"工商银行","account_number":"62*************78","verify_result":"VERIFY_SUCCESS","verify_fail_reason":"不应返回"}`)),
+		}, nil
+	})
+
+	_, err := client.QuerySubMerchantSettlement(context.Background(), "1900006491", "")
+	require.Error(t, err)
+	require.ErrorContains(t, err, "verify_fail_reason is only allowed")
+
+	var contractErr *SubMerchantSettlementContractError
+	require.ErrorAs(t, err, &contractErr)
+}
+
 func TestModifySubMerchantSettlement_PostsEncryptedPayload(t *testing.T) {
 	merchantPrivateKey, _ := generateTestKeyPair(t)
 	platformPrivateKey, platformPublicKey := generateTestKeyPair(t)
@@ -2282,6 +2355,58 @@ func TestModifySubMerchantSettlement_PostsEncryptedPayload(t *testing.T) {
 	require.Equal(t, "102329389XXXX", resp.ApplicationNo)
 }
 
+func TestModifySubMerchantSettlement_OmitsEmptyAccountName(t *testing.T) {
+	merchantPrivateKey, _ := generateTestKeyPair(t)
+	platformPrivateKey, platformPublicKey := generateTestKeyPair(t)
+
+	tempDir := t.TempDir()
+	privateKeyPath := createTestPrivateKeyFile(t, tempDir, merchantPrivateKey)
+	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
+
+	client, err := NewEcommerceClient(EcommerceClientConfig{
+		PaymentClientConfig: PaymentClientConfig{
+			MchID:                 "test_mch_id",
+			AppID:                 "test_app_id",
+			SerialNumber:          "test_serial",
+			APIV3Key:              testAPIV3Key(),
+			PrivateKeyPath:        privateKeyPath,
+			PlatformPublicKeyPath: publicKeyPath,
+			PlatformPublicKeyID:   "PUB_KEY_ID_0123456789",
+			NotifyURL:             "https://example.com/notify",
+		},
+	})
+	require.NoError(t, err)
+
+	client.httpClient = &http.Client{
+		Transport: signedEcommerceTransport(t, platformPrivateKey, "PUB_KEY_ID_0123456789", func(req *http.Request) (*http.Response, error) {
+			require.Equal(t, http.MethodPost, req.Method)
+			require.Equal(t, "/v3/apply4sub/sub_merchants/1900006491/modify-settlement", req.URL.Path)
+
+			var body map[string]any
+			require.NoError(t, json.NewDecoder(req.Body).Decode(&body))
+			require.Equal(t, "ACCOUNT_TYPE_BUSINESS", body["account_type"])
+			require.Equal(t, "工商银行", body["account_bank"])
+			require.Equal(t, "cipher-account-number", body["account_number"])
+			_, hasAccountName := body["account_name"]
+			require.False(t, hasAccountName)
+
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader(`{"application_no":"102329389XXXX"}`)),
+			}, nil
+		}),
+	}
+
+	resp, err := client.ModifySubMerchantSettlement(context.Background(), "1900006491", &ModifySubMerchantSettlementRequest{
+		AccountType:   "ACCOUNT_TYPE_BUSINESS",
+		AccountBank:   "工商银行",
+		AccountNumber: "cipher-account-number",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "102329389XXXX", resp.ApplicationNo)
+}
+
 func TestQuerySubMerchantSettlementApplication_UsesApplicationAndMaskRule(t *testing.T) {
 	merchantPrivateKey, _ := generateTestKeyPair(t)
 	platformPrivateKey, platformPublicKey := generateTestKeyPair(t)
@@ -2312,7 +2437,7 @@ func TestQuerySubMerchantSettlementApplication_UsesApplicationAndMaskRule(t *tes
 			return &http.Response{
 				StatusCode: http.StatusOK,
 				Header:     make(http.Header),
-				Body:       io.NopCloser(strings.NewReader(`{"account_name":"张*","account_type":"ACCOUNT_TYPE_BUSINESS","account_bank":"工商银行","account_number":"622202******8888","verify_result":"VERIFY_SUCCESS","verify_finish_time":"2015-05-20T13:29:35+08:00"}`)),
+				Body:       io.NopCloser(strings.NewReader(`{"account_name":"张*","account_type":"ACCOUNT_TYPE_BUSINESS","account_bank":"工商银行","account_number":"622202******8888","verify_result":"AUDIT_SUCCESS","verify_finish_time":"2015-05-20T13:29:35+08:00"}`)),
 			}, nil
 		}),
 	}
@@ -2320,7 +2445,47 @@ func TestQuerySubMerchantSettlementApplication_UsesApplicationAndMaskRule(t *tes
 	resp, err := client.QuerySubMerchantSettlementApplication(context.Background(), "1511101111", "102329389XXXX", "ACCOUNT_NUMBER_RULE_MASK_V2")
 	require.NoError(t, err)
 	require.Equal(t, "张*", resp.AccountName)
-	require.Equal(t, "VERIFY_SUCCESS", resp.VerifyResult)
+	require.Equal(t, "AUDIT_SUCCESS", resp.VerifyResult)
+}
+
+func TestQuerySubMerchantSettlementApplication_RejectsInvalidContract(t *testing.T) {
+	merchantPrivateKey, _ := generateTestKeyPair(t)
+	platformPrivateKey, platformPublicKey := generateTestKeyPair(t)
+
+	tempDir := t.TempDir()
+	privateKeyPath := createTestPrivateKeyFile(t, tempDir, merchantPrivateKey)
+	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
+
+	client, err := NewEcommerceClient(EcommerceClientConfig{
+		PaymentClientConfig: PaymentClientConfig{
+			MchID:                 "test_mch_id",
+			AppID:                 "test_app_id",
+			SerialNumber:          "test_serial",
+			APIV3Key:              testAPIV3Key(),
+			PrivateKeyPath:        privateKeyPath,
+			PlatformPublicKeyPath: publicKeyPath,
+			PlatformPublicKeyID:   "PUB_KEY_ID_0123456789",
+			NotifyURL:             "https://example.com/notify",
+		},
+	})
+	require.NoError(t, err)
+
+	client.httpClient = &http.Client{
+		Transport: signedEcommerceTransport(t, platformPrivateKey, "PUB_KEY_ID_0123456789", func(req *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader(`{"account_name":"张*","account_type":"ACCOUNT_TYPE_BUSINESS","account_bank":"工商银行","account_number":"622202******8888","verify_result":"AUDIT_FAIL"}`)),
+			}, nil
+		}),
+	}
+
+	_, err = client.QuerySubMerchantSettlementApplication(context.Background(), "1511101111", "102329389XXXX", "")
+	require.Error(t, err)
+	require.ErrorContains(t, err, "verify_fail_reason is required")
+
+	var contractErr *SubMerchantSettlementApplicationContractError
+	require.ErrorAs(t, err, &contractErr)
 }
 
 func encryptEcommerceNotificationResource(t *testing.T, apiV3Key, plaintext, associatedData, nonce string) string {

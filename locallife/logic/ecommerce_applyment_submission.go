@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"regexp"
 	"strings"
 	"time"
@@ -162,7 +163,6 @@ type ApplymentLocalRecordInput struct {
 type ApplymentWechatAccountInput struct {
 	AccountType     string
 	AccountBank     string
-	AccountBankCode int64
 	AccountName     string
 	BankAddressCode string
 	BankBranchID    string
@@ -288,7 +288,6 @@ func BuildWechatApplymentAccountInfo(input ApplymentWechatAccountInput) *wechat.
 	return &wechat.ApplymentBankAccountInfo{
 		BankAccountType: input.AccountType,
 		AccountBank:     input.AccountBank,
-		AccountBankCode: input.AccountBankCode,
 		AccountName:     input.AccountName,
 		BankAddressCode: input.BankAddressCode,
 		BankBranchID:    input.BankBranchID,
@@ -457,6 +456,9 @@ func UploadApplymentAsset(ctx context.Context, downloader ApplymentAssetDownload
 
 	response, err := uploader.UploadImage(ctx, filename, fileData)
 	if err != nil {
+		if wechat.IsUploadImageValidationError(err) {
+			return "", NewRequestError(http.StatusBadRequest, err)
+		}
 		return "", err
 	}
 	if response == nil || strings.TrimSpace(response.MediaID) == "" {
