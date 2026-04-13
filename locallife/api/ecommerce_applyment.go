@@ -692,14 +692,21 @@ func decryptApplymentSensitiveField(decryptor applymentSensitiveDecryptor, ciphe
 	return strings.TrimSpace(plaintext)
 }
 
+func resolveApplymentSensitiveFieldValue(decryptor applymentSensitiveDecryptor, value, rawCiphertext string) string {
+	if strings.TrimSpace(rawCiphertext) != "" {
+		return strings.TrimSpace(value)
+	}
+	return decryptApplymentSensitiveField(decryptor, value)
+}
+
 func buildApplymentAccountValidationResponse(validation *wechat.EcommerceApplymentAccountValidation, decryptor applymentSensitiveDecryptor) *applymentAccountValidationResponse {
 	if validation == nil {
 		return nil
 	}
 
 	return &applymentAccountValidationResponse{
-		AccountName:              decryptApplymentSensitiveField(decryptor, validation.AccountName),
-		AccountNo:                decryptApplymentSensitiveField(decryptor, validation.AccountNo),
+		AccountName:              resolveApplymentSensitiveFieldValue(decryptor, validation.AccountName, validation.RawAccountName),
+		AccountNo:                resolveApplymentSensitiveFieldValue(decryptor, validation.AccountNo, validation.RawAccountNo),
 		PayAmount:                validation.PayAmount,
 		DestinationAccountNumber: strings.TrimSpace(validation.DestinationAccountNumber),
 		DestinationAccountName:   strings.TrimSpace(validation.DestinationAccountName),
