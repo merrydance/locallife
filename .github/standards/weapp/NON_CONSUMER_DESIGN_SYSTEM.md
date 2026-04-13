@@ -76,7 +76,7 @@
 - `page-shell--page-gutter`
 
 当前实现定义见 `weapp/miniprogram/app.wxss`。
-成熟参考页面组优先看菜品管理页面组：`weapp/miniprogram/pages/merchant/dishes/index.wxml`、`weapp/miniprogram/pages/merchant/dishes/edit/index.wxml`、`weapp/miniprogram/pages/merchant/dishes/categories/index.wxml`。
+优先参考本文件给出的 page shell 结构、共享 shell 类和下方推荐骨架；仓库中的既有页面只能作为“当前怎么接 page shell”的实现样本，不能反向覆盖本文件对说明卡、文本动作按钮和局部视觉壳的硬规则。
 
 默认要求：
 
@@ -85,7 +85,7 @@
 - 内容区内部 padding 由 `content-section`、`list-section` 或等效内容容器统一承接。
 - 底部安全区由 `page-shell--bottom-safe` 或等效共享能力统一承接。
 - 不要一边用了 page shell，一边又在首张卡片、首个 section 或局部组件上叠第二套导航下间距或左右 gutter。
-- 若页面属于管理页、编辑页、列表运维页，优先参考菜品管理页面组的 `page-content` + 状态分支结构，而不是把 `content-section` 机械套到所有非顾客侧页面里。
+- 若页面属于管理页、编辑页、列表运维页，优先参考本文件的 `page-content` + 状态分支骨架和共享 page shell 组合，而不是复制某个历史页面里的 note-card、文本动作按钮或局部包装层。
 
 推荐结构：
 
@@ -193,4 +193,4 @@
 - `weapp/miniprogram/pages/operator/riders/index.wxml`
 - `weapp/miniprogram/pages/platform/operators/index.wxml`
 
-其中菜品管理页面组是当前最成熟的 page shell 参考来源；其他页面用于补充不同非顾客侧任务形态下的变体实现。这些实现用于回答“当前仓库里 page shell 和非顾客侧默认结构具体怎么接”，不替代本文件的长期规范地位。
+这些实现最多只用于回答“当前仓库里 page shell 和共享容器怎么接”；若现有页面仍保留说明卡、文本动作按钮或额外视觉壳等历史写法，一律以本文件的硬规则为准，不得把历史页面当成例外许可。

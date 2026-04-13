@@ -12,6 +12,8 @@ Apply these rules for files under `locallife/wechat/`.
 
 Use `.github/standards/domains/wechat-payment/README.md` as the payment domain index. Open the operations runbook for payment operations and recovery work, and open the complaint or subsidy spec only when the active change crosses backend and client behavior in those flows.
 
+If the change touches `/v3/merchant/media/upload` or the `UploadImage` path, also read `.github/standards/domains/wechat-payment/WECHAT_PAYMENT_MERCHANT_MEDIA_UPLOAD_CONTRACT_2026-04-13.md`.
+
 ## Historical Rollout References
 
 - Consult the `historical/` execution plan referenced by `.github/standards/domains/wechat-payment/README.md` only when a task changes the rollout baseline, stage ownership, or historical migration assumptions.
@@ -27,6 +29,7 @@ Use `.github/standards/domains/wechat-payment/README.md` as the payment domain i
 - Keep request signing, transport details, and provider-specific error handling inside this integration boundary.
 - Reuse existing payment, complaint, subsidy, and shipping client patterns instead of inventing a parallel client style for one endpoint.
 - Keep business status transitions, ledger updates, and domain decisions outside this package unless they are strictly required to shape an external request or response.
+- For `/v3/merchant/media/upload`, keep service-provider signing on `spMchID`, reject empty or fake image payloads locally, and preserve the current 2MB local limit unless the active domain standard is explicitly updated.
 
 ## Boundary Checks
 

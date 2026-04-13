@@ -24,6 +24,9 @@ Review must prioritize:
 
 - Wrong capability grouping, such as one-interface-one-page mapping or oversized all-in-one pages with no single primary task
 - Missing domain-component extraction when dense local workflows are left inline in a page shell
+- Explanatory-card creep, stacked guidance copy, or first-screen instruction blocks that crowd out the actual task
+- Text-action drift where local add/edit/delete/test/status actions stay as text buttons instead of icon buttons or icon-led small buttons without justification
+- Wrapper bloat where TDesign content is rewrapped in local cards, notice shells, or decorative containers that do not own real state or structure
 - Broken service-to-state-to-view wiring
 - Missing page states, missing recovery paths, and weak-network regressions
 - Backend-truth drift, fake local truth, and incomplete state propagation
@@ -67,6 +70,9 @@ Baseline review must check:
 - Page shell, outer gutter, nav gap, safe-area handling, and content-container spacing follow the current role-side standards instead of drifting into local one-off layout rules
 - TDesign component choice and customization stay within supported methods, and any non-TDesign or visual-system exception is justified explicitly against the weapp standards
 - Non-consumer pages do not inherit consumer-side custom design language, branding colors, or decorative styling by default
+- Single-task non-consumer pages do not spend first-screen space on explanatory cards or repeated guidance copy when labels, notes, state strips, or action-adjacent copy would carry the meaning more efficiently
+- Section-level and row-level local actions use icon buttons or icon-led small buttons by default; text-only local actions are treated as exceptions that need explicit justification
+- Local wrappers around TDesign content have a concrete structural job instead of existing only to add another visual layer
 - The review names the correct role-side design document when visual-system assertions depend on it rather than treating one design document as universal
 - User-facing copy and affordances are clear in weak-network and empty-data scenarios
 - Primary and secondary actions remain visually and behaviorally clear

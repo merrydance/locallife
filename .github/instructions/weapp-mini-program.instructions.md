@@ -64,6 +64,6 @@ Use `.github/prompts/weapp-implementation.prompt.md` for all Mini Program implem
 
 - Run commands from `weapp/`.
 - Common commands: `npm run compile`, `npm run lint`, `npm run lint:fix`, `npm run quality:check`.
-- `npm run gate:weapp` now runs in full-scan mode and includes page-shell, WXML expression safety, component policy, tdesign-component-declarations, tdesign-boundary, page-responsibility, page-complexity, request-boundary, role-contract, and business-status-boundary gates.
+- `npm run gate:weapp` now runs in full-scan mode and includes page-shell, WXML expression safety, component policy, tdesign-component-declarations, tdesign-boundary, non-consumer-ui-patterns, page-responsibility, page-complexity, request-boundary, role-contract, and business-status-boundary gates.
 - Prefer `npm run quality:check` before handing off changes that touch multiple Mini Program files or shared components.
 - In hand-off, follow the engineering governance wording for risk and residual risk, and still call out any remaining weak-network, re-entry, duplicate-tap, or state-recovery risk using concrete paths.
