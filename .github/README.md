@@ -46,7 +46,7 @@ Practical defaults for this workspace:
 - Default to a prompt, not an agent.
 - Treat prompt routing as layered, not flat: protocol prompts first, then stack prompts, then domain prompts, and only then agent or workflow boundaries.
 - Use `general-` prompts only when the task spans multiple product areas or the target area is not yet clear.
-- Prefer area-specific prompts over `general-` prompts once the target is clearly `locallife/`, `web/`, or `weapp/`.
+- Prefer area-specific prompts over `general-` prompts once the target is clearly `locallife/`, `merchant_app/`, `web/`, or `weapp/`.
 - Prefer specialized prompts such as payment, integration-test, task-card, or Mermaid only when the request explicitly matches that workflow.
 - Do not create a new agent just to express expertise. Expertise belongs in prompt wording or instructions unless a tool boundary is required.
 - Keep agent count minimal. In this workspace, default to prompts and instructions unless a future workflow adds real repository-backed agent files.
@@ -112,6 +112,10 @@ Mini Program:
 Flutter Merchant App:
 
 - `.github/standards/flutter/README.md`
+- `.github/standards/flutter/PRODUCTION_ROBUSTNESS_BASELINE.md`
+- `.github/standards/flutter/FLUTTER_UI_DESIGN_STANDARDS.md`
+- `.github/standards/flutter/TASK_ANNOTATION_TEMPLATE.md`
+- `.github/standards/flutter/REVIEW_CHECKLIST.md`
 - `.github/standards/flutter/FLUTTER_APP_ARCHITECTURE.md`
 - `.github/standards/flutter/APP_AUTH_BINDING.md`
 - `.github/standards/flutter/PUSH_NOTIFICATION_STANDARDS.md`

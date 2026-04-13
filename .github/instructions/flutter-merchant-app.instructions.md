@@ -12,9 +12,12 @@ Apply these rules for files under `merchant_app/`.
 
 Open the smallest relevant Flutter deep docs for the current task:
 
+- `PRODUCTION_ROBUSTNESS_BASELINE.md`: failure model, prohibited shortcuts, risk hints, validation depth, task annotation fields
+- `FLUTTER_UI_DESIGN_STANDARDS.md`: visual hierarchy, Chinese readability, spacing, state presentation, interaction rules
 - `FLUTTER_APP_ARCHITECTURE.md`: layering, state management, DI, directory conventions
 - `PUSH_NOTIFICATION_STANDARDS.md`: three-channel delivery, dedup, order acceptance, voice alerts
 - `ANDROID_KEEP_ALIVE_GUIDE.md`: vendor keep-alive, foreground service, permission guide
+- `REVIEW_CHECKLIST.md`: compact checklist for review and self-check on `G2`/`G3` paths
 
 ## Architecture Boundaries
 
@@ -27,8 +30,12 @@ Open the smallest relevant Flutter deep docs for the current task:
 ## Implementation Rules
 
 - All user-facing strings must be in Chinese.
+- Treat `merchant_app/` as a lossy edge client: duplicate delivery, reconnect, process death, and permission loss are default assumptions.
+- For UI work, use Flutter design tokens and stable spacing hierarchy; do not transplant web-only concepts like hover-dependent behavior or CSS blur defaults into Flutter screens.
 - Message deduplication by `message_id` is mandatory for all delivery channels.
 - Do not assume WebSocket is always connected; design for disconnection as normal state.
+- For non-trivial flows, define the state owner, recovery boundary, and validation plan explicitly.
+- Critical actions must be safe under retry or duplicate tap; do not ship client-only "exactly once" assumptions.
 - Foreground Service must run with a persistent, non-dismissable notification.
 - Use `STREAM_ALARM` audio stream for order voice alerts to bypass silent mode.
 - Do not hardcode API URLs; use environment config in `lib/config/env.dart`.
@@ -51,5 +58,6 @@ Open the smallest relevant Flutter deep docs for the current task:
 ## Completion Contract
 
 - State which features or layers changed.
+- State the risk level or reliability sensitivity when the task is not routine UI-only work.
 - State whether the change affects message delivery, keep-alive, or push integration.
 - Call out any path that remains untested on real devices.

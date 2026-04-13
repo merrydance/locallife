@@ -75,6 +75,7 @@
 - Backend: `backend-implementation.prompt.md`, `backend-review-closure.prompt.md`, `backend-bugfix.prompt.md`, `backend-takeover.prompt.md`
 - Web: `web-implementation.prompt.md`, `web-review.prompt.md`
 - Weapp: `weapp-implementation.prompt.md`, `weapp-review.prompt.md`
+- Flutter Merchant App: `flutter-implementation.prompt.md`, `flutter-review.prompt.md`, `flutter-bugfix.prompt.md`
 
 业务域层模板：
 
@@ -160,7 +161,13 @@ Prompt 库必须接受和代码同等级的基础门禁。
 | --- | --- | --- | --- |
 | Weapp | 以后端契约为唯一真相；service / state / handlers / WXML / WXSS / feedback 一起改；显式处理 loading / success / empty / error / retry / re-entry；说明弱网、重复点击与冷启动恢复 | 不要猜后端字段、状态、权限或统计语义；不要只改 WXML / WXSS；不要把金额语义、角色边界或结果语义混掉；不要把重写 TDesign 内部样式当常规方案 | setData 粒度、状态恢复、弱网与重入、支付结果、角色边界、页面壳一致性、反馈通道是否正确 |
 
-### 3.4 Cross-Stack Rules
+### 3.4 Flutter Merchant App
+
+| Area | Implementation Must Push | Implementation Must Not | Review Must Check |
+| --- | --- | --- | --- |
+| Flutter Merchant App | 按 disconnected edge client 建模；说明 state owner、recovery boundary、失败模式；把 service / provider / persistence / lifecycle / UI 贯通；关键链路显式处理 duplicate、retry、cold start、re-entry；按风险说明真实验证和残余风险 | 不要把业务逻辑和副作用塞进 Widget；不要假设单通道可靠或 exactly-once；不要为 `G2`/`G3` 路径做乐观成功；不要发明后端语义；不要省略真机、弱网、恢复路径的未验证说明 | 状态所有者是否清晰；去重、重试、冷启动、后台恢复是否被 deliberate 处理；push、foreground service、auth refresh、accept-order 等链路是否闭环；高风险设备或厂商路径是否仍未验证 |
+
+### 3.5 Cross-Stack Rules
 
 | Area | Implementation Must Push | Implementation Must Not | Review Must Check |
 | --- | --- | --- | --- |
