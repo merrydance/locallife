@@ -928,7 +928,8 @@ func (c *PaymentClient) decryptAESGCM(nonceStr, ciphertext, associatedData strin
 
 // doRequest 发送签名请求
 func (c *PaymentClient) doRequest(ctx context.Context, method, path string, body interface{}) ([]byte, error) {
-	return c.doRequestWithSerial(ctx, method, path, body, "")
+	respBody, _, err := c.doRequestWithRequestID(ctx, method, path, body)
+	return respBody, err
 }
 
 // doRequestWithWechatSerial 发送带微信支付平台公钥ID/证书序列号的请求（用于加密敏感信息）
@@ -938,26 +939,42 @@ func (c *PaymentClient) doRequestWithWechatSerial(ctx context.Context, method, p
 	if wechatSerial == "" {
 		return nil, fmt.Errorf("neither platform public key ID nor platform certificate loaded")
 	}
-	return c.doRequestWithSerial(ctx, method, path, body, wechatSerial)
+	respBody, _, err := c.doRequestWithSerialAndRequestID(ctx, method, path, body, wechatSerial)
+	return respBody, err
 }
 
 func (c *PaymentClient) doRequestWithoutResponseVerification(ctx context.Context, method, path string, body interface{}) ([]byte, error) {
-	return c.doRequestWithOptions(ctx, method, path, body, "", false)
+	respBody, _, err := c.doRequestWithOptionsAndRequestID(ctx, method, path, body, "", false)
+	return respBody, err
 }
 
 // doRequestWithSerial 发送请求，支持指定微信支付平台证书序列号
 func (c *PaymentClient) doRequestWithSerial(ctx context.Context, method, path string, body interface{}, wechatSerial string) ([]byte, error) {
-	return c.doRequestWithOptions(ctx, method, path, body, wechatSerial, true)
+	respBody, _, err := c.doRequestWithSerialAndRequestID(ctx, method, path, body, wechatSerial)
+	return respBody, err
 }
 
 func (c *PaymentClient) doRequestWithOptions(ctx context.Context, method, path string, body interface{}, wechatSerial string, verifyResponse bool) ([]byte, error) {
+	respBody, _, err := c.doRequestWithOptionsAndRequestID(ctx, method, path, body, wechatSerial, verifyResponse)
+	return respBody, err
+}
+
+func (c *PaymentClient) doRequestWithRequestID(ctx context.Context, method, path string, body interface{}) ([]byte, string, error) {
+	return c.doRequestWithSerialAndRequestID(ctx, method, path, body, "")
+}
+
+func (c *PaymentClient) doRequestWithSerialAndRequestID(ctx context.Context, method, path string, body interface{}, wechatSerial string) ([]byte, string, error) {
+	return c.doRequestWithOptionsAndRequestID(ctx, method, path, body, wechatSerial, true)
+}
+
+func (c *PaymentClient) doRequestWithOptionsAndRequestID(ctx context.Context, method, path string, body interface{}, wechatSerial string, verifyResponse bool) ([]byte, string, error) {
 	var bodyBytes []byte
 	var err error
 
 	if body != nil {
 		bodyBytes, err = json.Marshal(body)
 		if err != nil {
-			return nil, fmt.Errorf("marshal body: %w", err)
+			return nil, "", fmt.Errorf("marshal body: %w", err)
 		}
 	}
 
@@ -966,10 +983,10 @@ func (c *PaymentClient) doRequestWithOptions(ctx context.Context, method, path s
 	if strings.HasPrefix(path, "https://") || strings.HasPrefix(path, "http://") {
 		parsedURL, parseErr := url.Parse(path)
 		if parseErr != nil {
-			return nil, fmt.Errorf("parse request url: %w", parseErr)
+			return nil, "", fmt.Errorf("parse request url: %w", parseErr)
 		}
 		if parsedURL.Scheme == "" || parsedURL.Host == "" {
-			return nil, fmt.Errorf("invalid absolute request url: %s", path)
+			return nil, "", fmt.Errorf("invalid absolute request url: %s", path)
 		}
 		requestURL = parsedURL.String()
 		signaturePath = parsedURL.RequestURI()
@@ -977,13 +994,13 @@ func (c *PaymentClient) doRequestWithOptions(ctx context.Context, method, path s
 
 	req, err := http.NewRequestWithContext(ctx, method, requestURL, bytes.NewReader(bodyBytes))
 	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
+		return nil, "", fmt.Errorf("create request: %w", err)
 	}
 
 	// 生成请求ID（用于追踪和问题排查）
 	requestID, err := generateNonceStr()
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	// 设置请求头
@@ -998,11 +1015,11 @@ func (c *PaymentClient) doRequestWithOptions(ctx context.Context, method, path s
 	timestamp := time.Now().Unix()
 	nonceStr, err := generateNonceStr()
 	if err != nil {
-		return nil, err
+		return nil, requestID, err
 	}
 	signature, err := c.generateSignature(method, signaturePath, timestamp, nonceStr, bodyBytes)
 	if err != nil {
-		return nil, fmt.Errorf("generate signature: %w", err)
+		return nil, requestID, fmt.Errorf("generate signature: %w", err)
 	}
 
 	// 设置授权头
@@ -1015,17 +1032,17 @@ func (c *PaymentClient) doRequestWithOptions(ctx context.Context, method, path s
 	// 发送请求
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("send request (request_id=%s): %w", requestID, err)
+		return nil, requestID, fmt.Errorf("send request (request_id=%s): %w", requestID, err)
 	}
 	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20)) // 4MB上限，防止异常大响应耗尽内存
 	if err != nil {
-		return nil, fmt.Errorf("read response: %w", err)
+		return nil, requestID, fmt.Errorf("read response: %w", err)
 	}
 	if verifyResponse {
 		if err := c.verifyHTTPResponseSignature(resp, respBody); err != nil {
-			return nil, fmt.Errorf("verify response signature: %w", err)
+			return nil, requestID, fmt.Errorf("verify response signature: %w", err)
 		}
 	}
 
@@ -1037,14 +1054,14 @@ func (c *PaymentClient) doRequestWithOptions(ctx context.Context, method, path s
 
 		if err := json.Unmarshal(respBody, &wxErr); err == nil && wxErr.Code != "" {
 			// 成功解析错误响应，添加request_id便于排查
-			return nil, fmt.Errorf("request_id=%s: %w", requestID, &wxErr)
+			return nil, requestID, fmt.Errorf("request_id=%s: %w", requestID, &wxErr)
 		}
 
 		// 解析失败，返回原始错误
-		return nil, fmt.Errorf("wechat pay api error: status=%d, body=%s, request_id=%s", resp.StatusCode, string(respBody), requestID)
+		return nil, requestID, fmt.Errorf("wechat pay api error: status=%d, body=%s, request_id=%s", resp.StatusCode, string(respBody), requestID)
 	}
 
-	return respBody, nil
+	return respBody, requestID, nil
 }
 
 // generateSignature 生成请求签名

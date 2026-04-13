@@ -23,6 +23,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
 
@@ -569,6 +570,8 @@ type EcommerceApplymentAccountValidation struct {
 	City                     string `json:"city,omitempty"`
 	Remark                   string `json:"remark,omitempty"`
 	Deadline                 string `json:"deadline,omitempty"`
+	RawAccountName           string `json:"-"`
+	RawAccountNo             string `json:"-"`
 }
 
 func MarshalEcommerceApplymentAccountValidation(validation *EcommerceApplymentAccountValidation) []byte {
@@ -576,7 +579,25 @@ func MarshalEcommerceApplymentAccountValidation(validation *EcommerceApplymentAc
 		return nil
 	}
 
-	payload, err := json.Marshal(validation)
+	normalized := *validation
+	if trimmedRawAccountName := strings.TrimSpace(normalized.RawAccountName); trimmedRawAccountName != "" {
+		normalized.AccountName = trimmedRawAccountName
+	} else {
+		normalized.AccountName = strings.TrimSpace(normalized.AccountName)
+	}
+	if trimmedRawAccountNo := strings.TrimSpace(normalized.RawAccountNo); trimmedRawAccountNo != "" {
+		normalized.AccountNo = trimmedRawAccountNo
+	} else {
+		normalized.AccountNo = strings.TrimSpace(normalized.AccountNo)
+	}
+	normalized.DestinationAccountNumber = strings.TrimSpace(normalized.DestinationAccountNumber)
+	normalized.DestinationAccountName = strings.TrimSpace(normalized.DestinationAccountName)
+	normalized.DestinationAccountBank = strings.TrimSpace(normalized.DestinationAccountBank)
+	normalized.City = strings.TrimSpace(normalized.City)
+	normalized.Remark = strings.TrimSpace(normalized.Remark)
+	normalized.Deadline = strings.TrimSpace(normalized.Deadline)
+
+	payload, err := json.Marshal(&normalized)
 	if err != nil {
 		return nil
 	}
@@ -615,6 +636,391 @@ type EcommerceApplymentQueryResponse struct {
 type ApplymentAuditDetail struct {
 	ParamName    string `json:"param_name"`    // 参数名称
 	RejectReason string `json:"reject_reason"` // 驳回原因
+}
+
+const ecommerceApplymentOutRequestNoMaxLength = 124
+
+type EcommerceApplymentQueryValidationError struct {
+	Message string
+}
+
+func (e *EcommerceApplymentQueryValidationError) Error() string {
+	return e.Message
+}
+
+type ecommerceApplymentQueryKind string
+
+const (
+	ecommerceApplymentQueryByIDKind           ecommerceApplymentQueryKind = "applyment_id"
+	ecommerceApplymentQueryByOutRequestNoKind ecommerceApplymentQueryKind = "out_request_no"
+)
+
+var allowedEcommerceApplymentStates = map[string]struct{}{
+	"CHECKING":                        {},
+	"ACCOUNT_NEED_VERIFY":             {},
+	"AUDITING":                        {},
+	"REJECTED":                        {},
+	"NEED_SIGN":                       {},
+	"FINISH":                          {},
+	"FROZEN":                          {},
+	"CANCELED":                        {},
+	"APPLYMENT_STATE_EDITTING":        {},
+	"APPLYMENT_STATE_AUDITING":        {},
+	"APPLYMENT_STATE_REJECTED":        {},
+	"APPLYMENT_STATE_TO_BE_CONFIRMED": {},
+	"APPLYMENT_STATE_TO_BE_SIGNED":    {},
+	"APPLYMENT_STATE_SIGNING":         {},
+	"APPLYMENT_STATE_FINISHED":        {},
+	"APPLYMENT_STATE_FROZEN":          {},
+	"APPLYMENT_STATE_CANCELED":        {},
+}
+
+var allowedEcommerceApplymentSignStates = map[string]struct{}{
+	"UNSIGNED":     {},
+	"SIGNED":       {},
+	"NOT_SIGNABLE": {},
+}
+
+func newEcommerceApplymentQueryValidationError(format string, args ...any) error {
+	return &EcommerceApplymentQueryValidationError{Message: fmt.Sprintf("query ecommerce applyment: "+format, args...)}
+}
+
+func normalizeEcommerceApplymentQueryState(state string) string {
+	return strings.ToUpper(strings.TrimSpace(state))
+}
+
+func classifyEcommerceApplymentQueryState(state string) string {
+	switch normalizeEcommerceApplymentQueryState(state) {
+	case "APPLYMENT_STATE_AUDITING", "AUDITING":
+		return "AUDITING"
+	case "APPLYMENT_STATE_REJECTED", "REJECTED":
+		return "REJECTED"
+	case "APPLYMENT_STATE_TO_BE_SIGNED", "NEED_SIGN":
+		return "NEED_SIGN"
+	case "APPLYMENT_STATE_SIGNING":
+		return "SIGNING"
+	case "APPLYMENT_STATE_FINISHED", "FINISH":
+		return "FINISH"
+	case "APPLYMENT_STATE_FROZEN", "FROZEN":
+		return "FROZEN"
+	case "APPLYMENT_STATE_CANCELED", "CANCELED":
+		return "CANCELED"
+	case "APPLYMENT_STATE_TO_BE_CONFIRMED":
+		return "TO_BE_CONFIRMED"
+	case "ACCOUNT_NEED_VERIFY":
+		return "ACCOUNT_NEED_VERIFY"
+	case "CHECKING":
+		return "CHECKING"
+	case "APPLYMENT_STATE_EDITTING":
+		return "APPLYMENT_STATE_EDITTING"
+	default:
+		return normalizeEcommerceApplymentQueryState(state)
+	}
+}
+
+func ecommerceApplymentStateAllowsAccountValidation(stateClass string) bool {
+	return stateClass == "ACCOUNT_NEED_VERIFY" || stateClass == "TO_BE_CONFIRMED"
+}
+
+func ecommerceApplymentStateAllowsLegalValidationURL(stateClass string) bool {
+	return stateClass == "ACCOUNT_NEED_VERIFY" || stateClass == "TO_BE_CONFIRMED"
+}
+
+func ecommerceApplymentStateAllowsAuditDetail(stateClass string) bool {
+	return stateClass == "REJECTED" || stateClass == "FROZEN"
+}
+
+func ecommerceApplymentStateAllowsSubMchID(stateClass string) bool {
+	return stateClass == "NEED_SIGN" || stateClass == "SIGNING" || stateClass == "FINISH"
+}
+
+func ecommerceApplymentStateAllowsSignURL(kind ecommerceApplymentQueryKind, stateClass, signState string) bool {
+	if stateClass == "NEED_SIGN" || stateClass == "SIGNING" {
+		return true
+	}
+	return kind == ecommerceApplymentQueryByIDKind && signState == "UNSIGNED"
+}
+
+func normalizeEcommerceApplymentQuerySignState(signState string) string {
+	return strings.ToUpper(strings.TrimSpace(signState))
+}
+
+func validateEcommerceApplymentID(applymentID int64) error {
+	if applymentID <= 0 {
+		return newEcommerceApplymentQueryValidationError("applyment_id must be a positive integer")
+	}
+	return nil
+}
+
+func validateEcommerceApplymentOutRequestNo(outRequestNo string) (string, error) {
+	normalized := strings.TrimSpace(outRequestNo)
+	if normalized == "" {
+		return "", newEcommerceApplymentQueryValidationError("out_request_no is required")
+	}
+	if len(normalized) > ecommerceApplymentOutRequestNoMaxLength {
+		return "", newEcommerceApplymentQueryValidationError("out_request_no must not exceed %d characters", ecommerceApplymentOutRequestNoMaxLength)
+	}
+	return normalized, nil
+}
+
+func validateEcommerceApplymentAccountValidation(validation *EcommerceApplymentAccountValidation) error {
+	if validation == nil {
+		return errors.New("wechat response missing account_validation")
+	}
+	if strings.TrimSpace(validation.AccountName) == "" {
+		return errors.New("wechat response missing account_validation.account_name")
+	}
+	if validation.PayAmount == 0 {
+		return errors.New("wechat response missing account_validation.pay_amount")
+	}
+	if strings.TrimSpace(validation.DestinationAccountNumber) == "" {
+		return errors.New("wechat response missing account_validation.destination_account_number")
+	}
+	if strings.TrimSpace(validation.DestinationAccountName) == "" {
+		return errors.New("wechat response missing account_validation.destination_account_name")
+	}
+	if strings.TrimSpace(validation.DestinationAccountBank) == "" {
+		return errors.New("wechat response missing account_validation.destination_account_bank")
+	}
+	if strings.TrimSpace(validation.City) == "" {
+		return errors.New("wechat response missing account_validation.city")
+	}
+	if strings.TrimSpace(validation.Remark) == "" {
+		return errors.New("wechat response missing account_validation.remark")
+	}
+	if strings.TrimSpace(validation.Deadline) == "" {
+		return errors.New("wechat response missing account_validation.deadline")
+	}
+	return nil
+}
+
+func validateEcommerceApplymentAuditDetail(auditDetail []ApplymentAuditDetail) error {
+	if len(auditDetail) == 0 {
+		return errors.New("wechat response missing audit_detail")
+	}
+	for idx, detail := range auditDetail {
+		if strings.TrimSpace(detail.ParamName) == "" {
+			return fmt.Errorf("wechat response missing audit_detail[%d].param_name", idx)
+		}
+		if strings.TrimSpace(detail.RejectReason) == "" {
+			return fmt.Errorf("wechat response missing audit_detail[%d].reject_reason", idx)
+		}
+	}
+	return nil
+}
+
+func validateEcommerceApplymentQueryResponse(resp *EcommerceApplymentQueryResponse, kind ecommerceApplymentQueryKind) error {
+	if resp == nil {
+		return errors.New("query ecommerce applyment: empty wechat response")
+	}
+	outRequestNo := strings.TrimSpace(resp.OutRequestNo)
+	applymentState := normalizeEcommerceApplymentQueryState(resp.ApplymentState)
+	applymentStateClass := classifyEcommerceApplymentQueryState(resp.ApplymentState)
+	applymentStateDesc := strings.TrimSpace(resp.ApplymentStateDesc)
+	signURL := strings.TrimSpace(resp.SignURL)
+	signState := normalizeEcommerceApplymentQuerySignState(resp.SignState)
+	subMchID := strings.TrimSpace(resp.SubMchID)
+	legalValidationURL := strings.TrimSpace(resp.LegalValidationURL)
+
+	if resp.ApplymentID <= 0 {
+		return errors.New("query ecommerce applyment: wechat response missing applyment_id")
+	}
+	if outRequestNo == "" {
+		return errors.New("query ecommerce applyment: wechat response missing out_request_no")
+	}
+	if applymentState == "" {
+		return errors.New("query ecommerce applyment: wechat response missing applyment_state")
+	}
+	if applymentStateDesc == "" {
+		return errors.New("query ecommerce applyment: wechat response missing applyment_state_desc")
+	}
+	if _, ok := allowedEcommerceApplymentStates[applymentState]; !ok {
+		return fmt.Errorf("query ecommerce applyment: unsupported applyment_state %q", resp.ApplymentState)
+	}
+	if signState != "" {
+		if _, ok := allowedEcommerceApplymentSignStates[signState]; !ok {
+			return fmt.Errorf("query ecommerce applyment: unsupported sign_state %q", resp.SignState)
+		}
+	}
+	if signURL != "" {
+		if !ecommerceApplymentStateAllowsSignURL(kind, applymentStateClass, signState) {
+			if kind == ecommerceApplymentQueryByOutRequestNoKind {
+				return fmt.Errorf("query ecommerce applyment: sign_url is only allowed when applyment_state=NEED_SIGN or legacy signing states for out_request_no query, got applyment_state=%s", resp.ApplymentState)
+			}
+			return fmt.Errorf("query ecommerce applyment: sign_url is only allowed when applyment_state=NEED_SIGN, legacy signing states, or sign_state=UNSIGNED for applyment_id query, got applyment_state=%s sign_state=%s", resp.ApplymentState, resp.SignState)
+		}
+	}
+	if resp.AccountValidation != nil && !ecommerceApplymentStateAllowsAccountValidation(applymentStateClass) {
+		return fmt.Errorf("query ecommerce applyment: account_validation is only allowed when applyment_state=ACCOUNT_NEED_VERIFY, got %s", resp.ApplymentState)
+	}
+	if resp.AccountValidation != nil {
+		if err := validateEcommerceApplymentAccountValidation(resp.AccountValidation); err != nil {
+			return fmt.Errorf("query ecommerce applyment: %w", err)
+		}
+	}
+	if len(resp.AuditDetail) > 0 && !ecommerceApplymentStateAllowsAuditDetail(applymentStateClass) {
+		return fmt.Errorf("query ecommerce applyment: audit_detail is only allowed when applyment_state is REJECTED or FROZEN, got %s", resp.ApplymentState)
+	}
+	if len(resp.AuditDetail) > 0 {
+		if err := validateEcommerceApplymentAuditDetail(resp.AuditDetail); err != nil {
+			return fmt.Errorf("query ecommerce applyment: %w", err)
+		}
+	}
+	if legalValidationURL != "" && !ecommerceApplymentStateAllowsLegalValidationURL(applymentStateClass) {
+		return fmt.Errorf("query ecommerce applyment: legal_validation_url is only allowed when applyment_state=ACCOUNT_NEED_VERIFY, got %s", resp.ApplymentState)
+	}
+	if subMchID != "" && !ecommerceApplymentStateAllowsSubMchID(applymentStateClass) {
+		return fmt.Errorf("query ecommerce applyment: sub_mchid is only allowed when applyment_state is NEED_SIGN or FINISH, got %s", resp.ApplymentState)
+	}
+
+	if applymentStateClass == "ACCOUNT_NEED_VERIFY" {
+		if err := validateEcommerceApplymentAccountValidation(resp.AccountValidation); err != nil {
+			return fmt.Errorf("query ecommerce applyment: account_validation is required when applyment_state=ACCOUNT_NEED_VERIFY: %w", err)
+		}
+	}
+	if applymentStateClass == "REJECTED" || applymentStateClass == "FROZEN" {
+		if err := validateEcommerceApplymentAuditDetail(resp.AuditDetail); err != nil {
+			return fmt.Errorf("query ecommerce applyment: audit_detail is required when applyment_state=%s: %w", applymentStateClass, err)
+		}
+	}
+	if applymentStateClass == "NEED_SIGN" {
+		if signURL == "" {
+			return errors.New("query ecommerce applyment: sign_url is required when applyment_state=NEED_SIGN")
+		}
+		if subMchID == "" {
+			return errors.New("query ecommerce applyment: sub_mchid is required when applyment_state=NEED_SIGN")
+		}
+	}
+	if applymentStateClass == "FINISH" && subMchID == "" {
+		return errors.New("query ecommerce applyment: sub_mchid is required when applyment_state=FINISH")
+	}
+	if kind == ecommerceApplymentQueryByIDKind && signState == "UNSIGNED" && signURL == "" {
+		return errors.New("query ecommerce applyment: sign_url is required when sign_state=UNSIGNED for applyment_id query")
+	}
+
+	return nil
+}
+
+func (c *EcommerceClient) decryptEcommerceApplymentAccountValidation(validation *EcommerceApplymentAccountValidation) error {
+	if validation == nil {
+		return nil
+	}
+	rawAccountName := strings.TrimSpace(validation.AccountName)
+	if rawAccountName == "" {
+		return nil
+	}
+	plaintextAccountName, err := c.DecryptSensitiveResponseData(rawAccountName)
+	if err != nil {
+		return fmt.Errorf("query ecommerce applyment: decrypt account_validation.account_name: %w", err)
+	}
+	validation.RawAccountName = rawAccountName
+	validation.AccountName = strings.TrimSpace(plaintextAccountName)
+	if validation.AccountName == "" {
+		return errors.New("query ecommerce applyment: decrypted account_validation.account_name is empty")
+	}
+
+	rawAccountNo := strings.TrimSpace(validation.AccountNo)
+	if rawAccountNo == "" {
+		return nil
+	}
+	plaintextAccountNo, err := c.DecryptSensitiveResponseData(rawAccountNo)
+	if err != nil {
+		return fmt.Errorf("query ecommerce applyment: decrypt account_validation.account_no: %w", err)
+	}
+	validation.RawAccountNo = rawAccountNo
+	validation.AccountNo = strings.TrimSpace(plaintextAccountNo)
+	return nil
+}
+
+func ecommerceApplymentQueryWechatErrorGuide(wxErr *WechatPayError) string {
+	if wxErr == nil {
+		return "wechat ecommerce applyment query failed"
+	}
+	switch wxErr.Code {
+	case "PARAM_ERROR":
+		return "verify the query parameter format, especially out_request_no length and applyment_id semantics, then retry"
+	case "INVALID_REQUEST":
+		return "verify the request URL and merchant configuration, then retry"
+	case "SIGN_ERROR":
+		return "verify the merchant certificate, private key, and authorization signature, then retry"
+	case "SYSTEM_ERROR":
+		return "wechat query failed due to an upstream system error; retry with backoff and escalate if it persists"
+	case "RESOURCE_ALREADY_EXISTS":
+		return "wechat reported a conflicting resource state; verify the current applyment record before retrying"
+	case "NO_AUTH":
+		return "verify the merchant has permission to query this applyment and that the configured mchid/appid pair is correct"
+	case "RESOURCE_NOT_EXISTS":
+		return "wechat could not find the applyment; verify out_request_no or applyment_id before retrying"
+	case "RATELIMIT_EXCEEDED":
+		return "wechat rate limited the query; reduce polling frequency and retry later"
+	default:
+		return fmt.Sprintf("wechat ecommerce applyment query failed with upstream code %s; inspect the upstream message and request_id", wxErr.Code)
+	}
+}
+
+func wrapEcommerceApplymentQueryError(err error) error {
+	var wxErr *WechatPayError
+	if errors.As(err, &wxErr) {
+		return fmt.Errorf("query ecommerce applyment: %s: %w", ecommerceApplymentQueryWechatErrorGuide(wxErr), err)
+	}
+	return fmt.Errorf("query ecommerce applyment: %w", err)
+}
+
+func queryEcommerceApplymentLogEvent(requestID string, applymentID int64, outRequestNo string) *zerolog.Event {
+	evt := log.Error().Str("request_id", requestID)
+	if applymentID > 0 {
+		evt = evt.Int64("applyment_id", applymentID)
+	}
+	if outRequestNo != "" {
+		evt = evt.Str("out_request_no", outRequestNo)
+	}
+	return evt
+}
+
+func (c *EcommerceClient) queryEcommerceApplyment(ctx context.Context, kind ecommerceApplymentQueryKind, requestURL string, applymentID int64, outRequestNo string) (*EcommerceApplymentQueryResponse, error) {
+	respBody, requestID, err := c.doRequestWithRequestID(ctx, http.MethodGet, requestURL, nil)
+	if err != nil {
+		wrappedErr := wrapEcommerceApplymentQueryError(err)
+		evt := queryEcommerceApplymentLogEvent(requestID, applymentID, outRequestNo)
+		var wxErr *WechatPayError
+		if errors.As(err, &wxErr) {
+			evt = evt.
+				Int("status_code", wxErr.StatusCode).
+				Str("wechat_code", wxErr.Code).
+				Str("wechat_message", wxErr.Message).
+				Str("wechat_detail", wxErr.Detail)
+		}
+		evt.Err(wrappedErr).Msg("wechat ecommerce applyment query failed")
+		return nil, wrappedErr
+	}
+
+	var resp EcommerceApplymentQueryResponse
+	if err := json.Unmarshal(respBody, &resp); err != nil {
+		wrappedErr := fmt.Errorf("query ecommerce applyment: request_id=%s: decode response: %w", requestID, err)
+		queryEcommerceApplymentLogEvent(requestID, applymentID, outRequestNo).
+			Err(wrappedErr).
+			Msg("wechat ecommerce applyment query response decode failed")
+		return nil, wrappedErr
+	}
+	if err := validateEcommerceApplymentQueryResponse(&resp, kind); err != nil {
+		wrappedErr := fmt.Errorf("query ecommerce applyment: request_id=%s: %w", requestID, err)
+		queryEcommerceApplymentLogEvent(requestID, applymentID, outRequestNo).
+			Str("applyment_state", resp.ApplymentState).
+			Str("sign_state", resp.SignState).
+			Str("sub_mchid", resp.SubMchID).
+			Err(wrappedErr).
+			Msg("wechat ecommerce applyment query response contract validation failed")
+		return nil, wrappedErr
+	}
+	if err := c.decryptEcommerceApplymentAccountValidation(resp.AccountValidation); err != nil {
+		wrappedErr := fmt.Errorf("query ecommerce applyment: request_id=%s: %w", requestID, err)
+		queryEcommerceApplymentLogEvent(requestID, applymentID, outRequestNo).
+			Err(wrappedErr).
+			Msg("wechat ecommerce applyment query response sensitive field decryption failed")
+		return nil, wrappedErr
+	}
+
+	return &resp, nil
 }
 
 // CreateEcommerceApplyment 提交二级商户进件申请
@@ -773,36 +1179,31 @@ func normalizeEcommerceContactType(contactType string) string {
 
 // QueryEcommerceApplymentByID 通过申请单号查询进件状态
 func (c *EcommerceClient) QueryEcommerceApplymentByID(ctx context.Context, applymentID int64) (*EcommerceApplymentQueryResponse, error) {
-	url := fmt.Sprintf(ecommerceApplymentQueryURL, applymentID)
-
-	respBody, err := c.doRequest(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("query ecommerce applyment: %w", err)
+	if err := validateEcommerceApplymentID(applymentID); err != nil {
+		log.Error().
+			Int64("applyment_id", applymentID).
+			Err(err).
+			Msg("wechat ecommerce applyment query rejected invalid applyment_id")
+		return nil, err
 	}
 
-	var resp EcommerceApplymentQueryResponse
-	if err := json.Unmarshal(respBody, &resp); err != nil {
-		return nil, fmt.Errorf("unmarshal response: %w", err)
-	}
-
-	return &resp, nil
+	requestURL := fmt.Sprintf(ecommerceApplymentQueryURL, applymentID)
+	return c.queryEcommerceApplyment(ctx, ecommerceApplymentQueryByIDKind, requestURL, applymentID, "")
 }
 
 // QueryEcommerceApplymentByOutRequestNo 通过业务申请编号查询进件状态
 func (c *EcommerceClient) QueryEcommerceApplymentByOutRequestNo(ctx context.Context, outRequestNo string) (*EcommerceApplymentQueryResponse, error) {
-	url := fmt.Sprintf(ecommerceApplymentQueryByNo, outRequestNo)
-
-	respBody, err := c.doRequest(ctx, http.MethodGet, url, nil)
+	normalizedOutRequestNo, err := validateEcommerceApplymentOutRequestNo(outRequestNo)
 	if err != nil {
-		return nil, fmt.Errorf("query ecommerce applyment: %w", err)
+		log.Error().
+			Str("out_request_no", strings.TrimSpace(outRequestNo)).
+			Err(err).
+			Msg("wechat ecommerce applyment query rejected invalid out_request_no")
+		return nil, err
 	}
 
-	var resp EcommerceApplymentQueryResponse
-	if err := json.Unmarshal(respBody, &resp); err != nil {
-		return nil, fmt.Errorf("unmarshal response: %w", err)
-	}
-
-	return &resp, nil
+	requestURL := fmt.Sprintf(ecommerceApplymentQueryByNo, url.PathEscape(normalizedOutRequestNo))
+	return c.queryEcommerceApplyment(ctx, ecommerceApplymentQueryByOutRequestNoKind, requestURL, 0, normalizedOutRequestNo)
 }
 
 // ListPersonalBankingBanks 查询支持个人业务的银行列表

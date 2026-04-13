@@ -17,6 +17,7 @@ import (
 	"mime"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -37,6 +38,77 @@ func decodeTinyPNG(t *testing.T) []byte {
 	decoded, err := base64.StdEncoding.DecodeString(tinyPNGBase64)
 	require.NoError(t, err)
 	return decoded
+}
+
+func newSignedEcommerceClientForTest(t *testing.T, handler func(*http.Request) (*http.Response, error)) *EcommerceClient {
+	t.Helper()
+	merchantPrivateKey, _ := generateTestKeyPair(t)
+	platformPrivateKey, platformPublicKey := generateTestKeyPair(t)
+
+	tempDir := t.TempDir()
+	privateKeyPath := createTestPrivateKeyFile(t, tempDir, merchantPrivateKey)
+	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
+
+	client, err := NewEcommerceClient(EcommerceClientConfig{
+		PaymentClientConfig: PaymentClientConfig{
+			MchID:                 "ignored_base_mchid",
+			AppID:                 "service-appid-001",
+			SerialNumber:          "test_serial",
+			APIV3Key:              testAPIV3Key(),
+			PrivateKeyPath:        privateKeyPath,
+			PlatformPublicKeyPath: publicKeyPath,
+			PlatformPublicKeyID:   "PUB_KEY_ID_0123456789",
+			NotifyURL:             "https://example.com/notify",
+		},
+		SpMchID: "service-mchid-001",
+		SpAppID: "service-appid-001",
+	})
+	require.NoError(t, err)
+
+	client.httpClient = &http.Client{
+		Transport: signedEcommerceTransport(t, platformPrivateKey, "PUB_KEY_ID_0123456789", handler),
+	}
+
+	return client
+}
+
+func newSignedEcommerceClientWithMerchantKeyForTest(t *testing.T, handler func(*http.Request) (*http.Response, error)) (*EcommerceClient, *rsa.PublicKey) {
+	t.Helper()
+	merchantPrivateKey, merchantPublicKey := generateTestKeyPair(t)
+	platformPrivateKey, platformPublicKey := generateTestKeyPair(t)
+
+	tempDir := t.TempDir()
+	privateKeyPath := createTestPrivateKeyFile(t, tempDir, merchantPrivateKey)
+	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
+
+	client, err := NewEcommerceClient(EcommerceClientConfig{
+		PaymentClientConfig: PaymentClientConfig{
+			MchID:                 "ignored_base_mchid",
+			AppID:                 "service-appid-001",
+			SerialNumber:          "test_serial",
+			APIV3Key:              testAPIV3Key(),
+			PrivateKeyPath:        privateKeyPath,
+			PlatformPublicKeyPath: publicKeyPath,
+			PlatformPublicKeyID:   "PUB_KEY_ID_0123456789",
+			NotifyURL:             "https://example.com/notify",
+		},
+		SpMchID: "service-mchid-001",
+		SpAppID: "service-appid-001",
+	})
+	require.NoError(t, err)
+
+	client.httpClient = &http.Client{
+		Transport: signedEcommerceTransport(t, platformPrivateKey, "PUB_KEY_ID_0123456789", handler),
+	}
+
+	return client, merchantPublicKey
+}
+
+func encryptApplymentResponseSensitiveField(t *testing.T, publicKey *rsa.PublicKey, plaintext string) string {
+	t.Helper()
+	ciphertext, err := rsa.EncryptOAEP(sha1.New(), rand.Reader, publicKey, []byte(plaintext), nil)
+	require.NoError(t, err)
+	return base64.StdEncoding.EncodeToString(ciphertext)
 }
 
 func minimalBMP() []byte {
@@ -1775,6 +1847,285 @@ func TestDeleteViolationNotification(t *testing.T) {
 	}
 
 	require.NoError(t, client.DeleteViolationNotification(context.Background()))
+}
+
+func TestQueryEcommerceApplymentByOutRequestNo_EscapesPathAndReturnsResponse(t *testing.T) {
+	client := newSignedEcommerceClientForTest(t, func(req *http.Request) (*http.Response, error) {
+		require.Equal(t, http.MethodGet, req.Method)
+		require.Equal(t, "/v3/ecommerce/applyments/out-request-no/order%2F2025%20alpha", req.URL.EscapedPath())
+		require.Equal(t, "/v3/ecommerce/applyments/out-request-no/order/2025 alpha", req.URL.Path)
+		require.Empty(t, req.URL.RawQuery)
+
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body: io.NopCloser(strings.NewReader(`{
+				"applyment_id": 1001,
+				"out_request_no": "order/2025 alpha",
+				"applyment_state": "CHECKING",
+				"applyment_state_desc": "审核中"
+			}`)),
+		}, nil
+	})
+
+	resp, err := client.QueryEcommerceApplymentByOutRequestNo(context.Background(), "  order/2025 alpha  ")
+	require.NoError(t, err)
+	require.Equal(t, int64(1001), resp.ApplymentID)
+	require.Equal(t, "order/2025 alpha", resp.OutRequestNo)
+	require.Equal(t, "CHECKING", resp.ApplymentState)
+	_, decodeErr := url.PathUnescape(strings.TrimPrefix("/v3/ecommerce/applyments/out-request-no/order%2F2025%20alpha", "/v3/ecommerce/applyments/out-request-no/"))
+	require.NoError(t, decodeErr)
+}
+
+func TestQueryEcommerceApplymentByOutRequestNo_RejectsInvalidInput(t *testing.T) {
+	client := newSignedEcommerceClientForTest(t, func(req *http.Request) (*http.Response, error) {
+		t.Fatalf("unexpected request: %s", req.URL.String())
+		return nil, nil
+	})
+
+	_, err := client.QueryEcommerceApplymentByOutRequestNo(context.Background(), "   ")
+	require.Error(t, err)
+	require.ErrorContains(t, err, "out_request_no is required")
+
+	_, err = client.QueryEcommerceApplymentByOutRequestNo(context.Background(), strings.Repeat("a", 125))
+	require.Error(t, err)
+	require.ErrorContains(t, err, "out_request_no must not exceed 124 characters")
+
+	var validationErr *EcommerceApplymentQueryValidationError
+	require.ErrorAs(t, err, &validationErr)
+}
+
+func TestQueryEcommerceApplymentByOutRequestNo_RejectsMissingAccountValidation(t *testing.T) {
+	client := newSignedEcommerceClientForTest(t, func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body: io.NopCloser(strings.NewReader(`{
+				"applyment_id": 1002,
+				"out_request_no": "REQ-1002",
+				"applyment_state": "ACCOUNT_NEED_VERIFY",
+				"applyment_state_desc": "待账户验证"
+			}`)),
+		}, nil
+	})
+
+	_, err := client.QueryEcommerceApplymentByOutRequestNo(context.Background(), "REQ-1002")
+	require.Error(t, err)
+	require.ErrorContains(t, err, "request_id=")
+	require.ErrorContains(t, err, "account_validation is required when applyment_state=ACCOUNT_NEED_VERIFY")
+}
+
+func TestQueryEcommerceApplymentByID_RequiresSignURLForUnsignedSignState(t *testing.T) {
+	client := newSignedEcommerceClientForTest(t, func(req *http.Request) (*http.Response, error) {
+		require.Equal(t, http.MethodGet, req.Method)
+		require.Equal(t, "/v3/ecommerce/applyments/2002", req.URL.Path)
+
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body: io.NopCloser(strings.NewReader(`{
+				"applyment_id": 2002,
+				"out_request_no": "REQ-2002",
+				"applyment_state": "AUDITING",
+				"applyment_state_desc": "审核中",
+				"sign_state": "UNSIGNED"
+			}`)),
+		}, nil
+	})
+
+	_, err := client.QueryEcommerceApplymentByID(context.Background(), 2002)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "sign_url is required when sign_state=UNSIGNED for applyment_id query")
+}
+
+func TestQueryEcommerceApplymentByOutRequestNo_RejectsUnexpectedSignURL(t *testing.T) {
+	client := newSignedEcommerceClientForTest(t, func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body: io.NopCloser(strings.NewReader(`{
+				"applyment_id": 2003,
+				"out_request_no": "REQ-2003",
+				"applyment_state": "AUDITING",
+				"applyment_state_desc": "审核中",
+				"sign_url": "https://wx.example.com/sign/2003"
+			}`)),
+		}, nil
+	})
+
+	_, err := client.QueryEcommerceApplymentByOutRequestNo(context.Background(), "REQ-2003")
+	require.Error(t, err)
+	require.ErrorContains(t, err, "sign_url is only allowed when applyment_state=NEED_SIGN or legacy signing states for out_request_no query")
+}
+
+func TestQueryEcommerceApplymentByID_RejectsUnexpectedSignURL(t *testing.T) {
+	client := newSignedEcommerceClientForTest(t, func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body: io.NopCloser(strings.NewReader(`{
+				"applyment_id": 2004,
+				"out_request_no": "REQ-2004",
+				"applyment_state": "AUDITING",
+				"applyment_state_desc": "审核中",
+				"sign_state": "SIGNED",
+				"sign_url": "https://wx.example.com/sign/2004"
+			}`)),
+		}, nil
+	})
+
+	_, err := client.QueryEcommerceApplymentByID(context.Background(), 2004)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "sign_url is only allowed when applyment_state=NEED_SIGN, legacy signing states, or sign_state=UNSIGNED for applyment_id query")
+}
+
+func TestQueryEcommerceApplymentByOutRequestNo_WrapsWechatErrorWithGuidance(t *testing.T) {
+	client := newSignedEcommerceClientForTest(t, func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusBadRequest,
+			Header:     make(http.Header),
+			Body: io.NopCloser(strings.NewReader(`{
+				"code": "RESOURCE_NOT_EXISTS",
+				"message": "申请单不存在"
+			}`)),
+		}, nil
+	})
+
+	_, err := client.QueryEcommerceApplymentByOutRequestNo(context.Background(), "REQ-404")
+	require.Error(t, err)
+	require.ErrorContains(t, err, "wechat could not find the applyment; verify out_request_no or applyment_id before retrying")
+
+	var wxErr *WechatPayError
+	require.ErrorAs(t, err, &wxErr)
+	require.Equal(t, "RESOURCE_NOT_EXISTS", wxErr.Code)
+}
+
+func TestQueryEcommerceApplymentByID_DecryptsAccountValidationAndPreservesRawCiphertext(t *testing.T) {
+	var encryptedAccountName string
+	var encryptedAccountNo string
+	client, merchantPublicKey := newSignedEcommerceClientWithMerchantKeyForTest(t, func(req *http.Request) (*http.Response, error) {
+		require.Equal(t, http.MethodGet, req.Method)
+		require.Equal(t, "/v3/ecommerce/applyments/3003", req.URL.Path)
+
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body: io.NopCloser(strings.NewReader(fmt.Sprintf(`{
+				"applyment_id": 3003,
+				"out_request_no": "REQ-3003",
+				"applyment_state": "ACCOUNT_NEED_VERIFY",
+				"applyment_state_desc": "待账户验证",
+				"legal_validation_url": "https://wx.example.com/legal/3003",
+				"account_validation": {
+					"account_name": %q,
+					"account_no": %q,
+					"pay_amount": 124,
+					"destination_account_number": "7222223333322332",
+					"destination_account_name": "财付通支付科技有限公司",
+					"destination_account_bank": "招商银行威盛大厦支行",
+					"city": "深圳",
+					"remark": "入驻账户验证",
+					"deadline": "2018-12-10 17:09:01"
+				}
+			}`, encryptedAccountName, encryptedAccountNo))),
+		}, nil
+	})
+	encryptedAccountName = encryptApplymentResponseSensitiveField(t, merchantPublicKey, "张三")
+	encryptedAccountNo = encryptApplymentResponseSensitiveField(t, merchantPublicKey, "6214830012345678")
+
+	resp, err := client.QueryEcommerceApplymentByID(context.Background(), 3003)
+	require.NoError(t, err)
+	require.NotNil(t, resp.AccountValidation)
+	require.Equal(t, "ACCOUNT_NEED_VERIFY", resp.ApplymentState)
+	require.Equal(t, "张三", resp.AccountValidation.AccountName)
+	require.Equal(t, "6214830012345678", resp.AccountValidation.AccountNo)
+	require.Equal(t, encryptedAccountName, resp.AccountValidation.RawAccountName)
+	require.Equal(t, encryptedAccountNo, resp.AccountValidation.RawAccountNo)
+
+	stored := MarshalEcommerceApplymentAccountValidation(resp.AccountValidation)
+	var persisted EcommerceApplymentAccountValidation
+	require.NoError(t, json.Unmarshal(stored, &persisted))
+	require.Equal(t, encryptedAccountName, persisted.AccountName)
+	require.Equal(t, encryptedAccountNo, persisted.AccountNo)
+	decryptedPersistedName := decryptEcommerceTestCiphertext(t, client.privateKey, persisted.AccountName)
+	require.Equal(t, "张三", decryptedPersistedName)
+}
+
+func TestQueryEcommerceApplymentByID_AcceptsCompatibleLegacyConfirmationState(t *testing.T) {
+	var encryptedAccountName string
+	client, merchantPublicKey := newSignedEcommerceClientWithMerchantKeyForTest(t, func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body: io.NopCloser(strings.NewReader(fmt.Sprintf(`{
+				"applyment_id": 4004,
+				"out_request_no": "REQ-4004",
+				"applyment_state": "APPLYMENT_STATE_TO_BE_CONFIRMED",
+				"applyment_state_desc": "待确认",
+				"legal_validation_url": "https://wx.example.com/legal/4004",
+				"account_validation": {
+					"account_name": %q,
+					"pay_amount": 188,
+					"destination_account_number": "6222021234567890",
+					"destination_account_name": "财付通支付科技有限公司",
+					"destination_account_bank": "招商银行威盛大厦支行",
+					"city": "深圳",
+					"remark": "入驻账户验证",
+					"deadline": "2018-12-10 17:09:01"
+				}
+			}`, encryptedAccountName))),
+		}, nil
+	})
+	encryptedAccountName = encryptApplymentResponseSensitiveField(t, merchantPublicKey, "李四")
+
+	resp, err := client.QueryEcommerceApplymentByID(context.Background(), 4004)
+	require.NoError(t, err)
+	require.Equal(t, "APPLYMENT_STATE_TO_BE_CONFIRMED", resp.ApplymentState)
+	require.Equal(t, "李四", resp.AccountValidation.AccountName)
+	require.Equal(t, encryptedAccountName, resp.AccountValidation.RawAccountName)
+	require.Equal(t, "https://wx.example.com/legal/4004", resp.LegalValidationURL)
+}
+
+func TestQueryEcommerceApplymentByOutRequestNo_AcceptsCompatibleLegacySigningState(t *testing.T) {
+	client := newSignedEcommerceClientForTest(t, func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body: io.NopCloser(strings.NewReader(`{
+				"applyment_id": 4005,
+				"out_request_no": "REQ-4005",
+				"applyment_state": "APPLYMENT_STATE_SIGNING",
+				"applyment_state_desc": "签约中",
+				"sign_url": "https://wx.example.com/sign/4005",
+				"sub_mchid": "1900004005"
+			}`)),
+		}, nil
+	})
+
+	resp, err := client.QueryEcommerceApplymentByOutRequestNo(context.Background(), "REQ-4005")
+	require.NoError(t, err)
+	require.Equal(t, "APPLYMENT_STATE_SIGNING", resp.ApplymentState)
+	require.Equal(t, "https://wx.example.com/sign/4005", resp.SignURL)
+	require.Equal(t, "1900004005", resp.SubMchID)
+}
+
+func TestQueryEcommerceApplymentByID_RejectsUnknownApplymentState(t *testing.T) {
+	client := newSignedEcommerceClientForTest(t, func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body: io.NopCloser(strings.NewReader(`{
+				"applyment_id": 4006,
+				"out_request_no": "REQ-4006",
+				"applyment_state": "NEW_UPSTREAM_STATE",
+				"applyment_state_desc": "未知状态"
+			}`)),
+		}, nil
+	})
+
+	_, err := client.QueryEcommerceApplymentByID(context.Background(), 4006)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "unsupported applyment_state \"NEW_UPSTREAM_STATE\"")
 }
 
 func TestDecryptViolationNotification(t *testing.T) {
