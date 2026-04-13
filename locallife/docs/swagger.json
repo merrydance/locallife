@@ -9670,7 +9670,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "商户审核通过后，绑定银行卡信息并提交微信二级商户进件",
+                "description": "商户审核通过后，绑定银行卡信息并提交微信二级商户进件。\n错误语义与当前实现保持一致：本地资料校验失败、微信 PARAM_ERROR、INVALID_REQUEST、RESOURCE_ALREADY_EXISTS 返回 400；微信 SIGN_ERROR 返回 401；微信 NO_AUTH 返回 403；微信 RESOURCE_NOT_EXISTS 返回 404；本地存在进行中的申请或已完成开户返回 409；微信 SYSTEM_ERROR 或服务端内部失败返回 500。\n所有错误均写入请求日志，响应中的 error 字段会返回清晰的说明或操作指引。",
                 "consumes": [
                     "application/json"
                 ],
@@ -9713,6 +9713,18 @@
                     },
                     "403": {
                         "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -37080,7 +37092,7 @@
                 "contact_id_doc_type": {
                     "type": "string",
                     "enum": [
-                        "IDENTIFICATION_TYPE_IDCARD"
+                        "IDENTIFICATION_TYPE_MAINLAND_IDCARD"
                     ]
                 },
                 "contact_name": {

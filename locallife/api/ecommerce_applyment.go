@@ -26,7 +26,7 @@ import (
 
 var applymentDateTokenPattern = regexp.MustCompile(`\d{4}年\d{1,2}月\d{1,2}日|\d{4}[./-]\d{1,2}[./-]\d{1,2}|\d{8}|长期|永久`)
 
-const applymentDefaultContactIDDocType = "IDENTIFICATION_TYPE_IDCARD"
+const applymentDefaultContactIDDocType = "IDENTIFICATION_TYPE_MAINLAND_IDCARD"
 
 // ==================== 商户开户 ====================
 
@@ -47,7 +47,7 @@ type applymentBindBankFields struct {
 type applymentContactFields struct {
 	ContactType                 string `json:"contact_type" binding:"omitempty,oneof=LEGAL SUPER 65 66"`
 	ContactName                 string `json:"contact_name" binding:"omitempty,min=2,max=64"`
-	ContactIDDocType            string `json:"contact_id_doc_type" binding:"omitempty,oneof=IDENTIFICATION_TYPE_IDCARD"`
+	ContactIDDocType            string `json:"contact_id_doc_type" binding:"omitempty,oneof=IDENTIFICATION_TYPE_MAINLAND_IDCARD"`
 	ContactIDCardNumber         string `json:"contact_id_card_number" binding:"omitempty,min=15,max=32"`
 	ContactIDDocCopyAssetID     int64  `json:"contact_id_doc_copy_asset_id"`
 	ContactIDDocCopyBackAssetID int64  `json:"contact_id_doc_copy_back_asset_id"`
@@ -216,7 +216,9 @@ type merchantBindBankResponse struct {
 }
 
 // @Summary 商户绑定银行卡并提交微信开户
-// @Description 商户审核通过后，绑定银行卡信息并提交微信二级商户进件
+// @Description 商户审核通过后，绑定银行卡信息并提交微信二级商户进件。
+// @Description 错误语义与当前实现保持一致：本地资料校验失败、微信 PARAM_ERROR、INVALID_REQUEST、RESOURCE_ALREADY_EXISTS 返回 400；微信 SIGN_ERROR 返回 401；微信 NO_AUTH 返回 403；微信 RESOURCE_NOT_EXISTS 返回 404；本地存在进行中的申请或已完成开户返回 409；微信 SYSTEM_ERROR 或服务端内部失败返回 500。
+// @Description 所有错误均写入请求日志，响应中的 error 字段会返回清晰的说明或操作指引。
 // @Tags 商户
 // @Accept json
 // @Produce json
@@ -225,19 +227,21 @@ type merchantBindBankResponse struct {
 // @Failure 400 {object} ErrorResponse
 // @Failure 401 {object} ErrorResponse
 // @Failure 403 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 409 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /v1/merchant/applyment/bindbank [post]
 // @Security BearerAuth
 func (server *Server) merchantBindBank(ctx *gin.Context) {
 	var req merchantBindBankRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		respondApplymentClientError(ctx, http.StatusBadRequest, err)
 		return
 	}
 	req.applymentBindBankFields.normalize()
 	req.applymentContactFields.normalize()
 	if err := req.validateSelection(); err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		respondApplymentClientError(ctx, http.StatusBadRequest, err)
 		return
 	}
 
@@ -248,7 +252,7 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 	merchant, err := server.getMerchantFromContextOrStore(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(ErrMerchantNotFound))
+			respondApplymentClientError(ctx, http.StatusNotFound, ErrMerchantNotFound)
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -268,11 +272,11 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 	if validateErr := logic.ValidateMerchantApplymentSubmissionState(merchant.Status, existingApplymentRecord); validateErr != nil {
 		switch {
 		case errors.Is(validateErr, logic.ErrApplymentSubmissionPending):
-			ctx.JSON(http.StatusBadRequest, errorResponse(ErrAccountApplymentPending))
+			respondApplymentClientError(ctx, http.StatusConflict, ErrAccountApplymentPending)
 		case errors.Is(validateErr, logic.ErrApplymentAlreadyRegistered):
-			ctx.JSON(http.StatusBadRequest, errorResponse(ErrAccountAlreadyRegistered))
+			respondApplymentClientError(ctx, http.StatusConflict, ErrAccountAlreadyRegistered)
 		default:
-			ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("invalid merchant status: %s", merchant.Status)))
+			respondApplymentClientError(ctx, http.StatusBadRequest, fmt.Errorf("invalid merchant status: %s", merchant.Status))
 		}
 		return
 	}
@@ -286,7 +290,7 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 
 	contactPhone, err := server.resolveApplymentContactPhone(ctx, authPayload.UserID, application.ContactPhone, merchant.Phone)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		respondApplymentClientError(ctx, http.StatusBadRequest, err)
 		return
 	}
 
@@ -313,34 +317,34 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 		"4",
 	)
 	if err := validateMerchantApplymentScope(organizationType, req.AccountType); err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		respondApplymentClientError(ctx, http.StatusBadRequest, err)
 		return
 	}
 	if err := validateApplymentBusinessLicenseValidity(businessLicenseOCR.ValidPeriod); err != nil {
 		log.Warn().Int64("merchant_id", merchant.ID).Str("valid_period", businessLicenseOCR.ValidPeriod).Msg("商户营业期限无效，拒绝提交微信进件")
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		respondApplymentClientError(ctx, http.StatusBadRequest, err)
 		return
 	}
 
 	idCardValidTimeBegin, idCardValidTime := logic.ParseApplymentIDCardValidPeriod(idCardBackOCR.ValidDate)
 	if err := validateApplymentIDCardValidity(idCardValidTimeBegin, idCardValidTime); err != nil {
 		log.Warn().Int64("merchant_id", merchant.ID).Str("valid_date", idCardBackOCR.ValidDate).Msg("商户身份证有效期无效，拒绝提交微信进件")
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		respondApplymentClientError(ctx, http.StatusBadRequest, err)
 		return
 	}
 
 	resolvedContact, err := req.applymentContactFields.resolve(application.LegalPersonName, application.LegalPersonIDNumber)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		respondApplymentClientError(ctx, http.StatusBadRequest, err)
 		return
 	}
 	if resolvedContact.requiresIdentityDocumentAssets() {
 		if err := server.validateApplymentContactDocumentAsset(ctx, authPayload.UserID, resolvedContact.ContactIDDocCopyAssetID, media.CategoryIDCardFront); err != nil {
-			ctx.JSON(http.StatusBadRequest, errorResponse(err))
+			respondApplymentClientError(ctx, http.StatusBadRequest, err)
 			return
 		}
 		if err := server.validateApplymentContactDocumentAsset(ctx, authPayload.UserID, resolvedContact.ContactIDDocCopyBackAssetID, media.CategoryIDCardBack); err != nil {
-			ctx.JSON(http.StatusBadRequest, errorResponse(err))
+			respondApplymentClientError(ctx, http.StatusBadRequest, err)
 			return
 		}
 	}
@@ -441,6 +445,9 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 		idCardFrontMediaID, err = logic.UploadApplymentAsset(ctx, server.mediaRegistry, server.ecommerceClient, application.IDCardFrontMediaAssetID.Int64)
 		if err != nil {
 			log.Error().Err(err).Msg("下载商户身份证正面失败")
+			if writeLogicRequestError(ctx, err) {
+				return
+			}
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("获取身份证图片失败")))
 			return
 		}
@@ -451,6 +458,9 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 		idCardBackMediaID, err = logic.UploadApplymentAsset(ctx, server.mediaRegistry, server.ecommerceClient, application.IDCardBackMediaAssetID.Int64)
 		if err != nil {
 			log.Error().Err(err).Msg("下载商户身份证背面失败")
+			if writeLogicRequestError(ctx, err) {
+				return
+			}
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("获取身份证图片失败")))
 			return
 		}
@@ -461,6 +471,9 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 		businessLicenseMediaID, err = logic.UploadApplymentAsset(ctx, server.mediaRegistry, server.ecommerceClient, application.BusinessLicenseMediaAssetID.Int64)
 		if err != nil {
 			log.Error().Err(err).Msg("下载商户营业执照失败")
+			if writeLogicRequestError(ctx, err) {
+				return
+			}
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("获取营业执照图片失败")))
 			return
 		}
@@ -539,6 +552,9 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 		contactInfo.ContactIDDocCopy, err = logic.UploadApplymentAsset(ctx, server.mediaRegistry, server.ecommerceClient, resolvedContact.ContactIDDocCopyAssetID)
 		if err != nil {
 			log.Error().Err(err).Int64("asset_id", resolvedContact.ContactIDDocCopyAssetID).Msg("下载超级管理员身份证人像面失败")
+			if writeLogicRequestError(ctx, err) {
+				return
+			}
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("获取超级管理员证件图片失败")))
 			return
 		}
@@ -546,6 +562,9 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 		contactInfo.ContactIDDocCopyBack, err = logic.UploadApplymentAsset(ctx, server.mediaRegistry, server.ecommerceClient, resolvedContact.ContactIDDocCopyBackAssetID)
 		if err != nil {
 			log.Error().Err(err).Int64("asset_id", resolvedContact.ContactIDDocCopyBackAssetID).Msg("下载超级管理员身份证国徽面失败")
+			if writeLogicRequestError(ctx, err) {
+				return
+			}
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("获取超级管理员证件图片失败")))
 			return
 		}
@@ -567,7 +586,6 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 		AccountInfo: logic.ApplymentWechatAccountInput{
 			AccountType:     req.AccountType,
 			AccountBank:     req.AccountBank,
-			AccountBankCode: req.AccountBankCode,
 			AccountName:     encryptedWechatFields.AccountName,
 			BankAddressCode: req.BankAddressCode,
 			BankBranchID:    req.BankBranchID,
@@ -594,6 +612,9 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 		WechatRequest: applymentReq,
 	})
 	if err != nil {
+		if respondApplymentWechatError(ctx, merchant.ID, outRequestNo, err) {
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -858,6 +879,56 @@ func applymentTextChanged(current, next pgtype.Text) bool {
 		return false
 	}
 	return current.String != next.String
+}
+
+func respondApplymentClientError(ctx *gin.Context, status int, err error) {
+	_ = ctx.Error(err)
+	ctx.JSON(status, errorResponse(err))
+}
+
+func respondApplymentWechatError(ctx *gin.Context, merchantID int64, outRequestNo string, err error) bool {
+	var wxErr *wechat.WechatPayError
+	if !errors.As(err, &wxErr) || wxErr == nil {
+		return false
+	}
+
+	_ = ctx.Error(err)
+
+	evt := log.Error()
+	if wxErr.StatusCode < http.StatusInternalServerError && wxErr.Code != "INVALID_REQUEST" && wxErr.Code != "SIGN_ERROR" {
+		evt = log.Warn()
+	}
+	evt.
+		Err(err).
+		Str("request_id", GetRequestID(ctx)).
+		Int64("merchant_id", merchantID).
+		Str("out_request_no", strings.TrimSpace(outRequestNo)).
+		Int("wechat_status_code", wxErr.StatusCode).
+		Str("wechat_error_code", strings.TrimSpace(wxErr.Code)).
+		Str("wechat_error_message", strings.TrimSpace(wxErr.Message)).
+		Str("wechat_error_detail", strings.TrimSpace(wxErr.Detail)).
+		Msg("wechat applyment request failed")
+
+	switch strings.TrimSpace(wxErr.Code) {
+	case "RESOURCE_ALREADY_EXISTS":
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrAccountApplymentPending))
+	case "PARAM_ERROR":
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrApplymentWechatParamError))
+	case "NO_AUTH":
+		ctx.JSON(http.StatusForbidden, errorResponse(ErrApplymentWechatNoAuth))
+	case "RESOURCE_NOT_EXISTS":
+		ctx.JSON(http.StatusNotFound, errorResponse(ErrApplymentWechatNotFound))
+	case "INVALID_REQUEST":
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrApplymentWechatInvalidRequest))
+	case "SIGN_ERROR":
+		ctx.JSON(http.StatusUnauthorized, errorResponse(ErrApplymentWechatSignError))
+	case "SYSTEM_ERROR":
+		ctx.JSON(http.StatusInternalServerError, errorResponse(ErrApplymentWechatServiceUnavailable))
+	default:
+		ctx.JSON(http.StatusBadGateway, errorResponse(ErrApplymentWechatServiceUnavailable))
+	}
+
+	return true
 }
 
 // @Summary 查询商户开户状态

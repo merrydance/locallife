@@ -262,6 +262,11 @@ var (
 	ErrMerchantApplymentOrganizationUnsupported = apierr(40086, "merchant applyment only supports individual businesses or enterprises")
 	ErrApplymentEnterprisePublicAccountRequired = apierr(40089, "enterprise applyment must use a business bank account")
 	ErrApplymentWebSceneDomainRequired          = apierr(40109, "web applyment domain is not configured")
+	ErrApplymentWechatNoAuth                    = apierr(40363, "WeChat applyment permission is not enabled for the current platform merchant: please contact support")
+	ErrApplymentWechatNotFound                  = apierr(40456, "WeChat applyment record was not found: please verify the application number and retry")
+	ErrApplymentWechatInvalidRequest            = apierr(50216, "WeChat applyment request is invalid due to a platform integration issue: please retry later or contact support")
+	ErrApplymentWechatSignError                 = apierr(50217, "WeChat applyment signature verification failed: please retry later or contact support")
+	ErrApplymentWechatServiceUnavailable        = apierr(50218, "WeChat applyment service is temporarily unavailable: please retry later")
 )
 
 // ==================== 必填字段/文件上传校验 (Required Fields / Document Upload) ====================
@@ -299,4 +304,8 @@ var (
 	ErrSettlementWechatParamError         = apierr(50213, "wechat settlement account parameters are invalid")
 	ErrSettlementWechatInvalidRequest     = apierr(50214, "wechat settlement account request is invalid")
 	ErrSettlementWechatSignError          = apierr(50215, "wechat settlement account signature verification failed")
+)
+
+var (
+	ErrApplymentWechatParamError = errors.New("WeChat applyment validation failed: please check the business license, ID card, settlement account, and administrator information and resubmit")
 )

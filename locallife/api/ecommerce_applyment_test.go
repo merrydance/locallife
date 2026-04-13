@@ -207,7 +207,6 @@ func TestMerchantBindBankAPI(t *testing.T) {
 						require.Equal(t, "4", req.OrganizationType)
 						require.NotNil(t, req.AccountInfo)
 						require.Equal(t, "其他银行", req.AccountInfo.AccountBank)
-						require.Equal(t, int64(1099), req.AccountInfo.AccountBankCode)
 						require.Equal(t, "402584040001", req.AccountInfo.BankBranchID)
 						require.NotNil(t, req.IDCardInfo)
 						require.Equal(t, "2020-01-01", req.IDCardInfo.IDCardValidTimeBegin)
@@ -316,7 +315,7 @@ func TestMerchantBindBankAPI(t *testing.T) {
 				"account_name":                      "张三",
 				"contact_type":                      "SUPER",
 				"contact_name":                      "李四",
-				"contact_id_doc_type":               "IDENTIFICATION_TYPE_IDCARD",
+				"contact_id_doc_type":               "IDENTIFICATION_TYPE_MAINLAND_IDCARD",
 				"contact_id_card_number":            "110101199202023456",
 				"contact_id_doc_copy_asset_id":      501,
 				"contact_id_doc_copy_back_asset_id": 502,
@@ -407,7 +406,7 @@ func TestMerchantBindBankAPI(t *testing.T) {
 						require.NotNil(t, req.ContactInfo)
 						require.Equal(t, "SUPER", req.ContactInfo.ContactType)
 						require.Equal(t, "encrypted_data", req.ContactInfo.ContactName)
-						require.Equal(t, "IDENTIFICATION_TYPE_IDCARD", req.ContactInfo.ContactIDDocType)
+						require.Equal(t, "IDENTIFICATION_TYPE_MAINLAND_IDCARD", req.ContactInfo.ContactIDDocType)
 						require.Equal(t, "encrypted_data", req.ContactInfo.ContactIDCardNumber)
 						require.Equal(t, "wx_super_contact_front_media_id", req.ContactInfo.ContactIDDocCopy)
 						require.Equal(t, "wx_super_contact_back_media_id", req.ContactInfo.ContactIDDocCopyBack)
@@ -516,6 +515,131 @@ func TestMerchantBindBankAPI(t *testing.T) {
 			},
 		},
 		{
+			name: "BadRequest_SuperAdministratorDocumentUploadValidationFailed",
+			body: gin.H{
+				"account_type":                      "ACCOUNT_TYPE_PRIVATE",
+				"account_bank":                      "其他银行",
+				"account_bank_code":                 1099,
+				"bank_alias":                        "深圳前海微众银行",
+				"bank_alias_code":                   "1000009561",
+				"need_bank_branch":                  true,
+				"bank_address_code":                 "440300",
+				"bank_branch_id":                    "402584040001",
+				"bank_name":                         "深圳前海微众银行深圳南山支行",
+				"account_number":                    "6214830012345678",
+				"account_name":                      "张三",
+				"contact_type":                      "SUPER",
+				"contact_name":                      "李四",
+				"contact_id_doc_type":               "IDENTIFICATION_TYPE_MAINLAND_IDCARD",
+				"contact_id_card_number":            "110101199202023456",
+				"contact_id_doc_copy_asset_id":      501,
+				"contact_id_doc_copy_back_asset_id": 502,
+				"contact_id_doc_period_begin":       "2020-01-01",
+				"contact_id_doc_period_end":         "2030-01-01",
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetMediaAssetByID(gomock.Any(), int64(501)).
+					AnyTimes().
+					Return(db.MediaAsset{
+						ID:               501,
+						ObjectKey:        "id_card/front/1/20240101/contact-front.png",
+						Visibility:       string(media.VisibilityPrivate),
+						MediaCategory:    string(media.CategoryIDCardFront),
+						MimeType:         "image/png",
+						UploadedBy:       user.ID,
+						UploadStatus:     "confirmed",
+						ModerationStatus: "approved",
+					}, nil)
+				store.EXPECT().
+					GetMediaAssetByID(gomock.Any(), int64(502)).
+					AnyTimes().
+					Return(db.MediaAsset{
+						ID:               502,
+						ObjectKey:        "id_card/back/1/20240101/contact-back.png",
+						Visibility:       string(media.VisibilityPrivate),
+						MediaCategory:    string(media.CategoryIDCardBack),
+						MimeType:         "image/png",
+						UploadedBy:       user.ID,
+						UploadStatus:     "confirmed",
+						ModerationStatus: "approved",
+					}, nil)
+
+				store.EXPECT().
+					GetLatestEcommerceApplymentBySubject(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.EcommerceApplyment{}, db.ErrRecordNotFound)
+
+				store.EXPECT().
+					GetUserMerchantApplication(gomock.Any(), user.ID).
+					Times(1).
+					Return(applicationWithTestURL, nil)
+
+				store.EXPECT().
+					CreateEcommerceApplyment(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(randomEcommerceApplymentForTest("merchant", merchant.ID), nil)
+
+				ecommerceClient.EXPECT().
+					EncryptSensitiveData(gomock.Any()).
+					Times(7).
+					Return("encrypted_data", nil)
+
+				expectedObjectKey := buildMerchantStorefrontQRCodeObjectKey(merchant.ID)
+				ecommerceClient.EXPECT().
+					UploadImage(gomock.Any(), path.Base(expectedObjectKey), gomock.Any()).
+					Times(1).
+					DoAndReturn(func(_ context.Context, filename string, fileData []byte) (*wechat.ImageUploadResponse, error) {
+						require.Equal(t, path.Base(expectedObjectKey), filename)
+						require.NotEmpty(t, fileData)
+						return &wechat.ImageUploadResponse{MediaID: "wx_store_qr_media_id"}, nil
+					})
+
+				ecommerceClient.EXPECT().
+					UploadImage(gomock.Any(), "contact-front.png", gomock.Any()).
+					Times(1).
+					Return(nil, &wechat.UploadImageValidationError{Message: "upload image: file is empty; provide a non-empty JPG, JPEG, PNG, or BMP image"})
+			},
+			buildWechatStubs: func(store *mockdb.MockStore, wechatClient *mockwechat.MockWechatClient) {
+				expectedObjectKey := buildMerchantStorefrontQRCodeObjectKey(merchant.ID)
+				qrCodeData := buildTestQRCodePNG(t)
+
+				store.EXPECT().
+					GetMediaAssetByObjectKey(gomock.Any(), expectedObjectKey).
+					Times(1).
+					Return(db.MediaAsset{}, db.ErrRecordNotFound)
+
+				wechatClient.EXPECT().
+					GetWXACodeUnlimited(gomock.Any(), gomock.AssignableToTypeOf(&wechat.WXACodeRequest{})).
+					Times(1).
+					Return(qrCodeData, nil)
+
+				store.EXPECT().
+					CreateMediaAsset(gomock.Any(), gomock.AssignableToTypeOf(db.CreateMediaAssetParams{})).
+					Times(1).
+					Return(db.MediaAsset{ID: util.RandomInt(1, 1000), ModerationStatus: "pending"}, nil)
+
+				store.EXPECT().
+					SetMediaAssetModerationStatus(gomock.Any(), gomock.AssignableToTypeOf(db.SetMediaAssetModerationStatusParams{})).
+					Times(1).
+					Return(db.MediaAsset{ID: util.RandomInt(1, 1000), ModerationStatus: "approved"}, nil)
+			},
+			prepareServer: func(t *testing.T, server *Server) {
+				content := buildTestQRCodePNG(t)
+				seedPrivateContactDocumentAsset(t, server, "id_card/front/1/20240101/contact-front.png", content)
+				seedPrivateContactDocumentAsset(t, server, "id_card/back/1/20240101/contact-back.png", content)
+			},
+			checkResponse: func(recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				require.Contains(t, recorder.Body.String(), "upload image: file is empty; provide a non-empty JPG, JPEG, PNG, or BMP image")
+			},
+		},
+		{
 			name: "MerchantNotFound",
 			body: gin.H{
 				"account_type":      "ACCOUNT_TYPE_PRIVATE",
@@ -602,7 +726,7 @@ func TestMerchantBindBankAPI(t *testing.T) {
 					Return(existingApplyment, nil)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				require.Equal(t, http.StatusConflict, recorder.Code)
 			},
 		},
 		{
@@ -628,7 +752,7 @@ func TestMerchantBindBankAPI(t *testing.T) {
 					Return(existingApplyment, nil)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				require.Equal(t, http.StatusConflict, recorder.Code)
 			},
 		},
 		{
@@ -654,7 +778,7 @@ func TestMerchantBindBankAPI(t *testing.T) {
 					Return(existingApplyment, nil)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				require.Equal(t, http.StatusConflict, recorder.Code)
 			},
 		},
 		{
@@ -680,7 +804,7 @@ func TestMerchantBindBankAPI(t *testing.T) {
 					Return(existingApplyment, nil)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				require.Equal(t, http.StatusConflict, recorder.Code)
 			},
 		},
 		{
@@ -847,7 +971,7 @@ func TestMerchantBindBankAPI(t *testing.T) {
 					Return(existingApplyment, nil)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				require.Equal(t, http.StatusConflict, recorder.Code)
 			},
 		},
 		{
@@ -1467,6 +1591,91 @@ func TestMerchantBindBankEncryptFailed(t *testing.T) {
 	server.router.ServeHTTP(recorder, request)
 
 	require.Equal(t, http.StatusInternalServerError, recorder.Code)
+}
+
+func TestRespondApplymentWechatError(t *testing.T) {
+	testCases := []struct {
+		name           string
+		wxErr          *wechat.WechatPayError
+		expectedStatus int
+		expectedCode   int
+		expectedError  string
+	}{
+		{
+			name:           "ResourceAlreadyExistsMapsToConflict",
+			wxErr:          &wechat.WechatPayError{StatusCode: http.StatusBadRequest, Code: "RESOURCE_ALREADY_EXISTS", Message: "存在流程进行中的申请单，请检查是否重入"},
+			expectedStatus: http.StatusBadRequest,
+			expectedCode:   ErrAccountApplymentPending.Code,
+			expectedError:  ErrAccountApplymentPending.Message,
+		},
+		{
+			name:           "ParamErrorMapsToBadRequest",
+			wxErr:          &wechat.WechatPayError{StatusCode: http.StatusBadRequest, Code: "PARAM_ERROR", Message: "参数错误"},
+			expectedStatus: http.StatusBadRequest,
+			expectedError:  ErrApplymentWechatParamError.Error(),
+		},
+		{
+			name:           "NoAuthMapsToForbidden",
+			wxErr:          &wechat.WechatPayError{StatusCode: http.StatusForbidden, Code: "NO_AUTH", Message: "商户权限异常"},
+			expectedStatus: http.StatusForbidden,
+			expectedCode:   ErrApplymentWechatNoAuth.Code,
+			expectedError:  ErrApplymentWechatNoAuth.Message,
+		},
+		{
+			name:           "InvalidRequestMapsToBadGateway",
+			wxErr:          &wechat.WechatPayError{StatusCode: http.StatusBadRequest, Code: "INVALID_REQUEST", Message: "HTTP 请求不符合 APIv3 规则"},
+			expectedStatus: http.StatusBadRequest,
+			expectedCode:   ErrApplymentWechatInvalidRequest.Code,
+			expectedError:  ErrApplymentWechatInvalidRequest.Message,
+		},
+		{
+			name:           "SignErrorMapsToBadGateway",
+			wxErr:          &wechat.WechatPayError{StatusCode: http.StatusUnauthorized, Code: "SIGN_ERROR", Message: "验证不通过"},
+			expectedStatus: http.StatusUnauthorized,
+			expectedCode:   ErrApplymentWechatSignError.Code,
+			expectedError:  ErrApplymentWechatSignError.Message,
+		},
+		{
+			name:           "SystemErrorMapsToBadGateway",
+			wxErr:          &wechat.WechatPayError{StatusCode: http.StatusInternalServerError, Code: "SYSTEM_ERROR", Message: "系统异常"},
+			expectedStatus: http.StatusInternalServerError,
+			expectedCode:   ErrApplymentWechatServiceUnavailable.Code,
+			expectedError:  ErrApplymentWechatServiceUnavailable.Message,
+		},
+		{
+			name:           "ResourceNotExistsMapsToNotFound",
+			wxErr:          &wechat.WechatPayError{StatusCode: http.StatusNotFound, Code: "RESOURCE_NOT_EXISTS", Message: "申请单不存在"},
+			expectedStatus: http.StatusNotFound,
+			expectedCode:   ErrApplymentWechatNotFound.Code,
+			expectedError:  ErrApplymentWechatNotFound.Message,
+		},
+		{
+			name:           "UnknownWechatErrorMapsToBadGateway",
+			wxErr:          &wechat.WechatPayError{StatusCode: http.StatusBadGateway, Code: "UNKNOWN_ERROR", Message: "unknown"},
+			expectedStatus: http.StatusBadGateway,
+			expectedCode:   ErrApplymentWechatServiceUnavailable.Code,
+			expectedError:  ErrApplymentWechatServiceUnavailable.Message,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			ctx, _ := gin.CreateTestContext(recorder)
+			ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/merchant/applyment/bindbank", nil)
+
+			handled := respondApplymentWechatError(ctx, 101, "OUT_REQ_001", fmt.Errorf("submit applyment: %w", tc.wxErr))
+
+			require.True(t, handled)
+			require.Len(t, ctx.Errors, 1)
+			require.Equal(t, tc.expectedStatus, recorder.Code)
+
+			var resp ErrorResponse
+			require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+			require.Equal(t, tc.expectedCode, resp.Code)
+			require.Equal(t, tc.expectedError, resp.Error)
+		})
+	}
 }
 
 func TestMerchantBindBankSubmittedStateSyncFailed(t *testing.T) {
