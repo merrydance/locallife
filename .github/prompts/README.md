@@ -86,6 +86,7 @@ Cross-cutting governance rule:
 
 - When using `general-*` prompts for high-risk or cross-surface work, include a risk classification guess, validation scope, and expected residual-risk or release-readiness output instead of treating the task as routine.
 - Implementation and review prompts should reuse the shared push / prohibit / review matrix from `.github/standards/engineering/AI_PROMPT_GOVERNANCE.md` instead of drifting into separate local rule sets.
+- Payment-domain prompts should mirror the same strong-constraint chain in `.github/standards/domains/wechat-payment/WECHAT_PAYMENT_CAPABILITY_GROUP_CONSTRAINT_CHAIN_2026-04-14.md`: official docs first, then capability-group propagation matrix, then caller propagation and focused validation.
 
 ## Routing Test Cases
 

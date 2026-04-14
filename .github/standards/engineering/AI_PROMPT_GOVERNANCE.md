@@ -89,6 +89,7 @@
 
 - 技术栈层 Prompt 不要重复定义通用风险分级与发布口径，应复用协议层和工程治理标准。
 - 业务域层 Prompt 只在该域存在明显独特失败模式时新增，不要为了“更专业”滥建新文件。
+- 对外部平台且以异步能力组为主的业务域，domain prompt 必须把任务收束到“能力组 + caller 传播 + focused validation”，而不是按单个 endpoint 组织任务。
 
 ### Layer 4: Agents And Gates
 
@@ -173,6 +174,23 @@ Prompt 库必须接受和代码同等级的基础门禁。
 - 新 Prompt 必须补齐 `description` 中的 `Trigger phrases:`，否则不能进入可执行路由断言体系。
 - 如果新 Prompt 只是补充技术栈或业务域细节，应优先更新现有技术栈层或业务域层 Prompt。
 - 如果新规则是长期有效的，应先落到 standards，再镜像到 Prompt。
+
+## 4.1 Async Capability-Group Rule
+
+当某个业务域满足以下特征时，应默认按“能力组治理”而不是“单接口治理”组织 Prompt 与 instructions：
+
+- 主要依赖外部平台接口
+- 一组接口共同完成一个业务能力
+- 存在回调、轮询、恢复任务、状态页或异步通知
+- caller 分布在 integration boundary 之外
+
+治理要求：
+
+- 先有官方文档基线，再有仓库内传播矩阵，再让 instructions 和 prompt 镜像执行规则。
+- Domain prompt 必须要求声明当前能力组、caller 传播面、验证范围和残余风险。
+- 如果没有仓库内传播矩阵，prompt 不得把任务表述成“已完整对齐”，只能推动补齐矩阵或明确标注治理缺口。
+
+平台收付通 / 微信支付域默认属于这一类。
 
 ## 5. Maintenance Rules
 
