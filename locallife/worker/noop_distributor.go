@@ -72,6 +72,10 @@ func (NoopTaskDistributor) DistributeTaskProcessMerchantWithdrawResult(ctx conte
 	return financialTaskDistributorUnavailable("merchant withdraw result")
 }
 
+func (NoopTaskDistributor) DistributeTaskProcessMerchantCancelWithdrawResult(ctx context.Context, payload *MerchantCancelWithdrawResultPayload, opts ...asynq.Option) error {
+	return financialTaskDistributorUnavailable("merchant cancel withdraw result")
+}
+
 func (NoopTaskDistributor) DistributeTaskSendNotification(ctx context.Context, payload *SendNotificationPayload, opts ...asynq.Option) error {
 	return nil
 }

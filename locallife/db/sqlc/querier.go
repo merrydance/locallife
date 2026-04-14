@@ -160,6 +160,7 @@ type Querier interface {
 	// 统计各状态的申请数量
 	CountMerchantApplicationsByStatus(ctx context.Context, status string) (int64, error)
 	CountMerchantBosses(ctx context.Context, merchantID int64) (int64, error)
+	CountMerchantCancelWithdrawApplicationsByMerchant(ctx context.Context, merchantID int64) (int64, error)
 	// ==========================================
 	// 商户异物索赔追踪查询
 	// ==========================================
@@ -388,6 +389,7 @@ type Querier interface {
 	// Boss 店铺认领查询
 	CreateMerchantBoss(ctx context.Context, arg CreateMerchantBossParams) (MerchantBoss, error)
 	CreateMerchantBrand(ctx context.Context, arg CreateMerchantBrandParams) (MerchantBrand, error)
+	CreateMerchantCancelWithdrawApplication(ctx context.Context, arg CreateMerchantCancelWithdrawApplicationParams) (MerchantCancelWithdrawApplication, error)
 	// Groups
 	CreateMerchantGroup(ctx context.Context, arg CreateMerchantGroupParams) (MerchantGroup, error)
 	CreateMerchantMembership(ctx context.Context, arg CreateMerchantMembershipParams) (MerchantMembership, error)
@@ -754,6 +756,9 @@ type Querier interface {
 	// 获取用户关联的商户（支持店主和员工）
 	// 优先返回 owner_user_id 匹配的商户，其次返回 merchant_staff 关联的商户
 	GetMerchantByOwner(ctx context.Context, ownerUserID int64) (Merchant, error)
+	GetMerchantCancelWithdrawApplication(ctx context.Context, id int64) (MerchantCancelWithdrawApplication, error)
+	GetMerchantCancelWithdrawApplicationByApplymentID(ctx context.Context, applymentID pgtype.Text) (MerchantCancelWithdrawApplication, error)
+	GetMerchantCancelWithdrawApplicationByOutRequestNo(ctx context.Context, outRequestNo string) (MerchantCancelWithdrawApplication, error)
 	GetMerchantCapabilities(ctx context.Context, merchantID int64) (MerchantCapability, error)
 	// 商户查看索赔详情
 	GetMerchantClaimDetailForMerchant(ctx context.Context, arg GetMerchantClaimDetailForMerchantParams) (GetMerchantClaimDetailForMerchantRow, error)
@@ -1220,6 +1225,7 @@ type Querier interface {
 	ListMerchantBrandsByGroup(ctx context.Context, groupID int64) ([]MerchantBrand, error)
 	ListMerchantBusinessHours(ctx context.Context, merchantID int64) ([]MerchantBusinessHour, error)
 	ListMerchantBusinessHoursAll(ctx context.Context, merchantID int64) ([]MerchantBusinessHour, error)
+	ListMerchantCancelWithdrawApplicationsByMerchant(ctx context.Context, arg ListMerchantCancelWithdrawApplicationsByMerchantParams) ([]MerchantCancelWithdrawApplication, error)
 	ListMerchantClaims(ctx context.Context, arg ListMerchantClaimsParams) ([]Claim, error)
 	// 获取商户在指定时间窗口内特定类型的索赔列表
 	ListMerchantClaimsByTypeInPeriod(ctx context.Context, arg ListMerchantClaimsByTypeInPeriodParams) ([]Claim, error)
@@ -1316,6 +1322,7 @@ type Querier interface {
 	// 获取超时未接单的配送单
 	ListPendingDeliveriesBefore(ctx context.Context, arg ListPendingDeliveriesBeforeParams) ([]Delivery, error)
 	ListPendingEcommerceApplyments(ctx context.Context, arg ListPendingEcommerceApplymentsParams) ([]EcommerceApplyment, error)
+	ListPendingMerchantCancelWithdrawApplications(ctx context.Context, limit int32) ([]MerchantCancelWithdrawApplication, error)
 	ListPendingOCRJobsByMediaAsset(ctx context.Context, mediaAssetID int64) ([]OcrJob, error)
 	// 列出申请（平台管理员用，包含 submitted/approved/rejected）
 	ListPendingOperatorApplications(ctx context.Context, arg ListPendingOperatorApplicationsParams) ([]ListPendingOperatorApplicationsRow, error)
@@ -1653,6 +1660,7 @@ type Querier interface {
 	// 更新商户邀请码
 	UpdateMerchantBindCode(ctx context.Context, arg UpdateMerchantBindCodeParams) (Merchant, error)
 	UpdateMerchantBossStatus(ctx context.Context, arg UpdateMerchantBossStatusParams) (MerchantBoss, error)
+	UpdateMerchantCancelWithdrawApplicationSync(ctx context.Context, arg UpdateMerchantCancelWithdrawApplicationSyncParams) (MerchantCancelWithdrawApplication, error)
 	UpdateMerchantDishCategoryOrder(ctx context.Context, arg UpdateMerchantDishCategoryOrderParams) (MerchantDishCategory, error)
 	UpdateMerchantGroup(ctx context.Context, arg UpdateMerchantGroupParams) (MerchantGroup, error)
 	// Merchant affiliation

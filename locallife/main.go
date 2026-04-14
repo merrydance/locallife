@@ -203,6 +203,7 @@ func main() {
 	schedulerManager.Register("applyment-recovery", worker.NewApplymentRecoveryScheduler(store, taskDistributor, ecommerceClient))
 	schedulerManager.Register("applyment-settlement-verification", worker.NewApplymentSettlementVerificationScheduler(store, taskDistributor, ecommerceClient))
 	schedulerManager.Register("merchant-withdraw-recovery", worker.NewMerchantWithdrawRecoveryScheduler(store, taskDistributor))
+	schedulerManager.Register("merchant-cancel-withdraw-recovery", worker.NewMerchantCancelWithdrawRecoveryScheduler(store, taskDistributor))
 	if claimPayoutPaymentClient != nil {
 		schedulerManager.Register("claim-payout-recovery", worker.NewClaimPayoutRecoveryScheduler(store, claimPayoutPaymentClient))
 	} else {

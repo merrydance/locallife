@@ -390,6 +390,21 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) CreateEcommerceApplyment(ctx
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateEcommerceApplyment", reflect.TypeOf((*MockEcommerceClientInterface)(nil).CreateEcommerceApplyment), ctx, req)
 }
 
+// CreateEcommerceCancelWithdraw mocks base method.
+func (m *MockEcommerceClientInterface) CreateEcommerceCancelWithdraw(ctx context.Context, req *wechat.EcommerceCancelWithdrawRequest) (*wechat.EcommerceCancelWithdrawCreateResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateEcommerceCancelWithdraw", ctx, req)
+	ret0, _ := ret[0].(*wechat.EcommerceCancelWithdrawCreateResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateEcommerceCancelWithdraw indicates an expected call of CreateEcommerceCancelWithdraw.
+func (mr *MockEcommerceClientInterfaceMockRecorder) CreateEcommerceCancelWithdraw(ctx, req any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateEcommerceCancelWithdraw", reflect.TypeOf((*MockEcommerceClientInterface)(nil).CreateEcommerceCancelWithdraw), ctx, req)
+}
+
 // CreateEcommerceRefund mocks base method.
 func (m *MockEcommerceClientInterface) CreateEcommerceRefund(ctx context.Context, req *wechat.EcommerceRefundRequest) (*wechat.EcommerceRefundResponse, error) {
 	m.ctrl.T.Helper()
@@ -956,6 +971,36 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) QueryEcommerceApplymentByOut
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryEcommerceApplymentByOutRequestNo", reflect.TypeOf((*MockEcommerceClientInterface)(nil).QueryEcommerceApplymentByOutRequestNo), ctx, outRequestNo)
 }
 
+// QueryEcommerceCancelWithdrawByApplymentID mocks base method.
+func (m *MockEcommerceClientInterface) QueryEcommerceCancelWithdrawByApplymentID(ctx context.Context, applymentID string) (*wechat.EcommerceCancelWithdrawQueryResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "QueryEcommerceCancelWithdrawByApplymentID", ctx, applymentID)
+	ret0, _ := ret[0].(*wechat.EcommerceCancelWithdrawQueryResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// QueryEcommerceCancelWithdrawByApplymentID indicates an expected call of QueryEcommerceCancelWithdrawByApplymentID.
+func (mr *MockEcommerceClientInterfaceMockRecorder) QueryEcommerceCancelWithdrawByApplymentID(ctx, applymentID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryEcommerceCancelWithdrawByApplymentID", reflect.TypeOf((*MockEcommerceClientInterface)(nil).QueryEcommerceCancelWithdrawByApplymentID), ctx, applymentID)
+}
+
+// QueryEcommerceCancelWithdrawByOutRequestNo mocks base method.
+func (m *MockEcommerceClientInterface) QueryEcommerceCancelWithdrawByOutRequestNo(ctx context.Context, outRequestNo string) (*wechat.EcommerceCancelWithdrawQueryResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "QueryEcommerceCancelWithdrawByOutRequestNo", ctx, outRequestNo)
+	ret0, _ := ret[0].(*wechat.EcommerceCancelWithdrawQueryResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// QueryEcommerceCancelWithdrawByOutRequestNo indicates an expected call of QueryEcommerceCancelWithdrawByOutRequestNo.
+func (mr *MockEcommerceClientInterfaceMockRecorder) QueryEcommerceCancelWithdrawByOutRequestNo(ctx, outRequestNo any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryEcommerceCancelWithdrawByOutRequestNo", reflect.TypeOf((*MockEcommerceClientInterface)(nil).QueryEcommerceCancelWithdrawByOutRequestNo), ctx, outRequestNo)
+}
+
 // QueryEcommerceFundBalance mocks base method.
 func (m *MockEcommerceClientInterface) QueryEcommerceFundBalance(ctx context.Context, subMchID string) (*wechat.EcommerceFundBalanceResponse, error) {
 	m.ctrl.T.Helper()
@@ -1253,6 +1298,21 @@ func (m *MockEcommerceClientInterface) UploadImage(ctx context.Context, filename
 func (mr *MockEcommerceClientInterfaceMockRecorder) UploadImage(ctx, filename, fileData any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UploadImage", reflect.TypeOf((*MockEcommerceClientInterface)(nil).UploadImage), ctx, filename, fileData)
+}
+
+// ValidateEcommerceCancelWithdraw mocks base method.
+func (m *MockEcommerceClientInterface) ValidateEcommerceCancelWithdraw(ctx context.Context, subMchID string) (*wechat.EcommerceCancelWithdrawEligibilityResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ValidateEcommerceCancelWithdraw", ctx, subMchID)
+	ret0, _ := ret[0].(*wechat.EcommerceCancelWithdrawEligibilityResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ValidateEcommerceCancelWithdraw indicates an expected call of ValidateEcommerceCancelWithdraw.
+func (mr *MockEcommerceClientInterfaceMockRecorder) ValidateEcommerceCancelWithdraw(ctx, subMchID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateEcommerceCancelWithdraw", reflect.TypeOf((*MockEcommerceClientInterface)(nil).ValidateEcommerceCancelWithdraw), ctx, subMchID)
 }
 
 // VerifyNotificationSignature mocks base method.

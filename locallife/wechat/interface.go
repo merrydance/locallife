@@ -232,6 +232,18 @@ type EcommerceClientInterface interface {
 	QueryEcommerceRefund(ctx context.Context, subMchID, outRefundNo string) (*EcommerceRefundResponse, error)
 
 	// ==================== 账户资金管理 ====================
+	// ValidateEcommerceCancelWithdraw 校验二级商户是否满足注销提现条件
+	ValidateEcommerceCancelWithdraw(ctx context.Context, subMchID string) (*EcommerceCancelWithdrawEligibilityResponse, error)
+
+	// CreateEcommerceCancelWithdraw 提交商户注销提现申请
+	CreateEcommerceCancelWithdraw(ctx context.Context, req *EcommerceCancelWithdrawRequest) (*EcommerceCancelWithdrawCreateResponse, error)
+
+	// QueryEcommerceCancelWithdrawByOutRequestNo 按平台申请单号查询注销提现申请状态
+	QueryEcommerceCancelWithdrawByOutRequestNo(ctx context.Context, outRequestNo string) (*EcommerceCancelWithdrawQueryResponse, error)
+
+	// QueryEcommerceCancelWithdrawByApplymentID 按微信申请单号查询注销提现申请状态
+	QueryEcommerceCancelWithdrawByApplymentID(ctx context.Context, applymentID string) (*EcommerceCancelWithdrawQueryResponse, error)
+
 	// QueryEcommerceFundBalance 查询二级商户可用余额
 	QueryEcommerceFundBalance(ctx context.Context, subMchID string) (*EcommerceFundBalanceResponse, error)
 

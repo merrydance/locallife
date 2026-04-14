@@ -1204,6 +1204,9 @@ func (server *Server) setupRouter() {
 		merchantFinanceGroup.GET("/settlement-timeline", server.listMerchantSettlementTimeline)
 		merchantFinanceGroup.GET("/account/balance", server.getMerchantAccountBalance)
 		merchantFinanceGroup.GET("/account/settlement-account", server.getMerchantSettlementAccount)
+		merchantFinanceGroup.GET("/account/cancel-withdraw/eligibility", server.getMerchantCancelWithdrawEligibility)
+		merchantFinanceGroup.GET("/account/cancel-withdraw/applications", server.listMerchantCancelWithdrawApplications)
+		merchantFinanceGroup.GET("/account/cancel-withdraw/applications/:id", server.getMerchantCancelWithdrawApplication)
 		merchantFinanceGroup.GET("/account/withdrawals", server.listMerchantAccountWithdrawals)
 		merchantFinanceGroup.GET("/account/withdrawals/:id", server.getMerchantAccountWithdrawal)
 	}
@@ -1212,6 +1215,7 @@ func (server *Server) setupRouter() {
 	merchantFinanceOwnerGroup.Use(server.MerchantStaffMiddleware("owner"))
 	{
 		merchantFinanceOwnerGroup.POST("/account/withdraw", server.createMerchantAccountWithdraw)
+		merchantFinanceOwnerGroup.POST("/account/cancel-withdraw/applications", server.createMerchantCancelWithdrawApplication)
 		merchantFinanceOwnerGroup.POST("/account/settlement-account", server.modifyMerchantSettlementAccount)
 		merchantFinanceOwnerGroup.GET("/account/settlement-account/applications/:application_no", server.getMerchantSettlementApplication)
 	}

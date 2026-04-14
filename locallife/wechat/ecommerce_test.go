@@ -1672,6 +1672,202 @@ func TestCreateEcommerceWithdraw_UsesDedicatedNotifyURL(t *testing.T) {
 	require.Equal(t, "MW202604060001", resp.OutRequestNo)
 }
 
+func TestValidateEcommerceCancelWithdraw(t *testing.T) {
+	merchantPrivateKey, _ := generateTestKeyPair(t)
+	platformPrivateKey, platformPublicKey := generateTestKeyPair(t)
+
+	tempDir := t.TempDir()
+	privateKeyPath := createTestPrivateKeyFile(t, tempDir, merchantPrivateKey)
+	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
+
+	client, err := NewEcommerceClient(EcommerceClientConfig{
+		PaymentClientConfig: PaymentClientConfig{
+			MchID:                 "ignored_base_mchid",
+			AppID:                 "service-appid-001",
+			SerialNumber:          "test_serial",
+			APIV3Key:              testAPIV3Key(),
+			PrivateKeyPath:        privateKeyPath,
+			PlatformPublicKeyPath: publicKeyPath,
+			PlatformPublicKeyID:   "PUB_KEY_ID_0123456789",
+		},
+		SpMchID: "service-mchid-001",
+		SpAppID: "service-appid-001",
+	})
+	require.NoError(t, err)
+
+	client.httpClient = &http.Client{
+		Transport: signedEcommerceTransport(t, platformPrivateKey, "PUB_KEY_ID_0123456789", func(req *http.Request) (*http.Response, error) {
+			require.Equal(t, http.MethodGet, req.Method)
+			require.Equal(t, "/v3/ecommerce/account/apply-cancel-withdraw/validate-cancel/1900000109", req.URL.Path)
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader(`{"sub_mchid":"1900000109","merchant_state":"NORMAL","validate_result":"ALLOW_CANCEL_WITHDRAW","account_info":[{"out_account_type":"BASIC_ACCOUNT","amount":101}]}`)),
+			}, nil
+		}),
+	}
+
+	resp, err := client.ValidateEcommerceCancelWithdraw(context.Background(), "1900000109")
+	require.NoError(t, err)
+	require.Equal(t, "1900000109", resp.SubMchID)
+	require.Equal(t, "ALLOW_CANCEL_WITHDRAW", resp.ValidateResult)
+	require.Len(t, resp.AccountInfo, 1)
+}
+
+func TestCreateEcommerceCancelWithdraw(t *testing.T) {
+	merchantPrivateKey, _ := generateTestKeyPair(t)
+	platformPrivateKey, platformPublicKey := generateTestKeyPair(t)
+
+	tempDir := t.TempDir()
+	privateKeyPath := createTestPrivateKeyFile(t, tempDir, merchantPrivateKey)
+	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
+
+	client, err := NewEcommerceClient(EcommerceClientConfig{
+		PaymentClientConfig: PaymentClientConfig{
+			MchID:                 "ignored_base_mchid",
+			AppID:                 "service-appid-001",
+			SerialNumber:          "test_serial",
+			APIV3Key:              testAPIV3Key(),
+			PrivateKeyPath:        privateKeyPath,
+			PlatformPublicKeyPath: publicKeyPath,
+			PlatformPublicKeyID:   "PUB_KEY_ID_0123456789",
+		},
+		SpMchID: "service-mchid-001",
+		SpAppID: "service-appid-001",
+	})
+	require.NoError(t, err)
+
+	client.httpClient = &http.Client{
+		Transport: signedEcommerceTransport(t, platformPrivateKey, "PUB_KEY_ID_0123456789", func(req *http.Request) (*http.Response, error) {
+			require.Equal(t, http.MethodPost, req.Method)
+			require.Equal(t, ecommerceCancelWithdrawApplyURL, req.URL.Path)
+
+			var body map[string]any
+			require.NoError(t, json.NewDecoder(req.Body).Decode(&body))
+			require.Equal(t, "1900000109", body["sub_mchid"])
+			require.Equal(t, "MCW202604140001", body["out_request_no"])
+			require.Equal(t, "APPLY_WITHDRAW", body["withdraw"])
+			require.Equal(t, "特殊理由", body["remark"])
+
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader(`{"applyment_id":"X202604140001","out_request_no":"MCW202604140001"}`)),
+			}, nil
+		}),
+	}
+
+	resp, err := client.CreateEcommerceCancelWithdraw(context.Background(), &EcommerceCancelWithdrawRequest{
+		SubMchID:     "1900000109",
+		OutRequestNo: "MCW202604140001",
+		Withdraw:     "APPLY_WITHDRAW",
+		Remark:       "特殊理由",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "X202604140001", resp.ApplymentID)
+}
+
+func TestQueryEcommerceCancelWithdrawByOutRequestNo(t *testing.T) {
+	merchantPrivateKey, _ := generateTestKeyPair(t)
+	platformPrivateKey, platformPublicKey := generateTestKeyPair(t)
+
+	tempDir := t.TempDir()
+	privateKeyPath := createTestPrivateKeyFile(t, tempDir, merchantPrivateKey)
+	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
+
+	client, err := NewEcommerceClient(EcommerceClientConfig{
+		PaymentClientConfig: PaymentClientConfig{
+			MchID:                 "ignored_base_mchid",
+			AppID:                 "service-appid-001",
+			SerialNumber:          "test_serial",
+			APIV3Key:              testAPIV3Key(),
+			PrivateKeyPath:        privateKeyPath,
+			PlatformPublicKeyPath: publicKeyPath,
+			PlatformPublicKeyID:   "PUB_KEY_ID_0123456789",
+		},
+		SpMchID: "service-mchid-001",
+		SpAppID: "service-appid-001",
+	})
+	require.NoError(t, err)
+
+	client.httpClient = &http.Client{
+		Transport: signedEcommerceTransport(t, platformPrivateKey, "PUB_KEY_ID_0123456789", func(req *http.Request) (*http.Response, error) {
+			require.Equal(t, http.MethodGet, req.Method)
+			require.Equal(t, "/v3/ecommerce/account/apply-cancel-withdraw/out-request-no/MCW202604140001", req.URL.Path)
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader(`{"applyment_id":"X202604140001","out_request_no":"MCW202604140001","cancel_state":"REVIEWING","cancel_state_description":"审核中","sub_mchid":"1900000109"}`)),
+			}, nil
+		}),
+	}
+
+	resp, err := client.QueryEcommerceCancelWithdrawByOutRequestNo(context.Background(), "MCW202604140001")
+	require.NoError(t, err)
+	require.Equal(t, "X202604140001", resp.ApplymentID)
+	require.Equal(t, "REVIEWING", resp.CancelState)
+}
+
+func TestQueryEcommerceCancelWithdrawByApplymentID(t *testing.T) {
+	merchantPrivateKey, _ := generateTestKeyPair(t)
+	platformPrivateKey, platformPublicKey := generateTestKeyPair(t)
+
+	tempDir := t.TempDir()
+	privateKeyPath := createTestPrivateKeyFile(t, tempDir, merchantPrivateKey)
+	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
+
+	client, err := NewEcommerceClient(EcommerceClientConfig{
+		PaymentClientConfig: PaymentClientConfig{
+			MchID:                 "ignored_base_mchid",
+			AppID:                 "service-appid-001",
+			SerialNumber:          "test_serial",
+			APIV3Key:              testAPIV3Key(),
+			PrivateKeyPath:        privateKeyPath,
+			PlatformPublicKeyPath: publicKeyPath,
+			PlatformPublicKeyID:   "PUB_KEY_ID_0123456789",
+		},
+		SpMchID: "service-mchid-001",
+		SpAppID: "service-appid-001",
+	})
+	require.NoError(t, err)
+
+	client.httpClient = &http.Client{
+		Transport: signedEcommerceTransport(t, platformPrivateKey, "PUB_KEY_ID_0123456789", func(req *http.Request) (*http.Response, error) {
+			require.Equal(t, http.MethodGet, req.Method)
+			require.Equal(t, "/v3/ecommerce/account/apply-cancel-withdraw/applyment-id/X202604140001", req.URL.Path)
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader(`{"applyment_id":"X202604140001","out_request_no":"MCW202604140001","cancel_state":"WAITING_MERCHANT_CONFIRM","cancel_state_description":"等待商户确认","sub_mchid":"1900000109","confirm_cancel":{"confirm_cancel_url":"https://pay.weixin.qq.com/some_page?param_name=param_value"}}`)),
+			}, nil
+		}),
+	}
+
+	resp, err := client.QueryEcommerceCancelWithdrawByApplymentID(context.Background(), "X202604140001")
+	require.NoError(t, err)
+	require.Equal(t, "MCW202604140001", resp.OutRequestNo)
+	require.Equal(t, "WAITING_MERCHANT_CONFIRM", resp.CancelState)
+	require.NotNil(t, resp.ConfirmCancel)
+	require.Equal(t, "https://pay.weixin.qq.com/some_page?param_name=param_value", resp.ConfirmCancel.ConfirmCancelURL)
+}
+
+func TestQueryEcommerceCancelWithdrawByOutRequestNo_RejectsUnsupportedCancelState(t *testing.T) {
+	client := newSignedEcommerceClientForTest(t, func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader(`{"applyment_id":"X202604140001","out_request_no":"MCW202604140001","cancel_state":"UNKNOWN_STATE","cancel_state_description":"未知状态","sub_mchid":"1900000109"}`)),
+		}, nil
+	})
+
+	_, err := client.QueryEcommerceCancelWithdrawByOutRequestNo(context.Background(), "MCW202604140001")
+	require.Error(t, err)
+	require.ErrorContains(t, err, "unsupported cancel_state")
+
+	var contractErr *MerchantCancelWithdrawContractError
+	require.ErrorAs(t, err, &contractErr)
+}
+
 func TestCreateViolationNotification_UsesConfiguredNotifyURL(t *testing.T) {
 	merchantPrivateKey, _ := generateTestKeyPair(t)
 	platformPrivateKey, platformPublicKey := generateTestKeyPair(t)

@@ -100,6 +100,13 @@ type TaskDistributor interface {
 		opts ...asynq.Option,
 	) error
 
+	// DistributeTaskProcessMerchantCancelWithdrawResult 分发商户注销提现状态轮询任务
+	DistributeTaskProcessMerchantCancelWithdrawResult(
+		ctx context.Context,
+		payload *MerchantCancelWithdrawResultPayload,
+		opts ...asynq.Option,
+	) error
+
 	// DistributeTaskSendNotification 分发发送通知任务
 	DistributeTaskSendNotification(
 		ctx context.Context,

@@ -220,6 +220,7 @@ func (processor *RedisTaskProcessor) Start() error {
 	mux.HandleFunc(TaskSendNotification, processor.ProcessTaskSendNotification)
 	mux.HandleFunc(TaskProcessProfitSharingReturnResult, processor.ProcessTaskProfitSharingReturnResult)
 	mux.HandleFunc(TaskProcessMerchantWithdrawResult, processor.ProcessTaskMerchantWithdrawResult)
+	mux.HandleFunc(TaskProcessMerchantCancelWithdrawResult, processor.ProcessTaskMerchantCancelWithdrawResult)
 	mux.HandleFunc(TaskProcessAnomalyRefund, processor.ProcessTaskAnomalyRefund)
 	mux.HandleFunc(TaskPrintOrder, processor.ProcessTaskPrintOrder)
 

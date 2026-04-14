@@ -75,12 +75,16 @@ const (
 	ecommerceRefundQueryByOutRefundURL = "/v3/ecommerce/refunds/out-refund-no/%s"
 
 	// 账户资金管理（平台收付通）
-	ecommerceFundBalanceURL        = "/v3/ecommerce/fund/balance/%s"
-	ecommerceFundDayEndBalanceURL  = "/v3/ecommerce/fund/enddaybalance/%s"
-	platformFundBalanceURL         = "/v3/merchant/fund/balance/%s"
-	platformFundDayEndBalanceURL   = "/v3/merchant/fund/dayendbalance/%s"
-	ecommerceFundWithdrawURL       = "/v3/ecommerce/fund/withdraw"
-	ecommerceFundWithdrawQueryByNo = "/v3/ecommerce/fund/withdraw/out-request-no/%s"
+	ecommerceCancelWithdrawValidateURL  = "/v3/ecommerce/account/apply-cancel-withdraw/validate-cancel/%s"
+	ecommerceCancelWithdrawApplyURL     = "/v3/ecommerce/account/apply-cancel-withdraw"
+	ecommerceCancelWithdrawQueryByNoURL = "/v3/ecommerce/account/apply-cancel-withdraw/out-request-no/%s"
+	ecommerceCancelWithdrawQueryByIDURL = "/v3/ecommerce/account/apply-cancel-withdraw/applyment-id/%s"
+	ecommerceFundBalanceURL             = "/v3/ecommerce/fund/balance/%s"
+	ecommerceFundDayEndBalanceURL       = "/v3/ecommerce/fund/enddaybalance/%s"
+	platformFundBalanceURL              = "/v3/merchant/fund/balance/%s"
+	platformFundDayEndBalanceURL        = "/v3/merchant/fund/dayendbalance/%s"
+	ecommerceFundWithdrawURL            = "/v3/ecommerce/fund/withdraw"
+	ecommerceFundWithdrawQueryByNo      = "/v3/ecommerce/fund/withdraw/out-request-no/%s"
 
 	// 结算账户查询/修改/申请查询（apply4sub）
 	apply4subSettlementURL            = "/v3/apply4sub/sub_merchants/%s/settlement"
@@ -100,6 +104,208 @@ type EcommerceClient struct {
 	combineNotifyURL   string
 	withdrawNotifyURL  string
 	violationNotifyURL string
+}
+
+type EcommerceCancelWithdrawAccountInfo struct {
+	OutAccountType string `json:"out_account_type"`
+	Amount         int64  `json:"amount"`
+}
+
+type EcommerceCancelWithdrawBlockReason struct {
+	Type        string `json:"type"`
+	Description string `json:"description"`
+}
+
+type EcommerceCancelWithdrawEligibilityResponse struct {
+	SubMchID       string                               `json:"sub_mchid"`
+	MerchantState  string                               `json:"merchant_state"`
+	ValidateResult string                               `json:"validate_result"`
+	AccountInfo    []EcommerceCancelWithdrawAccountInfo `json:"account_info,omitempty"`
+	BlockReasons   []EcommerceCancelWithdrawBlockReason `json:"block_reasons,omitempty"`
+}
+
+type EcommerceCancelWithdrawIdentityInfo struct {
+	IDDocType          string `json:"id_doc_type,omitempty"`
+	IdentificationName string `json:"identification_name,omitempty"`
+	IdentificationNo   string `json:"identification_no,omitempty"`
+}
+
+type EcommerceCancelWithdrawBankAccountInfo struct {
+	AccountName    string `json:"account_name,omitempty"`
+	AccountBank    string `json:"account_bank,omitempty"`
+	BankBranchID   string `json:"bank_branch_id,omitempty"`
+	BankBranchName string `json:"bank_branch_name,omitempty"`
+	AccountNumber  string `json:"account_number,omitempty"`
+}
+
+type EcommerceCancelWithdrawPayeeInfo struct {
+	AccountType     string                                  `json:"account_type,omitempty"`
+	BankAccountInfo *EcommerceCancelWithdrawBankAccountInfo `json:"bank_account_info,omitempty"`
+	IdentityInfo    *EcommerceCancelWithdrawIdentityInfo    `json:"identity_info,omitempty"`
+}
+
+type EcommerceCancelWithdrawProofMedia struct {
+	ProofMediaType string `json:"proof_media_type"`
+	ProofMedia     string `json:"proof_media"`
+}
+
+type EcommerceCancelWithdrawRequest struct {
+	SubMchID            string                              `json:"sub_mchid"`
+	OutRequestNo        string                              `json:"out_request_no"`
+	Withdraw            string                              `json:"withdraw,omitempty"`
+	PayeeInfo           *EcommerceCancelWithdrawPayeeInfo   `json:"payee_info,omitempty"`
+	ProofMedias         []EcommerceCancelWithdrawProofMedia `json:"proof_medias,omitempty"`
+	AdditionalMaterials []string                            `json:"additional_materials,omitempty"`
+	Remark              string                              `json:"remark,omitempty"`
+}
+
+type EcommerceCancelWithdrawCreateResponse struct {
+	ApplymentID  string `json:"applyment_id"`
+	OutRequestNo string `json:"out_request_no"`
+}
+
+type EcommerceCancelWithdrawAccountWithdrawResult struct {
+	OutAccountType   string `json:"out_account_type"`
+	PayState         string `json:"pay_state"`
+	StateDescription string `json:"state_description"`
+}
+
+type EcommerceCancelWithdrawConfirmCancel struct {
+	ConfirmCancelURL string `json:"confirm_cancel_url,omitempty"`
+}
+
+type EcommerceCancelWithdrawQueryResponse struct {
+	ApplymentID              string                                         `json:"applyment_id"`
+	OutRequestNo             string                                         `json:"out_request_no"`
+	CancelState              string                                         `json:"cancel_state"`
+	CancelStateDescription   string                                         `json:"cancel_state_description"`
+	Withdraw                 string                                         `json:"withdraw,omitempty"`
+	WithdrawState            string                                         `json:"withdraw_state,omitempty"`
+	WithdrawStateDescription string                                         `json:"withdraw_state_description,omitempty"`
+	AccountWithdrawResult    []EcommerceCancelWithdrawAccountWithdrawResult `json:"account_withdraw_result,omitempty"`
+	ModifyTime               string                                         `json:"modify_time,omitempty"`
+	SubMchID                 string                                         `json:"sub_mchid"`
+	AccountInfo              []EcommerceCancelWithdrawAccountInfo           `json:"account_info,omitempty"`
+	ConfirmCancel            *EcommerceCancelWithdrawConfirmCancel          `json:"confirm_cancel,omitempty"`
+}
+
+// ValidateEcommerceCancelWithdraw 校验二级商户是否满足注销提现条件
+func (c *EcommerceClient) ValidateEcommerceCancelWithdraw(ctx context.Context, subMchID string) (*EcommerceCancelWithdrawEligibilityResponse, error) {
+	trimmedSubMchID, err := validateMerchantCancelWithdrawIdentifier("validate merchant cancel withdraw", "sub_mchid", subMchID)
+	if err != nil {
+		return nil, err
+	}
+
+	requestURL := fmt.Sprintf(ecommerceCancelWithdrawValidateURL, url.PathEscape(trimmedSubMchID))
+	respBody, err := c.doRequest(ctx, http.MethodGet, requestURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("validate ecommerce cancel withdraw: %w", err)
+	}
+
+	var resp EcommerceCancelWithdrawEligibilityResponse
+	if err := json.Unmarshal(respBody, &resp); err != nil {
+		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+	if resp.SubMchID == "" {
+		resp.SubMchID = trimmedSubMchID
+	}
+	if err := validateMerchantCancelWithdrawEligibilityResponse(&resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// CreateEcommerceCancelWithdraw 提交商户注销提现申请
+func (c *EcommerceClient) CreateEcommerceCancelWithdraw(ctx context.Context, req *EcommerceCancelWithdrawRequest) (*EcommerceCancelWithdrawCreateResponse, error) {
+	if err := validateMerchantCancelWithdrawCreateRequest(req); err != nil {
+		return nil, err
+	}
+
+	body := map[string]interface{}{
+		"sub_mchid":      strings.TrimSpace(req.SubMchID),
+		"out_request_no": strings.TrimSpace(req.OutRequestNo),
+	}
+	if req.Withdraw != "" {
+		body["withdraw"] = req.Withdraw
+	}
+	if req.PayeeInfo != nil {
+		body["payee_info"] = req.PayeeInfo
+	}
+	if len(req.ProofMedias) > 0 {
+		body["proof_medias"] = req.ProofMedias
+	}
+	if len(req.AdditionalMaterials) > 0 {
+		body["additional_materials"] = req.AdditionalMaterials
+	}
+	if strings.TrimSpace(req.Remark) != "" {
+		body["remark"] = strings.TrimSpace(req.Remark)
+	}
+
+	respBody, err := c.doRequest(ctx, http.MethodPost, ecommerceCancelWithdrawApplyURL, body)
+	if err != nil {
+		return nil, fmt.Errorf("create ecommerce cancel withdraw: %w", err)
+	}
+
+	var resp EcommerceCancelWithdrawCreateResponse
+	if err := json.Unmarshal(respBody, &resp); err != nil {
+		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+	if resp.OutRequestNo == "" {
+		resp.OutRequestNo = strings.TrimSpace(req.OutRequestNo)
+	}
+	return &resp, nil
+}
+
+// QueryEcommerceCancelWithdrawByOutRequestNo 按平台申请单号查询注销提现申请状态
+func (c *EcommerceClient) QueryEcommerceCancelWithdrawByOutRequestNo(ctx context.Context, outRequestNo string) (*EcommerceCancelWithdrawQueryResponse, error) {
+	trimmedOutRequestNo, err := validateMerchantCancelWithdrawIdentifier("query merchant cancel withdraw by out_request_no", "out_request_no", outRequestNo)
+	if err != nil {
+		return nil, err
+	}
+
+	requestURL := fmt.Sprintf(ecommerceCancelWithdrawQueryByNoURL, url.PathEscape(trimmedOutRequestNo))
+	respBody, err := c.doRequest(ctx, http.MethodGet, requestURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("query ecommerce cancel withdraw by out request no: %w", err)
+	}
+
+	var resp EcommerceCancelWithdrawQueryResponse
+	if err := json.Unmarshal(respBody, &resp); err != nil {
+		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+	if resp.OutRequestNo == "" {
+		resp.OutRequestNo = trimmedOutRequestNo
+	}
+	if err := validateMerchantCancelWithdrawQueryResponse("query merchant cancel withdraw by out_request_no", &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// QueryEcommerceCancelWithdrawByApplymentID 按微信申请单号查询注销提现申请状态
+func (c *EcommerceClient) QueryEcommerceCancelWithdrawByApplymentID(ctx context.Context, applymentID string) (*EcommerceCancelWithdrawQueryResponse, error) {
+	trimmedApplymentID, err := validateMerchantCancelWithdrawIdentifier("query merchant cancel withdraw by applyment_id", "applyment_id", applymentID)
+	if err != nil {
+		return nil, err
+	}
+
+	requestURL := fmt.Sprintf(ecommerceCancelWithdrawQueryByIDURL, url.PathEscape(trimmedApplymentID))
+	respBody, err := c.doRequest(ctx, http.MethodGet, requestURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("query ecommerce cancel withdraw by applyment id: %w", err)
+	}
+
+	var resp EcommerceCancelWithdrawQueryResponse
+	if err := json.Unmarshal(respBody, &resp); err != nil {
+		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+	if resp.ApplymentID == "" {
+		resp.ApplymentID = trimmedApplymentID
+	}
+	if err := validateMerchantCancelWithdrawQueryResponse("query merchant cancel withdraw by applyment_id", &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
 }
 
 // EcommerceClientConfig 平台收付通客户端配置
@@ -708,6 +914,28 @@ func (e *SubMerchantSettlementApplicationContractError) Error() string {
 	return e.Message
 }
 
+type MerchantCancelWithdrawValidationError struct {
+	Message string
+}
+
+func (e *MerchantCancelWithdrawValidationError) Error() string {
+	if e == nil || strings.TrimSpace(e.Message) == "" {
+		return "merchant cancel withdraw: validation failed"
+	}
+	return e.Message
+}
+
+type MerchantCancelWithdrawContractError struct {
+	Message string
+}
+
+func (e *MerchantCancelWithdrawContractError) Error() string {
+	if e == nil || strings.TrimSpace(e.Message) == "" {
+		return "merchant cancel withdraw: upstream contract validation failed"
+	}
+	return e.Message
+}
+
 type ecommerceApplymentQueryKind string
 
 const (
@@ -754,6 +982,81 @@ var allowedSubMerchantSettlementApplicationVerifyResults = map[string]struct{}{
 	subMerchantSettlementApplicationAuditFail:    {},
 }
 
+var allowedMerchantCancelWithdrawMerchantStates = map[string]struct{}{
+	"NORMAL":             {},
+	"HAS_BEEN_CANCELLED": {},
+}
+
+var allowedMerchantCancelWithdrawValidateResults = map[string]struct{}{
+	"ALLOW_CANCEL_WITHDRAW":     {},
+	"NOT_ALLOW_CANCEL_WITHDRAW": {},
+}
+
+var allowedMerchantCancelWithdrawBlockReasonTypes = map[string]struct{}{
+	"CONSUMER_COMPLAINT_UNPROCESSED": {},
+	"HAS_BLOCKING_CONTROL":           {},
+	"FUNDS_PENDING_PROCESSING":       {},
+	"OTHER_REASON":                   {},
+}
+
+var allowedMerchantCancelWithdrawModes = map[string]struct{}{
+	"NOT_APPLY_WITHDRAW": {},
+	"APPLY_WITHDRAW":     {},
+}
+
+var allowedMerchantCancelWithdrawAccountTypes = map[string]struct{}{
+	"ACCOUNT_TYPE_CORPORATE": {},
+	"ACCOUNT_TYPE_PERSONAL":  {},
+}
+
+var allowedMerchantCancelWithdrawIDDocTypes = map[string]struct{}{
+	"IDENTIFICATION_TYPE_ID_CARD":                 {},
+	"IDENTIFICATION_TYPE_OVERSEA_PASSPORT":        {},
+	"IDENTIFICATION_TYPE_HONGKONG_PASSPORT":       {},
+	"IDENTIFICATION_TYPE_MACAO_PASSPORT":          {},
+	"IDENTIFICATION_TYPE_TAIWAN_PASSPORT":         {},
+	"IDENTIFICATION_TYPE_FOREIGN_RESIDENT":        {},
+	"IDENTIFICATION_TYPE_HONGKONG_MACAO_RESIDENT": {},
+	"IDENTIFICATION_TYPE_TAIWAN_RESIDENT":         {},
+}
+
+var allowedMerchantCancelWithdrawStates = map[string]struct{}{
+	"ACCEPTED":                 {},
+	"REVIEWING":                {},
+	"REJECTED":                 {},
+	"WAITING_MERCHANT_CONFIRM": {},
+	"REVOKED":                  {},
+	"SYSTEM_PROCESSING":        {},
+	"CANCELED":                 {},
+	"FUND_PROCESSING":          {},
+	"FINISH":                   {},
+}
+
+var allowedMerchantCancelWithdrawStatesWithWithdrawProgress = map[string]struct{}{
+	"FUND_PROCESSING": {},
+	"FINISH":          {},
+}
+
+var allowedMerchantCancelWithdrawWithdrawStates = map[string]struct{}{
+	"WITHDRAW_PROCESSING": {},
+	"WITHDRAW_EXCEPTION":  {},
+	"WITHDRAW_SUCCEED":    {},
+}
+
+var allowedMerchantCancelWithdrawOutAccountTypes = map[string]struct{}{
+	"BASIC_ACCOUNT":     {},
+	"OPERATE_ACCOUNT":   {},
+	"MARGIN_ACCOUNT":    {},
+	"TRADE_FEE_ACCOUNT": {},
+}
+
+var allowedMerchantCancelWithdrawPayStates = map[string]struct{}{
+	"PAY_PROCESSING": {},
+	"PAY_SUCCEED":    {},
+	"PAY_FAIL":       {},
+	"BANK_REFUNDED":  {},
+}
+
 func newEcommerceApplymentQueryValidationError(format string, args ...any) error {
 	return &EcommerceApplymentQueryValidationError{Message: fmt.Sprintf("query ecommerce applyment: "+format, args...)}
 }
@@ -772,6 +1075,181 @@ func newSubMerchantSettlementApplicationQueryValidationError(format string, args
 
 func newSubMerchantSettlementApplicationContractError(format string, args ...any) error {
 	return &SubMerchantSettlementApplicationContractError{Message: fmt.Sprintf("query sub merchant settlement application: "+format, args...)}
+}
+
+func newMerchantCancelWithdrawValidationError(operation string, format string, args ...any) error {
+	prefix := strings.TrimSpace(operation)
+	if prefix == "" {
+		prefix = "merchant cancel withdraw"
+	}
+	return &MerchantCancelWithdrawValidationError{Message: fmt.Sprintf("%s: %s", prefix, fmt.Sprintf(format, args...))}
+}
+
+func newMerchantCancelWithdrawContractError(operation string, format string, args ...any) error {
+	prefix := strings.TrimSpace(operation)
+	if prefix == "" {
+		prefix = "merchant cancel withdraw"
+	}
+	return &MerchantCancelWithdrawContractError{Message: fmt.Sprintf("%s: %s", prefix, fmt.Sprintf(format, args...))}
+}
+
+func validateMerchantCancelWithdrawIdentifier(operation string, fieldName string, value string) (string, error) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return "", newMerchantCancelWithdrawValidationError(operation, "%s is required", fieldName)
+	}
+	if utf8.RuneCountInString(trimmed) > 32 {
+		return "", newMerchantCancelWithdrawValidationError(operation, "%s must not exceed 32 characters", fieldName)
+	}
+	return trimmed, nil
+}
+
+func validateMerchantCancelWithdrawCreateRequest(req *EcommerceCancelWithdrawRequest) error {
+	if req == nil {
+		return newMerchantCancelWithdrawValidationError("create merchant cancel withdraw", "request is nil")
+	}
+	trimmedSubMchID, err := validateMerchantCancelWithdrawIdentifier("create merchant cancel withdraw", "sub_mchid", req.SubMchID)
+	if err != nil {
+		return err
+	}
+	req.SubMchID = trimmedSubMchID
+	trimmedOutRequestNo, err := validateMerchantCancelWithdrawIdentifier("create merchant cancel withdraw", "out_request_no", req.OutRequestNo)
+	if err != nil {
+		return err
+	}
+	for _, r := range trimmedOutRequestNo {
+		if (r < '0' || r > '9') && (r < 'A' || r > 'Z') && (r < 'a' || r > 'z') {
+			return newMerchantCancelWithdrawValidationError("create merchant cancel withdraw", "out_request_no must contain only letters and digits")
+		}
+	}
+	req.OutRequestNo = trimmedOutRequestNo
+	if req.Withdraw != "" {
+		trimmedWithdraw := strings.TrimSpace(req.Withdraw)
+		if _, ok := allowedMerchantCancelWithdrawModes[trimmedWithdraw]; !ok {
+			return newMerchantCancelWithdrawValidationError("create merchant cancel withdraw", "unsupported withdraw %q", req.Withdraw)
+		}
+		req.Withdraw = trimmedWithdraw
+	}
+	if req.PayeeInfo != nil {
+		trimmedAccountType := strings.TrimSpace(req.PayeeInfo.AccountType)
+		if trimmedAccountType == "" {
+			return newMerchantCancelWithdrawValidationError("create merchant cancel withdraw", "payee_info.account_type is required when payee_info is provided")
+		}
+		if _, ok := allowedMerchantCancelWithdrawAccountTypes[trimmedAccountType]; !ok {
+			return newMerchantCancelWithdrawValidationError("create merchant cancel withdraw", "unsupported payee_info.account_type %q", req.PayeeInfo.AccountType)
+		}
+		req.PayeeInfo.AccountType = trimmedAccountType
+		if req.PayeeInfo.IdentityInfo != nil {
+			trimmedDocType := strings.TrimSpace(req.PayeeInfo.IdentityInfo.IDDocType)
+			if trimmedDocType != "" {
+				if _, ok := allowedMerchantCancelWithdrawIDDocTypes[trimmedDocType]; !ok {
+					return newMerchantCancelWithdrawValidationError("create merchant cancel withdraw", "unsupported payee_info.identity_info.id_doc_type %q", req.PayeeInfo.IdentityInfo.IDDocType)
+				}
+				req.PayeeInfo.IdentityInfo.IDDocType = trimmedDocType
+			}
+		}
+	}
+	if len(req.AdditionalMaterials) > 10 {
+		return newMerchantCancelWithdrawValidationError("create merchant cancel withdraw", "additional_materials must not exceed 10 items")
+	}
+	if utf8.RuneCountInString(strings.TrimSpace(req.Remark)) > 32 {
+		return newMerchantCancelWithdrawValidationError("create merchant cancel withdraw", "remark must not exceed 32 characters")
+	}
+	req.Remark = strings.TrimSpace(req.Remark)
+	return nil
+}
+
+func validateMerchantCancelWithdrawEligibilityResponse(resp *EcommerceCancelWithdrawEligibilityResponse) error {
+	if resp == nil {
+		return newMerchantCancelWithdrawContractError("validate merchant cancel withdraw", "empty wechat response")
+	}
+	if strings.TrimSpace(resp.SubMchID) == "" {
+		return newMerchantCancelWithdrawContractError("validate merchant cancel withdraw", "wechat response missing sub_mchid")
+	}
+	if _, ok := allowedMerchantCancelWithdrawMerchantStates[strings.TrimSpace(resp.MerchantState)]; !ok {
+		return newMerchantCancelWithdrawContractError("validate merchant cancel withdraw", "unsupported merchant_state %q", resp.MerchantState)
+	}
+	if _, ok := allowedMerchantCancelWithdrawValidateResults[strings.TrimSpace(resp.ValidateResult)]; !ok {
+		return newMerchantCancelWithdrawContractError("validate merchant cancel withdraw", "unsupported validate_result %q", resp.ValidateResult)
+	}
+	for index, account := range resp.AccountInfo {
+		if _, ok := allowedMerchantCancelWithdrawOutAccountTypes[strings.TrimSpace(account.OutAccountType)]; !ok {
+			return newMerchantCancelWithdrawContractError("validate merchant cancel withdraw", "account_info[%d].out_account_type has unsupported value %q", index, account.OutAccountType)
+		}
+	}
+	for index, reason := range resp.BlockReasons {
+		trimmedType := strings.TrimSpace(reason.Type)
+		if trimmedType == "" {
+			continue
+		}
+		if _, ok := allowedMerchantCancelWithdrawBlockReasonTypes[trimmedType]; !ok {
+			return newMerchantCancelWithdrawContractError("validate merchant cancel withdraw", "block_reasons[%d].type has unsupported value %q", index, reason.Type)
+		}
+	}
+	return nil
+}
+
+func validateMerchantCancelWithdrawQueryResponse(operation string, resp *EcommerceCancelWithdrawQueryResponse) error {
+	if resp == nil {
+		return newMerchantCancelWithdrawContractError(operation, "empty wechat response")
+	}
+	if strings.TrimSpace(resp.ApplymentID) == "" {
+		return newMerchantCancelWithdrawContractError(operation, "wechat response missing applyment_id")
+	}
+	if strings.TrimSpace(resp.OutRequestNo) == "" {
+		return newMerchantCancelWithdrawContractError(operation, "wechat response missing out_request_no")
+	}
+	if _, ok := allowedMerchantCancelWithdrawStates[strings.TrimSpace(resp.CancelState)]; !ok {
+		return newMerchantCancelWithdrawContractError(operation, "unsupported cancel_state %q", resp.CancelState)
+	}
+	if strings.TrimSpace(resp.CancelStateDescription) == "" {
+		return newMerchantCancelWithdrawContractError(operation, "wechat response missing cancel_state_description")
+	}
+	if strings.TrimSpace(resp.SubMchID) == "" {
+		return newMerchantCancelWithdrawContractError(operation, "wechat response missing sub_mchid")
+	}
+	if trimmedWithdraw := strings.TrimSpace(resp.Withdraw); trimmedWithdraw != "" {
+		if _, ok := allowedMerchantCancelWithdrawModes[trimmedWithdraw]; !ok {
+			return newMerchantCancelWithdrawContractError(operation, "unsupported withdraw %q", resp.Withdraw)
+		}
+	}
+	if trimmedWithdrawState := strings.TrimSpace(resp.WithdrawState); trimmedWithdrawState != "" {
+		if _, ok := allowedMerchantCancelWithdrawWithdrawStates[trimmedWithdrawState]; !ok {
+			return newMerchantCancelWithdrawContractError(operation, "unsupported withdraw_state %q", resp.WithdrawState)
+		}
+		if _, ok := allowedMerchantCancelWithdrawStatesWithWithdrawProgress[strings.TrimSpace(resp.CancelState)]; !ok {
+			return newMerchantCancelWithdrawContractError(operation, "withdraw_state is only allowed after the request reaches a withdraw-processing state")
+		}
+	}
+	if strings.TrimSpace(resp.ModifyTime) != "" {
+		if _, err := time.Parse(time.RFC3339, resp.ModifyTime); err != nil {
+			return newMerchantCancelWithdrawContractError(operation, "modify_time must be RFC3339: %v", err)
+		}
+	}
+	for index, account := range resp.AccountInfo {
+		if _, ok := allowedMerchantCancelWithdrawOutAccountTypes[strings.TrimSpace(account.OutAccountType)]; !ok {
+			return newMerchantCancelWithdrawContractError(operation, "account_info[%d].out_account_type has unsupported value %q", index, account.OutAccountType)
+		}
+	}
+	for index, result := range resp.AccountWithdrawResult {
+		if _, ok := allowedMerchantCancelWithdrawOutAccountTypes[strings.TrimSpace(result.OutAccountType)]; !ok {
+			return newMerchantCancelWithdrawContractError(operation, "account_withdraw_result[%d].out_account_type has unsupported value %q", index, result.OutAccountType)
+		}
+		if _, ok := allowedMerchantCancelWithdrawPayStates[strings.TrimSpace(result.PayState)]; !ok {
+			return newMerchantCancelWithdrawContractError(operation, "account_withdraw_result[%d].pay_state has unsupported value %q", index, result.PayState)
+		}
+		if strings.TrimSpace(result.StateDescription) == "" {
+			return newMerchantCancelWithdrawContractError(operation, "account_withdraw_result[%d].state_description is required", index)
+		}
+	}
+	confirmCancelURL := ""
+	if resp.ConfirmCancel != nil {
+		confirmCancelURL = strings.TrimSpace(resp.ConfirmCancel.ConfirmCancelURL)
+	}
+	if confirmCancelURL != "" && strings.TrimSpace(resp.CancelState) != "WAITING_MERCHANT_CONFIRM" {
+		return newMerchantCancelWithdrawContractError(operation, "confirm_cancel.confirm_cancel_url is only allowed when cancel_state=WAITING_MERCHANT_CONFIRM")
+	}
+	return nil
 }
 
 func normalizeEcommerceApplymentQueryState(state string) string {
@@ -2097,8 +2575,8 @@ type AddReceiverResponse struct {
 	RelationType string `json:"relation_type"`
 }
 
-// AddProfitSharingReceiver 添加分账接收方
-// 在二级商户进件成功后，需要将商户添加为分账接收方才能分账
+// AddProfitSharingReceiver 添加分账接收方。
+// 该接口用于为后续分账建立接收方关系，不同接收方类型是否需要预先添加应以当前官方规则和业务主链为准。
 func (c *EcommerceClient) AddProfitSharingReceiver(ctx context.Context, req *AddReceiverRequest) (*AddReceiverResponse, error) {
 	if err := c.validateAddReceiverRequest(req); err != nil {
 		return nil, err

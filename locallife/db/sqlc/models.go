@@ -956,6 +956,43 @@ type MerchantBusinessHour struct {
 	UpdatedAt   time.Time   `json:"updated_at"`
 }
 
+// 微信支付商户注销提现申请单
+type MerchantCancelWithdrawApplication struct {
+	ID              int64  `json:"id"`
+	MerchantID      int64  `json:"merchant_id"`
+	CreatedByUserID int64  `json:"created_by_user_id"`
+	SubMchID        string `json:"sub_mch_id"`
+	// 平台侧商户注销申请单号
+	OutRequestNo string `json:"out_request_no"`
+	// 微信支付注销提现申请单号
+	ApplymentID pgtype.Text `json:"applyment_id"`
+	// 是否提取资金：NOT_APPLY_WITHDRAW/APPLY_WITHDRAW
+	Withdraw                   string      `json:"withdraw"`
+	ProofMediaAssetIds         []byte      `json:"proof_media_asset_ids"`
+	AdditionalMaterialAssetIds []byte      `json:"additional_material_asset_ids"`
+	Remark                     pgtype.Text `json:"remark"`
+	// 本地提交同步状态：created/submit_succeeded/submit_unknown/sync_failed
+	LocalSyncState string `json:"local_sync_state"`
+	// 微信支付注销状态 cancel_state
+	CancelState            pgtype.Text `json:"cancel_state"`
+	CancelStateDescription pgtype.Text `json:"cancel_state_description"`
+	// 微信支付提现状态 withdraw_state
+	WithdrawState            pgtype.Text        `json:"withdraw_state"`
+	WithdrawStateDescription pgtype.Text        `json:"withdraw_state_description"`
+	ConfirmCancelUrl         pgtype.Text        `json:"confirm_cancel_url"`
+	AccountInfo              []byte             `json:"account_info"`
+	AccountWithdrawResult    []byte             `json:"account_withdraw_result"`
+	LatestQueryResponse      []byte             `json:"latest_query_response"`
+	LastError                pgtype.Text        `json:"last_error"`
+	ModifyTime               pgtype.Timestamptz `json:"modify_time"`
+	SubmittedAt              pgtype.Timestamptz `json:"submitted_at"`
+	LastQueryAt              pgtype.Timestamptz `json:"last_query_at"`
+	CreatedAt                time.Time          `json:"created_at"`
+	UpdatedAt                time.Time          `json:"updated_at"`
+	// 商户声明的营业执照状态：ACTIVE/CANCELED/REVOKED；仅用于企业主体注销提现材料校验
+	BusinessLicenseStatusDeclaration pgtype.Text `json:"business_license_status_declaration"`
+}
+
 // 商户能力真值表；系统标签由此表派生，不与经营类目混用
 type MerchantCapability struct {
 	MerchantID int64 `json:"merchant_id"`
