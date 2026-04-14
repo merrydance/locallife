@@ -107,11 +107,13 @@ func syncInitialApplymentQueryResult(
 		return nil
 	}
 
-	mappedStatus := mapWechatApplymentStateToSubmissionStatus(queryResp.ApplymentState)
-	if mappedStatus == "" {
-		mappedStatus = ApplymentSubmissionResultStatus
+	resolvedStatus := NormalizeResolvedApplymentStatus(
+		ResolveWechatApplymentStatus("", queryResp.ApplymentState, queryResp.SignState),
+		strings.TrimSpace(queryResp.SubMchID) != "",
+	)
+	if resolvedStatus == "" {
+		resolvedStatus = ApplymentSubmissionResultStatus
 	}
-	resolvedStatus := normalizeApplymentSubmissionStatus(mappedStatus, queryResp.SubMchID)
 
 	_, err := store.UpdateEcommerceApplymentStatus(ctx, db.UpdateEcommerceApplymentStatusParams{
 		ID:                 localApplymentID,
@@ -656,7 +658,7 @@ func SubmitEcommerceApplyment(
 
 	_, err = store.UpdateEcommerceApplymentToSubmitted(ctx, db.UpdateEcommerceApplymentToSubmittedParams{
 		ID:          input.Applyment.ID,
-		ApplymentID: pgtype.Int8{Int64: resp.ApplymentID, Valid: true},
+		ApplymentID: pgtype.Int8{Int64: resp.ApplymentID, Valid: resp.ApplymentID > 0},
 	})
 	if err != nil {
 		if updateSubjectStatus != nil {
@@ -679,11 +681,13 @@ func SubmitEcommerceApplyment(
 
 	initialQueryResp, err := queryInitialApplymentStatus(ctx, ecommerceClient, resp.ApplymentID, input.Applyment.OutRequestNo)
 	if err == nil && initialQueryResp != nil {
-		mappedStatus := mapWechatApplymentStateToSubmissionStatus(initialQueryResp.ApplymentState)
-		if mappedStatus == "" {
-			mappedStatus = ApplymentSubmissionResultStatus
+		resolvedStatus := NormalizeResolvedApplymentStatus(
+			ResolveWechatApplymentStatus(result.Status, initialQueryResp.ApplymentState, initialQueryResp.SignState),
+			strings.TrimSpace(initialQueryResp.SubMchID) != "",
+		)
+		if resolvedStatus == "" {
+			resolvedStatus = ApplymentSubmissionResultStatus
 		}
-		resolvedStatus := normalizeApplymentSubmissionStatus(mappedStatus, initialQueryResp.SubMchID)
 		statusDesc := getApplymentSubmissionStatusDesc(resolvedStatus)
 		if statusDesc == "未知状态" && strings.TrimSpace(initialQueryResp.ApplymentStateDesc) != "" {
 			statusDesc = strings.TrimSpace(initialQueryResp.ApplymentStateDesc)
@@ -747,42 +751,6 @@ func queryInitialApplymentStatus(
 			Msg("query initial applyment status succeeded")
 	}
 	return resp, err
-}
-
-func mapWechatApplymentStateToSubmissionStatus(wechatState string) string {
-	switch strings.TrimSpace(wechatState) {
-	case "APPLYMENT_STATE_EDITTING":
-		return "pending"
-	case "CHECKING":
-		return "checking"
-	case "ACCOUNT_NEED_VERIFY":
-		return "account_need_verify"
-	case "APPLYMENT_STATE_AUDITING", "AUDITING":
-		return "auditing"
-	case "APPLYMENT_STATE_REJECTED", "REJECTED":
-		return "rejected"
-	case "APPLYMENT_STATE_TO_BE_CONFIRMED":
-		return "to_be_confirmed"
-	case "APPLYMENT_STATE_TO_BE_SIGNED", "NEED_SIGN":
-		return "to_be_signed"
-	case "APPLYMENT_STATE_SIGNING":
-		return "signing"
-	case "APPLYMENT_STATE_FINISHED", "FINISH":
-		return "finish"
-	case "APPLYMENT_STATE_FROZEN", "FROZEN":
-		return "frozen"
-	case "APPLYMENT_STATE_CANCELED", "CANCELED":
-		return "canceled"
-	default:
-		return ""
-	}
-}
-
-func normalizeApplymentSubmissionStatus(status, subMchID string) string {
-	if status == "finish" && strings.TrimSpace(subMchID) == "" {
-		return ApplymentSubmissionResultStatus
-	}
-	return status
 }
 
 func getApplymentSubmissionStatusDesc(status string) string {

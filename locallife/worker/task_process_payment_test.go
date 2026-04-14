@@ -32,7 +32,7 @@ func TestProcessTaskApplymentResult_Success(t *testing.T) {
 			payload: worker.ApplymentResultPayload{
 				ApplymentID:    1,
 				OutRequestNo:   "APPLY_M_1_1234567890",
-				ApplymentState: "APPLYMENT_STATE_FINISHED",
+				ApplymentState: "FINISH",
 				SubMchID:       "1234567890",
 				SubjectType:    "merchant",
 				SubjectID:      100,
@@ -71,7 +71,7 @@ func TestProcessTaskApplymentResult_Success(t *testing.T) {
 			payload: worker.ApplymentResultPayload{
 				ApplymentID:    2,
 				OutRequestNo:   "APPLY_R_2_1234567890",
-				ApplymentState: "APPLYMENT_STATE_FINISHED",
+				ApplymentState: "FINISH",
 				SubMchID:       "9876543210",
 				SubjectType:    "rider",
 				SubjectID:      200,
@@ -83,11 +83,11 @@ func TestProcessTaskApplymentResult_Success(t *testing.T) {
 			},
 		},
 		{
-			name: "运营商进件成功结果被忽略",
+			name: "已移除的运营商进件成功结果被忽略",
 			payload: worker.ApplymentResultPayload{
 				ApplymentID:    12,
 				OutRequestNo:   "APPLY_O_12_1234567890",
-				ApplymentState: "APPLYMENT_STATE_FINISHED",
+				ApplymentState: "FINISH",
 				SubMchID:       "2234567890",
 				SubjectType:    "operator",
 				SubjectID:      300,
@@ -103,7 +103,7 @@ func TestProcessTaskApplymentResult_Success(t *testing.T) {
 			payload: worker.ApplymentResultPayload{
 				ApplymentID:    3,
 				OutRequestNo:   "APPLY_M_3_1234567890",
-				ApplymentState: "APPLYMENT_STATE_FINISHED",
+				ApplymentState: "FINISH",
 				SubMchID:       "1234567890",
 				SubjectType:    "merchant",
 				SubjectID:      100,
@@ -141,7 +141,7 @@ func TestProcessTaskApplymentResult_Success(t *testing.T) {
 			payload: worker.ApplymentResultPayload{
 				ApplymentID:    4,
 				OutRequestNo:   "APPLY_M_4_1234567890",
-				ApplymentState: "APPLYMENT_STATE_FINISHED",
+				ApplymentState: "FINISH",
 				SubMchID:       "1234567890",
 				SubjectType:    "merchant",
 				SubjectID:      999,
@@ -235,7 +235,7 @@ func TestProcessTaskApplymentResult_Rejected(t *testing.T) {
 			payload: worker.ApplymentResultPayload{
 				ApplymentID:    5,
 				OutRequestNo:   "APPLY_M_5_1234567890",
-				ApplymentState: "APPLYMENT_STATE_REJECTED",
+				ApplymentState: "REJECTED",
 				SubjectType:    "merchant",
 				SubjectID:      100,
 			},
@@ -278,7 +278,7 @@ func TestProcessTaskApplymentResult_Rejected(t *testing.T) {
 			payload: worker.ApplymentResultPayload{
 				ApplymentID:    6,
 				OutRequestNo:   "APPLY_R_6_1234567890",
-				ApplymentState: "APPLYMENT_STATE_REJECTED",
+				ApplymentState: "REJECTED",
 				SubjectType:    "rider",
 				SubjectID:      200,
 			},
@@ -289,11 +289,11 @@ func TestProcessTaskApplymentResult_Rejected(t *testing.T) {
 			},
 		},
 		{
-			name: "运营商进件驳回结果被忽略",
+			name: "已移除的运营商进件驳回结果被忽略",
 			payload: worker.ApplymentResultPayload{
 				ApplymentID:    13,
 				OutRequestNo:   "APPLY_O_13_1234567890",
-				ApplymentState: "APPLYMENT_STATE_REJECTED",
+				ApplymentState: "REJECTED",
 				SubjectType:    "operator",
 				SubjectID:      300,
 			},
@@ -308,7 +308,7 @@ func TestProcessTaskApplymentResult_Rejected(t *testing.T) {
 			payload: worker.ApplymentResultPayload{
 				ApplymentID:    7,
 				OutRequestNo:   "APPLY_M_7_1234567890",
-				ApplymentState: "APPLYMENT_STATE_REJECTED",
+				ApplymentState: "REJECTED",
 				SubjectType:    "merchant",
 				SubjectID:      100,
 			},
@@ -377,11 +377,11 @@ func TestProcessTaskApplymentResult_Pending(t *testing.T) {
 		{
 			name: "商户待确认_发送提醒通知",
 			payload: worker.ApplymentResultPayload{
-				ApplymentID:    8,
-				OutRequestNo:   "APPLY_M_8_1234567890",
-				ApplymentState: "APPLYMENT_STATE_TO_BE_CONFIRMED",
-				SubjectType:    "merchant",
-				SubjectID:      100,
+				ApplymentID:     8,
+				OutRequestNo:    "APPLY_M_8_1234567890",
+				ApplymentStatus: "to_be_confirmed",
+				SubjectType:     "merchant",
+				SubjectID:       100,
 			},
 			buildStubs: func(store *mockdb.MockStore, distributor *mockwk.MockTaskDistributor) {
 				// 获取商户信息
@@ -409,11 +409,11 @@ func TestProcessTaskApplymentResult_Pending(t *testing.T) {
 		{
 			name: "骑手待签约结果被忽略",
 			payload: worker.ApplymentResultPayload{
-				ApplymentID:    9,
-				OutRequestNo:   "APPLY_R_9_1234567890",
-				ApplymentState: "APPLYMENT_STATE_TO_BE_SIGNED",
-				SubjectType:    "rider",
-				SubjectID:      200,
+				ApplymentID:     9,
+				OutRequestNo:    "APPLY_R_9_1234567890",
+				ApplymentStatus: "to_be_signed",
+				SubjectType:     "rider",
+				SubjectID:       200,
 			},
 			buildStubs: func(store *mockdb.MockStore, distributor *mockwk.MockTaskDistributor) {
 			},
@@ -464,27 +464,69 @@ func TestProcessTaskApplymentResult_OtherStates(t *testing.T) {
 	testCases := []struct {
 		name        string
 		payload     worker.ApplymentResultPayload
+		buildStubs  func(store *mockdb.MockStore, distributor *mockwk.MockTaskDistributor)
 		checkResult func(t *testing.T, err error)
 	}{
 		{
 			name: "审核中状态_不处理",
 			payload: worker.ApplymentResultPayload{
 				ApplymentID:    10,
-				ApplymentState: "APPLYMENT_STATE_AUDITING",
+				ApplymentState: "AUDITING",
 				SubjectType:    "merchant",
 				SubjectID:      100,
+			},
+			buildStubs: func(store *mockdb.MockStore, distributor *mockwk.MockTaskDistributor) {},
+			checkResult: func(t *testing.T, err error) {
+				require.NoError(t, err)
+			},
+		},
+		{
+			name: "冻结状态_发送通知",
+			payload: worker.ApplymentResultPayload{
+				ApplymentID:    11,
+				ApplymentState: "FROZEN",
+				SubjectType:    "merchant",
+				SubjectID:      100,
+			},
+			buildStubs: func(store *mockdb.MockStore, distributor *mockwk.MockTaskDistributor) {
+				store.EXPECT().
+					GetMerchant(gomock.Any(), int64(100)).
+					Return(db.Merchant{ID: 100, OwnerUserID: 1001, Name: "测试商户"}, nil)
+
+				distributor.EXPECT().
+					DistributeTaskSendNotification(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ context.Context, payload *worker.SendNotificationPayload, _ ...asynq.Option) error {
+						require.Equal(t, int64(1001), payload.UserID)
+						require.Equal(t, "微信支付开户已冻结", payload.Title)
+						require.Contains(t, payload.Content, "已被冻结")
+						return nil
+					})
 			},
 			checkResult: func(t *testing.T, err error) {
 				require.NoError(t, err)
 			},
 		},
 		{
-			name: "冻结状态_不处理",
+			name: "作废状态_发送通知",
 			payload: worker.ApplymentResultPayload{
-				ApplymentID:    11,
-				ApplymentState: "APPLYMENT_STATE_FROZEN",
+				ApplymentID:    12,
+				ApplymentState: "CANCELED",
 				SubjectType:    "merchant",
-				SubjectID:      100,
+				SubjectID:      101,
+			},
+			buildStubs: func(store *mockdb.MockStore, distributor *mockwk.MockTaskDistributor) {
+				store.EXPECT().
+					GetMerchant(gomock.Any(), int64(101)).
+					Return(db.Merchant{ID: 101, OwnerUserID: 1002, Name: "测试商户二"}, nil)
+
+				distributor.EXPECT().
+					DistributeTaskSendNotification(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ context.Context, payload *worker.SendNotificationPayload, _ ...asynq.Option) error {
+						require.Equal(t, int64(1002), payload.UserID)
+						require.Equal(t, "微信支付开户已作废", payload.Title)
+						require.Contains(t, payload.Content, "已作废")
+						return nil
+					})
 			},
 			checkResult: func(t *testing.T, err error) {
 				require.NoError(t, err)
@@ -497,8 +539,13 @@ func TestProcessTaskApplymentResult_OtherStates(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 
-			// 不需要任何 mock，因为这些状态不需要处理
-			processor := worker.NewTestTaskProcessor(nil, nil, nil, nil)
+			store := mockdb.NewMockStore(ctrl)
+			distributor := mockwk.NewMockTaskDistributor(ctrl)
+			if tc.buildStubs != nil {
+				tc.buildStubs(store, distributor)
+			}
+
+			processor := worker.NewTestTaskProcessor(store, distributor, nil, nil)
 
 			payload, err := json.Marshal(tc.payload)
 			require.NoError(t, err)

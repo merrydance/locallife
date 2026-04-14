@@ -755,9 +755,9 @@ func TestModifyMerchantSettlementAccountMissingBranchSelectionWhenRequired(t *te
 	server.router.ServeHTTP(recorder, req)
 	require.Equal(t, http.StatusBadRequest, recorder.Code)
 
-	var resp ErrorResponse
-	require.NoError(t, json.Unmarshal(unwrapAPIResponseData(t, recorder.Body.Bytes()), &resp))
-	require.Equal(t, errSettlementBankBranchRequired.Error(), resp.Error)
+	var resp APIResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, errSettlementBankBranchRequired.Error(), resp.Message)
 }
 
 func TestModifyMerchantSettlementAccountEncryptFails(t *testing.T) {
@@ -1016,9 +1016,9 @@ func TestModifyMerchantSettlementAccountWechatParamError(t *testing.T) {
 	server.router.ServeHTTP(recorder, req)
 	require.Equal(t, http.StatusBadRequest, recorder.Code)
 
-	var resp ErrorResponse
-	require.NoError(t, json.Unmarshal(unwrapAPIResponseData(t, recorder.Body.Bytes()), &resp))
-	require.Equal(t, errSettlementWechatParamError.Error(), resp.Error)
+	var resp APIResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, errSettlementWechatParamError.Error(), resp.Message)
 }
 
 func TestModifyMerchantSettlementAccountWechatNoAuth(t *testing.T) {
@@ -1133,9 +1133,9 @@ func TestModifyMerchantSettlementAccountWechatNameMismatch(t *testing.T) {
 	server.router.ServeHTTP(recorder, req)
 	require.Equal(t, http.StatusBadRequest, recorder.Code)
 
-	var resp ErrorResponse
-	require.NoError(t, json.Unmarshal(unwrapAPIResponseData(t, recorder.Body.Bytes()), &resp))
-	require.Equal(t, errSettlementWechatNameMismatch.Error(), resp.Error)
+	var resp APIResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, errSettlementWechatNameMismatch.Error(), resp.Message)
 }
 
 // ==================== 商户查询结算账户修改申请状态 ====================
@@ -1300,57 +1300,6 @@ func TestGetMerchantSettlementApplicationWechatNotFound(t *testing.T) {
 	require.Equal(t, ErrSettlementApplicationNotFound.Message, resp.Error)
 }
 
-func TestGetMerchantSettlementApplicationInvalidWechatResponse(t *testing.T) {
-	user, _ := randomUser(t)
-	merchant := db.Merchant{
-		ID:          1,
-		RegionID:    1,
-		OwnerUserID: user.ID,
-		Name:        "测试商户",
-		Status:      "approved",
-		IsOpen:      true,
-		CreatedAt:   time.Now(),
-	}
-	paymentConfig := db.MerchantPaymentConfig{
-		MerchantID: merchant.ID,
-		SubMchID:   "sub_mch_123",
-		Status:     "active",
-	}
-
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	store := mockdb.NewMockStore(ctrl)
-	ecommerce := mockwechat.NewMockEcommerceClientInterface(ctrl)
-
-	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
-	store.EXPECT().
-		GetMerchantPaymentConfig(gomock.Any(), merchant.ID).
-		Times(1).
-		Return(paymentConfig, nil)
-
-	ecommerce.EXPECT().
-		QuerySubMerchantSettlementApplication(gomock.Any(), paymentConfig.SubMchID, "APP_BAD", "").
-		Times(1).
-		Return(nil, &wechat.SubMerchantSettlementApplicationContractError{Message: "query sub merchant settlement application: wechat response missing account_name"})
-
-	server := newTestServer(t, store)
-	server.SetEcommerceClientForTest(ecommerce)
-
-	recorder := httptest.NewRecorder()
-	req, err := http.NewRequest(http.MethodGet, "/v1/merchant/finance/account/settlement-account/applications/APP_BAD", nil)
-	require.NoError(t, err)
-	addAuthorization(t, req, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-
-	server.router.ServeHTTP(recorder, req)
-	require.Equal(t, http.StatusBadGateway, recorder.Code)
-
-	var resp ErrorResponse
-	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
-	require.Equal(t, ErrSettlementWechatInvalidResponse.Code, resp.Code)
-	require.Equal(t, ErrSettlementWechatInvalidResponse.Message, resp.Error)
-}
-
 func TestGetMerchantSettlementApplicationInvalidMaskRule(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := db.Merchant{
@@ -1406,7 +1355,7 @@ func TestGetMerchantSettlementApplicationTooLongApplicationNo(t *testing.T) {
 	server := newTestServer(t, store)
 	server.SetEcommerceClientForTest(ecommerce)
 
-	applicationNo := strings.Repeat("A", settlementApplicationNoMaxLength+1)
+	applicationNo := strings.Repeat("A", 65)
 	recorder := httptest.NewRecorder()
 	req, err := http.NewRequest(http.MethodGet, "/v1/merchant/finance/account/settlement-account/applications/"+applicationNo, nil)
 	require.NoError(t, err)
@@ -1414,8 +1363,55 @@ func TestGetMerchantSettlementApplicationTooLongApplicationNo(t *testing.T) {
 
 	server.router.ServeHTTP(recorder, req)
 	require.Equal(t, http.StatusBadRequest, recorder.Code)
+}
+
+func TestGetMerchantSettlementApplicationInvalidWechatResponse(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := db.Merchant{
+		ID:          1,
+		RegionID:    1,
+		OwnerUserID: user.ID,
+		Name:        "测试商户",
+		Status:      "approved",
+		IsOpen:      true,
+		CreatedAt:   time.Now(),
+	}
+	paymentConfig := db.MerchantPaymentConfig{
+		MerchantID: merchant.ID,
+		SubMchID:   "sub_mch_123",
+		Status:     "active",
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ecommerce := mockwechat.NewMockEcommerceClientInterface(ctrl)
+
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+	store.EXPECT().
+		GetMerchantPaymentConfig(gomock.Any(), merchant.ID).
+		Times(1).
+		Return(paymentConfig, nil)
+
+	ecommerce.EXPECT().
+		QuerySubMerchantSettlementApplication(gomock.Any(), paymentConfig.SubMchID, "APP_BAD", "").
+		Times(1).
+		Return(nil, &wechat.SubMerchantSettlementApplicationContractError{Message: "query sub merchant settlement application: wechat response missing account_name"})
+
+	server := newTestServer(t, store)
+	server.SetEcommerceClientForTest(ecommerce)
+
+	recorder := httptest.NewRecorder()
+	req, err := http.NewRequest(http.MethodGet, "/v1/merchant/finance/account/settlement-account/applications/APP_BAD", nil)
+	require.NoError(t, err)
+	addAuthorization(t, req, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, req)
+	require.Equal(t, http.StatusBadGateway, recorder.Code)
 
 	var resp ErrorResponse
-	require.NoError(t, json.Unmarshal(unwrapAPIResponseData(t, recorder.Body.Bytes()), &resp))
-	require.Equal(t, "application_no must not exceed 64 characters", resp.Error)
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, ErrSettlementWechatInvalidResponse.Code, resp.Code)
+	require.Equal(t, ErrSettlementWechatInvalidResponse.Message, resp.Error)
 }

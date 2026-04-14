@@ -58,7 +58,7 @@ See `.github/standards/engineering/AI_PROMPT_GOVERNANCE.md` for the authoritativ
 Use this order to avoid prompt collisions:
 
 1. If the request is diagramming only, use `business-flow-mermaid.prompt.md`.
-2. If the request is backend payment-specific, use `backend-payment-runbook.prompt.md`.
+2. If the request is backend payment-specific or belongs to WeChat platform-ecommerce flows such as applyment, settlement account, withdraw, profit sharing, refund, complaint, or payment callbacks, use `backend-payment-runbook.prompt.md`.
 3. If the request is backend takeover or onboarding focused, use `backend-takeover.prompt.md`.
 4. If the request is backend production bugfix or regression focused, use `backend-bugfix.prompt.md`.
 5. If the request is backend SQL or migration review-focused, use `backend-sql-review.prompt.md`.
@@ -78,7 +78,7 @@ Use this order to avoid prompt collisions:
 - `backend-implementation.prompt.md`: normal backend feature work outside payment-specialized, takeover, root-cause bugfix, or task-card-specialized flows.
 - `backend-takeover.prompt.md`: backend onboarding or new-owner context-building requests before implementation starts.
 - `backend-sql-review.prompt.md`: backend SQL, migration, sqlc propagation, index, or persistence-focused review requests.
-- `backend-payment-runbook.prompt.md`: WeChat payment, callback, refund, runbook, or audit-ledger work.
+- `backend-payment-runbook.prompt.md`: WeChat payment or platform-ecommerce work, including applyment, settlement account, closeout, callback, refund, profit sharing, withdraw, complaint, runbook, or audit-ledger paths.
 - `weapp-implementation.prompt.md`: all Mini Program implementation requests, including diagnosis-first page方案, payment-adjacent flows, and normal page or component implementation.
 - `weapp-review.prompt.md`: all Mini Program review requests, including overall upgrade audits and payment-flow review.
 
@@ -106,34 +106,37 @@ Expected target: `backend-review-closure.prompt.md`
 5. "给微信支付回调和退款链路做一次实现和审查请求模板。"
 Expected target: `backend-payment-runbook.prompt.md`
 
-6. "审查这个 db/query 和 migration 变更，重点看 sqlc 传播、索引遗漏和事务风险。"
+6. "补一下平台收付通商户进件申请单查询和签约状态处理，顺便检查字段和错误码是不是跟官方文档完全一致。"
+Expected target: `backend-payment-runbook.prompt.md`
+
+7. "审查这个 db/query 和 migration 变更，重点看 sqlc 传播、索引遗漏和事务风险。"
 Expected target: `backend-sql-review.prompt.md`
 
-7. "给这个小程序页面做页面方案，先诊断 setData 热点和弱网体验，再给实施方案。"
+8. "给这个小程序页面做页面方案，先诊断 setData 热点和弱网体验，再给实施方案。"
 Expected target: `weapp-implementation.prompt.md`
 
-8. "修一下小程序支付完成后返回页状态丢失和重复点击支付的问题。"
+9. "修一下小程序支付完成后返回页状态丢失和重复点击支付的问题。"
 Expected target: `weapp-implementation.prompt.md`
 
-9. "改一下小程序页面的列表空态和错误态。"
+10. "改一下小程序页面的列表空态和错误态。"
 Expected target: `weapp-implementation.prompt.md`
 
-10. "把这个小程序页面完全用 TDesign 重构，整页重新布局成极简风格，复杂区块拆成组件，新增删除改成图标按钮。"
+11. "把这个小程序页面完全用 TDesign 重构，整页重新布局成极简风格，复杂区块拆成组件，新增删除改成图标按钮。"
 Expected target: `weapp-implementation.prompt.md`
 
-11. "从整体升级角度审查一下 weapp 的交互和风格，既看现行规范，也看后端真相、页面连贯性和常见低质量模式。"
+12. "从整体升级角度审查一下 weapp 的交互和风格，既看现行规范，也看后端真相、页面连贯性和常见低质量模式。"
 Expected target: `weapp-review.prompt.md`
 
-12. "这个需求要同时改 backend 和 web，帮我整理一份实现请求。"
+13. "这个需求要同时改 backend 和 web，帮我整理一份实现请求。"
 Expected target: `general-implementation.prompt.md`
 
-13. "把这段报销审批流程整理成 Mermaid，补上驳回和超时分支。"
+14. "把这段报销审批流程整理成 Mermaid，补上驳回和超时分支。"
 Expected target: `business-flow-mermaid.prompt.md`
 
-14. "把这组任务按 开发 -> review -> 修复 -> review -> 文档同步 的顺序跑完，直到任务清单完成。"
+15. "把这组任务按 开发 -> review -> 修复 -> review -> 文档同步 的顺序跑完，直到任务清单完成。"
 Expected target: `general-task-loop.prompt.md`
 
-15. "把这次线上事故的结论落成规则、workflow、测试和 runbook 更新清单。"
+16. "把这次线上事故的结论落成规则、workflow、测试和 runbook 更新清单。"
 Expected target: `general-incident-followup.prompt.md`
 
 ## Maintenance Rule

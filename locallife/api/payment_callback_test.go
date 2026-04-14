@@ -2980,6 +2980,7 @@ func TestHandleApplymentStateNotify_IgnoresOperatorApplymentAfterRemoval(t *test
 func TestResolveApplymentCallbackStatus(t *testing.T) {
 	require.Equal(t, "auditing", resolveApplymentCallbackStatus("auditing", "NEW_UPSTREAM_STATE"))
 	require.Equal(t, "account_need_verify", resolveApplymentCallbackStatus("auditing", "ACCOUNT_NEED_VERIFY"))
+	require.Equal(t, "to_be_signed", resolveApplymentCallbackStatus("to_be_signed", "NEED_SIGN"))
 }
 
 // TestHandleProfitSharingNotifyIdempotency 测试分账回调的幂等性检查

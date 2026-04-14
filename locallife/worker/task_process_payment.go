@@ -2736,6 +2736,12 @@ func (processor *RedisTaskProcessor) ProcessTaskApplymentResult(ctx context.Cont
 			return err
 		}
 
+	case "frozen", "canceled":
+		// 已冻结/已作废，发送终态通知
+		if err := processor.handleApplymentTerminalState(ctx, &payload); err != nil {
+			return err
+		}
+
 	default:
 		log.Info().
 			Str("state", status).
@@ -2871,6 +2877,41 @@ func (processor *RedisTaskProcessor) handleApplymentPending(ctx context.Context,
 			UserID:      userID,
 			Type:        "system",
 			Title:       "微信支付开户待处理",
+			Content:     notifyContent,
+			RelatedType: "applyment",
+			RelatedID:   payload.ApplymentID,
+			ExpiresAt:   &expiresAt,
+		})
+	}
+
+	return nil
+}
+
+func (processor *RedisTaskProcessor) handleApplymentTerminalState(ctx context.Context, payload *ApplymentResultPayload) error {
+	resolvedStatus := resolveApplymentResultStatus(*payload)
+	merchant, err := processor.store.GetMerchant(ctx, payload.SubjectID)
+	if err != nil {
+		return nil
+	}
+
+	userID := merchant.OwnerUserID
+	var title string
+	var notifyContent string
+	switch resolvedStatus {
+	case "frozen":
+		title = "微信支付开户已冻结"
+		notifyContent = fmt.Sprintf("您的商户「%s」微信支付开户状态已被冻结，请登录后台查看详情并联系平台处理", merchant.Name)
+	default:
+		title = "微信支付开户已作废"
+		notifyContent = fmt.Sprintf("您的商户「%s」微信支付开户申请已作废，请检查资料后重新发起申请", merchant.Name)
+	}
+
+	if userID > 0 && processor.distributor != nil {
+		expiresAt := time.Now().Add(7 * 24 * time.Hour)
+		_ = processor.distributor.DistributeTaskSendNotification(ctx, &SendNotificationPayload{
+			UserID:      userID,
+			Type:        "system",
+			Title:       title,
 			Content:     notifyContent,
 			RelatedType: "applyment",
 			RelatedID:   payload.ApplymentID,

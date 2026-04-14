@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -116,6 +117,11 @@ func (s *ApplymentSettlementVerificationScheduler) verifyApplymentSettlement(ctx
 
 	resp, err := s.ecommerceClient.QuerySubMerchantSettlement(ctx, subMchID, "")
 	if err != nil {
+		if reason, ok := settlementVerificationTerminalFailureReason(err); ok {
+			s.markSettlementVerificationInternalFailure(ctx, runAt, item, subMchID, reason, err)
+			return
+		}
+
 		log.Error().Err(err).
 			Int64("applyment_id", item.ID).
 			Int64("merchant_id", item.SubjectID).
@@ -201,6 +207,55 @@ func (s *ApplymentSettlementVerificationScheduler) verifyApplymentSettlement(ctx
 	if _, err := s.store.MarkEcommerceApplymentSettlementVerifyFailedNotified(ctx, item.ID); err != nil {
 		log.Error().Err(err).Int64("applyment_id", item.ID).Msg("mark settlement verification failure notified failed")
 	}
+}
+
+func (s *ApplymentSettlementVerificationScheduler) markSettlementVerificationInternalFailure(ctx context.Context, runAt time.Time, item db.ListMerchantApplymentsPendingSettlementVerificationRow, subMchID, failReason string, cause error) {
+	firstTradeAt := item.FirstPaidAt
+	if item.SettlementVerifyFirstTradeAt.Valid {
+		firstTradeAt = item.SettlementVerifyFirstTradeAt.Time
+	}
+
+	_, err := s.store.UpdateEcommerceApplymentSettlementVerification(ctx, db.UpdateEcommerceApplymentSettlementVerificationParams{
+		ID:                            item.ID,
+		SettlementVerifyFirstTradeAt:  pgtype.Timestamptz{Time: firstTradeAt, Valid: true},
+		SettlementVerifyLastCheckedAt: pgtype.Timestamptz{Time: runAt, Valid: true},
+		SettlementVerifyCheckCount:    pgtype.Int4{Int32: item.SettlementVerifyCheckCount + 1, Valid: true},
+		SettlementVerifyStatus:        pgtype.Text{String: "fail", Valid: true},
+		SettlementVerifyFailReason:    pgtype.Text{String: failReason, Valid: failReason != ""},
+	})
+	if err != nil {
+		log.Error().Err(err).
+			Int64("applyment_id", item.ID).
+			Int64("merchant_id", item.SubjectID).
+			Str("sub_mch_id", subMchID).
+			Msg("mark settlement verification internal failure failed")
+		return
+	}
+
+	log.Error().Err(cause).
+		Int64("applyment_id", item.ID).
+		Int64("merchant_id", item.SubjectID).
+		Str("sub_mch_id", subMchID).
+		Time("first_trade_at", firstTradeAt).
+		Time("checked_at", runAt).
+		Int32("check_count", item.SettlementVerifyCheckCount+1).
+		Str("settlement_verify_status", "fail").
+		Str("settlement_verify_fail_reason", failReason).
+		Msg("settlement verification stopped on non-retryable query failure")
+}
+
+func settlementVerificationTerminalFailureReason(err error) (string, bool) {
+	var validationErr *wechat.SubMerchantSettlementQueryValidationError
+	if errors.As(err, &validationErr) {
+		return "结算卡验卡巡检请求无效，请联系平台处理微信二级商户号数据", true
+	}
+
+	var contractErr *wechat.SubMerchantSettlementContractError
+	if errors.As(err, &contractErr) {
+		return "微信结算卡查询响应不符合预期，请联系平台处理", true
+	}
+
+	return "", false
 }
 
 func resolveSettlementVerificationState(resp *wechat.SubMerchantSettlementResponse, checkCount int) (string, string) {

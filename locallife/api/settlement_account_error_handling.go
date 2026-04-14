@@ -69,10 +69,12 @@ func settlementWechatErrorResponse(ctx *gin.Context, operation string, subjectTy
 			Msg("wechat settlement request failed")
 
 		if operation == "query_settlement_application" && wxErr.StatusCode == http.StatusNotFound {
-			if strings.TrimSpace(wxErr.Code) == "ORDER_NOT_EXIST" {
+			switch strings.TrimSpace(wxErr.Code) {
+			case "ORDER_NOT_EXIST", "RESOURCE_NOT_EXISTS", "NOT_FOUND":
 				return http.StatusNotFound, errorResponse(ErrSettlementApplicationNotFound)
+			default:
+				return http.StatusBadGateway, errorResponse(ErrSettlementWechatInvalidResponse)
 			}
-			return http.StatusBadGateway, errorResponse(ErrSettlementWechatInvalidResponse)
 		}
 
 		if operation == "query_settlement_application" {
@@ -133,20 +135,6 @@ func settlementWechatErrorResponse(ctx *gin.Context, operation string, subjectTy
 		return http.StatusBadGateway, errorResponse(ErrSettlementWechatInvalidResponse)
 	}
 
-	var validationErr *wechat.SubMerchantSettlementQueryValidationError
-	if errors.As(err, &validationErr) {
-		log.Error().
-			Err(err).
-			Str("request_id", GetRequestID(ctx)).
-			Str("operation", operation).
-			Str("subject_type", subjectType).
-			Int64("subject_id", subjectID).
-			Str("sub_mch_id", strings.TrimSpace(subMchID)).
-			Str("application_no", strings.TrimSpace(applicationNo)).
-			Msg("wechat settlement request failed local validation before upstream call")
-		return http.StatusInternalServerError, ErrorResponse{Error: "internal server error"}
-	}
-
 	var applicationContractErr *wechat.SubMerchantSettlementApplicationContractError
 	if errors.As(err, &applicationContractErr) {
 		log.Error().
@@ -160,6 +148,20 @@ func settlementWechatErrorResponse(ctx *gin.Context, operation string, subjectTy
 			Str("wechat_contract_error", strings.TrimSpace(applicationContractErr.Error())).
 			Msg("wechat settlement application response contract validation failed")
 		return http.StatusBadGateway, errorResponse(ErrSettlementWechatInvalidResponse)
+	}
+
+	var validationErr *wechat.SubMerchantSettlementQueryValidationError
+	if errors.As(err, &validationErr) {
+		log.Error().
+			Err(err).
+			Str("request_id", GetRequestID(ctx)).
+			Str("operation", operation).
+			Str("subject_type", subjectType).
+			Int64("subject_id", subjectID).
+			Str("sub_mch_id", strings.TrimSpace(subMchID)).
+			Str("application_no", strings.TrimSpace(applicationNo)).
+			Msg("wechat settlement request failed local validation before upstream call")
+		return http.StatusInternalServerError, ErrorResponse{Error: "internal server error"}
 	}
 
 	var applicationValidationErr *wechat.SubMerchantSettlementApplicationQueryValidationError

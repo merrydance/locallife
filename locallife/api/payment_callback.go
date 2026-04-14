@@ -11,6 +11,7 @@ import (
 	"time"
 
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/websocket"
 	"github.com/merrydance/locallife/wechat"
 	"github.com/merrydance/locallife/worker"
@@ -2747,50 +2748,17 @@ func (server *Server) handleApplymentStateNotify(ctx *gin.Context) {
 
 // mapApplymentStateToDBStatus 将微信进件状态映射为数据库状态
 func mapApplymentStateToDBStatus(wechatState string) string {
-	switch wechatState {
-	case "APPLYMENT_STATE_EDITTING":
-		return "pending"
-	case "APPLYMENT_STATE_AUDITING":
-		return "auditing"
-	case "CHECKING":
-		return "checking"
-	case "ACCOUNT_NEED_VERIFY":
-		return "account_need_verify"
-	case "AUDITING":
-		return "auditing"
-	case "APPLYMENT_STATE_REJECTED":
-		return "rejected"
-	case "REJECTED":
-		return "rejected"
-	case "APPLYMENT_STATE_TO_BE_CONFIRMED":
-		return "to_be_confirmed"
-	case "APPLYMENT_STATE_TO_BE_SIGNED":
-		return "to_be_signed"
-	case "NEED_SIGN":
-		return "to_be_signed"
-	case "APPLYMENT_STATE_SIGNING":
-		return "signing"
-	case "APPLYMENT_STATE_FINISHED":
-		return "finish"
-	case "FINISH":
-		return "finish"
-	case "APPLYMENT_STATE_FROZEN", "FROZEN":
-		return "frozen"
-	case "APPLYMENT_STATE_CANCELED":
-		return "canceled"
-	case "CANCELED":
-		return "canceled"
-	default:
-		return ""
-	}
+	return logic.MapWechatApplymentStateToStatus(wechatState)
 }
 
 func resolveApplymentCallbackStatus(currentStatus, wechatState string) string {
-	mappedStatus := mapApplymentStateToDBStatus(wechatState)
-	if strings.TrimSpace(mappedStatus) == "" {
-		return currentStatus
+	if strings.TrimSpace(wechatState) == "NEED_SIGN" {
+		switch strings.TrimSpace(currentStatus) {
+		case "to_be_signed", "signing":
+			return currentStatus
+		}
 	}
-	return mappedStatus
+	return logic.ResolveWechatApplymentStatus(currentStatus, wechatState, "")
 }
 
 // handleOrderSettlementNotify 处理微信订单结算事件通知

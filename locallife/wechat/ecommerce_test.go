@@ -1955,7 +1955,7 @@ func TestQueryEcommerceApplymentByOutRequestNo_RejectsUnexpectedSignURL(t *testi
 
 	_, err := client.QueryEcommerceApplymentByOutRequestNo(context.Background(), "REQ-2003")
 	require.Error(t, err)
-	require.ErrorContains(t, err, "sign_url is only allowed when applyment_state=NEED_SIGN or legacy signing states for out_request_no query")
+	require.ErrorContains(t, err, "sign_url is only allowed when applyment_state=NEED_SIGN for out_request_no query")
 }
 
 func TestQueryEcommerceApplymentByID_RejectsUnexpectedSignURL(t *testing.T) {
@@ -1976,7 +1976,7 @@ func TestQueryEcommerceApplymentByID_RejectsUnexpectedSignURL(t *testing.T) {
 
 	_, err := client.QueryEcommerceApplymentByID(context.Background(), 2004)
 	require.Error(t, err)
-	require.ErrorContains(t, err, "sign_url is only allowed when applyment_state=NEED_SIGN, legacy signing states, or sign_state=UNSIGNED for applyment_id query")
+	require.ErrorContains(t, err, "sign_url is only allowed when applyment_state=NEED_SIGN or sign_state=UNSIGNED for applyment_id query")
 }
 
 func TestQueryEcommerceApplymentByOutRequestNo_WrapsWechatErrorWithGuidance(t *testing.T) {
@@ -2051,7 +2051,7 @@ func TestQueryEcommerceApplymentByID_DecryptsAccountValidationAndPreservesRawCip
 	require.Equal(t, "张三", decryptedPersistedName)
 }
 
-func TestQueryEcommerceApplymentByID_AcceptsCompatibleLegacyConfirmationState(t *testing.T) {
+func TestQueryEcommerceApplymentByID_RejectsUnsupportedLegacyConfirmationState(t *testing.T) {
 	var encryptedAccountName string
 	client, merchantPublicKey := newSignedEcommerceClientWithMerchantKeyForTest(t, func(req *http.Request) (*http.Response, error) {
 		return &http.Response{
@@ -2078,15 +2078,12 @@ func TestQueryEcommerceApplymentByID_AcceptsCompatibleLegacyConfirmationState(t 
 	})
 	encryptedAccountName = encryptApplymentResponseSensitiveField(t, merchantPublicKey, "李四")
 
-	resp, err := client.QueryEcommerceApplymentByID(context.Background(), 4004)
-	require.NoError(t, err)
-	require.Equal(t, "APPLYMENT_STATE_TO_BE_CONFIRMED", resp.ApplymentState)
-	require.Equal(t, "李四", resp.AccountValidation.AccountName)
-	require.Equal(t, encryptedAccountName, resp.AccountValidation.RawAccountName)
-	require.Equal(t, "https://wx.example.com/legal/4004", resp.LegalValidationURL)
+	_, err := client.QueryEcommerceApplymentByID(context.Background(), 4004)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "unsupported applyment_state \"APPLYMENT_STATE_TO_BE_CONFIRMED\"")
 }
 
-func TestQueryEcommerceApplymentByOutRequestNo_AcceptsCompatibleLegacySigningState(t *testing.T) {
+func TestQueryEcommerceApplymentByOutRequestNo_RejectsUnsupportedLegacySigningState(t *testing.T) {
 	client := newSignedEcommerceClientForTest(t, func(req *http.Request) (*http.Response, error) {
 		return &http.Response{
 			StatusCode: http.StatusOK,
@@ -2102,11 +2099,9 @@ func TestQueryEcommerceApplymentByOutRequestNo_AcceptsCompatibleLegacySigningSta
 		}, nil
 	})
 
-	resp, err := client.QueryEcommerceApplymentByOutRequestNo(context.Background(), "REQ-4005")
-	require.NoError(t, err)
-	require.Equal(t, "APPLYMENT_STATE_SIGNING", resp.ApplymentState)
-	require.Equal(t, "https://wx.example.com/sign/4005", resp.SignURL)
-	require.Equal(t, "1900004005", resp.SubMchID)
+	_, err := client.QueryEcommerceApplymentByOutRequestNo(context.Background(), "REQ-4005")
+	require.Error(t, err)
+	require.ErrorContains(t, err, "unsupported applyment_state \"APPLYMENT_STATE_SIGNING\"")
 }
 
 func TestQueryEcommerceApplymentByID_RejectsUnknownApplymentState(t *testing.T) {

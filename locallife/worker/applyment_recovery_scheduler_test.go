@@ -200,3 +200,57 @@ func TestApplymentRecoverySchedulerRunOnceFallsBackToOutRequestNoAfterIDQueryFai
 	scheduler := worker.NewApplymentRecoveryScheduler(store, distributor, ecommerceClient)
 	scheduler.RunOnce()
 }
+
+func TestApplymentRecoverySchedulerRunOnceEnqueuesFrozenFollowUp(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	distributor := mockwk.NewMockTaskDistributor(ctrl)
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+
+	store.EXPECT().
+		ListEcommerceApplymentsPendingFollowUp(gomock.Any(), gomock.Any()).
+		Return([]db.EcommerceApplymentPendingFollowUp{{
+			ID:           111,
+			SubjectType:  "merchant",
+			SubjectID:    211,
+			OutRequestNo: "APPLY_RECOVERY_006",
+			ApplymentID:  pgtype.Int8{Int64: 6060, Valid: true},
+			Status:       "auditing",
+			UpdatedAt:    time.Now().Add(-5 * time.Minute),
+		}}, nil)
+
+	ecommerceClient.EXPECT().
+		QueryEcommerceApplymentByID(gomock.Any(), int64(6060)).
+		Return(&wechat.EcommerceApplymentQueryResponse{
+			ApplymentID:        6060,
+			OutRequestNo:       "APPLY_RECOVERY_006",
+			ApplymentState:     "FROZEN",
+			ApplymentStateDesc: "已冻结",
+			AuditDetail: []wechat.ApplymentAuditDetail{{
+				ParamName:    "id_card_copy",
+				RejectReason: "身份证图片存在问题",
+			}},
+		}, nil)
+
+	store.EXPECT().
+		UpdateEcommerceApplymentStatus(gomock.Any(), gomock.AssignableToTypeOf(db.UpdateEcommerceApplymentStatusParams{})).
+		DoAndReturn(func(_ context.Context, arg db.UpdateEcommerceApplymentStatusParams) (db.EcommerceApplyment, error) {
+			require.Equal(t, int64(111), arg.ID)
+			require.Equal(t, "frozen", arg.Status)
+			require.Equal(t, pgtype.Text{String: "id_card_copy: 身份证图片存在问题", Valid: true}, arg.RejectReason)
+			return db.EcommerceApplyment{ID: arg.ID, Status: arg.Status}, nil
+		})
+
+	distributor.EXPECT().
+		DistributeTaskProcessApplymentResult(gomock.Any(), gomock.AssignableToTypeOf(&worker.ApplymentResultPayload{}), gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, payload *worker.ApplymentResultPayload, _ ...asynq.Option) error {
+			require.Equal(t, "FROZEN", payload.ApplymentState)
+			require.Equal(t, "frozen", payload.ApplymentStatus)
+			return nil
+		})
+
+	scheduler := worker.NewApplymentRecoveryScheduler(store, distributor, ecommerceClient)
+	scheduler.RunOnce()
+}

@@ -643,8 +643,8 @@ const (
 	ecommerceApplymentOutRequestNoMaxLength      = 124
 	subMerchantSettlementMchIDLength             = 10
 	subMerchantSettlementApplicationNoMaxLength  = 64
-	subMerchantSettlementAccountNameMaxLength    = 1024
 	subMerchantSettlementFieldMaxLength          = 128
+	subMerchantSettlementAccountNameMaxLength    = 1024
 	subMerchantSettlementFailReasonMaxLength     = 1024
 	subMerchantSettlementAccountNumberRuleV1     = "ACCOUNT_NUMBER_RULE_MASK_V1"
 	subMerchantSettlementAccountNumberRuleV2     = "ACCOUNT_NUMBER_RULE_MASK_V2"
@@ -716,23 +716,14 @@ const (
 )
 
 var allowedEcommerceApplymentStates = map[string]struct{}{
-	"CHECKING":                        {},
-	"ACCOUNT_NEED_VERIFY":             {},
-	"AUDITING":                        {},
-	"REJECTED":                        {},
-	"NEED_SIGN":                       {},
-	"FINISH":                          {},
-	"FROZEN":                          {},
-	"CANCELED":                        {},
-	"APPLYMENT_STATE_EDITTING":        {},
-	"APPLYMENT_STATE_AUDITING":        {},
-	"APPLYMENT_STATE_REJECTED":        {},
-	"APPLYMENT_STATE_TO_BE_CONFIRMED": {},
-	"APPLYMENT_STATE_TO_BE_SIGNED":    {},
-	"APPLYMENT_STATE_SIGNING":         {},
-	"APPLYMENT_STATE_FINISHED":        {},
-	"APPLYMENT_STATE_FROZEN":          {},
-	"APPLYMENT_STATE_CANCELED":        {},
+	"CHECKING":            {},
+	"ACCOUNT_NEED_VERIFY": {},
+	"AUDITING":            {},
+	"REJECTED":            {},
+	"NEED_SIGN":           {},
+	"FINISH":              {},
+	"FROZEN":              {},
+	"CANCELED":            {},
 }
 
 var allowedEcommerceApplymentSignStates = map[string]struct{}{
@@ -789,39 +780,33 @@ func normalizeEcommerceApplymentQueryState(state string) string {
 
 func classifyEcommerceApplymentQueryState(state string) string {
 	switch normalizeEcommerceApplymentQueryState(state) {
-	case "APPLYMENT_STATE_AUDITING", "AUDITING":
+	case "AUDITING":
 		return "AUDITING"
-	case "APPLYMENT_STATE_REJECTED", "REJECTED":
+	case "REJECTED":
 		return "REJECTED"
-	case "APPLYMENT_STATE_TO_BE_SIGNED", "NEED_SIGN":
+	case "NEED_SIGN":
 		return "NEED_SIGN"
-	case "APPLYMENT_STATE_SIGNING":
-		return "SIGNING"
-	case "APPLYMENT_STATE_FINISHED", "FINISH":
+	case "FINISH":
 		return "FINISH"
-	case "APPLYMENT_STATE_FROZEN", "FROZEN":
+	case "FROZEN":
 		return "FROZEN"
-	case "APPLYMENT_STATE_CANCELED", "CANCELED":
+	case "CANCELED":
 		return "CANCELED"
-	case "APPLYMENT_STATE_TO_BE_CONFIRMED":
-		return "TO_BE_CONFIRMED"
 	case "ACCOUNT_NEED_VERIFY":
 		return "ACCOUNT_NEED_VERIFY"
 	case "CHECKING":
 		return "CHECKING"
-	case "APPLYMENT_STATE_EDITTING":
-		return "APPLYMENT_STATE_EDITTING"
 	default:
 		return normalizeEcommerceApplymentQueryState(state)
 	}
 }
 
 func ecommerceApplymentStateAllowsAccountValidation(stateClass string) bool {
-	return stateClass == "ACCOUNT_NEED_VERIFY" || stateClass == "TO_BE_CONFIRMED"
+	return stateClass == "ACCOUNT_NEED_VERIFY"
 }
 
 func ecommerceApplymentStateAllowsLegalValidationURL(stateClass string) bool {
-	return stateClass == "ACCOUNT_NEED_VERIFY" || stateClass == "TO_BE_CONFIRMED"
+	return stateClass == "ACCOUNT_NEED_VERIFY"
 }
 
 func ecommerceApplymentStateAllowsAuditDetail(stateClass string) bool {
@@ -829,14 +814,14 @@ func ecommerceApplymentStateAllowsAuditDetail(stateClass string) bool {
 }
 
 func ecommerceApplymentStateAllowsSubMchID(stateClass string) bool {
-	return stateClass == "NEED_SIGN" || stateClass == "SIGNING" || stateClass == "FINISH"
+	return stateClass == "NEED_SIGN" || stateClass == "FINISH"
 }
 
-func ecommerceApplymentStateAllowsSignURL(kind ecommerceApplymentQueryKind, stateClass, signState string) bool {
-	if stateClass == "NEED_SIGN" || stateClass == "SIGNING" {
+func ecommerceApplymentStateAllowsSignURL(stateClass, signState string) bool {
+	if stateClass == "NEED_SIGN" {
 		return true
 	}
-	return kind == ecommerceApplymentQueryByIDKind && signState == "UNSIGNED"
+	return signState == "UNSIGNED"
 }
 
 func normalizeEcommerceApplymentQuerySignState(signState string) string {
@@ -846,6 +831,16 @@ func normalizeEcommerceApplymentQuerySignState(signState string) string {
 func validateEcommerceApplymentID(applymentID int64) error {
 	if applymentID <= 0 {
 		return newEcommerceApplymentQueryValidationError("applyment_id must be a positive integer")
+	}
+	return nil
+}
+
+func validateEcommerceApplymentCreateResponse(resp *EcommerceApplymentResponse) error {
+	if resp == nil {
+		return errors.New("create ecommerce applyment: response is nil")
+	}
+	if resp.ApplymentID <= 0 {
+		return errors.New("create ecommerce applyment: applyment_id must be a positive integer")
 	}
 	return nil
 }
@@ -984,8 +979,8 @@ func validateSubMerchantSettlementApplicationResponse(resp *QuerySubMerchantSett
 	if resp.AccountName == "" {
 		return newSubMerchantSettlementApplicationContractError("wechat response missing account_name")
 	}
-	if err := validateSubMerchantSettlementFieldLength("account_name", resp.AccountName, subMerchantSettlementAccountNameMaxLength); err != nil {
-		return newSubMerchantSettlementApplicationContractError("%s", strings.TrimPrefix(err.Error(), "query sub merchant settlement: "))
+	if utf8.RuneCountInString(resp.AccountName) > subMerchantSettlementAccountNameMaxLength {
+		return newSubMerchantSettlementApplicationContractError("wechat response account_name exceeds %d characters", subMerchantSettlementAccountNameMaxLength)
 	}
 	if resp.AccountType == "" {
 		return newSubMerchantSettlementApplicationContractError("wechat response missing account_type")
@@ -1016,6 +1011,9 @@ func validateSubMerchantSettlementApplicationResponse(resp *QuerySubMerchantSett
 	}
 	if _, ok := allowedSubMerchantSettlementApplicationVerifyResults[resp.VerifyResult]; !ok {
 		return newSubMerchantSettlementApplicationContractError("unsupported verify_result %q", resp.VerifyResult)
+	}
+	if err := validateSubMerchantSettlementFieldLength("verify_fail_reason", resp.VerifyFailReason, subMerchantSettlementFailReasonMaxLength); err != nil {
+		return newSubMerchantSettlementApplicationContractError("%s", strings.TrimPrefix(err.Error(), "query sub merchant settlement: "))
 	}
 	if resp.VerifyResult == subMerchantSettlementApplicationAuditFail {
 		if resp.VerifyFailReason == "" {
@@ -1188,11 +1186,11 @@ func validateEcommerceApplymentQueryResponse(resp *EcommerceApplymentQueryRespon
 		}
 	}
 	if signURL != "" {
-		if !ecommerceApplymentStateAllowsSignURL(kind, applymentStateClass, signState) {
+		if !ecommerceApplymentStateAllowsSignURL(applymentStateClass, signState) {
 			if kind == ecommerceApplymentQueryByOutRequestNoKind {
-				return fmt.Errorf("query ecommerce applyment: sign_url is only allowed when applyment_state=NEED_SIGN or legacy signing states for out_request_no query, got applyment_state=%s", resp.ApplymentState)
+				return fmt.Errorf("query ecommerce applyment: sign_url is only allowed when applyment_state=NEED_SIGN for out_request_no query, got applyment_state=%s", resp.ApplymentState)
 			}
-			return fmt.Errorf("query ecommerce applyment: sign_url is only allowed when applyment_state=NEED_SIGN, legacy signing states, or sign_state=UNSIGNED for applyment_id query, got applyment_state=%s sign_state=%s", resp.ApplymentState, resp.SignState)
+			return fmt.Errorf("query ecommerce applyment: sign_url is only allowed when applyment_state=NEED_SIGN or sign_state=UNSIGNED for applyment_id query, got applyment_state=%s sign_state=%s", resp.ApplymentState, resp.SignState)
 		}
 	}
 	if resp.AccountValidation != nil && !ecommerceApplymentStateAllowsAccountValidation(applymentStateClass) {
@@ -1239,8 +1237,8 @@ func validateEcommerceApplymentQueryResponse(resp *EcommerceApplymentQueryRespon
 	if applymentStateClass == "FINISH" && subMchID == "" {
 		return errors.New("query ecommerce applyment: sub_mchid is required when applyment_state=FINISH")
 	}
-	if kind == ecommerceApplymentQueryByIDKind && signState == "UNSIGNED" && signURL == "" {
-		return errors.New("query ecommerce applyment: sign_url is required when sign_state=UNSIGNED for applyment_id query")
+	if signState == "UNSIGNED" && signURL == "" {
+		return fmt.Errorf("query ecommerce applyment: sign_url is required when sign_state=UNSIGNED for %s query", kind)
 	}
 
 	return nil
@@ -1496,6 +1494,14 @@ func (c *EcommerceClient) CreateEcommerceApplyment(ctx context.Context, req *Eco
 	var resp EcommerceApplymentResponse
 	if err := json.Unmarshal(respBody, &resp); err != nil {
 		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+	if err := validateEcommerceApplymentCreateResponse(&resp); err != nil {
+		log.Error().
+			Err(err).
+			Str("endpoint", ecommerceApplymentsURL).
+			Int64("applyment_id", resp.ApplymentID).
+			Msg("validate create ecommerce applyment response failed")
+		return nil, err
 	}
 	return &resp, nil
 }

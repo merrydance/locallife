@@ -116,3 +116,75 @@ func TestApplymentSettlementVerificationSchedulerNotifiesOperatorOnFailure(t *te
 	scheduler := worker.NewApplymentSettlementVerificationScheduler(store, distributor, ecommerceClient)
 	scheduler.RunOnce()
 }
+
+func TestApplymentSettlementVerificationSchedulerMarksTerminalFailureOnInvalidSettlementQueryInput(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	distributor := mockwk.NewMockTaskDistributor(ctrl)
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+
+	store.EXPECT().
+		ListMerchantApplymentsPendingSettlementVerification(gomock.Any(), gomock.Any()).
+		Return([]db.ListMerchantApplymentsPendingSettlementVerificationRow{{
+			ID:                         51,
+			SubjectID:                  61,
+			SubMchID:                   pgtype.Text{String: "sub_mch_61", Valid: true},
+			SettlementVerifyCheckCount: 0,
+			FirstPaidAt:                time.Now().Add(-4 * time.Hour),
+		}}, nil)
+
+	ecommerceClient.EXPECT().
+		QuerySubMerchantSettlement(gomock.Any(), "sub_mch_61", "").
+		Return(nil, &wechat.SubMerchantSettlementQueryValidationError{Message: "query sub merchant settlement: sub_mchid must contain only digits"})
+
+	store.EXPECT().
+		UpdateEcommerceApplymentSettlementVerification(gomock.Any(), gomock.AssignableToTypeOf(db.UpdateEcommerceApplymentSettlementVerificationParams{})).
+		DoAndReturn(func(_ context.Context, arg db.UpdateEcommerceApplymentSettlementVerificationParams) (db.EcommerceApplyment, error) {
+			require.Equal(t, int64(51), arg.ID)
+			require.Equal(t, int32(1), arg.SettlementVerifyCheckCount.Int32)
+			require.Equal(t, "fail", arg.SettlementVerifyStatus.String)
+			require.Equal(t, "结算卡验卡巡检请求无效，请联系平台处理微信二级商户号数据", arg.SettlementVerifyFailReason.String)
+			return db.EcommerceApplyment{ID: 51}, nil
+		})
+
+	scheduler := worker.NewApplymentSettlementVerificationScheduler(store, distributor, ecommerceClient)
+	scheduler.RunOnce()
+}
+
+func TestApplymentSettlementVerificationSchedulerMarksTerminalFailureOnSettlementContractDrift(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	distributor := mockwk.NewMockTaskDistributor(ctrl)
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+
+	store.EXPECT().
+		ListMerchantApplymentsPendingSettlementVerification(gomock.Any(), gomock.Any()).
+		Return([]db.ListMerchantApplymentsPendingSettlementVerificationRow{{
+			ID:                         71,
+			SubjectID:                  81,
+			SubMchID:                   pgtype.Text{String: "1900000081", Valid: true},
+			SettlementVerifyCheckCount: 1,
+			FirstPaidAt:                time.Now().Add(-6 * time.Hour),
+		}}, nil)
+
+	ecommerceClient.EXPECT().
+		QuerySubMerchantSettlement(gomock.Any(), "1900000081", "").
+		Return(nil, &wechat.SubMerchantSettlementContractError{Message: "query sub merchant settlement: wechat response missing verify_result"})
+
+	store.EXPECT().
+		UpdateEcommerceApplymentSettlementVerification(gomock.Any(), gomock.AssignableToTypeOf(db.UpdateEcommerceApplymentSettlementVerificationParams{})).
+		DoAndReturn(func(_ context.Context, arg db.UpdateEcommerceApplymentSettlementVerificationParams) (db.EcommerceApplyment, error) {
+			require.Equal(t, int64(71), arg.ID)
+			require.Equal(t, int32(2), arg.SettlementVerifyCheckCount.Int32)
+			require.Equal(t, "fail", arg.SettlementVerifyStatus.String)
+			require.Equal(t, "微信结算卡查询响应不符合预期，请联系平台处理", arg.SettlementVerifyFailReason.String)
+			return db.EcommerceApplyment{ID: 71}, nil
+		})
+
+	scheduler := worker.NewApplymentSettlementVerificationScheduler(store, distributor, ecommerceClient)
+	scheduler.RunOnce()
+}

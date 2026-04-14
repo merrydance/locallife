@@ -498,6 +498,7 @@ func TestSubmitEcommerceApplymentFallsBackToOutRequestNoForInitialQuery(t *testi
 }
 
 func TestMapWechatApplymentStateToSubmissionStatus(t *testing.T) {
-	require.Equal(t, "to_be_signed", mapWechatApplymentStateToSubmissionStatus("NEED_SIGN"))
-	require.Equal(t, "", mapWechatApplymentStateToSubmissionStatus("NEW_UPSTREAM_STATE"))
+	require.Equal(t, "to_be_signed", MapWechatApplymentStateToStatus("NEED_SIGN"))
+	require.Equal(t, "", MapWechatApplymentStateToStatus("NEW_UPSTREAM_STATE"))
+	require.Equal(t, "to_be_signed", ResolveWechatApplymentStatus("submitted", "NEED_SIGN", "UNSIGNED"))
 }

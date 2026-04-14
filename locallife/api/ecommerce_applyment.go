@@ -25,6 +25,7 @@ import (
 )
 
 var applymentDateTokenPattern = regexp.MustCompile(`\d{4}年\d{1,2}月\d{1,2}日|\d{4}[./-]\d{1,2}[./-]\d{1,2}|\d{8}|长期|永久`)
+var applymentWechatRequestIDPattern = regexp.MustCompile(`request_id=([A-Za-z0-9._-]+)`)
 
 const applymentDefaultContactIDDocType = "IDENTIFICATION_TYPE_MAINLAND_IDCARD"
 
@@ -448,7 +449,7 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 			if writeLogicRequestError(ctx, err) {
 				return
 			}
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("获取身份证图片失败")))
+			writeApplymentMediaUploadServerError(ctx, err, "身份证图片", "获取身份证图片失败")
 			return
 		}
 	}
@@ -461,7 +462,7 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 			if writeLogicRequestError(ctx, err) {
 				return
 			}
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("获取身份证图片失败")))
+			writeApplymentMediaUploadServerError(ctx, err, "身份证图片", "获取身份证图片失败")
 			return
 		}
 	}
@@ -474,7 +475,7 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 			if writeLogicRequestError(ctx, err) {
 				return
 			}
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("获取营业执照图片失败")))
+			writeApplymentMediaUploadServerError(ctx, err, "营业执照图片", "获取营业执照图片失败")
 			return
 		}
 	}
@@ -535,7 +536,7 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 	storeQRCodeUploadResp, err := server.ecommerceClient.UploadImage(ctx, path.Base(storeQRCodeObjectKey), storeQRCodeData)
 	if err != nil {
 		log.Error().Err(err).Msg("上传商户店铺首页小程序码到微信失败")
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("上传店铺首页二维码失败: %w", err)))
+		writeApplymentMediaUploadServerError(ctx, err, "店铺首页二维码", "上传店铺首页二维码失败")
 		return
 	}
 
@@ -555,7 +556,7 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 			if writeLogicRequestError(ctx, err) {
 				return
 			}
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("获取超级管理员证件图片失败")))
+			writeApplymentMediaUploadServerError(ctx, err, "超级管理员证件图片", "获取超级管理员证件图片失败")
 			return
 		}
 
@@ -565,7 +566,7 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 			if writeLogicRequestError(ctx, err) {
 				return
 			}
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("获取超级管理员证件图片失败")))
+			writeApplymentMediaUploadServerError(ctx, err, "超级管理员证件图片", "获取超级管理员证件图片失败")
 			return
 		}
 	}
@@ -786,7 +787,7 @@ func buildApplymentSubmissionStatusSnapshot(result logic.SubmitEcommerceApplymen
 }
 
 func shouldQueryApplymentRemoteStatus(applyment db.EcommerceApplyment, subjectStatus string) bool {
-	normalizedStatus := normalizeApplymentStatus(applyment.Status, applyment.SubMchID.Valid && strings.TrimSpace(applyment.SubMchID.String) != "")
+	normalizedStatus := logic.NormalizeResolvedApplymentStatus(applyment.Status, applyment.SubMchID.Valid && strings.TrimSpace(applyment.SubMchID.String) != "")
 	if normalizedStatus == "finish" {
 		return applyment.ApplymentID.Valid || strings.TrimSpace(applyment.OutRequestNo) != ""
 	}
@@ -849,13 +850,6 @@ func (server *Server) queryEcommerceApplymentStatus(ctx context.Context, applyme
 func buildApplymentText(value string) pgtype.Text {
 	trimmed := strings.TrimSpace(value)
 	return pgtype.Text{String: trimmed, Valid: trimmed != ""}
-}
-
-func resolveRemoteApplymentStatus(currentStatus, remoteStatus string) string {
-	if strings.TrimSpace(remoteStatus) == "" {
-		return currentStatus
-	}
-	return remoteStatus
 }
 
 func shouldUseRemoteApplymentStatusDesc(status string, signState, legalValidationURL pgtype.Text, accountValidation []byte) bool {
@@ -938,6 +932,68 @@ func respondApplymentWechatError(ctx *gin.Context, merchantID int64, outRequestN
 	return true
 }
 
+func writeApplymentMediaUploadServerError(ctx *gin.Context, err error, assetLabel string, fallbackMessage string) {
+	_ = ctx.Error(err)
+	ctx.JSON(http.StatusInternalServerError, APIResponse{
+		Code:    CodeInternalError,
+		Message: buildApplymentMediaUploadErrorMessage(err, assetLabel, fallbackMessage),
+	})
+}
+
+func buildApplymentMediaUploadErrorMessage(err error, assetLabel string, fallbackMessage string) string {
+	if err == nil {
+		return fallbackMessage
+	}
+
+	requestID := extractApplymentWechatRequestID(err)
+	appendRequestID := func(message string) string {
+		if requestID == "" {
+			return message
+		}
+		return fmt.Sprintf("%s；如需排查，请提供 request_id=%s", message, requestID)
+	}
+
+	lowerMessage := strings.ToLower(err.Error())
+	if strings.Contains(lowerMessage, "service provider merchant id must be configured explicitly") {
+		return appendRequestID(fmt.Sprintf("%s上传到微信失败，平台收付通图片上传配置不完整，请联系平台管理员检查服务商商户号配置后重试", assetLabel))
+	}
+
+	var wxErr *wechat.WechatPayError
+	if errors.As(err, &wxErr) && wxErr != nil {
+		switch strings.TrimSpace(wxErr.Code) {
+		case "PARAM_ERROR":
+			return appendRequestID(fmt.Sprintf("%s上传到微信失败，请检查图片格式、内容和大小后重试", assetLabel))
+		case "NO_AUTH":
+			return appendRequestID(fmt.Sprintf("%s上传到微信失败，当前平台未开通微信图片上传权限，请联系平台管理员处理", assetLabel))
+		case "FREQUENCY_LIMIT_EXCEED":
+			return appendRequestID(fmt.Sprintf("%s上传到微信失败，微信接口限流，请稍后重试", assetLabel))
+		case "SIGN_ERROR":
+			return appendRequestID(fmt.Sprintf("%s上传到微信失败，平台签名配置异常，请联系平台管理员处理", assetLabel))
+		case "SYSTEM_ERROR":
+			return appendRequestID(fmt.Sprintf("%s上传到微信失败，微信服务暂时异常，请稍后重试", assetLabel))
+		default:
+			return appendRequestID(fmt.Sprintf("%s上传到微信失败，请稍后重试", assetLabel))
+		}
+	}
+
+	if requestID != "" {
+		return fmt.Sprintf("%s上传到微信失败，请稍后重试；如需排查，请提供 request_id=%s", assetLabel, requestID)
+	}
+
+	return fallbackMessage
+}
+
+func extractApplymentWechatRequestID(err error) string {
+	if err == nil {
+		return ""
+	}
+	matches := applymentWechatRequestIDPattern.FindStringSubmatch(err.Error())
+	if len(matches) != 2 {
+		return ""
+	}
+	return strings.TrimSpace(matches[1])
+}
+
 // @Summary 查询商户开户状态
 // @Description 查询商户微信二级商户进件状态
 // @Tags 商户
@@ -1003,13 +1059,16 @@ func (server *Server) getMerchantApplymentStatus(ctx *gin.Context) {
 				applyment.ApplymentID = pgtype.Int8{Int64: wxResp.ApplymentID, Valid: true}
 			}
 
-			updateStatus := resolveRemoteApplymentStatus(applyment.Status, mapWechatApplymentStatus(wxResp.ApplymentState))
+			nextSubMchID := buildApplymentText(wxResp.SubMchID)
+			updateStatus := logic.NormalizeResolvedApplymentStatus(
+				logic.ResolveWechatApplymentStatus(applyment.Status, wxResp.ApplymentState, wxResp.SignState),
+				nextSubMchID.Valid && strings.TrimSpace(nextSubMchID.String) != "",
+			)
 			nextRejectReason := getRejectReasonFromAuditDetail(wxResp.AuditDetail)
 			nextSignURL := buildApplymentText(wxResp.SignURL)
 			nextSignState := buildApplymentText(wxResp.SignState)
 			nextLegalValidationURL := buildApplymentText(wxResp.LegalValidationURL)
 			nextAccountValidation := wechat.MarshalEcommerceApplymentAccountValidation(wxResp.AccountValidation)
-			nextSubMchID := buildApplymentText(wxResp.SubMchID)
 
 			if updateStatus != applyment.Status ||
 				(!applyment.ApplymentID.Valid && wxResp.ApplymentID > 0) ||
@@ -1048,29 +1107,26 @@ func (server *Server) getMerchantApplymentStatus(ctx *gin.Context) {
 			remoteLegalValidationURL = strings.TrimSpace(wxResp.LegalValidationURL)
 			remoteAccountValidation = buildApplymentAccountValidationResponse(wxResp.AccountValidation, decryptor)
 
-			// 仅在申请单真正完成时才激活支付能力；提前返回 sub_mch_id 只用于后续签约/验证流程。
-			if updateStatus == "finish" && wxResp.SubMchID != "" && merchant.Status != "active" {
-				_, err = server.store.CreateMerchantPaymentConfig(ctx, db.CreateMerchantPaymentConfigParams{
-					MerchantID: merchant.ID,
-					SubMchID:   wxResp.SubMchID,
-					Status:     "active",
+			// 仅在申请单真正完成时才激活支付能力；提前返回的 sub_mch_id 只用于后续签约/验证流程。
+			if updateStatus == "finish" && nextSubMchID.Valid && merchant.Status != "active" {
+				err = server.store.ApplymentSubMchActivationTx(ctx, db.ApplymentSubMchActivationTxParams{
+					ApplymentID: applyment.ID,
+					SubjectType: applyment.SubjectType,
+					SubjectID:   applyment.SubjectID,
+					SubMchID:    nextSubMchID.String,
 				})
 				if err != nil {
-					log.Error().Err(err).Msg("创建商户支付配置失败")
-				}
-
-				_, err = server.store.UpdateMerchantStatus(ctx, db.UpdateMerchantStatusParams{
-					ID:     merchant.ID,
-					Status: "active",
-				})
-				if err != nil {
-					log.Error().Err(err).Msg("更新商户状态失败")
+					log.Error().Err(err).
+						Int64("applyment_id", applyment.ID).
+						Int64("merchant_id", merchant.ID).
+						Str("sub_mch_id", nextSubMchID.String).
+						Msg("activate merchant applyment after remote status sync failed")
 				}
 			}
 		}
 	}
 
-	normalizedStatus := normalizeApplymentStatus(applyment.Status, applyment.SubMchID.Valid && applyment.SubMchID.String != "")
+	normalizedStatus := logic.NormalizeResolvedApplymentStatus(applyment.Status, applyment.SubMchID.Valid && applyment.SubMchID.String != "")
 	statusDesc := getApplymentStatusDesc(normalizedStatus)
 	if remoteStatusDesc != "" {
 		statusDesc = remoteStatusDesc
@@ -1250,36 +1306,6 @@ func validateMerchantApplymentScope(organizationType, accountType string) error 
 	return nil
 }
 
-// mapWechatApplymentStatus 映射微信进件状态到本地状态
-func mapWechatApplymentStatus(wxStatus string) string {
-	switch wxStatus {
-	case "APPLYMENT_STATE_EDITTING":
-		return "pending"
-	case "CHECKING":
-		return "checking"
-	case "ACCOUNT_NEED_VERIFY":
-		return "account_need_verify"
-	case "APPLYMENT_STATE_AUDITING", "AUDITING":
-		return "auditing"
-	case "APPLYMENT_STATE_REJECTED", "REJECTED":
-		return "rejected"
-	case "APPLYMENT_STATE_CANCELED", "CANCELED":
-		return "canceled"
-	case "APPLYMENT_STATE_TO_BE_CONFIRMED":
-		return "to_be_confirmed"
-	case "APPLYMENT_STATE_TO_BE_SIGNED", "NEED_SIGN":
-		return "to_be_signed"
-	case "APPLYMENT_STATE_SIGNING":
-		return "signing"
-	case "APPLYMENT_STATE_FINISHED", "FINISH":
-		return "finish"
-	case "APPLYMENT_STATE_FROZEN", "FROZEN":
-		return "frozen"
-	default:
-		return ""
-	}
-}
-
 // getApplymentStatusDesc 获取进件状态描述
 func getApplymentStatusDesc(status string) string {
 	switch status {
@@ -1332,13 +1358,6 @@ func getRejectReasonFromAuditDetail(details []wechat.ApplymentAuditDetail) pgtyp
 		reasons += fmt.Sprintf("%s: %s", d.ParamName, d.RejectReason)
 	}
 	return pgtype.Text{String: reasons, Valid: true}
-}
-
-func normalizeApplymentStatus(status string, hasSubMchID bool) string {
-	if status == "finish" && !hasSubMchID {
-		return "submitted"
-	}
-	return status
 }
 
 func getMerchantApplymentSubmitCapability(merchantStatus, applymentStatus string) (bool, string) {

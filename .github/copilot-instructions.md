@@ -156,7 +156,7 @@ Use these docs as references instead of rewriting them:
 
 - Media backend and migration docs: `.github/standards/domains/media/*`
 - OCR rollout and refactor docs: `.github/standards/domains/ocr/*`
-- WeChat payment plans and runbooks: `.github/standards/domains/wechat-payment/*`
+- WeChat payment standards, baselines, plans, and runbooks: `.github/standards/domains/wechat-payment/*`
 - API contract rules: `.github/standards/backend/API_CONTRACT_STANDARDS.md`
 
 ## Practical Defaults For Agents
