@@ -10,6 +10,7 @@ import (
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	mockwechat "github.com/merrydance/locallife/wechat/mock"
 	"github.com/merrydance/locallife/worker"
 	mockwk "github.com/merrydance/locallife/worker/mock"
@@ -137,7 +138,7 @@ func TestApplymentSettlementVerificationSchedulerMarksTerminalFailureOnInvalidSe
 
 	ecommerceClient.EXPECT().
 		QuerySubMerchantSettlement(gomock.Any(), "sub_mch_61", "").
-		Return(nil, &wechat.SubMerchantSettlementQueryValidationError{Message: "query sub merchant settlement: sub_mchid must contain only digits"})
+		Return(nil, wechatcontracts.NewSubMerchantSettlementQueryValidationError("sub_mchid must contain only digits"))
 
 	store.EXPECT().
 		UpdateEcommerceApplymentSettlementVerification(gomock.Any(), gomock.AssignableToTypeOf(db.UpdateEcommerceApplymentSettlementVerificationParams{})).
@@ -173,7 +174,7 @@ func TestApplymentSettlementVerificationSchedulerMarksTerminalFailureOnSettlemen
 
 	ecommerceClient.EXPECT().
 		QuerySubMerchantSettlement(gomock.Any(), "1900000081", "").
-		Return(nil, &wechat.SubMerchantSettlementContractError{Message: "query sub merchant settlement: wechat response missing verify_result"})
+		Return(nil, wechatcontracts.NewSubMerchantSettlementContractError("unsupported verify_result %q", ""))
 
 	store.EXPECT().
 		UpdateEcommerceApplymentSettlementVerification(gomock.Any(), gomock.AssignableToTypeOf(db.UpdateEcommerceApplymentSettlementVerificationParams{})).

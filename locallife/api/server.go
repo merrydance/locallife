@@ -1038,6 +1038,7 @@ func (server *Server) setupRouter() {
 		paymentGroup.GET("/ledger", server.listPaymentLedger)
 		paymentGroup.GET("", server.listPaymentOrders)
 		paymentGroup.GET("/:id", server.getPaymentOrder)
+		paymentGroup.GET("/:id/query", server.queryPaymentOrder)
 		paymentGroup.POST("/:id/close", server.closePaymentOrder)
 		paymentGroup.GET("/:id/refunds", server.listRefundOrdersByPayment)
 	}

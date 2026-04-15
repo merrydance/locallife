@@ -323,7 +323,7 @@ func TestCreateCombinedPaymentOrder(t *testing.T) {
 				require.Error(t, err)
 				reqErr := assertRequestError(t, err)
 				require.Equal(t, http.StatusServiceUnavailable, reqErr.Status)
-				require.Equal(t, "wechat payment did not return a valid prepay session, please retry later", reqErr.Err.Error())
+				require.Equal(t, "微信支付未返回有效预支付会话，请稍后重试", reqErr.Err.Error())
 			},
 		},
 		{
@@ -372,7 +372,7 @@ func TestCreateCombinedPaymentOrder(t *testing.T) {
 				require.Error(t, err)
 				reqErr := assertRequestError(t, err)
 				require.Equal(t, http.StatusServiceUnavailable, reqErr.Status)
-				require.Equal(t, "wechat payment did not return a valid prepay session, please retry later", reqErr.Err.Error())
+				require.Equal(t, "微信支付未返回有效预支付会话，请稍后重试", reqErr.Err.Error())
 			},
 		},
 		{
@@ -1366,12 +1366,19 @@ func TestMapCombineOrderQueryError(t *testing.T) {
 	err := mapCombineOrderQueryError(&wechat.WechatPayError{StatusCode: 404, Code: "ORDERNOTEXIST", Message: "订单不存在"})
 	reqErr := assertRequestError(t, err)
 	require.Equal(t, http.StatusServiceUnavailable, reqErr.Status)
-	require.Equal(t, "payment status is still being synchronized, please retry later", reqErr.Err.Error())
+	require.Equal(t, "支付状态同步中，请稍后重试", reqErr.Err.Error())
+}
+
+func TestMapCombineOrderQueryError_ContractDrift(t *testing.T) {
+	err := mapCombineOrderQueryError(&wechat.CombineOrderQueryContractError{Message: "query combine order: wechat response missing combine_mchid"})
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, http.StatusServiceUnavailable, reqErr.Status)
+	require.Equal(t, "支付状态同步异常，请稍后重试", reqErr.Err.Error())
 }
 
 func TestMapCombineOrderCloseError(t *testing.T) {
 	err := mapCombineOrderCloseError(&wechat.WechatPayError{StatusCode: 202, Code: "USERPAYING", Message: "用户支付中"})
 	reqErr := assertRequestError(t, err)
 	require.Equal(t, http.StatusConflict, reqErr.Status)
-	require.Equal(t, "payment is being processed, please retry after confirming the latest status", reqErr.Err.Error())
+	require.Equal(t, "支付处理中，请确认最新状态后再重试", reqErr.Err.Error())
 }

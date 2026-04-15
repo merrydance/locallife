@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/rs/zerolog/log"
 )
 
 // APIResponse is the unified response envelope for all JSON APIs.
@@ -96,8 +97,9 @@ func bodyLooksLikeWrapped(b []byte) bool {
 }
 
 func extractErrorMessage(status int, body []byte) string {
-	// For 5xx, always keep it safe.
-	if status >= 500 {
+	// For 500, always keep it safe. For 502/503/504, handlers may provide
+	// a sanitized public message such as service-unavailable guidance.
+	if status == http.StatusInternalServerError {
 		return "internal server error"
 	}
 
@@ -121,6 +123,47 @@ func extractErrorMessage(status int, body []byte) string {
 	}
 
 	return http.StatusText(status)
+}
+
+func sanitizeServerErrorMessage(status int, message string) string {
+	trimmed := strings.TrimSpace(message)
+	if status == http.StatusInternalServerError {
+		return "internal server error"
+	}
+	if trimmed == "" {
+		return http.StatusText(status)
+	}
+
+	normalized := strings.ToLower(trimmed)
+	switch {
+	case strings.Contains(normalized, "wechat ecommerce client is not configured"), strings.Contains(normalized, "ecommerce client not configured"):
+		return "微信支付服务暂不可用，请稍后重试"
+	case strings.Contains(normalized, "payment service not configured"), strings.Contains(normalized, "payment service not available"):
+		return "支付服务暂不可用，请稍后重试"
+	case strings.Contains(normalized, "media storage not configured"):
+		return "媒体服务暂不可用，请稍后重试"
+	case strings.Contains(normalized, "not configured"):
+		return "服务暂不可用，请稍后重试"
+	default:
+		return trimmed
+	}
+}
+
+func logRawServerErrorResponse(c *gin.Context, status int, originalMessage string, publicMessage string) {
+	evt := log.Error().
+		Str("request_id", GetRequestID(c)).
+		Str("path", c.Request.URL.Path).
+		Str("method", c.Request.Method).
+		Int("status", status)
+
+	if strings.TrimSpace(originalMessage) != "" {
+		evt = evt.Str("original_message", originalMessage)
+	}
+	if strings.TrimSpace(publicMessage) != "" {
+		evt = evt.Str("public_message", publicMessage)
+	}
+
+	evt.Msg("raw server error response wrapped by envelope")
 }
 
 type bodyCaptureWriter struct {
@@ -228,7 +271,13 @@ func ResponseEnvelopeMiddleware() gin.HandlerFunc {
 			resp.Data = json.RawMessage(originalBody)
 		} else {
 			resp.Code = statusToCode(status)
-			resp.Message = extractErrorMessage(status, originalBody)
+			rawMessage := extractErrorMessage(status, originalBody)
+			if status >= 500 {
+				resp.Message = sanitizeServerErrorMessage(status, rawMessage)
+				logRawServerErrorResponse(c, status, rawMessage, resp.Message)
+			} else {
+				resp.Message = rawMessage
+			}
 			// For 4xx, keep original error payload in data for debugging.
 			if status >= 400 && status < 500 {
 				resp.Data = json.RawMessage(originalBody)

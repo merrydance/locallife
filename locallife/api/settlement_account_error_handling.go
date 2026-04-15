@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	"github.com/rs/zerolog/log"
 )
 
@@ -120,7 +121,7 @@ func settlementWechatErrorResponse(ctx *gin.Context, operation string, subjectTy
 		}
 	}
 
-	var contractErr *wechat.SubMerchantSettlementContractError
+	var contractErr *wechatcontracts.SubMerchantSettlementContractError
 	if errors.As(err, &contractErr) {
 		log.Error().
 			Err(err).
@@ -135,7 +136,7 @@ func settlementWechatErrorResponse(ctx *gin.Context, operation string, subjectTy
 		return http.StatusBadGateway, errorResponse(ErrSettlementWechatInvalidResponse)
 	}
 
-	var applicationContractErr *wechat.SubMerchantSettlementApplicationContractError
+	var applicationContractErr *wechatcontracts.SubMerchantSettlementApplicationContractError
 	if errors.As(err, &applicationContractErr) {
 		log.Error().
 			Err(err).
@@ -150,7 +151,7 @@ func settlementWechatErrorResponse(ctx *gin.Context, operation string, subjectTy
 		return http.StatusBadGateway, errorResponse(ErrSettlementWechatInvalidResponse)
 	}
 
-	var validationErr *wechat.SubMerchantSettlementQueryValidationError
+	var validationErr *wechatcontracts.SubMerchantSettlementQueryValidationError
 	if errors.As(err, &validationErr) {
 		log.Error().
 			Err(err).
@@ -164,7 +165,7 @@ func settlementWechatErrorResponse(ctx *gin.Context, operation string, subjectTy
 		return http.StatusInternalServerError, ErrorResponse{Error: "internal server error"}
 	}
 
-	var applicationValidationErr *wechat.SubMerchantSettlementApplicationQueryValidationError
+	var applicationValidationErr *wechatcontracts.SubMerchantSettlementApplicationQueryValidationError
 	if errors.As(err, &applicationValidationErr) {
 		log.Error().
 			Err(err).

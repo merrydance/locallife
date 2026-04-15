@@ -978,7 +978,7 @@ func TestTakeoutJourneyB1WebhookIntegration(t *testing.T) {
 	// 3) 注入 mock payment client 与任务分发器
 	mockPaymentClient := mockwechat.NewMockPaymentClientInterface(ctrl)
 	mockPaymentClient.EXPECT().
-		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Times(1).
 		Return(nil)
 
@@ -1329,7 +1329,7 @@ func TestTakeoutJourneyB0CombinedPaymentDelayedCallbackRecoveryIntegration(t *te
 	require.Equal(t, "pending", paymentOrder.Status)
 
 	mockEcommerceClient.EXPECT().
-		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Times(1).
 		Return(nil)
 	mockEcommerceClient.EXPECT().
@@ -2040,7 +2040,7 @@ func TestDineInJourneyA1Integration(t *testing.T) {
 
 	mockPaymentClient := mockwechat.NewMockPaymentClientInterface(ctrl)
 	mockPaymentClient.EXPECT().
-		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Times(1).
 		Return(nil)
 
@@ -2555,7 +2555,7 @@ func TestReservationJourneyC1Integration(t *testing.T) {
 
 	// 3) 走平台收付通普通支付回调 + 任务入队
 	mockEcommerceClient.EXPECT().
-		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Times(1).
 		Return(nil)
 
@@ -2567,12 +2567,7 @@ func TestReservationJourneyC1Integration(t *testing.T) {
 			OutTradeNo:    po.OutTradeNo,
 			TransactionID: "integration_tx_reservation_001",
 			TradeState:    "SUCCESS",
-			Amount: struct {
-				Total         int64  `json:"total"`
-				PayerTotal    int64  `json:"payer_total"`
-				Currency      string `json:"currency"`
-				PayerCurrency string `json:"payer_currency"`
-			}{
+			Amount: wechat.PartnerOrderQueryAmount{
 				Total:         po.Amount,
 				PayerTotal:    po.Amount,
 				Currency:      "CNY",
@@ -2917,7 +2912,7 @@ func TestReservationJourneyCNoShowIntegration(t *testing.T) {
 
 	// 3) 走平台收付通普通支付回调 + 任务入队
 	mockEcommerceClient.EXPECT().
-		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Times(1).
 		Return(nil)
 
@@ -2929,12 +2924,7 @@ func TestReservationJourneyCNoShowIntegration(t *testing.T) {
 			OutTradeNo:    po.OutTradeNo,
 			TransactionID: "integration_tx_reservation_noshow_001",
 			TradeState:    "SUCCESS",
-			Amount: struct {
-				Total         int64  `json:"total"`
-				PayerTotal    int64  `json:"payer_total"`
-				Currency      string `json:"currency"`
-				PayerCurrency string `json:"payer_currency"`
-			}{
+			Amount: wechat.PartnerOrderQueryAmount{
 				Total:         po.Amount,
 				PayerTotal:    po.Amount,
 				Currency:      "CNY",
@@ -3333,7 +3323,7 @@ func TestReservationJourneyCRefundNotifyIntegration(t *testing.T) {
 
 	// 3) 退款回调通知（收付通渠道）
 	mockEcommerceClient.EXPECT().
-		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Times(1).
 		Return(nil)
 

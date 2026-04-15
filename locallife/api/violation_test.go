@@ -31,7 +31,7 @@ func TestHandleViolationNotify_Success(t *testing.T) {
 	server.SetEcommerceClientForTest(ecommerceClient)
 
 	notificationID := util.RandomString(32)
-	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Eq("test_signature"), gomock.Eq("1712808000"), gomock.Eq("test_nonce"), gomock.Eq("test_serial"), gomock.Any()).Return(nil)
 	store.EXPECT().TryClaimWechatNotification(gomock.Any(), gomock.Any()).Return(true, nil)
 	ecommerceClient.EXPECT().DecryptViolationNotification(gomock.Any()).Return(&wechat.ViolationNotificationResource{
 		SubMchID:        "sub-mch-001",
@@ -67,7 +67,7 @@ func TestHandleViolationNotify_InvalidSignature(t *testing.T) {
 	server := newTestServer(t, store)
 	server.SetEcommerceClientForTest(ecommerceClient)
 
-	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(wechat.ErrInvalidSignature)
+	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(wechat.ErrInvalidSignature)
 
 	recorder := httptest.NewRecorder()
 	req := newViolationNotifyRequest(t, util.RandomString(32), "VIOLATION.PUNISH")
@@ -87,7 +87,7 @@ func TestHandleViolationNotify_DuplicateProcessedReturnsSuccess(t *testing.T) {
 	server.SetEcommerceClientForTest(ecommerceClient)
 
 	notificationID := util.RandomString(32)
-	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 	store.EXPECT().TryClaimWechatNotification(gomock.Any(), gomock.Any()).Return(false, nil)
 	store.EXPECT().GetWechatNotification(gomock.Any(), notificationID).Return(db.WechatNotification{
 		ID:          notificationID,
@@ -110,7 +110,7 @@ func TestHandleViolationNotify_UnsupportedEventMarksProcessed(t *testing.T) {
 	server := newTestServer(t, store)
 	server.SetEcommerceClientForTest(ecommerceClient)
 
-	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 	store.EXPECT().TryClaimWechatNotification(gomock.Any(), gomock.Any()).Return(true, nil)
 	ecommerceClient.EXPECT().DecryptViolationNotification(gomock.Any()).Times(0)
 
@@ -131,7 +131,7 @@ func TestHandleViolationNotify_DecryptFailureReleasesClaim(t *testing.T) {
 	server.SetEcommerceClientForTest(ecommerceClient)
 
 	notificationID := util.RandomString(32)
-	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 	store.EXPECT().TryClaimWechatNotification(gomock.Any(), gomock.Any()).Return(true, nil)
 	ecommerceClient.EXPECT().DecryptViolationNotification(gomock.Any()).Return(nil, errors.New("decrypt failed"))
 	store.EXPECT().ReleaseWechatNotificationClaim(gomock.Any(), notificationID).Return(nil)
@@ -154,7 +154,7 @@ func TestHandleViolationNotify_PersistFailureReleasesClaim(t *testing.T) {
 	server.SetEcommerceClientForTest(ecommerceClient)
 
 	notificationID := util.RandomString(32)
-	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 	store.EXPECT().TryClaimWechatNotification(gomock.Any(), gomock.Any()).Return(true, nil)
 	ecommerceClient.EXPECT().DecryptViolationNotification(gomock.Any()).Return(&wechat.ViolationNotificationResource{
 		SubMchID: "sub-mch-001",

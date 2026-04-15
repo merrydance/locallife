@@ -88,7 +88,8 @@ func (server *Server) handleViolationNotify(ctx *gin.Context) {
 	signature := ctx.GetHeader("Wechatpay-Signature")
 	timestamp := ctx.GetHeader("Wechatpay-Timestamp")
 	nonce := ctx.GetHeader("Wechatpay-Nonce")
-	if err := server.ecommerceClient.VerifyNotificationSignature(signature, timestamp, nonce, string(body)); err != nil {
+	serial := ctx.GetHeader("Wechatpay-Serial")
+	if err := server.ecommerceClient.VerifyNotificationSignature(signature, timestamp, nonce, serial, string(body)); err != nil {
 		paymentCallbackFailuresTotal.WithLabelValues(violationCallbackType, "signature").Inc()
 		log.Error().Err(err).Msg("violation notify: invalid signature")
 		ctx.JSON(http.StatusUnauthorized, wechatPaymentNotifyResponse{Code: "FAIL", Message: "signature verification failed"})

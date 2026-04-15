@@ -15,6 +15,7 @@ import (
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	mockwechat "github.com/merrydance/locallife/wechat/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -287,7 +288,7 @@ func TestGetMerchantSettlementAccountInvalidWechatResponse(t *testing.T) {
 	ecommerce.EXPECT().
 		QuerySubMerchantSettlement(gomock.Any(), paymentConfig.SubMchID, "").
 		Times(1).
-		Return(nil, &wechat.SubMerchantSettlementContractError{Message: "query sub merchant settlement: wechat response missing verify_result"})
+		Return(nil, wechatcontracts.NewSubMerchantSettlementContractError("unsupported verify_result %q", ""))
 
 	server := newTestServer(t, store)
 	server.SetEcommerceClientForTest(ecommerce)
@@ -1397,7 +1398,7 @@ func TestGetMerchantSettlementApplicationInvalidWechatResponse(t *testing.T) {
 	ecommerce.EXPECT().
 		QuerySubMerchantSettlementApplication(gomock.Any(), paymentConfig.SubMchID, "APP_BAD", "").
 		Times(1).
-		Return(nil, &wechat.SubMerchantSettlementApplicationContractError{Message: "query sub merchant settlement application: wechat response missing account_name"})
+		Return(nil, wechatcontracts.NewSubMerchantSettlementApplicationContractError("account_name is required"))
 
 	server := newTestServer(t, store)
 	server.SetEcommerceClientForTest(ecommerce)

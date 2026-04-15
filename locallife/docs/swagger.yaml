@@ -1598,6 +1598,10 @@ definitions:
         $ref: '#/definitions/api.combinedPaymentWechatAmountResult'
       out_trade_no:
         type: string
+      promotion_detail:
+        items:
+          $ref: '#/definitions/api.paymentOrderWechatPromotionDetail'
+        type: array
       success_time:
         type: string
       trade_state:
@@ -5878,6 +5882,35 @@ definitions:
       status:
         type: string
     type: object
+  api.paymentOrderQueryResponse:
+    properties:
+      amount:
+        type: integer
+      business_type:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: integer
+      order_id:
+        type: integer
+      out_trade_no:
+        type: string
+      paid_at:
+        type: string
+      pay_params:
+        $ref: '#/definitions/api.miniProgramPayParams'
+      payment_type:
+        type: string
+      prepay_id:
+        type: string
+      status:
+        type: string
+      user_id:
+        type: integer
+      wechat_query:
+        $ref: '#/definitions/api.paymentOrderWechatQueryResult'
+    type: object
   api.paymentOrderResponse:
     properties:
       amount:
@@ -5906,6 +5939,106 @@ definitions:
         type: string
       user_id:
         type: integer
+    type: object
+  api.paymentOrderWechatAmountResult:
+    properties:
+      currency:
+        type: string
+      payer_currency:
+        type: string
+      payer_total:
+        type: integer
+      total:
+        type: integer
+    type: object
+  api.paymentOrderWechatPayerResult:
+    properties:
+      sp_openid:
+        type: string
+      sub_openid:
+        type: string
+    type: object
+  api.paymentOrderWechatPromotionDetail:
+    properties:
+      amount:
+        type: integer
+      coupon_id:
+        type: string
+      currency:
+        type: string
+      goods_detail:
+        items:
+          $ref: '#/definitions/api.paymentOrderWechatPromotionGoodsDetail'
+        type: array
+      merchant_contribute:
+        type: integer
+      name:
+        type: string
+      other_contribute:
+        type: integer
+      scope:
+        type: string
+      stock_id:
+        type: string
+      type:
+        type: string
+      wechatpay_contribute:
+        type: integer
+    type: object
+  api.paymentOrderWechatPromotionGoodsDetail:
+    properties:
+      discount_amount:
+        type: integer
+      goods_id:
+        type: string
+      goods_remark:
+        type: string
+      quantity:
+        type: integer
+      unit_price:
+        type: integer
+    type: object
+  api.paymentOrderWechatQueryResult:
+    properties:
+      amount:
+        $ref: '#/definitions/api.paymentOrderWechatAmountResult'
+      attach:
+        type: string
+      bank_type:
+        type: string
+      out_trade_no:
+        type: string
+      payer:
+        $ref: '#/definitions/api.paymentOrderWechatPayerResult'
+      promotion_detail:
+        items:
+          $ref: '#/definitions/api.paymentOrderWechatPromotionDetail'
+        type: array
+      scene_info:
+        $ref: '#/definitions/api.paymentOrderWechatSceneInfo'
+      sp_appid:
+        type: string
+      sp_mchid:
+        type: string
+      sub_appid:
+        type: string
+      sub_mchid:
+        type: string
+      success_time:
+        type: string
+      trade_state:
+        type: string
+      trade_state_desc:
+        type: string
+      trade_type:
+        type: string
+      transaction_id:
+        type: string
+    type: object
+  api.paymentOrderWechatSceneInfo:
+    properties:
+      device_id:
+        type: string
     type: object
   api.peakHourConfigResponse:
     properties:
@@ -23435,6 +23568,49 @@ paths:
       security:
       - BearerAuth: []
       summary: 关闭支付订单
+      tags:
+      - 支付管理
+  /v1/payments/{id}/query:
+    get:
+      consumes:
+      - application/json
+      description: 查询本地普通支付订单详情，并拉取微信收付通单笔支付最新状态，供小程序恢复支付或判断后续动作
+      parameters:
+      - description: 支付订单ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 支付订单详情(含微信远端状态)
+          schema:
+            $ref: '#/definitions/api.paymentOrderQueryResponse'
+        "400":
+          description: 请求参数错误或支付单不支持该查询
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 支付订单不属于当前用户
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 支付订单不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: 支付服务不可用
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 查询支付订单远端状态
       tags:
       - 支付管理
   /v1/payments/{id}/refunds:

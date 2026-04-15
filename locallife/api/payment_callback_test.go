@@ -38,7 +38,7 @@ func TestHandlePaymentNotifyIdempotency(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockPaymentClientInterface) {
 				// 先验证签名（必须通过）
 				paymentClient.EXPECT().
-					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+					VerifyNotificationSignature(gomock.Eq("test_signature"), gomock.Eq("1234567890"), gomock.Eq("test_nonce"), gomock.Eq("test_serial"), gomock.Any()).
 					Times(1).
 					Return(nil)
 
@@ -95,7 +95,7 @@ func TestHandlePaymentNotifyIdempotency(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockPaymentClientInterface) {
 				// 签名验证失败（先于幂等性检查）
 				paymentClient.EXPECT().
-					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+					VerifyNotificationSignature(gomock.Eq("invalid_signature"), gomock.Eq("1234567890"), gomock.Eq("test_nonce"), gomock.Eq("test_serial"), gomock.Any()).
 					Times(1).
 					Return(wechat.ErrInvalidSignature)
 
@@ -137,7 +137,7 @@ func TestHandlePaymentNotifyIdempotency(t *testing.T) {
 			name: "重复通知_查询状态失败返回FAIL",
 			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockPaymentClientInterface) {
 				paymentClient.EXPECT().
-					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(nil)
 
@@ -187,7 +187,7 @@ func TestHandlePaymentNotifyIdempotency(t *testing.T) {
 			name: "重复通知_处理中返回FAIL",
 			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockPaymentClientInterface) {
 				paymentClient.EXPECT().
-					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(nil)
 
@@ -240,7 +240,7 @@ func TestHandlePaymentNotifyIdempotency(t *testing.T) {
 			name: "重复通知_stale claim返回FAIL并释放占位",
 			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockPaymentClientInterface) {
 				paymentClient.EXPECT().
-					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(nil)
 
@@ -298,7 +298,7 @@ func TestHandlePaymentNotifyIdempotency(t *testing.T) {
 			name: "重复通知_stale claim释放失败仍返回FAIL",
 			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockPaymentClientInterface) {
 				paymentClient.EXPECT().
-					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(nil)
 
@@ -391,7 +391,7 @@ func TestHandleRefundNotifyIdempotency(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockPaymentClientInterface) {
 				// 先验证签名
 				paymentClient.EXPECT().
-					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(nil)
 
@@ -468,7 +468,7 @@ func TestHandleRefundNotifyOwnershipMismatch(t *testing.T) {
 	paymentClient := mockwechat.NewMockPaymentClientInterface(ctrl)
 
 	paymentClient.EXPECT().
-		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Times(1).
 		Return(nil)
 
@@ -549,7 +549,7 @@ func TestHandleCombinePaymentNotifyIdempotency(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
 				// 先验证签名
 				ecommerceClient.EXPECT().
-					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(nil)
 
@@ -631,7 +631,7 @@ func TestHandleCombinePaymentNotify_ClosedOrderEnqueuesAnomalyRefund(t *testing.
 	transactionID := "WX_" + util.RandomString(18)
 
 	ecommerceClient.EXPECT().
-		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil)
 
 	store.EXPECT().
@@ -707,7 +707,7 @@ func TestHandleEcommercePaymentNotify_DelegatesToPartnerHandler(t *testing.T) {
 	transactionID := "WX_" + util.RandomString(18)
 
 	ecommerceClient.EXPECT().
-		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil)
 
 	store.EXPECT().
@@ -723,12 +723,7 @@ func TestHandleEcommercePaymentNotify_DelegatesToPartnerHandler(t *testing.T) {
 			OutTradeNo:    outTradeNo,
 			TransactionID: transactionID,
 			TradeState:    "SUCCESS",
-			Amount: struct {
-				Total         int64  `json:"total"`
-				PayerTotal    int64  `json:"payer_total"`
-				Currency      string `json:"currency"`
-				PayerCurrency string `json:"payer_currency"`
-			}{
+			Amount: wechat.PartnerOrderQueryAmount{
 				Total: 8800,
 			},
 		}, nil)
@@ -776,7 +771,7 @@ func TestHandleEcommercePaymentNotify_UsesPersistedSubMchIDWhenConfigDrifts(t *t
 	transactionID := "WX_" + util.RandomString(18)
 
 	ecommerceClient.EXPECT().
-		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil)
 
 	store.EXPECT().
@@ -792,12 +787,7 @@ func TestHandleEcommercePaymentNotify_UsesPersistedSubMchIDWhenConfigDrifts(t *t
 			OutTradeNo:    outTradeNo,
 			TransactionID: transactionID,
 			TradeState:    "SUCCESS",
-			Amount: struct {
-				Total         int64  `json:"total"`
-				PayerTotal    int64  `json:"payer_total"`
-				Currency      string `json:"currency"`
-				PayerCurrency string `json:"payer_currency"`
-			}{
+			Amount: wechat.PartnerOrderQueryAmount{
 				Total: 8800,
 			},
 		}, nil)
@@ -838,7 +828,7 @@ func TestHandleEcommercePaymentNotify_PaidUnprocessedReenqueuesPaymentSuccess(t 
 	transactionID := "WX_" + util.RandomString(18)
 
 	ecommerceClient.EXPECT().
-		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil)
 
 	store.EXPECT().
@@ -854,12 +844,7 @@ func TestHandleEcommercePaymentNotify_PaidUnprocessedReenqueuesPaymentSuccess(t 
 			OutTradeNo:    outTradeNo,
 			TransactionID: transactionID,
 			TradeState:    "SUCCESS",
-			Amount: struct {
-				Total         int64  `json:"total"`
-				PayerTotal    int64  `json:"payer_total"`
-				Currency      string `json:"currency"`
-				PayerCurrency string `json:"payer_currency"`
-			}{
+			Amount: wechat.PartnerOrderQueryAmount{
 				Total: 8800,
 			},
 		}, nil)
@@ -923,7 +908,7 @@ func TestHandleEcommercePaymentNotify_ClosedOrderEnqueueFailureEmitsAlert(t *tes
 		return db.PlatformAlertEvent{}, nil
 	})
 
-	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 	store.EXPECT().TryClaimWechatNotification(gomock.Any(), gomock.Any()).Return(true, nil)
 	ecommerceClient.EXPECT().DecryptPartnerPaymentNotification(gomock.Any()).Return(&wechat.PartnerPaymentNotificationResource{
 		SpMchID:       "sp_expected",
@@ -932,12 +917,7 @@ func TestHandleEcommercePaymentNotify_ClosedOrderEnqueueFailureEmitsAlert(t *tes
 		OutTradeNo:    outTradeNo,
 		TransactionID: transactionID,
 		TradeState:    "SUCCESS",
-		Amount: struct {
-			Total         int64  `json:"total"`
-			PayerTotal    int64  `json:"payer_total"`
-			Currency      string `json:"currency"`
-			PayerCurrency string `json:"payer_currency"`
-		}{Total: 8800},
+		Amount:        wechat.PartnerOrderQueryAmount{Total: 8800},
 	}, nil)
 	ecommerceClient.EXPECT().GetSpMchID().Return("sp_expected")
 	ecommerceClient.EXPECT().GetSpAppID().Return("app_expected")
@@ -979,7 +959,7 @@ func TestHandleEcommercePaymentNotify_AmountMismatchEnqueueFailureEmitsAlert(t *
 		return db.PlatformAlertEvent{}, nil
 	})
 
-	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 	store.EXPECT().TryClaimWechatNotification(gomock.Any(), gomock.Any()).Return(true, nil)
 	ecommerceClient.EXPECT().DecryptPartnerPaymentNotification(gomock.Any()).Return(&wechat.PartnerPaymentNotificationResource{
 		SpMchID:       "sp_expected",
@@ -988,12 +968,7 @@ func TestHandleEcommercePaymentNotify_AmountMismatchEnqueueFailureEmitsAlert(t *
 		OutTradeNo:    outTradeNo,
 		TransactionID: transactionID,
 		TradeState:    "SUCCESS",
-		Amount: struct {
-			Total         int64  `json:"total"`
-			PayerTotal    int64  `json:"payer_total"`
-			Currency      string `json:"currency"`
-			PayerCurrency string `json:"payer_currency"`
-		}{Total: 9900},
+		Amount:        wechat.PartnerOrderQueryAmount{Total: 9900},
 	}, nil)
 	ecommerceClient.EXPECT().GetSpMchID().Return("sp_expected")
 	ecommerceClient.EXPECT().GetSpAppID().Return("app_expected")
@@ -1036,7 +1011,7 @@ func TestHandleCombinePaymentNotify_OwnershipMismatchReturnsFail(t *testing.T) {
 	combineOutTradeNo := "COMB_" + util.RandomString(18)
 
 	ecommerceClient.EXPECT().
-		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil)
 
 	store.EXPECT().
@@ -1084,7 +1059,7 @@ func TestHandleCombinePaymentNotify_SubOrderNotFoundReturnsFail(t *testing.T) {
 	transactionID := "WX_" + util.RandomString(18)
 
 	ecommerceClient.EXPECT().
-		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil)
 
 	store.EXPECT().
@@ -1150,7 +1125,7 @@ func TestHandleCombinePaymentNotify_AmountMismatchEnqueuesRefund(t *testing.T) {
 	transactionID := "WX_" + util.RandomString(18)
 
 	ecommerceClient.EXPECT().
-		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil)
 
 	store.EXPECT().
@@ -1239,7 +1214,7 @@ func TestHandleCombinePaymentNotify_MainOrderNotFoundReturnsFail(t *testing.T) {
 	transactionID := "WX_" + util.RandomString(18)
 
 	ecommerceClient.EXPECT().
-		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil)
 
 	store.EXPECT().
@@ -1301,7 +1276,7 @@ func TestHandleCombinePaymentNotify_PaymentSuccessEnqueueFailureReturnsFail(t *t
 	transactionID := "WX_" + util.RandomString(18)
 
 	ecommerceClient.EXPECT().
-		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil)
 
 	store.EXPECT().
@@ -1391,7 +1366,7 @@ func TestHandleCombinePaymentNotify_ClosedOrderEnqueueFailureReturnsFail(t *test
 
 	store.EXPECT().CreatePlatformAlertEvent(gomock.Any(), gomock.Any()).Return(db.PlatformAlertEvent{}, nil)
 
-	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 	store.EXPECT().TryClaimWechatNotification(gomock.Any(), gomock.Any()).Return(true, nil)
 	ecommerceClient.EXPECT().DecryptCombinePaymentNotification(gomock.Any()).Return(&wechat.CombinePaymentNotification{
 		CombineOutTradeNo: combineOutTradeNo,
@@ -1448,7 +1423,7 @@ func TestHandleOrderSettlementNotify_ProfitSharingEnqueueFailureStillReturnsSucc
 	transactionID := "WX_" + util.RandomString(18)
 
 	ecommerceClient.EXPECT().
-		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil)
 
 	store.EXPECT().
@@ -1505,7 +1480,7 @@ func TestHandleEcommerceRefundNotify_OwnershipMismatchReturnsFail(t *testing.T) 
 	notificationID := util.RandomString(32)
 
 	ecommerceClient.EXPECT().
-		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Times(1).
 		Return(nil)
 
@@ -1575,7 +1550,7 @@ func TestHandleEcommerceRefundNotify_SuccessReturnsNoContent(t *testing.T) {
 	notificationID := util.RandomString(32)
 
 	ecommerceClient.EXPECT().
-		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Times(1).
 		Return(nil)
 
@@ -1659,7 +1634,7 @@ func TestHandleEcommerceRefundNotifyIdempotency(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
 				// 先验证签名
 				ecommerceClient.EXPECT().
-					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(nil)
 
@@ -1765,7 +1740,7 @@ func TestHandlePaymentNotifyFullFlow(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockPaymentClientInterface, taskDistributor *mockwk.MockTaskDistributor) {
 				// 1. 签名验证通过
 				paymentClient.EXPECT().
-					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(nil)
 
@@ -1860,7 +1835,7 @@ func TestHandlePaymentNotifyFullFlow(t *testing.T) {
 			name: "金额不匹配_返回SUCCESS避免重试",
 			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockPaymentClientInterface, taskDistributor *mockwk.MockTaskDistributor) {
 				paymentClient.EXPECT().
-					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(nil)
 
@@ -1956,7 +1931,7 @@ func TestHandlePaymentNotifyFullFlow(t *testing.T) {
 			name: "归属校验失败_返回FAIL触发重试",
 			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockPaymentClientInterface, taskDistributor *mockwk.MockTaskDistributor) {
 				paymentClient.EXPECT().
-					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(nil)
 
@@ -2032,7 +2007,7 @@ func TestHandlePaymentNotifyFullFlow(t *testing.T) {
 			name: "订单不存在_返回FAIL触发重试",
 			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockPaymentClientInterface, taskDistributor *mockwk.MockTaskDistributor) {
 				paymentClient.EXPECT().
-					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(nil)
 
@@ -2106,7 +2081,7 @@ func TestHandlePaymentNotifyFullFlow(t *testing.T) {
 			name: "订单不存在_release失败仍返回FAIL触发重试",
 			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockPaymentClientInterface, taskDistributor *mockwk.MockTaskDistributor) {
 				paymentClient.EXPECT().
-					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(nil)
 
@@ -2180,7 +2155,7 @@ func TestHandlePaymentNotifyFullFlow(t *testing.T) {
 			name: "订单已支付_幂等返回SUCCESS",
 			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockPaymentClientInterface, taskDistributor *mockwk.MockTaskDistributor) {
 				paymentClient.EXPECT().
-					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(nil)
 
@@ -2257,7 +2232,7 @@ func TestHandlePaymentNotifyFullFlow(t *testing.T) {
 			name: "非SUCCESS事件类型_忽略处理",
 			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockPaymentClientInterface, taskDistributor *mockwk.MockTaskDistributor) {
 				paymentClient.EXPECT().
-					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(nil)
 
@@ -2512,7 +2487,7 @@ func TestHandleEcommerceWithdrawNotify_SuccessUpdatesWithdrawal(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 	store.EXPECT().TryClaimWechatNotification(gomock.Any(), gomock.Any()).Return(true, nil)
 	ecommerceClient.EXPECT().DecryptNotificationRaw(gomock.Any()).Return([]byte(`{"sub_mchid":"sub-mch-001","withdraw_id":"wd_001","out_request_no":"MW202604060001","status":"SUCCESS","reason":""}`), nil)
 	store.EXPECT().GetWithdrawalRecordByOutRequestNo(gomock.Any(), pgtype.Text{String: "MW202604060001", Valid: true}).Return(db.WithdrawalRecord{
@@ -2563,7 +2538,7 @@ func TestHandleEcommerceWithdrawNotify_AccountInfoPersistFailureReturnsFail(t *t
 	})
 	require.NoError(t, err)
 
-	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 	store.EXPECT().TryClaimWechatNotification(gomock.Any(), gomock.Any()).Return(true, nil)
 	ecommerceClient.EXPECT().DecryptNotificationRaw(gomock.Any()).Return([]byte(`{"sub_mchid":"sub-mch-001","withdraw_id":"wd_001","out_request_no":"MW202604060001","status":"SUCCESS","reason":""}`), nil)
 	store.EXPECT().GetWithdrawalRecordByOutRequestNo(gomock.Any(), pgtype.Text{String: "MW202604060001", Valid: true}).Return(db.WithdrawalRecord{
@@ -2605,7 +2580,7 @@ func TestHandleEcommerceWithdrawNotify_StatusPersistFailureReturnsFail(t *testin
 	})
 	require.NoError(t, err)
 
-	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 	store.EXPECT().TryClaimWechatNotification(gomock.Any(), gomock.Any()).Return(true, nil)
 	ecommerceClient.EXPECT().DecryptNotificationRaw(gomock.Any()).Return([]byte(`{"sub_mchid":"sub-mch-001","withdraw_id":"wd_001","out_request_no":"MW202604060001","status":"SUCCESS","reason":""}`), nil)
 	store.EXPECT().GetWithdrawalRecordByOutRequestNo(gomock.Any(), pgtype.Text{String: "MW202604060001", Valid: true}).Return(db.WithdrawalRecord{
@@ -2641,7 +2616,7 @@ func TestHandleEcommerceWithdrawNotify_WithdrawalNotFoundReturnsFail(t *testing.
 
 	notificationID := util.RandomString(32)
 
-	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 	store.EXPECT().TryClaimWechatNotification(gomock.Any(), gomock.Any()).Return(true, nil)
 	ecommerceClient.EXPECT().DecryptNotificationRaw(gomock.Any()).Return([]byte(`{"sub_mchid":"sub-mch-001","withdraw_id":"wd_404","out_request_no":"MW404","status":"FAIL","reason":"账户异常"}`), nil)
 	store.EXPECT().GetWithdrawalRecordByOutRequestNo(gomock.Any(), pgtype.Text{String: "MW404", Valid: true}).Return(db.WithdrawalRecord{}, db.ErrRecordNotFound)
@@ -2666,7 +2641,7 @@ func TestHandleEcommerceWithdrawNotifyIdempotency(t *testing.T) {
 
 	notificationID := util.RandomString(32)
 
-	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 	store.EXPECT().TryClaimWechatNotification(gomock.Any(), gomock.Any()).Return(false, nil)
 	store.EXPECT().GetWechatNotification(gomock.Any(), notificationID).Return(db.WechatNotification{ID: notificationID, ProcessedAt: pgtype.Timestamp{Time: time.Now(), Valid: true}}, nil)
 
@@ -2688,7 +2663,7 @@ func TestHandleEcommerceWithdrawNotify_StaleClaimReturnsFailAndReleases(t *testi
 
 	notificationID := util.RandomString(32)
 
-	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 	store.EXPECT().TryClaimWechatNotification(gomock.Any(), gomock.Any()).Return(false, nil)
 	store.EXPECT().GetWechatNotification(gomock.Any(), notificationID).Return(db.WechatNotification{
 		ID:        notificationID,
@@ -2720,7 +2695,7 @@ func TestHandleApplymentStateNotifyIdempotency(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
 				// 先验证签名
 				ecommerceClient.EXPECT().
-					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(nil)
 
@@ -2768,7 +2743,7 @@ func TestHandleApplymentStateNotifyIdempotency(t *testing.T) {
 			name: "非进件事件类型_忽略处理",
 			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
 				ecommerceClient.EXPECT().
-					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(nil)
 
@@ -2853,7 +2828,7 @@ func TestHandleApplymentStateNotify_PreservesStoredSignFields(t *testing.T) {
 	}
 
 	ecommerceClient.EXPECT().
-		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Times(1).
 		Return(nil)
 
@@ -2932,7 +2907,7 @@ func TestHandleApplymentStateNotify_IgnoresOperatorApplymentAfterRemoval(t *test
 	}
 
 	ecommerceClient.EXPECT().
-		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Times(1).
 		Return(nil)
 
@@ -2999,7 +2974,7 @@ func TestHandleProfitSharingNotifyIdempotency(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
 				// 先验证签名
 				ecommerceClient.EXPECT().
-					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(nil)
 
@@ -3047,7 +3022,7 @@ func TestHandleProfitSharingNotifyIdempotency(t *testing.T) {
 			name: "分账成功通知_更新订单状态为finished",
 			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
 				ecommerceClient.EXPECT().
-					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(nil)
 
@@ -3141,7 +3116,7 @@ func TestHandleProfitSharingNotifyIdempotency(t *testing.T) {
 			name: "分账失败通知_更新订单状态为failed",
 			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
 				ecommerceClient.EXPECT().
-					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(nil)
 
@@ -3230,7 +3205,7 @@ func TestHandleProfitSharingNotifyIdempotency(t *testing.T) {
 			name: "分账查询失败_返回FAIL等待重试",
 			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
 				ecommerceClient.EXPECT().
-					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(nil)
 
@@ -3346,7 +3321,7 @@ func TestHandleProfitSharingNotifyIdempotency(t *testing.T) {
 			name: "分账回调子商户归属不匹配_返回FAIL",
 			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
 				ecommerceClient.EXPECT().
-					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(nil)
 

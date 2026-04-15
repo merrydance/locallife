@@ -141,6 +141,10 @@ func (f *DefaultPaymentFacade) GetPaymentOrder(ctx context.Context, input GetPay
 	return f.paymentService.GetPaymentOrder(ctx, input)
 }
 
+func (f *DefaultPaymentFacade) QueryPaymentOrder(ctx context.Context, input QueryPaymentOrderInput) (QueryPaymentOrderResult, error) {
+	return f.paymentService.QueryPaymentOrder(ctx, input)
+}
+
 func (f *DefaultPaymentFacade) ListPaymentOrders(ctx context.Context, input ListPaymentOrdersInput) (ListPaymentOrdersResult, error) {
 	return f.paymentService.ListPaymentOrders(ctx, input)
 }

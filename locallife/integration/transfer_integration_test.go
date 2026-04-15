@@ -142,7 +142,7 @@ func (c *integrationTestPaymentClient) DecryptNotificationRaw(notification *wech
 	return nil, errors.New("integration test payment client does not decrypt notifications")
 }
 
-func (c *integrationTestPaymentClient) VerifyNotificationSignature(signature, timestamp, nonce, body string) error {
+func (c *integrationTestPaymentClient) VerifyNotificationSignature(signature, timestamp, nonce, serial, body string) error {
 	return nil
 }
 

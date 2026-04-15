@@ -75,8 +75,9 @@ func (server *Server) readVerifiedEcommerceSuccessNotification(ctx *gin.Context,
 	signature := ctx.GetHeader("Wechatpay-Signature")
 	timestamp := ctx.GetHeader("Wechatpay-Timestamp")
 	nonce := ctx.GetHeader("Wechatpay-Nonce")
+	serial := ctx.GetHeader("Wechatpay-Serial")
 
-	if err := server.ecommerceClient.VerifyNotificationSignature(signature, timestamp, nonce, string(body)); err != nil {
+	if err := server.ecommerceClient.VerifyNotificationSignature(signature, timestamp, nonce, serial, string(body)); err != nil {
 		log.Error().Err(err).Str("callback_type", callbackType).Msg("invalid wechat signature for ecommerce notification")
 		ctx.JSON(http.StatusUnauthorized, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
@@ -702,8 +703,9 @@ func (server *Server) handleEcommerceWithdrawNotify(ctx *gin.Context) {
 	signature := ctx.GetHeader("Wechatpay-Signature")
 	timestamp := ctx.GetHeader("Wechatpay-Timestamp")
 	nonce := ctx.GetHeader("Wechatpay-Nonce")
+	serial := ctx.GetHeader("Wechatpay-Serial")
 
-	if err := server.ecommerceClient.VerifyNotificationSignature(signature, timestamp, nonce, string(body)); err != nil {
+	if err := server.ecommerceClient.VerifyNotificationSignature(signature, timestamp, nonce, serial, string(body)); err != nil {
 		paymentCallbackFailuresTotal.WithLabelValues("ecommerce_withdraw", "signature").Inc()
 		log.Error().Err(err).Msg("invalid wechat signature for ecommerce withdraw notification")
 		ctx.JSON(http.StatusUnauthorized, wechatPaymentNotifyResponse{Code: "FAIL", Message: "signature verification failed"})
@@ -982,8 +984,9 @@ func (server *Server) handlePaymentNotify(ctx *gin.Context) {
 	signature := ctx.GetHeader("Wechatpay-Signature")
 	timestamp := ctx.GetHeader("Wechatpay-Timestamp")
 	nonce := ctx.GetHeader("Wechatpay-Nonce")
+	serial := ctx.GetHeader("Wechatpay-Serial")
 
-	if err := server.paymentClient.VerifyNotificationSignature(signature, timestamp, nonce, string(body)); err != nil {
+	if err := server.paymentClient.VerifyNotificationSignature(signature, timestamp, nonce, serial, string(body)); err != nil {
 		paymentCallbackFailuresTotal.WithLabelValues("payment", "signature").Inc()
 		log.Error().
 			Err(err).
@@ -1449,8 +1452,9 @@ func (server *Server) handleRefundNotify(ctx *gin.Context) {
 	signature := ctx.GetHeader("Wechatpay-Signature")
 	timestamp := ctx.GetHeader("Wechatpay-Timestamp")
 	nonce := ctx.GetHeader("Wechatpay-Nonce")
+	serial := ctx.GetHeader("Wechatpay-Serial")
 
-	if err := server.paymentClient.VerifyNotificationSignature(signature, timestamp, nonce, string(body)); err != nil {
+	if err := server.paymentClient.VerifyNotificationSignature(signature, timestamp, nonce, serial, string(body)); err != nil {
 		paymentCallbackFailuresTotal.WithLabelValues("refund", "signature").Inc()
 		log.Error().Err(err).Msg("⚠️ invalid wechat signature for refund notification")
 		ctx.JSON(http.StatusUnauthorized, wechatPaymentNotifyResponse{
@@ -1602,8 +1606,9 @@ func (server *Server) handleEcommerceRefundNotify(ctx *gin.Context) {
 	signature := ctx.GetHeader("Wechatpay-Signature")
 	timestamp := ctx.GetHeader("Wechatpay-Timestamp")
 	nonce := ctx.GetHeader("Wechatpay-Nonce")
+	serial := ctx.GetHeader("Wechatpay-Serial")
 
-	if err := server.ecommerceClient.VerifyNotificationSignature(signature, timestamp, nonce, string(body)); err != nil {
+	if err := server.ecommerceClient.VerifyNotificationSignature(signature, timestamp, nonce, serial, string(body)); err != nil {
 		paymentCallbackFailuresTotal.WithLabelValues("ecommerce_refund", "signature").Inc()
 		log.Error().Err(err).Msg("⚠️ invalid wechat signature for ecommerce refund notification")
 		ctx.JSON(http.StatusUnauthorized, wechatPaymentNotifyResponse{
@@ -1758,8 +1763,9 @@ func (server *Server) handleProfitSharingNotify(ctx *gin.Context) {
 	signature := ctx.GetHeader("Wechatpay-Signature")
 	timestamp := ctx.GetHeader("Wechatpay-Timestamp")
 	nonce := ctx.GetHeader("Wechatpay-Nonce")
+	serial := ctx.GetHeader("Wechatpay-Serial")
 
-	if err := server.ecommerceClient.VerifyNotificationSignature(signature, timestamp, nonce, string(body)); err != nil {
+	if err := server.ecommerceClient.VerifyNotificationSignature(signature, timestamp, nonce, serial, string(body)); err != nil {
 		paymentCallbackFailuresTotal.WithLabelValues("profit_sharing", "signature").Inc()
 		log.Error().Err(err).Msg("⚠️ invalid wechat signature for profit sharing notification")
 		ctx.JSON(http.StatusUnauthorized, wechatPaymentNotifyResponse{
@@ -2546,8 +2552,9 @@ func (server *Server) handleApplymentStateNotify(ctx *gin.Context) {
 	signature := ctx.GetHeader("Wechatpay-Signature")
 	timestamp := ctx.GetHeader("Wechatpay-Timestamp")
 	nonce := ctx.GetHeader("Wechatpay-Nonce")
+	serial := ctx.GetHeader("Wechatpay-Serial")
 
-	if err := server.ecommerceClient.VerifyNotificationSignature(signature, timestamp, nonce, string(body)); err != nil {
+	if err := server.ecommerceClient.VerifyNotificationSignature(signature, timestamp, nonce, serial, string(body)); err != nil {
 		log.Error().
 			Err(err).
 			Str("signature", signature).
@@ -2792,8 +2799,9 @@ func (server *Server) handleOrderSettlementNotify(ctx *gin.Context) {
 	signature := ctx.GetHeader("Wechatpay-Signature")
 	timestamp := ctx.GetHeader("Wechatpay-Timestamp")
 	nonce := ctx.GetHeader("Wechatpay-Nonce")
+	serial := ctx.GetHeader("Wechatpay-Serial")
 
-	if err := server.ecommerceClient.VerifyNotificationSignature(signature, timestamp, nonce, string(body)); err != nil {
+	if err := server.ecommerceClient.VerifyNotificationSignature(signature, timestamp, nonce, serial, string(body)); err != nil {
 		paymentCallbackFailuresTotal.WithLabelValues("settlement", "signature").Inc()
 		log.Error().
 			Err(err).

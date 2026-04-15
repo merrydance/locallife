@@ -87,18 +87,19 @@ type QueryCombinedPaymentWechatAmount struct {
 }
 
 type QueryCombinedPaymentWechatSubOrder struct {
-	MchID         string
-	SubMchID      string
-	SubAppID      string
-	SubOpenID     string
-	OutTradeNo    string
-	TransactionID string
-	TradeType     string
-	TradeState    string
-	BankType      string
-	Attach        string
-	SuccessTime   string
-	Amount        QueryCombinedPaymentWechatAmount
+	MchID           string
+	SubMchID        string
+	SubAppID        string
+	SubOpenID       string
+	OutTradeNo      string
+	TransactionID   string
+	TradeType       string
+	TradeState      string
+	BankType        string
+	Attach          string
+	SuccessTime     string
+	PromotionDetail []wechat.PartnerPromotionDetail
+	Amount          QueryCombinedPaymentWechatAmount
 }
 
 type QueryCombinedPaymentWechatOrder struct {
@@ -664,17 +665,18 @@ func mapCombinedWechatOrder(queryResp *wechat.CombineQueryResponse) *QueryCombin
 	for _, subOrder := range queryResp.SubOrders {
 		tradeStates = append(tradeStates, subOrder.TradeState)
 		subOrders = append(subOrders, QueryCombinedPaymentWechatSubOrder{
-			MchID:         subOrder.MchID,
-			SubMchID:      subOrder.SubMchID,
-			SubAppID:      subOrder.SubAppID,
-			SubOpenID:     subOrder.SubOpenID,
-			OutTradeNo:    subOrder.OutTradeNo,
-			TransactionID: subOrder.TransactionID,
-			TradeType:     subOrder.TradeType,
-			TradeState:    subOrder.TradeState,
-			BankType:      subOrder.BankType,
-			Attach:        subOrder.Attach,
-			SuccessTime:   subOrder.SuccessTime,
+			MchID:           subOrder.MchID,
+			SubMchID:        subOrder.SubMchID,
+			SubAppID:        subOrder.SubAppID,
+			SubOpenID:       subOrder.SubOpenID,
+			OutTradeNo:      subOrder.OutTradeNo,
+			TransactionID:   subOrder.TransactionID,
+			TradeType:       subOrder.TradeType,
+			TradeState:      subOrder.TradeState,
+			BankType:        subOrder.BankType,
+			Attach:          subOrder.Attach,
+			SuccessTime:     subOrder.SuccessTime,
+			PromotionDetail: subOrder.PromotionDetail,
 			Amount: QueryCombinedPaymentWechatAmount{
 				TotalAmount:   subOrder.Amount.TotalAmount,
 				PayerAmount:   subOrder.Amount.PayerAmount,

@@ -21686,6 +21686,73 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/payments/{id}/query": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "查询本地普通支付订单详情，并拉取微信收付通单笔支付最新状态，供小程序恢复支付或判断后续动作",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "支付管理"
+                ],
+                "summary": "查询支付订单远端状态",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "支付订单ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "支付订单详情(含微信远端状态)",
+                        "schema": {
+                            "$ref": "#/definitions/api.paymentOrderQueryResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误或支付单不支持该查询",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "支付订单不属于当前用户",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "支付订单不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "支付服务不可用",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/payments/{id}/refunds": {
             "get": {
                 "security": [
@@ -33104,6 +33171,12 @@ const docTemplate = `{
                 "out_trade_no": {
                     "type": "string"
                 },
+                "promotion_detail": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.paymentOrderWechatPromotionDetail"
+                    }
+                },
                 "success_time": {
                     "type": "string"
                 },
@@ -39352,6 +39425,50 @@ const docTemplate = `{
                 }
             }
         },
+        "api.paymentOrderQueryResponse": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "integer"
+                },
+                "business_type": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "order_id": {
+                    "type": "integer"
+                },
+                "out_trade_no": {
+                    "type": "string"
+                },
+                "paid_at": {
+                    "type": "string"
+                },
+                "pay_params": {
+                    "$ref": "#/definitions/api.miniProgramPayParams"
+                },
+                "payment_type": {
+                    "type": "string"
+                },
+                "prepay_id": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "integer"
+                },
+                "wechat_query": {
+                    "$ref": "#/definitions/api.paymentOrderWechatQueryResult"
+                }
+            }
+        },
         "api.paymentOrderResponse": {
             "type": "object",
             "properties": {
@@ -39395,6 +39512,159 @@ const docTemplate = `{
                 },
                 "user_id": {
                     "type": "integer"
+                }
+            }
+        },
+        "api.paymentOrderWechatAmountResult": {
+            "type": "object",
+            "properties": {
+                "currency": {
+                    "type": "string"
+                },
+                "payer_currency": {
+                    "type": "string"
+                },
+                "payer_total": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.paymentOrderWechatPayerResult": {
+            "type": "object",
+            "properties": {
+                "sp_openid": {
+                    "type": "string"
+                },
+                "sub_openid": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.paymentOrderWechatPromotionDetail": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "integer"
+                },
+                "coupon_id": {
+                    "type": "string"
+                },
+                "currency": {
+                    "type": "string"
+                },
+                "goods_detail": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.paymentOrderWechatPromotionGoodsDetail"
+                    }
+                },
+                "merchant_contribute": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "other_contribute": {
+                    "type": "integer"
+                },
+                "scope": {
+                    "type": "string"
+                },
+                "stock_id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                },
+                "wechatpay_contribute": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.paymentOrderWechatPromotionGoodsDetail": {
+            "type": "object",
+            "properties": {
+                "discount_amount": {
+                    "type": "integer"
+                },
+                "goods_id": {
+                    "type": "string"
+                },
+                "goods_remark": {
+                    "type": "string"
+                },
+                "quantity": {
+                    "type": "integer"
+                },
+                "unit_price": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.paymentOrderWechatQueryResult": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "$ref": "#/definitions/api.paymentOrderWechatAmountResult"
+                },
+                "attach": {
+                    "type": "string"
+                },
+                "bank_type": {
+                    "type": "string"
+                },
+                "out_trade_no": {
+                    "type": "string"
+                },
+                "payer": {
+                    "$ref": "#/definitions/api.paymentOrderWechatPayerResult"
+                },
+                "promotion_detail": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.paymentOrderWechatPromotionDetail"
+                    }
+                },
+                "scene_info": {
+                    "$ref": "#/definitions/api.paymentOrderWechatSceneInfo"
+                },
+                "sp_appid": {
+                    "type": "string"
+                },
+                "sp_mchid": {
+                    "type": "string"
+                },
+                "sub_appid": {
+                    "type": "string"
+                },
+                "sub_mchid": {
+                    "type": "string"
+                },
+                "success_time": {
+                    "type": "string"
+                },
+                "trade_state": {
+                    "type": "string"
+                },
+                "trade_state_desc": {
+                    "type": "string"
+                },
+                "trade_type": {
+                    "type": "string"
+                },
+                "transaction_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.paymentOrderWechatSceneInfo": {
+            "type": "object",
+            "properties": {
+                "device_id": {
+                    "type": "string"
                 }
             }
         },

@@ -74,6 +74,17 @@ type GetPaymentOrderResult struct {
 	PaymentOrder db.PaymentOrder
 }
 
+type QueryPaymentOrderInput struct {
+	UserID         int64
+	PaymentOrderID int64
+}
+
+type QueryPaymentOrderResult struct {
+	PaymentOrder db.PaymentOrder
+	PayParams    *wechat.JSAPIPayParams
+	WechatOrder  *wechat.PartnerOrderQueryResponse
+}
+
 type ListPaymentOrdersInput struct {
 	UserID   int64
 	OrderID  *int64
@@ -783,6 +794,60 @@ func (svc *PaymentOrderService) GetPaymentOrder(ctx context.Context, input GetPa
 	return GetPaymentOrderResult{PaymentOrder: paymentOrder}, nil
 }
 
+func (svc *PaymentOrderService) QueryPaymentOrder(ctx context.Context, input QueryPaymentOrderInput) (QueryPaymentOrderResult, error) {
+	if svc.ecommerceClient == nil {
+		return QueryPaymentOrderResult{}, fmt.Errorf("ecommerce client: not configured")
+	}
+
+	detail, err := svc.GetPaymentOrder(ctx, GetPaymentOrderInput{
+		UserID:         input.UserID,
+		PaymentOrderID: input.PaymentOrderID,
+	})
+	if err != nil {
+		return QueryPaymentOrderResult{}, err
+	}
+
+	paymentOrder := detail.PaymentOrder
+	if paymentOrder.CombinedPaymentID.Valid {
+		return QueryPaymentOrderResult{}, NewRequestError(http.StatusBadRequest, errors.New("合单支付订单请使用合单查询接口"))
+	}
+	if paymentOrder.PaymentType != paymentTypeProfitSharing {
+		return QueryPaymentOrderResult{}, NewRequestError(http.StatusBadRequest, errors.New("仅收付通普通支付订单支持微信远端查询"))
+	}
+
+	subMchID, err := svc.resolvePaymentOrderSubMchID(ctx, paymentOrder)
+	if err != nil {
+		return QueryPaymentOrderResult{}, fmt.Errorf("resolve payment order sub_mchid: %w", err)
+	}
+
+	queryResp, err := svc.queryPartnerPaymentOrder(ctx, paymentOrder, subMchID)
+	if err != nil {
+		return QueryPaymentOrderResult{}, mapPartnerOrderQueryError(err)
+	}
+
+	var payParams *wechat.JSAPIPayParams
+	if svc.shouldExposePartnerPaymentPayParams(paymentOrder, queryResp) {
+		payParams, err = svc.signExistingPartnerPaymentOrder(paymentOrder)
+		if err != nil {
+			return QueryPaymentOrderResult{}, fmt.Errorf("sign payment order: %w", err)
+		}
+	}
+
+	return QueryPaymentOrderResult{
+		PaymentOrder: paymentOrder,
+		PayParams:    payParams,
+		WechatOrder:  queryResp,
+	}, nil
+}
+
+func (svc *PaymentOrderService) queryPartnerPaymentOrder(ctx context.Context, paymentOrder db.PaymentOrder, subMchID string) (*wechat.PartnerOrderQueryResponse, error) {
+	if paymentOrder.TransactionID.Valid && strings.TrimSpace(paymentOrder.TransactionID.String) != "" {
+		return svc.ecommerceClient.QueryPartnerOrderByTransactionID(ctx, paymentOrder.TransactionID.String, subMchID)
+	}
+
+	return svc.ecommerceClient.QueryPartnerOrderByOutTradeNo(ctx, paymentOrder.OutTradeNo, subMchID)
+}
+
 func (svc *PaymentOrderService) ListPaymentOrders(ctx context.Context, input ListPaymentOrdersInput) (ListPaymentOrdersResult, error) {
 	pageID := input.PageID
 	pageSize := input.PageSize
@@ -870,24 +935,48 @@ func (svc *PaymentOrderService) closePartnerPaymentOrder(ctx context.Context, pa
 		return ClosePaymentOrderResult{}, fmt.Errorf("ecommerce client: not configured")
 	}
 
+	subMchID, resolveErr := svc.resolvePaymentOrderSubMchID(ctx, paymentOrder)
+	if resolveErr != nil {
+		return ClosePaymentOrderResult{}, fmt.Errorf("resolve payment order sub_mchid: %w", resolveErr)
+	}
+	if err := svc.ecommerceClient.ClosePartnerOrder(ctx, paymentOrder.OutTradeNo, subMchID); err != nil {
+		if !hasWechatPaymentCode(err, "ORDER_CLOSED") {
+			return ClosePaymentOrderResult{}, mapPartnerOrderCloseError(err)
+		}
+	}
+
 	updatedPayment, err := svc.store.UpdatePaymentOrderToClosed(ctx, paymentOrder.ID)
 	if err != nil {
 		return ClosePaymentOrderResult{}, err
 	}
 
-	if paymentOrder.PrepayID.Valid {
-		subMchID, resolveErr := svc.resolvePaymentOrderSubMchID(ctx, paymentOrder)
-		if resolveErr != nil {
-			log.Warn().Err(resolveErr).Str("out_trade_no", paymentOrder.OutTradeNo).Msg("resolve partner payment sub_mchid failed, order will remain locally closed")
-			return ClosePaymentOrderResult{PaymentOrder: updatedPayment}, nil
-		}
-		if err := svc.ecommerceClient.ClosePartnerOrder(ctx, paymentOrder.OutTradeNo, subMchID); err != nil {
-			mappedErr := mapPartnerOrderCloseError(err)
-			log.Warn().Err(mappedErr).Str("out_trade_no", paymentOrder.OutTradeNo).Msg("close partner order failed, order will auto-expire")
-		}
-	}
-
 	return ClosePaymentOrderResult{PaymentOrder: updatedPayment}, nil
+}
+
+func (svc *PaymentOrderService) signExistingPartnerPaymentOrder(paymentOrder db.PaymentOrder) (*wechat.JSAPIPayParams, error) {
+	if !paymentOrder.PrepayID.Valid || strings.TrimSpace(paymentOrder.PrepayID.String) == "" {
+		return nil, nil
+	}
+	if svc.ecommerceClient == nil {
+		return nil, nil
+	}
+	return svc.ecommerceClient.GenerateJSAPIPayParams(paymentOrder.PrepayID.String)
+}
+
+func (svc *PaymentOrderService) shouldExposePartnerPaymentPayParams(paymentOrder db.PaymentOrder, wechatOrder *wechat.PartnerOrderQueryResponse) bool {
+	if paymentOrder.Status != paymentStatusPending {
+		return false
+	}
+	if !paymentOrder.PrepayID.Valid || strings.TrimSpace(paymentOrder.PrepayID.String) == "" {
+		return false
+	}
+	if paymentOrder.ExpiresAt.Valid && !svc.now().Before(paymentOrder.ExpiresAt.Time) {
+		return false
+	}
+	if wechatOrder == nil {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(wechatOrder.TradeState), "NOTPAY")
 }
 
 func (svc *PaymentOrderService) resolvePaymentOrderSubMchID(ctx context.Context, paymentOrder db.PaymentOrder) (string, error) {

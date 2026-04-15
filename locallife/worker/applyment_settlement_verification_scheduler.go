@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	"github.com/robfig/cron/v3"
 	"github.com/rs/zerolog/log"
 )
@@ -245,12 +246,12 @@ func (s *ApplymentSettlementVerificationScheduler) markSettlementVerificationInt
 }
 
 func settlementVerificationTerminalFailureReason(err error) (string, bool) {
-	var validationErr *wechat.SubMerchantSettlementQueryValidationError
+	var validationErr *wechatcontracts.SubMerchantSettlementQueryValidationError
 	if errors.As(err, &validationErr) {
 		return "结算卡验卡巡检请求无效，请联系平台处理微信二级商户号数据", true
 	}
 
-	var contractErr *wechat.SubMerchantSettlementContractError
+	var contractErr *wechatcontracts.SubMerchantSettlementContractError
 	if errors.As(err, &contractErr) {
 		return "微信结算卡查询响应不符合预期，请联系平台处理", true
 	}
