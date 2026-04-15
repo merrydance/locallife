@@ -9,7 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
-	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	mockwechat "github.com/merrydance/locallife/wechat/mock"
 	"github.com/merrydance/locallife/worker"
 	"github.com/stretchr/testify/require"
@@ -30,7 +30,7 @@ func TestProcessTaskMerchantCancelWithdrawResultSyncsTerminalState(t *testing.T)
 	}
 
 	store.EXPECT().GetMerchantCancelWithdrawApplication(gomock.Any(), record.ID).Return(record, nil)
-	ecommerceClient.EXPECT().QueryEcommerceCancelWithdrawByOutRequestNo(gomock.Any(), record.OutRequestNo).Return(&wechat.EcommerceCancelWithdrawQueryResponse{
+	ecommerceClient.EXPECT().QueryEcommerceCancelWithdrawByOutRequestNo(gomock.Any(), record.OutRequestNo).Return(&wechatcontracts.CancelWithdrawQueryResponse{
 		ApplymentID:             "WX-CANCEL-1001",
 		OutRequestNo:            record.OutRequestNo,
 		CancelState:             db.MerchantCancelStateFinish,

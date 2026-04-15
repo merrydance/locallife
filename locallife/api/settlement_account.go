@@ -12,7 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
-	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	"github.com/rs/zerolog/log"
 )
 
@@ -345,7 +345,7 @@ func (server *Server) modifyMerchantSettlementAccount(ctx *gin.Context) {
 		}
 	}
 
-	wxResp, err := server.ecommerceClient.ModifySubMerchantSettlement(ctx, paymentConfig.SubMchID, &wechat.ModifySubMerchantSettlementRequest{
+	wxResp, err := server.ecommerceClient.ModifySubMerchantSettlement(ctx, paymentConfig.SubMchID, &wechatcontracts.ModifySubMerchantSettlementRequest{
 		AccountType:   req.AccountType,
 		AccountBank:   req.AccountBank,
 		BankName:      req.BankName,

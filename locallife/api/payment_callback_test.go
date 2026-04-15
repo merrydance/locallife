@@ -16,6 +16,7 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/util"
 	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	mockwechat "github.com/merrydance/locallife/wechat/mock"
 	"github.com/merrydance/locallife/worker"
 	mockwk "github.com/merrydance/locallife/worker/mock"
@@ -2824,7 +2825,7 @@ func TestHandleApplymentStateNotify_PreservesStoredSignFields(t *testing.T) {
 		SignUrl:            pgtype.Text{String: "https://sign.example.com/keep", Valid: true},
 		SignState:          pgtype.Text{String: "UNSIGNED", Valid: true},
 		LegalValidationUrl: pgtype.Text{String: "https://wx.example.com/legal-keep", Valid: true},
-		AccountValidation:  wechat.MarshalEcommerceApplymentAccountValidation(&wechat.EcommerceApplymentAccountValidation{Remark: "keep-existing-validation"}),
+		AccountValidation:  wechat.MarshalEcommerceApplymentAccountValidation(&wechatcontracts.EcommerceApplymentAccountValidation{Remark: "keep-existing-validation"}),
 	}
 
 	ecommerceClient.EXPECT().

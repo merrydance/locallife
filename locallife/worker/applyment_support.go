@@ -7,7 +7,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/logic"
-	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 )
 
 func applymentNeedsSignFollowUp(status, signState string) bool {
@@ -61,7 +61,7 @@ func applymentStatusNeedsRemoteQuery(status string) bool {
 	}
 }
 
-func getRejectReasonFromApplymentAuditDetail(details []wechat.ApplymentAuditDetail) pgtype.Text {
+func getRejectReasonFromApplymentAuditDetail(details []wechatcontracts.ApplymentAuditDetail) pgtype.Text {
 	if len(details) == 0 {
 		return pgtype.Text{}
 	}

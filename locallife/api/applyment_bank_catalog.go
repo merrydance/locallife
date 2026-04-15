@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 )
 
 const (
@@ -363,7 +363,7 @@ func (server *Server) loadApplymentBanks(ctx context.Context, accountType string
 	}
 
 	var (
-		fetch func(context.Context, int, int) (*wechat.CapitalBankListResponse, error)
+		fetch func(context.Context, int, int) (*wechatcontracts.CapitalBankListResponse, error)
 		items []applymentBankOption
 	)
 
@@ -562,7 +562,7 @@ func (server *Server) loadApplymentBranches(ctx context.Context, bankAliasCode s
 	return entry, entry.refreshed, nil
 }
 
-func mapCapitalBankOption(bank wechat.CapitalBank) applymentBankOption {
+func mapCapitalBankOption(bank wechatcontracts.CapitalBank) applymentBankOption {
 	return applymentBankOption{
 		BankAlias:       bank.BankAlias,
 		BankAliasCode:   bank.BankAliasCode,

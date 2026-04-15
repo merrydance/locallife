@@ -8,7 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
-	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 )
 
 func NormalizeMerchantCancelState(cancelState string) string {
@@ -26,7 +26,7 @@ func MerchantCancelWithdrawIsTerminal(cancelState string) bool {
 
 func BuildMerchantCancelWithdrawSyncParams(
 	current db.MerchantCancelWithdrawApplication,
-	query *wechat.EcommerceCancelWithdrawQueryResponse,
+	query *wechatcontracts.CancelWithdrawQueryResponse,
 	localSyncState string,
 	lastError string,
 	markSubmitted bool,

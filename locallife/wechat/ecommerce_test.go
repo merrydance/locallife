@@ -647,13 +647,13 @@ func TestCreateEcommerceApplyment_SetsWechatpaySerialHeader(t *testing.T) {
 		OutRequestNo:       "applyment-test-001",
 		OrganizationType:   "4",
 		FinanceInstitution: false,
-		BusinessLicense:    &BusinessLicenseInfo{BusinessLicenseCopy: "license_copy_media_id", BusinessLicenseNumber: "91440300TEST12345", MerchantName: "测试门店", LegalPerson: "张三", CompanyAddress: "深圳市南山区", BusinessTime: "[\"2020-01-01\",\"长期\"]"},
+		BusinessLicense:    &wechatcontracts.ApplymentBusinessLicenseInfo{BusinessLicenseCopy: "license_copy_media_id", BusinessLicenseNumber: "91440300TEST12345", MerchantName: "测试门店", LegalPerson: "张三", CompanyAddress: "深圳市南山区", BusinessTime: "[\"2020-01-01\",\"长期\"]"},
 		MerchantShortname:  "测试运营商",
-		IDCardInfo:         &ApplymentIDCardInfo{IDCardCopy: "copy_media_id", IDCardNational: "national_media_id", IDCardName: "encrypted_name", IDCardNumber: "encrypted_id_no", IDCardValidTimeBegin: "2020-01-01", IDCardValidTime: "长期"},
-		AccountInfo:        &ApplymentBankAccountInfo{BankAccountType: "ACCOUNT_TYPE_PRIVATE", AccountBank: "其他银行", AccountName: "encrypted_account_name", BankAddressCode: "440300", BankBranchID: "402584040001", BankName: "深圳前海微众银行深圳南山支行", AccountNumber: "encrypted_account_no"},
-		ContactInfo:        &ApplymentContactInfo{ContactType: "LEGAL", ContactName: "encrypted_contact_name", MobilePhone: "encrypted_mobile"},
-		SalesSceneInfo:     &ApplymentSalesSceneInfo{StoreName: "测试门店", StoreURL: "https://example.com/store"},
-		SettlementInfo:     &ApplymentSettlementInfo{SettlementID: 719, QualificationType: "餐饮"},
+		IDCardInfo:         &wechatcontracts.ApplymentIDCardInfo{IDCardCopy: "copy_media_id", IDCardNational: "national_media_id", IDCardName: "encrypted_name", IDCardNumber: "encrypted_id_no", IDCardValidTimeBegin: "2020-01-01", IDCardValidTime: "长期"},
+		AccountInfo:        &wechatcontracts.ApplymentBankAccountInfo{BankAccountType: "ACCOUNT_TYPE_PRIVATE", AccountBank: "其他银行", AccountName: "encrypted_account_name", BankAddressCode: "440300", BankBranchID: "402584040001", BankName: "深圳前海微众银行深圳南山支行", AccountNumber: "encrypted_account_no"},
+		ContactInfo:        &wechatcontracts.ApplymentContactInfo{ContactType: "LEGAL", ContactName: "encrypted_contact_name", MobilePhone: "encrypted_mobile"},
+		SalesSceneInfo:     &wechatcontracts.ApplymentSalesSceneInfo{StoreName: "测试门店", StoreURL: "https://example.com/store"},
+		SettlementInfo:     &wechatcontracts.ApplymentSettlementInfo{SettlementID: 719, QualificationType: "餐饮"},
 	})
 	require.NoError(t, err)
 	require.Equal(t, int64(123456789), resp.ApplymentID)
@@ -2053,7 +2053,7 @@ func TestCreateEcommerceCancelWithdraw(t *testing.T) {
 		}),
 	}
 
-	resp, err := client.CreateEcommerceCancelWithdraw(context.Background(), &EcommerceCancelWithdrawRequest{
+	resp, err := client.CreateEcommerceCancelWithdraw(context.Background(), &wechatcontracts.CancelWithdrawRequest{
 		SubMchID:     "1900000109",
 		OutRequestNo: "MCW202604140001",
 		Withdraw:     "APPLY_WITHDRAW",
@@ -2160,7 +2160,7 @@ func TestQueryEcommerceCancelWithdrawByOutRequestNo_RejectsUnsupportedCancelStat
 	require.Error(t, err)
 	require.ErrorContains(t, err, "unsupported cancel_state")
 
-	var contractErr *MerchantCancelWithdrawContractError
+	var contractErr *wechatcontracts.CancelWithdrawQueryContractError
 	require.ErrorAs(t, err, &contractErr)
 }
 
@@ -2535,7 +2535,7 @@ func TestQueryEcommerceApplymentByID_DecryptsAccountValidationAndPreservesRawCip
 	require.Equal(t, encryptedAccountNo, resp.AccountValidation.RawAccountNo)
 
 	stored := MarshalEcommerceApplymentAccountValidation(resp.AccountValidation)
-	var persisted EcommerceApplymentAccountValidation
+	var persisted wechatcontracts.EcommerceApplymentAccountValidation
 	require.NoError(t, json.Unmarshal(stored, &persisted))
 	require.Equal(t, encryptedAccountName, persisted.AccountName)
 	require.Equal(t, encryptedAccountNo, persisted.AccountNo)
@@ -2831,7 +2831,7 @@ func TestModifySubMerchantSettlement_PostsEncryptedPayload(t *testing.T) {
 		}),
 	}
 
-	resp, err := client.ModifySubMerchantSettlement(context.Background(), "1900006491", &ModifySubMerchantSettlementRequest{
+	resp, err := client.ModifySubMerchantSettlement(context.Background(), "1900006491", &wechatcontracts.ModifySubMerchantSettlementRequest{
 		AccountType:   "ACCOUNT_TYPE_BUSINESS",
 		AccountBank:   "工商银行",
 		BankBranchID:  "402713354941",
@@ -2885,7 +2885,7 @@ func TestModifySubMerchantSettlement_OmitsEmptyAccountName(t *testing.T) {
 		}),
 	}
 
-	resp, err := client.ModifySubMerchantSettlement(context.Background(), "1900006491", &ModifySubMerchantSettlementRequest{
+	resp, err := client.ModifySubMerchantSettlement(context.Background(), "1900006491", &wechatcontracts.ModifySubMerchantSettlementRequest{
 		AccountType:   "ACCOUNT_TYPE_BUSINESS",
 		AccountBank:   "工商银行",
 		AccountNumber: "cipher-account-number",

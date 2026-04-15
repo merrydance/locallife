@@ -242,8 +242,12 @@ func (server *Server) retryPrinterReconciliationJob(ctx *gin.Context) {
 			return
 		}
 		ctx.JSON(http.StatusBadGateway, gin.H{
-			"error": errorResponse(err),
-			"job":   toPrinterReconciliationJobResponse(updatedJob),
+			"code":    CodeBadGateway,
+			"message": http.StatusText(http.StatusBadGateway),
+			"data": gin.H{
+				"error": errorResponse(err),
+				"job":   toPrinterReconciliationJobResponse(updatedJob),
+			},
 		})
 		return
 	}

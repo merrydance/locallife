@@ -13,6 +13,7 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	"github.com/rs/zerolog/log"
 )
 
@@ -152,7 +153,7 @@ func (processor *RedisTaskProcessor) ProcessTaskMerchantCancelWithdrawResult(ctx
 	return nil
 }
 
-func (processor *RedisTaskProcessor) queryMerchantCancelWithdrawResult(ctx context.Context, record db.MerchantCancelWithdrawApplication) (*wechat.EcommerceCancelWithdrawQueryResponse, error) {
+func (processor *RedisTaskProcessor) queryMerchantCancelWithdrawResult(ctx context.Context, record db.MerchantCancelWithdrawApplication) (*wechatcontracts.CancelWithdrawQueryResponse, error) {
 	if record.ApplymentID.Valid && strings.TrimSpace(record.ApplymentID.String) != "" {
 		resp, err := processor.ecommerceClient.QueryEcommerceCancelWithdrawByApplymentID(ctx, record.ApplymentID.String)
 		if err == nil {
@@ -189,7 +190,7 @@ func isWechatMerchantCancelWithdrawRequestNotFound(err error) bool {
 
 func mustBuildMerchantCancelWithdrawSyncParams(
 	record db.MerchantCancelWithdrawApplication,
-	queryResp *wechat.EcommerceCancelWithdrawQueryResponse,
+	queryResp *wechatcontracts.CancelWithdrawQueryResponse,
 	localSyncState string,
 	lastError string,
 ) db.UpdateMerchantCancelWithdrawApplicationSyncParams {

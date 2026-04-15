@@ -11,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	"github.com/stretchr/testify/require"
 )
 
@@ -70,9 +71,9 @@ func TestValidateCreateMerchantCancelWithdrawRequestRejectsBusinessLicenseStatus
 }
 
 func TestMerchantCancelWithdrawEligibilityBlockedErrorUsesBlockReasonDescriptions(t *testing.T) {
-	err := merchantCancelWithdrawEligibilityBlockedError(&wechat.EcommerceCancelWithdrawEligibilityResponse{
+	err := merchantCancelWithdrawEligibilityBlockedError(&wechatcontracts.CancelWithdrawEligibilityResponse{
 		ValidateResult: "NOT_ALLOW_CANCEL_WITHDRAW",
-		BlockReasons: []wechat.EcommerceCancelWithdrawBlockReason{
+		BlockReasons: []wechatcontracts.CancelWithdrawBlockReason{
 			{Type: "CONSUMER_COMPLAINT_UNPROCESSED", Description: "消费者投诉未处理"},
 			{Type: "HAS_BLOCKING_CONTROL", Description: "存在不可注销管控"},
 		},
@@ -81,9 +82,9 @@ func TestMerchantCancelWithdrawEligibilityBlockedErrorUsesBlockReasonDescription
 }
 
 func TestMerchantCancelWithdrawEligibilityBlockedErrorFallsBackToReasonType(t *testing.T) {
-	err := merchantCancelWithdrawEligibilityBlockedError(&wechat.EcommerceCancelWithdrawEligibilityResponse{
+	err := merchantCancelWithdrawEligibilityBlockedError(&wechatcontracts.CancelWithdrawEligibilityResponse{
 		ValidateResult: "NOT_ALLOW_CANCEL_WITHDRAW",
-		BlockReasons: []wechat.EcommerceCancelWithdrawBlockReason{
+		BlockReasons: []wechatcontracts.CancelWithdrawBlockReason{
 			{Type: "OTHER_REASON"},
 		},
 	})
@@ -132,11 +133,101 @@ func TestRespondMerchantCancelWithdrawRequestPreparationErrorHidesUnexpectedUpst
 
 	handled := respondMerchantCancelWithdrawRequestPreparationError(ctx, 101, "1900000109", "MCW202604140001", err)
 	require.True(t, handled)
-	require.Equal(t, http.StatusBadGateway, recorder.Code)
+	require.Equal(t, http.StatusServiceUnavailable, recorder.Code)
 	require.Equal(t,
-		"WeChat cancel-withdraw service is temporarily unavailable; retry later",
+		ErrMerchantCancelWithdrawServiceUnavailable.Message,
 		decodeMerchantCancelWithdrawErrorResponse(t, recorder).Error,
 	)
+}
+
+func TestRespondMerchantCancelWithdrawWechatError(t *testing.T) {
+	testCases := []struct {
+		name           string
+		operation      string
+		wxErr          *wechat.WechatPayError
+		expectedStatus int
+		expectedCode   int
+		expectedError  string
+	}{
+		{
+			name:           "ParamErrorMapsToBadRequest",
+			operation:      "create_cancel_withdraw",
+			wxErr:          &wechat.WechatPayError{StatusCode: http.StatusBadRequest, Code: "PARAM_ERROR", Message: "参数错误"},
+			expectedStatus: http.StatusBadRequest,
+			expectedError:  errMerchantCancelWithdrawWechatParamError.Error(),
+		},
+		{
+			name:           "NoAuthMapsToForbidden",
+			operation:      "create_cancel_withdraw",
+			wxErr:          &wechat.WechatPayError{StatusCode: http.StatusForbidden, Code: "NO_AUTH", Message: "商户权限异常"},
+			expectedStatus: http.StatusForbidden,
+			expectedCode:   ErrMerchantCancelWithdrawWechatNoAuth.Code,
+			expectedError:  ErrMerchantCancelWithdrawWechatNoAuth.Message,
+		},
+		{
+			name:           "AlreadyExistsMapsToConflict",
+			operation:      "create_cancel_withdraw",
+			wxErr:          &wechat.WechatPayError{StatusCode: http.StatusConflict, Code: "ALREADY_EXISTS", Message: "申请单已存在"},
+			expectedStatus: http.StatusConflict,
+			expectedCode:   ErrMerchantCancelWithdrawApplicationExists.Code,
+			expectedError:  ErrMerchantCancelWithdrawApplicationExists.Message,
+		},
+		{
+			name:           "BizErrNeedRetryMapsToServiceUnavailable",
+			operation:      "create_cancel_withdraw",
+			wxErr:          &wechat.WechatPayError{StatusCode: http.StatusServiceUnavailable, Code: "BIZ_ERR_NEED_RETRY", Message: "请稍后重试"},
+			expectedStatus: http.StatusServiceUnavailable,
+			expectedCode:   ErrMerchantCancelWithdrawWechatRetryLater.Code,
+			expectedError:  ErrMerchantCancelWithdrawWechatRetryLater.Message,
+		},
+		{
+			name:           "FrequencyLimitMapsToTooManyRequests",
+			operation:      "create_cancel_withdraw",
+			wxErr:          &wechat.WechatPayError{StatusCode: http.StatusTooManyRequests, Code: "FREQUENCY_LIMIT", Message: "频率超限"},
+			expectedStatus: http.StatusTooManyRequests,
+			expectedCode:   ErrMerchantCancelWithdrawWechatFrequencyLimit.Code,
+			expectedError:  ErrMerchantCancelWithdrawWechatFrequencyLimit.Message,
+		},
+		{
+			name:           "UploadRateLimitMapsToTooManyRequests",
+			operation:      "prepare_cancel_withdraw_request",
+			wxErr:          &wechat.WechatPayError{StatusCode: http.StatusTooManyRequests, Code: "FREQUENCY_LIMIT_EXCEED", Message: "上传频率超限"},
+			expectedStatus: http.StatusTooManyRequests,
+			expectedCode:   ErrMerchantCancelWithdrawWechatFrequencyLimit.Code,
+			expectedError:  ErrMerchantCancelWithdrawWechatFrequencyLimit.Message,
+		},
+		{
+			name:           "SystemErrorMapsToInternalServerError",
+			operation:      "create_cancel_withdraw",
+			wxErr:          &wechat.WechatPayError{StatusCode: http.StatusInternalServerError, Code: "SYSTEM_ERROR", Message: "系统异常"},
+			expectedStatus: http.StatusInternalServerError,
+			expectedCode:   ErrMerchantCancelWithdrawWechatServiceUnavailable.Code,
+			expectedError:  ErrMerchantCancelWithdrawWechatServiceUnavailable.Message,
+		},
+		{
+			name:           "UndocumentedCodeMapsToBadGateway",
+			operation:      "create_cancel_withdraw",
+			wxErr:          &wechat.WechatPayError{StatusCode: http.StatusBadRequest, Code: "UNKNOWN_CODE", Message: "unknown"},
+			expectedStatus: http.StatusBadGateway,
+			expectedCode:   ErrMerchantCancelWithdrawWechatInvalidResponse.Code,
+			expectedError:  ErrMerchantCancelWithdrawWechatInvalidResponse.Message,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, recorder := newMerchantCancelWithdrawTestContext(t)
+			handled := respondMerchantCancelWithdrawWechatError(ctx, tc.operation, 101, "1900000109", "MCW202604140001", fmt.Errorf("cancel withdraw failed: %w", tc.wxErr))
+
+			require.True(t, handled)
+			require.Len(t, ctx.Errors, 1)
+			require.Equal(t, tc.expectedStatus, recorder.Code)
+
+			resp := decodeMerchantCancelWithdrawErrorResponse(t, recorder)
+			require.Equal(t, tc.expectedCode, resp.Code)
+			require.Equal(t, tc.expectedError, resp.Error)
+		})
+	}
 }
 
 func newMerchantCancelWithdrawTestContext(t *testing.T) (*gin.Context, *httptest.ResponseRecorder) {

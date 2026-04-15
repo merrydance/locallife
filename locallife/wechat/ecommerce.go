@@ -108,92 +108,9 @@ type EcommerceClient struct {
 	violationNotifyURL string
 }
 
-type EcommerceCancelWithdrawAccountInfo struct {
-	OutAccountType string `json:"out_account_type"`
-	Amount         int64  `json:"amount"`
-}
-
-type EcommerceCancelWithdrawBlockReason struct {
-	Type        string `json:"type"`
-	Description string `json:"description"`
-}
-
-type EcommerceCancelWithdrawEligibilityResponse struct {
-	SubMchID       string                               `json:"sub_mchid"`
-	MerchantState  string                               `json:"merchant_state"`
-	ValidateResult string                               `json:"validate_result"`
-	AccountInfo    []EcommerceCancelWithdrawAccountInfo `json:"account_info,omitempty"`
-	BlockReasons   []EcommerceCancelWithdrawBlockReason `json:"block_reasons,omitempty"`
-}
-
-type EcommerceCancelWithdrawIdentityInfo struct {
-	IDDocType          string `json:"id_doc_type,omitempty"`
-	IdentificationName string `json:"identification_name,omitempty"`
-	IdentificationNo   string `json:"identification_no,omitempty"`
-}
-
-type EcommerceCancelWithdrawBankAccountInfo struct {
-	AccountName    string `json:"account_name,omitempty"`
-	AccountBank    string `json:"account_bank,omitempty"`
-	BankBranchID   string `json:"bank_branch_id,omitempty"`
-	BankBranchName string `json:"bank_branch_name,omitempty"`
-	AccountNumber  string `json:"account_number,omitempty"`
-}
-
-type EcommerceCancelWithdrawPayeeInfo struct {
-	AccountType     string                                  `json:"account_type,omitempty"`
-	BankAccountInfo *EcommerceCancelWithdrawBankAccountInfo `json:"bank_account_info,omitempty"`
-	IdentityInfo    *EcommerceCancelWithdrawIdentityInfo    `json:"identity_info,omitempty"`
-}
-
-type EcommerceCancelWithdrawProofMedia struct {
-	ProofMediaType string `json:"proof_media_type"`
-	ProofMedia     string `json:"proof_media"`
-}
-
-type EcommerceCancelWithdrawRequest struct {
-	SubMchID            string                              `json:"sub_mchid"`
-	OutRequestNo        string                              `json:"out_request_no"`
-	Withdraw            string                              `json:"withdraw,omitempty"`
-	PayeeInfo           *EcommerceCancelWithdrawPayeeInfo   `json:"payee_info,omitempty"`
-	ProofMedias         []EcommerceCancelWithdrawProofMedia `json:"proof_medias,omitempty"`
-	AdditionalMaterials []string                            `json:"additional_materials,omitempty"`
-	Remark              string                              `json:"remark,omitempty"`
-}
-
-type EcommerceCancelWithdrawCreateResponse struct {
-	ApplymentID  string `json:"applyment_id"`
-	OutRequestNo string `json:"out_request_no"`
-}
-
-type EcommerceCancelWithdrawAccountWithdrawResult struct {
-	OutAccountType   string `json:"out_account_type"`
-	PayState         string `json:"pay_state"`
-	StateDescription string `json:"state_description"`
-}
-
-type EcommerceCancelWithdrawConfirmCancel struct {
-	ConfirmCancelURL string `json:"confirm_cancel_url,omitempty"`
-}
-
-type EcommerceCancelWithdrawQueryResponse struct {
-	ApplymentID              string                                         `json:"applyment_id"`
-	OutRequestNo             string                                         `json:"out_request_no"`
-	CancelState              string                                         `json:"cancel_state"`
-	CancelStateDescription   string                                         `json:"cancel_state_description"`
-	Withdraw                 string                                         `json:"withdraw,omitempty"`
-	WithdrawState            string                                         `json:"withdraw_state,omitempty"`
-	WithdrawStateDescription string                                         `json:"withdraw_state_description,omitempty"`
-	AccountWithdrawResult    []EcommerceCancelWithdrawAccountWithdrawResult `json:"account_withdraw_result,omitempty"`
-	ModifyTime               string                                         `json:"modify_time,omitempty"`
-	SubMchID                 string                                         `json:"sub_mchid"`
-	AccountInfo              []EcommerceCancelWithdrawAccountInfo           `json:"account_info,omitempty"`
-	ConfirmCancel            *EcommerceCancelWithdrawConfirmCancel          `json:"confirm_cancel,omitempty"`
-}
-
 // ValidateEcommerceCancelWithdraw 校验二级商户是否满足注销提现条件
-func (c *EcommerceClient) ValidateEcommerceCancelWithdraw(ctx context.Context, subMchID string) (*EcommerceCancelWithdrawEligibilityResponse, error) {
-	trimmedSubMchID, err := validateMerchantCancelWithdrawIdentifier("validate merchant cancel withdraw", "sub_mchid", subMchID)
+func (c *EcommerceClient) ValidateEcommerceCancelWithdraw(ctx context.Context, subMchID string) (*wechatcontracts.CancelWithdrawEligibilityResponse, error) {
+	trimmedSubMchID, err := wechatcontracts.ValidateCancelWithdrawIdentifier("validate merchant cancel withdraw", "sub_mchid", subMchID)
 	if err != nil {
 		return nil, err
 	}
@@ -204,22 +121,22 @@ func (c *EcommerceClient) ValidateEcommerceCancelWithdraw(ctx context.Context, s
 		return nil, fmt.Errorf("validate ecommerce cancel withdraw: %w", err)
 	}
 
-	var resp EcommerceCancelWithdrawEligibilityResponse
+	var resp wechatcontracts.CancelWithdrawEligibilityResponse
 	if err := json.Unmarshal(respBody, &resp); err != nil {
 		return nil, fmt.Errorf("unmarshal response: %w", err)
 	}
 	if resp.SubMchID == "" {
 		resp.SubMchID = trimmedSubMchID
 	}
-	if err := validateMerchantCancelWithdrawEligibilityResponse(&resp); err != nil {
+	if err := wechatcontracts.ValidateCancelWithdrawEligibilityResponse(&resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil
 }
 
 // CreateEcommerceCancelWithdraw 提交商户注销提现申请
-func (c *EcommerceClient) CreateEcommerceCancelWithdraw(ctx context.Context, req *EcommerceCancelWithdrawRequest) (*EcommerceCancelWithdrawCreateResponse, error) {
-	if err := validateMerchantCancelWithdrawCreateRequest(req); err != nil {
+func (c *EcommerceClient) CreateEcommerceCancelWithdraw(ctx context.Context, req *wechatcontracts.CancelWithdrawRequest) (*wechatcontracts.CancelWithdrawCreateResponse, error) {
+	if err := wechatcontracts.ValidateCancelWithdrawCreateRequest(req); err != nil {
 		return nil, err
 	}
 
@@ -248,7 +165,7 @@ func (c *EcommerceClient) CreateEcommerceCancelWithdraw(ctx context.Context, req
 		return nil, fmt.Errorf("create ecommerce cancel withdraw: %w", err)
 	}
 
-	var resp EcommerceCancelWithdrawCreateResponse
+	var resp wechatcontracts.CancelWithdrawCreateResponse
 	if err := json.Unmarshal(respBody, &resp); err != nil {
 		return nil, fmt.Errorf("unmarshal response: %w", err)
 	}
@@ -259,8 +176,8 @@ func (c *EcommerceClient) CreateEcommerceCancelWithdraw(ctx context.Context, req
 }
 
 // QueryEcommerceCancelWithdrawByOutRequestNo 按平台申请单号查询注销提现申请状态
-func (c *EcommerceClient) QueryEcommerceCancelWithdrawByOutRequestNo(ctx context.Context, outRequestNo string) (*EcommerceCancelWithdrawQueryResponse, error) {
-	trimmedOutRequestNo, err := validateMerchantCancelWithdrawIdentifier("query merchant cancel withdraw by out_request_no", "out_request_no", outRequestNo)
+func (c *EcommerceClient) QueryEcommerceCancelWithdrawByOutRequestNo(ctx context.Context, outRequestNo string) (*wechatcontracts.CancelWithdrawQueryResponse, error) {
+	trimmedOutRequestNo, err := wechatcontracts.ValidateCancelWithdrawIdentifier("query merchant cancel withdraw by out_request_no", "out_request_no", outRequestNo)
 	if err != nil {
 		return nil, err
 	}
@@ -271,22 +188,22 @@ func (c *EcommerceClient) QueryEcommerceCancelWithdrawByOutRequestNo(ctx context
 		return nil, fmt.Errorf("query ecommerce cancel withdraw by out request no: %w", err)
 	}
 
-	var resp EcommerceCancelWithdrawQueryResponse
+	var resp wechatcontracts.CancelWithdrawQueryResponse
 	if err := json.Unmarshal(respBody, &resp); err != nil {
 		return nil, fmt.Errorf("unmarshal response: %w", err)
 	}
 	if resp.OutRequestNo == "" {
 		resp.OutRequestNo = trimmedOutRequestNo
 	}
-	if err := validateMerchantCancelWithdrawQueryResponse("query merchant cancel withdraw by out_request_no", &resp); err != nil {
+	if err := wechatcontracts.ValidateCancelWithdrawQueryResponse("query merchant cancel withdraw by out_request_no", &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil
 }
 
 // QueryEcommerceCancelWithdrawByApplymentID 按微信申请单号查询注销提现申请状态
-func (c *EcommerceClient) QueryEcommerceCancelWithdrawByApplymentID(ctx context.Context, applymentID string) (*EcommerceCancelWithdrawQueryResponse, error) {
-	trimmedApplymentID, err := validateMerchantCancelWithdrawIdentifier("query merchant cancel withdraw by applyment_id", "applyment_id", applymentID)
+func (c *EcommerceClient) QueryEcommerceCancelWithdrawByApplymentID(ctx context.Context, applymentID string) (*wechatcontracts.CancelWithdrawQueryResponse, error) {
+	trimmedApplymentID, err := wechatcontracts.ValidateCancelWithdrawIdentifier("query merchant cancel withdraw by applyment_id", "applyment_id", applymentID)
 	if err != nil {
 		return nil, err
 	}
@@ -297,14 +214,14 @@ func (c *EcommerceClient) QueryEcommerceCancelWithdrawByApplymentID(ctx context.
 		return nil, fmt.Errorf("query ecommerce cancel withdraw by applyment id: %w", err)
 	}
 
-	var resp EcommerceCancelWithdrawQueryResponse
+	var resp wechatcontracts.CancelWithdrawQueryResponse
 	if err := json.Unmarshal(respBody, &resp); err != nil {
 		return nil, fmt.Errorf("unmarshal response: %w", err)
 	}
 	if resp.ApplymentID == "" {
 		resp.ApplymentID = trimmedApplymentID
 	}
-	if err := validateMerchantCancelWithdrawQueryResponse("query merchant cancel withdraw by applyment_id", &resp); err != nil {
+	if err := wechatcontracts.ValidateCancelWithdrawQueryResponse("query merchant cancel withdraw by applyment_id", &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil
@@ -597,24 +514,24 @@ func (c *EcommerceClient) ClosePartnerOrder(ctx context.Context, outTradeNo, sub
 
 // EcommerceApplymentRequest 二级商户进件申请请求
 type EcommerceApplymentRequest struct {
-	OutRequestNo         string                    `json:"out_request_no"`                   // 业务申请编号
-	OrganizationType     string                    `json:"organization_type"`                // 主体类型: 2401-小微, 2500-个人卖家, 4-个体工商户, 2-企业, 3-事业单位, 2502-政府机关, 1708-社会组织
-	FinanceInstitution   bool                      `json:"finance_institution"`              // 是否金融机构
-	BusinessLicense      *BusinessLicenseInfo      `json:"business_license_info,omitempty"`  // 营业执照信息（个体户/企业必填）
-	IDCardInfo           *ApplymentIDCardInfo      `json:"id_card_info"`                     // 法人身份证信息
-	AccountInfo          *ApplymentBankAccountInfo `json:"account_info,omitempty"`           // 结算银行账户
-	ContactInfo          *ApplymentContactInfo     `json:"contact_info"`                     // 联系人信息
-	SalesSceneInfo       *ApplymentSalesSceneInfo  `json:"sales_scene_info"`                 // 经营场景信息
-	SettlementInfo       *ApplymentSettlementInfo  `json:"settlement_info,omitempty"`        // 结算规则
-	MerchantShortname    string                    `json:"merchant_shortname"`               // 商户简称
-	Qualifications       []string                  `json:"qualifications,omitempty"`         // 特殊资质
-	BusinessAdditionPics []string                  `json:"business_addition_pics,omitempty"` // 补充材料
-	BusinessAdditionDesc string                    `json:"business_addition_desc,omitempty"` // 补充说明
+	OutRequestNo         string                                        `json:"out_request_no"`                   // 业务申请编号
+	OrganizationType     string                                        `json:"organization_type"`                // 主体类型: 2401-小微, 2500-个人卖家, 4-个体工商户, 2-企业, 3-事业单位, 2502-政府机关, 1708-社会组织
+	FinanceInstitution   bool                                          `json:"finance_institution"`              // 是否金融机构
+	BusinessLicense      *wechatcontracts.ApplymentBusinessLicenseInfo `json:"business_license_info,omitempty"`  // 营业执照信息（个体户/企业必填）
+	IDCardInfo           *wechatcontracts.ApplymentIDCardInfo          `json:"id_card_info"`                     // 法人身份证信息
+	AccountInfo          *wechatcontracts.ApplymentBankAccountInfo     `json:"account_info,omitempty"`           // 结算银行账户
+	ContactInfo          *wechatcontracts.ApplymentContactInfo         `json:"contact_info"`                     // 联系人信息
+	SalesSceneInfo       *wechatcontracts.ApplymentSalesSceneInfo      `json:"sales_scene_info"`                 // 经营场景信息
+	SettlementInfo       *wechatcontracts.ApplymentSettlementInfo      `json:"settlement_info,omitempty"`        // 结算规则
+	MerchantShortname    string                                        `json:"merchant_shortname"`               // 商户简称
+	Qualifications       []string                                      `json:"qualifications,omitempty"`         // 特殊资质
+	BusinessAdditionPics []string                                      `json:"business_addition_pics,omitempty"` // 补充材料
+	BusinessAdditionDesc string                                        `json:"business_addition_desc,omitempty"` // 补充说明
 }
 
-// 公开 applyment/query/settlement 合同类型已迁移到 applyment_contract_aliases.go。
+// 公开 applyment/query/settlement 合同类型已迁移到 wechat/contracts 包。
 
-func MarshalEcommerceApplymentAccountValidation(validation *EcommerceApplymentAccountValidation) []byte {
+func MarshalEcommerceApplymentAccountValidation(validation *wechatcontracts.EcommerceApplymentAccountValidation) []byte {
 	if validation == nil {
 		return nil
 	}
@@ -645,12 +562,12 @@ func MarshalEcommerceApplymentAccountValidation(validation *EcommerceApplymentAc
 	return payload
 }
 
-func UnmarshalEcommerceApplymentAccountValidation(raw []byte) (*EcommerceApplymentAccountValidation, error) {
+func UnmarshalEcommerceApplymentAccountValidation(raw []byte) (*wechatcontracts.EcommerceApplymentAccountValidation, error) {
 	if len(raw) == 0 {
 		return nil, nil
 	}
 
-	var validation EcommerceApplymentAccountValidation
+	var validation wechatcontracts.EcommerceApplymentAccountValidation
 	if err := json.Unmarshal(raw, &validation); err != nil {
 		return nil, err
 	}
@@ -711,28 +628,6 @@ func (e *CombineOrderQueryContractError) Error() string {
 	return e.Message
 }
 
-type MerchantCancelWithdrawValidationError struct {
-	Message string
-}
-
-func (e *MerchantCancelWithdrawValidationError) Error() string {
-	if e == nil || strings.TrimSpace(e.Message) == "" {
-		return "merchant cancel withdraw: validation failed"
-	}
-	return e.Message
-}
-
-type MerchantCancelWithdrawContractError struct {
-	Message string
-}
-
-func (e *MerchantCancelWithdrawContractError) Error() string {
-	if e == nil || strings.TrimSpace(e.Message) == "" {
-		return "merchant cancel withdraw: upstream contract validation failed"
-	}
-	return e.Message
-}
-
 type ecommerceApplymentQueryKind string
 
 const (
@@ -776,83 +671,8 @@ var allowedPartnerPromotionTypes = map[string]struct{}{
 }
 
 var allowedSubMerchantSettlementAccountNumberRules = map[string]struct{}{
-	subMerchantSettlementAccountNumberRuleV1: {},
-	subMerchantSettlementAccountNumberRuleV2: {},
-}
-
-var allowedMerchantCancelWithdrawMerchantStates = map[string]struct{}{
-	"NORMAL":             {},
-	"HAS_BEEN_CANCELLED": {},
-}
-
-var allowedMerchantCancelWithdrawValidateResults = map[string]struct{}{
-	"ALLOW_CANCEL_WITHDRAW":     {},
-	"NOT_ALLOW_CANCEL_WITHDRAW": {},
-}
-
-var allowedMerchantCancelWithdrawBlockReasonTypes = map[string]struct{}{
-	"CONSUMER_COMPLAINT_UNPROCESSED": {},
-	"HAS_BLOCKING_CONTROL":           {},
-	"FUNDS_PENDING_PROCESSING":       {},
-	"OTHER_REASON":                   {},
-}
-
-var allowedMerchantCancelWithdrawModes = map[string]struct{}{
-	"NOT_APPLY_WITHDRAW": {},
-	"APPLY_WITHDRAW":     {},
-}
-
-var allowedMerchantCancelWithdrawAccountTypes = map[string]struct{}{
-	"ACCOUNT_TYPE_CORPORATE": {},
-	"ACCOUNT_TYPE_PERSONAL":  {},
-}
-
-var allowedMerchantCancelWithdrawIDDocTypes = map[string]struct{}{
-	"IDENTIFICATION_TYPE_ID_CARD":                 {},
-	"IDENTIFICATION_TYPE_OVERSEA_PASSPORT":        {},
-	"IDENTIFICATION_TYPE_HONGKONG_PASSPORT":       {},
-	"IDENTIFICATION_TYPE_MACAO_PASSPORT":          {},
-	"IDENTIFICATION_TYPE_TAIWAN_PASSPORT":         {},
-	"IDENTIFICATION_TYPE_FOREIGN_RESIDENT":        {},
-	"IDENTIFICATION_TYPE_HONGKONG_MACAO_RESIDENT": {},
-	"IDENTIFICATION_TYPE_TAIWAN_RESIDENT":         {},
-}
-
-var allowedMerchantCancelWithdrawStates = map[string]struct{}{
-	"ACCEPTED":                 {},
-	"REVIEWING":                {},
-	"REJECTED":                 {},
-	"WAITING_MERCHANT_CONFIRM": {},
-	"REVOKED":                  {},
-	"SYSTEM_PROCESSING":        {},
-	"CANCELED":                 {},
-	"FUND_PROCESSING":          {},
-	"FINISH":                   {},
-}
-
-var allowedMerchantCancelWithdrawStatesWithWithdrawProgress = map[string]struct{}{
-	"FUND_PROCESSING": {},
-	"FINISH":          {},
-}
-
-var allowedMerchantCancelWithdrawWithdrawStates = map[string]struct{}{
-	"WITHDRAW_PROCESSING": {},
-	"WITHDRAW_EXCEPTION":  {},
-	"WITHDRAW_SUCCEED":    {},
-}
-
-var allowedMerchantCancelWithdrawOutAccountTypes = map[string]struct{}{
-	"BASIC_ACCOUNT":     {},
-	"OPERATE_ACCOUNT":   {},
-	"MARGIN_ACCOUNT":    {},
-	"TRADE_FEE_ACCOUNT": {},
-}
-
-var allowedMerchantCancelWithdrawPayStates = map[string]struct{}{
-	"PAY_PROCESSING": {},
-	"PAY_SUCCEED":    {},
-	"PAY_FAIL":       {},
-	"BANK_REFUNDED":  {},
+	wechatcontracts.SubMerchantSettlementAccountNumberRuleMaskV1: {},
+	wechatcontracts.SubMerchantSettlementAccountNumberRuleMaskV2: {},
 }
 
 func newPartnerOrderQueryValidationError(operation string, format string, args ...any) error {
@@ -885,33 +705,6 @@ func newCombineOrderQueryContractError(operation string, format string, args ...
 		prefix = "query combine order"
 	}
 	return &CombineOrderQueryContractError{Message: fmt.Sprintf("%s: %s", prefix, fmt.Sprintf(format, args...))}
-}
-
-func newMerchantCancelWithdrawValidationError(operation string, format string, args ...any) error {
-	prefix := strings.TrimSpace(operation)
-	if prefix == "" {
-		prefix = "merchant cancel withdraw"
-	}
-	return &MerchantCancelWithdrawValidationError{Message: fmt.Sprintf("%s: %s", prefix, fmt.Sprintf(format, args...))}
-}
-
-func newMerchantCancelWithdrawContractError(operation string, format string, args ...any) error {
-	prefix := strings.TrimSpace(operation)
-	if prefix == "" {
-		prefix = "merchant cancel withdraw"
-	}
-	return &MerchantCancelWithdrawContractError{Message: fmt.Sprintf("%s: %s", prefix, fmt.Sprintf(format, args...))}
-}
-
-func validateMerchantCancelWithdrawIdentifier(operation string, fieldName string, value string) (string, error) {
-	trimmed := strings.TrimSpace(value)
-	if trimmed == "" {
-		return "", newMerchantCancelWithdrawValidationError(operation, "%s is required", fieldName)
-	}
-	if utf8.RuneCountInString(trimmed) > 32 {
-		return "", newMerchantCancelWithdrawValidationError(operation, "%s must not exceed 32 characters", fieldName)
-	}
-	return trimmed, nil
 }
 
 func validatePartnerOrderQueryResponse(operation string, resp *PartnerOrderQueryResponse, requireTransactionFields bool) error {
@@ -1097,154 +890,6 @@ func combineQueryResponseFromBody(resp *CombineQueryResponseBody) *CombineQueryR
 	return result
 }
 
-func validateMerchantCancelWithdrawCreateRequest(req *EcommerceCancelWithdrawRequest) error {
-	if req == nil {
-		return newMerchantCancelWithdrawValidationError("create merchant cancel withdraw", "request is nil")
-	}
-	trimmedSubMchID, err := validateMerchantCancelWithdrawIdentifier("create merchant cancel withdraw", "sub_mchid", req.SubMchID)
-	if err != nil {
-		return err
-	}
-	req.SubMchID = trimmedSubMchID
-	trimmedOutRequestNo, err := validateMerchantCancelWithdrawIdentifier("create merchant cancel withdraw", "out_request_no", req.OutRequestNo)
-	if err != nil {
-		return err
-	}
-	for _, r := range trimmedOutRequestNo {
-		if (r < '0' || r > '9') && (r < 'A' || r > 'Z') && (r < 'a' || r > 'z') {
-			return newMerchantCancelWithdrawValidationError("create merchant cancel withdraw", "out_request_no must contain only letters and digits")
-		}
-	}
-	req.OutRequestNo = trimmedOutRequestNo
-	if req.Withdraw != "" {
-		trimmedWithdraw := strings.TrimSpace(req.Withdraw)
-		if _, ok := allowedMerchantCancelWithdrawModes[trimmedWithdraw]; !ok {
-			return newMerchantCancelWithdrawValidationError("create merchant cancel withdraw", "unsupported withdraw %q", req.Withdraw)
-		}
-		req.Withdraw = trimmedWithdraw
-	}
-	if req.PayeeInfo != nil {
-		trimmedAccountType := strings.TrimSpace(req.PayeeInfo.AccountType)
-		if trimmedAccountType == "" {
-			return newMerchantCancelWithdrawValidationError("create merchant cancel withdraw", "payee_info.account_type is required when payee_info is provided")
-		}
-		if _, ok := allowedMerchantCancelWithdrawAccountTypes[trimmedAccountType]; !ok {
-			return newMerchantCancelWithdrawValidationError("create merchant cancel withdraw", "unsupported payee_info.account_type %q", req.PayeeInfo.AccountType)
-		}
-		req.PayeeInfo.AccountType = trimmedAccountType
-		if req.PayeeInfo.IdentityInfo != nil {
-			trimmedDocType := strings.TrimSpace(req.PayeeInfo.IdentityInfo.IDDocType)
-			if trimmedDocType != "" {
-				if _, ok := allowedMerchantCancelWithdrawIDDocTypes[trimmedDocType]; !ok {
-					return newMerchantCancelWithdrawValidationError("create merchant cancel withdraw", "unsupported payee_info.identity_info.id_doc_type %q", req.PayeeInfo.IdentityInfo.IDDocType)
-				}
-				req.PayeeInfo.IdentityInfo.IDDocType = trimmedDocType
-			}
-		}
-	}
-	if len(req.AdditionalMaterials) > 10 {
-		return newMerchantCancelWithdrawValidationError("create merchant cancel withdraw", "additional_materials must not exceed 10 items")
-	}
-	if utf8.RuneCountInString(strings.TrimSpace(req.Remark)) > 32 {
-		return newMerchantCancelWithdrawValidationError("create merchant cancel withdraw", "remark must not exceed 32 characters")
-	}
-	req.Remark = strings.TrimSpace(req.Remark)
-	return nil
-}
-
-func validateMerchantCancelWithdrawEligibilityResponse(resp *EcommerceCancelWithdrawEligibilityResponse) error {
-	if resp == nil {
-		return newMerchantCancelWithdrawContractError("validate merchant cancel withdraw", "empty wechat response")
-	}
-	if strings.TrimSpace(resp.SubMchID) == "" {
-		return newMerchantCancelWithdrawContractError("validate merchant cancel withdraw", "wechat response missing sub_mchid")
-	}
-	if _, ok := allowedMerchantCancelWithdrawMerchantStates[strings.TrimSpace(resp.MerchantState)]; !ok {
-		return newMerchantCancelWithdrawContractError("validate merchant cancel withdraw", "unsupported merchant_state %q", resp.MerchantState)
-	}
-	if _, ok := allowedMerchantCancelWithdrawValidateResults[strings.TrimSpace(resp.ValidateResult)]; !ok {
-		return newMerchantCancelWithdrawContractError("validate merchant cancel withdraw", "unsupported validate_result %q", resp.ValidateResult)
-	}
-	for index, account := range resp.AccountInfo {
-		if _, ok := allowedMerchantCancelWithdrawOutAccountTypes[strings.TrimSpace(account.OutAccountType)]; !ok {
-			return newMerchantCancelWithdrawContractError("validate merchant cancel withdraw", "account_info[%d].out_account_type has unsupported value %q", index, account.OutAccountType)
-		}
-	}
-	for index, reason := range resp.BlockReasons {
-		trimmedType := strings.TrimSpace(reason.Type)
-		if trimmedType == "" {
-			continue
-		}
-		if _, ok := allowedMerchantCancelWithdrawBlockReasonTypes[trimmedType]; !ok {
-			return newMerchantCancelWithdrawContractError("validate merchant cancel withdraw", "block_reasons[%d].type has unsupported value %q", index, reason.Type)
-		}
-	}
-	return nil
-}
-
-func validateMerchantCancelWithdrawQueryResponse(operation string, resp *EcommerceCancelWithdrawQueryResponse) error {
-	if resp == nil {
-		return newMerchantCancelWithdrawContractError(operation, "empty wechat response")
-	}
-	if strings.TrimSpace(resp.ApplymentID) == "" {
-		return newMerchantCancelWithdrawContractError(operation, "wechat response missing applyment_id")
-	}
-	if strings.TrimSpace(resp.OutRequestNo) == "" {
-		return newMerchantCancelWithdrawContractError(operation, "wechat response missing out_request_no")
-	}
-	if _, ok := allowedMerchantCancelWithdrawStates[strings.TrimSpace(resp.CancelState)]; !ok {
-		return newMerchantCancelWithdrawContractError(operation, "unsupported cancel_state %q", resp.CancelState)
-	}
-	if strings.TrimSpace(resp.CancelStateDescription) == "" {
-		return newMerchantCancelWithdrawContractError(operation, "wechat response missing cancel_state_description")
-	}
-	if strings.TrimSpace(resp.SubMchID) == "" {
-		return newMerchantCancelWithdrawContractError(operation, "wechat response missing sub_mchid")
-	}
-	if trimmedWithdraw := strings.TrimSpace(resp.Withdraw); trimmedWithdraw != "" {
-		if _, ok := allowedMerchantCancelWithdrawModes[trimmedWithdraw]; !ok {
-			return newMerchantCancelWithdrawContractError(operation, "unsupported withdraw %q", resp.Withdraw)
-		}
-	}
-	if trimmedWithdrawState := strings.TrimSpace(resp.WithdrawState); trimmedWithdrawState != "" {
-		if _, ok := allowedMerchantCancelWithdrawWithdrawStates[trimmedWithdrawState]; !ok {
-			return newMerchantCancelWithdrawContractError(operation, "unsupported withdraw_state %q", resp.WithdrawState)
-		}
-		if _, ok := allowedMerchantCancelWithdrawStatesWithWithdrawProgress[strings.TrimSpace(resp.CancelState)]; !ok {
-			return newMerchantCancelWithdrawContractError(operation, "withdraw_state is only allowed after the request reaches a withdraw-processing state")
-		}
-	}
-	if strings.TrimSpace(resp.ModifyTime) != "" {
-		if _, err := time.Parse(time.RFC3339, resp.ModifyTime); err != nil {
-			return newMerchantCancelWithdrawContractError(operation, "modify_time must be RFC3339: %v", err)
-		}
-	}
-	for index, account := range resp.AccountInfo {
-		if _, ok := allowedMerchantCancelWithdrawOutAccountTypes[strings.TrimSpace(account.OutAccountType)]; !ok {
-			return newMerchantCancelWithdrawContractError(operation, "account_info[%d].out_account_type has unsupported value %q", index, account.OutAccountType)
-		}
-	}
-	for index, result := range resp.AccountWithdrawResult {
-		if _, ok := allowedMerchantCancelWithdrawOutAccountTypes[strings.TrimSpace(result.OutAccountType)]; !ok {
-			return newMerchantCancelWithdrawContractError(operation, "account_withdraw_result[%d].out_account_type has unsupported value %q", index, result.OutAccountType)
-		}
-		if _, ok := allowedMerchantCancelWithdrawPayStates[strings.TrimSpace(result.PayState)]; !ok {
-			return newMerchantCancelWithdrawContractError(operation, "account_withdraw_result[%d].pay_state has unsupported value %q", index, result.PayState)
-		}
-		if strings.TrimSpace(result.StateDescription) == "" {
-			return newMerchantCancelWithdrawContractError(operation, "account_withdraw_result[%d].state_description is required", index)
-		}
-	}
-	confirmCancelURL := ""
-	if resp.ConfirmCancel != nil {
-		confirmCancelURL = strings.TrimSpace(resp.ConfirmCancel.ConfirmCancelURL)
-	}
-	if confirmCancelURL != "" && strings.TrimSpace(resp.CancelState) != "WAITING_MERCHANT_CONFIRM" {
-		return newMerchantCancelWithdrawContractError(operation, "confirm_cancel.confirm_cancel_url is only allowed when cancel_state=WAITING_MERCHANT_CONFIRM")
-	}
-	return nil
-}
-
 func validateEcommerceApplymentID(applymentID int64) error {
 	if applymentID <= 0 {
 		return wechatcontracts.NewEcommerceApplymentQueryValidationError("applyment_id must be a positive integer")
@@ -1252,7 +897,7 @@ func validateEcommerceApplymentID(applymentID int64) error {
 	return nil
 }
 
-func validateEcommerceApplymentCreateResponse(resp *EcommerceApplymentResponse) error {
+func validateEcommerceApplymentCreateResponse(resp *wechatcontracts.EcommerceApplymentResponse) error {
 	if resp == nil {
 		return errors.New("create ecommerce applyment: response is nil")
 	}
@@ -1295,7 +940,7 @@ func validateSubMerchantSettlementAccountNumberRule(accountNumberRule string) (s
 		return "", nil
 	}
 	if _, ok := allowedSubMerchantSettlementAccountNumberRules[normalized]; !ok {
-		return "", wechatcontracts.NewSubMerchantSettlementQueryValidationError("account_number_rule must be one of %s or %s", subMerchantSettlementAccountNumberRuleV1, subMerchantSettlementAccountNumberRuleV2)
+		return "", wechatcontracts.NewSubMerchantSettlementQueryValidationError("account_number_rule must be one of %s or %s", wechatcontracts.SubMerchantSettlementAccountNumberRuleMaskV1, wechatcontracts.SubMerchantSettlementAccountNumberRuleMaskV2)
 	}
 	return normalized, nil
 }
@@ -1318,7 +963,7 @@ func validateSubMerchantSettlementFieldLength(fieldName, value string, maxRunes 
 	return nil
 }
 
-func validateSubMerchantSettlementResponse(resp *SubMerchantSettlementResponse) error {
+func validateSubMerchantSettlementResponse(resp *wechatcontracts.SubMerchantSettlementResponse) error {
 	resp.AccountType = strings.TrimSpace(resp.AccountType)
 	resp.AccountBank = strings.TrimSpace(resp.AccountBank)
 	resp.BankName = strings.TrimSpace(resp.BankName)
@@ -1350,7 +995,7 @@ func validateSubMerchantSettlementResponse(resp *SubMerchantSettlementResponse) 
 	return nil
 }
 
-func validateSubMerchantSettlementApplicationResponse(resp *QuerySubMerchantSettlementApplicationResponse) error {
+func validateSubMerchantSettlementApplicationResponse(resp *wechatcontracts.QuerySubMerchantSettlementApplicationResponse) error {
 	resp.AccountName = strings.TrimSpace(resp.AccountName)
 	resp.AccountType = strings.TrimSpace(resp.AccountType)
 	resp.AccountBank = strings.TrimSpace(resp.AccountBank)
@@ -1462,7 +1107,7 @@ func querySubMerchantSettlementApplicationLogEvent(requestID, subMchID, applicat
 		Str("account_number_rule", strings.TrimSpace(accountNumberRule))
 }
 
-func validateEcommerceApplymentQueryResponse(resp *EcommerceApplymentQueryResponse, kind ecommerceApplymentQueryKind) error {
+func validateEcommerceApplymentQueryResponse(resp *wechatcontracts.EcommerceApplymentQueryResponse, kind ecommerceApplymentQueryKind) error {
 	switch kind {
 	case ecommerceApplymentQueryByOutRequestNoKind:
 		return wechatcontracts.ValidateEcommerceApplymentQueryByOutRequestNoResponse(resp)
@@ -1473,7 +1118,7 @@ func validateEcommerceApplymentQueryResponse(resp *EcommerceApplymentQueryRespon
 	}
 }
 
-func (c *EcommerceClient) decryptEcommerceApplymentAccountValidation(validation *EcommerceApplymentAccountValidation) error {
+func (c *EcommerceClient) decryptEcommerceApplymentAccountValidation(validation *wechatcontracts.EcommerceApplymentAccountValidation) error {
 	if validation == nil {
 		return nil
 	}
@@ -1549,7 +1194,7 @@ func queryEcommerceApplymentLogEvent(requestID string, applymentID int64, outReq
 	return evt
 }
 
-func (c *EcommerceClient) queryEcommerceApplyment(ctx context.Context, kind ecommerceApplymentQueryKind, requestURL string, applymentID int64, outRequestNo string) (*EcommerceApplymentQueryResponse, error) {
+func (c *EcommerceClient) queryEcommerceApplyment(ctx context.Context, kind ecommerceApplymentQueryKind, requestURL string, applymentID int64, outRequestNo string) (*wechatcontracts.EcommerceApplymentQueryResponse, error) {
 	respBody, requestID, err := c.doRequestWithRequestID(ctx, http.MethodGet, requestURL, nil)
 	if err != nil {
 		wrappedErr := wrapEcommerceApplymentQueryError(err)
@@ -1566,7 +1211,7 @@ func (c *EcommerceClient) queryEcommerceApplyment(ctx context.Context, kind ecom
 		return nil, wrappedErr
 	}
 
-	var resp EcommerceApplymentQueryResponse
+	var resp wechatcontracts.EcommerceApplymentQueryResponse
 	if err := json.Unmarshal(respBody, &resp); err != nil {
 		wrappedErr := fmt.Errorf("query ecommerce applyment: request_id=%s: decode response: %w", requestID, err)
 		queryEcommerceApplymentLogEvent(requestID, applymentID, outRequestNo).
@@ -1597,7 +1242,7 @@ func (c *EcommerceClient) queryEcommerceApplyment(ctx context.Context, kind ecom
 
 // CreateEcommerceApplyment 提交二级商户进件申请
 // 注意：敏感信息需要使用微信支付平台公钥加密
-func (c *EcommerceClient) CreateEcommerceApplyment(ctx context.Context, req *EcommerceApplymentRequest) (*EcommerceApplymentResponse, error) {
+func (c *EcommerceClient) CreateEcommerceApplyment(ctx context.Context, req *EcommerceApplymentRequest) (*wechatcontracts.EcommerceApplymentResponse, error) {
 	body := map[string]interface{}{
 		"out_request_no":      req.OutRequestNo,
 		"organization_type":   req.OrganizationType,
@@ -1720,7 +1365,7 @@ func (c *EcommerceClient) CreateEcommerceApplyment(ctx context.Context, req *Eco
 		return nil, fmt.Errorf("create ecommerce applyment: %w", err)
 	}
 
-	var resp EcommerceApplymentResponse
+	var resp wechatcontracts.EcommerceApplymentResponse
 	if err := json.Unmarshal(respBody, &resp); err != nil {
 		return nil, fmt.Errorf("unmarshal response: %w", err)
 	}
@@ -1758,7 +1403,7 @@ func normalizeEcommerceContactType(contactType string) string {
 }
 
 // QueryEcommerceApplymentByID 通过申请单号查询进件状态
-func (c *EcommerceClient) QueryEcommerceApplymentByID(ctx context.Context, applymentID int64) (*EcommerceApplymentQueryResponse, error) {
+func (c *EcommerceClient) QueryEcommerceApplymentByID(ctx context.Context, applymentID int64) (*wechatcontracts.EcommerceApplymentQueryResponse, error) {
 	if err := validateEcommerceApplymentID(applymentID); err != nil {
 		log.Error().
 			Int64("applyment_id", applymentID).
@@ -1772,7 +1417,7 @@ func (c *EcommerceClient) QueryEcommerceApplymentByID(ctx context.Context, apply
 }
 
 // QueryEcommerceApplymentByOutRequestNo 通过业务申请编号查询进件状态
-func (c *EcommerceClient) QueryEcommerceApplymentByOutRequestNo(ctx context.Context, outRequestNo string) (*EcommerceApplymentQueryResponse, error) {
+func (c *EcommerceClient) QueryEcommerceApplymentByOutRequestNo(ctx context.Context, outRequestNo string) (*wechatcontracts.EcommerceApplymentQueryResponse, error) {
 	normalizedOutRequestNo, err := validateEcommerceApplymentOutRequestNo(outRequestNo)
 	if err != nil {
 		log.Error().
@@ -1787,14 +1432,14 @@ func (c *EcommerceClient) QueryEcommerceApplymentByOutRequestNo(ctx context.Cont
 }
 
 // ListPersonalBankingBanks 查询支持个人业务的银行列表
-func (c *EcommerceClient) ListPersonalBankingBanks(ctx context.Context, offset, limit int) (*CapitalBankListResponse, error) {
+func (c *EcommerceClient) ListPersonalBankingBanks(ctx context.Context, offset, limit int) (*wechatcontracts.CapitalBankListResponse, error) {
 	requestURL := fmt.Sprintf("%s?offset=%d&limit=%d", capitalPersonalBanksURL, offset, limit)
 	respBody, err := c.doRequest(ctx, http.MethodGet, requestURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("list personal banking banks: %w", err)
 	}
 
-	var resp CapitalBankListResponse
+	var resp wechatcontracts.CapitalBankListResponse
 	if err := json.Unmarshal(respBody, &resp); err != nil {
 		return nil, fmt.Errorf("unmarshal personal banking banks: %w", err)
 	}
@@ -1803,14 +1448,14 @@ func (c *EcommerceClient) ListPersonalBankingBanks(ctx context.Context, offset, 
 }
 
 // ListCorporateBankingBanks 查询支持对公业务的银行列表
-func (c *EcommerceClient) ListCorporateBankingBanks(ctx context.Context, offset, limit int) (*CapitalBankListResponse, error) {
+func (c *EcommerceClient) ListCorporateBankingBanks(ctx context.Context, offset, limit int) (*wechatcontracts.CapitalBankListResponse, error) {
 	requestURL := fmt.Sprintf("%s?offset=%d&limit=%d", capitalCorporateBanksURL, offset, limit)
 	respBody, err := c.doRequest(ctx, http.MethodGet, requestURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("list corporate banking banks: %w", err)
 	}
 
-	var resp CapitalBankListResponse
+	var resp wechatcontracts.CapitalBankListResponse
 	if err := json.Unmarshal(respBody, &resp); err != nil {
 		return nil, fmt.Errorf("unmarshal corporate banking banks: %w", err)
 	}
@@ -1819,7 +1464,7 @@ func (c *EcommerceClient) ListCorporateBankingBanks(ctx context.Context, offset,
 }
 
 // SearchBanksByBankAccount 根据个人银行卡号识别开户银行候选
-func (c *EcommerceClient) SearchBanksByBankAccount(ctx context.Context, accountNumber string) (*CapitalBankAccountSearchResponse, error) {
+func (c *EcommerceClient) SearchBanksByBankAccount(ctx context.Context, accountNumber string) (*wechatcontracts.CapitalBankAccountSearchResponse, error) {
 	encryptedAccountNumber, err := c.EncryptSensitiveData(accountNumber)
 	if err != nil {
 		return nil, fmt.Errorf("encrypt account number: %w", err)
@@ -1831,7 +1476,7 @@ func (c *EcommerceClient) SearchBanksByBankAccount(ctx context.Context, accountN
 		return nil, fmt.Errorf("search banks by account number: %w", err)
 	}
 
-	var resp CapitalBankAccountSearchResponse
+	var resp wechatcontracts.CapitalBankAccountSearchResponse
 	if err := json.Unmarshal(respBody, &resp); err != nil {
 		return nil, fmt.Errorf("unmarshal banks by account number: %w", err)
 	}
@@ -1840,13 +1485,13 @@ func (c *EcommerceClient) SearchBanksByBankAccount(ctx context.Context, accountN
 }
 
 // ListProvinceAreas 查询省份列表
-func (c *EcommerceClient) ListProvinceAreas(ctx context.Context) (*CapitalProvinceListResponse, error) {
+func (c *EcommerceClient) ListProvinceAreas(ctx context.Context) (*wechatcontracts.CapitalProvinceListResponse, error) {
 	respBody, err := c.doRequest(ctx, http.MethodGet, capitalProvincesURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("list province areas: %w", err)
 	}
 
-	var resp CapitalProvinceListResponse
+	var resp wechatcontracts.CapitalProvinceListResponse
 	if err := json.Unmarshal(respBody, &resp); err != nil {
 		return nil, fmt.Errorf("unmarshal province areas: %w", err)
 	}
@@ -1855,14 +1500,14 @@ func (c *EcommerceClient) ListProvinceAreas(ctx context.Context) (*CapitalProvin
 }
 
 // ListCityAreas 查询省份下城市列表
-func (c *EcommerceClient) ListCityAreas(ctx context.Context, provinceCode int) (*CapitalCityListResponse, error) {
+func (c *EcommerceClient) ListCityAreas(ctx context.Context, provinceCode int) (*wechatcontracts.CapitalCityListResponse, error) {
 	requestURL := fmt.Sprintf(capitalProvinceCitiesURL, provinceCode)
 	respBody, err := c.doRequest(ctx, http.MethodGet, requestURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("list city areas: %w", err)
 	}
 
-	var resp CapitalCityListResponse
+	var resp wechatcontracts.CapitalCityListResponse
 	if err := json.Unmarshal(respBody, &resp); err != nil {
 		return nil, fmt.Errorf("unmarshal city areas: %w", err)
 	}
@@ -1871,14 +1516,14 @@ func (c *EcommerceClient) ListCityAreas(ctx context.Context, provinceCode int) (
 }
 
 // ListBankBranches 查询支行列表
-func (c *EcommerceClient) ListBankBranches(ctx context.Context, bankAliasCode string, cityCode, offset, limit int) (*CapitalBranchListResponse, error) {
+func (c *EcommerceClient) ListBankBranches(ctx context.Context, bankAliasCode string, cityCode, offset, limit int) (*wechatcontracts.CapitalBranchListResponse, error) {
 	requestURL := fmt.Sprintf("%s?city_code=%d&offset=%d&limit=%d", fmt.Sprintf(capitalBankBranchesURL, bankAliasCode), cityCode, offset, limit)
 	respBody, err := c.doRequest(ctx, http.MethodGet, requestURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("list bank branches: %w", err)
 	}
 
-	var resp CapitalBranchListResponse
+	var resp wechatcontracts.CapitalBranchListResponse
 	if err := json.Unmarshal(respBody, &resp); err != nil {
 		return nil, fmt.Errorf("unmarshal bank branches: %w", err)
 	}
@@ -3327,7 +2972,7 @@ func (c *EcommerceClient) QueryEcommerceWithdrawByOutRequestNo(ctx context.Conte
 // QuerySubMerchantSettlement 查询特约商户/二级商户结算账户信息
 //
 // subMchID: 特约商户号；accountNumberRule: 账号展示规则（空字符串使用微信默认 ACCOUNT_NUMBER_RULE_MASK_V1）
-func (c *EcommerceClient) QuerySubMerchantSettlement(ctx context.Context, subMchID string, accountNumberRule string) (*SubMerchantSettlementResponse, error) {
+func (c *EcommerceClient) QuerySubMerchantSettlement(ctx context.Context, subMchID string, accountNumberRule string) (*wechatcontracts.SubMerchantSettlementResponse, error) {
 	normalizedSubMchID, err := validateSubMerchantSettlementSubMchID(subMchID)
 	if err != nil {
 		log.Error().
@@ -3368,7 +3013,7 @@ func (c *EcommerceClient) QuerySubMerchantSettlement(ctx context.Context, subMch
 		return nil, wrappedErr
 	}
 
-	var resp SubMerchantSettlementResponse
+	var resp wechatcontracts.SubMerchantSettlementResponse
 	if err := json.Unmarshal(respBody, &resp); err != nil {
 		wrappedErr := fmt.Errorf("query sub merchant settlement: request_id=%s: decode response: %w", requestID, err)
 		querySubMerchantSettlementLogEvent(requestID, normalizedSubMchID, normalizedAccountNumberRule).
@@ -3393,7 +3038,7 @@ func (c *EcommerceClient) QuerySubMerchantSettlement(ctx context.Context, subMch
 // ==================== 结算账户修改 ====================
 
 // ModifySubMerchantSettlement 修改特约商户/二级商户结算账户
-func (c *EcommerceClient) ModifySubMerchantSettlement(ctx context.Context, subMchID string, req *ModifySubMerchantSettlementRequest) (*ModifySubMerchantSettlementResponse, error) {
+func (c *EcommerceClient) ModifySubMerchantSettlement(ctx context.Context, subMchID string, req *wechatcontracts.ModifySubMerchantSettlementRequest) (*wechatcontracts.ModifySubMerchantSettlementResponse, error) {
 	requestURL := fmt.Sprintf(apply4subModifySettlementURL, subMchID)
 
 	respBody, err := c.doRequestWithWechatSerial(ctx, http.MethodPost, requestURL, req)
@@ -3401,7 +3046,7 @@ func (c *EcommerceClient) ModifySubMerchantSettlement(ctx context.Context, subMc
 		return nil, fmt.Errorf("modify sub merchant settlement: %w", err)
 	}
 
-	var resp ModifySubMerchantSettlementResponse
+	var resp wechatcontracts.ModifySubMerchantSettlementResponse
 	if err := json.Unmarshal(respBody, &resp); err != nil {
 		return nil, fmt.Errorf("unmarshal modify sub merchant settlement: %w", err)
 	}
@@ -3414,7 +3059,7 @@ func (c *EcommerceClient) ModifySubMerchantSettlement(ctx context.Context, subMc
 // QuerySubMerchantSettlementApplication 查询结算账户修改申请状态
 //
 // subMchID: 特约商户号；applicationNo: 申请单号；accountNumberRule: 账号展示规则（空字符串使用微信默认）
-func (c *EcommerceClient) QuerySubMerchantSettlementApplication(ctx context.Context, subMchID, applicationNo, accountNumberRule string) (*QuerySubMerchantSettlementApplicationResponse, error) {
+func (c *EcommerceClient) QuerySubMerchantSettlementApplication(ctx context.Context, subMchID, applicationNo, accountNumberRule string) (*wechatcontracts.QuerySubMerchantSettlementApplicationResponse, error) {
 	normalizedSubMchID, err := validateSubMerchantSettlementSubMchID(subMchID)
 	if err != nil {
 		wrappedErr := wechatcontracts.NewSubMerchantSettlementApplicationQueryValidationError("%s", strings.TrimPrefix(err.Error(), "validate sub merchant settlement query request: "))
@@ -3469,7 +3114,7 @@ func (c *EcommerceClient) QuerySubMerchantSettlementApplication(ctx context.Cont
 		return nil, wrappedErr
 	}
 
-	var resp QuerySubMerchantSettlementApplicationResponse
+	var resp wechatcontracts.QuerySubMerchantSettlementApplicationResponse
 	if err := json.Unmarshal(respBody, &resp); err != nil {
 		wrappedErr := fmt.Errorf("query sub merchant settlement application: request_id=%s: decode response: %w", requestID, err)
 		querySubMerchantSettlementApplicationLogEvent(requestID, normalizedSubMchID, normalizedApplicationNo, normalizedAccountNumberRule).

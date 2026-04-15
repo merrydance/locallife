@@ -12,6 +12,7 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/util"
 	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	mockwechat "github.com/merrydance/locallife/wechat/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -125,9 +126,9 @@ func TestBuildWechatApplymentRequest(t *testing.T) {
 	request := BuildWechatApplymentRequest(ApplymentWechatRequestInput{
 		OutRequestNo:      "OUT_004",
 		OrganizationType:  "2",
-		BusinessLicense:   &wechat.BusinessLicenseInfo{BusinessLicenseNumber: "BLN001"},
+		BusinessLicense:   &wechatcontracts.ApplymentBusinessLicenseInfo{BusinessLicenseNumber: "BLN001"},
 		MerchantShortname: "主体简称",
-		IDCardInfo: &wechat.ApplymentIDCardInfo{
+		IDCardInfo: &wechatcontracts.ApplymentIDCardInfo{
 			IDCardCopy:           "front-media",
 			IDCardNational:       "back-media",
 			IDCardName:           "encrypted-name",
@@ -357,7 +358,7 @@ func TestSubmitEcommerceApplymentSubmittedSyncFailure(t *testing.T) {
 	ecommerceClient.EXPECT().
 		CreateEcommerceApplyment(gomock.Any(), gomock.AssignableToTypeOf(&wechat.EcommerceApplymentRequest{})).
 		Times(1).
-		Return(&wechat.EcommerceApplymentResponse{ApplymentID: 123456789}, nil)
+		Return(&wechatcontracts.EcommerceApplymentResponse{ApplymentID: 123456789}, nil)
 
 	store.EXPECT().
 		UpdateEcommerceApplymentToSubmitted(gomock.Any(), db.UpdateEcommerceApplymentToSubmittedParams{
@@ -391,7 +392,7 @@ func TestSubmitEcommerceApplymentReturnsInitialQueryStatus(t *testing.T) {
 
 	ecommerceClient.EXPECT().
 		CreateEcommerceApplyment(gomock.Any(), gomock.AssignableToTypeOf(&wechat.EcommerceApplymentRequest{})).
-		Return(&wechat.EcommerceApplymentResponse{ApplymentID: 22334455}, nil)
+		Return(&wechatcontracts.EcommerceApplymentResponse{ApplymentID: 22334455}, nil)
 
 	store.EXPECT().
 		UpdateEcommerceApplymentToSubmitted(gomock.Any(), db.UpdateEcommerceApplymentToSubmittedParams{
@@ -416,7 +417,7 @@ func TestSubmitEcommerceApplymentReturnsInitialQueryStatus(t *testing.T) {
 
 	ecommerceClient.EXPECT().
 		QueryEcommerceApplymentByID(gomock.Any(), int64(22334455)).
-		Return(&wechat.EcommerceApplymentQueryResponse{
+		Return(&wechatcontracts.EcommerceApplymentQueryResponse{
 			ApplymentID:    22334455,
 			OutRequestNo:   "OUT_REQ_002",
 			ApplymentState: "ACCOUNT_NEED_VERIFY",
@@ -450,7 +451,7 @@ func TestSubmitEcommerceApplymentFallsBackToOutRequestNoForInitialQuery(t *testi
 
 	ecommerceClient.EXPECT().
 		CreateEcommerceApplyment(gomock.Any(), gomock.AssignableToTypeOf(&wechat.EcommerceApplymentRequest{})).
-		Return(&wechat.EcommerceApplymentResponse{ApplymentID: 99887766}, nil)
+		Return(&wechatcontracts.EcommerceApplymentResponse{ApplymentID: 99887766}, nil)
 
 	store.EXPECT().
 		UpdateEcommerceApplymentToSubmitted(gomock.Any(), db.UpdateEcommerceApplymentToSubmittedParams{
@@ -479,7 +480,7 @@ func TestSubmitEcommerceApplymentFallsBackToOutRequestNoForInitialQuery(t *testi
 
 	ecommerceClient.EXPECT().
 		QueryEcommerceApplymentByOutRequestNo(gomock.Any(), "OUT_REQ_003").
-		Return(&wechat.EcommerceApplymentQueryResponse{
+		Return(&wechatcontracts.EcommerceApplymentQueryResponse{
 			ApplymentID:        99887766,
 			OutRequestNo:       "OUT_REQ_003",
 			ApplymentState:     "NEED_SIGN",

@@ -6,6 +6,7 @@ import (
 
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	"github.com/stretchr/testify/require"
 )
 
@@ -26,7 +27,15 @@ func TestMerchantCancelWithdrawSafeErrorMessage(t *testing.T) {
 	)
 	require.Equal(t,
 		"WeChat returned a cancel-withdraw response that does not match the documented contract",
-		MerchantCancelWithdrawSafeErrorMessage(&wechat.MerchantCancelWithdrawContractError{Message: "invalid response"}),
+		MerchantCancelWithdrawSafeErrorMessage(&wechatcontracts.CancelWithdrawQueryContractError{Message: "invalid response"}),
+	)
+	require.Equal(t,
+		"cancel-withdraw application already exists for the given out_request_no",
+		MerchantCancelWithdrawSafeErrorMessage(&wechat.WechatPayError{StatusCode: 409, Code: "ALREADY_EXISTS"}),
+	)
+	require.Equal(t,
+		"WeChat asked the cancel-withdraw request to retry later because the upstream business state is still processing",
+		MerchantCancelWithdrawSafeErrorMessage(&wechat.WechatPayError{StatusCode: 503, Code: "BIZ_ERR_NEED_RETRY"}),
 	)
 	require.Equal(t,
 		"WeChat cancel-withdraw service is temporarily unavailable; retry later",

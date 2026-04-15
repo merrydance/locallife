@@ -142,7 +142,7 @@ func TestGetMerchantSettlementAccountOK(t *testing.T) {
 
 	ecommerce.EXPECT().
 		QuerySubMerchantSettlement(gomock.Any(), paymentConfig.SubMchID, "").
-		Return(&wechat.SubMerchantSettlementResponse{
+		Return(&wechatcontracts.SubMerchantSettlementResponse{
 			AccountType:   "ACCOUNT_TYPE_BUSINESS",
 			AccountBank:   "工商银行",
 			BankName:      "工商银行北京分行",
@@ -205,7 +205,7 @@ func TestGetMerchantSettlementAccountWithMaskRule(t *testing.T) {
 	ecommerce.EXPECT().
 		QuerySubMerchantSettlement(gomock.Any(), paymentConfig.SubMchID, "ACCOUNT_NUMBER_RULE_MASK_V2").
 		Times(1).
-		Return(&wechat.SubMerchantSettlementResponse{
+		Return(&wechatcontracts.SubMerchantSettlementResponse{
 			AccountType:   "ACCOUNT_TYPE_BUSINESS",
 			AccountBank:   "工商银行",
 			AccountNumber: "622202******8888",
@@ -347,10 +347,10 @@ func TestModifyMerchantSettlementAccountOK(t *testing.T) {
 	ecommerce.EXPECT().
 		ListCorporateBankingBanks(gomock.Any(), 0, applymentCatalogPageSize).
 		Times(1).
-		Return(&wechat.CapitalBankListResponse{
+		Return(&wechatcontracts.CapitalBankListResponse{
 			TotalCount: 1,
 			Count:      1,
-			Data: []wechat.CapitalBank{{
+			Data: []wechatcontracts.CapitalBank{{
 				BankAlias:      "工商银行",
 				BankAliasCode:  "1002",
 				AccountBank:    "工商银行",
@@ -369,7 +369,7 @@ func TestModifyMerchantSettlementAccountOK(t *testing.T) {
 		Return("wx_encrypted_account_name", nil)
 
 	ecommerce.EXPECT().
-		ModifySubMerchantSettlement(gomock.Any(), paymentConfig.SubMchID, &wechat.ModifySubMerchantSettlementRequest{
+		ModifySubMerchantSettlement(gomock.Any(), paymentConfig.SubMchID, &wechatcontracts.ModifySubMerchantSettlementRequest{
 			AccountType:   "ACCOUNT_TYPE_BUSINESS",
 			AccountBank:   "工商银行",
 			BankName:      "中国工商银行北京分行",
@@ -377,7 +377,7 @@ func TestModifyMerchantSettlementAccountOK(t *testing.T) {
 			AccountNumber: "wx_encrypted_account_number",
 			AccountName:   "wx_encrypted_account_name",
 		}).
-		Return(&wechat.ModifySubMerchantSettlementResponse{
+		Return(&wechatcontracts.ModifySubMerchantSettlementResponse{
 			ApplicationNo: "102329389XXXX",
 		}, nil)
 
@@ -634,10 +634,10 @@ func TestModifyMerchantSettlementAccountAllowsMissingAccountName(t *testing.T) {
 	ecommerce.EXPECT().
 		ListCorporateBankingBanks(gomock.Any(), 0, applymentCatalogPageSize).
 		Times(1).
-		Return(&wechat.CapitalBankListResponse{
+		Return(&wechatcontracts.CapitalBankListResponse{
 			TotalCount: 1,
 			Count:      1,
-			Data: []wechat.CapitalBank{{
+			Data: []wechatcontracts.CapitalBank{{
 				BankAlias:      "工商银行",
 				BankAliasCode:  "1002",
 				AccountBank:    "工商银行",
@@ -649,13 +649,13 @@ func TestModifyMerchantSettlementAccountAllowsMissingAccountName(t *testing.T) {
 		Times(1).
 		Return("wx_encrypted_account_number", nil)
 	ecommerce.EXPECT().
-		ModifySubMerchantSettlement(gomock.Any(), paymentConfig.SubMchID, &wechat.ModifySubMerchantSettlementRequest{
+		ModifySubMerchantSettlement(gomock.Any(), paymentConfig.SubMchID, &wechatcontracts.ModifySubMerchantSettlementRequest{
 			AccountType:   "ACCOUNT_TYPE_BUSINESS",
 			AccountBank:   "工商银行",
 			AccountNumber: "wx_encrypted_account_number",
 		}).
 		Times(1).
-		Return(&wechat.ModifySubMerchantSettlementResponse{ApplicationNo: "APP_NO_NAME_001"}, nil)
+		Return(&wechatcontracts.ModifySubMerchantSettlementResponse{ApplicationNo: "APP_NO_NAME_001"}, nil)
 	store.EXPECT().
 		UpdateMerchantPaymentConfigSettlementApplication(gomock.Any(), gomock.AssignableToTypeOf(db.UpdateMerchantPaymentConfigSettlementApplicationParams{})).
 		Times(1).
@@ -724,10 +724,10 @@ func TestModifyMerchantSettlementAccountMissingBranchSelectionWhenRequired(t *te
 	ecommerce.EXPECT().
 		ListCorporateBankingBanks(gomock.Any(), 0, applymentCatalogPageSize).
 		Times(1).
-		Return(&wechat.CapitalBankListResponse{
+		Return(&wechatcontracts.CapitalBankListResponse{
 			TotalCount: 1,
 			Count:      1,
-			Data: []wechat.CapitalBank{{
+			Data: []wechatcontracts.CapitalBank{{
 				BankAlias:      "工商银行",
 				BankAliasCode:  "1002",
 				AccountBank:    "工商银行",
@@ -799,10 +799,10 @@ func TestModifyMerchantSettlementAccountEncryptFails(t *testing.T) {
 	ecommerce.EXPECT().
 		ListCorporateBankingBanks(gomock.Any(), 0, applymentCatalogPageSize).
 		Times(1).
-		Return(&wechat.CapitalBankListResponse{
+		Return(&wechatcontracts.CapitalBankListResponse{
 			TotalCount: 1,
 			Count:      1,
-			Data: []wechat.CapitalBank{{
+			Data: []wechatcontracts.CapitalBank{{
 				BankAlias:      "工商银行",
 				BankAliasCode:  "1002",
 				AccountBank:    "工商银行",
@@ -875,10 +875,10 @@ func TestModifyMerchantSettlementAccountIgnoresFrontendNeedBankBranchHint(t *tes
 	ecommerce.EXPECT().
 		ListCorporateBankingBanks(gomock.Any(), 0, applymentCatalogPageSize).
 		Times(1).
-		Return(&wechat.CapitalBankListResponse{
+		Return(&wechatcontracts.CapitalBankListResponse{
 			TotalCount: 1,
 			Count:      1,
-			Data: []wechat.CapitalBank{{
+			Data: []wechatcontracts.CapitalBank{{
 				BankAlias:      "建设银行",
 				BankAliasCode:  "1003",
 				AccountBank:    "建设银行",
@@ -894,14 +894,14 @@ func TestModifyMerchantSettlementAccountIgnoresFrontendNeedBankBranchHint(t *tes
 		Times(1).
 		Return("wx_encrypted_account_name", nil)
 	ecommerce.EXPECT().
-		ModifySubMerchantSettlement(gomock.Any(), paymentConfig.SubMchID, &wechat.ModifySubMerchantSettlementRequest{
+		ModifySubMerchantSettlement(gomock.Any(), paymentConfig.SubMchID, &wechatcontracts.ModifySubMerchantSettlementRequest{
 			AccountType:   "ACCOUNT_TYPE_BUSINESS",
 			AccountBank:   "建设银行",
 			AccountNumber: "wx_encrypted_account_number",
 			AccountName:   "wx_encrypted_account_name",
 		}).
 		Times(1).
-		Return(&wechat.ModifySubMerchantSettlementResponse{ApplicationNo: "APP_IGNORE_HINT_001"}, nil)
+		Return(&wechatcontracts.ModifySubMerchantSettlementResponse{ApplicationNo: "APP_IGNORE_HINT_001"}, nil)
 	store.EXPECT().
 		UpdateMerchantPaymentConfigSettlementApplication(gomock.Any(), gomock.AssignableToTypeOf(db.UpdateMerchantPaymentConfigSettlementApplicationParams{})).
 		Times(1).
@@ -968,10 +968,10 @@ func TestModifyMerchantSettlementAccountWechatParamError(t *testing.T) {
 	ecommerce.EXPECT().
 		ListCorporateBankingBanks(gomock.Any(), 0, applymentCatalogPageSize).
 		Times(1).
-		Return(&wechat.CapitalBankListResponse{
+		Return(&wechatcontracts.CapitalBankListResponse{
 			TotalCount: 1,
 			Count:      1,
-			Data: []wechat.CapitalBank{{
+			Data: []wechatcontracts.CapitalBank{{
 				BankAlias:      "建设银行",
 				BankAliasCode:  "1003",
 				AccountBank:    "建设银行",
@@ -987,7 +987,7 @@ func TestModifyMerchantSettlementAccountWechatParamError(t *testing.T) {
 		Times(1).
 		Return("wx_encrypted_account_name", nil)
 	ecommerce.EXPECT().
-		ModifySubMerchantSettlement(gomock.Any(), paymentConfig.SubMchID, &wechat.ModifySubMerchantSettlementRequest{
+		ModifySubMerchantSettlement(gomock.Any(), paymentConfig.SubMchID, &wechatcontracts.ModifySubMerchantSettlementRequest{
 			AccountType:   "ACCOUNT_TYPE_BUSINESS",
 			AccountBank:   "建设银行",
 			AccountNumber: "wx_encrypted_account_number",
@@ -1036,9 +1036,9 @@ func TestModifyMerchantSettlementAccountWechatNoAuth(t *testing.T) {
 	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 	store.EXPECT().GetMerchantPaymentConfig(gomock.Any(), merchant.ID).Times(1).Return(paymentConfig, nil)
 	store.EXPECT().GetLatestEcommerceApplymentBySubject(gomock.Any(), db.GetLatestEcommerceApplymentBySubjectParams{SubjectType: "merchant", SubjectID: merchant.ID}).Times(1).Return(db.EcommerceApplyment{OrganizationType: "4"}, nil)
-	ecommerce.EXPECT().ListCorporateBankingBanks(gomock.Any(), 0, applymentCatalogPageSize).Times(1).Return(&wechat.CapitalBankListResponse{TotalCount: 1, Count: 1, Data: []wechat.CapitalBank{{BankAlias: "建设银行", AccountBank: "建设银行"}}}, nil)
+	ecommerce.EXPECT().ListCorporateBankingBanks(gomock.Any(), 0, applymentCatalogPageSize).Times(1).Return(&wechatcontracts.CapitalBankListResponse{TotalCount: 1, Count: 1, Data: []wechatcontracts.CapitalBank{{BankAlias: "建设银行", AccountBank: "建设银行"}}}, nil)
 	ecommerce.EXPECT().EncryptSensitiveData("6222020202020202").Times(1).Return("wx_encrypted_account_number", nil)
-	ecommerce.EXPECT().ModifySubMerchantSettlement(gomock.Any(), paymentConfig.SubMchID, &wechat.ModifySubMerchantSettlementRequest{AccountType: "ACCOUNT_TYPE_BUSINESS", AccountBank: "建设银行", AccountNumber: "wx_encrypted_account_number"}).Times(1).Return(nil, fmt.Errorf("modify sub merchant settlement: %w", &wechat.WechatPayError{StatusCode: http.StatusForbidden, Code: "NO_AUTH", Message: "商户权限异常"}))
+	ecommerce.EXPECT().ModifySubMerchantSettlement(gomock.Any(), paymentConfig.SubMchID, &wechatcontracts.ModifySubMerchantSettlementRequest{AccountType: "ACCOUNT_TYPE_BUSINESS", AccountBank: "建设银行", AccountNumber: "wx_encrypted_account_number"}).Times(1).Return(nil, fmt.Errorf("modify sub merchant settlement: %w", &wechat.WechatPayError{StatusCode: http.StatusForbidden, Code: "NO_AUTH", Message: "商户权限异常"}))
 
 	server := newTestServer(t, store)
 	server.SetEcommerceClientForTest(ecommerce)
@@ -1075,9 +1075,9 @@ func TestModifyMerchantSettlementAccountWechatFrequencyLimit(t *testing.T) {
 	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 	store.EXPECT().GetMerchantPaymentConfig(gomock.Any(), merchant.ID).Times(1).Return(paymentConfig, nil)
 	store.EXPECT().GetLatestEcommerceApplymentBySubject(gomock.Any(), db.GetLatestEcommerceApplymentBySubjectParams{SubjectType: "merchant", SubjectID: merchant.ID}).Times(1).Return(db.EcommerceApplyment{OrganizationType: "4"}, nil)
-	ecommerce.EXPECT().ListCorporateBankingBanks(gomock.Any(), 0, applymentCatalogPageSize).Times(1).Return(&wechat.CapitalBankListResponse{TotalCount: 1, Count: 1, Data: []wechat.CapitalBank{{BankAlias: "建设银行", AccountBank: "建设银行"}}}, nil)
+	ecommerce.EXPECT().ListCorporateBankingBanks(gomock.Any(), 0, applymentCatalogPageSize).Times(1).Return(&wechatcontracts.CapitalBankListResponse{TotalCount: 1, Count: 1, Data: []wechatcontracts.CapitalBank{{BankAlias: "建设银行", AccountBank: "建设银行"}}}, nil)
 	ecommerce.EXPECT().EncryptSensitiveData("6222020202020202").Times(1).Return("wx_encrypted_account_number", nil)
-	ecommerce.EXPECT().ModifySubMerchantSettlement(gomock.Any(), paymentConfig.SubMchID, &wechat.ModifySubMerchantSettlementRequest{AccountType: "ACCOUNT_TYPE_BUSINESS", AccountBank: "建设银行", AccountNumber: "wx_encrypted_account_number"}).Times(1).Return(nil, fmt.Errorf("modify sub merchant settlement: %w", &wechat.WechatPayError{StatusCode: http.StatusTooManyRequests, Code: "FREQENCY_LIMIT", Message: "频率超限"}))
+	ecommerce.EXPECT().ModifySubMerchantSettlement(gomock.Any(), paymentConfig.SubMchID, &wechatcontracts.ModifySubMerchantSettlementRequest{AccountType: "ACCOUNT_TYPE_BUSINESS", AccountBank: "建设银行", AccountNumber: "wx_encrypted_account_number"}).Times(1).Return(nil, fmt.Errorf("modify sub merchant settlement: %w", &wechat.WechatPayError{StatusCode: http.StatusTooManyRequests, Code: "FREQENCY_LIMIT", Message: "频率超限"}))
 
 	server := newTestServer(t, store)
 	server.SetEcommerceClientForTest(ecommerce)
@@ -1114,10 +1114,10 @@ func TestModifyMerchantSettlementAccountWechatNameMismatch(t *testing.T) {
 	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 	store.EXPECT().GetMerchantPaymentConfig(gomock.Any(), merchant.ID).Times(1).Return(paymentConfig, nil)
 	store.EXPECT().GetLatestEcommerceApplymentBySubject(gomock.Any(), db.GetLatestEcommerceApplymentBySubjectParams{SubjectType: "merchant", SubjectID: merchant.ID}).Times(1).Return(db.EcommerceApplyment{OrganizationType: "4"}, nil)
-	ecommerce.EXPECT().ListCorporateBankingBanks(gomock.Any(), 0, applymentCatalogPageSize).Times(1).Return(&wechat.CapitalBankListResponse{TotalCount: 1, Count: 1, Data: []wechat.CapitalBank{{BankAlias: "建设银行", AccountBank: "建设银行"}}}, nil)
+	ecommerce.EXPECT().ListCorporateBankingBanks(gomock.Any(), 0, applymentCatalogPageSize).Times(1).Return(&wechatcontracts.CapitalBankListResponse{TotalCount: 1, Count: 1, Data: []wechatcontracts.CapitalBank{{BankAlias: "建设银行", AccountBank: "建设银行"}}}, nil)
 	ecommerce.EXPECT().EncryptSensitiveData("6222020202020202").Times(1).Return("wx_encrypted_account_number", nil)
 	ecommerce.EXPECT().EncryptSensitiveData("新的开户名").Times(1).Return("wx_encrypted_account_name", nil)
-	ecommerce.EXPECT().ModifySubMerchantSettlement(gomock.Any(), paymentConfig.SubMchID, &wechat.ModifySubMerchantSettlementRequest{AccountType: "ACCOUNT_TYPE_BUSINESS", AccountBank: "建设银行", AccountNumber: "wx_encrypted_account_number", AccountName: "wx_encrypted_account_name"}).Times(1).Return(nil, fmt.Errorf("modify sub merchant settlement: %w", &wechat.WechatPayError{StatusCode: http.StatusBadRequest, Code: "INVALID_REQUEST", Message: "无效请求", Detail: "你的开户名称与主体名称不一致，请修改后重试"}))
+	ecommerce.EXPECT().ModifySubMerchantSettlement(gomock.Any(), paymentConfig.SubMchID, &wechatcontracts.ModifySubMerchantSettlementRequest{AccountType: "ACCOUNT_TYPE_BUSINESS", AccountBank: "建设银行", AccountNumber: "wx_encrypted_account_number", AccountName: "wx_encrypted_account_name"}).Times(1).Return(nil, fmt.Errorf("modify sub merchant settlement: %w", &wechat.WechatPayError{StatusCode: http.StatusBadRequest, Code: "INVALID_REQUEST", Message: "无效请求", Detail: "你的开户名称与主体名称不一致，请修改后重试"}))
 
 	server := newTestServer(t, store)
 	server.SetEcommerceClientForTest(ecommerce)
@@ -1173,7 +1173,7 @@ func TestGetMerchantSettlementApplicationOK(t *testing.T) {
 	ecommerce.EXPECT().
 		QuerySubMerchantSettlementApplication(gomock.Any(), paymentConfig.SubMchID, "102329389XXXX", "").
 		Times(1).
-		Return(&wechat.QuerySubMerchantSettlementApplicationResponse{
+		Return(&wechatcontracts.QuerySubMerchantSettlementApplicationResponse{
 			AccountName:      "张*",
 			AccountType:      "ACCOUNT_TYPE_BUSINESS",
 			AccountBank:      "工商银行",

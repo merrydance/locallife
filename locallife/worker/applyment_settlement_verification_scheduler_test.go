@@ -9,7 +9,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
-	"github.com/merrydance/locallife/wechat"
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	mockwechat "github.com/merrydance/locallife/wechat/mock"
 	"github.com/merrydance/locallife/worker"
@@ -38,7 +37,7 @@ func TestApplymentSettlementVerificationSchedulerMarksVerifyingCandidate(t *test
 
 	ecommerceClient.EXPECT().
 		QuerySubMerchantSettlement(gomock.Any(), "sub_mch_21", "").
-		Return(&wechat.SubMerchantSettlementResponse{VerifyResult: "VERIFYING"}, nil)
+		Return(&wechatcontracts.SubMerchantSettlementResponse{VerifyResult: "VERIFYING"}, nil)
 
 	store.EXPECT().
 		UpdateEcommerceApplymentSettlementVerification(gomock.Any(), gomock.AssignableToTypeOf(db.UpdateEcommerceApplymentSettlementVerificationParams{})).
@@ -75,7 +74,7 @@ func TestApplymentSettlementVerificationSchedulerNotifiesOperatorOnFailure(t *te
 
 	ecommerceClient.EXPECT().
 		QuerySubMerchantSettlement(gomock.Any(), "sub_mch_41", "").
-		Return(&wechat.SubMerchantSettlementResponse{
+		Return(&wechatcontracts.SubMerchantSettlementResponse{
 			VerifyResult:     "VERIFY_FAIL",
 			VerifyFailReason: "银行卡户名不一致",
 		}, nil)

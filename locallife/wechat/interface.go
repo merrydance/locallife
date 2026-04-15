@@ -4,6 +4,8 @@ import (
 	"context"
 	"mime/multipart"
 	"time"
+
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 )
 
 const (
@@ -132,42 +134,42 @@ type EcommerceClientInterface interface {
 
 	// ==================== 二级商户进件 ====================
 	// CreateEcommerceApplyment 提交二级商户进件申请
-	CreateEcommerceApplyment(ctx context.Context, req *EcommerceApplymentRequest) (*EcommerceApplymentResponse, error)
+	CreateEcommerceApplyment(ctx context.Context, req *EcommerceApplymentRequest) (*wechatcontracts.EcommerceApplymentResponse, error)
 
 	// QueryEcommerceApplymentByID 通过申请单号查询进件状态
-	QueryEcommerceApplymentByID(ctx context.Context, applymentID int64) (*EcommerceApplymentQueryResponse, error)
+	QueryEcommerceApplymentByID(ctx context.Context, applymentID int64) (*wechatcontracts.EcommerceApplymentQueryResponse, error)
 
 	// QueryEcommerceApplymentByOutRequestNo 通过业务申请编号查询进件状态
-	QueryEcommerceApplymentByOutRequestNo(ctx context.Context, outRequestNo string) (*EcommerceApplymentQueryResponse, error)
+	QueryEcommerceApplymentByOutRequestNo(ctx context.Context, outRequestNo string) (*wechatcontracts.EcommerceApplymentQueryResponse, error)
 
 	// QuerySubMerchantSettlement 查询特约商户/二级商户结算账户信息（敏感信息掩码）
 	// accountNumberRule 为空时使用微信默认规则（ACCOUNT_NUMBER_RULE_MASK_V1）
-	QuerySubMerchantSettlement(ctx context.Context, subMchID string, accountNumberRule string) (*SubMerchantSettlementResponse, error)
+	QuerySubMerchantSettlement(ctx context.Context, subMchID string, accountNumberRule string) (*wechatcontracts.SubMerchantSettlementResponse, error)
 
 	// ModifySubMerchantSettlement 修改特约商户/二级商户结算账户
-	ModifySubMerchantSettlement(ctx context.Context, subMchID string, req *ModifySubMerchantSettlementRequest) (*ModifySubMerchantSettlementResponse, error)
+	ModifySubMerchantSettlement(ctx context.Context, subMchID string, req *wechatcontracts.ModifySubMerchantSettlementRequest) (*wechatcontracts.ModifySubMerchantSettlementResponse, error)
 
 	// QuerySubMerchantSettlementApplication 查询结算账户修改申请单状态
 	// applicationNo: 修改申请单号；accountNumberRule: 账号展示规则（空字符串使用微信默认）
-	QuerySubMerchantSettlementApplication(ctx context.Context, subMchID, applicationNo, accountNumberRule string) (*QuerySubMerchantSettlementApplicationResponse, error)
+	QuerySubMerchantSettlementApplication(ctx context.Context, subMchID, applicationNo, accountNumberRule string) (*wechatcontracts.QuerySubMerchantSettlementApplicationResponse, error)
 
 	// ListPersonalBankingBanks 查询支持个人业务的银行列表
-	ListPersonalBankingBanks(ctx context.Context, offset, limit int) (*CapitalBankListResponse, error)
+	ListPersonalBankingBanks(ctx context.Context, offset, limit int) (*wechatcontracts.CapitalBankListResponse, error)
 
 	// ListCorporateBankingBanks 查询支持对公业务的银行列表
-	ListCorporateBankingBanks(ctx context.Context, offset, limit int) (*CapitalBankListResponse, error)
+	ListCorporateBankingBanks(ctx context.Context, offset, limit int) (*wechatcontracts.CapitalBankListResponse, error)
 
 	// SearchBanksByBankAccount 根据个人银行卡号识别开户银行候选
-	SearchBanksByBankAccount(ctx context.Context, accountNumber string) (*CapitalBankAccountSearchResponse, error)
+	SearchBanksByBankAccount(ctx context.Context, accountNumber string) (*wechatcontracts.CapitalBankAccountSearchResponse, error)
 
 	// ListProvinceAreas 查询省份列表
-	ListProvinceAreas(ctx context.Context) (*CapitalProvinceListResponse, error)
+	ListProvinceAreas(ctx context.Context) (*wechatcontracts.CapitalProvinceListResponse, error)
 
 	// ListCityAreas 查询省份下城市列表
-	ListCityAreas(ctx context.Context, provinceCode int) (*CapitalCityListResponse, error)
+	ListCityAreas(ctx context.Context, provinceCode int) (*wechatcontracts.CapitalCityListResponse, error)
 
 	// ListBankBranches 查询支行列表
-	ListBankBranches(ctx context.Context, bankAliasCode string, cityCode, offset, limit int) (*CapitalBranchListResponse, error)
+	ListBankBranches(ctx context.Context, bankAliasCode string, cityCode, offset, limit int) (*wechatcontracts.CapitalBranchListResponse, error)
 
 	// ==================== 合单支付 ====================
 	// CreatePartnerJSAPIOrder 创建服务商模式单笔 JSAPI 订单（平台收付通）
@@ -233,16 +235,16 @@ type EcommerceClientInterface interface {
 
 	// ==================== 账户资金管理 ====================
 	// ValidateEcommerceCancelWithdraw 校验二级商户是否满足注销提现条件
-	ValidateEcommerceCancelWithdraw(ctx context.Context, subMchID string) (*EcommerceCancelWithdrawEligibilityResponse, error)
+	ValidateEcommerceCancelWithdraw(ctx context.Context, subMchID string) (*wechatcontracts.CancelWithdrawEligibilityResponse, error)
 
 	// CreateEcommerceCancelWithdraw 提交商户注销提现申请
-	CreateEcommerceCancelWithdraw(ctx context.Context, req *EcommerceCancelWithdrawRequest) (*EcommerceCancelWithdrawCreateResponse, error)
+	CreateEcommerceCancelWithdraw(ctx context.Context, req *wechatcontracts.CancelWithdrawRequest) (*wechatcontracts.CancelWithdrawCreateResponse, error)
 
 	// QueryEcommerceCancelWithdrawByOutRequestNo 按平台申请单号查询注销提现申请状态
-	QueryEcommerceCancelWithdrawByOutRequestNo(ctx context.Context, outRequestNo string) (*EcommerceCancelWithdrawQueryResponse, error)
+	QueryEcommerceCancelWithdrawByOutRequestNo(ctx context.Context, outRequestNo string) (*wechatcontracts.CancelWithdrawQueryResponse, error)
 
 	// QueryEcommerceCancelWithdrawByApplymentID 按微信申请单号查询注销提现申请状态
-	QueryEcommerceCancelWithdrawByApplymentID(ctx context.Context, applymentID string) (*EcommerceCancelWithdrawQueryResponse, error)
+	QueryEcommerceCancelWithdrawByApplymentID(ctx context.Context, applymentID string) (*wechatcontracts.CancelWithdrawQueryResponse, error)
 
 	// QueryEcommerceFundBalance 查询二级商户可用余额
 	QueryEcommerceFundBalance(ctx context.Context, subMchID string) (*EcommerceFundBalanceResponse, error)

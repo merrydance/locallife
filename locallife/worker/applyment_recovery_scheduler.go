@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	"github.com/robfig/cron/v3"
 	"github.com/rs/zerolog/log"
 )
@@ -167,7 +168,7 @@ func (s *ApplymentRecoveryScheduler) runOnce(ctx context.Context) {
 	}
 }
 
-func (s *ApplymentRecoveryScheduler) queryApplymentStatus(ctx context.Context, applyment db.EcommerceApplymentPendingFollowUp) (*wechat.EcommerceApplymentQueryResponse, error) {
+func (s *ApplymentRecoveryScheduler) queryApplymentStatus(ctx context.Context, applyment db.EcommerceApplymentPendingFollowUp) (*wechatcontracts.EcommerceApplymentQueryResponse, error) {
 	if applyment.ApplymentID.Valid {
 		resp, err := s.ecommerceClient.QueryEcommerceApplymentByID(ctx, applyment.ApplymentID.Int64)
 		if err == nil {
@@ -211,7 +212,7 @@ func (s *ApplymentRecoveryScheduler) queryApplymentStatus(ctx context.Context, a
 	return resp, err
 }
 
-func (s *ApplymentRecoveryScheduler) reconcileApplymentStatus(ctx context.Context, applyment db.EcommerceApplymentPendingFollowUp, queryResp *wechat.EcommerceApplymentQueryResponse) (string, string, error) {
+func (s *ApplymentRecoveryScheduler) reconcileApplymentStatus(ctx context.Context, applyment db.EcommerceApplymentPendingFollowUp, queryResp *wechatcontracts.EcommerceApplymentQueryResponse) (string, string, error) {
 	mappedStatus := mapWechatApplymentStateToStatus(queryResp.ApplymentState)
 	if mappedStatus == "" {
 		mappedStatus = applyment.Status

@@ -15,6 +15,7 @@ import (
 	time "time"
 
 	wechat "github.com/merrydance/locallife/wechat"
+	contracts "github.com/merrydance/locallife/wechat/contracts"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -376,10 +377,10 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) CreateCombineOrder(ctx, req 
 }
 
 // CreateEcommerceApplyment mocks base method.
-func (m *MockEcommerceClientInterface) CreateEcommerceApplyment(ctx context.Context, req *wechat.EcommerceApplymentRequest) (*wechat.EcommerceApplymentResponse, error) {
+func (m *MockEcommerceClientInterface) CreateEcommerceApplyment(ctx context.Context, req *wechat.EcommerceApplymentRequest) (*contracts.EcommerceApplymentResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateEcommerceApplyment", ctx, req)
-	ret0, _ := ret[0].(*wechat.EcommerceApplymentResponse)
+	ret0, _ := ret[0].(*contracts.EcommerceApplymentResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -391,10 +392,10 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) CreateEcommerceApplyment(ctx
 }
 
 // CreateEcommerceCancelWithdraw mocks base method.
-func (m *MockEcommerceClientInterface) CreateEcommerceCancelWithdraw(ctx context.Context, req *wechat.EcommerceCancelWithdrawRequest) (*wechat.EcommerceCancelWithdrawCreateResponse, error) {
+func (m *MockEcommerceClientInterface) CreateEcommerceCancelWithdraw(ctx context.Context, req *contracts.CancelWithdrawRequest) (*contracts.CancelWithdrawCreateResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateEcommerceCancelWithdraw", ctx, req)
-	ret0, _ := ret[0].(*wechat.EcommerceCancelWithdrawCreateResponse)
+	ret0, _ := ret[0].(*contracts.CancelWithdrawCreateResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -822,10 +823,10 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) GetSpMchName() *gomock.Call 
 }
 
 // ListBankBranches mocks base method.
-func (m *MockEcommerceClientInterface) ListBankBranches(ctx context.Context, bankAliasCode string, cityCode, offset, limit int) (*wechat.CapitalBranchListResponse, error) {
+func (m *MockEcommerceClientInterface) ListBankBranches(ctx context.Context, bankAliasCode string, cityCode, offset, limit int) (*contracts.CapitalBranchListResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListBankBranches", ctx, bankAliasCode, cityCode, offset, limit)
-	ret0, _ := ret[0].(*wechat.CapitalBranchListResponse)
+	ret0, _ := ret[0].(*contracts.CapitalBranchListResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -837,10 +838,10 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) ListBankBranches(ctx, bankAl
 }
 
 // ListCityAreas mocks base method.
-func (m *MockEcommerceClientInterface) ListCityAreas(ctx context.Context, provinceCode int) (*wechat.CapitalCityListResponse, error) {
+func (m *MockEcommerceClientInterface) ListCityAreas(ctx context.Context, provinceCode int) (*contracts.CapitalCityListResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListCityAreas", ctx, provinceCode)
-	ret0, _ := ret[0].(*wechat.CapitalCityListResponse)
+	ret0, _ := ret[0].(*contracts.CapitalCityListResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -867,10 +868,10 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) ListComplaints(ctx, req any)
 }
 
 // ListCorporateBankingBanks mocks base method.
-func (m *MockEcommerceClientInterface) ListCorporateBankingBanks(ctx context.Context, offset, limit int) (*wechat.CapitalBankListResponse, error) {
+func (m *MockEcommerceClientInterface) ListCorporateBankingBanks(ctx context.Context, offset, limit int) (*contracts.CapitalBankListResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListCorporateBankingBanks", ctx, offset, limit)
-	ret0, _ := ret[0].(*wechat.CapitalBankListResponse)
+	ret0, _ := ret[0].(*contracts.CapitalBankListResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -882,10 +883,10 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) ListCorporateBankingBanks(ct
 }
 
 // ListPersonalBankingBanks mocks base method.
-func (m *MockEcommerceClientInterface) ListPersonalBankingBanks(ctx context.Context, offset, limit int) (*wechat.CapitalBankListResponse, error) {
+func (m *MockEcommerceClientInterface) ListPersonalBankingBanks(ctx context.Context, offset, limit int) (*contracts.CapitalBankListResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListPersonalBankingBanks", ctx, offset, limit)
-	ret0, _ := ret[0].(*wechat.CapitalBankListResponse)
+	ret0, _ := ret[0].(*contracts.CapitalBankListResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -897,10 +898,10 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) ListPersonalBankingBanks(ctx
 }
 
 // ListProvinceAreas mocks base method.
-func (m *MockEcommerceClientInterface) ListProvinceAreas(ctx context.Context) (*wechat.CapitalProvinceListResponse, error) {
+func (m *MockEcommerceClientInterface) ListProvinceAreas(ctx context.Context) (*contracts.CapitalProvinceListResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListProvinceAreas", ctx)
-	ret0, _ := ret[0].(*wechat.CapitalProvinceListResponse)
+	ret0, _ := ret[0].(*contracts.CapitalProvinceListResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -912,10 +913,10 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) ListProvinceAreas(ctx any) *
 }
 
 // ModifySubMerchantSettlement mocks base method.
-func (m *MockEcommerceClientInterface) ModifySubMerchantSettlement(ctx context.Context, subMchID string, req *wechat.ModifySubMerchantSettlementRequest) (*wechat.ModifySubMerchantSettlementResponse, error) {
+func (m *MockEcommerceClientInterface) ModifySubMerchantSettlement(ctx context.Context, subMchID string, req *contracts.ModifySubMerchantSettlementRequest) (*contracts.ModifySubMerchantSettlementResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ModifySubMerchantSettlement", ctx, subMchID, req)
-	ret0, _ := ret[0].(*wechat.ModifySubMerchantSettlementResponse)
+	ret0, _ := ret[0].(*contracts.ModifySubMerchantSettlementResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -942,10 +943,10 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) QueryCombineOrder(ctx, combi
 }
 
 // QueryEcommerceApplymentByID mocks base method.
-func (m *MockEcommerceClientInterface) QueryEcommerceApplymentByID(ctx context.Context, applymentID int64) (*wechat.EcommerceApplymentQueryResponse, error) {
+func (m *MockEcommerceClientInterface) QueryEcommerceApplymentByID(ctx context.Context, applymentID int64) (*contracts.EcommerceApplymentQueryResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "QueryEcommerceApplymentByID", ctx, applymentID)
-	ret0, _ := ret[0].(*wechat.EcommerceApplymentQueryResponse)
+	ret0, _ := ret[0].(*contracts.EcommerceApplymentQueryResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -957,10 +958,10 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) QueryEcommerceApplymentByID(
 }
 
 // QueryEcommerceApplymentByOutRequestNo mocks base method.
-func (m *MockEcommerceClientInterface) QueryEcommerceApplymentByOutRequestNo(ctx context.Context, outRequestNo string) (*wechat.EcommerceApplymentQueryResponse, error) {
+func (m *MockEcommerceClientInterface) QueryEcommerceApplymentByOutRequestNo(ctx context.Context, outRequestNo string) (*contracts.EcommerceApplymentQueryResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "QueryEcommerceApplymentByOutRequestNo", ctx, outRequestNo)
-	ret0, _ := ret[0].(*wechat.EcommerceApplymentQueryResponse)
+	ret0, _ := ret[0].(*contracts.EcommerceApplymentQueryResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -972,10 +973,10 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) QueryEcommerceApplymentByOut
 }
 
 // QueryEcommerceCancelWithdrawByApplymentID mocks base method.
-func (m *MockEcommerceClientInterface) QueryEcommerceCancelWithdrawByApplymentID(ctx context.Context, applymentID string) (*wechat.EcommerceCancelWithdrawQueryResponse, error) {
+func (m *MockEcommerceClientInterface) QueryEcommerceCancelWithdrawByApplymentID(ctx context.Context, applymentID string) (*contracts.CancelWithdrawQueryResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "QueryEcommerceCancelWithdrawByApplymentID", ctx, applymentID)
-	ret0, _ := ret[0].(*wechat.EcommerceCancelWithdrawQueryResponse)
+	ret0, _ := ret[0].(*contracts.CancelWithdrawQueryResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -987,10 +988,10 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) QueryEcommerceCancelWithdraw
 }
 
 // QueryEcommerceCancelWithdrawByOutRequestNo mocks base method.
-func (m *MockEcommerceClientInterface) QueryEcommerceCancelWithdrawByOutRequestNo(ctx context.Context, outRequestNo string) (*wechat.EcommerceCancelWithdrawQueryResponse, error) {
+func (m *MockEcommerceClientInterface) QueryEcommerceCancelWithdrawByOutRequestNo(ctx context.Context, outRequestNo string) (*contracts.CancelWithdrawQueryResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "QueryEcommerceCancelWithdrawByOutRequestNo", ctx, outRequestNo)
-	ret0, _ := ret[0].(*wechat.EcommerceCancelWithdrawQueryResponse)
+	ret0, _ := ret[0].(*contracts.CancelWithdrawQueryResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1182,10 +1183,10 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) QueryProfitSharingReturn(ctx
 }
 
 // QuerySubMerchantSettlement mocks base method.
-func (m *MockEcommerceClientInterface) QuerySubMerchantSettlement(ctx context.Context, subMchID, accountNumberRule string) (*wechat.SubMerchantSettlementResponse, error) {
+func (m *MockEcommerceClientInterface) QuerySubMerchantSettlement(ctx context.Context, subMchID, accountNumberRule string) (*contracts.SubMerchantSettlementResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "QuerySubMerchantSettlement", ctx, subMchID, accountNumberRule)
-	ret0, _ := ret[0].(*wechat.SubMerchantSettlementResponse)
+	ret0, _ := ret[0].(*contracts.SubMerchantSettlementResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1197,10 +1198,10 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) QuerySubMerchantSettlement(c
 }
 
 // QuerySubMerchantSettlementApplication mocks base method.
-func (m *MockEcommerceClientInterface) QuerySubMerchantSettlementApplication(ctx context.Context, subMchID, applicationNo, accountNumberRule string) (*wechat.QuerySubMerchantSettlementApplicationResponse, error) {
+func (m *MockEcommerceClientInterface) QuerySubMerchantSettlementApplication(ctx context.Context, subMchID, applicationNo, accountNumberRule string) (*contracts.QuerySubMerchantSettlementApplicationResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "QuerySubMerchantSettlementApplication", ctx, subMchID, applicationNo, accountNumberRule)
-	ret0, _ := ret[0].(*wechat.QuerySubMerchantSettlementApplicationResponse)
+	ret0, _ := ret[0].(*contracts.QuerySubMerchantSettlementApplicationResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1256,10 +1257,10 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) ReturnSubsidy(ctx, req any) 
 }
 
 // SearchBanksByBankAccount mocks base method.
-func (m *MockEcommerceClientInterface) SearchBanksByBankAccount(ctx context.Context, accountNumber string) (*wechat.CapitalBankAccountSearchResponse, error) {
+func (m *MockEcommerceClientInterface) SearchBanksByBankAccount(ctx context.Context, accountNumber string) (*contracts.CapitalBankAccountSearchResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SearchBanksByBankAccount", ctx, accountNumber)
-	ret0, _ := ret[0].(*wechat.CapitalBankAccountSearchResponse)
+	ret0, _ := ret[0].(*contracts.CapitalBankAccountSearchResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1301,10 +1302,10 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) UploadImage(ctx, filename, f
 }
 
 // ValidateEcommerceCancelWithdraw mocks base method.
-func (m *MockEcommerceClientInterface) ValidateEcommerceCancelWithdraw(ctx context.Context, subMchID string) (*wechat.EcommerceCancelWithdrawEligibilityResponse, error) {
+func (m *MockEcommerceClientInterface) ValidateEcommerceCancelWithdraw(ctx context.Context, subMchID string) (*contracts.CancelWithdrawEligibilityResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ValidateEcommerceCancelWithdraw", ctx, subMchID)
-	ret0, _ := ret[0].(*wechat.EcommerceCancelWithdrawEligibilityResponse)
+	ret0, _ := ret[0].(*contracts.CancelWithdrawEligibilityResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

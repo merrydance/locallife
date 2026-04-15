@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	"github.com/rs/zerolog/log"
 )
 
@@ -60,7 +61,7 @@ type SubmitEcommerceApplymentResult struct {
 	Status               string
 	StatusDesc           string
 	Message              string
-	InitialQueryResponse *wechat.EcommerceApplymentQueryResponse
+	InitialQueryResponse *wechatcontracts.EcommerceApplymentQueryResponse
 }
 
 func waitApplymentInitialQuery(ctx context.Context, delay time.Duration) error {
@@ -84,7 +85,7 @@ func buildApplymentSubmissionText(value string) pgtype.Text {
 	return pgtype.Text{String: trimmed, Valid: trimmed != ""}
 }
 
-func getRejectReasonFromApplymentAuditDetails(details []wechat.ApplymentAuditDetail) pgtype.Text {
+func getRejectReasonFromApplymentAuditDetails(details []wechatcontracts.ApplymentAuditDetail) pgtype.Text {
 	if len(details) == 0 {
 		return pgtype.Text{}
 	}
@@ -101,7 +102,7 @@ func syncInitialApplymentQueryResult(
 	ctx context.Context,
 	store ApplymentSubmissionStore,
 	localApplymentID int64,
-	queryResp *wechat.EcommerceApplymentQueryResponse,
+	queryResp *wechatcontracts.EcommerceApplymentQueryResponse,
 ) error {
 	if queryResp == nil {
 		return nil
@@ -187,9 +188,9 @@ type ApplymentWechatContactInput struct {
 type ApplymentWechatRequestInput struct {
 	OutRequestNo      string
 	OrganizationType  string
-	BusinessLicense   *wechat.BusinessLicenseInfo
+	BusinessLicense   *wechatcontracts.ApplymentBusinessLicenseInfo
 	MerchantShortname string
-	IDCardInfo        *wechat.ApplymentIDCardInfo
+	IDCardInfo        *wechatcontracts.ApplymentIDCardInfo
 	AccountInfo       ApplymentWechatAccountInput
 	ContactInfo       ApplymentWechatContactInput
 	StoreName         string
@@ -286,8 +287,8 @@ func BuildCreateEcommerceApplymentParams(input ApplymentLocalRecordInput) db.Cre
 	}
 }
 
-func BuildWechatApplymentAccountInfo(input ApplymentWechatAccountInput) *wechat.ApplymentBankAccountInfo {
-	return &wechat.ApplymentBankAccountInfo{
+func BuildWechatApplymentAccountInfo(input ApplymentWechatAccountInput) *wechatcontracts.ApplymentBankAccountInfo {
+	return &wechatcontracts.ApplymentBankAccountInfo{
 		BankAccountType: input.AccountType,
 		AccountBank:     input.AccountBank,
 		AccountName:     input.AccountName,
@@ -298,8 +299,8 @@ func BuildWechatApplymentAccountInfo(input ApplymentWechatAccountInput) *wechat.
 	}
 }
 
-func BuildWechatApplymentContactInfo(input ApplymentWechatContactInput) *wechat.ApplymentContactInfo {
-	info := &wechat.ApplymentContactInfo{
+func BuildWechatApplymentContactInfo(input ApplymentWechatContactInput) *wechatcontracts.ApplymentContactInfo {
+	info := &wechatcontracts.ApplymentContactInfo{
 		ContactType:          input.ContactType,
 		ContactName:          input.ContactName,
 		ContactIDCardNumber:  input.ContactIDCardNumber,
@@ -334,7 +335,7 @@ func BuildWechatApplymentRequest(input ApplymentWechatRequestInput) *wechat.Ecom
 	}
 
 	if input.StoreName != "" || input.StoreURL != "" || input.StoreQRCode != "" {
-		request.SalesSceneInfo = &wechat.ApplymentSalesSceneInfo{
+		request.SalesSceneInfo = &wechatcontracts.ApplymentSalesSceneInfo{
 			StoreName:   input.StoreName,
 			StoreURL:    input.StoreURL,
 			StoreQRCode: input.StoreQRCode,
@@ -370,12 +371,12 @@ func ParseApplymentOperatorIDCardValidPeriod(validStart, validEnd string) (strin
 	return start, end
 }
 
-func BuildApplymentBusinessLicenseInfo(copyMediaID, businessLicenseNumber, merchantName, legalPerson, fallbackAddress string, ocr ApplymentBusinessLicenseOCRInput) *wechat.BusinessLicenseInfo {
+func BuildApplymentBusinessLicenseInfo(copyMediaID, businessLicenseNumber, merchantName, legalPerson, fallbackAddress string, ocr ApplymentBusinessLicenseOCRInput) *wechatcontracts.ApplymentBusinessLicenseInfo {
 	if copyMediaID == "" {
 		return nil
 	}
 
-	info := &wechat.BusinessLicenseInfo{
+	info := &wechatcontracts.ApplymentBusinessLicenseInfo{
 		BusinessLicenseCopy:   copyMediaID,
 		BusinessLicenseNumber: businessLicenseNumber,
 		MerchantName:          merchantName,
@@ -714,7 +715,7 @@ func queryInitialApplymentStatus(
 	ecommerceClient wechat.EcommerceClientInterface,
 	applymentID int64,
 	outRequestNo string,
-) (*wechat.EcommerceApplymentQueryResponse, error) {
+) (*wechatcontracts.EcommerceApplymentQueryResponse, error) {
 	if ecommerceClient == nil {
 		return nil, nil
 	}

@@ -10,7 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
-	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	mockwechat "github.com/merrydance/locallife/wechat/mock"
 	"github.com/merrydance/locallife/worker"
 	mockwk "github.com/merrydance/locallife/worker/mock"
@@ -72,7 +72,7 @@ func TestApplymentRecoverySchedulerRunOnceQueriesSubmittedMerchantAndReconcilesS
 
 	ecommerceClient.EXPECT().
 		QueryEcommerceApplymentByID(gomock.Any(), int64(991)).
-		Return(&wechat.EcommerceApplymentQueryResponse{
+		Return(&wechatcontracts.EcommerceApplymentQueryResponse{
 			ApplymentID:    991,
 			OutRequestNo:   "APPLY_RECOVERY_002",
 			ApplymentState: "FINISH",
@@ -172,7 +172,7 @@ func TestApplymentRecoverySchedulerRunOnceFallsBackToOutRequestNoAfterIDQueryFai
 
 	ecommerceClient.EXPECT().
 		QueryEcommerceApplymentByOutRequestNo(gomock.Any(), "APPLY_RECOVERY_005").
-		Return(&wechat.EcommerceApplymentQueryResponse{
+		Return(&wechatcontracts.EcommerceApplymentQueryResponse{
 			ApplymentID:    9901,
 			OutRequestNo:   "APPLY_RECOVERY_005",
 			ApplymentState: "AUDITING",
@@ -223,12 +223,12 @@ func TestApplymentRecoverySchedulerRunOnceEnqueuesFrozenFollowUp(t *testing.T) {
 
 	ecommerceClient.EXPECT().
 		QueryEcommerceApplymentByID(gomock.Any(), int64(6060)).
-		Return(&wechat.EcommerceApplymentQueryResponse{
+		Return(&wechatcontracts.EcommerceApplymentQueryResponse{
 			ApplymentID:        6060,
 			OutRequestNo:       "APPLY_RECOVERY_006",
 			ApplymentState:     "FROZEN",
 			ApplymentStateDesc: "已冻结",
-			AuditDetail: []wechat.ApplymentAuditDetail{{
+			AuditDetail: []wechatcontracts.ApplymentAuditDetail{{
 				ParamName:    "id_card_copy",
 				RejectReason: "身份证图片存在问题",
 			}},

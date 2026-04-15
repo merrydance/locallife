@@ -11362,6 +11362,332 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/merchant/finance/account/cancel-withdraw/applications": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "返回当前商户的注销提现申请列表。若收付通账户未激活，则返回空列表并带 account_status/status_desc。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户财务"
+                ],
+                "summary": "查询商户注销提现申请列表",
+                "parameters": [
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 1,
+                        "description": "页码",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "maximum": 100,
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 20,
+                        "description": "每页数量",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.merchantCancelWithdrawListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "认证失败",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "商户不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "创建商户注销提现申请并提交微信注销提现接口。服务端会先校验主体状态、上传证明材料，并按微信错误码返回明确语义，不会把已知微信错误降级为“提交结果未知”。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户财务"
+                ],
+                "summary": "创建商户注销提现申请",
+                "parameters": [
+                    {
+                        "description": "创建注销提现申请",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.createMerchantCancelWithdrawRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "同 out_request_no 已存在本地申请，返回现有申请",
+                        "schema": {
+                            "$ref": "#/definitions/api.merchantCancelWithdrawCreateResponse"
+                        }
+                    },
+                    "201": {
+                        "description": "创建成功",
+                        "schema": {
+                            "$ref": "#/definitions/api.merchantCancelWithdrawCreateResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "微信签名失败",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "商户支付账户、进件记录或申请不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "当前不满足注销提现条件或申请已存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "商户支付账户未激活",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "微信限频",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "内部错误或微信服务异常",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "微信返回契约不合法",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "服务不可用或微信要求稍后重试",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/merchant/finance/account/cancel-withdraw/applications/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "查询当前商户的注销提现申请详情。若申请尚未终态，服务端会先尝试同步一次微信状态。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户财务"
+                ],
+                "summary": "查询商户注销提现申请详情",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "本地申请 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.merchantCancelWithdrawItem"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "认证失败",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "商户或申请不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "微信限频",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "内部错误或微信服务异常",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "微信返回契约不合法",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "服务不可用",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/merchant/finance/account/cancel-withdraw/eligibility": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "查询当前商户的收付通账户状态与微信注销提现资格校验结果。若收付通账户未激活，则返回 200 且 eligible=false，不触发微信调用。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户财务"
+                ],
+                "summary": "查询商户注销提现资格",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.merchantCancelWithdrawEligibilityResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "认证失败",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "商户不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "微信限频",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "内部错误或微信服务异常",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "微信返回契约不合法",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "服务不可用",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/merchant/finance/account/settlement-account": {
             "get": {
                 "security": [
@@ -33843,6 +34169,52 @@ const docTemplate = `{
                 }
             }
         },
+        "api.createMerchantCancelWithdrawRequest": {
+            "type": "object",
+            "required": [
+                "withdraw"
+            ],
+            "properties": {
+                "additional_material_asset_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "business_license_status_declaration": {
+                    "type": "string",
+                    "enum": [
+                        "ACTIVE",
+                        "CANCELED",
+                        "REVOKED"
+                    ]
+                },
+                "out_request_no": {
+                    "type": "string",
+                    "maxLength": 32
+                },
+                "payee_info": {
+                    "$ref": "#/definitions/api.merchantCancelWithdrawPayeeInfoRequest"
+                },
+                "proof_media_asset_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "remark": {
+                    "type": "string",
+                    "maxLength": 32
+                },
+                "withdraw": {
+                    "type": "string",
+                    "enum": [
+                        "NOT_APPLY_WITHDRAW",
+                        "APPLY_WITHDRAW"
+                    ]
+                }
+            }
+        },
         "api.createOCRJobRequest": {
             "type": "object",
             "required": [
@@ -37261,6 +37633,327 @@ const docTemplate = `{
                 "sub_mch_id": {
                     "description": "二级商户号",
                     "type": "string"
+                }
+            }
+        },
+        "api.merchantCancelWithdrawAccountInfo": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "integer"
+                },
+                "out_account_type": {
+                    "type": "string",
+                    "enum": [
+                        "BASIC_ACCOUNT",
+                        "OPERATE_ACCOUNT",
+                        "MARGIN_ACCOUNT",
+                        "TRADE_FEE_ACCOUNT"
+                    ]
+                }
+            }
+        },
+        "api.merchantCancelWithdrawAccountWithdrawResult": {
+            "type": "object",
+            "properties": {
+                "out_account_type": {
+                    "type": "string"
+                },
+                "pay_state": {
+                    "type": "string",
+                    "enum": [
+                        "PAY_PROCESSING",
+                        "PAY_SUCCEED",
+                        "PAY_FAIL",
+                        "BANK_REFUNDED"
+                    ]
+                },
+                "state_description": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.merchantCancelWithdrawBankAccountInfoRequest": {
+            "type": "object",
+            "properties": {
+                "account_bank": {
+                    "type": "string"
+                },
+                "account_name": {
+                    "type": "string"
+                },
+                "account_number": {
+                    "type": "string"
+                },
+                "bank_branch_id": {
+                    "type": "string"
+                },
+                "bank_branch_name": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.merchantCancelWithdrawBlockReason": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "CONSUMER_COMPLAINT_UNPROCESSED",
+                        "HAS_BLOCKING_CONTROL",
+                        "FUNDS_PENDING_PROCESSING",
+                        "OTHER_REASON"
+                    ]
+                }
+            }
+        },
+        "api.merchantCancelWithdrawCreateResponse": {
+            "type": "object",
+            "properties": {
+                "application": {
+                    "$ref": "#/definitions/api.merchantCancelWithdrawItem"
+                }
+            }
+        },
+        "api.merchantCancelWithdrawEligibilityItem": {
+            "type": "object",
+            "properties": {
+                "account_info": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.merchantCancelWithdrawAccountInfo"
+                    }
+                },
+                "block_reasons": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.merchantCancelWithdrawBlockReason"
+                    }
+                },
+                "merchant_state": {
+                    "type": "string",
+                    "enum": [
+                        "NORMAL",
+                        "HAS_BEEN_CANCELLED"
+                    ]
+                },
+                "sub_mchid": {
+                    "type": "string"
+                },
+                "validate_result": {
+                    "type": "string",
+                    "enum": [
+                        "ALLOW_CANCEL_WITHDRAW",
+                        "NOT_ALLOW_CANCEL_WITHDRAW"
+                    ]
+                }
+            }
+        },
+        "api.merchantCancelWithdrawEligibilityResponse": {
+            "type": "object",
+            "properties": {
+                "account_status": {
+                    "type": "string"
+                },
+                "eligibility": {
+                    "$ref": "#/definitions/api.merchantCancelWithdrawEligibilityItem"
+                },
+                "eligible": {
+                    "type": "boolean"
+                },
+                "status_desc": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.merchantCancelWithdrawIdentityInfoRequest": {
+            "type": "object",
+            "properties": {
+                "id_doc_type": {
+                    "type": "string",
+                    "enum": [
+                        "IDENTIFICATION_TYPE_ID_CARD",
+                        "IDENTIFICATION_TYPE_OVERSEA_PASSPORT",
+                        "IDENTIFICATION_TYPE_HONGKONG_PASSPORT",
+                        "IDENTIFICATION_TYPE_MACAO_PASSPORT",
+                        "IDENTIFICATION_TYPE_TAIWAN_PASSPORT",
+                        "IDENTIFICATION_TYPE_FOREIGN_RESIDENT",
+                        "IDENTIFICATION_TYPE_HONGKONG_MACAO_RESIDENT",
+                        "IDENTIFICATION_TYPE_TAIWAN_RESIDENT"
+                    ]
+                },
+                "identification_name": {
+                    "type": "string"
+                },
+                "identification_no": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.merchantCancelWithdrawItem": {
+            "type": "object",
+            "properties": {
+                "account_info": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.merchantCancelWithdrawAccountInfo"
+                    }
+                },
+                "account_withdraw_result": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.merchantCancelWithdrawAccountWithdrawResult"
+                    }
+                },
+                "additional_material_asset_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "applyment_id": {
+                    "type": "string"
+                },
+                "business_license_status_declaration": {
+                    "type": "string",
+                    "enum": [
+                        "ACTIVE",
+                        "CANCELED",
+                        "REVOKED"
+                    ]
+                },
+                "cancel_state": {
+                    "type": "string",
+                    "enum": [
+                        "ACCEPTED",
+                        "REVIEWING",
+                        "REJECTED",
+                        "WAITING_MERCHANT_CONFIRM",
+                        "REVOKED",
+                        "SYSTEM_PROCESSING",
+                        "CANCELED",
+                        "FUND_PROCESSING",
+                        "FINISH"
+                    ]
+                },
+                "cancel_state_description": {
+                    "type": "string"
+                },
+                "confirm_cancel_url": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "last_error": {
+                    "type": "string"
+                },
+                "last_query_at": {
+                    "type": "string"
+                },
+                "local_sync_state": {
+                    "type": "string",
+                    "enum": [
+                        "created",
+                        "submit_succeeded",
+                        "submit_unknown",
+                        "sync_failed"
+                    ]
+                },
+                "modify_time": {
+                    "type": "string"
+                },
+                "out_request_no": {
+                    "type": "string"
+                },
+                "proof_media_asset_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "remark": {
+                    "type": "string"
+                },
+                "sub_mchid": {
+                    "type": "string"
+                },
+                "submitted_at": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "withdraw": {
+                    "type": "string",
+                    "enum": [
+                        "NOT_APPLY_WITHDRAW",
+                        "APPLY_WITHDRAW"
+                    ]
+                },
+                "withdraw_state": {
+                    "type": "string",
+                    "enum": [
+                        "WITHDRAW_PROCESSING",
+                        "WITHDRAW_EXCEPTION",
+                        "WITHDRAW_SUCCEED"
+                    ]
+                },
+                "withdraw_state_description": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.merchantCancelWithdrawListResponse": {
+            "type": "object",
+            "properties": {
+                "account_status": {
+                    "type": "string"
+                },
+                "applications": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.merchantCancelWithdrawItem"
+                    }
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "status_desc": {
+                    "type": "string"
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "total_pages": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.merchantCancelWithdrawPayeeInfoRequest": {
+            "type": "object",
+            "properties": {
+                "account_type": {
+                    "type": "string",
+                    "enum": [
+                        "ACCOUNT_TYPE_CORPORATE",
+                        "ACCOUNT_TYPE_PERSONAL"
+                    ]
+                },
+                "bank_account_info": {
+                    "$ref": "#/definitions/api.merchantCancelWithdrawBankAccountInfoRequest"
+                },
+                "identity_info": {
+                    "$ref": "#/definitions/api.merchantCancelWithdrawIdentityInfoRequest"
                 }
             }
         },

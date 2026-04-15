@@ -259,7 +259,7 @@ func settlementVerificationTerminalFailureReason(err error) (string, bool) {
 	return "", false
 }
 
-func resolveSettlementVerificationState(resp *wechat.SubMerchantSettlementResponse, checkCount int) (string, string) {
+func resolveSettlementVerificationState(resp *wechatcontracts.SubMerchantSettlementResponse, checkCount int) (string, string) {
 	if resp == nil {
 		return "", ""
 	}

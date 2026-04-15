@@ -21,6 +21,7 @@ import (
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/util"
 	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	"github.com/rs/zerolog/log"
 )
 
@@ -576,7 +577,7 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 		OrganizationType:  organizationType,
 		BusinessLicense:   businessLicenseInfo,
 		MerchantShortname: merchant.Name,
-		IDCardInfo: &wechat.ApplymentIDCardInfo{
+		IDCardInfo: &wechatcontracts.ApplymentIDCardInfo{
 			IDCardCopy:           idCardFrontMediaID,
 			IDCardNational:       idCardBackMediaID,
 			IDCardName:           encryptedWechatFields.IDCardName,
@@ -700,7 +701,7 @@ func resolveApplymentSensitiveFieldValue(decryptor applymentSensitiveDecryptor, 
 	return decryptApplymentSensitiveField(decryptor, value)
 }
 
-func buildApplymentAccountValidationResponse(validation *wechat.EcommerceApplymentAccountValidation, decryptor applymentSensitiveDecryptor) *applymentAccountValidationResponse {
+func buildApplymentAccountValidationResponse(validation *wechatcontracts.EcommerceApplymentAccountValidation, decryptor applymentSensitiveDecryptor) *applymentAccountValidationResponse {
 	if validation == nil {
 		return nil
 	}
@@ -794,7 +795,7 @@ func shouldQueryApplymentRemoteStatus(applyment db.EcommerceApplyment, subjectSt
 	return logic.IsApplymentSubmissionInFlight(normalizedStatus, subjectStatus, applyment.OutRequestNo)
 }
 
-func (server *Server) queryEcommerceApplymentStatus(ctx context.Context, applyment db.EcommerceApplyment) (*wechat.EcommerceApplymentQueryResponse, error) {
+func (server *Server) queryEcommerceApplymentStatus(ctx context.Context, applyment db.EcommerceApplyment) (*wechatcontracts.EcommerceApplymentQueryResponse, error) {
 	if server.ecommerceClient == nil {
 		return nil, fmt.Errorf("ecommerce client not configured")
 	}
@@ -1345,7 +1346,7 @@ func getApplymentStatusDesc(status string) string {
 }
 
 // getRejectReasonFromAuditDetail 从审核详情中获取拒绝原因
-func getRejectReasonFromAuditDetail(details []wechat.ApplymentAuditDetail) pgtype.Text {
+func getRejectReasonFromAuditDetail(details []wechatcontracts.ApplymentAuditDetail) pgtype.Text {
 	if len(details) == 0 {
 		return pgtype.Text{Valid: false}
 	}

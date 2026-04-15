@@ -20,6 +20,7 @@ import (
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/util"
 	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	mockwechat "github.com/merrydance/locallife/wechat/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -204,7 +205,7 @@ func TestMerchantBindBankAPI(t *testing.T) {
 				ecommerceClient.EXPECT().
 					CreateEcommerceApplyment(gomock.Any(), gomock.Any()).
 					Times(1).
-					DoAndReturn(func(_ any, req *wechat.EcommerceApplymentRequest) (*wechat.EcommerceApplymentResponse, error) {
+					DoAndReturn(func(_ any, req *wechat.EcommerceApplymentRequest) (*wechatcontracts.EcommerceApplymentResponse, error) {
 						require.Equal(t, "4", req.OrganizationType)
 						require.NotNil(t, req.AccountInfo)
 						require.Equal(t, "其他银行", req.AccountInfo.AccountBank)
@@ -218,7 +219,7 @@ func TestMerchantBindBankAPI(t *testing.T) {
 						require.Equal(t, applicationWithTestURL.MerchantName, req.SalesSceneInfo.StoreName)
 						require.Empty(t, req.SalesSceneInfo.StoreURL)
 						require.Equal(t, "wx_store_qr_media_id", req.SalesSceneInfo.StoreQRCode)
-						return &wechat.EcommerceApplymentResponse{ApplymentID: 123456789}, nil
+						return &wechatcontracts.EcommerceApplymentResponse{ApplymentID: 123456789}, nil
 					})
 
 				// 更新进件状态
@@ -241,7 +242,7 @@ func TestMerchantBindBankAPI(t *testing.T) {
 				ecommerceClient.EXPECT().
 					QueryEcommerceApplymentByID(gomock.Any(), int64(123456789)).
 					Times(1).
-					Return(&wechat.EcommerceApplymentQueryResponse{
+					Return(&wechatcontracts.EcommerceApplymentQueryResponse{
 						ApplymentID:    123456789,
 						ApplymentState: "NEED_SIGN",
 						SignURL:        "https://wx.example.com/sign/merchant",
@@ -403,7 +404,7 @@ func TestMerchantBindBankAPI(t *testing.T) {
 				ecommerceClient.EXPECT().
 					CreateEcommerceApplyment(gomock.Any(), gomock.Any()).
 					Times(1).
-					DoAndReturn(func(_ any, req *wechat.EcommerceApplymentRequest) (*wechat.EcommerceApplymentResponse, error) {
+					DoAndReturn(func(_ any, req *wechat.EcommerceApplymentRequest) (*wechatcontracts.EcommerceApplymentResponse, error) {
 						require.NotNil(t, req.ContactInfo)
 						require.Equal(t, "SUPER", req.ContactInfo.ContactType)
 						require.Equal(t, "encrypted_data", req.ContactInfo.ContactName)
@@ -413,7 +414,7 @@ func TestMerchantBindBankAPI(t *testing.T) {
 						require.Equal(t, "wx_super_contact_back_media_id", req.ContactInfo.ContactIDDocCopyBack)
 						require.Equal(t, "2020-01-01", req.ContactInfo.ContactIDDocPeriodBegin)
 						require.Equal(t, "2030-01-01", req.ContactInfo.ContactIDDocPeriodEnd)
-						return &wechat.EcommerceApplymentResponse{ApplymentID: 22334455}, nil
+						return &wechatcontracts.EcommerceApplymentResponse{ApplymentID: 22334455}, nil
 					})
 
 				store.EXPECT().
@@ -434,7 +435,7 @@ func TestMerchantBindBankAPI(t *testing.T) {
 				ecommerceClient.EXPECT().
 					QueryEcommerceApplymentByID(gomock.Any(), int64(22334455)).
 					Times(1).
-					Return(&wechat.EcommerceApplymentQueryResponse{
+					Return(&wechatcontracts.EcommerceApplymentQueryResponse{
 						ApplymentID:    22334455,
 						ApplymentState: "AUDITING",
 					}, nil)
@@ -1288,7 +1289,7 @@ func TestGetMerchantApplymentStatusNormalizesFinishWithoutSubMchID(t *testing.T)
 	ecommerceClient.EXPECT().
 		QueryEcommerceApplymentByID(gomock.Any(), int64(123456789)).
 		Times(1).
-		Return(&wechat.EcommerceApplymentQueryResponse{
+		Return(&wechatcontracts.EcommerceApplymentQueryResponse{
 			ApplymentID:    123456789,
 			OutRequestNo:   "APPLYMENT_STATUS_001",
 			ApplymentState: "FINISH",
@@ -1345,7 +1346,7 @@ func TestGetMerchantApplymentStatusUsesActivationTxForFinishedApplyment(t *testi
 	ecommerceClient.EXPECT().
 		QueryEcommerceApplymentByID(gomock.Any(), int64(22334455)).
 		Times(1).
-		Return(&wechat.EcommerceApplymentQueryResponse{
+		Return(&wechatcontracts.EcommerceApplymentQueryResponse{
 			ApplymentID:    22334455,
 			OutRequestNo:   "APPLYMENT_STATUS_002",
 			ApplymentState: "FINISH",
@@ -1542,10 +1543,10 @@ func TestListMerchantApplymentBanksAPI(t *testing.T) {
 	ecommerceClient.EXPECT().
 		ListPersonalBankingBanks(gomock.Any(), 0, applymentCatalogPageSize).
 		Times(1).
-		Return(&wechat.CapitalBankListResponse{
+		Return(&wechatcontracts.CapitalBankListResponse{
 			TotalCount: 2,
 			Count:      2,
-			Data: []wechat.CapitalBank{{
+			Data: []wechatcontracts.CapitalBank{{
 				BankAlias:       "其他银行",
 				BankAliasCode:   "1099",
 				AccountBank:     "其他银行",
@@ -2093,7 +2094,7 @@ func TestMerchantBindBankSubmittedStateSyncFailed(t *testing.T) {
 	ecommerceClient.EXPECT().
 		CreateEcommerceApplyment(gomock.Any(), gomock.Any()).
 		Times(1).
-		Return(&wechat.EcommerceApplymentResponse{ApplymentID: 123456789}, nil)
+		Return(&wechatcontracts.EcommerceApplymentResponse{ApplymentID: 123456789}, nil)
 
 	store.EXPECT().
 		UpdateEcommerceApplymentToSubmitted(gomock.Any(), gomock.Any()).
