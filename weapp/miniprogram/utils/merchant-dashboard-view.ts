@@ -23,6 +23,7 @@ interface DashboardIconConfig {
 interface DashboardBadgeConfig {
   count: string
   maxCount: number
+  offset: [number, string]
 }
 
 interface DashboardEntryDefinition {
@@ -303,7 +304,7 @@ export function buildSections(params: {
       return {
         ...item,
         badgeText,
-        badgeProps: badgeText ? { count: badgeText, maxCount: 99 } : null
+        badgeProps: badgeText ? { count: badgeText, maxCount: 99, offset: [0, '8rpx'] } : null
       }
     })
   })).filter((section) => section.items.length > 0)

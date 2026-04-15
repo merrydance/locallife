@@ -192,7 +192,8 @@
   align-items: center;
   justify-content: center;
   min-height: 112rpx;
-  padding: 0;
+  padding: 10rpx 0 0;
+  overflow: visible;
 }
 
 .dashboard-grid-text {

@@ -3,18 +3,26 @@
 
   <!-- ① 商户信息头部（可点击 → 进入商户详情） -->
   <view class="merchant-header" bindtap="onMerchantHeaderTap">
-    <t-image class="merchant-image" src="{{merchant.imageUrl}}" mode="aspectFill" shape="round" lazy />
+    <!-- 左列：门头图 + 状态标签 -->
+    <view class="merchant-image-col">
+      <t-image class="merchant-image" src="{{merchant.imageUrl}}" mode="aspectFill" shape="round" lazy />
+      <view
+        class="merchant-tag-row"
+        wx:if="{{merchant.isOrderingSuspended || merchant.label || merchant.isNewStore || merchant.hasOrdered || merchant.isOpen === false}}"
+      >
+        <t-tag wx:if="{{merchant.isOrderingSuspended}}" theme="danger" size="small" variant="dark">暂停接单</t-tag>
+        <t-tag wx:if="{{merchant.label === '推荐'}}" theme="success" size="small" variant="dark">推荐</t-tag>
+        <t-tag wx:elif="{{merchant.label === '热销'}}" theme="warning" size="small" variant="dark">热销</t-tag>
+        <t-tag wx:if="{{merchant.isNewStore}}" theme="primary" size="small" variant="dark">新店</t-tag>
+        <t-tag wx:if="{{merchant.hasOrdered}}" theme="success" size="small" variant="light">再来一单</t-tag>
+        <t-tag wx:if="{{merchant.isOpen === false}}" theme="danger" size="small" variant="dark">休息中</t-tag>
+      </view>
+    </view>
 
     <view class="merchant-info">
-    <!-- 第1行: 商户名 + 角标 -->
+    <!-- 第1行: 商户名 -->
     <view class="row-1">
       <text class="merchant-name">{{merchant.name}}</text>
-      <t-tag wx:if="{{merchant.isOrderingSuspended}}" theme="danger" size="small" variant="dark">暂停接单</t-tag>
-      <t-tag wx:if="{{merchant.label === '推荐'}}" theme="success" size="small" variant="dark">推荐</t-tag>
-      <t-tag wx:elif="{{merchant.label === '热销'}}" theme="warning" size="small" variant="dark">热销</t-tag>
-      <t-tag wx:if="{{merchant.isNewStore}}" theme="primary" size="small" variant="dark">新店</t-tag>
-      <t-tag wx:if="{{merchant.hasOrdered}}" theme="success" size="small" variant="light">再来一单</t-tag>
-      <t-tag wx:if="{{merchant.isOpen === false}}" theme="danger" size="small" variant="dark">休息中</t-tag>
     </view>
 
     <!-- 第2行: 月售 | 距离 | 配送费 | 出餐时间 -->
@@ -91,20 +99,6 @@
             <text class="dish-name">{{item.name}}</text>
             <view class="dish-bottom">
               <text class="dish-price">{{item.priceDisplay}}</text>
-              <!-- 有规格选项 -->
-              <view
-                wx:if="{{item.customization_groups && item.customization_groups.length > 0}}"
-                class="spec-btn"
-                catchtap="onSelectSpec"
-                data-index="{{index}}"
-              ><text class="spec-btn-text">选规格</text></view>
-              <!-- 直接加购 -->
-              <view
-                wx:else
-                class="add-btn"
-                catchtap="onDishAdd"
-                data-index="{{index}}"
-              ><text class="add-btn-icon">+</text></view>
             </view>
           </view>
 

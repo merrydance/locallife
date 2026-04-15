@@ -204,6 +204,13 @@ page[data-theme="dark"] {
   padding-right: var(--spacer-md);
 }
 
+.page-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-md);
+  padding-bottom: calc(var(--spacer-md) + var(--safe-area-bottom));
+}
+
 @keyframes shimmer {
   0% { background-position: -200% 0; }
   100% { background-position: 200% 0; }

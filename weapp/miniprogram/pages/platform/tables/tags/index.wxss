@@ -5,10 +5,8 @@
 }
 
 .page-content {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacer-md);
   padding-top: var(--spacer-md);
+  padding-bottom: 0;
 }
 
 .state-block {

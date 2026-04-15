@@ -38,25 +38,7 @@
     </view>
   </view>
   
-  <!-- 加购按钮区域 -->
+  <!-- 加购按钮区域（仅无定制选项时显示） -->
   <view class="add-btn-wrapper">
-    <!-- 有定制选项：显示"选规格"按钮 -->
-    <t-button
-      wx:if="{{dish.customization_groups && dish.customization_groups.length > 0}}"
-      theme="primary"
-      size="small"
-      variant="outline"
-      shape="round"
-      catchtap="onSelectSpec"
-    >选规格</t-button>
-    <!-- 无定制选项：显示"+"按钮 -->
-    <t-button
-      wx:else
-      theme="primary"
-      size="small"
-      icon="add"
-      shape="circle"
-      catchtap="onAdd"
-    />
   </view>
 </view>

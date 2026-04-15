@@ -270,7 +270,7 @@ export function openTakeoutLocationPicker(page: Pick<TakeoutPageLike, 'setData'>
 }
 
 export function buildTakeoutFeaturedDishes(dishes: PublicDish[], merchantId: number): FeaturedDish[] {
-  return dishes.slice(0, 4).map((dish) => ({
+  return dishes.slice(0, 3).map((dish) => ({
     id: dish.id,
     name: dish.name,
     imageUrl: getPublicImageUrl(dish.image_url || '') || '/assets/placeholder_food.png',

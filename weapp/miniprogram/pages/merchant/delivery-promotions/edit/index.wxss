@@ -3,9 +3,6 @@
   background: var(--td-bg-color-page);
 }
 
-.page-content {
-  padding-bottom: calc(var(--spacer-md) + var(--safe-area-bottom));
-}
 
 .state-block {
   min-height: 60vh;

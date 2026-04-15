@@ -3,11 +3,6 @@
   background: var(--td-bg-color-page);
 }
 
-.page-content {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacer-md);
-}
 
 .state-block {
   display: flex;

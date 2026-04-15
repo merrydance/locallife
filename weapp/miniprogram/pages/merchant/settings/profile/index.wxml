@@ -174,9 +174,9 @@
           </t-cell-group>
         </view>
 
-      </view>
-      <view class="form-actions">
-        <t-button theme="primary" loading="{{saving}}" disabled="{{saving || initialLoading}}" bind:tap="onSave">保存店铺资料</t-button>
+        <view class="form-actions">
+          <t-button theme="primary" loading="{{saving}}" disabled="{{saving || initialLoading}}" bind:tap="onSave">保存店铺资料</t-button>
+        </view>
       </view>
     </block>
   </block>

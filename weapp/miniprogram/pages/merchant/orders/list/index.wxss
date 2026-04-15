@@ -4,8 +4,6 @@
 }
 
 .page-content {
-  display: flex;
-  flex-direction: column;
   gap: var(--spacer-sm);
   padding: 0;
 }

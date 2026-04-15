@@ -3,9 +3,6 @@
   background: var(--td-bg-color-page);
 }
 
-.page-content {
-  padding-bottom: calc(var(--spacer-md) + var(--safe-area-bottom));
-}
 
 .loading-state {
   padding: 120rpx 0;
