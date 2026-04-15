@@ -11,7 +11,7 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
-	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	"github.com/rs/zerolog/log"
 )
 
@@ -113,12 +113,12 @@ func (p *RedisTaskProcessor) ProcessTaskCombinedPaymentOrderTimeout(ctx context.
 		return fmt.Errorf("unmarshal combined sub orders: %w", err)
 	}
 
-	closeSubs := make([]wechat.SubOrderClose, 0, len(subOrders))
+	closeSubs := make([]wechatcontracts.SubOrderClose, 0, len(subOrders))
 	for _, sub := range subOrders {
 		if sub.SubMchID == "" || sub.OutTradeNo == "" {
 			continue
 		}
-		closeSubs = append(closeSubs, wechat.SubOrderClose{
+		closeSubs = append(closeSubs, wechatcontracts.SubOrderClose{
 			SubMchID:   sub.SubMchID,
 			OutTradeNo: sub.OutTradeNo,
 		})
@@ -219,7 +219,7 @@ const (
 	combinedPaymentQueryStateUnknown     = "unknown"
 )
 
-func classifyCombinedPaymentQueryState(resp *wechat.CombineQueryResponse) string {
+func classifyCombinedPaymentQueryState(resp *wechatcontracts.CombineQueryResponse) string {
 	if resp == nil || len(resp.SubOrders) == 0 {
 		return combinedPaymentQueryStateUnknown
 	}
@@ -282,7 +282,7 @@ func classifyCombinedPaymentQueryState(resp *wechat.CombineQueryResponse) string
 	}
 }
 
-func (p *RedisTaskProcessor) reconcileRemotePaidCombinedPayment(ctx context.Context, combined db.CombinedPaymentOrder, queryResp *wechat.CombineQueryResponse) error {
+func (p *RedisTaskProcessor) reconcileRemotePaidCombinedPayment(ctx context.Context, combined db.CombinedPaymentOrder, queryResp *wechatcontracts.CombineQueryResponse) error {
 	result, err := p.reconcileRemoteSuccessfulCombinedSubOrders(ctx, combined, queryResp)
 	if err != nil {
 		return err
@@ -335,7 +335,7 @@ func (p *RedisTaskProcessor) reconcileRemotePaidCombinedPayment(ctx context.Cont
 	return nil
 }
 
-func (p *RedisTaskProcessor) reconcileRemotePartialPaidCombinedPayment(ctx context.Context, combined db.CombinedPaymentOrder, queryResp *wechat.CombineQueryResponse) error {
+func (p *RedisTaskProcessor) reconcileRemotePartialPaidCombinedPayment(ctx context.Context, combined db.CombinedPaymentOrder, queryResp *wechatcontracts.CombineQueryResponse) error {
 	result, err := p.reconcileRemoteSuccessfulCombinedSubOrders(ctx, combined, queryResp)
 	if err != nil {
 		return err
@@ -363,7 +363,7 @@ type combinedPaymentRemoteReconcileResult struct {
 	exceptionalCount int
 }
 
-func (p *RedisTaskProcessor) reconcileRemoteSuccessfulCombinedSubOrders(ctx context.Context, combined db.CombinedPaymentOrder, queryResp *wechat.CombineQueryResponse) (combinedPaymentRemoteReconcileResult, error) {
+func (p *RedisTaskProcessor) reconcileRemoteSuccessfulCombinedSubOrders(ctx context.Context, combined db.CombinedPaymentOrder, queryResp *wechatcontracts.CombineQueryResponse) (combinedPaymentRemoteReconcileResult, error) {
 	var result combinedPaymentRemoteReconcileResult
 	if queryResp == nil {
 		return result, fmt.Errorf("query combine order response is nil")

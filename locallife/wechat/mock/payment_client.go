@@ -319,7 +319,7 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) CancelSubsidy(ctx, req any) 
 }
 
 // CloseCombineOrder mocks base method.
-func (m *MockEcommerceClientInterface) CloseCombineOrder(ctx context.Context, combineOutTradeNo string, subOrders []wechat.SubOrderClose) error {
+func (m *MockEcommerceClientInterface) CloseCombineOrder(ctx context.Context, combineOutTradeNo string, subOrders []contracts.SubOrderClose) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CloseCombineOrder", ctx, combineOutTradeNo, subOrders)
 	ret0, _ := ret[0].(error)
@@ -361,10 +361,10 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) CompleteComplaint(ctx, compl
 }
 
 // CreateCombineOrder mocks base method.
-func (m *MockEcommerceClientInterface) CreateCombineOrder(ctx context.Context, req *wechat.CombineOrderRequest) (*wechat.CombineOrderResponse, *wechat.JSAPIPayParams, error) {
+func (m *MockEcommerceClientInterface) CreateCombineOrder(ctx context.Context, req *contracts.CombineOrderRequest) (*contracts.CombineOrderResponse, *wechat.JSAPIPayParams, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateCombineOrder", ctx, req)
-	ret0, _ := ret[0].(*wechat.CombineOrderResponse)
+	ret0, _ := ret[0].(*contracts.CombineOrderResponse)
 	ret1, _ := ret[1].(*wechat.JSAPIPayParams)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
@@ -437,10 +437,10 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) CreateEcommerceWithdraw(ctx,
 }
 
 // CreatePartnerJSAPIOrder mocks base method.
-func (m *MockEcommerceClientInterface) CreatePartnerJSAPIOrder(ctx context.Context, req *wechat.PartnerJSAPIOrderRequest) (*wechat.PartnerJSAPIOrderResponse, *wechat.JSAPIPayParams, error) {
+func (m *MockEcommerceClientInterface) CreatePartnerJSAPIOrder(ctx context.Context, req *contracts.PartnerJSAPIOrderRequest) (*contracts.PartnerJSAPIOrderResponse, *wechat.JSAPIPayParams, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreatePartnerJSAPIOrder", ctx, req)
-	ret0, _ := ret[0].(*wechat.PartnerJSAPIOrderResponse)
+	ret0, _ := ret[0].(*contracts.PartnerJSAPIOrderResponse)
 	ret1, _ := ret[1].(*wechat.JSAPIPayParams)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
@@ -528,10 +528,10 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) CreateViolationNotification(
 }
 
 // DecryptCombinePaymentNotification mocks base method.
-func (m *MockEcommerceClientInterface) DecryptCombinePaymentNotification(notification *wechat.PaymentNotification) (*wechat.CombinePaymentNotification, error) {
+func (m *MockEcommerceClientInterface) DecryptCombinePaymentNotification(notification *wechat.PaymentNotification) (*contracts.CombinePaymentNotification, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DecryptCombinePaymentNotification", notification)
-	ret0, _ := ret[0].(*wechat.CombinePaymentNotification)
+	ret0, _ := ret[0].(*contracts.CombinePaymentNotification)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -588,10 +588,10 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) DecryptNotificationRaw(notif
 }
 
 // DecryptPartnerPaymentNotification mocks base method.
-func (m *MockEcommerceClientInterface) DecryptPartnerPaymentNotification(notification *wechat.PaymentNotification) (*wechat.PartnerPaymentNotificationResource, error) {
+func (m *MockEcommerceClientInterface) DecryptPartnerPaymentNotification(notification *wechat.PaymentNotification) (*contracts.PartnerPaymentNotificationResource, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DecryptPartnerPaymentNotification", notification)
-	ret0, _ := ret[0].(*wechat.PartnerPaymentNotificationResource)
+	ret0, _ := ret[0].(*contracts.PartnerPaymentNotificationResource)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -928,10 +928,10 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) ModifySubMerchantSettlement(
 }
 
 // QueryCombineOrder mocks base method.
-func (m *MockEcommerceClientInterface) QueryCombineOrder(ctx context.Context, combineOutTradeNo string) (*wechat.CombineQueryResponse, error) {
+func (m *MockEcommerceClientInterface) QueryCombineOrder(ctx context.Context, combineOutTradeNo string) (*contracts.CombineQueryResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "QueryCombineOrder", ctx, combineOutTradeNo)
-	ret0, _ := ret[0].(*wechat.CombineQueryResponse)
+	ret0, _ := ret[0].(*contracts.CombineQueryResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1078,10 +1078,10 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) QueryEcommerceWithdrawByOutR
 }
 
 // QueryPartnerOrderByOutTradeNo mocks base method.
-func (m *MockEcommerceClientInterface) QueryPartnerOrderByOutTradeNo(ctx context.Context, outTradeNo, subMchID string) (*wechat.PartnerOrderQueryResponse, error) {
+func (m *MockEcommerceClientInterface) QueryPartnerOrderByOutTradeNo(ctx context.Context, outTradeNo, subMchID string) (*contracts.PartnerOrderQueryResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "QueryPartnerOrderByOutTradeNo", ctx, outTradeNo, subMchID)
-	ret0, _ := ret[0].(*wechat.PartnerOrderQueryResponse)
+	ret0, _ := ret[0].(*contracts.PartnerOrderQueryResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1093,10 +1093,10 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) QueryPartnerOrderByOutTradeN
 }
 
 // QueryPartnerOrderByTransactionID mocks base method.
-func (m *MockEcommerceClientInterface) QueryPartnerOrderByTransactionID(ctx context.Context, transactionID, subMchID string) (*wechat.PartnerOrderQueryResponse, error) {
+func (m *MockEcommerceClientInterface) QueryPartnerOrderByTransactionID(ctx context.Context, transactionID, subMchID string) (*contracts.PartnerOrderQueryResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "QueryPartnerOrderByTransactionID", ctx, transactionID, subMchID)
-	ret0, _ := ret[0].(*wechat.PartnerOrderQueryResponse)
+	ret0, _ := ret[0].(*contracts.PartnerOrderQueryResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

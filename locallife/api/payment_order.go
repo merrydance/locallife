@@ -13,6 +13,7 @@ import (
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/util"
 	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	"github.com/merrydance/locallife/worker"
 
 	"github.com/gin-gonic/gin"
@@ -145,7 +146,7 @@ type paymentOrderWechatPromotionGoodsDetail struct {
 	GoodsRemark    string `json:"goods_remark,omitempty"`
 }
 
-func newWechatPromotionDetails(details []wechat.PartnerPromotionDetail) []paymentOrderWechatPromotionDetail {
+func newWechatPromotionDetails(details []wechatcontracts.PartnerPromotionDetail) []paymentOrderWechatPromotionDetail {
 	if len(details) == 0 {
 		return nil
 	}
@@ -280,7 +281,7 @@ func newMiniProgramPayParams(payParams *wechat.JSAPIPayParams) *miniProgramPayPa
 	}
 }
 
-func newPaymentOrderWechatQueryResult(query *wechat.PartnerOrderQueryResponse) *paymentOrderWechatQueryResult {
+func newPaymentOrderWechatQueryResult(query *wechatcontracts.PartnerOrderQueryResponse) *paymentOrderWechatQueryResult {
 	if query == nil {
 		return nil
 	}
@@ -322,7 +323,7 @@ func newPaymentOrderWechatQueryResult(query *wechat.PartnerOrderQueryResponse) *
 	return resp
 }
 
-func newPaymentOrderQueryResponse(paymentOrder db.PaymentOrder, payParams *wechat.JSAPIPayParams, query *wechat.PartnerOrderQueryResponse) paymentOrderQueryResponse {
+func newPaymentOrderQueryResponse(paymentOrder db.PaymentOrder, payParams *wechat.JSAPIPayParams, query *wechatcontracts.PartnerOrderQueryResponse) paymentOrderQueryResponse {
 	base := newPaymentOrderResponse(paymentOrder)
 	return paymentOrderQueryResponse{
 		ID:           base.ID,
@@ -439,10 +440,7 @@ func sleepWithContext(ctx context.Context, d time.Duration) bool {
 // @Summary 创建支付订单
 // @Description 为订单或预定创建支付订单，当前主路径会按业务类型自动选择真实支付链路。
 // @Description
-// @Description **兼容字段：**
-// @Description - `payment_type` 仅作为兼容保留字段，可不传。
-// @Description - 对 `order` 和 `reservation` 主支付，系统已统一走平台收付通普通支付。
-// @Description - 旧客户端即使传入 `native` 或 `miniprogram`，也不会再改变底层支付物理链路。
+// @Description `payment_type` 为兼容字段，可不传；当前 `order` 和 `reservation` 主支付统一走平台收付通普通支付。
 // @Description
 // @Description **业务类型：**
 // @Description - order: 订单支付
@@ -489,7 +487,7 @@ func (server *Server) createPaymentOrder(ctx *gin.Context) {
 	})
 	if err != nil {
 		if isEcommerceClientNotConfigured(err) {
-			ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "支付服务暂不可用，请稍后重试", "partner payment ecommerce client not configured"))
+			ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "商户支付能力未完成配置，请联系平台处理", "partner payment ecommerce client not configured"))
 			return
 		}
 		if writeLogicRequestError(ctx, err) {
@@ -549,7 +547,7 @@ func (server *Server) queryPaymentOrder(ctx *gin.Context) {
 	})
 	if err != nil {
 		if isEcommerceClientNotConfigured(err) {
-			ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "支付查询服务暂不可用，请稍后重试", "query payment ecommerce client not configured"))
+			ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "商户支付能力未完成配置，当前无法确认支付状态，请联系平台处理", "query payment ecommerce client not configured"))
 			return
 		}
 		if writeLogicRequestError(ctx, err) {
@@ -680,7 +678,7 @@ func (server *Server) createCombinedPaymentOrder(ctx *gin.Context) {
 	})
 	if err != nil {
 		if isEcommerceClientNotConfigured(err) {
-			ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "合单支付服务暂不可用，请稍后重试", "combined payment ecommerce client not configured"))
+			ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "合单支付能力未完成配置，请联系平台处理", "combined payment ecommerce client not configured"))
 			return
 		}
 		if writeLogicRequestError(ctx, err) {
@@ -829,7 +827,7 @@ func (server *Server) queryCombinedPaymentOrder(ctx *gin.Context) {
 	})
 	if err != nil {
 		if isEcommerceClientNotConfigured(err) {
-			ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "合单支付查询服务暂不可用，请稍后重试", "query combined payment ecommerce client not configured"))
+			ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "合单支付能力未完成配置，当前无法确认支付状态，请联系平台处理", "query combined payment ecommerce client not configured"))
 			return
 		}
 		if writeLogicRequestError(ctx, err) {
@@ -888,7 +886,7 @@ func (server *Server) closeCombinedPaymentOrder(ctx *gin.Context) {
 	})
 	if err != nil {
 		if isEcommerceClientNotConfigured(err) {
-			ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "合单支付关闭服务暂不可用，请稍后重试", "close combined payment ecommerce client not configured"))
+			ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "合单支付能力未完成配置，当前无法关闭支付单，请联系平台处理", "close combined payment ecommerce client not configured"))
 			return
 		}
 		if writeLogicRequestError(ctx, err) {

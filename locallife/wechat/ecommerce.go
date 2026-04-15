@@ -301,7 +301,7 @@ func (c *EcommerceClient) GetSpMchName() string {
 }
 
 // CreatePartnerJSAPIOrder 创建服务商模式单笔 JSAPI 订单。
-func (c *EcommerceClient) CreatePartnerJSAPIOrder(ctx context.Context, req *PartnerJSAPIOrderRequest) (*PartnerJSAPIOrderResponse, *JSAPIPayParams, error) {
+func (c *EcommerceClient) CreatePartnerJSAPIOrder(ctx context.Context, req *wechatcontracts.PartnerJSAPIOrderRequest) (*wechatcontracts.PartnerJSAPIOrderResponse, *JSAPIPayParams, error) {
 	if req == nil {
 		return nil, nil, fmt.Errorf("create partner jsapi order: request is nil")
 	}
@@ -338,21 +338,21 @@ func (c *EcommerceClient) CreatePartnerJSAPIOrder(ctx context.Context, req *Part
 	if strings.TrimSpace(notifyURL) == "" {
 		return nil, nil, fmt.Errorf("create partner jsapi order: notify_url is required")
 	}
-	body := PartnerJSAPIOrderRequestBody{
+	body := wechatcontracts.PartnerJSAPIOrderRequestBody{
 		SpAppID:     c.spAppID,
 		SpMchID:     c.spMchID,
 		SubMchID:    req.SubMchID,
 		Description: req.Description,
 		OutTradeNo:  req.OutTradeNo,
 		NotifyURL:   notifyURL,
-		Amount: PartnerJSAPIAmount{
+		Amount: wechatcontracts.PartnerJSAPIAmount{
 			Total:    req.TotalAmount,
 			Currency: currency,
 		},
-		Payer: PartnerJSAPIPayer{
+		Payer: wechatcontracts.PartnerJSAPIPayer{
 			SpOpenID: req.PayerOpenID,
 		},
-		SettleInfo: &PartnerOrderSettleInfo{ProfitSharing: req.ProfitSharing, SubsidyAmount: req.SubsidyAmount},
+		SettleInfo: &wechatcontracts.PartnerOrderSettleInfo{ProfitSharing: req.ProfitSharing, SubsidyAmount: req.SubsidyAmount},
 	}
 	if req.Detail != nil {
 		body.Detail = req.Detail
@@ -370,7 +370,7 @@ func (c *EcommerceClient) CreatePartnerJSAPIOrder(ctx context.Context, req *Part
 		body.SupportFapiao = req.SupportFapiao
 	}
 	if req.PayerClientIP != "" || req.DeviceID != "" || req.StoreInfo != nil {
-		body.SceneInfo = &PartnerOrderSceneInfo{}
+		body.SceneInfo = &wechatcontracts.PartnerOrderSceneInfo{}
 		if req.PayerClientIP != "" {
 			body.SceneInfo.PayerClientIP = req.PayerClientIP
 		}
@@ -394,7 +394,7 @@ func (c *EcommerceClient) CreatePartnerJSAPIOrder(ctx context.Context, req *Part
 		return nil, nil, wrappedErr
 	}
 
-	var resp PartnerJSAPIOrderResponse
+	var resp wechatcontracts.PartnerJSAPIOrderResponse
 	if err := json.Unmarshal(respBody, &resp); err != nil {
 		return nil, nil, fmt.Errorf("unmarshal response: %w", err)
 	}
@@ -408,7 +408,7 @@ func (c *EcommerceClient) CreatePartnerJSAPIOrder(ctx context.Context, req *Part
 }
 
 // QueryPartnerOrderByTransactionID 通过微信支付订单号查询服务商模式单笔订单。
-func (c *EcommerceClient) QueryPartnerOrderByTransactionID(ctx context.Context, transactionID, subMchID string) (*PartnerOrderQueryResponse, error) {
+func (c *EcommerceClient) QueryPartnerOrderByTransactionID(ctx context.Context, transactionID, subMchID string) (*wechatcontracts.PartnerOrderQueryResponse, error) {
 	if strings.TrimSpace(transactionID) == "" {
 		return nil, newPartnerOrderQueryValidationError("query partner order by transaction_id", "transaction_id is required")
 	}
@@ -426,7 +426,7 @@ func (c *EcommerceClient) QueryPartnerOrderByTransactionID(ctx context.Context, 
 		return nil, wrappedErr
 	}
 
-	var resp PartnerOrderQueryResponse
+	var resp wechatcontracts.PartnerOrderQueryResponse
 	if err := json.Unmarshal(respBody, &resp); err != nil {
 		contractErr := newPartnerOrderQueryContractError("query partner order by transaction_id", "unmarshal response: %v", err)
 		ecommercePaymentOrderLogEvent(requestID, "query_partner_order_by_transaction_id").
@@ -449,7 +449,7 @@ func (c *EcommerceClient) QueryPartnerOrderByTransactionID(ctx context.Context, 
 }
 
 // QueryPartnerOrderByOutTradeNo 通过商户订单号查询服务商模式单笔订单。
-func (c *EcommerceClient) QueryPartnerOrderByOutTradeNo(ctx context.Context, outTradeNo, subMchID string) (*PartnerOrderQueryResponse, error) {
+func (c *EcommerceClient) QueryPartnerOrderByOutTradeNo(ctx context.Context, outTradeNo, subMchID string) (*wechatcontracts.PartnerOrderQueryResponse, error) {
 	if strings.TrimSpace(outTradeNo) == "" {
 		return nil, newPartnerOrderQueryValidationError("query partner order by out_trade_no", "out_trade_no is required")
 	}
@@ -467,7 +467,7 @@ func (c *EcommerceClient) QueryPartnerOrderByOutTradeNo(ctx context.Context, out
 		return nil, wrappedErr
 	}
 
-	var resp PartnerOrderQueryResponse
+	var resp wechatcontracts.PartnerOrderQueryResponse
 	if err := json.Unmarshal(respBody, &resp); err != nil {
 		contractErr := newPartnerOrderQueryContractError("query partner order by out_trade_no", "unmarshal response: %v", err)
 		ecommercePaymentOrderLogEvent(requestID, "query_partner_order_by_out_trade_no").
@@ -497,7 +497,7 @@ func (c *EcommerceClient) ClosePartnerOrder(ctx context.Context, outTradeNo, sub
 	if strings.TrimSpace(subMchID) == "" {
 		return fmt.Errorf("close partner order: sub_mchid is required")
 	}
-	body := PartnerCloseOrderRequest{SpMchID: c.spMchID, SubMchID: subMchID}
+	body := wechatcontracts.PartnerCloseOrderRequest{SpMchID: c.spMchID, SubMchID: subMchID}
 	if _, requestID, err := c.doRequestWithRequestID(ctx, http.MethodPost, fmt.Sprintf(ecommercePartnerCloseOrderURL, outTradeNo), body); err != nil {
 		wrappedErr := wrapPartnerOrderCloseError(err)
 		ecommercePaymentOrderLogEvent(requestID, "close_partner_order").
@@ -707,7 +707,7 @@ func newCombineOrderQueryContractError(operation string, format string, args ...
 	return &CombineOrderQueryContractError{Message: fmt.Sprintf("%s: %s", prefix, fmt.Sprintf(format, args...))}
 }
 
-func validatePartnerOrderQueryResponse(operation string, resp *PartnerOrderQueryResponse, requireTransactionFields bool) error {
+func validatePartnerOrderQueryResponse(operation string, resp *wechatcontracts.PartnerOrderQueryResponse, requireTransactionFields bool) error {
 	if resp == nil {
 		return newPartnerOrderQueryContractError(operation, "empty wechat response")
 	}
@@ -767,7 +767,7 @@ func validatePartnerOrderQueryResponse(operation string, resp *PartnerOrderQuery
 	return nil
 }
 
-func validateCombineOrderQueryResponse(operation string, resp *CombineQueryResponseBody) error {
+func validateCombineOrderQueryResponse(operation string, resp *wechatcontracts.CombineQueryResponseBody) error {
 	if resp == nil {
 		return newCombineOrderQueryContractError(operation, "empty wechat response")
 	}
@@ -831,19 +831,19 @@ func validateCombineOrderQueryResponse(operation string, resp *CombineQueryRespo
 	return nil
 }
 
-func combineQueryResponseFromBody(resp *CombineQueryResponseBody) *CombineQueryResponse {
+func combineQueryResponseFromBody(resp *wechatcontracts.CombineQueryResponseBody) *wechatcontracts.CombineQueryResponse {
 	if resp == nil {
 		return nil
 	}
 
-	result := &CombineQueryResponse{
+	result := &wechatcontracts.CombineQueryResponse{
 		CombineAppID:      resp.CombineAppID,
 		CombineMchID:      resp.CombineMchID,
 		CombineOutTradeNo: resp.CombineOutTradeNo,
 		SceneInfo:         resp.SceneInfo,
 	}
 	if resp.CombinePayerInfo != nil {
-		result.CombinePayerInfo = &CombinePayerInfo{
+		result.CombinePayerInfo = &wechatcontracts.CombinePayerInfo{
 			OpenID:    resp.CombinePayerInfo.OpenID,
 			SubOpenID: resp.CombinePayerInfo.SubOpenID,
 		}
@@ -852,9 +852,9 @@ func combineQueryResponseFromBody(resp *CombineQueryResponseBody) *CombineQueryR
 		return result
 	}
 
-	result.SubOrders = make([]CombineSubOrderResult, 0, len(resp.SubOrders))
+	result.SubOrders = make([]wechatcontracts.CombineSubOrderResult, 0, len(resp.SubOrders))
 	for _, subOrder := range resp.SubOrders {
-		mapped := CombineSubOrderResult{
+		mapped := wechatcontracts.CombineSubOrderResult{
 			MchID:           subOrder.MchID,
 			SubMchID:        subOrder.SubMchID,
 			SubAppID:        subOrder.SubAppID,
@@ -1535,7 +1535,7 @@ func (c *EcommerceClient) ListBankBranches(ctx context.Context, bankAliasCode st
 
 // CreateCombineOrder 创建合单订单（平台收付通）
 // 用于商户交易，资金进入二级商户账户
-func (c *EcommerceClient) CreateCombineOrder(ctx context.Context, req *CombineOrderRequest) (*CombineOrderResponse, *JSAPIPayParams, error) {
+func (c *EcommerceClient) CreateCombineOrder(ctx context.Context, req *wechatcontracts.CombineOrderRequest) (*wechatcontracts.CombineOrderResponse, *JSAPIPayParams, error) {
 	if req == nil {
 		return nil, nil, fmt.Errorf("create combine order: request is nil")
 	}
@@ -1559,7 +1559,7 @@ func (c *EcommerceClient) CreateCombineOrder(ctx context.Context, req *CombineOr
 	}
 
 	// 构建子订单列表
-	subOrders := make([]CombineSubOrderRequest, len(req.SubOrders))
+	subOrders := make([]wechatcontracts.CombineSubOrderRequest, len(req.SubOrders))
 	for i, sub := range req.SubOrders {
 		if strings.TrimSpace(sub.SubAppID) != "" {
 			return nil, nil, fmt.Errorf("create combine order: sub_orders[%d].sub_appid is not supported in the single-appid project flow", i)
@@ -1580,7 +1580,7 @@ func (c *EcommerceClient) CreateCombineOrder(ctx context.Context, req *CombineOr
 		if mchID == "" {
 			mchID = c.spMchID
 		}
-		subOrders[i] = CombineSubOrderRequest{
+		subOrders[i] = wechatcontracts.CombineSubOrderRequest{
 			MchID:       mchID,
 			SubMchID:    sub.SubMchID,
 			SubAppID:    sub.SubAppID,
@@ -1588,11 +1588,11 @@ func (c *EcommerceClient) CreateCombineOrder(ctx context.Context, req *CombineOr
 			Description: sub.Description,
 			Attach:      sub.Attach,
 			Detail:      sub.Detail,
-			Amount: CombineSubOrderAmount{
+			Amount: wechatcontracts.CombineSubOrderAmount{
 				TotalAmount: sub.Amount,
 				Currency:    "CNY",
 			},
-			SettleInfo: &CombineSubOrderSettleInfo{ProfitSharing: sub.ProfitSharing, SubsidyAmount: sub.SubsidyAmount},
+			SettleInfo: &wechatcontracts.CombineSubOrderSettleInfo{ProfitSharing: sub.ProfitSharing, SubsidyAmount: sub.SubsidyAmount},
 			GoodsTag:   sub.GoodsTag,
 		}
 	}
@@ -1605,11 +1605,11 @@ func (c *EcommerceClient) CreateCombineOrder(ctx context.Context, req *CombineOr
 		return nil, nil, fmt.Errorf("create combine order: notify_url is required")
 	}
 
-	body := CombineOrderRequestBody{
+	body := wechatcontracts.CombineOrderRequestBody{
 		CombineAppID:      c.spAppID,
 		CombineMchID:      c.spMchID,
 		CombineOutTradeNo: req.CombineOutTradeNo,
-		CombinePayerInfo: CombinePayerInfoRequest{
+		CombinePayerInfo: wechatcontracts.CombinePayerInfoRequest{
 			OpenID: req.PayerOpenID,
 		},
 		SubOrders: subOrders,
@@ -1623,7 +1623,7 @@ func (c *EcommerceClient) CreateCombineOrder(ctx context.Context, req *CombineOr
 	}
 
 	if req.SceneInfo != nil {
-		body.SceneInfo = &CombineSceneInfo{
+		body.SceneInfo = &wechatcontracts.CombineSceneInfo{
 			PayerClientIP: req.SceneInfo.PayerClientIP,
 			DeviceID:      req.SceneInfo.DeviceID,
 		}
@@ -1640,7 +1640,7 @@ func (c *EcommerceClient) CreateCombineOrder(ctx context.Context, req *CombineOr
 		return nil, nil, wrappedErr
 	}
 
-	var resp CombineOrderResponse
+	var resp wechatcontracts.CombineOrderResponse
 	if err := json.Unmarshal(respBody, &resp); err != nil {
 		return nil, nil, fmt.Errorf("unmarshal response: %w", err)
 	}
@@ -1655,7 +1655,7 @@ func (c *EcommerceClient) CreateCombineOrder(ctx context.Context, req *CombineOr
 }
 
 // QueryCombineOrder 查询合单订单
-func (c *EcommerceClient) QueryCombineOrder(ctx context.Context, combineOutTradeNo string) (*CombineQueryResponse, error) {
+func (c *EcommerceClient) QueryCombineOrder(ctx context.Context, combineOutTradeNo string) (*wechatcontracts.CombineQueryResponse, error) {
 	if strings.TrimSpace(combineOutTradeNo) == "" {
 		return nil, newCombineOrderQueryValidationError("query combine order", "combine_out_trade_no is required")
 	}
@@ -1672,7 +1672,7 @@ func (c *EcommerceClient) QueryCombineOrder(ctx context.Context, combineOutTrade
 		return nil, wrappedErr
 	}
 
-	var resp CombineQueryResponseBody
+	var resp wechatcontracts.CombineQueryResponseBody
 	if err := json.Unmarshal(respBody, &resp); err != nil {
 		contractErr := newCombineOrderQueryContractError("query combine order", "unmarshal response: %v", err)
 		ecommercePaymentOrderLogEvent(requestID, "query_combine_order").
@@ -1693,7 +1693,7 @@ func (c *EcommerceClient) QueryCombineOrder(ctx context.Context, combineOutTrade
 }
 
 // CloseCombineOrder 关闭合单订单
-func (c *EcommerceClient) CloseCombineOrder(ctx context.Context, combineOutTradeNo string, subOrders []SubOrderClose) error {
+func (c *EcommerceClient) CloseCombineOrder(ctx context.Context, combineOutTradeNo string, subOrders []wechatcontracts.SubOrderClose) error {
 	if strings.TrimSpace(combineOutTradeNo) == "" {
 		return fmt.Errorf("close combine order: combine_out_trade_no is required")
 	}
@@ -1702,7 +1702,7 @@ func (c *EcommerceClient) CloseCombineOrder(ctx context.Context, combineOutTrade
 	}
 	url := fmt.Sprintf(ecommerceCloseCombineURL, combineOutTradeNo)
 
-	subs := make([]CombineCloseSubOrderRequest, len(subOrders))
+	subs := make([]wechatcontracts.CombineCloseSubOrderRequest, len(subOrders))
 	for i, sub := range subOrders {
 		if strings.TrimSpace(sub.OutTradeNo) == "" {
 			return fmt.Errorf("close combine order: sub_orders[%d].out_trade_no is required", i)
@@ -1711,7 +1711,7 @@ func (c *EcommerceClient) CloseCombineOrder(ctx context.Context, combineOutTrade
 		if mchID == "" {
 			mchID = c.spMchID
 		}
-		subs[i] = CombineCloseSubOrderRequest{
+		subs[i] = wechatcontracts.CombineCloseSubOrderRequest{
 			MchID:      mchID,
 			SubMchID:   sub.SubMchID,
 			SubAppID:   sub.SubAppID,
@@ -1719,7 +1719,7 @@ func (c *EcommerceClient) CloseCombineOrder(ctx context.Context, combineOutTrade
 		}
 	}
 
-	body := CombineCloseOrderRequest{CombineAppID: c.spAppID, SubOrders: subs}
+	body := wechatcontracts.CombineCloseOrderRequest{CombineAppID: c.spAppID, SubOrders: subs}
 
 	_, requestID, err := c.doRequestWithRequestID(ctx, http.MethodPost, url, body)
 	if err != nil {
@@ -3140,7 +3140,7 @@ func (c *EcommerceClient) QuerySubMerchantSettlementApplication(ctx context.Cont
 // ==================== 回调通知解密 ====================
 
 // DecryptCombinePaymentNotification 解密合单支付通知
-func (c *EcommerceClient) DecryptCombinePaymentNotification(notification *PaymentNotification) (*CombinePaymentNotification, error) {
+func (c *EcommerceClient) DecryptCombinePaymentNotification(notification *PaymentNotification) (*wechatcontracts.CombinePaymentNotification, error) {
 	plaintext, err := c.decryptAESGCM(
 		notification.Resource.Nonce,
 		notification.Resource.Ciphertext,
@@ -3150,7 +3150,7 @@ func (c *EcommerceClient) DecryptCombinePaymentNotification(notification *Paymen
 		return nil, fmt.Errorf("decrypt notification: %w", err)
 	}
 
-	var result CombinePaymentNotification
+	var result wechatcontracts.CombinePaymentNotification
 	if err := json.Unmarshal(plaintext, &result); err != nil {
 		return nil, fmt.Errorf("unmarshal notification: %w", err)
 	}
@@ -3159,7 +3159,7 @@ func (c *EcommerceClient) DecryptCombinePaymentNotification(notification *Paymen
 }
 
 // DecryptPartnerPaymentNotification 解密服务商模式单笔支付通知。
-func (c *EcommerceClient) DecryptPartnerPaymentNotification(notification *PaymentNotification) (*PartnerPaymentNotificationResource, error) {
+func (c *EcommerceClient) DecryptPartnerPaymentNotification(notification *PaymentNotification) (*wechatcontracts.PartnerPaymentNotificationResource, error) {
 	plaintext, err := c.decryptAESGCM(
 		notification.Resource.Nonce,
 		notification.Resource.Ciphertext,
@@ -3169,7 +3169,7 @@ func (c *EcommerceClient) DecryptPartnerPaymentNotification(notification *Paymen
 		return nil, fmt.Errorf("decrypt notification: %w", err)
 	}
 
-	var result PartnerPaymentNotificationResource
+	var result wechatcontracts.PartnerPaymentNotificationResource
 	if err := json.Unmarshal(plaintext, &result); err != nil {
 		return nil, fmt.Errorf("unmarshal notification: %w", err)
 	}

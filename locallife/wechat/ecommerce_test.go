@@ -704,7 +704,7 @@ func TestCreatePartnerJSAPIOrder_UsesDedicatedNotifyURL(t *testing.T) {
 		}),
 	}
 
-	resp, payParams, err := client.CreatePartnerJSAPIOrder(context.Background(), &PartnerJSAPIOrderRequest{
+	resp, payParams, err := client.CreatePartnerJSAPIOrder(context.Background(), &wechatcontracts.PartnerJSAPIOrderRequest{
 		SubMchID:      "sub-mchid-001",
 		Description:   "测试普通支付",
 		OutTradeNo:    "partner-order-001",
@@ -727,7 +727,7 @@ func TestCreatePartnerJSAPIOrder_UsesServiceAppIDForPaySign(t *testing.T) {
 		}, nil
 	})
 
-	resp, payParams, err := client.CreatePartnerJSAPIOrder(context.Background(), &PartnerJSAPIOrderRequest{
+	resp, payParams, err := client.CreatePartnerJSAPIOrder(context.Background(), &wechatcontracts.PartnerJSAPIOrderRequest{
 		SubMchID:    "sub-mchid-001",
 		Description: "测试普通支付",
 		OutTradeNo:  "partner-order-service-001",
@@ -745,7 +745,7 @@ func TestCreatePartnerJSAPIOrder_UsesOfficialNestedRequestFields(t *testing.T) {
 		require.Equal(t, http.MethodPost, req.Method)
 		require.Equal(t, ecommercePartnerJSAPIOrderURL, req.URL.Path)
 
-		var body PartnerJSAPIOrderRequestBody
+		var body wechatcontracts.PartnerJSAPIOrderRequestBody
 		require.NoError(t, json.NewDecoder(req.Body).Decode(&body))
 		require.NotNil(t, body.Detail)
 		require.Equal(t, int64(288), body.Detail.CostPrice)
@@ -763,23 +763,23 @@ func TestCreatePartnerJSAPIOrder_UsesOfficialNestedRequestFields(t *testing.T) {
 		}, nil
 	})
 
-	_, _, err := client.CreatePartnerJSAPIOrder(context.Background(), &PartnerJSAPIOrderRequest{
+	_, _, err := client.CreatePartnerJSAPIOrder(context.Background(), &wechatcontracts.PartnerJSAPIOrderRequest{
 		SubMchID:      "sub-mchid-001",
 		Description:   "测试普通支付",
 		OutTradeNo:    "partner-order-nested-001",
 		TotalAmount:   188,
 		PayerOpenID:   "openid-001",
 		PayerClientIP: "127.0.0.1",
-		StoreInfo: &PartnerOrderStoreInfo{
+		StoreInfo: &wechatcontracts.PartnerOrderStoreInfo{
 			ID:      "store-001",
 			Name:    "腾讯大厦分店",
 			Address: "深圳南山",
 		},
 		ProfitSharing: true,
 		SubsidyAmount: 30,
-		Detail: &PartnerOrderDetail{
+		Detail: &wechatcontracts.PartnerOrderDetail{
 			CostPrice: 288,
-			GoodsDetail: []PartnerOrderGoodsDetail{{
+			GoodsDetail: []wechatcontracts.PartnerOrderGoodsDetail{{
 				MerchantGoodsID: "goods-001",
 				Quantity:        1,
 				UnitPrice:       188,
@@ -792,7 +792,7 @@ func TestCreatePartnerJSAPIOrder_UsesOfficialNestedRequestFields(t *testing.T) {
 func TestCreatePartnerJSAPIOrder_RejectsSubOpenIDProjectFlow(t *testing.T) {
 	client := &EcommerceClient{}
 
-	_, _, err := client.CreatePartnerJSAPIOrder(context.Background(), &PartnerJSAPIOrderRequest{
+	_, _, err := client.CreatePartnerJSAPIOrder(context.Background(), &wechatcontracts.PartnerJSAPIOrderRequest{
 		SubMchID:       "sub-mchid-001",
 		SubAppID:       "sub-appid-001",
 		Description:    "测试普通支付",
@@ -806,7 +806,7 @@ func TestCreatePartnerJSAPIOrder_RejectsSubOpenIDProjectFlow(t *testing.T) {
 func TestCreatePartnerJSAPIOrder_RequiresPayerClientIPWhenDeviceIDProvided(t *testing.T) {
 	client := &EcommerceClient{}
 
-	_, _, err := client.CreatePartnerJSAPIOrder(context.Background(), &PartnerJSAPIOrderRequest{
+	_, _, err := client.CreatePartnerJSAPIOrder(context.Background(), &wechatcontracts.PartnerJSAPIOrderRequest{
 		SubMchID:    "sub-mchid-001",
 		Description: "测试普通支付",
 		OutTradeNo:  "partner-order-001",
@@ -879,7 +879,7 @@ func TestClosePartnerOrder_UsesCanonicalCloseRequestBody(t *testing.T) {
 		require.Equal(t, http.MethodPost, req.Method)
 		require.Equal(t, "/v3/pay/partner/transactions/out-trade-no/partner-order-close-001/close", req.URL.Path)
 
-		var body PartnerCloseOrderRequest
+		var body wechatcontracts.PartnerCloseOrderRequest
 		require.NoError(t, json.NewDecoder(req.Body).Decode(&body))
 		require.Equal(t, "service-mchid-001", body.SpMchID)
 		require.Equal(t, "sub-mchid-001", body.SubMchID)
@@ -926,7 +926,7 @@ func TestCreateCombineOrder_UsesServiceProviderAndSubMerchantFields(t *testing.T
 			require.Equal(t, http.MethodPost, req.Method)
 			require.Equal(t, ecommerceCombineOrderURL, req.URL.Path)
 
-			var body CombineOrderRequestBody
+			var body wechatcontracts.CombineOrderRequestBody
 			require.NoError(t, json.NewDecoder(req.Body).Decode(&body))
 
 			require.Equal(t, "service-appid-001", body.CombineAppID)
@@ -950,9 +950,9 @@ func TestCreateCombineOrder_UsesServiceProviderAndSubMerchantFields(t *testing.T
 		}),
 	}
 
-	resp, payParams, err := client.CreateCombineOrder(context.Background(), &CombineOrderRequest{
+	resp, payParams, err := client.CreateCombineOrder(context.Background(), &wechatcontracts.CombineOrderRequest{
 		CombineOutTradeNo: "combine-order-001",
-		SubOrders: []SubOrder{{
+		SubOrders: []wechatcontracts.SubOrder{{
 			SubMchID:      "sub-mchid-001",
 			OutTradeNo:    "sub-order-001",
 			Description:   "测试订单",
@@ -964,7 +964,7 @@ func TestCreateCombineOrder_UsesServiceProviderAndSubMerchantFields(t *testing.T
 		}},
 		PayerOpenID: "openid-001",
 		ExpireTime:  time.Now().Add(30 * time.Minute),
-		SceneInfo: &CombineSceneInfo{
+		SceneInfo: &wechatcontracts.CombineSceneInfo{
 			PayerClientIP: "127.0.0.1",
 		},
 	})
@@ -982,9 +982,9 @@ func TestCreateCombineOrder_UsesServiceAppIDForPaySign(t *testing.T) {
 		}, nil
 	})
 
-	resp, payParams, err := client.CreateCombineOrder(context.Background(), &CombineOrderRequest{
+	resp, payParams, err := client.CreateCombineOrder(context.Background(), &wechatcontracts.CombineOrderRequest{
 		CombineOutTradeNo: "combine-order-service-001",
-		SubOrders: []SubOrder{{
+		SubOrders: []wechatcontracts.SubOrder{{
 			SubMchID:    "sub-mchid-001",
 			OutTradeNo:  "sub-order-service-001",
 			Description: "测试订单",
@@ -1001,9 +1001,9 @@ func TestCreateCombineOrder_UsesServiceAppIDForPaySign(t *testing.T) {
 func TestCreateCombineOrder_RejectsSubAppIDProjectFlow(t *testing.T) {
 	client := &EcommerceClient{}
 
-	_, _, err := client.CreateCombineOrder(context.Background(), &CombineOrderRequest{
+	_, _, err := client.CreateCombineOrder(context.Background(), &wechatcontracts.CombineOrderRequest{
 		CombineOutTradeNo: "combine-order-subapp-001",
-		SubOrders: []SubOrder{{
+		SubOrders: []wechatcontracts.SubOrder{{
 			SubMchID:    "sub-mchid-001",
 			SubAppID:    "sub-appid-001",
 			OutTradeNo:  "sub-order-subapp-001",
@@ -1019,9 +1019,9 @@ func TestCreateCombineOrder_RejectsSubAppIDProjectFlow(t *testing.T) {
 func TestCreateCombineOrder_RejectsSubOpenIDProjectFlow(t *testing.T) {
 	client := &EcommerceClient{}
 
-	_, _, err := client.CreateCombineOrder(context.Background(), &CombineOrderRequest{
+	_, _, err := client.CreateCombineOrder(context.Background(), &wechatcontracts.CombineOrderRequest{
 		CombineOutTradeNo: "combine-order-subopenid-001",
-		SubOrders: []SubOrder{{
+		SubOrders: []wechatcontracts.SubOrder{{
 			SubMchID:    "sub-mchid-001",
 			OutTradeNo:  "sub-order-subopenid-001",
 			Description: "测试订单",
@@ -1036,16 +1036,16 @@ func TestCreateCombineOrder_RejectsSubOpenIDProjectFlow(t *testing.T) {
 func TestCreateCombineOrder_RequiresAttachForEachSubOrder(t *testing.T) {
 	client := &EcommerceClient{}
 
-	_, _, err := client.CreateCombineOrder(context.Background(), &CombineOrderRequest{
+	_, _, err := client.CreateCombineOrder(context.Background(), &wechatcontracts.CombineOrderRequest{
 		CombineOutTradeNo: "combine-order-001",
-		SubOrders: []SubOrder{{
+		SubOrders: []wechatcontracts.SubOrder{{
 			SubMchID:    "sub-mchid-001",
 			OutTradeNo:  "sub-order-001",
 			Description: "测试订单",
 			Amount:      100,
 		}},
 		PayerOpenID: "openid-001",
-		SceneInfo: &CombineSceneInfo{
+		SceneInfo: &wechatcontracts.CombineSceneInfo{
 			PayerClientIP: "127.0.0.1",
 		},
 	})
@@ -1174,7 +1174,7 @@ func TestCloseCombineOrder_UsesSubMerchantFields(t *testing.T) {
 			require.Equal(t, http.MethodPost, req.Method)
 			require.Equal(t, "/v3/combine-transactions/out-trade-no/combine-order-001/close", req.URL.Path)
 
-			var body CombineCloseOrderRequest
+			var body wechatcontracts.CombineCloseOrderRequest
 			require.NoError(t, json.NewDecoder(req.Body).Decode(&body))
 			require.Equal(t, "service-appid-001", body.CombineAppID)
 			require.Len(t, body.SubOrders, 1)
@@ -1187,7 +1187,7 @@ func TestCloseCombineOrder_UsesSubMerchantFields(t *testing.T) {
 		}),
 	}
 
-	err = client.CloseCombineOrder(context.Background(), "combine-order-001", []SubOrderClose{{
+	err = client.CloseCombineOrder(context.Background(), "combine-order-001", []wechatcontracts.SubOrderClose{{
 		SubMchID:   "sub-mchid-001",
 		SubAppID:   "sub-appid-001",
 		OutTradeNo: "sub-order-001",

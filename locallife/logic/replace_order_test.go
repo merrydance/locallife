@@ -9,6 +9,7 @@ import (
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	wechatmock "github.com/merrydance/locallife/wechat/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -71,7 +72,6 @@ func TestReplaceReservationOrder_DeltaPositive(t *testing.T) {
 	dish := db.Dish{ID: dishID, MerchantID: merchantID, Name: "Noodles", Price: 1500, IsOnline: true, IsAvailable: true}
 	paymentOrder := db.PaymentOrder{
 		ID:            222,
-		UserID:        userID,
 		OrderID:       pgtype.Int8{Int64: 111, Valid: true},
 		ReservationID: pgtype.Int8{Int64: reservationID, Valid: true},
 		PaymentType:   "profit_sharing",
@@ -147,14 +147,14 @@ func TestReplaceReservationOrder_DeltaPositive(t *testing.T) {
 	ecommerceClient.EXPECT().
 		CreatePartnerJSAPIOrder(gomock.Any(), gomock.Any()).
 		Times(1).
-		DoAndReturn(func(_ context.Context, req *wechat.PartnerJSAPIOrderRequest) (*wechat.PartnerJSAPIOrderResponse, *wechat.JSAPIPayParams, error) {
+		DoAndReturn(func(_ context.Context, req *wechatcontracts.PartnerJSAPIOrderRequest) (*wechatcontracts.PartnerJSAPIOrderResponse, *wechat.JSAPIPayParams, error) {
 			require.Equal(t, "1900000109", req.SubMchID)
 			require.Equal(t, "openid-1", req.PayerOpenID)
 			require.Equal(t, int64(500), req.TotalAmount)
 			require.Equal(t, "Test Merchant - Reservation Adjustment", req.Description)
 			require.Equal(t, "order_id:111", req.Attach)
 			require.True(t, req.ProfitSharing)
-			return &wechat.PartnerJSAPIOrderResponse{PrepayID: "prepay-replace-1"}, &wechat.JSAPIPayParams{}, nil
+			return &wechatcontracts.PartnerJSAPIOrderResponse{PrepayID: "prepay-replace-1"}, &wechat.JSAPIPayParams{}, nil
 		})
 	store.EXPECT().
 		UpdatePaymentOrderPrepayId(gomock.Any(), gomock.Any()).

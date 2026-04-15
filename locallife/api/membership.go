@@ -11,7 +11,7 @@ import (
 	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/media"
 	"github.com/merrydance/locallife/token"
-	"github.com/merrydance/locallife/wechat"
+	contracts "github.com/merrydance/locallife/wechat/contracts"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -798,9 +798,9 @@ func (server *Server) rechargeMembership(ctx *gin.Context) {
 	}
 
 	// 调用收付通合单支付 API
-	combineResp, payParams, err := server.ecommerceClient.CreateCombineOrder(ctx, &wechat.CombineOrderRequest{
+	combineResp, payParams, err := server.ecommerceClient.CreateCombineOrder(ctx, &contracts.CombineOrderRequest{
 		CombineOutTradeNo: combineOutTradeNo,
-		SubOrders: []wechat.SubOrder{
+		SubOrders: []contracts.SubOrder{
 			{
 				SubMchID:    txResult.SubMchID,
 				Amount:      req.RechargeAmount,
@@ -811,7 +811,7 @@ func (server *Server) rechargeMembership(ctx *gin.Context) {
 		},
 		PayerOpenID: user.WechatOpenid,
 		ExpireTime:  expireTime,
-		SceneInfo: &wechat.CombineSceneInfo{
+		SceneInfo: &contracts.CombineSceneInfo{
 			PayerClientIP: ctx.ClientIP(),
 		},
 	})

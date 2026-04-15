@@ -11,6 +11,7 @@ import (
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	mockwechat "github.com/merrydance/locallife/wechat/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -102,12 +103,12 @@ func TestPaymentOrderServiceCreatePaymentOrder_RecreatesPendingOrderWhenAmountCh
 	ecommerceClient.EXPECT().
 		CreatePartnerJSAPIOrder(gomock.Any(), gomock.Any()).
 		Times(1).
-		DoAndReturn(func(_ context.Context, req *wechat.PartnerJSAPIOrderRequest) (*wechat.PartnerJSAPIOrderResponse, *wechat.JSAPIPayParams, error) {
+		DoAndReturn(func(_ context.Context, req *wechatcontracts.PartnerJSAPIOrderRequest) (*wechatcontracts.PartnerJSAPIOrderResponse, *wechat.JSAPIPayParams, error) {
 			require.Equal(t, "sub-new", req.SubMchID)
 			require.Equal(t, int64(700), req.TotalAmount)
 			require.Equal(t, "Merchant A - Order Payment", req.Description)
 			require.Equal(t, "order_id:2001;sub_mchid:sub-new", req.Attach)
-			return &wechat.PartnerJSAPIOrderResponse{PrepayID: "prepay-new"}, &wechat.JSAPIPayParams{NonceStr: "nonce"}, nil
+			return &wechatcontracts.PartnerJSAPIOrderResponse{PrepayID: "prepay-new"}, &wechat.JSAPIPayParams{NonceStr: "nonce"}, nil
 		})
 	store.EXPECT().
 		UpdatePaymentOrderPrepayId(gomock.Any(), db.UpdatePaymentOrderPrepayIdParams{
@@ -178,7 +179,7 @@ func TestPaymentOrderServiceCreatePaymentOrder_PartnerPrepayUpdateFailureClosesB
 		}, nil)
 	ecommerceClient.EXPECT().
 		CreatePartnerJSAPIOrder(gomock.Any(), gomock.Any()).
-		Return(&wechat.PartnerJSAPIOrderResponse{PrepayID: "prepay-new"}, &wechat.JSAPIPayParams{NonceStr: "nonce"}, nil)
+		Return(&wechatcontracts.PartnerJSAPIOrderResponse{PrepayID: "prepay-new"}, &wechat.JSAPIPayParams{NonceStr: "nonce"}, nil)
 	store.EXPECT().
 		UpdatePaymentOrderPrepayId(gomock.Any(), db.UpdatePaymentOrderPrepayIdParams{
 			ID:       txPayment.ID,
@@ -253,7 +254,7 @@ func TestMapReservationEcommerceError_ChangedTargetReturnsConflict(t *testing.T)
 	err := mapReservationEcommerceError(errors.New("reservation 42 payable amount changed"))
 	reqErr := assertRequestError(t, err)
 	require.Equal(t, 409, reqErr.Status)
-	require.Equal(t, "payment target changed, please retry", reqErr.Err.Error())
+	require.Equal(t, "支付金额或支付模式已变化，请返回订单页重新发起支付", reqErr.Err.Error())
 }
 
 func TestPaymentOrderServiceCreatePaymentOrder_ReservationPendingModeMismatchSupersedesExisting(t *testing.T) {
@@ -310,10 +311,10 @@ func TestPaymentOrderServiceCreatePaymentOrder_ReservationPendingModeMismatchSup
 		require.Equal(t, paymentModeDeposit, arg.PaymentMode)
 		return db.CreatePartnerPaymentTxResult{PaymentOrder: newPayment, SubMchID: "sub-new"}, nil
 	})
-	ecommerceClient.EXPECT().CreatePartnerJSAPIOrder(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, req *wechat.PartnerJSAPIOrderRequest) (*wechat.PartnerJSAPIOrderResponse, *wechat.JSAPIPayParams, error) {
+	ecommerceClient.EXPECT().CreatePartnerJSAPIOrder(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, req *wechatcontracts.PartnerJSAPIOrderRequest) (*wechatcontracts.PartnerJSAPIOrderResponse, *wechat.JSAPIPayParams, error) {
 		require.Equal(t, buildReservationPaymentAttach(input.OrderID, paymentModeDeposit)+";sub_mchid:sub-new", req.Attach)
 		require.True(t, req.ProfitSharing)
-		return &wechat.PartnerJSAPIOrderResponse{PrepayID: "prepay-new"}, &wechat.JSAPIPayParams{NonceStr: "nonce"}, nil
+		return &wechatcontracts.PartnerJSAPIOrderResponse{PrepayID: "prepay-new"}, &wechat.JSAPIPayParams{NonceStr: "nonce"}, nil
 	})
 	store.EXPECT().UpdatePaymentOrderPrepayId(gomock.Any(), db.UpdatePaymentOrderPrepayIdParams{
 		ID:       newPayment.ID,
@@ -366,10 +367,10 @@ func TestPaymentOrderServiceCreatePaymentOrder_TakeawayUsesPartnerSingleWithoutP
 	store.EXPECT().GetUser(gomock.Any(), input.UserID).Return(db.User{ID: input.UserID, WechatOpenid: "openid"}, nil)
 	store.EXPECT().GetMerchant(gomock.Any(), order.MerchantID).Return(db.Merchant{ID: order.MerchantID, Name: "Merchant A"}, nil)
 	store.EXPECT().CreatePartnerPaymentTx(gomock.Any(), gomock.Any()).Return(db.CreatePartnerPaymentTxResult{PaymentOrder: txPayment, SubMchID: "sub-new"}, nil)
-	ecommerceClient.EXPECT().CreatePartnerJSAPIOrder(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, req *wechat.PartnerJSAPIOrderRequest) (*wechat.PartnerJSAPIOrderResponse, *wechat.JSAPIPayParams, error) {
+	ecommerceClient.EXPECT().CreatePartnerJSAPIOrder(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, req *wechatcontracts.PartnerJSAPIOrderRequest) (*wechatcontracts.PartnerJSAPIOrderResponse, *wechat.JSAPIPayParams, error) {
 		require.False(t, req.ProfitSharing)
 		require.Equal(t, "Merchant A - Order Payment", req.Description)
-		return &wechat.PartnerJSAPIOrderResponse{PrepayID: "prepay-new"}, &wechat.JSAPIPayParams{NonceStr: "nonce"}, nil
+		return &wechatcontracts.PartnerJSAPIOrderResponse{PrepayID: "prepay-new"}, &wechat.JSAPIPayParams{NonceStr: "nonce"}, nil
 	})
 	store.EXPECT().UpdatePaymentOrderPrepayId(gomock.Any(), db.UpdatePaymentOrderPrepayIdParams{
 		ID:       txPayment.ID,
@@ -424,10 +425,10 @@ func TestPaymentOrderServiceCreatePaymentOrder_ReservationLinkedDineInUsesProfit
 	store.EXPECT().GetUser(gomock.Any(), input.UserID).Return(db.User{ID: input.UserID, WechatOpenid: "openid"}, nil)
 	store.EXPECT().GetMerchant(gomock.Any(), order.MerchantID).Return(db.Merchant{ID: order.MerchantID, Name: "Merchant A"}, nil)
 	store.EXPECT().CreatePartnerPaymentTx(gomock.Any(), gomock.Any()).Return(db.CreatePartnerPaymentTxResult{PaymentOrder: txPayment, SubMchID: "sub-new"}, nil)
-	ecommerceClient.EXPECT().CreatePartnerJSAPIOrder(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, req *wechat.PartnerJSAPIOrderRequest) (*wechat.PartnerJSAPIOrderResponse, *wechat.JSAPIPayParams, error) {
+	ecommerceClient.EXPECT().CreatePartnerJSAPIOrder(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, req *wechatcontracts.PartnerJSAPIOrderRequest) (*wechatcontracts.PartnerJSAPIOrderResponse, *wechat.JSAPIPayParams, error) {
 		require.True(t, req.ProfitSharing)
 		require.Equal(t, "Merchant A - Order Payment", req.Description)
-		return &wechat.PartnerJSAPIOrderResponse{PrepayID: "prepay-new"}, &wechat.JSAPIPayParams{NonceStr: "nonce"}, nil
+		return &wechatcontracts.PartnerJSAPIOrderResponse{PrepayID: "prepay-new"}, &wechat.JSAPIPayParams{NonceStr: "nonce"}, nil
 	})
 	store.EXPECT().UpdatePaymentOrderPrepayId(gomock.Any(), db.UpdatePaymentOrderPrepayIdParams{
 		ID:       txPayment.ID,
@@ -644,7 +645,7 @@ func TestPaymentOrderServiceQueryPaymentOrder(t *testing.T) {
 					Return(db.MerchantPaymentConfig{MerchantID: 77, SubMchID: "1900000109"}, nil)
 				client.EXPECT().
 					QueryPartnerOrderByOutTradeNo(gomock.Any(), "OC20260415000001", "1900000109").
-					Return(&wechat.PartnerOrderQueryResponse{OutTradeNo: "OC20260415000001", SubMchID: "1900000109", TradeState: "NOTPAY", TradeStateDesc: "待支付"}, nil)
+					Return(&wechatcontracts.PartnerOrderQueryResponse{OutTradeNo: "OC20260415000001", SubMchID: "1900000109", TradeState: "NOTPAY", TradeStateDesc: "待支付"}, nil)
 				client.EXPECT().
 					GenerateJSAPIPayParams("prepay-123").
 					Return(&wechat.JSAPIPayParams{NonceStr: "nonce"}, nil)
@@ -679,7 +680,7 @@ func TestPaymentOrderServiceQueryPaymentOrder(t *testing.T) {
 					Return(db.MerchantPaymentConfig{MerchantID: 79, SubMchID: "1900000111"}, nil)
 				client.EXPECT().
 					QueryPartnerOrderByTransactionID(gomock.Any(), "wx-transaction-001", "1900000111").
-					Return(&wechat.PartnerOrderQueryResponse{TransactionID: "wx-transaction-001", OutTradeNo: "OC20260415000011", SubMchID: "1900000111", TradeState: "SUCCESS", TradeStateDesc: "支付成功"}, nil)
+					Return(&wechatcontracts.PartnerOrderQueryResponse{TransactionID: "wx-transaction-001", OutTradeNo: "OC20260415000011", SubMchID: "1900000111", TradeState: "SUCCESS", TradeStateDesc: "支付成功"}, nil)
 			},
 			check: func(t *testing.T, result QueryPaymentOrderResult, err error) {
 				require.NoError(t, err)
@@ -708,8 +709,8 @@ func TestPaymentOrderServiceQueryPaymentOrder(t *testing.T) {
 			},
 			check: func(t *testing.T, _ QueryPaymentOrderResult, err error) {
 				reqErr := assertRequestError(t, err)
-				require.Equal(t, http.StatusServiceUnavailable, reqErr.Status)
-				require.Equal(t, "支付状态同步中，请稍后重试", reqErr.Err.Error())
+				require.Equal(t, http.StatusBadGateway, reqErr.Status)
+				require.Equal(t, "微信侧暂未确认该支付单，请保留当前订单并稍后刷新结果", reqErr.Err.Error())
 			},
 		},
 		{
@@ -731,8 +732,8 @@ func TestPaymentOrderServiceQueryPaymentOrder(t *testing.T) {
 			},
 			check: func(t *testing.T, _ QueryPaymentOrderResult, err error) {
 				reqErr := assertRequestError(t, err)
-				require.Equal(t, http.StatusServiceUnavailable, reqErr.Status)
-				require.Equal(t, "支付状态同步异常，请稍后重试", reqErr.Err.Error())
+				require.Equal(t, http.StatusBadGateway, reqErr.Status)
+				require.Equal(t, "微信支付状态返回异常，请不要重复支付，返回订单页后重新查询", reqErr.Err.Error())
 			},
 		},
 	}
@@ -995,7 +996,7 @@ func TestPaymentOrderServiceClosePaymentOrder(t *testing.T) {
 					Times(1).
 					Return([]db.CombinedPaymentSubOrder{{SubMchid: "1900000109", OutTradeNo: "CP202001010000000003"}}, nil)
 				client.EXPECT().
-					CloseCombineOrder(gomock.Any(), "OC123", []wechat.SubOrderClose{{SubMchID: "1900000109", OutTradeNo: "CP202001010000000003"}}).
+					CloseCombineOrder(gomock.Any(), "OC123", []wechatcontracts.SubOrderClose{{SubMchID: "1900000109", OutTradeNo: "CP202001010000000003"}}).
 					Times(1).
 					Return(nil)
 				store.EXPECT().
@@ -1144,7 +1145,7 @@ func TestPaymentOrderServiceClosePaymentOrder(t *testing.T) {
 			check: func(t *testing.T, _ ClosePaymentOrderResult, err error) {
 				reqErr := assertRequestError(t, err)
 				require.Equal(t, http.StatusConflict, reqErr.Status)
-				require.Equal(t, "支付处理中，请确认最新状态后再重试", reqErr.Err.Error())
+				require.Equal(t, "支付处理中，请先刷新支付结果确认后再决定是否关闭", reqErr.Err.Error())
 			},
 		},
 		{

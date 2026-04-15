@@ -641,9 +641,9 @@ func TestHandleCombinePaymentNotify_ClosedOrderEnqueuesAnomalyRefund(t *testing.
 
 	ecommerceClient.EXPECT().
 		DecryptCombinePaymentNotification(gomock.Any()).
-		Return(&wechat.CombinePaymentNotification{
+		Return(&wechatcontracts.CombinePaymentNotification{
 			CombineOutTradeNo: combineOutTradeNo,
-			SubOrders: []wechat.CombineSubOrderResult{{
+			SubOrders: []wechatcontracts.CombineSubOrderResult{{
 				OutTradeNo:    outTradeNo,
 				TransactionID: transactionID,
 				TradeState:    "SUCCESS",
@@ -717,14 +717,14 @@ func TestHandleEcommercePaymentNotify_DelegatesToPartnerHandler(t *testing.T) {
 
 	ecommerceClient.EXPECT().
 		DecryptPartnerPaymentNotification(gomock.Any()).
-		Return(&wechat.PartnerPaymentNotificationResource{
+		Return(&wechatcontracts.PartnerPaymentNotificationResource{
 			SpMchID:       "sp_expected",
 			SpAppID:       "app_expected",
 			SubMchID:      "sub_expected",
 			OutTradeNo:    outTradeNo,
 			TransactionID: transactionID,
 			TradeState:    "SUCCESS",
-			Amount: wechat.PartnerOrderQueryAmount{
+			Amount: wechatcontracts.PartnerOrderQueryAmount{
 				Total: 8800,
 			},
 		}, nil)
@@ -781,14 +781,14 @@ func TestHandleEcommercePaymentNotify_UsesPersistedSubMchIDWhenConfigDrifts(t *t
 
 	ecommerceClient.EXPECT().
 		DecryptPartnerPaymentNotification(gomock.Any()).
-		Return(&wechat.PartnerPaymentNotificationResource{
+		Return(&wechatcontracts.PartnerPaymentNotificationResource{
 			SpMchID:       "sp_expected",
 			SpAppID:       "app_expected",
 			SubMchID:      "sub_original",
 			OutTradeNo:    outTradeNo,
 			TransactionID: transactionID,
 			TradeState:    "SUCCESS",
-			Amount: wechat.PartnerOrderQueryAmount{
+			Amount: wechatcontracts.PartnerOrderQueryAmount{
 				Total: 8800,
 			},
 		}, nil)
@@ -838,14 +838,14 @@ func TestHandleEcommercePaymentNotify_PaidUnprocessedReenqueuesPaymentSuccess(t 
 
 	ecommerceClient.EXPECT().
 		DecryptPartnerPaymentNotification(gomock.Any()).
-		Return(&wechat.PartnerPaymentNotificationResource{
+		Return(&wechatcontracts.PartnerPaymentNotificationResource{
 			SpMchID:       "sp_expected",
 			SpAppID:       "app_expected",
 			SubMchID:      "sub_expected",
 			OutTradeNo:    outTradeNo,
 			TransactionID: transactionID,
 			TradeState:    "SUCCESS",
-			Amount: wechat.PartnerOrderQueryAmount{
+			Amount: wechatcontracts.PartnerOrderQueryAmount{
 				Total: 8800,
 			},
 		}, nil)
@@ -911,14 +911,14 @@ func TestHandleEcommercePaymentNotify_ClosedOrderEnqueueFailureEmitsAlert(t *tes
 
 	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 	store.EXPECT().TryClaimWechatNotification(gomock.Any(), gomock.Any()).Return(true, nil)
-	ecommerceClient.EXPECT().DecryptPartnerPaymentNotification(gomock.Any()).Return(&wechat.PartnerPaymentNotificationResource{
+	ecommerceClient.EXPECT().DecryptPartnerPaymentNotification(gomock.Any()).Return(&wechatcontracts.PartnerPaymentNotificationResource{
 		SpMchID:       "sp_expected",
 		SpAppID:       "app_expected",
 		SubMchID:      "sub_expected",
 		OutTradeNo:    outTradeNo,
 		TransactionID: transactionID,
 		TradeState:    "SUCCESS",
-		Amount:        wechat.PartnerOrderQueryAmount{Total: 8800},
+		Amount:        wechatcontracts.PartnerOrderQueryAmount{Total: 8800},
 	}, nil)
 	ecommerceClient.EXPECT().GetSpMchID().Return("sp_expected")
 	ecommerceClient.EXPECT().GetSpAppID().Return("app_expected")
@@ -962,14 +962,14 @@ func TestHandleEcommercePaymentNotify_AmountMismatchEnqueueFailureEmitsAlert(t *
 
 	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 	store.EXPECT().TryClaimWechatNotification(gomock.Any(), gomock.Any()).Return(true, nil)
-	ecommerceClient.EXPECT().DecryptPartnerPaymentNotification(gomock.Any()).Return(&wechat.PartnerPaymentNotificationResource{
+	ecommerceClient.EXPECT().DecryptPartnerPaymentNotification(gomock.Any()).Return(&wechatcontracts.PartnerPaymentNotificationResource{
 		SpMchID:       "sp_expected",
 		SpAppID:       "app_expected",
 		SubMchID:      "sub_expected",
 		OutTradeNo:    outTradeNo,
 		TransactionID: transactionID,
 		TradeState:    "SUCCESS",
-		Amount:        wechat.PartnerOrderQueryAmount{Total: 9900},
+		Amount:        wechatcontracts.PartnerOrderQueryAmount{Total: 9900},
 	}, nil)
 	ecommerceClient.EXPECT().GetSpMchID().Return("sp_expected")
 	ecommerceClient.EXPECT().GetSpAppID().Return("app_expected")
@@ -1021,7 +1021,7 @@ func TestHandleCombinePaymentNotify_OwnershipMismatchReturnsFail(t *testing.T) {
 
 	ecommerceClient.EXPECT().
 		DecryptCombinePaymentNotification(gomock.Any()).
-		Return(&wechat.CombinePaymentNotification{
+		Return(&wechatcontracts.CombinePaymentNotification{
 			CombineOutTradeNo: combineOutTradeNo,
 			CombineMchID:      "sp_wrong",
 			CombineAppID:      "app_wrong",
@@ -1069,9 +1069,9 @@ func TestHandleCombinePaymentNotify_SubOrderNotFoundReturnsFail(t *testing.T) {
 
 	ecommerceClient.EXPECT().
 		DecryptCombinePaymentNotification(gomock.Any()).
-		Return(&wechat.CombinePaymentNotification{
+		Return(&wechatcontracts.CombinePaymentNotification{
 			CombineOutTradeNo: combineOutTradeNo,
-			SubOrders: []wechat.CombineSubOrderResult{{
+			SubOrders: []wechatcontracts.CombineSubOrderResult{{
 				OutTradeNo:    outTradeNo,
 				TransactionID: transactionID,
 				TradeState:    "SUCCESS",
@@ -1135,9 +1135,9 @@ func TestHandleCombinePaymentNotify_AmountMismatchEnqueuesRefund(t *testing.T) {
 
 	ecommerceClient.EXPECT().
 		DecryptCombinePaymentNotification(gomock.Any()).
-		Return(&wechat.CombinePaymentNotification{
+		Return(&wechatcontracts.CombinePaymentNotification{
 			CombineOutTradeNo: combineOutTradeNo,
-			SubOrders: []wechat.CombineSubOrderResult{
+			SubOrders: []wechatcontracts.CombineSubOrderResult{
 				{
 					OutTradeNo:    outTradeNo,
 					TransactionID: transactionID,
@@ -1224,9 +1224,9 @@ func TestHandleCombinePaymentNotify_MainOrderNotFoundReturnsFail(t *testing.T) {
 
 	ecommerceClient.EXPECT().
 		DecryptCombinePaymentNotification(gomock.Any()).
-		Return(&wechat.CombinePaymentNotification{
+		Return(&wechatcontracts.CombinePaymentNotification{
 			CombineOutTradeNo: combineOutTradeNo,
-			SubOrders: []wechat.CombineSubOrderResult{{
+			SubOrders: []wechatcontracts.CombineSubOrderResult{{
 				OutTradeNo:    outTradeNo,
 				TransactionID: transactionID,
 				TradeState:    "SUCCESS",
@@ -1286,9 +1286,9 @@ func TestHandleCombinePaymentNotify_PaymentSuccessEnqueueFailureReturnsFail(t *t
 
 	ecommerceClient.EXPECT().
 		DecryptCombinePaymentNotification(gomock.Any()).
-		Return(&wechat.CombinePaymentNotification{
+		Return(&wechatcontracts.CombinePaymentNotification{
 			CombineOutTradeNo: combineOutTradeNo,
-			SubOrders: []wechat.CombineSubOrderResult{
+			SubOrders: []wechatcontracts.CombineSubOrderResult{
 				{
 					OutTradeNo:    outTradeNo,
 					TransactionID: transactionID,
@@ -1369,9 +1369,9 @@ func TestHandleCombinePaymentNotify_ClosedOrderEnqueueFailureReturnsFail(t *test
 
 	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 	store.EXPECT().TryClaimWechatNotification(gomock.Any(), gomock.Any()).Return(true, nil)
-	ecommerceClient.EXPECT().DecryptCombinePaymentNotification(gomock.Any()).Return(&wechat.CombinePaymentNotification{
+	ecommerceClient.EXPECT().DecryptCombinePaymentNotification(gomock.Any()).Return(&wechatcontracts.CombinePaymentNotification{
 		CombineOutTradeNo: combineOutTradeNo,
-		SubOrders: []wechat.CombineSubOrderResult{{
+		SubOrders: []wechatcontracts.CombineSubOrderResult{{
 			OutTradeNo:    outTradeNo,
 			TransactionID: transactionID,
 			TradeState:    "SUCCESS",

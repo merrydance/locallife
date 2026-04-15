@@ -173,25 +173,25 @@ type EcommerceClientInterface interface {
 
 	// ==================== 合单支付 ====================
 	// CreatePartnerJSAPIOrder 创建服务商模式单笔 JSAPI 订单（平台收付通）
-	CreatePartnerJSAPIOrder(ctx context.Context, req *PartnerJSAPIOrderRequest) (*PartnerJSAPIOrderResponse, *JSAPIPayParams, error)
+	CreatePartnerJSAPIOrder(ctx context.Context, req *wechatcontracts.PartnerJSAPIOrderRequest) (*wechatcontracts.PartnerJSAPIOrderResponse, *JSAPIPayParams, error)
 
 	// QueryPartnerOrderByTransactionID 通过微信支付订单号查询服务商模式单笔订单
-	QueryPartnerOrderByTransactionID(ctx context.Context, transactionID, subMchID string) (*PartnerOrderQueryResponse, error)
+	QueryPartnerOrderByTransactionID(ctx context.Context, transactionID, subMchID string) (*wechatcontracts.PartnerOrderQueryResponse, error)
 
 	// QueryPartnerOrderByOutTradeNo 通过商户订单号查询服务商模式单笔订单
-	QueryPartnerOrderByOutTradeNo(ctx context.Context, outTradeNo, subMchID string) (*PartnerOrderQueryResponse, error)
+	QueryPartnerOrderByOutTradeNo(ctx context.Context, outTradeNo, subMchID string) (*wechatcontracts.PartnerOrderQueryResponse, error)
 
 	// ClosePartnerOrder 关闭服务商模式单笔订单
 	ClosePartnerOrder(ctx context.Context, outTradeNo, subMchID string) error
 
 	// CreateCombineOrder 创建合单订单（平台收付通）
-	CreateCombineOrder(ctx context.Context, req *CombineOrderRequest) (*CombineOrderResponse, *JSAPIPayParams, error)
+	CreateCombineOrder(ctx context.Context, req *wechatcontracts.CombineOrderRequest) (*wechatcontracts.CombineOrderResponse, *JSAPIPayParams, error)
 
 	// QueryCombineOrder 查询合单订单
-	QueryCombineOrder(ctx context.Context, combineOutTradeNo string) (*CombineQueryResponse, error)
+	QueryCombineOrder(ctx context.Context, combineOutTradeNo string) (*wechatcontracts.CombineQueryResponse, error)
 
 	// CloseCombineOrder 关闭合单订单
-	CloseCombineOrder(ctx context.Context, combineOutTradeNo string, subOrders []SubOrderClose) error
+	CloseCombineOrder(ctx context.Context, combineOutTradeNo string, subOrders []wechatcontracts.SubOrderClose) error
 
 	// ==================== 分账 ====================
 	// CreateProfitSharing 请求分账
@@ -288,10 +288,10 @@ type EcommerceClientInterface interface {
 
 	// ==================== 通知解密 ====================
 	// DecryptPartnerPaymentNotification 解密服务商模式单笔支付通知
-	DecryptPartnerPaymentNotification(notification *PaymentNotification) (*PartnerPaymentNotificationResource, error)
+	DecryptPartnerPaymentNotification(notification *PaymentNotification) (*wechatcontracts.PartnerPaymentNotificationResource, error)
 
 	// DecryptCombinePaymentNotification 解密合单支付通知
-	DecryptCombinePaymentNotification(notification *PaymentNotification) (*CombinePaymentNotification, error)
+	DecryptCombinePaymentNotification(notification *PaymentNotification) (*wechatcontracts.CombinePaymentNotification, error)
 
 	// DecryptProfitSharingNotification 解密分账通知
 	DecryptProfitSharingNotification(notification *PaymentNotification) (*ProfitSharingNotification, error)

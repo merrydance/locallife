@@ -9,6 +9,7 @@ import (
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	wechatmock "github.com/merrydance/locallife/wechat/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -131,9 +132,9 @@ func TestOrderServiceReplaceOrderSchedulesPaymentTimeout(t *testing.T) {
 		require.Equal(t, reservationID, arg.ReservationID)
 		return db.CreatePartnerPaymentTxResult{PaymentOrder: paymentOrder, SubMchID: "1900000109"}, nil
 	})
-	ecommerceClient.EXPECT().CreatePartnerJSAPIOrder(gomock.Any(), gomock.Any()).Times(1).DoAndReturn(func(_ context.Context, req *wechat.PartnerJSAPIOrderRequest) (*wechat.PartnerJSAPIOrderResponse, *wechat.JSAPIPayParams, error) {
+	ecommerceClient.EXPECT().CreatePartnerJSAPIOrder(gomock.Any(), gomock.Any()).Times(1).DoAndReturn(func(_ context.Context, req *wechatcontracts.PartnerJSAPIOrderRequest) (*wechatcontracts.PartnerJSAPIOrderResponse, *wechat.JSAPIPayParams, error) {
 		require.True(t, req.ProfitSharing)
-		return &wechat.PartnerJSAPIOrderResponse{PrepayID: "prepay-replace-1"}, &wechat.JSAPIPayParams{}, nil
+		return &wechatcontracts.PartnerJSAPIOrderResponse{PrepayID: "prepay-replace-1"}, &wechat.JSAPIPayParams{}, nil
 	})
 	store.EXPECT().UpdatePaymentOrderPrepayId(gomock.Any(), gomock.Any()).Times(1).DoAndReturn(func(_ context.Context, arg db.UpdatePaymentOrderPrepayIdParams) (db.PaymentOrder, error) {
 		updated := paymentOrder

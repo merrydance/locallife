@@ -13,6 +13,7 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/util"
 	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	"github.com/rs/zerolog/log"
 )
 
@@ -82,7 +83,7 @@ type QueryPaymentOrderInput struct {
 type QueryPaymentOrderResult struct {
 	PaymentOrder db.PaymentOrder
 	PayParams    *wechat.JSAPIPayParams
-	WechatOrder  *wechat.PartnerOrderQueryResponse
+	WechatOrder  *wechatcontracts.PartnerOrderQueryResponse
 }
 
 type ListPaymentOrdersInput struct {
@@ -396,7 +397,7 @@ func (svc *PaymentOrderService) createReservationEcommercePayment(
 		paymentAttach = txResult.PaymentOrder.Attach.String
 	}
 
-	orderResp, payParams, err := svc.ecommerceClient.CreatePartnerJSAPIOrder(ctx, &wechat.PartnerJSAPIOrderRequest{
+	orderResp, payParams, err := svc.ecommerceClient.CreatePartnerJSAPIOrder(ctx, &wechatcontracts.PartnerJSAPIOrderRequest{
 		SubMchID:      txResult.SubMchID,
 		Description:   merchantName,
 		OutTradeNo:    txResult.PaymentOrder.OutTradeNo,
@@ -512,7 +513,7 @@ func (svc *PaymentOrderService) createOrderEcommercePayment(
 		paymentAttach = txResult.PaymentOrder.Attach.String
 	}
 
-	orderResp, payParams, err := svc.ecommerceClient.CreatePartnerJSAPIOrder(ctx, &wechat.PartnerJSAPIOrderRequest{
+	orderResp, payParams, err := svc.ecommerceClient.CreatePartnerJSAPIOrder(ctx, &wechatcontracts.PartnerJSAPIOrderRequest{
 		SubMchID:      txResult.SubMchID,
 		Description:   merchantName,
 		OutTradeNo:    txResult.PaymentOrder.OutTradeNo,
@@ -715,15 +716,15 @@ func mapReservationEcommerceError(err error) error {
 	msg := err.Error()
 	switch {
 	case strings.Contains(msg, "payment config invalid") || strings.Contains(msg, "inactive"):
-		return NewRequestError(http.StatusBadRequest, errors.New("merchant payment config invalid or not activated"))
+		return NewRequestError(http.StatusBadRequest, errors.New("商户支付配置无效或尚未启用，请联系平台处理"))
 	case strings.Contains(msg, "does not belong to user"):
-		return NewRequestError(http.StatusForbidden, errors.New("payment target does not belong to you"))
+		return NewRequestError(http.StatusForbidden, errors.New("当前支付对象不属于你"))
 	case strings.Contains(msg, "status is") || strings.Contains(msg, "expect pending"):
-		return NewRequestError(http.StatusBadRequest, errors.New("payment target is not in pending status"))
+		return NewRequestError(http.StatusBadRequest, errors.New("当前支付对象已不在待支付状态，请刷新页面确认"))
 	case strings.Contains(msg, "payable amount changed") || strings.Contains(msg, "payment mode changed"):
-		return NewRequestError(http.StatusConflict, errors.New("payment target changed, please retry"))
+		return NewRequestError(http.StatusConflict, errors.New("支付金额或支付模式已变化，请返回订单页重新发起支付"))
 	case strings.Contains(msg, "has pending payment order"):
-		return NewRequestError(http.StatusConflict, errors.New("payment order already exists, please retry"))
+		return NewRequestError(http.StatusConflict, errors.New("已有待支付订单，请先刷新支付结果后再决定是否重试"))
 	}
 	return fmt.Errorf("create ecommerce payment: %w", err)
 }
@@ -840,7 +841,7 @@ func (svc *PaymentOrderService) QueryPaymentOrder(ctx context.Context, input Que
 	}, nil
 }
 
-func (svc *PaymentOrderService) queryPartnerPaymentOrder(ctx context.Context, paymentOrder db.PaymentOrder, subMchID string) (*wechat.PartnerOrderQueryResponse, error) {
+func (svc *PaymentOrderService) queryPartnerPaymentOrder(ctx context.Context, paymentOrder db.PaymentOrder, subMchID string) (*wechatcontracts.PartnerOrderQueryResponse, error) {
 	if paymentOrder.TransactionID.Valid && strings.TrimSpace(paymentOrder.TransactionID.String) != "" {
 		return svc.ecommerceClient.QueryPartnerOrderByTransactionID(ctx, paymentOrder.TransactionID.String, subMchID)
 	}
@@ -963,7 +964,7 @@ func (svc *PaymentOrderService) signExistingPartnerPaymentOrder(paymentOrder db.
 	return svc.ecommerceClient.GenerateJSAPIPayParams(paymentOrder.PrepayID.String)
 }
 
-func (svc *PaymentOrderService) shouldExposePartnerPaymentPayParams(paymentOrder db.PaymentOrder, wechatOrder *wechat.PartnerOrderQueryResponse) bool {
+func (svc *PaymentOrderService) shouldExposePartnerPaymentPayParams(paymentOrder db.PaymentOrder, wechatOrder *wechatcontracts.PartnerOrderQueryResponse) bool {
 	if paymentOrder.Status != paymentStatusPending {
 		return false
 	}
@@ -1030,13 +1031,13 @@ func (svc *PaymentOrderService) closeCombinedPaymentOrder(ctx context.Context, p
 	if err != nil {
 		return ClosePaymentOrderResult{}, err
 	}
-	closeSubs := make([]wechat.SubOrderClose, 0, len(subOrders))
+	closeSubs := make([]wechatcontracts.SubOrderClose, 0, len(subOrders))
 	subOutTradeNos := make([]string, 0, len(subOrders))
 	for _, sub := range subOrders {
 		if sub.SubMchid == "" || sub.OutTradeNo == "" {
 			continue
 		}
-		closeSubs = append(closeSubs, wechat.SubOrderClose{SubMchID: sub.SubMchid, OutTradeNo: sub.OutTradeNo})
+		closeSubs = append(closeSubs, wechatcontracts.SubOrderClose{SubMchID: sub.SubMchid, OutTradeNo: sub.OutTradeNo})
 		subOutTradeNos = append(subOutTradeNos, sub.OutTradeNo)
 	}
 	if len(closeSubs) == 0 {

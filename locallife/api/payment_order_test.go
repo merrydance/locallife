@@ -16,6 +16,7 @@ import (
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/util"
 	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	mockwechat "github.com/merrydance/locallife/wechat/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -137,7 +138,7 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 				ecommerceClient.EXPECT().
 					CreatePartnerJSAPIOrder(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(&wechat.PartnerJSAPIOrderResponse{PrepayID: "wx123"}, payParams, nil)
+					Return(&wechatcontracts.PartnerJSAPIOrderResponse{PrepayID: "wx123"}, payParams, nil)
 
 				store.EXPECT().
 					UpdatePaymentOrderPrepayId(gomock.Any(), gomock.Any()).
@@ -369,7 +370,7 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 				ecommerceClient.EXPECT().
 					CreatePartnerJSAPIOrder(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(&wechat.PartnerJSAPIOrderResponse{PrepayID: "wx123"}, payParams, nil)
+					Return(&wechatcontracts.PartnerJSAPIOrderResponse{PrepayID: "wx123"}, payParams, nil)
 
 				store.EXPECT().
 					UpdatePaymentOrderPrepayId(gomock.Any(), gomock.Any()).
@@ -857,7 +858,7 @@ func TestCreatePaymentOrderAPI_ServiceUnavailableWhenEcommerceClientMissing(t *t
 	var resp APIResponse
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
 	require.Equal(t, CodeServiceUnavail, resp.Code)
-	require.Equal(t, "支付服务暂不可用，请稍后重试", resp.Message)
+	require.Equal(t, "商户支付能力未完成配置，请联系平台处理", resp.Message)
 }
 
 func TestQueryPaymentOrderAPI_ServiceUnavailableWhenEcommerceClientMissing(t *testing.T) {
@@ -878,7 +879,7 @@ func TestQueryPaymentOrderAPI_ServiceUnavailableWhenEcommerceClientMissing(t *te
 	var resp APIResponse
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
 	require.Equal(t, CodeServiceUnavail, resp.Code)
-	require.Equal(t, "支付查询服务暂不可用，请稍后重试", resp.Message)
+	require.Equal(t, "商户支付能力未完成配置，当前无法确认支付状态，请联系平台处理", resp.Message)
 }
 
 func TestQueryPaymentOrderAPI_RemotePendingReturnsWechatQueryAndPayParams(t *testing.T) {
@@ -912,7 +913,7 @@ func TestQueryPaymentOrderAPI_RemotePendingReturnsWechatQueryAndPayParams(t *tes
 		Return(db.MerchantPaymentConfig{MerchantID: 88, SubMchID: "1900000109"}, nil)
 	ecommerceClient.EXPECT().
 		QueryPartnerOrderByOutTradeNo(gomock.Any(), "OC20260415000001", "1900000109").
-		Return(&wechat.PartnerOrderQueryResponse{
+		Return(&wechatcontracts.PartnerOrderQueryResponse{
 			SpAppID:        "wx-service-app",
 			SpMchID:        "1900000001",
 			SubMchID:       "1900000109",
@@ -920,7 +921,7 @@ func TestQueryPaymentOrderAPI_RemotePendingReturnsWechatQueryAndPayParams(t *tes
 			TradeType:      "JSAPI",
 			TradeState:     "NOTPAY",
 			TradeStateDesc: "待支付",
-			Payer:          wechat.PartnerOrderPayerInfo{SpOpenID: "openid-1"},
+			Payer:          wechatcontracts.PartnerOrderPayerInfo{SpOpenID: "openid-1"},
 		}, nil)
 	ecommerceClient.EXPECT().
 		GenerateJSAPIPayParams("prepay-123").
@@ -971,7 +972,7 @@ func TestQueryPaymentOrderAPI_UsesTransactionIDQueryWhenAvailable(t *testing.T) 
 		Return(db.MerchantPaymentConfig{MerchantID: 88, SubMchID: "1900000109"}, nil)
 	ecommerceClient.EXPECT().
 		QueryPartnerOrderByTransactionID(gomock.Any(), "wx-transaction-001", "1900000109").
-		Return(&wechat.PartnerOrderQueryResponse{
+		Return(&wechatcontracts.PartnerOrderQueryResponse{
 			SpAppID:        "wx-service-app",
 			SpMchID:        "1900000001",
 			SubMchID:       "1900000109",
@@ -1026,7 +1027,7 @@ func TestQueryPaymentOrderAPI_OutTradeNoQueryPreservesWechatFields(t *testing.T)
 		Return(db.MerchantPaymentConfig{MerchantID: 88, SubMchID: "1900000109"}, nil)
 	ecommerceClient.EXPECT().
 		QueryPartnerOrderByOutTradeNo(gomock.Any(), "OC20260415000021", "1900000109").
-		Return(&wechat.PartnerOrderQueryResponse{
+		Return(&wechatcontracts.PartnerOrderQueryResponse{
 			SpAppID:        "wx-service-app",
 			SpMchID:        "1900000001",
 			SubAppID:       "wx-sub-app",
@@ -1039,15 +1040,15 @@ func TestQueryPaymentOrderAPI_OutTradeNoQueryPreservesWechatFields(t *testing.T)
 			BankType:       "OTHERS",
 			Attach:         "order=77",
 			SuccessTime:    "2026-04-15T12:00:00+08:00",
-			Payer:          wechat.PartnerOrderPayerInfo{SpOpenID: "openid-1"},
-			Amount: wechat.PartnerOrderQueryAmount{
+			Payer:          wechatcontracts.PartnerOrderPayerInfo{SpOpenID: "openid-1"},
+			Amount: wechatcontracts.PartnerOrderQueryAmount{
 				Total:         5000,
 				PayerTotal:    4800,
 				Currency:      "CNY",
 				PayerCurrency: "CNY",
 			},
-			SceneInfo: &wechat.PartnerOrderQuerySceneInfo{DeviceID: "device-77"},
-			PromotionDetail: []wechat.PartnerPromotionDetail{{
+			SceneInfo: &wechatcontracts.PartnerOrderQuerySceneInfo{DeviceID: "device-77"},
+			PromotionDetail: []wechatcontracts.PartnerPromotionDetail{{
 				CouponID:           "coupon-1",
 				Name:               "满减券",
 				Scope:              "GLOBAL",
@@ -1056,7 +1057,7 @@ func TestQueryPaymentOrderAPI_OutTradeNoQueryPreservesWechatFields(t *testing.T)
 				StockID:            "stock-1",
 				MerchantContribute: 200,
 				Currency:           "CNY",
-				GoodsDetail:        []wechat.PartnerPromotionGoodsDetail{{GoodsID: "dish-1", Quantity: 1, UnitPrice: 5000, DiscountAmount: 200, GoodsRemark: "招牌菜"}},
+				GoodsDetail:        []wechatcontracts.PartnerPromotionGoodsDetail{{GoodsID: "dish-1", Quantity: 1, UnitPrice: 5000, DiscountAmount: 200, GoodsRemark: "招牌菜"}},
 			}},
 		}, nil)
 
@@ -1119,11 +1120,11 @@ func TestQueryPaymentOrderAPI_ContractDriftReturnsClearError(t *testing.T) {
 
 	server.router.ServeHTTP(recorder, request)
 
-	require.Equal(t, http.StatusServiceUnavailable, recorder.Code)
+	require.Equal(t, http.StatusBadGateway, recorder.Code)
 	var resp APIResponse
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
-	require.Equal(t, CodeServiceUnavail, resp.Code)
-	require.Equal(t, "支付状态同步异常，请稍后重试", resp.Message)
+	require.Equal(t, CodeBadGateway, resp.Code)
+	require.Equal(t, "微信支付状态返回异常，请不要重复支付，返回订单页后重新查询", resp.Message)
 }
 
 func TestQueryPaymentOrderAPI_CombinedPaymentReturnsClearError(t *testing.T) {
@@ -1209,7 +1210,7 @@ func TestCreateCombinedPaymentOrderAPI_ServiceUnavailableWhenEcommerceClientMiss
 	var resp APIResponse
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
 	require.Equal(t, CodeServiceUnavail, resp.Code)
-	require.Equal(t, "合单支付服务暂不可用，请稍后重试", resp.Message)
+	require.Equal(t, "合单支付能力未完成配置，请联系平台处理", resp.Message)
 }
 
 func TestCloseCombinedPaymentOrderAPI_ServiceUnavailableWhenEcommerceClientMissing(t *testing.T) {
@@ -1230,7 +1231,7 @@ func TestCloseCombinedPaymentOrderAPI_ServiceUnavailableWhenEcommerceClientMissi
 	var resp APIResponse
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
 	require.Equal(t, CodeServiceUnavail, resp.Code)
-	require.Equal(t, "合单支付关闭服务暂不可用，请稍后重试", resp.Message)
+	require.Equal(t, "合单支付能力未完成配置，当前无法关闭支付单，请联系平台处理", resp.Message)
 }
 
 func TestQueryCombinedPaymentOrderAPI_ServiceUnavailableWhenEcommerceClientMissing(t *testing.T) {
@@ -1251,7 +1252,7 @@ func TestQueryCombinedPaymentOrderAPI_ServiceUnavailableWhenEcommerceClientMissi
 	var resp APIResponse
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
 	require.Equal(t, CodeServiceUnavail, resp.Code)
-	require.Equal(t, "合单支付查询服务暂不可用，请稍后重试", resp.Message)
+	require.Equal(t, "合单支付能力未完成配置，当前无法确认支付状态，请联系平台处理", resp.Message)
 }
 
 func TestQueryCombinedPaymentOrderAPI_ContractDriftReturnsClearError(t *testing.T) {
@@ -1298,11 +1299,11 @@ func TestQueryCombinedPaymentOrderAPI_ContractDriftReturnsClearError(t *testing.
 
 	server.router.ServeHTTP(recorder, request)
 
-	require.Equal(t, http.StatusServiceUnavailable, recorder.Code)
+	require.Equal(t, http.StatusBadGateway, recorder.Code)
 	var resp APIResponse
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
-	require.Equal(t, CodeServiceUnavail, resp.Code)
-	require.Equal(t, "支付状态同步异常，请稍后重试", resp.Message)
+	require.Equal(t, CodeBadGateway, resp.Code)
+	require.Equal(t, "微信支付状态返回异常，请不要重复支付，返回订单页后重新查询", resp.Message)
 }
 
 func TestQueryCombinedPaymentOrderAPI_RemotePaidOmitsPayParams(t *testing.T) {
@@ -1341,16 +1342,16 @@ func TestQueryCombinedPaymentOrderAPI_RemotePaidOmitsPayParams(t *testing.T) {
 	ecommerceClient.EXPECT().
 		QueryCombineOrder(gomock.Any(), "CP20260406000001").
 		Times(1).
-		Return(&wechat.CombineQueryResponse{
+		Return(&wechatcontracts.CombineQueryResponse{
 			CombineOutTradeNo: "CP20260406000001",
-			SubOrders: []wechat.CombineSubOrderResult{{
+			SubOrders: []wechatcontracts.CombineSubOrderResult{{
 				MchID:         "service-mchid-001",
 				SubMchID:      "1900001111",
 				OutTradeNo:    "P202001010000000001",
 				TransactionID: "wx-txn-123",
 				TradeType:     "JSAPI",
 				TradeState:    "SUCCESS",
-				PromotionDetail: []wechat.PartnerPromotionDetail{{
+				PromotionDetail: []wechatcontracts.PartnerPromotionDetail{{
 					CouponID: "coupon-1",
 					Amount:   300,
 					Currency: "CNY",

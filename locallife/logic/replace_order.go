@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 
 	"github.com/rs/zerolog/log"
 )
@@ -276,7 +277,7 @@ func createReplaceOrderEcommercePayment(
 		return db.PaymentOrder{}, fmt.Errorf("create partner payment: %w", err)
 	}
 
-	orderResp, _, err := ecommerceClient.CreatePartnerJSAPIOrder(ctx, &wechat.PartnerJSAPIOrderRequest{
+	orderResp, _, err := ecommerceClient.CreatePartnerJSAPIOrder(ctx, &wechatcontracts.PartnerJSAPIOrderRequest{
 		SubMchID:      txResult.SubMchID,
 		Description:   merchantName,
 		OutTradeNo:    txResult.PaymentOrder.OutTradeNo,

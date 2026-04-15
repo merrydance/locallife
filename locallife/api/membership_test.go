@@ -14,6 +14,7 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	mockwechat "github.com/merrydance/locallife/wechat/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -389,7 +390,7 @@ func TestRechargeMembershipAPI(t *testing.T) {
 				ecommerceClient.EXPECT().
 					CreateCombineOrder(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(&wechat.CombineOrderResponse{PrepayID: "prepay_id_test"}, &wechat.JSAPIPayParams{
+					Return(&wechatcontracts.CombineOrderResponse{PrepayID: "prepay_id_test"}, &wechat.JSAPIPayParams{
 						TimeStamp: "123456",
 						NonceStr:  "random",
 						Package:   "prepay_id=test",

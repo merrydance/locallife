@@ -14,6 +14,7 @@ import (
 	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/websocket"
 	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	"github.com/merrydance/locallife/worker"
 
 	"github.com/gin-gonic/gin"
@@ -166,7 +167,7 @@ func (server *Server) handleDuplicateClaimedNotification(ctx *gin.Context, notif
 	return false
 }
 
-func (server *Server) validateCombineNotifyOwnership(resource *wechat.CombinePaymentNotification) error {
+func (server *Server) validateCombineNotifyOwnership(resource *wechatcontracts.CombinePaymentNotification) error {
 	if server.ecommerceClient == nil {
 		return errors.New("ecommerce client not configured")
 	}
@@ -179,7 +180,7 @@ func (server *Server) validateCombineNotifyOwnership(resource *wechat.CombinePay
 	return nil
 }
 
-func (server *Server) validatePartnerNotifyOwnership(resource *wechat.PartnerPaymentNotificationResource) error {
+func (server *Server) validatePartnerNotifyOwnership(resource *wechatcontracts.PartnerPaymentNotificationResource) error {
 	if server.ecommerceClient == nil {
 		return errors.New("ecommerce client not configured")
 	}
@@ -369,7 +370,7 @@ func (server *Server) syncWithdrawalRecordWithWechat(ctx *gin.Context, record db
 	return record, nil
 }
 
-func (server *Server) handlePartnerPaymentNotification(ctx *gin.Context, notification wechat.PaymentNotification, resource *wechat.PartnerPaymentNotificationResource) {
+func (server *Server) handlePartnerPaymentNotification(ctx *gin.Context, notification wechat.PaymentNotification, resource *wechatcontracts.PartnerPaymentNotificationResource) {
 	if err := server.validatePartnerNotifyOwnership(resource); err != nil {
 		paymentCallbackFailuresTotal.WithLabelValues("ecommerce_payment", "ownership").Inc()
 		log.Error().Err(err).

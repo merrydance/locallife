@@ -20,6 +20,7 @@ import (
 	"github.com/merrydance/locallife/scheduler"
 	"github.com/merrydance/locallife/util"
 	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	mockwechat "github.com/merrydance/locallife/wechat/mock"
 	"github.com/merrydance/locallife/worker"
 	"github.com/stretchr/testify/require"
@@ -371,10 +372,10 @@ func createTakeoutCombinedPaymentFixture(t *testing.T, server *api.Server, store
 	}
 }
 
-func newIntegrationCombineQueryResponse(combineOutTradeNo, outTradeNo, tradeState, transactionID string, amount int64) *wechat.CombineQueryResponse {
-	resp := &wechat.CombineQueryResponse{
+func newIntegrationCombineQueryResponse(combineOutTradeNo, outTradeNo, tradeState, transactionID string, amount int64) *wechatcontracts.CombineQueryResponse {
+	resp := &wechatcontracts.CombineQueryResponse{
 		CombineOutTradeNo: combineOutTradeNo,
-		SubOrders: []wechat.CombineSubOrderResult{{
+		SubOrders: []wechatcontracts.CombineSubOrderResult{{
 			OutTradeNo:     outTradeNo,
 			TransactionID:  transactionID,
 			TradeType:      "JSAPI",
@@ -398,10 +399,10 @@ func newIntegrationCombineQueryResponse(combineOutTradeNo, outTradeNo, tradeStat
 	return resp
 }
 
-func newIntegrationCombinePaymentNotification(combineOutTradeNo, outTradeNo, transactionID string, amount int64) *wechat.CombinePaymentNotification {
-	resp := &wechat.CombinePaymentNotification{
+func newIntegrationCombinePaymentNotification(combineOutTradeNo, outTradeNo, transactionID string, amount int64) *wechatcontracts.CombinePaymentNotification {
+	resp := &wechatcontracts.CombinePaymentNotification{
 		CombineOutTradeNo: combineOutTradeNo,
-		SubOrders: []wechat.CombineSubOrderResult{{
+		SubOrders: []wechatcontracts.CombineSubOrderResult{{
 			OutTradeNo:     outTradeNo,
 			TransactionID:  transactionID,
 			TradeState:     "SUCCESS",
@@ -641,7 +642,7 @@ func TestTakeoutJourneyB1Integration(t *testing.T) {
 	mockEcommerceClient.EXPECT().
 		CreatePartnerJSAPIOrder(gomock.Any(), gomock.Any()).
 		Times(1).
-		Return(&wechat.PartnerJSAPIOrderResponse{PrepayID: "prepay_b1_integration_001"}, &wechat.JSAPIPayParams{
+		Return(&wechatcontracts.PartnerJSAPIOrderResponse{PrepayID: "prepay_b1_integration_001"}, &wechat.JSAPIPayParams{
 			TimeStamp: "1",
 			NonceStr:  "nonce",
 			Package:   "prepay_id=prepay_b1_integration_001",
@@ -927,7 +928,7 @@ func TestTakeoutJourneyB1WebhookIntegration(t *testing.T) {
 	mockEcommerceClient.EXPECT().
 		CreatePartnerJSAPIOrder(gomock.Any(), gomock.Any()).
 		Times(1).
-		Return(&wechat.PartnerJSAPIOrderResponse{PrepayID: "prepay_b1_webhook_001"}, &wechat.JSAPIPayParams{
+		Return(&wechatcontracts.PartnerJSAPIOrderResponse{PrepayID: "prepay_b1_webhook_001"}, &wechat.JSAPIPayParams{
 			TimeStamp: "1",
 			NonceStr:  "nonce",
 			Package:   "prepay_id=prepay_b1_webhook_001",
@@ -1141,7 +1142,7 @@ func TestTakeoutJourneyB0CombinedPaymentIntegration(t *testing.T) {
 	mockEcommerceClient.EXPECT().
 		CreateCombineOrder(gomock.Any(), gomock.Any()).
 		Times(1).
-		Return(&wechat.CombineOrderResponse{PrepayID: "prepay_combined_001"}, &wechat.JSAPIPayParams{
+		Return(&wechatcontracts.CombineOrderResponse{PrepayID: "prepay_combined_001"}, &wechat.JSAPIPayParams{
 			TimeStamp: "1",
 			NonceStr:  "nonce",
 			Package:   "prepay_id=prepay_combined_001",
@@ -1210,7 +1211,7 @@ func TestTakeoutJourneyB0CombinedPaymentQueryRecoveryBeforeCallbackIntegration(t
 	mockEcommerceClient.EXPECT().
 		CreateCombineOrder(gomock.Any(), gomock.Any()).
 		Times(1).
-		Return(&wechat.CombineOrderResponse{PrepayID: "prepay_combined_recovery_001"}, &wechat.JSAPIPayParams{
+		Return(&wechatcontracts.CombineOrderResponse{PrepayID: "prepay_combined_recovery_001"}, &wechat.JSAPIPayParams{
 			TimeStamp: "1",
 			NonceStr:  "nonce",
 			Package:   "prepay_id=prepay_combined_recovery_001",
@@ -1279,7 +1280,7 @@ func TestTakeoutJourneyB0CombinedPaymentDelayedCallbackRecoveryIntegration(t *te
 	mockEcommerceClient.EXPECT().
 		CreateCombineOrder(gomock.Any(), gomock.Any()).
 		Times(1).
-		Return(&wechat.CombineOrderResponse{PrepayID: "prepay_combined_delayed_001"}, &wechat.JSAPIPayParams{
+		Return(&wechatcontracts.CombineOrderResponse{PrepayID: "prepay_combined_delayed_001"}, &wechat.JSAPIPayParams{
 			TimeStamp: "1",
 			NonceStr:  "nonce",
 			Package:   "prepay_id=prepay_combined_delayed_001",
@@ -1691,7 +1692,7 @@ func TestTakeoutJourneyB7MerchantRejectRefundIntegration(t *testing.T) {
 	mockEcommerceClient.EXPECT().
 		CreatePartnerJSAPIOrder(gomock.Any(), gomock.Any()).
 		Times(1).
-		Return(&wechat.PartnerJSAPIOrderResponse{PrepayID: "prepay_b7_integration_001"}, &wechat.JSAPIPayParams{
+		Return(&wechatcontracts.PartnerJSAPIOrderResponse{PrepayID: "prepay_b7_integration_001"}, &wechat.JSAPIPayParams{
 			TimeStamp: "1",
 			NonceStr:  "nonce",
 			Package:   "prepay_id=prepay_b7_integration_001",
@@ -2508,7 +2509,7 @@ func TestReservationJourneyC1Integration(t *testing.T) {
 	mockEcommerceClient.EXPECT().
 		CreatePartnerJSAPIOrder(gomock.Any(), gomock.Any()).
 		Times(1).
-		Return(&wechat.PartnerJSAPIOrderResponse{PrepayID: "prepay_reservation_c1_001"}, &wechat.JSAPIPayParams{
+		Return(&wechatcontracts.PartnerJSAPIOrderResponse{PrepayID: "prepay_reservation_c1_001"}, &wechat.JSAPIPayParams{
 			TimeStamp: "1",
 			NonceStr:  "nonce",
 			Package:   "prepay_id=prepay_reservation_c1_001",
@@ -2562,12 +2563,12 @@ func TestReservationJourneyC1Integration(t *testing.T) {
 	mockEcommerceClient.EXPECT().
 		DecryptPartnerPaymentNotification(gomock.Any()).
 		Times(1).
-		Return(&wechat.PartnerPaymentNotificationResource{
+		Return(&wechatcontracts.PartnerPaymentNotificationResource{
 			SubMchID:      "sub_mch_reservation_c1",
 			OutTradeNo:    po.OutTradeNo,
 			TransactionID: "integration_tx_reservation_001",
 			TradeState:    "SUCCESS",
-			Amount: wechat.PartnerOrderQueryAmount{
+			Amount: wechatcontracts.PartnerOrderQueryAmount{
 				Total:         po.Amount,
 				PayerTotal:    po.Amount,
 				Currency:      "CNY",
@@ -2865,7 +2866,7 @@ func TestReservationJourneyCNoShowIntegration(t *testing.T) {
 	mockEcommerceClient.EXPECT().
 		CreatePartnerJSAPIOrder(gomock.Any(), gomock.Any()).
 		Times(1).
-		Return(&wechat.PartnerJSAPIOrderResponse{PrepayID: "prepay_reservation_noshow_001"}, &wechat.JSAPIPayParams{
+		Return(&wechatcontracts.PartnerJSAPIOrderResponse{PrepayID: "prepay_reservation_noshow_001"}, &wechat.JSAPIPayParams{
 			TimeStamp: "1",
 			NonceStr:  "nonce",
 			Package:   "prepay_id=prepay_reservation_noshow_001",
@@ -2919,12 +2920,12 @@ func TestReservationJourneyCNoShowIntegration(t *testing.T) {
 	mockEcommerceClient.EXPECT().
 		DecryptPartnerPaymentNotification(gomock.Any()).
 		Times(1).
-		Return(&wechat.PartnerPaymentNotificationResource{
+		Return(&wechatcontracts.PartnerPaymentNotificationResource{
 			SubMchID:      "sub_mch_reservation_noshow",
 			OutTradeNo:    po.OutTradeNo,
 			TransactionID: "integration_tx_reservation_noshow_001",
 			TradeState:    "SUCCESS",
-			Amount: wechat.PartnerOrderQueryAmount{
+			Amount: wechatcontracts.PartnerOrderQueryAmount{
 				Total:         po.Amount,
 				PayerTotal:    po.Amount,
 				Currency:      "CNY",
@@ -3009,7 +3010,7 @@ func TestReservationJourneyCCancelRefundIntegration(t *testing.T) {
 	mockEcommerceClient.EXPECT().
 		CreatePartnerJSAPIOrder(gomock.Any(), gomock.Any()).
 		Times(1).
-		Return(&wechat.PartnerJSAPIOrderResponse{PrepayID: "prepay_reservation_cancel_001"}, &wechat.JSAPIPayParams{
+		Return(&wechatcontracts.PartnerJSAPIOrderResponse{PrepayID: "prepay_reservation_cancel_001"}, &wechat.JSAPIPayParams{
 			TimeStamp: "1",
 			NonceStr:  "nonce",
 			Package:   "prepay_id=prepay_reservation_cancel_001",
@@ -3140,7 +3141,7 @@ func TestReservationJourneyCCancelAfterDeadlineIntegration(t *testing.T) {
 	mockEcommerceClient.EXPECT().
 		CreatePartnerJSAPIOrder(gomock.Any(), gomock.Any()).
 		Times(1).
-		Return(&wechat.PartnerJSAPIOrderResponse{PrepayID: "prepay_reservation_cancel_deadline_001"}, &wechat.JSAPIPayParams{
+		Return(&wechatcontracts.PartnerJSAPIOrderResponse{PrepayID: "prepay_reservation_cancel_deadline_001"}, &wechat.JSAPIPayParams{
 			TimeStamp: "1",
 			NonceStr:  "nonce",
 			Package:   "prepay_id=prepay_reservation_cancel_deadline_001",
@@ -3254,7 +3255,7 @@ func TestReservationJourneyCRefundNotifyIntegration(t *testing.T) {
 	mockEcommerceClient.EXPECT().
 		CreatePartnerJSAPIOrder(gomock.Any(), gomock.Any()).
 		Times(1).
-		Return(&wechat.PartnerJSAPIOrderResponse{PrepayID: "prepay_reservation_refund_notify_001"}, &wechat.JSAPIPayParams{
+		Return(&wechatcontracts.PartnerJSAPIOrderResponse{PrepayID: "prepay_reservation_refund_notify_001"}, &wechat.JSAPIPayParams{
 			TimeStamp: "1",
 			NonceStr:  "nonce",
 			Package:   "prepay_id=prepay_reservation_refund_notify_001",
