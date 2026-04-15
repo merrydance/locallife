@@ -78,7 +78,7 @@
 
 业务域层模板：
 
-- `backend-payment-runbook.prompt.md`
+- `backend-payment-domain.prompt.md`
 - `backend-sql-review.prompt.md`
 - `backend-integration-test.prompt.md`
 - `backend-task-card-implementation.prompt.md`

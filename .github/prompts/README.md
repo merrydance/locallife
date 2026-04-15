@@ -22,7 +22,7 @@ The files listed here are the active reusable prompt set for this workspace. Pro
 - `backend-review-closure.prompt.md`
 - `backend-sql-review.prompt.md`
 - `backend-integration-test.prompt.md`
-- `backend-payment-runbook.prompt.md`
+- `backend-payment-domain.prompt.md`
 - `backend-takeover.prompt.md`
 - `business-flow-mermaid.prompt.md`
 - `general-task-loop.prompt.md`
@@ -41,7 +41,7 @@ Treat this directory as a logical layered system even though files are stored fl
 
 - Protocol layer: `general-implementation.prompt.md`, `general-review.prompt.md`, `general-incident-followup.prompt.md`, `general-task-loop.prompt.md`
 - Stack layer: `backend-implementation.prompt.md`, `backend-review-closure.prompt.md`, `backend-bugfix.prompt.md`, `backend-takeover.prompt.md`, `web-implementation.prompt.md`, `web-review.prompt.md`, `weapp-implementation.prompt.md`, `weapp-review.prompt.md`
-- Domain / workflow layer: `backend-payment-runbook.prompt.md`, `backend-sql-review.prompt.md`, `backend-integration-test.prompt.md`, `backend-task-card-implementation.prompt.md`, `backend-phase-batch-implementation.prompt.md`, `business-flow-mermaid.prompt.md`
+- Domain / workflow layer: `backend-payment-domain.prompt.md`, `backend-sql-review.prompt.md`, `backend-integration-test.prompt.md`, `backend-task-card-implementation.prompt.md`, `backend-phase-batch-implementation.prompt.md`, `business-flow-mermaid.prompt.md`
 
 Layering rules:
 
@@ -58,7 +58,7 @@ See `.github/standards/engineering/AI_PROMPT_GOVERNANCE.md` for the authoritativ
 Use this order to avoid prompt collisions:
 
 1. If the request is diagramming only, use `business-flow-mermaid.prompt.md`.
-2. If the request is backend payment-specific or belongs to WeChat platform-ecommerce flows such as applyment, settlement account, withdraw, profit sharing, refund, complaint, or payment callbacks, use `backend-payment-runbook.prompt.md`.
+2. If the request is backend payment-specific or belongs to WeChat platform-ecommerce flows such as applyment, settlement account, withdraw, profit sharing, refund, complaint, or payment callbacks, use `backend-payment-domain.prompt.md`.
 3. If the request is backend takeover or onboarding focused, use `backend-takeover.prompt.md`.
 4. If the request is backend production bugfix or regression focused, use `backend-bugfix.prompt.md`.
 5. If the request is backend SQL or migration review-focused, use `backend-sql-review.prompt.md`.
@@ -78,7 +78,7 @@ Use this order to avoid prompt collisions:
 - `backend-implementation.prompt.md`: normal backend feature work outside payment-specialized, takeover, root-cause bugfix, or task-card-specialized flows.
 - `backend-takeover.prompt.md`: backend onboarding or new-owner context-building requests before implementation starts.
 - `backend-sql-review.prompt.md`: backend SQL, migration, sqlc propagation, index, or persistence-focused review requests.
-- `backend-payment-runbook.prompt.md`: WeChat payment or platform-ecommerce work, including applyment, settlement account, closeout, callback, refund, profit sharing, withdraw, complaint, runbook, or audit-ledger paths.
+- `backend-payment-domain.prompt.md`: WeChat payment or platform-ecommerce work, including applyment, settlement account, closeout, callback, refund, profit sharing, withdraw, complaint, or audit-ledger paths.
 - `weapp-implementation.prompt.md`: all Mini Program implementation requests, including diagnosis-first page方案, payment-adjacent flows, and normal page or component implementation.
 - `weapp-review.prompt.md`: all Mini Program review requests, including overall upgrade audits and payment-flow review.
 
@@ -86,7 +86,7 @@ Cross-cutting governance rule:
 
 - When using `general-*` prompts for high-risk or cross-surface work, include a risk classification guess, validation scope, and expected residual-risk or release-readiness output instead of treating the task as routine.
 - Implementation and review prompts should reuse the shared push / prohibit / review matrix from `.github/standards/engineering/AI_PROMPT_GOVERNANCE.md` instead of drifting into separate local rule sets.
-- Payment-domain prompts should mirror the same strong-constraint chain in `.github/standards/domains/wechat-payment/WECHAT_PAYMENT_CAPABILITY_GROUP_CONSTRAINT_CHAIN_2026-04-14.md`: official docs first, then capability-group propagation matrix, then caller propagation and focused validation.
+- Payment-domain prompts should mirror `.github/standards/domains/wechat-payment/README.md`: official docs first, then capability-group identification, then caller propagation and focused validation.
 
 ## Routing Test Cases
 
@@ -105,10 +105,10 @@ Expected target: `backend-takeover.prompt.md`
 Expected target: `backend-review-closure.prompt.md`
 
 5. "给微信支付回调和退款链路做一次实现和审查请求模板。"
-Expected target: `backend-payment-runbook.prompt.md`
+Expected target: `backend-payment-domain.prompt.md`
 
 6. "补一下平台收付通商户进件申请单查询和签约状态处理，顺便检查字段和错误码是不是跟官方文档完全一致。"
-Expected target: `backend-payment-runbook.prompt.md`
+Expected target: `backend-payment-domain.prompt.md`
 
 7. "审查这个 db/query 和 migration 变更，重点看 sqlc 传播、索引遗漏和事务风险。"
 Expected target: `backend-sql-review.prompt.md`

@@ -42,6 +42,6 @@ Use the prompt templates in `../.github/prompts/` when the task matches. Legacy 
 ## Existing Project Signals
 
 - `main.go` contains startup wiring, production safeguards, scheduler registration, and worker boot order.
-- `docs/production-robustness-review-report.md` is the baseline risk register for production paths.
-- `docs/order-money-chains-review.md` is the quickest route to understanding order and money flows.
+- `../.github/standards/backend/BACKEND_RISK_MAP.md` is the durable risk register for production backend paths.
+- `../.github/standards/backend/RUNTIME_ARCHITECTURE.md` plus `../.github/standards/domains/wechat-payment/README.md` are the preferred entrypoints for current execution paths and payment-domain capability routing.
 - There is existing user work in the tree; never revert unrelated changes.

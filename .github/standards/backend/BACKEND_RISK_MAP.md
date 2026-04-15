@@ -16,8 +16,8 @@
 - `.github/standards/backend/AGENT.md`
 - `.github/standards/backend/SYSTEM_PROMPT.md`
 - `.github/standards/engineering/HIGH_RISK_CHANGE_CHECKLISTS.md`
-- `locallife/docs/production-robustness-review-report.md`
-- `locallife/docs/order-money-chains-review.md`
+- `.github/standards/backend/RUNTIME_ARCHITECTURE.md`
+- `.github/standards/domains/wechat-payment/README.md`
 
 ## 2. Highest-Risk Areas
 

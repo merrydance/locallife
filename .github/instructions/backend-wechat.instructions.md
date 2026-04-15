@@ -8,19 +8,13 @@ Apply these rules for files under `locallife/wechat/`.
 
 ## Read First
 
-- `.github/standards/domains/wechat-payment/WECHAT_PAYMENT_CAPABILITY_GROUP_CONSTRAINT_CHAIN_2026-04-14.md`
-- `.github/standards/domains/wechat-payment/WECHAT_PAYMENT_OFFICIAL_API_BASELINE_2026-04-14.md`
 - `.github/standards/domains/wechat-payment/README.md`
 
-Use `.github/standards/domains/wechat-payment/README.md` as the payment domain index. Use `.github/standards/domains/wechat-payment/WECHAT_PAYMENT_CAPABILITY_GROUP_CONSTRAINT_CHAIN_2026-04-14.md` as the default strong-constraint-chain and capability-group governance baseline. Use `.github/standards/domains/wechat-payment/WECHAT_PAYMENT_OFFICIAL_API_BASELINE_2026-04-14.md` as the default official-document routing and contract-fidelity baseline before implementing or reviewing any WeChat payment or platform-ecommerce API. Open the operations runbook for payment operations and recovery work, and open the complaint or subsidy spec only when the active change crosses backend and client behavior in those flows.
+Use `.github/standards/domains/wechat-payment/README.md` as the single payment-domain source of truth inside the repository. Identify the active capability group, current payment split, official document set, and implementation rules from that README before implementing or reviewing any WeChat payment or platform-ecommerce API.
 
-If the change touches applyment creation, applyment status query, sign-state handling, account validation, settlement-account follow-up, or the `UploadImage` path inside the applyment group, first read `.github/standards/domains/wechat-payment/WECHAT_PAYMENT_APPLYMENT_CAPABILITY_GROUP_PROPAGATION_MATRIX_2026-04-14.md`, then read `.github/standards/domains/wechat-payment/WECHAT_PAYMENT_APPLYMENT_REVIEW_CHECKLIST_2026-04-14.md`.
+If the change touches applyment creation, applyment status query, sign-state handling, account validation, settlement-account follow-up, or the `UploadImage` path inside the applyment group, first read the applyment section in `.github/standards/domains/wechat-payment/README.md`, then verify the exact official pages before changing code.
 
-If the change touches `/v3/merchant/media/upload` or the `UploadImage` path, also read `.github/standards/domains/wechat-payment/WECHAT_PAYMENT_MERCHANT_MEDIA_UPLOAD_CONTRACT_2026-04-13.md`.
-
-## Historical Rollout References
-
-- Consult the `historical/` execution plan referenced by `.github/standards/domains/wechat-payment/README.md` only when a task changes the rollout baseline, stage ownership, or historical migration assumptions.
+If the change touches `/v3/merchant/media/upload` or the `UploadImage` path, re-check the applyment group links in `.github/standards/domains/wechat-payment/README.md` and then verify the live official upload contract.
 
 ## Role Of This Layer
 
@@ -32,8 +26,8 @@ If the change touches `/v3/merchant/media/upload` or the `UploadImage` path, als
 - Preserve explicit client and interface boundaries so callers depend on stable integration interfaces instead of concrete implementation details.
 - Keep request signing, transport details, and provider-specific error handling inside this integration boundary.
 - Do not implement WeChat interfaces from memory. First confirm the official API purpose, request and response structure, required and conditional-required fields, field types, enums, status values, and error codes against the active official docs baseline.
-- Treat payment-domain work as a capability-group change, not a single-endpoint patch. Before editing code, identify the active capability group and verify whether a propagation matrix already exists for its caller, persistence, callback, worker, scheduler, and frontend consumers.
-- If the active capability group is applyment, treat `.github/standards/domains/wechat-payment/WECHAT_PAYMENT_APPLYMENT_CAPABILITY_GROUP_PROPAGATION_MATRIX_2026-04-14.md` as the default repo truth for current caller and state propagation. Do not silently reintroduce operator applyment, full-field frontend collection, or frontend-authored `store_qr_code` assumptions.
+- Treat payment-domain work as a capability-group change, not a single-endpoint patch. Before editing code, identify the active capability group from `.github/standards/domains/wechat-payment/README.md` and verify its caller, persistence, callback, worker, scheduler, and frontend consumers.
+- If the active capability group is applyment, do not silently reintroduce operator applyment, full-field frontend collection, or frontend-authored `store_qr_code` assumptions.
 - Reuse existing payment, complaint, subsidy, and shipping client patterns instead of inventing a parallel client style for one endpoint.
 - Keep business status transitions, ledger updates, and domain decisions outside this package unless they are strictly required to shape an external request or response.
 - For `/v3/merchant/media/upload`, keep service-provider signing on `spMchID`, reject empty or fake image payloads locally, and preserve the current 2MB local limit unless the active domain standard is explicitly updated.
@@ -57,6 +51,5 @@ If the change touches `/v3/merchant/media/upload` or the `UploadImage` path, als
 ## Validation Defaults
 
 - Prefer focused unit tests for client, payment, callback, and error-mapping behavior.
-- For async or grouped platform-ecommerce changes, do not stop at client tests; also verify the active capability group has caller-propagation coverage or explicitly record that the propagation matrix is still missing.
-- If a change affects payment runbooks, service-provider config, or callbacks, update the linked domain standards alongside code.
-- If a payment task touches execution plans or rollout-only docs, report whether those documents are still active or should move to historical/archive status.
+- For async or grouped platform-ecommerce changes, do not stop at client tests; also verify the active capability group has caller-propagation coverage in code and tests, and explicitly record any still-unverified propagation path.
+- If a change affects payment-domain guidance, service-provider config, or callbacks, update the linked domain standards alongside code.

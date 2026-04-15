@@ -21,7 +21,7 @@
 优先参考：
 
 - `.github/standards/domains/wechat-payment/README.md`
-- `.github/standards/domains/wechat-payment/WECHAT_PAYMENT_OPERATIONS_RUNBOOK_2026-03-24.md`
+- `.github/standards/domains/wechat-payment/README.md`
 - `/memories/repo/payment-create-concurrency.md`
 
 ### 2.1 信任边界与输入
@@ -52,7 +52,7 @@
 ### 2.5 运行与发布
 
 - 监控是否能看见回调失败、重试耗尽、对账异常、补偿失败。
-- 是否需要同步 payment runbook 或 domain docs。
+- 是否需要同步 payment domain README 或相关 domain docs。
 - 回滚是否优先配置、代码、前端版本，而不是直接回滚 schema。
 
 ### 2.6 最低验证
@@ -198,7 +198,7 @@
 
 优先参考：
 
-- `.github/standards/domains/wechat-payment/WECHAT_PAYMENT_OPERATIONS_RUNBOOK_2026-03-24.md`
+- `.github/standards/domains/wechat-payment/README.md`
 - `/memories/repo/payment-create-concurrency.md`
 - `/memories/repo/profit-sharing-recovery-closure.md`
 
@@ -241,7 +241,7 @@
 
 优先参考：
 
-- `.github/standards/domains/wechat-payment/WECHAT_PAYMENT_OPERATIONS_RUNBOOK_2026-03-24.md`
+- `.github/standards/domains/wechat-payment/README.md`
 - `/memories/repo/claim-refund-outbox.md`
 - `/memories/repo/profit-sharing-recovery-closure.md`
 
@@ -284,9 +284,9 @@
 
 优先参考：
 
-- `locallife/docs/order-money-chains-review.md`
-- `locallife/docs/production-robustness-review-report.md`
 - `.github/standards/backend/BACKEND_RISK_MAP.md`
+- `.github/standards/backend/RUNTIME_ARCHITECTURE.md`
+- `.github/standards/domains/wechat-payment/README.md`
 
 ### 8.1 状态机与前置条件
 
