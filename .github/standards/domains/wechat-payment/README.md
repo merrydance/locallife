@@ -26,6 +26,7 @@
 - 先抽象微信支付客户端，明确区分直连支付客户端与平台收付通客户端。
 - 按能力组组织支付文档，而不是按零散接口组织。
 - 每个能力组中的官方文档，都是该能力组请求结构、响应结构、条件必填、状态、枚举、错误码的唯一真值来源。
+- 进件只允许个体工商户和企业，这是业务设计，不是错误。
 - 代码实现时，要把能力组中的请求结构、响应结构、错误码分别映射到对应包中。
 - 映射完成后，项目内所有后续调用都只能依赖这些包中的结构与错误码定义，不能再从 handler、logic、worker 或前端随意重写一套。
 - 若官方文档变更，应优先更新对应 capability group 的结构包和错误码包，再更新调用链。
@@ -65,12 +66,26 @@
 ### 4.1 平台收付通产品入口
 
 - 平台收付通产品介绍：https://pay.weixin.qq.com/doc/v3/partner/4012086891.md
+- API V3概述：https://pay.weixin.qq.com/doc/v3/partner/4012081673.md
+- 如何签名:
+  如何构造接口请求签名-请求参数里带Path参数（路径参数），如何计算签名:https://pay.weixin.qq.com/doc/v3/partner/4012365862.md
+  如何构造接口请求签名-请求参数里带Body参数(包体参数），如何计算签名:https://pay.weixin.qq.com/doc/v3/partner/4012365864.md
+  如何构造接口请求签名-请求参数里有Query（查询参数），如何计算签名:https://pay.weixin.qq.com/doc/v3/partner/4012365865.md
+  如何构造接口请求签名-图片上传接口，如何计算签名:https://pay.weixin.qq.com/doc/v3/partner/4012365863.md
+- 如何构造调起支付签名-小程序调起支付签名:https://pay.weixin.qq.com/doc/v3/partner/4012365869.md 
+- 如何验签-如何使用微信支付公钥验签:https://pay.weixin.qq.com/doc/v3/partner/4013059017.md
+- 如何使用微信支付公钥加密敏感字段:https://pay.weixin.qq.com/doc/v3/partner/4013059044.md
+- 如何解密回调报文和平台证书:https://pay.weixin.qq.com/doc/v3/partner/4012082320.md
+- 开户银行全称对照表:https://pay.weixin.qq.com/doc/v3/partner/4012082812.md
+- 开户银行对照表:https://pay.weixin.qq.com/doc/v3/partner/4012082813.md
+- 银行类型对照表:https://pay.weixin.qq.com/doc/v3/partner/4012082814.md
+- 省市区编号对照表:https://pay.weixin.qq.com/doc/v3/partner/4012082815.md
 
 ### 4.2 商户进件组
 
 - 商户进件-开发指引：https://pay.weixin.qq.com/doc/v3/partner/4012087137.md
 - 商户进件-常见问题：https://pay.weixin.qq.com/doc/v3/partner/4012525423.md
-- 商户进件-提交申请单：https://pay.weixin.qq.com/doc/v3/partner/4012713017
+- 商户进件-提交申请单：https://pay.weixin.qq.com/doc/v3/partner/4012713017.md
 - 商户进件-通过业务申请编号查询申请状态：https://pay.weixin.qq.com/doc/v3/partner/4012691376.md
 - 商户进件-通过申请单ID查询申请状态：https://pay.weixin.qq.com/doc/v3/partner/4012691469.md
 - 商户进件-修改结算账户：https://pay.weixin.qq.com/doc/v3/partner/4012761138.md

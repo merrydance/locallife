@@ -1,3 +1,7 @@
+# Local-only Mini Program demo sandboxes
+weapp/.demo/
+weapp/demo-lab/
+
 # ==========================================
 # LocalLife Monorepo .gitignore
 # ==========================================
