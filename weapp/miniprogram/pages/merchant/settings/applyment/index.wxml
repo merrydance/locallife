@@ -14,7 +14,7 @@
 
   <view wx:elif="{{accessErrorMessage}}" class="state-block">
     <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
-    <t-button theme="primary" shape="round" bind:tap="onRetryAccess">重新校验</t-button>
+    <t-button theme="primary" bind:tap="onRetryAccess">重新校验</t-button>
   </view>
 
   <view wx:elif="{{initialLoading}}" class="state-block">
@@ -23,43 +23,92 @@
 
   <view wx:elif="{{initialError}}" class="state-block">
     <t-empty description="{{initialErrorMessage || '进件状态加载失败，请重试'}}" />
-    <t-button theme="primary" shape="round" bind:tap="onRetry">重新加载</t-button>
+    <t-button theme="primary" bind:tap="onRetry">重新加载</t-button>
   </view>
 
   <view wx:else class="page-content">
-    <t-notice-bar
-      wx:if="{{refreshErrorMessage}}"
-      visible="{{true}}"
-      theme="warning"
-      content="{{refreshErrorMessage}}"
-      prefixIcon="error-circle"
-      t-class="page-notice"
-    />
-
     <view class="section-panel">
-      <view class="section-top">
-        <text class="section-title">当前进件状态</text>
+      <view class="section-top section-top--inline">
+        <view>
+          <text class="section-title">当前开户状态</text>
+          <text class="section-subtitle">{{applymentView.summaryText}}</text>
+        </view>
+        <t-tag theme="{{applymentView.tagTheme}}" variant="light">{{applymentView.tagText}}</t-tag>
       </view>
 
+      <t-steps current="{{applymentView.flowCurrent}}" theme="dot" readonly>
+        <t-step-item
+          wx:for="{{applymentView.flowSteps}}"
+          wx:key="key"
+          title="{{item.title}}"
+        />
+      </t-steps>
+
+      <view class="section-hint">下一步：{{applymentView.guideDescription}}</view>
+
       <t-cell-group theme="card">
-        <t-cell title="当前状态">
-          <view slot="note">
-            <t-tag theme="{{applymentView.tagTheme}}" variant="dark">{{applymentView.tagText}}</t-tag>
-          </view>
-        </t-cell>
-        <t-cell wx:if="{{applymentView.statusDesc}}" title="状态说明" note="{{applymentView.statusDesc}}" />
+        <t-cell title="当前阶段" note="{{applymentView.guideTitle}}" />
+        <t-cell title="状态说明" note="{{applymentView.statusDesc}}" />
         <t-cell wx:if="{{applymentView.signStateText}}" title="签约状态" note="{{applymentView.signStateText}}" />
         <t-cell wx:if="{{applymentView.subMchId !== '-'}}" title="子商户号" note="{{applymentView.subMchId}}" />
         <t-cell wx:if="{{applymentView.showRejectReason}}" title="拒绝原因" note="{{applymentView.rejectReason}}" />
       </t-cell-group>
+    </view>
 
-      <t-cell-group wx:if="{{applymentView.hasPendingActions && !showBindForm}}" theme="card">
-        <t-cell wx:if="{{applymentView.needsAccountValidation}}" title="待处理事项" note="请先完成账户验证后再刷新状态" />
-        <t-cell wx:if="{{applymentView.needsConfirmation}}" title="待确认" note="请按微信支付指引完成确认" />
-        <t-cell wx:if="{{applymentView.needsLegalValidation}}" title="法人扫码验证" note="可优先使用法人微信扫码完成验证" />
-      </t-cell-group>
+    <view class="section-panel">
+      <view class="section-top">
+        <text class="section-title">当前待办</text>
+      </view>
 
-      <t-cell-group wx:if="{{applymentView.accountValidation && !showBindForm}}" theme="card">
+      <view class="action-stack">
+        <t-button
+          wx:if="{{applymentView.canSubmitOpenInfo}}"
+          theme="primary"
+          size="medium"
+          shape="round"
+          bind:tap="onOpenSubmitPage"
+        >{{applymentView.primaryActionText || applymentView.submitActionLabel}}</t-button>
+        <t-button
+          wx:if="{{applymentView.isOpened}}"
+          theme="primary"
+          size="medium"
+          shape="round"
+          bind:tap="onGoSettlementAccount"
+        >查看结算账户</t-button>
+        <t-button
+          wx:if="{{applymentView.needsSign && applymentView.signURL}}"
+          theme="primary"
+          variant="outline"
+          size="medium"
+          shape="round"
+          bind:tap="onShowSignQRCode"
+        >展示签约二维码</t-button>
+        <t-button
+          wx:if="{{applymentView.needsLegalValidation && applymentView.legalValidationURL}}"
+          theme="primary"
+          variant="outline"
+          size="medium"
+          shape="round"
+          bind:tap="onShowLegalValidationQRCode"
+        >展示法人验证二维码</t-button>
+        <t-button
+          wx:if="{{applymentView.hasPendingActions || (!applymentView.isOpened && !applymentView.canSubmitOpenInfo)}}"
+          theme="default"
+          size="medium"
+          shape="round"
+          loading="{{refreshingStatus}}"
+          bind:tap="onRefreshStatus"
+        >刷新开户状态</t-button>
+      </view>
+    </view>
+
+    <view wx:if="{{applymentView.accountValidation}}" class="section-panel">
+      <view class="section-top">
+        <text class="section-title">账户验证信息</text>
+        <text class="section-subtitle">按微信支付提供的信息汇款，完成后回到此页刷新状态</text>
+      </view>
+
+      <t-cell-group theme="card">
         <t-cell title="汇款金额" note="{{applymentView.accountValidation.payAmountText}}" />
         <t-cell title="付款户名" note="{{applymentView.accountValidation.accountName}}" />
         <t-cell title="付款卡号" note="{{applymentView.accountValidation.accountNo}}" />
@@ -71,67 +120,45 @@
         <t-cell title="汇款截止时间" note="{{applymentView.accountValidation.deadline}}" />
       </t-cell-group>
 
-      <view wx:if="{{!showBindForm}}" class="action-row">
+      <view class="action-row action-row--compact">
         <t-button
-          wx:if="{{applymentView.canSubmitOpenInfo}}"
-          theme="primary"
-          shape="round"
-          bind:tap="onShowBindForm"
-        >{{applymentView.submitActionLabel}}</t-button>
-        <t-button
-          wx:if="{{applymentView.needsSign && applymentView.signURL}}"
-          theme="primary"
-          variant="outline"
-          shape="round"
-          bind:tap="onCopySignUrl"
-        >复制签约链接</t-button>
-        <t-button
-          wx:if="{{applymentView.needsLegalValidation && applymentView.legalValidationURL}}"
-          theme="primary"
-          variant="outline"
-          shape="round"
-          bind:tap="onCopyLegalValidationUrl"
-        >复制法人验证链接</t-button>
-        <t-button
-          wx:if="{{applymentView.accountValidation && applymentView.accountValidation.destinationAccountNumber !== '-'}}"
+          wx:if="{{applymentView.accountValidation.destinationAccountNumber !== '-'}}"
           theme="default"
           variant="outline"
           shape="round"
           bind:tap="onCopyValidationAccountNumber"
         >复制收款卡号</t-button>
         <t-button
-          wx:if="{{applymentView.accountValidation && applymentView.accountValidation.remark !== '-'}}"
+          wx:if="{{applymentView.accountValidation.remark !== '-'}}"
           theme="default"
           variant="outline"
           shape="round"
           bind:tap="onCopyValidationRemark"
         >复制汇款备注</t-button>
-        <t-button
-          wx:if="{{applymentView.hasPendingActions || (!applymentView.isOpened && !applymentView.canSubmitOpenInfo)}}"
-          theme="default"
-          shape="round"
-          loading="{{refreshingStatus}}"
-          bind:tap="onRefreshStatus"
-        >刷新状态</t-button>
       </view>
     </view>
 
-    <view wx:if="{{showBindForm}}" class="section-panel form-panel">
-      <view class="section-top">
-        <text class="section-title">填写结算账户</text>
+    <t-popup wx:if="{{qrCodeDialog.visible}}" visible="{{qrCodeDialog.visible}}" placement="bottom" bind:visible-change="onCloseQRCodeDialog">
+      <view class="popup-panel qr-popup">
+        <view class="popup-copy">
+          <text class="popup-title">{{qrCodeDialog.title}}</text>
+          <text class="popup-hint">{{qrCodeDialog.description}}</text>
+        </view>
+
+        <view class="qr-card">
+          <t-qrcode value="{{qrCodeDialog.value}}" size="220" level="M" borderless="{{true}}" />
+          <text class="qr-popup-tip">{{qrCodeDialog.hint}}</text>
+        </view>
+
+        <view class="popup-actions">
+          <t-button theme="default" bind:tap="onCloseQRCodeDialog">关闭</t-button>
+          <t-button theme="primary" bind:tap="onSaveQRCodeToAlbum" loading="{{qrCodeDialog.saving}}">保存到相册</t-button>
+        </view>
       </view>
-      <applyment-bank-form
-        apiBasePath="/v1/merchant/applyment"
-        uploadBusinessType="merchant"
-        initialDraft="{{bindBankDraft}}"
-        defaultAccountType="ACCOUNT_TYPE_BUSINESS"
-        showContactFields="{{true}}"
-        submitLabel="提交银行账户信息"
-        submitting="{{submittingBind}}"
-        bind:submit="onSubmitBindBank"
-        bind:cancel="onHideBindForm"
-        bind:draftchange="onBindDraftChange"
-      />
+    </t-popup>
+
+    <view class="qr-poster-canvas-shell" aria-hidden="true">
+      <canvas id="applymentQrcodePosterCanvas" type="2d" class="qr-poster-canvas" disable-scroll="true" />
     </view>
   </view>
 </view>

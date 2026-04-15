@@ -2,7 +2,7 @@ import { request } from '../utils/request'
 
 export type ApplymentAccountType = 'ACCOUNT_TYPE_BUSINESS' | 'ACCOUNT_TYPE_PRIVATE'
 export type ApplymentContactType = 'LEGAL' | 'SUPER'
-export type ApplymentContactDocType = 'IDENTIFICATION_TYPE_IDCARD'
+export type ApplymentContactDocType = 'IDENTIFICATION_TYPE_MAINLAND_IDCARD'
 
 export interface ApplymentBankOption {
   bank_alias: string
@@ -72,7 +72,7 @@ export interface ApplymentBindBankPayload {
   bank_branch_id?: string
   bank_name?: string
   account_number: string
-  account_name: string
+  account_name?: string
   contact_type?: ApplymentContactType
   contact_name?: string
   contact_id_doc_type?: ApplymentContactDocType

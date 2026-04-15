@@ -58,10 +58,9 @@
 }
 
 .section-panel {
-  background: var(--td-bg-color-container);
-  box-shadow: var(--shadow-sm);
-  padding: var(--spacer-md);
-  border-radius: var(--radius-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-sm);
 }
 
 .section-title,
@@ -69,6 +68,14 @@
 .summary-value,
 .record-amount {
   color: var(--td-text-color-primary);
+}
+
+.section-caption {
+  display: block;
+  margin-top: 8rpx;
+  font-size: var(--font-size-xs);
+  line-height: 1.7;
+  color: var(--td-text-color-secondary);
 }
 
 .balance-grid {
@@ -105,6 +112,20 @@
   justify-content: space-between;
   gap: var(--spacer-sm);
   margin-bottom: var(--spacer-sm);
+}
+
+.readiness-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-md);
+  background: var(--td-bg-color-container);
+  box-shadow: var(--shadow-sm);
+  padding: var(--spacer-md);
+  border-radius: var(--radius-lg);
+}
+
+.readiness-panel__top {
+  align-items: flex-start;
 }
 
 .section-title {

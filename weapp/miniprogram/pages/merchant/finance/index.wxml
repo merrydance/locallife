@@ -14,7 +14,7 @@
 
   <view wx:elif="{{accessErrorMessage}}" class="state-block">
     <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
-    <t-button theme="primary" size="small" shape="round" bind:tap="onRetryAccess">重新校验</t-button>
+    <t-button theme="primary" bind:tap="onRetryAccess">重新校验</t-button>
   </view>
 
   <view wx:elif="{{initialLoading}}" class="state-block">
@@ -23,18 +23,25 @@
 
   <view wx:elif="{{initialError}}" class="state-block">
     <t-empty icon="error-circle" description="{{initialErrorMessage || '资金账户加载失败，请重试'}}" />
-    <t-button theme="primary" size="small" shape="round" bind:tap="onRetry">重新加载</t-button>
+    <t-button theme="primary" bind:tap="onRetry">重新加载</t-button>
   </view>
 
   <view wx:else class="page-content">
-    <t-notice-bar
-      wx:if="{{refreshErrorMessage}}"
-      visible="{{true}}"
-      theme="warning"
-      content="{{refreshErrorMessage}}"
-      prefixIcon="error-circle"
-      t-class="page-notice"
-    />
+    <view wx:if="{{notConfigured}}" class="section-panel readiness-panel">
+      <view class="section-top readiness-panel__top">
+        <view>
+          <text class="section-title">{{readinessSummaryTitle || '资金账户暂未就绪'}}</text>
+          <text class="section-caption">{{balanceStatusDesc}}</text>
+        </view>
+        <t-tag theme="warning" variant="light">未就绪</t-tag>
+      </view>
+
+      <t-button
+        wx:if="{{readinessActionText}}"
+        theme="primary"
+        bind:tap="onGoPaymentSetup"
+      >{{readinessActionText}}</t-button>
+    </view>
 
     <view class="wallet-card">
       <view class="wallet-card__top">
@@ -45,7 +52,7 @@
         <t-tag theme="{{getWithdrawPanelTheme()}}" variant="light">{{getWithdrawPanelText()}}</t-tag>
       </view>
 
-      <t-grid column="3" gutter="12" border="{{false}}" theme="card" t-class="balance-grid">
+      <t-grid column="3" gutter="12" border="{{false}}" t-class="balance-grid">
         <t-grid-item text="可提现" description="¥{{formatAmount(balance.withdrawable_amount)}}" t-class-description="balance-grid__value" />
         <t-grid-item text="可用" description="¥{{formatAmount(balance.available_amount)}}" t-class-description="balance-grid__value" />
         <t-grid-item text="待结算" description="¥{{formatAmount(balance.pending_amount)}}" t-class-description="balance-grid__value" />
@@ -53,13 +60,10 @@
 
       <t-button
         theme="primary"
-        size="large"
-        shape="round"
-        block
         disabled="{{!canSubmitWithdraw() || loading}}"
         bind:tap="onOpenWithdrawDialog"
       >
-        申请提现
+        {{notConfigured ? '完成开户后可提现' : '申请提现'}}
       </t-button>
     </view>
 
@@ -83,7 +87,6 @@
             <t-button
               size="small"
               theme="default"
-              shape="round"
               data-id="{{item.id}}"
               bind:tap="onRefreshWithdrawal"
               loading="{{withdrawSyncingId === item.id}}"

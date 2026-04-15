@@ -20,7 +20,7 @@
 
       <view wx:elif="{{loadError}}" class="state-wrap">
         <t-empty icon="info-circle" description="{{loadError}}">
-          <t-button slot="action" theme="primary" shape="round" size="small" bindtap="onRetryLoad">重试</t-button>
+          <t-button slot="action" theme="primary" bindtap="onRetryLoad">重试</t-button>
         </t-empty>
       </view>
 
@@ -52,7 +52,7 @@
 
       <view wx:elif="{{loadError}}" class="state-wrap">
         <t-empty description="资金数据异常，暂不可提现">
-          <t-button slot="action" theme="primary" shape="round" size="small" bindtap="onRetryLoad">重试</t-button>
+          <t-button slot="action" theme="primary" bindtap="onRetryLoad">重试</t-button>
         </t-empty>
       </view>
 
@@ -103,7 +103,7 @@
 
       <view wx:elif="{{commissionError}}" class="state-wrap">
         <t-empty icon="info-circle" description="{{commissionError}}">
-          <t-button slot="action" theme="primary" shape="round" size="small" bindtap="onRetryLoad">重试</t-button>
+          <t-button slot="action" theme="primary" bindtap="onRetryLoad">重试</t-button>
         </t-empty>
       </view>
 

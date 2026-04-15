@@ -62,7 +62,8 @@
 
 .form-actions {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: var(--spacer-sm);
 }
 
@@ -93,10 +94,8 @@
 }
 
 .popup-actions {
-  display: grid;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: var(--spacer-sm);
-}
-
-.popup-actions--single {
-  grid-template-columns: 1fr;
 }

@@ -24,11 +24,11 @@
     <t-cell-group theme="card">
       <t-input
         label="开户名称"
-        placeholder="{{form.account_type === 'ACCOUNT_TYPE_BUSINESS' ? '请输入企业或机构全称' : '请输入持卡人姓名'}}"
+        placeholder="{{requireAccountName ? (form.account_type === 'ACCOUNT_TYPE_BUSINESS' ? '请输入企业或机构全称' : '请输入持卡人姓名') : '如需变更开户名称请填写；仅换银行卡可留空'}}"
         value="{{form.account_name}}"
         data-field="account_name"
         bind:change="onTextFieldChange"
-        required
+        required="{{requireAccountName}}"
       />
 
       <t-input
@@ -92,28 +92,21 @@
 
   <view wx:if="{{showContactFields}}" class="section-panel">
     <view class="section-top">
-      <text class="section-title">联系人身份</text>
-    </view>
-
-    <view class="tag-check-list">
-      <t-check-tag
-        checked="{{form.contact_type === 'LEGAL'}}"
-        content="法人"
-        shape="round"
-        data-value="LEGAL"
-        bind:change="onContactTypeChange"
-      />
-      <t-check-tag
-        checked="{{form.contact_type === 'SUPER'}}"
-        content="超级管理员"
-        shape="round"
-        data-value="SUPER"
-        bind:change="onContactTypeChange"
-      />
+      <text class="section-title">联系人信息</text>
     </view>
 
     <t-cell-group theme="card">
-      <t-cell wx:if="{{form.contact_type === 'LEGAL'}}" title="联系人说明" note="将直接使用法人姓名和身份证号作为联系人信息。" />
+      <t-cell
+        title="默认联系人"
+        description="系统会直接复用入驻时保存的法人姓名和身份证号，无需重复填写。"
+      />
+
+      <t-cell
+        title="联系人不是法人"
+        description="仅当微信支付联系人与法人不一致时开启，并补充超级管理员证件。"
+      >
+        <t-switch slot="note" value="{{form.contact_type === 'SUPER'}}" bind:change="onSuperContactSwitchChange" />
+      </t-cell>
 
       <block wx:if="{{form.contact_type === 'SUPER'}}">
         <t-cell title="证件类型" note="中国大陆居民身份证" />
@@ -200,8 +193,8 @@
   </view>
 
   <view class="form-actions">
-    <t-button theme="primary" size="large" shape="round" block loading="{{submitting}}" disabled="{{submitting || !canSubmit}}" bind:tap="onSubmit">{{submitLabel}}</t-button>
-    <t-button theme="default" variant="outline" size="large" shape="round" block disabled="{{submitting}}" bind:tap="onCancel">取消</t-button>
+    <t-button theme="primary" loading="{{submitting}}" disabled="{{submitting || !canSubmit}}" bind:tap="onSubmit">{{submitLabel}}</t-button>
+    <t-button theme="default" variant="outline" disabled="{{submitting}}" bind:tap="onCancel">取消</t-button>
   </view>
 
   <t-popup wx:if="{{showBankPicker}}" visible="{{showBankPicker}}" placement="bottom" using-custom-navbar="{{true}}" bind:visible-change="onBankPickerVisibleChange">
@@ -232,7 +225,7 @@
       </scroll-view>
 
       <view class="popup-actions popup-actions--single">
-        <t-button block size="large" shape="round" theme="default" bind:tap="onCloseBankPicker">关闭</t-button>
+        <t-button theme="default" bind:tap="onCloseBankPicker">关闭</t-button>
       </view>
     </view>
   </t-popup>
@@ -294,7 +287,7 @@
       </scroll-view>
 
       <view class="popup-actions popup-actions--single">
-        <t-button block size="large" shape="round" theme="default" bind:tap="onCloseBranchPicker">关闭</t-button>
+        <t-button theme="default" bind:tap="onCloseBranchPicker">关闭</t-button>
       </view>
     </view>
   </t-popup>

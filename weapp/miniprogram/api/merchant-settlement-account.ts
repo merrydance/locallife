@@ -13,6 +13,7 @@ export interface MerchantSettlementAccountInfo {
 export interface MerchantSettlementAccountResponse {
   account_status: string
   status_desc?: string
+  latest_application_no?: string
   account?: MerchantSettlementAccountInfo
 }
 
@@ -67,13 +68,71 @@ export function getMerchantSettlementApplication(
   })
 }
 
-export function getSettlementAccountStatusView(status?: string, statusDesc?: string) {
-  const normalizedStatus = String(status || '').trim().toLowerCase()
+export function getSettlementVerifyResultText(result?: string) {
+  switch (String(result || '').trim().toUpperCase()) {
+    case 'AUDIT_SUCCESS':
+      return '审核通过'
+    case 'AUDIT_FAIL':
+      return '审核失败'
+    case 'AUDITING':
+      return '审核中'
+    case 'VERIFY_SUCCESS':
+      return '校验通过'
+    case 'VERIFY_FAIL':
+      return '校验失败'
+    case 'VERIFYING':
+      return '校验中'
+    default:
+      return '处理中'
+  }
+}
+
+export function getSettlementVerifyResultTheme(result?: string) {
+  switch (String(result || '').trim().toUpperCase()) {
+    case 'AUDIT_SUCCESS':
+      return 'success'
+    case 'AUDIT_FAIL':
+      return 'danger'
+    case 'AUDITING':
+      return 'warning'
+    case 'VERIFY_SUCCESS':
+      return 'success'
+    case 'VERIFY_FAIL':
+      return 'danger'
+    case 'VERIFYING':
+      return 'warning'
+    default:
+      return 'default'
+  }
+}
+
+export function getSettlementAccountStatusView(response?: MerchantSettlementAccountResponse | null) {
+  const normalizedStatus = String(response?.account_status || '').trim().toLowerCase()
+  const normalizedVerifyResult = String(response?.account?.verify_result || '').trim().toUpperCase()
+  const isActiveAccount = normalizedStatus === 'active'
+  const isVerificationFailed = normalizedVerifyResult === 'VERIFY_FAIL'
+  const isVerificationPending = normalizedVerifyResult === 'VERIFYING'
+  const isVerificationReady = normalizedVerifyResult === '' || normalizedVerifyResult === 'VERIFY_SUCCESS'
+  const hasUnknownVerificationState = isActiveAccount && !isVerificationFailed && !isVerificationPending && !isVerificationReady
+  const latestApplicationNo = String(response?.latest_application_no || '').trim()
+
+  let statusDesc = String(response?.status_desc || '').trim()
+  if (!statusDesc && hasUnknownVerificationState) {
+    statusDesc = '微信提现卡状态同步中，请稍后再试。'
+  }
 
   return {
     normalizedStatus,
-    isActive: normalizedStatus === 'active',
+    normalizedVerifyResult,
+    latestApplicationNo,
+    isActiveAccount,
     isNotConfigured: normalizedStatus === 'not_configured',
-    statusDesc: statusDesc || ''
+    isVerificationFailed,
+    isVerificationPending,
+    hasUnknownVerificationState,
+    canOpenWithdraw: isActiveAccount && isVerificationReady,
+    canViewSettlementAccount: isActiveAccount,
+    canEditSettlementAccount: isActiveAccount && (isVerificationReady || isVerificationFailed),
+    statusDesc
   }
 }

@@ -234,7 +234,7 @@ Page({
     }
 
     if (lowerMessage.includes('operator is not active')) {
-      return '账号未激活，暂不可提现'
+      return '当前运营账号状态未生效，暂不可提现，请联系平台处理。'
     }
 
     return getErrorUserMessage(error, '提现申请失败')

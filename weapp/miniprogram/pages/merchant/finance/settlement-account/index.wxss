@@ -51,7 +51,8 @@
   margin-bottom: var(--spacer-sm);
   padding: 24rpx;
   border-radius: var(--radius-lg);
-  background: linear-gradient(135deg, var(--td-brand-color-1), var(--td-brand-color-2));
+  background: var(--td-bg-color-secondarycontainer);
+  border: 1rpx solid var(--td-component-border);
 }
 
 .bank-hero__label,

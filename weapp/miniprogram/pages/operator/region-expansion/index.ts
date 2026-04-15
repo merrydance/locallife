@@ -4,7 +4,8 @@ import {
   listAvailableRegions,
   listRegionExpansionApplications,
   listRegions,
-  type RegionExpansionApplication
+  type RegionExpansionApplication,
+  type RegionExpansionStatusTheme
 } from '../../../api/operator-application'
 import { logger } from '../../../utils/logger'
 import { getErrorUserMessage } from '../../../utils/user-facing'
@@ -13,7 +14,7 @@ type CityOption = { label: string, value: number }
 type RegionOption = { label: string, secondary: string, value: number }
 type RegionExpansionApplicationView = RegionExpansionApplication & {
   status_label: string
-  status_theme: 'warning' | 'primary' | 'danger'
+  status_theme: RegionExpansionStatusTheme
   is_rejected: boolean
 }
 

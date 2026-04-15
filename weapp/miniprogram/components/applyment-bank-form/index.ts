@@ -16,7 +16,7 @@ import {
 import { uploadMedia } from '../../utils/media'
 import { getErrorUserMessage } from '../../utils/user-facing'
 
-const DEFAULT_CONTACT_DOC_TYPE: ApplymentContactDocType = 'IDENTIFICATION_TYPE_IDCARD'
+const DEFAULT_CONTACT_DOC_TYPE: ApplymentContactDocType = 'IDENTIFICATION_TYPE_MAINLAND_IDCARD'
 
 type ContactDocumentKind = 'front' | 'back'
 
@@ -54,6 +54,7 @@ interface ApplymentBankFormProperties {
   defaultAccountType: ApplymentAccountType
   preloadCatalogs?: boolean
   showContactFields?: boolean
+  requireAccountName?: boolean
   uploadBusinessType?: string
 }
 
@@ -269,11 +270,11 @@ function findSelectedBranchIndex(branches: ApplymentBranchOption[], form: Applym
   return index >= 0 ? index : 0
 }
 
-function canSubmitForm(form: ApplymentBindBankDraft, showContactFields?: boolean): boolean {
+function canSubmitForm(form: ApplymentBindBankDraft, showContactFields?: boolean, requireAccountName: boolean = true): boolean {
   const baseValid = Boolean(
     form.account_bank.trim() &&
     form.account_number.trim() &&
-    form.account_name.trim()
+    (!requireAccountName || form.account_name.trim())
   )
 
   if (!baseValid) {
@@ -332,6 +333,10 @@ Component({
       type: Boolean,
       value: false
     },
+      requireAccountName: {
+        type: Boolean,
+        value: true
+      },
     uploadBusinessType: {
       type: String,
       value: ''
@@ -427,7 +432,7 @@ Component({
       const accountType = properties.defaultAccountType
       const initialDraft = normalizeDraft(accountType, properties.initialDraft)
 
-      this.setFormState(initialDraft, { canSubmit: canSubmitForm(initialDraft, properties.showContactFields) }, { emitDraft: false, syncSubmit: false })
+      this.setFormState(initialDraft, { canSubmit: canSubmitForm(initialDraft, properties.showContactFields, properties.requireAccountName) }, { emitDraft: false, syncSubmit: false })
 
       await this.restoreDraftSelection(initialDraft)
       if (properties.preloadCatalogs) {
@@ -560,7 +565,7 @@ Component({
 
     syncCanSubmit(nextForm?: ApplymentBindBankDraft) {
       const form = nextForm || (this.data.form as ApplymentBindBankDraft)
-      this.setData({ canSubmit: canSubmitForm(form, this.properties.showContactFields) })
+      this.setData({ canSubmit: canSubmitForm(form, this.properties.showContactFields, this.properties.requireAccountName) })
     },
 
     async restoreDraftSelection(draft: ApplymentBindBankDraft) {
@@ -941,18 +946,24 @@ Component({
       this.setFormState(nextForm)
     },
 
-    onContactTypeChange(e: WechatMiniprogram.TouchEvent) {
-      const nextContactType = normalizeContactType(String(e.currentTarget.dataset.value || ''))
+    onSuperContactSwitchChange(e: WechatMiniprogram.CustomEvent<{ value?: boolean }>) {
+      const useSuperContact = Boolean(e.detail?.value)
       const currentForm = this.readForm()
+      const nextContactType: ApplymentContactType = useSuperContact ? 'SUPER' : 'LEGAL'
 
       if (currentForm.contact_type === nextContactType) {
         return
       }
 
-      const nextForm: ApplymentBindBankDraft = nextContactType === 'LEGAL'
+      const nextForm: ApplymentBindBankDraft = useSuperContact
         ? {
           ...currentForm,
-          contact_type: nextContactType,
+          contact_type: 'SUPER',
+          contact_id_doc_type: DEFAULT_CONTACT_DOC_TYPE
+        }
+        : {
+          ...currentForm,
+          contact_type: 'LEGAL',
           contact_name: '',
           contact_id_doc_type: DEFAULT_CONTACT_DOC_TYPE,
           contact_id_card_number: '',
@@ -965,14 +976,9 @@ Component({
           contact_id_doc_period_begin: '',
           contact_id_doc_period_end: ''
         }
-        : {
-          ...currentForm,
-          contact_type: nextContactType,
-          contact_id_doc_type: DEFAULT_CONTACT_DOC_TYPE
-        }
 
       this.setFormState(nextForm)
-      if (nextContactType === 'LEGAL') {
+      if (!useSuperContact) {
         this.setContactDocumentFeedback('front', createIdleFeedback())
         this.setContactDocumentFeedback('back', createIdleFeedback())
       }
@@ -1304,7 +1310,7 @@ Component({
     onSubmit() {
       const form = this.readForm()
       const properties = this.properties as unknown as ApplymentBankFormProperties
-      if (!canSubmitForm(form, properties.showContactFields)) {
+      if (!canSubmitForm(form, properties.showContactFields, properties.requireAccountName)) {
         wx.showToast({ title: '请先补全必填信息', icon: 'none' })
         return
       }
@@ -1320,18 +1326,18 @@ Component({
         bank_branch_id: form.bank_branch_id.trim() || undefined,
         bank_name: form.bank_name.trim() || undefined,
         account_number: form.account_number.trim(),
-        account_name: form.account_name.trim()
+          account_name: form.account_name.trim() || undefined
       }
 
-      if (properties.showContactFields) {
-        payload.contact_type = form.contact_type
-        payload.contact_name = form.contact_type === 'SUPER' ? form.contact_name.trim() : undefined
-        payload.contact_id_doc_type = form.contact_type === 'SUPER' ? form.contact_id_doc_type : undefined
-        payload.contact_id_card_number = form.contact_type === 'SUPER' ? form.contact_id_card_number.trim() : undefined
-        payload.contact_id_doc_copy_asset_id = form.contact_type === 'SUPER' && form.contact_id_doc_copy_asset_id > 0 ? form.contact_id_doc_copy_asset_id : undefined
-        payload.contact_id_doc_copy_back_asset_id = form.contact_type === 'SUPER' && form.contact_id_doc_copy_back_asset_id > 0 ? form.contact_id_doc_copy_back_asset_id : undefined
-        payload.contact_id_doc_period_begin = form.contact_type === 'SUPER' ? form.contact_id_doc_period_begin.trim() : undefined
-        payload.contact_id_doc_period_end = form.contact_type === 'SUPER' ? form.contact_id_doc_period_end.trim() : undefined
+      if (properties.showContactFields && form.contact_type === 'SUPER') {
+        payload.contact_type = 'SUPER'
+        payload.contact_name = form.contact_name.trim()
+        payload.contact_id_doc_type = form.contact_id_doc_type
+        payload.contact_id_card_number = form.contact_id_card_number.trim()
+        payload.contact_id_doc_copy_asset_id = form.contact_id_doc_copy_asset_id > 0 ? form.contact_id_doc_copy_asset_id : undefined
+        payload.contact_id_doc_copy_back_asset_id = form.contact_id_doc_copy_back_asset_id > 0 ? form.contact_id_doc_copy_back_asset_id : undefined
+        payload.contact_id_doc_period_begin = form.contact_id_doc_period_begin.trim()
+        payload.contact_id_doc_period_end = form.contact_id_doc_period_end.trim()
       }
 
       this.triggerEvent('submit', payload)

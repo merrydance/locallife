@@ -2,14 +2,9 @@
 
 <view class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px;">
   <view wx:if="{{error && !initialLoading}}" class="console-error-banner">
-    <view class="console-error-banner__body">
-      <t-icon name="error-circle" size="32rpx" color="var(--td-warning-color-7)" />
-      <text class="console-error-banner__text">{{error}}</text>
-    </view>
-    <view class="console-error-banner__actions">
-      <t-button wx:if="{{errorCanRetry}}" theme="primary" size="small" bindtap="onRetry" shape="round">重新加载</t-button>
-      <t-button wx:if="{{showApplymentEntry}}" theme="primary" variant="outline" size="small" bindtap="onOpenApplyment" shape="round">去微信开户</t-button>
-    </view>
+    <t-notice-bar theme="warning" visible="{{true}}" content="{{error}}">
+      <text wx:if="{{errorCanRetry}}" slot="operation" class="notice-banner-operation" bindtap="onRetry">重新加载</text>
+    </t-notice-bar>
   </view>
 
   <!-- Loading (Skeleton) -->
@@ -53,7 +48,6 @@
           </view>
           <view class="finance-actions">
             <navigator url="/pages/operator/finance/withdraw/index" class="finance-link-pill">佣金明细</navigator>
-            <navigator url="/pages/operator/applyment/index" class="finance-link-pill finance-link-pill--ghost">开户状态</navigator>
           </view>
         </view>
       </view>
@@ -184,12 +178,6 @@
               <t-icon name="chart-bar" size="48rpx" />
             </view>
             <text>提现管理</text>
-          </navigator>
-          <navigator url="/pages/operator/applyment/index" class="menu-item">
-            <view class="menu-icon-bg color-default">
-              <t-icon name="secured" size="48rpx" />
-            </view>
-            <text>微信开户</text>
           </navigator>
           <navigator url="/pages/operator/rules/index?region_id={{selectedRegionId}}&region_name={{regions[selectedRegionIdx].name}}" class="menu-item">
             <view class="menu-icon-bg color-default">

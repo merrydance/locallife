@@ -2,7 +2,7 @@
 
 <view
   class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
-  style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: 32rpx;"
+  style="--page-shell-nav-height: {{navBarHeight}}px;"
 >
   <view wx:if="{{!accessReady}}" class="state-block">
     <t-loading theme="circular" size="40rpx" text="校验权限中..." vertical />
@@ -14,7 +14,7 @@
 
   <view wx:elif="{{accessErrorMessage}}" class="state-block">
     <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
-    <t-button theme="primary" size="small" shape="round" bind:tap="onRetryAccess">重新校验</t-button>
+    <t-button theme="primary" bind:tap="onRetryAccess">重新校验</t-button>
   </view>
 
   <view wx:elif="{{initialLoading}}" class="state-block">
@@ -23,7 +23,7 @@
 
   <view wx:elif="{{initialError}}" class="state-block">
     <t-empty icon="error-circle" description="{{initialErrorMessage || '提现银行卡页面加载失败，请重试'}}" />
-    <t-button theme="primary" size="small" shape="round" bind:tap="onRetry">重新加载</t-button>
+    <t-button theme="primary" bind:tap="onRetry">重新加载</t-button>
   </view>
 
   <view wx:else class="page-content">
@@ -31,17 +31,16 @@
       <view class="section-top">
         <text class="section-title">当前提现银行卡</text>
         <t-button
-          wx:if="{{canManageMerchantApplyment && settlementAccount && settlementAccount.account_status === 'active'}}"
+          wx:if="{{canManageMerchantApplyment && paymentReadiness && paymentReadiness.canEditSettlementAccount}}"
           theme="primary"
           size="small"
-          shape="round"
           bind:tap="onGoEditSettlementAccount"
         >更换银行卡</t-button>
       </view>
 
-      <view wx:if="{{!settlementAccount || settlementAccount.account_status !== 'active'}}" class="inline-note inline-note--warning">
+      <view wx:if="{{!paymentReadiness || !paymentReadiness.canViewSettlementAccount}}" class="inline-note inline-note--warning">
         <text>{{settlementStatusDesc || '当前收付通账户未激活，暂不可查看微信提现卡信息。'}}</text>
-        <t-button theme="primary" shape="round" size="small" bind:tap="onGoApplyment">去完成进件</t-button>
+        <t-button theme="primary" size="small" bind:tap="onGoApplyment">{{paymentReadiness && paymentReadiness.actionText ? paymentReadiness.actionText : '去完成进件'}}</t-button>
       </view>
 
       <block wx:else>
@@ -73,7 +72,7 @@
     <view wx:if="{{applicationNo}}" class="section-panel">
       <view class="section-top">
         <text class="section-title">最近一次换卡申请</text>
-        <t-button theme="default" size="small" shape="round" loading="{{refreshingApplication}}" bind:tap="onRefreshApplication">刷新结果</t-button>
+        <t-button theme="default" loading="{{refreshingApplication}}" bind:tap="onRefreshApplication">刷新结果</t-button>
       </view>
 
       <view wx:if="{{applicationLoading}}" class="inline-note">

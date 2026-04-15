@@ -1,10 +1,12 @@
 import {
-  getMerchantSettlementAccount,
-  getSettlementAccountStatusView,
   modifyMerchantSettlementAccount,
   type MerchantSettlementAccountResponse
 } from '../../../../../api/merchant-settlement-account'
 import type { ApplymentBindBankPayload } from '../../../../../api/applyment-bank'
+import {
+  fetchMerchantPaymentReadiness,
+  type MerchantPaymentReadinessView
+} from '../../../../../services/merchant-payment'
 import { ensureMerchantApplymentAccess } from '../../../../../utils/console-access'
 import { logger } from '../../../../../utils/logger'
 import { getStableBarHeights } from '../../../../../utils/responsive'
@@ -22,6 +24,7 @@ Page({
     initialErrorMessage: '',
     submitting: false,
     canEdit: false,
+    paymentReadiness: null as MerchantPaymentReadinessView | null,
     settlementAccount: null as MerchantSettlementAccountResponse | null,
     settlementStatusDesc: '',
     bindBankDraft: null as ApplymentBindBankPayload | null
@@ -79,12 +82,14 @@ Page({
   async loadData() {
     this.setData({ initialLoading: true, initialError: false, initialErrorMessage: '' })
     try {
-      const settlementAccount = await getMerchantSettlementAccount()
-      const statusView = getSettlementAccountStatusView(settlementAccount.account_status, settlementAccount.status_desc)
+      const paymentReadiness = await fetchMerchantPaymentReadiness()
+      const settlementAccount = paymentReadiness.settlementAccount
+
       this.setData({
+        paymentReadiness,
         settlementAccount,
-        settlementStatusDesc: statusView.statusDesc,
-        canEdit: statusView.isActive,
+        settlementStatusDesc: paymentReadiness.summaryDescription,
+        canEdit: paymentReadiness.canEditSettlementAccount,
         initialLoading: false,
         initialError: false,
         initialErrorMessage: ''
@@ -136,13 +141,16 @@ Page({
 
     try {
       const payload = e.detail
+        const accountName = String(payload.account_name || '').trim()
       const result = await modifyMerchantSettlementAccount({
         account_type: payload.account_type,
         account_bank: payload.account_bank,
         bank_name: payload.bank_name,
         bank_branch_id: payload.bank_branch_id,
         account_number: payload.account_number,
-        account_name: payload.account_name
+          ...(accountName
+            ? { account_name: accountName }
+            : {})
       })
 
       wx.redirectTo({
@@ -161,7 +169,9 @@ Page({
   },
 
   onGoApplyment() {
-    wx.navigateTo({ url: '/pages/merchant/settings/applyment/index' })
+    wx.navigateTo({
+      url: this.data.paymentReadiness?.actionPath || '/pages/merchant/settings/applyment/index'
+    })
   },
 
   formatAccountNumber(value?: string) {

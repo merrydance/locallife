@@ -1,7 +1,7 @@
 <custom-navbar title="申请更多区域" showBack="{{true}}" bind:navheight="onNavHeight" />
 
 <view
-  class="page-container page-shell page-shell--with-nav page-shell--bottom-safe"
+  class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
   style="--page-shell-nav-height: {{navBarHeight}}px"
 >
 
@@ -15,7 +15,7 @@
 
     <view wx:elif="{{listError}}" class="error-wrap">
       <t-empty icon="info-circle" description="{{listError}}">
-        <t-button slot="action" size="small" theme="primary" shape="round" bindtap="onRetry">重试</t-button>
+        <t-button slot="action" theme="primary" bindtap="onRetry">重试</t-button>
       </t-empty>
     </view>
 

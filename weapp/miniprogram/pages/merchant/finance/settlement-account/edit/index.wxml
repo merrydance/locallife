@@ -2,7 +2,7 @@
 
 <view
   class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
-  style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: 32rpx;"
+  style="--page-shell-nav-height: {{navBarHeight}}px;"
 >
   <view wx:if="{{!accessReady}}" class="state-block">
     <t-loading theme="circular" size="40rpx" text="校验权限中..." vertical />
@@ -14,7 +14,7 @@
 
   <view wx:elif="{{accessErrorMessage}}" class="state-block">
     <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
-    <t-button theme="primary" size="small" shape="round" bind:tap="onRetryAccess">重新校验</t-button>
+    <t-button theme="primary" bind:tap="onRetryAccess">重新校验</t-button>
   </view>
 
   <view wx:elif="{{initialLoading}}" class="state-block">
@@ -23,14 +23,14 @@
 
   <view wx:elif="{{initialError}}" class="state-block">
     <t-empty icon="error-circle" description="{{initialErrorMessage || '更换银行卡页面加载失败，请重试'}}" />
-    <t-button theme="primary" size="small" shape="round" bind:tap="onRetry">重新加载</t-button>
+    <t-button theme="primary" bind:tap="onRetry">重新加载</t-button>
   </view>
 
   <view wx:else class="page-content">
     <view class="section-panel">
       <view class="section-top-main">
         <text class="section-title">当前绑定银行卡</text>
-        <text class="section-caption">提交更换申请后，微信提现会在审核通过后切换到新卡。</text>
+        <text class="section-caption">请先确认当前绑定的银行卡信息，再发起换卡申请。</text>
       </view>
 
       <block wx:if="{{settlementAccount}}">
@@ -46,14 +46,14 @@
     <view wx:if="{{!canEdit}}" class="section-panel">
       <view class="inline-note inline-note--warning">
         <text>{{settlementStatusDesc || '当前收付通账户未激活，暂不可更换银行卡。'}}</text>
-        <t-button theme="primary" size="small" shape="round" bind:tap="onGoApplyment">去完成进件</t-button>
+        <t-button theme="primary" size="small" bind:tap="onGoApplyment">{{paymentReadiness && paymentReadiness.actionText ? paymentReadiness.actionText : '去完成进件'}}</t-button>
       </view>
     </view>
 
     <view wx:else class="section-panel">
       <view class="section-top-main">
         <text class="section-title">填写新银行卡</text>
-        <text class="section-caption">请填写微信支付要求的银行卡信息，提交后会发起新的审核申请。</text>
+        <text class="section-caption">请填写微信支付要求的银行卡信息；若开户名称不变，可留空沿用当前绑定信息。提交后会发起新的审核申请。</text>
       </view>
 
       <applyment-bank-form
@@ -61,6 +61,7 @@
         initialDraft="{{bindBankDraft}}"
         defaultAccountType="ACCOUNT_TYPE_BUSINESS"
         preloadCatalogs="{{true}}"
+        requireAccountName="{{false}}"
         submitLabel="提交换卡申请"
         submitting="{{submitting}}"
         bind:submit="onSubmitForm"

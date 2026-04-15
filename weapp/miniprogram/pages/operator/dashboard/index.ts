@@ -1,5 +1,5 @@
 import { responsiveBehavior } from '@/utils/responsive'
-import { getConsoleDashboardErrorState, shouldShowOperatorApplymentEntry } from '../../../utils/console-dashboard'
+import { getConsoleDashboardErrorState } from '../../../utils/console-dashboard'
 import { wsManager, WSMessageType } from '../../../utils/websocket'
 import {
   buildAbnormalRefundClipboardText,
@@ -88,7 +88,6 @@ Page({
     initialLoading: true,
     error: null as string | null,
     errorCanRetry: true,
-    showApplymentEntry: false,
     navBarHeight: 88,
     abnormalRefundAlerts: [] as AlertFeedItem[],
     alertFeedReady: false,
@@ -154,12 +153,10 @@ Page({
     } catch (error: unknown) {
       const errorState = getConsoleDashboardErrorState('operator', error, '运营中心数据加载失败，请稍后重试。')
       console.error('加载运营仪表盘失败:', error)
-      const showApplymentEntry = shouldShowOperatorApplymentEntry(error)
       this.setData({ 
         loading: false,
         error: errorState.message,
-        errorCanRetry: errorState.canRetry,
-        showApplymentEntry
+        errorCanRetry: errorState.canRetry
       })
     }
   },
@@ -408,9 +405,5 @@ Page({
         wx.navigateTo({ url: target.url })
       }
     })
-  },
-
-  onOpenApplyment() {
-    wx.navigateTo({ url: '/pages/operator/applyment/index' })
   }
 })
