@@ -28,7 +28,7 @@ func TestProcessTaskApplymentResult_Success(t *testing.T) {
 		checkResult func(t *testing.T, err error)
 	}{
 		{
-			name: "商户进件成功_添加分账接收方并发送通知",
+			name: "商户进件成功_发送通知并标记已处理",
 			payload: worker.ApplymentResultPayload{
 				ApplymentID:    1,
 				OutRequestNo:   "APPLY_M_1_1234567890",
@@ -38,7 +38,7 @@ func TestProcessTaskApplymentResult_Success(t *testing.T) {
 				SubjectID:      100,
 			},
 			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface, distributor *mockwk.MockTaskDistributor) {
-				// 1. 获取商户信息并添加分账接收方
+				// 1. 获取商户信息
 				store.EXPECT().
 					GetMerchant(gomock.Any(), int64(100)).
 					Return(db.Merchant{
@@ -46,18 +46,8 @@ func TestProcessTaskApplymentResult_Success(t *testing.T) {
 						OwnerUserID: 1001,
 						Name:        "测试商户",
 					}, nil)
-				ecommerceClient.EXPECT().
-					GetSpAppID().
-					Return("wx1234567890")
-				ecommerceClient.EXPECT().
-					AddProfitSharingReceiver(gomock.Any(), gomock.Any()).
-					DoAndReturn(func(_ context.Context, req *wechat.AddReceiverRequest) (*wechat.AddReceiverResponse, error) {
-						require.Equal(t, "1234567890", req.Account)
-						require.Equal(t, "测试商户", req.Name)
-						return &wechat.AddReceiverResponse{}, nil
-					})
 
-				// 3. 发送通知
+				// 2. 发送通知
 				distributor.EXPECT().
 					DistributeTaskSendNotification(gomock.Any(), gomock.Any()).
 					Return(nil)
@@ -99,7 +89,7 @@ func TestProcessTaskApplymentResult_Success(t *testing.T) {
 			},
 		},
 		{
-			name: "进件成功_添加接收方失败但不影响流程",
+			name: "进件成功_不依赖添加商户接收方",
 			payload: worker.ApplymentResultPayload{
 				ApplymentID:    3,
 				OutRequestNo:   "APPLY_M_3_1234567890",
@@ -109,7 +99,7 @@ func TestProcessTaskApplymentResult_Success(t *testing.T) {
 				SubjectID:      100,
 			},
 			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface, distributor *mockwk.MockTaskDistributor) {
-				// 1. 获取商户信息后，添加分账接收方失败
+				// 1. 获取商户信息
 				store.EXPECT().
 					GetMerchant(gomock.Any(), int64(100)).
 					Return(db.Merchant{
@@ -117,23 +107,14 @@ func TestProcessTaskApplymentResult_Success(t *testing.T) {
 						OwnerUserID: 1001,
 						Name:        "测试商户",
 					}, nil)
-				ecommerceClient.EXPECT().
-					GetSpAppID().
-					Return("wx1234567890")
-				ecommerceClient.EXPECT().
-					AddProfitSharingReceiver(gomock.Any(), gomock.Any()).
-					DoAndReturn(func(_ context.Context, req *wechat.AddReceiverRequest) (*wechat.AddReceiverResponse, error) {
-						require.Equal(t, "测试商户", req.Name)
-						return nil, errors.New("wechat api error")
-					})
 
-				// 3. 发送通知
+				// 2. 发送通知
 				distributor.EXPECT().
 					DistributeTaskSendNotification(gomock.Any(), gomock.Any()).
 					Return(nil)
 			},
 			checkResult: func(t *testing.T, err error) {
-				require.NoError(t, err) // 添加接收方失败不影响流程
+				require.NoError(t, err)
 			},
 		},
 		{

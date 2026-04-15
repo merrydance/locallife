@@ -381,6 +381,29 @@ type PartnerOrderQueryResponse struct {
 	SceneInfo *struct {
 		DeviceID string `json:"device_id"`
 	} `json:"scene_info,omitempty"`
+	PromotionDetail []PartnerPromotionDetail `json:"promotion_detail,omitempty"`
+}
+
+type PartnerPromotionDetail struct {
+	CouponID            string                        `json:"coupon_id"`
+	Name                string                        `json:"name,omitempty"`
+	Scope               string                        `json:"scope,omitempty"`
+	Type                string                        `json:"type,omitempty"`
+	Amount              int64                         `json:"amount"`
+	StockID             string                        `json:"stock_id,omitempty"`
+	WechatpayContribute int64                         `json:"wechatpay_contribute,omitempty"`
+	MerchantContribute  int64                         `json:"merchant_contribute,omitempty"`
+	OtherContribute     int64                         `json:"other_contribute,omitempty"`
+	Currency            string                        `json:"currency,omitempty"`
+	GoodsDetail         []PartnerPromotionGoodsDetail `json:"goods_detail,omitempty"`
+}
+
+type PartnerPromotionGoodsDetail struct {
+	GoodsID        string `json:"goods_id"`
+	Quantity       int64  `json:"quantity"`
+	UnitPrice      int64  `json:"unit_price"`
+	DiscountAmount int64  `json:"discount_amount"`
+	GoodsRemark    string `json:"goods_remark,omitempty"`
 }
 
 // PartnerPaymentNotificationResource 服务商模式单笔支付成功回调资源。
@@ -475,20 +498,23 @@ func (c *EcommerceClient) CreatePartnerJSAPIOrder(ctx context.Context, req *Part
 	if req == nil {
 		return nil, nil, fmt.Errorf("create partner jsapi order: request is nil")
 	}
-	if req.SubMchID == "" {
+	if strings.TrimSpace(req.PayerSubOpenID) != "" || strings.TrimSpace(req.SubAppID) != "" {
+		return nil, nil, fmt.Errorf("create partner jsapi order: sub_openid and sub_appid are not supported in the single-appid project flow")
+	}
+	if strings.TrimSpace(req.SubMchID) == "" {
 		return nil, nil, fmt.Errorf("create partner jsapi order: sub_mchid is required")
 	}
-	if req.Description == "" || req.OutTradeNo == "" {
+	if strings.TrimSpace(req.Description) == "" || strings.TrimSpace(req.OutTradeNo) == "" {
 		return nil, nil, fmt.Errorf("create partner jsapi order: description and out_trade_no are required")
 	}
 	if req.TotalAmount <= 0 {
 		return nil, nil, fmt.Errorf("create partner jsapi order: total amount must be positive")
 	}
-	if req.PayerOpenID == "" && req.PayerSubOpenID == "" {
+	if strings.TrimSpace(req.PayerOpenID) == "" && strings.TrimSpace(req.PayerSubOpenID) == "" {
 		return nil, nil, fmt.Errorf("create partner jsapi order: sp_openid or sub_openid is required")
 	}
-	if req.PayerSubOpenID != "" && req.SubAppID == "" {
-		return nil, nil, fmt.Errorf("create partner jsapi order: sub_appid is required when sub_openid is provided")
+	if strings.TrimSpace(req.DeviceID) != "" && strings.TrimSpace(req.PayerClientIP) == "" {
+		return nil, nil, fmt.Errorf("create partner jsapi order: payer_client_ip is required when scene_info.device_id is provided")
 	}
 
 	currency := req.Currency
@@ -518,9 +544,6 @@ func (c *EcommerceClient) CreatePartnerJSAPIOrder(ctx context.Context, req *Part
 	if !req.ExpireTime.IsZero() {
 		body["time_expire"] = req.ExpireTime.Format(time.RFC3339)
 	}
-	if req.SubAppID != "" {
-		body["sub_appid"] = req.SubAppID
-	}
 	if req.Attach != "" {
 		body["attach"] = req.Attach
 	}
@@ -534,9 +557,6 @@ func (c *EcommerceClient) CreatePartnerJSAPIOrder(ctx context.Context, req *Part
 	if req.PayerOpenID != "" {
 		payer["sp_openid"] = req.PayerOpenID
 	}
-	if req.PayerSubOpenID != "" {
-		payer["sub_openid"] = req.PayerSubOpenID
-	}
 	if req.PayerClientIP != "" || req.DeviceID != "" {
 		sceneInfo := map[string]interface{}{}
 		if req.PayerClientIP != "" {
@@ -548,9 +568,16 @@ func (c *EcommerceClient) CreatePartnerJSAPIOrder(ctx context.Context, req *Part
 		body["scene_info"] = sceneInfo
 	}
 
-	respBody, err := c.doRequest(ctx, http.MethodPost, ecommercePartnerJSAPIOrderURL, body)
+	respBody, requestID, err := c.doRequestWithRequestID(ctx, http.MethodPost, ecommercePartnerJSAPIOrderURL, body)
 	if err != nil {
-		return nil, nil, fmt.Errorf("create partner jsapi order: %w", err)
+		wrappedErr := wrapPartnerJSAPIOrderCreateError(err)
+		ecommercePaymentOrderLogEvent(requestID, "create_partner_jsapi_order").
+			Str("sub_mchid", strings.TrimSpace(req.SubMchID)).
+			Str("out_trade_no", strings.TrimSpace(req.OutTradeNo)).
+			Int64("total_amount", req.TotalAmount).
+			Err(wrappedErr).
+			Msg("wechat partner jsapi order failed")
+		return nil, nil, wrappedErr
 	}
 
 	var resp PartnerJSAPIOrderResponse
@@ -568,9 +595,15 @@ func (c *EcommerceClient) CreatePartnerJSAPIOrder(ctx context.Context, req *Part
 
 // QueryPartnerOrderByTransactionID 通过微信支付订单号查询服务商模式单笔订单。
 func (c *EcommerceClient) QueryPartnerOrderByTransactionID(ctx context.Context, transactionID, subMchID string) (*PartnerOrderQueryResponse, error) {
-	respBody, err := c.doRequest(ctx, http.MethodGet, fmt.Sprintf(ecommercePartnerQueryByIDURL, transactionID, c.spMchID, subMchID), nil)
+	respBody, requestID, err := c.doRequestWithRequestID(ctx, http.MethodGet, fmt.Sprintf(ecommercePartnerQueryByIDURL, transactionID, c.spMchID, subMchID), nil)
 	if err != nil {
-		return nil, fmt.Errorf("query partner order by transaction id: %w", err)
+		wrappedErr := wrapPartnerOrderQueryError(err)
+		ecommercePaymentOrderLogEvent(requestID, "query_partner_order_by_transaction_id").
+			Str("sub_mchid", strings.TrimSpace(subMchID)).
+			Str("transaction_id", strings.TrimSpace(transactionID)).
+			Err(wrappedErr).
+			Msg("wechat partner order query by transaction id failed")
+		return nil, wrappedErr
 	}
 
 	var resp PartnerOrderQueryResponse
@@ -583,9 +616,15 @@ func (c *EcommerceClient) QueryPartnerOrderByTransactionID(ctx context.Context, 
 
 // QueryPartnerOrderByOutTradeNo 通过商户订单号查询服务商模式单笔订单。
 func (c *EcommerceClient) QueryPartnerOrderByOutTradeNo(ctx context.Context, outTradeNo, subMchID string) (*PartnerOrderQueryResponse, error) {
-	respBody, err := c.doRequest(ctx, http.MethodGet, fmt.Sprintf(ecommercePartnerQueryByOutTradeNoURL, outTradeNo, c.spMchID, subMchID), nil)
+	respBody, requestID, err := c.doRequestWithRequestID(ctx, http.MethodGet, fmt.Sprintf(ecommercePartnerQueryByOutTradeNoURL, outTradeNo, c.spMchID, subMchID), nil)
 	if err != nil {
-		return nil, fmt.Errorf("query partner order by out trade no: %w", err)
+		wrappedErr := wrapPartnerOrderQueryError(err)
+		ecommercePaymentOrderLogEvent(requestID, "query_partner_order_by_out_trade_no").
+			Str("sub_mchid", strings.TrimSpace(subMchID)).
+			Str("out_trade_no", strings.TrimSpace(outTradeNo)).
+			Err(wrappedErr).
+			Msg("wechat partner order query by out trade no failed")
+		return nil, wrappedErr
 	}
 
 	var resp PartnerOrderQueryResponse
@@ -602,8 +641,14 @@ func (c *EcommerceClient) ClosePartnerOrder(ctx context.Context, outTradeNo, sub
 		"sp_mchid":  c.spMchID,
 		"sub_mchid": subMchID,
 	}
-	if _, err := c.doRequest(ctx, http.MethodPost, fmt.Sprintf(ecommercePartnerCloseOrderURL, outTradeNo), body); err != nil {
-		return fmt.Errorf("close partner order: %w", err)
+	if _, requestID, err := c.doRequestWithRequestID(ctx, http.MethodPost, fmt.Sprintf(ecommercePartnerCloseOrderURL, outTradeNo), body); err != nil {
+		wrappedErr := wrapPartnerOrderCloseError(err)
+		ecommercePaymentOrderLogEvent(requestID, "close_partner_order").
+			Str("sub_mchid", strings.TrimSpace(subMchID)).
+			Str("out_trade_no", strings.TrimSpace(outTradeNo)).
+			Err(wrappedErr).
+			Msg("wechat partner order close failed")
+		return wrappedErr
 	}
 	return nil
 }
@@ -2177,9 +2222,46 @@ type CombineOrderResponse struct {
 // CreateCombineOrder 创建合单订单（平台收付通）
 // 用于商户交易，资金进入二级商户账户
 func (c *EcommerceClient) CreateCombineOrder(ctx context.Context, req *CombineOrderRequest) (*CombineOrderResponse, *JSAPIPayParams, error) {
+	if req == nil {
+		return nil, nil, fmt.Errorf("create combine order: request is nil")
+	}
+	if strings.TrimSpace(req.PayerSubOpenID) != "" {
+		return nil, nil, fmt.Errorf("create combine order: sub_openid is not supported in the single-appid project flow")
+	}
+	if strings.TrimSpace(req.CombineOutTradeNo) == "" {
+		return nil, nil, fmt.Errorf("create combine order: combine_out_trade_no is required")
+	}
+	if len(req.SubOrders) == 0 {
+		return nil, nil, fmt.Errorf("create combine order: sub_orders is required")
+	}
+	if len(req.SubOrders) > 50 {
+		return nil, nil, fmt.Errorf("create combine order: sub_orders exceeds the maximum of 50")
+	}
+	if strings.TrimSpace(req.PayerOpenID) == "" && strings.TrimSpace(req.PayerSubOpenID) == "" {
+		return nil, nil, fmt.Errorf("create combine order: openid or sub_openid is required")
+	}
+	if req.SceneInfo != nil && strings.TrimSpace(req.SceneInfo.PayerClientIP) == "" {
+		return nil, nil, fmt.Errorf("create combine order: scene_info.payer_client_ip is required when scene_info is provided")
+	}
+
 	// 构建子订单列表
 	subOrders := make([]map[string]interface{}, len(req.SubOrders))
 	for i, sub := range req.SubOrders {
+		if strings.TrimSpace(sub.SubAppID) != "" {
+			return nil, nil, fmt.Errorf("create combine order: sub_orders[%d].sub_appid is not supported in the single-appid project flow", i)
+		}
+		if strings.TrimSpace(sub.OutTradeNo) == "" {
+			return nil, nil, fmt.Errorf("create combine order: sub_orders[%d].out_trade_no is required", i)
+		}
+		if strings.TrimSpace(sub.Attach) == "" {
+			return nil, nil, fmt.Errorf("create combine order: sub_orders[%d].attach is required", i)
+		}
+		if strings.TrimSpace(sub.Description) == "" {
+			return nil, nil, fmt.Errorf("create combine order: sub_orders[%d].description is required", i)
+		}
+		if sub.Amount <= 0 {
+			return nil, nil, fmt.Errorf("create combine order: sub_orders[%d].amount.total_amount must be positive", i)
+		}
 		mchID := strings.TrimSpace(sub.MchID)
 		if mchID == "" {
 			mchID = c.spMchID
@@ -2200,9 +2282,6 @@ func (c *EcommerceClient) CreateCombineOrder(ctx context.Context, req *CombineOr
 		if sub.SubMchID != "" {
 			subOrder["sub_mchid"] = sub.SubMchID
 		}
-		if sub.SubAppID != "" {
-			subOrder["sub_appid"] = sub.SubAppID
-		}
 		if sub.GoodsTag != "" {
 			subOrder["goods_tag"] = sub.GoodsTag
 		}
@@ -2212,9 +2291,6 @@ func (c *EcommerceClient) CreateCombineOrder(ctx context.Context, req *CombineOr
 	combinePayerInfo := map[string]interface{}{}
 	if req.PayerOpenID != "" {
 		combinePayerInfo["openid"] = req.PayerOpenID
-	}
-	if req.PayerSubOpenID != "" {
-		combinePayerInfo["sub_openid"] = req.PayerSubOpenID
 	}
 
 	notifyURL := c.combineNotifyURL
@@ -2228,8 +2304,12 @@ func (c *EcommerceClient) CreateCombineOrder(ctx context.Context, req *CombineOr
 		"combine_out_trade_no": req.CombineOutTradeNo,
 		"sub_orders":           subOrders,
 		"combine_payer_info":   combinePayerInfo,
-		"notify_url":           notifyURL,
-		"time_expire":          req.ExpireTime.Format(time.RFC3339),
+	}
+	if notifyURL != "" {
+		body["notify_url"] = notifyURL
+	}
+	if !req.ExpireTime.IsZero() {
+		body["time_expire"] = req.ExpireTime.Format(time.RFC3339)
 	}
 	if req.StartTime != nil {
 		body["time_start"] = req.StartTime.Format(time.RFC3339)
@@ -2242,9 +2322,15 @@ func (c *EcommerceClient) CreateCombineOrder(ctx context.Context, req *CombineOr
 		}
 	}
 
-	respBody, err := c.doRequest(ctx, http.MethodPost, ecommerceCombineOrderURL, body)
+	respBody, requestID, err := c.doRequestWithRequestID(ctx, http.MethodPost, ecommerceCombineOrderURL, body)
 	if err != nil {
-		return nil, nil, fmt.Errorf("create combine order: %w", err)
+		wrappedErr := wrapCombineOrderCreateError(err)
+		ecommercePaymentOrderLogEvent(requestID, "create_combine_order").
+			Str("combine_out_trade_no", strings.TrimSpace(req.CombineOutTradeNo)).
+			Int("sub_order_count", len(req.SubOrders)).
+			Err(wrappedErr).
+			Msg("wechat combine order creation failed")
+		return nil, nil, wrappedErr
 	}
 
 	var resp CombineOrderResponse
@@ -2265,9 +2351,14 @@ func (c *EcommerceClient) CreateCombineOrder(ctx context.Context, req *CombineOr
 func (c *EcommerceClient) QueryCombineOrder(ctx context.Context, combineOutTradeNo string) (*CombineQueryResponse, error) {
 	url := fmt.Sprintf(ecommerceQueryCombineURL, combineOutTradeNo)
 
-	respBody, err := c.doRequest(ctx, http.MethodGet, url, nil)
+	respBody, requestID, err := c.doRequestWithRequestID(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("query combine order: %w", err)
+		wrappedErr := wrapCombineOrderQueryError(err)
+		ecommercePaymentOrderLogEvent(requestID, "query_combine_order").
+			Str("combine_out_trade_no", strings.TrimSpace(combineOutTradeNo)).
+			Err(wrappedErr).
+			Msg("wechat combine order query failed")
+		return nil, wrappedErr
 	}
 
 	var resp CombineQueryResponse
@@ -2319,10 +2410,19 @@ type CombinePayerInfo struct {
 
 // CloseCombineOrder 关闭合单订单
 func (c *EcommerceClient) CloseCombineOrder(ctx context.Context, combineOutTradeNo string, subOrders []SubOrderClose) error {
+	if strings.TrimSpace(combineOutTradeNo) == "" {
+		return fmt.Errorf("close combine order: combine_out_trade_no is required")
+	}
+	if len(subOrders) == 0 {
+		return fmt.Errorf("close combine order: sub_orders is required")
+	}
 	url := fmt.Sprintf(ecommerceCloseCombineURL, combineOutTradeNo)
 
 	subs := make([]map[string]string, len(subOrders))
 	for i, sub := range subOrders {
+		if strings.TrimSpace(sub.OutTradeNo) == "" {
+			return fmt.Errorf("close combine order: sub_orders[%d].out_trade_no is required", i)
+		}
 		mchID := strings.TrimSpace(sub.MchID)
 		if mchID == "" {
 			mchID = c.spMchID
@@ -2345,12 +2445,232 @@ func (c *EcommerceClient) CloseCombineOrder(ctx context.Context, combineOutTrade
 		"sub_orders":    subs,
 	}
 
-	_, err := c.doRequest(ctx, http.MethodPost, url, body)
+	_, requestID, err := c.doRequestWithRequestID(ctx, http.MethodPost, url, body)
 	if err != nil {
-		return fmt.Errorf("close combine order: %w", err)
+		wrappedErr := wrapCombineOrderCloseError(err)
+		ecommercePaymentOrderLogEvent(requestID, "close_combine_order").
+			Str("combine_out_trade_no", strings.TrimSpace(combineOutTradeNo)).
+			Int("sub_order_count", len(subOrders)).
+			Err(wrappedErr).
+			Msg("wechat combine order close failed")
+		return wrappedErr
 	}
 
 	return nil
+}
+
+func ecommercePaymentOrderLogEvent(requestID string, operation string) *zerolog.Event {
+	evt := log.Error().Str("wechat_operation", operation)
+	if strings.TrimSpace(requestID) != "" {
+		evt = evt.Str("request_id", strings.TrimSpace(requestID))
+	}
+	return evt
+}
+
+func normalizePaymentOrderingWechatCode(code string) string {
+	return strings.ToUpper(strings.TrimSpace(code))
+}
+
+func partnerJSAPIOrderCreateWechatErrorGuide(wxErr *WechatPayError) string {
+	if wxErr == nil {
+		return "wechat partner jsapi order creation failed"
+	}
+	switch normalizePaymentOrderingWechatCode(wxErr.Code) {
+	case "PARAM_ERROR", "INVALID_REQUEST":
+		return "verify the partner jsapi request fields, especially payer, amount, sub_mchid, and scene_info.payer_client_ip, then retry"
+	case "APPID_MCHID_NOT_MATCH", "OPENID_MISMATCH", "MCH_NOT_EXISTS":
+		return "verify the configured appid, mchid, openid binding, and merchant configuration before retrying"
+	case "NOAUTH", "NO_AUTH":
+		return "verify the service provider merchant has permission to create partner jsapi orders before retrying"
+	case "SIGN_ERROR":
+		return "verify the merchant certificate, private key, and authorization signature before retrying"
+	case "ORDER_CLOSED":
+		return "wechat reported the payment order is already closed; recreate the payment with a new out_trade_no"
+	case "OUT_TRADE_NO_USED":
+		return "wechat reported the out_trade_no already exists; verify idempotency and reuse the existing pending payment when possible"
+	case "ACCOUNTERROR", "ACCOUNT_ERROR":
+		return "wechat rejected the payer account; ask the user to switch account or retry later"
+	case "RULELIMIT", "RULE_LIMIT", "FREQUENCY_LIMITED", "RATELIMIT_EXCEEDED":
+		return "wechat rate limited the payment request; retry later with backoff"
+	case "TRADE_ERROR":
+		return "wechat rejected the payment due to business rules; inspect the upstream detail and request_id before retrying"
+	case "BANKERROR", "BANK_ERROR", "SYSTEMERROR", "SYSTEM_ERROR":
+		return "wechat payment creation failed due to an upstream system error; retry later with backoff"
+	default:
+		return fmt.Sprintf("wechat partner jsapi order creation failed with upstream code %s; inspect the upstream message and request_id", wxErr.Code)
+	}
+}
+
+func wrapPartnerJSAPIOrderCreateError(err error) error {
+	var wxErr *WechatPayError
+	if errors.As(err, &wxErr) {
+		return fmt.Errorf("create partner jsapi order: %s: %w", partnerJSAPIOrderCreateWechatErrorGuide(wxErr), err)
+	}
+	return fmt.Errorf("create partner jsapi order: %w", err)
+}
+
+func partnerOrderQueryWechatErrorGuide(wxErr *WechatPayError) string {
+	if wxErr == nil {
+		return "wechat partner order query failed"
+	}
+	switch normalizePaymentOrderingWechatCode(wxErr.Code) {
+	case "ORDER_NOT_EXIST", "ORDERNOTEXIST":
+		return "wechat could not find the partner payment order; verify out_trade_no, transaction_id, and sub_mchid before retrying"
+	case "PARAM_ERROR", "INVALID_REQUEST":
+		return "verify the partner order query parameter format and request path before retrying"
+	case "NOAUTH", "NO_AUTH":
+		return "verify the merchant has permission to query this partner payment order before retrying"
+	case "SIGN_ERROR":
+		return "verify the merchant certificate, private key, and authorization signature before retrying"
+	case "RULELIMIT", "RULE_LIMIT", "FREQUENCY_LIMITED", "RATELIMIT_EXCEEDED":
+		return "wechat rate limited the partner order query; retry later with backoff"
+	case "SYSTEMERROR", "SYSTEM_ERROR", "BANKERROR", "BANK_ERROR":
+		return "wechat partner order query failed due to an upstream system error; retry later with backoff"
+	default:
+		return fmt.Sprintf("wechat partner order query failed with upstream code %s; inspect the upstream message and request_id", wxErr.Code)
+	}
+}
+
+func wrapPartnerOrderQueryError(err error) error {
+	var wxErr *WechatPayError
+	if errors.As(err, &wxErr) {
+		return fmt.Errorf("query partner order: %s: %w", partnerOrderQueryWechatErrorGuide(wxErr), err)
+	}
+	return fmt.Errorf("query partner order: %w", err)
+}
+
+func partnerOrderCloseWechatErrorGuide(wxErr *WechatPayError) string {
+	if wxErr == nil {
+		return "wechat partner order close failed"
+	}
+	switch normalizePaymentOrderingWechatCode(wxErr.Code) {
+	case "ORDER_CLOSED":
+		return "wechat reported the partner payment order is already closed"
+	case "ORDER_NOT_EXIST", "ORDERNOTEXIST":
+		return "wechat could not find the partner payment order to close; verify out_trade_no and sub_mchid before retrying"
+	case "INVALID_REQUEST":
+		return "verify the partner order close payload and merchant identifiers before retrying"
+	case "NOAUTH", "NO_AUTH":
+		return "verify the merchant has permission to close this partner payment order before retrying"
+	case "SIGN_ERROR":
+		return "verify the merchant certificate, private key, and authorization signature before retrying"
+	case "RULELIMIT", "RULE_LIMIT", "FREQUENCY_LIMITED", "RATELIMIT_EXCEEDED":
+		return "wechat rate limited the partner order close request; retry later with backoff"
+	case "SYSTEMERROR", "SYSTEM_ERROR", "BANKERROR", "BANK_ERROR":
+		return "wechat partner order close failed due to an upstream system error; retry later with backoff"
+	default:
+		return fmt.Sprintf("wechat partner order close failed with upstream code %s; inspect the upstream message and request_id", wxErr.Code)
+	}
+}
+
+func wrapPartnerOrderCloseError(err error) error {
+	var wxErr *WechatPayError
+	if errors.As(err, &wxErr) {
+		return fmt.Errorf("close partner order: %s: %w", partnerOrderCloseWechatErrorGuide(wxErr), err)
+	}
+	return fmt.Errorf("close partner order: %w", err)
+}
+
+func combineOrderCreateWechatErrorGuide(wxErr *WechatPayError) string {
+	if wxErr == nil {
+		return "wechat combine order creation failed"
+	}
+	switch normalizePaymentOrderingWechatCode(wxErr.Code) {
+	case "PARAM_ERROR", "INVALID_REQUEST":
+		return "verify combine_out_trade_no, sub_orders, payer info, and scene_info.payer_client_ip before retrying"
+	case "APPID_MCHID_NOT_MATCH", "OPENID_MISMATCH", "MCH_NOT_EXISTS":
+		return "verify the configured combine_appid, combine_mchid, and payer openid binding before retrying"
+	case "NOAUTH", "NO_AUTH":
+		return "verify the service provider merchant has permission to create combine orders before retrying"
+	case "SIGN_ERROR":
+		return "verify the merchant certificate, private key, and authorization signature before retrying"
+	case "ORDER_CLOSED":
+		return "wechat reported the combine order is already closed; recreate the payment with a new combine_out_trade_no"
+	case "OUT_TRADE_NO_USED":
+		return "wechat reported one of the trade numbers already exists; verify idempotency and reuse the existing pending payment when possible"
+	case "ACCOUNTERROR", "ACCOUNT_ERROR":
+		return "wechat rejected the payer account; ask the user to switch account or retry later"
+	case "RULELIMIT", "RULE_LIMIT", "FREQUENCY_LIMITED", "RATELIMIT_EXCEEDED":
+		return "wechat rate limited the combine order request; retry later with backoff"
+	case "TRADE_ERROR":
+		return "wechat rejected the combine payment due to business rules; inspect the upstream detail and request_id before retrying"
+	case "BANKERROR", "BANK_ERROR", "SYSTEMERROR", "SYSTEM_ERROR":
+		return "wechat combine order creation failed due to an upstream system error; retry later with backoff"
+	default:
+		return fmt.Sprintf("wechat combine order creation failed with upstream code %s; inspect the upstream message and request_id", wxErr.Code)
+	}
+}
+
+func wrapCombineOrderCreateError(err error) error {
+	var wxErr *WechatPayError
+	if errors.As(err, &wxErr) {
+		return fmt.Errorf("create combine order: %s: %w", combineOrderCreateWechatErrorGuide(wxErr), err)
+	}
+	return fmt.Errorf("create combine order: %w", err)
+}
+
+func combineOrderQueryWechatErrorGuide(wxErr *WechatPayError) string {
+	if wxErr == nil {
+		return "wechat combine order query failed"
+	}
+	switch normalizePaymentOrderingWechatCode(wxErr.Code) {
+	case "ORDER_NOT_EXIST", "ORDERNOTEXIST":
+		return "wechat could not find the combine payment order; verify combine_out_trade_no before retrying"
+	case "PARAM_ERROR", "INVALID_REQUEST":
+		return "verify the combine order query parameter format and request path before retrying"
+	case "NOAUTH", "NO_AUTH":
+		return "verify the merchant has permission to query this combine payment order before retrying"
+	case "SIGN_ERROR":
+		return "verify the merchant certificate, private key, and authorization signature before retrying"
+	case "RULELIMIT", "RULE_LIMIT", "FREQUENCY_LIMITED", "RATELIMIT_EXCEEDED":
+		return "wechat rate limited the combine order query; retry later with backoff"
+	case "SYSTEMERROR", "SYSTEM_ERROR", "BANKERROR", "BANK_ERROR":
+		return "wechat combine order query failed due to an upstream system error; retry later with backoff"
+	default:
+		return fmt.Sprintf("wechat combine order query failed with upstream code %s; inspect the upstream message and request_id", wxErr.Code)
+	}
+}
+
+func wrapCombineOrderQueryError(err error) error {
+	var wxErr *WechatPayError
+	if errors.As(err, &wxErr) {
+		return fmt.Errorf("query combine order: %s: %w", combineOrderQueryWechatErrorGuide(wxErr), err)
+	}
+	return fmt.Errorf("query combine order: %w", err)
+}
+
+func combineOrderCloseWechatErrorGuide(wxErr *WechatPayError) string {
+	if wxErr == nil {
+		return "wechat combine order close failed"
+	}
+	switch normalizePaymentOrderingWechatCode(wxErr.Code) {
+	case "ORDER_CLOSED":
+		return "wechat reported the combine payment order is already closed"
+	case "ORDER_NOT_EXIST", "ORDERNOTEXIST":
+		return "wechat could not find the combine payment order to close; verify combine_out_trade_no before retrying"
+	case "INVALID_REQUEST":
+		return "verify the close payload matches the original combine order sub-orders exactly before retrying"
+	case "NOAUTH", "NO_AUTH":
+		return "verify the merchant has permission to close this combine payment order before retrying"
+	case "SIGN_ERROR":
+		return "verify the merchant certificate, private key, and authorization signature before retrying"
+	case "USERPAYING":
+		return "wechat reports the payer is still completing payment; query the order result before retrying close"
+	case "RULELIMIT", "RULE_LIMIT", "FREQUENCY_LIMITED", "RATELIMIT_EXCEEDED":
+		return "wechat rate limited the combine order close request; retry later with backoff"
+	case "SYSTEMERROR", "SYSTEM_ERROR", "BANKERROR", "BANK_ERROR":
+		return "wechat combine order close failed due to an upstream system error; retry later with backoff"
+	default:
+		return fmt.Sprintf("wechat combine order close failed with upstream code %s; inspect the upstream message and request_id", wxErr.Code)
+	}
+}
+
+func wrapCombineOrderCloseError(err error) error {
+	var wxErr *WechatPayError
+	if errors.As(err, &wxErr) {
+		return fmt.Errorf("close combine order: %s: %w", combineOrderCloseWechatErrorGuide(wxErr), err)
+	}
+	return fmt.Errorf("close combine order: %w", err)
 }
 
 // SubOrderClose 关闭子订单参数

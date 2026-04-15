@@ -411,7 +411,7 @@ func (server *Server) createMerchantCancelWithdrawApplication(ctx *gin.Context) 
 		return
 	}
 	if strings.TrimSpace(eligibility.ValidateResult) != "ALLOW_CANCEL_WITHDRAW" {
-		ctx.JSON(http.StatusConflict, errorResponse(errors.New("merchant is not eligible for cancel withdraw")))
+		ctx.JSON(http.StatusConflict, errorResponse(merchantCancelWithdrawEligibilityBlockedError(eligibility)))
 		return
 	}
 
@@ -809,6 +809,29 @@ func toMerchantCancelWithdrawEligibilityItem(resp *wechat.EcommerceCancelWithdra
 		item.BlockReasons = append(item.BlockReasons, merchantCancelWithdrawBlockReason{Type: reason.Type, Description: reason.Description})
 	}
 	return item
+}
+
+func merchantCancelWithdrawEligibilityBlockedError(resp *wechat.EcommerceCancelWithdrawEligibilityResponse) error {
+	const baseMessage = "merchant is not eligible for cancel withdraw"
+	if resp == nil {
+		return errors.New(baseMessage)
+	}
+	reasons := make([]string, 0, len(resp.BlockReasons))
+	for _, reason := range resp.BlockReasons {
+		description := strings.TrimSpace(reason.Description)
+		if description != "" {
+			reasons = append(reasons, description)
+			continue
+		}
+		reasonType := strings.TrimSpace(reason.Type)
+		if reasonType != "" {
+			reasons = append(reasons, reasonType)
+		}
+	}
+	if len(reasons) == 0 {
+		return errors.New(baseMessage)
+	}
+	return fmt.Errorf("%s: %s", baseMessage, strings.Join(reasons, "; "))
 }
 
 func toMerchantCancelWithdrawItem(record db.MerchantCancelWithdrawApplication) merchantCancelWithdrawItem {

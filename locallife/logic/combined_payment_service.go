@@ -240,7 +240,7 @@ func (svc *CombinedPaymentService) CreateCombinedPaymentOrder(ctx context.Contex
 			_, _ = svc.store.UpdatePaymentOrderToClosed(cleanupCtx, info.PaymentOrder.ID)
 		}
 		_, _ = svc.store.UpdateCombinedPaymentOrderToClosed(cleanupCtx, txResult.CombinedPaymentOrder.ID)
-		return result, fmt.Errorf("create combine order: %w", err)
+		return result, mapCombineOrderCreateError(err)
 	}
 	if combineResp == nil || strings.TrimSpace(combineResp.PrepayID) == "" {
 		cleanupCtx := context.Background()
@@ -248,7 +248,7 @@ func (svc *CombinedPaymentService) CreateCombinedPaymentOrder(ctx context.Contex
 			_, _ = svc.store.UpdatePaymentOrderToClosed(cleanupCtx, info.PaymentOrder.ID)
 		}
 		_, _ = svc.store.UpdateCombinedPaymentOrderToClosed(cleanupCtx, txResult.CombinedPaymentOrder.ID)
-		return result, fmt.Errorf("create combine order: empty prepay id")
+		return result, mapCombineOrderCreateError(errors.New("create combine order: empty prepay id"))
 	}
 
 	updatedCombined, err := svc.store.UpdateCombinedPaymentOrderPrepay(ctx, db.UpdateCombinedPaymentOrderPrepayParams{
@@ -417,7 +417,7 @@ func (svc *CombinedPaymentService) QueryCombinedPaymentOrder(ctx context.Context
 
 	queryResp, err := svc.ecommerceClient.QueryCombineOrder(ctx, detail.CombinedPayment.CombineOutTradeNo)
 	if err != nil {
-		return QueryCombinedPaymentOrderResult{}, fmt.Errorf("query combine order: %w", err)
+		return QueryCombinedPaymentOrderResult{}, mapCombineOrderQueryError(err)
 	}
 	wechatOrder := mapCombinedWechatOrder(queryResp)
 
@@ -474,7 +474,7 @@ func (svc *CombinedPaymentService) CloseCombinedPaymentOrder(ctx context.Context
 	}
 
 	if err := svc.ecommerceClient.CloseCombineOrder(ctx, combinedRow.CombineOutTradeNo, closeSubs); err != nil {
-		return CloseCombinedPaymentOrderResult{}, err
+		return CloseCombinedPaymentOrderResult{}, mapCombineOrderCloseError(err)
 	}
 
 	// 收集子单 OutTradeNo 用于事务关闭

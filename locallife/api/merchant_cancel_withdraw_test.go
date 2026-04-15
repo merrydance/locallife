@@ -69,6 +69,27 @@ func TestValidateCreateMerchantCancelWithdrawRequestRejectsBusinessLicenseStatus
 	require.ErrorContains(t, err, "business_license_status_declaration must be empty when withdraw=NOT_APPLY_WITHDRAW")
 }
 
+func TestMerchantCancelWithdrawEligibilityBlockedErrorUsesBlockReasonDescriptions(t *testing.T) {
+	err := merchantCancelWithdrawEligibilityBlockedError(&wechat.EcommerceCancelWithdrawEligibilityResponse{
+		ValidateResult: "NOT_ALLOW_CANCEL_WITHDRAW",
+		BlockReasons: []wechat.EcommerceCancelWithdrawBlockReason{
+			{Type: "CONSUMER_COMPLAINT_UNPROCESSED", Description: "消费者投诉未处理"},
+			{Type: "HAS_BLOCKING_CONTROL", Description: "存在不可注销管控"},
+		},
+	})
+	require.Equal(t, "merchant is not eligible for cancel withdraw: 消费者投诉未处理; 存在不可注销管控", err.Error())
+}
+
+func TestMerchantCancelWithdrawEligibilityBlockedErrorFallsBackToReasonType(t *testing.T) {
+	err := merchantCancelWithdrawEligibilityBlockedError(&wechat.EcommerceCancelWithdrawEligibilityResponse{
+		ValidateResult: "NOT_ALLOW_CANCEL_WITHDRAW",
+		BlockReasons: []wechat.EcommerceCancelWithdrawBlockReason{
+			{Type: "OTHER_REASON"},
+		},
+	})
+	require.Equal(t, "merchant is not eligible for cancel withdraw: OTHER_REASON", err.Error())
+}
+
 func TestRespondMerchantCancelWithdrawRequestPreparationErrorReturnsValidationMessage(t *testing.T) {
 	ctx, recorder := newMerchantCancelWithdrawTestContext(t)
 

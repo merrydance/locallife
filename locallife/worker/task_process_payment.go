@@ -2773,30 +2773,7 @@ func (processor *RedisTaskProcessor) handleApplymentSuccess(ctx context.Context,
 		merchant = loadedMerchant
 	}
 
-	// 1. 商户进件成功后，添加为分账接收方。
-	if processor.ecommerceClient != nil && payload.SubMchID != "" && payload.SubjectType == "merchant" {
-		_, err := processor.ecommerceClient.AddProfitSharingReceiver(ctx, &wechat.AddReceiverRequest{
-			AppID:        processor.ecommerceClient.GetSpAppID(),
-			Type:         wechat.ReceiverTypeMerchant,
-			Account:      payload.SubMchID,
-			Name:         strings.TrimSpace(merchant.Name),
-			RelationType: wechat.RelationOthers,
-		})
-		if err != nil {
-			// 添加失败不影响流程，但需要记录告警
-			log.Error().Err(err).
-				Str("sub_mch_id", payload.SubMchID).
-				Str("alert_type", "ADD_RECEIVER_FAILED").
-				Msg("⚠️ ALERT: failed to add profit sharing receiver - manual intervention required")
-			// 不返回错误，允许继续发送通知
-		} else {
-			log.Info().
-				Str("sub_mch_id", payload.SubMchID).
-				Msg("successfully added profit sharing receiver")
-		}
-	}
-
-	// 2. 发送成功通知
+	// 发送进件完成通知。当前主链下，商户自身是分账出资方，不在这里追加为分账接收方。
 	userID := merchant.OwnerUserID
 	notifyContent := fmt.Sprintf("您的商户「%s」已完成微信支付开户，可以开始接单收款了！", merchant.Name)
 

@@ -321,7 +321,9 @@ func TestCreateCombinedPaymentOrder(t *testing.T) {
 			},
 			check: func(t *testing.T, _ CreateCombinedPaymentOrderResult, err error) {
 				require.Error(t, err)
-				require.Contains(t, err.Error(), "create combine order: empty prepay id")
+				reqErr := assertRequestError(t, err)
+				require.Equal(t, http.StatusServiceUnavailable, reqErr.Status)
+				require.Equal(t, "wechat payment did not return a valid prepay session, please retry later", reqErr.Err.Error())
 			},
 		},
 		{
@@ -368,7 +370,9 @@ func TestCreateCombinedPaymentOrder(t *testing.T) {
 			},
 			check: func(t *testing.T, _ CreateCombinedPaymentOrderResult, err error) {
 				require.Error(t, err)
-				require.Contains(t, err.Error(), "create combine order: empty prepay id")
+				reqErr := assertRequestError(t, err)
+				require.Equal(t, http.StatusServiceUnavailable, reqErr.Status)
+				require.Equal(t, "wechat payment did not return a valid prepay session, please retry later", reqErr.Err.Error())
 			},
 		},
 		{
@@ -1356,4 +1360,18 @@ func TestMapCombinedPaymentError(t *testing.T) {
 			require.Equal(t, tc.expectedMsg, reqErr.Err.Error())
 		})
 	}
+}
+
+func TestMapCombineOrderQueryError(t *testing.T) {
+	err := mapCombineOrderQueryError(&wechat.WechatPayError{StatusCode: 404, Code: "ORDERNOTEXIST", Message: "订单不存在"})
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, http.StatusServiceUnavailable, reqErr.Status)
+	require.Equal(t, "payment status is still being synchronized, please retry later", reqErr.Err.Error())
+}
+
+func TestMapCombineOrderCloseError(t *testing.T) {
+	err := mapCombineOrderCloseError(&wechat.WechatPayError{StatusCode: 202, Code: "USERPAYING", Message: "用户支付中"})
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, http.StatusConflict, reqErr.Status)
+	require.Equal(t, "payment is being processed, please retry after confirming the latest status", reqErr.Err.Error())
 }

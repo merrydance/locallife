@@ -399,12 +399,12 @@ func (svc *PaymentOrderService) createReservationEcommercePayment(
 	if err != nil {
 		cleanupCtx := context.Background()
 		_, _ = svc.store.UpdatePaymentOrderToClosed(cleanupCtx, txResult.PaymentOrder.ID)
-		return result, fmt.Errorf("create partner jsapi order: %w", err)
+		return result, mapPartnerJSAPIOrderCreateError(err)
 	}
 	if orderResp == nil || strings.TrimSpace(orderResp.PrepayID) == "" {
 		cleanupCtx := context.Background()
 		_, _ = svc.store.UpdatePaymentOrderToClosed(cleanupCtx, txResult.PaymentOrder.ID)
-		return result, fmt.Errorf("create partner jsapi order: empty prepay id")
+		return result, mapPartnerJSAPIOrderCreateError(errors.New("create partner jsapi order: empty prepay id"))
 	}
 
 	updatedPayment, err := svc.store.UpdatePaymentOrderPrepayId(ctx, db.UpdatePaymentOrderPrepayIdParams{
@@ -515,12 +515,12 @@ func (svc *PaymentOrderService) createOrderEcommercePayment(
 	if err != nil {
 		cleanupCtx := context.Background()
 		_, _ = svc.store.UpdatePaymentOrderToClosed(cleanupCtx, txResult.PaymentOrder.ID)
-		return result, fmt.Errorf("create partner jsapi order: %w", err)
+		return result, mapPartnerJSAPIOrderCreateError(err)
 	}
 	if orderResp == nil || strings.TrimSpace(orderResp.PrepayID) == "" {
 		cleanupCtx := context.Background()
 		_, _ = svc.store.UpdatePaymentOrderToClosed(cleanupCtx, txResult.PaymentOrder.ID)
-		return result, fmt.Errorf("create partner jsapi order: empty prepay id")
+		return result, mapPartnerJSAPIOrderCreateError(errors.New("create partner jsapi order: empty prepay id"))
 	}
 
 	updatedPayment, err := svc.store.UpdatePaymentOrderPrepayId(ctx, db.UpdatePaymentOrderPrepayIdParams{
@@ -749,8 +749,6 @@ func parsePaymentAttach(attach string) map[string]string {
 	return parts
 }
 
-
-
 func shouldReuseReservationPendingPayment(paymentOrder db.PaymentOrder, expectedAmount int64, expectedAttach string) bool {
 	if paymentOrder.Amount != expectedAmount || !paymentOrder.Attach.Valid {
 		return false
@@ -884,7 +882,8 @@ func (svc *PaymentOrderService) closePartnerPaymentOrder(ctx context.Context, pa
 			return ClosePaymentOrderResult{PaymentOrder: updatedPayment}, nil
 		}
 		if err := svc.ecommerceClient.ClosePartnerOrder(ctx, paymentOrder.OutTradeNo, subMchID); err != nil {
-			log.Warn().Err(err).Str("out_trade_no", paymentOrder.OutTradeNo).Msg("close partner order failed, order will auto-expire")
+			mappedErr := mapPartnerOrderCloseError(err)
+			log.Warn().Err(mappedErr).Str("out_trade_no", paymentOrder.OutTradeNo).Msg("close partner order failed, order will auto-expire")
 		}
 	}
 
@@ -956,7 +955,7 @@ func (svc *PaymentOrderService) closeCombinedPaymentOrder(ctx context.Context, p
 	}
 
 	if err := svc.ecommerceClient.CloseCombineOrder(ctx, combinedPayment.CombineOutTradeNo, closeSubs); err != nil {
-		return ClosePaymentOrderResult{}, err
+		return ClosePaymentOrderResult{}, mapCombineOrderCloseError(err)
 	}
 
 	if _, err := svc.store.CloseCombinedPaymentOrderTx(ctx, db.CloseCombinedPaymentOrderTxParams{

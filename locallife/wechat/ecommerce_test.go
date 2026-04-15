@@ -3,6 +3,7 @@ package wechat
 import (
 	"bytes"
 	"context"
+	"crypto"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
@@ -109,6 +110,15 @@ func encryptApplymentResponseSensitiveField(t *testing.T, publicKey *rsa.PublicK
 	ciphertext, err := rsa.EncryptOAEP(sha1.New(), rand.Reader, publicKey, []byte(plaintext), nil)
 	require.NoError(t, err)
 	return base64.StdEncoding.EncodeToString(ciphertext)
+}
+
+func verifyPaySignatureForAppID(t *testing.T, publicKey *rsa.PublicKey, appID string, payParams *JSAPIPayParams) bool {
+	t.Helper()
+	require.NotNil(t, payParams)
+	signature, err := base64.StdEncoding.DecodeString(payParams.PaySign)
+	require.NoError(t, err)
+	digest := sha256.Sum256([]byte(fmt.Sprintf("%s\n%s\n%s\n%s\n", appID, payParams.TimeStamp, payParams.NonceStr, payParams.Package)))
+	return rsa.VerifyPKCS1v15(publicKey, crypto.SHA256, digest[:], signature) == nil
 }
 
 func minimalBMP() []byte {
@@ -707,6 +717,56 @@ func TestCreatePartnerJSAPIOrder_UsesDedicatedNotifyURL(t *testing.T) {
 	require.Equal(t, "prepay_id=wx_partner_prepay_001", payParams.Package)
 }
 
+func TestCreatePartnerJSAPIOrder_UsesServiceAppIDForPaySign(t *testing.T) {
+	client, merchantPublicKey := newSignedEcommerceClientWithMerchantKeyForTest(t, func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader(`{"prepay_id":"wx_partner_prepay_service_001"}`)),
+		}, nil
+	})
+
+	resp, payParams, err := client.CreatePartnerJSAPIOrder(context.Background(), &PartnerJSAPIOrderRequest{
+		SubMchID:     "sub-mchid-001",
+		Description:  "测试普通支付",
+		OutTradeNo:   "partner-order-service-001",
+		ExpireTime:   time.Now().Add(30 * time.Minute),
+		TotalAmount:  188,
+		PayerOpenID:  "openid-001",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "wx_partner_prepay_service_001", resp.PrepayID)
+	require.True(t, verifyPaySignatureForAppID(t, merchantPublicKey, "service-appid-001", payParams))
+}
+
+func TestCreatePartnerJSAPIOrder_RejectsSubOpenIDProjectFlow(t *testing.T) {
+	client := &EcommerceClient{}
+
+	_, _, err := client.CreatePartnerJSAPIOrder(context.Background(), &PartnerJSAPIOrderRequest{
+		SubMchID:       "sub-mchid-001",
+		SubAppID:       "sub-appid-001",
+		Description:    "测试普通支付",
+		OutTradeNo:     "partner-order-subapp-001",
+		TotalAmount:    188,
+		PayerSubOpenID: "sub-openid-001",
+	})
+	require.EqualError(t, err, "create partner jsapi order: sub_openid and sub_appid are not supported in the single-appid project flow")
+}
+
+func TestCreatePartnerJSAPIOrder_RequiresPayerClientIPWhenDeviceIDProvided(t *testing.T) {
+	client := &EcommerceClient{}
+
+	_, _, err := client.CreatePartnerJSAPIOrder(context.Background(), &PartnerJSAPIOrderRequest{
+		SubMchID:    "sub-mchid-001",
+		Description: "测试普通支付",
+		OutTradeNo:  "partner-order-001",
+		TotalAmount: 188,
+		PayerOpenID: "openid-001",
+		DeviceID:    "POS-001",
+	})
+	require.EqualError(t, err, "create partner jsapi order: payer_client_ip is required when scene_info.device_id is provided")
+}
+
 func TestCreateCombineOrder_UsesServiceProviderAndSubMerchantFields(t *testing.T) {
 	merchantPrivateKey, _ := generateTestKeyPair(t)
 	platformPrivateKey, platformPublicKey := generateTestKeyPair(t)
@@ -757,7 +817,7 @@ func TestCreateCombineOrder_UsesServiceProviderAndSubMerchantFields(t *testing.T
 			require.True(t, ok)
 			require.Equal(t, "service-mchid-001", subOrder["mchid"])
 			require.Equal(t, "sub-mchid-001", subOrder["sub_mchid"])
-			require.Equal(t, "", subOrder["attach"])
+			require.Equal(t, "attach-001", subOrder["attach"])
 
 			settleInfo, ok := subOrder["settle_info"].(map[string]any)
 			require.True(t, ok)
@@ -779,7 +839,7 @@ func TestCreateCombineOrder_UsesServiceProviderAndSubMerchantFields(t *testing.T
 			Description:   "测试订单",
 			Amount:        100,
 			ProfitSharing: true,
-			Attach:        "",
+			Attach:        "attach-001",
 		}},
 		PayerOpenID: "openid-001",
 		ExpireTime:  time.Now().Add(30 * time.Minute),
@@ -790,6 +850,85 @@ func TestCreateCombineOrder_UsesServiceProviderAndSubMerchantFields(t *testing.T
 	require.NoError(t, err)
 	require.Equal(t, "wx_combined_prepay_001", resp.PrepayID)
 	require.Equal(t, "prepay_id=wx_combined_prepay_001", payParams.Package)
+}
+
+func TestCreateCombineOrder_UsesServiceAppIDForPaySign(t *testing.T) {
+	client, merchantPublicKey := newSignedEcommerceClientWithMerchantKeyForTest(t, func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader(`{"prepay_id":"wx_combined_prepay_service_001"}`)),
+		}, nil
+	})
+
+	resp, payParams, err := client.CreateCombineOrder(context.Background(), &CombineOrderRequest{
+		CombineOutTradeNo: "combine-order-service-001",
+		SubOrders: []SubOrder{{
+			SubMchID:    "sub-mchid-001",
+			OutTradeNo:  "sub-order-service-001",
+			Description: "测试订单",
+			Amount:      100,
+			Attach:      "attach-001",
+		}},
+		PayerOpenID: "openid-001",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "wx_combined_prepay_service_001", resp.PrepayID)
+	require.True(t, verifyPaySignatureForAppID(t, merchantPublicKey, "service-appid-001", payParams))
+}
+
+func TestCreateCombineOrder_RejectsSubAppIDProjectFlow(t *testing.T) {
+	client := &EcommerceClient{}
+
+	_, _, err := client.CreateCombineOrder(context.Background(), &CombineOrderRequest{
+		CombineOutTradeNo: "combine-order-subapp-001",
+		SubOrders: []SubOrder{{
+			SubMchID:    "sub-mchid-001",
+			SubAppID:    "sub-appid-001",
+			OutTradeNo:  "sub-order-subapp-001",
+			Description: "测试订单",
+			Amount:      100,
+			Attach:      "attach-001",
+		}},
+		PayerOpenID: "openid-001",
+	})
+	require.EqualError(t, err, "create combine order: sub_orders[0].sub_appid is not supported in the single-appid project flow")
+}
+
+func TestCreateCombineOrder_RejectsSubOpenIDProjectFlow(t *testing.T) {
+	client := &EcommerceClient{}
+
+	_, _, err := client.CreateCombineOrder(context.Background(), &CombineOrderRequest{
+		CombineOutTradeNo: "combine-order-subopenid-001",
+		SubOrders: []SubOrder{{
+			SubMchID:    "sub-mchid-001",
+			OutTradeNo:  "sub-order-subopenid-001",
+			Description: "测试订单",
+			Amount:      100,
+			Attach:      "attach-001",
+		}},
+		PayerSubOpenID: "sub-openid-001",
+	})
+	require.EqualError(t, err, "create combine order: sub_openid is not supported in the single-appid project flow")
+}
+
+func TestCreateCombineOrder_RequiresAttachForEachSubOrder(t *testing.T) {
+	client := &EcommerceClient{}
+
+	_, _, err := client.CreateCombineOrder(context.Background(), &CombineOrderRequest{
+		CombineOutTradeNo: "combine-order-001",
+		SubOrders: []SubOrder{{
+			SubMchID:    "sub-mchid-001",
+			OutTradeNo:  "sub-order-001",
+			Description: "测试订单",
+			Amount:      100,
+		}},
+		PayerOpenID: "openid-001",
+		SceneInfo: &CombineSceneInfo{
+			PayerClientIP: "127.0.0.1",
+		},
+	})
+	require.EqualError(t, err, "create combine order: sub_orders[0].attach is required")
 }
 
 func TestQueryCombineOrder_ParsesServiceProviderFields(t *testing.T) {

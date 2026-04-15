@@ -3,6 +3,7 @@ package logic
 import (
 	"context"
 	"errors"
+	"net/http"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -194,6 +195,57 @@ func TestPaymentOrderServiceCreatePaymentOrder_PartnerPrepayUpdateFailureClosesB
 	_, err := svc.CreatePaymentOrder(context.Background(), input)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "update prepay id")
+}
+
+func TestPaymentOrderServiceCreatePaymentOrder_WechatOrderClosedReturnsConflict(t *testing.T) {
+	input := CreatePaymentOrderInput{
+		UserID:       1001,
+		OrderID:      2001,
+		PaymentType:  paymentTypeMiniProgram,
+		BusinessType: businessTypeOrder,
+		ClientIP:     "127.0.0.1",
+	}
+	order := db.Order{
+		ID:          input.OrderID,
+		UserID:      input.UserID,
+		MerchantID:  3001,
+		Status:      "pending",
+		TotalAmount: 1000,
+	}
+	txPayment := db.PaymentOrder{
+		ID:          4002,
+		UserID:      input.UserID,
+		Status:      paymentStatusPending,
+		PaymentType: "profit_sharing",
+		Amount:      1000,
+		OutTradeNo:  "new-out-trade-no",
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+
+	store.EXPECT().GetOrder(gomock.Any(), input.OrderID).Return(order, nil)
+	store.EXPECT().GetLatestPaymentOrderByOrder(gomock.Any(), db.GetLatestPaymentOrderByOrderParams{
+		OrderID:      pgtype.Int8{Int64: input.OrderID, Valid: true},
+		BusinessType: businessTypeOrder,
+	}).Return(db.PaymentOrder{}, db.ErrRecordNotFound)
+	store.EXPECT().GetUser(gomock.Any(), input.UserID).Return(db.User{ID: input.UserID, WechatOpenid: "openid"}, nil)
+	store.EXPECT().GetMerchant(gomock.Any(), order.MerchantID).Return(db.Merchant{ID: order.MerchantID, Name: "Merchant A"}, nil)
+	store.EXPECT().CreatePartnerPaymentTx(gomock.Any(), gomock.Any()).Return(db.CreatePartnerPaymentTxResult{
+		PaymentOrder: txPayment,
+		SubMchID:     "sub-new",
+	}, nil)
+	ecommerceClient.EXPECT().CreatePartnerJSAPIOrder(gomock.Any(), gomock.Any()).Return(nil, nil, &wechat.WechatPayError{StatusCode: 400, Code: "ORDER_CLOSED", Message: "订单已关闭"})
+	store.EXPECT().UpdatePaymentOrderToClosed(gomock.Any(), txPayment.ID).Return(db.PaymentOrder{ID: txPayment.ID, Status: "closed"}, nil)
+
+	svc := NewPaymentOrderService(store, nil, ecommerceClient)
+	_, err := svc.CreatePaymentOrder(context.Background(), input)
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, http.StatusConflict, reqErr.Status)
+	require.Equal(t, "payment order has expired or been closed, please recreate the payment", reqErr.Err.Error())
 }
 
 func TestMapReservationEcommerceError_ChangedTargetReturnsConflict(t *testing.T) {
