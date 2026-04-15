@@ -23,6 +23,7 @@ import (
 	"testing"
 	"time"
 
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	"github.com/stretchr/testify/require"
 )
 
@@ -727,16 +728,65 @@ func TestCreatePartnerJSAPIOrder_UsesServiceAppIDForPaySign(t *testing.T) {
 	})
 
 	resp, payParams, err := client.CreatePartnerJSAPIOrder(context.Background(), &PartnerJSAPIOrderRequest{
-		SubMchID:     "sub-mchid-001",
-		Description:  "测试普通支付",
-		OutTradeNo:   "partner-order-service-001",
-		ExpireTime:   time.Now().Add(30 * time.Minute),
-		TotalAmount:  188,
-		PayerOpenID:  "openid-001",
+		SubMchID:    "sub-mchid-001",
+		Description: "测试普通支付",
+		OutTradeNo:  "partner-order-service-001",
+		ExpireTime:  time.Now().Add(30 * time.Minute),
+		TotalAmount: 188,
+		PayerOpenID: "openid-001",
 	})
 	require.NoError(t, err)
 	require.Equal(t, "wx_partner_prepay_service_001", resp.PrepayID)
 	require.True(t, verifyPaySignatureForAppID(t, merchantPublicKey, "service-appid-001", payParams))
+}
+
+func TestCreatePartnerJSAPIOrder_UsesOfficialNestedRequestFields(t *testing.T) {
+	client := newSignedEcommerceClientForTest(t, func(req *http.Request) (*http.Response, error) {
+		require.Equal(t, http.MethodPost, req.Method)
+		require.Equal(t, ecommercePartnerJSAPIOrderURL, req.URL.Path)
+
+		var body PartnerJSAPIOrderRequestBody
+		require.NoError(t, json.NewDecoder(req.Body).Decode(&body))
+		require.NotNil(t, body.Detail)
+		require.Equal(t, int64(288), body.Detail.CostPrice)
+		require.Len(t, body.Detail.GoodsDetail, 1)
+		require.Equal(t, "goods-001", body.Detail.GoodsDetail[0].MerchantGoodsID)
+		require.NotNil(t, body.SceneInfo)
+		require.Equal(t, "store-001", body.SceneInfo.StoreInfo.ID)
+		require.NotNil(t, body.SettleInfo)
+		require.Equal(t, int64(30), body.SettleInfo.SubsidyAmount)
+
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader(`{"prepay_id":"wx_partner_prepay_nested_001"}`)),
+		}, nil
+	})
+
+	_, _, err := client.CreatePartnerJSAPIOrder(context.Background(), &PartnerJSAPIOrderRequest{
+		SubMchID:      "sub-mchid-001",
+		Description:   "测试普通支付",
+		OutTradeNo:    "partner-order-nested-001",
+		TotalAmount:   188,
+		PayerOpenID:   "openid-001",
+		PayerClientIP: "127.0.0.1",
+		StoreInfo: &PartnerOrderStoreInfo{
+			ID:      "store-001",
+			Name:    "腾讯大厦分店",
+			Address: "深圳南山",
+		},
+		ProfitSharing: true,
+		SubsidyAmount: 30,
+		Detail: &PartnerOrderDetail{
+			CostPrice: 288,
+			GoodsDetail: []PartnerOrderGoodsDetail{{
+				MerchantGoodsID: "goods-001",
+				Quantity:        1,
+				UnitPrice:       188,
+			}},
+		},
+	})
+	require.NoError(t, err)
 }
 
 func TestCreatePartnerJSAPIOrder_RejectsSubOpenIDProjectFlow(t *testing.T) {
@@ -764,7 +814,85 @@ func TestCreatePartnerJSAPIOrder_RequiresPayerClientIPWhenDeviceIDProvided(t *te
 		PayerOpenID: "openid-001",
 		DeviceID:    "POS-001",
 	})
-	require.EqualError(t, err, "create partner jsapi order: payer_client_ip is required when scene_info.device_id is provided")
+	require.EqualError(t, err, "create partner jsapi order: payer_client_ip is required when scene_info is provided")
+}
+
+func TestQueryPartnerOrderByTransactionID_ValidatesRequiredResponseFields(t *testing.T) {
+	client := newSignedEcommerceClientForTest(t, func(req *http.Request) (*http.Response, error) {
+		require.Equal(t, http.MethodGet, req.Method)
+		require.Equal(t, "/v3/pay/partner/transactions/id/wx-transaction-001", req.URL.Path)
+		require.Equal(t, "service-mchid-001", req.URL.Query().Get("sp_mchid"))
+		require.Equal(t, "sub-mchid-001", req.URL.Query().Get("sub_mchid"))
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body: io.NopCloser(strings.NewReader(`{
+				"sp_appid":"service-appid-001",
+				"sp_mchid":"service-mchid-001",
+				"sub_mchid":"sub-mchid-001",
+				"out_trade_no":"partner-order-001",
+				"trade_type":"JSAPI",
+				"trade_state":"SUCCESS",
+				"trade_state_desc":"支付成功"
+			}`)),
+		}, nil
+	})
+
+	resp, err := client.QueryPartnerOrderByTransactionID(context.Background(), "wx-transaction-001", "sub-mchid-001")
+	require.Nil(t, resp)
+	var contractErr *PartnerOrderQueryContractError
+	require.ErrorAs(t, err, &contractErr)
+	require.EqualError(t, contractErr, "query partner order by transaction_id: wechat response missing transaction_id")
+}
+
+func TestQueryPartnerOrderByOutTradeNo_AllowsPendingResponseWithoutTransactionFields(t *testing.T) {
+	client := newSignedEcommerceClientForTest(t, func(req *http.Request) (*http.Response, error) {
+		require.Equal(t, http.MethodGet, req.Method)
+		require.Equal(t, "/v3/pay/partner/transactions/out-trade-no/partner-order-001", req.URL.Path)
+		require.Equal(t, "service-mchid-001", req.URL.Query().Get("sp_mchid"))
+		require.Equal(t, "sub-mchid-001", req.URL.Query().Get("sub_mchid"))
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body: io.NopCloser(strings.NewReader(`{
+				"sp_appid":"service-appid-001",
+				"sp_mchid":"service-mchid-001",
+				"sub_mchid":"sub-mchid-001",
+				"out_trade_no":"partner-order-001",
+				"trade_state":"NOTPAY",
+				"trade_state_desc":"待支付"
+			}`)),
+		}, nil
+	})
+
+	resp, err := client.QueryPartnerOrderByOutTradeNo(context.Background(), "partner-order-001", "sub-mchid-001")
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	require.Equal(t, "partner-order-001", resp.OutTradeNo)
+	require.Equal(t, "NOTPAY", resp.TradeState)
+	require.Empty(t, resp.TransactionID)
+	require.Empty(t, resp.TradeType)
+}
+
+func TestClosePartnerOrder_UsesCanonicalCloseRequestBody(t *testing.T) {
+	client := newSignedEcommerceClientForTest(t, func(req *http.Request) (*http.Response, error) {
+		require.Equal(t, http.MethodPost, req.Method)
+		require.Equal(t, "/v3/pay/partner/transactions/out-trade-no/partner-order-close-001/close", req.URL.Path)
+
+		var body PartnerCloseOrderRequest
+		require.NoError(t, json.NewDecoder(req.Body).Decode(&body))
+		require.Equal(t, "service-mchid-001", body.SpMchID)
+		require.Equal(t, "sub-mchid-001", body.SubMchID)
+
+		return &http.Response{
+			StatusCode: http.StatusNoContent,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader("")),
+		}, nil
+	})
+
+	err := client.ClosePartnerOrder(context.Background(), "partner-order-close-001", "sub-mchid-001")
+	require.NoError(t, err)
 }
 
 func TestCreateCombineOrder_UsesServiceProviderAndSubMerchantFields(t *testing.T) {
@@ -798,30 +926,21 @@ func TestCreateCombineOrder_UsesServiceProviderAndSubMerchantFields(t *testing.T
 			require.Equal(t, http.MethodPost, req.Method)
 			require.Equal(t, ecommerceCombineOrderURL, req.URL.Path)
 
-			var body map[string]any
+			var body CombineOrderRequestBody
 			require.NoError(t, json.NewDecoder(req.Body).Decode(&body))
 
-			require.Equal(t, "service-appid-001", body["combine_appid"])
-			require.Equal(t, "service-mchid-001", body["combine_mchid"])
-			require.Equal(t, "https://example.com/combine-notify", body["notify_url"])
-
-			payerInfo, ok := body["combine_payer_info"].(map[string]any)
-			require.True(t, ok)
-			require.Equal(t, "openid-001", payerInfo["openid"])
-
-			subOrders, ok := body["sub_orders"].([]any)
-			require.True(t, ok)
-			require.Len(t, subOrders, 1)
-
-			subOrder, ok := subOrders[0].(map[string]any)
-			require.True(t, ok)
-			require.Equal(t, "service-mchid-001", subOrder["mchid"])
-			require.Equal(t, "sub-mchid-001", subOrder["sub_mchid"])
-			require.Equal(t, "attach-001", subOrder["attach"])
-
-			settleInfo, ok := subOrder["settle_info"].(map[string]any)
-			require.True(t, ok)
-			require.Equal(t, true, settleInfo["profit_sharing"])
+			require.Equal(t, "service-appid-001", body.CombineAppID)
+			require.Equal(t, "service-mchid-001", body.CombineMchID)
+			require.Equal(t, "https://example.com/combine-notify", body.NotifyURL)
+			require.Equal(t, "openid-001", body.CombinePayerInfo.OpenID)
+			require.Len(t, body.SubOrders, 1)
+			require.Equal(t, "service-mchid-001", body.SubOrders[0].MchID)
+			require.Equal(t, "sub-mchid-001", body.SubOrders[0].SubMchID)
+			require.Equal(t, "attach-001", body.SubOrders[0].Attach)
+			require.Equal(t, "买单费用", body.SubOrders[0].Detail)
+			require.NotNil(t, body.SubOrders[0].SettleInfo)
+			require.Equal(t, true, body.SubOrders[0].SettleInfo.ProfitSharing)
+			require.Equal(t, int64(20), body.SubOrders[0].SettleInfo.SubsidyAmount)
 
 			return &http.Response{
 				StatusCode: http.StatusOK,
@@ -839,7 +958,9 @@ func TestCreateCombineOrder_UsesServiceProviderAndSubMerchantFields(t *testing.T
 			Description:   "测试订单",
 			Amount:        100,
 			ProfitSharing: true,
+			SubsidyAmount: 20,
 			Attach:        "attach-001",
+			Detail:        "买单费用",
 		}},
 		PayerOpenID: "openid-001",
 		ExpireTime:  time.Now().Add(30 * time.Minute),
@@ -962,7 +1083,7 @@ func TestQueryCombineOrder_ParsesServiceProviderFields(t *testing.T) {
 			return &http.Response{
 				StatusCode: http.StatusOK,
 				Header:     make(http.Header),
-				Body:       io.NopCloser(strings.NewReader(`{"combine_appid":"service-appid-001","combine_mchid":"service-mchid-001","combine_out_trade_no":"combine-order-001","combine_payer_info":{"openid":"openid-001","sub_openid":"sub-openid-001"},"scene_info":{"device_id":"POS-001"},"sub_orders":[{"mchid":"service-mchid-001","sub_mchid":"sub-mchid-001","sub_appid":"sub-appid-001","sub_openid":"sub-openid-001","out_trade_no":"sub-order-001","transaction_id":"wx_txn_001","trade_type":"JSAPI","trade_state":"SUCCESS","bank_type":"CMC","attach":"attach-001","amount":{"total_amount":100,"payer_amount":100,"currency":"CNY"},"success_time":"2024-11-14T10:00:00+08:00"}]}`)),
+				Body:       io.NopCloser(strings.NewReader(`{"combine_appid":"service-appid-001","combine_mchid":"service-mchid-001","combine_out_trade_no":"combine-order-001","combine_payer_info":{"openid":"openid-001","sub_openid":"sub-openid-001"},"scene_info":{"device_id":"POS-001"},"sub_orders":[{"mchid":"service-mchid-001","sub_mchid":"sub-mchid-001","sub_appid":"sub-appid-001","sub_openid":"sub-openid-001","out_trade_no":"sub-order-001","transaction_id":"wx_txn_001","trade_type":"JSAPI","trade_state":"SUCCESS","bank_type":"CMC","attach":"attach-001","amount":{"total_amount":100,"payer_amount":100,"currency":"CNY","payer_currency":"CNY"},"success_time":"2024-11-14T10:00:00+08:00"}]}`)),
 			}, nil
 		}),
 	}
@@ -980,6 +1101,48 @@ func TestQueryCombineOrder_ParsesServiceProviderFields(t *testing.T) {
 	require.Equal(t, "JSAPI", resp.SubOrders[0].TradeType)
 	require.Equal(t, "CMC", resp.SubOrders[0].BankType)
 	require.Equal(t, "attach-001", resp.SubOrders[0].Attach)
+}
+
+func TestQueryCombineOrder_RejectsContractDrift(t *testing.T) {
+	merchantPrivateKey, _ := generateTestKeyPair(t)
+	platformPrivateKey, platformPublicKey := generateTestKeyPair(t)
+
+	tempDir := t.TempDir()
+	privateKeyPath := createTestPrivateKeyFile(t, tempDir, merchantPrivateKey)
+	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
+
+	client, err := NewEcommerceClient(EcommerceClientConfig{
+		PaymentClientConfig: PaymentClientConfig{
+			MchID:                 "ignored_base_mchid",
+			AppID:                 "service-appid-001",
+			SerialNumber:          "test_serial",
+			APIV3Key:              testAPIV3Key(),
+			PrivateKeyPath:        privateKeyPath,
+			PlatformPublicKeyPath: publicKeyPath,
+			PlatformPublicKeyID:   "PUB_KEY_ID_0123456789",
+			NotifyURL:             "https://example.com/notify",
+		},
+		SpMchID: "service-mchid-001",
+		SpAppID: "service-appid-001",
+	})
+	require.NoError(t, err)
+
+	client.httpClient = &http.Client{
+		Transport: signedEcommerceTransport(t, platformPrivateKey, "PUB_KEY_ID_0123456789", func(req *http.Request) (*http.Response, error) {
+			require.Equal(t, http.MethodGet, req.Method)
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader(`{"combine_appid":"service-appid-001","combine_out_trade_no":"combine-order-001","sub_orders":[{"out_trade_no":"sub-order-001","trade_state":"SUCCESS","amount":{"total_amount":100,"payer_amount":100,"currency":"CNY","payer_currency":"CNY"}}]}`)),
+			}, nil
+		}),
+	}
+
+	_, err = client.QueryCombineOrder(context.Background(), "combine-order-001")
+	require.Error(t, err)
+	var contractErr *CombineOrderQueryContractError
+	require.ErrorAs(t, err, &contractErr)
+	require.Equal(t, "query combine order: wechat response missing combine_mchid", contractErr.Error())
 }
 
 func TestCloseCombineOrder_UsesSubMerchantFields(t *testing.T) {
@@ -1011,20 +1174,14 @@ func TestCloseCombineOrder_UsesSubMerchantFields(t *testing.T) {
 			require.Equal(t, http.MethodPost, req.Method)
 			require.Equal(t, "/v3/combine-transactions/out-trade-no/combine-order-001/close", req.URL.Path)
 
-			var body map[string]any
+			var body CombineCloseOrderRequest
 			require.NoError(t, json.NewDecoder(req.Body).Decode(&body))
-			require.Equal(t, "service-appid-001", body["combine_appid"])
-
-			subOrders, ok := body["sub_orders"].([]any)
-			require.True(t, ok)
-			require.Len(t, subOrders, 1)
-
-			subOrder, ok := subOrders[0].(map[string]any)
-			require.True(t, ok)
-			require.Equal(t, "service-mchid-001", subOrder["mchid"])
-			require.Equal(t, "sub-mchid-001", subOrder["sub_mchid"])
-			require.Equal(t, "sub-appid-001", subOrder["sub_appid"])
-			require.Equal(t, "sub-order-001", subOrder["out_trade_no"])
+			require.Equal(t, "service-appid-001", body.CombineAppID)
+			require.Len(t, body.SubOrders, 1)
+			require.Equal(t, "service-mchid-001", body.SubOrders[0].MchID)
+			require.Equal(t, "sub-mchid-001", body.SubOrders[0].SubMchID)
+			require.Equal(t, "sub-appid-001", body.SubOrders[0].SubAppID)
+			require.Equal(t, "sub-order-001", body.SubOrders[0].OutTradeNo)
 
 			return &http.Response{StatusCode: http.StatusNoContent, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(""))}, nil
 		}),
@@ -2226,7 +2383,7 @@ func TestQueryEcommerceApplymentByOutRequestNo_RejectsInvalidInput(t *testing.T)
 	require.Error(t, err)
 	require.ErrorContains(t, err, "out_request_no must not exceed 124 characters")
 
-	var validationErr *EcommerceApplymentQueryValidationError
+	var validationErr *wechatcontracts.EcommerceApplymentQueryValidationError
 	require.ErrorAs(t, err, &validationErr)
 }
 
@@ -2270,7 +2427,7 @@ func TestQueryEcommerceApplymentByID_RequiresSignURLForUnsignedSignState(t *test
 
 	_, err := client.QueryEcommerceApplymentByID(context.Background(), 2002)
 	require.Error(t, err)
-	require.ErrorContains(t, err, "sign_url is required when sign_state=UNSIGNED for applyment_id query")
+	require.ErrorContains(t, err, "sign_url is required for current applyment state")
 }
 
 func TestQueryEcommerceApplymentByOutRequestNo_RejectsUnexpectedSignURL(t *testing.T) {
@@ -2290,7 +2447,7 @@ func TestQueryEcommerceApplymentByOutRequestNo_RejectsUnexpectedSignURL(t *testi
 
 	_, err := client.QueryEcommerceApplymentByOutRequestNo(context.Background(), "REQ-2003")
 	require.Error(t, err)
-	require.ErrorContains(t, err, "sign_url is only allowed when applyment_state=NEED_SIGN for out_request_no query")
+	require.ErrorContains(t, err, "sign_url is not allowed for current applyment state")
 }
 
 func TestQueryEcommerceApplymentByID_RejectsUnexpectedSignURL(t *testing.T) {
@@ -2311,7 +2468,7 @@ func TestQueryEcommerceApplymentByID_RejectsUnexpectedSignURL(t *testing.T) {
 
 	_, err := client.QueryEcommerceApplymentByID(context.Background(), 2004)
 	require.Error(t, err)
-	require.ErrorContains(t, err, "sign_url is only allowed when applyment_state=NEED_SIGN or sign_state=UNSIGNED for applyment_id query")
+	require.ErrorContains(t, err, "sign_url is not allowed for current applyment state")
 }
 
 func TestQueryEcommerceApplymentByOutRequestNo_WrapsWechatErrorWithGuidance(t *testing.T) {
@@ -2575,7 +2732,7 @@ func TestQuerySubMerchantSettlement_RejectsInvalidInput(t *testing.T) {
 	require.Error(t, err)
 	require.ErrorContains(t, err, "account_number_rule must be one of")
 
-	var validationErr *SubMerchantSettlementQueryValidationError
+	var validationErr *wechatcontracts.SubMerchantSettlementQueryValidationError
 	require.ErrorAs(t, err, &validationErr)
 }
 
@@ -2590,9 +2747,9 @@ func TestQuerySubMerchantSettlement_RejectsMissingRequiredResponseField(t *testi
 
 	_, err := client.QuerySubMerchantSettlement(context.Background(), "1900006491", "")
 	require.Error(t, err)
-	require.ErrorContains(t, err, "wechat response missing verify_result")
+	require.ErrorContains(t, err, "unsupported verify_result \"\"")
 
-	var contractErr *SubMerchantSettlementContractError
+	var contractErr *wechatcontracts.SubMerchantSettlementContractError
 	require.ErrorAs(t, err, &contractErr)
 }
 
@@ -2609,7 +2766,7 @@ func TestQuerySubMerchantSettlement_RejectsUnsupportedResponseEnum(t *testing.T)
 	require.Error(t, err)
 	require.ErrorContains(t, err, "unsupported account_type")
 
-	var contractErr *SubMerchantSettlementContractError
+	var contractErr *wechatcontracts.SubMerchantSettlementContractError
 	require.ErrorAs(t, err, &contractErr)
 }
 
@@ -2626,7 +2783,7 @@ func TestQuerySubMerchantSettlement_RejectsUnexpectedVerifyFailReason(t *testing
 	require.Error(t, err)
 	require.ErrorContains(t, err, "verify_fail_reason is only allowed")
 
-	var contractErr *SubMerchantSettlementContractError
+	var contractErr *wechatcontracts.SubMerchantSettlementContractError
 	require.ErrorAs(t, err, &contractErr)
 }
 
@@ -2814,7 +2971,7 @@ func TestQuerySubMerchantSettlementApplication_RejectsInvalidContract(t *testing
 	require.Error(t, err)
 	require.ErrorContains(t, err, "verify_fail_reason is required")
 
-	var contractErr *SubMerchantSettlementApplicationContractError
+	var contractErr *wechatcontracts.SubMerchantSettlementApplicationContractError
 	require.ErrorAs(t, err, &contractErr)
 }
 

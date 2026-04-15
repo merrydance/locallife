@@ -1,0 +1,24 @@
+package wechat
+
+import wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
+
+type CombineOrderRequest = wechatcontracts.CombineOrderRequest
+type CombineOrderRequestBody = wechatcontracts.CombineOrderRequestBody
+type CombinePayerInfoRequest = wechatcontracts.CombinePayerInfoRequest
+type CombineSubOrderRequest = wechatcontracts.CombineSubOrderRequest
+type CombineSubOrderAmount = wechatcontracts.CombineSubOrderAmount
+type CombineSubOrderSettleInfo = wechatcontracts.CombineSubOrderSettleInfo
+type SubOrder = wechatcontracts.SubOrder
+type CombineSceneInfo = wechatcontracts.CombineSceneInfo
+type CombineOrderResponse = wechatcontracts.CombineOrderResponse
+type CombineQueryResponse = wechatcontracts.CombineQueryResponse
+type CombinePaymentNotification = wechatcontracts.CombinePaymentNotification
+type CombineQueryResponseBody = wechatcontracts.CombineQueryResponseBody
+type CombineQueryPayerInfoBody = wechatcontracts.CombineQueryPayerInfoBody
+type CombineQuerySubOrderBody = wechatcontracts.CombineQuerySubOrderBody
+type CombineQueryAmountBody = wechatcontracts.CombineQueryAmountBody
+type CombineSubOrderResult = wechatcontracts.CombineSubOrderResult
+type CombinePayerInfo = wechatcontracts.CombinePayerInfo
+type SubOrderClose = wechatcontracts.SubOrderClose
+type CombineCloseSubOrderRequest = wechatcontracts.CombineCloseSubOrderRequest
+type CombineCloseOrderRequest = wechatcontracts.CombineCloseOrderRequest

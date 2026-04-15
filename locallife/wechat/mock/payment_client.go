@@ -236,17 +236,17 @@ func (mr *MockPaymentClientInterfaceMockRecorder) QueryTransfer(ctx, outBatchNo 
 }
 
 // VerifyNotificationSignature mocks base method.
-func (m *MockPaymentClientInterface) VerifyNotificationSignature(signature, timestamp, nonce, body string) error {
+func (m *MockPaymentClientInterface) VerifyNotificationSignature(signature, timestamp, nonce, serial, body string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "VerifyNotificationSignature", signature, timestamp, nonce, body)
+	ret := m.ctrl.Call(m, "VerifyNotificationSignature", signature, timestamp, nonce, serial, body)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // VerifyNotificationSignature indicates an expected call of VerifyNotificationSignature.
-func (mr *MockPaymentClientInterfaceMockRecorder) VerifyNotificationSignature(signature, timestamp, nonce, body any) *gomock.Call {
+func (mr *MockPaymentClientInterfaceMockRecorder) VerifyNotificationSignature(signature, timestamp, nonce, serial, body any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VerifyNotificationSignature", reflect.TypeOf((*MockPaymentClientInterface)(nil).VerifyNotificationSignature), signature, timestamp, nonce, body)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VerifyNotificationSignature", reflect.TypeOf((*MockPaymentClientInterface)(nil).VerifyNotificationSignature), signature, timestamp, nonce, serial, body)
 }
 
 // MockEcommerceClientInterface is a mock of EcommerceClientInterface interface.
@@ -1316,15 +1316,15 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) ValidateEcommerceCancelWithd
 }
 
 // VerifyNotificationSignature mocks base method.
-func (m *MockEcommerceClientInterface) VerifyNotificationSignature(signature, timestamp, nonce, body string) error {
+func (m *MockEcommerceClientInterface) VerifyNotificationSignature(signature, timestamp, nonce, serial, body string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "VerifyNotificationSignature", signature, timestamp, nonce, body)
+	ret := m.ctrl.Call(m, "VerifyNotificationSignature", signature, timestamp, nonce, serial, body)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // VerifyNotificationSignature indicates an expected call of VerifyNotificationSignature.
-func (mr *MockEcommerceClientInterfaceMockRecorder) VerifyNotificationSignature(signature, timestamp, nonce, body any) *gomock.Call {
+func (mr *MockEcommerceClientInterfaceMockRecorder) VerifyNotificationSignature(signature, timestamp, nonce, serial, body any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VerifyNotificationSignature", reflect.TypeOf((*MockEcommerceClientInterface)(nil).VerifyNotificationSignature), signature, timestamp, nonce, body)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VerifyNotificationSignature", reflect.TypeOf((*MockEcommerceClientInterface)(nil).VerifyNotificationSignature), signature, timestamp, nonce, serial, body)
 }

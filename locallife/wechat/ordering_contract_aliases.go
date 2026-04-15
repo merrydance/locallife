@@ -1,0 +1,22 @@
+package wechat
+
+import wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
+
+type PartnerJSAPIOrderRequest = wechatcontracts.PartnerJSAPIOrderRequest
+type PartnerJSAPIOrderRequestBody = wechatcontracts.PartnerJSAPIOrderRequestBody
+type PartnerJSAPIAmount = wechatcontracts.PartnerJSAPIAmount
+type PartnerJSAPIPayer = wechatcontracts.PartnerJSAPIPayer
+type PartnerOrderSettleInfo = wechatcontracts.PartnerOrderSettleInfo
+type PartnerJSAPIOrderResponse = wechatcontracts.PartnerJSAPIOrderResponse
+type PartnerOrderPayerInfo = wechatcontracts.PartnerOrderPayerInfo
+type PartnerOrderSceneInfo = wechatcontracts.PartnerOrderSceneInfo
+type PartnerOrderStoreInfo = wechatcontracts.PartnerOrderStoreInfo
+type PartnerOrderDetail = wechatcontracts.PartnerOrderDetail
+type PartnerOrderGoodsDetail = wechatcontracts.PartnerOrderGoodsDetail
+type PartnerOrderQueryAmount = wechatcontracts.PartnerOrderQueryAmount
+type PartnerOrderQuerySceneInfo = wechatcontracts.PartnerOrderQuerySceneInfo
+type PartnerOrderQueryResponse = wechatcontracts.PartnerOrderQueryResponse
+type PartnerPaymentNotificationResource = wechatcontracts.PartnerPaymentNotificationResource
+type PartnerPromotionDetail = wechatcontracts.PartnerPromotionDetail
+type PartnerPromotionGoodsDetail = wechatcontracts.PartnerPromotionGoodsDetail
+type PartnerCloseOrderRequest = wechatcontracts.PartnerCloseOrderRequest

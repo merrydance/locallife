@@ -24,6 +24,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
+	wechaterrorcodes "github.com/merrydance/locallife/wechat/errorcodes"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
@@ -320,118 +322,6 @@ type EcommerceClientConfig struct {
 	ViolationNotifyURL  string // 收付通商户违规通知回调地址（空则回退到 PartnerNotifyURL / PaymentClientConfig.NotifyURL）
 }
 
-// PartnerJSAPIOrderRequest 服务商模式单笔 JSAPI 下单请求。
-type PartnerJSAPIOrderRequest struct {
-	SubMchID       string
-	SubAppID       string
-	Description    string
-	OutTradeNo     string
-	ExpireTime     time.Time
-	Attach         string
-	GoodsTag       string
-	TotalAmount    int64
-	Currency       string
-	NotifyURL      string
-	PayerOpenID    string
-	PayerSubOpenID string
-	PayerClientIP  string
-	DeviceID       string
-	ProfitSharing  bool
-	SupportFapiao  *bool
-}
-
-// PartnerJSAPIOrderResponse 服务商模式单笔 JSAPI 下单响应。
-type PartnerJSAPIOrderResponse struct {
-	PrepayID string `json:"prepay_id"`
-}
-
-// PartnerOrderPayerInfo 服务商模式支付者信息。
-type PartnerOrderPayerInfo struct {
-	SpOpenID  string `json:"sp_openid,omitempty"`
-	SubOpenID string `json:"sub_openid,omitempty"`
-}
-
-// PartnerOrderSceneInfo 服务商模式场景信息。
-type PartnerOrderSceneInfo struct {
-	PayerClientIP string `json:"payer_client_ip,omitempty"`
-	DeviceID      string `json:"device_id,omitempty"`
-}
-
-// PartnerOrderQueryResponse 服务商模式单笔支付查询响应。
-type PartnerOrderQueryResponse struct {
-	SpAppID        string                `json:"sp_appid"`
-	SpMchID        string                `json:"sp_mchid"`
-	SubAppID       string                `json:"sub_appid,omitempty"`
-	SubMchID       string                `json:"sub_mchid"`
-	OutTradeNo     string                `json:"out_trade_no"`
-	TransactionID  string                `json:"transaction_id,omitempty"`
-	TradeType      string                `json:"trade_type,omitempty"`
-	TradeState     string                `json:"trade_state"`
-	TradeStateDesc string                `json:"trade_state_desc"`
-	BankType       string                `json:"bank_type,omitempty"`
-	Attach         string                `json:"attach,omitempty"`
-	SuccessTime    string                `json:"success_time,omitempty"`
-	Payer          PartnerOrderPayerInfo `json:"payer,omitempty"`
-	Amount         struct {
-		Total         int64  `json:"total"`
-		PayerTotal    int64  `json:"payer_total"`
-		Currency      string `json:"currency"`
-		PayerCurrency string `json:"payer_currency"`
-	} `json:"amount,omitempty"`
-	SceneInfo *struct {
-		DeviceID string `json:"device_id"`
-	} `json:"scene_info,omitempty"`
-	PromotionDetail []PartnerPromotionDetail `json:"promotion_detail,omitempty"`
-}
-
-type PartnerPromotionDetail struct {
-	CouponID            string                        `json:"coupon_id"`
-	Name                string                        `json:"name,omitempty"`
-	Scope               string                        `json:"scope,omitempty"`
-	Type                string                        `json:"type,omitempty"`
-	Amount              int64                         `json:"amount"`
-	StockID             string                        `json:"stock_id,omitempty"`
-	WechatpayContribute int64                         `json:"wechatpay_contribute,omitempty"`
-	MerchantContribute  int64                         `json:"merchant_contribute,omitempty"`
-	OtherContribute     int64                         `json:"other_contribute,omitempty"`
-	Currency            string                        `json:"currency,omitempty"`
-	GoodsDetail         []PartnerPromotionGoodsDetail `json:"goods_detail,omitempty"`
-}
-
-type PartnerPromotionGoodsDetail struct {
-	GoodsID        string `json:"goods_id"`
-	Quantity       int64  `json:"quantity"`
-	UnitPrice      int64  `json:"unit_price"`
-	DiscountAmount int64  `json:"discount_amount"`
-	GoodsRemark    string `json:"goods_remark,omitempty"`
-}
-
-// PartnerPaymentNotificationResource 服务商模式单笔支付成功回调资源。
-type PartnerPaymentNotificationResource struct {
-	SpAppID        string                `json:"sp_appid"`
-	SpMchID        string                `json:"sp_mchid"`
-	SubAppID       string                `json:"sub_appid,omitempty"`
-	SubMchID       string                `json:"sub_mchid"`
-	OutTradeNo     string                `json:"out_trade_no"`
-	TransactionID  string                `json:"transaction_id"`
-	TradeType      string                `json:"trade_type"`
-	TradeState     string                `json:"trade_state"`
-	TradeStateDesc string                `json:"trade_state_desc"`
-	BankType       string                `json:"bank_type"`
-	Attach         string                `json:"attach,omitempty"`
-	SuccessTime    string                `json:"success_time"`
-	Payer          PartnerOrderPayerInfo `json:"payer"`
-	Amount         struct {
-		Total         int64  `json:"total"`
-		PayerTotal    int64  `json:"payer_total"`
-		Currency      string `json:"currency"`
-		PayerCurrency string `json:"payer_currency"`
-	} `json:"amount"`
-	SceneInfo *struct {
-		DeviceID string `json:"device_id"`
-	} `json:"scene_info,omitempty"`
-}
-
 // NewEcommerceClient 创建平台收付通客户端
 func NewEcommerceClient(cfg EcommerceClientConfig) (*EcommerceClient, error) {
 	baseClient, err := NewPaymentClient(cfg.PaymentClientConfig)
@@ -513,8 +403,11 @@ func (c *EcommerceClient) CreatePartnerJSAPIOrder(ctx context.Context, req *Part
 	if strings.TrimSpace(req.PayerOpenID) == "" && strings.TrimSpace(req.PayerSubOpenID) == "" {
 		return nil, nil, fmt.Errorf("create partner jsapi order: sp_openid or sub_openid is required")
 	}
-	if strings.TrimSpace(req.DeviceID) != "" && strings.TrimSpace(req.PayerClientIP) == "" {
-		return nil, nil, fmt.Errorf("create partner jsapi order: payer_client_ip is required when scene_info.device_id is provided")
+	if (strings.TrimSpace(req.DeviceID) != "" || req.StoreInfo != nil) && strings.TrimSpace(req.PayerClientIP) == "" {
+		return nil, nil, fmt.Errorf("create partner jsapi order: payer_client_ip is required when scene_info is provided")
+	}
+	if req.StoreInfo != nil && strings.TrimSpace(req.StoreInfo.ID) == "" {
+		return nil, nil, fmt.Errorf("create partner jsapi order: scene_info.store_info.id is required when store_info is provided")
 	}
 
 	currency := req.Currency
@@ -525,47 +418,51 @@ func (c *EcommerceClient) CreatePartnerJSAPIOrder(ctx context.Context, req *Part
 	if notifyURL == "" {
 		notifyURL = c.partnerNotifyURL
 	}
-	body := map[string]interface{}{
-		"sp_appid":     c.spAppID,
-		"sp_mchid":     c.spMchID,
-		"sub_mchid":    req.SubMchID,
-		"description":  req.Description,
-		"out_trade_no": req.OutTradeNo,
-		"notify_url":   notifyURL,
-		"amount": map[string]interface{}{
-			"total":    req.TotalAmount,
-			"currency": currency,
+	if strings.TrimSpace(notifyURL) == "" {
+		return nil, nil, fmt.Errorf("create partner jsapi order: notify_url is required")
+	}
+	body := PartnerJSAPIOrderRequestBody{
+		SpAppID:     c.spAppID,
+		SpMchID:     c.spMchID,
+		SubMchID:    req.SubMchID,
+		Description: req.Description,
+		OutTradeNo:  req.OutTradeNo,
+		NotifyURL:   notifyURL,
+		Amount: PartnerJSAPIAmount{
+			Total:    req.TotalAmount,
+			Currency: currency,
 		},
-		"payer": map[string]interface{}{},
-		"settle_info": map[string]interface{}{
-			"profit_sharing": req.ProfitSharing,
+		Payer: PartnerJSAPIPayer{
+			SpOpenID: req.PayerOpenID,
 		},
+		SettleInfo: &PartnerOrderSettleInfo{ProfitSharing: req.ProfitSharing, SubsidyAmount: req.SubsidyAmount},
+	}
+	if req.Detail != nil {
+		body.Detail = req.Detail
 	}
 	if !req.ExpireTime.IsZero() {
-		body["time_expire"] = req.ExpireTime.Format(time.RFC3339)
+		body.TimeExpire = req.ExpireTime.Format(time.RFC3339)
 	}
 	if req.Attach != "" {
-		body["attach"] = req.Attach
+		body.Attach = req.Attach
 	}
 	if req.GoodsTag != "" {
-		body["goods_tag"] = req.GoodsTag
+		body.GoodsTag = req.GoodsTag
 	}
 	if req.SupportFapiao != nil {
-		body["support_fapiao"] = *req.SupportFapiao
+		body.SupportFapiao = req.SupportFapiao
 	}
-	payer := body["payer"].(map[string]interface{})
-	if req.PayerOpenID != "" {
-		payer["sp_openid"] = req.PayerOpenID
-	}
-	if req.PayerClientIP != "" || req.DeviceID != "" {
-		sceneInfo := map[string]interface{}{}
+	if req.PayerClientIP != "" || req.DeviceID != "" || req.StoreInfo != nil {
+		body.SceneInfo = &PartnerOrderSceneInfo{}
 		if req.PayerClientIP != "" {
-			sceneInfo["payer_client_ip"] = req.PayerClientIP
+			body.SceneInfo.PayerClientIP = req.PayerClientIP
 		}
 		if req.DeviceID != "" {
-			sceneInfo["device_id"] = req.DeviceID
+			body.SceneInfo.DeviceID = req.DeviceID
 		}
-		body["scene_info"] = sceneInfo
+		if req.StoreInfo != nil {
+			body.SceneInfo.StoreInfo = req.StoreInfo
+		}
 	}
 
 	respBody, requestID, err := c.doRequestWithRequestID(ctx, http.MethodPost, ecommercePartnerJSAPIOrderURL, body)
@@ -595,6 +492,12 @@ func (c *EcommerceClient) CreatePartnerJSAPIOrder(ctx context.Context, req *Part
 
 // QueryPartnerOrderByTransactionID 通过微信支付订单号查询服务商模式单笔订单。
 func (c *EcommerceClient) QueryPartnerOrderByTransactionID(ctx context.Context, transactionID, subMchID string) (*PartnerOrderQueryResponse, error) {
+	if strings.TrimSpace(transactionID) == "" {
+		return nil, newPartnerOrderQueryValidationError("query partner order by transaction_id", "transaction_id is required")
+	}
+	if strings.TrimSpace(subMchID) == "" {
+		return nil, newPartnerOrderQueryValidationError("query partner order by transaction_id", "sub_mchid is required")
+	}
 	respBody, requestID, err := c.doRequestWithRequestID(ctx, http.MethodGet, fmt.Sprintf(ecommercePartnerQueryByIDURL, transactionID, c.spMchID, subMchID), nil)
 	if err != nil {
 		wrappedErr := wrapPartnerOrderQueryError(err)
@@ -608,7 +511,21 @@ func (c *EcommerceClient) QueryPartnerOrderByTransactionID(ctx context.Context, 
 
 	var resp PartnerOrderQueryResponse
 	if err := json.Unmarshal(respBody, &resp); err != nil {
-		return nil, fmt.Errorf("unmarshal response: %w", err)
+		contractErr := newPartnerOrderQueryContractError("query partner order by transaction_id", "unmarshal response: %v", err)
+		ecommercePaymentOrderLogEvent(requestID, "query_partner_order_by_transaction_id").
+			Str("sub_mchid", strings.TrimSpace(subMchID)).
+			Str("transaction_id", strings.TrimSpace(transactionID)).
+			Err(contractErr).
+			Msg("wechat partner order query by transaction id response contract invalid")
+		return nil, contractErr
+	}
+	if err := validatePartnerOrderQueryResponse("query partner order by transaction_id", &resp, true); err != nil {
+		ecommercePaymentOrderLogEvent(requestID, "query_partner_order_by_transaction_id").
+			Str("sub_mchid", strings.TrimSpace(subMchID)).
+			Str("transaction_id", strings.TrimSpace(transactionID)).
+			Err(err).
+			Msg("wechat partner order query by transaction id response contract invalid")
+		return nil, err
 	}
 
 	return &resp, nil
@@ -616,6 +533,12 @@ func (c *EcommerceClient) QueryPartnerOrderByTransactionID(ctx context.Context, 
 
 // QueryPartnerOrderByOutTradeNo 通过商户订单号查询服务商模式单笔订单。
 func (c *EcommerceClient) QueryPartnerOrderByOutTradeNo(ctx context.Context, outTradeNo, subMchID string) (*PartnerOrderQueryResponse, error) {
+	if strings.TrimSpace(outTradeNo) == "" {
+		return nil, newPartnerOrderQueryValidationError("query partner order by out_trade_no", "out_trade_no is required")
+	}
+	if strings.TrimSpace(subMchID) == "" {
+		return nil, newPartnerOrderQueryValidationError("query partner order by out_trade_no", "sub_mchid is required")
+	}
 	respBody, requestID, err := c.doRequestWithRequestID(ctx, http.MethodGet, fmt.Sprintf(ecommercePartnerQueryByOutTradeNoURL, outTradeNo, c.spMchID, subMchID), nil)
 	if err != nil {
 		wrappedErr := wrapPartnerOrderQueryError(err)
@@ -629,7 +552,21 @@ func (c *EcommerceClient) QueryPartnerOrderByOutTradeNo(ctx context.Context, out
 
 	var resp PartnerOrderQueryResponse
 	if err := json.Unmarshal(respBody, &resp); err != nil {
-		return nil, fmt.Errorf("unmarshal response: %w", err)
+		contractErr := newPartnerOrderQueryContractError("query partner order by out_trade_no", "unmarshal response: %v", err)
+		ecommercePaymentOrderLogEvent(requestID, "query_partner_order_by_out_trade_no").
+			Str("sub_mchid", strings.TrimSpace(subMchID)).
+			Str("out_trade_no", strings.TrimSpace(outTradeNo)).
+			Err(contractErr).
+			Msg("wechat partner order query by out trade no response contract invalid")
+		return nil, contractErr
+	}
+	if err := validatePartnerOrderQueryResponse("query partner order by out_trade_no", &resp, false); err != nil {
+		ecommercePaymentOrderLogEvent(requestID, "query_partner_order_by_out_trade_no").
+			Str("sub_mchid", strings.TrimSpace(subMchID)).
+			Str("out_trade_no", strings.TrimSpace(outTradeNo)).
+			Err(err).
+			Msg("wechat partner order query by out trade no response contract invalid")
+		return nil, err
 	}
 
 	return &resp, nil
@@ -637,10 +574,13 @@ func (c *EcommerceClient) QueryPartnerOrderByOutTradeNo(ctx context.Context, out
 
 // ClosePartnerOrder 关闭服务商模式单笔订单。
 func (c *EcommerceClient) ClosePartnerOrder(ctx context.Context, outTradeNo, subMchID string) error {
-	body := map[string]interface{}{
-		"sp_mchid":  c.spMchID,
-		"sub_mchid": subMchID,
+	if strings.TrimSpace(outTradeNo) == "" {
+		return fmt.Errorf("close partner order: out_trade_no is required")
 	}
+	if strings.TrimSpace(subMchID) == "" {
+		return fmt.Errorf("close partner order: sub_mchid is required")
+	}
+	body := PartnerCloseOrderRequest{SpMchID: c.spMchID, SubMchID: subMchID}
 	if _, requestID, err := c.doRequestWithRequestID(ctx, http.MethodPost, fmt.Sprintf(ecommercePartnerCloseOrderURL, outTradeNo), body); err != nil {
 		wrappedErr := wrapPartnerOrderCloseError(err)
 		ecommercePaymentOrderLogEvent(requestID, "close_partner_order").
@@ -672,159 +612,7 @@ type EcommerceApplymentRequest struct {
 	BusinessAdditionDesc string                    `json:"business_addition_desc,omitempty"` // 补充说明
 }
 
-// BusinessLicenseInfo 营业执照信息
-type BusinessLicenseInfo struct {
-	CertType              string `json:"cert_type,omitempty"`       // 证书类型（政府/事业单位/社会组织）
-	BusinessLicenseCopy   string `json:"business_license_copy"`     // 营业执照照片MediaID
-	BusinessLicenseNumber string `json:"business_license_number"`   // 营业执照注册号
-	MerchantName          string `json:"merchant_name"`             // 商户名称
-	LegalPerson           string `json:"legal_person"`              // 法人姓名
-	CompanyAddress        string `json:"company_address,omitempty"` // 注册地址
-	BusinessTime          string `json:"business_time,omitempty"`   // 营业期限
-}
-
-// ApplymentIDCardInfo 进件身份证信息
-type ApplymentIDCardInfo struct {
-	IDCardCopy           string `json:"id_card_copy"`             // 身份证正面照片MediaID
-	IDCardNational       string `json:"id_card_national"`         // 身份证背面照片MediaID
-	IDCardName           string `json:"id_card_name"`             // 身份证姓名（需加密）
-	IDCardNumber         string `json:"id_card_number"`           // 身份证号码（需加密）
-	IDCardValidTimeBegin string `json:"id_card_valid_time_begin"` // 身份证有效期开始时间
-	IDCardValidTime      string `json:"id_card_valid_time"`       // 身份证有效期结束时间：YYYY-MM-DD 或 长期
-}
-
-// ApplymentBankAccountInfo 进件银行账户信息
-type ApplymentBankAccountInfo struct {
-	BankAccountType string `json:"bank_account_type"`           // ACCOUNT_TYPE_BUSINESS-对公, ACCOUNT_TYPE_PRIVATE-对私
-	AccountBank     string `json:"account_bank"`                // 开户银行
-	AccountName     string `json:"account_name"`                // 开户名称（需加密）
-	BankAddressCode string `json:"bank_address_code,omitempty"` // 开户银行省市编码
-	BankBranchID    string `json:"bank_branch_id,omitempty"`    // 开户银行联行号
-	BankName        string `json:"bank_name,omitempty"`         // 开户银行全称（支行）
-	AccountNumber   string `json:"account_number"`              // 银行账号（需加密）
-}
-
-// CapitalBank 开户银行选项
-type CapitalBank struct {
-	BankAlias       string `json:"bank_alias"`
-	BankAliasCode   string `json:"bank_alias_code"`
-	AccountBank     string `json:"account_bank"`
-	AccountBankCode int64  `json:"account_bank_code"`
-	NeedBankBranch  bool   `json:"need_bank_branch"`
-}
-
-// CapitalBankListLinks 分页链接
-type CapitalBankListLinks struct {
-	Next string `json:"next,omitempty"`
-	Prev string `json:"prev,omitempty"`
-	Self string `json:"self,omitempty"`
-}
-
-// CapitalBankListResponse 银行列表响应
-type CapitalBankListResponse struct {
-	TotalCount int                  `json:"total_count"`
-	Count      int                  `json:"count"`
-	Data       []CapitalBank        `json:"data,omitempty"`
-	Offset     int                  `json:"offset"`
-	Links      CapitalBankListLinks `json:"links"`
-}
-
-// CapitalBankAccountSearchResponse 银行卡开户银行识别响应
-type CapitalBankAccountSearchResponse struct {
-	TotalCount int           `json:"total_count"`
-	Data       []CapitalBank `json:"data,omitempty"`
-}
-
-// CapitalProvince 省份选项
-type CapitalProvince struct {
-	ProvinceName string `json:"province_name"`
-	ProvinceCode int    `json:"province_code"`
-}
-
-// CapitalProvinceListResponse 省份列表响应
-type CapitalProvinceListResponse struct {
-	Data       []CapitalProvince `json:"data,omitempty"`
-	TotalCount int               `json:"total_count"`
-}
-
-// CapitalCity 城市选项
-type CapitalCity struct {
-	CityName string `json:"city_name"`
-	CityCode int    `json:"city_code"`
-}
-
-// CapitalCityListResponse 城市列表响应
-type CapitalCityListResponse struct {
-	Data       []CapitalCity `json:"data,omitempty"`
-	TotalCount int           `json:"total_count"`
-}
-
-// CapitalBranch 开户支行选项
-type CapitalBranch struct {
-	BankBranchName string `json:"bank_branch_name"`
-	BankBranchID   string `json:"bank_branch_id"`
-}
-
-// CapitalBranchListResponse 支行列表响应
-type CapitalBranchListResponse struct {
-	TotalCount      int                  `json:"total_count"`
-	Count           int                  `json:"count"`
-	Data            []CapitalBranch      `json:"data,omitempty"`
-	Offset          int                  `json:"offset"`
-	Links           CapitalBankListLinks `json:"links"`
-	AccountBank     string               `json:"account_bank"`
-	AccountBankCode int64                `json:"account_bank_code"`
-	BankAlias       string               `json:"bank_alias"`
-	BankAliasCode   string               `json:"bank_alias_code"`
-}
-
-// ApplymentContactInfo 联系人信息
-type ApplymentContactInfo struct {
-	ContactType             string `json:"contact_type,omitempty"`                // 联系人类型: 65-法人, 66-经办人
-	ContactName             string `json:"contact_name"`                          // 联系人姓名（需加密）
-	ContactIDDocType        string `json:"contact_id_doc_type,omitempty"`         // 联系人证件类型
-	ContactIDCardNumber     string `json:"contact_id_card_number,omitempty"`      // 联系人身份证号（需加密）
-	ContactIDDocCopy        string `json:"contact_id_doc_copy,omitempty"`         // 联系人证件正面照片
-	ContactIDDocCopyBack    string `json:"contact_id_doc_copy_back,omitempty"`    // 联系人证件反面照片
-	ContactIDDocPeriodBegin string `json:"contact_id_doc_period_begin,omitempty"` // 联系人证件有效期开始时间
-	ContactIDDocPeriodEnd   string `json:"contact_id_doc_period_end,omitempty"`   // 联系人证件有效期结束时间
-	MobilePhone             string `json:"mobile_phone"`                          // 联系手机号（需加密）
-}
-
-// ApplymentSalesSceneInfo 经营场景信息
-type ApplymentSalesSceneInfo struct {
-	StoreName           string `json:"store_name"`                       // 店铺名称
-	StoreURL            string `json:"store_url,omitempty"`              // 店铺链接
-	StoreQRCode         string `json:"store_qr_code,omitempty"`          // 店铺二维码MediaID
-	MiniProgramSubAppID string `json:"mini_program_sub_appid,omitempty"` // 小程序AppID
-}
-
-// ApplymentSettlementInfo 结算规则信息
-type ApplymentSettlementInfo struct {
-	SettlementID      int64  `json:"settlement_id,omitempty"`
-	QualificationType string `json:"qualification_type,omitempty"`
-}
-
-// EcommerceApplymentResponse 二级商户进件响应
-type EcommerceApplymentResponse struct {
-	ApplymentID  int64  `json:"applyment_id"`   // 微信支付申请单号
-	OutRequestNo string `json:"out_request_no"` // 业务申请编号
-}
-
-// EcommerceApplymentAccountValidation 汇款账户验证信息。
-type EcommerceApplymentAccountValidation struct {
-	AccountName              string `json:"account_name,omitempty"`
-	AccountNo                string `json:"account_no,omitempty"`
-	PayAmount                int64  `json:"pay_amount,omitempty"`
-	DestinationAccountNumber string `json:"destination_account_number,omitempty"`
-	DestinationAccountName   string `json:"destination_account_name,omitempty"`
-	DestinationAccountBank   string `json:"destination_account_bank,omitempty"`
-	City                     string `json:"city,omitempty"`
-	Remark                   string `json:"remark,omitempty"`
-	Deadline                 string `json:"deadline,omitempty"`
-	RawAccountName           string `json:"-"`
-	RawAccountNo             string `json:"-"`
-}
+// 公开 applyment/query/settlement 合同类型已迁移到 applyment_contract_aliases.go。
 
 func MarshalEcommerceApplymentAccountValidation(validation *EcommerceApplymentAccountValidation) []byte {
 	if validation == nil {
@@ -870,91 +658,55 @@ func UnmarshalEcommerceApplymentAccountValidation(raw []byte) (*EcommerceApplyme
 	return &validation, nil
 }
 
-// EcommerceApplymentQueryResponse 二级商户进件查询响应
-type EcommerceApplymentQueryResponse struct {
-	ApplymentID        int64                                `json:"applyment_id"`                   // 微信支付申请单号
-	OutRequestNo       string                               `json:"out_request_no"`                 // 业务申请编号
-	ApplymentState     string                               `json:"applyment_state"`                // 申请状态
-	ApplymentStateDesc string                               `json:"applyment_state_desc"`           // 申请状态描述
-	SignURL            string                               `json:"sign_url,omitempty"`             // 签约链接
-	SignState          string                               `json:"sign_state,omitempty"`           // 签约状态
-	SubMchID           string                               `json:"sub_mchid,omitempty"`            // 特约商户号
-	AccountValidation  *EcommerceApplymentAccountValidation `json:"account_validation,omitempty"`   // 汇款账户验证信息
-	LegalValidationURL string                               `json:"legal_validation_url,omitempty"` // 法人扫码验证链接
-	AuditDetail        []ApplymentAuditDetail               `json:"audit_detail,omitempty"`         // 驳回详情
-}
-
-// ApplymentAuditDetail 进件审核详情
-type ApplymentAuditDetail struct {
-	ParamName    string `json:"param_name"`    // 参数名称
-	RejectReason string `json:"reject_reason"` // 驳回原因
-}
-
 const (
-	ecommerceApplymentOutRequestNoMaxLength      = 124
-	subMerchantSettlementMchIDLength             = 10
-	subMerchantSettlementApplicationNoMaxLength  = 64
-	subMerchantSettlementFieldMaxLength          = 128
-	subMerchantSettlementAccountNameMaxLength    = 1024
-	subMerchantSettlementFailReasonMaxLength     = 1024
-	subMerchantSettlementAccountNumberRuleV1     = "ACCOUNT_NUMBER_RULE_MASK_V1"
-	subMerchantSettlementAccountNumberRuleV2     = "ACCOUNT_NUMBER_RULE_MASK_V2"
-	subMerchantSettlementVerifyResultSuccess     = "VERIFY_SUCCESS"
-	subMerchantSettlementVerifyResultFail        = "VERIFY_FAIL"
-	subMerchantSettlementVerifyResultVerifying   = "VERIFYING"
-	subMerchantSettlementApplicationAuditSuccess = "AUDIT_SUCCESS"
-	subMerchantSettlementApplicationAuditing     = "AUDITING"
-	subMerchantSettlementApplicationAuditFail    = "AUDIT_FAIL"
+	ecommerceApplymentOutRequestNoMaxLength     = 124
+	subMerchantSettlementMchIDLength            = 10
+	subMerchantSettlementApplicationNoMaxLength = 64
+	subMerchantSettlementFieldMaxLength         = 128
+	subMerchantSettlementAccountNameMaxLength   = 1024
+	subMerchantSettlementFailReasonMaxLength    = 1024
 )
 
-type EcommerceApplymentQueryValidationError struct {
+type PartnerOrderQueryValidationError struct {
 	Message string
 }
 
-func (e *EcommerceApplymentQueryValidationError) Error() string {
-	return e.Message
-}
-
-type SubMerchantSettlementQueryValidationError struct {
-	Message string
-}
-
-func (e *SubMerchantSettlementQueryValidationError) Error() string {
+func (e *PartnerOrderQueryValidationError) Error() string {
 	if e == nil || strings.TrimSpace(e.Message) == "" {
-		return "query sub merchant settlement: validation failed"
+		return "query partner order: validation failed"
 	}
 	return e.Message
 }
 
-type SubMerchantSettlementContractError struct {
+type PartnerOrderQueryContractError struct {
 	Message string
 }
 
-func (e *SubMerchantSettlementContractError) Error() string {
+func (e *PartnerOrderQueryContractError) Error() string {
 	if e == nil || strings.TrimSpace(e.Message) == "" {
-		return "query sub merchant settlement: upstream contract validation failed"
+		return "query partner order: upstream contract validation failed"
 	}
 	return e.Message
 }
 
-type SubMerchantSettlementApplicationQueryValidationError struct {
+type CombineOrderQueryValidationError struct {
 	Message string
 }
 
-func (e *SubMerchantSettlementApplicationQueryValidationError) Error() string {
+func (e *CombineOrderQueryValidationError) Error() string {
 	if e == nil || strings.TrimSpace(e.Message) == "" {
-		return "query sub merchant settlement application: validation failed"
+		return "query combine order: validation failed"
 	}
 	return e.Message
 }
 
-type SubMerchantSettlementApplicationContractError struct {
+type CombineOrderQueryContractError struct {
 	Message string
 }
 
-func (e *SubMerchantSettlementApplicationContractError) Error() string {
+func (e *CombineOrderQueryContractError) Error() string {
 	if e == nil || strings.TrimSpace(e.Message) == "" {
-		return "query sub merchant settlement application: upstream contract validation failed"
+		return "query combine order: upstream contract validation failed"
 	}
 	return e.Message
 }
@@ -988,43 +740,44 @@ const (
 	ecommerceApplymentQueryByOutRequestNoKind ecommerceApplymentQueryKind = "out_request_no"
 )
 
-var allowedEcommerceApplymentStates = map[string]struct{}{
-	"CHECKING":            {},
-	"ACCOUNT_NEED_VERIFY": {},
-	"AUDITING":            {},
-	"REJECTED":            {},
-	"NEED_SIGN":           {},
-	"FINISH":              {},
-	"FROZEN":              {},
-	"CANCELED":            {},
+var allowedPartnerOrderTradeStates = map[string]struct{}{
+	"SUCCESS":    {},
+	"REFUND":     {},
+	"NOTPAY":     {},
+	"CLOSED":     {},
+	"REVOKED":    {},
+	"USERPAYING": {},
+	"PAYERROR":   {},
 }
 
-var allowedEcommerceApplymentSignStates = map[string]struct{}{
-	"UNSIGNED":     {},
-	"SIGNED":       {},
-	"NOT_SIGNABLE": {},
+var allowedCombineOrderTradeStates = map[string]struct{}{
+	"SUCCESS":  {},
+	"REFUND":   {},
+	"NOTPAY":   {},
+	"CLOSED":   {},
+	"PAYERROR": {},
+}
+
+var allowedCombineOrderTradeTypes = map[string]struct{}{
+	"NATIVE": {},
+	"JSAPI":  {},
+	"APP":    {},
+	"MWEB":   {},
+}
+
+var allowedPartnerPromotionScopes = map[string]struct{}{
+	"GLOBAL": {},
+	"SINGLE": {},
+}
+
+var allowedPartnerPromotionTypes = map[string]struct{}{
+	"CASH":   {},
+	"NOCASH": {},
 }
 
 var allowedSubMerchantSettlementAccountNumberRules = map[string]struct{}{
 	subMerchantSettlementAccountNumberRuleV1: {},
 	subMerchantSettlementAccountNumberRuleV2: {},
-}
-
-var allowedSubMerchantSettlementAccountTypes = map[string]struct{}{
-	"ACCOUNT_TYPE_BUSINESS": {},
-	"ACCOUNT_TYPE_PRIVATE":  {},
-}
-
-var allowedSubMerchantSettlementVerifyResults = map[string]struct{}{
-	subMerchantSettlementVerifyResultSuccess:   {},
-	subMerchantSettlementVerifyResultFail:      {},
-	subMerchantSettlementVerifyResultVerifying: {},
-}
-
-var allowedSubMerchantSettlementApplicationVerifyResults = map[string]struct{}{
-	subMerchantSettlementApplicationAuditSuccess: {},
-	subMerchantSettlementApplicationAuditing:     {},
-	subMerchantSettlementApplicationAuditFail:    {},
 }
 
 var allowedMerchantCancelWithdrawMerchantStates = map[string]struct{}{
@@ -1102,24 +855,36 @@ var allowedMerchantCancelWithdrawPayStates = map[string]struct{}{
 	"BANK_REFUNDED":  {},
 }
 
-func newEcommerceApplymentQueryValidationError(format string, args ...any) error {
-	return &EcommerceApplymentQueryValidationError{Message: fmt.Sprintf("query ecommerce applyment: "+format, args...)}
+func newPartnerOrderQueryValidationError(operation string, format string, args ...any) error {
+	prefix := strings.TrimSpace(operation)
+	if prefix == "" {
+		prefix = "query partner order"
+	}
+	return &PartnerOrderQueryValidationError{Message: fmt.Sprintf("%s: %s", prefix, fmt.Sprintf(format, args...))}
 }
 
-func newSubMerchantSettlementQueryValidationError(format string, args ...any) error {
-	return &SubMerchantSettlementQueryValidationError{Message: fmt.Sprintf("query sub merchant settlement: "+format, args...)}
+func newPartnerOrderQueryContractError(operation string, format string, args ...any) error {
+	prefix := strings.TrimSpace(operation)
+	if prefix == "" {
+		prefix = "query partner order"
+	}
+	return &PartnerOrderQueryContractError{Message: fmt.Sprintf("%s: %s", prefix, fmt.Sprintf(format, args...))}
 }
 
-func newSubMerchantSettlementContractError(format string, args ...any) error {
-	return &SubMerchantSettlementContractError{Message: fmt.Sprintf("query sub merchant settlement: "+format, args...)}
+func newCombineOrderQueryValidationError(operation string, format string, args ...any) error {
+	prefix := strings.TrimSpace(operation)
+	if prefix == "" {
+		prefix = "query combine order"
+	}
+	return &CombineOrderQueryValidationError{Message: fmt.Sprintf("%s: %s", prefix, fmt.Sprintf(format, args...))}
 }
 
-func newSubMerchantSettlementApplicationQueryValidationError(format string, args ...any) error {
-	return &SubMerchantSettlementApplicationQueryValidationError{Message: fmt.Sprintf("query sub merchant settlement application: "+format, args...)}
-}
-
-func newSubMerchantSettlementApplicationContractError(format string, args ...any) error {
-	return &SubMerchantSettlementApplicationContractError{Message: fmt.Sprintf("query sub merchant settlement application: "+format, args...)}
+func newCombineOrderQueryContractError(operation string, format string, args ...any) error {
+	prefix := strings.TrimSpace(operation)
+	if prefix == "" {
+		prefix = "query combine order"
+	}
+	return &CombineOrderQueryContractError{Message: fmt.Sprintf("%s: %s", prefix, fmt.Sprintf(format, args...))}
 }
 
 func newMerchantCancelWithdrawValidationError(operation string, format string, args ...any) error {
@@ -1147,6 +912,189 @@ func validateMerchantCancelWithdrawIdentifier(operation string, fieldName string
 		return "", newMerchantCancelWithdrawValidationError(operation, "%s must not exceed 32 characters", fieldName)
 	}
 	return trimmed, nil
+}
+
+func validatePartnerOrderQueryResponse(operation string, resp *PartnerOrderQueryResponse, requireTransactionFields bool) error {
+	if resp == nil {
+		return newPartnerOrderQueryContractError(operation, "empty wechat response")
+	}
+	if strings.TrimSpace(resp.SpAppID) == "" {
+		return newPartnerOrderQueryContractError(operation, "wechat response missing sp_appid")
+	}
+	if strings.TrimSpace(resp.SpMchID) == "" {
+		return newPartnerOrderQueryContractError(operation, "wechat response missing sp_mchid")
+	}
+	if strings.TrimSpace(resp.SubMchID) == "" {
+		return newPartnerOrderQueryContractError(operation, "wechat response missing sub_mchid")
+	}
+	if strings.TrimSpace(resp.OutTradeNo) == "" {
+		return newPartnerOrderQueryContractError(operation, "wechat response missing out_trade_no")
+	}
+	if requireTransactionFields && strings.TrimSpace(resp.TransactionID) == "" {
+		return newPartnerOrderQueryContractError(operation, "wechat response missing transaction_id")
+	}
+	if requireTransactionFields && strings.TrimSpace(resp.TradeType) == "" {
+		return newPartnerOrderQueryContractError(operation, "wechat response missing trade_type")
+	}
+	if strings.TrimSpace(resp.TradeState) == "" {
+		return newPartnerOrderQueryContractError(operation, "wechat response missing trade_state")
+	}
+	if _, ok := allowedPartnerOrderTradeStates[strings.ToUpper(strings.TrimSpace(resp.TradeState))]; !ok {
+		return newPartnerOrderQueryContractError(operation, "unsupported trade_state %q", resp.TradeState)
+	}
+	if strings.TrimSpace(resp.TradeStateDesc) == "" {
+		return newPartnerOrderQueryContractError(operation, "wechat response missing trade_state_desc")
+	}
+	if resp.SceneInfo != nil && strings.TrimSpace(resp.SceneInfo.DeviceID) == "" {
+		return newPartnerOrderQueryContractError(operation, "scene_info.device_id is required when scene_info is provided")
+	}
+	for index, detail := range resp.PromotionDetail {
+		if strings.TrimSpace(detail.CouponID) == "" {
+			return newPartnerOrderQueryContractError(operation, "promotion_detail[%d].coupon_id is required", index)
+		}
+		if strings.TrimSpace(detail.Name) == "" {
+			return newPartnerOrderQueryContractError(operation, "promotion_detail[%d].name is required", index)
+		}
+		if detail.Scope != "" {
+			if _, ok := allowedPartnerPromotionScopes[strings.ToUpper(strings.TrimSpace(detail.Scope))]; !ok {
+				return newPartnerOrderQueryContractError(operation, "promotion_detail[%d].scope has unsupported value %q", index, detail.Scope)
+			}
+		}
+		if detail.Type != "" {
+			if _, ok := allowedPartnerPromotionTypes[strings.ToUpper(strings.TrimSpace(detail.Type))]; !ok {
+				return newPartnerOrderQueryContractError(operation, "promotion_detail[%d].type has unsupported value %q", index, detail.Type)
+			}
+		}
+		for goodsIndex, goods := range detail.GoodsDetail {
+			if strings.TrimSpace(goods.GoodsID) == "" {
+				return newPartnerOrderQueryContractError(operation, "promotion_detail[%d].goods_detail[%d].goods_id is required", index, goodsIndex)
+			}
+		}
+	}
+	return nil
+}
+
+func validateCombineOrderQueryResponse(operation string, resp *CombineQueryResponseBody) error {
+	if resp == nil {
+		return newCombineOrderQueryContractError(operation, "empty wechat response")
+	}
+	if strings.TrimSpace(resp.CombineAppID) == "" {
+		return newCombineOrderQueryContractError(operation, "wechat response missing combine_appid")
+	}
+	if strings.TrimSpace(resp.CombineMchID) == "" {
+		return newCombineOrderQueryContractError(operation, "wechat response missing combine_mchid")
+	}
+	if strings.TrimSpace(resp.CombineOutTradeNo) == "" {
+		return newCombineOrderQueryContractError(operation, "wechat response missing combine_out_trade_no")
+	}
+	for index, subOrder := range resp.SubOrders {
+		if strings.TrimSpace(subOrder.MchID) == "" {
+			return newCombineOrderQueryContractError(operation, "sub_orders[%d].mchid is required", index)
+		}
+		if strings.TrimSpace(subOrder.OutTradeNo) == "" {
+			return newCombineOrderQueryContractError(operation, "sub_orders[%d].out_trade_no is required", index)
+		}
+		if strings.TrimSpace(subOrder.TradeState) == "" {
+			return newCombineOrderQueryContractError(operation, "sub_orders[%d].trade_state is required", index)
+		}
+		if _, ok := allowedCombineOrderTradeStates[strings.ToUpper(strings.TrimSpace(subOrder.TradeState))]; !ok {
+			return newCombineOrderQueryContractError(operation, "sub_orders[%d].trade_state has unsupported value %q", index, subOrder.TradeState)
+		}
+		if strings.TrimSpace(subOrder.TradeType) != "" {
+			if _, ok := allowedCombineOrderTradeTypes[strings.ToUpper(strings.TrimSpace(subOrder.TradeType))]; !ok {
+				return newCombineOrderQueryContractError(operation, "sub_orders[%d].trade_type has unsupported value %q", index, subOrder.TradeType)
+			}
+		}
+		if subOrder.Amount == nil {
+			return newCombineOrderQueryContractError(operation, "sub_orders[%d].amount is required", index)
+		}
+		if strings.TrimSpace(subOrder.Amount.Currency) == "" {
+			return newCombineOrderQueryContractError(operation, "sub_orders[%d].amount.currency is required", index)
+		}
+		if strings.TrimSpace(subOrder.Amount.PayerCurrency) == "" {
+			return newCombineOrderQueryContractError(operation, "sub_orders[%d].amount.payer_currency is required", index)
+		}
+		for detailIndex, detail := range subOrder.PromotionDetail {
+			if strings.TrimSpace(detail.CouponID) == "" {
+				return newCombineOrderQueryContractError(operation, "sub_orders[%d].promotion_detail[%d].coupon_id is required", index, detailIndex)
+			}
+			if detail.Scope != "" {
+				if _, ok := allowedPartnerPromotionScopes[strings.ToUpper(strings.TrimSpace(detail.Scope))]; !ok {
+					return newCombineOrderQueryContractError(operation, "sub_orders[%d].promotion_detail[%d].scope has unsupported value %q", index, detailIndex, detail.Scope)
+				}
+			}
+			if detail.Type != "" {
+				if _, ok := allowedPartnerPromotionTypes[strings.ToUpper(strings.TrimSpace(detail.Type))]; !ok {
+					return newCombineOrderQueryContractError(operation, "sub_orders[%d].promotion_detail[%d].type has unsupported value %q", index, detailIndex, detail.Type)
+				}
+			}
+			for goodsIndex, goods := range detail.GoodsDetail {
+				if strings.TrimSpace(goods.GoodsID) == "" {
+					return newCombineOrderQueryContractError(operation, "sub_orders[%d].promotion_detail[%d].goods_detail[%d].goods_id is required", index, detailIndex, goodsIndex)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func combineQueryResponseFromBody(resp *CombineQueryResponseBody) *CombineQueryResponse {
+	if resp == nil {
+		return nil
+	}
+
+	result := &CombineQueryResponse{
+		CombineAppID:      resp.CombineAppID,
+		CombineMchID:      resp.CombineMchID,
+		CombineOutTradeNo: resp.CombineOutTradeNo,
+		SceneInfo:         resp.SceneInfo,
+	}
+	if resp.CombinePayerInfo != nil {
+		result.CombinePayerInfo = &CombinePayerInfo{
+			OpenID:    resp.CombinePayerInfo.OpenID,
+			SubOpenID: resp.CombinePayerInfo.SubOpenID,
+		}
+	}
+	if len(resp.SubOrders) == 0 {
+		return result
+	}
+
+	result.SubOrders = make([]CombineSubOrderResult, 0, len(resp.SubOrders))
+	for _, subOrder := range resp.SubOrders {
+		mapped := CombineSubOrderResult{
+			MchID:           subOrder.MchID,
+			SubMchID:        subOrder.SubMchID,
+			SubAppID:        subOrder.SubAppID,
+			SubOpenID:       subOrder.SubOpenID,
+			OutTradeNo:      subOrder.OutTradeNo,
+			TransactionID:   subOrder.TransactionID,
+			TradeType:       subOrder.TradeType,
+			TradeState:      subOrder.TradeState,
+			TradeStateDesc:  subOrder.TradeStateDesc,
+			BankType:        subOrder.BankType,
+			Attach:          subOrder.Attach,
+			PromotionDetail: subOrder.PromotionDetail,
+			SuccessTime:     subOrder.SuccessTime,
+		}
+		if subOrder.Amount != nil {
+			mapped.Amount = struct {
+				TotalAmount    int64  `json:"total_amount"`
+				PayerAmount    int64  `json:"payer_amount"`
+				Currency       string `json:"currency"`
+				PayerCurrency  string `json:"payer_currency"`
+				SettlementRate int64  `json:"settlement_rate"`
+			}{
+				TotalAmount:    subOrder.Amount.TotalAmount,
+				PayerAmount:    subOrder.Amount.PayerAmount,
+				Currency:       subOrder.Amount.Currency,
+				PayerCurrency:  subOrder.Amount.PayerCurrency,
+				SettlementRate: subOrder.Amount.SettlementRate,
+			}
+		}
+		result.SubOrders = append(result.SubOrders, mapped)
+	}
+
+	return result
 }
 
 func validateMerchantCancelWithdrawCreateRequest(req *EcommerceCancelWithdrawRequest) error {
@@ -1297,63 +1245,9 @@ func validateMerchantCancelWithdrawQueryResponse(operation string, resp *Ecommer
 	return nil
 }
 
-func normalizeEcommerceApplymentQueryState(state string) string {
-	return strings.ToUpper(strings.TrimSpace(state))
-}
-
-func classifyEcommerceApplymentQueryState(state string) string {
-	switch normalizeEcommerceApplymentQueryState(state) {
-	case "AUDITING":
-		return "AUDITING"
-	case "REJECTED":
-		return "REJECTED"
-	case "NEED_SIGN":
-		return "NEED_SIGN"
-	case "FINISH":
-		return "FINISH"
-	case "FROZEN":
-		return "FROZEN"
-	case "CANCELED":
-		return "CANCELED"
-	case "ACCOUNT_NEED_VERIFY":
-		return "ACCOUNT_NEED_VERIFY"
-	case "CHECKING":
-		return "CHECKING"
-	default:
-		return normalizeEcommerceApplymentQueryState(state)
-	}
-}
-
-func ecommerceApplymentStateAllowsAccountValidation(stateClass string) bool {
-	return stateClass == "ACCOUNT_NEED_VERIFY"
-}
-
-func ecommerceApplymentStateAllowsLegalValidationURL(stateClass string) bool {
-	return stateClass == "ACCOUNT_NEED_VERIFY"
-}
-
-func ecommerceApplymentStateAllowsAuditDetail(stateClass string) bool {
-	return stateClass == "REJECTED" || stateClass == "FROZEN"
-}
-
-func ecommerceApplymentStateAllowsSubMchID(stateClass string) bool {
-	return stateClass == "NEED_SIGN" || stateClass == "FINISH"
-}
-
-func ecommerceApplymentStateAllowsSignURL(stateClass, signState string) bool {
-	if stateClass == "NEED_SIGN" {
-		return true
-	}
-	return signState == "UNSIGNED"
-}
-
-func normalizeEcommerceApplymentQuerySignState(signState string) string {
-	return strings.ToUpper(strings.TrimSpace(signState))
-}
-
 func validateEcommerceApplymentID(applymentID int64) error {
 	if applymentID <= 0 {
-		return newEcommerceApplymentQueryValidationError("applyment_id must be a positive integer")
+		return wechatcontracts.NewEcommerceApplymentQueryValidationError("applyment_id must be a positive integer")
 	}
 	return nil
 }
@@ -1371,10 +1265,10 @@ func validateEcommerceApplymentCreateResponse(resp *EcommerceApplymentResponse) 
 func validateEcommerceApplymentOutRequestNo(outRequestNo string) (string, error) {
 	normalized := strings.TrimSpace(outRequestNo)
 	if normalized == "" {
-		return "", newEcommerceApplymentQueryValidationError("out_request_no is required")
+		return "", wechatcontracts.NewEcommerceApplymentQueryValidationError("out_request_no is required")
 	}
 	if len(normalized) > ecommerceApplymentOutRequestNoMaxLength {
-		return "", newEcommerceApplymentQueryValidationError("out_request_no must not exceed %d characters", ecommerceApplymentOutRequestNoMaxLength)
+		return "", wechatcontracts.NewEcommerceApplymentQueryValidationError("out_request_no must not exceed %d characters", ecommerceApplymentOutRequestNoMaxLength)
 	}
 	return normalized, nil
 }
@@ -1382,14 +1276,14 @@ func validateEcommerceApplymentOutRequestNo(outRequestNo string) (string, error)
 func validateSubMerchantSettlementSubMchID(subMchID string) (string, error) {
 	normalized := strings.TrimSpace(subMchID)
 	if normalized == "" {
-		return "", newSubMerchantSettlementQueryValidationError("sub_mchid is required")
+		return "", wechatcontracts.NewSubMerchantSettlementQueryValidationError("sub_mchid is required")
 	}
 	if len(normalized) != subMerchantSettlementMchIDLength {
-		return "", newSubMerchantSettlementQueryValidationError("sub_mchid must be exactly %d digits", subMerchantSettlementMchIDLength)
+		return "", wechatcontracts.NewSubMerchantSettlementQueryValidationError("sub_mchid must be exactly %d digits", subMerchantSettlementMchIDLength)
 	}
 	for _, ch := range normalized {
 		if ch < '0' || ch > '9' {
-			return "", newSubMerchantSettlementQueryValidationError("sub_mchid must contain only digits")
+			return "", wechatcontracts.NewSubMerchantSettlementQueryValidationError("sub_mchid must contain only digits")
 		}
 	}
 	return normalized, nil
@@ -1401,7 +1295,7 @@ func validateSubMerchantSettlementAccountNumberRule(accountNumberRule string) (s
 		return "", nil
 	}
 	if _, ok := allowedSubMerchantSettlementAccountNumberRules[normalized]; !ok {
-		return "", newSubMerchantSettlementQueryValidationError("account_number_rule must be one of %s or %s", subMerchantSettlementAccountNumberRuleV1, subMerchantSettlementAccountNumberRuleV2)
+		return "", wechatcontracts.NewSubMerchantSettlementQueryValidationError("account_number_rule must be one of %s or %s", subMerchantSettlementAccountNumberRuleV1, subMerchantSettlementAccountNumberRuleV2)
 	}
 	return normalized, nil
 }
@@ -1409,26 +1303,22 @@ func validateSubMerchantSettlementAccountNumberRule(accountNumberRule string) (s
 func validateSubMerchantSettlementApplicationNo(applicationNo string) (string, error) {
 	normalized := strings.TrimSpace(applicationNo)
 	if normalized == "" {
-		return "", newSubMerchantSettlementApplicationQueryValidationError("application_no is required")
+		return "", wechatcontracts.NewSubMerchantSettlementApplicationQueryValidationError("application_no is required")
 	}
 	if utf8.RuneCountInString(normalized) > subMerchantSettlementApplicationNoMaxLength {
-		return "", newSubMerchantSettlementApplicationQueryValidationError("application_no must not exceed %d characters", subMerchantSettlementApplicationNoMaxLength)
+		return "", wechatcontracts.NewSubMerchantSettlementApplicationQueryValidationError("application_no must not exceed %d characters", subMerchantSettlementApplicationNoMaxLength)
 	}
 	return normalized, nil
 }
 
 func validateSubMerchantSettlementFieldLength(fieldName, value string, maxRunes int) error {
 	if utf8.RuneCountInString(value) > maxRunes {
-		return newSubMerchantSettlementContractError("wechat response %s exceeds %d characters", fieldName, maxRunes)
+		return wechatcontracts.NewSubMerchantSettlementContractError("response %s exceeds %d characters", fieldName, maxRunes)
 	}
 	return nil
 }
 
 func validateSubMerchantSettlementResponse(resp *SubMerchantSettlementResponse) error {
-	if resp == nil {
-		return newSubMerchantSettlementContractError("empty wechat response")
-	}
-
 	resp.AccountType = strings.TrimSpace(resp.AccountType)
 	resp.AccountBank = strings.TrimSpace(resp.AccountBank)
 	resp.BankName = strings.TrimSpace(resp.BankName)
@@ -1437,24 +1327,10 @@ func validateSubMerchantSettlementResponse(resp *SubMerchantSettlementResponse) 
 	resp.VerifyResult = strings.TrimSpace(resp.VerifyResult)
 	resp.VerifyFailReason = strings.TrimSpace(resp.VerifyFailReason)
 
-	if resp.AccountType == "" {
-		return newSubMerchantSettlementContractError("wechat response missing account_type")
+	if err := wechatcontracts.ValidateSubMerchantSettlementResponse(resp); err != nil {
+		return err
 	}
-	if _, ok := allowedSubMerchantSettlementAccountTypes[resp.AccountType]; !ok {
-		return newSubMerchantSettlementContractError("unsupported account_type %q", resp.AccountType)
-	}
-	if resp.AccountBank == "" {
-		return newSubMerchantSettlementContractError("wechat response missing account_bank")
-	}
-	if resp.AccountNumber == "" {
-		return newSubMerchantSettlementContractError("wechat response missing account_number")
-	}
-	if resp.VerifyResult == "" {
-		return newSubMerchantSettlementContractError("wechat response missing verify_result")
-	}
-	if _, ok := allowedSubMerchantSettlementVerifyResults[resp.VerifyResult]; !ok {
-		return newSubMerchantSettlementContractError("unsupported verify_result %q", resp.VerifyResult)
-	}
+
 	if err := validateSubMerchantSettlementFieldLength("account_bank", resp.AccountBank, subMerchantSettlementFieldMaxLength); err != nil {
 		return err
 	}
@@ -1471,24 +1347,10 @@ func validateSubMerchantSettlementResponse(resp *SubMerchantSettlementResponse) 
 		return err
 	}
 
-	if resp.VerifyResult == subMerchantSettlementVerifyResultFail {
-		if resp.VerifyFailReason == "" {
-			return newSubMerchantSettlementContractError("verify_fail_reason is required when verify_result=%s", subMerchantSettlementVerifyResultFail)
-		}
-		return nil
-	}
-	if resp.VerifyFailReason != "" {
-		return newSubMerchantSettlementContractError("verify_fail_reason is only allowed when verify_result=%s", subMerchantSettlementVerifyResultFail)
-	}
-
 	return nil
 }
 
 func validateSubMerchantSettlementApplicationResponse(resp *QuerySubMerchantSettlementApplicationResponse) error {
-	if resp == nil {
-		return newSubMerchantSettlementApplicationContractError("empty wechat response")
-	}
-
 	resp.AccountName = strings.TrimSpace(resp.AccountName)
 	resp.AccountType = strings.TrimSpace(resp.AccountType)
 	resp.AccountBank = strings.TrimSpace(resp.AccountBank)
@@ -1499,56 +1361,27 @@ func validateSubMerchantSettlementApplicationResponse(resp *QuerySubMerchantSett
 	resp.VerifyFailReason = strings.TrimSpace(resp.VerifyFailReason)
 	resp.VerifyFinishTime = strings.TrimSpace(resp.VerifyFinishTime)
 
-	if resp.AccountName == "" {
-		return newSubMerchantSettlementApplicationContractError("wechat response missing account_name")
+	if err := wechatcontracts.ValidateSubMerchantSettlementApplicationResponse(resp); err != nil {
+		return err
 	}
+
 	if utf8.RuneCountInString(resp.AccountName) > subMerchantSettlementAccountNameMaxLength {
-		return newSubMerchantSettlementApplicationContractError("wechat response account_name exceeds %d characters", subMerchantSettlementAccountNameMaxLength)
-	}
-	if resp.AccountType == "" {
-		return newSubMerchantSettlementApplicationContractError("wechat response missing account_type")
-	}
-	if _, ok := allowedSubMerchantSettlementAccountTypes[resp.AccountType]; !ok {
-		return newSubMerchantSettlementApplicationContractError("unsupported account_type %q", resp.AccountType)
-	}
-	if resp.AccountBank == "" {
-		return newSubMerchantSettlementApplicationContractError("wechat response missing account_bank")
+		return wechatcontracts.NewSubMerchantSettlementApplicationContractError("response account_name exceeds %d characters", subMerchantSettlementAccountNameMaxLength)
 	}
 	if err := validateSubMerchantSettlementFieldLength("account_bank", resp.AccountBank, subMerchantSettlementFieldMaxLength); err != nil {
-		return newSubMerchantSettlementApplicationContractError("%s", strings.TrimPrefix(err.Error(), "query sub merchant settlement: "))
+		return wechatcontracts.NewSubMerchantSettlementApplicationContractError("response account_bank exceeds %d characters", subMerchantSettlementFieldMaxLength)
 	}
 	if err := validateSubMerchantSettlementFieldLength("bank_name", resp.BankName, subMerchantSettlementFieldMaxLength); err != nil {
-		return newSubMerchantSettlementApplicationContractError("%s", strings.TrimPrefix(err.Error(), "query sub merchant settlement: "))
+		return wechatcontracts.NewSubMerchantSettlementApplicationContractError("response bank_name exceeds %d characters", subMerchantSettlementFieldMaxLength)
 	}
 	if err := validateSubMerchantSettlementFieldLength("bank_branch_id", resp.BankBranchID, subMerchantSettlementFieldMaxLength); err != nil {
-		return newSubMerchantSettlementApplicationContractError("%s", strings.TrimPrefix(err.Error(), "query sub merchant settlement: "))
-	}
-	if resp.AccountNumber == "" {
-		return newSubMerchantSettlementApplicationContractError("wechat response missing account_number")
+		return wechatcontracts.NewSubMerchantSettlementApplicationContractError("response bank_branch_id exceeds %d characters", subMerchantSettlementFieldMaxLength)
 	}
 	if err := validateSubMerchantSettlementFieldLength("account_number", resp.AccountNumber, subMerchantSettlementFieldMaxLength); err != nil {
-		return newSubMerchantSettlementApplicationContractError("%s", strings.TrimPrefix(err.Error(), "query sub merchant settlement: "))
-	}
-	if resp.VerifyResult == "" {
-		return newSubMerchantSettlementApplicationContractError("wechat response missing verify_result")
-	}
-	if _, ok := allowedSubMerchantSettlementApplicationVerifyResults[resp.VerifyResult]; !ok {
-		return newSubMerchantSettlementApplicationContractError("unsupported verify_result %q", resp.VerifyResult)
+		return wechatcontracts.NewSubMerchantSettlementApplicationContractError("response account_number exceeds %d characters", subMerchantSettlementFieldMaxLength)
 	}
 	if err := validateSubMerchantSettlementFieldLength("verify_fail_reason", resp.VerifyFailReason, subMerchantSettlementFailReasonMaxLength); err != nil {
-		return newSubMerchantSettlementApplicationContractError("%s", strings.TrimPrefix(err.Error(), "query sub merchant settlement: "))
-	}
-	if resp.VerifyResult == subMerchantSettlementApplicationAuditFail {
-		if resp.VerifyFailReason == "" {
-			return newSubMerchantSettlementApplicationContractError("verify_fail_reason is required when verify_result=%s", subMerchantSettlementApplicationAuditFail)
-		}
-	} else if resp.VerifyFailReason != "" {
-		return newSubMerchantSettlementApplicationContractError("verify_fail_reason is only allowed when verify_result=%s", subMerchantSettlementApplicationAuditFail)
-	}
-	if resp.VerifyFinishTime != "" {
-		if _, err := time.Parse(time.RFC3339, resp.VerifyFinishTime); err != nil {
-			return newSubMerchantSettlementApplicationContractError("verify_finish_time must be RFC3339: %w", err)
-		}
+		return wechatcontracts.NewSubMerchantSettlementApplicationContractError("response verify_fail_reason exceeds %d characters", subMerchantSettlementFailReasonMaxLength)
 	}
 
 	return nil
@@ -1629,142 +1462,15 @@ func querySubMerchantSettlementApplicationLogEvent(requestID, subMchID, applicat
 		Str("account_number_rule", strings.TrimSpace(accountNumberRule))
 }
 
-func validateEcommerceApplymentAccountValidation(validation *EcommerceApplymentAccountValidation) error {
-	if validation == nil {
-		return errors.New("wechat response missing account_validation")
-	}
-	if strings.TrimSpace(validation.AccountName) == "" {
-		return errors.New("wechat response missing account_validation.account_name")
-	}
-	if validation.PayAmount == 0 {
-		return errors.New("wechat response missing account_validation.pay_amount")
-	}
-	if strings.TrimSpace(validation.DestinationAccountNumber) == "" {
-		return errors.New("wechat response missing account_validation.destination_account_number")
-	}
-	if strings.TrimSpace(validation.DestinationAccountName) == "" {
-		return errors.New("wechat response missing account_validation.destination_account_name")
-	}
-	if strings.TrimSpace(validation.DestinationAccountBank) == "" {
-		return errors.New("wechat response missing account_validation.destination_account_bank")
-	}
-	if strings.TrimSpace(validation.City) == "" {
-		return errors.New("wechat response missing account_validation.city")
-	}
-	if strings.TrimSpace(validation.Remark) == "" {
-		return errors.New("wechat response missing account_validation.remark")
-	}
-	if strings.TrimSpace(validation.Deadline) == "" {
-		return errors.New("wechat response missing account_validation.deadline")
-	}
-	return nil
-}
-
-func validateEcommerceApplymentAuditDetail(auditDetail []ApplymentAuditDetail) error {
-	if len(auditDetail) == 0 {
-		return errors.New("wechat response missing audit_detail")
-	}
-	for idx, detail := range auditDetail {
-		if strings.TrimSpace(detail.ParamName) == "" {
-			return fmt.Errorf("wechat response missing audit_detail[%d].param_name", idx)
-		}
-		if strings.TrimSpace(detail.RejectReason) == "" {
-			return fmt.Errorf("wechat response missing audit_detail[%d].reject_reason", idx)
-		}
-	}
-	return nil
-}
-
 func validateEcommerceApplymentQueryResponse(resp *EcommerceApplymentQueryResponse, kind ecommerceApplymentQueryKind) error {
-	if resp == nil {
-		return errors.New("query ecommerce applyment: empty wechat response")
+	switch kind {
+	case ecommerceApplymentQueryByOutRequestNoKind:
+		return wechatcontracts.ValidateEcommerceApplymentQueryByOutRequestNoResponse(resp)
+	case ecommerceApplymentQueryByIDKind:
+		return wechatcontracts.ValidateEcommerceApplymentQueryByIDResponse(resp)
+	default:
+		return wechatcontracts.NewApplymentQueryContractError("unsupported query kind %q", kind)
 	}
-	outRequestNo := strings.TrimSpace(resp.OutRequestNo)
-	applymentState := normalizeEcommerceApplymentQueryState(resp.ApplymentState)
-	applymentStateClass := classifyEcommerceApplymentQueryState(resp.ApplymentState)
-	applymentStateDesc := strings.TrimSpace(resp.ApplymentStateDesc)
-	signURL := strings.TrimSpace(resp.SignURL)
-	signState := normalizeEcommerceApplymentQuerySignState(resp.SignState)
-	subMchID := strings.TrimSpace(resp.SubMchID)
-	legalValidationURL := strings.TrimSpace(resp.LegalValidationURL)
-
-	if resp.ApplymentID <= 0 {
-		return errors.New("query ecommerce applyment: wechat response missing applyment_id")
-	}
-	if outRequestNo == "" {
-		return errors.New("query ecommerce applyment: wechat response missing out_request_no")
-	}
-	if applymentState == "" {
-		return errors.New("query ecommerce applyment: wechat response missing applyment_state")
-	}
-	if applymentStateDesc == "" {
-		return errors.New("query ecommerce applyment: wechat response missing applyment_state_desc")
-	}
-	if _, ok := allowedEcommerceApplymentStates[applymentState]; !ok {
-		return fmt.Errorf("query ecommerce applyment: unsupported applyment_state %q", resp.ApplymentState)
-	}
-	if signState != "" {
-		if _, ok := allowedEcommerceApplymentSignStates[signState]; !ok {
-			return fmt.Errorf("query ecommerce applyment: unsupported sign_state %q", resp.SignState)
-		}
-	}
-	if signURL != "" {
-		if !ecommerceApplymentStateAllowsSignURL(applymentStateClass, signState) {
-			if kind == ecommerceApplymentQueryByOutRequestNoKind {
-				return fmt.Errorf("query ecommerce applyment: sign_url is only allowed when applyment_state=NEED_SIGN for out_request_no query, got applyment_state=%s", resp.ApplymentState)
-			}
-			return fmt.Errorf("query ecommerce applyment: sign_url is only allowed when applyment_state=NEED_SIGN or sign_state=UNSIGNED for applyment_id query, got applyment_state=%s sign_state=%s", resp.ApplymentState, resp.SignState)
-		}
-	}
-	if resp.AccountValidation != nil && !ecommerceApplymentStateAllowsAccountValidation(applymentStateClass) {
-		return fmt.Errorf("query ecommerce applyment: account_validation is only allowed when applyment_state=ACCOUNT_NEED_VERIFY, got %s", resp.ApplymentState)
-	}
-	if resp.AccountValidation != nil {
-		if err := validateEcommerceApplymentAccountValidation(resp.AccountValidation); err != nil {
-			return fmt.Errorf("query ecommerce applyment: %w", err)
-		}
-	}
-	if len(resp.AuditDetail) > 0 && !ecommerceApplymentStateAllowsAuditDetail(applymentStateClass) {
-		return fmt.Errorf("query ecommerce applyment: audit_detail is only allowed when applyment_state is REJECTED or FROZEN, got %s", resp.ApplymentState)
-	}
-	if len(resp.AuditDetail) > 0 {
-		if err := validateEcommerceApplymentAuditDetail(resp.AuditDetail); err != nil {
-			return fmt.Errorf("query ecommerce applyment: %w", err)
-		}
-	}
-	if legalValidationURL != "" && !ecommerceApplymentStateAllowsLegalValidationURL(applymentStateClass) {
-		return fmt.Errorf("query ecommerce applyment: legal_validation_url is only allowed when applyment_state=ACCOUNT_NEED_VERIFY, got %s", resp.ApplymentState)
-	}
-	if subMchID != "" && !ecommerceApplymentStateAllowsSubMchID(applymentStateClass) {
-		return fmt.Errorf("query ecommerce applyment: sub_mchid is only allowed when applyment_state is NEED_SIGN or FINISH, got %s", resp.ApplymentState)
-	}
-
-	if applymentStateClass == "ACCOUNT_NEED_VERIFY" {
-		if err := validateEcommerceApplymentAccountValidation(resp.AccountValidation); err != nil {
-			return fmt.Errorf("query ecommerce applyment: account_validation is required when applyment_state=ACCOUNT_NEED_VERIFY: %w", err)
-		}
-	}
-	if applymentStateClass == "REJECTED" || applymentStateClass == "FROZEN" {
-		if err := validateEcommerceApplymentAuditDetail(resp.AuditDetail); err != nil {
-			return fmt.Errorf("query ecommerce applyment: audit_detail is required when applyment_state=%s: %w", applymentStateClass, err)
-		}
-	}
-	if applymentStateClass == "NEED_SIGN" {
-		if signURL == "" {
-			return errors.New("query ecommerce applyment: sign_url is required when applyment_state=NEED_SIGN")
-		}
-		if subMchID == "" {
-			return errors.New("query ecommerce applyment: sub_mchid is required when applyment_state=NEED_SIGN")
-		}
-	}
-	if applymentStateClass == "FINISH" && subMchID == "" {
-		return errors.New("query ecommerce applyment: sub_mchid is required when applyment_state=FINISH")
-	}
-	if signState == "UNSIGNED" && signURL == "" {
-		return fmt.Errorf("query ecommerce applyment: sign_url is required when sign_state=UNSIGNED for %s query", kind)
-	}
-
-	return nil
 }
 
 func (c *EcommerceClient) decryptEcommerceApplymentAccountValidation(validation *EcommerceApplymentAccountValidation) error {
@@ -2182,43 +1888,6 @@ func (c *EcommerceClient) ListBankBranches(ctx context.Context, bankAliasCode st
 
 // ==================== 合单支付 ====================
 
-// CombineOrderRequest 合单下单请求
-type CombineOrderRequest struct {
-	CombineOutTradeNo string            // 合单商户订单号
-	Description       string            // 商品描述
-	SubOrders         []SubOrder        // 子订单列表
-	PayerOpenID       string            // 支付者 OpenID
-	PayerSubOpenID    string            // 支付者子商户 OpenID（可选）
-	ExpireTime        time.Time         // 交易结束时间
-	StartTime         *time.Time        // 交易开始时间（可选）
-	NotifyURL         string            // 支付通知地址（可选，默认使用客户端配置）
-	SceneInfo         *CombineSceneInfo // 场景信息（可选）
-}
-
-// SubOrder 子订单
-type SubOrder struct {
-	MchID         string // 商品单商户号；为空时默认使用服务商商户号
-	SubMchID      string // 特约商户号（二级商户号）
-	SubAppID      string // 子商户绑定的 AppID（可选）
-	OutTradeNo    string // 子单商户订单号
-	Description   string // 商品描述
-	Amount        int64  // 订单金额（分）
-	ProfitSharing bool   // 是否分账，true 表示需要分账
-	Attach        string // 附加数据
-	GoodsTag      string // 订单优惠标记（可选）
-}
-
-// CombineSceneInfo 场景信息
-type CombineSceneInfo struct {
-	PayerClientIP string `json:"payer_client_ip,omitempty"` // 用户终端 IP
-	DeviceID      string `json:"device_id,omitempty"`       // 商户端设备号
-}
-
-// CombineOrderResponse 合单下单响应
-type CombineOrderResponse struct {
-	PrepayID string `json:"prepay_id"`
-}
-
 // CreateCombineOrder 创建合单订单（平台收付通）
 // 用于商户交易，资金进入二级商户账户
 func (c *EcommerceClient) CreateCombineOrder(ctx context.Context, req *CombineOrderRequest) (*CombineOrderResponse, *JSAPIPayParams, error) {
@@ -2245,7 +1914,7 @@ func (c *EcommerceClient) CreateCombineOrder(ctx context.Context, req *CombineOr
 	}
 
 	// 构建子订单列表
-	subOrders := make([]map[string]interface{}, len(req.SubOrders))
+	subOrders := make([]CombineSubOrderRequest, len(req.SubOrders))
 	for i, sub := range req.SubOrders {
 		if strings.TrimSpace(sub.SubAppID) != "" {
 			return nil, nil, fmt.Errorf("create combine order: sub_orders[%d].sub_appid is not supported in the single-appid project flow", i)
@@ -2266,59 +1935,52 @@ func (c *EcommerceClient) CreateCombineOrder(ctx context.Context, req *CombineOr
 		if mchID == "" {
 			mchID = c.spMchID
 		}
-		subOrder := map[string]interface{}{
-			"mchid":        mchID,
-			"attach":       sub.Attach,
-			"out_trade_no": sub.OutTradeNo,
-			"description":  sub.Description,
-			"amount": map[string]interface{}{
-				"total_amount": sub.Amount,
-				"currency":     "CNY",
+		subOrders[i] = CombineSubOrderRequest{
+			MchID:       mchID,
+			SubMchID:    sub.SubMchID,
+			SubAppID:    sub.SubAppID,
+			OutTradeNo:  sub.OutTradeNo,
+			Description: sub.Description,
+			Attach:      sub.Attach,
+			Detail:      sub.Detail,
+			Amount: CombineSubOrderAmount{
+				TotalAmount: sub.Amount,
+				Currency:    "CNY",
 			},
-			"settle_info": map[string]interface{}{
-				"profit_sharing": sub.ProfitSharing,
-			},
+			SettleInfo: &CombineSubOrderSettleInfo{ProfitSharing: sub.ProfitSharing, SubsidyAmount: sub.SubsidyAmount},
+			GoodsTag:   sub.GoodsTag,
 		}
-		if sub.SubMchID != "" {
-			subOrder["sub_mchid"] = sub.SubMchID
-		}
-		if sub.GoodsTag != "" {
-			subOrder["goods_tag"] = sub.GoodsTag
-		}
-		subOrders[i] = subOrder
-	}
-
-	combinePayerInfo := map[string]interface{}{}
-	if req.PayerOpenID != "" {
-		combinePayerInfo["openid"] = req.PayerOpenID
 	}
 
 	notifyURL := c.combineNotifyURL
 	if req.NotifyURL != "" {
 		notifyURL = req.NotifyURL
 	}
-
-	body := map[string]interface{}{
-		"combine_appid":        c.spAppID,
-		"combine_mchid":        c.spMchID,
-		"combine_out_trade_no": req.CombineOutTradeNo,
-		"sub_orders":           subOrders,
-		"combine_payer_info":   combinePayerInfo,
+	if strings.TrimSpace(notifyURL) == "" {
+		return nil, nil, fmt.Errorf("create combine order: notify_url is required")
 	}
-	if notifyURL != "" {
-		body["notify_url"] = notifyURL
+
+	body := CombineOrderRequestBody{
+		CombineAppID:      c.spAppID,
+		CombineMchID:      c.spMchID,
+		CombineOutTradeNo: req.CombineOutTradeNo,
+		CombinePayerInfo: CombinePayerInfoRequest{
+			OpenID: req.PayerOpenID,
+		},
+		SubOrders: subOrders,
+		NotifyURL: notifyURL,
 	}
 	if !req.ExpireTime.IsZero() {
-		body["time_expire"] = req.ExpireTime.Format(time.RFC3339)
+		body.TimeExpire = req.ExpireTime.Format(time.RFC3339)
 	}
 	if req.StartTime != nil {
-		body["time_start"] = req.StartTime.Format(time.RFC3339)
+		body.TimeStart = req.StartTime.Format(time.RFC3339)
 	}
 
 	if req.SceneInfo != nil {
-		body["scene_info"] = map[string]interface{}{
-			"payer_client_ip": req.SceneInfo.PayerClientIP,
-			"device_id":       req.SceneInfo.DeviceID,
+		body.SceneInfo = &CombineSceneInfo{
+			PayerClientIP: req.SceneInfo.PayerClientIP,
+			DeviceID:      req.SceneInfo.DeviceID,
 		}
 	}
 
@@ -2349,6 +2011,10 @@ func (c *EcommerceClient) CreateCombineOrder(ctx context.Context, req *CombineOr
 
 // QueryCombineOrder 查询合单订单
 func (c *EcommerceClient) QueryCombineOrder(ctx context.Context, combineOutTradeNo string) (*CombineQueryResponse, error) {
+	if strings.TrimSpace(combineOutTradeNo) == "" {
+		return nil, newCombineOrderQueryValidationError("query combine order", "combine_out_trade_no is required")
+	}
+
 	url := fmt.Sprintf(ecommerceQueryCombineURL, combineOutTradeNo)
 
 	respBody, requestID, err := c.doRequestWithRequestID(ctx, http.MethodGet, url, nil)
@@ -2361,51 +2027,24 @@ func (c *EcommerceClient) QueryCombineOrder(ctx context.Context, combineOutTrade
 		return nil, wrappedErr
 	}
 
-	var resp CombineQueryResponse
+	var resp CombineQueryResponseBody
 	if err := json.Unmarshal(respBody, &resp); err != nil {
-		return nil, fmt.Errorf("unmarshal response: %w", err)
+		contractErr := newCombineOrderQueryContractError("query combine order", "unmarshal response: %v", err)
+		ecommercePaymentOrderLogEvent(requestID, "query_combine_order").
+			Str("combine_out_trade_no", strings.TrimSpace(combineOutTradeNo)).
+			Err(contractErr).
+			Msg("wechat combine order query response contract invalid")
+		return nil, contractErr
+	}
+	if err := validateCombineOrderQueryResponse("query combine order", &resp); err != nil {
+		ecommercePaymentOrderLogEvent(requestID, "query_combine_order").
+			Str("combine_out_trade_no", strings.TrimSpace(combineOutTradeNo)).
+			Err(err).
+			Msg("wechat combine order query response contract invalid")
+		return nil, err
 	}
 
-	return &resp, nil
-}
-
-// CombineQueryResponse 合单查询响应
-type CombineQueryResponse struct {
-	CombineAppID      string                  `json:"combine_appid"`
-	CombineMchID      string                  `json:"combine_mchid"`
-	CombineOutTradeNo string                  `json:"combine_out_trade_no"`
-	SubOrders         []CombineSubOrderResult `json:"sub_orders"`
-	CombinePayerInfo  *CombinePayerInfo       `json:"combine_payer_info"`
-	SceneInfo         *CombineSceneInfo       `json:"scene_info"`
-}
-
-// CombineSubOrderResult 合单子订单结果
-type CombineSubOrderResult struct {
-	MchID          string `json:"mchid"`
-	SubMchID       string `json:"sub_mchid,omitempty"`
-	SubAppID       string `json:"sub_appid,omitempty"`
-	SubOpenID      string `json:"sub_openid,omitempty"`
-	OutTradeNo     string `json:"out_trade_no"`
-	TransactionID  string `json:"transaction_id"`
-	TradeType      string `json:"trade_type,omitempty"`
-	TradeState     string `json:"trade_state"` // SUCCESS/REFUND/NOTPAY/CLOSED/PAYERROR
-	TradeStateDesc string `json:"trade_state_desc"`
-	BankType       string `json:"bank_type,omitempty"`
-	Attach         string `json:"attach,omitempty"`
-	Amount         struct {
-		TotalAmount    int64  `json:"total_amount"`
-		PayerAmount    int64  `json:"payer_amount"`
-		Currency       string `json:"currency"`
-		PayerCurrency  string `json:"payer_currency"`
-		SettlementRate int64  `json:"settlement_rate"`
-	} `json:"amount"`
-	SuccessTime string `json:"success_time"`
-}
-
-// CombinePayerInfo 合单支付者信息
-type CombinePayerInfo struct {
-	OpenID    string `json:"openid"`
-	SubOpenID string `json:"sub_openid,omitempty"`
+	return combineQueryResponseFromBody(&resp), nil
 }
 
 // CloseCombineOrder 关闭合单订单
@@ -2418,7 +2057,7 @@ func (c *EcommerceClient) CloseCombineOrder(ctx context.Context, combineOutTrade
 	}
 	url := fmt.Sprintf(ecommerceCloseCombineURL, combineOutTradeNo)
 
-	subs := make([]map[string]string, len(subOrders))
+	subs := make([]CombineCloseSubOrderRequest, len(subOrders))
 	for i, sub := range subOrders {
 		if strings.TrimSpace(sub.OutTradeNo) == "" {
 			return fmt.Errorf("close combine order: sub_orders[%d].out_trade_no is required", i)
@@ -2427,23 +2066,15 @@ func (c *EcommerceClient) CloseCombineOrder(ctx context.Context, combineOutTrade
 		if mchID == "" {
 			mchID = c.spMchID
 		}
-		subOrder := map[string]string{
-			"mchid":        mchID,
-			"out_trade_no": sub.OutTradeNo,
+		subs[i] = CombineCloseSubOrderRequest{
+			MchID:      mchID,
+			SubMchID:   sub.SubMchID,
+			SubAppID:   sub.SubAppID,
+			OutTradeNo: sub.OutTradeNo,
 		}
-		if sub.SubMchID != "" {
-			subOrder["sub_mchid"] = sub.SubMchID
-		}
-		if sub.SubAppID != "" {
-			subOrder["sub_appid"] = sub.SubAppID
-		}
-		subs[i] = subOrder
 	}
 
-	body := map[string]interface{}{
-		"combine_appid": c.spAppID,
-		"sub_orders":    subs,
-	}
+	body := CombineCloseOrderRequest{CombineAppID: c.spAppID, SubOrders: subs}
 
 	_, requestID, err := c.doRequestWithRequestID(ctx, http.MethodPost, url, body)
 	if err != nil {
@@ -2467,34 +2098,30 @@ func ecommercePaymentOrderLogEvent(requestID string, operation string) *zerolog.
 	return evt
 }
 
-func normalizePaymentOrderingWechatCode(code string) string {
-	return strings.ToUpper(strings.TrimSpace(code))
-}
-
 func partnerJSAPIOrderCreateWechatErrorGuide(wxErr *WechatPayError) string {
 	if wxErr == nil {
 		return "wechat partner jsapi order creation failed"
 	}
-	switch normalizePaymentOrderingWechatCode(wxErr.Code) {
-	case "PARAM_ERROR", "INVALID_REQUEST":
+	switch {
+	case wechaterrorcodes.OrderingCodeIn(wxErr.Code, wechaterrorcodes.OrderingCodeParamError, wechaterrorcodes.OrderingCodeInvalidRequest):
 		return "verify the partner jsapi request fields, especially payer, amount, sub_mchid, and scene_info.payer_client_ip, then retry"
-	case "APPID_MCHID_NOT_MATCH", "OPENID_MISMATCH", "MCH_NOT_EXISTS":
+	case wechaterrorcodes.OrderingCodeIn(wxErr.Code, wechaterrorcodes.OrderingCodeAppIDMchIDNotMatch, wechaterrorcodes.OrderingCodeOpenIDMismatch, wechaterrorcodes.OrderingCodeMchNotExists):
 		return "verify the configured appid, mchid, openid binding, and merchant configuration before retrying"
-	case "NOAUTH", "NO_AUTH":
+	case wechaterrorcodes.OrderingCodeEquals(wxErr.Code, wechaterrorcodes.OrderingCodeNoAuth):
 		return "verify the service provider merchant has permission to create partner jsapi orders before retrying"
-	case "SIGN_ERROR":
+	case wechaterrorcodes.OrderingCodeEquals(wxErr.Code, wechaterrorcodes.OrderingCodeSignError):
 		return "verify the merchant certificate, private key, and authorization signature before retrying"
-	case "ORDER_CLOSED":
+	case wechaterrorcodes.OrderingCodeEquals(wxErr.Code, wechaterrorcodes.OrderingCodeOrderClosed):
 		return "wechat reported the payment order is already closed; recreate the payment with a new out_trade_no"
-	case "OUT_TRADE_NO_USED":
+	case wechaterrorcodes.OrderingCodeEquals(wxErr.Code, wechaterrorcodes.OrderingCodeOutTradeNoUsed):
 		return "wechat reported the out_trade_no already exists; verify idempotency and reuse the existing pending payment when possible"
-	case "ACCOUNTERROR", "ACCOUNT_ERROR":
+	case wechaterrorcodes.OrderingCodeEquals(wxErr.Code, wechaterrorcodes.OrderingCodeAccountError):
 		return "wechat rejected the payer account; ask the user to switch account or retry later"
-	case "RULELIMIT", "RULE_LIMIT", "FREQUENCY_LIMITED", "RATELIMIT_EXCEEDED":
+	case wechaterrorcodes.OrderingCodeIn(wxErr.Code, wechaterrorcodes.OrderingCodeRuleLimit, wechaterrorcodes.OrderingCodeFrequencyLimited, wechaterrorcodes.OrderingCompatCodeRateLimit):
 		return "wechat rate limited the payment request; retry later with backoff"
-	case "TRADE_ERROR":
+	case wechaterrorcodes.OrderingCodeEquals(wxErr.Code, wechaterrorcodes.OrderingCodeTradeError):
 		return "wechat rejected the payment due to business rules; inspect the upstream detail and request_id before retrying"
-	case "BANKERROR", "BANK_ERROR", "SYSTEMERROR", "SYSTEM_ERROR":
+	case wechaterrorcodes.OrderingCodeIn(wxErr.Code, wechaterrorcodes.OrderingCodeBankError, wechaterrorcodes.OrderingCodeSystemError):
 		return "wechat payment creation failed due to an upstream system error; retry later with backoff"
 	default:
 		return fmt.Sprintf("wechat partner jsapi order creation failed with upstream code %s; inspect the upstream message and request_id", wxErr.Code)
@@ -2513,18 +2140,18 @@ func partnerOrderQueryWechatErrorGuide(wxErr *WechatPayError) string {
 	if wxErr == nil {
 		return "wechat partner order query failed"
 	}
-	switch normalizePaymentOrderingWechatCode(wxErr.Code) {
-	case "ORDER_NOT_EXIST", "ORDERNOTEXIST":
+	switch {
+	case wechaterrorcodes.OrderingCodeEquals(wxErr.Code, wechaterrorcodes.OrderingCodeOrderNotExist):
 		return "wechat could not find the partner payment order; verify out_trade_no, transaction_id, and sub_mchid before retrying"
-	case "PARAM_ERROR", "INVALID_REQUEST":
+	case wechaterrorcodes.OrderingCodeIn(wxErr.Code, wechaterrorcodes.OrderingCodeParamError, wechaterrorcodes.OrderingCodeInvalidRequest):
 		return "verify the partner order query parameter format and request path before retrying"
-	case "NOAUTH", "NO_AUTH":
+	case wechaterrorcodes.OrderingCodeEquals(wxErr.Code, wechaterrorcodes.OrderingCodeNoAuth):
 		return "verify the merchant has permission to query this partner payment order before retrying"
-	case "SIGN_ERROR":
+	case wechaterrorcodes.OrderingCodeEquals(wxErr.Code, wechaterrorcodes.OrderingCodeSignError):
 		return "verify the merchant certificate, private key, and authorization signature before retrying"
-	case "RULELIMIT", "RULE_LIMIT", "FREQUENCY_LIMITED", "RATELIMIT_EXCEEDED":
+	case wechaterrorcodes.OrderingCodeIn(wxErr.Code, wechaterrorcodes.OrderingCodeRuleLimit, wechaterrorcodes.OrderingCodeFrequencyLimited, wechaterrorcodes.OrderingCompatCodeRateLimit):
 		return "wechat rate limited the partner order query; retry later with backoff"
-	case "SYSTEMERROR", "SYSTEM_ERROR", "BANKERROR", "BANK_ERROR":
+	case wechaterrorcodes.OrderingCodeIn(wxErr.Code, wechaterrorcodes.OrderingCodeSystemError, wechaterrorcodes.OrderingCodeBankError):
 		return "wechat partner order query failed due to an upstream system error; retry later with backoff"
 	default:
 		return fmt.Sprintf("wechat partner order query failed with upstream code %s; inspect the upstream message and request_id", wxErr.Code)
@@ -2543,20 +2170,20 @@ func partnerOrderCloseWechatErrorGuide(wxErr *WechatPayError) string {
 	if wxErr == nil {
 		return "wechat partner order close failed"
 	}
-	switch normalizePaymentOrderingWechatCode(wxErr.Code) {
-	case "ORDER_CLOSED":
+	switch {
+	case wechaterrorcodes.OrderingCodeEquals(wxErr.Code, wechaterrorcodes.OrderingCodeOrderClosed):
 		return "wechat reported the partner payment order is already closed"
-	case "ORDER_NOT_EXIST", "ORDERNOTEXIST":
+	case wechaterrorcodes.OrderingCodeEquals(wxErr.Code, wechaterrorcodes.OrderingCodeOrderNotExist):
 		return "wechat could not find the partner payment order to close; verify out_trade_no and sub_mchid before retrying"
-	case "INVALID_REQUEST":
+	case wechaterrorcodes.OrderingCodeEquals(wxErr.Code, wechaterrorcodes.OrderingCodeInvalidRequest):
 		return "verify the partner order close payload and merchant identifiers before retrying"
-	case "NOAUTH", "NO_AUTH":
+	case wechaterrorcodes.OrderingCodeEquals(wxErr.Code, wechaterrorcodes.OrderingCodeNoAuth):
 		return "verify the merchant has permission to close this partner payment order before retrying"
-	case "SIGN_ERROR":
+	case wechaterrorcodes.OrderingCodeEquals(wxErr.Code, wechaterrorcodes.OrderingCodeSignError):
 		return "verify the merchant certificate, private key, and authorization signature before retrying"
-	case "RULELIMIT", "RULE_LIMIT", "FREQUENCY_LIMITED", "RATELIMIT_EXCEEDED":
+	case wechaterrorcodes.OrderingCodeIn(wxErr.Code, wechaterrorcodes.OrderingCodeRuleLimit, wechaterrorcodes.OrderingCodeFrequencyLimited, wechaterrorcodes.OrderingCompatCodeRateLimit):
 		return "wechat rate limited the partner order close request; retry later with backoff"
-	case "SYSTEMERROR", "SYSTEM_ERROR", "BANKERROR", "BANK_ERROR":
+	case wechaterrorcodes.OrderingCodeIn(wxErr.Code, wechaterrorcodes.OrderingCodeSystemError, wechaterrorcodes.OrderingCodeBankError):
 		return "wechat partner order close failed due to an upstream system error; retry later with backoff"
 	default:
 		return fmt.Sprintf("wechat partner order close failed with upstream code %s; inspect the upstream message and request_id", wxErr.Code)
@@ -2575,26 +2202,26 @@ func combineOrderCreateWechatErrorGuide(wxErr *WechatPayError) string {
 	if wxErr == nil {
 		return "wechat combine order creation failed"
 	}
-	switch normalizePaymentOrderingWechatCode(wxErr.Code) {
-	case "PARAM_ERROR", "INVALID_REQUEST":
+	switch {
+	case wechaterrorcodes.OrderingCodeIn(wxErr.Code, wechaterrorcodes.OrderingCodeParamError, wechaterrorcodes.OrderingCodeInvalidRequest):
 		return "verify combine_out_trade_no, sub_orders, payer info, and scene_info.payer_client_ip before retrying"
-	case "APPID_MCHID_NOT_MATCH", "OPENID_MISMATCH", "MCH_NOT_EXISTS":
+	case wechaterrorcodes.OrderingCodeIn(wxErr.Code, wechaterrorcodes.OrderingCodeAppIDMchIDNotMatch, wechaterrorcodes.OrderingCodeOpenIDMismatch, wechaterrorcodes.OrderingCodeMchNotExists):
 		return "verify the configured combine_appid, combine_mchid, and payer openid binding before retrying"
-	case "NOAUTH", "NO_AUTH":
+	case wechaterrorcodes.OrderingCodeEquals(wxErr.Code, wechaterrorcodes.OrderingCodeNoAuth):
 		return "verify the service provider merchant has permission to create combine orders before retrying"
-	case "SIGN_ERROR":
+	case wechaterrorcodes.OrderingCodeEquals(wxErr.Code, wechaterrorcodes.OrderingCodeSignError):
 		return "verify the merchant certificate, private key, and authorization signature before retrying"
-	case "ORDER_CLOSED":
+	case wechaterrorcodes.OrderingCodeEquals(wxErr.Code, wechaterrorcodes.OrderingCodeOrderClosed):
 		return "wechat reported the combine order is already closed; recreate the payment with a new combine_out_trade_no"
-	case "OUT_TRADE_NO_USED":
+	case wechaterrorcodes.OrderingCodeEquals(wxErr.Code, wechaterrorcodes.OrderingCodeOutTradeNoUsed):
 		return "wechat reported one of the trade numbers already exists; verify idempotency and reuse the existing pending payment when possible"
-	case "ACCOUNTERROR", "ACCOUNT_ERROR":
+	case wechaterrorcodes.OrderingCodeEquals(wxErr.Code, wechaterrorcodes.OrderingCodeAccountError):
 		return "wechat rejected the payer account; ask the user to switch account or retry later"
-	case "RULELIMIT", "RULE_LIMIT", "FREQUENCY_LIMITED", "RATELIMIT_EXCEEDED":
+	case wechaterrorcodes.OrderingCodeIn(wxErr.Code, wechaterrorcodes.OrderingCodeRuleLimit, wechaterrorcodes.OrderingCodeFrequencyLimited, wechaterrorcodes.OrderingCompatCodeRateLimit):
 		return "wechat rate limited the combine order request; retry later with backoff"
-	case "TRADE_ERROR":
+	case wechaterrorcodes.OrderingCodeEquals(wxErr.Code, wechaterrorcodes.OrderingCodeTradeError):
 		return "wechat rejected the combine payment due to business rules; inspect the upstream detail and request_id before retrying"
-	case "BANKERROR", "BANK_ERROR", "SYSTEMERROR", "SYSTEM_ERROR":
+	case wechaterrorcodes.OrderingCodeIn(wxErr.Code, wechaterrorcodes.OrderingCodeBankError, wechaterrorcodes.OrderingCodeSystemError):
 		return "wechat combine order creation failed due to an upstream system error; retry later with backoff"
 	default:
 		return fmt.Sprintf("wechat combine order creation failed with upstream code %s; inspect the upstream message and request_id", wxErr.Code)
@@ -2613,18 +2240,18 @@ func combineOrderQueryWechatErrorGuide(wxErr *WechatPayError) string {
 	if wxErr == nil {
 		return "wechat combine order query failed"
 	}
-	switch normalizePaymentOrderingWechatCode(wxErr.Code) {
-	case "ORDER_NOT_EXIST", "ORDERNOTEXIST":
+	switch {
+	case wechaterrorcodes.OrderingCodeEquals(wxErr.Code, wechaterrorcodes.OrderingCodeOrderNotExist):
 		return "wechat could not find the combine payment order; verify combine_out_trade_no before retrying"
-	case "PARAM_ERROR", "INVALID_REQUEST":
+	case wechaterrorcodes.OrderingCodeIn(wxErr.Code, wechaterrorcodes.OrderingCodeParamError, wechaterrorcodes.OrderingCodeInvalidRequest):
 		return "verify the combine order query parameter format and request path before retrying"
-	case "NOAUTH", "NO_AUTH":
+	case wechaterrorcodes.OrderingCodeEquals(wxErr.Code, wechaterrorcodes.OrderingCodeNoAuth):
 		return "verify the merchant has permission to query this combine payment order before retrying"
-	case "SIGN_ERROR":
+	case wechaterrorcodes.OrderingCodeEquals(wxErr.Code, wechaterrorcodes.OrderingCodeSignError):
 		return "verify the merchant certificate, private key, and authorization signature before retrying"
-	case "RULELIMIT", "RULE_LIMIT", "FREQUENCY_LIMITED", "RATELIMIT_EXCEEDED":
+	case wechaterrorcodes.OrderingCodeIn(wxErr.Code, wechaterrorcodes.OrderingCodeRuleLimit, wechaterrorcodes.OrderingCodeFrequencyLimited, wechaterrorcodes.OrderingCompatCodeRateLimit):
 		return "wechat rate limited the combine order query; retry later with backoff"
-	case "SYSTEMERROR", "SYSTEM_ERROR", "BANKERROR", "BANK_ERROR":
+	case wechaterrorcodes.OrderingCodeIn(wxErr.Code, wechaterrorcodes.OrderingCodeSystemError, wechaterrorcodes.OrderingCodeBankError):
 		return "wechat combine order query failed due to an upstream system error; retry later with backoff"
 	default:
 		return fmt.Sprintf("wechat combine order query failed with upstream code %s; inspect the upstream message and request_id", wxErr.Code)
@@ -2643,22 +2270,22 @@ func combineOrderCloseWechatErrorGuide(wxErr *WechatPayError) string {
 	if wxErr == nil {
 		return "wechat combine order close failed"
 	}
-	switch normalizePaymentOrderingWechatCode(wxErr.Code) {
-	case "ORDER_CLOSED":
+	switch {
+	case wechaterrorcodes.OrderingCodeEquals(wxErr.Code, wechaterrorcodes.OrderingCodeOrderClosed):
 		return "wechat reported the combine payment order is already closed"
-	case "ORDER_NOT_EXIST", "ORDERNOTEXIST":
+	case wechaterrorcodes.OrderingCodeEquals(wxErr.Code, wechaterrorcodes.OrderingCodeOrderNotExist):
 		return "wechat could not find the combine payment order to close; verify combine_out_trade_no before retrying"
-	case "INVALID_REQUEST":
+	case wechaterrorcodes.OrderingCodeEquals(wxErr.Code, wechaterrorcodes.OrderingCodeInvalidRequest):
 		return "verify the close payload matches the original combine order sub-orders exactly before retrying"
-	case "NOAUTH", "NO_AUTH":
+	case wechaterrorcodes.OrderingCodeEquals(wxErr.Code, wechaterrorcodes.OrderingCodeNoAuth):
 		return "verify the merchant has permission to close this combine payment order before retrying"
-	case "SIGN_ERROR":
+	case wechaterrorcodes.OrderingCodeEquals(wxErr.Code, wechaterrorcodes.OrderingCodeSignError):
 		return "verify the merchant certificate, private key, and authorization signature before retrying"
-	case "USERPAYING":
+	case wechaterrorcodes.OrderingCodeEquals(wxErr.Code, wechaterrorcodes.OrderingCodeUserPaying):
 		return "wechat reports the payer is still completing payment; query the order result before retrying close"
-	case "RULELIMIT", "RULE_LIMIT", "FREQUENCY_LIMITED", "RATELIMIT_EXCEEDED":
+	case wechaterrorcodes.OrderingCodeIn(wxErr.Code, wechaterrorcodes.OrderingCodeRuleLimit, wechaterrorcodes.OrderingCodeFrequencyLimited, wechaterrorcodes.OrderingCompatCodeRateLimit):
 		return "wechat rate limited the combine order close request; retry later with backoff"
-	case "SYSTEMERROR", "SYSTEM_ERROR", "BANKERROR", "BANK_ERROR":
+	case wechaterrorcodes.OrderingCodeIn(wxErr.Code, wechaterrorcodes.OrderingCodeSystemError, wechaterrorcodes.OrderingCodeBankError):
 		return "wechat combine order close failed due to an upstream system error; retry later with backoff"
 	default:
 		return fmt.Sprintf("wechat combine order close failed with upstream code %s; inspect the upstream message and request_id", wxErr.Code)
@@ -2671,14 +2298,6 @@ func wrapCombineOrderCloseError(err error) error {
 		return fmt.Errorf("close combine order: %s: %w", combineOrderCloseWechatErrorGuide(wxErr), err)
 	}
 	return fmt.Errorf("close combine order: %w", err)
-}
-
-// SubOrderClose 关闭子订单参数
-type SubOrderClose struct {
-	MchID      string
-	SubMchID   string
-	SubAppID   string
-	OutTradeNo string
 }
 
 // ==================== 分账 ====================
@@ -3705,17 +3324,6 @@ func (c *EcommerceClient) QueryEcommerceWithdrawByOutRequestNo(ctx context.Conte
 
 // ==================== 结算账户查询 ====================
 
-// SubMerchantSettlementResponse 结算账户查询应答
-type SubMerchantSettlementResponse struct {
-	AccountType      string `json:"account_type"`                 // 账户类型：ACCOUNT_TYPE_BUSINESS / ACCOUNT_TYPE_PRIVATE
-	AccountBank      string `json:"account_bank"`                 // 开户银行
-	BankName         string `json:"bank_name,omitempty"`          // 开户银行全称（含支行）
-	BankBranchID     string `json:"bank_branch_id,omitempty"`     // 开户银行联行号
-	AccountNumber    string `json:"account_number"`               // 银行账号（掩码展示）
-	VerifyResult     string `json:"verify_result"`                // 验证结果：VERIFY_SUCCESS / VERIFY_FAIL / VERIFYING
-	VerifyFailReason string `json:"verify_fail_reason,omitempty"` // 验证失败原因
-}
-
 // QuerySubMerchantSettlement 查询特约商户/二级商户结算账户信息
 //
 // subMchID: 特约商户号；accountNumberRule: 账号展示规则（空字符串使用微信默认 ACCOUNT_NUMBER_RULE_MASK_V1）
@@ -3784,21 +3392,6 @@ func (c *EcommerceClient) QuerySubMerchantSettlement(ctx context.Context, subMch
 
 // ==================== 结算账户修改 ====================
 
-// ModifySubMerchantSettlementRequest 修改结算账户请求
-type ModifySubMerchantSettlementRequest struct {
-	AccountType   string `json:"account_type"`             // 账户类型：ACCOUNT_TYPE_BUSINESS / ACCOUNT_TYPE_PRIVATE
-	AccountBank   string `json:"account_bank"`             // 开户银行
-	BankName      string `json:"bank_name,omitempty"`      // 开户银行全称（含支行）
-	BankBranchID  string `json:"bank_branch_id,omitempty"` // 开户银行联行号
-	AccountNumber string `json:"account_number"`           // 银行账号（微信支付公钥加密）
-	AccountName   string `json:"account_name,omitempty"`   // 开户名称（微信支付公钥加密，可选）
-}
-
-// ModifySubMerchantSettlementResponse 修改结算账户应答
-type ModifySubMerchantSettlementResponse struct {
-	ApplicationNo string `json:"application_no"` // 修改结算账户申请单号
-}
-
 // ModifySubMerchantSettlement 修改特约商户/二级商户结算账户
 func (c *EcommerceClient) ModifySubMerchantSettlement(ctx context.Context, subMchID string, req *ModifySubMerchantSettlementRequest) (*ModifySubMerchantSettlementResponse, error) {
 	requestURL := fmt.Sprintf(apply4subModifySettlementURL, subMchID)
@@ -3818,26 +3411,13 @@ func (c *EcommerceClient) ModifySubMerchantSettlement(ctx context.Context, subMc
 
 // ==================== 结算账户修改申请查询 ====================
 
-// QuerySubMerchantSettlementApplicationResponse 查询结算账户修改申请状态应答
-type QuerySubMerchantSettlementApplicationResponse struct {
-	AccountName      string `json:"account_name"`        // 开户名称（掩码）
-	AccountType      string `json:"account_type"`        // 账户类型
-	AccountBank      string `json:"account_bank"`        // 开户银行
-	BankName         string `json:"bank_name,omitempty"` // 开户银行全称（含支行）
-	BankBranchID     string `json:"bank_branch_id,omitempty"`
-	AccountNumber    string `json:"account_number"` // 银行账号（掩码）
-	VerifyResult     string `json:"verify_result"`  // 审核状态：AUDIT_SUCCESS / AUDITING / AUDIT_FAIL
-	VerifyFailReason string `json:"verify_fail_reason,omitempty"`
-	VerifyFinishTime string `json:"verify_finish_time,omitempty"`
-}
-
 // QuerySubMerchantSettlementApplication 查询结算账户修改申请状态
 //
 // subMchID: 特约商户号；applicationNo: 申请单号；accountNumberRule: 账号展示规则（空字符串使用微信默认）
 func (c *EcommerceClient) QuerySubMerchantSettlementApplication(ctx context.Context, subMchID, applicationNo, accountNumberRule string) (*QuerySubMerchantSettlementApplicationResponse, error) {
 	normalizedSubMchID, err := validateSubMerchantSettlementSubMchID(subMchID)
 	if err != nil {
-		wrappedErr := newSubMerchantSettlementApplicationQueryValidationError("%s", strings.TrimPrefix(err.Error(), "query sub merchant settlement: "))
+		wrappedErr := wechatcontracts.NewSubMerchantSettlementApplicationQueryValidationError("%s", strings.TrimPrefix(err.Error(), "validate sub merchant settlement query request: "))
 		log.Error().
 			Str("sub_mchid", strings.TrimSpace(subMchID)).
 			Str("application_no", strings.TrimSpace(applicationNo)).
@@ -3858,7 +3438,7 @@ func (c *EcommerceClient) QuerySubMerchantSettlementApplication(ctx context.Cont
 	}
 	normalizedAccountNumberRule, err := validateSubMerchantSettlementAccountNumberRule(accountNumberRule)
 	if err != nil {
-		wrappedErr := newSubMerchantSettlementApplicationQueryValidationError("%s", strings.TrimPrefix(err.Error(), "query sub merchant settlement: "))
+		wrappedErr := wechatcontracts.NewSubMerchantSettlementApplicationQueryValidationError("%s", strings.TrimPrefix(err.Error(), "validate sub merchant settlement query request: "))
 		log.Error().
 			Str("sub_mchid", normalizedSubMchID).
 			Str("application_no", normalizedApplicationNo).
@@ -3913,16 +3493,6 @@ func (c *EcommerceClient) QuerySubMerchantSettlementApplication(ctx context.Cont
 }
 
 // ==================== 回调通知解密 ====================
-
-// CombinePaymentNotification 合单支付通知
-type CombinePaymentNotification struct {
-	CombineAppID      string                  `json:"combine_appid"`
-	CombineMchID      string                  `json:"combine_mchid"`
-	CombineOutTradeNo string                  `json:"combine_out_trade_no"`
-	SubOrders         []CombineSubOrderResult `json:"sub_orders"`
-	CombinePayerInfo  *CombinePayerInfo       `json:"combine_payer_info"`
-	SceneInfo         *CombineSceneInfo       `json:"scene_info"`
-}
 
 // DecryptCombinePaymentNotification 解密合单支付通知
 func (c *EcommerceClient) DecryptCombinePaymentNotification(notification *PaymentNotification) (*CombinePaymentNotification, error) {

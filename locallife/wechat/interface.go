@@ -100,7 +100,7 @@ type PaymentClientInterface interface {
 	DecryptNotificationRaw(notification *PaymentNotification) ([]byte, error)
 
 	// VerifyNotificationSignature 验证微信支付回调签名
-	VerifyNotificationSignature(signature, timestamp, nonce, body string) error
+	VerifyNotificationSignature(signature, timestamp, nonce, serial, body string) error
 
 	// GenerateJSAPIPayParams 根据 prepay_id 重新生成小程序调起支付所需参数（用于幂等返回旧 pending 记录时重新签名）
 	GenerateJSAPIPayParams(prepayID string) (*JSAPIPayParams, error)
@@ -310,7 +310,7 @@ type EcommerceClientInterface interface {
 	DecryptViolationNotification(notification *PaymentNotification) (*ViolationNotificationResource, error)
 
 	// VerifyNotificationSignature 验证微信支付回调签名
-	VerifyNotificationSignature(signature, timestamp, nonce, body string) error
+	VerifyNotificationSignature(signature, timestamp, nonce, serial, body string) error
 
 	// ==================== 用户投诉 ====================
 	// ListComplaints 查询投诉单列表（分页）

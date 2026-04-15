@@ -351,6 +351,35 @@ func TestGetPlatformCertificateSerial_WithCertificate(t *testing.T) {
 	require.Equal(t, "499602D2", serial) // 1234567890 的十六进制
 }
 
+func TestGenerateJSAPIPayParams_UsesCanonicalRequestPaymentContract(t *testing.T) {
+	merchantPrivateKey, _ := generateTestKeyPair(t)
+	_, platformPublicKey := generateTestKeyPair(t)
+
+	tempDir := t.TempDir()
+	privateKeyPath := createTestPrivateKeyFile(t, tempDir, merchantPrivateKey)
+	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
+
+	client, err := NewPaymentClient(PaymentClientConfig{
+		MchID:                 "test_mch_id",
+		AppID:                 "test_app_id",
+		SerialNumber:          "test_serial",
+		APIV3Key:              testAPIV3Key(),
+		PrivateKeyPath:        privateKeyPath,
+		PlatformPublicKeyPath: publicKeyPath,
+		PlatformPublicKeyID:   "PUB_KEY_ID_0123456789",
+		NotifyURL:             "https://example.com/notify",
+	})
+	require.NoError(t, err)
+
+	payParams, err := client.GenerateJSAPIPayParams("prepay_id_test_001")
+	require.NoError(t, err)
+	require.Equal(t, JSAPIPaySignTypeRSA, payParams.SignType)
+	require.Equal(t, "prepay_id=prepay_id_test_001", payParams.Package)
+	require.NotEmpty(t, payParams.TimeStamp)
+	require.NotEmpty(t, payParams.NonceStr)
+	require.NotEmpty(t, payParams.PaySign)
+}
+
 func TestLoadPublicKey(t *testing.T) {
 	// 生成测试密钥
 	_, publicKey := generateTestKeyPair(t)
@@ -423,6 +452,15 @@ func signTestHTTPResponse(t *testing.T, privateKey *rsa.PrivateKey, serial strin
 	resp.Header.Set("Wechatpay-Serial", serial)
 
 	return resp
+}
+
+func signNotificationForTest(t *testing.T, privateKey *rsa.PrivateKey, timestamp, nonce, body string) string {
+	t.Helper()
+	message := fmt.Sprintf("%s\n%s\n%s\n", timestamp, nonce, body)
+	hashed := sha256.Sum256([]byte(message))
+	signature, err := rsa.SignPKCS1v15(rand.Reader, privateKey, crypto.SHA256, hashed[:])
+	require.NoError(t, err)
+	return base64.StdEncoding.EncodeToString(signature)
 }
 
 func signedPaymentTransport(t *testing.T, privateKey *rsa.PrivateKey, serial string, fn paymentRoundTripFunc) http.RoundTripper {
@@ -520,4 +558,63 @@ func TestQueryOrderByOutTradeNo_MissingResponseSignatureFails(t *testing.T) {
 	_, err = client.QueryOrderByOutTradeNo(context.Background(), "order-001")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "verify response signature")
+}
+
+func TestVerifyNotificationSignature_WithMatchingSerial(t *testing.T) {
+	merchantPrivateKey, _ := generateTestKeyPair(t)
+	platformPrivateKey, platformPublicKey := generateTestKeyPair(t)
+
+	tempDir := t.TempDir()
+	privateKeyPath := createTestPrivateKeyFile(t, tempDir, merchantPrivateKey)
+	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
+
+	client, err := NewPaymentClient(PaymentClientConfig{
+		MchID:                 "test_mch_id",
+		AppID:                 "test_app_id",
+		SerialNumber:          "test_serial",
+		APIV3Key:              testAPIV3Key(),
+		PrivateKeyPath:        privateKeyPath,
+		PlatformPublicKeyPath: publicKeyPath,
+		PlatformPublicKeyID:   "PUB_KEY_ID_0123456789",
+		NotifyURL:             "https://example.com/notify",
+	})
+	require.NoError(t, err)
+
+	body := `{"id":"notify-001"}`
+	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
+	nonce := "test_notification_nonce"
+	signature := signNotificationForTest(t, platformPrivateKey, timestamp, nonce, body)
+
+	err = client.VerifyNotificationSignature(signature, timestamp, nonce, "PUB_KEY_ID_0123456789", body)
+	require.NoError(t, err)
+}
+
+func TestVerifyNotificationSignature_SerialMismatchFails(t *testing.T) {
+	merchantPrivateKey, _ := generateTestKeyPair(t)
+	platformPrivateKey, platformPublicKey := generateTestKeyPair(t)
+
+	tempDir := t.TempDir()
+	privateKeyPath := createTestPrivateKeyFile(t, tempDir, merchantPrivateKey)
+	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
+
+	client, err := NewPaymentClient(PaymentClientConfig{
+		MchID:                 "test_mch_id",
+		AppID:                 "test_app_id",
+		SerialNumber:          "test_serial",
+		APIV3Key:              testAPIV3Key(),
+		PrivateKeyPath:        privateKeyPath,
+		PlatformPublicKeyPath: publicKeyPath,
+		PlatformPublicKeyID:   "PUB_KEY_ID_0123456789",
+		NotifyURL:             "https://example.com/notify",
+	})
+	require.NoError(t, err)
+
+	body := `{"id":"notify-001"}`
+	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
+	nonce := "test_notification_nonce"
+	signature := signNotificationForTest(t, platformPrivateKey, timestamp, nonce, body)
+
+	err = client.VerifyNotificationSignature(signature, timestamp, nonce, "PUB_KEY_ID_OTHER", body)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "unexpected notification serial")
 }

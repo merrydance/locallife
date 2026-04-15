@@ -1,0 +1,38 @@
+package wechat
+
+import wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
+
+type BusinessLicenseInfo = wechatcontracts.ApplymentBusinessLicenseInfo
+type ApplymentIDCardInfo = wechatcontracts.ApplymentIDCardInfo
+type ApplymentBankAccountInfo = wechatcontracts.ApplymentBankAccountInfo
+type ApplymentContactInfo = wechatcontracts.ApplymentContactInfo
+type ApplymentSalesSceneInfo = wechatcontracts.ApplymentSalesSceneInfo
+type ApplymentSettlementInfo = wechatcontracts.ApplymentSettlementInfo
+
+type CapitalBank = wechatcontracts.CapitalBank
+type CapitalBankListLinks = wechatcontracts.CapitalPaginationLinks
+type CapitalBankListResponse = wechatcontracts.CapitalBankListResponse
+type CapitalBankAccountSearchResponse = wechatcontracts.CapitalBankAccountSearchResponse
+type CapitalProvince = wechatcontracts.CapitalProvince
+type CapitalProvinceListResponse = wechatcontracts.CapitalProvinceListResponse
+type CapitalCity = wechatcontracts.CapitalCity
+type CapitalCityListResponse = wechatcontracts.CapitalCityListResponse
+type CapitalBranch = wechatcontracts.CapitalBranch
+type CapitalBranchListResponse = wechatcontracts.CapitalBranchListResponse
+
+type EcommerceApplymentResponse = wechatcontracts.EcommerceApplymentResponse
+type EcommerceApplymentAccountValidation = wechatcontracts.EcommerceApplymentAccountValidation
+type ApplymentAuditDetail = wechatcontracts.ApplymentAuditDetail
+type EcommerceApplymentQueryResponse = wechatcontracts.EcommerceApplymentQueryResponse
+
+type QuerySubMerchantSettlementRequest = wechatcontracts.QuerySubMerchantSettlementRequest
+type SubMerchantSettlementResponse = wechatcontracts.SubMerchantSettlementResponse
+type ModifySubMerchantSettlementRequest = wechatcontracts.ModifySubMerchantSettlementRequest
+type ModifySubMerchantSettlementResponse = wechatcontracts.ModifySubMerchantSettlementResponse
+type QuerySubMerchantSettlementApplicationRequest = wechatcontracts.QuerySubMerchantSettlementApplicationRequest
+type QuerySubMerchantSettlementApplicationResponse = wechatcontracts.QuerySubMerchantSettlementApplicationResponse
+
+const (
+	subMerchantSettlementAccountNumberRuleV1 = wechatcontracts.SubMerchantSettlementAccountNumberRuleMaskV1
+	subMerchantSettlementAccountNumberRuleV2 = wechatcontracts.SubMerchantSettlementAccountNumberRuleMaskV2
+)

@@ -279,15 +279,6 @@ type JSAPIOrderResponse struct {
 	PrepayID string `json:"prepay_id"`
 }
 
-// JSAPIPayParams 小程序调起支付所需参数
-type JSAPIPayParams struct {
-	TimeStamp string `json:"timeStamp"`
-	NonceStr  string `json:"nonceStr"`
-	Package   string `json:"package"`
-	SignType  string `json:"signType"`
-	PaySign   string `json:"paySign"`
-}
-
 // CreateJSAPIOrder 创建 JSAPI 订单（小程序支付）
 func (c *PaymentClient) CreateJSAPIOrder(ctx context.Context, req *JSAPIOrderRequest) (*JSAPIOrderResponse, *JSAPIPayParams, error) {
 	body := map[string]interface{}{
@@ -364,7 +355,7 @@ func (c *PaymentClient) generateJSAPIPayParams(prepayID string) (*JSAPIPayParams
 		TimeStamp: timeStamp,
 		NonceStr:  nonceStr,
 		Package:   packageStr,
-		SignType:  "RSA",
+		SignType:  JSAPIPaySignTypeRSA,
 		PaySign:   paySign,
 	}, nil
 }
@@ -796,7 +787,18 @@ const notifyTimestampWindow = 5 * 60 // seconds
 // VerifyNotificationSignature 验证回调通知签名
 // 参考: https://pay.weixin.qq.com/wiki/doc/apiv3/wechatpay/wechatpay4_1.shtml
 // 优先使用平台公钥（推荐），其次使用平台证书公钥（已弃用）
-func (c *PaymentClient) VerifyNotificationSignature(signature, timestamp, nonce, body string) error {
+func (c *PaymentClient) VerifyNotificationSignature(signature, timestamp, nonce, serial, body string) error {
+	expectedSerial := c.GetPlatformCertificateSerial()
+	if expectedSerial == "" {
+		return fmt.Errorf("neither platform public key ID nor platform certificate configured")
+	}
+	if serial == "" {
+		return fmt.Errorf("missing Wechatpay-Serial header")
+	}
+	if !strings.EqualFold(serial, expectedSerial) {
+		return fmt.Errorf("unexpected notification serial: got %q want %q", serial, expectedSerial)
+	}
+
 	// 0. 校验时间戳合法性，防止重放攻击（微信官方要求 ±5 分钟内）
 	ts, err := strconv.ParseInt(timestamp, 10, 64)
 	if err != nil {
