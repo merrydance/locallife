@@ -17,6 +17,7 @@ Request:
 - Keep WeChat integration details inside the integration boundary and keep business decisions in logic or worker layers
 - Confirm the official WeChat API purpose, request and response shape, required and conditional-required fields, field types, enums, statuses, and error codes before changing code; do not implement by memory
 - Check the payment-domain capability-group constraint chain and the active capability-group propagation matrix before editing callers; if the matrix does not exist yet, say so and add or update it as part of the task
+- If the active capability group is applyment, use `.github/standards/domains/wechat-payment/WECHAT_PAYMENT_APPLYMENT_CAPABILITY_GROUP_PROPAGATION_MATRIX_2026-04-14.md` as the repo-internal propagation truth and `.github/standards/domains/wechat-payment/WECHAT_PAYMENT_APPLYMENT_REVIEW_CHECKLIST_2026-04-14.md` as the review supplement; do not let either replace the official API baseline
 - Tell me whether the change requires updates to payment runbooks, callback handling, config wiring, or audit records
 - Run the smallest relevant validation command and report what was executed
 - State whether callback signature verification, idempotency, recovery scheduling, and persisted auditability were actually checked or remain unverified
@@ -28,6 +29,7 @@ Optional context:
 - Affected package or endpoint: <path>
 - Payment, applyment, settlement, withdrawal, complaint, or callback flow involved: <details>
 - Related docs: `.github/standards/domains/wechat-payment/README.md`, `.github/standards/domains/wechat-payment/WECHAT_PAYMENT_CAPABILITY_GROUP_CONSTRAINT_CHAIN_2026-04-14.md`, `.github/standards/domains/wechat-payment/WECHAT_PAYMENT_OFFICIAL_API_BASELINE_2026-04-14.md`, `.github/standards/domains/wechat-payment/WECHAT_PAYMENT_OPERATIONS_RUNBOOK_2026-03-24.md`
+- Applyment-specific active docs when the capability group is applyment: `.github/standards/domains/wechat-payment/WECHAT_PAYMENT_APPLYMENT_CAPABILITY_GROUP_PROPAGATION_MATRIX_2026-04-14.md`, `.github/standards/domains/wechat-payment/WECHAT_PAYMENT_APPLYMENT_REVIEW_CHECKLIST_2026-04-14.md`
 
 Use `.github/standards/domains/wechat-payment/historical/WECHAT_PAYMENT_REFACTOR_EXECUTION_PLAN_2026-03-24.md` only when the task changes historical rollout assumptions, stage ownership, or migration baseline.
 

@@ -12,6 +12,8 @@
 
 默认与 `.github/standards/domains/wechat-payment/WECHAT_PAYMENT_OFFICIAL_API_BASELINE_2026-04-14.md` 配套使用。
 
+若当前任务不是纯审查而是要判断“改动还应不应该继续传播到哪些调用面”，先读 `.github/standards/domains/wechat-payment/WECHAT_PAYMENT_APPLYMENT_CAPABILITY_GROUP_PROPAGATION_MATRIX_2026-04-14.md`，再使用本清单。
+
 ## 2. 官方文档对齐
 
 - 是否先核对了当前任务对应的官方接口用途，而不是直接复用旧接口或旧字段。
