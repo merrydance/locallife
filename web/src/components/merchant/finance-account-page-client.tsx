@@ -77,9 +77,26 @@ interface MerchantWithdrawalListResponse {
 interface ApplymentStatusResponse {
   status: string;
   status_desc: string;
+  can_submit?: boolean;
+  block_reason?: string;
   sign_url?: string;
+  sign_state?: string;
+  legal_validation_url?: string;
+  account_validation?: ApplymentAccountValidationResponse;
   sub_mch_id?: string;
   reject_reason?: string;
+}
+
+interface ApplymentAccountValidationResponse {
+  account_name?: string;
+  account_no?: string;
+  pay_amount?: number;
+  destination_account_number?: string;
+  destination_account_name?: string;
+  destination_account_bank?: string;
+  city?: string;
+  remark?: string;
+  deadline?: string;
 }
 
 /* ─────────────────────────── Helpers ─────────────────────────── */
@@ -109,11 +126,23 @@ const applymentStatusMeta: Record<
     className: "bg-blue-100 text-blue-700 border-blue-200",
   },
   bindbank_submitted: {
-    label: "进件审核中",
+    label: "已提交",
+    className: "bg-blue-100 text-blue-700 border-blue-200",
+  },
+  checking: {
+    label: "校验中",
     className: "bg-blue-100 text-blue-700 border-blue-200",
   },
   auditing: {
     label: "审核中",
+    className: "bg-amber-100 text-amber-700 border-amber-200",
+  },
+  account_need_verify: {
+    label: "待验证",
+    className: "bg-amber-100 text-amber-700 border-amber-200",
+  },
+  to_be_confirmed: {
+    label: "待确认",
     className: "bg-amber-100 text-amber-700 border-amber-200",
   },
   to_be_signed: {
@@ -136,7 +165,43 @@ const applymentStatusMeta: Record<
     label: "已拒绝",
     className: "bg-rose-100 text-rose-700 border-rose-200",
   },
+  frozen: {
+    label: "已冻结",
+    className: "bg-rose-100 text-rose-700 border-rose-200",
+  },
+  canceled: {
+    label: "已作废",
+    className: "bg-slate-100 text-slate-700 border-slate-200",
+  },
 };
+
+function normalizeApplymentSignState(signState?: string): string {
+  return String(signState ?? "").trim().toUpperCase();
+}
+
+function shouldApplymentNeedSign(status: string, signState?: string): boolean {
+  const normalizedSignState = normalizeApplymentSignState(signState);
+  if (normalizedSignState === "UNSIGNED") {
+    return true;
+  }
+  if (normalizedSignState === "SIGNED" || normalizedSignState === "NOT_SIGNABLE") {
+    return false;
+  }
+  return status === "to_be_signed" || status === "signing";
+}
+
+function getApplymentSignStateText(signState?: string): string {
+  switch (normalizeApplymentSignState(signState)) {
+    case "UNSIGNED":
+      return "未签约";
+    case "SIGNED":
+      return "已签约";
+    case "NOT_SIGNABLE":
+      return "当前不可签约";
+    default:
+      return "";
+  }
+}
 
 /* ─────────────────────────── Main component ─────────────────────────── */
 
@@ -338,6 +403,19 @@ export function FinanceAccountPageClient() {
               </div>
             ) : (
               <div className="space-y-3">
+                {(() => {
+                  const needsSign = shouldApplymentNeedSign(
+                    applymentStatus.status,
+                    applymentStatus.sign_state
+                  );
+                  const signStateText = getApplymentSignStateText(
+                    applymentStatus.sign_state
+                  );
+                  const accountValidation = applymentStatus.account_validation;
+                  const payAmount = accountValidation?.pay_amount ?? 0;
+
+                  return (
+                    <>
                 <div className="flex flex-wrap items-center gap-3">
                   {(() => {
                     const meta = applymentStatusMeta[applymentStatus.status] ?? {
@@ -354,9 +432,14 @@ export function FinanceAccountPageClient() {
                       子商户号：{applymentStatus.sub_mch_id}
                     </span>
                   )}
+                  {signStateText && (
+                    <span className="text-xs text-muted-foreground">
+                      签约状态：{signStateText}
+                    </span>
+                  )}
                 </div>
 
-                {applymentStatus.sign_url && (
+                {needsSign && applymentStatus.sign_url && (
                   <div className="flex items-center gap-2">
                     <FileSignature className="h-4 w-4 shrink-0 text-indigo-500" />
                     <span className="text-sm">需要完成签约：</span>
@@ -368,6 +451,82 @@ export function FinanceAccountPageClient() {
                     >
                       前往签约 <ExternalLink className="h-3 w-3" />
                     </a>
+                  </div>
+                )}
+
+                {needsSign && !applymentStatus.sign_url && (
+                  <div className="flex items-center gap-2 rounded-md border border-indigo-200 bg-indigo-50 p-3 text-sm text-indigo-700">
+                    <FileSignature className="h-4 w-4 shrink-0" />
+                    当前存在待签约事项，请完成签约后再刷新状态。
+                  </div>
+                )}
+
+                {applymentStatus.legal_validation_url && (
+                  <div className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">
+                    <ExternalLink className="h-4 w-4 shrink-0" />
+                    <span>可优先通过法人扫码完成账户验证：</span>
+                    <a
+                      href={applymentStatus.legal_validation_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-sm font-medium underline-offset-4 hover:underline"
+                    >
+                      前往扫码验证 <ExternalLink className="h-3 w-3" />
+                    </a>
+                  </div>
+                )}
+
+                {accountValidation && (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-4">
+                    <div className="mb-3 flex items-center gap-2 text-sm font-medium text-amber-800">
+                      <CreditCard className="h-4 w-4" />
+                      账户验证汇款指引
+                    </div>
+                    <div className="grid gap-3 text-sm text-amber-900 md:grid-cols-2">
+                      <div>
+                        <div className="text-xs text-amber-700">收款户名</div>
+                        <div>{accountValidation.destination_account_name || "-"}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-amber-700">收款账号</div>
+                        <div className="font-mono text-xs">
+                          {accountValidation.destination_account_number || "-"}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-amber-700">收款银行</div>
+                        <div>{accountValidation.destination_account_bank || "-"}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-amber-700">汇款金额</div>
+                        <div>{payAmount > 0 ? `¥${formatAmount(payAmount)}` : "-"}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-amber-700">验证账户名</div>
+                        <div>{accountValidation.account_name || "-"}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-amber-700">验证账号</div>
+                        <div className="font-mono text-xs">{accountValidation.account_no || "-"}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-amber-700">汇款城市</div>
+                        <div>{accountValidation.city || "-"}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-amber-700">截止时间</div>
+                        <div>{accountValidation.deadline || "-"}</div>
+                      </div>
+                    </div>
+                    <div className="mt-3 text-xs text-amber-700">
+                      备注：{accountValidation.remark || "请按微信返回指引完成汇款验证"}
+                    </div>
+                  </div>
+                )}
+
+                {applymentStatus.block_reason && (
+                  <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+                    当前暂不可重新提交：{applymentStatus.block_reason}
                   </div>
                 )}
 
@@ -386,7 +545,10 @@ export function FinanceAccountPageClient() {
                   </div>
                 )}
 
-                {applymentStatus.status === "rejected" && !showBindForm && (
+                {applymentStatus.can_submit &&
+                  applymentStatus.status !== "finish" &&
+                  applymentStatus.status !== "active" &&
+                  !showBindForm && (
                   <Button
                     size="sm"
                     variant="outline"
@@ -394,7 +556,7 @@ export function FinanceAccountPageClient() {
                   >
                     重新提交银行账户信息
                   </Button>
-                )}
+                  )}
 
                 {showBindForm && (
                   <ApplymentBankForm
@@ -406,6 +568,9 @@ export function FinanceAccountPageClient() {
                     onCancel={() => setShowBindForm(false)}
                   />
                 )}
+                    </>
+                  );
+                })()}
               </div>
             )}
           </CardContent>

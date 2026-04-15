@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BarChart3,
-  Building2,
   CircleDollarSign,
   LayoutDashboard,
   PanelsTopLeft,
@@ -143,13 +142,6 @@ const navGroups: Array<{
     label: "财务中心",
     description: "佣金与提现",
     items: [
-      {
-        label: "微信开户",
-        href: "/operator/applyment",
-        activePrefix: "/operator/applyment",
-        exact: true,
-        icon: Building2,
-      },
       {
         label: "财务管理",
         href: "/operator/finance",
