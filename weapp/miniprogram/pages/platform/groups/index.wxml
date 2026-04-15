@@ -1,7 +1,7 @@
 <custom-navbar title="集团申请审核" show-back="{{true}}" show-location="{{false}}" bind:navheight="onNavHeight" />
 
 <view
-  class="groups-page page-shell page-shell--with-nav page-shell--bottom-safe"
+  class="groups-page page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
   style="--page-shell-nav-height: {{navBarHeight}}px"
 >
   <scroll-view
@@ -24,7 +24,7 @@
 
       <view wx:if="{{error}}" class="section-card status-wrap">
         <t-empty icon="error-circle" description="{{error}}">
-          <t-button slot="action" theme="primary" shape="round" size="small" bind:tap="onRetry">重试</t-button>
+          <t-button slot="action" theme="primary" bind:tap="onRetry">重试</t-button>
         </t-empty>
       </view>
 
@@ -53,7 +53,6 @@
         <view class="actions">
           <t-button
             theme="primary"
-            shape="round"
             size="small"
             bind:tap="onDetailTap"
             data-id="{{item.id}}"

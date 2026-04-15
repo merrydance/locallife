@@ -8,68 +8,73 @@
  */
 page {
   /* ========== TDesign主题色覆盖 ========== */
-  /* 品牌主色 - 活力暖橙 #FF6B00 (30%使用) */
-  --td-brand-color: #FF6B00;
-  --td-brand-color-1: #FFF0E0;
-  --td-brand-color-2: #FFE1C2;
-  --td-brand-color-3: #FFD2A3;
-  --td-brand-color-4: #FFC385;
-  --td-brand-color-5: #FFB466;
-  --td-brand-color-6: #FFA547;
-  --td-brand-color-7: #FF9629;
-  --td-brand-color-8: #FF880A;
-  --td-brand-color-9: #E66000;
-  --td-brand-color-10: #CC5500;
+  /* 非顾客侧对齐独立商户接单 App 的绿色品牌系；消费侧在 customer.wxss 中覆盖为暖橙 */
+  --td-brand-color: #006B31;
+  --td-brand-color-1: #EAF6EE;
+  --td-brand-color-2: #CFE8D7;
+  --td-brand-color-3: #ADD7BC;
+  --td-brand-color-4: #87C79D;
+  --td-brand-color-5: #5FB77D;
+  --td-brand-color-6: #2F9A59;
+  --td-brand-color-7: #006B31;
+  --td-brand-color-8: #005625;
+  --td-brand-color-9: #00401B;
+  --td-brand-color-10: #002C12;
   
   /* 浅色背景变量映射到最淡的色阶，确保文字对比度 */
   --td-brand-color-light: var(--td-brand-color-1);
-  --td-brand-color-focus: #E66000;
-  --td-brand-color-disabled: #FFC385;
+  --td-brand-color-focus: #005625;
+  --td-brand-color-disabled: #ADD7BC;
   
-  /* 辅助色 - 极客深青 #00897B (10%使用) */
-  --td-success-color: #00897B;
-  --td-success-color-1: #E6F7F5;
-  --td-success-color-5: #4DB6AC;
-  --td-success-color-7: #00897B;
+  /* 辅助色：保持 TDesign 语义分层，但与商户侧绿色体系保持同色相家族 */
+  --td-success-color: #0A7A46;
+  --td-success-color-1: #E8F6EE;
+  --td-success-color-5: #4EA36F;
+  --td-success-color-7: #0A7A46;
   --td-success-color-light: var(--td-success-color-1);
   
-  /* 强调色 - 日光芥末 #FFC107 (10%使用) */
-  --td-warning-color: #FFC107;
-  --td-warning-color-1: #FFF9E6;
-  --td-warning-color-5: #FFD54F;
-  --td-warning-color-7: #FFC107;
+  /* 强调色：沿用商户端高辨识橙色体系 */
+  --td-warning-color: #FC820C;
+  --td-warning-color-1: #FFF3E6;
+  --td-warning-color-5: #FDBA74;
+  --td-warning-color-7: #FC820C;
   --td-warning-color-light: var(--td-warning-color-1);
   
-  /* 错误色 - 警示红 #E53935 */
-  --td-error-color: #E53935;
-  --td-error-color-1: #FFEBEE;
-  --td-error-color-5: #EF5350;
-  --td-error-color-7: #E53935;
+  /* 错误色：保留明确告警语义，不与品牌主色混用 */
+  --td-error-color: #B6171E;
+  --td-error-color-1: #FDEBEC;
+  --td-error-color-5: #D55B62;
+  --td-error-color-7: #B6171E;
   --td-error-color-light: var(--td-error-color-1);
   
   /* ========== 背景色 (60%使用) ========== */
-  --td-bg-color-page: #FAFAFA;        /* 陶瓷白 - 页面背景 */
-  --td-bg-color-container: #FFFFFF;   /* 纯白 - 卡片背景 */
-  --td-bg-color-secondarycontainer: #F5F5F5;
+  --td-bg-color-page: #F5FBF1;
+  --td-bg-color-container: #FFFFFF;
+  --td-bg-color-secondarycontainer: #EFF5EC;
+
+  /* ========== 边框色 ========== */
+  --td-border-level-1-color: #D5E1D3;
+  --td-border-level-2-color: #E6EEE3;
+  --td-component-border: #DDE7DB;
   
   /* ========== 文字颜色 ========== */
-  --td-text-color-primary: #333333;    /* 炭黑 - 主标题 */
-  --td-text-color-secondary: #666666;  /* 副标题 */
-  --td-text-color-placeholder: #999999; /* 占位文字 */
-  --td-text-color-disabled: #CCCCCC;   /* 禁用 */
+  --td-text-color-primary: #171D17;
+  --td-text-color-secondary: #3E4A3F;
+  --td-text-color-placeholder: #667365;
+  --td-text-color-disabled: #96A396;
   --td-text-color-anti: rgba(255, 255, 255, 0.87); /* 白色文字 */
   
   /* ========== 自定义品牌变量 ========== */
-  --brand-primary: #FF6B00;       /* 主色：暖橙 */
-  --brand-primary-light: #FFF0E0; /* 浅主色背景 */
-  --brand-secondary: #1A1A2E;     /* 深夜蓝（优质质感） */
-  --brand-accent: #FFD166;        /* 强调黄 */
+  --brand-primary: #006B31;
+  --brand-primary-light: var(--td-brand-color-1);
+  --brand-secondary: #1F2A20;
+  --brand-accent: #FC820C;
   
   /* 兼容旧变量 */
-  --brand-coral: #FF6B00;
-  --brand-coral-gradient: linear-gradient(135deg, #FF9629 0%, #FF6B00 100%);
-  --brand-teal: #00897B;
-  --brand-mustard: #FFC107;
+  --brand-coral: #006B31;
+  --brand-coral-gradient: linear-gradient(135deg, #038740 0%, #006B31 100%);
+  --brand-teal: #0A7A46;
+  --brand-mustard: #FC820C;
   
   /* 阴影 */
   --shadow-sm: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
@@ -77,22 +82,6 @@ page {
   --shadow-lg: 0 8rpx 24rpx rgba(0, 0, 0, 0.12);
   --shadow-card: 0 4rpx 20rpx rgba(0,0,0,0.06);
   --shadow-float: 0 8rpx 32rpx rgba(0,0,0,0.12);
-
-  /* ========== 消费侧卡片设计 Token ========== */
-  /* 仅用于消费侧组件，不影响商户侧 */
-  --customer-card-padding: 24rpx;
-  --customer-card-gap: 24rpx;
-  --customer-card-margin: 16rpx;
-  --customer-card-radius: 24rpx;
-  --customer-card-shadow: var(--shadow-card);
-  --customer-card-shadow-active: var(--shadow-sm);
-  --customer-image-size: 180rpx;
-  --customer-image-radius: 12rpx;
-  --customer-title-size: 32rpx;
-  --customer-subtitle-size: 26rpx;
-  --customer-caption-size: 24rpx;
-  --customer-section-gap: 16rpx;
-  --customer-page-padding: 24rpx;
 
   /* ========== 统一文字系统 (Typography System) ========== */
   --font-size-display: 48rpx;
@@ -107,12 +96,7 @@ page {
   --spacer-xxs: 4rpx;   /* 极微 */
   --spacer-xs: 8rpx;    /* 紧凑 (icon-text) */
   --spacer-sm: 16rpx;   /* 小 (card-margin, tag-gap) */
-  --spacer-md: 24rpx;   /* TDesign Component Overrides - 按钮形状收口为大圆角 */
-  --td-button-border-radius: 999px;
-  --td-button-large-border-radius: 999px;
-  --td-button-medium-border-radius: 999px;
-  --td-button-small-border-radius: 999px;
-  --td-button-extra-small-border-radius: 999px;
+  --spacer-md: 24rpx;   /* 标准间距 */
 
   /* Cart Bar Specific Overrides */
   --spacer-lg: 32rpx;   /* 大 (section-gap) */
@@ -153,34 +137,37 @@ page {
 /* ========== 深色模式 ========== */
 page[data-theme="dark"] {
   /* 品牌色微调（深色模式下更柔和） */
-  --td-brand-color: #FFA547;
-  --td-brand-color-8: #FFA547;
+  --td-brand-color: #63B07C;
+  --td-brand-color-8: #4F9A67;
   
   /* 背景色 */
-  --td-bg-color-page: #121212;
-  --td-bg-color-container: #1E1E1E;
-  --td-bg-color-secondarycontainer: #2C2C2C;
+  --td-bg-color-page: #111611;
+  --td-bg-color-container: #1A211B;
+  --td-bg-color-secondarycontainer: #232C24;
   
   /* 文字颜色 */
-  --td-text-color-primary: #E0E0E0;
-  --td-text-color-secondary: #B0B0B0;
-  --td-text-color-placeholder: #808080;
-  --td-text-color-disabled: #606060;
+  --td-text-color-primary: #E7EEE5;
+  --td-text-color-secondary: #B6C1B5;
+  --td-text-color-placeholder: #899488;
+  --td-text-color-disabled: #626B61;
   
   /* 边框 */
-  --td-border-level-1-color: #3C3C3C;
-  --td-border-level-2-color: #2C2C2C;
+  --td-border-level-1-color: #303A31;
+  --td-border-level-2-color: #242D25;
+  --td-component-border: #354036;
   
   /* 辅助色调整 */
-  --td-success-color: #26A69A;
-  --td-warning-color: #FFD54F;
-  --td-error-color: #FF6B6B;
+  --td-success-color: #47A26B;
+  --td-warning-color: #F0A63C;
+  --td-error-color: #DE6B64;
   
   /* 品牌色 */
-  --brand-coral: #FFA547;
-  --brand-coral-gradient: linear-gradient(135deg, #FFB466 0%, #FFA547 100%);
-  --brand-teal: #26A69A;
-  --brand-mustard: #FFD54F;
+  --brand-primary: #63B07C;
+  --brand-primary-light: #233126;
+  --brand-coral: #63B07C;
+  --brand-coral-gradient: linear-gradient(135deg, #3D8A59 0%, #63B07C 100%);
+  --brand-teal: #47A26B;
+  --brand-mustard: #F0A63C;
   
   /* 阴影（深色模式下更明显） */
   --shadow-sm: 0 2rpx 8rpx rgba(0, 0, 0, 0.3);
@@ -217,23 +204,6 @@ page[data-theme="dark"] {
   padding-right: var(--spacer-md);
 }
 
-/* 全局收紧表单分组标题与内容间距（影响 t-cell-group） */
-.t-cell-group {
-  margin: 0 !important;
-}
-
-.t-cell-group__title {
-  padding: 12rpx 24rpx !important;
-  font-size: 26rpx !important;
-  color: var(--td-text-color-secondary) !important;
-  background: var(--td-bg-color-secondarycontainer) !important;
-  line-height: 36rpx !important;
-}
-
-.t-cell-group__wrapper {
-  margin-top: 0 !important;
-}
-
 @keyframes shimmer {
   0% { background-position: -200% 0; }
   100% { background-position: 200% 0; }
@@ -252,9 +222,4 @@ page[data-theme="dark"] {
 .skeleton-circle {
   border-radius: 50%;
   background: var(--td-bg-color-secondarycontainer);
-}
-
-/* 全站标签视觉基线（非交互态） */
-.t-tag {
-  border-radius: var(--radius-round) !important;
 }

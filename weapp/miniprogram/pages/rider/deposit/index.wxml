@@ -11,7 +11,7 @@
 >
   <view wx:if="{{accountError && !loading}}" class="state-shell">
     <t-empty icon="error-circle" description="{{accountError}}" />
-    <t-button theme="primary" block shape="round" bindtap="onRetryPage">重新加载</t-button>
+    <t-button theme="primary" bindtap="onRetryPage">重新加载</t-button>
   </view>
 
   <block wx:else>
@@ -42,8 +42,8 @@
       <view class="wallet-tip">配送分账资金将直接进入微信零钱，本页仅展示押金与账单记录。</view>
       <view class="wallet-tip">冻结押金已拆分展示为配送冻结与提现处理中，合计仍等于当前冻结押金。</view>
       <view class="wallet-tip wallet-tip-secondary">{{withdrawHint}}</view>
-      <view wx:if="{{actionNoticeMessage}}" class="action-notice action-notice-{{actionNoticeTheme}}">
-        <text class="action-notice-text">{{actionNoticeMessage}}</text>
+      <view wx:if="{{actionNoticeMessage}}" class="notice-banner">
+        <t-notice-bar theme="{{actionNoticeTheme}}" visible="{{true}}" content="{{actionNoticeMessage}}" />
       </view>
 
       <view class="wallet-actions">
@@ -62,7 +62,7 @@
 
       <view wx:elif="{{listError && transactions.length === 0}}" class="inline-state-card">
         <t-empty icon="error-circle" description="{{listError}}" />
-        <t-button theme="primary" shape="round" bindtap="onRetryTransactions">重新加载账单</t-button>
+        <t-button theme="primary" bindtap="onRetryTransactions">重新加载账单</t-button>
       </view>
 
       <view class="history-list" wx:elif="{{transactions.length > 0}}">

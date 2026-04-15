@@ -1,7 +1,6 @@
 .page-container {
   min-height: 100vh;
   background-color: var(--td-bg-color-page);
-  padding: 0 var(--spacer-md);
   box-sizing: border-box;
 }
 

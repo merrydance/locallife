@@ -1,3 +1,5 @@
+@import '../../../styles/customer.wxss';
+
 /* Pages User Center Reservations */
 .page {
   min-height: 100vh;

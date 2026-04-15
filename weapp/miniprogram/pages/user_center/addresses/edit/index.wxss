@@ -1,3 +1,5 @@
+@import '../../../../styles/customer.wxss';
+
 /* Pages User Center Addresses Edit */
 .page-container {
   min-height: 100vh;

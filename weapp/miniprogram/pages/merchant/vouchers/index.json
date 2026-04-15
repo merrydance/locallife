@@ -10,7 +10,6 @@
     "t-empty": "tdesign-miniprogram/empty/empty",
     "t-fab": "tdesign-miniprogram/fab/fab",
     "t-loading": "tdesign-miniprogram/loading/loading",
-    "t-notice-bar": "tdesign-miniprogram/notice-bar/notice-bar",
     "t-switch": "tdesign-miniprogram/switch/switch",
     "t-tag": "tdesign-miniprogram/tag/tag"
   }

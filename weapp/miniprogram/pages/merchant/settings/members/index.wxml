@@ -7,17 +7,13 @@
 
   <view wx:elif="{{initialError}}" class="state-block">
     <t-empty description="{{initialErrorMessage || '会员列表加载失败，请重试'}}" />
-    <view class="retry-button" bindtap="onRetry">重新加载</view>
+    <t-button theme="primary" bindtap="onRetry">重新加载</t-button>
   </view>
 
   <block wx:else>
-    <view wx:if="{{refreshErrorMessage}}" class="inline-banner inline-banner-danger">
-      <text class="inline-banner-text">{{refreshErrorMessage}}</text>
-      <text class="inline-banner-action" bindtap="onRetryRefresh">重新同步</text>
-    </view>
-
-    <view wx:if="{{members.length}}" class="inline-banner inline-banner-info">
-      <text class="inline-banner-text">当前已加载 {{members.length}} 位会员，可进入详情查看流水或调整余额。</text>
+    <view wx:if="{{refreshErrorMessage}}" class="list-meta-row list-meta-row--error">
+      <text class="list-meta-text">{{refreshErrorMessage}}</text>
+      <text class="list-meta-action" bindtap="onRetryRefresh">重新同步</text>
     </view>
 
     <view wx:if="{{!members.length}}" class="state-block state-compact">
@@ -28,7 +24,7 @@
       <view wx:for="{{members}}" wx:key="user_id" class="member-card" data-user-id="{{item.user_id}}" bindtap="onOpenDetail">
         <view class="member-header">
           <view class="member-profile">
-            <image wx:if="{{item.avatar_url}}" class="member-avatar" src="{{item.avatar_url}}" mode="aspectFill" />
+            <t-image wx:if="{{item.avatar_url}}" class="member-avatar" src="{{item.avatar_url}}" mode="aspectFill" />
             <view wx:else class="member-avatar member-avatar-fallback">{{item.display_initial}}</view>
             <view class="member-meta">
               <text class="member-name">{{item.display_name}}</text>
@@ -76,8 +72,8 @@
             <text class="detail-submeta">{{selectedMember.phone_text}} · 会员 ID {{selectedMember.membership_id}}</text>
           </view>
           <view class="detail-actions">
-            <t-button wx:if="{{selectedMember.phone}}" size="small" theme="default" variant="outline" shape="round" bindtap="onCallMember">联系会员</t-button>
-            <t-button size="small" theme="primary" shape="round" bindtap="onOpenAdjustPopup">调整余额</t-button>
+            <t-button wx:if="{{selectedMember.phone}}" size="small" theme="default" variant="outline" bindtap="onCallMember">联系会员</t-button>
+            <t-button size="small" theme="primary" bindtap="onOpenAdjustPopup">调整余额</t-button>
           </view>
         </view>
 
@@ -142,8 +138,8 @@
       </view>
 
       <view class="popup-actions">
-        <t-button theme="primary" variant="outline" size="medium" shape="round" bindtap="onCloseAdjustPopup">取消</t-button>
-        <t-button theme="primary" size="medium" shape="round" loading="{{adjustSubmitting}}" bindtap="onSubmitAdjust">提交调整</t-button>
+        <t-button theme="primary" variant="outline" bindtap="onCloseAdjustPopup">取消</t-button>
+        <t-button theme="primary" loading="{{adjustSubmitting}}" bindtap="onSubmitAdjust">提交调整</t-button>
       </view>
     </view>
   </t-popup>

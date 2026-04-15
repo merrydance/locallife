@@ -1,3 +1,4 @@
+@import '../../../styles/customer.wxss';
 @import "../../../styles/takeout-combo-detail-top.wxss";
 
 .page-container {

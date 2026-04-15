@@ -1,3 +1,5 @@
+@import '../../../styles/customer.wxss';
+
 /* 堂食支付成功页面样式 */
 .page-container {
   min-height: 100vh;

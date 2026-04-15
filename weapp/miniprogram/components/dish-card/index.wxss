@@ -1,4 +1,5 @@
 /* 菜品卡片 - 深度适配 Design System */
+@import '../../styles/customer.wxss';
 
 .dish-card {
   display: flex;

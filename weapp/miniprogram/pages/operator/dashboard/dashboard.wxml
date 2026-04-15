@@ -4,7 +4,7 @@
   <!-- 错误状态 -->
   <view wx:if="{{error && !initialLoading}}" class="error-container">
     <t-empty icon="info-circle" description="{{error}}">
-      <t-button slot="action" theme="primary" size="small" bindtap="onRetry" shape="round">重试</t-button>
+      <t-button slot="action" theme="primary" bindtap="onRetry">重试</t-button>
     </t-empty>
   </view>
 

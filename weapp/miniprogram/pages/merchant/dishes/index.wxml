@@ -10,20 +10,11 @@
 
   <view wx:elif="{{initialError}}" class="state-block">
     <t-empty icon="error-circle" description="{{initialErrorMessage || '菜品加载失败，请重试'}}" />
-    <t-button theme="primary" size="small" shape="round" bind:tap="onRetry">重新加载</t-button>
+    <t-button theme="primary" bind:tap="onRetry">重新加载</t-button>
   </view>
 
   <block wx:else>
     <view class="page-content">
-      <t-notice-bar
-        wx:if="{{refreshErrorMessage}}"
-        visible="{{true}}"
-        theme="warning"
-        content="{{refreshErrorMessage}}"
-        prefixIcon="error-circle"
-        t-class="page-notice"
-      />
-
       <t-sticky offset-top="{{navBarHeight}}" z-index="40">
         <view class="control-panel">
           <view class="tabs-shell tabs-shell--top">
@@ -66,7 +57,7 @@
       <block wx:else>
         <view class="dish-list">
           <block wx:for="{{dishes}}" wx:key="id">
-            <t-cell-group class="dish-card" theme="card">
+            <t-cell-group class="dish-card">
               <view class="dish-card-main" bindtap="onDishCardTap" data-id="{{item.id}}">
                 <t-image
                   t-class="dish-cover"

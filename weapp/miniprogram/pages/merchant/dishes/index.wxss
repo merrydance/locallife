@@ -32,9 +32,9 @@
 }
 
 .tabs-shell {
-  background: var(--td-bg-color-container);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .tabs-shell--top {
@@ -42,10 +42,10 @@
 }
 
 .filter-panel {
-  padding: var(--spacer-sm) var(--spacer-md);
-  background: var(--td-bg-color-container);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .filter-block {

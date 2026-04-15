@@ -4,7 +4,7 @@
 }
 
 .content {
-  padding: var(--spacer-md);
+  padding: 0;
 }
 
 .header-section {

@@ -109,7 +109,11 @@
 
 .notice-card-info,
 .notice-card-warning {
-  background: var(--td-brand-color-light);
+  background: var(--td-bg-color-secondarycontainer);
+}
+
+.notice-card-warning {
+  background: var(--td-warning-color-1);
 }
 
 .notice-title {

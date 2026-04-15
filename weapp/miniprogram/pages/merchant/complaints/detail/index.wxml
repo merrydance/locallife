@@ -11,13 +11,14 @@
   </view>
 
   <view wx:elif="{{detail}}" class="content">
-    <view wx:if="{{actionNoticeMessage}}" class="inline-banner inline-banner-warning">
-      <text class="inline-banner-text">{{actionNoticeMessage}}</text>
+    <view wx:if="{{actionNoticeMessage}}" class="notice-banner">
+      <t-notice-bar theme="warning" visible="{{true}}" content="{{actionNoticeMessage}}" />
     </view>
 
-    <view wx:if="{{refreshErrorMessage}}" class="inline-banner inline-banner-danger">
-      <text class="inline-banner-text">{{refreshErrorMessage}}</text>
-      <text class="inline-banner-action" bindtap="onRetryRefresh">重新同步</text>
+    <view wx:if="{{refreshErrorMessage}}" class="notice-banner">
+      <t-notice-bar theme="error" visible="{{true}}" content="{{refreshErrorMessage}}">
+        <text slot="operation" class="notice-banner-operation" bindtap="onRetryRefresh">重新同步</text>
+      </t-notice-bar>
     </view>
 
     <view class="hero-card">
@@ -88,8 +89,8 @@
     </view>
 
     <view class="action-bar">
-      <t-button wx:if="{{detail.canRespond}}" theme="primary" variant="outline" shape="round" bindtap="onOpenResponsePopup">{{detail.hasResponse ? '更新回复' : '回复投诉'}}</t-button>
-      <t-button wx:if="{{detail.canComplete}}" theme="primary" shape="round" loading="{{completing}}" bindtap="onCompleteComplaint">确认完结</t-button>
+      <t-button wx:if="{{detail.canRespond}}" theme="primary" variant="outline" bindtap="onOpenResponsePopup">{{detail.hasResponse ? '更新回复' : '回复投诉'}}</t-button>
+      <t-button wx:if="{{detail.canComplete}}" theme="primary" loading="{{completing}}" bindtap="onCompleteComplaint">确认完结</t-button>
     </view>
   </view>
 
@@ -113,8 +114,8 @@
         />
       </view>
       <view class="popup-actions">
-        <t-button theme="primary" variant="outline" size="medium" shape="round" bindtap="onCloseResponsePopup">取消</t-button>
-        <t-button theme="primary" size="medium" shape="round" loading="{{responseSubmitting}}" bindtap="onSubmitResponse">提交回复</t-button>
+        <t-button theme="primary" variant="outline" bindtap="onCloseResponsePopup">取消</t-button>
+        <t-button theme="primary" loading="{{responseSubmitting}}" bindtap="onSubmitResponse">提交回复</t-button>
       </view>
     </view>
   </t-popup>

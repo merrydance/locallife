@@ -14,7 +14,6 @@
     "t-image": "tdesign-miniprogram/image/image",
     "t-switch": "tdesign-miniprogram/switch/switch",
     "t-sticky": "tdesign-miniprogram/sticky/sticky",
-    "t-notice-bar": "tdesign-miniprogram/notice-bar/notice-bar",
     "custom-navbar": "/components/custom-navbar/index"
   },
   "navigationStyle": "custom"

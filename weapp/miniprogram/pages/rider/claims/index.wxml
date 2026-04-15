@@ -15,9 +15,10 @@
       <view class="tips">索赔记录现在按处理状态分桶；需要查看判定依据、支付追偿或提交申诉，请进入对应索赔详情。</view>
     </view>
 
-    <view wx:if="{{refreshErrorMessage}}" class="inline-banner inline-banner-danger">
-      <text class="inline-banner-text">{{refreshErrorMessage}}</text>
-      <text class="inline-banner-action" bindtap="onRetryRefresh">重新同步</text>
+    <view wx:if="{{refreshErrorMessage}}" class="notice-banner">
+      <t-notice-bar theme="error" visible="{{true}}" content="{{refreshErrorMessage}}">
+        <text slot="operation" class="notice-banner-operation" bindtap="onRetryRefresh">重新同步</text>
+      </t-notice-bar>
     </view>
 
     <view class="summary-grid">

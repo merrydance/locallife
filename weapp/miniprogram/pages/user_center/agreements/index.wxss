@@ -1,3 +1,5 @@
+@import '../../../styles/customer.wxss';
+
 /* 协议中心 - 遵循 .github/standards/weapp/DESIGN_SYSTEM.md 规范 */
 
 .page-scroll {

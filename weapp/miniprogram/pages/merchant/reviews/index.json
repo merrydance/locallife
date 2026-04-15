@@ -6,6 +6,8 @@
     "t-loading": "tdesign-miniprogram/loading/loading",
     "t-empty": "tdesign-miniprogram/empty/empty",
     "t-button": "tdesign-miniprogram/button/button",
+    "t-image": "tdesign-miniprogram/image/image",
+    "t-notice-bar": "tdesign-miniprogram/notice-bar/notice-bar",
     "t-tag": "tdesign-miniprogram/tag/tag",
     "t-popup": "tdesign-miniprogram/popup/popup",
     "t-textarea": "tdesign-miniprogram/textarea/textarea"

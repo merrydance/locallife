@@ -1,0 +1,11 @@
+{
+  "purpose": "Reusable non-customer section card container that standardizes section title marker, surface rhythm, and content insets.",
+  "tdesignGroup": "data",
+  "tdesignCandidates": [
+    "cell-group",
+    "grid",
+    "layout"
+  ],
+  "decision": "tdesign-wrapper",
+  "rationale": "TDesign Mini Program does not provide a generic section card container for merchant/operator pages. This wrapper owns only the section surface and title rhythm while leaving actual content composition to TDesign primitives inside the slot."
+}

@@ -37,8 +37,9 @@
 
 1. `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md`
 2. `.github/standards/weapp/NON_CONSUMER_DESIGN_SYSTEM.md`
-3. `.github/standards/weapp/REVIEW_CHECKLIST.md`（仅 review 或复审时）
-4. `weapp/miniprogram/app.wxss`（仅在需要确认 page shell 与共享类当前实现时）
+3. `.github/standards/weapp/NON_CONSUMER_PAGE_EXECUTION_CHECKLIST.md`（需要快速落地或收口样式时优先通读）
+4. `.github/standards/weapp/REVIEW_CHECKLIST.md`（仅 review 或复审时）
+5. `weapp/miniprogram/app.wxss`（仅在需要确认 page shell 与共享类当前实现时）
 
 ## 3. Core Principles
 
@@ -100,7 +101,7 @@
 
   <view wx:elif="{{initialError}}" class="state-block">
     <t-empty icon="error-circle" description="加载失败，请重试" />
-    <t-button theme="primary" size="small" shape="round" bind:tap="onRetry">重新加载</t-button>
+    <t-button theme="primary" bind:tap="onRetry">重新加载</t-button>
   </view>
 
   <block wx:else>
@@ -128,20 +129,39 @@
 
 ### 6.1 Buttons
 
-- 主操作默认继续使用 TDesign 大按钮规范。
-- 区块级新增、删除、增减、排序、局部管理动作默认使用 TDesign 图标按钮或 icon-led small button。
+- 主操作默认使用 TDesign 原生按钮层级；是否使用 `large`、`round`、`block` 由当前页面结构和动作位置决定，不做全局硬性规定。
+- 区块级新增、删除、增减、排序、局部管理动作优先使用 TDesign 原生轻量按钮接法；icon button、icon-led button、轻量文本按钮都可以，由当前语义密度和误触风险决定。
 - 嵌套组件相邻icon按钮可以通过内层按钮小于外层按钮加以视觉区分
-- 默认不使用纯文字“新增”“删除”“增加”“减少”按钮，除非该动作必须依赖完整文本说明才能避免误解。
+- 不要机械地把局部动作都做成同一种按钮模板；若纯文字按钮已经能清楚表达语义且不会制造误触，不必为了统一外观强行改成图标按钮。
+
+进一步落地为四类默认模式：
+
+- 页级主动作：编辑页、设置页、创建页的保存/提交动作，默认放在 `page-content` 末尾的内容流动作区，例如 `form-actions`。除非动作必须在长滚动过程中持续可见，否则不要再包自定义 fixed `footer-bar`、阴影壳或额外安全区壳。
+- 状态重试动作：`state-block`、嵌入式空态、首屏失败等场景下的“重新加载”“重新校验”，默认直接使用 TDesign 原生按钮，不再额外指定 `size="small"`、`shape="round"` 作为常规样式。
+- 区块头局部动作：`section-top-action`、`field-action-row` 一类区域里的“新增标签”“管理分类”“新增规格组”，默认使用带图标的 `size="small"` 按钮，并保留短文案；不要把这类页级局部动作默认做成纯圆形加号按钮。
+- 行级工具动作：重复编辑器、局部列表项尾部、紧凑型 note slot 内的增删改按钮，才优先使用 `shape="circle"`、`size="small"` 或 `size="extra-small"` 的图标按钮，用来表达“局部工具”而不是“区块级动作”。
+
+默认禁忌：
+
+- 不要把页级主动作做成固定底栏视觉壳，再额外依赖 `page-shell-bottom-offset` 为它让位。
+- 不要把“新增/管理”这类区块头动作收缩成只有图标的圆形按钮，除非该区域已经存在非常强的上下文，不会牺牲可扫读性。
+- 不要给普通重试、返回、刷新按钮附带无业务意义的 `round`、`large`、`block` 视觉约定。
+
+当前推荐样式对应关系：
+
+- `新增标签`、`管理分类`、`新增规格组` 这类区块头动作，参考 `weapp/miniprogram/pages/merchant/dishes/edit/index.wxml`。
+- `保存店铺资料`、`保存代金券` 这类页级主动作，参考 `weapp/miniprogram/pages/merchant/settings/profile/index.wxml` 与 `weapp/miniprogram/pages/merchant/vouchers/edit/index.wxml`。
+- 嵌套编辑器里的行级圆形工具按钮，继续参考 `weapp/miniprogram/components/dish-customization-editor/index.wxml` 与 `weapp/miniprogram/components/dish-customization-options/index.wxml`。
 
 嵌套重复编辑器示例：
 
 - 当页面存在“规格组 -> 规格项”这类两层重复编辑结构时，外层组级动作应放在组头右侧，内层行级动作应放在每行尾部的局部工具区，不要把两层按钮都做成同一视觉重量。
-- 组级动作可使用 `small` 圆形 icon button 作为局部主动作；行级动作应进一步降为 `extra-small`，通过尺寸直接表达“这是内层编辑动作”。
-- 两层都涉及草稿态增删时，优先使用 `add` / `remove` 图标语义；只有真正进入危险删除确认语境时，才升级为更强的危险表达。
-- 颜色分工应同时服务语义与层级：组级移除可使用 `danger`，行级新增优先使用 `light`，行级移除优先使用 `default` 或同等低强调表达，避免内层动作和外层动作抢视觉主次。
+- 组级和行级动作可以通过尺寸、位置、主题或文案密度拉开层级，但不预设固定的 size / shape / theme 组合。
+- 两层都涉及草稿态增删时，可以使用图标语义，也可以保留短文本动作；是否进入危险表达由真实风险决定，不做全局样式指定。
+- 颜色分工只要求服务语义与层级，不预设固定的 danger / light / default 搭配模板。
 - 行级增减按钮允许放入一个轻量局部操作容器中统一承接，但该容器只负责行尾动作聚合，不应升级成新的卡片或结构性视觉壳。
 
-参考结构：
+参考结构之一：
 
 ```xml
 <view class="spec-group-card__header">
@@ -167,12 +187,13 @@
 - 不要把每一段说明、每一排筛选、每一个轻量表单组都做成独立白卡。
 - 优先用 page shell + 内容容器 + TDesign 组件本身建立秩序，再决定是否需要卡片。
 - 顶部 hero 式说明卡片不属于非顾客侧默认结构；只有当说明本身就是当前任务主体时才允许例外。
+- 从 fixed footer-bar 改回内容流动作区时，page shell 仍然只负责外层 safe area；页面自身还需要补足内容区底部节奏，例如 `page-content` 的底部 padding 和动作区与上一块内容之间的显式间距。
 
 ### 6.3 Popup And Dialog
 
 - 少字段辅助创建、短确认流程优先使用 `t-dialog`。
 - 只有当内容较长、需要滚动、需要持续底部动作区时，才使用底部 `t-popup`。
-- 使用底部弹层时，动作区必须独立于滚动内容，并继续采用大按钮、等宽双列和统一安全区承接。
+- 使用底部弹层时，动作区必须独立于滚动内容，并由统一安全区承接；按钮尺寸、圆角和是否等宽跟随当前场景与 TDesign 原生能力，不做全局锁定。
 
 ## 7. Review Questions
 

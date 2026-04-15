@@ -12,7 +12,7 @@
 }
 
 .result-list {
-  padding: var(--spacer-md);
+  padding: var(--spacer-md) 0;
 }
 
 .group-card {

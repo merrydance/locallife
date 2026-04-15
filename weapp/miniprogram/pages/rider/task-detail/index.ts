@@ -12,7 +12,9 @@ import {
     isRiderDeliveryTrackedStatus,
     RiderDeliveryActionKey
 } from '../../../utils/rider-delivery-view'
+import { getRiderLocationStatusView } from '../../../utils/rider-location-status-view'
 import { getStableBarHeights } from '../../../utils/responsive'
+import { resolveStatusTagTheme, type StatusTagTheme } from '../../../utils/status-tag'
 
 interface RiderTaskDetailOptions {
     id?: string
@@ -29,8 +31,6 @@ type DeliveryView = Delivery & {
     can_update_status: boolean
     action_label: string
 }
-
-type TagTheme = 'primary' | 'success' | 'warning' | 'danger' | 'default'
 
 let taskDetailLocationUnsubscribe: null | (() => void) = null
 
@@ -101,7 +101,7 @@ Page({
         routeSummary: '',
 
         locationStatusText: '等待进入配送',
-        locationStatusTheme: 'default' as TagTheme,
+        locationStatusTheme: resolveStatusTagTheme('neutral') as StatusTagTheme,
         locationPendingText: '',
         locationUpdatedText: '暂无定位记录',
         locationActionText: '立即刷新',
@@ -232,7 +232,7 @@ Page({
         if (!state || !state.activeDeliveryId || !this.data.delivery || state.activeDeliveryId !== this.data.delivery.id) {
             return {
                 locationStatusText: isRiderDeliveryTrackedStatus(this.data.delivery?.status) ? '等待连续定位启动' : '当前状态无需定位',
-                locationStatusTheme: 'default' as TagTheme,
+                locationStatusTheme: resolveStatusTagTheme('neutral') as StatusTagTheme,
                 locationPendingText: '',
                 locationUpdatedText: fallbackRecordedAt ? `最近轨迹 ${formatRelativeTime(fallbackRecordedAt)}` : '暂无定位记录',
                 locationActionText: '立即刷新',
@@ -257,19 +257,12 @@ Page({
             needsLocationPermission: state.uploadState === 'permission_required'
         }
 
-        switch (state.uploadState) {
-            case 'starting':
-                return { ...baseView, locationStatusText: '正在开启连续定位', locationStatusTheme: 'warning' as TagTheme }
-            case 'uploading':
-                return { ...baseView, locationStatusText: '正在上传位置', locationStatusTheme: 'primary' as TagTheme }
-            case 'retrying':
-                return { ...baseView, locationStatusText: '网络恢复后会自动补发', locationStatusTheme: 'warning' as TagTheme }
-            case 'permission_required':
-                return { ...baseView, locationStatusText: '需要开启定位权限', locationStatusTheme: 'danger' as TagTheme }
-            case 'tracking':
-                return { ...baseView, locationStatusText: '定位正常', locationStatusTheme: 'success' as TagTheme }
-            default:
-                return { ...baseView, locationStatusText: '等待连续定位启动', locationStatusTheme: 'default' as TagTheme }
+        const locationStatusView = getRiderLocationStatusView(state.uploadState)
+        return {
+            ...baseView,
+            locationStatusText: locationStatusView.text,
+            locationStatusTheme: locationStatusView.theme,
+            needsLocationPermission: locationStatusView.needsPermission
         }
     },
 

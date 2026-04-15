@@ -1,13 +1,13 @@
 <custom-navbar title="集团 / 品牌入驻" showBack="{{true}}" bind:navheight="onNavHeight" />
 
-<view class="page-container page-shell page-shell--with-nav page-shell--bottom-safe" style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: 120rpx;">
+<view class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: 120rpx;">
   <view wx:if="{{accessReady && accessDenied}}" class="state-block">
     <t-empty icon="error-circle" description="当前账号无商户权限，请返回“我的”切换身份" />
   </view>
 
   <view wx:elif="{{accessReady && accessErrorMessage}}" class="state-block">
     <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
-    <t-button theme="primary" size="small" shape="round" bind:tap="onRetryAccess">重新校验</t-button>
+    <t-button theme="primary" bind:tap="onRetryAccess">重新校验</t-button>
   </view>
 
   <block wx:elif="{{accessReady}}">
@@ -17,7 +17,7 @@
 
   <view wx:elif="{{draftErrorMessage}}" class="state-block">
     <t-empty icon="error-circle" description="{{draftErrorMessage}}" />
-    <t-button theme="primary" size="small" shape="round" bind:tap="onRetryDraft">重新加载草稿</t-button>
+    <t-button theme="primary" bind:tap="onRetryDraft">重新加载草稿</t-button>
   </view>
 
   <block wx:else>
@@ -113,7 +113,7 @@
       <view class="section-title">确认集团信息</view>
 
       <view class="card-group">
-        <t-input label="集团 / 品牌名" placeholder="请输入品牌名称" value="{{formData.groupName}}" bindchange="onInput" data-field="groupName" />
+        <t-input label="品牌名称" placeholder="请输入品牌名称" value="{{formData.groupName}}" bindchange="onInput" data-field="groupName" />
         <view class="field-block {{phoneError ? 'field-block-error' : ''}}">
           <t-input label="联系电话" type="number" placeholder="请输入手机号" value="{{formData.contactPhone}}" bindchange="onInput" data-field="contactPhone" />
         </view>
@@ -172,7 +172,7 @@
         <view class="status-text">{{resultStatusView.resultText}}</view>
         <view class="status-hint">{{resultStatusView.resultHint}}</view>
       </view>
-      <t-button theme="primary" block size="large" bindtap="onBackToConfig" shape="round">返回配置中心</t-button>
+      <t-button theme="primary" block bindtap="onBackToConfig">返回配置中心</t-button>
     </view>
   </view>
 
@@ -192,18 +192,18 @@
     </view>
 
     <block wx:if="{{currentStep === 0}}">
-      <t-button block theme="primary" size="large" bindtap="onNext" shape="round">开始申请</t-button>
+      <t-button block theme="primary" bindtap="onNext">开始申请</t-button>
     </block>
     <block wx:elif="{{currentStep === 3}}">
       <view class="btn-group">
-        <t-button block size="large" bindtap="onPrev" shape="round">返回修改</t-button>
-        <t-button block theme="primary" size="large" bindtap="onSubmit" loading="{{submitting}}" shape="round">确认提交</t-button>
+        <t-button bindtap="onPrev">返回修改</t-button>
+        <t-button theme="primary" bindtap="onSubmit" loading="{{submitting}}">确认提交</t-button>
       </view>
     </block>
     <block wx:elif="{{currentStep < 3}}">
       <view class="btn-group">
-        <t-button block size="large" bindtap="onPrev" shape="round">上一步</t-button>
-        <t-button block theme="primary" size="large" bindtap="onNext" shape="round">下一步</t-button>
+        <t-button bindtap="onPrev">上一步</t-button>
+        <t-button theme="primary" bindtap="onNext">下一步</t-button>
       </view>
     </block>
   </view>
@@ -223,7 +223,7 @@
       <text class="consent-link" data-type="USER_AGREEMENT" data-title="用户服务协议" catchtap="onViewAgreement">《用户服务协议》</text>
       <text class="consent-link" data-type="PRIVACY_POLICY" data-title="隐私政策" catchtap="onViewAgreement">《隐私政策》</text>
     </view>
-    <t-button block theme="primary" size="large" bindtap="onConfirmConsent" shape="round">我已阅读并同意，继续</t-button>
-    <t-button block theme="default" size="large" bindtap="closeConsentPopup" shape="round">暂不继续</t-button>
+    <t-button block theme="primary" bindtap="onConfirmConsent">我已阅读并同意，继续</t-button>
+    <t-button block theme="default" bindtap="closeConsentPopup">暂不继续</t-button>
   </view>
 </t-popup>

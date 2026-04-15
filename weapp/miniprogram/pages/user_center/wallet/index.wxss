@@ -1,3 +1,4 @@
+@import '../../../styles/customer.wxss';
 @import "../../../styles/wallet-skeleton.wxss";
 
 .page-container {

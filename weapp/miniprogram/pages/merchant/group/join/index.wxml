@@ -7,7 +7,7 @@
 
   <view wx:elif="{{accessReady && accessErrorMessage}}" class="state-block">
     <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
-    <t-button theme="primary" size="small" shape="round" bind:tap="onRetryAccess">重新校验</t-button>
+    <t-button theme="primary" bind:tap="onRetryAccess">重新校验</t-button>
   </view>
 
   <block wx:elif="{{accessReady}}">
@@ -46,7 +46,7 @@
         </view>
         <view class="empty-state" wx:elif="{{searchErrorMessage}}">
           <t-empty icon="error-circle" description="{{searchErrorMessage}}" />
-          <t-button theme="primary" size="small" shape="round" bind:tap="onSearchSubmit">重新搜索</t-button>
+          <t-button theme="primary" bind:tap="onSearchSubmit">重新搜索</t-button>
         </view>
         <view class="empty-state" wx:elif="{{searched && groups.length === 0}}">
           <t-empty icon="search" description="未搜索到相关集团或品牌" />

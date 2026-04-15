@@ -8,10 +8,11 @@ import {
   MerchantMembershipTransaction
 } from '../../../../api/merchant'
 import { logger } from '../../../../utils/logger'
+import { getMembershipTransactionTagView } from '../../../../utils/membership-transaction-view'
 import { getStableBarHeights } from '../../../../utils/responsive'
+import type { StatusTagTheme } from '../../../../utils/status-tag'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
 
-type TransactionTheme = 'success' | 'warning' | 'danger' | 'default'
 type AdjustDirection = 'increase' | 'decrease'
 
 interface MemberView extends MerchantMemberSummary {
@@ -29,7 +30,7 @@ interface TransactionView extends MerchantMembershipTransaction {
   amount_text: string
   balance_after_text: string
   created_at_label: string
-  theme: TransactionTheme
+  theme: StatusTagTheme
 }
 
 interface AdjustFormData {
@@ -59,23 +60,8 @@ function buildMemberView(item: MerchantMemberSummary): MemberView {
   }
 }
 
-function getTransactionMeta(type: string) {
-  switch (type) {
-    case 'recharge':
-      return { label: '充值', theme: 'success' as TransactionTheme }
-    case 'consume':
-      return { label: '消费', theme: 'warning' as TransactionTheme }
-    case 'refund':
-      return { label: '退款', theme: 'success' as TransactionTheme }
-    case 'adjust':
-      return { label: '人工调整', theme: 'primary' as TransactionTheme }
-    default:
-      return { label: type || '交易', theme: 'default' as TransactionTheme }
-  }
-}
-
 function buildTransactionView(item: MerchantMembershipTransaction): TransactionView {
-  const meta = getTransactionMeta(item.type)
+  const meta = getMembershipTransactionTagView(item.type)
   const signedPrefix = item.amount > 0 ? '+' : ''
   return {
     ...item,

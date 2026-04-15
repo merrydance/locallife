@@ -42,7 +42,7 @@
 }
 
 .history-list {
-  padding: 0 var(--spacer-md);
+  padding: 0;
 }
 
 .history-card {
@@ -100,7 +100,8 @@
   width: 56rpx;
   height: 56rpx;
   border-radius: var(--radius-round);
-  background: var(--td-brand-color-light);
+  background: var(--td-bg-color-secondarycontainer);
+  border: 1rpx solid var(--td-component-border);
   color: var(--td-brand-color);
   flex-shrink: 0;
 }

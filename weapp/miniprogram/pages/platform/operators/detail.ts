@@ -5,6 +5,7 @@ import {
   type AdminOperatorApplicationDetail
 } from '@/api/platform-management'
 import { getPrivateMediaUrl } from '@/utils/image-security'
+import { resolveStatusTagTheme } from '@/utils/status-tag'
 import { getErrorUserMessage } from '@/utils/user-facing'
 
 type NavHeightEvent = WechatMiniprogram.CustomEvent<{ navBarHeight?: number }>
@@ -39,7 +40,7 @@ Page({
     idCardBackUrl: '',
     idCardPreviewUnavailable: false,
     statusLabel: '',
-    statusTheme: 'primary' as AdminApprovalTheme,
+    statusTheme: resolveStatusTagTheme('info') as AdminApprovalTheme,
     showRejectReason: false,
     canReview: false,
     rejectReason: ''

@@ -172,7 +172,7 @@
         <view class="status-text">{{resultStatusView.resultText}}</view>
         <view class="status-hint">{{resultStatusView.resultHint}}</view>
       </view>
-      <t-button theme="primary" block size="large" bindtap="onBackHome" shape="round">返回个人中心</t-button>
+      <t-button theme="primary" block bindtap="onBackHome">返回个人中心</t-button>
     </view>
   </view>
 
@@ -193,18 +193,18 @@
     </view>
 
     <block wx:if="{{currentStep === 0}}">
-      <t-button block theme="primary" size="large" bindtap="onNext" shape="round">开始申请</t-button>
+      <t-button block theme="primary" bindtap="onNext">开始申请</t-button>
     </block>
     <block wx:elif="{{currentStep === 3}}">
       <view class="btn-group">
-        <t-button block size="large" bindtap="onPrev" shape="round">返回修改</t-button>
-        <t-button block theme="primary" size="large" bindtap="onSubmit" loading="{{submitting}}" shape="round">确认提交</t-button>
+        <t-button bindtap="onPrev">返回修改</t-button>
+        <t-button theme="primary" bindtap="onSubmit" loading="{{submitting}}">确认提交</t-button>
       </view>
     </block>
     <block wx:elif="{{currentStep < 3}}">
       <view class="btn-group">
-        <t-button block size="large" bindtap="onPrev" shape="round">上一步</t-button>
-        <t-button block theme="primary" size="large" bindtap="onNext" shape="round">下一步</t-button>
+        <t-button bindtap="onPrev">上一步</t-button>
+        <t-button theme="primary" bindtap="onNext">下一步</t-button>
       </view>
     </block>
   </view>
@@ -218,7 +218,7 @@
       <text class="consent-link" data-type="USER_AGREEMENT" data-title="用户服务协议" catchtap="onViewAgreement">《用户服务协议》</text>
       <text class="consent-link" data-type="PRIVACY_POLICY" data-title="隐私政策" catchtap="onViewAgreement">《隐私政策》</text>
     </view>
-    <t-button block theme="primary" size="large" bindtap="onConfirmConsent" shape="round">我已阅读并同意，继续</t-button>
-    <t-button block variant="text" size="large" bindtap="closeConsentPopup">暂不继续</t-button>
+    <t-button block theme="primary" bindtap="onConfirmConsent">我已阅读并同意，继续</t-button>
+    <t-button block variant="text" bindtap="closeConsentPopup">暂不继续</t-button>
   </view>
 </t-popup>

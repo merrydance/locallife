@@ -1,0 +1,10 @@
+<view class="merchant-section-card">
+  <view wx:if="{{title || subtitle}}" class="merchant-section-card__header">
+    <text wx:if="{{title}}" class="merchant-section-card__title">{{title}}</text>
+    <text wx:if="{{subtitle}}" class="merchant-section-card__subtitle">{{subtitle}}</text>
+  </view>
+
+  <view class="merchant-section-card__body {{bodyPadding === 'none' ? 'merchant-section-card__body--none' : ''}}">
+    <slot />
+  </view>
+</view>

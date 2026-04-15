@@ -199,12 +199,12 @@ const DASHBOARD_SECTIONS: DashboardSectionDefinition[] = [
     id: 'growth',
     title: '会员与营销',
     items: [
-      { id: 'membership', title: '叠加规则', icon: createIcon('cardmembership', 'var(--td-warning-color)'), path: '/pages/merchant/settings/membership/index' },
-      { id: 'members', title: '会员列表', icon: createIcon('usergroup', 'var(--td-warning-color)'), path: '/pages/merchant/settings/members/index' },
-      { id: 'recharge-rules', title: '充值规则', icon: createIcon('saving-pot', 'var(--td-warning-color)'), path: '/pages/merchant/settings/recharge-rules/index' },
-      { id: 'discount-rules', title: '满减活动', icon: createIcon('discount', 'var(--td-warning-color)'), path: '/pages/merchant/discount-rules/index' },
-      { id: 'delivery-promotions', title: '配送活动', icon: createIcon('vehicle', 'var(--td-warning-color)'), path: '/pages/merchant/delivery-promotions/index' },
-      { id: 'vouchers', title: '代金券', icon: createIcon('coupon', 'var(--td-warning-color)'), path: '/pages/merchant/vouchers/index' }
+      { id: 'membership', title: '叠加规则', icon: createIcon('cardmembership', 'var(--td-brand-color)'), path: '/pages/merchant/settings/membership/index' },
+      { id: 'members', title: '会员列表', icon: createIcon('usergroup', 'var(--td-brand-color)'), path: '/pages/merchant/settings/members/index' },
+      { id: 'recharge-rules', title: '充值规则', icon: createIcon('saving-pot', 'var(--td-brand-color)'), path: '/pages/merchant/settings/recharge-rules/index' },
+      { id: 'discount-rules', title: '满减活动', icon: createIcon('discount', 'var(--td-brand-color)'), path: '/pages/merchant/discount-rules/index' },
+      { id: 'delivery-promotions', title: '配送活动', icon: createIcon('vehicle', 'var(--td-brand-color)'), path: '/pages/merchant/delivery-promotions/index' },
+      { id: 'vouchers', title: '代金券', icon: createIcon('coupon', 'var(--td-brand-color)'), path: '/pages/merchant/vouchers/index' }
     ]
   },
   {

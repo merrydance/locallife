@@ -3,7 +3,6 @@
 .page-container {
   background-color: var(--td-bg-color-page);
   min-height: 100vh;
-  padding-bottom: 200rpx;
 }
 
 /* 状态横幅 */
@@ -100,7 +99,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: var(--td-brand-color-light);
+  background-color: var(--td-bg-color-secondarycontainer);
+  border: 1rpx solid var(--td-component-border);
   border-radius: 50%;
 }
 

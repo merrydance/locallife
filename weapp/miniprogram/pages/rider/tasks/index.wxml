@@ -12,7 +12,7 @@
 
   <view wx:elif="{{errorMessage && deliveries.length === 0}}" class="history-error card-state">
     <t-empty icon="error-circle" description="{{errorMessage}}" />
-    <t-button theme="primary" shape="round" bindtap="onRetry" size="medium">重新加载</t-button>
+    <t-button theme="primary" bindtap="onRetry">重新加载</t-button>
   </view>
 
   <block wx:else>
@@ -86,7 +86,7 @@
     <t-loading wx:if="{{loadingMore}}" theme="circular" size="40rpx" text="加载中..." />
     <view class="card-state load-more-state" wx:if="{{loadMoreError}}">
       <text class="load-more-error">{{loadMoreError}}</text>
-      <t-button theme="primary" variant="outline" shape="round" size="small" bindtap="onRetryLoadMore">重试加载更多</t-button>
+      <t-button theme="primary" variant="outline" bindtap="onRetryLoadMore">重试加载更多</t-button>
     </view>
     <view class="no-more" wx:if="{{!hasMore && !loadMoreError}}">到底啦，仅显示最近半年的记录</view>
   </view>

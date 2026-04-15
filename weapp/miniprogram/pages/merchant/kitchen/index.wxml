@@ -2,7 +2,7 @@
 
 <view
   class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
-  style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: 32rpx;"
+  style="--page-shell-nav-height: {{navBarHeight}}px;"
 >
   <view wx:if="{{!accessReady}}" class="state-block">
     <t-loading theme="circular" size="40rpx" text="加载后厨工作台中..." vertical />
@@ -14,7 +14,7 @@
 
   <view wx:elif="{{accessErrorMessage}}" class="state-block">
     <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
-    <t-button theme="primary" size="small" shape="round" bind:tap="onRetryAccess">重新校验</t-button>
+    <t-button theme="primary" bind:tap="onRetryAccess">重新校验</t-button>
   </view>
 
   <block wx:else>
@@ -40,15 +40,6 @@
           </view>
         </view>
       </t-sticky>
-
-      <t-notice-bar
-        wx:if="{{boardRefreshErrorMessage}}"
-        visible="{{true}}"
-        theme="warning"
-        content="{{boardRefreshErrorMessage}}"
-        prefixIcon="error-circle"
-        t-class="page-notice"
-      />
 
       <view class="summary-grid">
         <view class="summary-card brand-card">
@@ -90,7 +81,7 @@
 
       <view wx:elif="{{boardInitialError}}" class="state-inline">
         <t-empty description="{{boardInitialErrorMessage || '后厨数据加载失败，请重试'}}" />
-        <t-button theme="primary" size="small" shape="round" bind:tap="onRetryBoard">重新加载</t-button>
+        <t-button theme="primary" bind:tap="onRetryBoard">重新加载</t-button>
       </view>
 
       <t-empty wx:elif="{{!visibleNewOrders.length && !visiblePreparingOrders.length && !visibleReadyOrders.length}}" icon="info-circle" description="{{boardEmptyDescription}}" />
@@ -129,8 +120,8 @@
               </view>
 
               <view class="card-actions">
-                <t-button size="small" variant="outline" shape="round" bind:tap="onViewDetail" data-id="{{item.id}}">查看详情</t-button>
-                <t-button theme="primary" size="small" shape="round" bind:tap="onStartPreparing" data-id="{{item.id}}" loading="{{actionOrderId === item.id && actionType === 'preparing'}}">开始制作</t-button>
+                <t-button size="small" variant="outline" bind:tap="onViewDetail" data-id="{{item.id}}">查看详情</t-button>
+                <t-button theme="primary" size="small" bind:tap="onStartPreparing" data-id="{{item.id}}" loading="{{actionOrderId === item.id && actionType === 'preparing'}}">开始制作</t-button>
               </view>
             </view>
           </view>
@@ -148,7 +139,7 @@
                   <t-tag theme="primary" variant="light" size="small">{{item.order_type_label}}</t-tag>
                   <text class="order-no">#{{item.order_no_short}}</text>
                 </view>
-                <t-tag theme="{{item.is_overdue ? 'danger' : 'success'}}" variant="light" size="small">{{item.is_overdue ? '已超时' : item.remaining_label}}</t-tag>
+                <t-tag theme="{{item.remaining_tag_theme}}" variant="light" size="small">{{item.remaining_tag_text}}</t-tag>
               </view>
 
               <view class="order-meta-row">
@@ -175,8 +166,8 @@
               </view>
 
               <view class="card-actions">
-                <t-button size="small" variant="outline" shape="round" bind:tap="onViewDetail" data-id="{{item.id}}">查看详情</t-button>
-                <t-button theme="primary" size="small" shape="round" bind:tap="onMarkReady" data-id="{{item.id}}" loading="{{actionOrderId === item.id && actionType === 'ready'}}">标记出餐</t-button>
+                <t-button size="small" variant="outline" bind:tap="onViewDetail" data-id="{{item.id}}">查看详情</t-button>
+                <t-button theme="primary" size="small" bind:tap="onMarkReady" data-id="{{item.id}}" loading="{{actionOrderId === item.id && actionType === 'ready'}}">标记出餐</t-button>
               </view>
             </view>
           </view>
@@ -215,7 +206,7 @@
               </view>
 
               <view class="card-actions card-actions-single">
-                <t-button size="small" variant="outline" shape="round" bind:tap="onViewDetail" data-id="{{item.id}}">查看详情</t-button>
+                <t-button size="small" variant="outline" bind:tap="onViewDetail" data-id="{{item.id}}">查看详情</t-button>
               </view>
             </view>
           </view>

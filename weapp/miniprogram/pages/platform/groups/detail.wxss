@@ -8,7 +8,7 @@
 }
 
 .detail-container {
-  padding: var(--spacer-md);
+  padding: 0;
 }
 
 .section-card {

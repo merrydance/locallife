@@ -10,10 +10,6 @@
   box-shadow: var(--shadow-sm);
 }
 
-.form-content {
-  padding: 0 var(--spacer-md);
-}
-
 .step-view {
   display: block;
 }
@@ -276,14 +272,14 @@
 }
 
 .btn-group {
-  display: grid;
-  grid-template-columns: 1fr 1.5fr;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 24rpx;
 }
 
-.footer-bar t-button,
 .footer-action-btn {
-  width: 100%;
+  flex: 0 0 auto;
 }
 
 /* animations */

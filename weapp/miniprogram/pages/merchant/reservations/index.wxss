@@ -17,16 +17,16 @@
 }
 
 .tabs-shell {
-  background: var(--td-bg-color-container);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .filter-panel {
-  padding: var(--spacer-sm) var(--spacer-md);
-  background: var(--td-bg-color-container);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .state-block {
@@ -41,9 +41,7 @@
 
 .state-block--inline {
   min-height: 320rpx;
-  padding: 48rpx 32rpx;
-  border-radius: 32rpx;
-  background: #ffffff;
+  padding: 48rpx 0;
   box-sizing: border-box;
 }
 
@@ -60,10 +58,10 @@
   display: flex;
   align-items: stretch;
   justify-content: space-between;
-  min-height: 104rpx;
-  border-radius: 28rpx;
-  background: #ffffff;
-  box-shadow: 0 16rpx 40rpx rgba(15, 23, 42, 0.06);
+  min-height: 96rpx;
+  border-radius: var(--radius-lg);
+  background: transparent;
+  border: 1rpx solid var(--td-component-border);
   overflow: hidden;
 }
 
@@ -73,19 +71,19 @@
   flex-direction: column;
   justify-content: center;
   gap: 8rpx;
-  padding: 0 28rpx;
+  padding: 0 24rpx;
 }
 
 .date-filter-label {
   font-size: 24rpx;
-  color: #8b93a6;
+  color: var(--td-text-color-secondary);
 }
 
 .date-filter-value {
   font-size: 30rpx;
   line-height: 42rpx;
   font-weight: 600;
-  color: #1f2937;
+  color: var(--td-text-color-primary);
 }
 
 .date-filter-actions {
@@ -95,16 +93,16 @@
 
 .date-filter-divider {
   width: 1rpx;
-  margin: 22rpx 0;
-  background: rgba(15, 23, 42, 0.08);
+  margin: 20rpx 0;
+  background: var(--td-component-border);
 }
 
 .date-filter-icon-button {
-  width: 104rpx;
+  width: 96rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #475569;
+  color: var(--td-text-color-secondary);
 }
 
 .result-bar {
@@ -134,9 +132,9 @@
 }
 
 .card-surface {
-  border-radius: 32rpx;
-  background: #ffffff;
-  box-shadow: 0 18rpx 44rpx rgba(15, 23, 42, 0.06);
+  border-radius: var(--radius-lg);
+  background: var(--td-bg-color-container);
+  box-shadow: var(--shadow-sm);
   overflow: hidden;
 }
 
@@ -166,13 +164,13 @@
   font-size: 30rpx;
   line-height: 42rpx;
   font-weight: 600;
-  color: #111827;
+  color: var(--td-text-color-primary);
 }
 
 .reservation-card__subtitle {
   font-size: 24rpx;
   line-height: 36rpx;
-  color: #6b7280;
+  color: var(--td-text-color-secondary);
 }
 
 .reservation-card__meta-list {
@@ -188,20 +186,20 @@
   gap: 8rpx;
   padding: 18rpx 20rpx;
   border-radius: 24rpx;
-  background: #f8fafc;
+  background: var(--td-bg-color-secondarycontainer);
 }
 
 .reservation-card__meta-label {
   font-size: 22rpx;
   line-height: 32rpx;
-  color: #8b93a6;
+  color: var(--td-text-color-placeholder);
 }
 
 .reservation-card__meta-value {
   font-size: 26rpx;
   line-height: 36rpx;
   font-weight: 600;
-  color: #1f2937;
+  color: var(--td-text-color-primary);
 }
 
 .reservation-card__info-block {
@@ -217,28 +215,28 @@
 .reservation-card__info-label {
   font-size: 22rpx;
   line-height: 32rpx;
-  color: #8b93a6;
+  color: var(--td-text-color-placeholder);
 }
 
 .reservation-card__info-text {
   font-size: 26rpx;
   line-height: 38rpx;
-  color: #374151;
+  color: var(--td-text-color-secondary);
 }
 
 .reservation-card__notice {
   padding: 18rpx 20rpx;
   border-radius: 24rpx;
-  background: rgba(14, 116, 144, 0.08);
+  background: var(--td-success-color-1);
   font-size: 24rpx;
   line-height: 36rpx;
-  color: #0f766e;
+  color: var(--td-text-color-primary);
 }
 
 .card-divider {
   height: 1rpx;
   margin: 0 28rpx;
-  background: rgba(15, 23, 42, 0.08);
+  background: var(--td-component-border);
 }
 
 .reservation-card__actions {
@@ -257,7 +255,7 @@
   text-align: center;
   font-size: 28rpx;
   line-height: 40rpx;
-  color: #475569;
+  color: var(--td-text-color-secondary);
 }
 
 .reservation-card__action--primary {
@@ -268,7 +266,7 @@
 .card-action-divider {
   width: 1rpx;
   height: 32rpx;
-  background: rgba(15, 23, 42, 0.08);
+  background: var(--td-component-border);
 }
 
 .list-loading-more,

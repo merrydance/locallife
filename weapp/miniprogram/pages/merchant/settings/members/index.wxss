@@ -1,6 +1,5 @@
 .page-container {
   min-height: 100vh;
-  padding: 24rpx;
   box-sizing: border-box;
   background: var(--td-bg-color-page);
 }
@@ -19,40 +18,26 @@
   padding: 80rpx 24rpx;
 }
 
-.retry-button {
-  padding: 18rpx 36rpx;
-  border-radius: 999rpx;
-  background: var(--td-brand-color);
-  color: var(--td-text-color-anti);
-  font-size: 26rpx;
-}
-
-.inline-banner {
+.list-meta-row {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 16rpx;
-  margin-bottom: 24rpx;
-  padding: 20rpx 24rpx;
-  border-radius: 18rpx;
+  min-height: 44rpx;
 }
 
-.inline-banner-danger {
-  background: var(--td-error-color-1);
+.list-meta-row--error {
+  color: var(--td-error-color-6);
 }
 
-.inline-banner-info {
-  background: var(--td-brand-color-1);
-}
-
-.inline-banner-text {
+.list-meta-text {
   flex: 1;
   font-size: 24rpx;
   line-height: 1.6;
-  color: var(--td-text-color-primary);
+  color: inherit;
 }
 
-.inline-banner-action {
+.list-meta-action {
   flex-shrink: 0;
   font-size: 24rpx;
   line-height: 1.6;
@@ -62,7 +47,6 @@
 
 .member-card,
 .popup-sheet,
-.summary-strip,
 .transaction-card {
   background: var(--td-bg-color-container);
   border-radius: 20rpx;
@@ -123,7 +107,6 @@
 .detail-header,
 .detail-name-row,
 .detail-actions,
-.summary-strip,
 .transaction-header,
 .transaction-row,
 .popup-actions,
@@ -189,6 +172,7 @@
 }
 
 .member-stats,
+.summary-strip,
 .direction-row {
   gap: 16rpx;
 }
@@ -202,6 +186,10 @@
   padding: 20rpx;
   border-radius: 16rpx;
   background: var(--td-bg-color-secondarycontainer);
+}
+
+.summary-strip {
+  display: flex;
 }
 
 .member-stat-value,

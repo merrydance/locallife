@@ -10,6 +10,7 @@
         "t-tag": "tdesign-miniprogram/tag/tag",
         "t-switch": "tdesign-miniprogram/switch/switch",
         "t-empty": "tdesign-miniprogram/empty/empty",
+        "t-notice-bar": "tdesign-miniprogram/notice-bar/notice-bar",
         "t-sticky": "tdesign-miniprogram/sticky/sticky",
         "t-loading": "tdesign-miniprogram/loading/loading",
         "t-skeleton": "tdesign-miniprogram/skeleton/skeleton",

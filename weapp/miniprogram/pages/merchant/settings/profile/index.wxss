@@ -7,6 +7,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--spacer-md);
+  padding-bottom: calc(var(--spacer-md) + var(--safe-area-bottom));
 }
 
 .state-block {
@@ -19,7 +20,7 @@
   padding: 0 var(--spacer-lg);
 }
 
-.notice-card,
+.notice-banner,
 .section-panel {
   background: var(--td-bg-color-container);
   border-radius: var(--radius-lg);
@@ -38,23 +39,7 @@
   color: var(--td-text-color-secondary);
 }
 
-.notice-card {
-  padding: var(--spacer-sm) var(--spacer-md);
-}
-
-.notice-card--warning {
-  background: var(--td-warning-color-1);
-  border: 1rpx solid rgba(255, 193, 7, 0.35);
-}
-
-.notice-card--split {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--spacer-sm);
-}
-
-.notice-action {
+.notice-banner-operation {
   flex-shrink: 0;
   font-size: var(--font-size-sm);
   line-height: 1.6;
@@ -180,16 +165,11 @@
   color: var(--td-text-color-secondary);
 }
 
-.footer-bar {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: var(--z-index-fixed);
-  padding: var(--spacer-md);
-  padding-bottom: calc(var(--spacer-md) + var(--safe-area-bottom));
-  background: var(--td-bg-color-container);
-  box-shadow: 0 -8rpx 24rpx rgba(0, 0, 0, 0.06);
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--spacer-sm);
 }
 
 @media (max-width: 420px) {

@@ -4,6 +4,7 @@
         "custom-navbar": "/components/custom-navbar/index",
         "t-input": "tdesign-miniprogram/input/input",
         "t-button": "tdesign-miniprogram/button/button",
+        "t-image": "tdesign-miniprogram/image/image",
         "t-textarea": "tdesign-miniprogram/textarea/textarea",
         "t-dialog": "tdesign-miniprogram/dialog/dialog",
         "t-empty": "tdesign-miniprogram/empty/empty",

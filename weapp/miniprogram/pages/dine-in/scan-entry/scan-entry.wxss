@@ -1,3 +1,5 @@
+@import '../../../styles/customer.wxss';
+
 .page-container {
   background-color: var(--td-bg-color-page);
   min-height: 100vh;

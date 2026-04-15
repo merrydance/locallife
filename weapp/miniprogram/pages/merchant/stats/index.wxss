@@ -3,7 +3,6 @@
 
 .page-container {
   min-height: 100vh;
-  padding: 0 var(--spacer-md) 24rpx;
   box-sizing: border-box;
   background: var(--td-bg-color-page);
 }
@@ -83,13 +82,13 @@
 }
 
 .accent-sales {
-  background: linear-gradient(135deg, var(--td-brand-color), #1c7ef5);
+  background: var(--td-bg-color-secondarycontainer);
 }
 
 .accent-sales .summary-label,
 .accent-sales .summary-value,
 .accent-sales .summary-meta {
-  color: var(--td-text-color-anti);
+  color: var(--td-text-color-primary);
 }
 
 .summary-label,

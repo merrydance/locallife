@@ -1,3 +1,5 @@
+@import '../../styles/customer.wxss';
+
 /* 用户中心 - 严格遵循 .github/standards/weapp/DESIGN_SYSTEM.md 规范 */
 
 /* Skyline 滚动容器 */

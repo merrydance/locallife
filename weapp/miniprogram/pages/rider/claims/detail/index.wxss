@@ -1,7 +1,7 @@
 .page-container {
   min-height: 100vh;
   background: var(--td-bg-color-page);
-  padding: var(--spacer-sm);
+  padding: 0;
   box-sizing: border-box;
 }
 
@@ -31,11 +31,11 @@
 
 .head-copy {
   flex: 1;
-  background: var(--td-brand-color-light);
-  border: 1px solid var(--td-brand-color-2);
+  background: transparent;
+  border: 0;
   color: var(--td-text-color-primary);
-  border-radius: var(--radius-lg);
-  padding: var(--spacer-sm);
+  border-radius: 0;
+  padding: 0;
   font-size: var(--font-size-xs);
   line-height: 1.6;
 }
@@ -46,43 +46,24 @@
   gap: var(--spacer-sm);
 }
 
-.inline-banner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--spacer-sm);
-  border-radius: var(--radius-md);
-  padding: var(--spacer-sm) var(--spacer-md);
+.notice-banner {
+  margin-bottom: 0;
 }
 
-.inline-banner-warning {
-  background: rgba(255, 193, 7, 0.12);
-  color: #8a6100;
-}
-
-.inline-banner-danger {
-  background: rgba(229, 57, 53, 0.08);
-  color: var(--td-error-color);
-}
-
-.inline-banner-text {
-  flex: 1;
+.notice-banner-operation {
   font-size: var(--font-size-sm);
   line-height: 1.6;
-}
-
-.inline-banner-action {
-  font-size: var(--font-size-sm);
   font-weight: 600;
   color: var(--td-brand-color);
 }
 
 .hero-card {
-  background: var(--brand-coral-gradient);
-  color: var(--td-text-color-anti);
+  background: var(--td-bg-color-container);
+  color: var(--td-text-color-primary);
   border-radius: var(--radius-card);
   padding: var(--spacer-md);
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--td-border-level-1-color);
 }
 
 .hero-top {
@@ -99,7 +80,7 @@
 
 .hero-status {
   font-size: var(--font-size-xs);
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--td-text-color-secondary);
 }
 
 .hero-meta {
@@ -112,7 +93,7 @@
 .meta-chip {
   padding: var(--spacer-xs) var(--spacer-sm);
   border-radius: 999rpx;
-  background: rgba(255, 255, 255, 0.12);
+  background: var(--td-bg-color-secondarycontainer);
   font-size: var(--font-size-xxs);
 }
 
@@ -126,7 +107,7 @@
 .amount-label {
   display: block;
   font-size: var(--font-size-xxs);
-  color: rgba(255, 255, 255, 0.75);
+  color: var(--td-text-color-secondary);
 }
 
 .amount-value {

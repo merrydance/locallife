@@ -4,7 +4,7 @@
 }
 
 .page-content {
-  padding-bottom: 32rpx;
+  padding-bottom: calc(var(--spacer-md) + var(--safe-area-bottom));
 }
 
 .state-block {
@@ -98,14 +98,12 @@
   color: var(--td-text-color-secondary);
 }
 
-.footer-bar {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  padding: 20rpx 24rpx 30rpx;
-  background: var(--td-bg-color-container);
-  box-shadow: 0 -12rpx 32rpx rgba(0, 0, 0, 0.06);
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--spacer-sm);
+  margin-top: var(--spacer-md);
 }
 
 @media (max-width: 420px) {

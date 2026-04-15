@@ -1,7 +1,7 @@
 <custom-navbar title="运营商管理" show-back="{{true}}" show-location="{{false}}" bind:navheight="onNavHeight" />
 
 <view
-  class="operators-page page-shell page-shell--with-nav page-shell--bottom-safe"
+  class="operators-page page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
   style="--page-shell-nav-height: {{navBarHeight}}px"
 >
   <scroll-view
@@ -53,7 +53,7 @@
 
         <view wx:if="{{error}}" class="section-card status-wrap">
           <t-empty icon="error-circle" description="{{error}}">
-            <t-button slot="action" theme="primary" shape="round" size="small" bind:tap="onRetry">重试</t-button>
+            <t-button slot="action" theme="primary" bind:tap="onRetry">重试</t-button>
           </t-empty>
         </view>
 
@@ -135,7 +135,7 @@
 
         <view wx:if="{{regionError}}" class="section-card status-wrap">
           <t-empty icon="error-circle" description="{{regionError}}">
-            <t-button slot="action" theme="primary" shape="round" size="small" bind:tap="onRegionRetry">重试</t-button>
+            <t-button slot="action" theme="primary" bind:tap="onRegionRetry">重试</t-button>
           </t-empty>
         </view>
 
@@ -170,12 +170,12 @@
           </view>
           <view wx:if="{{item.canReview}}" class="action-row">
             <t-button
-              size="small" theme="primary" shape="round"
+              size="small" theme="primary"
               data-id="{{item.id}}" data-name="{{item.operator_name}}" data-region="{{item.region_name}}"
               bind:tap="onApproveRegion"
             >通过</t-button>
             <t-button
-              size="small" theme="danger" variant="outline" shape="round"
+              size="small" theme="danger" variant="outline"
               data-id="{{item.id}}" data-name="{{item.operator_name}}" data-region="{{item.region_name}}"
               bind:tap="onRejectRegion"
             >驳回</t-button>

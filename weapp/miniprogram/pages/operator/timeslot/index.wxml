@@ -5,7 +5,7 @@
     <view class="content-inner">
       <view class="welcome-header">
         <view class="title">时段系数配置</view>
-        <view class="subtitle">当前区域：{{selectedRegionName || ('ID: ' + selectedRegionId)}}，保存后立即生效</view>
+        <view class="subtitle">当前区域：{{selectedRegionName || ('ID: ' + selectedRegionId)}}，保存后立即生效。已有时段如需调整，请删除后重建。</view>
       </view>
 
       <view class="section-card">
@@ -15,25 +15,20 @@
         </view>
       </view>
 
-      <view class="section-card notice-card">
-        <view class="notice-title">当前页职责</view>
-        <view class="notice-text">这里只处理峰时时段的新增、删除和冲突校验。后端当前不支持直接编辑已有时段，如需调整请删除后重建。</view>
-      </view>
-
       <view wx:if="{{initialLoading}}" class="section-card">
         <view wx:for="{{3}}" wx:key="index" class="skeleton-item"></view>
       </view>
 
       <view wx:elif="{{error}}" class="section-card status-wrap">
         <t-empty icon="error-circle" description="{{error}}">
-          <t-button slot="action" theme="primary" shape="round" size="small" bind:tap="onRetry">重试</t-button>
+          <t-button slot="action" theme="primary" bind:tap="onRetry">重试</t-button>
         </t-empty>
       </view>
 
       <view wx:else>
         <view class="title-row">
           <text class="summary-title">时段系数列表</text>
-          <t-button size="small" theme="primary" shape="round" bind:tap="onAddPeak">新增时段</t-button>
+          <t-button size="small" theme="primary" bind:tap="onAddPeak">新增时段</t-button>
         </view>
 
         <view class="rules-list" wx:if="{{peakConfigs.length > 0}}">
@@ -60,8 +55,8 @@
               <view class="actions">
                 <t-button
                   theme="danger"
-                  shape="round"
                   size="small"
+                  icon="delete"
                   bind:tap="onDeletePeak"
                   data-id="{{item.id}}"
                 >删除</t-button>

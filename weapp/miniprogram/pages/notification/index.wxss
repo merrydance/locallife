@@ -86,7 +86,7 @@
 
 .icon-orange { background: #FF6B00; }
 .icon-green  { background: #2ba471; }
-.icon-blue   { background: #0052D9; }
+.icon-blue   { background: var(--td-brand-color); }
 .icon-gray   { background: #999; }
 .icon-red    { background: #E34D59; }
 

@@ -4,35 +4,18 @@
 }
 
 .content {
-    padding: 24rpx;
+    padding: 0;
 }
 
-.hero-card {
-    background: linear-gradient(135deg, #0052d9 0%, #4f8dff 100%);
-    border-radius: 24rpx;
-    padding: 32rpx;
-    color: #fff;
+.page-summary {
     margin-bottom: 24rpx;
-    box-shadow: 0 16rpx 32rpx rgba(0, 82, 217, 0.18);
 }
 
-.hero-title {
-    display: block;
-    font-size: 38rpx;
-    font-weight: 600;
-    margin-bottom: 12rpx;
-}
-
-.hero-subtitle,
-.hero-desc {
+.page-summary-text {
     display: block;
     font-size: 24rpx;
     line-height: 1.6;
-    color: rgba(255, 255, 255, 0.9);
-}
-
-.hero-desc {
-    margin-top: 12rpx;
+    color: var(--td-text-color-secondary);
 }
 
 .section-card {
@@ -102,20 +85,6 @@
     font-size: 24rpx;
     line-height: 1.6;
     color: var(--td-text-color-secondary);
-}
-
-.boundary-card {
-    padding-bottom: 12rpx;
-}
-
-.boundary-item {
-    display: flex;
-    align-items: flex-start;
-    gap: 16rpx;
-    font-size: 26rpx;
-    line-height: 1.6;
-    color: var(--td-text-color-primary);
-    margin-top: 20rpx;
 }
 
 .error-container {

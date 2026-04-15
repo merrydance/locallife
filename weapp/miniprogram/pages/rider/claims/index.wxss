@@ -1,7 +1,7 @@
 .page-container {
   min-height: 100vh;
   background: var(--td-bg-color-page);
-  padding: var(--spacer-sm);
+  padding: 0;
   box-sizing: border-box;
 }
 
@@ -37,40 +37,25 @@
   margin-bottom: var(--spacer-sm);
 }
 
-.inline-banner {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--spacer-sm);
-  padding: var(--spacer-sm);
-  border-radius: var(--radius-lg);
+.notice-banner {
   margin-bottom: var(--spacer-sm);
 }
 
-.inline-banner-danger {
-  background: var(--td-error-color-1);
-  color: var(--td-error-color-7);
-}
-
-.inline-banner-text {
-  flex: 1;
+.notice-banner-operation {
   font-size: var(--font-size-xs);
   line-height: 1.6;
-}
-
-.inline-banner-action {
-  color: var(--td-brand-color);
-  font-size: var(--font-size-xs);
   white-space: nowrap;
+  color: var(--td-brand-color);
+  font-weight: 600;
 }
 
 .tips {
   flex: 1;
-  background: var(--td-brand-color-light);
+  background: transparent;
   color: var(--td-text-color-primary);
-  border: 1px solid var(--td-brand-color-2);
-  border-radius: var(--radius-lg);
-  padding: var(--spacer-sm);
+  border: 0;
+  border-radius: 0;
+  padding: 0;
   font-size: var(--font-size-xs);
   line-height: 1.6;
 }
@@ -89,7 +74,7 @@
 }
 
 .accent-total {
-  background: linear-gradient(135deg, var(--td-brand-color-1), var(--td-brand-color-2));
+  background: var(--td-bg-color-secondarycontainer);
 }
 
 .accent-pending {
@@ -119,9 +104,9 @@
 
 .claims-tabs {
   margin-bottom: var(--spacer-xs);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  background: var(--td-bg-color-container);
+  border-radius: 0;
+  overflow: visible;
+  background: transparent;
 }
 
 .sub-tabs {
@@ -182,7 +167,8 @@
   margin-bottom: var(--spacer-sm);
   padding: var(--spacer-sm);
   border-radius: var(--radius-md);
-  background: var(--td-brand-color-light);
+  background: var(--td-bg-color-secondarycontainer);
+  border: 1px solid var(--td-component-border);
   font-size: var(--font-size-xs);
   line-height: 1.6;
   color: var(--td-text-color-primary);

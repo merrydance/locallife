@@ -2,7 +2,7 @@
 
 <view
   class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
-  style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: 220rpx;"
+  style="--page-shell-nav-height: {{navBarHeight}}px;"
 >
   <view wx:if="{{loading}}" class="loading-state">
     <t-loading theme="circular" text="加载中..." vertical />
@@ -10,13 +10,13 @@
 
   <view wx:elif="{{initialError}}" class="state-block">
     <t-empty description="{{initialErrorMessage || '套餐编辑页加载失败，请重试'}}" />
-    <t-button theme="primary" size="small" shape="round" bind:tap="onRetry">重新加载</t-button>
+    <t-button theme="primary" bind:tap="onRetry">重新加载</t-button>
   </view>
 
   <block wx:else>
     <view class="page-content">
-      <view wx:if="{{loadWarningMessage}}" class="notice-card notice-card--warning">
-        <text class="notice-text">{{loadWarningMessage}}</text>
+      <view wx:if="{{loadWarningMessage}}" class="notice-banner">
+        <t-notice-bar theme="warning" visible="{{true}}" content="{{loadWarningMessage}}" />
       </view>
 
       <view class="section-panel">
@@ -38,7 +38,7 @@
                 value="{{item.id}}"
                 checked="{{item.checked}}"
               ></t-checkbox>
-              <image wx:if="{{item.image_url}}" class="dish-thumb" src="{{item.image_url}}" mode="aspectFill" />
+              <t-image wx:if="{{item.image_url}}" class="dish-thumb" src="{{item.image_url}}" mode="aspectFill" />
               <view class="dish-meta">
                 <view class="dish-name">{{item.name}}</view>
                 <view class="dish-extra">¥{{item.price / 100}} · {{item.is_online ? (item.is_available ? '在售' : '暂停售卖') : '未上架'}}</view>
@@ -130,7 +130,7 @@
             <text wx:if="{{availableTags.length}}" class="section-caption">已选 {{selectedTagIds.length}} 个</text>
           </view>
           <view class="section-top-button">
-            <t-button size="small" shape="circle" theme="primary" icon="add" loading="{{tagSubmitting}}" bind:tap="onCreateTag" />
+            <t-button size="small" theme="primary" icon="add" loading="{{tagSubmitting}}" bind:tap="onCreateTag">新增标签</t-button>
           </view>
         </view>
 
@@ -151,7 +151,7 @@
 
       <view class="summary-card">
         <view class="summary-previews" wx:if="{{selectedDishPreviews.length}}">
-          <image class="summary-preview-image" wx:for="{{selectedDishPreviews}}" wx:key="*this" src="{{item}}" mode="aspectFill" />
+          <t-image class="summary-preview-image" wx:for="{{selectedDishPreviews}}" wx:key="*this" src="{{item}}" mode="aspectFill" />
         </view>
         <view class="summary-row">
           <text class="label">套餐名称</text>
@@ -171,15 +171,12 @@
         </view>
         <view class="summary-note">自动建议名称：{{autoName}}</view>
       </view>
-
-      <view class="footer-bar">
+      <view class="form-actions">
         <t-button
-          block
           theme="primary"
           loading="{{submitting}}"
           disabled="{{selectedDishIds.length === 0}}"
-          bind:tap="onSubmit"
-          shape="round">
+          bind:tap="onSubmit">
           {{isEdit ? '保存套餐' : '创建套餐'}}
         </t-button>
       </view>

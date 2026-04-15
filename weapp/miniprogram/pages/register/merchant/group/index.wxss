@@ -10,7 +10,7 @@
 }
 
 .form-content {
-  padding: 0 var(--spacer-md);
+  padding: 0;
 }
 
 .step-view {
@@ -240,14 +240,14 @@
 }
 
 .btn-group {
-  display: grid;
-  grid-template-columns: 1fr 1.5fr;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 24rpx;
 }
 
-.btn-group t-button,
-.action-bar t-button {
-  width: 100%;
+.btn-group t-button {
+  flex: 0 0 auto;
 }
 
 .step-view.center {

@@ -1,6 +1,8 @@
+import { resolveStatusTagTheme, type StatusTagTheme } from '@/utils/status-tag'
+
 export type AdminApprovalCategory = 'draft' | 'pending' | 'approved' | 'rejected' | 'unknown'
 
-export type AdminApprovalTheme = 'success' | 'warning' | 'danger' | 'primary' | 'default'
+export type AdminApprovalTheme = StatusTagTheme
 
 export type AdminApprovalFilter = 'draft' | 'pending' | 'submitted' | 'approved' | 'rejected'
 
@@ -62,22 +64,22 @@ export function getAdminApprovalStatusDisplay(
   const category = getAdminApprovalCategory(status)
 
   if (category === 'approved') {
-    return { category, label: '已通过', theme: 'success', isPending: false, isApproved: true, isRejected: false, isDraft: false }
+    return { category, label: '已通过', theme: resolveStatusTagTheme('success'), isPending: false, isApproved: true, isRejected: false, isDraft: false }
   }
 
   if (category === 'rejected') {
-    return { category, label: '已驳回', theme: 'danger', isPending: false, isApproved: false, isRejected: true, isDraft: false }
+    return { category, label: '已驳回', theme: resolveStatusTagTheme('danger'), isPending: false, isApproved: false, isRejected: true, isDraft: false }
   }
 
   if (category === 'pending') {
-    return { category, label: '待审核', theme: 'warning', isPending: true, isApproved: false, isRejected: false, isDraft: false }
+    return { category, label: '待审核', theme: resolveStatusTagTheme('warning'), isPending: true, isApproved: false, isRejected: false, isDraft: false }
   }
 
   if (category === 'draft') {
     return {
       category,
       label: '草稿',
-      theme: options.draftTheme || 'primary',
+      theme: options.draftTheme || resolveStatusTagTheme('info'),
       isPending: false,
       isApproved: false,
       isRejected: false,
@@ -88,7 +90,7 @@ export function getAdminApprovalStatusDisplay(
   return {
     category,
     label: status || '未知状态',
-    theme: options.unknownTheme || 'primary',
+    theme: options.unknownTheme || resolveStatusTagTheme('info'),
     isPending: false,
     isApproved: false,
     isRejected: false,

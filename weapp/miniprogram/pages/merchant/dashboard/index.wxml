@@ -10,7 +10,7 @@
 
   <view wx:elif="{{accessReady && accessErrorMessage}}" class="state-block">
     <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
-    <t-button theme="primary" size="small" shape="round" bind:tap="onRetryAccess">重新校验</t-button>
+    <t-button theme="primary" bind:tap="onRetryAccess">重新校验</t-button>
   </view>
 
   <view wx:elif="{{!accessReady}}" class="state-block">
@@ -18,18 +18,9 @@
   </view>
 
   <block wx:else>
-    <t-notice-bar
-      wx:if="{{refreshErrorMessage && !initialError}}"
-      visible="{{true}}"
-      theme="warning"
-      content="{{refreshErrorMessage}}"
-      prefixIcon="error-circle"
-      t-class="dashboard-notice"
-    />
-
     <view wx:if="{{initialError}}" class="state-block">
       <t-empty icon="error-circle" description="{{initialErrorMessage || '商户首页加载失败，请重试'}}" />
-      <t-button theme="primary" size="small" shape="round" bind:tap="onRetry">重新加载</t-button>
+      <t-button theme="primary" bind:tap="onRetry">重新加载</t-button>
     </view>
 
     <block wx:else>
@@ -77,12 +68,8 @@
         </view>
 
         <view class="section-list">
-          <view wx:for="{{sections}}" wx:key="id" class="section-block">
-            <view class="section-header">
-              <text class="section-title">{{item.title}}</text>
-            </view>
-
-            <t-grid column="4" gutter="{{gridGutter}}" border="{{false}}" theme="card" hover="{{true}}" t-class="dashboard-grid">
+          <merchant-section-card wx:for="{{sections}}" wx:key="id" title="{{item.title}}">
+            <t-grid align="center" column="4" gutter="0" border="{{false}}" hover="{{true}}" t-class="dashboard-grid">
               <t-grid-item
                 wx:for="{{item.items}}"
                 wx:for-item="entry"
@@ -98,7 +85,7 @@
                 t-class-text="dashboard-grid-text"
               />
             </t-grid>
-          </view>
+          </merchant-section-card>
         </view>
       </t-skeleton>
     </block>
@@ -117,7 +104,7 @@
 
       <view wx:elif="{{appBindError}}" class="app-bind-state">
         <t-empty icon="error-circle" description="{{appBindErrorMessage || '生成绑定码失败，请重试'}}" />
-        <t-button theme="primary" size="small" shape="round" bind:tap="onRetryAppBindCode">重新生成</t-button>
+        <t-button theme="primary" bind:tap="onRetryAppBindCode">重新生成</t-button>
       </view>
 
       <view wx:else class="app-bind-body">
@@ -126,8 +113,8 @@
         </view>
         <text class="app-bind-countdown">{{appBindRemainingLabel}}</text>
         <view class="app-bind-actions">
-          <t-button theme="default" shape="round" size="medium" bind:tap="onRetryAppBindCode">重新生成</t-button>
-          <t-button theme="primary" shape="round" size="medium" bind:tap="onCopyAppBindCode">复制绑定码</t-button>
+          <t-button theme="default" bind:tap="onRetryAppBindCode">重新生成</t-button>
+          <t-button theme="primary" bind:tap="onCopyAppBindCode">复制绑定码</t-button>
         </view>
       </view>
     </view>

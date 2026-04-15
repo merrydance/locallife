@@ -12,10 +12,6 @@
   margin-bottom: var(--spacer-md);
 }
 
-.form-content {
-  padding: 0 var(--spacer-md);
-}
-
 .step-view {
   display: block;
 }
@@ -172,16 +168,13 @@
 
 .btn-group {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: var(--spacer-md);
 }
 
 .btn-group t-button {
-  flex: 1;
-  width: 100%;
-}
-
-.bottom-action t-button {
-  width: 100%;
+  flex: 0 0 auto;
 }
 
 /* Region Popup Styles */

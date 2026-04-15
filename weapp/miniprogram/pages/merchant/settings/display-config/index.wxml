@@ -2,7 +2,7 @@
 
 <view
   class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
-  style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: 220rpx;"
+  style="--page-shell-nav-height: {{navBarHeight}}px;"
 >
   <view wx:if="{{!accessReady}}" class="state-block">
     <t-loading theme="circular" size="40rpx" text="加载后厨协同设置中..." vertical />
@@ -14,7 +14,7 @@
 
   <view wx:elif="{{accessErrorMessage}}" class="state-block">
     <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
-    <t-button theme="primary" shape="round" bind:tap="onRetryAccess">重新校验</t-button>
+    <t-button theme="primary" bind:tap="onRetryAccess">重新校验</t-button>
   </view>
 
   <view wx:elif="{{settingsAccessDenied}}" class="state-block">
@@ -23,22 +23,13 @@
 
   <block wx:else>
     <view class="page-content">
-      <t-notice-bar
-        wx:if="{{settingsRefreshErrorMessage}}"
-        visible="{{true}}"
-        theme="warning"
-        content="{{settingsRefreshErrorMessage}}"
-        prefixIcon="error-circle"
-        t-class="page-notice"
-      />
-
       <view wx:if="{{settingsInitialLoading}}" class="loading-state">
         <t-loading theme="circular" size="40rpx" text="加载后厨协同设置中..." vertical />
       </view>
 
       <view wx:elif="{{settingsInitialError}}" class="state-inline">
         <t-empty description="{{settingsInitialErrorMessage || '后厨协同配置加载失败，请重试'}}" />
-        <t-button theme="primary" size="small" shape="round" bind:tap="onRetrySettings">重新加载</t-button>
+        <t-button theme="primary" bind:tap="onRetrySettings">重新加载</t-button>
       </view>
 
       <block wx:else>
@@ -120,9 +111,8 @@
             </t-cell>
           </t-cell-group>
         </view>
-
-        <view class="footer-bar">
-          <t-button theme="primary" size="large" shape="round" block loading="{{settingsSaving}}" disabled="{{settingsSaving}}" bind:tap="onSaveSettings">保存后厨协同设置</t-button>
+        <view class="form-actions">
+          <t-button theme="primary" loading="{{settingsSaving}}" disabled="{{settingsSaving}}" bind:tap="onSaveSettings">保存后厨协同设置</t-button>
         </view>
       </block>
     </view>

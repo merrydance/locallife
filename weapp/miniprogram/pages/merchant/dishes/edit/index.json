@@ -4,6 +4,7 @@
     "t-check-tag": "tdesign-miniprogram/check-tag/check-tag",
     "t-empty": "tdesign-miniprogram/empty/empty",
     "t-input": "tdesign-miniprogram/input/input",
+    "t-notice-bar": "tdesign-miniprogram/notice-bar/notice-bar",
     "t-textarea": "tdesign-miniprogram/textarea/textarea",
     "t-switch": "tdesign-miniprogram/switch/switch",
     "t-cell": "tdesign-miniprogram/cell/cell",

@@ -1,6 +1,6 @@
 ---
 name: "Mini Program Implementation Template"
-description: "Use when drafting any Mini Program implementation request for weapp/, including normal page or component changes, diagnosis-first page方案 before coding, payment-adjacent flows, and TDesign-first UI refactors. Trigger phrases: update Mini Program page, 小程序页面, 小程序页面方案, 小程序 UI 重构, TDesign 重构, TDesign-first 页面重写, 全页重构, 整页重新布局, 极简美学, build Mini Program page, create merchant page, 新建商户页面, 新建运营页面, 新建平台页面, fix component behavior, 列表空态和错误态, wire page state, improve weak-network UX, implement service-to-view change, setData 热点, 弱网体验, 小程序支付, 支付结果, login recovery after pay, duplicate tap guard, 重复点击支付, 图标按钮替代文字按钮, 组件拆分重构."
+description: "Use when drafting any Mini Program implementation request for weapp/, including normal page or component changes, diagnosis-first page方案 before coding, payment-adjacent flows, and TDesign-first UI refactors. Trigger phrases: update Mini Program page, 小程序页面, 小程序页面方案, 小程序 UI 重构, TDesign 重构, TDesign-first 页面重写, 全页重构, 整页重新布局, 极简美学, build Mini Program page, create merchant page, 新建商户页面, 新建运营页面, 新建平台页面, fix component behavior, 列表空态和错误态, wire page state, improve weak-network UX, implement service-to-view change, setData 热点, 弱网体验, 小程序支付, 支付结果, login recovery after pay, duplicate tap guard, 重复点击支付, 组件拆分重构."
 ---
 # Mini Program Implementation Template
 
@@ -40,6 +40,15 @@ Implementation must push:
 - Wire service calls, page state, handlers, WXML, WXSS, and user-visible feedback end to end
 - State which role-side design document governed the visual decisions and whether any exception crossed that boundary
 - Report any user-visible area that still does not use TDesign, any backend-contract ambiguity, and any remaining weak-network, re-entry, duplicate-tap, or payment-state risk
+- For native-to-TDesign replacement tasks, default to replacing native controls with TDesign equivalents where available (for example image->image, button->button, input->input, textarea->textarea, switch->switch, checkbox/radio groups, tag-like status), and explicitly list non-replaceable native tags that remain due platform capability gaps (commonly scroll-view, navigator, picker wrappers)
+
+TDesign Miniprogram component inventory (MCP snapshot; choose from this list first):
+
+- feedback: action-sheet, dialog, dropdown-menu, guide, loading, message, notice-bar, overlay, popover, popup, pull-down-refresh, swipe-cell, toast
+- data: avatar, badge, cell, collapse, count-down, empty, footer, grid, image-viewer, image, progress, qrcode, result, skeleton, sticky, swiper, tag, watermark
+- navigation: back-top, drawer, indexes, navbar, side-bar, steps, tab-bar, tabs
+- base: button, divider, fab, icon, layout, link
+- form: calendar, cascader, checkbox, color-picker, date-time-picker, form, input, picker, radio, rate, search, slider, stepper, switch, textarea, tree-select, upload
 
 Implementation must not do:
 

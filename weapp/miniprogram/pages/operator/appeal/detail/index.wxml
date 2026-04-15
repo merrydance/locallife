@@ -1,10 +1,10 @@
 <custom-navbar title="申诉详情" showBack="{{true}}" bind:navheight="onNavHeight" />
 
-<view class="page-container page-shell page-shell--with-nav page-shell--bottom-safe" style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: 140rpx;">
+<view class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px;">
   <!-- 错误状态 -->
   <view wx:if="{{error && !initialLoading}}" class="error-container">
     <t-empty icon="info-circle" description="{{error}}">
-      <t-button slot="action" theme="primary" size="small" bindtap="onRetry" shape="round">重试</t-button>
+      <t-button slot="action" theme="primary" bindtap="onRetry">重试</t-button>
     </t-empty>
   </view>
 
@@ -74,7 +74,7 @@
       <view class="card" wx:if="{{appeal.evidence_files_view.length > 0}}">
         <view class="section-title">证据材料</view>
         <view class="images-grid">
-          <image wx:for="{{appeal.evidence_files_view}}" wx:key="*this" class="img" src="{{item}}" mode="aspectFill" bindtap="onPreviewEvidence" data-url="{{item}}" />
+          <t-image wx:for="{{appeal.evidence_files_view}}" wx:key="*this" class="img" src="{{item}}" mode="aspectFill" bindtap="onPreviewEvidence" data-url="{{item}}" />
         </view>
       </view>
 
@@ -109,13 +109,6 @@
           <text class="label">到期时间</text>
           <text class="value">{{recovery.due_at}}</text>
         </view>
-        <t-button
-          wx:if="{{recovery.can_waive}}"
-          theme="primary"
-          block
-          loading="{{recoverySubmitting}}"
-          bindtap="onWaiveRecovery"
-         shape="round">核销追偿</t-button>
       </view>
 
       <view class="card input-card" wx:if="{{appeal.can_review}}">
@@ -138,9 +131,19 @@
         />
       </view>
       
-      <view class="footer-actions" wx:if="{{appeal.can_review}}">
-        <t-button theme="danger" block bind:tap="onReject" loading="{{submitting}}" shape="round">驳回申诉</t-button>
-        <t-button theme="primary" block bind:tap="onApprove" loading="{{submitting}}" shape="round">审核通过</t-button>
+      <view class="detail-actions" wx:if="{{recovery.can_waive || appeal.can_review}}">
+        <t-button
+          wx:if="{{recovery.can_waive}}"
+          theme="primary"
+          block
+          loading="{{recoverySubmitting}}"
+          bindtap="onWaiveRecovery"
+        >核销追偿</t-button>
+
+        <view class="detail-actions__row" wx:if="{{appeal.can_review}}">
+          <t-button theme="danger" block bind:tap="onReject" loading="{{submitting}}">驳回申诉</t-button>
+          <t-button theme="primary" block bind:tap="onApprove" loading="{{submitting}}">审核通过</t-button>
+        </view>
       </view>
     </view>
   </block>

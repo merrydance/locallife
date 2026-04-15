@@ -245,28 +245,21 @@
   flex-wrap: wrap;
 }
 
-.footer-bar {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  background-color: #fff;
-  padding: 32rpx;
-  box-shadow: 0 -4rpx 12rpx rgba(0, 0, 0, 0.05);
-  z-index: 100;
+.detail-actions {
+  margin-top: 32rpx;
+  padding-top: 8rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
 }
 
-.footer-action-row {
+.detail-actions__row {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16rpx;
 }
 
-.footer-bar.iphone-x {
-  padding-bottom: 64rpx;
-}
-
-.status-footer {
+.detail-actions__status {
   text-align: center;
   font-size: 28rpx;
   color: var(--td-text-color-placeholder);

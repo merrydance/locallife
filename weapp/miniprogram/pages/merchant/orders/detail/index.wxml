@@ -7,7 +7,7 @@
 
   <view wx:elif="{{initialError}}" class="loading-state loading-state-page">
     <t-empty icon="info-circle" description="{{initialErrorMessage || '订单详情加载失败，请重试'}}" />
-    <view class="retry-button" bindtap="onRetry">重新加载</view>
+    <t-button theme="primary" bind:tap="onRetry">重新加载</t-button>
   </view>
 
   <block wx:elif="{{order}}">
@@ -92,7 +92,6 @@
             size="small"
             variant="outline"
             theme="primary"
-            shape="round"
             loading="{{refundSubmitting}}"
             disabled="{{refundSubmitting}}"
             bind:tap="onOpenRefundPopup"
@@ -103,7 +102,7 @@
 
         <view wx:if="{{refundsError && !payment && !refunds.length}}" class="card-state-block">
           <t-empty icon="error-circle" description="{{refundsErrorMessage || '退款信息加载失败，请稍后重试'}}" />
-          <t-button theme="primary" size="small" shape="round" bind:tap="onRetryRefresh">重新加载</t-button>
+          <t-button theme="primary" bind:tap="onRetryRefresh">重新加载</t-button>
         </view>
 
         <block wx:elif="{{payment}}">
@@ -204,7 +203,6 @@
             size="small"
             variant="outline"
             theme="primary"
-            shape="round"
             loading="{{manualPrinting}}"
             disabled="{{manualPrinting}}"
             bind:tap="onManualPrint"
@@ -213,7 +211,7 @@
 
         <view wx:if="{{printJobsError && !printJobs.length}}" class="card-state-block">
           <t-empty icon="error-circle" description="{{printJobsErrorMessage || '打印状态加载失败，请稍后重试'}}" />
-          <t-button theme="primary" size="small" shape="round" bind:tap="onRetryRefresh">重新加载</t-button>
+          <t-button theme="primary" bind:tap="onRetryRefresh">重新加载</t-button>
         </view>
 
         <block wx:elif="{{printJobs.length}}">
@@ -259,7 +257,6 @@
                 size="small"
                 variant="outline"
                 theme="primary"
-                shape="round"
                 loading="{{queryingPrintJobStatusId === item.id}}"
                 disabled="{{queryingPrintJobStatusId === item.id || retryingPrintJobId === item.id}}"
                 bind:tap="onQueryPrintJobStatus"
@@ -269,7 +266,6 @@
                 wx:if="{{item.can_retry}}"
                 size="small"
                 theme="primary"
-                shape="round"
                 loading="{{retryingPrintJobId === item.id}}"
                 disabled="{{retryingPrintJobId === item.id}}"
                 bind:tap="onRetryPrintJob"
@@ -288,23 +284,21 @@
           <t-step-item wx:for="{{order.timeline_steps}}" wx:key="title" title="{{item.title}}" content="{{item.content}}" />
         </t-steps>
       </view>
+
+      <view class="detail-actions" wx:if="{{order}}">
+        <view class="detail-actions__status" wx:if="{{!order.can_accept && !order.can_reject && !order.can_mark_ready && !order.can_complete}}">{{order.status_label}}</view>
+
+        <view wx:if="{{order.can_accept || order.can_reject}}" class="detail-actions__row">
+          <t-button wx:if="{{order.can_reject}}" theme="danger" variant="outline" size="large" bind:tap="onReject" disabled="{{submitting}}">拒单退款</t-button>
+          <t-button wx:if="{{order.can_accept}}" theme="primary" size="large" bind:tap="onAccept" loading="{{submitting}}">接单一键制作</t-button>
+        </view>
+
+        <t-button wx:elif="{{order.can_mark_ready}}" block theme="primary" size="large" bind:tap="onMarkReady" loading="{{submitting}}">标记制作完成</t-button>
+
+        <t-button wx:elif="{{order.can_complete}}" block theme="success" size="large" bind:tap="onComplete" loading="{{submitting}}">确认送达/核销</t-button>
+      </view>
     </view>
   </block>
-  <view class="footer-bar {{isIPhoneX ? 'iphone-x' : ''}}" wx:if="{{order}}">
-    <block wx:if="{{order.can_accept || order.can_reject}}">
-      <view class="footer-action-row">
-        <t-button wx:if="{{order.can_reject}}" theme="danger" variant="outline" size="large" bind:tap="onReject" disabled="{{submitting}}" shape="round">拒单退款</t-button>
-        <t-button wx:if="{{order.can_accept}}" theme="primary" size="large" bind:tap="onAccept" loading="{{submitting}}" shape="round">接单一键制作</t-button>
-      </view>
-    </block>
-    <block wx:elif="{{order.can_mark_ready}}">
-      <t-button block theme="primary" size="large" bind:tap="onMarkReady" loading="{{submitting}}" shape="round">标记制作完成</t-button>
-    </block>
-    <block wx:elif="{{order.can_complete}}">
-      <t-button block theme="success" size="large" bind:tap="onComplete" loading="{{submitting}}" shape="round">确认送达/核销</t-button>
-    </block>
-    <view wx:else class="status-footer">{{order.status_label}}</view>
-  </view>
 </view>
 <t-dialog id="t-dialog" />
 <t-popup wx:if="{{refundPopupVisible}}" visible="{{refundPopupVisible}}" placement="bottom" bind:visible-change="onRefundPopupVisibleChange">
@@ -348,8 +342,8 @@
     </view>
 
     <view class="popup-actions">
-      <t-button theme="primary" variant="outline" size="medium" shape="round" disabled="{{refundSubmitting}}" bind:tap="onCloseRefundPopup">取消</t-button>
-      <t-button theme="primary" size="medium" shape="round" loading="{{refundSubmitting}}" bind:tap="onSubmitRefund">提交退款</t-button>
+      <t-button theme="primary" variant="outline" disabled="{{refundSubmitting}}" bind:tap="onCloseRefundPopup">取消</t-button>
+      <t-button theme="primary" loading="{{refundSubmitting}}" bind:tap="onSubmitRefund">提交退款</t-button>
     </view>
   </view>
 </t-popup>

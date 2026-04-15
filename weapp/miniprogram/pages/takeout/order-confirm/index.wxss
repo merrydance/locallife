@@ -1,3 +1,4 @@
+@import '../../../styles/customer.wxss';
 @import "../../../styles/takeout-order-confirm-sections.wxss";
 
 .page-container {

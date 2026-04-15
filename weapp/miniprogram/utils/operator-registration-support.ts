@@ -42,12 +42,9 @@ export function handleExistingOperatorApplication(
   if (res.status === 'approved' && !res.is_operator) {
     wx.showModal({
       title: '审核通过',
-      content: '请先完成微信开户，开户完成后即可进入运营商控制台。',
+      content: '资料审核已通过，但当前账号暂未获得运营身份，请联系平台处理后再进入运营商控制台。',
       showCancel: false,
-      confirmText: '去开户',
-      success: () => {
-        wx.reLaunch({ url: '/pages/operator/applyment/index' })
-      }
+      confirmText: '知道了'
     })
     return 0
   }

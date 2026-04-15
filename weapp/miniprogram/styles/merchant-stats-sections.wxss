@@ -186,15 +186,15 @@
 .insight-progress-fill {
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, var(--td-brand-color), #ff9b62);
+  background: var(--td-brand-color);
 }
 
 .insight-progress-fill-daily {
-  background: linear-gradient(90deg, #24a148, var(--td-brand-color));
+  background: var(--td-success-color);
 }
 
 .insight-progress-fill-accent {
-  background: linear-gradient(90deg, #1c7ef5, var(--td-brand-color));
+  background: var(--td-brand-color-6);
 }
 
 .insight-grid {
@@ -213,7 +213,7 @@
 }
 
 .accent-soft {
-  background: linear-gradient(135deg, var(--td-brand-color-light), #fff2d9);
+  background: var(--td-bg-color-secondarycontainer);
 }
 
 .insight-stat-label,

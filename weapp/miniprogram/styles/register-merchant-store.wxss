@@ -5,7 +5,7 @@
 }
 
 .form-container {
-  padding: 24rpx;
+  padding: 24rpx 0;
 }
 
 .section-header {
@@ -343,18 +343,14 @@
 
 .btn-row {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 24rpx;
   width: 100%;
 }
 
 .half-btn {
-  flex: 1;
-  width: 100%;
-}
-
-.submit-bar t-button {
-  width: 100%;
+  flex: 0 0 auto;
 }
 
 .review-title {

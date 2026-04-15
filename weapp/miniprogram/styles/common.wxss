@@ -150,7 +150,7 @@
   color: #333;
   margin: 32rpx 0 24rpx;
   padding-left: 16rpx;
-  border-left: 6rpx solid var(--td-brand-color, #FF6B00);
+  border-left: 6rpx solid var(--td-border-level-2-color, #E7E7E7);
   line-height: 1.4;
 }
 

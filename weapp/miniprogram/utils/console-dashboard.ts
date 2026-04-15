@@ -74,16 +74,6 @@ function isPermissionDenied(kind: ConsoleDashboardKind, normalized: string): boo
     rolePatterns[kind].some((pattern) => normalized.includes(pattern.toLowerCase()))
 }
 
-export function shouldShowOperatorApplymentEntry(error: unknown): boolean {
-  return extractErrorTexts(error).some((text) => {
-    const normalized = text.trim().toLowerCase()
-    return normalized.includes('operator account is not active') ||
-      normalized.includes('operator is not active') ||
-      normalized.includes('开户') ||
-      normalized.includes('bindbank')
-  })
-}
-
 export function getConsoleDashboardErrorState(
   kind: ConsoleDashboardKind,
   error: unknown,
@@ -110,7 +100,7 @@ export function getConsoleDashboardErrorState(
       normalized.includes('bindbank')
     ) {
       return {
-        message: '当前角色暂未完成该功能所需开通流程，请完成开户后再试。',
+        message: '当前运营账号状态未生效，暂时不能进入该功能，请联系平台处理。',
         canRetry: false,
         reason: 'activation'
       }

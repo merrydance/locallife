@@ -50,11 +50,11 @@
 }
 
 .ll-stats-card.primary {
-  border-left: 4px solid #0052D9;
+  border-left: 4px solid var(--td-brand-color);
 }
 
 .ll-stats-card.secondary {
-  border-left: 4px solid #00A870;
+  border-left: 4px solid var(--td-success-color);
 }
 
 .card-header {

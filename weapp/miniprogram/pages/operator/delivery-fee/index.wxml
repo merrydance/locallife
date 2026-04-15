@@ -6,7 +6,7 @@
     <!-- Error State -->
     <view wx:if="{{error && !initialLoading}}" class="error-container">
       <t-empty icon="info-circle" description="{{error}}">
-        <t-button slot="action" theme="primary" size="small" bindtap="onRetry" shape="round">重试</t-button>
+        <t-button slot="action" theme="primary" bindtap="onRetry">重试</t-button>
       </t-empty>
     </view>
 
@@ -31,7 +31,7 @@
         <view class="section">
           <view class="section-title">距离与货值规则</view>
           <t-cell-group theme="card">
-            <t-input label="超距每公里加价" suffix="元" type="digit" value="{{config.extra_fee_per_km}}" bind:change="onInput" data-field="extra_fee_per_km" align="right" />
+            <t-input label="超距加价" suffix="元/公里" type="digit" value="{{config.extra_fee_per_km}}" bind:change="onInput" data-field="extra_fee_per_km" align="right" />
             <t-input label="货值费率" suffix="倍率" type="digit" value="{{config.value_ratio}}" bind:change="onInput" data-field="value_ratio" align="right" />
           </t-cell-group>
         </view>
@@ -48,7 +48,7 @@
         </view>
 
         <view class="footer-btn-wrapper">
-          <t-button theme="primary" size="large" block bind:tap="onSave" shape="round">保存配置</t-button>
+          <t-button theme="primary" size="large" block bind:tap="onSave">保存配置</t-button>
         </view>
       </view>
     </block>

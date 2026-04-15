@@ -7,7 +7,7 @@
 
   <view wx:elif="{{accessReady && accessErrorMessage}}" class="state-block">
     <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
-    <t-button theme="primary" size="small" shape="round" bind:tap="onRetryAccess">重新校验</t-button>
+    <t-button theme="primary" bind:tap="onRetryAccess">重新校验</t-button>
   </view>
 
   <view wx:elif="{{initialLoading}}" class="state-block">
@@ -16,7 +16,7 @@
 
   <view wx:elif="{{initialError}}" class="state-block">
     <t-empty icon="error-circle" description="{{initialErrorMessage || '库存加载失败，请重试'}}" />
-    <t-button theme="primary" size="small" shape="round" bind:tap="onRetry">重新加载</t-button>
+    <t-button theme="primary" bind:tap="onRetry">重新加载</t-button>
   </view>
 
   <block wx:else>
@@ -36,7 +36,7 @@
 
     <view wx:if="{{refreshErrorMessage}}" class="refresh-banner">
       <text class="refresh-banner__text">{{refreshErrorMessage}}</text>
-      <t-button size="small" theme="default" shape="round" bind:tap="onRetryRefresh">重试</t-button>
+      <t-button theme="default" bind:tap="onRetryRefresh">重试</t-button>
     </view>
 
     <view wx:if="{{loading && !hasInventories}}" class="loading-state">
@@ -76,8 +76,6 @@
               <view class="input-label">库存</view>
               <t-input
                 t-class="qty-input"
-                t-class-input="qty-input__inner"
-                custom-style="--td-input-vertical-padding: 14rpx; --td-input-bg-color: var(--td-bg-color-page); --td-input-border-color: var(--td-brand-color-2, var(--td-component-border)); --td-input-border-left-space: 20rpx; --td-input-border-right-space: 20rpx;"
                 size="small"
                 borderless="{{false}}"
                 type="number"

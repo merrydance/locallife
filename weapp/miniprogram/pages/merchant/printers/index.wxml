@@ -14,12 +14,12 @@
       <text wx:if="{{merchantName}}">当前门店：{{merchantName}}</text>
       <text wx:if="{{accessRoleLabel !== '--'}}">当前身份：{{accessRoleLabel}}</text>
     </view>
-    <t-button theme="primary" size="small" shape="round" bind:tap="onRetryAccess">重新校验</t-button>
+    <t-button theme="primary" bind:tap="onRetryAccess">重新校验</t-button>
   </view>
 
   <view wx:elif="{{accessErrorMessage}}" class="state-block">
     <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
-    <t-button theme="primary" size="small" shape="round" bind:tap="onRetryAccess">重新校验</t-button>
+    <t-button theme="primary" bind:tap="onRetryAccess">重新校验</t-button>
   </view>
 
   <view wx:elif="{{initialLoading}}" class="state-block">
@@ -28,20 +28,11 @@
 
   <view wx:elif="{{initialError}}" class="state-block">
     <t-empty icon="error-circle" description="{{initialErrorMessage || '设备加载失败，请重试'}}" />
-    <t-button theme="primary" size="small" shape="round" bind:tap="onRetry">重新加载</t-button>
+    <t-button theme="primary" bind:tap="onRetry">重新加载</t-button>
   </view>
 
   <block wx:else>
     <view class="page-content">
-      <t-notice-bar
-        wx:if="{{refreshErrorMessage}}"
-        visible="{{true}}"
-        theme="warning"
-        content="{{refreshErrorMessage}}"
-        prefixIcon="error-circle"
-        t-class="page-notice"
-      />
-
       <view class="result-bar">
         <text class="result-summary">{{resultSummaryText}}</text>
       </view>
@@ -54,7 +45,7 @@
 
       <view wx:else class="printer-list">
         <block wx:for="{{printers}}" wx:key="id">
-          <t-cell-group class="printer-card" theme="card">
+          <t-cell-group class="printer-card">
             <view class="printer-card-main" bindtap="onOpenEditPrinter" data-id="{{item.id}}">
               <view class="printer-card__header">
                 <view class="printer-card__heading">
@@ -186,8 +177,8 @@
       </view>
 
       <view class="status-popup__actions">
-        <t-button block theme="default" size="large" shape="round" bind:tap="closeStatusPopup">关闭</t-button>
-        <t-button block theme="primary" size="large" shape="round" loading="{{statusLoading}}" bind:tap="onRefreshPrinterStatus">重新查询</t-button>
+        <t-button theme="default" bind:tap="closeStatusPopup">关闭</t-button>
+        <t-button theme="primary" loading="{{statusLoading}}" bind:tap="onRefreshPrinterStatus">重新查询</t-button>
       </view>
     </view>
   </t-popup>

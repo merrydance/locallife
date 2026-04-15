@@ -20,14 +20,6 @@
 
   <block wx:else>
     <view class="page-content reservations-page__content">
-      <t-notice-bar
-        wx:if="{{listRefreshErrorMessage}}"
-        visible="{{true}}"
-        theme="warning"
-        prefix-icon="info-circle"
-        content="{{listRefreshErrorMessage}}"
-      />
-
       <t-sticky offset-top="{{navBarHeight}}">
         <view class="control-panel reservations-control-panel">
           <view class="tabs-shell tabs-shell--compact">
@@ -69,8 +61,7 @@
       <t-empty wx:elif="{{!listLoading && !reservations.length}}" icon="info-circle" description="当前筛选条件下暂无预订" />
 
       <view wx:else class="reservation-list">
-        <t-cell-group theme="card">
-          <view wx:for="{{reservations}}" wx:key="id" class="reservation-card card-surface">
+        <view wx:for="{{reservations}}" wx:key="id" class="reservation-card card-surface">
             <view class="reservation-card__main" data-id="{{item.id}}" bindtap="onReservationCardTap">
               <view class="reservation-card__header">
                 <view class="reservation-card__title-group">
@@ -129,7 +120,6 @@
               <view wx:if="{{item.showMoreActions}}" class="reservation-card__action" data-id="{{item.id}}" bindtap="onOpenMoreActions">更多</view>
             </view>
           </view>
-        </t-cell-group>
 
         <view wx:if="{{listLoading && reservations.length}}" class="list-loading-more">
           <t-loading size="32rpx" text="正在加载更多..." />

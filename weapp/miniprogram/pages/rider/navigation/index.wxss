@@ -19,15 +19,14 @@
 
 .panel-sheet {
   position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  padding: var(--spacer-md) var(--spacer-md) calc(var(--spacer-md) + env(safe-area-inset-bottom));
-  background: rgba(255, 255, 255, 0.96);
-  backdrop-filter: blur(12px);
-  border-top-left-radius: var(--radius-xl);
-  border-top-right-radius: var(--radius-xl);
-  box-shadow: 0 -12rpx 48rpx rgba(0, 0, 0, 0.08);
+  left: var(--spacer-md);
+  right: var(--spacer-md);
+  bottom: calc(var(--spacer-sm) + env(safe-area-inset-bottom));
+  padding: var(--spacer-md);
+  background: var(--td-bg-color-container);
+  border-radius: var(--radius-lg);
+  border: 1rpx solid var(--td-component-border);
+  box-shadow: var(--shadow-sm);
 }
 
 .panel-header {

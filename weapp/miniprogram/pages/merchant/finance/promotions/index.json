@@ -6,7 +6,6 @@
     "t-button": "tdesign-miniprogram/button/button",
     "t-empty": "tdesign-miniprogram/empty/empty",
     "t-loading": "tdesign-miniprogram/loading/loading",
-    "t-notice-bar": "tdesign-miniprogram/notice-bar/notice-bar",
     "t-cell-group": "tdesign-miniprogram/cell-group/cell-group"
   }
 }

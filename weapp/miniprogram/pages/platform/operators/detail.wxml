@@ -1,7 +1,7 @@
 <custom-navbar title="运营商申请详情" show-back="{{true}}" show-location="{{false}}" bind:navheight="onNavHeight" />
 
 <view
-  class="detail-page page-shell page-shell--with-nav page-shell--bottom-safe"
+  class="detail-page page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
   style="--page-shell-nav-height: {{navBarHeight}}px"
 >
   <scroll-view class="detail-scroll" scroll-y>
@@ -12,7 +12,7 @@
 
       <view wx:elif="{{error}}" class="section-card status-wrap">
         <t-empty icon="error-circle" description="{{error}}">
-          <t-button slot="action" theme="primary" shape="round" size="small" bind:tap="onRetry">重试</t-button>
+          <t-button slot="action" theme="primary" bind:tap="onRetry">重试</t-button>
         </t-empty>
       </view>
 
@@ -64,7 +64,7 @@
           </view>
           <view wx:if="{{businessLicenseUrl}}" class="image-row">
             <text class="meta-label">营业执照</text>
-            <image
+            <t-image
               class="cert-image"
               src="{{businessLicenseUrl}}"
               mode="aspectFill"
@@ -91,7 +91,7 @@
           </view>
           <view wx:if="{{idCardFrontUrl}}" class="image-row">
             <text class="meta-label">身份证人像面</text>
-            <image
+            <t-image
               class="cert-image"
               src="{{idCardFrontUrl}}"
               mode="aspectFill"
@@ -102,7 +102,7 @@
           </view>
           <view wx:if="{{idCardBackUrl}}" class="image-row">
             <text class="meta-label">身份证国徽面</text>
-            <image
+            <t-image
               class="cert-image"
               src="{{idCardBackUrl}}"
               mode="aspectFill"
@@ -143,7 +143,6 @@
           <view class="actions">
             <t-button
               theme="danger"
-              shape="round"
               size="small"
               loading="{{submittingAction === 'reject'}}"
               disabled="{{submittingAction !== ''}}"
@@ -151,7 +150,6 @@
             >驳回</t-button>
             <t-button
               theme="primary"
-              shape="round"
               size="small"
               loading="{{submittingAction === 'approve'}}"
               disabled="{{submittingAction !== ''}}"

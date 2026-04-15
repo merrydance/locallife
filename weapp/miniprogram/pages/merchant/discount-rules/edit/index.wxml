@@ -2,7 +2,7 @@
 
 <view
   class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
-  style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: 220rpx;"
+  style="--page-shell-nav-height: {{navBarHeight}}px;"
 >
   <view wx:if="{{accessReady && accessDenied}}" class="state-block">
     <t-empty icon="lock-on" description="当前账号无商户权限，请返回“我的”切换身份" />
@@ -10,7 +10,7 @@
 
   <view wx:elif="{{accessReady && accessErrorMessage}}" class="state-block">
     <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
-    <t-button theme="primary" size="small" shape="round" bind:tap="onRetryAccess">重新校验</t-button>
+    <t-button theme="primary" bind:tap="onRetryAccess">重新校验</t-button>
   </view>
 
   <view wx:elif="{{initialLoading}}" class="state-block">
@@ -19,7 +19,7 @@
 
   <view wx:elif="{{initialError}}" class="state-block">
     <t-empty icon="error-circle" description="{{initialErrorMessage || '满减规则编辑页加载失败，请重试'}}" />
-    <t-button theme="primary" size="small" shape="round" bind:tap="onRetry">重新加载</t-button>
+    <t-button theme="primary" bind:tap="onRetry">重新加载</t-button>
   </view>
 
   <block wx:else>
@@ -110,12 +110,11 @@
           </t-cell>
         </t-cell-group>
       </view>
-    </view>
-
-    <view class="footer-bar">
-      <t-button block theme="primary" size="large" shape="round" loading="{{submitting}}" bind:tap="onSubmit">
+      <view class="form-actions">
+        <t-button theme="primary" loading="{{submitting}}" bind:tap="onSubmit">
         {{isEdit ? '保存满减规则' : '创建满减规则'}}
-      </t-button>
+        </t-button>
+      </view>
     </view>
 
     <t-date-time-picker

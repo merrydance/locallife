@@ -11,9 +11,10 @@
   </view>
 
   <view wx:elif="{{detail}}" class="content">
-    <view wx:if="{{refreshErrorMessage}}" class="inline-banner inline-banner-danger">
-      <text class="inline-banner-text">{{refreshErrorMessage}}</text>
-      <text class="inline-banner-action" bindtap="onRetryRefresh">重新同步</text>
+    <view wx:if="{{refreshErrorMessage}}" class="notice-banner">
+      <t-notice-bar theme="error" visible="{{true}}" content="{{refreshErrorMessage}}">
+        <text slot="operation" class="notice-banner-operation" bindtap="onRetryRefresh">重新同步</text>
+      </t-notice-bar>
     </view>
 
     <view class="hero-card">

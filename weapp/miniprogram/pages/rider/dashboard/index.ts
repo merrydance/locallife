@@ -6,6 +6,7 @@ import {
   WsUnsubscribe,
   riderDashboardRuntimeMethods
 } from '../../../utils/rider-dashboard-runtime'
+import { resolveStatusTagTheme } from '../../../utils/status-tag'
 
 Page({
   data: {
@@ -40,7 +41,7 @@ Page({
 
     locationDeliveryId: 0,
     locationStatusText: '',
-    locationStatusTheme: 'default' as TagTheme,
+    locationStatusTheme: resolveStatusTagTheme('neutral') as TagTheme,
     locationPendingText: '',
     locationUpdatedText: '',
     locationNeedsPermission: false,

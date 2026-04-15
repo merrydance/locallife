@@ -61,7 +61,7 @@ Page({
     status: 'draft',
     statusView: buildMerchantApplicationStatusView('draft') as ApplicationStatusView,
     statusBadgeText: buildMerchantApplicationStatusView('draft').badgeText,
-    statusBadgeColor: getBadgeColor('primary'),
+    statusBadgeColor: getBadgeColor(buildMerchantApplicationStatusView('draft').tagTheme),
     rejectReason: '',
     actionNoticeMessage: '',
     regionId: 0,

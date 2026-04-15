@@ -1,3 +1,5 @@
+@import '../../../styles/customer.wxss';
+
 .page-container {
   height: 100vh;
   display: flex;

@@ -1,9 +1,9 @@
 <custom-navbar title="区域配置中心" showBack="{{true}}" bind:navheight="onNavHeight" />
-<view class="page-container" style="padding-top: {{navBarHeight}}px;">
+<view class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px;">
   <view class="content">
     <view wx:if="{{error && !initialLoading}}" class="error-container">
       <t-empty icon="info-circle" description="{{error}}">
-        <t-button slot="action" theme="primary" size="small" bindtap="onRetry" shape="round">重试</t-button>
+        <t-button slot="action" theme="primary" bindtap="onRetry">重试</t-button>
       </t-empty>
     </view>
 
@@ -15,10 +15,8 @@
       </view>
 
       <view wx:else class="animate-fade-in">
-        <view class="hero-card">
-          <view class="hero-title">区域配置中心</view>
-          <view class="hero-subtitle">当前区域：{{regionName || ('ID: ' + regionId)}}</view>
-          <view class="hero-desc">这里仅承载配置摘要与分流。基础配送费和峰时时段分别在独立页面维护，避免多页重复改同一份规则。</view>
+        <view class="page-summary">
+          <text class="page-summary-text">当前区域：{{regionName || ('ID: ' + regionId)}}</text>
         </view>
 
         <view class="section-card">
@@ -27,7 +25,7 @@
               <view class="section-title">基础配送费</view>
               <view class="section-subtitle">基础计费、超距规则、货值费率统一在这里维护</view>
             </view>
-            <t-button size="small" theme="primary" shape="round" bind:tap="onOpenDeliveryFee">去配置</t-button>
+            <t-button size="small" theme="primary" bind:tap="onOpenDeliveryFee">去配置</t-button>
           </view>
 
           <view class="summary-grid">
@@ -66,7 +64,7 @@
               <view class="section-title">峰时时段</view>
               <view class="section-subtitle">时段系数单独维护，和基础配送费分离</view>
             </view>
-            <t-button size="small" theme="primary" shape="round" bind:tap="onOpenTimeslot">去管理</t-button>
+            <t-button size="small" theme="primary" bind:tap="onOpenTimeslot">去管理</t-button>
           </view>
 
           <view class="summary-grid summary-grid--double">
@@ -81,18 +79,6 @@
           </view>
 
           <view class="status-note">{{peakSummary.note}}</view>
-        </view>
-
-        <view class="section-card boundary-card">
-          <view class="section-title">职责边界</view>
-          <view class="boundary-item">
-            <t-icon name="money" size="32rpx" color="#0052D9" />
-            <text>基础配送费页面只处理基础费、超距规则、货值费率和费用边界。</text>
-          </view>
-          <view class="boundary-item">
-            <t-icon name="time" size="32rpx" color="#ED7B2F" />
-            <text>峰时时段页面只处理新增、删除和冲突校验，不再与基础配送费重复编辑。</text>
-          </view>
         </view>
       </view>
     </block>

@@ -132,8 +132,8 @@
 
 .current-badge {
   font-size: 20rpx;
-  color: #0052D9;
-  background-color: rgba(0, 82, 217, 0.1);
+  color: var(--td-brand-color);
+  background-color: var(--td-brand-color-1);
   padding: 2rpx 10rpx;
   border-radius: 4rpx;
 }
@@ -149,7 +149,7 @@
   font-size: 44rpx;
   font-family: 'DIN Alternate', sans-serif;
   font-weight: bold;
-  color: #0052D9;
+  color: var(--td-brand-color);
 }
 
 .value-row .unit {

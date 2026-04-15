@@ -1,11 +1,8 @@
 <!-- 顶部操作区 -->
 <view class="header-actions">
-  <!-- weapp-gate allow-native-control: 该 legacy mobile 模板当前不是主运行入口，待平台看板响应式旧分支合并时一并改成共享 TDesign picker 控制器 -->
-  <picker range="{{dateRangeOptions}}" range-key="label" value="{{selectedDateRange}}" bindchange="onDateRangeChange">
-    <t-tag variant="dark" shape="round">
-      {{dateRangeOptions[selectedDateRange].label}} <t-icon name="caret-down-small" size="16" />
-    </t-tag>
-  </picker>
+  <t-tabs value="{{selectedDateRange}}" bind:change="onDateRangeChange" t-class="date-range-tabs">
+    <t-tab-panel wx:for="{{dateRangeOptions}}" wx:key="label" value="{{index}}" label="{{item.label}}" />
+  </t-tabs>
 </view>
 
 <!-- 实时数据 -->

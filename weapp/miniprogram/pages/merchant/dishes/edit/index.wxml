@@ -2,7 +2,7 @@
 
 <view
   class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
-  style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: 220rpx;"
+  style="--page-shell-nav-height: {{navBarHeight}}px;"
 >
   <view wx:if="{{initialLoading}}" class="state-block">
     <t-loading theme="circular" size="40rpx" text="加载菜品编辑信息中..." vertical />
@@ -10,13 +10,13 @@
 
   <view wx:elif="{{initialError}}" class="state-block">
     <t-empty icon="error-circle" description="{{initialErrorMessage || '菜品编辑页加载失败，请重试'}}" />
-    <t-button theme="primary" size="small" shape="round" bind:tap="onRetry">重新加载</t-button>
+    <t-button theme="primary" bind:tap="onRetry">重新加载</t-button>
   </view>
 
   <block wx:else>
     <view class="page-content">
-      <view wx:if="{{loadWarningMessage}}" class="notice-card notice-card--warning">
-        <text class="notice-text">{{loadWarningMessage}}</text>
+      <view wx:if="{{loadWarningMessage}}" class="notice-banner">
+        <t-notice-bar theme="warning" visible="{{true}}" content="{{loadWarningMessage}}" />
       </view>
 
       <view class="section-panel">
@@ -55,7 +55,7 @@
             <view class="field-action-main">
               <t-cell title="菜品分类" arrow bind:tap="showCategoryPicker" note="{{selectedCategoryName || (categoryOptions.length ? '请选择分类' : '请先创建分类')}}" />
             </view>
-            <t-button size="small" shape="circle" theme="primary" icon="add" loading="{{categoryCreateSubmitting}}" bind:tap="onManageCategories" />
+            <t-button size="small" theme="primary" icon="add" loading="{{categoryCreateSubmitting}}" bind:tap="onManageCategories">管理分类</t-button>
           </view>
 
           <text wx:if="{{!categoryOptions.length}}" class="section-caption">{{formData.category_id ? '当前分类不可调整' : '当前还没有可选分类'}}</text>
@@ -94,12 +94,8 @@
           <text class="section-title">售卖与展示</text>
         </view>
 
-        <view wx:if="{{formData.is_packaging}}" class="inline-note-card inline-note-card--warning">
-          包装菜品会固定用于外卖与自取订单的包装方式选择，并强制保持上架、可售。
-        </view>
-
         <t-cell-group theme="card">
-          <t-cell title="包装菜品" description="开启后，该菜品会作为包装方式参与外卖与自取下单校验">
+          <t-cell title="包装菜品" description="{{formData.is_packaging ? '当前会固定用于外卖与自取包装方式选择，并保持上架、可售' : '开启后，该菜品会作为包装方式参与外卖与自取下单校验'}}">
             <t-switch slot="note" value="{{formData.is_packaging}}" bind:change="onSwitchChange" data-field="is_packaging" />
           </t-cell>
           <t-cell title="是否上架">
@@ -132,7 +128,7 @@
             <text wx:if="{{availableDishTags.length}}" class="section-caption">已选 {{selectedDishTagIds.length}} 个</text>
           </view>
           <view class="section-top-button">
-            <t-button size="small" shape="circle" theme="primary" icon="add" bind:tap="onCreateDishTag" loading="{{tagSubmitting}}" />
+            <t-button size="small" theme="primary" icon="add" bind:tap="onCreateDishTag" loading="{{tagSubmitting}}">新增标签</t-button>
           </view>
         </view>
 
@@ -158,16 +154,16 @@
             <text wx:if="{{customizationGroups.length}}" class="section-caption">默认必选，共 {{customizationGroups.length}} 组</text>
           </view>
           <view class="section-top-button">
-            <t-button size="small" shape="circle" theme="primary" icon="add" bind:tap="onAddCustomizationGroup" />
+            <t-button size="small" theme="primary" icon="add" bind:tap="onAddCustomizationGroup">新增规格组</t-button>
           </view>
         </view>
 
         <customization-editor id="customizationEditor" value="{{customizationGroups}}" bind:change="onCustomizationGroupsChange" />
-      </view>
     </view>
 
-    <view class="footer-bar">
-      <t-button block size="large" shape="round" theme="primary" loading="{{submitting}}" disabled="{{!categoryOptions.length && !formData.category_id}}" bind:tap="onSubmit">{{isEdit ? '保存菜品' : '创建菜品'}}</t-button>
+      <view class="form-actions">
+        <t-button theme="primary" loading="{{submitting}}" disabled="{{!categoryOptions.length && !formData.category_id}}" bind:tap="onSubmit">{{isEdit ? '保存菜品' : '创建菜品'}}</t-button>
+      </view>
     </view>
 
     <t-picker

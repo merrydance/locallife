@@ -8,7 +8,7 @@
 }
 
 .riders-container {
-  padding: var(--spacer-md);
+  padding: 0;
 }
 
 .summary-card {

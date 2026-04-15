@@ -7,7 +7,7 @@
 
   <view wx:elif="{{accessReady && accessErrorMessage}}" class="state-block">
     <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
-    <t-button theme="primary" size="small" shape="round" bindtap="onRetryAccess">重新校验</t-button>
+    <t-button theme="primary" bindtap="onRetryAccess">重新校验</t-button>
   </view>
 
   <view wx:elif="{{initialLoading}}" class="state-block">
@@ -16,7 +16,7 @@
 
   <view wx:elif="{{initialError}}" class="state-block">
     <t-empty description="{{initialErrorMessage || '打印异常加载失败，请重试'}}" />
-    <t-button theme="primary" size="small" shape="round" bindtap="onRetry">重新加载</t-button>
+    <t-button theme="primary" bindtap="onRetry">重新加载</t-button>
   </view>
 
   <block wx:else>
@@ -25,13 +25,14 @@
       <text class="hero-subtitle">集中查看当前仍未恢复的异常打印任务，并直接进入订单详情或补打。</text>
     </view>
 
-    <view wx:if="{{syncMessage}}" class="inline-banner inline-banner-info">
-      <text class="inline-banner-text">{{syncMessage}}</text>
+    <view wx:if="{{syncMessage}}" class="notice-banner">
+      <t-notice-bar theme="info" visible="{{true}}" content="{{syncMessage}}" />
     </view>
 
-    <view wx:if="{{refreshErrorMessage}}" class="inline-banner inline-banner-danger">
-      <text class="inline-banner-text">{{refreshErrorMessage}}</text>
-      <text class="inline-banner-action" bindtap="onRetryRefresh">重新同步</text>
+    <view wx:if="{{refreshErrorMessage}}" class="notice-banner">
+      <t-notice-bar theme="error" visible="{{true}}" content="{{refreshErrorMessage}}">
+        <text slot="operation" class="notice-banner-operation" bindtap="onRetryRefresh">重新同步</text>
+      </t-notice-bar>
     </view>
 
     <view class="filter-row">

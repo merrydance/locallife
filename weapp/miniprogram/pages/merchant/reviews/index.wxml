@@ -7,7 +7,7 @@
 
   <view wx:elif="{{accessReady && accessErrorMessage}}" class="state-block">
     <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
-    <t-button theme="primary" size="small" shape="round" bindtap="onRetryAccess">重新校验</t-button>
+    <t-button theme="primary" bindtap="onRetryAccess">重新校验</t-button>
   </view>
 
   <view wx:elif="{{initialLoading}}" class="state-block">
@@ -16,17 +16,18 @@
 
   <view wx:elif="{{initialError}}" class="state-block">
     <t-empty description="{{initialErrorMessage || '评价列表加载失败，请重试'}}" />
-    <t-button theme="primary" size="small" shape="round" bindtap="onRetry">重新加载</t-button>
+    <t-button theme="primary" bindtap="onRetry">重新加载</t-button>
   </view>
 
   <block wx:else>
-    <view wx:if="{{actionNoticeMessage}}" class="inline-banner inline-banner-success">
-      <text class="inline-banner-text">{{actionNoticeMessage}}</text>
+    <view wx:if="{{actionNoticeMessage}}" class="notice-banner">
+      <t-notice-bar theme="success" visible="{{true}}" content="{{actionNoticeMessage}}" />
     </view>
 
-    <view wx:if="{{refreshErrorMessage}}" class="inline-banner inline-banner-danger">
-      <text class="inline-banner-text">{{refreshErrorMessage}}</text>
-      <text class="inline-banner-action" bindtap="onRetryRefresh">重新同步</text>
+    <view wx:if="{{refreshErrorMessage}}" class="notice-banner">
+      <t-notice-bar theme="error" visible="{{true}}" content="{{refreshErrorMessage}}">
+        <text slot="operation" class="notice-banner-operation" bindtap="onRetryRefresh">重新同步</text>
+      </t-notice-bar>
     </view>
 
     <view class="hero-card">
@@ -61,7 +62,7 @@
         <view class="content-block">{{item.content || '顾客未填写评价内容'}}</view>
 
         <view wx:if="{{item.imageUrls.length}}" class="image-list">
-          <image
+          <t-image
             wx:for="{{item.imageUrls}}"
             wx:for-item="imageUrl"
             wx:key="*this"
@@ -85,12 +86,12 @@
         </view>
 
         <view class="action-row">
-          <t-button size="small" theme="default" shape="round" data-id="{{item.id}}" bindtap="onOpenReplyPopup">{{item.replyActionLabel}}</t-button>
+          <t-button size="small" theme="default" data-id="{{item.id}}" bindtap="onOpenReplyPopup">{{item.replyActionLabel}}</t-button>
         </view>
       </view>
 
       <view wx:if="{{hasMore}}" class="more-wrap">
-        <t-button size="large" theme="default" shape="round" loading="{{loadingMore}}" bindtap="onLoadMore">加载更多</t-button>
+        <t-button theme="default" loading="{{loadingMore}}" bindtap="onLoadMore">加载更多</t-button>
       </view>
     </view>
   </block>
@@ -107,8 +108,8 @@
         bindchange="onReplyInput"
       />
       <view class="popup-actions">
-        <t-button block theme="default" size="large" shape="round" disabled="{{replySubmitting}}" bindtap="onCloseReplyPopup">取消</t-button>
-        <t-button block theme="primary" size="large" shape="round" loading="{{replySubmitting}}" bindtap="onSubmitReply">提交回复</t-button>
+        <t-button block theme="default" size="large" disabled="{{replySubmitting}}" bindtap="onCloseReplyPopup">取消</t-button>
+        <t-button block theme="primary" size="large" loading="{{replySubmitting}}" bindtap="onSubmitReply">提交回复</t-button>
       </view>
     </view>
   </t-popup>

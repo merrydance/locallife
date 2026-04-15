@@ -4,8 +4,10 @@ import { deliveryTaskManagementService } from '../api/delivery-task-management'
 import { logger } from './logger'
 import { locationService } from './location'
 import { normalizeLocationError, syncRiderDeliveryLocation } from './rider-location'
+import { getRiderLocationStatusView } from './rider-location-status-view'
 import { riderLiveLocationSession, RiderLiveLocationState } from './rider-live-location'
 import { getStableBarHeights } from './responsive'
+import { resolveStatusTagTheme, type StatusTagTheme } from './status-tag'
 import { wsManager, WSMessageType } from './websocket'
 import { networkMonitor } from './network-monitor'
 import { getConsoleDashboardErrorMessage, getConsoleDashboardErrorState } from './console-dashboard'
@@ -22,7 +24,7 @@ let dashboardLocationUnsubscribe: null | (() => void) = null
 export type WsUnsubscribe = () => void
 export type DeliveryActionType = 'startPickup' | 'confirmPickup' | 'startDelivery' | 'confirmDelivery'
 type DeliveryActionMethod = (deliveryId: number) => Promise<Delivery>
-export type TagTheme = 'primary' | 'success' | 'warning' | 'danger' | 'default'
+export type TagTheme = StatusTagTheme
 
 export type DashboardDeliveryView = Delivery & {
   status_desc: string
@@ -84,7 +86,9 @@ function isTrackableDelivery(status: Delivery['status']): boolean {
 
 function buildDashboardDeliveryActionState(status: Delivery['status']) {
   return {
-    statusTagTheme: status === 'assigned' || status === 'picking' ? 'warning' as TagTheme : 'success' as TagTheme,
+    statusTagTheme: status === 'assigned' || status === 'picking'
+      ? resolveStatusTagTheme('warning')
+      : resolveStatusTagTheme('success'),
     isPickupFinished: status === 'picked' || status === 'delivering',
     canStartPickup: status === 'assigned',
     canConfirmPickup: status === 'picking',
@@ -426,7 +430,7 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
       this.setData({
         locationDeliveryId: 0,
         locationStatusText: '',
-        locationStatusTheme: 'default',
+        locationStatusTheme: resolveStatusTagTheme('neutral'),
         locationPendingText: '',
         locationUpdatedText: '',
         locationNeedsPermission: false
@@ -443,43 +447,15 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
       ? `待补发 ${state.pendingCount} 个定位点`
       : ''
 
-    let locationStatusText = '等待连续定位启动'
-    let locationStatusTheme: TagTheme = 'default'
-    let locationNeedsPermission = false
-
-    switch (state.uploadState) {
-      case 'tracking':
-        locationStatusText = '定位正常'
-        locationStatusTheme = 'success'
-        break
-      case 'uploading':
-        locationStatusText = '正在上传位置'
-        locationStatusTheme = 'primary'
-        break
-      case 'retrying':
-        locationStatusText = '网络恢复后会自动补发'
-        locationStatusTheme = 'warning'
-        break
-      case 'permission_required':
-        locationStatusText = '需要开启定位权限'
-        locationStatusTheme = 'danger'
-        locationNeedsPermission = true
-        break
-      case 'starting':
-        locationStatusText = '正在开启连续定位'
-        locationStatusTheme = 'warning'
-        break
-      default:
-        break
-    }
+    const locationStatusView = getRiderLocationStatusView(state.uploadState)
 
     this.setData({
       locationDeliveryId: trackedDelivery.id,
-      locationStatusText,
-      locationStatusTheme,
+      locationStatusText: locationStatusView.text,
+      locationStatusTheme: locationStatusView.theme,
       locationPendingText,
       locationUpdatedText,
-      locationNeedsPermission
+      locationNeedsPermission: locationStatusView.needsPermission
     })
   },
 

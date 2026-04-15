@@ -1,3 +1,4 @@
+@import '../../../styles/customer.wxss';
 @import "../../../styles/dine-in-checkout-overlays.wxss";
 
 /* 堂食/预订结算页样式 */

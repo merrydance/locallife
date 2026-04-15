@@ -11,8 +11,16 @@
   padding: 100rpx 0;
 }
 
+.error-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+  width: 100%;
+  margin-top: 24rpx;
+}
+
 .content {
-  padding: var(--spacer-md);
+  padding: 0;
 }
 
 .detail-card {
@@ -247,8 +255,8 @@
 }
 
 .contact-tip-card {
-  background: var(--td-brand-color-light);
-  border: 1px solid var(--td-brand-color-2);
+  background: var(--td-bg-color-secondarycontainer);
+  border: 1px solid var(--td-component-border);
 }
 
 .contact-tip-title {
@@ -268,6 +276,11 @@
   margin-top: var(--spacer-sm);
   display: flex;
   justify-content: flex-end;
+}
+
+.detail-actions {
+  margin-top: var(--spacer-md);
+  padding-bottom: var(--spacer-md);
 }
 
 /* 商品清单 */
@@ -306,14 +319,3 @@
   font-weight: bold;
 }
 
-/* 底部按钮 */
-.bottom-action {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  padding: 24rpx 40rpx calc(24rpx + env(safe-area-inset-bottom));
-  background: #FFFFFF;
-  box-shadow: 0 -4rpx 20rpx rgba(0,0,0,0.05);
-  z-index: 100;
-}

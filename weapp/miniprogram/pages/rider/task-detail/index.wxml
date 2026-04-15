@@ -3,7 +3,7 @@
 <scroll-view 
   scroll-y 
   class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" 
-  style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: 200rpx;"
+  style="--page-shell-nav-height: {{navBarHeight}}px;"
 >
   <view class="loading-box" wx:if="{{loading}}">
     <t-loading theme="circular" size="40rpx" text="正在加载详情..." />
@@ -24,12 +24,10 @@
     <!-- 2. 异常状态展示 (Only shows if not loading AND no data) -->
     <view class="error-placeholder" wx:if="{{!loading && !delivery}}">
       <t-empty icon="info-circle" description="{{errorMessage || '订单不存在或已被接走'}}" />
-      <t-button theme="primary" variant="outline" shape="round" block size="large" bindtap="onRetry" style="margin-top: 24rpx;">
-        重试加载
-      </t-button>
-      <t-button theme="primary" shape="round" block size="large" bindtap="onBack" style="margin-top: 40rpx;">
-        返回大厅
-      </t-button>
+      <view class="error-actions">
+        <t-button theme="primary" variant="outline" bindtap="onRetry">重试加载</t-button>
+        <t-button theme="primary" bindtap="onBack">返回大厅</t-button>
+      </view>
     </view>
 
     <!-- 3. 正常业务数据占位/展示 -->
@@ -140,8 +138,8 @@
 
         <view class="location-actions">
           <view class="location-actions-main">
-            <t-button theme="primary" size="small" shape="round" bindtap="onGoToNavigation">进入导航页</t-button>
-            <t-button wx:if="{{showLocationAction}}" theme="primary" variant="outline" size="small" shape="round" bindtap="onRetryLocationSync">
+            <t-button theme="primary" size="small" bindtap="onGoToNavigation">进入导航页</t-button>
+            <t-button wx:if="{{showLocationAction}}" theme="primary" variant="outline" size="small" bindtap="onRetryLocationSync">
               {{locationActionText}}
             </t-button>
           </view>
@@ -170,25 +168,23 @@
       </view>
 
       <view class="detail-card contact-tip-card">
-        <view class="contact-tip-title">如预计晚点，请直接联系顾客说明情况</view>
-        <view class="contact-tip-desc">骑手端不再向平台提交延时或异常报备。起步阶段按即时履约处理，优先和顾客同步到达时间。</view>
+        <view class="contact-tip-title">预计晚点时请直接联系顾客</view>
+        <view class="contact-tip-desc">骑手端按即时履约处理，不在这里额外提交延时或异常报备。</view>
         <view class="contact-tip-actions" wx:if="{{delivery.delivery_phone}}">
-          <t-button theme="primary" variant="outline" shape="round" bindtap="onCallPhone" data-phone="{{delivery.delivery_phone}}">联系顾客</t-button>
+          <t-button theme="primary" variant="outline" bindtap="onCallPhone" data-phone="{{delivery.delivery_phone}}">联系顾客</t-button>
         </view>
+      </view>
+
+      <view class="detail-actions" wx:if="{{delivery && delivery.can_update_status}}">
+        <t-button
+          theme="primary"
+          size="large"
+          block
+          bindtap="onUpdateStatus"
+        >
+          {{delivery.action_label}}
+        </t-button>
       </view>
     </block>
   </view>
 </scroll-view>
-
-<!-- 底部固定操作按钮 -->
-<view class="bottom-action" wx:if="{{delivery && delivery.can_update_status}}">
-  <t-button 
-    theme="primary" 
-    size="large" 
-    block 
-    shape="round" 
-    bindtap="onUpdateStatus"
-  >
-    {{delivery.action_label}}
-  </t-button>
-</view>

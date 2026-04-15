@@ -160,15 +160,15 @@ export function getOcrTagTheme(status?: string) {
 export function getBadgeColor(theme?: string) {
   switch (theme) {
     case 'success':
-      return '#00A870'
+      return '#0A7A46'
     case 'danger':
-      return '#E34D59'
+      return '#B6171E'
     case 'warning':
-      return '#ED7B2F'
+      return '#FC820C'
     case 'primary':
-      return '#0052D9'
+      return '#006B31'
     default:
-      return '#8B8BA3'
+      return '#667365'
   }
 }
 
