@@ -14,6 +14,7 @@ More specific Mini Program instruction files under `.github/instructions/` take 
 
 Use `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md` as the single non-visual hot path for `weapp/` page and component work.
 When the task touches visual structure, page shell, spacing rhythm, or component visual baseline, choose the role-matched design document explicitly: consumer surfaces use `.github/standards/weapp/DESIGN_SYSTEM.md`; merchant, operator, platform, rider, and other non-consumer surfaces use `.github/standards/weapp/NON_CONSUMER_DESIGN_SYSTEM.md`.
+When the task is a non-consumer page cleanup, TDesign-first refactor, or style convergence pass, also read `.github/standards/weapp/NON_CONSUMER_PAGE_EXECUTION_CHECKLIST.md` as the compressed execution checklist.
 When choosing components, inspect TDesign Miniprogram through the TDesign MCP component list and docs first: start from the component group that matches the task purpose, then narrow to the closest existing component before adding local UI.
 Use `.github/prompts/weapp-implementation.prompt.md` for all Mini Program implementation asks, including diagnosis-first page方案 and payment-adjacent flows. Use `.github/prompts/weapp-review.prompt.md` for all Mini Program review asks.
 
@@ -34,9 +35,11 @@ Use `.github/prompts/weapp-implementation.prompt.md` for all Mini Program implem
 - Establish the page shell, outer page gutter, nav gap, safe-area handling, and content-container padding outside TDesign controls before composing the page's inner TDesign components.
 - Prefer TDesign Miniprogram first. User-facing controls should stay in the TDesign system unless a suitable component genuinely does not exist.
 - Treat TDesign MCP documentation as the sole guidance source for TDesign component usage, supported props, and allowed extension methods.
+- If TDesign already provides the component or an officially supported outer composition, keep LocalLife customization at the page-shell, layout, and shared-token level instead of adding a new user-visible local shell.
 - Consumer surfaces may use the consumer-side design language from `.github/standards/weapp/DESIGN_SYSTEM.md`; non-consumer surfaces default to the restrained TDesign-first system from `.github/standards/weapp/NON_CONSUMER_DESIGN_SYSTEM.md`.
 - Section-level and row-level add/remove actions should default to TDesign icon buttons or icon-led small buttons; text-only add/remove buttons require an explicit exception.
 - Do not carry consumer-side custom design language into merchant, operator, platform, rider, or other non-consumer surfaces unless a standard explicitly allows it.
+- Non-consumer surfaces should not import `styles/customer.wxss` or borrow customer-side brand tokens unless the governing standard explicitly allows that boundary exception.
 - Keep page shell rhythm consistent: stable top spacing below navbar, stable horizontal gutter, and explicit bottom safe-area handling.
 - Shared components must remain reusable and explicit. Do not hide page-level API calls, route jumps, or role-specific state machines inside shared components.
 - User-facing copy must be product copy. Do not leak raw backend, provider, SQL, or English diagnostic text.
@@ -64,6 +67,6 @@ Use `.github/prompts/weapp-implementation.prompt.md` for all Mini Program implem
 
 - Run commands from `weapp/`.
 - Common commands: `npm run compile`, `npm run lint`, `npm run lint:fix`, `npm run quality:check`.
-- `npm run gate:weapp` now runs in full-scan mode and includes page-shell, WXML expression safety, component policy, tdesign-component-declarations, tdesign-boundary, non-consumer-ui-patterns, page-responsibility, page-complexity, request-boundary, role-contract, and business-status-boundary gates.
+- `npm run gate:weapp` runs the configured gate set for page-shell, WXML expression safety, component policy, tdesign-component-declarations, tdesign-boundary, non-consumer-ui-patterns, page-responsibility, page-complexity, request-boundary, role-contract, and business-status-boundary; note that `gate:non-consumer-ui-patterns` is currently changed-only so new drift is blocked while historical cleanup continues.
 - Prefer `npm run quality:check` before handing off changes that touch multiple Mini Program files or shared components.
 - In hand-off, follow the engineering governance wording for risk and residual risk, and still call out any remaining weak-network, re-entry, duplicate-tap, or state-recovery risk using concrete paths.

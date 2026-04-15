@@ -37,12 +37,14 @@ Implementation must push:
 - Keep non-consumer pages restrained: prefer page shell + content container + TDesign components, and make every extra local wrapper earn its keep through layout, state ownership, summary, or danger containment
 - Default section-level and row-level local actions to TDesign icon buttons or icon-led small buttons; if a text-only local action remains, name the exception and why icon-led affordance would be misleading or insufficient
 - Check TDesign MCP against the installed Mini Program component set before introducing any user-visible local control or wrapper exception, and state the exact component or supported composition chosen
+- If TDesign or an officially supported TDesign outer composition already solves the task, do not add a user-visible local notice/card/panel/footer shell; keep LocalLife customization at page shell, shared layout, and token-level branding only
 - Wire service calls, page state, handlers, WXML, WXSS, and user-visible feedback end to end
 - State which role-side design document governed the visual decisions and whether any exception crossed that boundary
+- For non-consumer pages, do not import `styles/customer.wxss` or carry customer-side brand-token styling unless the governing standard explicitly allows that boundary exception
 - Report any user-visible area that still does not use TDesign, any backend-contract ambiguity, and any remaining weak-network, re-entry, duplicate-tap, or payment-state risk
 - For native-to-TDesign replacement tasks, default to replacing native controls with TDesign equivalents where available (for example image->image, button->button, input->input, textarea->textarea, switch->switch, checkbox/radio groups, tag-like status), and explicitly list non-replaceable native tags that remain due platform capability gaps (commonly scroll-view, navigator, picker wrappers)
 
-TDesign Miniprogram component inventory (MCP snapshot; choose from this list first):
+Installed TDesign Miniprogram component inventory (verified against MCP and the repository's `tdesign-miniprogram@^1.13.1`; choose from this list first):
 
 - feedback: action-sheet, dialog, dropdown-menu, guide, loading, message, notice-bar, overlay, popover, popup, pull-down-refresh, swipe-cell, toast
 - data: avatar, badge, cell, collapse, count-down, empty, footer, grid, image-viewer, image, progress, qrcode, result, skeleton, sticky, swiper, tag, watermark
@@ -62,6 +64,7 @@ Implementation must not do:
 - Do not spend first-screen budget on explanatory hero cards, guide cards, or stacked instruction blocks for single-task non-consumer pages
 - Do not default to text-only local edit/delete/add/test/status buttons when an icon button or icon-led small button would communicate the action
 - Do not wrap TDesign regions in extra local notice/card/panel shells unless the wrapper owns real layout, state, summary, warning, or danger responsibility
+- Do not build non-consumer pages by skinning TDesign with customer-side token imports or extra decorative wrapper layers when the task can be expressed by page shell plus native TDesign composition
 - Do not leave business-specific styles in global styles unless they are truly shared
 - Do not carry customer-side brand colors, decorative token language, or marketing-style visual treatment into merchant, operator, platform, rider, or other non-consumer surfaces by default
 - Do not override TDesign internals for page-local taste when official props, theme hooks, or page-level layout control would suffice

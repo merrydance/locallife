@@ -9,6 +9,12 @@
 
 如果只是想快速判断一个页面是否符合当前标准，按下面顺序过一遍即可。
 
+先做组件判断：
+
+- 是否已经先查 TDesign MCP 组件列表和组件文档，而不是沿用历史页面写法。
+- 仓库当前依赖版本下已有组件或官方支持组合能否直接承接任务；若能，是否避免继续新增本地 notice/card/panel/footer 样式壳。
+- 是否把 LocalLife 自定义收敛在 page shell、共享布局和 token 级配色，而不是给 TDesign 组件再套一层顾客侧皮肤。
+
 ## 1. 页面骨架
 
 - 是否使用统一 page shell：`page-shell`、`page-shell--with-nav`、`page-shell--bottom-safe`、`page-shell--page-gutter`。
@@ -59,6 +65,7 @@
 - 是否把普通重试、返回、刷新按钮做成 round/large/block 的“视觉模板”。
 - 是否存在输入框一部分左对齐、一部分右对齐，但不是出于字段类型语义，而是历史自定义样式造成。
 - 是否存在说明文案过长，直接塞进 input label、cell title 或按钮文案里导致换行。
+- 是否在非顾客侧页面导入 `styles/customer.wxss`，或借用顾客侧品牌 token 给 TDesign 再包一层本地视觉皮肤。
 
 ## 8. 提交前验证
 

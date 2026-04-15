@@ -30,7 +30,15 @@
 - 页面与组件的非视觉交付，默认先读 `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md`。
 - 顾客侧页面 UI 结构、小屏手感、品牌化视觉与组件视觉基线，读 `.github/standards/weapp/DESIGN_SYSTEM.md`。
 - 商户、运营、平台、骑手等非顾客侧页面的 UI 结构、小屏手感、page shell 与克制型 TDesign-first 表达，读 `.github/standards/weapp/NON_CONSUMER_DESIGN_SYSTEM.md`。
+- 非顾客侧页面若处于实现收口、样式统一或快速自检阶段，再补读 `.github/standards/weapp/NON_CONSUMER_PAGE_EXECUTION_CHECKLIST.md` 作为执行压缩清单；它是辅助收口文档，不是新的并行权威层。
 - 页面审查与复审时，配合 `.github/standards/weapp/REVIEW_CHECKLIST.md` 使用。
+
+## TDesign 来源口径
+
+- 小程序用户可见组件默认先查 TDesign MCP 组件列表与组件文档，再决定是否需要本地补充。
+- TDesign 组件存在且官方支持的组合方式已经能承接任务时，不应再新增本地 notice/card/panel/footer 一类用户可见样式壳。
+- 若 MCP 文档与仓库实际依赖版本不一致，以 `weapp/package.json` 中安装的版本能力为准。
+- 当前非顾客侧标准中维护了一份按仓库实际依赖版本核对过的 TDesign Miniprogram 组件清单，见 `.github/standards/weapp/NON_CONSUMER_DESIGN_SYSTEM.md` 中的 TDesign 组件清单小节；prompt 与 instructions 应引用这一路径，不再各自维护会漂移的另一套口径。
 
 ## 专题补充与历史参考
 

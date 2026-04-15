@@ -18,8 +18,10 @@ const NON_CONSUMER_ROOTS = [
 
 const ALLOW_TEXT_ACTION_MARKER = 'weapp-gate allow-text-action:'
 const ALLOW_EXPLANATORY_CARD_MARKER = 'weapp-gate allow-explanatory-card:'
+const ALLOW_FIXED_FOOTER_MARKER = 'weapp-gate allow-fixed-footer-shell:'
 
 const EXPLANATORY_CARD_CLASS_REGEX = /\b(?:notice-card|inline-note-card|guide-card|helper-card|intro-card|tips-card|explain-card|description-card)\b/
+const FIXED_FOOTER_CLASS_REGEX = /\b(?:footer-bar|save-wrap|footer-actions|bottom-action|bottom-actions)\b/
 const TEXT_ACTION_LABELS = new Set(['新增', '添加', '编辑', '删除', '移除', '测试', '状态'])
 const SMALL_BUTTON_REGEX = /\bsize\s*=\s*(["'])(small|extra-small)\1/
 const TEXT_VARIANT_REGEX = /\bvariant\s*=\s*(["'])text\1/
@@ -118,6 +120,34 @@ function collectExplanatoryCardFailures(relativePath, lines, legacyLineCounts) {
       reason: 'non-consumer page uses a local explanatory-card pattern; push the guidance into labels, notes, state strips, or action-adjacent copy by default',
       lineText: line.trim(),
       marker: `Add ${ALLOW_EXPLANATORY_CARD_MARKER} <reason> only when the explanation itself is the task or warning surface.`
+    })
+  })
+
+  return failures
+}
+
+function collectFixedFooterShellFailures(relativePath, lines, legacyLineCounts) {
+  const failures = []
+
+  lines.forEach((line, index) => {
+    if (!FIXED_FOOTER_CLASS_REGEX.test(line)) {
+      return
+    }
+
+    if (hasNearbyMarker(lines, index, ALLOW_FIXED_FOOTER_MARKER)) {
+      return
+    }
+
+    if (consumeCount(legacyLineCounts, line.trim())) {
+      return
+    }
+
+    failures.push({
+      relativePath,
+      lineNumber: index + 1,
+      reason: 'non-consumer page introduces a local fixed-footer shell; default to content-flow form actions inside page-content and let page shell handle safe area',
+      lineText: line.trim(),
+      marker: `Add ${ALLOW_FIXED_FOOTER_MARKER} <reason> only when a persistent fixed action bar is genuinely required by the task.`
     })
   })
 
@@ -229,12 +259,13 @@ function main() {
     const legacyBlockCounts = changedOnly ? buildBlockCountMap(collectTextActionBlocks(legacyContent)) : new Map()
 
     failures.push(...collectExplanatoryCardFailures(relativePath, lines, legacyLineCounts))
+    failures.push(...collectFixedFooterShellFailures(relativePath, lines, legacyLineCounts))
     failures.push(...collectTextActionFailures(relativePath, content, lines, legacyBlockCounts))
   }
 
   if (failures.length > 0) {
     console.error('Non-consumer UI pattern gate failed. Merchant/operator/platform/rider pages must stay brief, direct, and TDesign-first on small screens.')
-    console.error('Default policy: avoid explanatory-card blocks and use icon buttons or icon-led small buttons for local actions unless a narrow exception is documented.')
+    console.error('Default policy: avoid explanatory-card blocks, avoid local fixed-footer shells, and use icon buttons or icon-led small buttons for local actions unless a narrow exception is documented.')
     console.error('')
 
     for (const failure of failures) {

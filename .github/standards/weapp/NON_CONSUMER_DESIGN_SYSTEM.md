@@ -48,16 +48,34 @@
 - 组件选型先查 TDesign MCP 与官方文档；若最新文档与仓库当前依赖版本不一致，以 `weapp/package.json` 中的实际安装版本能力为准。
 - 用户可见控件默认优先使用 TDesign Miniprogram。
 - 组件存在且能承接任务时，不得为了局部审美改回原生控件或手写近似组件。
+- 若 TDesign 组件本身或官方支持的外层组合已经能承接任务，不得再叠本地 notice/card/panel/footer/action-bar 一类用户可见样式壳；LocalLife 自定义默认只保留在 page shell、共享布局和 token 级配色协同上。
 - 只允许使用 TDesign MCP 文档明确支持的 theme、size、shape、layout、slot、class、style 和属性扩展方式。
 - 若退回原生或本地重写控件，必须能说明 TDesign 不满足的具体点，且例外范围已经收敛到最小。
 - 禁止覆盖 TDesign 内部类名、依赖内部节点结构、改写伪元素、替换内部状态色或重写默认交互反馈。
 - 如平台能力确实要求回退原生用户可见控件，必须在控件上方就近写明 `<!-- weapp-gate allow-native-control: reason -->`；如必须保留极小范围的 TDesign 内部类兼容处理，必须在选择器上方写明 `/* weapp-gate allow-tdesign-internal-class: reason */`，且理由应直接说明 TDesign 当前缺口或平台限制。
+
+#### 3.1.1 当前仓库安装版本的 TDesign Miniprogram 组件清单
+
+以下清单按当前仓库依赖 `tdesign-miniprogram@^1.13.1` 与 TDesign MCP 返回结果核对，用于回答“先应该从哪些官方组件里选”。后续版本升级时，应先核对 MCP 与本地安装目录，再同步本节。
+
+- feedback: action-sheet, dialog, dropdown-menu, guide, loading, message, notice-bar, overlay, popover, popup, pull-down-refresh, swipe-cell, toast
+- data: avatar, badge, cell, collapse, count-down, empty, footer, grid, image-viewer, image, progress, qrcode, result, skeleton, sticky, swiper, tag, watermark
+- navigation: back-top, drawer, indexes, navbar, side-bar, steps, tab-bar, tabs
+- base: button, divider, fab, icon, layout, link
+- form: calendar, cascader, checkbox, color-picker, date-time-picker, form, input, picker, radio, rate, search, slider, stepper, switch, textarea, tree-select, upload
+
+使用要求：
+
+- 先用 TDesign MCP 组件列表定位组件组，再用组件文档确认 props、slot、事件和允许扩展方式。
+- “能用 TDesign 就不用自己写”不仅适用于按钮、输入框、标签，也适用于 notice、popup、dialog、empty、result、grid、cell、footer、sticky 等结构性表达。
+- 若页面仍保留本地用户可见壳体，必须能说明它承担的是页面结构、状态承接、摘要聚合或危险隔离，而不是在重复包装一个已经足够清楚的 TDesign 组件。
 
 ### 3.2 Minimal Containers
 
 - 非顾客侧页面默认只保留形成页面所必需的外层结构：page shell、内容区、必要分区、状态区、底部动作区和安全区承接。
 - 不要为了“显得完整”给每个小块都单独包卡片、说明块、装饰头图或额外背景层。
 - 若内容已经能直接依靠 TDesign 组件和少量布局容器表达，就不要再额外制造本地视觉组件。
+- 若 TDesign 的 notice-bar、cell、tag、dialog、popup、empty、result、footer、grid 或 button 组合已经能完成表达，就不要再新增本地 `notice-card`、`inline-note-card`、`footer-bar`、`save-wrap` 之类只承担视觉包装的壳体。
 - 非顾客侧单任务页、设置页、表单页、详情编辑页默认禁止在顶部放置解释性大卡片、导读大卡片、任务边界说明卡片或“这里只负责……”式说明块；首屏应直接进入任务本身。
 - 需要说明同步状态、编辑边界、失败影响或局部规则时，应优先用贴近位置的短句、状态标签、字段 note 或页内状态承接；图标或动画只能辅助，不替代必要说明。
 
@@ -124,6 +142,7 @@
 - 非顾客侧页面不默认复用顾客侧品牌主色、装饰性氛围色、营销块面或顾客侧专属视觉 token。
 - 如果颜色和视觉层级仅靠 TDesign 默认 token 即可表达清楚，就不要再新增本地色板。
 - 允许使用共享 spacing、radius、安全区和 page shell 相关 token；这些属于跨角色可复用的基础布局 token。
+- 非顾客侧页面默认不得导入 `styles/customer.wxss`，也不得借用顾客侧品牌 token 去给 TDesign 再包一层“本地皮肤”；若确有跨边界例外，必须在任务说明和交付说明中明确写出原因与范围。
 
 ## 6. Components
 

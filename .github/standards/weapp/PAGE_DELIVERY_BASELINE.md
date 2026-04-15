@@ -140,6 +140,6 @@
 
 - 运行命令应从 `weapp/` 目录执行。
 - 常用校验命令：`npm run compile`、`npm run lint`、`npm run lint:fix`、`npm run quality:check`。
-- `npm run gate:weapp` 现在默认按全量扫描运行，包含 page shell、WXML 表达式安全、共享组件政策、TDesign 组件声明一致性、TDesign 边界、non-consumer-ui-patterns、页面职责、页面复杂度、请求边界、角色契约和业务状态边界门禁。
+- `npm run gate:weapp` 按当前脚本配置运行页面门禁，包含 page shell、WXML 表达式安全、共享组件政策、TDesign 组件声明一致性、TDesign 边界、non-consumer-ui-patterns、页面职责、页面复杂度、请求边界、角色契约和业务状态边界门禁；其中 `gate:non-consumer-ui-patterns` 当前按 changed-only 模式阻止新增漂移，历史页面整治仍需结合专项改造逐步收口。
 - 涉及多个页面、角色工作流、请求边界、恢复路径或共享组件的变更，必须优先运行 `npm run quality:check`，除非有明确说明当前环境无法执行。
 - 高风险改动的验证说明、未验证路径与剩余风险表达，统一按 `.github/standards/engineering/VALIDATION_AND_RELEASE_MATRIX.md` 执行。
