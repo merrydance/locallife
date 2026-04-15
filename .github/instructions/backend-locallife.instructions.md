@@ -13,15 +13,15 @@ More specific backend instruction files under `.github/instructions/` take prece
 - `.github/standards/engineering/README.md`
 - `.github/standards/backend/README.md`
 
-Use `.github/standards/engineering/README.md` as the stable governance index, then open the baseline, validation matrix, or high-risk checklists when the active change needs them.
+Use `.github/standards/engineering/README.md` as the stable governance index, then open the baseline, validation matrix, or matching area/domain standards when the active change needs them.
 
 Open the smallest relevant backend deep docs for the current task instead of reading the whole backend stack every time:
 
 - `RUNTIME_ARCHITECTURE.md`: real entrypoints, async boundaries, and takeover or high-risk path tracing
 - `WORKFLOW_AND_VALIDATION.md`: regeneration triggers, local commands, and validation depth
-- `BACKEND_RISK_MAP.md`: funds, state machines, callback, worker, scheduler, and recovery hot paths
 - `API_CONTRACT_STANDARDS.md`: contract semantics, status codes, empty states, and route behavior
 - `SYSTEM_PROMPT.md`: detailed layering, middleware, DTO, and implementation-shape rules when a task truly needs the deeper contract
+- matching `domain README`: payment, media, OCR, and other high-risk domains
 
 Prompt routing defaults for this area:
 
@@ -72,8 +72,8 @@ Prompt routing defaults for this area:
 - Do not place third-party calls, websocket emits, or other external side effects inside transaction-owned critical sections; commit durable state first, then trigger post-commit work.
 - For private media, OCR, document, or download access, preserve ownership checks, visibility rules, and secret handling. Do not weaken access assumptions just to make a path easier to wire.
 - For `G2` and `G3` changes, explicitly check timeout handling, partial failure behavior, repeated delivery semantics, and what the operator or downstream caller observes when the path degrades.
-- When the change is payment- or authz-sensitive, apply the matching section in `.github/standards/engineering/HIGH_RISK_CHANGE_CHECKLISTS.md` instead of relying on generic review memory.
-- When the change touches order, fulfillment, reservation, or inventory state machines, also apply the matching section in `.github/standards/engineering/HIGH_RISK_CHANGE_CHECKLISTS.md`.
+- When the change is payment- or authz-sensitive, apply the matching governance and area/domain standards surfaced from `.github/standards/engineering/README.md`; for WeChat Pay use `.github/standards/domains/wechat-payment/README.md` instead of relying on generic review memory.
+- When the change touches order, fulfillment, reservation, or inventory state machines, apply the matching backend and runtime standards from `.github/standards/backend/README.md` and `.github/standards/backend/RUNTIME_ARCHITECTURE.md` instead of relying on generic review memory.
 - If a high-risk path cannot be validated locally, call that out as residual risk instead of implying the path is production-safe.
 
 ## Regeneration Triggers

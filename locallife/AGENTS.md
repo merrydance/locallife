@@ -14,7 +14,7 @@ For any non-trivial backend task, read these first:
 1. `../.github/standards/backend/README.md`
 2. `../.github/standards/backend/RUNTIME_ARCHITECTURE.md`
 3. `../.github/standards/backend/WORKFLOW_AND_VALIDATION.md`
-4. `../.github/standards/backend/BACKEND_RISK_MAP.md`
+4. matching domain README for the active high-risk area, for example `../.github/standards/domains/wechat-payment/README.md`
 
 Use the prompt templates in `../.github/prompts/` when the task matches. Legacy `.codex/prompts/` files should be treated as backend-local wrappers, not the long-term source of truth.
 
@@ -36,12 +36,12 @@ Use the prompt templates in `../.github/prompts/` when the task matches. Legacy 
 - For DB-backed tests, understand that `db/sqlc/main_test.go` auto-runs migrations against `TEST_DB_SOURCE` or `DB_SOURCE`.
 - If a change touches funds or state machines, verify at the transaction layer and at least one upstream caller layer.
 - Use `make test-safety` after changes in high-risk paths such as order creation, payment, refund, and delivery transitions.
-- Formal reviews and audits should follow `../.github/standards/backend/FORMAL_REVIEW_DURABILITY.md`; the current backend ledgers are `../.github/review/open-findings.md` and `../.github/review/audit-log.md`, while durable recurring patterns should update `../.github/standards/backend/BACKEND_RISK_MAP.md`.
+- Formal reviews and audits should follow `../.github/standards/backend/FORMAL_REVIEW_DURABILITY.md`; the current backend ledgers are `../.github/review/open-findings.md` and `../.github/review/audit-log.md`, while durable recurring patterns should update `../.github/standards/backend/README.md` or the matching domain README.
 - Call out when you did not run `make sqlc`, `make swagger`, or package tests.
 
 ## Existing Project Signals
 
 - `main.go` contains startup wiring, production safeguards, scheduler registration, and worker boot order.
-- `../.github/standards/backend/BACKEND_RISK_MAP.md` is the durable risk register for production backend paths.
+- `../.github/standards/backend/README.md` plus the matching domain README are the durable entrypoints for production backend risk context.
 - `../.github/standards/backend/RUNTIME_ARCHITECTURE.md` plus `../.github/standards/domains/wechat-payment/README.md` are the preferred entrypoints for current execution paths and payment-domain capability routing.
 - There is existing user work in the tree; never revert unrelated changes.

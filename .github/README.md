@@ -83,7 +83,6 @@ Backend:
 - `.github/standards/backend/API_CONTRACT_STANDARDS.md`
 - `.github/standards/backend/RUNTIME_ARCHITECTURE.md`
 - `.github/standards/backend/WORKFLOW_AND_VALIDATION.md`
-- `.github/standards/backend/BACKEND_RISK_MAP.md`
 - `.github/standards/backend/BACKEND_CHANGE_SAFETY_CHECKLIST.md`
 - `.github/standards/backend/BACKEND_REVIEW_CLOSEOUT_CHECKLIST.md`
 - `.github/standards/backend/FORMAL_REVIEW_DURABILITY.md`
@@ -95,7 +94,6 @@ Cross-cutting engineering governance:
 - `.github/standards/engineering/AI_PROMPT_GOVERNANCE.md`
 - `.github/standards/engineering/UNREACHABLE_DEPENDENCY_RISK_REGISTER.md`
 - `.github/standards/engineering/INCIDENT_FEEDBACK_LOOP.md`
-- `.github/standards/engineering/HIGH_RISK_CHANGE_CHECKLISTS.md`
 
 Web:
 

@@ -9,7 +9,7 @@ Canonical prompt:
 Recommended supporting docs:
 
 - `../../.github/standards/backend/WORKFLOW_AND_VALIDATION.md`
-- `../../.github/standards/backend/BACKEND_RISK_MAP.md`
+- `../../.github/standards/backend/README.md`
 - `../../.github/standards/backend/RUNTIME_ARCHITECTURE.md`
 - `../../.github/standards/domains/wechat-payment/README.md`
 

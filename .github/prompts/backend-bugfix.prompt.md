@@ -6,7 +6,7 @@ description: "Use when drafting a backend production bugfix or regression-fix re
 
 Use this template when asking for a backend regression or production bug fix in `locallife/`.
 
-Use `.github/standards/backend/RUNTIME_ARCHITECTURE.md` to trace the real production path, `.github/standards/backend/WORKFLOW_AND_VALIDATION.md` to choose the right regeneration and regression commands, `.github/standards/backend/BACKEND_RISK_MAP.md` to identify already-known hot paths, and `.github/standards/backend/BACKEND_CHANGE_SAFETY_CHECKLIST.md` before claiming the fix is complete.
+Use `.github/standards/backend/RUNTIME_ARCHITECTURE.md` to trace the real production path, `.github/standards/backend/WORKFLOW_AND_VALIDATION.md` to choose the right regeneration and regression commands, `.github/standards/backend/README.md` plus the matching domain README to identify already-known hot paths, and `.github/standards/backend/BACKEND_CHANGE_SAFETY_CHECKLIST.md` before claiming the fix is complete.
 
 ## Backend Bug Fix
 
@@ -30,7 +30,7 @@ Required context:
 Optional context:
 
 - Related incident or escaped-defect note: <path>
-- Existing audit or domain docs: `.github/standards/backend/BACKEND_RISK_MAP.md`, `.github/standards/backend/AGENT.md`, `.github/standards/backend/SYSTEM_PROMPT.md`
+- Existing audit or domain docs: `.github/standards/backend/README.md`, `.github/standards/backend/AGENT.md`, `.github/standards/backend/SYSTEM_PROMPT.md`, `.github/standards/domains/wechat-payment/README.md`
 - Known risky path: <payment, refund, delivery, reservation, withdraw, complaint, callback, worker, scheduler>
 
 Acceptance checklist:

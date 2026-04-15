@@ -5,7 +5,7 @@
 > SQL 编写、migration、索引与 sqlc 约定见 `.github/standards/backend/SQL_STANDARDS.md`。
 > Go 代码组织、`context`、并发、接口与测试实践见 `.github/standards/backend/GO_PRACTICES.md`。
 > 后端目录总入口见 `.github/standards/backend/README.md`。
-> 仓库级高风险链路与已知失效模式见 `.github/standards/backend/BACKEND_RISK_MAP.md`。
+> 仓库级高风险入口见 `.github/standards/backend/README.md` 与匹配的 domain README。
 > 当前仓库真实运行结构与生成触点见 `.github/standards/backend/RUNTIME_ARCHITECTURE.md`。
 > 常用命令、再生成规则和验证工作流见 `.github/standards/backend/WORKFLOW_AND_VALIDATION.md`。
 > 交付与评审收口清单见 `.github/standards/backend/BACKEND_CHANGE_SAFETY_CHECKLIST.md` 与 `.github/standards/backend/BACKEND_REVIEW_CLOSEOUT_CHECKLIST.md`。

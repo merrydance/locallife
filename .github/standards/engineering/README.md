@@ -16,7 +16,6 @@
 - `AI_PROMPT_GOVERNANCE.md`: AI-facing Prompt、Instruction、Agent 与治理门禁的分层和维护规则。
 - `UNREACHABLE_DEPENDENCY_RISK_REGISTER.md`: 不可达依赖风险台账，用于收口 `required module not called` 一类非可触达依赖发现。
 - `INCIDENT_FEEDBACK_LOOP.md`: 事故、重大缺陷、near miss 与高价值 review finding 的规则回灌机制。
-- `HIGH_RISK_CHANGE_CHECKLISTS.md`: 第一批高风险变更专项清单，当前覆盖 payment、authz、media、OCR、callback、async recovery，以及 order / fulfillment / reservation / inventory 状态机。
 
 ## Historical Material
 
@@ -38,9 +37,8 @@
 2. `VALIDATION_AND_RELEASE_MATRIX.md`
 3. `AI_PROMPT_GOVERNANCE.md`（当任务涉及 `.github/` Prompt、Instruction、Agent 或治理门禁时）
 4. `UNREACHABLE_DEPENDENCY_RISK_REGISTER.md`
-5. `HIGH_RISK_CHANGE_CHECKLISTS.md`
-6. `INCIDENT_FEEDBACK_LOOP.md`
-7. 对应 area-specific 标准：backend、web、weapp 或 domain docs
+5. `INCIDENT_FEEDBACK_LOOP.md`
+6. 对应 area-specific 标准：backend、web、weapp 或 domain docs
 
 仅在需要追溯治理建设顺序或阶段验收历史时，再查看 `historical/GOVERNANCE_ROADMAP.md`。
 

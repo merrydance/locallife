@@ -13,7 +13,7 @@ Canonical review policy and active ledgers now live in `.github`:
 
 When a formal backend review reveals a recurring bug class or a reusable backend risk, update:
 
-- `../../.github/standards/backend/BACKEND_RISK_MAP.md`
+- `../../.github/standards/backend/README.md` or the matching domain README
 
 Use the canonical `.github` document for:
 

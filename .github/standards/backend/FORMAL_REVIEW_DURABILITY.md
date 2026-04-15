@@ -38,7 +38,8 @@
 
 如果 finding 暴露的是可重复 bug class，而不是单点瑕疵，应更新对应长期规则，例如：
 
-- `.github/standards/backend/BACKEND_RISK_MAP.md`
+- `.github/standards/backend/README.md`
+- 匹配的 domain README
 - `.github/instructions/backend-locallife.instructions.md`
 - `.github/prompts/backend-bugfix.prompt.md`
 - `.github/prompts/backend-review-closure.prompt.md`
