@@ -949,44 +949,6 @@ definitions:
     - dish_ids
     - is_online
     type: object
-  api.billReconciliationReportResponse:
-    properties:
-      amount_mismatch:
-        items:
-          type: integer
-        type: array
-      bill_date:
-        description: '"2006-01-02"'
-        type: string
-      bill_type:
-        description: trade | ecommerce_trade | refund
-        type: string
-      created_at:
-        type: string
-      error_message:
-        type: string
-      id:
-        type: integer
-      local_count:
-        type: integer
-      mismatch_count:
-        type: integer
-      missing_local:
-        items:
-          type: integer
-        type: array
-      missing_wxpay:
-        items:
-          type: integer
-        type: array
-      status:
-        description: pending | running | completed | failed
-        type: string
-      updated_at:
-        type: string
-      wxpay_count:
-        type: integer
-    type: object
   api.billingGroupListResponse:
     properties:
       billing_groups:
@@ -6369,23 +6331,6 @@ definitions:
       timestamp:
         type: string
       title:
-        type: string
-    type: object
-  api.platformBillDownloadResponse:
-    properties:
-      account_type:
-        type: string
-      bill_date:
-        type: string
-      download_url:
-        type: string
-      hash_type:
-        type: string
-      hash_value:
-        type: string
-      sub_mch_id:
-        type: string
-      tar_type:
         type: string
     type: object
   api.platformDailyStatRow:
@@ -24528,112 +24473,6 @@ paths:
       summary: 查询平台微信支付账户余额
       tags:
       - 平台财务
-  /v1/platform/finance/bills/fund-flow/download-url:
-    get:
-      description: 管理员调用微信支付资金账单接口，获取平台商户号账单下载地址
-      parameters:
-      - description: 账单日期，格式 YYYY-MM-DD
-        in: query
-        name: bill_date
-        required: true
-        type: string
-      - description: 账户类型，默认 BASIC
-        enum:
-        - BASIC
-        - OPERATION
-        - FEES
-        in: query
-        name: account_type
-        type: string
-      - description: 压缩类型，默认 GZIP
-        enum:
-        - GZIP
-        in: query
-        name: tar_type
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.platformBillDownloadResponse'
-        "400":
-          description: 参数错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "401":
-          description: 未认证
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "403":
-          description: 无权限
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "502":
-          description: 微信支付调用失败
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "503":
-          description: 微信支付未配置
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 获取平台资金账单下载地址
-      tags:
-      - 平台财务
-  /v1/platform/finance/bills/profit-sharing/download-url:
-    get:
-      description: 管理员调用微信支付分账账单接口，获取平台或指定子商户分账账单下载地址
-      parameters:
-      - description: 账单日期，格式 YYYY-MM-DD
-        in: query
-        name: bill_date
-        required: true
-        type: string
-      - description: 指定子商户号；不传则获取服务商下全部分账账单
-        in: query
-        name: sub_mchid
-        type: string
-      - description: 压缩类型，默认 GZIP
-        enum:
-        - GZIP
-        in: query
-        name: tar_type
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.platformBillDownloadResponse'
-        "400":
-          description: 参数错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "401":
-          description: 未认证
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "403":
-          description: 无权限
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "502":
-          description: 微信支付调用失败
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "503":
-          description: 微信支付未配置
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 获取平台分账账单下载地址
-      tags:
-      - 平台财务
   /v1/platform/finance/wechat-ecommerce/violation-notification:
     delete:
       description: 管理员删除微信支付平台收付通商户违规通知回调地址；若微信侧已不存在则幂等返回 204
@@ -25400,52 +25239,6 @@ paths:
       summary: 查询规则命中记录
       tags:
       - 规则引擎
-  /v1/platform/stats/bill-reconciliation:
-    get:
-      consumes:
-      - application/json
-      description: 列出微信支付账单与本地数据库的对账报告，按账单日期倒序排列
-      parameters:
-      - description: 页码 (从1开始)
-        in: query
-        name: page_id
-        required: true
-        type: integer
-      - description: 每页条数 (1-100)
-        in: query
-        name: page_size
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 对账报告列表
-          schema:
-            items:
-              $ref: '#/definitions/api.billReconciliationReportResponse'
-            type: array
-        "400":
-          description: 请求参数错误
-          schema:
-            $ref: '#/definitions/api.errorRes'
-        "401":
-          description: 未授权
-          schema:
-            $ref: '#/definitions/api.errorRes'
-        "403":
-          description: 权限不足
-          schema:
-            $ref: '#/definitions/api.errorRes'
-        "500":
-          description: 服务器内部错误
-          schema:
-            $ref: '#/definitions/api.errorRes'
-      security:
-      - BearerAuth: []
-      summary: 获取每日账单对账报告列表
-      tags:
-      - Platform
   /v1/platform/stats/categories:
     get:
       consumes:

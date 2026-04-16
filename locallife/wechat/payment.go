@@ -1053,11 +1053,6 @@ func (c *PaymentClient) doRequestWithWechatSerial(ctx context.Context, method, p
 	return respBody, err
 }
 
-func (c *PaymentClient) doRequestWithoutResponseVerification(ctx context.Context, method, path string, body interface{}) ([]byte, error) {
-	respBody, _, err := c.doRequestWithOptionsAndRequestID(ctx, method, path, body, "", false)
-	return respBody, err
-}
-
 func (c *PaymentClient) doRequestWithRequestID(ctx context.Context, method, path string, body interface{}) ([]byte, string, error) {
 	return c.doRequestWithSerialAndRequestID(ctx, method, path, body, "")
 }

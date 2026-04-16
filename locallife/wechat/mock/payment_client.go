@@ -12,7 +12,6 @@ package mockwechat
 import (
 	context "context"
 	reflect "reflect"
-	time "time"
 
 	wechat "github.com/merrydance/locallife/wechat"
 	contracts "github.com/merrydance/locallife/wechat/contracts"
@@ -737,21 +736,6 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) GetComplaintDetail(ctx, comp
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetComplaintDetail", reflect.TypeOf((*MockEcommerceClientInterface)(nil).GetComplaintDetail), ctx, complaintID)
 }
 
-// GetFundFlowBillDownloadURL mocks base method.
-func (m *MockEcommerceClientInterface) GetFundFlowBillDownloadURL(ctx context.Context, billDate time.Time, accountType, tarType string) (*wechat.BillDownloadURLResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetFundFlowBillDownloadURL", ctx, billDate, accountType, tarType)
-	ret0, _ := ret[0].(*wechat.BillDownloadURLResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetFundFlowBillDownloadURL indicates an expected call of GetFundFlowBillDownloadURL.
-func (mr *MockEcommerceClientInterfaceMockRecorder) GetFundFlowBillDownloadURL(ctx, billDate, accountType, tarType any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFundFlowBillDownloadURL", reflect.TypeOf((*MockEcommerceClientInterface)(nil).GetFundFlowBillDownloadURL), ctx, billDate, accountType, tarType)
-}
-
 // GetPlatformCertificateSerial mocks base method.
 func (m *MockEcommerceClientInterface) GetPlatformCertificateSerial() string {
 	m.ctrl.T.Helper()
@@ -764,21 +748,6 @@ func (m *MockEcommerceClientInterface) GetPlatformCertificateSerial() string {
 func (mr *MockEcommerceClientInterfaceMockRecorder) GetPlatformCertificateSerial() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPlatformCertificateSerial", reflect.TypeOf((*MockEcommerceClientInterface)(nil).GetPlatformCertificateSerial))
-}
-
-// GetProfitSharingBillDownloadURL mocks base method.
-func (m *MockEcommerceClientInterface) GetProfitSharingBillDownloadURL(ctx context.Context, billDate time.Time, subMchID, tarType string) (*wechat.BillDownloadURLResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetProfitSharingBillDownloadURL", ctx, billDate, subMchID, tarType)
-	ret0, _ := ret[0].(*wechat.BillDownloadURLResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetProfitSharingBillDownloadURL indicates an expected call of GetProfitSharingBillDownloadURL.
-func (mr *MockEcommerceClientInterfaceMockRecorder) GetProfitSharingBillDownloadURL(ctx, billDate, subMchID, tarType any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetProfitSharingBillDownloadURL", reflect.TypeOf((*MockEcommerceClientInterface)(nil).GetProfitSharingBillDownloadURL), ctx, billDate, subMchID, tarType)
 }
 
 // GetSpAppID mocks base method.

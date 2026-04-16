@@ -1369,7 +1369,6 @@ func (server *Server) setupRouter() {
 		platformStatsGroup.GET("/riders/ranking", server.getRiderRanking)
 		platformStatsGroup.GET("/hourly", server.getHourlyDistribution)
 		platformStatsGroup.GET("/realtime", server.getRealtimeDashboard)
-		platformStatsGroup.GET("/bill-reconciliation", server.getBillReconciliationReports)
 	}
 
 	// 平台分账规则配置（管理）
@@ -1399,8 +1398,6 @@ func (server *Server) setupRouter() {
 	platformFinanceGroup.Use(server.CasbinRoleMiddleware(RoleAdmin))
 	{
 		platformFinanceGroup.GET("/account/balance", server.getPlatformAccountBalance)
-		platformFinanceGroup.GET("/bills/fund-flow/download-url", server.getPlatformFundFlowBillDownloadURL)
-		platformFinanceGroup.GET("/bills/profit-sharing/download-url", server.getPlatformProfitSharingBillDownloadURL)
 		platformFinanceGroup.GET("/wechat-ecommerce/violation-notification", server.getPlatformViolationNotificationConfig)
 		platformFinanceGroup.POST("/wechat-ecommerce/violation-notification", server.createPlatformViolationNotificationConfig)
 		platformFinanceGroup.PUT("/wechat-ecommerce/violation-notification", server.updatePlatformViolationNotificationConfig)

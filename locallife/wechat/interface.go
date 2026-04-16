@@ -3,7 +3,6 @@ package wechat
 import (
 	"context"
 	"mime/multipart"
-	"time"
 
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 )
@@ -261,12 +260,6 @@ type EcommerceClientInterface interface {
 	// QueryPlatformFundDayEndBalance 查询平台商户指定日期日终余额
 	QueryPlatformFundDayEndBalance(ctx context.Context, accountType, date string) (*wechatcontracts.PlatformFundBalanceResponse, error)
 
-	// GetFundFlowBillDownloadURL 获取平台资金账单下载地址
-	GetFundFlowBillDownloadURL(ctx context.Context, billDate time.Time, accountType, tarType string) (*BillDownloadURLResponse, error)
-
-	// GetProfitSharingBillDownloadURL 获取平台分账账单下载地址
-	GetProfitSharingBillDownloadURL(ctx context.Context, billDate time.Time, subMchID, tarType string) (*BillDownloadURLResponse, error)
-
 	// CreateEcommerceWithdraw 发起二级商户提现
 	CreateEcommerceWithdraw(ctx context.Context, req *wechatcontracts.EcommerceWithdrawRequest) (*wechatcontracts.EcommerceWithdrawCreateResponse, error)
 
@@ -341,7 +334,3 @@ var _ PaymentClientInterface = (*PaymentClient)(nil)
 
 // 确保 *EcommerceClient 实现了 EcommerceClientInterface 接口
 var _ EcommerceClientInterface = (*EcommerceClient)(nil)
-
-// 确保 *EcommerceClient 实现了 BillClientInterface 接口
-// （DownloadTradeBill / DownloadRefundBill 通过内嵌 *PaymentClient 自动满足）
-var _ BillClientInterface = (*EcommerceClient)(nil)

@@ -79,11 +79,6 @@ var allowedFundManagementDayEndWithdrawStatuses = map[string]struct{}{
 	FundManagementDayEndWithdrawStatusAbnormal:   {},
 }
 
-var allowedFundManagementCalculateAmountTypes = map[string]struct{}{
-	FundManagementCalculateAmountTypeOnlyDayEndBalance:   {},
-	FundManagementCalculateAmountTypeAllowCurrentBalance: {},
-}
-
 var allowedFundManagementBillTypes = map[string]struct{}{
 	FundManagementBillTypeNoSucc: {},
 }

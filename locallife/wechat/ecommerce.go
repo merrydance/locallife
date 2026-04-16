@@ -579,16 +579,8 @@ var allowedSubMerchantSettlementAccountNumberRules = map[string]struct{}{
 	wechatcontracts.SubMerchantSettlementAccountNumberRuleMaskV2: {},
 }
 
-func newPartnerOrderQueryValidationError(operation string, format string, args ...any) error {
-	return wechatcontracts.NewPartnerOrderQueryValidationError(operation, format, args...)
-}
-
 func newPartnerOrderQueryContractError(operation string, format string, args ...any) error {
 	return wechatcontracts.NewPartnerOrderQueryContractError(operation, format, args...)
-}
-
-func newCombineOrderQueryValidationError(operation string, format string, args ...any) error {
-	return wechatcontracts.NewCombineOrderQueryValidationError(operation, format, args...)
 }
 
 func newCombineOrderQueryContractError(operation string, format string, args ...any) error {
@@ -3029,14 +3021,11 @@ func (c *EcommerceClient) UploadImage(ctx context.Context, filename string, file
 	fileHash := sha256.Sum256(fileData)
 	sha256Hex := fmt.Sprintf("%x", fileHash)
 
-	uploadRequest := wechatcontracts.ImageUploadRequest{
-		File: fileData,
-		Meta: wechatcontracts.MerchantMediaUploadMeta{
-			Filename: normalizedFilename,
-			SHA256:   sha256Hex,
-		},
+	meta := wechatcontracts.MerchantMediaUploadMeta{
+		Filename: normalizedFilename,
+		SHA256:   sha256Hex,
 	}
-	metaBytes, err := json.Marshal(uploadRequest.Meta)
+	metaBytes, err := json.Marshal(meta)
 	if err != nil {
 		log.Error().
 			Str("request_id", requestID).
