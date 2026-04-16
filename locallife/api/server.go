@@ -1331,6 +1331,8 @@ func (server *Server) setupRouter() {
 		// 补差管理（运营商发起/退回/取消平台补差）
 		operatorPaymentGroup := operatorsGroup.Group("/payment-orders/:id")
 		{
+			operatorPaymentGroup.GET("/profit-sharing/amounts", server.getProfitSharingAmounts)
+			operatorPaymentGroup.POST("/profit-sharing/receivers/delete", server.deleteProfitSharingReceiver)
 			operatorPaymentGroup.POST("/subsidies", server.createSubsidy)
 			operatorPaymentGroup.POST("/subsidies/return", server.returnSubsidy)
 			operatorPaymentGroup.POST("/subsidies/cancel", server.cancelSubsidy)

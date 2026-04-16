@@ -2785,6 +2785,27 @@ definitions:
       total_sales:
         type: integer
     type: object
+  api.deleteProfitSharingReceiverRequest:
+    properties:
+      account:
+        type: string
+      appid:
+        type: string
+      type:
+        type: string
+    required:
+    - account
+    - type
+    type: object
+  api.deleteProfitSharingReceiverResponse:
+    properties:
+      account:
+        type: string
+      payment_order_id:
+        type: integer
+      type:
+        type: string
+    type: object
   api.deliveryFeeConfigResponse:
     properties:
       base_distance:
@@ -6629,6 +6650,15 @@ definitions:
         type: string
       expire_at:
         type: string
+    type: object
+  api.profitSharingAmountsResponse:
+    properties:
+      payment_order_id:
+        type: integer
+      transaction_id:
+        type: string
+      unsplit_amount:
+        type: integer
     type: object
   api.profitSharingConfigAuditItem:
     properties:
@@ -22980,6 +23010,82 @@ paths:
       summary: 获取财务概览
       tags:
       - 运营商数据统计
+  /v1/operators/me/payment-orders/{id}/profit-sharing/amounts:
+    get:
+      consumes:
+      - application/json
+      description: 运营商按支付单查询微信侧剩余待分账金额，仅适用于收付通分账订单
+      parameters:
+      - description: 支付单ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 待分账金额
+          schema:
+            $ref: '#/definitions/api.profitSharingAmountsResponse'
+        "400":
+          description: 请求参数错误或支付单类型不支持
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 支付单不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "502":
+          description: 微信支付接口不可用
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 查询待分账金额
+      tags:
+      - 运营商财务
+  /v1/operators/me/payment-orders/{id}/profit-sharing/receivers/delete:
+    post:
+      consumes:
+      - application/json
+      description: 运营商按支付单上下文删除微信分账接收方关系，仅适用于收付通分账订单
+      parameters:
+      - description: 支付单ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 删除请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.deleteProfitSharingReceiverRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 删除结果
+          schema:
+            $ref: '#/definitions/api.deleteProfitSharingReceiverResponse'
+        "400":
+          description: 请求参数错误或支付单类型不支持
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 支付单不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "502":
+          description: 微信支付接口不可用
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 删除分账接收方关系
+      tags:
+      - 运营商财务
   /v1/operators/me/profit-sharing/configs:
     get:
       consumes:
@@ -23897,10 +24003,7 @@ paths:
       description: |-
         为订单或预定创建支付订单，当前主路径会按业务类型自动选择真实支付链路。
 
-        **兼容字段：**
-        - `payment_type` 仅作为兼容保留字段，可不传。
-        - 对 `order` 和 `reservation` 主支付，系统已统一走平台收付通普通支付。
-        - 旧客户端即使传入 `native` 或 `miniprogram`，也不会再改变底层支付物理链路。
+        `payment_type` 为兼容字段，可不传；当前 `order` 和 `reservation` 主支付统一走平台收付通普通支付。
 
         **业务类型：**
         - order: 订单支付

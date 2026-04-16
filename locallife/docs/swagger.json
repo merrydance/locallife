@@ -20143,6 +20143,125 @@
                 }
             }
         },
+        "/v1/operators/me/payment-orders/{id}/profit-sharing/amounts": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "运营商按支付单查询微信侧剩余待分账金额，仅适用于收付通分账订单",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营商财务"
+                ],
+                "summary": "查询待分账金额",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "支付单ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "待分账金额",
+                        "schema": {
+                            "$ref": "#/definitions/api.profitSharingAmountsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误或支付单类型不支持",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "支付单不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "微信支付接口不可用",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/operators/me/payment-orders/{id}/profit-sharing/receivers/delete": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "运营商按支付单上下文删除微信分账接收方关系，仅适用于收付通分账订单",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营商财务"
+                ],
+                "summary": "删除分账接收方关系",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "支付单ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "删除请求",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.deleteProfitSharingReceiverRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "删除结果",
+                        "schema": {
+                            "$ref": "#/definitions/api.deleteProfitSharingReceiverResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误或支付单类型不支持",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "支付单不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "微信支付接口不可用",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/operators/me/profit-sharing/configs": {
             "get": {
                 "security": [
@@ -21477,7 +21596,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "为订单或预定创建支付订单，当前主路径会按业务类型自动选择真实支付链路。\n\n**兼容字段：**\n- `payment_type` 仅作为兼容保留字段，可不传。\n- 对 `order` 和 `reservation` 主支付，系统已统一走平台收付通普通支付。\n- 旧客户端即使传入 `native` 或 `miniprogram`，也不会再改变底层支付物理链路。\n\n**业务类型：**\n- order: 订单支付\n- reservation: 预定押金\n\n**幂等性：** 如果已存在待支付的支付订单，将直接返回该订单。\n\n**安全限制：**\n- 订单必须属于当前用户\n- 订单必须处于pending状态",
+                "description": "为订单或预定创建支付订单，当前主路径会按业务类型自动选择真实支付链路。\n\n`payment_type` 为兼容字段，可不传；当前 `order` 和 `reservation` 主支付统一走平台收付通普通支付。\n\n**业务类型：**\n- order: 订单支付\n- reservation: 预定押金\n\n**幂等性：** 如果已存在待支付的支付订单，将直接返回该订单。\n\n**安全限制：**\n- 订单必须属于当前用户\n- 订单必须处于pending状态",
                 "consumes": [
                     "application/json"
                 ],
@@ -35161,6 +35280,38 @@
                 }
             }
         },
+        "api.deleteProfitSharingReceiverRequest": {
+            "type": "object",
+            "required": [
+                "account",
+                "type"
+            ],
+            "properties": {
+                "account": {
+                    "type": "string"
+                },
+                "appid": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.deleteProfitSharingReceiverResponse": {
+            "type": "object",
+            "properties": {
+                "account": {
+                    "type": "string"
+                },
+                "payment_order_id": {
+                    "type": "integer"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
         "api.deliveryFeeConfigResponse": {
             "type": "object",
             "properties": {
@@ -40858,6 +41009,20 @@
                 },
                 "expire_at": {
                     "type": "string"
+                }
+            }
+        },
+        "api.profitSharingAmountsResponse": {
+            "type": "object",
+            "properties": {
+                "payment_order_id": {
+                    "type": "integer"
+                },
+                "transaction_id": {
+                    "type": "string"
+                },
+                "unsplit_amount": {
+                    "type": "integer"
                 }
             }
         },
