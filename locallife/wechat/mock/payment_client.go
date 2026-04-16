@@ -423,10 +423,10 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) CreateEcommerceRefund(ctx, r
 }
 
 // CreateEcommerceWithdraw mocks base method.
-func (m *MockEcommerceClientInterface) CreateEcommerceWithdraw(ctx context.Context, req *wechat.EcommerceWithdrawRequest) (*wechat.EcommerceWithdrawResponse, error) {
+func (m *MockEcommerceClientInterface) CreateEcommerceWithdraw(ctx context.Context, req *contracts.EcommerceWithdrawRequest) (*contracts.EcommerceWithdrawCreateResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateEcommerceWithdraw", ctx, req)
-	ret0, _ := ret[0].(*wechat.EcommerceWithdrawResponse)
+	ret0, _ := ret[0].(*contracts.EcommerceWithdrawCreateResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1004,10 +1004,10 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) QueryEcommerceCancelWithdraw
 }
 
 // QueryEcommerceFundBalance mocks base method.
-func (m *MockEcommerceClientInterface) QueryEcommerceFundBalance(ctx context.Context, subMchID string) (*wechat.EcommerceFundBalanceResponse, error) {
+func (m *MockEcommerceClientInterface) QueryEcommerceFundBalance(ctx context.Context, subMchID string) (*contracts.EcommerceFundBalanceResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "QueryEcommerceFundBalance", ctx, subMchID)
-	ret0, _ := ret[0].(*wechat.EcommerceFundBalanceResponse)
+	ret0, _ := ret[0].(*contracts.EcommerceFundBalanceResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1019,10 +1019,10 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) QueryEcommerceFundBalance(ct
 }
 
 // QueryEcommerceFundBalanceByAccountType mocks base method.
-func (m *MockEcommerceClientInterface) QueryEcommerceFundBalanceByAccountType(ctx context.Context, subMchID, accountType string) (*wechat.EcommerceFundBalanceResponse, error) {
+func (m *MockEcommerceClientInterface) QueryEcommerceFundBalanceByAccountType(ctx context.Context, subMchID, accountType string) (*contracts.EcommerceFundBalanceResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "QueryEcommerceFundBalanceByAccountType", ctx, subMchID, accountType)
-	ret0, _ := ret[0].(*wechat.EcommerceFundBalanceResponse)
+	ret0, _ := ret[0].(*contracts.EcommerceFundBalanceResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1034,10 +1034,10 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) QueryEcommerceFundBalanceByA
 }
 
 // QueryEcommerceFundDayEndBalance mocks base method.
-func (m *MockEcommerceClientInterface) QueryEcommerceFundDayEndBalance(ctx context.Context, subMchID, date, accountType string) (*wechat.EcommerceFundBalanceResponse, error) {
+func (m *MockEcommerceClientInterface) QueryEcommerceFundDayEndBalance(ctx context.Context, subMchID, date, accountType string) (*contracts.EcommerceFundBalanceResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "QueryEcommerceFundDayEndBalance", ctx, subMchID, date, accountType)
-	ret0, _ := ret[0].(*wechat.EcommerceFundBalanceResponse)
+	ret0, _ := ret[0].(*contracts.EcommerceFundBalanceResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1064,10 +1064,10 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) QueryEcommerceRefund(ctx, su
 }
 
 // QueryEcommerceWithdrawByOutRequestNo mocks base method.
-func (m *MockEcommerceClientInterface) QueryEcommerceWithdrawByOutRequestNo(ctx context.Context, subMchID, outRequestNo string) (*wechat.EcommerceWithdrawResponse, error) {
+func (m *MockEcommerceClientInterface) QueryEcommerceWithdrawByOutRequestNo(ctx context.Context, subMchID, outRequestNo string) (*contracts.EcommerceWithdrawQueryResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "QueryEcommerceWithdrawByOutRequestNo", ctx, subMchID, outRequestNo)
-	ret0, _ := ret[0].(*wechat.EcommerceWithdrawResponse)
+	ret0, _ := ret[0].(*contracts.EcommerceWithdrawQueryResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1109,10 +1109,10 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) QueryPartnerOrderByTransacti
 }
 
 // QueryPlatformFundBalance mocks base method.
-func (m *MockEcommerceClientInterface) QueryPlatformFundBalance(ctx context.Context, accountType string) (*wechat.PlatformFundBalanceResponse, error) {
+func (m *MockEcommerceClientInterface) QueryPlatformFundBalance(ctx context.Context, accountType string) (*contracts.PlatformFundBalanceResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "QueryPlatformFundBalance", ctx, accountType)
-	ret0, _ := ret[0].(*wechat.PlatformFundBalanceResponse)
+	ret0, _ := ret[0].(*contracts.PlatformFundBalanceResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1124,10 +1124,10 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) QueryPlatformFundBalance(ctx
 }
 
 // QueryPlatformFundDayEndBalance mocks base method.
-func (m *MockEcommerceClientInterface) QueryPlatformFundDayEndBalance(ctx context.Context, accountType, date string) (*wechat.PlatformFundBalanceResponse, error) {
+func (m *MockEcommerceClientInterface) QueryPlatformFundDayEndBalance(ctx context.Context, accountType, date string) (*contracts.PlatformFundBalanceResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "QueryPlatformFundDayEndBalance", ctx, accountType, date)
-	ret0, _ := ret[0].(*wechat.PlatformFundBalanceResponse)
+	ret0, _ := ret[0].(*contracts.PlatformFundBalanceResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

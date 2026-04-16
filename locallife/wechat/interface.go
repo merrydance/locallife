@@ -247,19 +247,19 @@ type EcommerceClientInterface interface {
 	QueryEcommerceCancelWithdrawByApplymentID(ctx context.Context, applymentID string) (*wechatcontracts.CancelWithdrawQueryResponse, error)
 
 	// QueryEcommerceFundBalance 查询二级商户可用余额
-	QueryEcommerceFundBalance(ctx context.Context, subMchID string) (*EcommerceFundBalanceResponse, error)
+	QueryEcommerceFundBalance(ctx context.Context, subMchID string) (*wechatcontracts.EcommerceFundBalanceResponse, error)
 
 	// QueryEcommerceFundBalanceByAccountType 按账户类型查询二级商户实时余额
-	QueryEcommerceFundBalanceByAccountType(ctx context.Context, subMchID, accountType string) (*EcommerceFundBalanceResponse, error)
+	QueryEcommerceFundBalanceByAccountType(ctx context.Context, subMchID, accountType string) (*wechatcontracts.EcommerceFundBalanceResponse, error)
 
 	// QueryEcommerceFundDayEndBalance 查询二级商户指定日期日终余额
-	QueryEcommerceFundDayEndBalance(ctx context.Context, subMchID, date, accountType string) (*EcommerceFundBalanceResponse, error)
+	QueryEcommerceFundDayEndBalance(ctx context.Context, subMchID, date, accountType string) (*wechatcontracts.EcommerceFundBalanceResponse, error)
 
 	// QueryPlatformFundBalance 查询平台商户实时余额
-	QueryPlatformFundBalance(ctx context.Context, accountType string) (*PlatformFundBalanceResponse, error)
+	QueryPlatformFundBalance(ctx context.Context, accountType string) (*wechatcontracts.PlatformFundBalanceResponse, error)
 
 	// QueryPlatformFundDayEndBalance 查询平台商户指定日期日终余额
-	QueryPlatformFundDayEndBalance(ctx context.Context, accountType, date string) (*PlatformFundBalanceResponse, error)
+	QueryPlatformFundDayEndBalance(ctx context.Context, accountType, date string) (*wechatcontracts.PlatformFundBalanceResponse, error)
 
 	// GetFundFlowBillDownloadURL 获取平台资金账单下载地址
 	GetFundFlowBillDownloadURL(ctx context.Context, billDate time.Time, accountType, tarType string) (*BillDownloadURLResponse, error)
@@ -268,10 +268,10 @@ type EcommerceClientInterface interface {
 	GetProfitSharingBillDownloadURL(ctx context.Context, billDate time.Time, subMchID, tarType string) (*BillDownloadURLResponse, error)
 
 	// CreateEcommerceWithdraw 发起二级商户提现
-	CreateEcommerceWithdraw(ctx context.Context, req *EcommerceWithdrawRequest) (*EcommerceWithdrawResponse, error)
+	CreateEcommerceWithdraw(ctx context.Context, req *wechatcontracts.EcommerceWithdrawRequest) (*wechatcontracts.EcommerceWithdrawCreateResponse, error)
 
 	// QueryEcommerceWithdrawByOutRequestNo 通过外部申请单号查询提现状态
-	QueryEcommerceWithdrawByOutRequestNo(ctx context.Context, subMchID, outRequestNo string) (*EcommerceWithdrawResponse, error)
+	QueryEcommerceWithdrawByOutRequestNo(ctx context.Context, subMchID, outRequestNo string) (*wechatcontracts.EcommerceWithdrawQueryResponse, error)
 
 	// ==================== 商户违规通知 ====================
 	// QueryViolationNotification 查询商户违规通知回调地址

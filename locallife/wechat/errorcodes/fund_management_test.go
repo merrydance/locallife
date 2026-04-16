@@ -16,3 +16,12 @@ func TestFundManagementDocumentedCodeSets(t *testing.T) {
 		t.Fatalf("expected withdraw bill documented codes to include STATEMENT_CREATING")
 	}
 }
+
+func TestFundManagementCodeHelpers(t *testing.T) {
+	if !FundManagementCodeEquals(" order_not_exist ", FundManagementCodeOrderNotExist) {
+		t.Fatalf("expected ORDER_NOT_EXIST comparison to ignore case and whitespace")
+	}
+	if !FundManagementCodeIn(" statement_creating ", FundManagementCodeNoStatementExist, FundManagementCodeStatementCreating) {
+		t.Fatalf("expected STATEMENT_CREATING to match candidate set")
+	}
+}

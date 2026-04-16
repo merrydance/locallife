@@ -2439,6 +2439,27 @@ func newEcommerceWithdrawNotifyRequest(t *testing.T, notificationID string) *htt
 	return request
 }
 
+func validWithdrawNotificationResource(t *testing.T, outRequestNo, withdrawID, status, reason string) []byte {
+	t.Helper()
+
+	payload := map[string]string{
+		"sub_mchid":      "sub-mch-001",
+		"withdraw_id":    withdrawID,
+		"out_request_no": outRequestNo,
+		"status":         status,
+		"reason":         reason,
+		"create_time":    "2026-04-06T10:00:00+08:00",
+		"update_time":    "2026-04-06T10:05:00+08:00",
+		"account_type":   "BASIC",
+		"account_number": "6222020202020202",
+		"account_bank":   "招商银行",
+	}
+
+	body, err := json.Marshal(payload)
+	require.NoError(t, err)
+	return body
+}
+
 func assertWechatSuccessResponse(t *testing.T, recorder *httptest.ResponseRecorder, expectedMessage string) {
 	t.Helper()
 	_ = expectedMessage
@@ -2486,7 +2507,7 @@ func TestHandleEcommerceWithdrawNotify_SuccessUpdatesWithdrawal(t *testing.T) {
 
 	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 	store.EXPECT().TryClaimWechatNotification(gomock.Any(), gomock.Any()).Return(true, nil)
-	ecommerceClient.EXPECT().DecryptNotificationRaw(gomock.Any()).Return([]byte(`{"sub_mchid":"sub-mch-001","withdraw_id":"wd_001","out_request_no":"MW202604060001","status":"SUCCESS","reason":""}`), nil)
+	ecommerceClient.EXPECT().DecryptNotificationRaw(gomock.Any()).Return(validWithdrawNotificationResource(t, "MW202604060001", "wd_001", "SUCCESS", ""), nil)
 	store.EXPECT().GetWithdrawalRecordByOutRequestNo(gomock.Any(), pgtype.Text{String: "MW202604060001", Valid: true}).Return(db.WithdrawalRecord{
 		ID:          66,
 		UserID:      99,
@@ -2537,7 +2558,7 @@ func TestHandleEcommerceWithdrawNotify_AccountInfoPersistFailureReturnsFail(t *t
 
 	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 	store.EXPECT().TryClaimWechatNotification(gomock.Any(), gomock.Any()).Return(true, nil)
-	ecommerceClient.EXPECT().DecryptNotificationRaw(gomock.Any()).Return([]byte(`{"sub_mchid":"sub-mch-001","withdraw_id":"wd_001","out_request_no":"MW202604060001","status":"SUCCESS","reason":""}`), nil)
+	ecommerceClient.EXPECT().DecryptNotificationRaw(gomock.Any()).Return(validWithdrawNotificationResource(t, "MW202604060001", "wd_001", "SUCCESS", ""), nil)
 	store.EXPECT().GetWithdrawalRecordByOutRequestNo(gomock.Any(), pgtype.Text{String: "MW202604060001", Valid: true}).Return(db.WithdrawalRecord{
 		ID:          66,
 		UserID:      99,
@@ -2579,7 +2600,7 @@ func TestHandleEcommerceWithdrawNotify_StatusPersistFailureReturnsFail(t *testin
 
 	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 	store.EXPECT().TryClaimWechatNotification(gomock.Any(), gomock.Any()).Return(true, nil)
-	ecommerceClient.EXPECT().DecryptNotificationRaw(gomock.Any()).Return([]byte(`{"sub_mchid":"sub-mch-001","withdraw_id":"wd_001","out_request_no":"MW202604060001","status":"SUCCESS","reason":""}`), nil)
+	ecommerceClient.EXPECT().DecryptNotificationRaw(gomock.Any()).Return(validWithdrawNotificationResource(t, "MW202604060001", "wd_001", "SUCCESS", ""), nil)
 	store.EXPECT().GetWithdrawalRecordByOutRequestNo(gomock.Any(), pgtype.Text{String: "MW202604060001", Valid: true}).Return(db.WithdrawalRecord{
 		ID:          66,
 		UserID:      99,
@@ -2615,7 +2636,7 @@ func TestHandleEcommerceWithdrawNotify_WithdrawalNotFoundReturnsFail(t *testing.
 
 	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 	store.EXPECT().TryClaimWechatNotification(gomock.Any(), gomock.Any()).Return(true, nil)
-	ecommerceClient.EXPECT().DecryptNotificationRaw(gomock.Any()).Return([]byte(`{"sub_mchid":"sub-mch-001","withdraw_id":"wd_404","out_request_no":"MW404","status":"FAIL","reason":"账户异常"}`), nil)
+	ecommerceClient.EXPECT().DecryptNotificationRaw(gomock.Any()).Return(validWithdrawNotificationResource(t, "MW404", "wd_404", "FAIL", "账户异常"), nil)
 	store.EXPECT().GetWithdrawalRecordByOutRequestNo(gomock.Any(), pgtype.Text{String: "MW404", Valid: true}).Return(db.WithdrawalRecord{}, db.ErrRecordNotFound)
 	store.EXPECT().ReleaseWechatNotificationClaim(gomock.Any(), notificationID).Return(nil)
 

@@ -38,6 +38,20 @@ func CanonicalFundManagementCode(code string) string {
 	return strings.ToUpper(strings.TrimSpace(code))
 }
 
+func FundManagementCodeEquals(code, expected string) bool {
+	return CanonicalFundManagementCode(code) == CanonicalFundManagementCode(expected)
+}
+
+func FundManagementCodeIn(code string, expected ...string) bool {
+	actual := CanonicalFundManagementCode(code)
+	for _, candidate := range expected {
+		if actual == CanonicalFundManagementCode(candidate) {
+			return true
+		}
+	}
+	return false
+}
+
 var FundManagementCommonCodes = newFundManagementCodeSet(
 	FundManagementCodeParamError,
 	FundManagementCodeInvalidRequest,

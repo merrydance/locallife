@@ -56,11 +56,10 @@ func TestMerchantAccountDayEndBalanceIntegration(t *testing.T) {
 	mockEcommerceClient.EXPECT().
 		QueryEcommerceFundDayEndBalance(gomock.Any(), "sub_mch_finance_integration_001", "2026-04-05", "DEPOSIT").
 		Return(&wechat.EcommerceFundBalanceResponse{
-			SubMchID:           "sub_mch_finance_integration_001",
-			AvailableAmount:    5600,
-			PendingAmount:      40,
-			AccountType:        "DEPOSIT",
-			WithdrawableAmount: 5600,
+			SubMchID:        "sub_mch_finance_integration_001",
+			AvailableAmount: 5600,
+			PendingAmount:   40,
+			AccountType:     "DEPOSIT",
 		}, nil)
 	server.SetEcommerceClientForTest(mockEcommerceClient)
 	defer server.SetEcommerceClientForTest(nil)
@@ -107,14 +106,12 @@ func TestPlatformAccountBalanceIntegration(t *testing.T) {
 		Return(&wechat.PlatformFundBalanceResponse{
 			AvailableAmount: 43210,
 			PendingAmount:   321,
-			AccountType:     "OPERATION",
 		}, nil)
 	mockEcommerceClient.EXPECT().
 		QueryPlatformFundDayEndBalance(gomock.Any(), "FEES", "2026-04-05").
 		Return(&wechat.PlatformFundBalanceResponse{
 			AvailableAmount: 2100,
 			PendingAmount:   12,
-			AccountType:     "FEES",
 		}, nil)
 	server.SetEcommerceClientForTest(mockEcommerceClient)
 	defer server.SetEcommerceClientForTest(nil)

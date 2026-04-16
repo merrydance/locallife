@@ -18,15 +18,19 @@ import (
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/websocket"
 	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	"github.com/merrydance/locallife/worker"
 
 	"github.com/gin-gonic/gin"
+	"github.com/rs/zerolog/log"
 )
 
 const (
-	merchantWithdrawMinAmount = int64(100) // 1元
-	merchantWithdrawMaxAmount = int64(500000000)
-	merchantWithdrawChannel   = "wechat_ecommerce_fund"
+	merchantWithdrawMinAmount                    = int64(100) // 1元
+	merchantWithdrawMaxAmount                    = int64(500000000)
+	merchantWithdrawChannel                      = "wechat_ecommerce_fund"
+	merchantWithdrawSyncStatePendingConfirmation = "pending_confirmation"
+	merchantWithdrawSyncStateStale               = "stale"
 )
 
 // ==================== 财务概览 ====================
@@ -1069,6 +1073,8 @@ type merchantWithdrawItem struct {
 	WithdrawID   string `json:"withdraw_id,omitempty"`
 	SubMchID     string `json:"sub_mch_id,omitempty"`
 	Reason       string `json:"reason,omitempty"`
+	SyncState    string `json:"sync_state,omitempty"`
+	SyncMessage  string `json:"sync_message,omitempty"`
 	CreatedAt    string `json:"created_at"`
 	UpdatedAt    string `json:"updated_at"`
 }
@@ -1101,11 +1107,21 @@ type merchantWithdrawCreateResponse struct {
 	Wechat     interface{}          `json:"wechat"`
 }
 
+func deriveMerchantWithdrawableAmount(balance *wechat.EcommerceFundBalanceResponse) int64 {
+	if balance == nil {
+		return 0
+	}
+	if balance.AvailableAmount <= 0 {
+		return 0
+	}
+	return balance.AvailableAmount
+}
+
 func mapWechatWithdrawStatus(status string) string {
 	switch strings.ToUpper(status) {
-	case "SUCCESS":
+	case wechatcontracts.FundManagementWithdrawStatusSuccess:
 		return "success"
-	case "FAIL", "REFUND", "CLOSE":
+	case wechatcontracts.FundManagementWithdrawStatusFail, wechatcontracts.FundManagementWithdrawStatusRefund, wechatcontracts.FundManagementWithdrawStatusClose:
 		return "failed"
 	default:
 		return "pending"
@@ -1133,9 +1149,9 @@ func (server *Server) persistWithdrawalRecordStatus(ctx *gin.Context, record db.
 		return record, nil
 	}
 	updated, err := server.store.UpdateWithdrawalStatus(ctx, db.UpdateWithdrawalStatusParams{
-		ID:     record.ID,
-		Status: status,
-		Reason: reasonArg,
+		ID:          record.ID,
+		Status:      status,
+		Reason:      reasonArg,
 		ClearReason: clearReason,
 	})
 	if err != nil {
@@ -1238,6 +1254,12 @@ func toMerchantWithdrawItem(record db.WithdrawalRecord) merchantWithdrawItem {
 	}
 }
 
+func withMerchantWithdrawSyncState(item merchantWithdrawItem, state, message string) merchantWithdrawItem {
+	item.SyncState = state
+	item.SyncMessage = message
+	return item
+}
+
 func (server *Server) getOwnerMerchantWithActivePaymentConfig(ctx *gin.Context, userID int64) (db.Merchant, db.MerchantPaymentConfig, error) {
 	merchant, err := server.requireOwnedMerchantForUser(ctx, userID)
 	if err != nil {
@@ -1324,7 +1346,7 @@ func (server *Server) getMerchantAccountBalance(ctx *gin.Context) {
 
 	balance, err := loadSubMerchantFundBalance(ctx, server.ecommerceClient, paymentConfig.SubMchID, query)
 	if err != nil {
-		ctx.JSON(http.StatusBadGateway, internalError(ctx, fmt.Errorf("query ecommerce fund balance: %w", err)))
+		respondFundBalanceQueryError(ctx, "query ecommerce fund balance", err)
 		return
 	}
 
@@ -1332,7 +1354,7 @@ func (server *Server) getMerchantAccountBalance(ctx *gin.Context) {
 		SubMchID:           paymentConfig.SubMchID,
 		AvailableAmount:    balance.AvailableAmount,
 		PendingAmount:      balance.PendingAmount,
-		WithdrawableAmount: balance.WithdrawableAmount,
+		WithdrawableAmount: deriveMerchantWithdrawableAmount(balance),
 		AccountType:        query.AccountType,
 		BalanceDate:        query.Date,
 		AccountStatus:      "active",
@@ -1422,46 +1444,68 @@ func (server *Server) createMerchantAccountWithdraw(ctx *gin.Context) {
 		return
 	}
 
-	withdrawResp, err := server.ecommerceClient.CreateEcommerceWithdraw(ctx, &wechat.EcommerceWithdrawRequest{
+	withdrawCreateResp, err := server.ecommerceClient.CreateEcommerceWithdraw(ctx, &wechat.EcommerceWithdrawRequest{
 		SubMchID:     paymentConfig.SubMchID,
 		OutRequestNo: outRequestNo,
 		Amount:       req.Amount,
 		Remark:       req.Remark,
 	})
+	var (
+		wechatPayload interface{}
+		withdrawID    string
+		status        = "pending"
+		reason        string
+	)
 	if err != nil {
 		queryResp, queryErr := server.ecommerceClient.QueryEcommerceWithdrawByOutRequestNo(ctx, paymentConfig.SubMchID, outRequestNo)
 		if queryErr != nil {
-			record = server.updateWithdrawalRecordStatus(ctx, record, "pending", fmt.Sprintf("withdraw request submitted, awaiting confirmation: %v", err))
+			_ = ctx.Error(err)
+			_ = ctx.Error(queryErr)
+			log.Warn().
+				Err(err).
+				Str("request_id", GetRequestID(ctx)).
+				Int64("merchant_id", merchant.ID).
+				Int64("withdrawal_record_id", record.ID).
+				Str("sub_mchid", paymentConfig.SubMchID).
+				Str("out_request_no", outRequestNo).
+				Str("query_error", queryErr.Error()).
+				Msg("merchant withdraw submitted but wechat confirmation is pending")
+			record = server.updateWithdrawalRecordStatus(ctx, record, "pending", "withdraw request submitted, awaiting wechat confirmation")
 			server.enqueueWithdrawalResultPolling(ctx, record)
 			ctx.JSON(http.StatusAccepted, merchantWithdrawCreateResponse{
-				Withdrawal: toMerchantWithdrawItem(record),
-				Wechat:     nil,
+				Withdrawal: withMerchantWithdrawSyncState(
+					toMerchantWithdrawItem(record),
+					merchantWithdrawSyncStatePendingConfirmation,
+					"微信提现已提交，但微信侧结果暂未确认，系统将继续同步状态。",
+				),
+				Wechat: nil,
 			})
 			return
 		}
-		withdrawResp = queryResp
+		withdrawID = queryResp.WithdrawID
+		status = mapWechatWithdrawStatus(queryResp.Status)
+		reason = queryResp.Reason
+		wechatPayload = queryResp
+	} else {
+		withdrawID = withdrawCreateResp.WithdrawID
+		wechatPayload = withdrawCreateResp
 	}
 
 	accountInfoBytes, _ = json.Marshal(merchantWithdrawAccountInfo{
 		MerchantID:   merchant.ID,
 		SubMchID:     paymentConfig.SubMchID,
 		OutRequestNo: outRequestNo,
-		WithdrawID:   withdrawResp.WithdrawID,
+		WithdrawID:   withdrawID,
 		Remark:       req.Remark,
 	})
 	record = server.updateWithdrawalRecordAccountInfo(ctx, record, accountInfoBytes)
 
-	status := mapWechatWithdrawStatus(withdrawResp.Status)
-	reason := ""
-	if withdrawResp.Reason != "" {
-		reason = withdrawResp.Reason
-	}
 	record = server.updateWithdrawalRecordStatus(ctx, record, status, reason)
 	server.enqueueWithdrawalResultPolling(ctx, record)
 
 	ctx.JSON(http.StatusCreated, merchantWithdrawCreateResponse{
 		Withdrawal: toMerchantWithdrawItem(record),
-		Wechat:     withdrawResp,
+		Wechat:     wechatPayload,
 	})
 }
 
@@ -1593,6 +1637,7 @@ func (server *Server) getMerchantAccountWithdrawal(ctx *gin.Context) {
 	}
 
 	info := parseMerchantWithdrawAccountInfo(record.AccountInfo)
+	response := toMerchantWithdrawItem(record)
 	if info.SubMchID != "" && info.OutRequestNo != "" {
 		wxResp, queryErr := server.ecommerceClient.QueryEcommerceWithdrawByOutRequestNo(ctx, info.SubMchID, info.OutRequestNo)
 		if queryErr == nil {
@@ -1610,8 +1655,23 @@ func (server *Server) getMerchantAccountWithdrawal(ctx *gin.Context) {
 					record = server.updateWithdrawalRecordAccountInfo(ctx, record, raw)
 				}
 			}
+			response = toMerchantWithdrawItem(record)
+		} else {
+			_ = ctx.Error(queryErr)
+			log.Warn().
+				Err(queryErr).
+				Str("request_id", GetRequestID(ctx)).
+				Int64("withdrawal_record_id", record.ID).
+				Str("sub_mchid", info.SubMchID).
+				Str("out_request_no", info.OutRequestNo).
+				Msg("query merchant withdraw status failed; returning cached record")
+			response = withMerchantWithdrawSyncState(
+				response,
+				merchantWithdrawSyncStateStale,
+				"微信提现状态同步失败，当前展示的是本地缓存结果，请稍后刷新。",
+			)
 		}
 	}
 
-	ctx.JSON(http.StatusOK, toMerchantWithdrawItem(record))
+	ctx.JSON(http.StatusOK, response)
 }

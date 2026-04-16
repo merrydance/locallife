@@ -2295,58 +2295,43 @@ func (c *EcommerceClient) QueryEcommerceRefundByID(ctx context.Context, subMchID
 
 // ==================== 账户资金管理 ====================
 
-// EcommerceFundBalanceResponse 二级商户资金账户余额
-type EcommerceFundBalanceResponse struct {
-	SubMchID           string `json:"sub_mchid"`
-	AvailableAmount    int64  `json:"available_amount"`
-	PendingAmount      int64  `json:"pending_amount"`
-	AccountType        string `json:"account_type"`
-	WithdrawableAmount int64  `json:"withdrawable_amount"`
-}
+type EcommerceFundBalanceResponse = wechatcontracts.EcommerceFundBalanceResponse
 
-// PlatformFundBalanceResponse 平台商户资金账户余额
-type PlatformFundBalanceResponse struct {
-	AvailableAmount int64  `json:"available_amount"`
-	PendingAmount   int64  `json:"pending_amount"`
-	AccountType     string `json:"account_type"`
-}
+type PlatformFundBalanceResponse = wechatcontracts.PlatformFundBalanceResponse
+
+type EcommerceWithdrawRequest = wechatcontracts.EcommerceWithdrawRequest
+
+type EcommerceWithdrawCreateResponse = wechatcontracts.EcommerceWithdrawCreateResponse
+
+type EcommerceWithdrawResponse = wechatcontracts.EcommerceWithdrawQueryResponse
 
 // QueryEcommerceFundBalance 查询二级商户可用余额
 func (c *EcommerceClient) QueryEcommerceFundBalance(ctx context.Context, subMchID string) (*EcommerceFundBalanceResponse, error) {
-	return c.QueryEcommerceFundBalanceByAccountType(ctx, subMchID, "BASIC")
+	return c.QueryEcommerceFundBalanceByAccountType(ctx, subMchID, wechatcontracts.FundManagementAccountTypeBasic)
 }
 
 // QueryEcommerceFundBalanceByAccountType 按账户类型查询二级商户实时余额
 func (c *EcommerceClient) QueryEcommerceFundBalanceByAccountType(ctx context.Context, subMchID, accountType string) (*EcommerceFundBalanceResponse, error) {
-	if subMchID == "" {
-		return nil, fmt.Errorf("query ecommerce fund balance: sub_mchid is required")
-	}
-	if accountType == "" {
-		accountType = "BASIC"
+	trimmedSubMchID, trimmedAccountType, err := wechatcontracts.ValidateEcommerceFundBalanceQueryInput(subMchID, accountType)
+	if err != nil {
+		return nil, err
 	}
 
 	query := url.Values{}
-	query.Set("account_type", accountType)
-	requestURL := fmt.Sprintf(ecommerceFundBalanceURL, url.PathEscape(subMchID)) + "?" + query.Encode()
+	query.Set("account_type", trimmedAccountType)
+	requestURL := fmt.Sprintf(ecommerceFundBalanceURL, url.PathEscape(trimmedSubMchID)) + "?" + query.Encode()
 
 	respBody, err := c.doRequest(ctx, http.MethodGet, requestURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("query ecommerce fund balance: %w", err)
 	}
 
-	var resp EcommerceFundBalanceResponse
+	var resp wechatcontracts.EcommerceFundBalanceResponse
 	if err := json.Unmarshal(respBody, &resp); err != nil {
 		return nil, fmt.Errorf("unmarshal response: %w", err)
 	}
-
-	if resp.SubMchID == "" {
-		resp.SubMchID = subMchID
-	}
-	if resp.AccountType == "" {
-		resp.AccountType = accountType
-	}
-	if resp.WithdrawableAmount == 0 && resp.AvailableAmount > 0 {
-		resp.WithdrawableAmount = resp.AvailableAmount
+	if err := wechatcontracts.ValidateEcommerceFundBalanceResponse("query ecommerce fund balance", &resp, trimmedSubMchID, trimmedAccountType); err != nil {
+		return nil, err
 	}
 
 	return &resp, nil
@@ -2354,39 +2339,27 @@ func (c *EcommerceClient) QueryEcommerceFundBalanceByAccountType(ctx context.Con
 
 // QueryEcommerceFundDayEndBalance 查询二级商户指定日期日终余额
 func (c *EcommerceClient) QueryEcommerceFundDayEndBalance(ctx context.Context, subMchID, date, accountType string) (*EcommerceFundBalanceResponse, error) {
-	if subMchID == "" {
-		return nil, fmt.Errorf("query ecommerce fund day end balance: sub_mchid is required")
-	}
-	if date == "" {
-		return nil, fmt.Errorf("query ecommerce fund day end balance: date is required")
-	}
-	if accountType == "" {
-		accountType = "BASIC"
+	trimmedSubMchID, trimmedDate, trimmedAccountType, err := wechatcontracts.ValidateEcommerceFundDayEndBalanceQueryInput(subMchID, date, accountType)
+	if err != nil {
+		return nil, err
 	}
 
 	query := url.Values{}
-	query.Set("date", date)
-	query.Set("account_type", accountType)
-	requestURL := fmt.Sprintf(ecommerceFundDayEndBalanceURL, url.PathEscape(subMchID)) + "?" + query.Encode()
+	query.Set("date", trimmedDate)
+	query.Set("account_type", trimmedAccountType)
+	requestURL := fmt.Sprintf(ecommerceFundDayEndBalanceURL, url.PathEscape(trimmedSubMchID)) + "?" + query.Encode()
 
 	respBody, err := c.doRequest(ctx, http.MethodGet, requestURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("query ecommerce fund day end balance: %w", err)
 	}
 
-	var resp EcommerceFundBalanceResponse
+	var resp wechatcontracts.EcommerceFundBalanceResponse
 	if err := json.Unmarshal(respBody, &resp); err != nil {
 		return nil, fmt.Errorf("unmarshal response: %w", err)
 	}
-
-	if resp.SubMchID == "" {
-		resp.SubMchID = subMchID
-	}
-	if resp.AccountType == "" {
-		resp.AccountType = accountType
-	}
-	if resp.WithdrawableAmount == 0 && resp.AvailableAmount > 0 {
-		resp.WithdrawableAmount = resp.AvailableAmount
+	if err := wechatcontracts.ValidateEcommerceFundBalanceResponse("query ecommerce fund day end balance", &resp, trimmedSubMchID, trimmedAccountType); err != nil {
+		return nil, err
 	}
 
 	return &resp, nil
@@ -2394,22 +2367,23 @@ func (c *EcommerceClient) QueryEcommerceFundDayEndBalance(ctx context.Context, s
 
 // QueryPlatformFundBalance 查询平台商户实时余额
 func (c *EcommerceClient) QueryPlatformFundBalance(ctx context.Context, accountType string) (*PlatformFundBalanceResponse, error) {
-	if accountType == "" {
-		accountType = "BASIC"
+	trimmedAccountType, err := wechatcontracts.ValidatePlatformFundBalanceQueryInput(accountType)
+	if err != nil {
+		return nil, err
 	}
 
-	requestURL := fmt.Sprintf(platformFundBalanceURL, url.PathEscape(accountType))
+	requestURL := fmt.Sprintf(platformFundBalanceURL, url.PathEscape(trimmedAccountType))
 	respBody, err := c.doRequest(ctx, http.MethodGet, requestURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("query platform fund balance: %w", err)
 	}
 
-	var resp PlatformFundBalanceResponse
+	var resp wechatcontracts.PlatformFundBalanceResponse
 	if err := json.Unmarshal(respBody, &resp); err != nil {
 		return nil, fmt.Errorf("unmarshal response: %w", err)
 	}
-	if resp.AccountType == "" {
-		resp.AccountType = accountType
+	if err := wechatcontracts.ValidatePlatformFundBalanceResponse("query platform fund balance", &resp); err != nil {
+		return nil, err
 	}
 
 	return &resp, nil
@@ -2417,84 +2391,55 @@ func (c *EcommerceClient) QueryPlatformFundBalance(ctx context.Context, accountT
 
 // QueryPlatformFundDayEndBalance 查询平台商户指定日期日终余额
 func (c *EcommerceClient) QueryPlatformFundDayEndBalance(ctx context.Context, accountType, date string) (*PlatformFundBalanceResponse, error) {
-	if date == "" {
-		return nil, fmt.Errorf("query platform fund day end balance: date is required")
-	}
-	if accountType == "" {
-		accountType = "BASIC"
+	trimmedAccountType, trimmedDate, err := wechatcontracts.ValidatePlatformFundDayEndBalanceQueryInput(accountType, date)
+	if err != nil {
+		return nil, err
 	}
 
 	query := url.Values{}
-	query.Set("date", date)
-	requestURL := fmt.Sprintf(platformFundDayEndBalanceURL, url.PathEscape(accountType)) + "?" + query.Encode()
+	query.Set("date", trimmedDate)
+	requestURL := fmt.Sprintf(platformFundDayEndBalanceURL, url.PathEscape(trimmedAccountType)) + "?" + query.Encode()
 
 	respBody, err := c.doRequest(ctx, http.MethodGet, requestURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("query platform fund day end balance: %w", err)
 	}
 
-	var resp PlatformFundBalanceResponse
+	var resp wechatcontracts.PlatformFundBalanceResponse
 	if err := json.Unmarshal(respBody, &resp); err != nil {
 		return nil, fmt.Errorf("unmarshal response: %w", err)
 	}
-	if resp.AccountType == "" {
-		resp.AccountType = accountType
+	if err := wechatcontracts.ValidatePlatformFundBalanceResponse("query platform fund day end balance", &resp); err != nil {
+		return nil, err
 	}
 
 	return &resp, nil
 }
 
-// EcommerceWithdrawRequest 二级商户提现请求
-type EcommerceWithdrawRequest struct {
-	SubMchID     string // 二级商户号
-	OutRequestNo string // 商户提现申请单号
-	Amount       int64  // 提现金额（分）
-	Remark       string // 提现备注
-}
-
-// EcommerceWithdrawResponse 二级商户提现响应
-type EcommerceWithdrawResponse struct {
-	SubMchID     string `json:"sub_mchid"`
-	WithdrawID   string `json:"withdraw_id"`
-	OutRequestNo string `json:"out_request_no"`
-	Amount       int64  `json:"amount"`
-	Status       string `json:"status"`
-	CreateTime   string `json:"create_time"`
-	UpdateTime   string `json:"update_time"`
-	SuccessTime  string `json:"success_time"`
-	Reason       string `json:"reason"`
-}
-
 // CreateEcommerceWithdraw 发起二级商户提现
-func (c *EcommerceClient) CreateEcommerceWithdraw(ctx context.Context, req *EcommerceWithdrawRequest) (*EcommerceWithdrawResponse, error) {
-	body := map[string]interface{}{
-		"sub_mchid":      req.SubMchID,
-		"out_request_no": req.OutRequestNo,
-		"amount":         req.Amount,
-		"remark":         req.Remark,
+func (c *EcommerceClient) CreateEcommerceWithdraw(ctx context.Context, req *EcommerceWithdrawRequest) (*EcommerceWithdrawCreateResponse, error) {
+	if req == nil {
+		return nil, wechatcontracts.ValidateEcommerceWithdrawRequest(nil)
 	}
-	if c.withdrawNotifyURL != "" {
-		body["notify_url"] = c.withdrawNotifyURL
+	contractReq := *req
+	if strings.TrimSpace(contractReq.NotifyURL) == "" && strings.TrimSpace(c.withdrawNotifyURL) != "" {
+		contractReq.NotifyURL = strings.TrimSpace(c.withdrawNotifyURL)
+	}
+	if err := wechatcontracts.ValidateEcommerceWithdrawRequest(&contractReq); err != nil {
+		return nil, err
 	}
 
-	respBody, err := c.doRequest(ctx, http.MethodPost, ecommerceFundWithdrawURL, body)
+	respBody, err := c.doRequest(ctx, http.MethodPost, ecommerceFundWithdrawURL, &contractReq)
 	if err != nil {
 		return nil, fmt.Errorf("create ecommerce withdraw: %w", err)
 	}
 
-	var resp EcommerceWithdrawResponse
+	var resp wechatcontracts.EcommerceWithdrawCreateResponse
 	if err := json.Unmarshal(respBody, &resp); err != nil {
 		return nil, fmt.Errorf("unmarshal response: %w", err)
 	}
-
-	if resp.SubMchID == "" {
-		resp.SubMchID = req.SubMchID
-	}
-	if resp.OutRequestNo == "" {
-		resp.OutRequestNo = req.OutRequestNo
-	}
-	if resp.Amount == 0 {
-		resp.Amount = req.Amount
+	if err := wechatcontracts.ValidateEcommerceWithdrawCreateResponse("create ecommerce withdraw", &resp, contractReq.SubMchID, contractReq.OutRequestNo); err != nil {
+		return nil, err
 	}
 
 	return &resp, nil
@@ -2502,23 +2447,26 @@ func (c *EcommerceClient) CreateEcommerceWithdraw(ctx context.Context, req *Ecom
 
 // QueryEcommerceWithdrawByOutRequestNo 通过外部申请单号查询提现状态
 func (c *EcommerceClient) QueryEcommerceWithdrawByOutRequestNo(ctx context.Context, subMchID, outRequestNo string) (*EcommerceWithdrawResponse, error) {
-	url := fmt.Sprintf(ecommerceFundWithdrawQueryByNo+"?sub_mchid=%s", outRequestNo, subMchID)
+	trimmedSubMchID, trimmedOutRequestNo, err := wechatcontracts.ValidateEcommerceWithdrawQueryInput(subMchID, outRequestNo)
+	if err != nil {
+		return nil, err
+	}
 
-	respBody, err := c.doRequest(ctx, http.MethodGet, url, nil)
+	query := url.Values{}
+	query.Set("sub_mchid", trimmedSubMchID)
+	requestURL := fmt.Sprintf(ecommerceFundWithdrawQueryByNo, url.PathEscape(trimmedOutRequestNo)) + "?" + query.Encode()
+
+	respBody, err := c.doRequest(ctx, http.MethodGet, requestURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("query ecommerce withdraw: %w", err)
 	}
 
-	var resp EcommerceWithdrawResponse
+	var resp wechatcontracts.EcommerceWithdrawQueryResponse
 	if err := json.Unmarshal(respBody, &resp); err != nil {
 		return nil, fmt.Errorf("unmarshal response: %w", err)
 	}
-
-	if resp.SubMchID == "" {
-		resp.SubMchID = subMchID
-	}
-	if resp.OutRequestNo == "" {
-		resp.OutRequestNo = outRequestNo
+	if err := wechatcontracts.ValidateEcommerceWithdrawQueryResponse("query ecommerce withdraw by out_request_no", &resp, trimmedSubMchID, trimmedOutRequestNo); err != nil {
+		return nil, err
 	}
 
 	return &resp, nil

@@ -325,7 +325,15 @@ func (server *Server) resolvePaymentOrderSubMchID(ctx context.Context, paymentOr
 	return config.SubMchID, nil
 }
 
-func (server *Server) syncWithdrawalRecordWithWechat(ctx *gin.Context, record db.WithdrawalRecord, resource *wechat.EcommerceWithdrawResponse) (db.WithdrawalRecord, error) {
+type withdrawStatusSyncSnapshot struct {
+	OutRequestNo string
+	SubMchID     string
+	WithdrawID   string
+	Status       string
+	Reason       string
+}
+
+func (server *Server) syncWithdrawalRecordWithWechat(ctx *gin.Context, record db.WithdrawalRecord, resource *withdrawStatusSyncSnapshot) (db.WithdrawalRecord, error) {
 	if resource == nil {
 		return record, errors.New("withdraw resource is nil")
 	}
@@ -721,7 +729,7 @@ func (server *Server) handleEcommerceWithdrawNotify(ctx *gin.Context) {
 		return
 	}
 
-	if notification.EventType != "MCHWITHDRAW.CHANGE" {
+	if notification.EventType != wechatcontracts.FundManagementNotificationEventType {
 		log.Info().Str("event_type", notification.EventType).Msg("ignore non-withdraw ecommerce notification")
 		writeWechatNotifySuccess(ctx, "ecommerce_withdraw")
 		return
@@ -740,12 +748,19 @@ func (server *Server) handleEcommerceWithdrawNotify(ctx *gin.Context) {
 		return
 	}
 
-	var resource wechat.EcommerceWithdrawResponse
+	var resource wechatcontracts.WithdrawNotificationResource
 	if err := json.Unmarshal(decrypted, &resource); err != nil {
 		paymentCallbackFailuresTotal.WithLabelValues("ecommerce_withdraw", "parse_resource").Inc()
 		log.Error().Err(err).Str("decrypted", string(decrypted)).Msg("parse ecommerce withdraw resource")
 		server.releaseNotification(ctx, notification.ID, "ecommerce_withdraw")
 		ctx.JSON(http.StatusBadRequest, wechatPaymentNotifyResponse{Code: "FAIL", Message: "parse resource failed"})
+		return
+	}
+	if err := wechatcontracts.ValidateWithdrawNotificationResource("decrypt ecommerce withdraw notification", &resource); err != nil {
+		paymentCallbackFailuresTotal.WithLabelValues("ecommerce_withdraw", "contract_validation").Inc()
+		log.Error().Err(err).Str("notification_id", notification.ID).Msg("validate ecommerce withdraw resource contract")
+		server.releaseNotification(ctx, notification.ID, "ecommerce_withdraw")
+		ctx.JSON(http.StatusBadRequest, wechatPaymentNotifyResponse{Code: "FAIL", Message: "invalid resource contract"})
 		return
 	}
 	if resource.OutRequestNo == "" {
@@ -772,7 +787,13 @@ func (server *Server) handleEcommerceWithdrawNotify(ctx *gin.Context) {
 		return
 	}
 
-	if _, err := server.syncWithdrawalRecordWithWechat(ctx, record, &resource); err != nil {
+	if _, err := server.syncWithdrawalRecordWithWechat(ctx, record, &withdrawStatusSyncSnapshot{
+		OutRequestNo: resource.OutRequestNo,
+		SubMchID:     resource.SubMchID,
+		WithdrawID:   resource.WithdrawID,
+		Status:       resource.Status,
+		Reason:       resource.Reason,
+	}); err != nil {
 		paymentCallbackFailuresTotal.WithLabelValues("ecommerce_withdraw", "sync_withdrawal").Inc()
 		log.Error().Err(err).Int64("withdrawal_record_id", record.ID).Str("out_request_no", resource.OutRequestNo).Msg("sync withdrawal record with ecommerce callback failed")
 		server.releaseNotification(ctx, notification.ID, "ecommerce_withdraw")

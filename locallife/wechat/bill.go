@@ -16,6 +16,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	wechaterrorcodes "github.com/merrydance/locallife/wechat/errorcodes"
 )
 
 const (
@@ -265,9 +267,9 @@ func normalizeBillDownloadURLError(err error) error {
 	var wxErr *WechatPayError
 	if errors.As(err, &wxErr) {
 		switch {
-		case wxErr.Code == "STATEMENT_CREATING":
+		case wechaterrorcodes.FundManagementCodeEquals(wxErr.Code, wechaterrorcodes.FundManagementCodeStatementCreating):
 			return &billDownloadStateError{Kind: ErrBillNotReady, Cause: err}
-		case wxErr.StatusCode == http.StatusNotFound:
+		case wxErr.StatusCode == http.StatusNotFound || wechaterrorcodes.FundManagementCodeEquals(wxErr.Code, wechaterrorcodes.FundManagementCodeNoStatementExist):
 			return &billDownloadStateError{Kind: ErrBillNotFound, Cause: err}
 		}
 	}

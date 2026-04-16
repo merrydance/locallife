@@ -1884,7 +1884,6 @@ func TestQueryEcommerceFundBalanceByAccountType(t *testing.T) {
 	require.Equal(t, "sub-mchid-001", resp.SubMchID)
 	require.Equal(t, "FEES", resp.AccountType)
 	require.Equal(t, int64(1234), resp.AvailableAmount)
-	require.Equal(t, int64(1234), resp.WithdrawableAmount)
 }
 
 func TestQueryEcommerceFundDayEndBalance(t *testing.T) {
@@ -1929,7 +1928,6 @@ func TestQueryEcommerceFundDayEndBalance(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "DEPOSIT", resp.AccountType)
 	require.Equal(t, int64(88), resp.AvailableAmount)
-	require.Equal(t, int64(88), resp.WithdrawableAmount)
 }
 
 func TestQueryPlatformFundBalance(t *testing.T) {
@@ -1972,7 +1970,6 @@ func TestQueryPlatformFundBalance(t *testing.T) {
 
 	resp, err := client.QueryPlatformFundBalance(context.Background(), "OPERATION")
 	require.NoError(t, err)
-	require.Equal(t, "OPERATION", resp.AccountType)
 	require.Equal(t, int64(5000), resp.AvailableAmount)
 	require.Equal(t, int64(20), resp.PendingAmount)
 }
@@ -2017,7 +2014,6 @@ func TestQueryPlatformFundDayEndBalance(t *testing.T) {
 
 	resp, err := client.QueryPlatformFundDayEndBalance(context.Background(), "FEES", "2026-04-05")
 	require.NoError(t, err)
-	require.Equal(t, "FEES", resp.AccountType)
 	require.Equal(t, int64(7000), resp.AvailableAmount)
 	require.Equal(t, int64(0), resp.PendingAmount)
 }
