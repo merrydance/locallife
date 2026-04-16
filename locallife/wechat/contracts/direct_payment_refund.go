@@ -12,6 +12,10 @@ const (
 )
 
 const (
+	DirectRefundCurrencyCNY = "CNY"
+)
+
+const (
 	DirectRefundChannelOriginal      = "ORIGINAL"
 	DirectRefundChannelBalance       = "BALANCE"
 	DirectRefundChannelOtherBalance  = "OTHER_BALANCE"

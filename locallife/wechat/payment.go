@@ -25,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	"github.com/rs/zerolog/log"
 )
 
@@ -433,30 +434,32 @@ func (c *PaymentClient) CloseOrder(ctx context.Context, outTradeNo string) error
 
 // RefundRequest 退款请求
 type RefundRequest struct {
-	OutTradeNo   string // 原商户订单号
-	OutRefundNo  string // 商户退款单号
-	Reason       string // 退款原因
-	RefundAmount int64  // 退款金额（分）
-	TotalAmount  int64  // 原订单金额（分）
+	TransactionID string // 微信支付订单号
+	OutTradeNo    string // 原商户订单号
+	OutRefundNo   string // 商户退款单号
+	Reason        string // 退款原因
+	NotifyURL     string // 退款回调地址
+	FundsAccount  string // 退款资金来源
+	RefundAmount  int64  // 退款金额（分）
+	TotalAmount   int64  // 原订单金额（分）
+	AmountFrom    []wechatcontracts.DirectRefundAmountFrom
+	GoodsDetail   []wechatcontracts.DirectRefundGoodsDetail
 }
 
 // RefundResponse 退款响应
 type RefundResponse struct {
-	RefundID            string `json:"refund_id"`
-	OutRefundNo         string `json:"out_refund_no"`
-	TransactionID       string `json:"transaction_id"`
-	OutTradeNo          string `json:"out_trade_no"`
-	Channel             string `json:"channel"`
-	UserReceivedAccount string `json:"user_received_account"`
-	SuccessTime         string `json:"success_time,omitempty"`
-	CreateTime          string `json:"create_time"`
-	Status              string `json:"status"`
-	Amount              struct {
-		Total       int64 `json:"total"`
-		Refund      int64 `json:"refund"`
-		PayerTotal  int64 `json:"payer_total"`
-		PayerRefund int64 `json:"payer_refund"`
-	} `json:"amount"`
+	RefundID            string                                        `json:"refund_id"`
+	OutRefundNo         string                                        `json:"out_refund_no"`
+	TransactionID       string                                        `json:"transaction_id"`
+	OutTradeNo          string                                        `json:"out_trade_no"`
+	Channel             string                                        `json:"channel"`
+	UserReceivedAccount string                                        `json:"user_received_account"`
+	SuccessTime         string                                        `json:"success_time,omitempty"`
+	CreateTime          string                                        `json:"create_time"`
+	Status              string                                        `json:"status"`
+	FundsAccount        string                                        `json:"funds_account"`
+	Amount              wechatcontracts.DirectRefundAmount            `json:"amount"`
+	PromotionDetail     []wechatcontracts.DirectRefundPromotionDetail `json:"promotion_detail,omitempty"`
 }
 
 // RefundStatus 退款状态常量
@@ -469,16 +472,73 @@ const (
 
 // CreateRefund 申请退款
 func (c *PaymentClient) CreateRefund(ctx context.Context, req *RefundRequest) (*RefundResponse, error) {
+	contractReq := &wechatcontracts.DirectRefundRequest{
+		TransactionID: req.TransactionID,
+		OutTradeNo:    req.OutTradeNo,
+		OutRefundNo:   req.OutRefundNo,
+		Reason:        req.Reason,
+		NotifyURL:     req.NotifyURL,
+		FundsAccount:  req.FundsAccount,
+		Amount: &wechatcontracts.DirectRefundRequestAmount{
+			Refund:   req.RefundAmount,
+			From:     req.AmountFrom,
+			Total:    req.TotalAmount,
+			Currency: wechatcontracts.DirectRefundCurrencyCNY,
+		},
+		GoodsDetail: req.GoodsDetail,
+	}
+	if err := wechatcontracts.ValidateDirectRefundRequest(contractReq); err != nil {
+		return nil, err
+	}
+
+	notifyURL := strings.TrimSpace(req.NotifyURL)
+	if notifyURL == "" {
+		notifyURL = c.refundNotifyURL
+	}
 	body := map[string]interface{}{
-		"out_trade_no":  req.OutTradeNo,
 		"out_refund_no": req.OutRefundNo,
 		"reason":        req.Reason,
-		"notify_url":    c.refundNotifyURL,
 		"amount": map[string]interface{}{
 			"refund":   req.RefundAmount,
 			"total":    req.TotalAmount,
-			"currency": "CNY",
+			"currency": wechatcontracts.DirectRefundCurrencyCNY,
 		},
+	}
+	if strings.TrimSpace(req.TransactionID) != "" {
+		body["transaction_id"] = req.TransactionID
+	}
+	if strings.TrimSpace(req.OutTradeNo) != "" {
+		body["out_trade_no"] = req.OutTradeNo
+	}
+	if notifyURL != "" {
+		body["notify_url"] = notifyURL
+	}
+	if strings.TrimSpace(req.FundsAccount) != "" {
+		body["funds_account"] = req.FundsAccount
+	}
+	if len(req.AmountFrom) > 0 {
+		from := make([]map[string]interface{}, 0, len(req.AmountFrom))
+		for _, entry := range req.AmountFrom {
+			from = append(from, map[string]interface{}{
+				"account": entry.Account,
+				"amount":  entry.Amount,
+			})
+		}
+		body["amount"].(map[string]interface{})["from"] = from
+	}
+	if len(req.GoodsDetail) > 0 {
+		goods := make([]map[string]interface{}, 0, len(req.GoodsDetail))
+		for _, item := range req.GoodsDetail {
+			goods = append(goods, map[string]interface{}{
+				"merchant_goods_id":  item.MerchantGoodsID,
+				"wechatpay_goods_id": item.WechatpayGoodsID,
+				"goods_name":         item.GoodsName,
+				"unit_price":         item.UnitPrice,
+				"refund_amount":      item.RefundAmount,
+				"refund_quantity":    item.RefundQuantity,
+			})
+		}
+		body["goods_detail"] = goods
 	}
 
 	respBody, err := c.doRequest(ctx, http.MethodPost, refundURL, body)
@@ -490,13 +550,20 @@ func (c *PaymentClient) CreateRefund(ctx context.Context, req *RefundRequest) (*
 	if err := json.Unmarshal(respBody, &resp); err != nil {
 		return nil, fmt.Errorf("unmarshal response: %w", err)
 	}
+	if err := wechatcontracts.ValidateDirectRefundResponse("create direct refund", toDirectRefundContractResponse(&resp)); err != nil {
+		return nil, err
+	}
 
 	return &resp, nil
 }
 
 // QueryRefund 查询退款
 func (c *PaymentClient) QueryRefund(ctx context.Context, outRefundNo string) (*RefundResponse, error) {
-	url := fmt.Sprintf(queryRefundURL, outRefundNo)
+	trimmedOutRefundNo, err := wechatcontracts.ValidateDirectQueryRefundByOutRefundNoInput(outRefundNo)
+	if err != nil {
+		return nil, err
+	}
+	url := fmt.Sprintf(queryRefundURL, trimmedOutRefundNo)
 
 	respBody, err := c.doRequest(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -506,6 +573,9 @@ func (c *PaymentClient) QueryRefund(ctx context.Context, outRefundNo string) (*R
 	var resp RefundResponse
 	if err := json.Unmarshal(respBody, &resp); err != nil {
 		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+	if err := wechatcontracts.ValidateDirectRefundResponse("query direct refund", toDirectRefundContractResponse(&resp)); err != nil {
+		return nil, err
 	}
 
 	return &resp, nil
@@ -767,8 +837,46 @@ func (c *PaymentClient) DecryptRefundNotification(notification *PaymentNotificat
 	if err := json.Unmarshal(plaintext, &resource); err != nil {
 		return nil, fmt.Errorf("unmarshal resource: %w", err)
 	}
+	if err := wechatcontracts.ValidateDirectRefundNotificationResource("decrypt direct refund notification", &wechatcontracts.DirectRefundNotificationResource{
+		MchID:               resource.MchID,
+		OutTradeNo:          resource.OutTradeNo,
+		TransactionID:       resource.TransactionID,
+		OutRefundNo:         resource.OutRefundNo,
+		RefundID:            resource.RefundID,
+		RefundStatus:        resource.RefundStatus,
+		SuccessTime:         resource.SuccessTime,
+		UserReceivedAccount: resource.UserReceivedAccount,
+		Amount: wechatcontracts.DirectRefundNotificationAmount{
+			Total:       resource.Amount.Total,
+			Refund:      resource.Amount.Refund,
+			PayerTotal:  resource.Amount.PayerTotal,
+			PayerRefund: resource.Amount.PayerRefund,
+		},
+	}); err != nil {
+		return nil, err
+	}
 
 	return &resource, nil
+}
+
+func toDirectRefundContractResponse(resp *RefundResponse) *wechatcontracts.DirectRefundResponse {
+	if resp == nil {
+		return nil
+	}
+	return &wechatcontracts.DirectRefundResponse{
+		RefundID:            resp.RefundID,
+		OutRefundNo:         resp.OutRefundNo,
+		TransactionID:       resp.TransactionID,
+		OutTradeNo:          resp.OutTradeNo,
+		Channel:             resp.Channel,
+		UserReceivedAccount: resp.UserReceivedAccount,
+		SuccessTime:         resp.SuccessTime,
+		CreateTime:          resp.CreateTime,
+		Status:              resp.Status,
+		FundsAccount:        resp.FundsAccount,
+		Amount:              resp.Amount,
+		PromotionDetail:     resp.PromotionDetail,
+	}
 }
 
 // DecryptNotificationRaw 解密通知原始数据（返回 JSON 字节）

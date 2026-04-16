@@ -66,17 +66,11 @@ func TestProcessTaskInitiateRefund_MembershipRechargeMismatchRefund(t *testing.T
 			require.Equal(t, "RFM2_M", req.OutRefundNo)
 			require.Equal(t, int64(12000), req.RefundAmount)
 			require.Equal(t, int64(12000), req.TotalAmount)
-			return &wechat.EcommerceRefundResponse{RefundID: "refund_membership_2", Status: wechat.RefundStatusSuccess}, nil
+			return &wechat.EcommerceRefundResponse{RefundID: "refund_membership_2"}, nil
 		})
 	store.EXPECT().
-		UpdateRefundOrderToSuccess(gomock.Any(), refundOrder.ID).
-		Return(db.RefundOrder{ID: refundOrder.ID, PaymentOrderID: refundOrder.PaymentOrderID, Status: "success", OutRefundNo: refundOrder.OutRefundNo}, nil)
-	store.EXPECT().
-		GetTotalRefundedByPaymentOrder(gomock.Any(), paymentOrder.ID).
-		Return(int64(12000), nil)
-	store.EXPECT().
-		UpdatePaymentOrderToRefunded(gomock.Any(), paymentOrder.ID).
-		Return(db.PaymentOrder{ID: paymentOrder.ID, Status: "refunded"}, nil)
+		UpdateRefundOrderToProcessing(gomock.Any(), db.UpdateRefundOrderToProcessingParams{ID: refundOrder.ID, RefundID: pgtype.Text{String: "refund_membership_2", Valid: true}}).
+		Return(db.RefundOrder{ID: refundOrder.ID, PaymentOrderID: refundOrder.PaymentOrderID, Status: "processing", OutRefundNo: refundOrder.OutRefundNo}, nil)
 
 	processor := worker.NewTestTaskProcessor(store, nil, nil, ecommerceClient)
 	payloadBytes, err := json.Marshal(worker.PayloadProcessRefund{
@@ -192,10 +186,10 @@ func TestProcessTaskInitiateRefund_MembershipRechargeMismatchRefund_StatusPersis
 		Return(refundOrder, nil)
 	ecommerceClient.EXPECT().
 		CreateEcommerceRefund(gomock.Any(), gomock.Any()).
-		Return(&wechat.EcommerceRefundResponse{RefundID: "refund_membership_2", Status: wechat.RefundStatusSuccess}, nil)
+		Return(&wechat.EcommerceRefundResponse{RefundID: "refund_membership_2"}, nil)
 	store.EXPECT().
-		UpdateRefundOrderToSuccess(gomock.Any(), refundOrder.ID).
-		Return(db.RefundOrder{}, errors.New("persist refund success failed"))
+		UpdateRefundOrderToProcessing(gomock.Any(), db.UpdateRefundOrderToProcessingParams{ID: refundOrder.ID, RefundID: pgtype.Text{String: "refund_membership_2", Valid: true}}).
+		Return(db.RefundOrder{}, errors.New("persist refund processing failed"))
 
 	processor := worker.NewTestTaskProcessor(store, nil, nil, ecommerceClient)
 	payloadBytes, err := json.Marshal(worker.PayloadProcessRefund{
@@ -208,5 +202,5 @@ func TestProcessTaskInitiateRefund_MembershipRechargeMismatchRefund_StatusPersis
 	task := asynq.NewTask(worker.TaskProcessRefund, payloadBytes)
 	err = processor.ProcessTaskInitiateRefund(context.Background(), task)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "mark refund order as success")
+	require.Contains(t, err.Error(), "mark refund order as processing")
 }

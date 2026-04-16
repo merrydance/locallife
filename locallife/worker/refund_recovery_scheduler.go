@@ -9,6 +9,7 @@ import (
 	"github.com/hibiken/asynq"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	"github.com/robfig/cron/v3"
 	"github.com/rs/zerolog/log"
 )
@@ -310,7 +311,7 @@ func (s *RefundRecoveryScheduler) recoverStuckProcessingRefunds(ctx context.Cont
 			continue
 		}
 
-		if refundStatus == wechat.RefundStatusProcessing {
+		if refundStatus == wechatcontracts.EcommerceRefundStatusProcessing {
 			log.Info().
 				Int64("refund_order_id", refundOrder.ID).
 				Str("out_refund_no", refundOrder.OutRefundNo).

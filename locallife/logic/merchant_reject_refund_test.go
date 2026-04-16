@@ -215,16 +215,15 @@ func TestProcessMerchantRejectRefund_ProfitSharing_EcommerceSuccess(t *testing.T
 			require.Equal(t, "sub_mch_007", req.SubMchID)
 			require.Equal(t, "combine_1", req.OutTradeNo)
 			require.Equal(t, int64(2000), req.RefundAmount)
-			return &wechat.EcommerceRefundResponse{RefundID: "erefund_1", Status: wechat.RefundStatusSuccess}, nil
+			return &wechat.EcommerceRefundResponse{RefundID: "erefund_1"}, nil
 		})
 	store.EXPECT().
-		UpdateRefundOrderToSuccess(gomock.Any(), int64(200)).
+		UpdateRefundOrderToProcessing(gomock.Any(), db.UpdateRefundOrderToProcessingParams{
+			ID:       200,
+			RefundID: pgtype.Text{String: "erefund_1", Valid: true},
+		}).
 		Times(1).
 		Return(db.RefundOrder{}, nil)
-	store.EXPECT().
-		UpdatePaymentOrderToRefunded(gomock.Any(), int64(10)).
-		Times(1).
-		Return(db.PaymentOrder{}, nil)
 
 	result, err := ProcessMerchantRejectRefund(
 		context.Background(),
@@ -262,7 +261,7 @@ func TestProcessMerchantRejectRefund_ProfitSharing_EcommerceProcessing(t *testin
 	ecommerceClient.EXPECT().
 		CreateEcommerceRefund(gomock.Any(), gomock.Any()).
 		Times(1).
-		Return(&wechat.EcommerceRefundResponse{RefundID: "erefund_2", Status: wechat.RefundStatusProcessing}, nil)
+		Return(&wechat.EcommerceRefundResponse{RefundID: "erefund_2"}, nil)
 	store.EXPECT().
 		UpdateRefundOrderToProcessing(gomock.Any(), db.UpdateRefundOrderToProcessingParams{
 			ID:       201,

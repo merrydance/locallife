@@ -11,6 +11,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/base64"
+	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"io"
@@ -23,6 +24,7 @@ import (
 	"testing"
 	"time"
 
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	"github.com/stretchr/testify/require"
 )
 
@@ -558,6 +560,121 @@ func TestQueryOrderByOutTradeNo_MissingResponseSignatureFails(t *testing.T) {
 	_, err = client.QueryOrderByOutTradeNo(context.Background(), "order-001")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "verify response signature")
+}
+
+func TestCreateRefund_UsesLatestDocumentedFields(t *testing.T) {
+	merchantPrivateKey, _ := generateTestKeyPair(t)
+	platformPrivateKey, platformPublicKey := generateTestKeyPair(t)
+
+	tempDir := t.TempDir()
+	privateKeyPath := createTestPrivateKeyFile(t, tempDir, merchantPrivateKey)
+	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
+
+	client, err := NewPaymentClient(PaymentClientConfig{
+		MchID:                 "test_mch_id",
+		AppID:                 "test_app_id",
+		SerialNumber:          "test_serial",
+		APIV3Key:              testAPIV3Key(),
+		PrivateKeyPath:        privateKeyPath,
+		PlatformPublicKeyPath: publicKeyPath,
+		PlatformPublicKeyID:   "PUB_KEY_ID_0123456789",
+		NotifyURL:             "https://example.com/notify",
+	})
+	require.NoError(t, err)
+
+	client.httpClient = &http.Client{
+		Transport: signedPaymentTransport(t, platformPrivateKey, "PUB_KEY_ID_0123456789", func(req *http.Request) (*http.Response, error) {
+			require.Equal(t, http.MethodPost, req.Method)
+			require.Equal(t, refundURL, req.URL.Path)
+
+			var body map[string]any
+			require.NoError(t, json.NewDecoder(req.Body).Decode(&body))
+			require.Equal(t, "order-001", body["out_trade_no"])
+			require.Equal(t, "refund-001", body["out_refund_no"])
+			require.Equal(t, "退款原因", body["reason"])
+			require.Equal(t, "AVAILABLE", body["funds_account"])
+
+			amount, ok := body["amount"].(map[string]any)
+			require.True(t, ok)
+			require.EqualValues(t, 88, amount["refund"])
+			require.EqualValues(t, 188, amount["total"])
+			require.Equal(t, wechatcontracts.DirectRefundCurrencyCNY, amount["currency"])
+
+			from, ok := amount["from"].([]any)
+			require.True(t, ok)
+			require.Len(t, from, 1)
+
+			goodsDetail, ok := body["goods_detail"].([]any)
+			require.True(t, ok)
+			require.Len(t, goodsDetail, 1)
+
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader(`{"refund_id":"refund-id-001","out_refund_no":"refund-001","transaction_id":"wx-transaction-001","out_trade_no":"order-001","channel":"ORIGINAL","user_received_account":"招商银行信用卡0403","create_time":"2025-06-06T10:34:56+08:00","status":"PROCESSING","funds_account":"AVAILABLE","amount":{"total":188,"refund":88,"from":[{"account":"AVAILABLE","amount":88}],"payer_total":188,"payer_refund":88,"settlement_refund":88,"settlement_total":188,"discount_refund":1,"currency":"CNY"},"promotion_detail":[{"promotion_id":"promo-001","scope":"SINGLE","type":"CASH","amount":1,"refund_amount":1}]}`)),
+			}, nil
+		}),
+	}
+
+	resp, err := client.CreateRefund(context.Background(), &RefundRequest{
+		OutTradeNo:   "order-001",
+		OutRefundNo:  "refund-001",
+		Reason:       "退款原因",
+		FundsAccount: "AVAILABLE",
+		RefundAmount: 88,
+		TotalAmount:  188,
+		AmountFrom: []wechatcontracts.DirectRefundAmountFrom{{
+			Account: "AVAILABLE",
+			Amount:  88,
+		}},
+		GoodsDetail: []wechatcontracts.DirectRefundGoodsDetail{{
+			MerchantGoodsID: "goods-001",
+			GoodsName:       "可乐",
+			UnitPrice:       88,
+			RefundAmount:    88,
+			RefundQuantity:  1,
+		}},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "refund-id-001", resp.RefundID)
+	require.Equal(t, RefundStatusProcessing, resp.Status)
+	require.Equal(t, "AVAILABLE", resp.FundsAccount)
+	require.Len(t, resp.PromotionDetail, 1)
+}
+
+func TestQueryRefund_MissingDocumentedFieldsFails(t *testing.T) {
+	merchantPrivateKey, _ := generateTestKeyPair(t)
+	platformPrivateKey, platformPublicKey := generateTestKeyPair(t)
+
+	tempDir := t.TempDir()
+	privateKeyPath := createTestPrivateKeyFile(t, tempDir, merchantPrivateKey)
+	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
+
+	client, err := NewPaymentClient(PaymentClientConfig{
+		MchID:                 "test_mch_id",
+		AppID:                 "test_app_id",
+		SerialNumber:          "test_serial",
+		APIV3Key:              testAPIV3Key(),
+		PrivateKeyPath:        privateKeyPath,
+		PlatformPublicKeyPath: publicKeyPath,
+		PlatformPublicKeyID:   "PUB_KEY_ID_0123456789",
+		NotifyURL:             "https://example.com/notify",
+	})
+	require.NoError(t, err)
+
+	client.httpClient = &http.Client{
+		Transport: signedPaymentTransport(t, platformPrivateKey, "PUB_KEY_ID_0123456789", func(req *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader(`{"refund_id":"refund-id-001","out_refund_no":"refund-001","transaction_id":"wx-transaction-001","out_trade_no":"order-001","channel":"ORIGINAL","user_received_account":"招商银行信用卡0403","create_time":"2025-06-06T10:34:56+08:00","status":"SUCCESS","amount":{"total":188,"refund":88,"payer_total":188,"payer_refund":88,"settlement_refund":88,"settlement_total":188,"discount_refund":1,"currency":"CNY"}}`)),
+			}, nil
+		}),
+	}
+
+	_, err = client.QueryRefund(context.Background(), "refund-001")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "funds_account is required")
 }
 
 func TestVerifyNotificationSignature_WithMatchingSerial(t *testing.T) {

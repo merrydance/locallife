@@ -158,25 +158,16 @@ func (f *DefaultPaymentFacade) ClosePaymentOrder(ctx context.Context, input Clos
 	return f.paymentService.ClosePaymentOrder(ctx, input)
 }
 
-func (f *DefaultPaymentFacade) CreateRefund(ctx context.Context, req *wechat.RefundRequest) (*wechat.RefundResponse, error) {
-	if f.paymentClient == nil {
-		return nil, fmt.Errorf("payment client not configured")
-	}
-	return f.paymentClient.CreateRefund(ctx, req)
+func (f *DefaultPaymentFacade) CreateRefund(ctx context.Context, req *wechatcontracts.DirectRefundRequest) (*wechatcontracts.DirectRefundResponse, error) {
+	return createDirectRefundContract(ctx, f.paymentClient, req)
 }
 
-func (f *DefaultPaymentFacade) CreateEcommerceRefund(ctx context.Context, req *wechat.EcommerceRefundRequest) (*wechat.EcommerceRefundResponse, error) {
-	if f.ecommerceClient == nil {
-		return nil, fmt.Errorf("ecommerce client not configured")
-	}
-	return f.ecommerceClient.CreateEcommerceRefund(ctx, req)
+func (f *DefaultPaymentFacade) CreateEcommerceRefund(ctx context.Context, req *wechatcontracts.EcommerceRefundRequest) (*wechatcontracts.EcommerceRefundCreateResponse, error) {
+	return createEcommerceRefundContract(ctx, f.ecommerceClient, req)
 }
 
-func (f *DefaultPaymentFacade) ApplyEcommerceAbnormalRefund(ctx context.Context, req *wechat.EcommerceAbnormalRefundRequest) (*wechat.EcommerceRefundResponse, error) {
-	if f.ecommerceClient == nil {
-		return nil, fmt.Errorf("ecommerce client not configured")
-	}
-	return f.ecommerceClient.ApplyEcommerceAbnormalRefund(ctx, req)
+func (f *DefaultPaymentFacade) ApplyEcommerceAbnormalRefund(ctx context.Context, req *wechatcontracts.EcommerceAbnormalRefundRequest) (*wechatcontracts.EcommerceRefundQueryResponse, error) {
+	return applyEcommerceAbnormalRefundContract(ctx, f.ecommerceClient, req)
 }
 
 func (f *DefaultPaymentFacade) CreateProfitSharingReturn(ctx context.Context, req *wechatcontracts.ProfitSharingReturnRequest) (*wechatcontracts.ProfitSharingReturnResponse, error) {

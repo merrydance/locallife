@@ -622,9 +622,10 @@ func writeLogicRequestError(ctx *gin.Context, err error) bool {
 	if !errors.As(err, &reqErr) {
 		return false
 	}
-	_ = ctx.Error(reqErr.Err)
+	logErr := logic.LoggableError(reqErr)
+	_ = ctx.Error(logErr)
 	log.Error().
-		Err(reqErr.Err).
+		Err(logErr).
 		Str("request_id", GetRequestID(ctx)).
 		Str("path", ctx.Request.URL.Path).
 		Str("method", ctx.Request.Method).

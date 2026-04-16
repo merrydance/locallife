@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	"github.com/rs/zerolog/log"
 )
 
@@ -123,34 +124,27 @@ func processMerchantRejectEcommerceRefund(
 		return fmt.Errorf("get merchant payment config: %w", err)
 	}
 
-	wxRefund, err := ecommerceClient.CreateEcommerceRefund(ctx, &wechat.EcommerceRefundRequest{
-		SubMchID:     paymentConfig.SubMchID,
-		OutTradeNo:   paymentOrder.OutTradeNo,
-		OutRefundNo:  outRefundNo,
-		Reason:       reason,
-		RefundAmount: paymentOrder.Amount,
-		TotalAmount:  paymentOrder.Amount,
+	wxRefund, err := createEcommerceRefundContract(ctx, ecommerceClient, &wechatcontracts.EcommerceRefundRequest{
+		SubMchID:    paymentConfig.SubMchID,
+		OutTradeNo:  paymentOrder.OutTradeNo,
+		OutRefundNo: outRefundNo,
+		Reason:      reason,
+		Amount: &wechatcontracts.EcommerceRefundRequestAmount{
+			Refund:   paymentOrder.Amount,
+			Total:    paymentOrder.Amount,
+			Currency: wechatcontracts.EcommerceRefundCurrencyCNY,
+		},
 	})
 	if err != nil {
 		// 微信API失败时保持pending状态，由 RefundRecoveryScheduler 每5分钟自动补偿重试
 		return fmt.Errorf("wechat ecommerce refund api: %w", err)
 	}
 
-	switch wxRefund.Status {
-	case wechat.RefundStatusSuccess:
-		if _, dbErr := store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID); dbErr != nil {
-			log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as success")
-		}
-		if _, dbErr := store.UpdatePaymentOrderToRefunded(ctx, paymentOrder.ID); dbErr != nil {
-			log.Error().Err(dbErr).Int64("payment_order_id", paymentOrder.ID).Msg("failed to mark payment order as refunded")
-		}
-	case wechat.RefundStatusProcessing:
-		if _, dbErr := store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
-			ID:       refundOrder.ID,
-			RefundID: pgtype.Text{String: wxRefund.RefundID, Valid: true},
-		}); dbErr != nil {
-			log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as processing")
-		}
+	if _, dbErr := store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
+		ID:       refundOrder.ID,
+		RefundID: pgtype.Text{String: wxRefund.RefundID, Valid: wxRefund.RefundID != ""},
+	}); dbErr != nil {
+		log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as processing")
 	}
 	return nil
 }
@@ -168,12 +162,15 @@ func processMerchantRejectDirectRefund(
 		return nil
 	}
 
-	wxRefund, err := paymentClient.CreateRefund(ctx, &wechat.RefundRequest{
-		OutTradeNo:   paymentOrder.OutTradeNo,
-		OutRefundNo:  outRefundNo,
-		Reason:       reason,
-		RefundAmount: paymentOrder.Amount,
-		TotalAmount:  paymentOrder.Amount,
+	wxRefund, err := createDirectRefundContract(ctx, paymentClient, &wechatcontracts.DirectRefundRequest{
+		OutTradeNo:  paymentOrder.OutTradeNo,
+		OutRefundNo: outRefundNo,
+		Reason:      reason,
+		Amount: &wechatcontracts.DirectRefundRequestAmount{
+			Refund:   paymentOrder.Amount,
+			Total:    paymentOrder.Amount,
+			Currency: wechatcontracts.DirectRefundCurrencyCNY,
+		},
 	})
 	if err != nil {
 		// R-05 修复：微信API失败时不标记为failed，保持pending状态
@@ -182,17 +179,17 @@ func processMerchantRejectDirectRefund(
 	}
 
 	switch wxRefund.Status {
-	case wechat.RefundStatusSuccess:
+	case wechatcontracts.DirectRefundStatusSuccess:
 		if _, dbErr := store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID); dbErr != nil {
 			log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as success")
 		}
 		if _, dbErr := store.UpdatePaymentOrderToRefunded(ctx, paymentOrder.ID); dbErr != nil {
 			log.Error().Err(dbErr).Int64("payment_order_id", paymentOrder.ID).Msg("failed to mark payment order as refunded")
 		}
-	case wechat.RefundStatusProcessing:
+	case wechatcontracts.DirectRefundStatusProcessing:
 		if _, dbErr := store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
 			ID:       refundOrder.ID,
-			RefundID: pgtype.Text{String: wxRefund.RefundID, Valid: true},
+			RefundID: pgtype.Text{String: wxRefund.RefundID, Valid: wxRefund.RefundID != ""},
 		}); dbErr != nil {
 			log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as processing")
 		}

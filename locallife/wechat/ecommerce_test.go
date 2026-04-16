@@ -1377,7 +1377,7 @@ func TestQueryEcommerceRefundByID_UsesRefundIDEndpoint(t *testing.T) {
 			return &http.Response{
 				StatusCode: http.StatusOK,
 				Header:     make(http.Header),
-				Body:       io.NopCloser(strings.NewReader(`{"refund_id":"refund-id-001","out_refund_no":"refund-001","status":"PROCESSING","create_time":"2024-11-04T10:34:56+08:00","amount":{"refund":88,"payer_refund":88}}`)),
+				Body:       io.NopCloser(strings.NewReader(`{"refund_id":"refund-id-001","out_refund_no":"refund-001","transaction_id":"wx-transaction-001","out_trade_no":"trade-001","channel":"ORIGINAL","user_received_account":"招商银行信用卡0403","create_time":"2024-11-04T10:34:56+08:00","status":"PROCESSING","amount":{"refund":88,"from":[{"account":"AVAILABLE","amount":88}],"payer_refund":88,"discount_refund":0,"currency":"CNY","advance":0},"refund_account":"REFUND_SOURCE_SUB_MERCHANT","funds_account":"AVAILABLE"}`)),
 			}, nil
 		}),
 	}
@@ -1441,7 +1441,7 @@ func TestApplyEcommerceAbnormalRefund_UserBankCardEncryptsSensitiveFields(t *tes
 			return &http.Response{
 				StatusCode: http.StatusOK,
 				Header:     make(http.Header),
-				Body:       io.NopCloser(strings.NewReader(`{"refund_id":"refund-id-001","out_refund_no":"refund-out-001","status":"PROCESSING","create_time":"2025-06-06T10:34:56+08:00","amount":{"refund":88,"payer_refund":88}}`)),
+				Body:       io.NopCloser(strings.NewReader(`{"refund_id":"refund-id-001","out_refund_no":"refund-out-001","transaction_id":"wx-transaction-001","out_trade_no":"trade-001","channel":"ORIGINAL","user_received_account":"招商银行信用卡0403","create_time":"2025-06-06T10:34:56+08:00","status":"PROCESSING","funds_account":"AVAILABLE","amount":{"refund":88,"from":[{"account":"AVAILABLE","amount":88}],"payer_refund":88,"discount_refund":0,"currency":"CNY","advance":0},"refund_account":"REFUND_SOURCE_SUB_MERCHANT"}`)),
 			}, nil
 		}),
 	}
@@ -1505,7 +1505,7 @@ func TestApplyEcommerceAbnormalRefund_MerchantBankCardUsesMinimalBody(t *testing
 			return &http.Response{
 				StatusCode: http.StatusOK,
 				Header:     make(http.Header),
-				Body:       io.NopCloser(strings.NewReader(`{"refund_id":"refund-id-002","out_refund_no":"refund-out-002","status":"SUCCESS","create_time":"2025-06-06T10:34:56+08:00","amount":{"refund":188,"payer_refund":188}}`)),
+				Body:       io.NopCloser(strings.NewReader(`{"refund_id":"refund-id-002","out_refund_no":"refund-out-002","transaction_id":"wx-transaction-002","out_trade_no":"trade-002","channel":"BALANCE","user_received_account":"尾号0403","success_time":"2025-06-06T10:40:56+08:00","create_time":"2025-06-06T10:34:56+08:00","status":"SUCCESS","funds_account":"AVAILABLE","amount":{"refund":188,"from":[{"account":"AVAILABLE","amount":188}],"payer_refund":188,"discount_refund":0,"currency":"CNY","advance":0},"refund_account":"REFUND_SOURCE_SUB_MERCHANT"}`)),
 			}, nil
 		}),
 	}
@@ -1519,6 +1519,45 @@ func TestApplyEcommerceAbnormalRefund_MerchantBankCardUsesMinimalBody(t *testing
 	require.NoError(t, err)
 	require.Equal(t, "refund-id-002", resp.RefundID)
 	require.Equal(t, RefundStatusSuccess, resp.Status)
+}
+
+func TestQueryEcommerceRefundByID_MissingDocumentedFieldsFails(t *testing.T) {
+	merchantPrivateKey, _ := generateTestKeyPair(t)
+	platformPrivateKey, platformPublicKey := generateTestKeyPair(t)
+
+	tempDir := t.TempDir()
+	privateKeyPath := createTestPrivateKeyFile(t, tempDir, merchantPrivateKey)
+	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
+
+	client, err := NewEcommerceClient(EcommerceClientConfig{
+		PaymentClientConfig: PaymentClientConfig{
+			MchID:                 "ignored_base_mchid",
+			AppID:                 "service-appid-001",
+			SerialNumber:          "test_serial",
+			APIV3Key:              testAPIV3Key(),
+			PrivateKeyPath:        privateKeyPath,
+			PlatformPublicKeyPath: publicKeyPath,
+			PlatformPublicKeyID:   "PUB_KEY_ID_0123456789",
+			NotifyURL:             "https://example.com/notify",
+		},
+		SpMchID: "service-mchid-001",
+		SpAppID: "service-appid-001",
+	})
+	require.NoError(t, err)
+
+	client.httpClient = &http.Client{
+		Transport: signedEcommerceTransport(t, platformPrivateKey, "PUB_KEY_ID_0123456789", func(req *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader(`{"refund_id":"refund-id-001","out_refund_no":"refund-001","status":"PROCESSING","create_time":"2024-11-04T10:34:56+08:00","amount":{"refund":88,"payer_refund":88}}`)),
+			}, nil
+		}),
+	}
+
+	_, err = client.QueryEcommerceRefundByID(context.Background(), "sub-mchid-001", "refund-id-001")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "transaction_id is required")
 }
 
 func TestCreateProfitSharing_EncryptsReceiverNameUsingLatestField(t *testing.T) {

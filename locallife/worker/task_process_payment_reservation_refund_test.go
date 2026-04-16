@@ -46,11 +46,9 @@ func TestProcessTaskInitiateRefund_ReservationAddonRefund_UsesProvidedOutRefundN
 		require.Equal(t, refundOrder.OutRefundNo, req.OutRefundNo)
 		require.Equal(t, int64(300), req.RefundAmount)
 		require.Equal(t, paymentOrder.Amount, req.TotalAmount)
-		return &wechat.EcommerceRefundResponse{RefundID: "refund_ra_12", Status: wechat.RefundStatusSuccess}, nil
+		return &wechat.EcommerceRefundResponse{RefundID: "refund_ra_12"}, nil
 	})
-	store.EXPECT().UpdateRefundOrderToSuccess(gomock.Any(), refundOrder.ID).Return(db.RefundOrder{ID: refundOrder.ID, PaymentOrderID: refundOrder.PaymentOrderID, RefundAmount: refundOrder.RefundAmount, Status: "success", OutRefundNo: refundOrder.OutRefundNo}, nil)
-	store.EXPECT().GetTotalRefundedByPaymentOrder(gomock.Any(), paymentOrder.ID).Return(int64(300), nil)
-	store.EXPECT().AddReservationPrepaidAmount(gomock.Any(), db.AddReservationPrepaidAmountParams{ID: reservationID, PrepaidAmount: -300}).Return(db.TableReservation{ID: reservationID}, nil)
+	store.EXPECT().UpdateRefundOrderToProcessing(gomock.Any(), db.UpdateRefundOrderToProcessingParams{ID: refundOrder.ID, RefundID: pgtype.Text{String: "refund_ra_12", Valid: true}}).Return(db.RefundOrder{ID: refundOrder.ID, PaymentOrderID: refundOrder.PaymentOrderID, RefundAmount: refundOrder.RefundAmount, Status: "processing", OutRefundNo: refundOrder.OutRefundNo}, nil)
 
 	processor := worker.NewTestTaskProcessor(store, nil, nil, ecommerceClient)
 	payloadBytes, err := json.Marshal(worker.PayloadProcessRefund{

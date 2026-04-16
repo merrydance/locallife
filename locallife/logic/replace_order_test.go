@@ -407,10 +407,13 @@ func TestReplaceReservationOrder_RefundProfitSharing(t *testing.T) {
 			require.Equal(t, "1900000109", req.SubMchID)
 			require.Equal(t, "out_1", req.OutTradeNo)
 			require.Equal(t, int64(500), req.RefundAmount)
-			return &wechat.EcommerceRefundResponse{Status: wechat.RefundStatusSuccess}, nil
+			return &wechat.EcommerceRefundResponse{RefundID: "erefund_replace_1"}, nil
 		})
 	store.EXPECT().
-		UpdateRefundOrderToSuccess(gomock.Any(), int64(555)).
+		UpdateRefundOrderToProcessing(gomock.Any(), db.UpdateRefundOrderToProcessingParams{
+			ID:       555,
+			RefundID: pgtype.Text{String: "erefund_replace_1", Valid: true},
+		}).
 		Times(1).
 		Return(db.RefundOrder{}, nil)
 

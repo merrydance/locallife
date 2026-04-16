@@ -7,7 +7,6 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/maps"
 	"github.com/merrydance/locallife/rules"
-	"github.com/merrydance/locallife/wechat"
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 )
 
@@ -46,9 +45,9 @@ type PaymentFacade interface {
 	ListPaymentLedger(ctx context.Context, input ListPaymentLedgerInput) (ListPaymentLedgerResult, error)
 	ClosePaymentOrder(ctx context.Context, input ClosePaymentOrderInput) (ClosePaymentOrderResult, error)
 
-	CreateRefund(ctx context.Context, req *wechat.RefundRequest) (*wechat.RefundResponse, error)
-	CreateEcommerceRefund(ctx context.Context, req *wechat.EcommerceRefundRequest) (*wechat.EcommerceRefundResponse, error)
-	ApplyEcommerceAbnormalRefund(ctx context.Context, req *wechat.EcommerceAbnormalRefundRequest) (*wechat.EcommerceRefundResponse, error)
+	CreateRefund(ctx context.Context, req *wechatcontracts.DirectRefundRequest) (*wechatcontracts.DirectRefundResponse, error)
+	CreateEcommerceRefund(ctx context.Context, req *wechatcontracts.EcommerceRefundRequest) (*wechatcontracts.EcommerceRefundCreateResponse, error)
+	ApplyEcommerceAbnormalRefund(ctx context.Context, req *wechatcontracts.EcommerceAbnormalRefundRequest) (*wechatcontracts.EcommerceRefundQueryResponse, error)
 	CreateProfitSharingReturn(ctx context.Context, req *wechatcontracts.ProfitSharingReturnRequest) (*wechatcontracts.ProfitSharingReturnResponse, error)
 	SpMchID() string
 }
@@ -256,7 +255,7 @@ type ApplyAbnormalRefundInput struct {
 
 type ApplyAbnormalRefundResult struct {
 	RefundOrder  db.RefundOrder
-	WechatRefund wechat.EcommerceRefundResponse
+	WechatRefund wechatcontracts.EcommerceRefundQueryResponse
 }
 
 type GetUserOrderQueryInput struct {

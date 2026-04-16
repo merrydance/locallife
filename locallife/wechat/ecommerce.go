@@ -2089,23 +2089,26 @@ type EcommerceAbnormalRefundRequest struct {
 // CreateEcommerceRefund 申请电商退款
 // 退款前需要先调用分账回退
 func (c *EcommerceClient) CreateEcommerceRefund(ctx context.Context, req *EcommerceRefundRequest) (*EcommerceRefundResponse, error) {
-	if req == nil {
-		return nil, fmt.Errorf("create ecommerce refund: request is nil")
+	contractReq := &wechatcontracts.EcommerceRefundRequest{
+		SubMchID:      req.SubMchID,
+		SpAppID:       c.spAppID,
+		SubAppID:      req.SubAppID,
+		TransactionID: req.TransactionID,
+		OutTradeNo:    req.OutTradeNo,
+		OutRefundNo:   req.OutRefundNo,
+		Reason:        req.Reason,
+		Amount: &wechatcontracts.EcommerceRefundRequestAmount{
+			Refund:   req.RefundAmount,
+			From:     toEcommerceRefundAmountFromContract(req.AmountFrom),
+			Total:    req.TotalAmount,
+			Currency: wechatcontracts.EcommerceRefundCurrencyCNY,
+		},
+		NotifyURL:     req.NotifyURL,
+		RefundAccount: req.RefundAccount,
+		FundsAccount:  req.FundsAccount,
 	}
-	if req.SubMchID == "" {
-		return nil, fmt.Errorf("create ecommerce refund: sub_mchid is required")
-	}
-	if req.OutRefundNo == "" {
-		return nil, fmt.Errorf("create ecommerce refund: out_refund_no is required")
-	}
-	if req.TransactionID == "" && req.OutTradeNo == "" {
-		return nil, fmt.Errorf("create ecommerce refund: transaction_id or out_trade_no is required")
-	}
-	if req.RefundAmount <= 0 || req.TotalAmount <= 0 {
-		return nil, fmt.Errorf("create ecommerce refund: refund and total amount must be positive")
-	}
-	if len(req.AmountFrom) > 0 && req.FundsAccount != "" {
-		return nil, fmt.Errorf("create ecommerce refund: amount.from and funds_account are mutually exclusive")
+	if err := wechatcontracts.ValidateEcommerceRefundRequest(contractReq); err != nil {
+		return nil, err
 	}
 
 	body := map[string]interface{}{
@@ -2165,23 +2168,25 @@ func (c *EcommerceClient) CreateEcommerceRefund(ctx context.Context, req *Ecomme
 	if err := json.Unmarshal(respBody, &resp); err != nil {
 		return nil, fmt.Errorf("unmarshal response: %w", err)
 	}
+	if err := wechatcontracts.ValidateEcommerceRefundCreateResponse("create ecommerce refund", toEcommerceRefundCreateContractResponse(&resp)); err != nil {
+		return nil, err
+	}
 
 	return &resp, nil
 }
 
 // ApplyEcommerceAbnormalRefund 发起电商异常退款处理
 func (c *EcommerceClient) ApplyEcommerceAbnormalRefund(ctx context.Context, req *EcommerceAbnormalRefundRequest) (*EcommerceRefundResponse, error) {
-	if req == nil {
-		return nil, fmt.Errorf("apply ecommerce abnormal refund: request is nil")
-	}
-	if req.RefundID == "" {
-		return nil, fmt.Errorf("apply ecommerce abnormal refund: refund_id is required")
-	}
-	if req.SubMchID == "" {
-		return nil, fmt.Errorf("apply ecommerce abnormal refund: sub_mchid is required")
-	}
-	if req.OutRefundNo == "" {
-		return nil, fmt.Errorf("apply ecommerce abnormal refund: out_refund_no is required")
+	if err := wechatcontracts.ValidateEcommerceAbnormalRefundRequest(&wechatcontracts.EcommerceAbnormalRefundRequest{
+		RefundID:    req.RefundID,
+		SubMchID:    req.SubMchID,
+		OutRefundNo: req.OutRefundNo,
+		Type:        req.Type,
+		BankType:    req.BankType,
+		BankAccount: req.BankAccount,
+		RealName:    req.RealName,
+	}); err != nil {
+		return nil, err
 	}
 
 	body := map[string]interface{}{
@@ -2228,6 +2233,9 @@ func (c *EcommerceClient) ApplyEcommerceAbnormalRefund(ctx context.Context, req 
 	if err := json.Unmarshal(respBody, &resp); err != nil {
 		return nil, fmt.Errorf("unmarshal response: %w", err)
 	}
+	if err := wechatcontracts.ValidateEcommerceRefundQueryResponse("apply ecommerce abnormal refund", toEcommerceRefundQueryContractResponse(&resp)); err != nil {
+		return nil, err
+	}
 
 	return &resp, nil
 }
@@ -2239,13 +2247,11 @@ func (c *EcommerceClient) QueryEcommerceRefund(ctx context.Context, subMchID, ou
 
 // QueryEcommerceRefundByOutRefundNo 按商户退款单号查询电商退款
 func (c *EcommerceClient) QueryEcommerceRefundByOutRefundNo(ctx context.Context, subMchID, outRefundNo string) (*EcommerceRefundResponse, error) {
-	if subMchID == "" {
-		return nil, fmt.Errorf("query ecommerce refund by out_refund_no: sub_mchid is required")
+	trimmedOutRefundNo, trimmedSubMchID, err := wechatcontracts.ValidateEcommerceRefundQueryByOutRefundNoInput(outRefundNo, subMchID)
+	if err != nil {
+		return nil, err
 	}
-	if outRefundNo == "" {
-		return nil, fmt.Errorf("query ecommerce refund by out_refund_no: out_refund_no is required")
-	}
-	requestURL := fmt.Sprintf(ecommerceRefundQueryByOutRefundURL, url.PathEscape(outRefundNo)) + "?sub_mchid=" + url.QueryEscape(subMchID)
+	requestURL := fmt.Sprintf(ecommerceRefundQueryByOutRefundURL, url.PathEscape(trimmedOutRefundNo)) + "?sub_mchid=" + url.QueryEscape(trimmedSubMchID)
 
 	respBody, err := c.doRequest(ctx, http.MethodGet, requestURL, nil)
 	if err != nil {
@@ -2256,19 +2262,20 @@ func (c *EcommerceClient) QueryEcommerceRefundByOutRefundNo(ctx context.Context,
 	if err := json.Unmarshal(respBody, &resp); err != nil {
 		return nil, fmt.Errorf("unmarshal response: %w", err)
 	}
+	if err := wechatcontracts.ValidateEcommerceRefundQueryResponse("query ecommerce refund by out_refund_no", toEcommerceRefundQueryContractResponse(&resp)); err != nil {
+		return nil, err
+	}
 
 	return &resp, nil
 }
 
 // QueryEcommerceRefundByID 按微信退款单号查询电商退款
 func (c *EcommerceClient) QueryEcommerceRefundByID(ctx context.Context, subMchID, refundID string) (*EcommerceRefundResponse, error) {
-	if subMchID == "" {
-		return nil, fmt.Errorf("query ecommerce refund by refund_id: sub_mchid is required")
+	trimmedRefundID, trimmedSubMchID, err := wechatcontracts.ValidateEcommerceRefundQueryByIDInput(refundID, subMchID)
+	if err != nil {
+		return nil, err
 	}
-	if refundID == "" {
-		return nil, fmt.Errorf("query ecommerce refund by refund_id: refund_id is required")
-	}
-	requestURL := fmt.Sprintf(ecommerceRefundQueryByIDURL, url.PathEscape(refundID)) + "?sub_mchid=" + url.QueryEscape(subMchID)
+	requestURL := fmt.Sprintf(ecommerceRefundQueryByIDURL, url.PathEscape(trimmedRefundID)) + "?sub_mchid=" + url.QueryEscape(trimmedSubMchID)
 
 	respBody, err := c.doRequest(ctx, http.MethodGet, requestURL, nil)
 	if err != nil {
@@ -2278,6 +2285,9 @@ func (c *EcommerceClient) QueryEcommerceRefundByID(ctx context.Context, subMchID
 	var resp EcommerceRefundResponse
 	if err := json.Unmarshal(respBody, &resp); err != nil {
 		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+	if err := wechatcontracts.ValidateEcommerceRefundQueryResponse("query ecommerce refund by refund_id", toEcommerceRefundQueryContractResponse(&resp)); err != nil {
+		return nil, err
 	}
 
 	return &resp, nil
@@ -2776,8 +2786,105 @@ func (c *EcommerceClient) DecryptEcommerceRefundNotification(notification *Payme
 	if err := json.Unmarshal(plaintext, &result); err != nil {
 		return nil, fmt.Errorf("unmarshal notification: %w", err)
 	}
+	if err := wechatcontracts.ValidateEcommerceRefundNotification("decrypt ecommerce refund notification", &wechatcontracts.EcommerceRefundNotification{
+		SPMchID:             result.SpMchID,
+		SubMchID:            result.SubMchID,
+		OutTradeNo:          result.OutTradeNo,
+		TransactionID:       result.TransactionID,
+		OutRefundNo:         result.OutRefundNo,
+		RefundID:            result.RefundID,
+		RefundStatus:        result.RefundStatus,
+		SuccessTime:         result.SuccessTime,
+		UserReceivedAccount: result.UserReceivedAccount,
+		Amount: wechatcontracts.EcommerceRefundNotificationAmount{
+			Total:       result.Amount.Total,
+			Refund:      result.Amount.Refund,
+			PayerTotal:  result.Amount.PayerTotal,
+			PayerRefund: result.Amount.PayerRefund,
+		},
+		RefundAccount: result.RefundAccount,
+	}); err != nil {
+		return nil, err
+	}
 
 	return &result, nil
+}
+
+func toEcommerceRefundCreateContractResponse(resp *EcommerceRefundResponse) *wechatcontracts.EcommerceRefundCreateResponse {
+	if resp == nil {
+		return nil
+	}
+	return &wechatcontracts.EcommerceRefundCreateResponse{
+		RefundID:        resp.RefundID,
+		OutRefundNo:     resp.OutRefundNo,
+		CreateTime:      resp.CreateTime,
+		Amount:          toEcommerceRefundAmountContract(resp.Amount),
+		PromotionDetail: toEcommerceRefundPromotionDetailsContract(resp.PromotionDetail),
+		RefundAccount:   resp.RefundAccount,
+	}
+}
+
+func toEcommerceRefundQueryContractResponse(resp *EcommerceRefundResponse) *wechatcontracts.EcommerceRefundQueryResponse {
+	if resp == nil {
+		return nil
+	}
+	return &wechatcontracts.EcommerceRefundQueryResponse{
+		RefundID:            resp.RefundID,
+		OutRefundNo:         resp.OutRefundNo,
+		TransactionID:       resp.TransactionID,
+		OutTradeNo:          resp.OutTradeNo,
+		Channel:             resp.Channel,
+		UserReceivedAccount: resp.UserReceivedAccount,
+		SuccessTime:         resp.SuccessTime,
+		CreateTime:          resp.CreateTime,
+		Status:              resp.Status,
+		Amount:              toEcommerceRefundAmountContract(resp.Amount),
+		PromotionDetail:     toEcommerceRefundPromotionDetailsContract(resp.PromotionDetail),
+		RefundAccount:       resp.RefundAccount,
+		FundsAccount:        resp.FundsAccount,
+	}
+}
+
+func toEcommerceRefundAmountContract(amount EcommerceRefundAmount) wechatcontracts.EcommerceRefundAmount {
+	return wechatcontracts.EcommerceRefundAmount{
+		Refund:         amount.Refund,
+		From:           toEcommerceRefundAmountFromContract(amount.From),
+		PayerRefund:    amount.PayerRefund,
+		DiscountRefund: amount.DiscountRefund,
+		Currency:       amount.Currency,
+		Advance:        amount.Advance,
+	}
+}
+
+func toEcommerceRefundAmountFromContract(entries []EcommerceRefundAmountFrom) []wechatcontracts.EcommerceRefundAmountFrom {
+	if len(entries) == 0 {
+		return nil
+	}
+	result := make([]wechatcontracts.EcommerceRefundAmountFrom, 0, len(entries))
+	for _, entry := range entries {
+		result = append(result, wechatcontracts.EcommerceRefundAmountFrom{
+			Account: entry.Account,
+			Amount:  entry.Amount,
+		})
+	}
+	return result
+}
+
+func toEcommerceRefundPromotionDetailsContract(details []EcommerceRefundPromotionDetail) []wechatcontracts.EcommerceRefundPromotionDetail {
+	if len(details) == 0 {
+		return nil
+	}
+	result := make([]wechatcontracts.EcommerceRefundPromotionDetail, 0, len(details))
+	for _, detail := range details {
+		result = append(result, wechatcontracts.EcommerceRefundPromotionDetail{
+			PromotionID:  detail.PromotionID,
+			Scope:        detail.Scope,
+			Type:         detail.Type,
+			Amount:       detail.Amount,
+			RefundAmount: detail.RefundAmount,
+		})
+	}
+	return result
 }
 
 // SettlementNotificationResource 微信结算事件通知解密后的资源数据

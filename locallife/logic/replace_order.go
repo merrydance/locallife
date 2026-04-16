@@ -197,7 +197,7 @@ func ReplaceReservationOrder(
 					return ReplaceOrderResult{}, err
 				}
 
-				refundStatus, refundErr := processReplaceOrderRefund(ctx, store, paymentClient, ecommerceClient, oldOrder.MerchantID, allocation.PaymentOrder, outRefundNo, refundReason, allocation.RefundAmount)
+				refundStatus, refundID, refundErr := processReplaceOrderRefund(ctx, store, paymentClient, ecommerceClient, oldOrder.MerchantID, allocation.PaymentOrder, outRefundNo, refundReason, allocation.RefundAmount)
 				if refundErr != nil {
 					if _, dbErr := store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
 						log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as failed")
@@ -205,12 +205,12 @@ func ReplaceReservationOrder(
 					return ReplaceOrderResult{}, refundErr
 				}
 				switch refundStatus {
-				case wechat.RefundStatusSuccess:
+				case wechatcontracts.DirectRefundStatusSuccess:
 					if _, dbErr := store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID); dbErr != nil {
 						log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as success")
 					}
-				case wechat.RefundStatusProcessing:
-					if _, dbErr := store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{ID: refundOrder.ID}); dbErr != nil {
+				case wechatcontracts.DirectRefundStatusProcessing:
+					if _, dbErr := store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{ID: refundOrder.ID, RefundID: pgtype.Text{String: refundID, Valid: refundID != ""}}); dbErr != nil {
 						log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as processing")
 					}
 				}
@@ -324,43 +324,49 @@ func processReplaceOrderRefund(
 	outRefundNo string,
 	reason string,
 	refundAmount int64,
-) (string, error) {
+) (string, string, error) {
 	if paymentOrder.PaymentType == "profit_sharing" {
 		if ecommerceClient == nil {
-			return "", errors.New("ecommerce client not configured")
+			return "", "", errors.New("ecommerce client not configured")
 		}
 		paymentConfig, err := store.GetMerchantPaymentConfig(ctx, merchantID)
 		if err != nil {
-			return "", fmt.Errorf("get merchant payment config: %w", err)
+			return "", "", fmt.Errorf("get merchant payment config: %w", err)
 		}
-		refundResp, err := ecommerceClient.CreateEcommerceRefund(ctx, &wechat.EcommerceRefundRequest{
-			SubMchID:     paymentConfig.SubMchID,
-			OutTradeNo:   paymentOrder.OutTradeNo,
-			OutRefundNo:  outRefundNo,
-			Reason:       reason,
-			RefundAmount: refundAmount,
-			TotalAmount:  paymentOrder.Amount,
+		refundResp, err := createEcommerceRefundContract(ctx, ecommerceClient, &wechatcontracts.EcommerceRefundRequest{
+			SubMchID:    paymentConfig.SubMchID,
+			OutTradeNo:  paymentOrder.OutTradeNo,
+			OutRefundNo: outRefundNo,
+			Reason:      reason,
+			Amount: &wechatcontracts.EcommerceRefundRequestAmount{
+				Refund:   refundAmount,
+				Total:    paymentOrder.Amount,
+				Currency: wechatcontracts.EcommerceRefundCurrencyCNY,
+			},
 		})
 		if err != nil {
-			return "", err
+			return "", "", mapEcommerceRefundCreateError(err)
 		}
-		return refundResp.Status, nil
+		return wechatcontracts.EcommerceRefundStatusProcessing, refundResp.RefundID, nil
 	}
 
 	if paymentClient == nil {
-		return "", errors.New("payment client not configured")
+		return "", "", errors.New("payment client not configured")
 	}
-	wxRefund, err := paymentClient.CreateRefund(ctx, &wechat.RefundRequest{
-		OutTradeNo:   paymentOrder.OutTradeNo,
-		OutRefundNo:  outRefundNo,
-		Reason:       reason,
-		RefundAmount: refundAmount,
-		TotalAmount:  paymentOrder.Amount,
+	wxRefund, err := createDirectRefundContract(ctx, paymentClient, &wechatcontracts.DirectRefundRequest{
+		OutTradeNo:  paymentOrder.OutTradeNo,
+		OutRefundNo: outRefundNo,
+		Reason:      reason,
+		Amount: &wechatcontracts.DirectRefundRequestAmount{
+			Refund:   refundAmount,
+			Total:    paymentOrder.Amount,
+			Currency: wechatcontracts.DirectRefundCurrencyCNY,
+		},
 	})
 	if err != nil {
-		return "", err
+		return "", "", mapDirectRefundCreateError(err)
 	}
-	return wxRefund.Status, nil
+	return wxRefund.Status, wxRefund.RefundID, nil
 }
 
 func generateOrderNo() (string, error) {
