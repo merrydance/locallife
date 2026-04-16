@@ -147,18 +147,23 @@ var PartnerSingleCloseCompatibilityCodes = newCodeSet(
 // CombineCreateDocumentedCodes follows the active official audit for
 // POST /v3/combine-transactions/jsapi.
 var CombineCreateDocumentedCodes = newCodeSet(
+	OrderingCodeUserPaying,
 	OrderingCodeParamError,
 	OrderingCodeInvalidRequest,
 	OrderingCodeAppIDMchIDNotMatch,
 	OrderingCodeOpenIDMismatch,
+	OrderingCodeInvalidTransactionID,
+	OrderingCodeMchNotExists,
 	OrderingCodeNoAuth,
 	OrderingCodeSignError,
 	OrderingCodeOrderClosed,
+	OrderingCodeOrderNotExist,
 	OrderingCodeOutTradeNoUsed,
 	OrderingCodeAccountError,
 	OrderingCodeTradeError,
 	OrderingCodeRuleLimit,
 	OrderingCodeFrequencyLimited,
+	OrderingCodeBankError,
 	OrderingCodeSystemError,
 )
 
@@ -199,6 +204,7 @@ var CombineCloseDocumentedCodes = newCodeSet(
 	OrderingCodeMchNotExists,
 	OrderingCodeNoAuth,
 	OrderingCodeSignError,
+	OrderingCodeAccountError,
 	OrderingCodeNotEnough,
 	OrderingCodeOutTradeNoUsed,
 	OrderingCodeRuleLimit,

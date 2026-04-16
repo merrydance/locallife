@@ -9,6 +9,7 @@ import (
 
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 )
 
 type SystemClock struct{}
@@ -178,7 +179,7 @@ func (f *DefaultPaymentFacade) ApplyEcommerceAbnormalRefund(ctx context.Context,
 	return f.ecommerceClient.ApplyEcommerceAbnormalRefund(ctx, req)
 }
 
-func (f *DefaultPaymentFacade) CreateProfitSharingReturn(ctx context.Context, req *wechat.ProfitSharingReturnRequest) (*wechat.ProfitSharingReturnResponse, error) {
+func (f *DefaultPaymentFacade) CreateProfitSharingReturn(ctx context.Context, req *wechatcontracts.ProfitSharingReturnRequest) (*wechatcontracts.ProfitSharingReturnResponse, error) {
 	if f.ecommerceClient == nil {
 		return nil, fmt.Errorf("ecommerce client not configured")
 	}

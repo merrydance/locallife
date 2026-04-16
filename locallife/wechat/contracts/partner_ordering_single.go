@@ -183,21 +183,22 @@ type PartnerOrderQueryResponse struct {
 // PartnerPaymentNotificationResource is the canonical decrypted callback
 // resource for partner single-order payment notifications.
 type PartnerPaymentNotificationResource struct {
-	SpAppID        string                      `json:"sp_appid"`
-	SpMchID        string                      `json:"sp_mchid"`
-	SubAppID       string                      `json:"sub_appid,omitempty"`
-	SubMchID       string                      `json:"sub_mchid"`
-	OutTradeNo     string                      `json:"out_trade_no"`
-	TransactionID  string                      `json:"transaction_id"`
-	TradeType      string                      `json:"trade_type"`
-	TradeState     string                      `json:"trade_state"`
-	TradeStateDesc string                      `json:"trade_state_desc"`
-	BankType       string                      `json:"bank_type"`
-	Attach         string                      `json:"attach,omitempty"`
-	SuccessTime    string                      `json:"success_time"`
-	Payer          PartnerOrderPayerInfo       `json:"payer"`
-	Amount         PartnerOrderQueryAmount     `json:"amount"`
-	SceneInfo      *PartnerOrderQuerySceneInfo `json:"scene_info,omitempty"`
+	SpAppID         string                      `json:"sp_appid"`
+	SpMchID         string                      `json:"sp_mchid"`
+	SubAppID        string                      `json:"sub_appid,omitempty"`
+	SubMchID        string                      `json:"sub_mchid"`
+	OutTradeNo      string                      `json:"out_trade_no"`
+	TransactionID   string                      `json:"transaction_id"`
+	TradeType       string                      `json:"trade_type"`
+	TradeState      string                      `json:"trade_state"`
+	TradeStateDesc  string                      `json:"trade_state_desc"`
+	BankType        string                      `json:"bank_type"`
+	Attach          string                      `json:"attach,omitempty"`
+	SuccessTime     string                      `json:"success_time"`
+	Payer           PartnerOrderPayerInfo       `json:"payer"`
+	Amount          PartnerOrderQueryAmount     `json:"amount"`
+	SceneInfo       *PartnerOrderQuerySceneInfo `json:"scene_info,omitempty"`
+	PromotionDetail []PartnerPromotionDetail    `json:"promotion_detail,omitempty"`
 }
 
 // PartnerCloseOrderRequest is the canonical request body for partner single

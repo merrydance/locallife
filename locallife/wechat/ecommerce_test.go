@@ -1083,7 +1083,7 @@ func TestQueryCombineOrder_ParsesServiceProviderFields(t *testing.T) {
 			return &http.Response{
 				StatusCode: http.StatusOK,
 				Header:     make(http.Header),
-				Body:       io.NopCloser(strings.NewReader(`{"combine_appid":"service-appid-001","combine_mchid":"service-mchid-001","combine_out_trade_no":"combine-order-001","combine_payer_info":{"openid":"openid-001","sub_openid":"sub-openid-001"},"scene_info":{"device_id":"POS-001"},"sub_orders":[{"mchid":"service-mchid-001","sub_mchid":"sub-mchid-001","sub_appid":"sub-appid-001","sub_openid":"sub-openid-001","out_trade_no":"sub-order-001","transaction_id":"wx_txn_001","trade_type":"JSAPI","trade_state":"SUCCESS","bank_type":"CMC","attach":"attach-001","amount":{"total_amount":100,"payer_amount":100,"currency":"CNY","payer_currency":"CNY"},"success_time":"2024-11-14T10:00:00+08:00"}]}`)),
+				Body:       io.NopCloser(strings.NewReader(`{"combine_appid":"service-appid-001","combine_mchid":"service-mchid-001","combine_out_trade_no":"combine-order-001","combine_payer_info":{"openid":"openid-001"},"scene_info":{"device_id":"POS-001"},"sub_orders":[{"mchid":"service-mchid-001","sub_mchid":"sub-mchid-001","sub_appid":"sub-appid-001","sub_openid":"sub-openid-001","out_trade_no":"sub-order-001","transaction_id":"wx_txn_001","trade_type":"JSAPI","trade_state":"SUCCESS","bank_type":"CMC","attach":"attach-001","amount":{"total_amount":100,"payer_amount":100,"currency":"CNY","payer_currency":"CNY"},"success_time":"2024-11-14T10:00:00+08:00"}]}`)),
 			}, nil
 		}),
 	}
@@ -1091,7 +1091,8 @@ func TestQueryCombineOrder_ParsesServiceProviderFields(t *testing.T) {
 	resp, err := client.QueryCombineOrder(context.Background(), "combine-order-001")
 	require.NoError(t, err)
 	require.Equal(t, "service-appid-001", resp.CombineAppID)
-	require.Equal(t, "sub-openid-001", resp.CombinePayerInfo.SubOpenID)
+	require.NotNil(t, resp.CombinePayerInfo)
+	require.Equal(t, "openid-001", resp.CombinePayerInfo.OpenID)
 	require.NotNil(t, resp.SceneInfo)
 	require.Equal(t, "POS-001", resp.SceneInfo.DeviceID)
 	require.Len(t, resp.SubOrders, 1)
@@ -1143,6 +1144,23 @@ func TestQueryCombineOrder_RejectsContractDrift(t *testing.T) {
 	var contractErr *CombineOrderQueryContractError
 	require.ErrorAs(t, err, &contractErr)
 	require.Equal(t, "query combine order: wechat response missing combine_mchid", contractErr.Error())
+}
+
+func TestQueryCombineOrder_RejectsEmptyDocumentedSceneInfoField(t *testing.T) {
+	client := newSignedEcommerceClientForTest(t, func(req *http.Request) (*http.Response, error) {
+		require.Equal(t, http.MethodGet, req.Method)
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader(`{"combine_appid":"service-appid-001","combine_mchid":"service-mchid-001","combine_out_trade_no":"combine-order-001","scene_info":{},"sub_orders":[{"mchid":"service-mchid-001","out_trade_no":"sub-order-001","trade_state":"SUCCESS","amount":{"total_amount":100,"payer_amount":100,"currency":"CNY","payer_currency":"CNY"}}]}`)),
+		}, nil
+	})
+
+	_, err := client.QueryCombineOrder(context.Background(), "combine-order-001")
+	require.Error(t, err)
+	var contractErr *CombineOrderQueryContractError
+	require.ErrorAs(t, err, &contractErr)
+	require.Equal(t, "query combine order: scene_info.device_id is required when scene_info is present", contractErr.Error())
 }
 
 func TestCloseCombineOrder_UsesSubMerchantFields(t *testing.T) {
@@ -1559,13 +1577,13 @@ func TestCreateProfitSharing_EncryptsReceiverNameUsingLatestField(t *testing.T) 
 		}),
 	}
 
-	resp, err := client.CreateProfitSharing(context.Background(), &ProfitSharingRequest{
+	resp, err := client.CreateProfitSharing(context.Background(), &wechatcontracts.ProfitSharingRequest{
 		SubMchID:      "sub-mchid-001",
 		TransactionID: "wx-transaction-001",
 		OutOrderNo:    "ps-order-001",
 		Finish:        true,
-		Receivers: []ProfitSharingReceiver{{
-			Type:            ReceiverTypeMerchant,
+		Receivers: []wechatcontracts.ProfitSharingReceiver{{
+			Type:            wechatcontracts.ReceiverTypeMerchant,
 			ReceiverAccount: "receiver-mchid-001",
 			ReceiverName:    "测试分账接收方",
 			Amount:          520,
@@ -1622,16 +1640,56 @@ func TestAddProfitSharingReceiver_UsesNameFieldAndWechatpaySerial(t *testing.T) 
 		}),
 	}
 
-	resp, err := client.AddProfitSharingReceiver(context.Background(), &AddReceiverRequest{
+	resp, err := client.AddProfitSharingReceiver(context.Background(), &wechatcontracts.AddReceiverRequest{
 		AppID:        "service-appid-001",
-		Type:         ReceiverTypePersonal,
+		Type:         wechatcontracts.ReceiverTypePersonal,
 		Account:      "openid-001",
 		Name:         "张三",
-		RelationType: RelationOthers,
+		RelationType: wechatcontracts.RelationOthers,
 	})
 	require.NoError(t, err)
-	require.Equal(t, ReceiverTypePersonal, resp.Type)
-	require.Equal(t, RelationOthers, resp.RelationType)
+	require.Equal(t, wechatcontracts.ReceiverTypePersonal, resp.Type)
+	require.Equal(t, "openid-001", resp.Account)
+}
+
+func TestCreateProfitSharing_RejectsContractDrift(t *testing.T) {
+	client := newSignedEcommerceClientForTest(t, func(req *http.Request) (*http.Response, error) {
+		require.Equal(t, http.MethodPost, req.Method)
+		require.Equal(t, profitSharingURL, req.URL.Path)
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader(`{"sub_mchid":"sub-mchid-001","out_order_no":"ps-order-001","order_id":"ps-wx-001"}`)),
+		}, nil
+	})
+
+	_, err := client.CreateProfitSharing(context.Background(), &wechatcontracts.ProfitSharingRequest{
+		SubMchID:      "sub-mchid-001",
+		TransactionID: "wx-transaction-001",
+		OutOrderNo:    "ps-order-001",
+		Receivers: []wechatcontracts.ProfitSharingReceiver{{
+			Type:            wechatcontracts.ReceiverTypeMerchant,
+			ReceiverAccount: "receiver-mchid-001",
+			Amount:          520,
+			Description:     "平台分账",
+		}},
+	})
+	require.EqualError(t, err, "create profit sharing: wechat response missing status")
+}
+
+func TestQueryProfitSharing_RejectsContractDrift(t *testing.T) {
+	client := newSignedEcommerceClientForTest(t, func(req *http.Request) (*http.Response, error) {
+		require.Equal(t, http.MethodGet, req.Method)
+		require.Equal(t, profitSharingURL, req.URL.Path)
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader(`{"sub_mchid":"sub-mchid-001","out_order_no":"ps-order-001","order_id":"ps-wx-001","status":"PROCESSING","receivers":[{"type":"MERCHANT_ID","receiver_account":"receiver-mchid-001","amount":1}]}`)),
+		}, nil
+	})
+
+	_, err := client.QueryProfitSharing(context.Background(), "sub-mchid-001", "wx-transaction-001", "ps-order-001")
+	require.EqualError(t, err, "query profit sharing: receivers[0].result is required")
 }
 
 func TestQueryProfitSharingReturn_UsesCollectionEndpointAndEscapedQuery(t *testing.T) {
@@ -1680,6 +1738,20 @@ func TestQueryProfitSharingReturn_UsesCollectionEndpointAndEscapedQuery(t *testi
 	require.Equal(t, "PROCESSING", resp.Result)
 }
 
+func TestQueryProfitSharingReturn_RejectsContractDrift(t *testing.T) {
+	client := newSignedEcommerceClientForTest(t, func(req *http.Request) (*http.Response, error) {
+		require.Equal(t, http.MethodGet, req.Method)
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader(`{"out_return_no":"return-1"}`)),
+		}, nil
+	})
+
+	_, err := client.QueryProfitSharingReturn(context.Background(), "sub-mchid-001", "return-1", "order-1")
+	require.EqualError(t, err, "query profit sharing return: wechat response missing result")
+}
+
 func TestQueryProfitSharingAmounts_UsesTransactionEndpoint(t *testing.T) {
 	merchantPrivateKey, _ := generateTestKeyPair(t)
 	platformPrivateKey, platformPublicKey := generateTestKeyPair(t)
@@ -1725,7 +1797,7 @@ func TestQueryProfitSharingAmounts_UsesTransactionEndpoint(t *testing.T) {
 
 func TestIsProfitSharingReturnProcessingError(t *testing.T) {
 	require.True(t, IsProfitSharingReturnProcessingError(&WechatPayError{Code: "NOT_ENOUGH", Message: "余额不足", StatusCode: http.StatusBadRequest}))
-	require.True(t, IsProfitSharingReturnProcessingError(&WechatPayError{Code: "PAYER_ACCOUNT_ABNORMAL", Message: "分账方账户异常", StatusCode: http.StatusBadRequest}))
+	require.False(t, IsProfitSharingReturnProcessingError(&WechatPayError{Code: "PAYER_ACCOUNT_ABNORMAL", Message: "分账方账户异常", StatusCode: http.StatusBadRequest}))
 	require.False(t, IsProfitSharingReturnProcessingError(&WechatPayError{Code: "PARAM_ERROR", Message: "参数错误", StatusCode: http.StatusBadRequest}))
 	require.False(t, IsProfitSharingReturnProcessingError(errors.New("network error")))
 }
@@ -2662,6 +2734,47 @@ func TestDecryptViolationNotification(t *testing.T) {
 	require.Equal(t, "ONE_YUAN_PURCHASES", resource.RiskType)
 	require.Equal(t, "涉嫌一元购", resource.RiskDescription)
 	require.Equal(t, "2015-05-20T13:29:35+08:00", resource.PunishTime.Format(time.RFC3339))
+}
+
+func TestDecryptProfitSharingNotification_RejectsContractDrift(t *testing.T) {
+	validAPIV3Key := testAPIV3Key()
+
+	merchantPrivateKey, _ := generateTestKeyPair(t)
+	_, platformPublicKey := generateTestKeyPair(t)
+
+	tempDir := t.TempDir()
+	privateKeyPath := createTestPrivateKeyFile(t, tempDir, merchantPrivateKey)
+	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
+
+	client, err := NewEcommerceClient(EcommerceClientConfig{
+		PaymentClientConfig: PaymentClientConfig{
+			MchID:                 "ignored_base_mchid",
+			AppID:                 "service-appid-001",
+			SerialNumber:          "test_serial",
+			APIV3Key:              validAPIV3Key,
+			PrivateKeyPath:        privateKeyPath,
+			PlatformPublicKeyPath: publicKeyPath,
+			PlatformPublicKeyID:   "PUB_KEY_ID_0123456789",
+		},
+		SpMchID: "service-mchid-001",
+		SpAppID: "service-appid-001",
+	})
+	require.NoError(t, err)
+	client.apiV3Key = validAPIV3Key
+
+	plaintext := `{"sub_mchid":"1900009231","transaction_id":"4200000000001","order_id":"ps_wx_001","out_order_no":"ps-1","receiver":{"type":"MERCHANT_ID","amount":1,"description":"desc"},"success_time":"2015-05-20T13:29:35+08:00"}`
+	nonce := "0123456789ab"
+	associatedData := "profit-sharing"
+	ciphertext := encryptEcommerceNotificationResource(t, validAPIV3Key, plaintext, associatedData, nonce)
+
+	notification := &PaymentNotification{ID: "notif_001", EventType: "PROFIT_SHARING.ORDER", ResourceType: "encrypt-resource"}
+	notification.Resource.Algorithm = "AEAD_AES_256_GCM"
+	notification.Resource.Ciphertext = ciphertext
+	notification.Resource.Nonce = nonce
+	notification.Resource.AssociatedData = associatedData
+
+	_, err = client.DecryptProfitSharingNotification(notification)
+	require.EqualError(t, err, "decrypt profit sharing notification: wechat response missing sp_mchid")
 }
 
 func decryptEcommerceTestCiphertext(t *testing.T, privateKey *rsa.PrivateKey, ciphertext string) string {

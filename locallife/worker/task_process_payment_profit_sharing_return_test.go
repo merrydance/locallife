@@ -11,6 +11,7 @@ import (
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	mockwechat "github.com/merrydance/locallife/wechat/mock"
 	"github.com/merrydance/locallife/worker"
 	mockwk "github.com/merrydance/locallife/worker/mock"
@@ -80,12 +81,11 @@ func TestProcessTaskInitiateRefund_ProfitSharingReturnAmbiguousErrorFallsBackToP
 	}).Return(returnRecord, nil)
 	ecommerceClient.EXPECT().GetSpMchID().Return("service-mchid-001")
 	ecommerceClient.EXPECT().CreateProfitSharingReturn(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(_ context.Context, req *wechat.ProfitSharingReturnRequest) (*wechat.ProfitSharingReturnResponse, error) {
+		func(_ context.Context, req *wechatcontracts.ProfitSharingReturnRequest) (*wechatcontracts.ProfitSharingReturnResponse, error) {
 			require.Equal(t, "sub-mchid-001", req.SubMchID)
 			require.Equal(t, profitSharingOrder.OutOrderNo, req.OutOrderNo)
 			require.Equal(t, returnRecord.OutReturnNo, req.OutReturnNo)
-			require.Equal(t, wechat.ReceiverTypeMerchant, req.ReturnAccountType)
-			require.Equal(t, "service-mchid-001", req.ReturnAccount)
+			require.Equal(t, "service-mchid-001", req.ReturnMchID)
 			return nil, &wechat.WechatPayError{Code: "NOT_ENOUGH", Message: "余额不足", StatusCode: 400}
 		},
 	)

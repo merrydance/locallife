@@ -62,6 +62,21 @@ func TestOrderingCodeSetsUseCanonicalAliases(t *testing.T) {
 	if !CombineQueryDocumentedCodes.Has(OrderingCompatCodeOrderNotExist) {
 		t.Fatalf("expected combine query documented set to accept ORDERNOTEXIST alias via canonicalization")
 	}
+	if !CombineCreateDocumentedCodes.Has(OrderingCodeUserPaying) {
+		t.Fatalf("expected combine create documented set to include USERPAYING")
+	}
+	if !CombineCreateDocumentedCodes.Has(OrderingCodeInvalidTransactionID) {
+		t.Fatalf("expected combine create documented set to include INVALID_TRANSACTIONID")
+	}
+	if !CombineCreateDocumentedCodes.Has(OrderingCodeMchNotExists) {
+		t.Fatalf("expected combine create documented set to include MCH_NOT_EXISTS")
+	}
+	if !CombineCreateDocumentedCodes.Has(OrderingCompatCodeOrderNotExist) {
+		t.Fatalf("expected combine create documented set to accept ORDERNOTEXIST alias via canonicalization")
+	}
+	if !CombineCreateDocumentedCodes.Has(OrderingCompatCodeBankError) {
+		t.Fatalf("expected combine create documented set to accept BANKERROR alias via canonicalization")
+	}
 	if !CombineQueryDocumentedCodes.Has(OrderingCodeInvalidTransactionID) {
 		t.Fatalf("expected combine query documented set to include INVALID_TRANSACTIONID")
 	}
@@ -70,5 +85,8 @@ func TestOrderingCodeSetsUseCanonicalAliases(t *testing.T) {
 	}
 	if !CombineCloseDocumentedCodes.Has(OrderingCodeUserPaying) {
 		t.Fatalf("expected combine close documented set to include USERPAYING")
+	}
+	if !CombineCloseDocumentedCodes.Has(OrderingCodeAccountError) {
+		t.Fatalf("expected combine close documented codes to include ACCOUNT_ERROR")
 	}
 }

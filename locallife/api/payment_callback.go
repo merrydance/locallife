@@ -203,17 +203,17 @@ func (server *Server) validateEcommerceRefundOwnership(resource *wechat.Ecommerc
 	return nil
 }
 
-func (server *Server) validateProfitSharingOwnership(resource *wechat.ProfitSharingNotification) error {
+func (server *Server) validateProfitSharingOwnership(resource *wechatcontracts.ProfitSharingNotification) error {
 	if server.ecommerceClient == nil {
 		return errors.New("ecommerce client not configured")
 	}
-	if resource.MchID != "" && resource.MchID != server.ecommerceClient.GetSpMchID() {
+	if resource.SPMchID != "" && resource.SPMchID != server.ecommerceClient.GetSpMchID() {
 		return fmt.Errorf("mchid mismatch")
 	}
 	return nil
 }
 
-func (server *Server) validateProfitSharingSubMerchantOwnership(ctx context.Context, resource *wechat.ProfitSharingNotification, order db.ProfitSharingOrder) error {
+func (server *Server) validateProfitSharingSubMerchantOwnership(ctx context.Context, resource *wechatcontracts.ProfitSharingNotification, order db.ProfitSharingOrder) error {
 	if resource == nil {
 		return errors.New("profit sharing resource is nil")
 	}
@@ -1817,7 +1817,7 @@ func (server *Server) handleProfitSharingNotify(ctx *gin.Context) {
 	}
 
 	log.Info().
-		Str("mch_id", resource.MchID).
+		Str("sp_mch_id", resource.SPMchID).
 		Str("sub_mch_id", resource.SubMchID).
 		Str("out_order_no", resource.OutOrderNo).
 		Str("order_id", resource.OrderID).
@@ -1826,20 +1826,20 @@ func (server *Server) handleProfitSharingNotify(ctx *gin.Context) {
 	if err := server.validateProfitSharingOwnership(resource); err != nil {
 		paymentCallbackFailuresTotal.WithLabelValues("profit_sharing", "ownership").Inc()
 		log.Error().Err(err).
-			Str("mch_id", resource.MchID).
+			Str("sp_mch_id", resource.SPMchID).
 			Str("sub_mch_id", resource.SubMchID).
 			Msg("profit sharing notification ownership validation failed")
 		server.sendAlert(websocket.AlertData{
 			AlertType:   websocket.AlertTypeSystemError,
 			Level:       websocket.AlertLevelCritical,
 			Title:       "分账回调归属校验失败",
-			Message:     fmt.Sprintf("分账回调 out_order_no=%s 的归属校验失败，mch_id=%s, sub_mch_id=%s。系统已返回 FAIL 等待微信重试，请排查是否存在错服务商分账回调。", resource.OutOrderNo, resource.MchID, resource.SubMchID),
+			Message:     fmt.Sprintf("分账回调 out_order_no=%s 的归属校验失败，sp_mch_id=%s, sub_mch_id=%s。系统已返回 FAIL 等待微信重试，请排查是否存在错服务商分账回调。", resource.OutOrderNo, resource.SPMchID, resource.SubMchID),
 			RelatedID:   0,
 			RelatedType: "profit_sharing_order",
 			Extra: map[string]interface{}{
 				"out_order_no": resource.OutOrderNo,
 				"order_id":     resource.OrderID,
-				"mch_id":       resource.MchID,
+				"sp_mch_id":    resource.SPMchID,
 				"sub_mch_id":   resource.SubMchID,
 			},
 		})
@@ -2077,6 +2077,34 @@ func (server *Server) handleEcommercePaymentNotify(ctx *gin.Context) {
 		})
 		return
 	}
+	if err := wechatcontracts.ValidatePartnerPaymentNotification("decrypt partner payment notification", resource); err != nil {
+		paymentCallbackFailuresTotal.WithLabelValues("ecommerce_payment", "contract_validation").Inc()
+		log.Error().Err(err).
+			Str("notification_id", notification.ID).
+			Str("out_trade_no", resource.OutTradeNo).
+			Str("transaction_id", resource.TransactionID).
+			Msg("partner payment notification contract validation failed")
+		server.sendAlert(websocket.AlertData{
+			AlertType:   websocket.AlertTypeSystemError,
+			Level:       websocket.AlertLevelCritical,
+			Title:       "收付通单笔支付回调契约校验失败",
+			Message:     fmt.Sprintf("收付通单笔支付回调 notification_id=%s 未通过上游契约校验。系统已返回 FAIL 等待微信重试，请核对微信文档与当前通知 contract 是否漂移。", notification.ID),
+			RelatedID:   0,
+			RelatedType: "payment_order",
+			Extra: map[string]interface{}{
+				"notification_id": notification.ID,
+				"out_trade_no":    resource.OutTradeNo,
+				"transaction_id":  resource.TransactionID,
+				"reason":          err.Error(),
+			},
+		})
+		server.releaseNotification(ctx, notification.ID, "ecommerce_payment")
+		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
+			Code:    "FAIL",
+			Message: "notification contract validation failed",
+		})
+		return
+	}
 
 	server.handlePartnerPaymentNotification(ctx, *notification, resource)
 }
@@ -2101,6 +2129,32 @@ func (server *Server) handleCombinePaymentNotify(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
 			Message: "decrypt failed",
+		})
+		return
+	}
+	if err := wechatcontracts.ValidateCombinePaymentNotification("decrypt combine payment notification", resource); err != nil {
+		paymentCallbackFailuresTotal.WithLabelValues("combine_payment", "contract_validation").Inc()
+		log.Error().Err(err).
+			Str("notification_id", notification.ID).
+			Str("combine_out_trade_no", resource.CombineOutTradeNo).
+			Msg("combine payment notification contract validation failed")
+		server.sendAlert(websocket.AlertData{
+			AlertType:   websocket.AlertTypeSystemError,
+			Level:       websocket.AlertLevelCritical,
+			Title:       "合单支付回调契约校验失败",
+			Message:     fmt.Sprintf("合单支付回调 notification_id=%s 未通过上游契约校验。系统已返回 FAIL 等待微信重试，请核对微信文档与当前通知 contract 是否漂移。", notification.ID),
+			RelatedID:   0,
+			RelatedType: "combined_payment_order",
+			Extra: map[string]interface{}{
+				"notification_id":      notification.ID,
+				"combine_out_trade_no": resource.CombineOutTradeNo,
+				"reason":               err.Error(),
+			},
+		})
+		server.releaseNotification(ctx, notification.ID, "combine_payment")
+		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
+			Code:    "FAIL",
+			Message: "notification contract validation failed",
 		})
 		return
 	}

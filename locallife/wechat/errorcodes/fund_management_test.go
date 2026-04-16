@@ -1,0 +1,18 @@
+package errorcodes
+
+import "testing"
+
+func TestFundManagementDocumentedCodeSets(t *testing.T) {
+	if !FundManagementBalanceDocumentedCodes.Has(FundManagementCodeNoAuth) {
+		t.Fatalf("expected balance documented codes to include NO_AUTH")
+	}
+	if !FundManagementWithdrawDocumentedCodes.Has(FundManagementCodeAccountNotVerified) {
+		t.Fatalf("expected withdraw documented codes to include ACCOUNT_NOT_VERIFIED")
+	}
+	if !FundManagementWithdrawDocumentedCodes.Has(FundManagementCodeOrderNotExist) {
+		t.Fatalf("expected withdraw documented codes to include ORDER_NOT_EXIST")
+	}
+	if !FundManagementWithdrawBillDocumentedCodes.Has(FundManagementCodeStatementCreating) {
+		t.Fatalf("expected withdraw bill documented codes to include STATEMENT_CREATING")
+	}
+}

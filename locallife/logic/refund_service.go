@@ -12,6 +12,7 @@ import (
 
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 )
 
 const paymentTypeProfitSharing = "profit_sharing"
@@ -469,7 +470,7 @@ func (s *RefundService) processProfitSharingRefund(
 	}
 
 	hasProcessing := false
-	processReturn := func(outReturnNo, returnAccountType, returnAccount, description string, amount int64, delay time.Duration) error {
+	processReturn := func(outReturnNo, returnAccount, description string, amount int64, delay time.Duration) error {
 		// 幂等检查：如果该 outReturnNo 已有记录，且状态为 success/processing，直接跳过
 		// 这让 processProfitSharingRefund 在被重试时能从失败点继续，而非重新全量执行
 		existingReturn, lookupErr := s.store.GetProfitSharingReturnByOutReturnNo(ctx, outReturnNo)
@@ -499,16 +500,15 @@ func (s *RefundService) processProfitSharingRefund(
 			return createErr
 		}
 
-		returnResp, returnErr := s.paymentFacade.CreateProfitSharingReturn(ctx, &wechat.ProfitSharingReturnRequest{
-			SubMchID:          paymentConfig.SubMchID,
-			OrderID:           profitSharingOrder.SharingOrderID.String,
-			TransactionID:     paymentOrder.TransactionID.String,
-			OutOrderNo:        profitSharingOrder.OutOrderNo,
-			OutReturnNo:       outReturnNo,
-			ReturnAccountType: returnAccountType,
-			ReturnAccount:     returnAccount,
-			Amount:            amount,
-			Description:       description,
+		returnResp, returnErr := s.paymentFacade.CreateProfitSharingReturn(ctx, &wechatcontracts.ProfitSharingReturnRequest{
+			SubMchID:      paymentConfig.SubMchID,
+			OrderID:       profitSharingOrder.SharingOrderID.String,
+			TransactionID: paymentOrder.TransactionID.String,
+			OutOrderNo:    profitSharingOrder.OutOrderNo,
+			OutReturnNo:   outReturnNo,
+			ReturnMchID:   returnAccount,
+			Amount:        amount,
+			Description:   description,
 		})
 		if returnErr != nil {
 			if wechat.IsProfitSharingReturnProcessingError(returnErr) {
@@ -612,7 +612,7 @@ func (s *RefundService) processProfitSharingRefund(
 
 	if profitSharingOrder.PlatformCommission > 0 {
 		outReturnNo := fmt.Sprintf("PR%dPL", refundOrder.ID)
-		if returnErr := processReturn(outReturnNo, wechat.ReceiverTypeMerchant, s.paymentFacade.SpMchID(), "平台分账回退", profitSharingOrder.PlatformCommission, delay); returnErr != nil {
+		if returnErr := processReturn(outReturnNo, s.paymentFacade.SpMchID(), "平台分账回退", profitSharingOrder.PlatformCommission, delay); returnErr != nil {
 			// 单方失败：记录到 profit_sharing_return 记录，整体退款单标记为 partial_failed
 			// ProfitSharingRecoveryScheduler 会扫描并重试失败的回退单
 			if _, dbErr := s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
@@ -623,7 +623,7 @@ func (s *RefundService) processProfitSharingRefund(
 	}
 	if profitSharingOrder.OperatorCommission > 0 {
 		outReturnNo := fmt.Sprintf("PR%dOP", refundOrder.ID)
-		if returnErr := processReturn(outReturnNo, wechat.ReceiverTypeMerchant, operator.WechatMchID.String, "运营商分账回退", profitSharingOrder.OperatorCommission, delay); returnErr != nil {
+		if returnErr := processReturn(outReturnNo, operator.WechatMchID.String, "运营商分账回退", profitSharingOrder.OperatorCommission, delay); returnErr != nil {
 			// 平台回退可能已成功，不在这里标记整体为 failed；仅标记本次尝试失败
 			// 后续退款单维持 pending 等 recovery 扫描到 failed 的 profit_sharing_return 后重试
 			if _, dbErr := s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {

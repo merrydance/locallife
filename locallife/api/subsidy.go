@@ -9,7 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
-	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	"github.com/rs/zerolog/log"
 )
 
@@ -93,7 +93,7 @@ type createSubsidyRequest struct {
 // POST /v1/operator/payment-orders/:id/subsidies
 //
 // 幂等保证：out_subsidy_no = "S-{payment_order_id}-{merchant_id}"，同一订单对同一
-// 商户只能发起一次补差；微信返回 ALREADY_EXISTS 时亦视为成功。
+// 商户只能发起一次补差；失败后仅允许用相同参数和原补差单号重入。
 func (server *Server) createSubsidy(ctx *gin.Context) {
 	if server.ecommerceClient == nil {
 		ctx.JSON(http.StatusServiceUnavailable, errorResponse(errors.New("payment service not configured")))
@@ -156,29 +156,42 @@ func (server *Server) createSubsidy(ctx *gin.Context) {
 			ctx.JSON(http.StatusOK, toSubsidyOrderResponse(existingSubsidy))
 			return
 		}
-		// 已失败/取消，则允许重试（继续走下面的逻辑）
+		if existingSubsidy.Status == "canceled" {
+			ctx.JSON(http.StatusConflict, errorResponse(errors.New("subsidy already canceled for this payment order")))
+			return
+		}
+		if existingSubsidy.Status != "failed" {
+			ctx.JSON(http.StatusConflict, errorResponse(fmt.Errorf("cannot create subsidy from status %q", existingSubsidy.Status)))
+			return
+		}
+		if err := validateSubsidyRetryMatch(existingSubsidy, req, merchantPayConfig.SubMchID, paymentOrder.TransactionID.String); err != nil {
+			ctx.JSON(http.StatusConflict, errorResponse(err))
+			return
+		}
 	}
 
-	// 在 DB 中先写入 pending 状态（防止重复调用微信 API）
-	subsidyOrder, err := server.store.CreateSubsidyOrder(ctx, db.CreateSubsidyOrderParams{
-		PaymentOrderID: paymentOrderID,
-		SubMchID:       merchantPayConfig.SubMchID,
-		TransactionID:  paymentOrder.TransactionID,
-		OutSubsidyNo:   outSubsidyNo,
-		PayerAmount:    req.PayerAmount,
-		Amount:         req.Amount,
-		Description:    req.Description,
-	})
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
+	subsidyOrder := existingSubsidy
+	if isNotFoundError(err) {
+		// 在 DB 中先写入 pending 状态（防止重复调用微信 API）
+		subsidyOrder, err = server.store.CreateSubsidyOrder(ctx, db.CreateSubsidyOrderParams{
+			PaymentOrderID: paymentOrderID,
+			SubMchID:       merchantPayConfig.SubMchID,
+			TransactionID:  paymentOrder.TransactionID,
+			OutSubsidyNo:   outSubsidyNo,
+			PayerAmount:    req.PayerAmount,
+			Amount:         req.Amount,
+			Description:    req.Description,
+		})
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
 	}
 
 	// 调用微信补差 API
-	wxResp, wxErr := server.ecommerceClient.CreateSubsidy(ctx, wechat.SubsidyRequest{
+	wxResp, wxErr := server.ecommerceClient.CreateSubsidy(ctx, wechatcontracts.SubsidyRequest{
 		SubMchID:      merchantPayConfig.SubMchID,
 		TransactionID: paymentOrder.TransactionID.String,
-		PayerAmount:   req.PayerAmount,
 		Amount:        req.Amount,
 		Description:   req.Description,
 		OutSubsidyNo:  outSubsidyNo,
@@ -195,9 +208,27 @@ func (server *Server) createSubsidy(ctx *gin.Context) {
 		return
 	}
 
+	result := ""
+	if wxResp != nil {
+		result = wxResp.Result
+	}
+	if wxResp == nil || result != wechatcontracts.SubsidyResultSuccess {
+		failReason := "subsidy result is not SUCCESS"
+		if result != "" {
+			failReason = fmt.Sprintf("subsidy result is %s", result)
+		}
+		log.Error().Str("out_subsidy_no", outSubsidyNo).Str("result", result).Msg("create subsidy: wxpay returned non-success result")
+		_, _ = server.store.UpdateSubsidyOrderToFailed(ctx, db.UpdateSubsidyOrderToFailedParams{
+			ID:         subsidyOrder.ID,
+			FailReason: pgtype.Text{String: failReason, Valid: true},
+		})
+		ctx.JSON(http.StatusConflict, errorResponse(errors.New("subsidy request did not succeed")))
+		return
+	}
+
 	// 标记成功
 	wxpaySubsidyID := pgtype.Text{}
-	if wxResp != nil && wxResp.SubsidyID != "" {
+	if wxResp.SubsidyID != "" {
 		wxpaySubsidyID = pgtype.Text{String: wxResp.SubsidyID, Valid: true}
 	}
 	updated, err := server.store.UpdateSubsidyOrderToSuccess(ctx, db.UpdateSubsidyOrderToSuccessParams{
@@ -217,6 +248,7 @@ func (server *Server) createSubsidy(ctx *gin.Context) {
 // ========================= 退回补差 ==========================================
 
 type returnSubsidyRequest struct {
+	RefundID    string `json:"refund_id"`
 	Amount      int64  `json:"amount" binding:"required,min=1"`
 	Description string `json:"description" binding:"required,min=1,max=80"`
 }
@@ -265,30 +297,56 @@ func (server *Server) returnSubsidy(ctx *gin.Context) {
 	// 幂等：out_return_no = "SR-{payment_order_id}"
 	outReturnNo := fmt.Sprintf("SR-%d", paymentOrderID)
 
-	// 若已在进行退回，防止重复提交
-	if subsidyOrder.OutReturnNo.Valid && subsidyOrder.OutReturnNo.String == outReturnNo {
-		ctx.JSON(http.StatusOK, toSubsidyOrderResponse(subsidyOrder))
-		return
+	shouldInitiateReturn := true
+	if subsidyOrder.OutReturnNo.Valid {
+		if subsidyOrder.OutReturnNo.String != outReturnNo {
+			ctx.JSON(http.StatusConflict, errorResponse(errors.New("unexpected subsidy return order number")))
+			return
+		}
+		if subsidyOrder.ReturnAmount.Valid && subsidyOrder.ReturnAmount.Int64 != req.Amount {
+			ctx.JSON(http.StatusConflict, errorResponse(errors.New("subsidy return retry must use the original return amount")))
+			return
+		}
+		if subsidyOrder.ReturnStatus.Valid {
+			switch subsidyOrder.ReturnStatus.String {
+			case "pending_return", "return_success":
+				ctx.JSON(http.StatusOK, toSubsidyOrderResponse(subsidyOrder))
+				return
+			case "return_failed":
+				shouldInitiateReturn = false
+			default:
+				ctx.JSON(http.StatusConflict, errorResponse(fmt.Errorf("cannot retry subsidy return from status %q", subsidyOrder.ReturnStatus.String)))
+				return
+			}
+		}
 	}
 
-	// 标记开始退回
-	_, err = server.store.InitiateSubsidyReturn(ctx, db.InitiateSubsidyReturnParams{
-		ID:           subsidyOrder.ID,
-		OutReturnNo:  pgtype.Text{String: outReturnNo, Valid: true},
-		ReturnAmount: pgtype.Int8{Int64: req.Amount, Valid: true},
-	})
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
+	if shouldInitiateReturn {
+		_, err = server.store.InitiateSubsidyReturn(ctx, db.InitiateSubsidyReturnParams{
+			ID:           subsidyOrder.ID,
+			OutReturnNo:  pgtype.Text{String: outReturnNo, Valid: true},
+			ReturnAmount: pgtype.Int8{Int64: req.Amount, Valid: true},
+		})
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
 	}
 
 	// 调用微信退回补差 API
-	wxResp, wxErr := server.ecommerceClient.ReturnSubsidy(ctx, wechat.SubsidyReturnRequest{
+	subsidyID := ""
+	if subsidyOrder.WxpaySubsidyID.Valid {
+		subsidyID = subsidyOrder.WxpaySubsidyID.String
+	}
+
+	wxResp, wxErr := server.ecommerceClient.ReturnSubsidy(ctx, wechatcontracts.SubsidyReturnRequest{
 		SubMchID:      subsidyOrder.SubMchID,
+		OutOrderNo:    outReturnNo,
 		TransactionID: subsidyOrder.TransactionID.String,
-		OutReturnNo:   outReturnNo,
+		RefundID:      req.RefundID,
 		Amount:        req.Amount,
 		Description:   req.Description,
+		SubsidyID:     subsidyID,
 	})
 
 	if wxErr != nil {
@@ -301,10 +359,28 @@ func (server *Server) returnSubsidy(ctx *gin.Context) {
 		return
 	}
 
+	result := ""
+	if wxResp != nil {
+		result = wxResp.Result
+	}
+	if wxResp == nil || result != wechatcontracts.SubsidyResultSuccess {
+		failReason := "subsidy return result is not SUCCESS"
+		if result != "" {
+			failReason = fmt.Sprintf("subsidy return result is %s", result)
+		}
+		log.Error().Str("out_return_no", outReturnNo).Str("result", result).Msg("return subsidy: wxpay returned non-success result")
+		_, _ = server.store.UpdateSubsidyReturnToFailed(ctx, db.UpdateSubsidyReturnToFailedParams{
+			OutReturnNo:      pgtype.Text{String: outReturnNo, Valid: true},
+			ReturnFailReason: pgtype.Text{String: failReason, Valid: true},
+		})
+		ctx.JSON(http.StatusConflict, errorResponse(errors.New("subsidy return did not succeed")))
+		return
+	}
+
 	// 标记退回成功
 	returnWxpayID := pgtype.Text{}
-	if wxResp != nil && wxResp.ReturnID != "" {
-		returnWxpayID = pgtype.Text{String: wxResp.ReturnID, Valid: true}
+	if wxResp.SubsidyRefundID != "" {
+		returnWxpayID = pgtype.Text{String: wxResp.SubsidyRefundID, Valid: true}
 	}
 	updated, err := server.store.UpdateSubsidyReturnToSuccess(ctx, db.UpdateSubsidyReturnToSuccessParams{
 		OutReturnNo:   pgtype.Text{String: outReturnNo, Valid: true},
@@ -360,7 +436,7 @@ func (server *Server) cancelSubsidy(ctx *gin.Context) {
 	}
 
 	// 调用微信取消补差 API
-	wxErr := server.ecommerceClient.CancelSubsidy(ctx, wechat.SubsidyCancelRequest{
+	wxResp, wxErr := server.ecommerceClient.CancelSubsidy(ctx, wechatcontracts.SubsidyCancelRequest{
 		SubMchID:      subsidyOrder.SubMchID,
 		TransactionID: subsidyOrder.TransactionID.String,
 		Description:   "operator cancel",
@@ -368,6 +444,15 @@ func (server *Server) cancelSubsidy(ctx *gin.Context) {
 	if wxErr != nil {
 		log.Error().Err(wxErr).Str("out_subsidy_no", subsidyOrder.OutSubsidyNo).Msg("cancel subsidy: wxpay api failed")
 		ctx.JSON(http.StatusBadGateway, errorResponse(errors.New("cancel subsidy api unavailable")))
+		return
+	}
+	result := ""
+	if wxResp != nil {
+		result = wxResp.Result
+	}
+	if wxResp == nil || result != wechatcontracts.SubsidyResultSuccess {
+		log.Error().Str("out_subsidy_no", subsidyOrder.OutSubsidyNo).Str("result", result).Msg("cancel subsidy: wxpay returned non-success result")
+		ctx.JSON(http.StatusConflict, errorResponse(errors.New("cancel subsidy did not succeed")))
 		return
 	}
 
@@ -380,4 +465,17 @@ func (server *Server) cancelSubsidy(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, toSubsidyOrderResponse(updated))
+}
+
+func validateSubsidyRetryMatch(existing db.SubsidyOrder, req createSubsidyRequest, subMchID, transactionID string) error {
+	if existing.SubMchID != subMchID {
+		return errors.New("existing subsidy order belongs to a different sub merchant")
+	}
+	if existing.Amount != req.Amount || existing.PayerAmount != req.PayerAmount || existing.Description != req.Description {
+		return errors.New("subsidy retry must use the original amount, payer amount, and description")
+	}
+	if existing.TransactionID.Valid && existing.TransactionID.String != transactionID {
+		return errors.New("existing subsidy order belongs to a different transaction")
+	}
+	return nil
 }

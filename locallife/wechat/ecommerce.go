@@ -302,29 +302,8 @@ func (c *EcommerceClient) GetSpMchName() string {
 
 // CreatePartnerJSAPIOrder 创建服务商模式单笔 JSAPI 订单。
 func (c *EcommerceClient) CreatePartnerJSAPIOrder(ctx context.Context, req *wechatcontracts.PartnerJSAPIOrderRequest) (*wechatcontracts.PartnerJSAPIOrderResponse, *JSAPIPayParams, error) {
-	if req == nil {
-		return nil, nil, fmt.Errorf("create partner jsapi order: request is nil")
-	}
-	if strings.TrimSpace(req.PayerSubOpenID) != "" || strings.TrimSpace(req.SubAppID) != "" {
-		return nil, nil, fmt.Errorf("create partner jsapi order: sub_openid and sub_appid are not supported in the single-appid project flow")
-	}
-	if strings.TrimSpace(req.SubMchID) == "" {
-		return nil, nil, fmt.Errorf("create partner jsapi order: sub_mchid is required")
-	}
-	if strings.TrimSpace(req.Description) == "" || strings.TrimSpace(req.OutTradeNo) == "" {
-		return nil, nil, fmt.Errorf("create partner jsapi order: description and out_trade_no are required")
-	}
-	if req.TotalAmount <= 0 {
-		return nil, nil, fmt.Errorf("create partner jsapi order: total amount must be positive")
-	}
-	if strings.TrimSpace(req.PayerOpenID) == "" && strings.TrimSpace(req.PayerSubOpenID) == "" {
-		return nil, nil, fmt.Errorf("create partner jsapi order: sp_openid or sub_openid is required")
-	}
-	if (strings.TrimSpace(req.DeviceID) != "" || req.StoreInfo != nil) && strings.TrimSpace(req.PayerClientIP) == "" {
-		return nil, nil, fmt.Errorf("create partner jsapi order: payer_client_ip is required when scene_info is provided")
-	}
-	if req.StoreInfo != nil && strings.TrimSpace(req.StoreInfo.ID) == "" {
-		return nil, nil, fmt.Errorf("create partner jsapi order: scene_info.store_info.id is required when store_info is provided")
+	if err := wechatcontracts.ValidatePartnerJSAPIOrderRequest(req); err != nil {
+		return nil, nil, err
 	}
 
 	currency := req.Currency
@@ -409,18 +388,16 @@ func (c *EcommerceClient) CreatePartnerJSAPIOrder(ctx context.Context, req *wech
 
 // QueryPartnerOrderByTransactionID 通过微信支付订单号查询服务商模式单笔订单。
 func (c *EcommerceClient) QueryPartnerOrderByTransactionID(ctx context.Context, transactionID, subMchID string) (*wechatcontracts.PartnerOrderQueryResponse, error) {
-	if strings.TrimSpace(transactionID) == "" {
-		return nil, newPartnerOrderQueryValidationError("query partner order by transaction_id", "transaction_id is required")
+	trimmedTransactionID, trimmedSubMchID, err := wechatcontracts.ValidatePartnerOrderQueryByTransactionIDInput(transactionID, subMchID)
+	if err != nil {
+		return nil, err
 	}
-	if strings.TrimSpace(subMchID) == "" {
-		return nil, newPartnerOrderQueryValidationError("query partner order by transaction_id", "sub_mchid is required")
-	}
-	respBody, requestID, err := c.doRequestWithRequestID(ctx, http.MethodGet, fmt.Sprintf(ecommercePartnerQueryByIDURL, transactionID, c.spMchID, subMchID), nil)
+	respBody, requestID, err := c.doRequestWithRequestID(ctx, http.MethodGet, fmt.Sprintf(ecommercePartnerQueryByIDURL, trimmedTransactionID, c.spMchID, trimmedSubMchID), nil)
 	if err != nil {
 		wrappedErr := wrapPartnerOrderQueryError(err)
 		ecommercePaymentOrderLogEvent(requestID, "query_partner_order_by_transaction_id").
-			Str("sub_mchid", strings.TrimSpace(subMchID)).
-			Str("transaction_id", strings.TrimSpace(transactionID)).
+			Str("sub_mchid", trimmedSubMchID).
+			Str("transaction_id", trimmedTransactionID).
 			Err(wrappedErr).
 			Msg("wechat partner order query by transaction id failed")
 		return nil, wrappedErr
@@ -430,16 +407,16 @@ func (c *EcommerceClient) QueryPartnerOrderByTransactionID(ctx context.Context, 
 	if err := json.Unmarshal(respBody, &resp); err != nil {
 		contractErr := newPartnerOrderQueryContractError("query partner order by transaction_id", "unmarshal response: %v", err)
 		ecommercePaymentOrderLogEvent(requestID, "query_partner_order_by_transaction_id").
-			Str("sub_mchid", strings.TrimSpace(subMchID)).
-			Str("transaction_id", strings.TrimSpace(transactionID)).
+			Str("sub_mchid", trimmedSubMchID).
+			Str("transaction_id", trimmedTransactionID).
 			Err(contractErr).
 			Msg("wechat partner order query by transaction id response contract invalid")
 		return nil, contractErr
 	}
 	if err := validatePartnerOrderQueryResponse("query partner order by transaction_id", &resp, true); err != nil {
 		ecommercePaymentOrderLogEvent(requestID, "query_partner_order_by_transaction_id").
-			Str("sub_mchid", strings.TrimSpace(subMchID)).
-			Str("transaction_id", strings.TrimSpace(transactionID)).
+			Str("sub_mchid", trimmedSubMchID).
+			Str("transaction_id", trimmedTransactionID).
 			Err(err).
 			Msg("wechat partner order query by transaction id response contract invalid")
 		return nil, err
@@ -450,18 +427,16 @@ func (c *EcommerceClient) QueryPartnerOrderByTransactionID(ctx context.Context, 
 
 // QueryPartnerOrderByOutTradeNo 通过商户订单号查询服务商模式单笔订单。
 func (c *EcommerceClient) QueryPartnerOrderByOutTradeNo(ctx context.Context, outTradeNo, subMchID string) (*wechatcontracts.PartnerOrderQueryResponse, error) {
-	if strings.TrimSpace(outTradeNo) == "" {
-		return nil, newPartnerOrderQueryValidationError("query partner order by out_trade_no", "out_trade_no is required")
+	trimmedOutTradeNo, trimmedSubMchID, err := wechatcontracts.ValidatePartnerOrderQueryByOutTradeNoInput(outTradeNo, subMchID)
+	if err != nil {
+		return nil, err
 	}
-	if strings.TrimSpace(subMchID) == "" {
-		return nil, newPartnerOrderQueryValidationError("query partner order by out_trade_no", "sub_mchid is required")
-	}
-	respBody, requestID, err := c.doRequestWithRequestID(ctx, http.MethodGet, fmt.Sprintf(ecommercePartnerQueryByOutTradeNoURL, outTradeNo, c.spMchID, subMchID), nil)
+	respBody, requestID, err := c.doRequestWithRequestID(ctx, http.MethodGet, fmt.Sprintf(ecommercePartnerQueryByOutTradeNoURL, trimmedOutTradeNo, c.spMchID, trimmedSubMchID), nil)
 	if err != nil {
 		wrappedErr := wrapPartnerOrderQueryError(err)
 		ecommercePaymentOrderLogEvent(requestID, "query_partner_order_by_out_trade_no").
-			Str("sub_mchid", strings.TrimSpace(subMchID)).
-			Str("out_trade_no", strings.TrimSpace(outTradeNo)).
+			Str("sub_mchid", trimmedSubMchID).
+			Str("out_trade_no", trimmedOutTradeNo).
 			Err(wrappedErr).
 			Msg("wechat partner order query by out trade no failed")
 		return nil, wrappedErr
@@ -471,16 +446,16 @@ func (c *EcommerceClient) QueryPartnerOrderByOutTradeNo(ctx context.Context, out
 	if err := json.Unmarshal(respBody, &resp); err != nil {
 		contractErr := newPartnerOrderQueryContractError("query partner order by out_trade_no", "unmarshal response: %v", err)
 		ecommercePaymentOrderLogEvent(requestID, "query_partner_order_by_out_trade_no").
-			Str("sub_mchid", strings.TrimSpace(subMchID)).
-			Str("out_trade_no", strings.TrimSpace(outTradeNo)).
+			Str("sub_mchid", trimmedSubMchID).
+			Str("out_trade_no", trimmedOutTradeNo).
 			Err(contractErr).
 			Msg("wechat partner order query by out trade no response contract invalid")
 		return nil, contractErr
 	}
 	if err := validatePartnerOrderQueryResponse("query partner order by out_trade_no", &resp, false); err != nil {
 		ecommercePaymentOrderLogEvent(requestID, "query_partner_order_by_out_trade_no").
-			Str("sub_mchid", strings.TrimSpace(subMchID)).
-			Str("out_trade_no", strings.TrimSpace(outTradeNo)).
+			Str("sub_mchid", trimmedSubMchID).
+			Str("out_trade_no", trimmedOutTradeNo).
 			Err(err).
 			Msg("wechat partner order query by out trade no response contract invalid")
 		return nil, err
@@ -584,49 +559,13 @@ const (
 	subMerchantSettlementFailReasonMaxLength    = 1024
 )
 
-type PartnerOrderQueryValidationError struct {
-	Message string
-}
+type PartnerOrderQueryValidationError = wechatcontracts.PartnerOrderQueryValidationError
 
-func (e *PartnerOrderQueryValidationError) Error() string {
-	if e == nil || strings.TrimSpace(e.Message) == "" {
-		return "query partner order: validation failed"
-	}
-	return e.Message
-}
+type PartnerOrderQueryContractError = wechatcontracts.PartnerOrderQueryContractError
 
-type PartnerOrderQueryContractError struct {
-	Message string
-}
+type CombineOrderQueryValidationError = wechatcontracts.CombineOrderQueryValidationError
 
-func (e *PartnerOrderQueryContractError) Error() string {
-	if e == nil || strings.TrimSpace(e.Message) == "" {
-		return "query partner order: upstream contract validation failed"
-	}
-	return e.Message
-}
-
-type CombineOrderQueryValidationError struct {
-	Message string
-}
-
-func (e *CombineOrderQueryValidationError) Error() string {
-	if e == nil || strings.TrimSpace(e.Message) == "" {
-		return "query combine order: validation failed"
-	}
-	return e.Message
-}
-
-type CombineOrderQueryContractError struct {
-	Message string
-}
-
-func (e *CombineOrderQueryContractError) Error() string {
-	if e == nil || strings.TrimSpace(e.Message) == "" {
-		return "query combine order: upstream contract validation failed"
-	}
-	return e.Message
-}
+type CombineOrderQueryContractError = wechatcontracts.CombineOrderQueryContractError
 
 type ecommerceApplymentQueryKind string
 
@@ -635,200 +574,33 @@ const (
 	ecommerceApplymentQueryByOutRequestNoKind ecommerceApplymentQueryKind = "out_request_no"
 )
 
-var allowedPartnerOrderTradeStates = map[string]struct{}{
-	"SUCCESS":    {},
-	"REFUND":     {},
-	"NOTPAY":     {},
-	"CLOSED":     {},
-	"REVOKED":    {},
-	"USERPAYING": {},
-	"PAYERROR":   {},
-}
-
-var allowedCombineOrderTradeStates = map[string]struct{}{
-	"SUCCESS":  {},
-	"REFUND":   {},
-	"NOTPAY":   {},
-	"CLOSED":   {},
-	"PAYERROR": {},
-}
-
-var allowedCombineOrderTradeTypes = map[string]struct{}{
-	"NATIVE": {},
-	"JSAPI":  {},
-	"APP":    {},
-	"MWEB":   {},
-}
-
-var allowedPartnerPromotionScopes = map[string]struct{}{
-	"GLOBAL": {},
-	"SINGLE": {},
-}
-
-var allowedPartnerPromotionTypes = map[string]struct{}{
-	"CASH":   {},
-	"NOCASH": {},
-}
-
 var allowedSubMerchantSettlementAccountNumberRules = map[string]struct{}{
 	wechatcontracts.SubMerchantSettlementAccountNumberRuleMaskV1: {},
 	wechatcontracts.SubMerchantSettlementAccountNumberRuleMaskV2: {},
 }
 
 func newPartnerOrderQueryValidationError(operation string, format string, args ...any) error {
-	prefix := strings.TrimSpace(operation)
-	if prefix == "" {
-		prefix = "query partner order"
-	}
-	return &PartnerOrderQueryValidationError{Message: fmt.Sprintf("%s: %s", prefix, fmt.Sprintf(format, args...))}
+	return wechatcontracts.NewPartnerOrderQueryValidationError(operation, format, args...)
 }
 
 func newPartnerOrderQueryContractError(operation string, format string, args ...any) error {
-	prefix := strings.TrimSpace(operation)
-	if prefix == "" {
-		prefix = "query partner order"
-	}
-	return &PartnerOrderQueryContractError{Message: fmt.Sprintf("%s: %s", prefix, fmt.Sprintf(format, args...))}
+	return wechatcontracts.NewPartnerOrderQueryContractError(operation, format, args...)
 }
 
 func newCombineOrderQueryValidationError(operation string, format string, args ...any) error {
-	prefix := strings.TrimSpace(operation)
-	if prefix == "" {
-		prefix = "query combine order"
-	}
-	return &CombineOrderQueryValidationError{Message: fmt.Sprintf("%s: %s", prefix, fmt.Sprintf(format, args...))}
+	return wechatcontracts.NewCombineOrderQueryValidationError(operation, format, args...)
 }
 
 func newCombineOrderQueryContractError(operation string, format string, args ...any) error {
-	prefix := strings.TrimSpace(operation)
-	if prefix == "" {
-		prefix = "query combine order"
-	}
-	return &CombineOrderQueryContractError{Message: fmt.Sprintf("%s: %s", prefix, fmt.Sprintf(format, args...))}
+	return wechatcontracts.NewCombineOrderQueryContractError(operation, format, args...)
 }
 
 func validatePartnerOrderQueryResponse(operation string, resp *wechatcontracts.PartnerOrderQueryResponse, requireTransactionFields bool) error {
-	if resp == nil {
-		return newPartnerOrderQueryContractError(operation, "empty wechat response")
-	}
-	if strings.TrimSpace(resp.SpAppID) == "" {
-		return newPartnerOrderQueryContractError(operation, "wechat response missing sp_appid")
-	}
-	if strings.TrimSpace(resp.SpMchID) == "" {
-		return newPartnerOrderQueryContractError(operation, "wechat response missing sp_mchid")
-	}
-	if strings.TrimSpace(resp.SubMchID) == "" {
-		return newPartnerOrderQueryContractError(operation, "wechat response missing sub_mchid")
-	}
-	if strings.TrimSpace(resp.OutTradeNo) == "" {
-		return newPartnerOrderQueryContractError(operation, "wechat response missing out_trade_no")
-	}
-	if requireTransactionFields && strings.TrimSpace(resp.TransactionID) == "" {
-		return newPartnerOrderQueryContractError(operation, "wechat response missing transaction_id")
-	}
-	if requireTransactionFields && strings.TrimSpace(resp.TradeType) == "" {
-		return newPartnerOrderQueryContractError(operation, "wechat response missing trade_type")
-	}
-	if strings.TrimSpace(resp.TradeState) == "" {
-		return newPartnerOrderQueryContractError(operation, "wechat response missing trade_state")
-	}
-	if _, ok := allowedPartnerOrderTradeStates[strings.ToUpper(strings.TrimSpace(resp.TradeState))]; !ok {
-		return newPartnerOrderQueryContractError(operation, "unsupported trade_state %q", resp.TradeState)
-	}
-	if strings.TrimSpace(resp.TradeStateDesc) == "" {
-		return newPartnerOrderQueryContractError(operation, "wechat response missing trade_state_desc")
-	}
-	if resp.SceneInfo != nil && strings.TrimSpace(resp.SceneInfo.DeviceID) == "" {
-		return newPartnerOrderQueryContractError(operation, "scene_info.device_id is required when scene_info is provided")
-	}
-	for index, detail := range resp.PromotionDetail {
-		if strings.TrimSpace(detail.CouponID) == "" {
-			return newPartnerOrderQueryContractError(operation, "promotion_detail[%d].coupon_id is required", index)
-		}
-		if strings.TrimSpace(detail.Name) == "" {
-			return newPartnerOrderQueryContractError(operation, "promotion_detail[%d].name is required", index)
-		}
-		if detail.Scope != "" {
-			if _, ok := allowedPartnerPromotionScopes[strings.ToUpper(strings.TrimSpace(detail.Scope))]; !ok {
-				return newPartnerOrderQueryContractError(operation, "promotion_detail[%d].scope has unsupported value %q", index, detail.Scope)
-			}
-		}
-		if detail.Type != "" {
-			if _, ok := allowedPartnerPromotionTypes[strings.ToUpper(strings.TrimSpace(detail.Type))]; !ok {
-				return newPartnerOrderQueryContractError(operation, "promotion_detail[%d].type has unsupported value %q", index, detail.Type)
-			}
-		}
-		for goodsIndex, goods := range detail.GoodsDetail {
-			if strings.TrimSpace(goods.GoodsID) == "" {
-				return newPartnerOrderQueryContractError(operation, "promotion_detail[%d].goods_detail[%d].goods_id is required", index, goodsIndex)
-			}
-		}
-	}
-	return nil
+	return wechatcontracts.ValidatePartnerOrderQueryResponse(operation, resp, requireTransactionFields)
 }
 
 func validateCombineOrderQueryResponse(operation string, resp *wechatcontracts.CombineQueryResponseBody) error {
-	if resp == nil {
-		return newCombineOrderQueryContractError(operation, "empty wechat response")
-	}
-	if strings.TrimSpace(resp.CombineAppID) == "" {
-		return newCombineOrderQueryContractError(operation, "wechat response missing combine_appid")
-	}
-	if strings.TrimSpace(resp.CombineMchID) == "" {
-		return newCombineOrderQueryContractError(operation, "wechat response missing combine_mchid")
-	}
-	if strings.TrimSpace(resp.CombineOutTradeNo) == "" {
-		return newCombineOrderQueryContractError(operation, "wechat response missing combine_out_trade_no")
-	}
-	for index, subOrder := range resp.SubOrders {
-		if strings.TrimSpace(subOrder.MchID) == "" {
-			return newCombineOrderQueryContractError(operation, "sub_orders[%d].mchid is required", index)
-		}
-		if strings.TrimSpace(subOrder.OutTradeNo) == "" {
-			return newCombineOrderQueryContractError(operation, "sub_orders[%d].out_trade_no is required", index)
-		}
-		if strings.TrimSpace(subOrder.TradeState) == "" {
-			return newCombineOrderQueryContractError(operation, "sub_orders[%d].trade_state is required", index)
-		}
-		if _, ok := allowedCombineOrderTradeStates[strings.ToUpper(strings.TrimSpace(subOrder.TradeState))]; !ok {
-			return newCombineOrderQueryContractError(operation, "sub_orders[%d].trade_state has unsupported value %q", index, subOrder.TradeState)
-		}
-		if strings.TrimSpace(subOrder.TradeType) != "" {
-			if _, ok := allowedCombineOrderTradeTypes[strings.ToUpper(strings.TrimSpace(subOrder.TradeType))]; !ok {
-				return newCombineOrderQueryContractError(operation, "sub_orders[%d].trade_type has unsupported value %q", index, subOrder.TradeType)
-			}
-		}
-		if subOrder.Amount == nil {
-			return newCombineOrderQueryContractError(operation, "sub_orders[%d].amount is required", index)
-		}
-		if strings.TrimSpace(subOrder.Amount.Currency) == "" {
-			return newCombineOrderQueryContractError(operation, "sub_orders[%d].amount.currency is required", index)
-		}
-		if strings.TrimSpace(subOrder.Amount.PayerCurrency) == "" {
-			return newCombineOrderQueryContractError(operation, "sub_orders[%d].amount.payer_currency is required", index)
-		}
-		for detailIndex, detail := range subOrder.PromotionDetail {
-			if strings.TrimSpace(detail.CouponID) == "" {
-				return newCombineOrderQueryContractError(operation, "sub_orders[%d].promotion_detail[%d].coupon_id is required", index, detailIndex)
-			}
-			if detail.Scope != "" {
-				if _, ok := allowedPartnerPromotionScopes[strings.ToUpper(strings.TrimSpace(detail.Scope))]; !ok {
-					return newCombineOrderQueryContractError(operation, "sub_orders[%d].promotion_detail[%d].scope has unsupported value %q", index, detailIndex, detail.Scope)
-				}
-			}
-			if detail.Type != "" {
-				if _, ok := allowedPartnerPromotionTypes[strings.ToUpper(strings.TrimSpace(detail.Type))]; !ok {
-					return newCombineOrderQueryContractError(operation, "sub_orders[%d].promotion_detail[%d].type has unsupported value %q", index, detailIndex, detail.Type)
-				}
-			}
-			for goodsIndex, goods := range detail.GoodsDetail {
-				if strings.TrimSpace(goods.GoodsID) == "" {
-					return newCombineOrderQueryContractError(operation, "sub_orders[%d].promotion_detail[%d].goods_detail[%d].goods_id is required", index, detailIndex, goodsIndex)
-				}
-			}
-		}
-	}
-	return nil
+	return wechatcontracts.ValidateCombineOrderQueryResponse(operation, resp)
 }
 
 func combineQueryResponseFromBody(resp *wechatcontracts.CombineQueryResponseBody) *wechatcontracts.CombineQueryResponse {
@@ -843,18 +615,17 @@ func combineQueryResponseFromBody(resp *wechatcontracts.CombineQueryResponseBody
 		SceneInfo:         resp.SceneInfo,
 	}
 	if resp.CombinePayerInfo != nil {
-		result.CombinePayerInfo = &wechatcontracts.CombinePayerInfo{
-			OpenID:    resp.CombinePayerInfo.OpenID,
-			SubOpenID: resp.CombinePayerInfo.SubOpenID,
+		result.CombinePayerInfo = &wechatcontracts.CombineQueryPayerInfo{
+			OpenID: resp.CombinePayerInfo.OpenID,
 		}
 	}
 	if len(resp.SubOrders) == 0 {
 		return result
 	}
 
-	result.SubOrders = make([]wechatcontracts.CombineSubOrderResult, 0, len(resp.SubOrders))
+	result.SubOrders = make([]wechatcontracts.CombineQuerySubOrder, 0, len(resp.SubOrders))
 	for _, subOrder := range resp.SubOrders {
-		mapped := wechatcontracts.CombineSubOrderResult{
+		mapped := wechatcontracts.CombineQuerySubOrder{
 			MchID:           subOrder.MchID,
 			SubMchID:        subOrder.SubMchID,
 			SubAppID:        subOrder.SubAppID,
@@ -863,7 +634,6 @@ func combineQueryResponseFromBody(resp *wechatcontracts.CombineQueryResponseBody
 			TransactionID:   subOrder.TransactionID,
 			TradeType:       subOrder.TradeType,
 			TradeState:      subOrder.TradeState,
-			TradeStateDesc:  subOrder.TradeStateDesc,
 			BankType:        subOrder.BankType,
 			Attach:          subOrder.Attach,
 			PromotionDetail: subOrder.PromotionDetail,
@@ -1536,46 +1306,13 @@ func (c *EcommerceClient) ListBankBranches(ctx context.Context, bankAliasCode st
 // CreateCombineOrder 创建合单订单（平台收付通）
 // 用于商户交易，资金进入二级商户账户
 func (c *EcommerceClient) CreateCombineOrder(ctx context.Context, req *wechatcontracts.CombineOrderRequest) (*wechatcontracts.CombineOrderResponse, *JSAPIPayParams, error) {
-	if req == nil {
-		return nil, nil, fmt.Errorf("create combine order: request is nil")
-	}
-	if strings.TrimSpace(req.PayerSubOpenID) != "" {
-		return nil, nil, fmt.Errorf("create combine order: sub_openid is not supported in the single-appid project flow")
-	}
-	if strings.TrimSpace(req.CombineOutTradeNo) == "" {
-		return nil, nil, fmt.Errorf("create combine order: combine_out_trade_no is required")
-	}
-	if len(req.SubOrders) == 0 {
-		return nil, nil, fmt.Errorf("create combine order: sub_orders is required")
-	}
-	if len(req.SubOrders) > 50 {
-		return nil, nil, fmt.Errorf("create combine order: sub_orders exceeds the maximum of 50")
-	}
-	if strings.TrimSpace(req.PayerOpenID) == "" && strings.TrimSpace(req.PayerSubOpenID) == "" {
-		return nil, nil, fmt.Errorf("create combine order: openid or sub_openid is required")
-	}
-	if req.SceneInfo != nil && strings.TrimSpace(req.SceneInfo.PayerClientIP) == "" {
-		return nil, nil, fmt.Errorf("create combine order: scene_info.payer_client_ip is required when scene_info is provided")
+	if err := wechatcontracts.ValidateCombineOrderRequest(req); err != nil {
+		return nil, nil, err
 	}
 
 	// 构建子订单列表
 	subOrders := make([]wechatcontracts.CombineSubOrderRequest, len(req.SubOrders))
 	for i, sub := range req.SubOrders {
-		if strings.TrimSpace(sub.SubAppID) != "" {
-			return nil, nil, fmt.Errorf("create combine order: sub_orders[%d].sub_appid is not supported in the single-appid project flow", i)
-		}
-		if strings.TrimSpace(sub.OutTradeNo) == "" {
-			return nil, nil, fmt.Errorf("create combine order: sub_orders[%d].out_trade_no is required", i)
-		}
-		if strings.TrimSpace(sub.Attach) == "" {
-			return nil, nil, fmt.Errorf("create combine order: sub_orders[%d].attach is required", i)
-		}
-		if strings.TrimSpace(sub.Description) == "" {
-			return nil, nil, fmt.Errorf("create combine order: sub_orders[%d].description is required", i)
-		}
-		if sub.Amount <= 0 {
-			return nil, nil, fmt.Errorf("create combine order: sub_orders[%d].amount.total_amount must be positive", i)
-		}
 		mchID := strings.TrimSpace(sub.MchID)
 		if mchID == "" {
 			mchID = c.spMchID
@@ -1656,17 +1393,18 @@ func (c *EcommerceClient) CreateCombineOrder(ctx context.Context, req *wechatcon
 
 // QueryCombineOrder 查询合单订单
 func (c *EcommerceClient) QueryCombineOrder(ctx context.Context, combineOutTradeNo string) (*wechatcontracts.CombineQueryResponse, error) {
-	if strings.TrimSpace(combineOutTradeNo) == "" {
-		return nil, newCombineOrderQueryValidationError("query combine order", "combine_out_trade_no is required")
+	trimmedCombineOutTradeNo, err := wechatcontracts.ValidateCombineOrderQueryInput(combineOutTradeNo)
+	if err != nil {
+		return nil, err
 	}
 
-	url := fmt.Sprintf(ecommerceQueryCombineURL, combineOutTradeNo)
+	url := fmt.Sprintf(ecommerceQueryCombineURL, trimmedCombineOutTradeNo)
 
 	respBody, requestID, err := c.doRequestWithRequestID(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		wrappedErr := wrapCombineOrderQueryError(err)
 		ecommercePaymentOrderLogEvent(requestID, "query_combine_order").
-			Str("combine_out_trade_no", strings.TrimSpace(combineOutTradeNo)).
+			Str("combine_out_trade_no", trimmedCombineOutTradeNo).
 			Err(wrappedErr).
 			Msg("wechat combine order query failed")
 		return nil, wrappedErr
@@ -1676,14 +1414,14 @@ func (c *EcommerceClient) QueryCombineOrder(ctx context.Context, combineOutTrade
 	if err := json.Unmarshal(respBody, &resp); err != nil {
 		contractErr := newCombineOrderQueryContractError("query combine order", "unmarshal response: %v", err)
 		ecommercePaymentOrderLogEvent(requestID, "query_combine_order").
-			Str("combine_out_trade_no", strings.TrimSpace(combineOutTradeNo)).
+			Str("combine_out_trade_no", trimmedCombineOutTradeNo).
 			Err(contractErr).
 			Msg("wechat combine order query response contract invalid")
 		return nil, contractErr
 	}
 	if err := validateCombineOrderQueryResponse("query combine order", &resp); err != nil {
 		ecommercePaymentOrderLogEvent(requestID, "query_combine_order").
-			Str("combine_out_trade_no", strings.TrimSpace(combineOutTradeNo)).
+			Str("combine_out_trade_no", trimmedCombineOutTradeNo).
 			Err(err).
 			Msg("wechat combine order query response contract invalid")
 		return nil, err
@@ -1947,39 +1685,16 @@ func wrapCombineOrderCloseError(err error) error {
 
 // ==================== 分账 ====================
 
-// ProfitSharingRequest 分账请求
-type ProfitSharingRequest struct {
-	SubMchID      string                  // 二级商户号
-	TransactionID string                  // 微信订单号
-	OutOrderNo    string                  // 商户分账单号
-	Receivers     []ProfitSharingReceiver // 分账接收方列表
-	Finish        bool                    // 是否分账完成
-}
-
-// ProfitSharingReceiver 分账接收方
-type ProfitSharingReceiver struct {
-	Type                  string // 分账接收方类型：MERCHANT_ID/PERSONAL_OPENID
-	ReceiverAccount       string // 分账接收方账号
-	ReceiverName          string // 分账接收方名称（明文，发送时会加密）
-	EncryptedReceiverName string // 已加密的分账接收方名称
-	Amount                int64  // 分账金额（分）
-	Description           string // 分账描述
-}
-
-// ProfitSharingResponse 分账响应
-type ProfitSharingResponse struct {
-	SubMchID      string `json:"sub_mchid"`
-	TransactionID string `json:"transaction_id"`
-	OutOrderNo    string `json:"out_order_no"`
-	OrderID       string `json:"order_id"` // 微信分账单号
-	Status        string `json:"status"`   // PROCESSING/FINISHED
-}
-
 // CreateProfitSharing 请求分账
 // 订单支付成功后，调用此接口将资金分给各方
-func (c *EcommerceClient) CreateProfitSharing(ctx context.Context, req *ProfitSharingRequest) (*ProfitSharingResponse, error) {
+func (c *EcommerceClient) CreateProfitSharing(ctx context.Context, req *wechatcontracts.ProfitSharingRequest) (*wechatcontracts.ProfitSharingResponse, error) {
 	if err := c.validateProfitSharingRequest(req); err != nil {
 		return nil, err
+	}
+
+	appID := strings.TrimSpace(req.AppID)
+	if appID == "" {
+		appID = strings.TrimSpace(c.spAppID)
 	}
 
 	receivers := make([]map[string]interface{}, len(req.Receivers))
@@ -2003,12 +1718,14 @@ func (c *EcommerceClient) CreateProfitSharing(ctx context.Context, req *ProfitSh
 	}
 
 	body := map[string]interface{}{
-		"appid":          c.spAppID,
 		"sub_mchid":      req.SubMchID,
 		"transaction_id": req.TransactionID,
 		"out_order_no":   req.OutOrderNo,
 		"receivers":      receivers,
 		"finish":         req.Finish,
+	}
+	if appID != "" {
+		body["appid"] = appID
 	}
 
 	requestFn := c.doRequest
@@ -2021,22 +1738,19 @@ func (c *EcommerceClient) CreateProfitSharing(ctx context.Context, req *ProfitSh
 		return nil, fmt.Errorf("create profit sharing: %w", err)
 	}
 
-	var resp ProfitSharingResponse
+	var resp wechatcontracts.ProfitSharingResponse
 	if err := json.Unmarshal(respBody, &resp); err != nil {
 		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+	if err := wechatcontracts.ValidateProfitSharingCreateResponse("create profit sharing", &resp); err != nil {
+		return nil, err
 	}
 
 	return &resp, nil
 }
 
-// ProfitSharingAmountsResponse 查询订单剩余待分账金额响应。
-type ProfitSharingAmountsResponse struct {
-	TransactionID string `json:"transaction_id"`
-	UnsplitAmount int64  `json:"unsplit_amount"`
-}
-
 // QueryProfitSharingAmounts 查询订单剩余待分账金额。
-func (c *EcommerceClient) QueryProfitSharingAmounts(ctx context.Context, transactionID string) (*ProfitSharingAmountsResponse, error) {
+func (c *EcommerceClient) QueryProfitSharingAmounts(ctx context.Context, transactionID string) (*wechatcontracts.ProfitSharingAmountsResponse, error) {
 	if strings.TrimSpace(transactionID) == "" {
 		return nil, fmt.Errorf("query profit sharing amounts: transaction_id is required")
 	}
@@ -2046,19 +1760,19 @@ func (c *EcommerceClient) QueryProfitSharingAmounts(ctx context.Context, transac
 		return nil, fmt.Errorf("query profit sharing amounts: %w", err)
 	}
 
-	var resp ProfitSharingAmountsResponse
+	var resp wechatcontracts.ProfitSharingAmountsResponse
 	if err := json.Unmarshal(respBody, &resp); err != nil {
 		return nil, fmt.Errorf("unmarshal response: %w", err)
 	}
-	if resp.TransactionID == "" {
-		resp.TransactionID = transactionID
+	if err := wechatcontracts.ValidateProfitSharingAmountsResponse("query profit sharing amounts", &resp, transactionID); err != nil {
+		return nil, err
 	}
 
 	return &resp, nil
 }
 
 // QueryProfitSharing 查询分账结果
-func (c *EcommerceClient) QueryProfitSharing(ctx context.Context, subMchID, transactionID, outOrderNo string) (*ProfitSharingQueryResponse, error) {
+func (c *EcommerceClient) QueryProfitSharing(ctx context.Context, subMchID, transactionID, outOrderNo string) (*wechatcontracts.ProfitSharingQueryResponse, error) {
 	query := url.Values{}
 	query.Set("sub_mchid", subMchID)
 	query.Set("transaction_id", transactionID)
@@ -2070,41 +1784,20 @@ func (c *EcommerceClient) QueryProfitSharing(ctx context.Context, subMchID, tran
 		return nil, fmt.Errorf("query profit sharing: %w", err)
 	}
 
-	var resp ProfitSharingQueryResponse
+	var resp wechatcontracts.ProfitSharingQueryResponse
 	if err := json.Unmarshal(respBody, &resp); err != nil {
 		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+	if err := wechatcontracts.ValidateProfitSharingQueryResponse("query profit sharing", &resp); err != nil {
+		return nil, err
 	}
 
 	return &resp, nil
 }
 
-// ProfitSharingQueryResponse 分账查询响应
-type ProfitSharingQueryResponse struct {
-	SubMchID          string                        `json:"sub_mchid"`
-	TransactionID     string                        `json:"transaction_id"`
-	OutOrderNo        string                        `json:"out_order_no"`
-	OrderID           string                        `json:"order_id"`
-	Status            string                        `json:"status"`
-	Receivers         []ProfitSharingReceiverResult `json:"receivers"`
-	FinishAmount      int64                         `json:"finish_amount"`
-	FinishDescription string                        `json:"finish_description"`
-}
-
-// ProfitSharingReceiverResult 分账接收方结果
-type ProfitSharingReceiverResult struct {
-	Type            string `json:"type"`
-	ReceiverAccount string `json:"receiver_account"`
-	Amount          int64  `json:"amount"`
-	Description     string `json:"description"`
-	Result          string `json:"result"` // PENDING/SUCCESS/CLOSED
-	FinishTime      string `json:"finish_time"`
-	FailReason      string `json:"fail_reason"`
-	DetailID        string `json:"detail_id"`
-}
-
 // FinishProfitSharing 完结分账
 // 分账完成后，剩余资金解冻给二级商户
-func (c *EcommerceClient) FinishProfitSharing(ctx context.Context, subMchID, transactionID, outOrderNo, description string) (*ProfitSharingResponse, error) {
+func (c *EcommerceClient) FinishProfitSharing(ctx context.Context, subMchID, transactionID, outOrderNo, description string) (*wechatcontracts.ProfitSharingResponse, error) {
 	body := map[string]interface{}{
 		"sub_mchid":      subMchID,
 		"transaction_id": transactionID,
@@ -2117,9 +1810,12 @@ func (c *EcommerceClient) FinishProfitSharing(ctx context.Context, subMchID, tra
 		return nil, fmt.Errorf("finish profit sharing: %w", err)
 	}
 
-	var resp ProfitSharingResponse
+	var resp wechatcontracts.ProfitSharingResponse
 	if err := json.Unmarshal(respBody, &resp); err != nil {
 		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+	if err := wechatcontracts.ValidateProfitSharingFinishResponse("finish profit sharing", &resp); err != nil {
+		return nil, err
 	}
 
 	return &resp, nil
@@ -2127,41 +1823,9 @@ func (c *EcommerceClient) FinishProfitSharing(ctx context.Context, subMchID, tra
 
 // ==================== 分账接收方管理 ====================
 
-// ReceiverType 分账接收方类型
-const (
-	ReceiverTypeMerchant = "MERCHANT_ID"     // 商户号
-	ReceiverTypePersonal = "PERSONAL_OPENID" // 个人openid
-)
-
-// RelationType 分账关系类型
-const (
-	RelationServiceProvider = "SERVICE_PROVIDER" // 服务商
-	RelationDistributor     = "DISTRIBUTOR"      // 分销商
-	RelationSupplier        = "SUPPLIER"         // 供应商
-	RelationPlatform        = "PLATFORM"         // 平台
-	RelationOthers          = "OTHERS"           // 其他
-)
-
-// AddReceiverRequest 添加分账接收方请求
-type AddReceiverRequest struct {
-	AppID         string `json:"appid"`          // 应用ID
-	Type          string `json:"type"`           // 接收方类型：MERCHANT_ID/PERSONAL_OPENID
-	Account       string `json:"account"`        // 接收方账号（商户号或openid）
-	Name          string `json:"name,omitempty"` // 接收方名称（明文，发送时会加密）
-	EncryptedName string `json:"-"`              // 已加密的接收方名称
-	RelationType  string `json:"relation_type"`  // 与分账方的关系类型
-}
-
-// AddReceiverResponse 添加分账接收方响应
-type AddReceiverResponse struct {
-	Type         string `json:"type"`
-	Account      string `json:"account"`
-	RelationType string `json:"relation_type"`
-}
-
 // AddProfitSharingReceiver 添加分账接收方。
 // 该接口用于为后续分账建立接收方关系，不同接收方类型是否需要预先添加应以当前官方规则和业务主链为准。
-func (c *EcommerceClient) AddProfitSharingReceiver(ctx context.Context, req *AddReceiverRequest) (*AddReceiverResponse, error) {
+func (c *EcommerceClient) AddProfitSharingReceiver(ctx context.Context, req *wechatcontracts.AddReceiverRequest) (*wechatcontracts.AddReceiverResponse, error) {
 	if err := c.validateAddReceiverRequest(req); err != nil {
 		return nil, err
 	}
@@ -2187,29 +1851,23 @@ func (c *EcommerceClient) AddProfitSharingReceiver(ctx context.Context, req *Add
 		return nil, fmt.Errorf("add profit sharing receiver: %w", err)
 	}
 
-	var resp AddReceiverResponse
+	var resp wechatcontracts.AddReceiverResponse
 	if err := json.Unmarshal(respBody, &resp); err != nil {
 		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+	if err := wechatcontracts.ValidateAddReceiverResponse("add profit sharing receiver", &resp); err != nil {
+		return nil, err
 	}
 
 	return &resp, nil
 }
 
-// DeleteReceiverRequest 删除分账接收方请求
-type DeleteReceiverRequest struct {
-	AppID   string `json:"appid"`   // 应用ID
-	Type    string `json:"type"`    // 接收方类型
-	Account string `json:"account"` // 接收方账号
-}
-
-// DeleteReceiverResponse 删除分账接收方响应
-type DeleteReceiverResponse struct {
-	Type    string `json:"type"`
-	Account string `json:"account"`
-}
-
 // DeleteProfitSharingReceiver 删除分账接收方
-func (c *EcommerceClient) DeleteProfitSharingReceiver(ctx context.Context, req *DeleteReceiverRequest) (*DeleteReceiverResponse, error) {
+func (c *EcommerceClient) DeleteProfitSharingReceiver(ctx context.Context, req *wechatcontracts.DeleteReceiverRequest) (*wechatcontracts.DeleteReceiverResponse, error) {
+	if err := wechatcontracts.ValidateDeleteReceiverRequest(req); err != nil {
+		return nil, err
+	}
+
 	body := map[string]interface{}{
 		"appid":   req.AppID,
 		"type":    req.Type,
@@ -2221,9 +1879,12 @@ func (c *EcommerceClient) DeleteProfitSharingReceiver(ctx context.Context, req *
 		return nil, fmt.Errorf("delete profit sharing receiver: %w", err)
 	}
 
-	var resp DeleteReceiverResponse
+	var resp wechatcontracts.DeleteReceiverResponse
 	if err := json.Unmarshal(respBody, &resp); err != nil {
 		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+	if err := wechatcontracts.ValidateDeleteReceiverResponse("delete profit sharing receiver", &resp); err != nil {
+		return nil, err
 	}
 
 	return &resp, nil
@@ -2231,43 +1892,9 @@ func (c *EcommerceClient) DeleteProfitSharingReceiver(ctx context.Context, req *
 
 // ==================== 分账回退 ====================
 
-// ProfitSharingReturnRequest 分账回退请求
-type ProfitSharingReturnRequest struct {
-	SubMchID      string // 二级商户号
-	OrderID       string // 微信分账单号
-	OutOrderNo    string // 商户分账单号
-	OutReturnNo   string // 商户回退单号
-	TransactionID string // 微信订单号（大于 6 个月订单必填）
-	// 回退接收方（兼容两种写法）
-	// 推荐：ReturnAccountType + ReturnAccount
-	// 兼容：ReturnMchID（历史商户号字段）
-	ReturnAccountType string // MERCHANT_ID / PERSONAL_OPENID
-	ReturnAccount     string // 商户号或openid
-	ReturnMchID       string // 回退商户号（兼容旧逻辑）
-	Amount            int64  // 回退金额（分）
-	Description       string // 回退描述
-}
-
-// ProfitSharingReturnResponse 分账回退响应
-type ProfitSharingReturnResponse struct {
-	SubMchID          string `json:"sub_mchid"`
-	OrderID           string `json:"order_id"`
-	OutOrderNo        string `json:"out_order_no"`
-	OutReturnNo       string `json:"out_return_no"`
-	ReturnID          string `json:"return_no"`
-	ReturnMchID       string `json:"return_mchid"`
-	ReturnAccountType string `json:"return_account_type"`
-	ReturnAccount     string `json:"return_account"`
-	Amount            int64  `json:"amount"`
-	Result            string `json:"result"` // PROCESSING/SUCCESS/FAILED
-	FinishTime        string `json:"finish_time"`
-	FailReason        string `json:"fail_reason"`
-	TransactionID     string `json:"transaction_id"`
-}
-
 // CreateProfitSharingReturn 请求分账回退
 // 退款时需要先从各分账方回退资金
-func (c *EcommerceClient) CreateProfitSharingReturn(ctx context.Context, req *ProfitSharingReturnRequest) (*ProfitSharingReturnResponse, error) {
+func (c *EcommerceClient) CreateProfitSharingReturn(ctx context.Context, req *wechatcontracts.ProfitSharingReturnRequest) (*wechatcontracts.ProfitSharingReturnResponse, error) {
 	if err := c.validateProfitSharingReturnRequest(req); err != nil {
 		return nil, err
 	}
@@ -2288,11 +1915,6 @@ func (c *EcommerceClient) CreateProfitSharingReturn(ctx context.Context, req *Pr
 
 	if req.ReturnMchID != "" {
 		body["return_mchid"] = req.ReturnMchID
-	} else if req.ReturnAccountType == ReceiverTypeMerchant && req.ReturnAccount != "" {
-		body["return_mchid"] = req.ReturnAccount
-	} else if req.ReturnAccountType != "" && req.ReturnAccount != "" {
-		body["return_account_type"] = req.ReturnAccountType
-		body["return_account"] = req.ReturnAccount
 	}
 
 	respBody, err := c.doRequest(ctx, http.MethodPost, profitSharingReturnURL, body)
@@ -2300,16 +1922,19 @@ func (c *EcommerceClient) CreateProfitSharingReturn(ctx context.Context, req *Pr
 		return nil, fmt.Errorf("create profit sharing return: %w", err)
 	}
 
-	var resp ProfitSharingReturnResponse
+	var resp wechatcontracts.ProfitSharingReturnResponse
 	if err := json.Unmarshal(respBody, &resp); err != nil {
 		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+	if err := wechatcontracts.ValidateProfitSharingReturnResponse("create profit sharing return", &resp, req.OutReturnNo); err != nil {
+		return nil, err
 	}
 
 	return &resp, nil
 }
 
 // QueryProfitSharingReturn 查询分账回退结果
-func (c *EcommerceClient) QueryProfitSharingReturn(ctx context.Context, subMchID, outReturnNo, outOrderNo string) (*ProfitSharingReturnResponse, error) {
+func (c *EcommerceClient) QueryProfitSharingReturn(ctx context.Context, subMchID, outReturnNo, outOrderNo string) (*wechatcontracts.ProfitSharingReturnResponse, error) {
 	if strings.TrimSpace(subMchID) == "" || strings.TrimSpace(outReturnNo) == "" {
 		return nil, fmt.Errorf("query profit sharing return: sub_mchid and out_return_no are required")
 	}
@@ -2327,9 +1952,12 @@ func (c *EcommerceClient) QueryProfitSharingReturn(ctx context.Context, subMchID
 		return nil, fmt.Errorf("query profit sharing return: %w", err)
 	}
 
-	var resp ProfitSharingReturnResponse
+	var resp wechatcontracts.ProfitSharingReturnResponse
 	if err := json.Unmarshal(respBody, &resp); err != nil {
 		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+	if err := wechatcontracts.ValidateProfitSharingReturnResponse("query profit sharing return", &resp, outReturnNo); err != nil {
+		return nil, err
 	}
 
 	return &resp, nil
@@ -2350,92 +1978,16 @@ func (c *EcommerceClient) resolveEncryptedReceiverName(name, encryptedName strin
 	return resolved, nil
 }
 
-func (c *EcommerceClient) validateProfitSharingRequest(req *ProfitSharingRequest) error {
-	if req == nil {
-		return fmt.Errorf("create profit sharing: request is nil")
-	}
-	if strings.TrimSpace(req.SubMchID) == "" || strings.TrimSpace(req.TransactionID) == "" || strings.TrimSpace(req.OutOrderNo) == "" {
-		return fmt.Errorf("create profit sharing: sub_mchid, transaction_id and out_order_no are required")
-	}
-	if len(req.Receivers) == 0 {
-		return fmt.Errorf("create profit sharing: receivers are required")
-	}
-
-	seenReceivers := make(map[string]struct{}, len(req.Receivers))
-	for _, receiver := range req.Receivers {
-		receiverType := strings.TrimSpace(receiver.Type)
-		receiverAccount := strings.TrimSpace(receiver.ReceiverAccount)
-		if receiverType == "" || receiverAccount == "" {
-			return fmt.Errorf("create profit sharing: receiver type and account are required")
-		}
-		if receiver.Amount <= 0 {
-			return fmt.Errorf("create profit sharing: receiver amount must be positive")
-		}
-		if strings.TrimSpace(receiver.Description) == "" {
-			return fmt.Errorf("create profit sharing: receiver description is required")
-		}
-		if receiverType == ReceiverTypePersonal && strings.TrimSpace(c.spAppID) == "" {
-			return fmt.Errorf("create profit sharing: appid is required for personal receivers")
-		}
-		if req.Finish && receiverType == ReceiverTypeMerchant && receiverAccount == req.SubMchID {
-			return fmt.Errorf("create profit sharing: finish=true does not allow sub_mchid as receiver")
-		}
-
-		receiverKey := receiverType + ":" + receiverAccount
-		if _, exists := seenReceivers[receiverKey]; exists {
-			return fmt.Errorf("create profit sharing: duplicate receiver %s", receiverKey)
-		}
-		seenReceivers[receiverKey] = struct{}{}
-	}
-
-	return nil
+func (c *EcommerceClient) validateProfitSharingRequest(req *wechatcontracts.ProfitSharingRequest) error {
+	return wechatcontracts.ValidateProfitSharingRequest(req, c.spAppID)
 }
 
-func (c *EcommerceClient) validateAddReceiverRequest(req *AddReceiverRequest) error {
-	if req == nil {
-		return fmt.Errorf("add profit sharing receiver: request is nil")
-	}
-	if strings.TrimSpace(req.Type) == "" || strings.TrimSpace(req.Account) == "" {
-		return fmt.Errorf("add profit sharing receiver: type and account are required")
-	}
-	if req.Type == ReceiverTypePersonal && strings.TrimSpace(req.AppID) == "" {
-		return fmt.Errorf("add profit sharing receiver: appid is required for personal receivers")
-	}
-	if !isSupportedRelationType(req.RelationType) {
-		return fmt.Errorf("add profit sharing receiver: unsupported relation_type %q", req.RelationType)
-	}
-	return nil
+func (c *EcommerceClient) validateAddReceiverRequest(req *wechatcontracts.AddReceiverRequest) error {
+	return wechatcontracts.ValidateAddReceiverRequest(req)
 }
 
-func (c *EcommerceClient) validateProfitSharingReturnRequest(req *ProfitSharingReturnRequest) error {
-	if req == nil {
-		return fmt.Errorf("create profit sharing return: request is nil")
-	}
-	if strings.TrimSpace(req.SubMchID) == "" || strings.TrimSpace(req.OutReturnNo) == "" {
-		return fmt.Errorf("create profit sharing return: sub_mchid and out_return_no are required")
-	}
-	if strings.TrimSpace(req.OrderID) == "" && strings.TrimSpace(req.OutOrderNo) == "" {
-		return fmt.Errorf("create profit sharing return: order_id or out_order_no is required")
-	}
-	if req.Amount <= 0 {
-		return fmt.Errorf("create profit sharing return: amount must be positive")
-	}
-	if strings.TrimSpace(req.Description) == "" {
-		return fmt.Errorf("create profit sharing return: description is required")
-	}
-	if strings.TrimSpace(req.ReturnMchID) == "" && strings.TrimSpace(req.ReturnAccount) == "" {
-		return fmt.Errorf("create profit sharing return: return target is required")
-	}
-	return nil
-}
-
-func isSupportedRelationType(relationType string) bool {
-	switch strings.TrimSpace(relationType) {
-	case RelationServiceProvider, RelationDistributor, RelationSupplier, RelationPlatform, RelationOthers:
-		return true
-	default:
-		return false
-	}
+func (c *EcommerceClient) validateProfitSharingReturnRequest(req *wechatcontracts.ProfitSharingReturnRequest) error {
+	return wechatcontracts.ValidateProfitSharingReturnRequest(req)
 }
 
 // IsProfitSharingReturnProcessingError 判断分账回退请求错误是否仍需进入结果轮询。
@@ -2449,12 +2001,7 @@ func IsProfitSharingReturnProcessingError(err error) bool {
 		return false
 	}
 
-	switch strings.ToUpper(strings.TrimSpace(wxErr.Code)) {
-	case "NOT_ENOUGH", "PAYER_ACCOUNT_ABNORMAL":
-		return true
-	default:
-		return false
-	}
+	return wechaterrorcodes.IsProfitSharingReturnProcessingCode(wxErr.Code)
 }
 
 // ==================== 电商退款 ====================
@@ -3177,28 +2724,8 @@ func (c *EcommerceClient) DecryptPartnerPaymentNotification(notification *Paymen
 	return &result, nil
 }
 
-// ProfitSharingNotification 分账通知
-type ProfitSharingNotification struct {
-	MchID         string `json:"mchid"`
-	SubMchID      string `json:"sub_mchid"`
-	TransactionID string `json:"transaction_id"`
-	OrderID       string `json:"order_id"`
-	OutOrderNo    string `json:"out_order_no"`
-	Receiver      struct {
-		Type            string `json:"type"`
-		ReceiverAccount string `json:"receiver_account"`
-		Amount          int64  `json:"amount"`
-		Description     string `json:"description"`
-		Result          string `json:"result"`
-		DetailID        string `json:"detail_id"`
-		FinishTime      string `json:"finish_time"`
-		FailReason      string `json:"fail_reason"`
-	} `json:"receiver"`
-	SuccessTime string `json:"success_time"`
-}
-
 // DecryptProfitSharingNotification 解密分账通知
-func (c *EcommerceClient) DecryptProfitSharingNotification(notification *PaymentNotification) (*ProfitSharingNotification, error) {
+func (c *EcommerceClient) DecryptProfitSharingNotification(notification *PaymentNotification) (*wechatcontracts.ProfitSharingNotification, error) {
 	plaintext, err := c.decryptAESGCM(
 		notification.Resource.Nonce,
 		notification.Resource.Ciphertext,
@@ -3208,9 +2735,12 @@ func (c *EcommerceClient) DecryptProfitSharingNotification(notification *Payment
 		return nil, fmt.Errorf("decrypt notification: %w", err)
 	}
 
-	var result ProfitSharingNotification
+	var result wechatcontracts.ProfitSharingNotification
 	if err := json.Unmarshal(plaintext, &result); err != nil {
 		return nil, fmt.Errorf("unmarshal notification: %w", err)
+	}
+	if err := wechatcontracts.ValidateProfitSharingNotification("decrypt profit sharing notification", &result); err != nil {
+		return nil, err
 	}
 
 	return &result, nil
@@ -3379,10 +2909,7 @@ func (c *EcommerceClient) generateSignature(method, path, timestamp, nonceStr st
 
 // ==================== 图片上传 ====================
 
-// ImageUploadResponse 图片上传响应
-type ImageUploadResponse struct {
-	MediaID string `json:"media_id"` // 媒体文件标识ID
-}
+type ImageUploadResponse = wechatcontracts.ImageUploadResponse
 
 // UploadImageValidationError represents a caller-fixable local validation failure
 // before the WeChat merchant media upload request is sent.
@@ -3447,12 +2974,14 @@ func (c *EcommerceClient) UploadImage(ctx context.Context, filename string, file
 	fileHash := sha256.Sum256(fileData)
 	sha256Hex := fmt.Sprintf("%x", fileHash)
 
-	// 构造 meta 信息
-	meta := map[string]string{
-		"filename": normalizedFilename,
-		"sha256":   sha256Hex,
+	uploadRequest := wechatcontracts.ImageUploadRequest{
+		File: fileData,
+		Meta: wechatcontracts.MerchantMediaUploadMeta{
+			Filename: normalizedFilename,
+			SHA256:   sha256Hex,
+		},
 	}
-	metaBytes, err := json.Marshal(meta)
+	metaBytes, err := json.Marshal(uploadRequest.Meta)
 	if err != nil {
 		log.Error().
 			Str("request_id", requestID).

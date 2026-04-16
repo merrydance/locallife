@@ -195,30 +195,30 @@ type EcommerceClientInterface interface {
 
 	// ==================== 分账 ====================
 	// CreateProfitSharing 请求分账
-	CreateProfitSharing(ctx context.Context, req *ProfitSharingRequest) (*ProfitSharingResponse, error)
+	CreateProfitSharing(ctx context.Context, req *wechatcontracts.ProfitSharingRequest) (*wechatcontracts.ProfitSharingResponse, error)
 
 	// QueryProfitSharing 查询分账结果
-	QueryProfitSharing(ctx context.Context, subMchID, transactionID, outOrderNo string) (*ProfitSharingQueryResponse, error)
+	QueryProfitSharing(ctx context.Context, subMchID, transactionID, outOrderNo string) (*wechatcontracts.ProfitSharingQueryResponse, error)
 
 	// QueryProfitSharingAmounts 查询订单剩余待分账金额
-	QueryProfitSharingAmounts(ctx context.Context, transactionID string) (*ProfitSharingAmountsResponse, error)
+	QueryProfitSharingAmounts(ctx context.Context, transactionID string) (*wechatcontracts.ProfitSharingAmountsResponse, error)
 
 	// FinishProfitSharing 完结分账
-	FinishProfitSharing(ctx context.Context, subMchID, transactionID, outOrderNo, description string) (*ProfitSharingResponse, error)
+	FinishProfitSharing(ctx context.Context, subMchID, transactionID, outOrderNo, description string) (*wechatcontracts.ProfitSharingResponse, error)
 
 	// ==================== 分账接收方管理 ====================
 	// AddProfitSharingReceiver 添加分账接收方
-	AddProfitSharingReceiver(ctx context.Context, req *AddReceiverRequest) (*AddReceiverResponse, error)
+	AddProfitSharingReceiver(ctx context.Context, req *wechatcontracts.AddReceiverRequest) (*wechatcontracts.AddReceiverResponse, error)
 
 	// DeleteProfitSharingReceiver 删除分账接收方
-	DeleteProfitSharingReceiver(ctx context.Context, req *DeleteReceiverRequest) (*DeleteReceiverResponse, error)
+	DeleteProfitSharingReceiver(ctx context.Context, req *wechatcontracts.DeleteReceiverRequest) (*wechatcontracts.DeleteReceiverResponse, error)
 
 	// ==================== 分账回退 ====================
 	// CreateProfitSharingReturn 请求分账回退
-	CreateProfitSharingReturn(ctx context.Context, req *ProfitSharingReturnRequest) (*ProfitSharingReturnResponse, error)
+	CreateProfitSharingReturn(ctx context.Context, req *wechatcontracts.ProfitSharingReturnRequest) (*wechatcontracts.ProfitSharingReturnResponse, error)
 
 	// QueryProfitSharingReturn 查询分账回退结果
-	QueryProfitSharingReturn(ctx context.Context, subMchID, outReturnNo, outOrderNo string) (*ProfitSharingReturnResponse, error)
+	QueryProfitSharingReturn(ctx context.Context, subMchID, outReturnNo, outOrderNo string) (*wechatcontracts.ProfitSharingReturnResponse, error)
 
 	// ==================== 退款 ====================
 	// CreateRefund 申请直连退款（仅用于骑手押金等平台直收业务场景的退款）
@@ -294,7 +294,7 @@ type EcommerceClientInterface interface {
 	DecryptCombinePaymentNotification(notification *PaymentNotification) (*wechatcontracts.CombinePaymentNotification, error)
 
 	// DecryptProfitSharingNotification 解密分账通知
-	DecryptProfitSharingNotification(notification *PaymentNotification) (*ProfitSharingNotification, error)
+	DecryptProfitSharingNotification(notification *PaymentNotification) (*wechatcontracts.ProfitSharingNotification, error)
 
 	// DecryptEcommerceRefundNotification 解密电商退款通知
 	DecryptEcommerceRefundNotification(notification *PaymentNotification) (*EcommerceRefundNotification, error)
@@ -326,11 +326,11 @@ type EcommerceClientInterface interface {
 
 	// ==================== 补差 ====================
 	// CreateSubsidy 向二级商户发起补差（平台出资营销）
-	CreateSubsidy(ctx context.Context, req SubsidyRequest) (*SubsidyResponse, error)
+	CreateSubsidy(ctx context.Context, req wechatcontracts.SubsidyRequest) (*wechatcontracts.SubsidyResponse, error)
 	// ReturnSubsidy 退回补差（退款时回收平台补贴款）
-	ReturnSubsidy(ctx context.Context, req SubsidyReturnRequest) (*SubsidyReturnResponse, error)
+	ReturnSubsidy(ctx context.Context, req wechatcontracts.SubsidyReturnRequest) (*wechatcontracts.SubsidyReturnResponse, error)
 	// CancelSubsidy 取消补差（尚未分账前可取消）
-	CancelSubsidy(ctx context.Context, req SubsidyCancelRequest) error
+	CancelSubsidy(ctx context.Context, req wechatcontracts.SubsidyCancelRequest) (*wechatcontracts.SubsidyCancelResponse, error)
 }
 
 // 确保 *Client 实现了 WechatClient 接口

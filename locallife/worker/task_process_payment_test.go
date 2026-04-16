@@ -10,7 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
-	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	mockwechat "github.com/merrydance/locallife/wechat/mock"
 	"github.com/merrydance/locallife/worker"
 	mockwk "github.com/merrydance/locallife/worker/mock"
@@ -626,23 +626,23 @@ func TestProcessTaskProfitSharing_UsesMerchantRegionActiveOperator(t *testing.T)
 		Return("encrypted_operator_44", nil)
 	ecommerceClient.EXPECT().
 		AddProfitSharingReceiver(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, req *wechat.AddReceiverRequest) (*wechat.AddReceiverResponse, error) {
-			require.Equal(t, wechat.ReceiverTypePersonal, req.Type)
+		DoAndReturn(func(_ context.Context, req *wechatcontracts.AddReceiverRequest) (*wechatcontracts.AddReceiverResponse, error) {
+			require.Equal(t, wechatcontracts.ReceiverTypePersonal, req.Type)
 			require.Equal(t, operatorUser.WechatOpenid, req.Account)
 			require.Equal(t, "encrypted_operator_44", req.EncryptedName)
-			return &wechat.AddReceiverResponse{}, nil
+			return &wechatcontracts.AddReceiverResponse{}, nil
 		})
 	ecommerceClient.EXPECT().
 		CreateProfitSharing(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, req *wechat.ProfitSharingRequest) (*wechat.ProfitSharingResponse, error) {
+		DoAndReturn(func(_ context.Context, req *wechatcontracts.ProfitSharingRequest) (*wechatcontracts.ProfitSharingResponse, error) {
 			require.Equal(t, "sub_mch_15", req.SubMchID)
 			require.Equal(t, "wx_txn_901", req.TransactionID)
 			require.Len(t, req.Receivers, 1)
-			require.Equal(t, wechat.ReceiverTypePersonal, req.Receivers[0].Type)
+			require.Equal(t, wechatcontracts.ReceiverTypePersonal, req.Receivers[0].Type)
 			require.Equal(t, operatorUser.WechatOpenid, req.Receivers[0].ReceiverAccount)
 			require.Empty(t, req.Receivers[0].ReceiverName)
 			require.Equal(t, int64(2000), req.Receivers[0].Amount)
-			return &wechat.ProfitSharingResponse{OrderID: "ps_wx_3001", Status: "PROCESSING"}, nil
+			return &wechatcontracts.ProfitSharingResponse{OrderID: "ps_wx_3001", Status: wechatcontracts.ProfitSharingStatusProcessing}, nil
 		})
 	store.EXPECT().
 		UpdateProfitSharingOrderToProcessing(gomock.Any(), db.UpdateProfitSharingOrderToProcessingParams{
@@ -736,22 +736,22 @@ func TestProcessTaskProfitSharing_UsesPersonalOperatorOpenID(t *testing.T) {
 		Return("encrypted_operator_name", nil)
 	ecommerceClient.EXPECT().
 		AddProfitSharingReceiver(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, req *wechat.AddReceiverRequest) (*wechat.AddReceiverResponse, error) {
-			require.Equal(t, wechat.ReceiverTypePersonal, req.Type)
+		DoAndReturn(func(_ context.Context, req *wechatcontracts.AddReceiverRequest) (*wechatcontracts.AddReceiverResponse, error) {
+			require.Equal(t, wechatcontracts.ReceiverTypePersonal, req.Type)
 			require.Equal(t, operatorUser.WechatOpenid, req.Account)
 			require.Equal(t, "encrypted_operator_name", req.EncryptedName)
-			return &wechat.AddReceiverResponse{}, nil
+			return &wechatcontracts.AddReceiverResponse{}, nil
 		})
 	ecommerceClient.EXPECT().
 		CreateProfitSharing(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, req *wechat.ProfitSharingRequest) (*wechat.ProfitSharingResponse, error) {
+		DoAndReturn(func(_ context.Context, req *wechatcontracts.ProfitSharingRequest) (*wechatcontracts.ProfitSharingResponse, error) {
 			require.Equal(t, "sub_mch_18", req.SubMchID)
 			require.Len(t, req.Receivers, 1)
-			require.Equal(t, wechat.ReceiverTypePersonal, req.Receivers[0].Type)
+			require.Equal(t, wechatcontracts.ReceiverTypePersonal, req.Receivers[0].Type)
 			require.Equal(t, operatorUser.WechatOpenid, req.Receivers[0].ReceiverAccount)
 			require.Empty(t, req.Receivers[0].ReceiverName)
 			require.Equal(t, int64(2000), req.Receivers[0].Amount)
-			return &wechat.ProfitSharingResponse{OrderID: "ps_wx_3004", Status: "PROCESSING"}, nil
+			return &wechatcontracts.ProfitSharingResponse{OrderID: "ps_wx_3004", Status: wechatcontracts.ProfitSharingStatusProcessing}, nil
 		})
 	store.EXPECT().
 		UpdateProfitSharingOrderToProcessing(gomock.Any(), db.UpdateProfitSharingOrderToProcessingParams{
@@ -923,20 +923,20 @@ func TestProcessTaskProfitSharing_UsesPaymentOrderAmountAsProfitSharingBase(t *t
 		Return("encrypted_operator_45", nil)
 	ecommerceClient.EXPECT().
 		AddProfitSharingReceiver(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, req *wechat.AddReceiverRequest) (*wechat.AddReceiverResponse, error) {
-			require.Equal(t, wechat.ReceiverTypePersonal, req.Type)
+		DoAndReturn(func(_ context.Context, req *wechatcontracts.AddReceiverRequest) (*wechatcontracts.AddReceiverResponse, error) {
+			require.Equal(t, wechatcontracts.ReceiverTypePersonal, req.Type)
 			require.Equal(t, operatorUser.WechatOpenid, req.Account)
 			require.Equal(t, "encrypted_operator_45", req.EncryptedName)
-			return &wechat.AddReceiverResponse{}, nil
+			return &wechatcontracts.AddReceiverResponse{}, nil
 		})
 	ecommerceClient.EXPECT().
 		CreateProfitSharing(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, req *wechat.ProfitSharingRequest) (*wechat.ProfitSharingResponse, error) {
-			require.Equal(t, wechat.ReceiverTypePersonal, req.Receivers[0].Type)
+		DoAndReturn(func(_ context.Context, req *wechatcontracts.ProfitSharingRequest) (*wechatcontracts.ProfitSharingResponse, error) {
+			require.Equal(t, wechatcontracts.ReceiverTypePersonal, req.Receivers[0].Type)
 			require.Equal(t, operatorUser.WechatOpenid, req.Receivers[0].ReceiverAccount)
 			require.Empty(t, req.Receivers[0].ReceiverName)
 			require.Equal(t, int64(1400), req.Receivers[0].Amount)
-			return &wechat.ProfitSharingResponse{OrderID: "ps_wx_3002", Status: "PROCESSING"}, nil
+			return &wechatcontracts.ProfitSharingResponse{OrderID: "ps_wx_3002", Status: wechatcontracts.ProfitSharingStatusProcessing}, nil
 		})
 	store.EXPECT().
 		UpdateProfitSharingOrderToProcessing(gomock.Any(), db.UpdateProfitSharingOrderToProcessingParams{
@@ -997,12 +997,12 @@ func TestProcessTaskProfitSharing_UsesServiceProviderNameForPlatformReceiver(t *
 	})
 	ecommerceClient.EXPECT().GetSpMchID().Return("sp_mch_1")
 	ecommerceClient.EXPECT().GetSpMchName().Return("平台服务商")
-	ecommerceClient.EXPECT().CreateProfitSharing(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, req *wechat.ProfitSharingRequest) (*wechat.ProfitSharingResponse, error) {
+	ecommerceClient.EXPECT().CreateProfitSharing(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, req *wechatcontracts.ProfitSharingRequest) (*wechatcontracts.ProfitSharingResponse, error) {
 		require.Len(t, req.Receivers, 1)
 		require.Equal(t, "sp_mch_1", req.Receivers[0].ReceiverAccount)
 		require.Equal(t, "平台服务商", req.Receivers[0].ReceiverName)
 		require.Equal(t, int64(1000), req.Receivers[0].Amount)
-		return &wechat.ProfitSharingResponse{OrderID: "ps_wx_3003", Status: "PROCESSING"}, nil
+		return &wechatcontracts.ProfitSharingResponse{OrderID: "ps_wx_3003", Status: wechatcontracts.ProfitSharingStatusProcessing}, nil
 	})
 	store.EXPECT().UpdateProfitSharingOrderToProcessing(gomock.Any(), db.UpdateProfitSharingOrderToProcessingParams{
 		ID:             3003,
@@ -1081,7 +1081,7 @@ func TestProcessTaskProfitSharing_DineInMarksFinishedWithoutSharing(t *testing.T
 		})
 	ecommerceClient.EXPECT().
 		FinishProfitSharing(gomock.Any(), "sub_mch_17", paymentOrder.TransactionID.String, gomock.Any(), "无需继续分账，解冻剩余资金").
-		Return(&wechat.ProfitSharingResponse{OrderID: "ps_finish_3003", Status: "PROCESSING"}, nil)
+		Return(&wechatcontracts.ProfitSharingResponse{OrderID: "ps_finish_3003", Status: wechatcontracts.ProfitSharingStatusProcessing}, nil)
 	store.EXPECT().
 		UpdateProfitSharingOrderToProcessing(gomock.Any(), db.UpdateProfitSharingOrderToProcessingParams{
 			ID:             3003,
@@ -1143,12 +1143,12 @@ func TestProcessTaskProfitSharing_ReservationLinkedDineInUsesReservationSource(t
 	})
 	ecommerceClient.EXPECT().GetSpMchID().Return("sp_mch_1")
 	ecommerceClient.EXPECT().GetSpMchName().Return("平台服务商")
-	ecommerceClient.EXPECT().CreateProfitSharing(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, req *wechat.ProfitSharingRequest) (*wechat.ProfitSharingResponse, error) {
+	ecommerceClient.EXPECT().CreateProfitSharing(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, req *wechatcontracts.ProfitSharingRequest) (*wechatcontracts.ProfitSharingResponse, error) {
 		require.Equal(t, "sub_mch_18", req.SubMchID)
 		require.Equal(t, "wx_txn_905", req.TransactionID)
 		require.Len(t, req.Receivers, 1)
 		require.Equal(t, int64(880), req.Receivers[0].Amount)
-		return &wechat.ProfitSharingResponse{OrderID: "ps_wx_3005", Status: "PROCESSING"}, nil
+		return &wechatcontracts.ProfitSharingResponse{OrderID: "ps_wx_3005", Status: wechatcontracts.ProfitSharingStatusProcessing}, nil
 	})
 	store.EXPECT().UpdateProfitSharingOrderToProcessing(gomock.Any(), db.UpdateProfitSharingOrderToProcessingParams{
 		ID:             3005,
@@ -1194,9 +1194,9 @@ func TestProcessTaskProfitSharing_ProcessingOrderQueriesAndFinishes(t *testing.T
 	store.EXPECT().GetActiveOperatorByRegion(gomock.Any(), merchant.RegionID).Return(db.Operator{}, db.ErrRecordNotFound)
 	store.EXPECT().GetProfitSharingOrderByPaymentOrder(gomock.Any(), paymentOrder.ID).Return(existingOrder, nil)
 	ecommerceClient.EXPECT().QueryProfitSharing(gomock.Any(), "sub_mch_18", "wx_txn_904", existingOrder.OutOrderNo).
-		Return(&wechat.ProfitSharingQueryResponse{
-			Status:    "FINISHED",
-			Receivers: []wechat.ProfitSharingReceiverResult{{Result: "SUCCESS"}},
+		Return(&wechatcontracts.ProfitSharingQueryResponse{
+			Status:    wechatcontracts.ProfitSharingStatusFinished,
+			Receivers: []wechatcontracts.ProfitSharingReceiverResult{{Result: wechatcontracts.ProfitSharingResultSuccess}},
 		}, nil)
 	store.EXPECT().UpdateProfitSharingOrderToFinished(gomock.Any(), existingOrder.ID).Return(db.ProfitSharingOrder{ID: existingOrder.ID, Status: "finished"}, nil)
 	distributor.EXPECT().DistributeTaskProcessProfitSharingResult(gomock.Any(), gomock.AssignableToTypeOf(&worker.ProfitSharingResultPayload{}), gomock.Any()).

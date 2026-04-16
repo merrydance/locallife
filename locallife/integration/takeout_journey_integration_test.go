@@ -376,12 +376,11 @@ func newIntegrationCombineQueryResponse(combineOutTradeNo, outTradeNo, tradeStat
 	resp := &wechatcontracts.CombineQueryResponse{
 		CombineOutTradeNo: combineOutTradeNo,
 		SubOrders: []wechatcontracts.CombineSubOrderResult{{
-			OutTradeNo:     outTradeNo,
-			TransactionID:  transactionID,
-			TradeType:      "JSAPI",
-			TradeState:     tradeState,
-			TradeStateDesc: "integration",
-			SuccessTime:    time.Now().UTC().Format(time.RFC3339),
+			OutTradeNo:    outTradeNo,
+			TransactionID: transactionID,
+			TradeType:     "JSAPI",
+			TradeState:    tradeState,
+			SuccessTime:   time.Now().UTC().Format(time.RFC3339),
 		}},
 	}
 	resp.SubOrders[0].Amount = struct {
@@ -402,13 +401,12 @@ func newIntegrationCombineQueryResponse(combineOutTradeNo, outTradeNo, tradeStat
 func newIntegrationCombinePaymentNotification(combineOutTradeNo, outTradeNo, transactionID string, amount int64) *wechatcontracts.CombinePaymentNotification {
 	resp := &wechatcontracts.CombinePaymentNotification{
 		CombineOutTradeNo: combineOutTradeNo,
-		SubOrders: []wechatcontracts.CombineSubOrderResult{{
-			OutTradeNo:     outTradeNo,
-			TransactionID:  transactionID,
-			TradeState:     "SUCCESS",
-			TradeStateDesc: "integration",
-			TradeType:      "JSAPI",
-			SuccessTime:    time.Now().UTC().Format(time.RFC3339),
+		SubOrders: []wechatcontracts.CombinePaymentNotificationSubOrder{{
+			OutTradeNo:    outTradeNo,
+			TransactionID: transactionID,
+			TradeState:    "SUCCESS",
+			TradeType:     "JSAPI",
+			SuccessTime:   time.Now().UTC().Format(time.RFC3339),
 		}},
 	}
 	resp.SubOrders[0].Amount = struct {

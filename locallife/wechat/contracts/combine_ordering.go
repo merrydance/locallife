@@ -79,11 +79,23 @@ type SubOrder struct {
 	GoodsTag      string
 }
 
-// CombineSceneInfo is the canonical scene projection shared by combine order
-// create and query contracts.
+// CombineSceneInfo is the canonical scene projection for combine-order create
+// requests.
 type CombineSceneInfo struct {
 	PayerClientIP string `json:"payer_client_ip,omitempty"`
 	DeviceID      string `json:"device_id,omitempty"`
+}
+
+// CombineQuerySceneInfo is the canonical scene projection for combine-order
+// query responses.
+type CombineQuerySceneInfo struct {
+	DeviceID string `json:"device_id,omitempty"`
+}
+
+// CombinePaymentNotificationSceneInfo is the canonical scene projection for
+// decrypted combine payment notifications.
+type CombinePaymentNotificationSceneInfo struct {
+	DeviceID string `json:"device_id,omitempty"`
 }
 
 // CombineOrderResponse is the canonical response contract for combine order
@@ -95,23 +107,23 @@ type CombineOrderResponse struct {
 // CombineQueryResponse is the canonical response contract for combine order
 // queries.
 type CombineQueryResponse struct {
-	CombineAppID      string                  `json:"combine_appid"`
-	CombineMchID      string                  `json:"combine_mchid"`
-	CombineOutTradeNo string                  `json:"combine_out_trade_no"`
-	SubOrders         []CombineSubOrderResult `json:"sub_orders"`
-	CombinePayerInfo  *CombinePayerInfo       `json:"combine_payer_info"`
-	SceneInfo         *CombineSceneInfo       `json:"scene_info"`
+	CombineAppID      string                 `json:"combine_appid"`
+	CombineMchID      string                 `json:"combine_mchid"`
+	CombineOutTradeNo string                 `json:"combine_out_trade_no"`
+	SubOrders         []CombineQuerySubOrder `json:"sub_orders"`
+	CombinePayerInfo  *CombineQueryPayerInfo `json:"combine_payer_info"`
+	SceneInfo         *CombineQuerySceneInfo `json:"scene_info"`
 }
 
 // CombinePaymentNotification is the canonical decrypted callback resource for
 // combine-order payment notifications.
 type CombinePaymentNotification struct {
-	CombineAppID      string                  `json:"combine_appid"`
-	CombineMchID      string                  `json:"combine_mchid"`
-	CombineOutTradeNo string                  `json:"combine_out_trade_no"`
-	SubOrders         []CombineSubOrderResult `json:"sub_orders"`
-	CombinePayerInfo  *CombinePayerInfo       `json:"combine_payer_info"`
-	SceneInfo         *CombineSceneInfo       `json:"scene_info"`
+	CombineAppID      string                               `json:"combine_appid"`
+	CombineMchID      string                               `json:"combine_mchid"`
+	CombineOutTradeNo string                               `json:"combine_out_trade_no"`
+	SubOrders         []CombinePaymentNotificationSubOrder `json:"sub_orders"`
+	CombinePayerInfo  *CombinePaymentNotificationPayerInfo `json:"combine_payer_info"`
+	SceneInfo         *CombinePaymentNotificationSceneInfo `json:"scene_info"`
 }
 
 // CombineQueryResponseBody is the official wire response body for
@@ -122,15 +134,13 @@ type CombineQueryResponseBody struct {
 	CombineOutTradeNo string                     `json:"combine_out_trade_no"`
 	SubOrders         []CombineQuerySubOrderBody `json:"sub_orders,omitempty"`
 	CombinePayerInfo  *CombineQueryPayerInfoBody `json:"combine_payer_info,omitempty"`
-	SceneInfo         *CombineSceneInfo          `json:"scene_info,omitempty"`
+	SceneInfo         *CombineQuerySceneInfo     `json:"scene_info,omitempty"`
 }
 
 // CombineQueryPayerInfoBody is the official combine_payer_info payload for
-// combine query responses. SubOpenID is kept as a compatibility passthrough
-// because current callers already expose it.
+// combine query responses.
 type CombineQueryPayerInfoBody struct {
-	OpenID    string `json:"openid,omitempty"`
-	SubOpenID string `json:"sub_openid,omitempty"`
+	OpenID string `json:"openid,omitempty"`
 }
 
 // CombineQuerySubOrderBody is the official sub_orders item for combine query
@@ -144,7 +154,6 @@ type CombineQuerySubOrderBody struct {
 	TransactionID   string                   `json:"transaction_id,omitempty"`
 	TradeType       string                   `json:"trade_type,omitempty"`
 	TradeState      string                   `json:"trade_state"`
-	TradeStateDesc  string                   `json:"trade_state_desc,omitempty"`
 	BankType        string                   `json:"bank_type,omitempty"`
 	Attach          string                   `json:"attach,omitempty"`
 	PromotionDetail []PartnerPromotionDetail `json:"promotion_detail,omitempty"`
@@ -162,9 +171,9 @@ type CombineQueryAmountBody struct {
 	SettlementRate int64  `json:"settlement_rate,omitempty"`
 }
 
-// CombineSubOrderResult is the canonical query and callback projection for a
-// single combine sub-order.
-type CombineSubOrderResult struct {
+// CombineQuerySubOrder is the canonical projection for a single combine query
+// response sub-order.
+type CombineQuerySubOrder struct {
 	MchID           string                   `json:"mchid"`
 	SubMchID        string                   `json:"sub_mchid,omitempty"`
 	SubAppID        string                   `json:"sub_appid,omitempty"`
@@ -173,7 +182,6 @@ type CombineSubOrderResult struct {
 	TransactionID   string                   `json:"transaction_id"`
 	TradeType       string                   `json:"trade_type,omitempty"`
 	TradeState      string                   `json:"trade_state"`
-	TradeStateDesc  string                   `json:"trade_state_desc"`
 	BankType        string                   `json:"bank_type,omitempty"`
 	Attach          string                   `json:"attach,omitempty"`
 	PromotionDetail []PartnerPromotionDetail `json:"promotion_detail,omitempty"`
@@ -187,11 +195,43 @@ type CombineSubOrderResult struct {
 	SuccessTime string `json:"success_time"`
 }
 
-// CombinePayerInfo is the canonical payer projection for combine order query
-// responses.
-type CombinePayerInfo struct {
-	OpenID    string `json:"openid"`
-	SubOpenID string `json:"sub_openid,omitempty"`
+// CombineQueryPayerInfo is the canonical payer projection for combine order
+// query responses.
+type CombineQueryPayerInfo struct {
+	OpenID string `json:"openid"`
+}
+
+// CombineSubOrderResult is a compatibility alias for combine query sub-order
+// projections.
+type CombineSubOrderResult = CombineQuerySubOrder
+
+// CombinePaymentNotificationSubOrder is the canonical projection for a single
+// decrypted combine payment notification sub-order.
+type CombinePaymentNotificationSubOrder struct {
+	MchID           string                   `json:"mchid"`
+	SubMchID        string                   `json:"sub_mchid,omitempty"`
+	SubAppID        string                   `json:"sub_appid,omitempty"`
+	OutTradeNo      string                   `json:"out_trade_no"`
+	TransactionID   string                   `json:"transaction_id"`
+	TradeType       string                   `json:"trade_type,omitempty"`
+	TradeState      string                   `json:"trade_state"`
+	BankType        string                   `json:"bank_type,omitempty"`
+	Attach          string                   `json:"attach,omitempty"`
+	PromotionDetail []PartnerPromotionDetail `json:"promotion_detail,omitempty"`
+	Amount          struct {
+		TotalAmount    int64  `json:"total_amount"`
+		PayerAmount    int64  `json:"payer_amount"`
+		Currency       string `json:"currency"`
+		PayerCurrency  string `json:"payer_currency"`
+		SettlementRate int64  `json:"settlement_rate"`
+	} `json:"amount"`
+	SuccessTime string `json:"success_time"`
+}
+
+// CombinePaymentNotificationPayerInfo is the canonical payer projection for
+// decrypted combine payment notifications.
+type CombinePaymentNotificationPayerInfo struct {
+	OpenID string `json:"openid"`
 }
 
 // SubOrderClose is the canonical caller-shaped sub-order contract for combine

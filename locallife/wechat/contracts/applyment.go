@@ -296,8 +296,8 @@ type QuerySubMerchantSettlementApplicationResponse struct {
 
 // 官方文档：POST /v3/merchant/media/upload
 type ImageUploadRequest struct {
-	Filename string
-	SHA256   string
+	File []byte                  `json:"file"`
+	Meta MerchantMediaUploadMeta `json:"meta"`
 }
 
 // 官方文档：POST /v3/merchant/media/upload

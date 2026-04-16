@@ -8,6 +8,7 @@ import (
 	"github.com/merrydance/locallife/maps"
 	"github.com/merrydance/locallife/rules"
 	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 )
 
 type OrderCommandService interface {
@@ -48,7 +49,7 @@ type PaymentFacade interface {
 	CreateRefund(ctx context.Context, req *wechat.RefundRequest) (*wechat.RefundResponse, error)
 	CreateEcommerceRefund(ctx context.Context, req *wechat.EcommerceRefundRequest) (*wechat.EcommerceRefundResponse, error)
 	ApplyEcommerceAbnormalRefund(ctx context.Context, req *wechat.EcommerceAbnormalRefundRequest) (*wechat.EcommerceRefundResponse, error)
-	CreateProfitSharingReturn(ctx context.Context, req *wechat.ProfitSharingReturnRequest) (*wechat.ProfitSharingReturnResponse, error)
+	CreateProfitSharingReturn(ctx context.Context, req *wechatcontracts.ProfitSharingReturnRequest) (*wechatcontracts.ProfitSharingReturnResponse, error)
 	SpMchID() string
 }
 

@@ -275,10 +275,10 @@ func (m *MockEcommerceClientInterface) EXPECT() *MockEcommerceClientInterfaceMoc
 }
 
 // AddProfitSharingReceiver mocks base method.
-func (m *MockEcommerceClientInterface) AddProfitSharingReceiver(ctx context.Context, req *wechat.AddReceiverRequest) (*wechat.AddReceiverResponse, error) {
+func (m *MockEcommerceClientInterface) AddProfitSharingReceiver(ctx context.Context, req *contracts.AddReceiverRequest) (*contracts.AddReceiverResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddProfitSharingReceiver", ctx, req)
-	ret0, _ := ret[0].(*wechat.AddReceiverResponse)
+	ret0, _ := ret[0].(*contracts.AddReceiverResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -305,11 +305,12 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) ApplyEcommerceAbnormalRefund
 }
 
 // CancelSubsidy mocks base method.
-func (m *MockEcommerceClientInterface) CancelSubsidy(ctx context.Context, req wechat.SubsidyCancelRequest) error {
+func (m *MockEcommerceClientInterface) CancelSubsidy(ctx context.Context, req contracts.SubsidyCancelRequest) (*contracts.SubsidyCancelResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CancelSubsidy", ctx, req)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(*contracts.SubsidyCancelResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // CancelSubsidy indicates an expected call of CancelSubsidy.
@@ -453,10 +454,10 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) CreatePartnerJSAPIOrder(ctx,
 }
 
 // CreateProfitSharing mocks base method.
-func (m *MockEcommerceClientInterface) CreateProfitSharing(ctx context.Context, req *wechat.ProfitSharingRequest) (*wechat.ProfitSharingResponse, error) {
+func (m *MockEcommerceClientInterface) CreateProfitSharing(ctx context.Context, req *contracts.ProfitSharingRequest) (*contracts.ProfitSharingResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateProfitSharing", ctx, req)
-	ret0, _ := ret[0].(*wechat.ProfitSharingResponse)
+	ret0, _ := ret[0].(*contracts.ProfitSharingResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -468,10 +469,10 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) CreateProfitSharing(ctx, req
 }
 
 // CreateProfitSharingReturn mocks base method.
-func (m *MockEcommerceClientInterface) CreateProfitSharingReturn(ctx context.Context, req *wechat.ProfitSharingReturnRequest) (*wechat.ProfitSharingReturnResponse, error) {
+func (m *MockEcommerceClientInterface) CreateProfitSharingReturn(ctx context.Context, req *contracts.ProfitSharingReturnRequest) (*contracts.ProfitSharingReturnResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateProfitSharingReturn", ctx, req)
-	ret0, _ := ret[0].(*wechat.ProfitSharingReturnResponse)
+	ret0, _ := ret[0].(*contracts.ProfitSharingReturnResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -498,10 +499,10 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) CreateRefund(ctx, req any) *
 }
 
 // CreateSubsidy mocks base method.
-func (m *MockEcommerceClientInterface) CreateSubsidy(ctx context.Context, req wechat.SubsidyRequest) (*wechat.SubsidyResponse, error) {
+func (m *MockEcommerceClientInterface) CreateSubsidy(ctx context.Context, req contracts.SubsidyRequest) (*contracts.SubsidyResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateSubsidy", ctx, req)
-	ret0, _ := ret[0].(*wechat.SubsidyResponse)
+	ret0, _ := ret[0].(*contracts.SubsidyResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -603,10 +604,10 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) DecryptPartnerPaymentNotific
 }
 
 // DecryptProfitSharingNotification mocks base method.
-func (m *MockEcommerceClientInterface) DecryptProfitSharingNotification(notification *wechat.PaymentNotification) (*wechat.ProfitSharingNotification, error) {
+func (m *MockEcommerceClientInterface) DecryptProfitSharingNotification(notification *wechat.PaymentNotification) (*contracts.ProfitSharingNotification, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DecryptProfitSharingNotification", notification)
-	ret0, _ := ret[0].(*wechat.ProfitSharingNotification)
+	ret0, _ := ret[0].(*contracts.ProfitSharingNotification)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -648,10 +649,10 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) DecryptViolationNotification
 }
 
 // DeleteProfitSharingReceiver mocks base method.
-func (m *MockEcommerceClientInterface) DeleteProfitSharingReceiver(ctx context.Context, req *wechat.DeleteReceiverRequest) (*wechat.DeleteReceiverResponse, error) {
+func (m *MockEcommerceClientInterface) DeleteProfitSharingReceiver(ctx context.Context, req *contracts.DeleteReceiverRequest) (*contracts.DeleteReceiverResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DeleteProfitSharingReceiver", ctx, req)
-	ret0, _ := ret[0].(*wechat.DeleteReceiverResponse)
+	ret0, _ := ret[0].(*contracts.DeleteReceiverResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -692,10 +693,10 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) EncryptSensitiveData(plainte
 }
 
 // FinishProfitSharing mocks base method.
-func (m *MockEcommerceClientInterface) FinishProfitSharing(ctx context.Context, subMchID, transactionID, outOrderNo, description string) (*wechat.ProfitSharingResponse, error) {
+func (m *MockEcommerceClientInterface) FinishProfitSharing(ctx context.Context, subMchID, transactionID, outOrderNo, description string) (*contracts.ProfitSharingResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "FinishProfitSharing", ctx, subMchID, transactionID, outOrderNo, description)
-	ret0, _ := ret[0].(*wechat.ProfitSharingResponse)
+	ret0, _ := ret[0].(*contracts.ProfitSharingResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1138,10 +1139,10 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) QueryPlatformFundDayEndBalan
 }
 
 // QueryProfitSharing mocks base method.
-func (m *MockEcommerceClientInterface) QueryProfitSharing(ctx context.Context, subMchID, transactionID, outOrderNo string) (*wechat.ProfitSharingQueryResponse, error) {
+func (m *MockEcommerceClientInterface) QueryProfitSharing(ctx context.Context, subMchID, transactionID, outOrderNo string) (*contracts.ProfitSharingQueryResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "QueryProfitSharing", ctx, subMchID, transactionID, outOrderNo)
-	ret0, _ := ret[0].(*wechat.ProfitSharingQueryResponse)
+	ret0, _ := ret[0].(*contracts.ProfitSharingQueryResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1153,10 +1154,10 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) QueryProfitSharing(ctx, subM
 }
 
 // QueryProfitSharingAmounts mocks base method.
-func (m *MockEcommerceClientInterface) QueryProfitSharingAmounts(ctx context.Context, transactionID string) (*wechat.ProfitSharingAmountsResponse, error) {
+func (m *MockEcommerceClientInterface) QueryProfitSharingAmounts(ctx context.Context, transactionID string) (*contracts.ProfitSharingAmountsResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "QueryProfitSharingAmounts", ctx, transactionID)
-	ret0, _ := ret[0].(*wechat.ProfitSharingAmountsResponse)
+	ret0, _ := ret[0].(*contracts.ProfitSharingAmountsResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1168,10 +1169,10 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) QueryProfitSharingAmounts(ct
 }
 
 // QueryProfitSharingReturn mocks base method.
-func (m *MockEcommerceClientInterface) QueryProfitSharingReturn(ctx context.Context, subMchID, outReturnNo, outOrderNo string) (*wechat.ProfitSharingReturnResponse, error) {
+func (m *MockEcommerceClientInterface) QueryProfitSharingReturn(ctx context.Context, subMchID, outReturnNo, outOrderNo string) (*contracts.ProfitSharingReturnResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "QueryProfitSharingReturn", ctx, subMchID, outReturnNo, outOrderNo)
-	ret0, _ := ret[0].(*wechat.ProfitSharingReturnResponse)
+	ret0, _ := ret[0].(*contracts.ProfitSharingReturnResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1242,10 +1243,10 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) RespondComplaint(ctx, req an
 }
 
 // ReturnSubsidy mocks base method.
-func (m *MockEcommerceClientInterface) ReturnSubsidy(ctx context.Context, req wechat.SubsidyReturnRequest) (*wechat.SubsidyReturnResponse, error) {
+func (m *MockEcommerceClientInterface) ReturnSubsidy(ctx context.Context, req contracts.SubsidyReturnRequest) (*contracts.SubsidyReturnResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReturnSubsidy", ctx, req)
-	ret0, _ := ret[0].(*wechat.SubsidyReturnResponse)
+	ret0, _ := ret[0].(*contracts.SubsidyReturnResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

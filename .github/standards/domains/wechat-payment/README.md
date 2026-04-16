@@ -134,6 +134,11 @@
 - 分账-分账动账通知：https://pay.weixin.qq.com/doc/v3/partner/4012116672.md
 - 分账-分账常见问题：https://pay.weixin.qq.com/doc/v3/partner/4012525463.md
 - 分账-分账失败处理指引：https://pay.weixin.qq.com/doc/v3/partner/4015504955.md
+- 补差-业务示例代码:https://pay.weixin.qq.com/doc/v3/partner/4015593692.md
+- 补差-请求补差:https://pay.weixin.qq.com/doc/v3/partner/4012477631.md
+- 补差-请求补差回退:https://pay.weixin.qq.com/doc/v3/partner/4012477636.md
+- 补差-取消补差:https://pay.weixin.qq.com/doc/v3/partner/4012477639.md
+- 补差-常见问题:https://pay.weixin.qq.com/doc/v3/partner/4015942503.md
 
 ### 4.6 交易退款组
 
@@ -167,6 +172,10 @@
 
 ### 4.8 账单下载组
 
+- 账单下载-产品介绍：https://pay.weixin.qq.com/doc/v3/partner/4013080592.md
+- 账单下载-交易账单详细说明：https://pay.weixin.qq.com/doc/v3/partner/4013080599.md
+- 账单下载-资金账单详细说明：https://pay.weixin.qq.com/doc/v3/partner/4013080600.md
+- 账单下载-平台下载账单操作指引：https://pay.weixin.qq.com/doc/v3/partner/4013080601.md
 - 账单下载-业务示例代码：https://pay.weixin.qq.com/doc/v3/partner/4016062108.md
 - 账单下载-申请交易账单：https://pay.weixin.qq.com/doc/v3/partner/4012760667.md
 - 账单下载-申请资金账单：https://pay.weixin.qq.com/doc/v3/partner/4012760672.md
