@@ -10,23 +10,40 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 )
 
+type MerchantDiscountResult struct {
+	DiscountAmount   int64
+	AllowWithVoucher bool
+}
+
+func ResolveMerchantDiscount(ctx context.Context, store db.Store, opt OrderContext) (MerchantDiscountResult, error) {
+	result := MerchantDiscountResult{AllowWithVoucher: true}
+
+	rules, err := store.ListActiveDiscountRules(ctx, opt.MerchantID)
+	if err != nil {
+		return result, err
+	}
+
+	for _, rule := range pickBestMatchingRulesByStackingGroup(rules, opt, time.Now()) {
+		result.DiscountAmount += rule.DiscountAmount
+		if !rule.CanStackWithVoucher {
+			result.AllowWithVoucher = false
+		}
+	}
+
+	return result, nil
+}
+
 // GetBestDiscountAmount selects the best discount amount based on current rules.
 func GetBestDiscountAmount(ctx context.Context, store db.Store, merchantID int64, subtotal int64) (int64, error) {
-	rules, err := store.ListActiveDiscountRules(ctx, merchantID)
+	result, err := ResolveMerchantDiscount(ctx, store, OrderContext{
+		MerchantID: merchantID,
+		Subtotal:   subtotal,
+	})
 	if err != nil {
 		return 0, err
 	}
 
-	var bestAmount int64
-	for _, rule := range rules {
-		if subtotal < rule.MinOrderAmount {
-			continue
-		}
-		if rule.DiscountAmount > bestAmount {
-			bestAmount = rule.DiscountAmount
-		}
-	}
-	return bestAmount, nil
+	return result.DiscountAmount, nil
 }
 
 // VoucherValidationInput defines the voucher validation input.

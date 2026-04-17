@@ -211,12 +211,6 @@ func TestParseApplymentIDCardValidPeriod(t *testing.T) {
 	require.Equal(t, "长期", end)
 }
 
-func TestParseApplymentOperatorIDCardValidPeriod(t *testing.T) {
-	begin, end := ParseApplymentOperatorIDCardValidPeriod("", "2008.09.29-2028.09.29")
-	require.Equal(t, "2008-09-29", begin)
-	require.Equal(t, "2028-09-29", end)
-}
-
 func TestBuildApplymentBusinessLicenseInfo(t *testing.T) {
 	info := BuildApplymentBusinessLicenseInfo("license-media", "BLN001", "主体名称", "张三", "深圳市南山区", ApplymentBusinessLicenseOCRInput{
 		Address:     "广州市天河区",
@@ -227,12 +221,6 @@ func TestBuildApplymentBusinessLicenseInfo(t *testing.T) {
 	require.Equal(t, "license-media", info.BusinessLicenseCopy)
 	require.Equal(t, "广州市天河区", info.CompanyAddress)
 	require.Equal(t, `["2020-01-01","长期"]`, info.BusinessTime)
-}
-
-func TestBuildApplymentStoreURL(t *testing.T) {
-	require.Equal(t, "https://merchant.example.com", BuildApplymentStoreURL("https://merchant.example.com/", ""))
-	require.Equal(t, "https://external.example.com", BuildApplymentStoreURL("", "https://external.example.com/"))
-	require.Empty(t, BuildApplymentStoreURL("", ""))
 }
 
 func TestUploadApplymentAsset(t *testing.T) {

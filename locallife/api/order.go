@@ -2428,12 +2428,20 @@ type orderCalculationResponse struct {
 	DeliveryFee int64 `json:"delivery_fee" example:"500"`
 	// 配送费优惠 (单位：分)
 	DeliveryFeeDiscount int64 `json:"delivery_fee_discount" example:"200"`
-	// 满减优惠 (单位：分)
+	// 营销优惠总减免（分），包含商户优惠和优惠券抵扣
 	DiscountAmount int64 `json:"discount_amount" example:"500"`
 	// 最终应付金额 (单位：分)
 	TotalAmount int64 `json:"total_amount" example:"5560"`
 	// 优惠明细
 	Promotions []orderPromotion `json:"promotions,omitempty"`
+	// 推荐可用优惠券（仅试算，不自动使用）
+	SuggestedVoucher *logic.SuggestedVoucher `json:"suggested_voucher,omitempty"`
+	// 阶梯优惠试算信息
+	LadderPromotions []logic.LadderPromotion `json:"ladder_promotions,omitempty"`
+	// 代金券试算信息
+	VoucherTrials []logic.VoucherTrial `json:"voucher_trials,omitempty"`
+	// 会员余额支付能力评估
+	PaymentAssessment logic.PaymentAssessment `json:"payment_assessment"`
 	// 商品明细
 	Items []orderCalculationItem `json:"items"`
 }
@@ -2460,9 +2468,10 @@ type orderCalculationItem struct {
 // @Description **计算内容：**
 // @Description - 商品小计（基于购物车商品）
 // @Description - 配送费（外卖订单，基于实时位置或配送地址）
-// @Description - 满减优惠
+// @Description - 商户营销优惠与优惠券抵扣
 // @Description - 满返运费优惠
-// @Description - 优惠券抵扣
+// @Description - 推荐优惠券、阶梯优惠和代金券试算
+// @Description - 会员余额支付能力评估
 // @Description
 // @Description **配送费计算方式：**
 // @Description - 传入 latitude/longitude：使用实时位置计算（浏览阶段）
@@ -2558,6 +2567,10 @@ func (server *Server) calculateOrder(ctx *gin.Context) {
 		TotalAmount:         result.TotalAmount,
 		Items:               make([]orderCalculationItem, len(result.Items)),
 		Promotions:          make([]orderPromotion, len(result.Promotions)),
+		SuggestedVoucher:    result.SuggestedVoucher,
+		LadderPromotions:    result.LadderPromotions,
+		VoucherTrials:       result.VoucherTrials,
+		PaymentAssessment:   result.PaymentAssessment,
 	}
 
 	for i, item := range result.Items {

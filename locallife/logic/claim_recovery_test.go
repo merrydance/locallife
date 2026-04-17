@@ -122,72 +122,6 @@ func TestGetClaimRecoveryForMerchant(t *testing.T) {
 	}
 }
 
-func TestPayMerchantClaimRecoveryTargetMismatch(t *testing.T) {
-	claimID := int64(10)
-	merchantID := int64(20)
-
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	store := mockdb.NewMockStore(ctrl)
-	store.EXPECT().
-		GetClaimForAppeal(gomock.Any(), claimID).
-		Times(1).
-		Return(claimInfoFor(merchantID, 99, nil), nil)
-	store.EXPECT().
-		GetClaimRecoveryByClaimID(gomock.Any(), claimID).
-		Times(1).
-		Return(db.ClaimRecovery{ID: 30, RecoveryTarget: pgtype.Text{String: "rider", Valid: true}}, nil)
-
-	_, err := PayMerchantClaimRecovery(context.Background(), store, PayMerchantClaimRecoveryInput{
-		ClaimID:    claimID,
-		MerchantID: merchantID,
-	})
-
-	reqErr := assertRequestError(t, err)
-	require.Equal(t, 400, reqErr.Status)
-	require.Equal(t, "recovery target mismatch", reqErr.Err.Error())
-}
-
-func TestPayMerchantClaimRecoverySuccess(t *testing.T) {
-	claimID := int64(10)
-	merchantID := int64(20)
-	recoveryID := int64(30)
-
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	store := mockdb.NewMockStore(ctrl)
-	recovery := db.ClaimRecovery{ID: recoveryID, ClaimID: claimID, RecoveryTarget: pgtype.Text{String: "merchant", Valid: true}, RecoveryAmount: 500}
-	updated := recovery
-	updated.Status = "paid"
-
-	store.EXPECT().
-		GetClaimForAppeal(gomock.Any(), claimID).
-		Times(1).
-		Return(claimInfoFor(merchantID, 99, nil), nil)
-	store.EXPECT().
-		GetClaimRecoveryByClaimID(gomock.Any(), claimID).
-		Times(1).
-		Return(recovery, nil)
-	store.EXPECT().
-		MarkClaimRecoveryPaid(gomock.Any(), recoveryID).
-		Times(1).
-		Return(updated, nil)
-	store.EXPECT().
-		UnsuspendMerchantTakeout(gomock.Any(), merchantID).
-		Times(1).
-		Return(nil)
-
-	got, err := PayMerchantClaimRecovery(context.Background(), store, PayMerchantClaimRecoveryInput{
-		ClaimID:    claimID,
-		MerchantID: merchantID,
-	})
-
-	require.NoError(t, err)
-	require.Equal(t, updated.Status, got.Status)
-}
-
 func TestCreateMerchantClaimRecoveryPaymentSuccess(t *testing.T) {
 	claimID := int64(10)
 	merchantID := int64(20)
@@ -549,45 +483,6 @@ func TestCreateMerchantClaimRecoveryPaymentExpiredPendingCloseWechatOrderFailure
 
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "close expired claim recovery wechat order")
-}
-
-func TestPayRiderClaimRecoverySuccess(t *testing.T) {
-	claimID := int64(10)
-	riderID := int64(20)
-	recoveryID := int64(30)
-
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	store := mockdb.NewMockStore(ctrl)
-	recovery := db.ClaimRecovery{ID: recoveryID, ClaimID: claimID, RecoveryTarget: pgtype.Text{String: "rider", Valid: true}, RecoveryAmount: 200}
-	updated := recovery
-	updated.Status = "paid"
-
-	store.EXPECT().
-		GetClaimForAppeal(gomock.Any(), claimID).
-		Times(1).
-		Return(claimInfoFor(99, 88, &riderID), nil)
-	store.EXPECT().
-		GetClaimRecoveryByClaimID(gomock.Any(), claimID).
-		Times(1).
-		Return(recovery, nil)
-	store.EXPECT().
-		MarkClaimRecoveryPaid(gomock.Any(), recoveryID).
-		Times(1).
-		Return(updated, nil)
-	store.EXPECT().
-		UnsuspendRider(gomock.Any(), riderID).
-		Times(1).
-		Return(nil)
-
-	got, err := PayRiderClaimRecovery(context.Background(), store, PayRiderClaimRecoveryInput{
-		ClaimID: claimID,
-		RiderID: riderID,
-	})
-
-	require.NoError(t, err)
-	require.Equal(t, updated.Status, got.Status)
 }
 
 func TestCreateRiderClaimRecoveryPaymentReusePending(t *testing.T) {

@@ -21163,7 +21163,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "根据购物车商品计算订单金额，用于下单前预览。\n\n**计算内容：**\n- 商品小计（基于购物车商品）\n- 配送费（外卖订单，基于实时位置或配送地址）\n- 满减优惠\n- 满返运费优惠\n- 优惠券抵扣\n\n**配送费计算方式：**\n- 传入 latitude/longitude：使用实时位置计算（浏览阶段）\n- 传入 address_id：使用已保存地址计算（下单阶段）\n- 两者都传：优先使用 address_id",
+                "description": "根据购物车商品计算订单金额，用于下单前预览。\n\n**计算内容：**\n- 商品小计（基于购物车商品）\n- 配送费（外卖订单，基于实时位置或配送地址）\n- 商户营销优惠与优惠券抵扣\n- 满返运费优惠\n- 推荐优惠券、阶梯优惠和代金券试算\n- 会员余额支付能力评估\n\n**配送费计算方式：**\n- 传入 latitude/longitude：使用实时位置计算（浏览阶段）\n- 传入 address_id：使用已保存地址计算（下单阶段）\n- 两者都传：优先使用 address_id",
                 "consumes": [
                     "application/json"
                 ],
@@ -34289,7 +34289,6 @@ const docTemplate = `{
                 "payment_type": {
                     "type": "string",
                     "enum": [
-                        "native",
                         "miniprogram"
                     ]
                 }
@@ -39636,7 +39635,7 @@ const docTemplate = `{
                     "example": 200
                 },
                 "discount_amount": {
-                    "description": "满减优惠 (单位：分)",
+                    "description": "营销优惠总减免（分），包含商户优惠和优惠券抵扣",
                     "type": "integer",
                     "example": 500
                 },
@@ -39646,6 +39645,21 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/api.orderCalculationItem"
                     }
+                },
+                "ladder_promotions": {
+                    "description": "阶梯优惠试算信息",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/logic.LadderPromotion"
+                    }
+                },
+                "payment_assessment": {
+                    "description": "会员余额支付能力评估",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/logic.PaymentAssessment"
+                        }
+                    ]
                 },
                 "promotions": {
                     "description": "优惠明细",
@@ -39659,10 +39673,25 @@ const docTemplate = `{
                     "type": "integer",
                     "example": 5760
                 },
+                "suggested_voucher": {
+                    "description": "推荐可用优惠券（仅试算，不自动使用）",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/logic.SuggestedVoucher"
+                        }
+                    ]
+                },
                 "total_amount": {
                     "description": "最终应付金额 (单位：分)",
                     "type": "integer",
                     "example": 5560
+                },
+                "voucher_trials": {
+                    "description": "代金券试算信息",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/logic.VoucherTrial"
+                    }
                 }
             }
         },

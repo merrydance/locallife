@@ -14,48 +14,12 @@ import (
 )
 
 const (
-	// TypeHandleSuspiciousPattern 处理可疑索赔模式任务
-	TypeHandleSuspiciousPattern = "risk:handle_suspicious_pattern"
-
 	// TypeCheckMerchantForeignObject 检查商户异物索赔历史任务
 	TypeCheckMerchantForeignObject = "risk:check_merchant_foreign_object"
 
 	// TypeCheckRiderDamage 检查骑手餐损历史任务
 	TypeCheckRiderDamage = "risk:check_rider_damage"
 )
-
-// HandleSuspiciousPatternPayload 可疑模式处理任务载荷
-type HandleSuspiciousPatternPayload struct {
-	UserID       int64                     `json:"user_id"`
-	ClaimID      int64                     `json:"claim_id"`
-	ClaimType    string                    `json:"claim_type"`
-	LookbackData *algorithm.LookbackResult `json:"lookback_data"`
-}
-
-// NewHandleSuspiciousPatternTask 创建可疑模式处理任务
-func NewHandleSuspiciousPatternTask(userID, claimID int64, claimType string, lookback *algorithm.LookbackResult) (*asynq.Task, error) {
-	payload, err := json.Marshal(HandleSuspiciousPatternPayload{
-		UserID:       userID,
-		ClaimID:      claimID,
-		ClaimType:    claimType,
-		LookbackData: lookback,
-	})
-	if err != nil {
-		return nil, err
-	}
-	return asynq.NewTask(TypeHandleSuspiciousPattern, payload), nil
-}
-
-// HandleSuspiciousPatternProcessor 处理可疑模式任务
-func (processor *RedisTaskProcessor) HandleSuspiciousPattern(ctx context.Context, task *asynq.Task) error {
-	var payload HandleSuspiciousPatternPayload
-	if err := json.Unmarshal(task.Payload(), &payload); err != nil {
-		return fmt.Errorf("json.Unmarshal failed: %w", asynq.SkipRetry)
-	}
-
-	_ = payload
-	return nil
-}
 
 // CheckMerchantForeignObjectPayload 商户异物索赔检查任务载荷
 type CheckMerchantForeignObjectPayload struct {

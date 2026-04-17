@@ -235,7 +235,6 @@ func (processor *RedisTaskProcessor) Start() error {
 	mux.HandleFunc(TaskPrintOrder, processor.ProcessTaskPrintOrder)
 
 	// TrustScore系统任务
-	mux.HandleFunc(TypeHandleSuspiciousPattern, processor.HandleSuspiciousPattern)
 	mux.HandleFunc(TypeCheckMerchantForeignObject, processor.HandleCheckMerchantForeignObject)
 	mux.HandleFunc(TypeCheckRiderDamage, processor.HandleCheckRiderDamage)
 

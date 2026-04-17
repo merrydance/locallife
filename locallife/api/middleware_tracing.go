@@ -130,10 +130,3 @@ func GetRequestID(ctx *gin.Context) string {
 	}
 	return ""
 }
-
-// LogWithRequestID 创建带有 request_id 的日志器
-func LogWithRequestID(ctx *gin.Context) *zerolog.Logger {
-	requestID := GetRequestID(ctx)
-	logger := log.With().Str("request_id", requestID).Logger()
-	return &logger
-}

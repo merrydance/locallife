@@ -24,17 +24,6 @@ type OperatorClaimRecoveryInput struct {
 	RegionID int64
 }
 
-type PayMerchantClaimRecoveryInput struct {
-	ClaimID    int64
-	MerchantID int64
-	Now        time.Time
-}
-
-type PayRiderClaimRecoveryInput struct {
-	ClaimID int64
-	RiderID int64
-}
-
 type WaiveClaimRecoveryInput struct {
 	ClaimID  int64
 	RegionID int64
@@ -102,74 +91,6 @@ func GetClaimRecoveryForOperator(ctx context.Context, store db.Store, input Oper
 	}
 
 	return recovery, nil
-}
-
-func PayMerchantClaimRecovery(ctx context.Context, store db.Store, input PayMerchantClaimRecoveryInput) (db.ClaimRecovery, error) {
-	claimInfo, err := store.GetClaimForAppeal(ctx, input.ClaimID)
-	if err != nil {
-		if errors.Is(err, db.ErrRecordNotFound) {
-			return db.ClaimRecovery{}, NewRequestError(http.StatusNotFound, errors.New("claim not found or not eligible for recovery"))
-		}
-		return db.ClaimRecovery{}, err
-	}
-
-	if claimInfo.MerchantID != input.MerchantID {
-		return db.ClaimRecovery{}, NewRequestError(http.StatusForbidden, errors.New("this claim does not belong to your merchant"))
-	}
-
-	recovery, err := store.GetClaimRecoveryByClaimID(ctx, input.ClaimID)
-	if err != nil {
-		return db.ClaimRecovery{}, NewRequestError(http.StatusNotFound, errors.New("claim recovery not found"))
-	}
-
-	if !recovery.RecoveryTarget.Valid || recovery.RecoveryTarget.String != "merchant" {
-		return db.ClaimRecovery{}, NewRequestError(http.StatusBadRequest, errors.New("recovery target mismatch"))
-	}
-
-	updated, err := store.MarkClaimRecoveryPaid(ctx, recovery.ID)
-	if err != nil {
-		return db.ClaimRecovery{}, err
-	}
-
-	if err := store.UnsuspendMerchantTakeout(ctx, input.MerchantID); err != nil {
-		return db.ClaimRecovery{}, err
-	}
-
-	return updated, nil
-}
-
-func PayRiderClaimRecovery(ctx context.Context, store db.Store, input PayRiderClaimRecoveryInput) (db.ClaimRecovery, error) {
-	claimInfo, err := store.GetClaimForAppeal(ctx, input.ClaimID)
-	if err != nil {
-		if errors.Is(err, db.ErrRecordNotFound) {
-			return db.ClaimRecovery{}, NewRequestError(http.StatusNotFound, errors.New("claim not found or not eligible for recovery"))
-		}
-		return db.ClaimRecovery{}, err
-	}
-
-	if !claimInfo.RiderID.Valid || claimInfo.RiderID.Int64 != input.RiderID {
-		return db.ClaimRecovery{}, NewRequestError(http.StatusForbidden, errors.New("this claim does not belong to your rider"))
-	}
-
-	recovery, err := store.GetClaimRecoveryByClaimID(ctx, input.ClaimID)
-	if err != nil {
-		return db.ClaimRecovery{}, NewRequestError(http.StatusNotFound, errors.New("claim recovery not found"))
-	}
-
-	if !recovery.RecoveryTarget.Valid || recovery.RecoveryTarget.String != "rider" {
-		return db.ClaimRecovery{}, NewRequestError(http.StatusBadRequest, errors.New("recovery target mismatch"))
-	}
-
-	updated, err := store.MarkClaimRecoveryPaid(ctx, recovery.ID)
-	if err != nil {
-		return db.ClaimRecovery{}, err
-	}
-
-	if err := store.UnsuspendRider(ctx, input.RiderID); err != nil {
-		return db.ClaimRecovery{}, err
-	}
-
-	return updated, nil
 }
 
 func WaiveClaimRecovery(ctx context.Context, store db.Store, input WaiveClaimRecoveryInput) (db.ClaimRecovery, error) {

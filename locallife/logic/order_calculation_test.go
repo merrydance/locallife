@@ -93,9 +93,31 @@ func TestCalculateOrderPreview_WithVoucher(t *testing.T) {
 		Times(1).
 		Return(db.Merchant{ID: merchantID, RegionID: 9}, nil)
 	store.EXPECT().
-		ListActiveDiscountRules(gomock.Any(), merchantID).
+		GetUserVoucher(gomock.Any(), voucherID).
 		Times(1).
+		Return(db.GetUserVoucherRow{
+			ID:                voucherID,
+			UserID:            userID,
+			MerchantID:        merchantID,
+			Status:            "unused",
+			ExpiresAt:         time.Now().Add(time.Hour),
+			MinOrderAmount:    500,
+			AllowedOrderTypes: []string{"takeout"},
+			Amount:            200,
+			Name:              "Promo",
+		}, nil)
+	store.EXPECT().
+		ListActiveDiscountRules(gomock.Any(), merchantID).
+		Times(2).
 		Return([]db.DiscountRule{}, nil)
+	store.EXPECT().
+		ListUserAvailableVouchersForMerchant(gomock.Any(), db.ListUserAvailableVouchersForMerchantParams{
+			UserID:         userID,
+			MerchantID:     merchantID,
+			MinOrderAmount: 1000,
+		}).
+		Times(1).
+		Return([]db.ListUserAvailableVouchersForMerchantRow{}, nil)
 	store.EXPECT().
 		GetUserVoucher(gomock.Any(), voucherID).
 		Times(1).
@@ -110,6 +132,10 @@ func TestCalculateOrderPreview_WithVoucher(t *testing.T) {
 			Amount:            200,
 			Name:              "Promo",
 		}, nil)
+	store.EXPECT().
+		GetMembershipByMerchantAndUser(gomock.Any(), db.GetMembershipByMerchantAndUserParams{MerchantID: merchantID, UserID: userID}).
+		Times(1).
+		Return(db.MerchantMembership{}, db.ErrRecordNotFound)
 
 	result, err := CalculateOrderPreview(
 		context.Background(),
@@ -137,6 +163,141 @@ func TestCalculateOrderPreview_WithVoucher(t *testing.T) {
 		}
 	}
 	require.True(t, foundVoucher)
+}
+
+func TestCalculateOrderPreview_RejectsVoucherWhenMerchantDiscountCannotStack(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	userID := int64(1)
+	merchantID := int64(2)
+	voucherID := int64(3)
+	now := time.Now()
+
+	store.EXPECT().
+		GetCartByUserAndMerchant(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(db.Cart{ID: 22}, nil)
+	store.EXPECT().
+		ListCartItems(gomock.Any(), int64(22)).
+		Times(1).
+		Return([]db.ListCartItemsRow{{
+			DishID:    pgtype.Int8{Int64: 5, Valid: true},
+			DishName:  pgtype.Text{String: "Dish", Valid: true},
+			DishPrice: pgtype.Int8{Int64: 1000, Valid: true},
+			Quantity:  1,
+		}}, nil)
+	store.EXPECT().
+		GetMerchant(gomock.Any(), merchantID).
+		Times(1).
+		Return(db.Merchant{ID: merchantID, RegionID: 9}, nil)
+	store.EXPECT().
+		GetUserVoucher(gomock.Any(), voucherID).
+		Times(1).
+		Return(db.GetUserVoucherRow{
+			ID:                voucherID,
+			UserID:            userID,
+			MerchantID:        merchantID,
+			Status:            "unused",
+			ExpiresAt:         now.Add(time.Hour),
+			MinOrderAmount:    500,
+			AllowedOrderTypes: []string{"takeout"},
+			Amount:            200,
+			Name:              "Promo",
+		}, nil)
+	store.EXPECT().
+		ListActiveDiscountRules(gomock.Any(), merchantID).
+		Times(1).
+		Return([]db.DiscountRule{{
+			ID:                  1,
+			Name:                "会员日满减",
+			MinOrderAmount:      1000,
+			DiscountAmount:      300,
+			ValidFrom:           now.Add(-time.Hour),
+			ValidUntil:          now.Add(time.Hour),
+			CanStackWithVoucher: false,
+		}}, nil)
+
+	_, err := CalculateOrderPreview(
+		context.Background(),
+		store,
+		nil,
+		OrderCalculationInput{UserID: userID, MerchantID: merchantID, OrderType: "takeout", UserVoucherID: &voucherID},
+		func(context.Context, int64, map[string]interface{}) ([]byte, int64, error) {
+			return json.RawMessage{}, 0, nil
+		},
+		func(_ context.Context, regionID, merchantID int64, distance int32, orderAmount int64) (DeliveryFeeComputation, error) {
+			require.Equal(t, int32(defaultDeliveryDistance), distance)
+			return DeliveryFeeComputation{Fee: 500, Discount: 0}, nil
+		},
+	)
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, 400, reqErr.Status)
+	require.Equal(t, "当前活动不可与所选优惠券叠加", reqErr.Err.Error())
+}
+
+func TestCalculateOrderPreview_SuggestsVoucher(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	userID := int64(1)
+	merchantID := int64(2)
+
+	store.EXPECT().
+		GetCartByUserAndMerchant(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(db.Cart{ID: 21}, nil)
+	store.EXPECT().
+		ListCartItems(gomock.Any(), int64(21)).
+		Times(1).
+		Return([]db.ListCartItemsRow{
+			{DishID: pgtype.Int8{Int64: 5, Valid: true}, DishName: pgtype.Text{String: "Dish", Valid: true}, DishPrice: pgtype.Int8{Int64: 1500, Valid: true}, Quantity: 1},
+		}, nil)
+	store.EXPECT().
+		GetMerchant(gomock.Any(), merchantID).
+		Times(1).
+		Return(db.Merchant{ID: merchantID, RegionID: 9}, nil)
+	store.EXPECT().
+		ListActiveDiscountRules(gomock.Any(), merchantID).
+		Times(1).
+		Return([]db.DiscountRule{}, nil)
+	store.EXPECT().
+		ListUserAvailableVouchersForMerchant(gomock.Any(), db.ListUserAvailableVouchersForMerchantParams{
+			UserID:         userID,
+			MerchantID:     merchantID,
+			MinOrderAmount: 1500,
+		}).
+		Times(1).
+		Return([]db.ListUserAvailableVouchersForMerchantRow{
+			{ID: 11, Name: "推荐券", Amount: 300, AllowedOrderTypes: []string{"takeout"}},
+		}, nil)
+	store.EXPECT().
+		GetMembershipByMerchantAndUser(gomock.Any(), db.GetMembershipByMerchantAndUserParams{MerchantID: merchantID, UserID: userID}).
+		Times(1).
+		Return(db.MerchantMembership{}, db.ErrRecordNotFound)
+
+	result, err := CalculateOrderPreview(
+		context.Background(),
+		store,
+		nil,
+		OrderCalculationInput{UserID: userID, MerchantID: merchantID, OrderType: "takeout"},
+		func(context.Context, int64, map[string]interface{}) ([]byte, int64, error) {
+			return json.RawMessage{}, 0, nil
+		},
+		func(_ context.Context, regionID, merchantID int64, distance int32, orderAmount int64) (DeliveryFeeComputation, error) {
+			require.Equal(t, int32(defaultDeliveryDistance), distance)
+			return DeliveryFeeComputation{Fee: 500, Discount: 0}, nil
+		},
+	)
+	require.NoError(t, err)
+	require.Equal(t, int64(1500), result.Subtotal)
+	require.Equal(t, int64(2000), result.TotalAmount)
+	require.NotNil(t, result.SuggestedVoucher)
+	require.Equal(t, int64(11), result.SuggestedVoucher.ID)
+	require.Len(t, result.VoucherTrials, 1)
+	require.Equal(t, int64(1700), result.VoucherTrials[0].TrialPayable)
 }
 
 func TestCalculateOrderPreview_RejectsForeignAddress(t *testing.T) {

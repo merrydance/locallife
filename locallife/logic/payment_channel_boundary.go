@@ -15,10 +15,6 @@ func paymentOrderUsesEcommerceChannel(paymentOrder db.PaymentOrder) bool {
 	return db.PaymentOrderUsesEcommerceChannel(paymentOrder)
 }
 
-func paymentOrderRequiresProfitSharing(paymentOrder db.PaymentOrder) bool {
-	return db.PaymentOrderRequiresProfitSharing(paymentOrder)
-}
-
 func refundTypeForPaymentOrder(paymentOrder db.PaymentOrder) string {
 	if paymentOrderUsesEcommerceChannel(paymentOrder) {
 		return paymentTypeProfitSharing

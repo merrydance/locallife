@@ -554,16 +554,6 @@ func (caa *ClaimAutoApproval) CreateClaimWithDecisionAndEvidence(
 	caa.applyPersistedDecisionSideEffects(ctx, userID, result.BehaviorDecision, decision)
 	caa.executePersistedBehaviorActions(ctx, result)
 
-	// 餐损赔付后的事后处理
-	if claimType == ClaimTypeDamage && decision.NeedsReview {
-		// 发现可疑模式，异步进行信用分处理
-		// 使用Worker任务异步执行（如果未配置worker则降级为goroutine）
-		// 接入方法：在API层通过caa.SetTaskDistributor(server.taskDistributor)设置
-		// 然后通过worker.NewHandleSuspiciousPatternTask分发任务
-		// 当前降级：直接用goroutine（生产环境建议使用Worker）
-		go caa.handleSuspiciousPattern(ctx, userID, claim.ID, claimType, decision.LookbackData)
-	}
-
 	return &claim, nil
 }
 
@@ -689,54 +679,6 @@ func persistedBehaviorDecisionReason(behaviorDecision db.BehaviorDecision) strin
 		return behaviorDecision.RestrictionReason.String
 	}
 	return ""
-}
-
-// handleSuspiciousPattern 处理可疑的餐损索赔模式
-// 已经赔付，但根据信用分和模式进行事后处罚
-func (caa *ClaimAutoApproval) handleSuspiciousPattern(
-	ctx context.Context,
-	userID int64,
-	claimID int64,
-	claimType string,
-	lookback *LookbackResult,
-) {
-	_ = claimType
-	// 根据索赔频率和模式发出警告
-	var reason string
-	var warningMessage string
-
-	if lookback != nil && lookback.ClaimsFound >= 5 {
-		// 高频索赔（5次以上）
-		reason = "高频索赔处罚"
-		warningMessage = fmt.Sprintf("您最近%s内已索赔%d次，被系统判定为恶意索赔风险",
-			lookback.Period, lookback.ClaimsFound)
-	} else if lookback != nil && lookback.ClaimsFound >= 3 {
-		// 频繁索赔（3次以上）
-		reason = "频繁索赔警告"
-		warningMessage = fmt.Sprintf("您最近%s内5笔订单中已索赔%d次，系统判定有恶意索赔风险。继续索赔将影响您的账号使用。",
-			lookback.Period, lookback.ClaimsFound)
-	} else {
-		// 可疑但次数不多，轻微扣分
-		reason = "可疑模式提醒"
-		warningMessage = "系统检测到可疑索赔模式，请注意"
-	}
-
-	// 发送用户通知。
-	// 当前阶段只要求把通知写入通知中心；用户在小程序内可通过通知列表和未读计数接口获取。
-	// 普通用户不要求在本链路上接 WebSocket，也不要求额外补微信订阅消息离线触达。
-	if caa.notificationDistributor != nil {
-		_ = caa.notificationDistributor.SendUserNotification(
-			ctx,
-			userID,
-			"system",       // notificationType
-			"索赔风险提醒",       // title
-			warningMessage, // content
-			"claim",        // relatedType
-			claimID,        // relatedID
-		)
-	}
-
-	_ = reason
 }
 
 // sendNotification 发送商户/骑手 WebSocket 实时通知。

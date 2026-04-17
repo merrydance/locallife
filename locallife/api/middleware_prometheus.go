@@ -62,36 +62,12 @@ var (
 		[]string{"type"}, // rider, merchant, platform
 	)
 
-	// 业务指标
-	ordersCreatedTotal = promauto.NewCounter(
-		prometheus.CounterOpts{
-			Name: "orders_created_total",
-			Help: "Total number of orders created",
-		},
-	)
-
-	paymentsProcessedTotal = promauto.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "payments_processed_total",
-			Help: "Total number of payments processed",
-		},
-		[]string{"status"}, // success, failed
-	)
-
 	paymentCallbackFailuresTotal = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "payment_callback_failures_total",
 			Help: "Total number of payment callback failures",
 		},
 		[]string{"type", "reason"}, // payment/refund/ecommerce_refund/profit_sharing
-	)
-
-	alertsSentTotal = promauto.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "alerts_sent_total",
-			Help: "Total number of alerts sent",
-		},
-		[]string{"type", "level"},
 	)
 
 	wsMessagesTotal = promauto.NewCounterVec(
@@ -195,11 +171,6 @@ func MetricsHandler() gin.HandlerFunc {
 	}
 }
 
-// PrometheusHandler 返回 Prometheus 指标处理器（别名）
-func PrometheusHandler() gin.HandlerFunc {
-	return MetricsHandler()
-}
-
 // UpdateDBMetrics 更新数据库连接池指标（应该定期调用）
 func UpdateDBMetrics(active, idle int) {
 	dbConnectionsActive.Set(float64(active))
@@ -211,25 +182,6 @@ func UpdateWSMetrics(riders, merchants, platforms int) {
 	wsConnectionsTotal.WithLabelValues("rider").Set(float64(riders))
 	wsConnectionsTotal.WithLabelValues("merchant").Set(float64(merchants))
 	wsConnectionsTotal.WithLabelValues("platform").Set(float64(platforms))
-}
-
-// RecordOrderCreated 记录订单创建
-func RecordOrderCreated() {
-	ordersCreatedTotal.Inc()
-}
-
-// RecordPaymentProcessed 记录支付处理
-func RecordPaymentProcessed(success bool) {
-	status := "success"
-	if !success {
-		status = "failed"
-	}
-	paymentsProcessedTotal.WithLabelValues(status).Inc()
-}
-
-// RecordAlertSent 记录告警发送
-func RecordAlertSent(alertType, level string) {
-	alertsSentTotal.WithLabelValues(alertType, level).Inc()
 }
 
 // RecordWSMessage records WebSocket message delivery outcomes.

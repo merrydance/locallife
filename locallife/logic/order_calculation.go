@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"time"
 
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/maps"
@@ -58,6 +57,10 @@ type OrderCalculationResult struct {
 	TotalAmount         int64
 	Promotions          []OrderPromotion
 	Items               []OrderCalculationItem
+	SuggestedVoucher    *SuggestedVoucher
+	LadderPromotions    []LadderPromotion
+	VoucherTrials       []VoucherTrial
+	PaymentAssessment   PaymentAssessment
 }
 
 // CalculateOrderPreview computes order totals based on cart and delivery inputs.
@@ -140,6 +143,8 @@ func CalculateOrderPreview(
 
 	result.Items = items
 	result.Promotions = []OrderPromotion{}
+	result.LadderPromotions = []LadderPromotion{}
+	result.VoucherTrials = []VoucherTrial{}
 
 	if input.OrderType == "takeout" {
 		merchant, err := store.GetMerchant(ctx, input.MerchantID)
@@ -208,77 +213,58 @@ func CalculateOrderPreview(
 		}
 	}
 
-	discountRules, err := store.ListActiveDiscountRules(ctx, input.MerchantID)
-	if err == nil {
-		var bestDiscount db.DiscountRule
-		var bestFound bool
-		for _, rule := range discountRules {
-			if result.Subtotal >= rule.MinOrderAmount {
-				if !bestFound || rule.DiscountAmount > bestDiscount.DiscountAmount {
-					bestDiscount = rule
-					bestFound = true
-				}
-			}
-		}
-		if bestFound {
-			result.DiscountAmount = bestDiscount.DiscountAmount
-			result.Promotions = append(result.Promotions, OrderPromotion{
-				Type:   "discount",
-				Title:  fmt.Sprintf("满%d减%d", bestDiscount.MinOrderAmount/100, bestDiscount.DiscountAmount/100),
-				Amount: bestDiscount.DiscountAmount,
-			})
-		}
-	}
-
 	if input.VoucherCode != "" {
 		return result, NewRequestError(http.StatusBadRequest, errors.New("请使用 user_voucher_id 进行金额预览"))
 	}
 	if input.UserVoucherID != nil {
-		voucher, err := store.GetUserVoucher(ctx, *input.UserVoucherID)
+		_, err := ValidateVoucher(ctx, store, VoucherValidationInput{
+			UserID:        input.UserID,
+			MerchantID:    input.MerchantID,
+			OrderType:     input.OrderType,
+			Subtotal:      result.Subtotal,
+			UserVoucherID: input.UserVoucherID,
+		})
 		if err != nil {
-			if errors.Is(err, db.ErrRecordNotFound) {
-				return result, NewRequestError(http.StatusNotFound, errors.New("优惠券不存在"))
-			}
 			return result, err
 		}
-		if voucher.UserID != input.UserID {
-			return result, NewRequestError(http.StatusForbidden, errors.New("优惠券不属于您"))
+		if resolvedDiscount, getErr := ResolveMerchantDiscount(ctx, store, OrderContext{
+			MerchantID: input.MerchantID,
+			OrderType:  input.OrderType,
+			Subtotal:   result.Subtotal,
+		}); getErr == nil && !resolvedDiscount.AllowWithVoucher {
+			return result, NewRequestError(http.StatusBadRequest, errors.New("当前活动不可与所选优惠券叠加"))
 		}
-		if voucher.Status != "unused" {
-			return result, NewRequestError(http.StatusBadRequest, errors.New("优惠券已使用或已过期"))
-		}
-		if time.Now().After(voucher.ExpiresAt) {
-			return result, NewRequestError(http.StatusBadRequest, errors.New("优惠券已过期"))
-		}
-		if voucher.MerchantID != input.MerchantID {
-			return result, NewRequestError(http.StatusBadRequest, errors.New("该优惠券不能在此商户使用"))
-		}
-		if result.Subtotal < voucher.MinOrderAmount {
-			return result, NewRequestError(http.StatusBadRequest, fmt.Errorf("未达到最低消费 %d 元", voucher.MinOrderAmount/100))
-		}
-
-		orderTypeAllowed := false
-		for _, allowed := range voucher.AllowedOrderTypes {
-			if allowed == input.OrderType {
-				orderTypeAllowed = true
-				break
-			}
-		}
-		if !orderTypeAllowed {
-			return result, NewRequestError(http.StatusBadRequest, errors.New("该代金券不适用于此订单类型"))
-		}
-
-		result.DiscountAmount += voucher.Amount
-		result.Promotions = append(result.Promotions, OrderPromotion{
-			Type:   "voucher",
-			Title:  voucher.Name,
-			Amount: voucher.Amount,
-		})
 	}
 
-	result.TotalAmount = result.Subtotal + result.DeliveryFee - result.DeliveryFeeDiscount - result.DiscountAmount
-	if result.TotalAmount < 0 {
-		result.TotalAmount = 0
+	engine := NewPromotionEngine(store)
+	calcResult, err := engine.CalculateFinalPrice(ctx, OrderContext{
+		MerchantID:          input.MerchantID,
+		UserID:              input.UserID,
+		OrderType:           input.OrderType,
+		Subtotal:            result.Subtotal,
+		VoucherID:           input.UserVoucherID,
+		DeliveryFee:         result.DeliveryFee,
+		DeliveryFeeDiscount: result.DeliveryFeeDiscount,
+	})
+	if err != nil {
+		return result, err
+	}
+
+	result.DeliveryFee = calcResult.DeliveryFee
+	result.DeliveryFeeDiscount = calcResult.DeliveryFeeDiscount
+	result.DiscountAmount = calcResult.MerchantDiscount + calcResult.VoucherDiscount
+	result.TotalAmount = calcResult.TotalAmount
+	result.SuggestedVoucher = calcResult.SuggestedVoucher
+	result.LadderPromotions = calcResult.LadderPromotions
+	result.VoucherTrials = calcResult.VoucherTrials
+	result.PaymentAssessment = calcResult.PaymentAssessment
+	result.Promotions = make([]OrderPromotion, 0, len(calcResult.AppliedPromotions))
+	for _, promo := range calcResult.AppliedPromotions {
+		result.Promotions = append(result.Promotions, OrderPromotion{
+			Type:   promo.Type,
+			Title:  promo.Title,
+			Amount: promo.Amount,
+		})
 	}
 
 	return result, nil

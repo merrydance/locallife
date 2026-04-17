@@ -21,10 +21,3 @@ func TestRefundTypeForPaymentOrder(t *testing.T) {
 	require.Equal(t, paymentTypeMiniProgram, refundTypeForPaymentOrder(db.PaymentOrder{PaymentType: paymentTypeNative}))
 	require.Equal(t, paymentTypeMiniProgram, refundTypeForPaymentOrder(db.PaymentOrder{PaymentType: paymentTypeMiniProgram}))
 }
-
-func TestPaymentOrderRequiresProfitSharing(t *testing.T) {
-	t.Parallel()
-
-	require.True(t, paymentOrderRequiresProfitSharing(db.PaymentOrder{PaymentChannel: db.PaymentChannelEcommerce, RequiresProfitSharing: true}))
-	require.False(t, paymentOrderRequiresProfitSharing(db.PaymentOrder{PaymentChannel: db.PaymentChannelEcommerce, RequiresProfitSharing: false}))
-}

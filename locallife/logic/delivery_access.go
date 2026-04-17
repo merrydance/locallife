@@ -8,12 +8,6 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 )
 
-// DeliveryOrderAccessInput defines access parameters by order.
-type DeliveryOrderAccessInput struct {
-	UserID  int64
-	OrderID int64
-}
-
 // DeliveryOrderViewerInput defines viewer access parameters by order.
 type DeliveryOrderViewerInput struct {
 	UserID           int64
@@ -34,30 +28,6 @@ type DeliveryViewerResult struct {
 	Order        db.Order
 	IsOrderOwner bool
 	IsRider      bool
-}
-
-// GetDeliveryForOrderOwner loads delivery info for an order owner.
-func GetDeliveryForOrderOwner(ctx context.Context, store db.Store, input DeliveryOrderAccessInput) (db.Delivery, error) {
-	order, err := store.GetOrder(ctx, input.OrderID)
-	if err != nil {
-		if errors.Is(err, db.ErrRecordNotFound) {
-			return db.Delivery{}, NewRequestError(http.StatusNotFound, errors.New("订单不存在"))
-		}
-		return db.Delivery{}, err
-	}
-	if order.UserID != input.UserID {
-		return db.Delivery{}, NewRequestError(http.StatusForbidden, errors.New("无权查看此订单配送信息"))
-	}
-
-	delivery, err := store.GetDeliveryByOrderID(ctx, input.OrderID)
-	if err != nil {
-		if errors.Is(err, db.ErrRecordNotFound) {
-			return db.Delivery{}, NewRequestError(http.StatusNotFound, errors.New("配送单不存在"))
-		}
-		return db.Delivery{}, err
-	}
-
-	return delivery, nil
 }
 
 // GetDeliveryForViewerByOrder loads delivery info for an order owner or the assigned rider.

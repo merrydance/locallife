@@ -41,10 +41,6 @@ type MerchantMembershipRechargeResult struct {
 
 const membershipRechargeIdempotencyPrefix = "[merchant_recharge_idempotency:"
 
-func BuildMembershipRechargeIdempotencyPrefix(idempotencyKey string) string {
-	return membershipRechargeIdempotencyPrefix + strings.TrimSpace(idempotencyKey) + "]"
-}
-
 func StripMembershipTransactionSystemNotes(notes string) string {
 	trimmed := strings.TrimSpace(notes)
 	if !strings.HasPrefix(trimmed, membershipRechargeIdempotencyPrefix) {

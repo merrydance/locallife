@@ -353,24 +353,6 @@ func ParseApplymentIDCardValidPeriod(validDate string) (string, string) {
 	return begin, end
 }
 
-func ParseApplymentOperatorIDCardValidPeriod(validStart, validEnd string) (string, string) {
-	start := normalizeApplymentDate(validStart)
-	end := normalizeApplymentDate(validEnd)
-	if start != "" && end != "" {
-		return start, end
-	}
-
-	if begin, rangedEnd := parseApplymentDateRange(validEnd); begin != "" || rangedEnd != "" {
-		return begin, rangedEnd
-	}
-
-	if begin, rangedEnd := parseApplymentDateRange(validStart); begin != "" || rangedEnd != "" {
-		return begin, rangedEnd
-	}
-
-	return start, end
-}
-
 func BuildApplymentBusinessLicenseInfo(copyMediaID, businessLicenseNumber, merchantName, legalPerson, fallbackAddress string, ocr ApplymentBusinessLicenseOCRInput) *wechatcontracts.ApplymentBusinessLicenseInfo {
 	if copyMediaID == "" {
 		return nil
@@ -408,16 +390,6 @@ func BuildApplymentBusinessTime(validPeriod string) string {
 	}
 
 	return fmt.Sprintf("[\"%s\",\"%s\"]", start, end)
-}
-
-func BuildApplymentStoreURL(webBaseURL, externalBaseURL string) string {
-	if base := strings.TrimSpace(webBaseURL); base != "" {
-		return strings.TrimRight(base, "/")
-	}
-	if base := strings.TrimSpace(externalBaseURL); base != "" {
-		return strings.TrimRight(base, "/")
-	}
-	return ""
 }
 
 func ResolveApplymentOrganizationType(businessLicenseNumber, licenseType, subjectName, defaultLicensedType string) string {

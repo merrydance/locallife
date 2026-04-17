@@ -295,3 +295,40 @@ func TestCalculateFinalPrice_MembershipBlockedByPromotionRule(t *testing.T) {
 	require.Equal(t, int64(0), result.PaymentAssessment.BonusPart)
 	require.Equal(t, "会员余额不可与当前营销优惠叠加", result.PaymentAssessment.PaymentHint)
 }
+
+func TestCalculateFinalPrice_SelectsBestMatchingRuleWithinDefaultGroup(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 2, 12, 12, 0, 0, 0, time.UTC)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		ListActiveDiscountRules(gomock.Any(), int64(10)).
+		Times(1).
+		Return([]db.DiscountRule{
+			{Name: "满20减2", MinOrderAmount: 2000, DiscountAmount: 200, ValidFrom: now.Add(-time.Hour), ValidUntil: now.Add(time.Hour)},
+			{Name: "满50减8", MinOrderAmount: 5000, DiscountAmount: 800, ValidFrom: now.Add(-time.Hour), ValidUntil: now.Add(time.Hour)},
+		}, nil)
+	store.EXPECT().
+		ListUserAvailableVouchersForMerchant(gomock.Any(), db.ListUserAvailableVouchersForMerchantParams{
+			UserID:         20,
+			MerchantID:     10,
+			MinOrderAmount: 3000,
+		}).
+		Times(1).
+		Return([]db.ListUserAvailableVouchersForMerchantRow{}, nil)
+	store.EXPECT().
+		GetMembershipByMerchantAndUser(gomock.Any(), db.GetMembershipByMerchantAndUserParams{MerchantID: 10, UserID: 20}).
+		Times(1).
+		Return(db.MerchantMembership{}, db.ErrRecordNotFound)
+
+	engine := NewPromotionEngine(store)
+	engine.now = func() time.Time { return now }
+
+	result, err := engine.CalculateFinalPrice(ctx, OrderContext{MerchantID: 10, UserID: 20, OrderType: "takeout", Subtotal: 3000})
+	require.NoError(t, err)
+	require.Equal(t, int64(200), result.MerchantDiscount)
+	require.Equal(t, int64(2800), result.TotalAmount)
+}

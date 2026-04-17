@@ -180,8 +180,14 @@ func (s *OrderService) CreateOrder(ctx context.Context, input CreateOrderCommand
 	}
 
 	discountAmount := int64(0)
-	if bestAmount, getErr := GetBestDiscountAmount(ctx, s.store, input.MerchantID, subtotal); getErr == nil {
-		discountAmount = bestAmount
+	merchantDiscountResult := MerchantDiscountResult{AllowWithVoucher: true}
+	if resolvedDiscount, getErr := ResolveMerchantDiscount(ctx, s.store, OrderContext{
+		MerchantID: input.MerchantID,
+		OrderType:  input.OrderType,
+		Subtotal:   subtotal,
+	}); getErr == nil {
+		merchantDiscountResult = resolvedDiscount
+		discountAmount = resolvedDiscount.DiscountAmount
 	}
 
 	var voucherAmount int64
@@ -196,6 +202,9 @@ func (s *OrderService) CreateOrder(ctx context.Context, input CreateOrderCommand
 		})
 		if validateErr != nil {
 			return CreateOrderCommandResult{}, validateErr
+		}
+		if !merchantDiscountResult.AllowWithVoucher {
+			return CreateOrderCommandResult{}, NewRequestError(http.StatusBadRequest, errors.New("当前活动不可与所选优惠券叠加"))
 		}
 		userVoucherID = voucherResult.UserVoucherID
 		voucherAmount = voucherResult.VoucherAmount
