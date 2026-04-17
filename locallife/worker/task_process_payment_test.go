@@ -1021,7 +1021,7 @@ func TestProcessTaskProfitSharing_UsesServiceProviderNameForPlatformReceiver(t *
 	require.NoError(t, err)
 }
 
-func TestProcessTaskProfitSharing_DineInMarksFinishedWithoutSharing(t *testing.T) {
+func TestProcessTaskProfitSharing_DineInMarksFinishedLocallyWithoutSharing(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -1079,15 +1079,9 @@ func TestProcessTaskProfitSharing_DineInMarksFinishedWithoutSharing(t *testing.T
 			require.Equal(t, paymentOrder.Amount, arg.MerchantAmount)
 			return db.ProfitSharingOrder{ID: 3003, OutOrderNo: arg.OutOrderNo}, nil
 		})
-	ecommerceClient.EXPECT().
-		FinishProfitSharing(gomock.Any(), "sub_mch_17", paymentOrder.TransactionID.String, gomock.Any(), "无需继续分账，解冻剩余资金").
-		Return(&wechatcontracts.ProfitSharingResponse{OrderID: "ps_finish_3003", Status: wechatcontracts.ProfitSharingStatusProcessing}, nil)
 	store.EXPECT().
-		UpdateProfitSharingOrderToProcessing(gomock.Any(), db.UpdateProfitSharingOrderToProcessingParams{
-			ID:             3003,
-			SharingOrderID: pgtype.Text{String: "ps_finish_3003", Valid: true},
-		}).
-		Return(db.ProfitSharingOrder{ID: 3003, Status: "processing"}, nil)
+		UpdateProfitSharingOrderToFinished(gomock.Any(), int64(3003)).
+		Return(db.ProfitSharingOrder{ID: 3003, Status: "finished"}, nil)
 
 	processor := worker.NewTestTaskProcessor(store, nil, nil, ecommerceClient)
 	payloadBytes, err := json.Marshal(worker.ProfitSharingPayload{

@@ -28,13 +28,14 @@ func TestProcessTaskInitiateRefund_ProfitSharingReturnAmbiguousErrorFallsBackToP
 	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
 
 	paymentOrder := db.PaymentOrder{
-		ID:           11,
-		OutTradeNo:   "PAY_11",
-		Amount:       1000,
-		Status:       "paid",
-		BusinessType: "takeout",
-		PaymentType:  "profit_sharing",
-		OrderID:      pgtype.Int8{Int64: 22, Valid: true},
+		ID:             11,
+		OutTradeNo:     "PAY_11",
+		Amount:         1000,
+		Status:         "paid",
+		BusinessType:   "takeout",
+		PaymentType:    "profit_sharing",
+		PaymentChannel: db.PaymentChannelEcommerce,
+		OrderID:        pgtype.Int8{Int64: 22, Valid: true},
 	}
 	order := db.Order{ID: 22, MerchantID: 33}
 	refundOrder := db.RefundOrder{ID: 44, PaymentOrderID: paymentOrder.ID, Status: "pending", OutRefundNo: "RF11_22"}
@@ -124,13 +125,14 @@ func TestProcessTaskInitiateRefund_BlocksPersonalProfitSharingReturn(t *testing.
 	store := mockdb.NewMockStore(ctrl)
 	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
 	paymentOrder := db.PaymentOrder{
-		ID:           21,
-		OutTradeNo:   "PAY_21",
-		Amount:       3200,
-		Status:       "paid",
-		BusinessType: "takeout",
-		PaymentType:  "profit_sharing",
-		OrderID:      pgtype.Int8{Int64: 31, Valid: true},
+		ID:             21,
+		OutTradeNo:     "PAY_21",
+		Amount:         3200,
+		Status:         "paid",
+		BusinessType:   "takeout",
+		PaymentType:    "profit_sharing",
+		PaymentChannel: db.PaymentChannelEcommerce,
+		OrderID:        pgtype.Int8{Int64: 31, Valid: true},
 	}
 	order := db.Order{ID: 31, MerchantID: 41}
 	refundOrder := db.RefundOrder{ID: 51, PaymentOrderID: paymentOrder.ID, Status: "pending", OutRefundNo: "RF21_31"}
@@ -178,13 +180,14 @@ func TestProcessTaskInitiateRefund_BlocksPersonalOperatorProfitSharingReturn(t *
 	store := mockdb.NewMockStore(ctrl)
 	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
 	paymentOrder := db.PaymentOrder{
-		ID:           22,
-		OutTradeNo:   "PAY_22",
-		Amount:       4200,
-		Status:       "paid",
-		BusinessType: "takeout",
-		PaymentType:  "profit_sharing",
-		OrderID:      pgtype.Int8{Int64: 32, Valid: true},
+		ID:             22,
+		OutTradeNo:     "PAY_22",
+		Amount:         4200,
+		Status:         "paid",
+		BusinessType:   "takeout",
+		PaymentType:    "profit_sharing",
+		PaymentChannel: db.PaymentChannelEcommerce,
+		OrderID:        pgtype.Int8{Int64: 32, Valid: true},
 	}
 	order := db.Order{ID: 32, MerchantID: 42}
 	refundOrder := db.RefundOrder{ID: 52, PaymentOrderID: paymentOrder.ID, Status: "pending", OutRefundNo: "RF22_32"}

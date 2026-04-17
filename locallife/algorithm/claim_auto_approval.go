@@ -25,12 +25,6 @@ type NotificationDistributor interface {
 	SendUserNotification(ctx context.Context, userID int64, notificationType, title, content string, relatedType string, relatedID int64) error
 }
 
-// ClaimPayoutDistributor 分发正式 payout action。
-// algorithm 层只负责触发持久化 payout action 的执行；具体入队和重试由下游实现负责。
-type ClaimPayoutDistributor interface {
-	EnqueueClaimPayoutAction(ctx context.Context, actionID int64) error
-}
-
 // ClaimAutoApproval 索赔自动审核器
 // 设计理念：
 // 1. 所有索赔都赔付，不存在不赔的情况
@@ -40,7 +34,6 @@ type ClaimAutoApproval struct {
 	store                   db.Store
 	lookbackChecker         *LookbackChecker
 	notificationDistributor NotificationDistributor // 可选。用于把用户通知动作分发到通知中心链路。
-	payoutDistributor       ClaimPayoutDistributor  // 可选。用于把 payout action 分发到异步执行链路。
 	wsHub                   WebSocketHub            // 可选。仅用于商户/骑手的实时 WebSocket fallback。
 }
 
@@ -112,11 +105,6 @@ func NewClaimAutoApproval(store db.Store, wsHub WebSocketHub) *ClaimAutoApproval
 // 未设置时，用户侧 notify action 不会在 algorithm 层直接送达，但通知中心链路可由上层自行接入。
 func (caa *ClaimAutoApproval) SetNotificationDistributor(distributor NotificationDistributor) {
 	caa.notificationDistributor = distributor
-}
-
-// SetClaimPayoutDistributor 设置 payout action 分发器（可选）。
-func (caa *ClaimAutoApproval) SetClaimPayoutDistributor(distributor ClaimPayoutDistributor) {
-	caa.payoutDistributor = distributor
 }
 
 // EvaluateClaim 评估异常订单索赔申请。
@@ -595,28 +583,11 @@ func (caa *ClaimAutoApproval) applyPersistedDecisionSideEffects(ctx context.Cont
 }
 
 func (caa *ClaimAutoApproval) executePersistedBehaviorActions(ctx context.Context, result db.CreateClaimWithBehaviorTxResult) {
-	if result.PayoutAction != nil {
-		caa.executePayoutAction(ctx, *result.PayoutAction)
-	}
 	if result.RestrictionAction != nil {
 		caa.executeRestrictionAction(ctx, *result.RestrictionAction)
 	}
 	if result.NotificationAction != nil {
 		caa.executeNotificationAction(ctx, *result.NotificationAction)
-	}
-}
-
-func (caa *ClaimAutoApproval) executePayoutAction(ctx context.Context, action db.BehaviorAction) {
-	if action.ID == 0 {
-		log.Warn().Msg("skip persisted payout action without action id")
-		return
-	}
-	if caa.payoutDistributor == nil {
-		log.Error().Int64("behavior_action_id", action.ID).Msg("claim payout distributor unavailable during persisted payout execution")
-		return
-	}
-	if err := caa.payoutDistributor.EnqueueClaimPayoutAction(ctx, action.ID); err != nil {
-		log.Error().Err(err).Int64("behavior_action_id", action.ID).Msg("dispatch persisted payout action failed")
 	}
 }
 

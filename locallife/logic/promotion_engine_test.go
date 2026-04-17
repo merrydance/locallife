@@ -173,8 +173,8 @@ func TestCalculateFinalPrice_MembershipSplitWithCap(t *testing.T) {
 		Times(1).
 		Return(db.MerchantMembershipSetting{
 			MerchantID:          10,
-			BalanceUsableScenes: []string{"takeout"},
-			BonusUsableScenes:   []string{"takeout"},
+			BalanceUsableScenes: []string{"takeaway"},
+			BonusUsableScenes:   []string{"takeaway"},
 			AllowWithVoucher:    true,
 			AllowWithDiscount:   true,
 			MaxDeductionPercent: 50,
@@ -189,7 +189,7 @@ func TestCalculateFinalPrice_MembershipSplitWithCap(t *testing.T) {
 		Return([]db.ListUserAvailableVouchersForMerchantRow{}, nil)
 
 	engine := NewPromotionEngine(store)
-	result, err := engine.CalculateFinalPrice(ctx, OrderContext{MerchantID: 10, UserID: 20, OrderType: "takeout", Subtotal: 2000})
+	result, err := engine.CalculateFinalPrice(ctx, OrderContext{MerchantID: 10, UserID: 20, OrderType: "takeaway", Subtotal: 2000})
 	require.NoError(t, err)
 	require.Equal(t, int64(600), result.PaymentAssessment.PrincipalPart)
 	require.Equal(t, int64(400), result.PaymentAssessment.BonusPart)
@@ -215,7 +215,7 @@ func TestCalculateFinalPrice_MembershipBonusSceneBlocked(t *testing.T) {
 		Times(1).
 		Return(db.MerchantMembershipSetting{
 			MerchantID:          10,
-			BalanceUsableScenes: []string{"takeout"},
+			BalanceUsableScenes: []string{"takeaway"},
 			BonusUsableScenes:   []string{"dine_in"},
 			AllowWithVoucher:    true,
 			AllowWithDiscount:   true,
@@ -231,7 +231,7 @@ func TestCalculateFinalPrice_MembershipBonusSceneBlocked(t *testing.T) {
 		Return([]db.ListUserAvailableVouchersForMerchantRow{}, nil)
 
 	engine := NewPromotionEngine(store)
-	result, err := engine.CalculateFinalPrice(ctx, OrderContext{MerchantID: 10, UserID: 20, OrderType: "takeout", Subtotal: 1000})
+	result, err := engine.CalculateFinalPrice(ctx, OrderContext{MerchantID: 10, UserID: 20, OrderType: "takeaway", Subtotal: 1000})
 	require.NoError(t, err)
 	require.Equal(t, int64(500), result.PaymentAssessment.PrincipalPart)
 	require.Equal(t, int64(0), result.PaymentAssessment.BonusPart)
@@ -278,8 +278,8 @@ func TestCalculateFinalPrice_MembershipBlockedByPromotionRule(t *testing.T) {
 		Times(1).
 		Return(db.MerchantMembershipSetting{
 			MerchantID:          10,
-			BalanceUsableScenes: []string{"takeout"},
-			BonusUsableScenes:   []string{"takeout"},
+			BalanceUsableScenes: []string{"takeaway"},
+			BonusUsableScenes:   []string{"takeaway"},
 			AllowWithVoucher:    true,
 			AllowWithDiscount:   true,
 			MaxDeductionPercent: 100,
@@ -288,7 +288,7 @@ func TestCalculateFinalPrice_MembershipBlockedByPromotionRule(t *testing.T) {
 	engine := NewPromotionEngine(store)
 	engine.now = func() time.Time { return now }
 
-	result, err := engine.CalculateFinalPrice(ctx, OrderContext{MerchantID: 10, UserID: 20, OrderType: "takeout", Subtotal: 1500})
+	result, err := engine.CalculateFinalPrice(ctx, OrderContext{MerchantID: 10, UserID: 20, OrderType: "takeaway", Subtotal: 1500})
 	require.NoError(t, err)
 	require.Equal(t, int64(200), result.MerchantDiscount)
 	require.Equal(t, int64(0), result.PaymentAssessment.PrincipalPart)

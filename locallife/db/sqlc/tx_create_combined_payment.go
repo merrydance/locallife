@@ -12,6 +12,7 @@ import (
 )
 
 var ErrOrderPendingPaymentConflict = errors.New("order already has a pending payment order")
+var ErrCombinedPaymentUnsupportedOrderType = errors.New("order type does not support combined payment")
 
 // CreateCombinedPaymentTxParams 包含创建合单支付事务的参数
 type CreateCombinedPaymentTxParams struct {
@@ -72,6 +73,9 @@ func (store *SQLStore) CreateCombinedPaymentTx(ctx context.Context, arg CreateCo
 			}
 			if order.Status != "pending" {
 				return fmt.Errorf("order %d status is %s, expect pending", orderID, order.Status)
+			}
+			if order.OrderType == "takeaway" {
+				return fmt.Errorf("order %d type %s: %w", orderID, order.OrderType, ErrCombinedPaymentUnsupportedOrderType)
 			}
 
 			payAmount, err := OrderRemainingPayableAmount(order)
@@ -144,15 +148,17 @@ func (store *SQLStore) CreateCombinedPaymentTx(ctx context.Context, arg CreateCo
 			}
 
 			po, err := q.CreatePaymentOrder(ctx, CreatePaymentOrderParams{
-				OrderID:       pgtype.Int8{Int64: info.Order.ID, Valid: true},
-				ReservationID: info.Order.ReservationID,
-				UserID:        arg.UserID,
-				PaymentType:   "profit_sharing", // 合单支付走收付通渠道，子单必须标记为 profit_sharing
-				BusinessType:  "order",
-				Amount:        info.PayAmount,
-				OutTradeNo:    outTradeNo,
-				ExpiresAt:     pgtype.Timestamptz{Time: arg.ExpiresAt, Valid: true},
-				Attach:        pgtype.Text{String: fmt.Sprintf("合单:%s", arg.CombineOutTradeNo), Valid: true},
+				OrderID:               pgtype.Int8{Int64: info.Order.ID, Valid: true},
+				ReservationID:         info.Order.ReservationID,
+				UserID:                arg.UserID,
+				PaymentType:           "miniprogram",
+				PaymentChannel:        PaymentChannelEcommerce,
+				RequiresProfitSharing: OrderRequiresProfitSharing(info.Order),
+				BusinessType:          "order",
+				Amount:                info.PayAmount,
+				OutTradeNo:            outTradeNo,
+				ExpiresAt:             pgtype.Timestamptz{Time: arg.ExpiresAt, Valid: true},
+				Attach:                pgtype.Text{String: fmt.Sprintf("合单:%s", arg.CombineOutTradeNo), Valid: true},
 			})
 			if err != nil {
 				return fmt.Errorf("create payment order for order %d: %w", info.Order.ID, err)

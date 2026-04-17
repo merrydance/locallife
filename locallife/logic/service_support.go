@@ -97,7 +97,7 @@ func (DefaultOrderPolicy) ValidateCreateInput(input CreateOrderCommandInput) err
 }
 
 type DefaultPaymentFacade struct {
-	paymentClient   wechat.PaymentClientInterface
+	paymentClient   wechat.DirectPaymentClientInterface
 	ecommerceClient wechat.EcommerceClientInterface
 	paymentService  *PaymentOrderService
 	ledgerService   *PaymentLedgerService
@@ -106,13 +106,13 @@ type DefaultPaymentFacade struct {
 
 func NewDefaultPaymentFacade(
 	store db.Store,
-	paymentClient wechat.PaymentClientInterface,
+	paymentClient wechat.DirectPaymentClientInterface,
 	ecommerceClient wechat.EcommerceClientInterface,
 ) PaymentFacade {
 	return &DefaultPaymentFacade{
 		paymentClient:   paymentClient,
 		ecommerceClient: ecommerceClient,
-		paymentService:  NewPaymentOrderService(store, paymentClient, ecommerceClient),
+		paymentService:  NewPaymentOrderService(store, ecommerceClient),
 		ledgerService:   NewPaymentLedgerService(store),
 		combinedService: NewCombinedPaymentService(store, ecommerceClient),
 	}

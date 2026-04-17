@@ -4,13 +4,25 @@ INSERT INTO payment_orders (
     reservation_id,
     user_id,
     payment_type,
+    payment_channel,
+    requires_profit_sharing,
     business_type,
     amount,
     out_trade_no,
     expires_at,
     attach
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9
+    sqlc.arg(order_id),
+    sqlc.arg(reservation_id),
+    sqlc.arg(user_id),
+    sqlc.arg(payment_type),
+    sqlc.arg(payment_channel),
+    sqlc.arg(requires_profit_sharing),
+    sqlc.arg(business_type),
+    sqlc.arg(amount),
+    sqlc.arg(out_trade_no),
+    sqlc.arg(expires_at),
+    sqlc.arg(attach)
 ) RETURNING *;
 
 -- name: GetPaymentOrder :one
@@ -249,7 +261,7 @@ RETURNING *;
 -- 获取指定日期范围内所有小程序直连支付订单（用于每日对账）
 SELECT id, out_trade_no, transaction_id, amount, status
 FROM payment_orders
-WHERE payment_type = 'miniprogram'
+WHERE payment_channel = 'direct'
   AND status IN ('paid', 'refunded')
   AND paid_at >= $1
   AND paid_at < $2;

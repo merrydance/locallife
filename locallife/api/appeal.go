@@ -1717,7 +1717,7 @@ func (server *Server) reviewAppeal(ctx *gin.Context) {
 	if req.Status == "approved" && req.CompensationAmount != nil {
 		compensationAmount = pgtype.Int8{Int64: *req.CompensationAmount, Valid: true}
 	}
-	if req.Status == "approved" && compensationAmount.Valid && compensationAmount.Int64 > 0 && server.paymentClient == nil {
+	if req.Status == "approved" && compensationAmount.Valid && compensationAmount.Int64 > 0 && server.transferClient == nil {
 		ctx.JSON(http.StatusServiceUnavailable, errorResponse(ErrAppealCompensationUnavailable))
 		return
 	}
@@ -1779,13 +1779,17 @@ func (server *Server) reviewAppeal(ctx *gin.Context) {
 
 	if server.taskDistributor == nil {
 		if inlineErr := server.processAppealResultInline(ctx, taskPayload); inlineErr != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, inlineErr))
+			if !writeLogicRequestError(ctx, inlineErr) {
+				ctx.JSON(http.StatusInternalServerError, internalError(ctx, inlineErr))
+			}
 			return
 		}
 	} else {
 		if err := server.taskDistributor.DistributeTaskProcessAppealResult(ctx, taskPayload); err != nil {
 			if inlineErr := server.processAppealResultInline(ctx, taskPayload); inlineErr != nil {
-				ctx.JSON(http.StatusInternalServerError, internalError(ctx, inlineErr))
+				if !writeLogicRequestError(ctx, inlineErr) {
+					ctx.JSON(http.StatusInternalServerError, internalError(ctx, inlineErr))
+				}
 				return
 			}
 		}
@@ -1801,9 +1805,10 @@ func (server *Server) processAppealResultInline(ctx *gin.Context, payload *worke
 			return err
 		}
 		if payload.CompensationActionID > 0 {
-			if err := worker.ExecuteClaimPayoutAction(ctx, server.store, server.paymentClient, payload.CompensationActionID); err != nil {
-				log.Error().Err(err).Int64("appeal_id", payload.AppealID).Int64("behavior_action_id", payload.CompensationActionID).Msg("failed to execute appeal compensation action inline")
-				return err
+			if err := worker.ExecuteClaimPayoutAction(ctx, server.store, server.transferClient, payload.CompensationActionID); err != nil {
+				mappedErr := logic.MapClaimPayoutTransferExecutionError(err)
+				log.Error().Err(logic.LoggableError(mappedErr)).Int64("appeal_id", payload.AppealID).Int64("behavior_action_id", payload.CompensationActionID).Msg("failed to execute appeal compensation action inline")
+				return mappedErr
 			}
 		}
 	case "rejected":

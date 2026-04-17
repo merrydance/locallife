@@ -213,7 +213,7 @@ JOIN payment_orders p ON p.id = r.payment_order_id
 WHERE r.status = 'success'
   AND r.refunded_at >= $1
   AND r.refunded_at < $2
-  AND p.payment_type = 'profit_sharing'
+    AND p.payment_channel = 'ecommerce'
 `
 
 type ListEcommerceRefundOrdersForReconciliationParams struct {
@@ -229,7 +229,7 @@ type ListEcommerceRefundOrdersForReconciliationRow struct {
 	Status       string      `json:"status"`
 }
 
-// 获取指定日期范围内收付通退款成功记录（payment_type='profit_sharing'）
+// 获取指定日期范围内收付通退款成功记录（payment_channel='ecommerce'）
 // 对应微信 /v3/ecommerce/refunds/apply 产生的退款账单
 func (q *Queries) ListEcommerceRefundOrdersForReconciliation(ctx context.Context, arg ListEcommerceRefundOrdersForReconciliationParams) ([]ListEcommerceRefundOrdersForReconciliationRow, error) {
 	rows, err := q.db.Query(ctx, listEcommerceRefundOrdersForReconciliation, arg.RefundedAt, arg.RefundedAt_2)
@@ -414,7 +414,7 @@ JOIN payment_orders p ON p.id = r.payment_order_id
 WHERE r.status = 'success'
   AND r.refunded_at >= $1
   AND r.refunded_at < $2
-  AND p.payment_type != 'profit_sharing'
+    AND p.payment_channel = 'direct'
 `
 
 type ListRefundOrdersForReconciliationParams struct {
@@ -431,7 +431,7 @@ type ListRefundOrdersForReconciliationRow struct {
 }
 
 // 获取指定日期范围内直连支付（miniprogram/deposit等）成功退款订单（用于每日对账）
-// 通过 JOIN payment_orders 过滤 payment_type，排除收付通退款（已单独对账）
+// 通过 JOIN payment_orders 过滤 payment_channel，排除收付通退款（已单独对账）
 func (q *Queries) ListRefundOrdersForReconciliation(ctx context.Context, arg ListRefundOrdersForReconciliationParams) ([]ListRefundOrdersForReconciliationRow, error) {
 	rows, err := q.db.Query(ctx, listRefundOrdersForReconciliation, arg.RefundedAt, arg.RefundedAt_2)
 	if err != nil {

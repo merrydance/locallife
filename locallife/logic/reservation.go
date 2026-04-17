@@ -551,10 +551,7 @@ func CancelReservation(
 				return ReservationStatusUpdateResult{}, fmt.Errorf("get merchant payment config: %w", err)
 			}
 
-			refundType := paymentOrder.PaymentType
-			if refundType == paymentTypeNative {
-				refundType = paymentTypeMiniProgram
-			}
+			refundType := refundTypeForPaymentOrder(paymentOrder)
 
 			txResult, createErr := store.CreateRefundOrderTx(ctx, db.CreateRefundOrderTxParams{
 				PaymentOrderID: paymentOrder.ID,

@@ -30,14 +30,15 @@ func (p *testPublisher) Publish(ctx context.Context, channel string, payload []b
 
 func TestRefundOrderAlertExtra_IncludesCommonIdentifiers(t *testing.T) {
 	paymentOrder := db.PaymentOrder{
-		ID:            11,
-		OrderID:       pgtype.Int8{Int64: 22, Valid: true},
-		UserID:        33,
-		PaymentType:   "profit_sharing",
-		BusinessType:  "takeout_order",
-		Amount:        4567,
-		OutTradeNo:    "OT123",
-		TransactionID: pgtype.Text{String: "WX123", Valid: true},
+		ID:             11,
+		OrderID:        pgtype.Int8{Int64: 22, Valid: true},
+		UserID:         33,
+		PaymentType:    "profit_sharing",
+		PaymentChannel: db.PaymentChannelEcommerce,
+		BusinessType:   "takeout_order",
+		Amount:         4567,
+		OutTradeNo:     "OT123",
+		TransactionID:  pgtype.Text{String: "WX123", Valid: true},
 	}
 	refundOrder := db.RefundOrder{
 		ID:             44,
@@ -63,8 +64,9 @@ func TestRefundOrderAlertExtra_IncludesCommonIdentifiers(t *testing.T) {
 
 func TestAbnormalRefundActionExtra_ForEcommerceRefundIncludesAdminAction(t *testing.T) {
 	paymentOrder := db.PaymentOrder{
-		ID:          11,
-		PaymentType: "profit_sharing",
+		ID:             11,
+		PaymentType:    "profit_sharing",
+		PaymentChannel: db.PaymentChannelEcommerce,
 	}
 	refundOrder := db.RefundOrder{
 		ID:       44,
@@ -104,12 +106,13 @@ func TestProcessTaskRefundResult_AbnormalPublishesActionableAlertForEcommerceRef
 	processor.pubSubPublisher = publisher
 
 	paymentOrder := db.PaymentOrder{
-		ID:          11,
-		OrderID:     pgtype.Int8{Int64: 22, Valid: true},
-		UserID:      33,
-		PaymentType: "profit_sharing",
-		Amount:      4567,
-		OutTradeNo:  "OT123",
+		ID:             11,
+		OrderID:        pgtype.Int8{Int64: 22, Valid: true},
+		UserID:         33,
+		PaymentType:    "profit_sharing",
+		PaymentChannel: db.PaymentChannelEcommerce,
+		Amount:         4567,
+		OutTradeNo:     "OT123",
 	}
 	refundOrder := db.RefundOrder{
 		ID:             44,

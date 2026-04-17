@@ -116,6 +116,9 @@ const (
 	MerchantCancelStateFundProcessing         = "FUND_PROCESSING"
 	MerchantCancelStateFinish                 = "FINISH"
 
+	PaymentChannelDirect    = "direct"
+	PaymentChannelEcommerce = "ecommerce"
+
 	MerchantCancelWithdrawStateProcessing = "WITHDRAW_PROCESSING"
 	MerchantCancelWithdrawStateException  = "WITHDRAW_EXCEPTION"
 	MerchantCancelWithdrawStateSucceed    = "WITHDRAW_SUCCEED"

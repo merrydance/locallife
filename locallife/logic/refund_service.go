@@ -93,6 +93,9 @@ func (s *RefundService) CreateRefundOrder(ctx context.Context, input CreateRefun
 	if !paymentOrder.OrderID.Valid {
 		return CreateRefundOrderResult{}, NewRequestError(http.StatusBadRequest, errors.New("payment order has no associated order"))
 	}
+	if !paymentOrderUsesEcommerceChannel(paymentOrder) {
+		return CreateRefundOrderResult{}, mainBusinessEcommerceOnlyError("发起退款")
+	}
 
 	order, err := s.store.GetOrder(ctx, paymentOrder.OrderID.Int64)
 	if err != nil {
@@ -128,50 +131,8 @@ func (s *RefundService) CreateRefundOrder(ctx context.Context, input CreateRefun
 	}
 	refundOrder := txResult.RefundOrder
 
-	if paymentOrder.PaymentType == paymentTypeProfitSharing {
-		if err := s.processProfitSharingRefund(ctx, paymentOrder, order, refundOrder, input); err != nil {
-			return CreateRefundOrderResult{}, err
-		}
-
-		latest, getErr := s.store.GetRefundOrder(ctx, refundOrder.ID)
-		if getErr == nil {
-			refundOrder = latest
-		}
-		return CreateRefundOrderResult{RefundOrder: refundOrder}, nil
-	}
-
-	if s.paymentFacade != nil {
-		wxRefund, refundErr := s.paymentFacade.CreateRefund(ctx, &wechatcontracts.DirectRefundRequest{
-			OutTradeNo:  paymentOrder.OutTradeNo,
-			OutRefundNo: outRefundNo,
-			Reason:      input.RefundReason,
-			Amount: &wechatcontracts.DirectRefundRequestAmount{
-				Refund:   input.RefundAmount,
-				Total:    paymentOrder.Amount,
-				Currency: wechatcontracts.DirectRefundCurrencyCNY,
-			},
-		})
-		if refundErr != nil {
-			if _, dbErr := s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
-				log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as failed")
-			}
-			return CreateRefundOrderResult{}, mapDirectRefundCreateError(refundErr)
-		}
-
-		switch wxRefund.Status {
-		case wechatcontracts.DirectRefundStatusSuccess:
-			if _, dbErr := s.store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID); dbErr != nil {
-				log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as success")
-			}
-			s.maybeMarkPaymentOrderRefunded(ctx, paymentOrder.ID, paymentOrder.Amount)
-		case wechatcontracts.DirectRefundStatusProcessing:
-			if _, dbErr := s.store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
-				ID:       refundOrder.ID,
-				RefundID: pgtype.Text{String: wxRefund.RefundID, Valid: wxRefund.RefundID != ""},
-			}); dbErr != nil {
-				log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as processing")
-			}
-		}
+	if err := s.processProfitSharingRefund(ctx, paymentOrder, order, refundOrder, input); err != nil {
+		return CreateRefundOrderResult{}, err
 	}
 
 	latest, getErr := s.store.GetRefundOrder(ctx, refundOrder.ID)
@@ -310,7 +271,7 @@ func (s *RefundService) ApplyAbnormalRefund(ctx context.Context, input ApplyAbno
 	if err != nil {
 		return ApplyAbnormalRefundResult{}, err
 	}
-	if paymentOrder.PaymentType != paymentTypeProfitSharing {
+	if !paymentOrderUsesEcommerceChannel(paymentOrder) {
 		return ApplyAbnormalRefundResult{}, NewRequestError(http.StatusBadRequest, errors.New("refund order is not an ecommerce refund"))
 	}
 

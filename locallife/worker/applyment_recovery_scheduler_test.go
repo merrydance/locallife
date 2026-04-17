@@ -201,6 +201,29 @@ func TestApplymentRecoverySchedulerRunOnceFallsBackToOutRequestNoAfterIDQueryFai
 	scheduler.RunOnce()
 }
 
+func TestApplymentRecoverySchedulerRunOnceSkipsRemoteQueryWithoutEcommerceClient(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	distributor := mockwk.NewMockTaskDistributor(ctrl)
+
+	store.EXPECT().
+		ListEcommerceApplymentsPendingFollowUp(gomock.Any(), gomock.Any()).
+		Return([]db.EcommerceApplymentPendingFollowUp{{
+			ID:           101,
+			SubjectType:  "merchant",
+			SubjectID:    102,
+			OutRequestNo: "APPLY_RECOVERY_NO_ECOM_001",
+			ApplymentID:  pgtype.Int8{Int64: 9101, Valid: true},
+			Status:       "submitted",
+			UpdatedAt:    time.Now().Add(-5 * time.Minute),
+		}}, nil)
+
+	scheduler := worker.NewApplymentRecoveryScheduler(store, distributor, nil)
+	scheduler.RunOnce()
+}
+
 func TestApplymentRecoverySchedulerRunOnceEnqueuesFrozenFollowUp(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

@@ -61,9 +61,9 @@ type WechatClient interface {
 	UploadCombinedShippingInfo(ctx context.Context, req *UploadCombinedShippingInfoRequest) error
 }
 
-// PaymentClientInterface 微信支付客户端接口（小程序直连支付）
-// 用于押金、充值等平台直接收款场景
-type PaymentClientInterface interface {
+// DirectPaymentClientInterface 直连支付客户端接口
+// 用于骑手押金、追偿付款及其配套退款/通知场景
+type DirectPaymentClientInterface interface {
 	// GetMchID 获取直连支付商户号
 	GetMchID() string
 
@@ -71,10 +71,10 @@ type PaymentClientInterface interface {
 	GetAppID() string
 
 	// CreateJSAPIOrder 创建 JSAPI 订单（小程序支付）
-	CreateJSAPIOrder(ctx context.Context, req *JSAPIOrderRequest) (*JSAPIOrderResponse, *JSAPIPayParams, error)
+	CreateJSAPIOrder(ctx context.Context, req *wechatcontracts.DirectJSAPIOrderRequest) (*wechatcontracts.DirectJSAPIOrderResponse, *JSAPIPayParams, error)
 
 	// QueryOrderByOutTradeNo 根据商户订单号查询订单
-	QueryOrderByOutTradeNo(ctx context.Context, outTradeNo string) (*OrderQueryResponse, error)
+	QueryOrderByOutTradeNo(ctx context.Context, outTradeNo string) (*wechatcontracts.DirectOrderQueryResponse, error)
 
 	// CloseOrder 关闭订单
 	CloseOrder(ctx context.Context, outTradeNo string) error
@@ -85,17 +85,11 @@ type PaymentClientInterface interface {
 	// QueryRefund 查询退款
 	QueryRefund(ctx context.Context, outRefundNo string) (*RefundResponse, error)
 
-	// CreateTransfer 发起转账（商家转账到零钱）
-	CreateTransfer(ctx context.Context, req *TransferRequest) (*TransferResponse, error)
-
-	// QueryTransfer 按商户批次单号查询转账批次状态
-	QueryTransfer(ctx context.Context, outBatchNo string) (*TransferQueryResponse, error)
-
 	// DecryptPaymentNotification 解密支付通知
-	DecryptPaymentNotification(notification *PaymentNotification) (*PaymentNotificationResource, error)
+	DecryptPaymentNotification(notification *PaymentNotification) (*wechatcontracts.DirectPaymentNotificationResource, error)
 
 	// DecryptRefundNotification 解密退款通知
-	DecryptRefundNotification(notification *PaymentNotification) (*RefundNotificationResource, error)
+	DecryptRefundNotification(notification *PaymentNotification) (*wechatcontracts.DirectRefundNotificationResource, error)
 
 	// DecryptNotificationRaw 解密通知原始数据（返回 JSON 字节）
 	DecryptNotificationRaw(notification *PaymentNotification) ([]byte, error)
@@ -105,6 +99,28 @@ type PaymentClientInterface interface {
 
 	// GenerateJSAPIPayParams 根据 prepay_id 重新生成小程序调起支付所需参数（用于幂等返回旧 pending 记录时重新签名）
 	GenerateJSAPIPayParams(prepayID string) (*JSAPIPayParams, error)
+}
+
+// TransferClientInterface 商家转账客户端接口。
+// 用于索赔赔付等转账到微信零钱场景，不属于直连 JSAPI 支付主链路。
+type TransferClientInterface interface {
+	// GetMchID 获取商家转账商户号。
+	GetMchID() string
+
+	// GetAppID 获取商家转账 AppID。
+	GetAppID() string
+
+	// CreateTransfer 发起转账（商家转账到零钱）。
+	CreateTransfer(ctx context.Context, req *wechatcontracts.DirectMerchantTransferCreateRequest) (*wechatcontracts.DirectMerchantTransferCreateResponse, error)
+
+	// QueryTransferByOutBillNo 按商户单号查询转账单状态。
+	QueryTransferByOutBillNo(ctx context.Context, outBillNo string) (*wechatcontracts.DirectMerchantTransferQueryResponse, error)
+
+	// VerifyNotificationSignature 验证商家转账回调签名。
+	VerifyNotificationSignature(signature, timestamp, nonce, serial, body string) error
+
+	// DecryptMerchantTransferNotification 解密商家转账回调通知资源。
+	DecryptMerchantTransferNotification(notification *PaymentNotification) (*wechatcontracts.DirectMerchantTransferNotificationResource, error)
 }
 
 // EcommerceClientInterface 平台收付通客户端接口
@@ -119,13 +135,13 @@ type EcommerceClientInterface interface {
 	// GetSpMchName 获取服务商名称
 	GetSpMchName() string
 
-	// GetPlatformCertificateSerial 获取微信支付平台证书序列号
-	GetPlatformCertificateSerial() string
+	// GetPlatformPublicKeyID 获取请求头 Wechatpay-Serial 所需的平台公钥 ID。
+	GetPlatformPublicKeyID() string
 
 	// GenerateJSAPIPayParams 根据 prepay_id 重新生成小程序调起支付所需参数（用于幂等返回旧 pending 记录时重新签名）
 	GenerateJSAPIPayParams(prepayID string) (*JSAPIPayParams, error)
 
-	// EncryptSensitiveData 使用微信支付平台证书公钥加密敏感数据
+	// EncryptSensitiveData 使用微信支付平台公钥加密敏感数据。
 	EncryptSensitiveData(plaintext string) (string, error)
 
 	// UploadImage 上传图片到微信支付获取 MediaID
@@ -220,9 +236,6 @@ type EcommerceClientInterface interface {
 	QueryProfitSharingReturn(ctx context.Context, subMchID, outReturnNo, outOrderNo string) (*wechatcontracts.ProfitSharingReturnResponse, error)
 
 	// ==================== 退款 ====================
-	// CreateRefund 申请直连退款（仅用于骑手押金等平台直收业务场景的退款）
-	CreateRefund(ctx context.Context, req *RefundRequest) (*RefundResponse, error)
-
 	// CreateEcommerceRefund 申请电商退款
 	CreateEcommerceRefund(ctx context.Context, req *EcommerceRefundRequest) (*EcommerceRefundResponse, error)
 
@@ -329,8 +342,8 @@ type EcommerceClientInterface interface {
 // 确保 *Client 实现了 WechatClient 接口
 var _ WechatClient = (*Client)(nil)
 
-// 确保 *PaymentClient 实现了 PaymentClientInterface 接口
-var _ PaymentClientInterface = (*PaymentClient)(nil)
+// 确保 *DirectPaymentClient 实现了 DirectPaymentClientInterface 接口
+var _ DirectPaymentClientInterface = (*DirectPaymentClient)(nil)
 
 // 确保 *EcommerceClient 实现了 EcommerceClientInterface 接口
 var _ EcommerceClientInterface = (*EcommerceClient)(nil)

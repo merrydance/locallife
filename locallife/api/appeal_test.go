@@ -17,6 +17,7 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/util"
+	"github.com/merrydance/locallife/wechat"
 	mockwechat "github.com/merrydance/locallife/wechat/mock"
 	"github.com/merrydance/locallife/worker"
 	mockwk "github.com/merrydance/locallife/worker/mock"
@@ -760,7 +761,7 @@ func TestReviewAppealAPI(t *testing.T) {
 		name          string
 		appealID      int64
 		body          gin.H
-		withPayment   bool
+		withTransfer  bool
 		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
 		buildStubs    func(store *mockdb.MockStore, taskDistributor *mockwk.MockTaskDistributor)
 		checkResponse func(recorder *httptest.ResponseRecorder)
@@ -773,7 +774,7 @@ func TestReviewAppealAPI(t *testing.T) {
 				"review_notes":        "申诉理由充分，予以批准",
 				"compensation_amount": 500,
 			},
-			withPayment: true,
+			withTransfer: true,
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
@@ -1031,8 +1032,8 @@ func TestReviewAppealAPI(t *testing.T) {
 			tc.buildStubs(store, taskDistributor)
 
 			server := newTestServerWithTaskDistributor(t, store, taskDistributor)
-			if tc.withPayment {
-				server.SetPaymentClientForTest(mockwechat.NewMockPaymentClientInterface(ctrl))
+			if tc.withTransfer {
+				server.SetTransferClientForTest(mockwechat.NewMockTransferClientInterface(ctrl))
 			}
 			recorder := httptest.NewRecorder()
 
@@ -1051,7 +1052,7 @@ func TestReviewAppealAPI(t *testing.T) {
 	}
 }
 
-func TestReviewAppealAPI_ApprovedCompensationRequiresPaymentClient(t *testing.T) {
+func TestReviewAppealAPI_ApprovedCompensationRequiresTransferClient(t *testing.T) {
 	user, _ := randomUser(t)
 	region := randomRegion()
 	operator := randomAppealOperator(user.ID, region.ID)
@@ -1234,7 +1235,7 @@ func TestReviewAppealAPI_InlineCompensationFailureReturns500(t *testing.T) {
 		Return(db.BehaviorAction{}, errors.New("load action failed"))
 
 	server := newTestServerWithTaskDistributor(t, store, taskDistributor)
-	server.SetPaymentClientForTest(mockwechat.NewMockPaymentClientInterface(ctrl))
+	server.SetTransferClientForTest(mockwechat.NewMockTransferClientInterface(ctrl))
 
 	body, err := json.Marshal(gin.H{
 		"status":              "approved",
@@ -1252,6 +1253,112 @@ func TestReviewAppealAPI_InlineCompensationFailureReturns500(t *testing.T) {
 	server.router.ServeHTTP(recorder, request)
 
 	require.Equal(t, http.StatusInternalServerError, recorder.Code)
+}
+
+func TestReviewAppealAPI_InlineCompensationWechatErrorReturnsSemanticError(t *testing.T) {
+	user, _ := randomUser(t)
+	region := randomRegion()
+	operator := randomAppealOperator(user.ID, region.ID)
+	appeal := db.Appeal{
+		ID:            1,
+		ClaimID:       100,
+		AppellantType: "merchant",
+		AppellantID:   200,
+		Reason:        "测试申诉理由",
+		Status:        "pending",
+		RegionID:      region.ID,
+		CreatedAt:     time.Now(),
+	}
+	reviewedAppeal := appeal
+	reviewedAppeal.Status = "approved"
+	reviewedAppeal.ReviewerID = pgtype.Int8{Int64: operator.ID, Valid: true}
+	reviewedAppeal.ReviewNotes = pgtype.Text{String: "申诉理由充分，予以批准", Valid: true}
+	reviewedAppeal.CompensationAmount = pgtype.Int8{Int64: 500, Valid: true}
+	reviewedAppeal.ReviewedAt = pgtype.Timestamptz{Time: time.Now(), Valid: true}
+
+	detailBytes, err := json.Marshal(workerClaimPayoutActionDetailForTest(appeal.ID, 300, 500))
+	require.NoError(t, err)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	taskDistributor := mockwk.NewMockTaskDistributor(ctrl)
+	transferClient := mockwechat.NewMockTransferClientInterface(ctrl)
+	expectActiveOperatorAuth(store, user.ID, operator)
+	store.EXPECT().GetAppeal(gomock.Any(), appeal.ID).
+		Times(1).
+		Return(appeal, nil)
+	expectOperatorManagesRegion(store, operator, appeal.RegionID, true)
+	store.EXPECT().ReviewAppealWithCompensationTx(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(db.ReviewAppealWithCompensationTxResult{
+			Appeal: reviewedAppeal,
+			PostProcess: db.GetAppealForPostProcessRow{
+				AppealID:       appeal.ID,
+				ClaimID:        0,
+				AppellantType:  "merchant",
+				AppellantID:    appeal.AppellantID,
+				ClaimantUserID: 300,
+				ClaimType:      "missing-item",
+				ClaimAmount:    500,
+				OrderNo:        "20240101120000123456",
+			},
+			CompensationAction: &db.BehaviorAction{ID: 88},
+		}, nil)
+	taskDistributor.EXPECT().DistributeTaskProcessAppealResult(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(errors.New("queue unavailable"))
+	store.EXPECT().GetBehaviorAction(gomock.Any(), int64(88)).
+		Times(1).
+		Return(db.BehaviorAction{ID: 88, ActionType: "payout", TargetEntity: "user", Status: "created", Detail: detailBytes}, nil)
+	store.EXPECT().GetUser(gomock.Any(), int64(300)).
+		Times(1).
+		Return(db.User{ID: 300, WechatOpenid: "openid-300", FullName: "张三"}, nil)
+	transferClient.EXPECT().GetAppID().Times(1).Return("wx-mini-app")
+	store.EXPECT().UpdateBehaviorActionExecution(gomock.Any(), gomock.Any()).Times(1).Return(nil)
+	transferClient.EXPECT().CreateTransfer(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(nil, &wechat.WechatPayError{Code: "NOT_ENOUGH", Message: "余额不足", StatusCode: http.StatusForbidden})
+	store.EXPECT().UpdateBehaviorActionExecution(gomock.Any(), gomock.Any()).Times(1).Return(nil)
+
+	server := newTestServerWithTaskDistributor(t, store, taskDistributor)
+	server.SetTransferClientForTest(transferClient)
+
+	body, err := json.Marshal(gin.H{
+		"status":              "approved",
+		"review_notes":        "申诉理由充分，予以批准",
+		"compensation_amount": 500,
+	})
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPost, "/v1/operator/appeals/1/review", bytes.NewReader(body))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusConflict, recorder.Code)
+
+	var resp apiTestEnvelope
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, "商户转账余额不足，当前无法完成企业赔付，请联系平台处理", resp.Message)
+}
+
+func workerClaimPayoutActionDetailForTest(appealID, userID, amount int64) map[string]any {
+	return map[string]any{
+		"appeal_id":      appealID,
+		"user_id":        userID,
+		"amount":         amount,
+		"source_type":    "appeal",
+		"source_id":      appealID,
+		"remark":         "申诉补偿",
+		"last_error":     "",
+		"out_bill_no":    "",
+		"transfer_state": "",
+	}
 }
 
 // ====================== List Operator Appeals Tests ======================

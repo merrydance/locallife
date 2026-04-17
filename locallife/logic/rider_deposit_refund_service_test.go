@@ -19,7 +19,7 @@ func TestRiderDepositRefundService_SubmitWithdrawal_SynchronousSuccess(t *testin
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	paymentClient := mockwechat.NewMockPaymentClientInterface(ctrl)
+	paymentClient := mockwechat.NewMockDirectPaymentClientInterface(ctrl)
 	service := NewRiderDepositRefundService(store, paymentClient)
 
 	rider := db.Rider{
@@ -98,7 +98,7 @@ func TestRiderDepositRefundService_SubmitWithdrawal_RefundRequestFailureCompensa
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	paymentClient := mockwechat.NewMockPaymentClientInterface(ctrl)
+	paymentClient := mockwechat.NewMockDirectPaymentClientInterface(ctrl)
 	service := NewRiderDepositRefundService(store, paymentClient)
 
 	rider := db.Rider{
@@ -168,7 +168,7 @@ func TestRiderDepositRefundService_SubmitWithdrawal_ApprovedRiderAllowed(t *test
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	paymentClient := mockwechat.NewMockPaymentClientInterface(ctrl)
+	paymentClient := mockwechat.NewMockDirectPaymentClientInterface(ctrl)
 	service := NewRiderDepositRefundService(store, paymentClient)
 
 	rider := db.Rider{

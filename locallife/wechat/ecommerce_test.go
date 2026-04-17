@@ -52,7 +52,7 @@ func newSignedEcommerceClientForTest(t *testing.T, handler func(*http.Request) (
 	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
 
 	client, err := NewEcommerceClient(EcommerceClientConfig{
-		PaymentClientConfig: PaymentClientConfig{
+		DirectPaymentClientConfig: DirectPaymentClientConfig{
 			MchID:                 "ignored_base_mchid",
 			AppID:                 "service-appid-001",
 			SerialNumber:          "test_serial",
@@ -84,7 +84,7 @@ func newSignedEcommerceClientWithMerchantKeyForTest(t *testing.T, handler func(*
 	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
 
 	client, err := NewEcommerceClient(EcommerceClientConfig{
-		PaymentClientConfig: PaymentClientConfig{
+		DirectPaymentClientConfig: DirectPaymentClientConfig{
 			MchID:                 "ignored_base_mchid",
 			AppID:                 "service-appid-001",
 			SerialNumber:          "test_serial",
@@ -215,7 +215,7 @@ func newTestUploadImageClient(t *testing.T, spMchID string) *EcommerceClient {
 	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
 
 	client, err := NewEcommerceClient(EcommerceClientConfig{
-		PaymentClientConfig: PaymentClientConfig{
+		DirectPaymentClientConfig: DirectPaymentClientConfig{
 			MchID:                 "base-mchid-001",
 			AppID:                 "service-appid-001",
 			SerialNumber:          "test_serial",
@@ -241,7 +241,7 @@ func TestUploadImage_SendsValidatedMultipartBodyWithServiceProviderMchID(t *test
 	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
 
 	client, err := NewEcommerceClient(EcommerceClientConfig{
-		PaymentClientConfig: PaymentClientConfig{
+		DirectPaymentClientConfig: DirectPaymentClientConfig{
 			MchID:                 "ignored_base_mchid",
 			AppID:                 "service-appid-001",
 			SerialNumber:          "test_serial",
@@ -299,7 +299,7 @@ func TestUploadImage_AcceptsBMPPayload(t *testing.T) {
 	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
 
 	client, err := NewEcommerceClient(EcommerceClientConfig{
-		PaymentClientConfig: PaymentClientConfig{
+		DirectPaymentClientConfig: DirectPaymentClientConfig{
 			MchID:                 "ignored_base_mchid",
 			AppID:                 "service-appid-001",
 			SerialNumber:          "test_serial",
@@ -352,7 +352,7 @@ func TestUploadImage_RejectsEmptyFile(t *testing.T) {
 	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
 
 	client, err := NewEcommerceClient(EcommerceClientConfig{
-		PaymentClientConfig: PaymentClientConfig{
+		DirectPaymentClientConfig: DirectPaymentClientConfig{
 			MchID:                 "ignored_base_mchid",
 			AppID:                 "service-appid-001",
 			SerialNumber:          "test_serial",
@@ -388,7 +388,7 @@ func TestUploadImage_RejectsNonImagePayload(t *testing.T) {
 	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
 
 	client, err := NewEcommerceClient(EcommerceClientConfig{
-		PaymentClientConfig: PaymentClientConfig{
+		DirectPaymentClientConfig: DirectPaymentClientConfig{
 			MchID:                 "ignored_base_mchid",
 			AppID:                 "service-appid-001",
 			SerialNumber:          "test_serial",
@@ -424,7 +424,7 @@ func TestUploadImage_RejectsOversizedPayload(t *testing.T) {
 	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
 
 	client, err := NewEcommerceClient(EcommerceClientConfig{
-		PaymentClientConfig: PaymentClientConfig{
+		DirectPaymentClientConfig: DirectPaymentClientConfig{
 			MchID:                 "ignored_base_mchid",
 			AppID:                 "service-appid-001",
 			SerialNumber:          "test_serial",
@@ -454,7 +454,7 @@ func TestUploadImage_RejectsMissingMediaIDInSuccessResponse(t *testing.T) {
 	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
 
 	client, err := NewEcommerceClient(EcommerceClientConfig{
-		PaymentClientConfig: PaymentClientConfig{
+		DirectPaymentClientConfig: DirectPaymentClientConfig{
 			MchID:                 "ignored_base_mchid",
 			AppID:                 "service-appid-001",
 			SerialNumber:          "test_serial",
@@ -494,7 +494,7 @@ func TestUploadImage_WrapsWechatErrorsWithRequestID(t *testing.T) {
 	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
 
 	client, err := NewEcommerceClient(EcommerceClientConfig{
-		PaymentClientConfig: PaymentClientConfig{
+		DirectPaymentClientConfig: DirectPaymentClientConfig{
 			MchID:                 "ignored_base_mchid",
 			AppID:                 "service-appid-001",
 			SerialNumber:          "test_serial",
@@ -586,7 +586,7 @@ func TestCreateEcommerceApplyment_SetsWechatpaySerialHeader(t *testing.T) {
 	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
 
 	client, err := NewEcommerceClient(EcommerceClientConfig{
-		PaymentClientConfig: PaymentClientConfig{
+		DirectPaymentClientConfig: DirectPaymentClientConfig{
 			MchID:                 "test_mch_id",
 			AppID:                 "test_app_id",
 			SerialNumber:          "test_serial",
@@ -668,7 +668,7 @@ func TestCreatePartnerJSAPIOrder_UsesDedicatedNotifyURL(t *testing.T) {
 	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
 
 	client, err := NewEcommerceClient(EcommerceClientConfig{
-		PaymentClientConfig: PaymentClientConfig{
+		DirectPaymentClientConfig: DirectPaymentClientConfig{
 			MchID:                 "ignored_base_mchid",
 			AppID:                 "service-appid-001",
 			SerialNumber:          "test_serial",
@@ -904,7 +904,7 @@ func TestCreateCombineOrder_UsesServiceProviderAndSubMerchantFields(t *testing.T
 	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
 
 	client, err := NewEcommerceClient(EcommerceClientConfig{
-		PaymentClientConfig: PaymentClientConfig{
+		DirectPaymentClientConfig: DirectPaymentClientConfig{
 			MchID:                 "ignored_base_mchid",
 			AppID:                 "service-appid-001",
 			SerialNumber:          "test_serial",
@@ -1061,7 +1061,7 @@ func TestQueryCombineOrder_ParsesServiceProviderFields(t *testing.T) {
 	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
 
 	client, err := NewEcommerceClient(EcommerceClientConfig{
-		PaymentClientConfig: PaymentClientConfig{
+		DirectPaymentClientConfig: DirectPaymentClientConfig{
 			MchID:                 "ignored_base_mchid",
 			AppID:                 "service-appid-001",
 			SerialNumber:          "test_serial",
@@ -1113,7 +1113,7 @@ func TestQueryCombineOrder_RejectsContractDrift(t *testing.T) {
 	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
 
 	client, err := NewEcommerceClient(EcommerceClientConfig{
-		PaymentClientConfig: PaymentClientConfig{
+		DirectPaymentClientConfig: DirectPaymentClientConfig{
 			MchID:                 "ignored_base_mchid",
 			AppID:                 "service-appid-001",
 			SerialNumber:          "test_serial",
@@ -1172,7 +1172,7 @@ func TestCloseCombineOrder_UsesSubMerchantFields(t *testing.T) {
 	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
 
 	client, err := NewEcommerceClient(EcommerceClientConfig{
-		PaymentClientConfig: PaymentClientConfig{
+		DirectPaymentClientConfig: DirectPaymentClientConfig{
 			MchID:                 "ignored_base_mchid",
 			AppID:                 "service-appid-001",
 			SerialNumber:          "test_serial",
@@ -1222,7 +1222,7 @@ func TestCreateEcommerceRefund_UsesLatestPlatformFields(t *testing.T) {
 	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
 
 	client, err := NewEcommerceClient(EcommerceClientConfig{
-		PaymentClientConfig: PaymentClientConfig{
+		DirectPaymentClientConfig: DirectPaymentClientConfig{
 			MchID:                 "ignored_base_mchid",
 			AppID:                 "service-appid-001",
 			SerialNumber:          "test_serial",
@@ -1305,7 +1305,7 @@ func TestQueryEcommerceRefundByOutRefundNo_ParsesLatestFields(t *testing.T) {
 	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
 
 	client, err := NewEcommerceClient(EcommerceClientConfig{
-		PaymentClientConfig: PaymentClientConfig{
+		DirectPaymentClientConfig: DirectPaymentClientConfig{
 			MchID:                 "ignored_base_mchid",
 			AppID:                 "service-appid-001",
 			SerialNumber:          "test_serial",
@@ -1354,7 +1354,7 @@ func TestQueryEcommerceRefundByID_UsesRefundIDEndpoint(t *testing.T) {
 	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
 
 	client, err := NewEcommerceClient(EcommerceClientConfig{
-		PaymentClientConfig: PaymentClientConfig{
+		DirectPaymentClientConfig: DirectPaymentClientConfig{
 			MchID:                 "ignored_base_mchid",
 			AppID:                 "service-appid-001",
 			SerialNumber:          "test_serial",
@@ -1398,7 +1398,7 @@ func TestApplyEcommerceAbnormalRefund_UserBankCardEncryptsSensitiveFields(t *tes
 	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
 
 	client, err := NewEcommerceClient(EcommerceClientConfig{
-		PaymentClientConfig: PaymentClientConfig{
+		DirectPaymentClientConfig: DirectPaymentClientConfig{
 			MchID:                 "ignored_base_mchid",
 			AppID:                 "service-appid-001",
 			SerialNumber:          "test_serial",
@@ -1469,7 +1469,7 @@ func TestApplyEcommerceAbnormalRefund_MerchantBankCardUsesMinimalBody(t *testing
 	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
 
 	client, err := NewEcommerceClient(EcommerceClientConfig{
-		PaymentClientConfig: PaymentClientConfig{
+		DirectPaymentClientConfig: DirectPaymentClientConfig{
 			MchID:                 "ignored_base_mchid",
 			AppID:                 "service-appid-001",
 			SerialNumber:          "test_serial",
@@ -1530,7 +1530,7 @@ func TestQueryEcommerceRefundByID_MissingDocumentedFieldsFails(t *testing.T) {
 	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
 
 	client, err := NewEcommerceClient(EcommerceClientConfig{
-		PaymentClientConfig: PaymentClientConfig{
+		DirectPaymentClientConfig: DirectPaymentClientConfig{
 			MchID:                 "ignored_base_mchid",
 			AppID:                 "service-appid-001",
 			SerialNumber:          "test_serial",
@@ -1569,7 +1569,7 @@ func TestCreateProfitSharing_EncryptsReceiverNameUsingLatestField(t *testing.T) 
 	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
 
 	client, err := NewEcommerceClient(EcommerceClientConfig{
-		PaymentClientConfig: PaymentClientConfig{
+		DirectPaymentClientConfig: DirectPaymentClientConfig{
 			MchID:                 "ignored_base_mchid",
 			AppID:                 "service-appid-001",
 			SerialNumber:          "test_serial",
@@ -1642,7 +1642,7 @@ func TestAddProfitSharingReceiver_UsesNameFieldAndWechatpaySerial(t *testing.T) 
 	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
 
 	client, err := NewEcommerceClient(EcommerceClientConfig{
-		PaymentClientConfig: PaymentClientConfig{
+		DirectPaymentClientConfig: DirectPaymentClientConfig{
 			MchID:                 "ignored_base_mchid",
 			AppID:                 "service-appid-001",
 			SerialNumber:          "test_serial",
@@ -1740,7 +1740,7 @@ func TestQueryProfitSharingReturn_UsesCollectionEndpointAndEscapedQuery(t *testi
 	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
 
 	client, err := NewEcommerceClient(EcommerceClientConfig{
-		PaymentClientConfig: PaymentClientConfig{
+		DirectPaymentClientConfig: DirectPaymentClientConfig{
 			MchID:                 "ignored_base_mchid",
 			AppID:                 "service-appid-001",
 			SerialNumber:          "test_serial",
@@ -1800,7 +1800,7 @@ func TestQueryProfitSharingAmounts_UsesTransactionEndpoint(t *testing.T) {
 	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
 
 	client, err := NewEcommerceClient(EcommerceClientConfig{
-		PaymentClientConfig: PaymentClientConfig{
+		DirectPaymentClientConfig: DirectPaymentClientConfig{
 			MchID:                 "ignored_base_mchid",
 			AppID:                 "service-appid-001",
 			SerialNumber:          "test_serial",
@@ -1850,7 +1850,7 @@ func TestQueryEcommerceFundBalanceByAccountType(t *testing.T) {
 	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
 
 	client, err := NewEcommerceClient(EcommerceClientConfig{
-		PaymentClientConfig: PaymentClientConfig{
+		DirectPaymentClientConfig: DirectPaymentClientConfig{
 			MchID:                 "ignored_base_mchid",
 			AppID:                 "service-appid-001",
 			SerialNumber:          "test_serial",
@@ -1895,7 +1895,7 @@ func TestQueryEcommerceFundDayEndBalance(t *testing.T) {
 	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
 
 	client, err := NewEcommerceClient(EcommerceClientConfig{
-		PaymentClientConfig: PaymentClientConfig{
+		DirectPaymentClientConfig: DirectPaymentClientConfig{
 			MchID:                 "ignored_base_mchid",
 			AppID:                 "service-appid-001",
 			SerialNumber:          "test_serial",
@@ -1939,7 +1939,7 @@ func TestQueryPlatformFundBalance(t *testing.T) {
 	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
 
 	client, err := NewEcommerceClient(EcommerceClientConfig{
-		PaymentClientConfig: PaymentClientConfig{
+		DirectPaymentClientConfig: DirectPaymentClientConfig{
 			MchID:                 "ignored_base_mchid",
 			AppID:                 "service-appid-001",
 			SerialNumber:          "test_serial",
@@ -1983,7 +1983,7 @@ func TestQueryPlatformFundDayEndBalance(t *testing.T) {
 	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
 
 	client, err := NewEcommerceClient(EcommerceClientConfig{
-		PaymentClientConfig: PaymentClientConfig{
+		DirectPaymentClientConfig: DirectPaymentClientConfig{
 			MchID:                 "ignored_base_mchid",
 			AppID:                 "service-appid-001",
 			SerialNumber:          "test_serial",
@@ -2027,7 +2027,7 @@ func TestCreateEcommerceWithdraw_UsesDedicatedNotifyURL(t *testing.T) {
 	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
 
 	client, err := NewEcommerceClient(EcommerceClientConfig{
-		PaymentClientConfig: PaymentClientConfig{
+		DirectPaymentClientConfig: DirectPaymentClientConfig{
 			MchID:                 "ignored_base_mchid",
 			AppID:                 "service-appid-001",
 			SerialNumber:          "test_serial",
@@ -2084,7 +2084,7 @@ func TestValidateEcommerceCancelWithdraw(t *testing.T) {
 	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
 
 	client, err := NewEcommerceClient(EcommerceClientConfig{
-		PaymentClientConfig: PaymentClientConfig{
+		DirectPaymentClientConfig: DirectPaymentClientConfig{
 			MchID:                 "ignored_base_mchid",
 			AppID:                 "service-appid-001",
 			SerialNumber:          "test_serial",
@@ -2126,7 +2126,7 @@ func TestCreateEcommerceCancelWithdraw(t *testing.T) {
 	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
 
 	client, err := NewEcommerceClient(EcommerceClientConfig{
-		PaymentClientConfig: PaymentClientConfig{
+		DirectPaymentClientConfig: DirectPaymentClientConfig{
 			MchID:                 "ignored_base_mchid",
 			AppID:                 "service-appid-001",
 			SerialNumber:          "test_serial",
@@ -2179,7 +2179,7 @@ func TestQueryEcommerceCancelWithdrawByOutRequestNo(t *testing.T) {
 	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
 
 	client, err := NewEcommerceClient(EcommerceClientConfig{
-		PaymentClientConfig: PaymentClientConfig{
+		DirectPaymentClientConfig: DirectPaymentClientConfig{
 			MchID:                 "ignored_base_mchid",
 			AppID:                 "service-appid-001",
 			SerialNumber:          "test_serial",
@@ -2220,7 +2220,7 @@ func TestQueryEcommerceCancelWithdrawByApplymentID(t *testing.T) {
 	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
 
 	client, err := NewEcommerceClient(EcommerceClientConfig{
-		PaymentClientConfig: PaymentClientConfig{
+		DirectPaymentClientConfig: DirectPaymentClientConfig{
 			MchID:                 "ignored_base_mchid",
 			AppID:                 "service-appid-001",
 			SerialNumber:          "test_serial",
@@ -2280,7 +2280,7 @@ func TestCreateViolationNotification_UsesConfiguredNotifyURL(t *testing.T) {
 	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
 
 	client, err := NewEcommerceClient(EcommerceClientConfig{
-		PaymentClientConfig: PaymentClientConfig{
+		DirectPaymentClientConfig: DirectPaymentClientConfig{
 			MchID:                 "ignored_base_mchid",
 			AppID:                 "service-appid-001",
 			SerialNumber:          "test_serial",
@@ -2328,7 +2328,7 @@ func TestQueryViolationNotification(t *testing.T) {
 	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
 
 	client, err := NewEcommerceClient(EcommerceClientConfig{
-		PaymentClientConfig: PaymentClientConfig{
+		DirectPaymentClientConfig: DirectPaymentClientConfig{
 			MchID:                 "ignored_base_mchid",
 			AppID:                 "service-appid-001",
 			SerialNumber:          "test_serial",
@@ -2370,7 +2370,7 @@ func TestUpdateViolationNotification_UsesExplicitNotifyURL(t *testing.T) {
 	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
 
 	client, err := NewEcommerceClient(EcommerceClientConfig{
-		PaymentClientConfig: PaymentClientConfig{
+		DirectPaymentClientConfig: DirectPaymentClientConfig{
 			MchID:                 "ignored_base_mchid",
 			AppID:                 "service-appid-001",
 			SerialNumber:          "test_serial",
@@ -2418,7 +2418,7 @@ func TestDeleteViolationNotification(t *testing.T) {
 	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
 
 	client, err := NewEcommerceClient(EcommerceClientConfig{
-		PaymentClientConfig: PaymentClientConfig{
+		DirectPaymentClientConfig: DirectPaymentClientConfig{
 			MchID:                 "ignored_base_mchid",
 			AppID:                 "service-appid-001",
 			SerialNumber:          "test_serial",
@@ -2733,7 +2733,7 @@ func TestDecryptViolationNotification(t *testing.T) {
 	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
 
 	client, err := NewEcommerceClient(EcommerceClientConfig{
-		PaymentClientConfig: PaymentClientConfig{
+		DirectPaymentClientConfig: DirectPaymentClientConfig{
 			MchID:                 "ignored_base_mchid",
 			AppID:                 "service-appid-001",
 			SerialNumber:          "test_serial",
@@ -2782,7 +2782,7 @@ func TestDecryptProfitSharingNotification_RejectsContractDrift(t *testing.T) {
 	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
 
 	client, err := NewEcommerceClient(EcommerceClientConfig{
-		PaymentClientConfig: PaymentClientConfig{
+		DirectPaymentClientConfig: DirectPaymentClientConfig{
 			MchID:                 "ignored_base_mchid",
 			AppID:                 "service-appid-001",
 			SerialNumber:          "test_serial",
@@ -2830,7 +2830,7 @@ func TestQuerySubMerchantSettlement_UsesAccountNumberRule(t *testing.T) {
 	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
 
 	client, err := NewEcommerceClient(EcommerceClientConfig{
-		PaymentClientConfig: PaymentClientConfig{
+		DirectPaymentClientConfig: DirectPaymentClientConfig{
 			MchID:                 "test_mch_id",
 			AppID:                 "test_app_id",
 			SerialNumber:          "test_serial",
@@ -2944,7 +2944,7 @@ func TestModifySubMerchantSettlement_PostsEncryptedPayload(t *testing.T) {
 	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
 
 	client, err := NewEcommerceClient(EcommerceClientConfig{
-		PaymentClientConfig: PaymentClientConfig{
+		DirectPaymentClientConfig: DirectPaymentClientConfig{
 			MchID:                 "test_mch_id",
 			AppID:                 "test_app_id",
 			SerialNumber:          "test_serial",
@@ -2999,7 +2999,7 @@ func TestModifySubMerchantSettlement_OmitsEmptyAccountName(t *testing.T) {
 	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
 
 	client, err := NewEcommerceClient(EcommerceClientConfig{
-		PaymentClientConfig: PaymentClientConfig{
+		DirectPaymentClientConfig: DirectPaymentClientConfig{
 			MchID:                 "test_mch_id",
 			AppID:                 "test_app_id",
 			SerialNumber:          "test_serial",
@@ -3051,7 +3051,7 @@ func TestQuerySubMerchantSettlementApplication_UsesApplicationAndMaskRule(t *tes
 	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
 
 	client, err := NewEcommerceClient(EcommerceClientConfig{
-		PaymentClientConfig: PaymentClientConfig{
+		DirectPaymentClientConfig: DirectPaymentClientConfig{
 			MchID:                 "test_mch_id",
 			AppID:                 "test_app_id",
 			SerialNumber:          "test_serial",
@@ -3092,7 +3092,7 @@ func TestQuerySubMerchantSettlementApplication_RejectsInvalidContract(t *testing
 	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
 
 	client, err := NewEcommerceClient(EcommerceClientConfig{
-		PaymentClientConfig: PaymentClientConfig{
+		DirectPaymentClientConfig: DirectPaymentClientConfig{
 			MchID:                 "test_mch_id",
 			AppID:                 "test_app_id",
 			SerialNumber:          "test_serial",

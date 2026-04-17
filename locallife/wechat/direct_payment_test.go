@@ -9,13 +9,11 @@ import (
 	"crypto/sha1"
 	"crypto/sha256"
 	"crypto/x509"
-	"crypto/x509/pkix"
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"io"
-	"math/big"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -28,9 +26,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type paymentRoundTripFunc func(*http.Request) (*http.Response, error)
+type directPaymentRoundTripFunc func(*http.Request) (*http.Response, error)
 
-func (fn paymentRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+func (fn directPaymentRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return fn(req)
 }
 
@@ -43,7 +41,7 @@ func testWeChatKey(seed string) string {
 }
 
 func testAPIV3Key() string {
-	return testWeChatKey("wechat-pay-client-test")
+	return testWeChatKey("wechat-direct-payment-client-test")
 }
 
 // 生成测试用的 RSA 密钥对
@@ -81,35 +79,7 @@ func createTestPublicKeyFile(t *testing.T, dir string, publicKey *rsa.PublicKey)
 	return path
 }
 
-// 创建测试用的证书 PEM 文件
-func createTestCertificateFile(t *testing.T, dir string, privateKey *rsa.PrivateKey, publicKey *rsa.PublicKey) string {
-	path := filepath.Join(dir, "platform_certificate.pem")
-
-	template := &x509.Certificate{
-		SerialNumber: big.NewInt(1234567890),
-		Subject: pkix.Name{
-			Organization: []string{"Test"},
-		},
-		NotBefore:             time.Now(),
-		NotAfter:              time.Now().Add(5 * 365 * 24 * time.Hour), // 5 years
-		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-		BasicConstraintsValid: true,
-	}
-
-	certDER, err := x509.CreateCertificate(rand.Reader, template, template, publicKey, privateKey)
-	require.NoError(t, err)
-
-	certPEM := pem.EncodeToMemory(&pem.Block{
-		Type:  "CERTIFICATE",
-		Bytes: certDER,
-	})
-	err = os.WriteFile(path, certPEM, 0644)
-	require.NoError(t, err)
-	return path
-}
-
-func TestNewPaymentClient_WithPlatformPublicKey(t *testing.T) {
+func TestNewDirectPaymentClient_WithPlatformPublicKey(t *testing.T) {
 	// 生成测试密钥
 	merchantPrivateKey, _ := generateTestKeyPair(t)
 	_, platformPublicKey := generateTestKeyPair(t)
@@ -122,7 +92,7 @@ func TestNewPaymentClient_WithPlatformPublicKey(t *testing.T) {
 	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
 
 	// 测试使用平台公钥创建客户端
-	client, err := NewPaymentClient(PaymentClientConfig{
+	client, err := NewDirectPaymentClient(DirectPaymentClientConfig{
 		MchID:                 "test_mch_id",
 		AppID:                 "test_app_id",
 		SerialNumber:          "test_serial",
@@ -136,40 +106,10 @@ func TestNewPaymentClient_WithPlatformPublicKey(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, client)
 	require.NotNil(t, client.platformPublicKey)
-	require.Nil(t, client.platformCertificate)
 	require.Equal(t, "PUB_KEY_ID_0123456789", client.platformPublicKeyID)
 }
 
-func TestNewPaymentClient_WithPlatformCertificate(t *testing.T) {
-	// 生成测试密钥
-	merchantPrivateKey, _ := generateTestKeyPair(t)
-	platformPrivateKey, platformPublicKey := generateTestKeyPair(t)
-
-	// 创建临时目录
-	tempDir := t.TempDir()
-
-	// 创建测试文件
-	privateKeyPath := createTestPrivateKeyFile(t, tempDir, merchantPrivateKey)
-	certPath := createTestCertificateFile(t, tempDir, platformPrivateKey, platformPublicKey)
-
-	// 测试使用平台证书创建客户端（旧方式）
-	client, err := NewPaymentClient(PaymentClientConfig{
-		MchID:                   "test_mch_id",
-		AppID:                   "test_app_id",
-		SerialNumber:            "test_serial",
-		APIV3Key:                testAPIV3Key(),
-		PrivateKeyPath:          privateKeyPath,
-		PlatformCertificatePath: certPath,
-		NotifyURL:               "https://example.com/notify",
-	})
-
-	require.NoError(t, err)
-	require.NotNil(t, client)
-	require.NotNil(t, client.platformCertificate)
-	require.Nil(t, client.platformPublicKey)
-}
-
-func TestNewPaymentClient_PublicKeyWithoutID_Error(t *testing.T) {
+func TestNewDirectPaymentClient_PublicKeyWithoutID_Error(t *testing.T) {
 	// 生成测试密钥
 	merchantPrivateKey, _ := generateTestKeyPair(t)
 	_, platformPublicKey := generateTestKeyPair(t)
@@ -182,7 +122,7 @@ func TestNewPaymentClient_PublicKeyWithoutID_Error(t *testing.T) {
 	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
 
 	// 测试：提供公钥但不提供公钥ID应该报错
-	_, err := NewPaymentClient(PaymentClientConfig{
+	_, err := NewDirectPaymentClient(DirectPaymentClientConfig{
 		MchID:                 "test_mch_id",
 		AppID:                 "test_app_id",
 		SerialNumber:          "test_serial",
@@ -194,7 +134,25 @@ func TestNewPaymentClient_PublicKeyWithoutID_Error(t *testing.T) {
 	})
 
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "platform public key ID is required")
+	require.Contains(t, err.Error(), "platform public key path and ID are required")
+}
+
+func TestNewDirectPaymentClient_PublicKeyRequired(t *testing.T) {
+	merchantPrivateKey, _ := generateTestKeyPair(t)
+	tempDir := t.TempDir()
+	privateKeyPath := createTestPrivateKeyFile(t, tempDir, merchantPrivateKey)
+
+	_, err := NewDirectPaymentClient(DirectPaymentClientConfig{
+		MchID:          "test_mch_id",
+		AppID:          "test_app_id",
+		SerialNumber:   "test_serial",
+		APIV3Key:       testAPIV3Key(),
+		PrivateKeyPath: privateKeyPath,
+		NotifyURL:      "https://example.com/notify",
+	})
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "platform public key path and ID are required")
 }
 
 func TestEncryptSensitiveData_WithPublicKey(t *testing.T) {
@@ -210,7 +168,7 @@ func TestEncryptSensitiveData_WithPublicKey(t *testing.T) {
 	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
 
 	// 创建客户端
-	client, err := NewPaymentClient(PaymentClientConfig{
+	client, err := NewDirectPaymentClient(DirectPaymentClientConfig{
 		MchID:                 "test_mch_id",
 		AppID:                 "test_app_id",
 		SerialNumber:          "test_serial",
@@ -233,66 +191,6 @@ func TestEncryptSensitiveData_WithPublicKey(t *testing.T) {
 	require.Equal(t, plaintext, decrypted)
 }
 
-func TestEncryptSensitiveData_WithCertificate(t *testing.T) {
-	// 生成测试密钥
-	merchantPrivateKey, _ := generateTestKeyPair(t)
-	platformPrivateKey, platformPublicKey := generateTestKeyPair(t)
-
-	// 创建临时目录
-	tempDir := t.TempDir()
-
-	// 创建测试文件
-	privateKeyPath := createTestPrivateKeyFile(t, tempDir, merchantPrivateKey)
-	certPath := createTestCertificateFile(t, tempDir, platformPrivateKey, platformPublicKey)
-
-	// 创建客户端（使用证书）
-	client, err := NewPaymentClient(PaymentClientConfig{
-		MchID:                   "test_mch_id",
-		AppID:                   "test_app_id",
-		SerialNumber:            "test_serial",
-		APIV3Key:                testAPIV3Key(),
-		PrivateKeyPath:          privateKeyPath,
-		PlatformCertificatePath: certPath,
-		NotifyURL:               "https://example.com/notify",
-	})
-	require.NoError(t, err)
-
-	// 测试加密
-	plaintext := "330123199001011234"
-	ciphertext, err := client.EncryptSensitiveData(plaintext)
-	require.NoError(t, err)
-	require.NotEmpty(t, ciphertext)
-
-	// 验证可以解密
-	decrypted := decryptWithPrivateKey(t, platformPrivateKey, ciphertext)
-	require.Equal(t, plaintext, decrypted)
-}
-
-func TestEncryptSensitiveData_NoCertOrKey_Error(t *testing.T) {
-	// 生成测试密钥
-	merchantPrivateKey, _ := generateTestKeyPair(t)
-
-	// 创建临时目录
-	tempDir := t.TempDir()
-	privateKeyPath := createTestPrivateKeyFile(t, tempDir, merchantPrivateKey)
-
-	// 创建客户端（不提供证书或公钥）
-	client, err := NewPaymentClient(PaymentClientConfig{
-		MchID:          "test_mch_id",
-		AppID:          "test_app_id",
-		SerialNumber:   "test_serial",
-		APIV3Key:       testAPIV3Key(),
-		PrivateKeyPath: privateKeyPath,
-		NotifyURL:      "https://example.com/notify",
-	})
-	require.NoError(t, err)
-
-	// 测试加密应该失败
-	_, err = client.EncryptSensitiveData("test")
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "neither platform public key nor platform certificate loaded")
-}
-
 func TestGetPlatformCertificateSerial_WithPublicKey(t *testing.T) {
 	// 生成测试密钥
 	merchantPrivateKey, _ := generateTestKeyPair(t)
@@ -306,7 +204,7 @@ func TestGetPlatformCertificateSerial_WithPublicKey(t *testing.T) {
 	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
 
 	// 创建客户端
-	client, err := NewPaymentClient(PaymentClientConfig{
+	client, err := NewDirectPaymentClient(DirectPaymentClientConfig{
 		MchID:                 "test_mch_id",
 		AppID:                 "test_app_id",
 		SerialNumber:          "test_serial",
@@ -319,38 +217,8 @@ func TestGetPlatformCertificateSerial_WithPublicKey(t *testing.T) {
 	require.NoError(t, err)
 
 	// 测试获取序列号（应返回公钥ID）
-	serial := client.GetPlatformCertificateSerial()
-	require.Equal(t, "PUB_KEY_ID_0123456789", serial)
-}
-
-func TestGetPlatformCertificateSerial_WithCertificate(t *testing.T) {
-	// 生成测试密钥
-	merchantPrivateKey, _ := generateTestKeyPair(t)
-	platformPrivateKey, platformPublicKey := generateTestKeyPair(t)
-
-	// 创建临时目录
-	tempDir := t.TempDir()
-
-	// 创建测试文件
-	privateKeyPath := createTestPrivateKeyFile(t, tempDir, merchantPrivateKey)
-	certPath := createTestCertificateFile(t, tempDir, platformPrivateKey, platformPublicKey)
-
-	// 创建客户端
-	client, err := NewPaymentClient(PaymentClientConfig{
-		MchID:                   "test_mch_id",
-		AppID:                   "test_app_id",
-		SerialNumber:            "test_serial",
-		APIV3Key:                testAPIV3Key(),
-		PrivateKeyPath:          privateKeyPath,
-		PlatformCertificatePath: certPath,
-		NotifyURL:               "https://example.com/notify",
-	})
-	require.NoError(t, err)
-
-	// 测试获取序列号（应返回证书序列号）
-	serial := client.GetPlatformCertificateSerial()
-	require.NotEmpty(t, serial)
-	require.Equal(t, "499602D2", serial) // 1234567890 的十六进制
+	publicKeyID := client.GetPlatformPublicKeyID()
+	require.Equal(t, "PUB_KEY_ID_0123456789", publicKeyID)
 }
 
 func TestGenerateJSAPIPayParams_UsesCanonicalRequestPaymentContract(t *testing.T) {
@@ -361,7 +229,7 @@ func TestGenerateJSAPIPayParams_UsesCanonicalRequestPaymentContract(t *testing.T
 	privateKeyPath := createTestPrivateKeyFile(t, tempDir, merchantPrivateKey)
 	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
 
-	client, err := NewPaymentClient(PaymentClientConfig{
+	client, err := NewDirectPaymentClient(DirectPaymentClientConfig{
 		MchID:                 "test_mch_id",
 		AppID:                 "test_app_id",
 		SerialNumber:          "test_serial",
@@ -465,9 +333,9 @@ func signNotificationForTest(t *testing.T, privateKey *rsa.PrivateKey, timestamp
 	return base64.StdEncoding.EncodeToString(signature)
 }
 
-func signedPaymentTransport(t *testing.T, privateKey *rsa.PrivateKey, serial string, fn paymentRoundTripFunc) http.RoundTripper {
+func signedDirectPaymentTransport(t *testing.T, privateKey *rsa.PrivateKey, serial string, fn directPaymentRoundTripFunc) http.RoundTripper {
 	t.Helper()
-	return paymentRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+	return directPaymentRoundTripFunc(func(req *http.Request) (*http.Response, error) {
 		resp, err := fn(req)
 		if err != nil {
 			return nil, err
@@ -495,7 +363,7 @@ func TestQueryOrderByOutTradeNo_VerifiesResponseSignature(t *testing.T) {
 	privateKeyPath := createTestPrivateKeyFile(t, tempDir, merchantPrivateKey)
 	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
 
-	client, err := NewPaymentClient(PaymentClientConfig{
+	client, err := NewDirectPaymentClient(DirectPaymentClientConfig{
 		MchID:                 "test_mch_id",
 		AppID:                 "test_app_id",
 		SerialNumber:          "test_serial",
@@ -508,14 +376,14 @@ func TestQueryOrderByOutTradeNo_VerifiesResponseSignature(t *testing.T) {
 	require.NoError(t, err)
 
 	client.httpClient = &http.Client{
-		Transport: signedPaymentTransport(t, platformPrivateKey, "PUB_KEY_ID_0123456789", func(req *http.Request) (*http.Response, error) {
+		Transport: signedDirectPaymentTransport(t, platformPrivateKey, "PUB_KEY_ID_0123456789", func(req *http.Request) (*http.Response, error) {
 			require.Equal(t, http.MethodGet, req.Method)
 			require.Equal(t, "/v3/pay/transactions/out-trade-no/order-001", req.URL.Path)
 			require.Equal(t, "mchid=test_mch_id", req.URL.RawQuery)
 			return &http.Response{
 				StatusCode: http.StatusOK,
 				Header:     make(http.Header),
-				Body:       io.NopCloser(strings.NewReader(`{"appid":"test_app_id","mchid":"test_mch_id","out_trade_no":"order-001","transaction_id":"wx_txn_001","trade_state":"SUCCESS"}`)),
+				Body:       io.NopCloser(strings.NewReader(`{"appid":"test_app_id","mchid":"test_mch_id","out_trade_no":"order-001","transaction_id":"wx_txn_001","trade_state":"SUCCESS","trade_state_desc":"支付成功"}`)),
 			}, nil
 		}),
 	}
@@ -524,7 +392,7 @@ func TestQueryOrderByOutTradeNo_VerifiesResponseSignature(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "order-001", resp.OutTradeNo)
 	require.Equal(t, "wx_txn_001", resp.TransactionID)
-	require.Equal(t, TradeStateSuccess, resp.TradeState)
+	require.Equal(t, wechatcontracts.DirectTradeStateSuccess, resp.TradeState)
 }
 
 func TestQueryOrderByOutTradeNo_MissingResponseSignatureFails(t *testing.T) {
@@ -535,7 +403,7 @@ func TestQueryOrderByOutTradeNo_MissingResponseSignatureFails(t *testing.T) {
 	privateKeyPath := createTestPrivateKeyFile(t, tempDir, merchantPrivateKey)
 	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
 
-	client, err := NewPaymentClient(PaymentClientConfig{
+	client, err := NewDirectPaymentClient(DirectPaymentClientConfig{
 		MchID:                 "test_mch_id",
 		AppID:                 "test_app_id",
 		SerialNumber:          "test_serial",
@@ -548,7 +416,7 @@ func TestQueryOrderByOutTradeNo_MissingResponseSignatureFails(t *testing.T) {
 	require.NoError(t, err)
 
 	client.httpClient = &http.Client{
-		Transport: paymentRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		Transport: directPaymentRoundTripFunc(func(req *http.Request) (*http.Response, error) {
 			return &http.Response{
 				StatusCode: http.StatusOK,
 				Header:     make(http.Header),
@@ -570,7 +438,7 @@ func TestCreateRefund_UsesLatestDocumentedFields(t *testing.T) {
 	privateKeyPath := createTestPrivateKeyFile(t, tempDir, merchantPrivateKey)
 	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
 
-	client, err := NewPaymentClient(PaymentClientConfig{
+	client, err := NewDirectPaymentClient(DirectPaymentClientConfig{
 		MchID:                 "test_mch_id",
 		AppID:                 "test_app_id",
 		SerialNumber:          "test_serial",
@@ -583,7 +451,7 @@ func TestCreateRefund_UsesLatestDocumentedFields(t *testing.T) {
 	require.NoError(t, err)
 
 	client.httpClient = &http.Client{
-		Transport: signedPaymentTransport(t, platformPrivateKey, "PUB_KEY_ID_0123456789", func(req *http.Request) (*http.Response, error) {
+		Transport: signedDirectPaymentTransport(t, platformPrivateKey, "PUB_KEY_ID_0123456789", func(req *http.Request) (*http.Response, error) {
 			require.Equal(t, http.MethodPost, req.Method)
 			require.Equal(t, refundURL, req.URL.Path)
 
@@ -650,7 +518,7 @@ func TestQueryRefund_MissingDocumentedFieldsFails(t *testing.T) {
 	privateKeyPath := createTestPrivateKeyFile(t, tempDir, merchantPrivateKey)
 	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
 
-	client, err := NewPaymentClient(PaymentClientConfig{
+	client, err := NewDirectPaymentClient(DirectPaymentClientConfig{
 		MchID:                 "test_mch_id",
 		AppID:                 "test_app_id",
 		SerialNumber:          "test_serial",
@@ -663,7 +531,7 @@ func TestQueryRefund_MissingDocumentedFieldsFails(t *testing.T) {
 	require.NoError(t, err)
 
 	client.httpClient = &http.Client{
-		Transport: signedPaymentTransport(t, platformPrivateKey, "PUB_KEY_ID_0123456789", func(req *http.Request) (*http.Response, error) {
+		Transport: signedDirectPaymentTransport(t, platformPrivateKey, "PUB_KEY_ID_0123456789", func(req *http.Request) (*http.Response, error) {
 			return &http.Response{
 				StatusCode: http.StatusOK,
 				Header:     make(http.Header),
@@ -685,7 +553,7 @@ func TestVerifyNotificationSignature_WithMatchingSerial(t *testing.T) {
 	privateKeyPath := createTestPrivateKeyFile(t, tempDir, merchantPrivateKey)
 	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
 
-	client, err := NewPaymentClient(PaymentClientConfig{
+	client, err := NewDirectPaymentClient(DirectPaymentClientConfig{
 		MchID:                 "test_mch_id",
 		AppID:                 "test_app_id",
 		SerialNumber:          "test_serial",
@@ -714,7 +582,7 @@ func TestVerifyNotificationSignature_SerialMismatchFails(t *testing.T) {
 	privateKeyPath := createTestPrivateKeyFile(t, tempDir, merchantPrivateKey)
 	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
 
-	client, err := NewPaymentClient(PaymentClientConfig{
+	client, err := NewDirectPaymentClient(DirectPaymentClientConfig{
 		MchID:                 "test_mch_id",
 		AppID:                 "test_app_id",
 		SerialNumber:          "test_serial",

@@ -94,16 +94,17 @@ func TestOrderServiceReplaceOrderSchedulesPaymentTimeout(t *testing.T) {
 	session := db.DiningSession{ID: 77, UserID: userID}
 	dish := db.Dish{ID: dishID, MerchantID: merchantID, Name: "Noodles", Price: 1500, IsOnline: true, IsAvailable: true}
 	paymentOrder := db.PaymentOrder{
-		ID:            222,
-		UserID:        userID,
-		OrderID:       pgtype.Int8{Int64: 111, Valid: true},
-		PaymentType:   "profit_sharing",
-		BusinessType:  "order",
-		Amount:        500,
-		OutTradeNo:    "RO111202603230001",
-		Status:        "pending",
-		ExpiresAt:     pgtype.Timestamptz{Time: expiresAt, Valid: true},
-		ReservationID: pgtype.Int8{Int64: reservationID, Valid: true},
+		ID:             222,
+		UserID:         userID,
+		OrderID:        pgtype.Int8{Int64: 111, Valid: true},
+		PaymentType:    "profit_sharing",
+		PaymentChannel: db.PaymentChannelEcommerce,
+		BusinessType:   "order",
+		Amount:         500,
+		OutTradeNo:     "RO111202603230001",
+		Status:         "pending",
+		ExpiresAt:      pgtype.Timestamptz{Time: expiresAt, Valid: true},
+		ReservationID:  pgtype.Int8{Int64: reservationID, Valid: true},
 	}
 
 	store.EXPECT().GetOrderForUpdate(gomock.Any(), orderID).Times(1).Return(oldOrder, nil)

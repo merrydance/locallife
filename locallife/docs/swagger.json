@@ -8545,7 +8545,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "用户为会员卡充值，支持微信/支付宝支付，自动匹配赠送规则",
+                "description": "会员线上充值已暂停，请联系商户线下收款后代录入账",
                 "consumes": [
                     "application/json"
                 ],
@@ -8555,7 +8555,7 @@
                 "tags": [
                     "会员管理"
                 ],
-                "summary": "会员卡充值",
+                "summary": "会员卡充值（已暂停）",
                 "parameters": [
                     {
                         "description": "充值信息",
@@ -8568,12 +8568,6 @@
                     }
                 ],
                 "responses": {
-                    "200": {
-                        "description": "支付参数和交易信息",
-                        "schema": {
-                            "type": "object"
-                        }
-                    },
                     "400": {
                         "description": "参数错误或用户未绑定微信",
                         "schema": {
@@ -8600,6 +8594,12 @@
                     },
                     "500": {
                         "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "会员储值支付已暂停",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -15287,6 +15287,96 @@
                     },
                     "400": {
                         "description": "参数错误或余额不足",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "非商户用户",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "会员不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/merchants/{id}/members/{user_id}/recharge": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "商户记录用户已在线下完成的会员充值，并自动按当前充赠规则入账",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "会员管理-商户"
+                ],
+                "summary": "商户代录会员充值",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "商户ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "用户ID",
+                        "name": "user_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "幂等键，同一笔充值重试必须复用同一个值",
+                        "name": "Idempotency-Key",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "充值入账信息",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.recordMemberRechargeBody"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "入账后的会员信息",
+                        "schema": {
+                            "$ref": "#/definitions/api.merchantMemberRechargeResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -38159,6 +38249,53 @@
                 }
             }
         },
+        "api.merchantMemberRechargeResponse": {
+            "type": "object",
+            "properties": {
+                "avatar_url": {
+                    "type": "string"
+                },
+                "balance": {
+                    "type": "integer"
+                },
+                "bonus_amount": {
+                    "type": "integer"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "full_name": {
+                    "type": "string"
+                },
+                "membership_id": {
+                    "type": "integer"
+                },
+                "phone": {
+                    "type": "string"
+                },
+                "recharge_amount": {
+                    "type": "integer"
+                },
+                "recharge_rule_id": {
+                    "type": "integer"
+                },
+                "total_consumed": {
+                    "type": "integer"
+                },
+                "total_credited": {
+                    "type": "integer"
+                },
+                "total_recharged": {
+                    "type": "integer"
+                },
+                "transaction_id": {
+                    "type": "integer"
+                },
+                "user_id": {
+                    "type": "integer"
+                }
+            }
+        },
         "api.merchantMemberResponse": {
             "type": "object",
             "properties": {
@@ -41385,6 +41522,23 @@
                 },
                 "urgency_score": {
                     "type": "integer"
+                }
+            }
+        },
+        "api.recordMemberRechargeBody": {
+            "type": "object",
+            "required": [
+                "recharge_amount"
+            ],
+            "properties": {
+                "notes": {
+                    "type": "string",
+                    "maxLength": 200
+                },
+                "recharge_amount": {
+                    "type": "integer",
+                    "maximum": 100000000,
+                    "minimum": 1
                 }
             }
         },

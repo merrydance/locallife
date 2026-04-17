@@ -26,13 +26,14 @@ func TestProcessTaskInitiateRefund_ReservationAddonRefund_UsesProvidedOutRefundN
 
 	reservationID := int64(88)
 	paymentOrder := db.PaymentOrder{
-		ID:            12,
-		ReservationID: pgtype.Int8{Int64: reservationID, Valid: true},
-		OutTradeNo:    "RA_PAY_12",
-		Amount:        600,
-		Status:        "paid",
-		BusinessType:  "reservation_addon",
-		PaymentType:   "profit_sharing",
+		ID:             12,
+		ReservationID:  pgtype.Int8{Int64: reservationID, Valid: true},
+		OutTradeNo:     "RA_PAY_12",
+		Amount:         600,
+		Status:         "paid",
+		BusinessType:   "reservation_addon",
+		PaymentType:    "profit_sharing",
+		PaymentChannel: db.PaymentChannelEcommerce,
 	}
 	refundOrder := db.RefundOrder{ID: 33, PaymentOrderID: paymentOrder.ID, RefundAmount: 300, Status: "pending", OutRefundNo: "RF_RA_12_1"}
 

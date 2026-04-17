@@ -153,12 +153,14 @@ func createRandomPaymentOrderWithOrder(t *testing.T, userID int64, orderID *int6
 	}
 
 	arg := CreatePaymentOrderParams{
-		UserID:       userID,
-		PaymentType:  "miniprogram",
-		BusinessType: "order",
-		Amount:       amount,
-		OutTradeNo:   outTradeNo,
-		ExpiresAt:    pgtype.Timestamptz{Time: time.Now().Add(15 * time.Minute), Valid: true},
+		UserID:                userID,
+		PaymentType:           "miniprogram",
+		PaymentChannel:        PaymentChannelDirect,
+		RequiresProfitSharing: false,
+		BusinessType:          "order",
+		Amount:                amount,
+		OutTradeNo:            outTradeNo,
+		ExpiresAt:             pgtype.Timestamptz{Time: time.Now().Add(15 * time.Minute), Valid: true},
 	}
 
 	if orderID != nil {
@@ -274,13 +276,15 @@ func TestGetPaymentOrdersByOrder(t *testing.T) {
 	// 创建关联到订单的支付单
 	outTradeNo := util.RandomString(32)
 	arg := CreatePaymentOrderParams{
-		OrderID:      pgtype.Int8{Int64: order.ID, Valid: true},
-		UserID:       order.UserID,
-		PaymentType:  "miniprogram",
-		BusinessType: "order",
-		Amount:       order.TotalAmount,
-		OutTradeNo:   outTradeNo,
-		ExpiresAt:    pgtype.Timestamptz{Time: time.Now().Add(15 * time.Minute), Valid: true},
+		OrderID:               pgtype.Int8{Int64: order.ID, Valid: true},
+		UserID:                order.UserID,
+		PaymentType:           "miniprogram",
+		PaymentChannel:        PaymentChannelDirect,
+		RequiresProfitSharing: false,
+		BusinessType:          "order",
+		Amount:                order.TotalAmount,
+		OutTradeNo:            outTradeNo,
+		ExpiresAt:             pgtype.Timestamptz{Time: time.Now().Add(15 * time.Minute), Valid: true},
 	}
 
 	_, err := testStore.CreatePaymentOrder(context.Background(), arg)
@@ -303,13 +307,15 @@ func TestGetLatestPaymentOrderByOrder(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		outTradeNo := util.RandomString(32)
 		arg := CreatePaymentOrderParams{
-			OrderID:      pgtype.Int8{Int64: order.ID, Valid: true},
-			UserID:       order.UserID,
-			PaymentType:  "miniprogram",
-			BusinessType: "order",
-			Amount:       order.TotalAmount,
-			OutTradeNo:   outTradeNo,
-			ExpiresAt:    pgtype.Timestamptz{Time: time.Now().Add(15 * time.Minute), Valid: true},
+			OrderID:               pgtype.Int8{Int64: order.ID, Valid: true},
+			UserID:                order.UserID,
+			PaymentType:           "miniprogram",
+			PaymentChannel:        PaymentChannelDirect,
+			RequiresProfitSharing: false,
+			BusinessType:          "order",
+			Amount:                order.TotalAmount,
+			OutTradeNo:            outTradeNo,
+			ExpiresAt:             pgtype.Timestamptz{Time: time.Now().Add(15 * time.Minute), Valid: true},
 		}
 
 		_, err := testStore.CreatePaymentOrder(context.Background(), arg)

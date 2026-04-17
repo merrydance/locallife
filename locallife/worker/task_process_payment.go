@@ -41,6 +41,19 @@ const (
 
 const profitSharingEnqueueDedupWindow = 12 * time.Minute
 
+func shouldDispatchOrderProfitSharing(order db.Order) bool {
+	if order.ReservationID.Valid {
+		return true
+	}
+
+	switch order.OrderType {
+	case "takeout", "dine_in", "takeaway":
+		return false
+	default:
+		return true
+	}
+}
+
 func withProfitSharingEnqueueDedup(opts ...asynq.Option) []asynq.Option {
 	merged := make([]asynq.Option, 0, len(opts)+1)
 	merged = append(merged, opts...)
@@ -615,13 +628,10 @@ func (processor *RedisTaskProcessor) ProcessTaskPaymentSuccess(ctx context.Conte
 	// 订单支付成功后，需要触发分账与通知
 	if paymentOrder.BusinessType == "order" && result.OrderResult != nil {
 		processor.sendOrderPaidNotifications(ctx, *result.OrderResult)
-		if paymentOrder.PaymentType == "profit_sharing" && paymentOrder.OrderID.Valid {
+		if paymentOrderUsesEcommerceChannel(paymentOrder) && paymentOrderRequiresProfitSharing(paymentOrder) && paymentOrder.OrderID.Valid && shouldDispatchOrderProfitSharing(result.OrderResult.Order) {
 			// 外卖订单：发货信息上报后微信会冻结资金48小时，由微信结算事件
 			// (trade_manage_order_settlement) 在用户确认收货或 T+2 自动确认后回调触发分账。
-			// 堂食/打包订单：无配送环节，微信不会推送结算事件，需立即触发分账。
-			if result.OrderResult.Order.OrderType == "takeout" {
-				return nil
-			}
+			// 堂食/外带普通订单不进入分账；预定关联订单仍按预定链路分账。
 			return processor.distributor.DistributeTaskProcessProfitSharing(ctx, &ProfitSharingPayload{
 				PaymentOrderID: paymentOrder.ID,
 				OrderID:        paymentOrder.OrderID.Int64,
@@ -1398,11 +1408,10 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharing(ctx context.Contex
 
 	// 如果不需要分账（堂食/打包），直接完结分账
 	if !needProfitSharing {
-		err = processor.finishProfitSharingOrder(ctx, profitSharingOrder.ID, paymentConfig.SubMchID, paymentOrder.TransactionID.String, outOrderNo, "无需继续分账，解冻剩余资金")
-		if err != nil {
-			return err
+		if _, err := processor.store.UpdateProfitSharingOrderToFinished(ctx, profitSharingOrder.ID); err != nil && !errors.Is(err, db.ErrRecordNotFound) {
+			return fmt.Errorf("update profit sharing order to finished: %w", err)
 		}
-		log.Info().Int64("profit_sharing_order_id", profitSharingOrder.ID).Msg("no profit sharing needed, finish order requested")
+		log.Info().Int64("profit_sharing_order_id", profitSharingOrder.ID).Msg("no profit sharing needed, finished locally")
 		return nil
 	}
 
@@ -1652,8 +1661,6 @@ func (processor *RedisTaskProcessor) ProcessTaskInitiateRefund(ctx context.Conte
 	}
 
 	switch paymentOrder.BusinessType {
-	case "membership_recharge":
-		return processor.processMembershipRechargeRefund(ctx, paymentOrder, payload)
 	case "rider_deposit":
 		return processor.processRiderDepositMismatchRefund(ctx, paymentOrder, payload)
 	}
@@ -1670,15 +1677,6 @@ func (processor *RedisTaskProcessor) ProcessTaskInitiateRefund(ctx context.Conte
 	order, err := processor.store.GetOrder(ctx, orderID)
 	if err != nil {
 		return fmt.Errorf("get order: %w", err)
-	}
-
-	// 获取商户支付配置
-	paymentConfig, err := processor.store.GetMerchantPaymentConfig(ctx, order.MerchantID)
-	if err != nil {
-		if errors.Is(err, db.ErrRecordNotFound) {
-			return fmt.Errorf("merchant payment config not found")
-		}
-		return fmt.Errorf("get merchant payment config: %w", err)
 	}
 
 	// 生成退款单号（下划线分隔符确保不同 ID 组合不产生相同字符串）
@@ -1725,13 +1723,29 @@ func (processor *RedisTaskProcessor) ProcessTaskInitiateRefund(ctx context.Conte
 		}
 		refundOrder = txResult.RefundOrder
 	}
-
-	// 检查是否有微信支付客户端
-	if processor.ecommerceClient == nil {
-		return fmt.Errorf("ecommerce client not configured for refund")
+	if requiresEcommerceRefund(paymentOrder) && !paymentOrderUsesEcommerceChannel(paymentOrder) {
+		refundErr := mainBusinessRefundChannelDriftError(paymentOrder, "initiate refund")
+		if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
+			return errors.Join(refundErr, fmt.Errorf("mark refund order as failed: %w", dbErr))
+		}
+		return fmt.Errorf("%w: %w", refundErr, asynq.SkipRetry)
 	}
 
-	if paymentOrder.PaymentType == "profit_sharing" {
+	var paymentConfig db.MerchantPaymentConfig
+
+	if paymentOrderUsesEcommerceChannel(paymentOrder) {
+		if processor.ecommerceClient == nil {
+			return fmt.Errorf("ecommerce client not configured for refund")
+		}
+
+		paymentConfig, err = processor.store.GetMerchantPaymentConfig(ctx, order.MerchantID)
+		if err != nil {
+			if errors.Is(err, db.ErrRecordNotFound) {
+				return fmt.Errorf("merchant payment config not found")
+			}
+			return fmt.Errorf("get merchant payment config: %w", err)
+		}
+
 		profitSharingOrder, err := processor.store.GetProfitSharingOrderByPaymentOrder(ctx, paymentOrder.ID)
 		if err != nil {
 			if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
@@ -2016,7 +2030,7 @@ func (processor *RedisTaskProcessor) ProcessTaskInitiateRefund(ctx context.Conte
 	// 根据支付渠道选择退款 API，与同步退款服务（refund_service.go）保持一致：
 	// - profit_sharing（收付通）→ CreateEcommerceRefund，需携带 SubMchID
 	// - miniprogram/native 等直连支付 → CreateRefund，直连退款 API
-	if paymentOrder.PaymentType == "profit_sharing" {
+	if paymentOrderUsesEcommerceChannel(paymentOrder) {
 		refundResp, err := createEcommerceRefundContract(ctx, processor.ecommerceClient, &wechatcontracts.EcommerceRefundRequest{
 			SubMchID:    paymentConfig.SubMchID,
 			OutTradeNo:  paymentOrder.OutTradeNo,
@@ -2048,7 +2062,7 @@ func (processor *RedisTaskProcessor) ProcessTaskInitiateRefund(ctx context.Conte
 			Msg("ecommerce refund request processed")
 	} else {
 		// 直连支付退款（miniprogram/native 等）
-		wxRefund, err := createDirectRefundContract(ctx, processor.ecommerceClient, &wechatcontracts.DirectRefundRequest{
+		wxRefund, err := createDirectRefundContract(ctx, processor.directPaymentClient, &wechatcontracts.DirectRefundRequest{
 			OutTradeNo:  paymentOrder.OutTradeNo,
 			OutRefundNo: outRefundNo,
 			Reason:      payload.Reason,
@@ -2093,104 +2107,6 @@ func (processor *RedisTaskProcessor) ProcessTaskInitiateRefund(ctx context.Conte
 	return nil
 }
 
-func (processor *RedisTaskProcessor) processMembershipRechargeRefund(ctx context.Context, paymentOrder db.PaymentOrder, payload PayloadProcessRefund) error {
-	log.Info().
-		Int64("payment_order_id", payload.PaymentOrderID).
-		Int64("refund_amount", payload.RefundAmount).
-		Str("reason", payload.Reason).
-		Msg("processing membership recharge refund task")
-
-	if processor.ecommerceClient == nil {
-		return fmt.Errorf("ecommerce client not configured, cannot process membership recharge refund")
-	}
-	if !paymentOrder.Attach.Valid || paymentOrder.Attach.String == "" {
-		return fmt.Errorf("membership recharge attach is missing")
-	}
-
-	var attachData struct {
-		MembershipID int64 `json:"membership_id"`
-	}
-	if err := json.Unmarshal([]byte(paymentOrder.Attach.String), &attachData); err != nil {
-		return fmt.Errorf("parse membership recharge attach: %w", err)
-	}
-	if attachData.MembershipID == 0 {
-		return fmt.Errorf("membership recharge attach membership_id is required")
-	}
-
-	membership, err := processor.store.GetMembershipForUpdate(ctx, attachData.MembershipID)
-	if err != nil {
-		return fmt.Errorf("get membership for refund: %w", err)
-	}
-	paymentConfig, err := processor.store.GetMerchantPaymentConfig(ctx, membership.MerchantID)
-	if err != nil {
-		return fmt.Errorf("get merchant payment config: %w", err)
-	}
-
-	outRefundNo := fmt.Sprintf("RFM%d_M", payload.PaymentOrderID)
-	var refundOrder db.RefundOrder
-	existingRefund, findErr := processor.store.GetRefundOrderByOutRefundNo(ctx, outRefundNo)
-	if findErr == nil {
-		refundOrder = existingRefund
-		if refundOrder.Status == "success" {
-			log.Info().Str("out_refund_no", outRefundNo).Msg("membership recharge refund already succeeded")
-			return nil
-		}
-		if refundOrder.Status == "processing" {
-			log.Info().Str("out_refund_no", outRefundNo).Msg("membership recharge refund already processing")
-			return nil
-		}
-	} else if !errors.Is(findErr, db.ErrRecordNotFound) {
-		return fmt.Errorf("check existing membership recharge refund order: %w", findErr)
-	} else {
-		refundOrder, err = processor.store.CreateRefundOrder(ctx, db.CreateRefundOrderParams{
-			PaymentOrderID: paymentOrder.ID,
-			RefundType:     "amount_mismatch",
-			RefundAmount:   payload.RefundAmount,
-			RefundReason:   pgtype.Text{String: payload.Reason, Valid: payload.Reason != ""},
-			OutRefundNo:    outRefundNo,
-			Status:         "pending",
-		})
-		if err != nil {
-			if db.ErrorCode(err) == db.UniqueViolation {
-				refundOrder, err = processor.store.GetRefundOrderByOutRefundNo(ctx, outRefundNo)
-				if err != nil {
-					return fmt.Errorf("lookup membership recharge refund order after conflict: %w", err)
-				}
-			} else {
-				return fmt.Errorf("create membership recharge refund order: %w", err)
-			}
-		}
-	}
-
-	refundResp, err := createEcommerceRefundContract(ctx, processor.ecommerceClient, &wechatcontracts.EcommerceRefundRequest{
-		SubMchID:    paymentConfig.SubMchID,
-		OutTradeNo:  paymentOrder.OutTradeNo,
-		OutRefundNo: outRefundNo,
-		Reason:      payload.Reason,
-		Amount: &wechatcontracts.EcommerceRefundRequestAmount{
-			Refund:   payload.RefundAmount,
-			Total:    refundRequestTotalAmount(paymentOrder.Amount, payload.RefundAmount),
-			Currency: wechatcontracts.EcommerceRefundCurrencyCNY,
-		},
-	})
-	if err != nil {
-		logRefundRequestFailure(refundOrder.ID, paymentOrder.ID, outRefundNo, paymentOrder.PaymentType, err)
-		if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
-			return errors.Join(fmt.Errorf("call wechat membership recharge refund API: %w", err), fmt.Errorf("mark refund order as failed: %w", dbErr))
-		}
-		return fmt.Errorf("call wechat membership recharge refund API: %w", err)
-	}
-
-	if dbErr := processor.markRefundOrderProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
-		ID:       refundOrder.ID,
-		RefundID: pgtype.Text{String: refundResp.RefundID, Valid: refundResp.RefundID != ""},
-	}); dbErr != nil {
-		return fmt.Errorf("mark refund order as processing: %w", dbErr)
-	}
-
-	return nil
-}
-
 func (processor *RedisTaskProcessor) processRiderDepositMismatchRefund(ctx context.Context, paymentOrder db.PaymentOrder, payload PayloadProcessRefund) error {
 	log.Info().
 		Int64("payment_order_id", payload.PaymentOrderID).
@@ -2198,8 +2114,8 @@ func (processor *RedisTaskProcessor) processRiderDepositMismatchRefund(ctx conte
 		Str("reason", payload.Reason).
 		Msg("processing rider deposit mismatch refund task")
 
-	if processor.ecommerceClient == nil {
-		return fmt.Errorf("ecommerce client not configured, cannot process rider deposit refund")
+	if processor.directPaymentClient == nil {
+		return fmt.Errorf("payment client not configured, cannot process rider deposit refund")
 	}
 
 	outRefundNo := fmt.Sprintf("RFM%d_D", payload.PaymentOrderID)
@@ -2241,7 +2157,7 @@ func (processor *RedisTaskProcessor) processRiderDepositMismatchRefund(ctx conte
 		}
 	}
 
-	wxRefund, err := createDirectRefundContract(ctx, processor.ecommerceClient, &wechatcontracts.DirectRefundRequest{
+	wxRefund, err := createDirectRefundContract(ctx, processor.directPaymentClient, &wechatcontracts.DirectRefundRequest{
 		OutTradeNo:  paymentOrder.OutTradeNo,
 		OutRefundNo: outRefundNo,
 		Reason:      payload.Reason,
@@ -2307,6 +2223,9 @@ func (processor *RedisTaskProcessor) processReservationRefund(ctx context.Contex
 	if processor.ecommerceClient == nil {
 		return fmt.Errorf("ecommerce client not configured, cannot process reservation refund")
 	}
+	if !paymentOrderUsesEcommerceChannel(paymentOrder) {
+		return mainBusinessRefundChannelDriftError(paymentOrder, "process reservation refund")
+	}
 
 	reservation, err := processor.store.GetTableReservation(ctx, payload.ReservationID)
 	if err != nil {
@@ -2340,10 +2259,7 @@ func (processor *RedisTaskProcessor) processReservationRefund(ctx context.Contex
 	} else if !errors.Is(findErr, db.ErrRecordNotFound) {
 		return fmt.Errorf("check existing refund order: %w", findErr)
 	} else {
-		refundType := paymentOrder.PaymentType
-		if refundType == "native" {
-			refundType = "miniprogram"
-		}
+		refundType := refundTypeForPaymentOrder(paymentOrder)
 		txResult, createErr := processor.store.CreateRefundOrderTx(ctx, db.CreateRefundOrderTxParams{
 			PaymentOrderID: payload.PaymentOrderID,
 			RefundType:     refundType,
@@ -2472,76 +2388,83 @@ func (processor *RedisTaskProcessor) ProcessTaskAnomalyRefund(ctx context.Contex
 		return nil
 	}
 
-	// 解析商户 SubMchID
 	var subMchID string
 	merchantID := int64(0)
-	if paymentOrder.OrderID.Valid {
-		order, orderErr := processor.store.GetOrder(ctx, paymentOrder.OrderID.Int64)
-		if orderErr != nil {
-			if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
-				return errors.Join(fmt.Errorf("get order for merchant lookup: %w", orderErr), fmt.Errorf("mark refund order as failed: %w", dbErr))
-			}
-			return fmt.Errorf("get order for merchant lookup: %w", orderErr)
-		}
-		merchantID = order.MerchantID
-		cfg, cfgErr := processor.store.GetMerchantPaymentConfig(ctx, order.MerchantID)
-		if cfgErr != nil {
-			if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
-				return errors.Join(fmt.Errorf("get merchant payment config: %w", cfgErr), fmt.Errorf("mark refund order as failed: %w", dbErr))
-			}
-			return fmt.Errorf("get merchant payment config: %w", cfgErr)
-		}
-		subMchID = cfg.SubMchID
-	} else if paymentOrder.ReservationID.Valid {
-		reservation, resErr := processor.store.GetTableReservation(ctx, paymentOrder.ReservationID.Int64)
-		if resErr != nil {
-			if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
-				return errors.Join(fmt.Errorf("get reservation for merchant lookup: %w", resErr), fmt.Errorf("mark refund order as failed: %w", dbErr))
-			}
-			return fmt.Errorf("get reservation for merchant lookup: %w", resErr)
-		}
-		merchantID = reservation.MerchantID
-		cfg, cfgErr := processor.store.GetMerchantPaymentConfig(ctx, reservation.MerchantID)
-		if cfgErr != nil {
-			if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
-				return errors.Join(fmt.Errorf("get merchant payment config: %w", cfgErr), fmt.Errorf("mark refund order as failed: %w", dbErr))
-			}
-			return fmt.Errorf("get merchant payment config: %w", cfgErr)
-		}
-		subMchID = cfg.SubMchID
-	} else {
-		// 无法确定商户，标记失败并告警（不重试）
+	if requiresEcommerceRefund(paymentOrder) && !paymentOrderUsesEcommerceChannel(paymentOrder) {
+		refundErr := mainBusinessRefundChannelDriftError(paymentOrder, "process anomaly refund")
 		if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
-			return fmt.Errorf("mark refund order as failed: %w", dbErr)
+			return errors.Join(refundErr, fmt.Errorf("mark refund order as failed: %w", dbErr))
 		}
-		processor.publishAlert(ctx, AlertData{
-			AlertType:   AlertTypeRefundFailed,
-			Level:       AlertLevelCritical,
-			Title:       "⚠️ 异常退款无法确定商户",
-			Message:     fmt.Sprintf("支付单 %d 的异常退款无法确定 SubMchID（OrderID 和 ReservationID 均为空），请人工处理", payload.PaymentOrderID),
-			RelatedID:   payload.PaymentOrderID,
-			RelatedType: "payment_order",
-			Extra: mergeAlertExtra(paymentOrderAlertExtra(paymentOrder, 0), map[string]interface{}{
-				"transaction_id": payload.TransactionID,
-				"refund_amount":  payload.RefundAmount,
-				"out_refund_no":  payload.OutRefundNo,
-			}),
-		})
-		// 不可重试：返回 nil 防止 asynq 无限重试
-		return nil
-	}
-
-	if processor.ecommerceClient == nil {
-		if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
-			return errors.Join(fmt.Errorf("ecommerce client not configured"), fmt.Errorf("mark refund order as failed: %w", dbErr))
-		}
-		return fmt.Errorf("ecommerce client not configured")
+		return fmt.Errorf("%w: %w", refundErr, asynq.SkipRetry)
 	}
 
 	// 根据支付渠道选择退款 API：
 	// - profit_sharing（收付通）→ CreateEcommerceRefund，使用 TransactionID 绕过本地状态约束
 	// - miniprogram/native 等直连支付 → CreateRefund，使用 OutTradeNo
-	if paymentOrder.PaymentType == "profit_sharing" {
+	if paymentOrderUsesEcommerceChannel(paymentOrder) {
+		if processor.ecommerceClient == nil {
+			if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
+				return errors.Join(fmt.Errorf("ecommerce client not configured"), fmt.Errorf("mark refund order as failed: %w", dbErr))
+			}
+			return fmt.Errorf("ecommerce client not configured")
+		}
+
+		if paymentOrder.OrderID.Valid {
+			order, orderErr := processor.store.GetOrder(ctx, paymentOrder.OrderID.Int64)
+			if orderErr != nil {
+				if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
+					return errors.Join(fmt.Errorf("get order for merchant lookup: %w", orderErr), fmt.Errorf("mark refund order as failed: %w", dbErr))
+				}
+				return fmt.Errorf("get order for merchant lookup: %w", orderErr)
+			}
+			merchantID = order.MerchantID
+			cfg, cfgErr := processor.store.GetMerchantPaymentConfig(ctx, order.MerchantID)
+			if cfgErr != nil {
+				if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
+					return errors.Join(fmt.Errorf("get merchant payment config: %w", cfgErr), fmt.Errorf("mark refund order as failed: %w", dbErr))
+				}
+				return fmt.Errorf("get merchant payment config: %w", cfgErr)
+			}
+			subMchID = cfg.SubMchID
+		} else if paymentOrder.ReservationID.Valid {
+			reservation, resErr := processor.store.GetTableReservation(ctx, paymentOrder.ReservationID.Int64)
+			if resErr != nil {
+				if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
+					return errors.Join(fmt.Errorf("get reservation for merchant lookup: %w", resErr), fmt.Errorf("mark refund order as failed: %w", dbErr))
+				}
+				return fmt.Errorf("get reservation for merchant lookup: %w", resErr)
+			}
+			merchantID = reservation.MerchantID
+			cfg, cfgErr := processor.store.GetMerchantPaymentConfig(ctx, reservation.MerchantID)
+			if cfgErr != nil {
+				if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
+					return errors.Join(fmt.Errorf("get merchant payment config: %w", cfgErr), fmt.Errorf("mark refund order as failed: %w", dbErr))
+				}
+				return fmt.Errorf("get merchant payment config: %w", cfgErr)
+			}
+			subMchID = cfg.SubMchID
+		} else {
+			// 无法确定商户，标记失败并告警（不重试）
+			if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
+				return fmt.Errorf("mark refund order as failed: %w", dbErr)
+			}
+			processor.publishAlert(ctx, AlertData{
+				AlertType:   AlertTypeRefundFailed,
+				Level:       AlertLevelCritical,
+				Title:       "⚠️ 异常退款无法确定商户",
+				Message:     fmt.Sprintf("支付单 %d 的异常退款无法确定 SubMchID（OrderID 和 ReservationID 均为空），请人工处理", payload.PaymentOrderID),
+				RelatedID:   payload.PaymentOrderID,
+				RelatedType: "payment_order",
+				Extra: mergeAlertExtra(paymentOrderAlertExtra(paymentOrder, 0), map[string]interface{}{
+					"transaction_id": payload.TransactionID,
+					"refund_amount":  payload.RefundAmount,
+					"out_refund_no":  payload.OutRefundNo,
+				}),
+			})
+			// 不可重试：返回 nil 防止 asynq 无限重试
+			return nil
+		}
+
 		refundResp, err := createEcommerceRefundContract(ctx, processor.ecommerceClient, &wechatcontracts.EcommerceRefundRequest{
 			SubMchID:      subMchID,
 			TransactionID: payload.TransactionID,
@@ -2572,7 +2495,7 @@ func (processor *RedisTaskProcessor) ProcessTaskAnomalyRefund(ctx context.Contex
 			Msg("anomaly ecommerce refund accepted, waiting for callback confirmation")
 	} else {
 		// 直连支付退款（miniprogram/native 等），使用 OutTradeNo
-		wxRefund, err := createDirectRefundContract(ctx, processor.ecommerceClient, &wechatcontracts.DirectRefundRequest{
+		wxRefund, err := createDirectRefundContract(ctx, processor.directPaymentClient, &wechatcontracts.DirectRefundRequest{
 			OutTradeNo:  paymentOrder.OutTradeNo,
 			OutRefundNo: payload.OutRefundNo,
 			Reason:      "已关闭订单异常到账，系统自动退款",

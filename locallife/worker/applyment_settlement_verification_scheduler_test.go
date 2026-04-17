@@ -188,3 +188,14 @@ func TestApplymentSettlementVerificationSchedulerMarksTerminalFailureOnSettlemen
 	scheduler := worker.NewApplymentSettlementVerificationScheduler(store, distributor, ecommerceClient)
 	scheduler.RunOnce()
 }
+
+func TestApplymentSettlementVerificationSchedulerRunOnceSkipsWithoutEcommerceClient(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	distributor := mockwk.NewMockTaskDistributor(ctrl)
+
+	scheduler := worker.NewApplymentSettlementVerificationScheduler(store, distributor, nil)
+	scheduler.RunOnce()
+}

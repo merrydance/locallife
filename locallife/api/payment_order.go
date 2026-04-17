@@ -33,12 +33,11 @@ const (
 
 // 业务类型常量
 const (
-	BusinessTypeOrder              = "order"               // 订单支付
-	BusinessTypeReservation        = "reservation"         // 预定押金
-	BusinessTypeReservationAddon   = "reservation_addon"   // 预定加菜补差
-	BusinessTypeMembershipRecharge = "membership_recharge" // 会员充值
-	BusinessTypeRiderDeposit       = "rider_deposit"       // 骑手押金
-	BusinessTypeClaimRecovery      = "claim_recovery"      // 索赔追偿支付
+	BusinessTypeOrder            = "order"             // 订单支付
+	BusinessTypeReservation      = "reservation"       // 预定押金
+	BusinessTypeReservationAddon = "reservation_addon" // 预定加菜补差
+	BusinessTypeRiderDeposit     = "rider_deposit"     // 骑手押金
+	BusinessTypeClaimRecovery    = "claim_recovery"    // 索赔追偿支付
 )
 
 // 支付状态常量
@@ -54,7 +53,7 @@ const (
 
 type createPaymentOrderRequest struct {
 	OrderID      int64  `json:"order_id" binding:"required,min=1"`
-	PaymentType  string `json:"payment_type" binding:"omitempty,oneof=native miniprogram"`
+	PaymentType  string `json:"payment_type" binding:"omitempty,oneof=miniprogram"`
 	BusinessType string `json:"business_type" binding:"required,oneof=order reservation"`
 }
 
@@ -394,14 +393,9 @@ func newCombinedPaymentWechatQueryResult(query *logic.QueryCombinedPaymentWechat
 	}
 }
 
-// generateOutTradeNo 生成商户订单号
-// 格式：P + yyyyMMddHHmmss(14位) + hex随机(8位) = 23位
+// generateOutTradeNo 生成商户订单号。
 func generateOutTradeNo() (string, error) {
 	return util.GenerateOutTradeNo("P")
-}
-
-func generateOutTradeNoWithPrefix(prefix string) (string, error) {
-	return util.GenerateOutTradeNo(prefix)
 }
 
 const (
@@ -471,7 +465,7 @@ func (server *Server) createPaymentOrder(ctx *gin.Context) {
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	server.normalizeCreatePaymentOrderRequest(&req, authPayload.UserID)
+	server.normalizeCreatePaymentOrderRequest(&req)
 
 	facade := server.paymentFacade
 	if facade == nil {
@@ -560,28 +554,10 @@ func (server *Server) queryPaymentOrder(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, newPaymentOrderQueryResponse(result.PaymentOrder, result.PayParams, result.WechatOrder))
 }
 
-func (server *Server) normalizeCreatePaymentOrderRequest(req *createPaymentOrderRequest, userID int64) {
+func (server *Server) normalizeCreatePaymentOrderRequest(req *createPaymentOrderRequest) {
 	if req.PaymentType == "" {
 		req.PaymentType = PaymentTypeMiniProgram
-		return
 	}
-
-	entry := log.Info()
-	message := "legacy payment_type accepted for create payment order api"
-	if req.PaymentType == PaymentTypeNative {
-		entry = log.Warn()
-		message = "legacy native payment_type ignored for create payment order api"
-	}
-
-	entry.
-		Int64("user_id", userID).
-		Int64("order_id", req.OrderID).
-		Str("business_type", req.BusinessType).
-		Str("payment_type", req.PaymentType).
-		Bool("legacy_client_compat", true).
-		Msg(message)
-
-	req.PaymentType = PaymentTypeMiniProgram
 }
 
 func (server *Server) scheduleTimeoutForPaymentOrder(ctx context.Context, paymentOrder db.PaymentOrder) {

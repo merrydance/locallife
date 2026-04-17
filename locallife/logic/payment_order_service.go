@@ -36,16 +36,14 @@ const (
 // PaymentOrderService encapsulates payment order creation logic.
 type PaymentOrderService struct {
 	store           db.Store
-	paymentClient   wechat.PaymentClientInterface
 	ecommerceClient wechat.EcommerceClientInterface
 	now             func() time.Time
 }
 
 // NewPaymentOrderService creates a payment order service.
-func NewPaymentOrderService(store db.Store, paymentClient wechat.PaymentClientInterface, ecommerceClient wechat.EcommerceClientInterface) *PaymentOrderService {
+func NewPaymentOrderService(store db.Store, ecommerceClient wechat.EcommerceClientInterface) *PaymentOrderService {
 	return &PaymentOrderService{
 		store:           store,
-		paymentClient:   paymentClient,
 		ecommerceClient: ecommerceClient,
 		now:             time.Now,
 	}
@@ -194,14 +192,21 @@ func (svc *PaymentOrderService) CreatePaymentOrder(ctx context.Context, input Cr
 		})
 	}
 	if err == nil && existingPayment.Status == paymentStatusPending {
-		if input.BusinessType == businessTypeReservation {
+		if !paymentOrderUsesEcommerceChannel(existingPayment) {
+			if closeErr := svc.supersedePendingPaymentOrder(ctx, existingPayment); closeErr != nil {
+				return result, closeErr
+			}
+		} else if input.BusinessType == businessTypeReservation {
 			if !shouldReuseReservationPendingPayment(existingPayment, amount, attach) {
 				if closeErr := svc.supersedePendingPaymentOrder(ctx, existingPayment); closeErr != nil {
 					return result, closeErr
 				}
 			} else {
 				result.PaymentOrder = existingPayment
-				result.PayParams = svc.signExistingPaymentOrder(existingPayment)
+				result.PayParams, err = svc.signExistingPaymentOrder(existingPayment)
+				if err != nil {
+					return result, fmt.Errorf("sign existing payment order: %w", err)
+				}
 				return result, nil
 			}
 		} else if existingPayment.Amount != amount {
@@ -210,7 +215,10 @@ func (svc *PaymentOrderService) CreatePaymentOrder(ctx context.Context, input Cr
 			}
 		} else {
 			result.PaymentOrder = existingPayment
-			result.PayParams = svc.signExistingPaymentOrder(existingPayment)
+			result.PayParams, err = svc.signExistingPaymentOrder(existingPayment)
+			if err != nil {
+				return result, fmt.Errorf("sign existing payment order: %w", err)
+			}
 			return result, nil
 		}
 	}
@@ -225,91 +233,7 @@ func (svc *PaymentOrderService) CreatePaymentOrder(ctx context.Context, input Cr
 		return svc.createOrderEcommercePayment(ctx, input, merchantID, merchantName, reservationLinkedOrder || shouldEnableOrderProfitSharing(orderType), amount, attach, expiresAt)
 	}
 
-	// ==================== 订单走直连或扫码支付 ====================
-	var paymentOrder db.PaymentOrder
-	var outTradeNo string
-	err = nil
-	for attempt := 1; attempt <= outTradeNoMaxRetry; attempt++ {
-		var genErr error
-		outTradeNo, genErr = generateOutTradeNo()
-		if genErr != nil {
-			return result, fmt.Errorf("generate out trade no: %w", genErr)
-		}
-		createParams := db.CreatePaymentOrderParams{
-			UserID:       input.UserID,
-			PaymentType:  input.PaymentType,
-			BusinessType: input.BusinessType,
-			Amount:       amount,
-			OutTradeNo:   outTradeNo,
-			ExpiresAt:    pgtype.Timestamptz{Time: expiresAt, Valid: true},
-		}
-		createParams.OrderID = pgtype.Int8{Int64: input.OrderID, Valid: true}
-		paymentOrder, err = svc.store.CreatePaymentOrder(ctx, createParams)
-		if err == nil {
-			break
-		}
-		if isOutTradeNoConflict(err) && attempt < outTradeNoMaxRetry {
-			if !sleepWithContext(ctx, outTradeNoRetryBaseBack*time.Duration(attempt)) {
-				return result, NewRequestError(http.StatusRequestTimeout, errors.New("request canceled"))
-			}
-			continue
-		}
-		return result, fmt.Errorf("create payment order: %w", err)
-	}
-
-	result.PaymentOrder = paymentOrder
-
-	if svc.paymentClient != nil && input.PaymentType == paymentTypeMiniProgram {
-		user, err := svc.store.GetUser(ctx, input.UserID)
-		if err != nil {
-			_, _ = svc.store.UpdatePaymentOrderToClosed(ctx, paymentOrder.ID)
-			return result, fmt.Errorf("get user: %w", err)
-		}
-		if user.WechatOpenid == "" {
-			_, _ = svc.store.UpdatePaymentOrderToClosed(ctx, paymentOrder.ID)
-			return result, NewRequestError(http.StatusBadRequest, errors.New("wechat openid not found"))
-		}
-
-		if merchantID > 0 {
-			merchant, err := svc.store.GetMerchant(ctx, merchantID)
-			if err == nil {
-				merchantName = merchant.Name + " - Order Payment"
-			}
-		}
-
-		wxResp, payParams, err := svc.paymentClient.CreateJSAPIOrder(ctx, &wechat.JSAPIOrderRequest{
-			OutTradeNo:    outTradeNo,
-			Description:   merchantName,
-			TotalAmount:   amount,
-			OpenID:        user.WechatOpenid,
-			ExpireTime:    expiresAt,
-			Attach:        attach,
-			PayerClientIP: input.ClientIP,
-		})
-		if err != nil {
-			_, _ = svc.store.UpdatePaymentOrderToClosed(ctx, paymentOrder.ID)
-			return result, fmt.Errorf("wechat pay: %w", err)
-		}
-
-		updatedPayment, err := svc.store.UpdatePaymentOrderPrepayId(ctx, db.UpdatePaymentOrderPrepayIdParams{
-			ID:       paymentOrder.ID,
-			PrepayID: pgtype.Text{String: wxResp.PrepayID, Valid: true},
-		})
-		if err != nil {
-			_, _ = svc.store.UpdatePaymentOrderToFailed(ctx, paymentOrder.ID)
-			if svc.paymentClient != nil {
-				if closeErr := svc.paymentClient.CloseOrder(ctx, outTradeNo); closeErr != nil {
-					log.Warn().Err(closeErr).Str("out_trade_no", outTradeNo).Msg("close wechat order after prepay_id update failure")
-				}
-			}
-			return result, fmt.Errorf("update prepay id: %w", err)
-		}
-
-		result.PaymentOrder = updatedPayment
-		result.PayParams = payParams
-	}
-
-	return result, nil
+	return result, fmt.Errorf("unsupported business type after validation: %s", input.BusinessType)
 }
 
 // createReservationEcommercePayment 通过收付通单笔支付创建预定支付单。
@@ -553,27 +477,19 @@ func (svc *PaymentOrderService) createOrderEcommercePayment(
 	return result, nil
 }
 
-func (svc *PaymentOrderService) signExistingPaymentOrder(paymentOrder db.PaymentOrder) *wechat.JSAPIPayParams {
+func (svc *PaymentOrderService) signExistingPaymentOrder(paymentOrder db.PaymentOrder) (*wechat.JSAPIPayParams, error) {
 	if !paymentOrder.PrepayID.Valid {
-		return nil
+		return nil, nil
+	}
+	if svc.ecommerceClient != nil {
+		payParams, err := svc.ecommerceClient.GenerateJSAPIPayParams(paymentOrder.PrepayID.String)
+		if err != nil {
+			return nil, err
+		}
+		return payParams, nil
 	}
 
-	switch paymentOrder.PaymentType {
-	case "profit_sharing":
-		if svc.ecommerceClient != nil {
-			if payParams, err := svc.ecommerceClient.GenerateJSAPIPayParams(paymentOrder.PrepayID.String); err == nil {
-				return payParams
-			}
-		}
-	default:
-		if svc.paymentClient != nil {
-			if payParams, err := svc.paymentClient.GenerateJSAPIPayParams(paymentOrder.PrepayID.String); err == nil {
-				return payParams
-			}
-		}
-	}
-
-	return nil
+	return nil, nil
 }
 
 func (svc *PaymentOrderService) supersedePendingPaymentOrder(ctx context.Context, paymentOrder db.PaymentOrder) error {
@@ -631,7 +547,10 @@ func (svc *PaymentOrderService) resolveConcurrentOrderPayment(
 		}
 
 		result.PaymentOrder = paymentOrder
-		result.PayParams = svc.signExistingPaymentOrder(paymentOrder)
+		result.PayParams, err = svc.signExistingPaymentOrder(paymentOrder)
+		if err != nil {
+			return result, true, fmt.Errorf("sign concurrent pending payment order: %w", err)
+		}
 		if result.PayParams != nil {
 			return result, true, nil
 		}
@@ -685,7 +604,10 @@ func (svc *PaymentOrderService) resolveConcurrentReservationPayment(
 		}
 
 		result.PaymentOrder = paymentOrder
-		result.PayParams = svc.signExistingPaymentOrder(paymentOrder)
+		result.PayParams, err = svc.signExistingPaymentOrder(paymentOrder)
+		if err != nil {
+			return result, true, fmt.Errorf("sign concurrent reservation payment order: %w", err)
+		}
 		if result.PayParams != nil {
 			return result, true, nil
 		}
@@ -812,7 +734,7 @@ func (svc *PaymentOrderService) QueryPaymentOrder(ctx context.Context, input Que
 	if paymentOrder.CombinedPaymentID.Valid {
 		return QueryPaymentOrderResult{}, NewRequestError(http.StatusBadRequest, errors.New("合单支付订单请使用合单查询接口"))
 	}
-	if paymentOrder.PaymentType != paymentTypeProfitSharing {
+	if !paymentOrderUsesEcommerceChannel(paymentOrder) {
 		return QueryPaymentOrderResult{}, NewRequestError(http.StatusBadRequest, errors.New("仅收付通普通支付订单支持微信远端查询"))
 	}
 
@@ -909,10 +831,10 @@ func (svc *PaymentOrderService) ClosePaymentOrder(ctx context.Context, input Clo
 }
 
 func (svc *PaymentOrderService) closePendingPaymentOrder(ctx context.Context, paymentOrder db.PaymentOrder) (ClosePaymentOrderResult, error) {
-	if paymentOrder.CombinedPaymentID.Valid && paymentOrder.PaymentType == "profit_sharing" {
+	if paymentOrder.CombinedPaymentID.Valid && paymentOrderUsesEcommerceChannel(paymentOrder) {
 		return svc.closeCombinedPaymentOrder(ctx, paymentOrder)
 	}
-	if paymentOrder.PaymentType == "profit_sharing" {
+	if paymentOrderUsesEcommerceChannel(paymentOrder) {
 		return svc.closePartnerPaymentOrder(ctx, paymentOrder)
 	}
 
@@ -920,12 +842,11 @@ func (svc *PaymentOrderService) closePendingPaymentOrder(ctx context.Context, pa
 	if err != nil {
 		return ClosePaymentOrderResult{}, err
 	}
-
-	if svc.paymentClient != nil && paymentOrder.PrepayID.Valid {
-		if err := svc.paymentClient.CloseOrder(ctx, paymentOrder.OutTradeNo); err != nil {
-			// 微信关单失败不阻断业务（订单会在 30 分钟后自动关闭），但必须记录
-			log.Warn().Err(err).Str("out_trade_no", paymentOrder.OutTradeNo).Msg("close wechat order failed, order will auto-expire")
-		}
+	if paymentOrder.PrepayID.Valid {
+		log.Warn().
+			Int64("payment_order_id", paymentOrder.ID).
+			Str("payment_type", paymentOrder.PaymentType).
+			Msg("close pending main-business payment order without partner remote close because payment type is not profit_sharing")
 	}
 
 	return ClosePaymentOrderResult{PaymentOrder: updatedPayment}, nil
@@ -1062,11 +983,6 @@ func (svc *PaymentOrderService) closeCombinedPaymentOrder(ctx context.Context, p
 
 	return ClosePaymentOrderResult{PaymentOrder: updatedPayment}, nil
 }
-
-func generateOutTradeNo() (string, error) {
-	return util.GenerateOutTradeNo("P")
-}
-
 func generateOutTradeNoWithPrefix(prefix string) (string, error) {
 	return util.GenerateOutTradeNo(prefix)
 }

@@ -161,6 +161,22 @@ INSERT INTO membership_transactions (
     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
 ) RETURNING *;
 
+-- name: CreateMembershipRechargeTransaction :one
+INSERT INTO membership_transactions (
+    membership_id,
+    type,
+    amount,
+    principal_amount,
+    bonus_amount,
+    balance_after,
+    related_order_id,
+    recharge_rule_id,
+    notes,
+    idempotency_key
+) VALUES (
+    $1, 'recharge', $2, $3, $4, $5, $6, $7, $8, $9
+) RETURNING *;
+
 -- name: GetMembershipTransaction :one
 SELECT * FROM membership_transactions
 WHERE id = $1 LIMIT 1;
@@ -173,6 +189,15 @@ WHERE payment_order_id = $1 LIMIT 1;
 SELECT * FROM membership_transactions
 WHERE membership_id = $1 AND related_order_id = $2 AND type = 'consume'
 ORDER BY created_at DESC
+LIMIT 1;
+
+-- name: GetMembershipRechargeTransactionByIdempotencyKey :one
+SELECT id, membership_id, type, amount, balance_after, related_order_id, recharge_rule_id, notes, created_at, payment_order_id, principal_amount, bonus_amount, idempotency_key
+FROM membership_transactions
+WHERE membership_id = sqlc.arg('membership_id')
+    AND type = 'recharge'
+    AND idempotency_key = sqlc.arg('idempotency_key')
+ORDER BY created_at DESC, id DESC
 LIMIT 1;
 
 -- name: ListMembershipTransactions :many

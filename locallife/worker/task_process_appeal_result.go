@@ -191,7 +191,7 @@ func (processor *RedisTaskProcessor) executeAppealCompensation(ctx context.Conte
 	if payload.Status != "approved" || payload.CompensationActionID == 0 {
 		return nil
 	}
-	return ExecuteClaimPayoutAction(ctx, processor.store, processor.paymentClient, payload.CompensationActionID)
+	return ExecuteClaimPayoutAction(ctx, processor.store, processor.transferClient, payload.CompensationActionID)
 }
 
 func (processor *RedisTaskProcessor) rollbackClaimRecovery(ctx context.Context, payload ProcessAppealResultPayload) error {

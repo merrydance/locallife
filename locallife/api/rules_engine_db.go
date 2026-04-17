@@ -6,6 +6,7 @@ import (
 	"time"
 
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/rules"
 )
 
@@ -426,15 +427,21 @@ func checkBalanceSceneAllowed(ctx context.Context, store db.Store, merchantID in
 	if merchantID == 0 || orderType == "" {
 		return false, nil
 	}
+	if !logic.IsMembershipBalanceSupportedOrderType(orderType) {
+		return false, nil
+	}
 	settings, err := store.GetMerchantMembershipSettings(ctx, merchantID)
 	if err != nil {
 		if isNotFoundError(err) || err == db.ErrRecordNotFound {
 			// 未配置时默认允许堂食/自提
-			return orderType == "dine_in" || orderType == "takeaway", nil
+			return true, nil
 		}
 		return false, err
 	}
 	for _, scene := range settings.BalanceUsableScenes {
+		if !logic.IsMembershipBalanceSupportedOrderType(scene) {
+			continue
+		}
 		if scene == orderType {
 			return true, nil
 		}

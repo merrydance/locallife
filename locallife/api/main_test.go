@@ -11,8 +11,10 @@ import (
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/util"
 	"github.com/merrydance/locallife/wechat"
+	mockwechat "github.com/merrydance/locallife/wechat/mock"
 	"github.com/merrydance/locallife/worker"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 )
 
 // 测试用的 Casbin 模型定义
@@ -185,6 +187,48 @@ func newTestServer(t *testing.T, store db.Store) *Server {
 	return server
 }
 
+func TestSetDirectPaymentClientForTest_DoesNotPopulateTransferClient(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	server := newTestServer(t, nil)
+	paymentClient := mockwechat.NewMockDirectPaymentClientInterface(ctrl)
+
+	server.SetDirectPaymentClientForTest(paymentClient)
+
+	require.Same(t, paymentClient, server.directPaymentClient)
+	require.Nil(t, server.transferClient)
+}
+
+func TestSetPaymentClientsForTest_SetsBothClients(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	server := newTestServer(t, nil)
+	directClient := mockwechat.NewMockDirectPaymentClientInterface(ctrl)
+	transferClient := mockwechat.NewMockTransferClientInterface(ctrl)
+
+	server.SetPaymentClientsForTest(directClient, transferClient)
+
+	require.Same(t, directClient, server.directPaymentClient)
+	require.Same(t, transferClient, server.transferClient)
+}
+
+func TestResetPaymentClientsForTest_ClearsBothClients(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	server := newTestServer(t, nil)
+	directClient := mockwechat.NewMockDirectPaymentClientInterface(ctrl)
+	transferClient := mockwechat.NewMockTransferClientInterface(ctrl)
+	server.SetPaymentClientsForTest(directClient, transferClient)
+
+	server.ResetPaymentClientsForTest()
+
+	require.Nil(t, server.directPaymentClient)
+	require.Nil(t, server.transferClient)
+}
+
 // newTestServerWithWechat creates a test server with a mock wechat client
 func newTestServerWithWechat(t *testing.T, store db.Store, wechatClient interface{}) *Server {
 	config := util.Config{
@@ -202,7 +246,7 @@ func newTestServerWithWechat(t *testing.T, store db.Store, wechatClient interfac
 }
 
 // newTestServerWithPayment creates a test server with a mock payment client
-func newTestServerWithPayment(t *testing.T, store db.Store, paymentClient wechat.PaymentClientInterface) *Server {
+func newTestServerWithPayment(t *testing.T, store db.Store, paymentClient wechat.DirectPaymentClientInterface) *Server {
 	config := util.Config{
 		Environment:         "test",
 		TokenSymmetricKey:   util.RandomString(32),
@@ -213,14 +257,14 @@ func newTestServerWithPayment(t *testing.T, store db.Store, paymentClient wechat
 	require.NoError(t, err)
 
 	server := &Server{
-		config:          config,
-		store:           store,
-		tokenMaker:      tokenMaker,
-		auditWriter:     NewNoopAuditWriter(),
-		wechatClient:    nil,
-		paymentClient:   paymentClient,
-		weatherCache:    nil,
-		taskDistributor: nil,
+		config:              config,
+		store:               store,
+		tokenMaker:          tokenMaker,
+		auditWriter:         NewNoopAuditWriter(),
+		wechatClient:        nil,
+		directPaymentClient: paymentClient,
+		weatherCache:        nil,
+		taskDistributor:     nil,
 	}
 
 	server.setupRouter()
@@ -239,14 +283,14 @@ func newTestServerWithTaskDistributor(t *testing.T, store db.Store, taskDistribu
 	require.NoError(t, err)
 
 	server := &Server{
-		config:          config,
-		store:           store,
-		tokenMaker:      tokenMaker,
-		auditWriter:     NewNoopAuditWriter(),
-		wechatClient:    nil,
-		paymentClient:   nil,
-		weatherCache:    nil,
-		taskDistributor: taskDistributor,
+		config:              config,
+		store:               store,
+		tokenMaker:          tokenMaker,
+		auditWriter:         NewNoopAuditWriter(),
+		wechatClient:        nil,
+		directPaymentClient: nil,
+		weatherCache:        nil,
+		taskDistributor:     taskDistributor,
 	}
 
 	server.setupRouter()

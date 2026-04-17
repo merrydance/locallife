@@ -4269,7 +4269,7 @@ func TestCreateOrderWithBalanceAPI(t *testing.T) {
 				var response APIResponse
 				err := json.Unmarshal(recorder.Body.Bytes(), &response)
 				require.NoError(t, err)
-				require.Contains(t, response.Message, "外卖和预定订单暂不支持余额支付")
+				require.Contains(t, response.Message, "仅堂食和外带自取支持余额支付")
 			},
 		},
 		{

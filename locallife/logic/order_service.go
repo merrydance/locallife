@@ -31,7 +31,7 @@ type OrderService struct {
 	eventPublisher        OrderEventPublisher
 	taskScheduler         TaskScheduler
 	normalizer            DishCustomizationNormalizer
-	paymentClient         wechat.PaymentClientInterface
+	paymentClient         wechat.DirectPaymentClientInterface
 	ecommerceClient       wechat.EcommerceClientInterface
 	clock                 Clock
 	idGenerator           IDGenerator
@@ -45,7 +45,7 @@ func NewOrderService(
 	eventPublisher OrderEventPublisher,
 	taskScheduler TaskScheduler,
 	normalizer DishCustomizationNormalizer,
-	paymentClient wechat.PaymentClientInterface,
+	paymentClient wechat.DirectPaymentClientInterface,
 	ecommerceClient wechat.EcommerceClientInterface,
 	clock Clock,
 	idGenerator IDGenerator,
@@ -472,7 +472,7 @@ func (s *OrderService) UrgeOrder(ctx context.Context, input UrgeOrderInput) (Urg
 
 func (s *OrderService) ReplaceOrder(ctx context.Context, input ReplaceOrderInput) (ReplaceOrderResult, error) {
 	normalize := s.buildNormalizerFunc()
-	result, err := ReplaceReservationOrder(ctx, s.store, s.paymentClient, s.ecommerceClient, input, normalize)
+	result, err := ReplaceReservationOrder(ctx, s.store, s.ecommerceClient, input, normalize)
 	if err != nil {
 		return ReplaceOrderResult{}, err
 	}
@@ -590,7 +590,7 @@ func (s *OrderService) RejectMerchantOrder(ctx context.Context, input MerchantOr
 		})
 	}
 
-	refundResult, refundErr := ProcessMerchantRejectRefund(ctx, s.store, s.paymentClient, s.ecommerceClient, MerchantRejectRefundInput{
+	refundResult, refundErr := ProcessMerchantRejectRefund(ctx, s.store, s.ecommerceClient, MerchantRejectRefundInput{
 		MerchantID: input.MerchantID,
 		OrderID:    result.Order.ID,
 		Reason:     input.Reason,

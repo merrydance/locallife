@@ -1,5 +1,7 @@
 package contracts
 
+import "time"
+
 // 官方文档：直连支付组
 // JSAPI/小程序下单：https://pay.weixin.qq.com/doc/v3/merchant/4012791897.md
 // 微信支付订单号查询订单：https://pay.weixin.qq.com/doc/v3/merchant/4012791899.md
@@ -85,6 +87,29 @@ type DirectOrderSceneInfo struct {
 
 type DirectOrderSettleInfo struct {
 	ProfitSharing bool `json:"profit_sharing"`
+}
+
+// DirectJSAPIOrderRequest is the stable caller-shaped contract used by the
+// LocalLife direct-payment chain for JSAPI create.
+//
+// Keep this contract as the single caller truth, then derive the official wire
+// body from it inside the client implementation.
+type DirectJSAPIOrderRequest struct {
+	Description   string
+	OutTradeNo    string
+	ExpireTime    time.Time
+	Attach        string
+	GoodsTag      string
+	TotalAmount   int64
+	Currency      string
+	NotifyURL     string
+	PayerOpenID   string
+	PayerClientIP string
+	DeviceID      string
+	StoreInfo     *DirectOrderStoreInfo
+	ProfitSharing bool
+	SupportFapiao *bool
+	Detail        *DirectOrderDetail
 }
 
 // 官方文档：POST /v3/pay/transactions/jsapi

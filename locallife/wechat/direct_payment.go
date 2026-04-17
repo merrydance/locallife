@@ -55,76 +55,64 @@ func (e *WechatPayError) Error() string {
 
 const (
 	// 微信支付 API 端点
-	wxPayBaseURL         = "https://api.mch.weixin.qq.com"
-	jsapiOrderURL        = "/v3/pay/transactions/jsapi"
-	queryOrderByOutNoURL = "/v3/pay/transactions/out-trade-no"
-	closeOrderURL        = "/v3/pay/transactions/out-trade-no/%s/close"
-	refundURL            = "/v3/refund/domestic/refunds"
-	queryRefundURL       = "/v3/refund/domestic/refunds/%s"
-	queryTransferURL     = "/v3/transfer/batches/out-batch-no/%s?need_query_detail=false"
+	wxPayBaseURL                             = "https://api.mch.weixin.qq.com"
+	jsapiOrderURL                            = "/v3/pay/transactions/jsapi"
+	queryOrderByOutNoURL                     = "/v3/pay/transactions/out-trade-no"
+	closeOrderURL                            = "/v3/pay/transactions/out-trade-no/%s/close"
+	refundURL                                = "/v3/refund/domestic/refunds"
+	queryRefundURL                           = "/v3/refund/domestic/refunds/%s"
+	merchantTransferCreateURL                = "/v3/fund-app/mch-transfer/transfer-bills"
+	merchantTransferQueryByOutBillNoURL      = "/v3/fund-app/mch-transfer/transfer-bills/out-bill-no/%s"
+	merchantTransferQueryByTransferBillNoURL = "/v3/fund-app/mch-transfer/transfer-bills/transfer-bill-no/%s"
+	merchantTransferCancelURL                = "/v3/fund-app/mch-transfer/transfer-bills/out-bill-no/%s/cancel"
 )
 
-// PaymentClient 微信支付客户端
-type PaymentClient struct {
-	mchID               string            // 商户号
-	appID               string            // 小程序 AppID
-	serialNo            string            // 商户API证书序列号
-	apiV3Key            string            // APIv3 密钥
-	privateKey          *rsa.PrivateKey   // 商户私钥
-	platformCertificate *x509.Certificate // 微信支付平台证书（用于验签和加密敏感信息）- 已弃用，建议使用公钥
-	platformPublicKey   *rsa.PublicKey    // 微信支付平台公钥（推荐，用于验签和加密敏感信息）
-	platformPublicKeyID string            // 微信支付平台公钥ID
-	notifyURL           string            // 支付回调 URL
-	refundNotifyURL     string            // 退款回调 URL
-	httpClient          *http.Client
-	httpTimeout         time.Duration // HTTP请求超时时间
+// DirectPaymentClient 直连支付客户端
+type DirectPaymentClient struct {
+	mchID                     string          // 商户号
+	appID                     string          // 小程序 AppID
+	serialNo                  string          // 商户API证书序列号
+	apiV3Key                  string          // APIv3 密钥
+	privateKey                *rsa.PrivateKey // 商户私钥
+	platformPublicKey         *rsa.PublicKey  // 微信支付平台公钥（推荐，用于验签和加密敏感信息）
+	platformPublicKeyID       string          // 微信支付平台公钥ID
+	notifyURL                 string          // 支付回调 URL
+	refundNotifyURL           string          // 退款回调 URL
+	merchantTransferNotifyURL string          // 商家转账回调 URL
+	httpClient                *http.Client
+	httpTimeout               time.Duration // HTTP请求超时时间
 }
 
-// PaymentClientConfig 支付客户端配置
-type PaymentClientConfig struct {
-	MchID                   string
-	AppID                   string
-	SerialNumber            string
-	HTTPTimeout             time.Duration // HTTP请求超时时间（默认30秒）
-	PrivateKeyPath          string
-	APIV3Key                string
-	NotifyURL               string
-	RefundNotifyURL         string
-	PlatformCertificatePath string // 平台证书路径（已弃用，建议使用公钥）
-	PlatformPublicKeyPath   string // 微信支付平台公钥路径（推荐）
-	PlatformPublicKeyID     string // 微信支付平台公钥ID（从商户平台获取）
+// DirectPaymentClientConfig 直连支付客户端配置
+type DirectPaymentClientConfig struct {
+	MchID                     string
+	AppID                     string
+	SerialNumber              string
+	HTTPTimeout               time.Duration // HTTP请求超时时间（默认30秒）
+	PrivateKeyPath            string
+	APIV3Key                  string
+	NotifyURL                 string
+	RefundNotifyURL           string
+	MerchantTransferNotifyURL string
+	PlatformPublicKeyPath     string // 微信支付平台公钥路径（推荐）
+	PlatformPublicKeyID       string // 微信支付平台公钥ID（从商户平台获取）
 }
 
-// NewPaymentClient 创建微信支付客户端
-func NewPaymentClient(cfg PaymentClientConfig) (*PaymentClient, error) {
+// NewDirectPaymentClient 创建直连支付客户端
+func NewDirectPaymentClient(cfg DirectPaymentClientConfig) (*DirectPaymentClient, error) {
 	// 读取商户私钥
 	privateKey, err := loadPrivateKey(cfg.PrivateKeyPath)
 	if err != nil {
 		return nil, fmt.Errorf("load private key: %w", err)
 	}
 
-	// 优先使用平台公钥（推荐），其次使用平台证书（已弃用）
-	var platformCert *x509.Certificate
-	var platformPublicKey *rsa.PublicKey
-	var platformPublicKeyID string
+	if cfg.PlatformPublicKeyPath == "" || cfg.PlatformPublicKeyID == "" {
+		return nil, fmt.Errorf("platform public key path and ID are required")
+	}
 
-	if cfg.PlatformPublicKeyPath != "" {
-		// 使用微信支付平台公钥（推荐方式）
-		platformPublicKey, err = loadPublicKey(cfg.PlatformPublicKeyPath)
-		if err != nil {
-			return nil, fmt.Errorf("load platform public key: %w", err)
-		}
-		platformPublicKeyID = cfg.PlatformPublicKeyID
-		if platformPublicKeyID == "" {
-			return nil, fmt.Errorf("platform public key ID is required when using platform public key")
-		}
-	} else if cfg.PlatformCertificatePath != "" {
-		// 使用平台证书（已弃用，建议迁移到公钥模式）
-		log.Warn().Msg("使用平台证书模式已弃用，建议迁移到微信支付公钥模式")
-		platformCert, err = loadCertificate(cfg.PlatformCertificatePath)
-		if err != nil {
-			return nil, fmt.Errorf("load platform certificate: %w", err)
-		}
+	platformPublicKey, err := loadPublicKey(cfg.PlatformPublicKeyPath)
+	if err != nil {
+		return nil, fmt.Errorf("load platform public key: %w", err)
 	}
 
 	// 设置默认超时时间
@@ -133,17 +121,17 @@ func NewPaymentClient(cfg PaymentClientConfig) (*PaymentClient, error) {
 		httpTimeout = 30 * time.Second
 	}
 
-	return &PaymentClient{
-		mchID:               cfg.MchID,
-		appID:               cfg.AppID,
-		serialNo:            cfg.SerialNumber,
-		apiV3Key:            cfg.APIV3Key,
-		privateKey:          privateKey,
-		platformCertificate: platformCert,
-		platformPublicKey:   platformPublicKey,
-		platformPublicKeyID: platformPublicKeyID,
-		notifyURL:           cfg.NotifyURL,
-		refundNotifyURL:     cfg.RefundNotifyURL,
+	return &DirectPaymentClient{
+		mchID:                     cfg.MchID,
+		appID:                     cfg.AppID,
+		serialNo:                  cfg.SerialNumber,
+		apiV3Key:                  cfg.APIV3Key,
+		privateKey:                privateKey,
+		platformPublicKey:         platformPublicKey,
+		platformPublicKeyID:       cfg.PlatformPublicKeyID,
+		notifyURL:                 cfg.NotifyURL,
+		refundNotifyURL:           cfg.RefundNotifyURL,
+		merchantTransferNotifyURL: cfg.MerchantTransferNotifyURL,
 		httpClient: &http.Client{
 			Timeout: httpTimeout,
 			Transport: &http.Transport{
@@ -157,12 +145,12 @@ func NewPaymentClient(cfg PaymentClientConfig) (*PaymentClient, error) {
 }
 
 // GetMchID 返回当前直连支付商户号，供回调归属校验使用。
-func (c *PaymentClient) GetMchID() string {
+func (c *DirectPaymentClient) GetMchID() string {
 	return c.mchID
 }
 
 // GetAppID 返回当前直连支付 AppID，供回调归属校验使用。
-func (c *PaymentClient) GetAppID() string {
+func (c *DirectPaymentClient) GetAppID() string {
 	return c.appID
 }
 
@@ -242,72 +230,53 @@ func loadPrivateKey(path string) (*rsa.PrivateKey, error) {
 	return rsaKey, nil
 }
 
-// loadCertificate 从 PEM 文件加载证书
-func loadCertificate(path string) (*x509.Certificate, error) {
-	data, err := readBoundedConfigFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("read certificate file: %w", err)
-	}
-
-	block, _ := pem.Decode(data)
-	if block == nil {
-		return nil, fmt.Errorf("failed to decode PEM block")
-	}
-
-	cert, err := x509.ParseCertificate(block.Bytes)
-	if err != nil {
-		return nil, fmt.Errorf("parse certificate: %w", err)
-	}
-
-	return cert, nil
-}
-
-// ==================== JSAPI 下单 ====================
-
-// JSAPIOrderRequest JSAPI 下单请求
-type JSAPIOrderRequest struct {
-	OutTradeNo    string    // 商户订单号
-	Description   string    // 商品描述
-	TotalAmount   int64     // 订单金额（分）
-	OpenID        string    // 用户 OpenID
-	ExpireTime    time.Time // 订单失效时间
-	Attach        string    // 商户数据包（选填，建议传递 order_id，支付成功后会原样返回）
-	PayerClientIP string    // 用户终端IP（选填但强烈建议，用于风控）
-}
-
-// JSAPIOrderResponse JSAPI 下单响应
-type JSAPIOrderResponse struct {
-	PrepayID string `json:"prepay_id"`
-}
-
 // CreateJSAPIOrder 创建 JSAPI 订单（小程序支付）
-func (c *PaymentClient) CreateJSAPIOrder(ctx context.Context, req *JSAPIOrderRequest) (*JSAPIOrderResponse, *JSAPIPayParams, error) {
-	body := map[string]interface{}{
-		"appid":        c.appID,
-		"mchid":        c.mchID,
-		"description":  req.Description,
-		"out_trade_no": req.OutTradeNo,
-		"time_expire":  req.ExpireTime.Format(time.RFC3339),
-		"notify_url":   c.notifyURL,
-		"amount": map[string]interface{}{
-			"total":    req.TotalAmount,
-			"currency": "CNY",
-		},
-		"payer": map[string]interface{}{
-			"openid": req.OpenID,
-		},
+func (c *DirectPaymentClient) CreateJSAPIOrder(ctx context.Context, req *wechatcontracts.DirectJSAPIOrderRequest) (*wechatcontracts.DirectJSAPIOrderResponse, *JSAPIPayParams, error) {
+	if req == nil {
+		return nil, nil, wechatcontracts.ValidateDirectJSAPIOrderRequest(nil)
 	}
 
-	// 添加商户数据包（用于回调时关联订单）
-	if req.Attach != "" {
-		body["attach"] = req.Attach
+	effectiveReq := *req
+	if strings.TrimSpace(effectiveReq.NotifyURL) == "" {
+		effectiveReq.NotifyURL = c.notifyURL
+	}
+	if strings.TrimSpace(effectiveReq.Currency) == "" {
+		effectiveReq.Currency = wechatcontracts.DirectPaymentCurrencyCNY
+	}
+	if err := wechatcontracts.ValidateDirectJSAPIOrderRequest(&effectiveReq); err != nil {
+		return nil, nil, err
 	}
 
-	// 添加场景信息（用户终端IP，用于风控）
-	if req.PayerClientIP != "" {
-		body["scene_info"] = map[string]interface{}{
-			"payer_client_ip": req.PayerClientIP,
+	body := wechatcontracts.DirectJSAPIOrderRequestBody{
+		AppID:       c.appID,
+		MchID:       c.mchID,
+		Description: effectiveReq.Description,
+		OutTradeNo:  effectiveReq.OutTradeNo,
+		Attach:      effectiveReq.Attach,
+		NotifyURL:   effectiveReq.NotifyURL,
+		GoodsTag:    effectiveReq.GoodsTag,
+		Amount: wechatcontracts.DirectOrderAmount{
+			Total:    effectiveReq.TotalAmount,
+			Currency: effectiveReq.Currency,
+		},
+		Payer: wechatcontracts.DirectOrderPayer{
+			OpenID: effectiveReq.PayerOpenID,
+		},
+		Detail:        effectiveReq.Detail,
+		SupportFapiao: effectiveReq.SupportFapiao,
+	}
+	if !effectiveReq.ExpireTime.IsZero() {
+		body.TimeExpire = effectiveReq.ExpireTime.Format(time.RFC3339)
+	}
+	if effectiveReq.PayerClientIP != "" || effectiveReq.DeviceID != "" || effectiveReq.StoreInfo != nil {
+		body.SceneInfo = &wechatcontracts.DirectOrderSceneInfo{
+			PayerClientIP: effectiveReq.PayerClientIP,
+			DeviceID:      effectiveReq.DeviceID,
+			StoreInfo:     effectiveReq.StoreInfo,
 		}
+	}
+	if effectiveReq.ProfitSharing {
+		body.SettleInfo = &wechatcontracts.DirectOrderSettleInfo{ProfitSharing: true}
 	}
 
 	respBody, err := c.doRequest(ctx, http.MethodPost, jsapiOrderURL, body)
@@ -315,9 +284,12 @@ func (c *PaymentClient) CreateJSAPIOrder(ctx context.Context, req *JSAPIOrderReq
 		return nil, nil, fmt.Errorf("create jsapi order: %w", err)
 	}
 
-	var resp JSAPIOrderResponse
+	var resp wechatcontracts.DirectJSAPIOrderResponse
 	if err := json.Unmarshal(respBody, &resp); err != nil {
 		return nil, nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+	if strings.TrimSpace(resp.PrepayID) == "" {
+		return nil, nil, fmt.Errorf("create direct jsapi order: empty prepay id")
 	}
 
 	// 生成小程序调起支付参数
@@ -329,13 +301,13 @@ func (c *PaymentClient) CreateJSAPIOrder(ctx context.Context, req *JSAPIOrderReq
 	return &resp, payParams, nil
 }
 
-// GenerateJSAPIPayParams 生成小程序调起支付的参数（公开方法，实现 PaymentClientInterface）
-func (c *PaymentClient) GenerateJSAPIPayParams(prepayID string) (*JSAPIPayParams, error) {
+// GenerateJSAPIPayParams 生成小程序调起支付的参数（公开方法，实现 DirectPaymentClientInterface）
+func (c *DirectPaymentClient) GenerateJSAPIPayParams(prepayID string) (*JSAPIPayParams, error) {
 	return c.generateJSAPIPayParams(prepayID)
 }
 
 // generateJSAPIPayParams 生成小程序调起支付的参数
-func (c *PaymentClient) generateJSAPIPayParams(prepayID string) (*JSAPIPayParams, error) {
+func (c *DirectPaymentClient) generateJSAPIPayParams(prepayID string) (*JSAPIPayParams, error) {
 	nonceStr, err := generateNonceStr()
 	if err != nil {
 		return nil, err
@@ -363,51 +335,25 @@ func (c *PaymentClient) generateJSAPIPayParams(prepayID string) (*JSAPIPayParams
 
 // ==================== 查询订单 ====================
 
-// OrderQueryResponse 订单查询响应
-type OrderQueryResponse struct {
-	AppID          string `json:"appid"`
-	MchID          string `json:"mchid"`
-	OutTradeNo     string `json:"out_trade_no"`
-	TransactionID  string `json:"transaction_id"`
-	TradeType      string `json:"trade_type"`
-	TradeState     string `json:"trade_state"`
-	TradeStateDesc string `json:"trade_state_desc"`
-	BankType       string `json:"bank_type"`
-	SuccessTime    string `json:"success_time"`
-	Payer          struct {
-		OpenID string `json:"openid"`
-	} `json:"payer"`
-	Amount struct {
-		Total         int64  `json:"total"`
-		PayerTotal    int64  `json:"payer_total"`
-		Currency      string `json:"currency"`
-		PayerCurrency string `json:"payer_currency"`
-	} `json:"amount"`
-}
-
-// TradeState 交易状态常量
-const (
-	TradeStateSuccess    = "SUCCESS"    // 支付成功
-	TradeStateRefund     = "REFUND"     // 转入退款
-	TradeStateNotPay     = "NOTPAY"     // 未支付
-	TradeStateClosed     = "CLOSED"     // 已关闭
-	TradeStateRevoked    = "REVOKED"    // 已撤销（仅付款码支付）
-	TradeStateUserPaying = "USERPAYING" // 用户支付中（仅付款码支付）
-	TradeStatePayError   = "PAYERROR"   // 支付失败
-)
-
 // QueryOrderByOutTradeNo 根据商户订单号查询订单
-func (c *PaymentClient) QueryOrderByOutTradeNo(ctx context.Context, outTradeNo string) (*OrderQueryResponse, error) {
-	url := fmt.Sprintf("%s/%s?mchid=%s", queryOrderByOutNoURL, outTradeNo, c.mchID)
+func (c *DirectPaymentClient) QueryOrderByOutTradeNo(ctx context.Context, outTradeNo string) (*wechatcontracts.DirectOrderQueryResponse, error) {
+	trimmedOutTradeNo, err := wechatcontracts.ValidateDirectOrderQueryByOutTradeNoInput(outTradeNo)
+	if err != nil {
+		return nil, err
+	}
+	url := fmt.Sprintf("%s/%s?mchid=%s", queryOrderByOutNoURL, url.PathEscape(trimmedOutTradeNo), url.QueryEscape(c.mchID))
 
 	respBody, err := c.doRequest(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("query order: %w", err)
 	}
 
-	var resp OrderQueryResponse
+	var resp wechatcontracts.DirectOrderQueryResponse
 	if err := json.Unmarshal(respBody, &resp); err != nil {
 		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+	if err := wechatcontracts.ValidateDirectOrderQueryResponse("query direct order by out_trade_no", &resp, false); err != nil {
+		return nil, err
 	}
 
 	return &resp, nil
@@ -416,13 +362,15 @@ func (c *PaymentClient) QueryOrderByOutTradeNo(ctx context.Context, outTradeNo s
 // ==================== 关闭订单 ====================
 
 // CloseOrder 关闭订单
-func (c *PaymentClient) CloseOrder(ctx context.Context, outTradeNo string) error {
-	url := fmt.Sprintf(closeOrderURL, outTradeNo)
-	body := map[string]interface{}{
-		"mchid": c.mchID,
+func (c *DirectPaymentClient) CloseOrder(ctx context.Context, outTradeNo string) error {
+	trimmedOutTradeNo, err := wechatcontracts.ValidateDirectOrderQueryByOutTradeNoInput(outTradeNo)
+	if err != nil {
+		return err
 	}
+	url := fmt.Sprintf(closeOrderURL, trimmedOutTradeNo)
+	body := wechatcontracts.DirectCloseOrderRequest{MchID: c.mchID}
 
-	_, err := c.doRequest(ctx, http.MethodPost, url, body)
+	_, err = c.doRequest(ctx, http.MethodPost, url, body)
 	if err != nil {
 		return fmt.Errorf("close order: %w", err)
 	}
@@ -471,7 +419,7 @@ const (
 )
 
 // CreateRefund 申请退款
-func (c *PaymentClient) CreateRefund(ctx context.Context, req *RefundRequest) (*RefundResponse, error) {
+func (c *DirectPaymentClient) CreateRefund(ctx context.Context, req *RefundRequest) (*RefundResponse, error) {
 	contractReq := &wechatcontracts.DirectRefundRequest{
 		TransactionID: req.TransactionID,
 		OutTradeNo:    req.OutTradeNo,
@@ -558,7 +506,7 @@ func (c *PaymentClient) CreateRefund(ctx context.Context, req *RefundRequest) (*
 }
 
 // QueryRefund 查询退款
-func (c *PaymentClient) QueryRefund(ctx context.Context, outRefundNo string) (*RefundResponse, error) {
+func (c *DirectPaymentClient) QueryRefund(ctx context.Context, outRefundNo string) (*RefundResponse, error) {
 	trimmedOutRefundNo, err := wechatcontracts.ValidateDirectQueryRefundByOutRefundNoInput(outRefundNo)
 	if err != nil {
 		return nil, err
@@ -581,124 +529,135 @@ func (c *PaymentClient) QueryRefund(ctx context.Context, outRefundNo string) (*R
 	return &resp, nil
 }
 
-// ==================== 提现转账（企业付款到零钱） ====================
+// ==================== 商家转账（普通商户单单据） ====================
 
-const (
-	transferURL = "/v3/transfer/batches"
-)
-
-// TransferRequest 转账请求
-type TransferRequest struct {
-	OutBatchNo     string // 商户批次单号
-	BatchName      string // 批次名称
-	BatchRemark    string // 批次备注
-	TransferAmount int64  // 转账金额（分）
-	OpenID         string // 收款用户 OpenID
-	UserName       string // 收款用户真实姓名（需要加密）
-	TransferRemark string // 转账备注
-}
-
-// TransferResponse 转账响应
-type TransferResponse struct {
-	OutBatchNo  string `json:"out_batch_no"`
-	BatchID     string `json:"batch_id"`
-	CreateTime  string `json:"create_time"`
-	BatchStatus string `json:"batch_status"`
-}
-
-// TransferQueryResponse 转账批次查询响应
-type TransferQueryResponse struct {
-	OutBatchNo  string `json:"out_batch_no"`
-	BatchID     string `json:"batch_id"`
-	BatchStatus string `json:"batch_status"`
-	CreateTime  string `json:"create_time"`
-	UpdateTime  string `json:"update_time"`
-	CloseReason string `json:"close_reason"`
-}
-
-// CreateTransfer 发起转账（商家转账到零钱）
-func (c *PaymentClient) CreateTransfer(ctx context.Context, req *TransferRequest) (*TransferResponse, error) {
-	// 生成商户明细单号
-	outDetailNo, err := generateNonceStr()
-	if err != nil {
+// CreateTransfer 发起商家转账到零钱。
+func (c *DirectPaymentClient) CreateTransfer(ctx context.Context, req *wechatcontracts.DirectMerchantTransferCreateRequest) (*wechatcontracts.DirectMerchantTransferCreateResponse, error) {
+	if err := wechatcontracts.ValidateDirectMerchantTransferCreateRequest(req); err != nil {
 		return nil, err
 	}
 
-	// 加密敏感信息（用户真实姓名）
-	encryptedUserName, err := c.EncryptSensitiveData(req.UserName)
+	body := wechatcontracts.DirectMerchantTransferCreateRequestBody{
+		AppID:                    req.AppID,
+		OutBillNo:                req.OutBillNo,
+		TransferSceneID:          req.TransferSceneID,
+		OpenID:                   req.OpenID,
+		TransferAmount:           req.TransferAmount,
+		TransferRemark:           req.TransferRemark,
+		NotifyURL:                strings.TrimSpace(req.NotifyURL),
+		UserRecvPerception:       strings.TrimSpace(req.UserRecvPerception),
+		TransferSceneReportInfos: req.TransferSceneReportInfos,
+	}
+	if body.NotifyURL == "" {
+		body.NotifyURL = c.merchantTransferNotifyURL
+	}
+	if strings.TrimSpace(req.UserName) != "" {
+		encryptedUserName, err := c.EncryptSensitiveData(req.UserName)
+		if err != nil {
+			return nil, fmt.Errorf("encrypt merchant transfer user name: %w", err)
+		}
+		body.UserName = encryptedUserName
+	}
+
+	respBody, err := c.doRequestWithWechatSerial(ctx, http.MethodPost, merchantTransferCreateURL, body)
 	if err != nil {
-		return nil, fmt.Errorf("encrypt user name: %w", err)
+		return nil, fmt.Errorf("create merchant transfer: %w", err)
 	}
 
-	body := map[string]interface{}{
-		"appid":        c.appID,
-		"out_batch_no": req.OutBatchNo,
-		"batch_name":   req.BatchName,
-		"batch_remark": req.BatchRemark,
-		"total_amount": req.TransferAmount,
-		"total_num":    1,
-		"transfer_detail_list": []map[string]interface{}{
-			{
-				"out_detail_no":   outDetailNo,
-				"transfer_amount": req.TransferAmount,
-				"transfer_remark": req.TransferRemark,
-				"openid":          req.OpenID,
-				"user_name":       encryptedUserName,
-			},
-		},
-	}
-
-	respBody, err := c.doRequestWithWechatSerial(ctx, http.MethodPost, transferURL, body)
-	if err != nil {
-		return nil, fmt.Errorf("create transfer: %w", err)
-	}
-
-	var resp TransferResponse
+	var resp wechatcontracts.DirectMerchantTransferCreateResponse
 	if err := json.Unmarshal(respBody, &resp); err != nil {
-		return nil, fmt.Errorf("unmarshal response: %w", err)
+		return nil, fmt.Errorf("unmarshal merchant transfer response: %w", err)
+	}
+	if err := wechatcontracts.ValidateDirectMerchantTransferCreateResponse("create direct merchant transfer", &resp); err != nil {
+		return nil, err
 	}
 
 	return &resp, nil
 }
 
-// QueryTransfer 按商户批次单号查询转账批次状态。
-func (c *PaymentClient) QueryTransfer(ctx context.Context, outBatchNo string) (*TransferQueryResponse, error) {
-	respBody, err := c.doRequestWithWechatSerial(ctx, http.MethodGet, fmt.Sprintf(queryTransferURL, outBatchNo), nil)
+// QueryTransferByOutBillNo 按商户单号查询商家转账状态。
+func (c *DirectPaymentClient) QueryTransferByOutBillNo(ctx context.Context, outBillNo string) (*wechatcontracts.DirectMerchantTransferQueryResponse, error) {
+	trimmedOutBillNo, err := wechatcontracts.ValidateDirectMerchantTransferQueryByOutBillNoInput(outBillNo)
 	if err != nil {
-		return nil, fmt.Errorf("query transfer: %w", err)
+		return nil, err
+	}
+	respBody, err := c.doRequestWithWechatSerial(ctx, http.MethodGet, fmt.Sprintf(merchantTransferQueryByOutBillNoURL, url.PathEscape(trimmedOutBillNo)), nil)
+	if err != nil {
+		return nil, fmt.Errorf("query merchant transfer by out_bill_no: %w", err)
 	}
 
-	var resp TransferQueryResponse
+	var resp wechatcontracts.DirectMerchantTransferQueryResponse
 	if err := json.Unmarshal(respBody, &resp); err != nil {
-		return nil, fmt.Errorf("unmarshal transfer query response: %w", err)
+		return nil, fmt.Errorf("unmarshal merchant transfer query response: %w", err)
+	}
+	if err := wechatcontracts.ValidateDirectMerchantTransferQueryResponse("query direct merchant transfer by out_bill_no", &resp); err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(resp.UserName) != "" {
+		decryptedUserName, err := c.DecryptSensitiveResponseData(resp.UserName)
+		if err != nil {
+			return nil, fmt.Errorf("decrypt merchant transfer query user_name: %w", err)
+		}
+		resp.UserName = decryptedUserName
 	}
 
 	return &resp, nil
 }
 
-// EncryptSensitiveData 使用微信支付平台公钥或证书公钥加密敏感数据
-// 优先使用平台公钥（推荐方式），其次使用平台证书公钥（已弃用）
+// QueryTransferByTransferBillNo 按微信转账单号查询商家转账状态。
+func (c *DirectPaymentClient) QueryTransferByTransferBillNo(ctx context.Context, transferBillNo string) (*wechatcontracts.DirectMerchantTransferQueryResponse, error) {
+	trimmedTransferBillNo, err := wechatcontracts.ValidateDirectMerchantTransferQueryByTransferBillNoInput(transferBillNo)
+	if err != nil {
+		return nil, err
+	}
+	respBody, err := c.doRequestWithWechatSerial(ctx, http.MethodGet, fmt.Sprintf(merchantTransferQueryByTransferBillNoURL, url.PathEscape(trimmedTransferBillNo)), nil)
+	if err != nil {
+		return nil, fmt.Errorf("query merchant transfer by transfer_bill_no: %w", err)
+	}
+
+	var resp wechatcontracts.DirectMerchantTransferQueryResponse
+	if err := json.Unmarshal(respBody, &resp); err != nil {
+		return nil, fmt.Errorf("unmarshal merchant transfer query response: %w", err)
+	}
+	if err := wechatcontracts.ValidateDirectMerchantTransferQueryResponse("query direct merchant transfer by transfer_bill_no", &resp); err != nil {
+		return nil, err
+	}
+
+	return &resp, nil
+}
+
+// CancelTransfer 按商户单号撤销商家转账。
+func (c *DirectPaymentClient) CancelTransfer(ctx context.Context, outBillNo string) (*wechatcontracts.DirectMerchantTransferCancelResponse, error) {
+	trimmedOutBillNo, err := wechatcontracts.ValidateDirectMerchantTransferQueryByOutBillNoInput(outBillNo)
+	if err != nil {
+		return nil, err
+	}
+	respBody, err := c.doRequestWithWechatSerial(ctx, http.MethodPost, fmt.Sprintf(merchantTransferCancelURL, url.PathEscape(trimmedOutBillNo)), nil)
+	if err != nil {
+		return nil, fmt.Errorf("cancel merchant transfer: %w", err)
+	}
+
+	var resp wechatcontracts.DirectMerchantTransferCancelResponse
+	if err := json.Unmarshal(respBody, &resp); err != nil {
+		return nil, fmt.Errorf("unmarshal cancel merchant transfer response: %w", err)
+	}
+	if err := wechatcontracts.ValidateDirectMerchantTransferCancelResponse("cancel direct merchant transfer", &resp); err != nil {
+		return nil, err
+	}
+
+	return &resp, nil
+}
+
+// EncryptSensitiveData 使用微信支付平台公钥加密敏感数据
 // 用于加密身份证号、银行卡号、手机号等敏感信息
 // 返回 Base64 编码的加密后字符串
-func (c *PaymentClient) EncryptSensitiveData(plaintext string) (string, error) {
-	var publicKey *rsa.PublicKey
-
-	// 优先使用平台公钥
-	if c.platformPublicKey != nil {
-		publicKey = c.platformPublicKey
-	} else if c.platformCertificate != nil {
-		// 回退到平台证书
-		var ok bool
-		publicKey, ok = c.platformCertificate.PublicKey.(*rsa.PublicKey)
-		if !ok {
-			return "", fmt.Errorf("invalid platform certificate public key")
-		}
-	} else {
-		return "", fmt.Errorf("neither platform public key nor platform certificate loaded")
+func (c *DirectPaymentClient) EncryptSensitiveData(plaintext string) (string, error) {
+	if c.platformPublicKey == nil {
+		return "", fmt.Errorf("platform public key not loaded")
 	}
 
 	// 微信支付敏感字段加密要求使用 RSAES-OAEP with SHA-1。
-	ciphertext, err := rsa.EncryptOAEP(sha1.New(), rand.Reader, publicKey, []byte(plaintext), nil)
+	ciphertext, err := rsa.EncryptOAEP(sha1.New(), rand.Reader, c.platformPublicKey, []byte(plaintext), nil)
 	if err != nil {
 		return "", fmt.Errorf("encrypt: %w", err)
 	}
@@ -708,7 +667,7 @@ func (c *PaymentClient) EncryptSensitiveData(plaintext string) (string, error) {
 
 // DecryptSensitiveResponseData 解密微信返回的敏感字段。
 // 微信对查询响应中的敏感字段使用商户 API 证书公钥加密，需由商户私钥解密。
-func (c *PaymentClient) DecryptSensitiveResponseData(ciphertext string) (string, error) {
+func (c *DirectPaymentClient) DecryptSensitiveResponseData(ciphertext string) (string, error) {
 	trimmedCiphertext := strings.TrimSpace(ciphertext)
 	if trimmedCiphertext == "" {
 		return "", nil
@@ -730,19 +689,9 @@ func (c *PaymentClient) DecryptSensitiveResponseData(ciphertext string) (string,
 	return string(plaintext), nil
 }
 
-// GetPlatformCertificateSerial 获取微信支付平台证书序列号或平台公钥ID
-// 用于设置请求头中的 Wechatpay-Serial
-// 如果使用平台公钥，返回公钥ID；如果使用平台证书，返回证书序列号
-func (c *PaymentClient) GetPlatformCertificateSerial() string {
-	// 优先返回平台公钥ID
-	if c.platformPublicKeyID != "" {
-		return c.platformPublicKeyID
-	}
-	// 回退到平台证书序列号
-	if c.platformCertificate == nil {
-		return ""
-	}
-	return fmt.Sprintf("%X", c.platformCertificate.SerialNumber)
+// GetPlatformPublicKeyID 返回请求头 Wechatpay-Serial 所需的平台公钥 ID。
+func (c *DirectPaymentClient) GetPlatformPublicKeyID() string {
+	return c.platformPublicKeyID
 }
 
 // ==================== 回调通知处理 ====================
@@ -763,48 +712,8 @@ type PaymentNotification struct {
 	Summary string `json:"summary"`
 }
 
-// PaymentNotificationResource 支付通知解密后的资源
-type PaymentNotificationResource struct {
-	TransactionID  string `json:"transaction_id"`
-	OutTradeNo     string `json:"out_trade_no"`
-	TradeType      string `json:"trade_type"`
-	TradeState     string `json:"trade_state"`
-	TradeStateDesc string `json:"trade_state_desc"`
-	AppID          string `json:"appid"`
-	MchID          string `json:"mchid"`
-	BankType       string `json:"bank_type"`
-	SuccessTime    string `json:"success_time"`
-	Payer          struct {
-		OpenID string `json:"openid"`
-	} `json:"payer"`
-	Amount struct {
-		Total         int64  `json:"total"`
-		PayerTotal    int64  `json:"payer_total"`
-		Currency      string `json:"currency"`
-		PayerCurrency string `json:"payer_currency"`
-	} `json:"amount"`
-}
-
-// RefundNotificationResource 退款通知解密后的资源
-type RefundNotificationResource struct {
-	MchID               string `json:"mchid"`
-	OutTradeNo          string `json:"out_trade_no"`
-	TransactionID       string `json:"transaction_id"`
-	OutRefundNo         string `json:"out_refund_no"`
-	RefundID            string `json:"refund_id"`
-	RefundStatus        string `json:"refund_status"`
-	SuccessTime         string `json:"success_time,omitempty"`
-	UserReceivedAccount string `json:"user_received_account"`
-	Amount              struct {
-		Total       int64 `json:"total"`
-		Refund      int64 `json:"refund"`
-		PayerTotal  int64 `json:"payer_total"`
-		PayerRefund int64 `json:"payer_refund"`
-	} `json:"amount"`
-}
-
 // DecryptPaymentNotification 解密支付通知
-func (c *PaymentClient) DecryptPaymentNotification(notification *PaymentNotification) (*PaymentNotificationResource, error) {
+func (c *DirectPaymentClient) DecryptPaymentNotification(notification *PaymentNotification) (*wechatcontracts.DirectPaymentNotificationResource, error) {
 	plaintext, err := c.decryptAESGCM(
 		notification.Resource.Nonce,
 		notification.Resource.Ciphertext,
@@ -814,16 +723,19 @@ func (c *PaymentClient) DecryptPaymentNotification(notification *PaymentNotifica
 		return nil, fmt.Errorf("decrypt notification: %w", err)
 	}
 
-	var resource PaymentNotificationResource
+	var resource wechatcontracts.DirectPaymentNotificationResource
 	if err := json.Unmarshal(plaintext, &resource); err != nil {
 		return nil, fmt.Errorf("unmarshal resource: %w", err)
+	}
+	if err := wechatcontracts.ValidateDirectPaymentNotificationResource("decrypt direct payment notification", &resource); err != nil {
+		return nil, err
 	}
 
 	return &resource, nil
 }
 
 // DecryptRefundNotification 解密退款通知
-func (c *PaymentClient) DecryptRefundNotification(notification *PaymentNotification) (*RefundNotificationResource, error) {
+func (c *DirectPaymentClient) DecryptRefundNotification(notification *PaymentNotification) (*wechatcontracts.DirectRefundNotificationResource, error) {
 	plaintext, err := c.decryptAESGCM(
 		notification.Resource.Nonce,
 		notification.Resource.Ciphertext,
@@ -833,26 +745,33 @@ func (c *PaymentClient) DecryptRefundNotification(notification *PaymentNotificat
 		return nil, fmt.Errorf("decrypt notification: %w", err)
 	}
 
-	var resource RefundNotificationResource
+	var resource wechatcontracts.DirectRefundNotificationResource
 	if err := json.Unmarshal(plaintext, &resource); err != nil {
 		return nil, fmt.Errorf("unmarshal resource: %w", err)
 	}
-	if err := wechatcontracts.ValidateDirectRefundNotificationResource("decrypt direct refund notification", &wechatcontracts.DirectRefundNotificationResource{
-		MchID:               resource.MchID,
-		OutTradeNo:          resource.OutTradeNo,
-		TransactionID:       resource.TransactionID,
-		OutRefundNo:         resource.OutRefundNo,
-		RefundID:            resource.RefundID,
-		RefundStatus:        resource.RefundStatus,
-		SuccessTime:         resource.SuccessTime,
-		UserReceivedAccount: resource.UserReceivedAccount,
-		Amount: wechatcontracts.DirectRefundNotificationAmount{
-			Total:       resource.Amount.Total,
-			Refund:      resource.Amount.Refund,
-			PayerTotal:  resource.Amount.PayerTotal,
-			PayerRefund: resource.Amount.PayerRefund,
-		},
-	}); err != nil {
+	if err := wechatcontracts.ValidateDirectRefundNotificationResource("decrypt direct refund notification", &resource); err != nil {
+		return nil, err
+	}
+
+	return &resource, nil
+}
+
+// DecryptMerchantTransferNotification 解密商家转账通知。
+func (c *DirectPaymentClient) DecryptMerchantTransferNotification(notification *PaymentNotification) (*wechatcontracts.DirectMerchantTransferNotificationResource, error) {
+	plaintext, err := c.decryptAESGCM(
+		notification.Resource.Nonce,
+		notification.Resource.Ciphertext,
+		notification.Resource.AssociatedData,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("decrypt merchant transfer notification: %w", err)
+	}
+
+	var resource wechatcontracts.DirectMerchantTransferNotificationResource
+	if err := json.Unmarshal(plaintext, &resource); err != nil {
+		return nil, fmt.Errorf("unmarshal merchant transfer resource: %w", err)
+	}
+	if err := wechatcontracts.ValidateDirectMerchantTransferNotificationResource("decrypt direct merchant transfer notification", &resource); err != nil {
 		return nil, err
 	}
 
@@ -881,7 +800,7 @@ func toDirectRefundContractResponse(resp *RefundResponse) *wechatcontracts.Direc
 
 // DecryptNotificationRaw 解密通知原始数据（返回 JSON 字节）
 // 用于解密非标准的通知类型，如进件状态变更通知
-func (c *PaymentClient) DecryptNotificationRaw(notification *PaymentNotification) ([]byte, error) {
+func (c *DirectPaymentClient) DecryptNotificationRaw(notification *PaymentNotification) ([]byte, error) {
 	return c.decryptAESGCM(
 		notification.Resource.Nonce,
 		notification.Resource.Ciphertext,
@@ -894,17 +813,16 @@ const notifyTimestampWindow = 5 * 60 // seconds
 
 // VerifyNotificationSignature 验证回调通知签名
 // 参考: https://pay.weixin.qq.com/wiki/doc/apiv3/wechatpay/wechatpay4_1.shtml
-// 优先使用平台公钥（推荐），其次使用平台证书公钥（已弃用）
-func (c *PaymentClient) VerifyNotificationSignature(signature, timestamp, nonce, serial, body string) error {
-	expectedSerial := c.GetPlatformCertificateSerial()
-	if expectedSerial == "" {
-		return fmt.Errorf("neither platform public key ID nor platform certificate configured")
+func (c *DirectPaymentClient) VerifyNotificationSignature(signature, timestamp, nonce, serial, body string) error {
+	expectedPublicKeyID := c.GetPlatformPublicKeyID()
+	if expectedPublicKeyID == "" {
+		return fmt.Errorf("platform public key ID not configured")
 	}
 	if serial == "" {
 		return fmt.Errorf("missing Wechatpay-Serial header")
 	}
-	if !strings.EqualFold(serial, expectedSerial) {
-		return fmt.Errorf("unexpected notification serial: got %q want %q", serial, expectedSerial)
+	if !strings.EqualFold(serial, expectedPublicKeyID) {
+		return fmt.Errorf("unexpected notification serial: got %q want %q", serial, expectedPublicKeyID)
 	}
 
 	// 0. 校验时间戳合法性，防止重放攻击（微信官方要求 ±5 分钟内）
@@ -917,20 +835,8 @@ func (c *PaymentClient) VerifyNotificationSignature(signature, timestamp, nonce,
 		return fmt.Errorf("timestamp out of allowed window: diff=%ds", diff)
 	}
 
-	// 获取用于验签的公钥
-	var publicKey *rsa.PublicKey
-	if c.platformPublicKey != nil {
-		// 优先使用平台公钥（推荐方式）
-		publicKey = c.platformPublicKey
-	} else if c.platformCertificate != nil {
-		// 回退到平台证书公钥（已弃用）
-		var ok bool
-		publicKey, ok = c.platformCertificate.PublicKey.(*rsa.PublicKey)
-		if !ok {
-			return fmt.Errorf("invalid platform certificate public key type")
-		}
-	} else {
-		return fmt.Errorf("neither platform public key nor platform certificate configured")
+	if c.platformPublicKey == nil {
+		return fmt.Errorf("platform public key not configured")
 	}
 
 	// 1. 构造验签名串
@@ -949,7 +855,7 @@ func (c *PaymentClient) VerifyNotificationSignature(signature, timestamp, nonce,
 	hashed := sha256.Sum256([]byte(message))
 
 	// 4. 使用平台公钥验证签名
-	err = rsa.VerifyPKCS1v15(publicKey, crypto.SHA256, hashed[:], signatureBytes)
+	err = rsa.VerifyPKCS1v15(c.platformPublicKey, crypto.SHA256, hashed[:], signatureBytes)
 	if err != nil {
 		return ErrInvalidSignature
 	}
@@ -957,30 +863,21 @@ func (c *PaymentClient) VerifyNotificationSignature(signature, timestamp, nonce,
 	return nil
 }
 
-func (c *PaymentClient) verifyResponseSignature(signature, timestamp, nonce, serial, body string) error {
+func (c *DirectPaymentClient) verifyResponseSignature(signature, timestamp, nonce, serial, body string) error {
 	if signature == "" || timestamp == "" || nonce == "" || serial == "" {
 		return fmt.Errorf("missing response signature headers")
 	}
 
-	expectedSerial := c.GetPlatformCertificateSerial()
-	if expectedSerial == "" {
-		return fmt.Errorf("neither platform public key ID nor platform certificate configured")
+	expectedPublicKeyID := c.GetPlatformPublicKeyID()
+	if expectedPublicKeyID == "" {
+		return fmt.Errorf("platform public key ID not configured")
 	}
-	if !strings.EqualFold(serial, expectedSerial) {
-		return fmt.Errorf("unexpected response serial: got %q want %q", serial, expectedSerial)
+	if !strings.EqualFold(serial, expectedPublicKeyID) {
+		return fmt.Errorf("unexpected response serial: got %q want %q", serial, expectedPublicKeyID)
 	}
 
-	var publicKey *rsa.PublicKey
-	if c.platformPublicKey != nil {
-		publicKey = c.platformPublicKey
-	} else if c.platformCertificate != nil {
-		var ok bool
-		publicKey, ok = c.platformCertificate.PublicKey.(*rsa.PublicKey)
-		if !ok {
-			return fmt.Errorf("invalid platform certificate public key type")
-		}
-	} else {
-		return fmt.Errorf("neither platform public key nor platform certificate configured")
+	if c.platformPublicKey == nil {
+		return fmt.Errorf("platform public key not configured")
 	}
 
 	message := fmt.Sprintf("%s\n%s\n%s\n", timestamp, nonce, body)
@@ -990,14 +887,14 @@ func (c *PaymentClient) verifyResponseSignature(signature, timestamp, nonce, ser
 	}
 
 	hashed := sha256.Sum256([]byte(message))
-	if err := rsa.VerifyPKCS1v15(publicKey, crypto.SHA256, hashed[:], signatureBytes); err != nil {
+	if err := rsa.VerifyPKCS1v15(c.platformPublicKey, crypto.SHA256, hashed[:], signatureBytes); err != nil {
 		return ErrInvalidSignature
 	}
 
 	return nil
 }
 
-func (c *PaymentClient) verifyHTTPResponseSignature(resp *http.Response, body []byte) error {
+func (c *DirectPaymentClient) verifyHTTPResponseSignature(resp *http.Response, body []byte) error {
 	return c.verifyResponseSignature(
 		resp.Header.Get("Wechatpay-Signature"),
 		resp.Header.Get("Wechatpay-Timestamp"),
@@ -1008,7 +905,7 @@ func (c *PaymentClient) verifyHTTPResponseSignature(resp *http.Response, body []
 }
 
 // decryptAESGCM 使用 AES-GCM 解密（APIv3 回调通知解密）
-func (c *PaymentClient) decryptAESGCM(nonceStr, ciphertext, associatedData string) ([]byte, error) {
+func (c *DirectPaymentClient) decryptAESGCM(nonceStr, ciphertext, associatedData string) ([]byte, error) {
 	nonce := []byte(nonceStr)
 	ciphertextBytes, err := base64.StdEncoding.DecodeString(ciphertext)
 	if err != nil {
@@ -1037,31 +934,30 @@ func (c *PaymentClient) decryptAESGCM(nonceStr, ciphertext, associatedData strin
 // ==================== HTTP 请求签名 ====================
 
 // doRequest 发送签名请求
-func (c *PaymentClient) doRequest(ctx context.Context, method, path string, body interface{}) ([]byte, error) {
+func (c *DirectPaymentClient) doRequest(ctx context.Context, method, path string, body interface{}) ([]byte, error) {
 	respBody, _, err := c.doRequestWithRequestID(ctx, method, path, body)
 	return respBody, err
 }
 
-// doRequestWithWechatSerial 发送带微信支付平台公钥ID/证书序列号的请求（用于加密敏感信息）
-// 优先使用平台公钥ID（推荐），其次使用平台证书序列号（已弃用）
-func (c *PaymentClient) doRequestWithWechatSerial(ctx context.Context, method, path string, body interface{}) ([]byte, error) {
-	wechatSerial := c.GetPlatformCertificateSerial()
-	if wechatSerial == "" {
-		return nil, fmt.Errorf("neither platform public key ID nor platform certificate loaded")
+// doRequestWithWechatSerial 发送带微信支付平台公钥 ID 的请求（用于加密敏感信息）。
+func (c *DirectPaymentClient) doRequestWithWechatSerial(ctx context.Context, method, path string, body interface{}) ([]byte, error) {
+	wechatpaySerial := c.GetPlatformPublicKeyID()
+	if wechatpaySerial == "" {
+		return nil, fmt.Errorf("platform public key ID not loaded")
 	}
-	respBody, _, err := c.doRequestWithSerialAndRequestID(ctx, method, path, body, wechatSerial)
+	respBody, _, err := c.doRequestWithSerialAndRequestID(ctx, method, path, body, wechatpaySerial)
 	return respBody, err
 }
 
-func (c *PaymentClient) doRequestWithRequestID(ctx context.Context, method, path string, body interface{}) ([]byte, string, error) {
+func (c *DirectPaymentClient) doRequestWithRequestID(ctx context.Context, method, path string, body interface{}) ([]byte, string, error) {
 	return c.doRequestWithSerialAndRequestID(ctx, method, path, body, "")
 }
 
-func (c *PaymentClient) doRequestWithSerialAndRequestID(ctx context.Context, method, path string, body interface{}, wechatSerial string) ([]byte, string, error) {
+func (c *DirectPaymentClient) doRequestWithSerialAndRequestID(ctx context.Context, method, path string, body interface{}, wechatSerial string) ([]byte, string, error) {
 	return c.doRequestWithOptionsAndRequestID(ctx, method, path, body, wechatSerial, true)
 }
 
-func (c *PaymentClient) doRequestWithOptionsAndRequestID(ctx context.Context, method, path string, body interface{}, wechatSerial string, verifyResponse bool) ([]byte, string, error) {
+func (c *DirectPaymentClient) doRequestWithOptionsAndRequestID(ctx context.Context, method, path string, body interface{}, wechatSerial string, verifyResponse bool) ([]byte, string, error) {
 	var bodyBytes []byte
 	var err error
 
@@ -1147,9 +1043,26 @@ func (c *PaymentClient) doRequestWithOptionsAndRequestID(ctx context.Context, me
 		wxErr.StatusCode = resp.StatusCode
 
 		if err := json.Unmarshal(respBody, &wxErr); err == nil && wxErr.Code != "" {
+			log.Error().
+				Str("request_id", requestID).
+				Str("method", method).
+				Str("path", signaturePath).
+				Int("status", wxErr.StatusCode).
+				Str("code", wxErr.Code).
+				Str("message", wxErr.Message).
+				Str("detail", wxErr.Detail).
+				Msg("wechat pay api returned error")
 			// 成功解析错误响应，添加request_id便于排查
 			return nil, requestID, fmt.Errorf("request_id=%s: %w", requestID, &wxErr)
 		}
+
+		log.Error().
+			Str("request_id", requestID).
+			Str("method", method).
+			Str("path", signaturePath).
+			Int("status", resp.StatusCode).
+			Str("body", string(respBody)).
+			Msg("wechat pay api returned non-json error body")
 
 		// 解析失败，返回原始错误
 		return nil, requestID, fmt.Errorf("wechat pay api error: status=%d, body=%s, request_id=%s", resp.StatusCode, string(respBody), requestID)
@@ -1159,7 +1072,7 @@ func (c *PaymentClient) doRequestWithOptionsAndRequestID(ctx context.Context, me
 }
 
 // generateSignature 生成请求签名
-func (c *PaymentClient) generateSignature(method, path string, timestamp int64, nonceStr string, body []byte) (string, error) {
+func (c *DirectPaymentClient) generateSignature(method, path string, timestamp int64, nonceStr string, body []byte) (string, error) {
 	// 构造签名串
 	var signStr string
 	if len(body) > 0 {
@@ -1172,7 +1085,7 @@ func (c *PaymentClient) generateSignature(method, path string, timestamp int64, 
 }
 
 // signWithRSA 使用 RSA-SHA256 签名
-func (c *PaymentClient) signWithRSA(message string) (string, error) {
+func (c *DirectPaymentClient) signWithRSA(message string) (string, error) {
 	hash := sha256.Sum256([]byte(message))
 	signature, err := rsa.SignPKCS1v15(rand.Reader, c.privateKey, crypto.SHA256, hash[:])
 	if err != nil {

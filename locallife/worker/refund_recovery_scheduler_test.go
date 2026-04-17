@@ -60,7 +60,7 @@ func TestRefundRecoverySchedulerRunOnceQueriesDirectRefundStatus(t *testing.T) {
 
 	store := mockdb.NewMockStore(ctrl)
 	distributor := mockwk.NewMockTaskDistributor(ctrl)
-	paymentClient := mockwechat.NewMockPaymentClientInterface(ctrl)
+	paymentClient := mockwechat.NewMockDirectPaymentClientInterface(ctrl)
 
 	stuckRefund := db.RefundOrder{
 		ID:             51,
@@ -109,6 +109,49 @@ func TestRefundRecoverySchedulerRunOnceQueriesDirectRefundStatus(t *testing.T) {
 	scheduler.RunOnce()
 }
 
+func TestRefundRecoverySchedulerRunOnceSkipsDirectRefundStatusWithoutPaymentClient(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	distributor := mockwk.NewMockTaskDistributor(ctrl)
+
+	stuckRefund := db.RefundOrder{
+		ID:             52,
+		PaymentOrderID: 82,
+		OutRefundNo:    "RFD_STUCK_DIRECT_SKIP_001",
+		Status:         "processing",
+	}
+	paymentOrder := db.PaymentOrder{
+		ID:          82,
+		PaymentType: "miniprogram",
+	}
+
+	store.EXPECT().
+		ListPaidUnrefundedPaymentOrders(gomock.Any(), int32(50)).
+		Return([]db.PaymentOrder{}, nil)
+	store.EXPECT().
+		ListPaidUnrefundedReservationPaymentOrders(gomock.Any(), int32(50)).
+		Return([]db.PaymentOrder{}, nil)
+	store.EXPECT().
+		ListPendingReservationRefundOrdersForRecovery(gomock.Any(), gomock.Any()).
+		Return([]db.ListPendingReservationRefundOrdersForRecoveryRow{}, nil)
+	store.EXPECT().
+		ListStuckProcessingRefundOrders(gomock.Any(), gomock.Any()).
+		Return([]db.ListStuckProcessingRefundOrdersRow{{
+			ID:          stuckRefund.ID,
+			OutRefundNo: stuckRefund.OutRefundNo,
+			Status:      stuckRefund.Status,
+			CreatedAt:   time.Now().Add(-20 * time.Minute),
+			PaymentType: paymentOrder.PaymentType,
+		}}, nil)
+	store.EXPECT().GetRefundOrder(gomock.Any(), stuckRefund.ID).Return(stuckRefund, nil)
+	store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil)
+
+	scheduler := worker.NewRefundRecoveryScheduler(store, distributor, nil, nil)
+	scheduler.RunOnce()
+}
+
 func TestRefundRecoverySchedulerRunOnceQueriesEcommerceRefundStatus(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -124,9 +167,10 @@ func TestRefundRecoverySchedulerRunOnceQueriesEcommerceRefundStatus(t *testing.T
 		Status:         "processing",
 	}
 	paymentOrder := db.PaymentOrder{
-		ID:          91,
-		PaymentType: "profit_sharing",
-		OrderID:     pgtype.Int8{Int64: 501, Valid: true},
+		ID:             91,
+		PaymentType:    "profit_sharing",
+		PaymentChannel: db.PaymentChannelEcommerce,
+		OrderID:        pgtype.Int8{Int64: 501, Valid: true},
 	}
 
 	store.EXPECT().
@@ -167,6 +211,51 @@ func TestRefundRecoverySchedulerRunOnceQueriesEcommerceRefundStatus(t *testing.T
 	scheduler.RunOnce()
 }
 
+func TestRefundRecoverySchedulerRunOnceSkipsEcommerceRefundStatusWithoutEcommerceClient(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	distributor := mockwk.NewMockTaskDistributor(ctrl)
+
+	stuckRefund := db.RefundOrder{
+		ID:             64,
+		PaymentOrderID: 94,
+		OutRefundNo:    "RFD_STUCK_ECOM_SKIP_001",
+		Status:         "processing",
+	}
+	paymentOrder := db.PaymentOrder{
+		ID:             94,
+		PaymentType:    "profit_sharing",
+		PaymentChannel: db.PaymentChannelEcommerce,
+		OrderID:        pgtype.Int8{Int64: 503, Valid: true},
+	}
+
+	store.EXPECT().
+		ListPaidUnrefundedPaymentOrders(gomock.Any(), int32(50)).
+		Return([]db.PaymentOrder{}, nil)
+	store.EXPECT().
+		ListPaidUnrefundedReservationPaymentOrders(gomock.Any(), int32(50)).
+		Return([]db.PaymentOrder{}, nil)
+	store.EXPECT().
+		ListPendingReservationRefundOrdersForRecovery(gomock.Any(), gomock.Any()).
+		Return([]db.ListPendingReservationRefundOrdersForRecoveryRow{}, nil)
+	store.EXPECT().
+		ListStuckProcessingRefundOrders(gomock.Any(), gomock.Any()).
+		Return([]db.ListStuckProcessingRefundOrdersRow{{
+			ID:          stuckRefund.ID,
+			OutRefundNo: stuckRefund.OutRefundNo,
+			Status:      stuckRefund.Status,
+			CreatedAt:   time.Now().Add(-20 * time.Minute),
+			PaymentType: paymentOrder.PaymentType,
+		}}, nil)
+	store.EXPECT().GetRefundOrder(gomock.Any(), stuckRefund.ID).Return(stuckRefund, nil)
+	store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil)
+
+	scheduler := worker.NewRefundRecoveryScheduler(store, distributor, nil, nil)
+	scheduler.RunOnce()
+}
+
 func TestRefundRecoverySchedulerRunOnceQueriesEcommerceRefundStatusByReservation(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -182,9 +271,10 @@ func TestRefundRecoverySchedulerRunOnceQueriesEcommerceRefundStatusByReservation
 		Status:         "processing",
 	}
 	paymentOrder := db.PaymentOrder{
-		ID:            92,
-		PaymentType:   "profit_sharing",
-		ReservationID: pgtype.Int8{Int64: 601, Valid: true},
+		ID:             92,
+		PaymentType:    "profit_sharing",
+		PaymentChannel: db.PaymentChannelEcommerce,
+		ReservationID:  pgtype.Int8{Int64: 601, Valid: true},
 	}
 
 	store.EXPECT().
@@ -240,9 +330,10 @@ func TestRefundRecoverySchedulerRunOnceKeepsWaitingWhenEcommerceRefundStillProce
 		Status:         "processing",
 	}
 	paymentOrder := db.PaymentOrder{
-		ID:          93,
-		PaymentType: "profit_sharing",
-		OrderID:     pgtype.Int8{Int64: 502, Valid: true},
+		ID:             93,
+		PaymentType:    "profit_sharing",
+		PaymentChannel: db.PaymentChannelEcommerce,
+		OrderID:        pgtype.Int8{Int64: 502, Valid: true},
 	}
 
 	store.EXPECT().

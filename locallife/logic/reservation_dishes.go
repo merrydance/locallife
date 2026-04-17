@@ -233,10 +233,7 @@ func ModifyReservationDishes(
 			return result, fmt.Errorf("generate out refund no: %w", genErr)
 		}
 
-		refundType := allocation.PaymentOrder.PaymentType
-		if refundType == paymentTypeNative {
-			refundType = paymentTypeMiniProgram
-		}
+		refundType := refundTypeForPaymentOrder(allocation.PaymentOrder)
 
 		if _, createErr := store.CreateRefundOrderTx(ctx, db.CreateRefundOrderTxParams{
 			PaymentOrderID: allocation.PaymentOrder.ID,

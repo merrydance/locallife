@@ -90,10 +90,6 @@ type Store interface {
 	OpenDiningSessionTx(ctx context.Context, arg OpenDiningSessionTxParams) (OpenDiningSessionTxResult, error)
 	TransferDiningSessionTableTx(ctx context.Context, arg TransferDiningSessionTableTxParams) (TransferDiningSessionTableTxResult, error)
 	CloseDiningSessionTx(ctx context.Context, arg CloseDiningSessionTxParams) (CloseDiningSessionTxResult, error)
-	// Claim payout transactions（索赔平台赔付）
-	ClaimPayoutTx(ctx context.Context, arg ClaimPayoutTxParams) (ClaimPayoutTxResult, error)
-	ClaimPayoutRollbackTx(ctx context.Context, arg ClaimPayoutRollbackTxParams) (ClaimPayoutRollbackTxResult, error)
-	AppealCompensationTx(ctx context.Context, arg AppealCompensationTxParams) (AppealCompensationTxResult, error)
 	// Behavior trace transactions
 	CreateClaimWithBehaviorTx(ctx context.Context, arg CreateClaimWithBehaviorTxParams) (CreateClaimWithBehaviorTxResult, error)
 	ReviewAppealWithCompensationTx(ctx context.Context, arg ReviewAppealWithCompensationTxParams) (ReviewAppealWithCompensationTxResult, error)

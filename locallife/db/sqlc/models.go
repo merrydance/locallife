@@ -834,6 +834,8 @@ type MembershipTransaction struct {
 	PaymentOrderID  pgtype.Int8 `json:"payment_order_id"`
 	PrincipalAmount int64       `json:"principal_amount"`
 	BonusAmount     int64       `json:"bonus_amount"`
+	// 商户代录会员充值请求幂等键，仅 recharge 交易使用
+	IdempotencyKey pgtype.Text `json:"idempotency_key"`
 }
 
 type Merchant struct {
@@ -1504,8 +1506,10 @@ type PaymentOrder struct {
 	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
 	Attach        pgtype.Text        `json:"attach"`
 	// 关联的合单支付ID，单商户支付时为NULL
-	CombinedPaymentID pgtype.Int8        `json:"combined_payment_id"`
-	ProcessedAt       pgtype.Timestamptz `json:"processed_at"`
+	CombinedPaymentID     pgtype.Int8        `json:"combined_payment_id"`
+	ProcessedAt           pgtype.Timestamptz `json:"processed_at"`
+	PaymentChannel        string             `json:"payment_channel"`
+	RequiresProfitSharing bool               `json:"requires_profit_sharing"`
 }
 
 // 高峰/特殊时段配置表（午高峰、晚高峰、深夜配送等）

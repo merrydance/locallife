@@ -18,7 +18,7 @@ type outputEnvelope struct {
 func main() {
 	docPath := flag.String("doc", "", "Path to the markdown document to extract")
 	outPath := flag.String("out", "", "Optional JSON output path; defaults to stdout")
-	auditScope := flag.String("audit", "", "Optional audit scope; supported values: applyment, ordering, cancel_withdraw, profit_sharing, subsidy, refund, fund_management, complaint, direct_payment")
+	auditScope := flag.String("audit", "", "Optional audit scope; supported values: applyment, ordering, cancel_withdraw, profit_sharing, subsidy, refund, fund_management, complaint, direct_payment, merchant_transfer")
 	flag.Parse()
 
 	if *docPath == "" {
@@ -55,6 +55,8 @@ func main() {
 			audit = wechatdoc.AuditComplaintAlignment(result)
 		case "direct_payment":
 			audit = wechatdoc.AuditDirectPaymentAlignment(result)
+		case "merchant_transfer":
+			audit = wechatdoc.AuditMerchantTransferAlignment(result)
 		default:
 			fmt.Fprintln(os.Stderr, "unsupported -audit value:", *auditScope)
 			os.Exit(2)

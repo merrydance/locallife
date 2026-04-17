@@ -366,7 +366,10 @@ func (svc *CombinedPaymentService) resolveConcurrentCombinedPayment(
 		}
 
 		payParams, signErr := svc.signExistingCombinedPaymentOrder(combinedRow)
-		if signErr == nil && payParams != nil {
+		if signErr != nil {
+			return result, true, fmt.Errorf("sign concurrent combined payment order: %w", signErr)
+		}
+		if payParams != nil {
 			result, buildErr := buildExistingCombinedPaymentResult(combinedRow, payParams)
 			if buildErr != nil {
 				return CreateCombinedPaymentOrderResult{}, true, buildErr
@@ -761,6 +764,9 @@ func aggregateCombinedTradeState(tradeStates []string) string {
 func mapCombinedPaymentError(err error) error {
 	if err == nil {
 		return nil
+	}
+	if errors.Is(err, db.ErrCombinedPaymentUnsupportedOrderType) {
+		return NewRequestError(http.StatusBadRequest, errors.New("外带订单不支持合单支付，请使用普通支付入口"))
 	}
 
 	msg := err.Error()

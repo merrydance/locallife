@@ -24,9 +24,11 @@ func TestGetProfitSharingAmounts_OK(t *testing.T) {
 	ecommerce := mockwechat.NewMockEcommerceClientInterface(ctrl)
 
 	paymentOrder := db.PaymentOrder{
-		ID:            301,
-		PaymentType:   PaymentTypeProfitShare,
-		TransactionID: pgtype.Text{String: "wx_tx_301", Valid: true},
+		ID:                    301,
+		PaymentType:           PaymentTypeProfitShare,
+		PaymentChannel:        db.PaymentChannelEcommerce,
+		RequiresProfitSharing: true,
+		TransactionID:         pgtype.Text{String: "wx_tx_301", Valid: true},
 	}
 
 	store.EXPECT().
@@ -94,7 +96,7 @@ func TestDeleteProfitSharingReceiver_OK(t *testing.T) {
 
 	store.EXPECT().
 		GetPaymentOrder(gomock.Any(), int64(303)).
-		Return(db.PaymentOrder{ID: 303, PaymentType: PaymentTypeProfitShare}, nil)
+		Return(db.PaymentOrder{ID: 303, PaymentType: PaymentTypeProfitShare, PaymentChannel: db.PaymentChannelEcommerce, RequiresProfitSharing: true}, nil)
 	ecommerce.EXPECT().
 		DeleteProfitSharingReceiver(gomock.Any(), &wechatcontracts.DeleteReceiverRequest{
 			AppID:   "wx_app_303",
@@ -136,7 +138,7 @@ func TestDeleteProfitSharingReceiver_ValidationErrorReturnsBadRequest(t *testing
 
 	store.EXPECT().
 		GetPaymentOrder(gomock.Any(), int64(304)).
-		Return(db.PaymentOrder{ID: 304, PaymentType: PaymentTypeProfitShare}, nil)
+		Return(db.PaymentOrder{ID: 304, PaymentType: PaymentTypeProfitShare, PaymentChannel: db.PaymentChannelEcommerce, RequiresProfitSharing: true}, nil)
 	ecommerce.EXPECT().
 		DeleteProfitSharingReceiver(gomock.Any(), &wechatcontracts.DeleteReceiverRequest{
 			AppID:   "",

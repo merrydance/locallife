@@ -430,6 +430,33 @@ func TestCreateMembershipTransaction(t *testing.T) {
 	require.Equal(t, int64(10000), tx.BalanceAfter)
 }
 
+func TestCreateMembershipRechargeTransactionUniqueIdempotencyKey(t *testing.T) {
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	user := createRandomUser(t)
+
+	membership := createRandomMembership(t, merchant.ID, user.ID)
+	arg := CreateMembershipRechargeTransactionParams{
+		MembershipID:    membership.ID,
+		Amount:          10000,
+		PrincipalAmount: 10000,
+		BonusAmount:     0,
+		BalanceAfter:    10000,
+		RelatedOrderID:  pgtype.Int8{Valid: false},
+		RechargeRuleID:  pgtype.Int8{Valid: false},
+		Notes:           pgtype.Text{String: "首次充值", Valid: true},
+		IdempotencyKey:  pgtype.Text{String: "merchant-recharge-1", Valid: true},
+	}
+
+	firstTx, err := testStore.CreateMembershipRechargeTransaction(context.Background(), arg)
+	require.NoError(t, err)
+	require.NotZero(t, firstTx.ID)
+
+	_, err = testStore.CreateMembershipRechargeTransaction(context.Background(), arg)
+	require.Error(t, err)
+	require.Equal(t, UniqueViolation, ErrorCode(err))
+}
+
 func TestListMembershipTransactions(t *testing.T) {
 	owner := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, owner.ID)

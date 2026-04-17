@@ -169,6 +169,26 @@ func TestCreateCombinedPaymentOrder(t *testing.T) {
 			},
 		},
 		{
+			name:  "CreateTxMappedUnsupportedTakeaway",
+			input: baseInput,
+			buildStubs: func(store *mockdb.MockStore, client *mockwechat.MockEcommerceClientInterface) {
+				store.EXPECT().
+					GetUser(gomock.Any(), baseInput.UserID).
+					Times(1).
+					Return(db.User{ID: baseInput.UserID, WechatOpenid: "openid-1"}, nil)
+
+				store.EXPECT().
+					CreateCombinedPaymentTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.CreateCombinedPaymentTxResult{}, db.ErrCombinedPaymentUnsupportedOrderType)
+			},
+			check: func(t *testing.T, _ CreateCombinedPaymentOrderResult, err error) {
+				reqErr := assertRequestError(t, err)
+				require.Equal(t, 400, reqErr.Status)
+				require.Equal(t, "外带订单不支持合单支付，请使用普通支付入口", reqErr.Err.Error())
+			},
+		},
+		{
 			name:  "CreateTxMappedActivePaymentOrder",
 			input: baseInput,
 			buildStubs: func(store *mockdb.MockStore, client *mockwechat.MockEcommerceClientInterface) {
@@ -599,7 +619,70 @@ func TestCreateCombinedPaymentOrder_ReusesConcurrentPendingCombinedPayment(t *te
 	require.Equal(t, []int64{11, 22}, []int64{result.SubOrders[0].OrderID, result.SubOrders[1].OrderID})
 }
 
-func TestCreateCombinedPaymentOrder_ConcurrentPendingCombinedWithoutPayParamsReturnsConflict(t *testing.T) {
+func TestCreateCombinedPaymentOrder_ConcurrentPendingCombinedSigningFailureReturnsError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	client := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	svc := NewCombinedPaymentService(store, client)
+
+	input := CreateCombinedPaymentOrderInput{
+		UserID:   1001,
+		OrderIDs: []int64{11, 22},
+		ClientIP: "127.0.0.1",
+	}
+
+	subOrders, err := json.Marshal([]combinedSubOrderPayload{
+		{OrderID: 11, PaymentOrderID: 7001, MerchantID: 501, SubMchID: "190001", Amount: 3200, OutTradeNo: "P11", Description: "m1 - Order Payment"},
+		{OrderID: 22, PaymentOrderID: 7002, MerchantID: 502, SubMchID: "190002", Amount: 4800, OutTradeNo: "P22", Description: "m2 - Order Payment"},
+	})
+	require.NoError(t, err)
+
+	store.EXPECT().
+		GetUser(gomock.Any(), input.UserID).
+		Return(db.User{ID: input.UserID, WechatOpenid: "openid-1"}, nil)
+	store.EXPECT().
+		CreateCombinedPaymentTx(gomock.Any(), gomock.Any()).
+		Return(db.CreateCombinedPaymentTxResult{}, db.ErrOrderPendingPaymentConflict)
+	store.EXPECT().
+		GetLatestPaymentOrderByOrder(gomock.Any(), db.GetLatestPaymentOrderByOrderParams{
+			OrderID:      pgtype.Int8{Int64: 11, Valid: true},
+			BusinessType: businessTypeOrder,
+		}).
+		Times(1).
+		Return(db.PaymentOrder{ID: 7001, Status: paymentStatusPending, CombinedPaymentID: pgtype.Int8{Int64: 9001, Valid: true}}, nil)
+	store.EXPECT().
+		GetLatestPaymentOrderByOrder(gomock.Any(), db.GetLatestPaymentOrderByOrderParams{
+			OrderID:      pgtype.Int8{Int64: 22, Valid: true},
+			BusinessType: businessTypeOrder,
+		}).
+		Times(1).
+		Return(db.PaymentOrder{ID: 7002, Status: paymentStatusPending, CombinedPaymentID: pgtype.Int8{Int64: 9001, Valid: true}}, nil)
+	store.EXPECT().
+		GetCombinedPaymentOrderWithSubOrders(gomock.Any(), int64(9001)).
+		Times(1).
+		Return(db.GetCombinedPaymentOrderWithSubOrdersRow{
+			ID:                9001,
+			UserID:            input.UserID,
+			CombineOutTradeNo: "CP20260406000001",
+			TotalAmount:       8000,
+			PrepayID:          pgtype.Text{String: "combine-prepay-9001", Valid: true},
+			Status:            paymentStatusPending,
+			SubOrders:         subOrders,
+		}, nil)
+	client.EXPECT().
+		GenerateJSAPIPayParams("combine-prepay-9001").
+		Times(1).
+		Return(nil, errors.New("signing unavailable"))
+
+	_, err = svc.CreateCombinedPaymentOrder(context.Background(), input)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "sign concurrent combined payment order")
+	require.Contains(t, err.Error(), "signing unavailable")
+}
+
+func TestCreateCombinedPaymentOrder_ConcurrentPendingCombinedWithoutPrepayReturnsConflict(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -647,14 +730,9 @@ func TestCreateCombinedPaymentOrder_ConcurrentPendingCombinedWithoutPayParamsRet
 			UserID:            input.UserID,
 			CombineOutTradeNo: "CP20260406000001",
 			TotalAmount:       8000,
-			PrepayID:          pgtype.Text{String: "combine-prepay-9001", Valid: true},
 			Status:            paymentStatusPending,
 			SubOrders:         subOrders,
 		}, nil)
-	client.EXPECT().
-		GenerateJSAPIPayParams("combine-prepay-9001").
-		Times(outTradeNoMaxRetry).
-		Return(nil, errors.New("signing unavailable"))
 
 	_, err = svc.CreateCombinedPaymentOrder(context.Background(), input)
 	reqErr := assertRequestError(t, err)

@@ -97,15 +97,15 @@ const (
 // EcommerceClient 平台收付通客户端
 // 用于多商户场景，支持分账功能
 type EcommerceClient struct {
-	*PaymentClient            // 复用基础支付客户端
-	spMchID            string // 服务商商户号
-	explicitSpMchID    bool
-	spAppID            string // 服务商 AppID
-	spMchName          string // 服务商名称（可选）
-	partnerNotifyURL   string
-	combineNotifyURL   string
-	withdrawNotifyURL  string
-	violationNotifyURL string
+	*DirectPaymentClient        // 复用基础支付客户端
+	spMchID              string // 服务商商户号
+	explicitSpMchID      bool
+	spAppID              string // 服务商 AppID
+	spMchName            string // 服务商名称（可选）
+	partnerNotifyURL     string
+	combineNotifyURL     string
+	withdrawNotifyURL    string
+	violationNotifyURL   string
 }
 
 // ValidateEcommerceCancelWithdraw 校验二级商户是否满足注销提现条件
@@ -229,21 +229,21 @@ func (c *EcommerceClient) QueryEcommerceCancelWithdrawByApplymentID(ctx context.
 
 // EcommerceClientConfig 平台收付通客户端配置
 type EcommerceClientConfig struct {
-	PaymentClientConfig        // 嵌入基础配置
-	SpMchID             string // 服务商商户号（UploadImage 要求显式配置；即使与 MchID 相同也应填写）
-	SpAppID             string // 服务商 AppID（如与 AppID 相同可不填）
-	SpMchName           string // 服务商名称（可选）
-	PartnerNotifyURL    string // 收付通普通支付回调地址（空则回退到 PaymentClientConfig.NotifyURL）
-	CombineNotifyURL    string // 收付通合单支付回调地址（空则回退到 PartnerNotifyURL / PaymentClientConfig.NotifyURL）
-	WithdrawNotifyURL   string // 收付通提现回调地址（空则不为提现请求上送 notify_url）
-	ViolationNotifyURL  string // 收付通商户违规通知回调地址（空则回退到 PartnerNotifyURL / PaymentClientConfig.NotifyURL）
+	DirectPaymentClientConfig        // 嵌入基础配置
+	SpMchID                   string // 服务商商户号（UploadImage 要求显式配置；即使与 MchID 相同也应填写）
+	SpAppID                   string // 服务商 AppID（如与 AppID 相同可不填）
+	SpMchName                 string // 服务商名称（可选）
+	PartnerNotifyURL          string // 收付通普通支付回调地址（空则回退到 DirectPaymentClientConfig.NotifyURL）
+	CombineNotifyURL          string // 收付通合单支付回调地址（空则回退到 PartnerNotifyURL / DirectPaymentClientConfig.NotifyURL）
+	WithdrawNotifyURL         string // 收付通提现回调地址（空则不为提现请求上送 notify_url）
+	ViolationNotifyURL        string // 收付通商户违规通知回调地址（空则回退到 PartnerNotifyURL / DirectPaymentClientConfig.NotifyURL）
 }
 
 // NewEcommerceClient 创建平台收付通客户端
 func NewEcommerceClient(cfg EcommerceClientConfig) (*EcommerceClient, error) {
-	baseClient, err := NewPaymentClient(cfg.PaymentClientConfig)
+	baseClient, err := NewDirectPaymentClient(cfg.DirectPaymentClientConfig)
 	if err != nil {
-		return nil, fmt.Errorf("create base payment client: %w", err)
+		return nil, fmt.Errorf("create base direct payment client: %w", err)
 	}
 
 	spMchID := strings.TrimSpace(cfg.SpMchID)
@@ -273,15 +273,15 @@ func NewEcommerceClient(cfg EcommerceClientConfig) (*EcommerceClient, error) {
 	}
 
 	return &EcommerceClient{
-		PaymentClient:      baseClient,
-		spMchID:            spMchID,
-		explicitSpMchID:    explicitSpMchID,
-		spAppID:            spAppID,
-		spMchName:          spMchName,
-		partnerNotifyURL:   partnerNotifyURL,
-		combineNotifyURL:   combineNotifyURL,
-		withdrawNotifyURL:  withdrawNotifyURL,
-		violationNotifyURL: violationNotifyURL,
+		DirectPaymentClient: baseClient,
+		spMchID:             spMchID,
+		explicitSpMchID:     explicitSpMchID,
+		spAppID:             spAppID,
+		spMchName:           spMchName,
+		partnerNotifyURL:    partnerNotifyURL,
+		combineNotifyURL:    combineNotifyURL,
+		withdrawNotifyURL:   withdrawNotifyURL,
+		violationNotifyURL:  violationNotifyURL,
 	}, nil
 }
 

@@ -821,7 +821,8 @@ JOIN orders o ON po.order_id = o.id
 LEFT JOIN profit_sharing_orders pso ON po.id = pso.payment_order_id
 WHERE 
     po.status = 'paid' 
-    AND po.payment_type = 'profit_sharing'
+    AND po.payment_channel = 'ecommerce'
+    AND po.requires_profit_sharing = TRUE
     AND o.status = 'completed'
   AND o.order_type <> 'takeout'
     AND pso.id IS NULL

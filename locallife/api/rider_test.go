@@ -15,6 +15,7 @@ import (
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/util"
 	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	wechatmock "github.com/merrydance/locallife/wechat/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -139,7 +140,7 @@ func TestGoOnlineAPI(t *testing.T) {
 		name          string
 		body          map[string]interface{}
 		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
-		buildStubs    func(store *mockdb.MockStore, paymentClient *wechatmock.MockPaymentClientInterface)
+		buildStubs    func(store *mockdb.MockStore, paymentClient *wechatmock.MockDirectPaymentClientInterface)
 		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
 	}{
 		{
@@ -151,7 +152,7 @@ func TestGoOnlineAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockPaymentClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockDirectPaymentClientInterface) {
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
@@ -178,7 +179,7 @@ func TestGoOnlineAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockPaymentClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockDirectPaymentClientInterface) {
 				approvedRider := rider
 				approvedRider.Status = db.RiderStatusApproved
 				store.EXPECT().
@@ -199,7 +200,7 @@ func TestGoOnlineAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockPaymentClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockDirectPaymentClientInterface) {
 				insufficientRider := rider
 				insufficientRider.DepositAmount = 0
 				store.EXPECT().
@@ -221,7 +222,7 @@ func TestGoOnlineAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockPaymentClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockDirectPaymentClientInterface) {
 				pendingRider := rider
 				pendingRider.Status = "pending"
 				store.EXPECT().
@@ -243,7 +244,7 @@ func TestGoOnlineAPI(t *testing.T) {
 			defer ctrl.Finish()
 
 			store := mockdb.NewMockStore(ctrl)
-			paymentClient := wechatmock.NewMockPaymentClientInterface(ctrl)
+			paymentClient := wechatmock.NewMockDirectPaymentClientInterface(ctrl)
 			tc.buildStubs(store, paymentClient)
 
 			server := newTestServerWithPayment(t, store, paymentClient)
@@ -402,7 +403,7 @@ func TestDepositRiderAPI(t *testing.T) {
 		name          string
 		body          map[string]interface{}
 		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
-		buildStubs    func(store *mockdb.MockStore)
+		buildStubs    func(store *mockdb.MockStore, paymentClient *wechatmock.MockDirectPaymentClientInterface)
 		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
 	}{
 		{
@@ -414,7 +415,7 @@ func TestDepositRiderAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {
+			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockDirectPaymentClientInterface) {
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
@@ -439,6 +440,27 @@ func TestDepositRiderAPI(t *testing.T) {
 						Status:       "pending",
 						OutTradeNo:   "test_order_123",
 					}, nil)
+
+				store.EXPECT().
+					GetUser(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(db.User{ID: user.ID, WechatOpenid: "openid_rider_001"}, nil)
+
+				paymentClient.EXPECT().
+					CreateJSAPIOrder(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(&wechatcontracts.DirectJSAPIOrderResponse{PrepayID: "prepay_rider_deposit_001"}, &wechat.JSAPIPayParams{
+						TimeStamp: "1234567890",
+						NonceStr:  "nonce-001",
+						Package:   "prepay_id=prepay_rider_deposit_001",
+						SignType:  "RSA",
+						PaySign:   "sign-001",
+					}, nil)
+
+				store.EXPECT().
+					UpdatePaymentOrderPrepayId(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.PaymentOrder{}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -447,6 +469,7 @@ func TestDepositRiderAPI(t *testing.T) {
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Contains(t, resp, "payment_order_id")
 				require.Contains(t, resp, "out_trade_no")
+				require.Contains(t, resp, "pay_params")
 			},
 		},
 		{
@@ -458,7 +481,7 @@ func TestDepositRiderAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {
+			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockDirectPaymentClientInterface) {
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), gomock.Any()).
 					Times(0)
@@ -476,7 +499,7 @@ func TestDepositRiderAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {
+			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockDirectPaymentClientInterface) {
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
@@ -495,7 +518,7 @@ func TestDepositRiderAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {
+			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockDirectPaymentClientInterface) {
 				pendingRider := rider
 				pendingRider.Status = "pending"
 				store.EXPECT().
@@ -517,9 +540,13 @@ func TestDepositRiderAPI(t *testing.T) {
 			defer ctrl.Finish()
 
 			store := mockdb.NewMockStore(ctrl)
-			tc.buildStubs(store)
+			paymentClient := wechatmock.NewMockDirectPaymentClientInterface(ctrl)
+			tc.buildStubs(store, paymentClient)
 
-			server := newTestServer(t, store)
+			server := newTestServerWithPayment(t, store, paymentClient)
+			if tc.name == "PaymentClientNotConfigured" {
+				server.directPaymentClient = nil
+			}
 			recorder := httptest.NewRecorder()
 
 			data, err := json.Marshal(tc.body)
@@ -666,7 +693,7 @@ func TestWithdrawRiderAPI(t *testing.T) {
 		name          string
 		body          map[string]interface{}
 		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
-		buildStubs    func(store *mockdb.MockStore, paymentClient *wechatmock.MockPaymentClientInterface)
+		buildStubs    func(store *mockdb.MockStore, paymentClient *wechatmock.MockDirectPaymentClientInterface)
 		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
 	}{
 		{
@@ -678,7 +705,7 @@ func TestWithdrawRiderAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockPaymentClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockDirectPaymentClientInterface) {
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
@@ -732,7 +759,7 @@ func TestWithdrawRiderAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockPaymentClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockDirectPaymentClientInterface) {
 				// 不应该调用任何 store 方法
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), gomock.Any()).
@@ -751,7 +778,7 @@ func TestWithdrawRiderAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockPaymentClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockDirectPaymentClientInterface) {
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), gomock.Any()).
 					Times(0)
@@ -769,7 +796,7 @@ func TestWithdrawRiderAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockPaymentClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockDirectPaymentClientInterface) {
 				pendingRider := rider
 				pendingRider.Status = "pending"
 				store.EXPECT().
@@ -790,7 +817,7 @@ func TestWithdrawRiderAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockPaymentClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockDirectPaymentClientInterface) {
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
@@ -809,7 +836,7 @@ func TestWithdrawRiderAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockPaymentClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockDirectPaymentClientInterface) {
 				frozenRider := rider
 				frozenRider.FrozenDeposit = 50 * fenPerYuan
 				store.EXPECT().
@@ -837,7 +864,7 @@ func TestWithdrawRiderAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockPaymentClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockDirectPaymentClientInterface) {
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
@@ -862,7 +889,7 @@ func TestWithdrawRiderAPI(t *testing.T) {
 			defer ctrl.Finish()
 
 			store := mockdb.NewMockStore(ctrl)
-			paymentClient := wechatmock.NewMockPaymentClientInterface(ctrl)
+			paymentClient := wechatmock.NewMockDirectPaymentClientInterface(ctrl)
 			tc.buildStubs(store, paymentClient)
 
 			server := newTestServerWithPayment(t, store, paymentClient)

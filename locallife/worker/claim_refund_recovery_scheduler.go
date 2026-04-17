@@ -19,26 +19,26 @@ const (
 
 // ClaimPayoutRecoveryScheduler 扫描未完成的赔付动作并重试执行。
 type ClaimPayoutRecoveryScheduler struct {
-	cron          *cron.Cron
-	wg            sync.WaitGroup
-	stopCtx       context.Context
-	stopCancel    context.CancelFunc
-	runMu         sync.Mutex
-	store         db.Store
-	paymentClient wechat.PaymentClientInterface
+	cron           *cron.Cron
+	wg             sync.WaitGroup
+	stopCtx        context.Context
+	stopCancel     context.CancelFunc
+	runMu          sync.Mutex
+	store          db.Store
+	transferClient wechat.TransferClientInterface
 }
 
-func NewClaimPayoutRecoveryScheduler(store db.Store, paymentClient wechat.PaymentClientInterface) *ClaimPayoutRecoveryScheduler {
+func NewClaimPayoutRecoveryScheduler(store db.Store, transferClient wechat.TransferClientInterface) *ClaimPayoutRecoveryScheduler {
 	stopCtx, stopCancel := context.WithCancel(context.Background())
 	return &ClaimPayoutRecoveryScheduler{
 		cron: cron.New(cron.WithChain(
 			cron.SkipIfStillRunning(cron.DefaultLogger),
 			cron.Recover(cron.DefaultLogger),
 		)),
-		stopCtx:       stopCtx,
-		stopCancel:    stopCancel,
-		store:         store,
-		paymentClient: paymentClient,
+		stopCtx:        stopCtx,
+		stopCancel:     stopCancel,
+		store:          store,
+		transferClient: transferClient,
 	}
 }
 
@@ -95,7 +95,7 @@ func (s *ClaimPayoutRecoveryScheduler) runOnce(ctx context.Context) {
 			if action.Status == "failed" && isClaimPayoutTerminalFailure(action.Detail) {
 				continue
 			}
-			if err := ExecuteClaimPayoutAction(ctx, s.store, s.paymentClient, action.ID); err != nil {
+			if err := ExecuteClaimPayoutAction(ctx, s.store, s.transferClient, action.ID); err != nil {
 				log.Error().Err(err).Int64("behavior_action_id", action.ID).Msg("recover claim payout action failed")
 			}
 		}

@@ -9,7 +9,7 @@
 支付能力分为两条主线：
 
 - 平台收付通：用于为餐饮、零售等商户提供支付、退款、分账、进件、资金管理、投诉等能力。
-- 直连支付：用于向独立运营的个人骑手收取保证金，以及处理商户、骑手索赔相关赔付。
+- 直连支付：用于骑手保证金缴纳与赎回，以及商户、骑手追偿向平台付款。
 
 当前分账接收方固定为三个：
 
@@ -43,6 +43,7 @@
 
 使用微信支付平台收付通工具箱，为餐饮、零售等客户提供：
 
+- 预订、堂食、自取、外卖等商户业务支付
 - 商户进件
 - 普通支付与合单支付
 - 分账与补差
@@ -56,9 +57,10 @@
 
 使用微信支付直连支付，处理：
 
-- 个人骑手保证金收取
-- 商户索赔赔付
-- 骑手索赔赔付
+- 个人骑手保证金缴纳
+- 个人骑手保证金赎回
+- 商户追偿向平台付款
+- 骑手追偿向平台付款
 - 与这些直连支付主链路配套的查单、关单、退款、异常退款、通知
 
 ## 4. 能力组文档索引
@@ -147,8 +149,8 @@
 - 交易退款-查询单笔退款（按微信支付退款单号）：https://pay.weixin.qq.com/doc/v3/partner/4012476908.md
 - 交易退款-查询单笔退款（按商户退款单号）：https://pay.weixin.qq.com/doc/v3/partner/4012476911.md
 - 交易退款-退款结果通知：https://pay.weixin.qq.com/doc/v3/partner/4012124635.md
-- 交易退款-查询垫付回补通知：https://pay.weixin.qq.com/doc/v3/partner/4012476916.md
-- 交易退款-垫付退款回补：https://pay.weixin.qq.com/doc/v3/partner/4012476927.md
+- 交易退款-查询垫付回补通知：https://pay.weixin.qq.com/doc/v3/partner/4012476916.md（当前业务模式不使用）
+- 交易退款-垫付退款回补：https://pay.weixin.qq.com/doc/v3/partner/4012476927.md（当前业务模式不使用）
 - 交易退款-发起异常退款：https://pay.weixin.qq.com/doc/v3/partner/4015181616.md
 
 ### 4.7 账户资金管理组
@@ -223,6 +225,25 @@
 - 小程序支付-API列表-查询单笔退款（通过商户退款单号）：https://pay.weixin.qq.com/doc/v3/merchant/4012791904.md
 - 小程序支付-API列表-发起异常退款：https://pay.weixin.qq.com/doc/v3/merchant/4012791905.md
 - 小程序支付-API列表-退款结果回调通知：https://pay.weixin.qq.com/doc/v3/merchant/4012791906.md
+
+- 直连支付-商家转账
+- 产品介绍：https://pay.weixin.qq.com/doc/v3/merchant/4012711988.md
+- 开发指引：https://pay.weixin.qq.com/doc/v3/merchant/4012715211.md
+- 发起转账：https://pay.weixin.qq.com/doc/v3/merchant/4012716434.md
+- JSAPI调起用户确认收款：https://pay.weixin.qq.com/doc/v3/merchant/4012716430.md
+- 撤销转账：https://pay.weixin.qq.com/doc/v3/merchant/4012716458.md
+- 商户单号查询转账单：https://pay.weixin.qq.com/doc/v3/merchant/4012716437.md
+- 微信单号查询转账单：https://pay.weixin.qq.com/doc/v3/merchant/4012716457.md
+- 商家转账回调通知：https://pay.weixin.qq.com/doc/v3/merchant/4012712115.md
+- 商户单号申请电子回单:https://pay.weixin.qq.com/doc/v3/merchant/4012716452.md
+- 商户单号查询电子回单:https://pay.weixin.qq.com/doc/v3/merchant/4012716436.md
+- 微信单号申请电子回单：https://pay.weixin.qq.com/doc/v3/merchant/4012716456.md
+- 微信单号查询电子回单：https://pay.weixin.qq.com/doc/v3/merchant/4012716455.md
+- 下载电子回单：https://pay.weixin.qq.com/doc/v3/merchant/4013866774.md
+- 常见问题:https://pay.weixin.qq.com/doc/v3/merchant/4013778940.md
+- 设置接口安全IP:https://pay.weixin.qq.com/doc/v3/merchant/4013751010.md
+- 订单失败原因说明:https://pay.weixin.qq.com/doc/v3/merchant/4013774966.md
+- 转账场景报备信息字段传参说明-企业赔付:https://pay.weixin.qq.com/doc/v3/merchant/4013774589.md
 
 ## 5. 默认执行顺序
 

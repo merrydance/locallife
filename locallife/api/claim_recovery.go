@@ -234,7 +234,7 @@ func (server *Server) payMerchantClaimRecovery(ctx *gin.Context) {
 		return
 	}
 
-	result, err := logic.CreateMerchantClaimRecoveryPayment(ctx, server.store, server.paymentClient, logic.CreateMerchantClaimRecoveryPaymentInput{
+	result, err := logic.CreateMerchantClaimRecoveryPayment(ctx, server.store, server.directPaymentClient, logic.CreateMerchantClaimRecoveryPaymentInput{
 		ClaimID:     claimID,
 		MerchantID:  merchant.ID,
 		PayerUserID: authPayload.UserID,
@@ -279,7 +279,7 @@ func (server *Server) payRiderClaimRecovery(ctx *gin.Context) {
 		return
 	}
 
-	result, err := logic.CreateRiderClaimRecoveryPayment(ctx, server.store, server.paymentClient, logic.CreateRiderClaimRecoveryPaymentInput{
+	result, err := logic.CreateRiderClaimRecoveryPayment(ctx, server.store, server.directPaymentClient, logic.CreateRiderClaimRecoveryPaymentInput{
 		ClaimID:     claimID,
 		RiderID:     rider.ID,
 		PayerUserID: authPayload.UserID,

@@ -496,7 +496,6 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 	approver := algorithm.NewClaimAutoApproval(server.store, server.wsHub)
 	if server.taskDistributor != nil {
 		approver.SetNotificationDistributor(worker.NewNotificationAdapter(server.taskDistributor))
-		approver.SetClaimPayoutDistributor(worker.NewClaimPayoutAdapter(server.taskDistributor))
 	}
 
 	// 评估索赔（新设计）
@@ -624,7 +623,7 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 			DecisionSnapshot: decisionSnapshotJSON,
 		}
 	}
-	if decision.Approved && decision.Amount > 0 && server.paymentClient == nil {
+	if decision.Approved && decision.Amount > 0 && server.transferClient == nil {
 		ctx.JSON(http.StatusServiceUnavailable, errorResponse(ErrClaimPayoutServiceUnavailable))
 		return
 	}

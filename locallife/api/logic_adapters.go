@@ -327,7 +327,7 @@ func (server *Server) buildOrderCommandService() logic.OrderCommandService {
 		eventPublisher,
 		taskScheduler,
 		apiDishCustomizationNormalizer{server: server},
-		server.paymentClient,
+		server.directPaymentClient,
 		server.ecommerceClient,
 		nil,
 		nil,
@@ -358,7 +358,7 @@ func (server *Server) buildOrderQueryService() logic.OrderQueryService {
 		nil,
 		taskScheduler,
 		apiDishCustomizationNormalizer{server: server},
-		server.paymentClient,
+		server.directPaymentClient,
 		server.ecommerceClient,
 		nil,
 		nil,
@@ -371,13 +371,13 @@ func (server *Server) buildOrderQueryService() logic.OrderQueryService {
 }
 
 func (server *Server) buildPaymentFacade() logic.PaymentFacade {
-	return logic.NewDefaultPaymentFacade(server.store, server.paymentClient, server.ecommerceClient)
+	return logic.NewDefaultPaymentFacade(server.store, server.directPaymentClient, server.ecommerceClient)
 }
 
 func (server *Server) buildRefundOrchestrator() logic.RefundOrchestrator {
 	var paymentFacade logic.PaymentFacade
-	if server.paymentClient != nil || server.ecommerceClient != nil {
-		paymentFacade = logic.NewDefaultPaymentFacade(server.store, server.paymentClient, server.ecommerceClient)
+	if server.directPaymentClient != nil || server.ecommerceClient != nil {
+		paymentFacade = logic.NewDefaultPaymentFacade(server.store, server.directPaymentClient, server.ecommerceClient)
 	}
 
 	var taskScheduler logic.TaskScheduler
@@ -395,5 +395,5 @@ func (server *Server) buildRefundOrchestrator() logic.RefundOrchestrator {
 }
 
 func (server *Server) buildRiderDepositRefundService() *logic.RiderDepositRefundService {
-	return logic.NewRiderDepositRefundService(server.store, server.paymentClient)
+	return logic.NewRiderDepositRefundService(server.store, server.directPaymentClient)
 }

@@ -32,7 +32,7 @@ const (
 
 type RiderDepositRefundService struct {
 	store         db.Store
-	paymentClient wechat.PaymentClientInterface
+	paymentClient wechat.DirectPaymentClientInterface
 }
 
 type SubmitRiderDepositWithdrawalInput struct {
@@ -54,7 +54,7 @@ type SubmitRiderDepositWithdrawalResult struct {
 	Refunds         []RiderDepositWithdrawalRefundItem
 }
 
-func NewRiderDepositRefundService(store db.Store, paymentClient wechat.PaymentClientInterface) *RiderDepositRefundService {
+func NewRiderDepositRefundService(store db.Store, paymentClient wechat.DirectPaymentClientInterface) *RiderDepositRefundService {
 	return &RiderDepositRefundService{
 		store:         store,
 		paymentClient: paymentClient,

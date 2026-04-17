@@ -312,21 +312,6 @@ func (mr *MockStoreMockRecorder) AllocateDailyPickupSequence(ctx, arg any) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AllocateDailyPickupSequence", reflect.TypeOf((*MockStore)(nil).AllocateDailyPickupSequence), ctx, arg)
 }
 
-// AppealCompensationTx mocks base method.
-func (m *MockStore) AppealCompensationTx(ctx context.Context, arg db.AppealCompensationTxParams) (db.AppealCompensationTxResult, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AppealCompensationTx", ctx, arg)
-	ret0, _ := ret[0].(db.AppealCompensationTxResult)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// AppealCompensationTx indicates an expected call of AppealCompensationTx.
-func (mr *MockStoreMockRecorder) AppealCompensationTx(ctx, arg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppealCompensationTx", reflect.TypeOf((*MockStore)(nil).AppealCompensationTx), ctx, arg)
-}
-
 // ApplymentSubMchActivationTx mocks base method.
 func (m *MockStore) ApplymentSubMchActivationTx(ctx context.Context, arg db.ApplymentSubMchActivationTxParams) error {
 	m.ctrl.T.Helper()
@@ -788,36 +773,6 @@ func (m *MockStore) CheckUserVoucherExists(ctx context.Context, arg db.CheckUser
 func (mr *MockStoreMockRecorder) CheckUserVoucherExists(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckUserVoucherExists", reflect.TypeOf((*MockStore)(nil).CheckUserVoucherExists), ctx, arg)
-}
-
-// ClaimPayoutRollbackTx mocks base method.
-func (m *MockStore) ClaimPayoutRollbackTx(ctx context.Context, arg db.ClaimPayoutRollbackTxParams) (db.ClaimPayoutRollbackTxResult, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ClaimPayoutRollbackTx", ctx, arg)
-	ret0, _ := ret[0].(db.ClaimPayoutRollbackTxResult)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ClaimPayoutRollbackTx indicates an expected call of ClaimPayoutRollbackTx.
-func (mr *MockStoreMockRecorder) ClaimPayoutRollbackTx(ctx, arg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClaimPayoutRollbackTx", reflect.TypeOf((*MockStore)(nil).ClaimPayoutRollbackTx), ctx, arg)
-}
-
-// ClaimPayoutTx mocks base method.
-func (m *MockStore) ClaimPayoutTx(ctx context.Context, arg db.ClaimPayoutTxParams) (db.ClaimPayoutTxResult, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ClaimPayoutTx", ctx, arg)
-	ret0, _ := ret[0].(db.ClaimPayoutTxResult)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ClaimPayoutTx indicates an expected call of ClaimPayoutTx.
-func (mr *MockStoreMockRecorder) ClaimPayoutTx(ctx, arg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClaimPayoutTx", reflect.TypeOf((*MockStore)(nil).ClaimPayoutTx), ctx, arg)
 }
 
 // ClaimVoucherTx mocks base method.
@@ -3556,6 +3511,21 @@ func (m *MockStore) CreateMediaAsset(ctx context.Context, arg db.CreateMediaAsse
 func (mr *MockStoreMockRecorder) CreateMediaAsset(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateMediaAsset", reflect.TypeOf((*MockStore)(nil).CreateMediaAsset), ctx, arg)
+}
+
+// CreateMembershipRechargeTransaction mocks base method.
+func (m *MockStore) CreateMembershipRechargeTransaction(ctx context.Context, arg db.CreateMembershipRechargeTransactionParams) (db.MembershipTransaction, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateMembershipRechargeTransaction", ctx, arg)
+	ret0, _ := ret[0].(db.MembershipTransaction)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateMembershipRechargeTransaction indicates an expected call of CreateMembershipRechargeTransaction.
+func (mr *MockStoreMockRecorder) CreateMembershipRechargeTransaction(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateMembershipRechargeTransaction", reflect.TypeOf((*MockStore)(nil).CreateMembershipRechargeTransaction), ctx, arg)
 }
 
 // CreateMembershipTransaction mocks base method.
@@ -7512,6 +7482,21 @@ func (m *MockStore) GetMembershipForUpdate(ctx context.Context, id int64) (db.Me
 func (mr *MockStoreMockRecorder) GetMembershipForUpdate(ctx, id any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMembershipForUpdate", reflect.TypeOf((*MockStore)(nil).GetMembershipForUpdate), ctx, id)
+}
+
+// GetMembershipRechargeTransactionByIdempotencyKey mocks base method.
+func (m *MockStore) GetMembershipRechargeTransactionByIdempotencyKey(ctx context.Context, arg db.GetMembershipRechargeTransactionByIdempotencyKeyParams) (db.MembershipTransaction, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetMembershipRechargeTransactionByIdempotencyKey", ctx, arg)
+	ret0, _ := ret[0].(db.MembershipTransaction)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetMembershipRechargeTransactionByIdempotencyKey indicates an expected call of GetMembershipRechargeTransactionByIdempotencyKey.
+func (mr *MockStoreMockRecorder) GetMembershipRechargeTransactionByIdempotencyKey(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMembershipRechargeTransactionByIdempotencyKey", reflect.TypeOf((*MockStore)(nil).GetMembershipRechargeTransactionByIdempotencyKey), ctx, arg)
 }
 
 // GetMembershipTransaction mocks base method.

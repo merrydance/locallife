@@ -130,7 +130,7 @@ func TestSubmitClaimAPI_ReturnsUserFacingLifecycleAndWritesAudit(t *testing.T) {
 	)
 
 	server := newTestServer(t, store)
-	server.SetPaymentClientForTest(mockwechat.NewMockPaymentClientInterface(ctrl))
+	server.SetTransferClientForTest(mockwechat.NewMockTransferClientInterface(ctrl))
 	auditWriter := &auditSpyWriter{}
 	server.auditWriter = auditWriter
 
@@ -245,17 +245,10 @@ func TestSubmitClaimAPI_PayoutDispatchUsesTxActionWithoutBehaviorReload(t *testi
 	store.EXPECT().ListBehaviorActionsByDecision(gomock.Any(), gomock.Any()).Times(0)
 
 	taskDistributor := mockworker.NewMockTaskDistributor(ctrl)
-	taskDistributor.EXPECT().DistributeTaskClaimPayout(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
-		func(_ any, payload any, _ any) error {
-			require.IsType(t, &worker.ClaimPayoutPayload{}, payload)
-			require.Equal(t, int64(906), payload.(*worker.ClaimPayoutPayload).ActionID)
-			return nil
-		},
-	)
 	taskDistributor.EXPECT().DistributeTaskCheckMerchantForeignObject(gomock.Any(), order.MerchantID, gomock.Any(), gomock.Any()).Return(nil)
 
 	server := newTestServerWithTaskDistributor(t, store, taskDistributor)
-	server.SetPaymentClientForTest(mockwechat.NewMockPaymentClientInterface(ctrl))
+	server.SetTransferClientForTest(mockwechat.NewMockTransferClientInterface(ctrl))
 
 	body, err := json.Marshal(SubmitClaimRequest{
 		OrderID:     order.ID,
@@ -352,15 +345,6 @@ func TestSubmitClaimAPI_UsesPersistedPlatformFallbackOutcome(t *testing.T) {
 	)
 
 	taskDistributor := mockworker.NewMockTaskDistributor(ctrl)
-	taskDistributor.EXPECT().DistributeTaskClaimPayout(
-		gomock.Any(),
-		gomock.Any(),
-		gomock.Any(),
-	).DoAndReturn(func(_ any, payload any, _ any) error {
-		require.IsType(t, &worker.ClaimPayoutPayload{}, payload)
-		require.Equal(t, int64(912), payload.(*worker.ClaimPayoutPayload).ActionID)
-		return nil
-	})
 	store.EXPECT().GetDeliveryByOrderID(gomock.Any(), order.ID).Return(db.Delivery{
 		OrderID: order.ID,
 		RiderID: pgtype.Int8{Int64: 919, Valid: true},
@@ -373,7 +357,7 @@ func TestSubmitClaimAPI_UsesPersistedPlatformFallbackOutcome(t *testing.T) {
 	).Return(nil)
 
 	server := newTestServerWithTaskDistributor(t, store, taskDistributor)
-	server.SetPaymentClientForTest(mockwechat.NewMockPaymentClientInterface(ctrl))
+	server.SetTransferClientForTest(mockwechat.NewMockTransferClientInterface(ctrl))
 
 	body, err := json.Marshal(SubmitClaimRequest{
 		OrderID:     order.ID,
@@ -490,12 +474,6 @@ func TestSubmitClaimAPI_RuleOverridePlatformFallbackDoesNotCreateRecovery(t *tes
 
 	taskDistributor := mockworker.NewMockTaskDistributor(ctrl)
 	taskDistributor.EXPECT().DistributeTaskSendNotification(gomock.Any(), gomock.Any()).Times(0)
-	taskDistributor.EXPECT().DistributeTaskClaimPayout(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
-		func(_ context.Context, payload *worker.ClaimPayoutPayload, _ ...asynq.Option) error {
-			require.Equal(t, int64(918), payload.ActionID)
-			return nil
-		},
-	)
 	taskDistributor.EXPECT().DistributeTaskCheckRiderDamage(gomock.Any(), rider.ID, gomock.Any(), gomock.Any()).Return(nil)
 
 	server := newTestServerWithTaskDistributor(t, store, taskDistributor)
@@ -505,7 +483,7 @@ func TestSubmitClaimAPI_RuleOverridePlatformFallbackDoesNotCreateRecovery(t *tes
 		Action: "platform-fallback",
 		Reason: "规则覆盖为平台兜底，不应再创建服务方追偿",
 	}}
-	server.SetPaymentClientForTest(mockwechat.NewMockPaymentClientInterface(ctrl))
+	server.SetTransferClientForTest(mockwechat.NewMockTransferClientInterface(ctrl))
 
 	body, err := json.Marshal(SubmitClaimRequest{
 		OrderID:     order.ID,
@@ -648,18 +626,9 @@ func TestSubmitClaimAPI_UsesPersistedUserRestrictedOutcome(t *testing.T) {
 		require.Contains(t, notifyPayload.Content, "服务已受到限制")
 		return nil
 	})
-	taskDistributor.EXPECT().DistributeTaskClaimPayout(
-		gomock.Any(),
-		gomock.Any(),
-		gomock.Any(),
-	).DoAndReturn(func(_ any, payload any, _ any) error {
-		require.IsType(t, &worker.ClaimPayoutPayload{}, payload)
-		require.Equal(t, int64(922), payload.(*worker.ClaimPayoutPayload).ActionID)
-		return nil
-	})
 
 	server := newTestServerWithTaskDistributor(t, store, taskDistributor)
-	server.SetPaymentClientForTest(mockwechat.NewMockPaymentClientInterface(ctrl))
+	server.SetTransferClientForTest(mockwechat.NewMockTransferClientInterface(ctrl))
 
 	body, err := json.Marshal(SubmitClaimRequest{
 		OrderID:     order.ID,
@@ -774,7 +743,7 @@ func TestSubmitClaimAPI_RuleActionMerchantRecoveryUsesFormalMode(t *testing.T) {
 		Action: "merchant-recovery",
 		Reason: "规则判定商户责任明确",
 	}}
-	server.SetPaymentClientForTest(mockwechat.NewMockPaymentClientInterface(ctrl))
+	server.SetTransferClientForTest(mockwechat.NewMockTransferClientInterface(ctrl))
 	server.wsHub = nil
 	server.wsPubSub = nil
 
@@ -919,12 +888,6 @@ func TestSubmitClaimAPI_RuleActionRiderRecoveryUsesFormalMode(t *testing.T) {
 			return nil
 		},
 	)
-	taskDistributor.EXPECT().DistributeTaskClaimPayout(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
-		func(_ context.Context, payload *worker.ClaimPayoutPayload, _ ...asynq.Option) error {
-			require.Equal(t, int64(937), payload.ActionID)
-			return nil
-		},
-	)
 	taskDistributor.EXPECT().DistributeTaskCheckRiderDamage(gomock.Any(), rider.ID, gomock.Any(), gomock.Any()).Return(nil)
 
 	server := newTestServerWithTaskDistributor(t, store, taskDistributor)
@@ -934,7 +897,7 @@ func TestSubmitClaimAPI_RuleActionRiderRecoveryUsesFormalMode(t *testing.T) {
 		Action: "rider-recovery",
 		Reason: "规则判定骑手责任明确",
 	}}
-	server.SetPaymentClientForTest(mockwechat.NewMockPaymentClientInterface(ctrl))
+	server.SetTransferClientForTest(mockwechat.NewMockTransferClientInterface(ctrl))
 
 	body, err := json.Marshal(SubmitClaimRequest{
 		OrderID:     order.ID,
@@ -1050,12 +1013,6 @@ func TestSubmitClaimAPI_RuleOverrideDoesNotDispatchNotificationWithoutPersistedA
 
 	taskDistributor := mockworker.NewMockTaskDistributor(ctrl)
 	taskDistributor.EXPECT().DistributeTaskSendNotification(gomock.Any(), gomock.Any()).Times(0)
-	taskDistributor.EXPECT().DistributeTaskClaimPayout(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
-		func(_ context.Context, payload *worker.ClaimPayoutPayload, _ ...asynq.Option) error {
-			require.Equal(t, int64(947), payload.ActionID)
-			return nil
-		},
-	)
 	taskDistributor.EXPECT().DistributeTaskCheckRiderDamage(gomock.Any(), rider.ID, gomock.Any(), gomock.Any()).Return(nil)
 
 	server := newTestServerWithTaskDistributor(t, store, taskDistributor)
@@ -1065,7 +1022,7 @@ func TestSubmitClaimAPI_RuleOverrideDoesNotDispatchNotificationWithoutPersistedA
 		Action: "rider-recovery",
 		Reason: "规则判定骑手责任明确，但通知必须依赖 persisted action",
 	}}
-	server.SetPaymentClientForTest(mockwechat.NewMockPaymentClientInterface(ctrl))
+	server.SetTransferClientForTest(mockwechat.NewMockTransferClientInterface(ctrl))
 
 	body, err := json.Marshal(SubmitClaimRequest{
 		OrderID:     order.ID,
@@ -1210,12 +1167,6 @@ func TestSubmitClaimAPI_RuleActionUserRestrictedUsesFormalMode(t *testing.T) {
 			return nil
 		},
 	)
-	taskDistributor.EXPECT().DistributeTaskClaimPayout(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
-		func(_ context.Context, payload *worker.ClaimPayoutPayload, _ ...asynq.Option) error {
-			require.Equal(t, int64(942), payload.ActionID)
-			return nil
-		},
-	)
 	taskDistributor.EXPECT().DistributeTaskCheckMerchantForeignObject(gomock.Any(), order.MerchantID, gomock.Any(), gomock.Any()).Return(nil)
 
 	server := newTestServerWithTaskDistributor(t, store, taskDistributor)
@@ -1225,7 +1176,7 @@ func TestSubmitClaimAPI_RuleActionUserRestrictedUsesFormalMode(t *testing.T) {
 		Action: "user-restricted",
 		Reason: "规则命中高风险用户，本次已限制服务并由平台兜底",
 	}}
-	server.SetPaymentClientForTest(mockwechat.NewMockPaymentClientInterface(ctrl))
+	server.SetTransferClientForTest(mockwechat.NewMockTransferClientInterface(ctrl))
 
 	body, err := json.Marshal(SubmitClaimRequest{
 		OrderID:     order.ID,
@@ -1338,12 +1289,6 @@ func TestSubmitClaimAPI_RuleOverrideDoesNotApplyRestrictionWithoutPersistedActio
 
 	taskDistributor := mockworker.NewMockTaskDistributor(ctrl)
 	taskDistributor.EXPECT().DistributeTaskSendNotification(gomock.Any(), gomock.Any()).Times(0)
-	taskDistributor.EXPECT().DistributeTaskClaimPayout(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
-		func(_ context.Context, payload *worker.ClaimPayoutPayload, _ ...asynq.Option) error {
-			require.Equal(t, int64(952), payload.ActionID)
-			return nil
-		},
-	)
 	taskDistributor.EXPECT().DistributeTaskCheckMerchantForeignObject(gomock.Any(), order.MerchantID, gomock.Any(), gomock.Any()).Return(nil)
 
 	server := newTestServerWithTaskDistributor(t, store, taskDistributor)
@@ -1353,7 +1298,7 @@ func TestSubmitClaimAPI_RuleOverrideDoesNotApplyRestrictionWithoutPersistedActio
 		Action: "user-restricted",
 		Reason: "规则命中高风险用户，但限制动作必须依赖 persisted action",
 	}}
-	server.SetPaymentClientForTest(mockwechat.NewMockPaymentClientInterface(ctrl))
+	server.SetTransferClientForTest(mockwechat.NewMockTransferClientInterface(ctrl))
 
 	body, err := json.Marshal(SubmitClaimRequest{
 		OrderID:     order.ID,
@@ -1382,7 +1327,7 @@ func TestSubmitClaimAPI_RuleOverrideDoesNotApplyRestrictionWithoutPersistedActio
 	require.Equal(t, "规则命中高风险用户，但限制动作必须依赖 persisted action", *resp.Warning)
 }
 
-func TestSubmitClaimAPI_ApprovedPayoutRequiresPaymentClient(t *testing.T) {
+func TestSubmitClaimAPI_ApprovedPayoutRequiresTransferClient(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchant(user.ID)
 	order := randomOrder(user.ID, merchant.ID)

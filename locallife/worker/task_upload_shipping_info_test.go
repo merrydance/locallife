@@ -38,6 +38,7 @@ func TestProcessTaskUploadShippingInfo_ProfitSharingUsesCombineOutTradeNo(t *tes
 			ID:                3001,
 			Status:            "paid",
 			PaymentType:       "profit_sharing",
+			PaymentChannel:    db.PaymentChannelEcommerce,
 			OutTradeNo:        "SUB123",
 			CombinedPaymentID: pgtype.Int8{Int64: 4001, Valid: true},
 		}, nil)

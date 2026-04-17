@@ -5,8 +5,13 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	db "github.com/merrydance/locallife/db/sqlc"
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 )
+
+func paymentOrderSupportsProfitSharingCapability(paymentOrder db.PaymentOrder) bool {
+	return db.PaymentOrderUsesEcommerceChannel(paymentOrder) && db.PaymentOrderRequiresProfitSharing(paymentOrder)
+}
 
 type profitSharingAmountsResponse struct {
 	PaymentOrderID int64  `json:"payment_order_id"`
@@ -48,7 +53,7 @@ func (server *Server) getProfitSharingAmounts(ctx *gin.Context) {
 		}
 		return
 	}
-	if paymentOrder.PaymentType != PaymentTypeProfitShare {
+	if !paymentOrderSupportsProfitSharingCapability(paymentOrder) {
 		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("payment order is not a profit sharing order")))
 		return
 	}
@@ -122,7 +127,7 @@ func (server *Server) deleteProfitSharingReceiver(ctx *gin.Context) {
 		}
 		return
 	}
-	if paymentOrder.PaymentType != PaymentTypeProfitShare {
+	if !paymentOrderSupportsProfitSharingCapability(paymentOrder) {
 		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("payment order is not a profit sharing order")))
 		return
 	}

@@ -1479,7 +1479,7 @@ func TestHandleApplymentStateNotifyAPI(t *testing.T) {
 		name          string
 		body          string
 		headers       map[string]string
-		buildStubs    func(store *mockdb.MockStore, paymentClient *mockwechat.MockPaymentClientInterface, ecommerceClient *mockwechat.MockEcommerceClientInterface)
+		buildStubs    func(store *mockdb.MockStore, paymentClient *mockwechat.MockDirectPaymentClientInterface, ecommerceClient *mockwechat.MockEcommerceClientInterface)
 		checkResponse func(recorder *httptest.ResponseRecorder)
 	}{
 		{
@@ -1490,7 +1490,7 @@ func TestHandleApplymentStateNotifyAPI(t *testing.T) {
 				"Wechatpay-Timestamp": "1234567890",
 				"Wechatpay-Nonce":     "test_nonce",
 			},
-			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockPaymentClientInterface, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockDirectPaymentClientInterface, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
 				// ecommerceClient is nil
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
@@ -1506,7 +1506,7 @@ func TestHandleApplymentStateNotifyAPI(t *testing.T) {
 			defer ctrl.Finish()
 
 			store := mockdb.NewMockStore(ctrl)
-			paymentClient := mockwechat.NewMockPaymentClientInterface(ctrl)
+			paymentClient := mockwechat.NewMockDirectPaymentClientInterface(ctrl)
 			ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
 			tc.buildStubs(store, paymentClient, ecommerceClient)
 

@@ -367,12 +367,16 @@ func applyMembershipSettings(
 ) {
 	principal := membership.PrincipalBalance
 	bonus := membership.BonusBalance
-
-	if !containsString(settings.BalanceUsableScenes, opt.OrderType) {
+	if !IsMembershipBalanceSupportedOrderType(opt.OrderType) {
 		principal = 0
-	}
-	if !containsString(settings.BonusUsableScenes, opt.OrderType) {
 		bonus = 0
+	} else {
+		if !containsString(sanitizeMembershipUsableScenes(settings.BalanceUsableScenes), opt.OrderType) {
+			principal = 0
+		}
+		if !containsString(sanitizeMembershipUsableScenes(settings.BonusUsableScenes), opt.OrderType) {
+			bonus = 0
+		}
 	}
 
 	if res.MerchantDiscount > 0 && hasMembershipExclusivePromo {

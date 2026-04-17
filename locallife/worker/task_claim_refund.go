@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 )
 
 const (
@@ -32,12 +33,13 @@ type claimPayoutActionDetail struct {
 	SourceType       string     `json:"source_type"`
 	SourceID         int64      `json:"source_id"`
 	Remark           string     `json:"remark"`
-	OutBatchNo       string     `json:"out_batch_no,omitempty"`
-	BatchID          string     `json:"batch_id,omitempty"`
-	BatchStatus      string     `json:"batch_status,omitempty"`
+	OutBillNo        string     `json:"out_bill_no,omitempty"`
+	TransferBillNo   string     `json:"transfer_bill_no,omitempty"`
+	TransferState    string     `json:"transfer_state,omitempty"`
 	TransferCreateAt string     `json:"transfer_create_at,omitempty"`
 	TransferUpdateAt string     `json:"transfer_update_at,omitempty"`
-	CloseReason      string     `json:"close_reason,omitempty"`
+	FailReason       string     `json:"fail_reason,omitempty"`
+	PackageInfo      string     `json:"package_info,omitempty"`
 	LastError        string     `json:"last_error,omitempty"`
 	LastQueriedAt    *time.Time `json:"last_queried_at,omitempty"`
 	TerminalFailure  bool       `json:"terminal_failure,omitempty"`
@@ -61,7 +63,7 @@ func (processor *RedisTaskProcessor) ProcessTaskClaimPayout(ctx context.Context,
 		return fmt.Errorf("failed to unmarshal claim payout payload: %w", asynq.SkipRetry)
 	}
 
-	if err := ExecuteClaimPayoutAction(ctx, processor.store, processor.paymentClient, payload.ActionID); err != nil {
+	if err := ExecuteClaimPayoutAction(ctx, processor.store, processor.transferClient, payload.ActionID); err != nil {
 		return fmt.Errorf("failed to execute claim payout action: %w", err)
 	}
 
@@ -69,7 +71,7 @@ func (processor *RedisTaskProcessor) ProcessTaskClaimPayout(ctx context.Context,
 }
 
 // ExecuteClaimPayoutAction 执行索赔赔付动作，behavior_action 作为持久化 outbox。
-func ExecuteClaimPayoutAction(ctx context.Context, store db.Store, paymentClient wechat.PaymentClientInterface, actionID int64) error {
+func ExecuteClaimPayoutAction(ctx context.Context, store db.Store, transferClient wechat.TransferClientInterface, actionID int64) error {
 	action, err := store.GetBehaviorAction(ctx, actionID)
 	if err != nil {
 		return fmt.Errorf("get behavior action: %w", err)
@@ -93,19 +95,22 @@ func ExecuteClaimPayoutAction(ctx context.Context, store db.Store, paymentClient
 		_ = markClaimPayoutActionFailure(ctx, store, action.ID, detail, true)
 		return fmt.Errorf("invalid behavior action detail for claim payout")
 	}
-	if paymentClient == nil {
-		detail.LastError = "payment client is not configured for claim payout"
+	if transferClient == nil {
+		detail.LastError = "transfer client is not configured for claim payout"
 		detail.TerminalFailure = false
 		_ = markClaimPayoutActionFailure(ctx, store, action.ID, detail, false)
-		return fmt.Errorf("payment client is not configured for claim payout")
+		return fmt.Errorf("transfer client is not configured for claim payout")
 	}
 	if action.Status == "failed" && detail.TerminalFailure {
 		return nil
 	}
-	if action.Status == "running" && detail.OutBatchNo != "" {
-		resolved, err := reconcileClaimPayoutTransfer(ctx, store, paymentClient, action.ID, &detail)
-		if resolved || err != nil {
+	if action.Status == "running" && detail.OutBillNo != "" {
+		resolved, err := reconcileClaimPayoutTransfer(ctx, store, transferClient, action.ID, &detail)
+		if err != nil {
 			return err
+		}
+		if resolved {
+			return nil
 		}
 	}
 
@@ -129,8 +134,8 @@ func ExecuteClaimPayoutAction(ctx context.Context, store db.Store, paymentClient
 		return fmt.Errorf("payout user %d missing full name", detail.UserID)
 	}
 
-	transferReq := buildClaimPayoutTransferRequest(action.ID, detail, user)
-	detail.OutBatchNo = transferReq.OutBatchNo
+	transferReq := buildClaimPayoutTransferRequest(action.ID, detail, user, transferClient)
+	detail.OutBillNo = transferReq.OutBillNo
 	detail.TerminalFailure = false
 	detail.LastError = ""
 	if err := updateClaimPayoutAction(ctx, store, action.ID, "running", detail, pgtype.Timestamptz{}); err != nil {
@@ -140,7 +145,7 @@ func ExecuteClaimPayoutAction(ctx context.Context, store db.Store, paymentClient
 	transferCtx, cancel := context.WithTimeout(ctx, claimPayoutTransferTimeout)
 	defer cancel()
 
-	transferResp, err := paymentClient.CreateTransfer(transferCtx, transferReq)
+	transferResp, err := transferClient.CreateTransfer(transferCtx, transferReq)
 	if err != nil && !isDuplicateClaimTransferError(err) {
 		detail.LastError = err.Error()
 		detail.TerminalFailure = false
@@ -151,11 +156,60 @@ func ExecuteClaimPayoutAction(ctx context.Context, store db.Store, paymentClient
 		applyTransferCreateResponse(&detail, transferResp)
 	}
 
-	resolved, err := reconcileClaimPayoutTransfer(ctx, store, paymentClient, action.ID, &detail)
-	if resolved || err != nil {
+	resolved, err := reconcileClaimPayoutTransfer(ctx, store, transferClient, action.ID, &detail)
+	if err != nil {
 		return err
 	}
-	return fmt.Errorf("claim payout transfer reconciliation returned without final state")
+	if resolved {
+		return nil
+	}
+	return nil
+}
+
+// HandleClaimPayoutTransferNotification 根据商家转账终态通知推进平台赔付动作。
+func HandleClaimPayoutTransferNotification(ctx context.Context, store db.Store, actionID int64, resource *wechatcontracts.DirectMerchantTransferNotificationResource) error {
+	if resource == nil {
+		return fmt.Errorf("claim payout transfer notification resource is nil")
+	}
+	action, err := store.GetBehaviorAction(ctx, actionID)
+	if err != nil {
+		return fmt.Errorf("get behavior action: %w", err)
+	}
+	if action.ActionType != "payout" || action.TargetEntity != "user" {
+		return fmt.Errorf("behavior action %d is not a user payout action", action.ID)
+	}
+	if action.Status == "success" {
+		return nil
+	}
+
+	var detail claimPayoutActionDetail
+	if err := json.Unmarshal(action.Detail, &detail); err != nil {
+		return fmt.Errorf("unmarshal behavior action detail: %w", err)
+	}
+	if strings.TrimSpace(detail.OutBillNo) != "" && !strings.EqualFold(strings.TrimSpace(detail.OutBillNo), strings.TrimSpace(resource.OutBillNo)) {
+		return fmt.Errorf("claim payout transfer out_bill_no mismatch: stored=%s notified=%s", detail.OutBillNo, resource.OutBillNo)
+	}
+
+	applyTransferNotificationResource(&detail, resource)
+	switch classifyClaimPayoutTransferState(detail.TransferState) {
+	case claimPayoutTransferSucceeded:
+		if err := markClaimPayoutOutcome(ctx, store, detail); err != nil {
+			return fmt.Errorf("mark claim payout outcome: %w", err)
+		}
+		executedAt := pgtype.Timestamptz{Time: time.Now(), Valid: true}
+		return updateClaimPayoutAction(ctx, store, actionID, "success", detail, executedAt)
+	case claimPayoutTransferTerminalFailure:
+		detail.TerminalFailure = true
+		if strings.TrimSpace(detail.FailReason) != "" {
+			detail.LastError = fmt.Sprintf("transfer failed: %s", detail.FailReason)
+		} else {
+			detail.LastError = fmt.Sprintf("transfer reached terminal failure state: %s", detail.TransferState)
+		}
+		return updateClaimPayoutAction(ctx, store, actionID, "failed", detail, pgtype.Timestamptz{})
+	default:
+		detail.TerminalFailure = false
+		return updateClaimPayoutAction(ctx, store, actionID, "running", detail, pgtype.Timestamptz{})
+	}
 }
 
 func updateClaimPayoutAction(ctx context.Context, store db.Store, actionID int64, status string, detail claimPayoutActionDetail, executedAt pgtype.Timestamptz) error {
@@ -180,70 +234,93 @@ func markClaimPayoutActionFailure(ctx context.Context, store db.Store, actionID 
 	return updateClaimPayoutAction(ctx, store, actionID, status, detail, pgtype.Timestamptz{})
 }
 
-func buildClaimPayoutTransferRequest(actionID int64, detail claimPayoutActionDetail, user db.User) *wechat.TransferRequest {
-	batchName := "异常索赔平台赔付"
-	batchRemark := "claim payout"
+func buildClaimPayoutTransferRequest(actionID int64, detail claimPayoutActionDetail, user db.User, transferClient wechat.TransferClientInterface) *wechatcontracts.DirectMerchantTransferCreateRequest {
+	reason := "异常索赔平台赔付"
 	transferRemark := detail.Remark
 	if detail.AppealID > 0 {
-		batchName = "异常索赔申诉补偿"
-		batchRemark = "appeal compensation"
+		reason = "异常索赔申诉补偿"
 	}
 	if strings.TrimSpace(transferRemark) == "" {
-		transferRemark = batchRemark
+		transferRemark = reason
 	}
 
-	return &wechat.TransferRequest{
-		OutBatchNo:     claimPayoutOutBatchNo(actionID),
-		BatchName:      batchName,
-		BatchRemark:    batchRemark,
-		TransferAmount: detail.Amount,
-		OpenID:         user.WechatOpenid,
-		UserName:       strings.TrimSpace(user.FullName),
-		TransferRemark: transferRemark,
+	return &wechatcontracts.DirectMerchantTransferCreateRequest{
+		AppID:              transferClient.GetAppID(),
+		OutBillNo:          claimPayoutOutBillNo(actionID),
+		TransferSceneID:    wechatcontracts.DirectMerchantTransferSceneEnterpriseCompensation,
+		OpenID:             user.WechatOpenid,
+		UserName:           strings.TrimSpace(user.FullName),
+		TransferAmount:     detail.Amount,
+		TransferRemark:     transferRemark,
+		UserRecvPerception: wechatcontracts.DirectMerchantTransferUserRecvPerceptionMerchantCompensation,
+		TransferSceneReportInfos: []wechatcontracts.DirectMerchantTransferSceneReportInfo{{
+			InfoType:    wechatcontracts.DirectMerchantTransferReportInfoTypeCompensationReason,
+			InfoContent: transferRemark,
+		}},
 	}
 }
 
-func claimPayoutOutBatchNo(actionID int64) string {
+func claimPayoutOutBillNo(actionID int64) string {
 	return fmt.Sprintf("claimpayout%d", actionID)
 }
 
-func applyTransferCreateResponse(detail *claimPayoutActionDetail, resp *wechat.TransferResponse) {
+func applyTransferCreateResponse(detail *claimPayoutActionDetail, resp *wechatcontracts.DirectMerchantTransferCreateResponse) {
 	if resp == nil {
 		return
 	}
-	detail.OutBatchNo = resp.OutBatchNo
-	detail.BatchID = resp.BatchID
-	detail.BatchStatus = resp.BatchStatus
+	detail.OutBillNo = resp.OutBillNo
+	detail.TransferBillNo = resp.TransferBillNo
+	detail.TransferState = resp.State
 	detail.TransferCreateAt = resp.CreateTime
+	detail.PackageInfo = resp.PackageInfo
 }
 
-func applyTransferQueryResponse(detail *claimPayoutActionDetail, resp *wechat.TransferQueryResponse) {
+func applyTransferQueryResponse(detail *claimPayoutActionDetail, resp *wechatcontracts.DirectMerchantTransferQueryResponse) {
 	if resp == nil {
 		return
 	}
 	now := time.Now()
-	detail.OutBatchNo = resp.OutBatchNo
-	detail.BatchID = resp.BatchID
-	detail.BatchStatus = resp.BatchStatus
+	detail.OutBillNo = resp.OutBillNo
+	detail.TransferBillNo = resp.TransferBillNo
+	detail.TransferState = resp.State
 	detail.TransferCreateAt = resp.CreateTime
 	detail.TransferUpdateAt = resp.UpdateTime
-	detail.CloseReason = resp.CloseReason
+	detail.FailReason = resp.FailReason
 	detail.LastQueriedAt = &now
 	detail.LastError = ""
 }
 
-func reconcileClaimPayoutTransfer(ctx context.Context, store db.Store, paymentClient wechat.PaymentClientInterface, actionID int64, detail *claimPayoutActionDetail) (bool, error) {
-	if detail.OutBatchNo == "" {
+func applyTransferNotificationResource(detail *claimPayoutActionDetail, resource *wechatcontracts.DirectMerchantTransferNotificationResource) {
+	if resource == nil {
+		return
+	}
+	now := time.Now()
+	detail.OutBillNo = resource.OutBillNo
+	detail.TransferBillNo = resource.TransferBillNo
+	detail.TransferState = resource.State
+	detail.TransferCreateAt = resource.CreateTime
+	detail.TransferUpdateAt = resource.UpdateTime
+	detail.FailReason = resource.FailReason
+	detail.LastQueriedAt = &now
+	detail.LastError = ""
+}
+
+func reconcileClaimPayoutTransfer(ctx context.Context, store db.Store, transferClient wechat.TransferClientInterface, actionID int64, detail *claimPayoutActionDetail) (bool, error) {
+	if detail.OutBillNo == "" {
 		return false, nil
 	}
 
 	queryCtx, cancel := context.WithTimeout(ctx, claimPayoutTransferTimeout)
 	defer cancel()
 
-	transferResp, err := paymentClient.QueryTransfer(queryCtx, detail.OutBatchNo)
+	transferResp, err := transferClient.QueryTransferByOutBillNo(queryCtx, detail.OutBillNo)
 	if err != nil {
 		if isTransferNotFoundError(err) {
-			return false, nil
+			detail.TerminalFailure = false
+			if updateErr := updateClaimPayoutAction(ctx, store, actionID, "running", *detail, pgtype.Timestamptz{}); updateErr != nil {
+				return true, fmt.Errorf("persist unresolved claim payout transfer: %w", updateErr)
+			}
+			return true, nil
 		}
 		detail.LastError = err.Error()
 		detail.TerminalFailure = false
@@ -254,7 +331,7 @@ func reconcileClaimPayoutTransfer(ctx context.Context, store db.Store, paymentCl
 	}
 
 	applyTransferQueryResponse(detail, transferResp)
-	switch classifyClaimPayoutTransferStatus(detail.BatchStatus) {
+	switch classifyClaimPayoutTransferState(detail.TransferState) {
 	case claimPayoutTransferSucceeded:
 		if err := markClaimPayoutOutcome(ctx, store, *detail); err != nil {
 			detail.LastError = err.Error()
@@ -268,23 +345,23 @@ func reconcileClaimPayoutTransfer(ctx context.Context, store db.Store, paymentCl
 			return true, fmt.Errorf("mark behavior action success: %w", err)
 		}
 		return true, nil
-	case claimPayoutTransferClosed:
+	case claimPayoutTransferTerminalFailure:
 		detail.TerminalFailure = true
-		if detail.CloseReason != "" {
-			detail.LastError = fmt.Sprintf("transfer closed: %s", detail.CloseReason)
+		if strings.TrimSpace(detail.FailReason) != "" {
+			detail.LastError = fmt.Sprintf("transfer failed: %s", detail.FailReason)
 		} else {
-			detail.LastError = "transfer closed"
+			detail.LastError = fmt.Sprintf("transfer reached terminal failure state: %s", detail.TransferState)
 		}
 		if err := updateClaimPayoutAction(ctx, store, actionID, "failed", *detail, pgtype.Timestamptz{}); err != nil {
-			return true, fmt.Errorf("persist closed claim payout transfer: %w", err)
+			return true, fmt.Errorf("persist failed claim payout transfer: %w", err)
 		}
-		return true, fmt.Errorf("claim payout transfer closed: %s", detail.CloseReason)
+		return true, nil
 	default:
 		detail.TerminalFailure = false
 		if err := updateClaimPayoutAction(ctx, store, actionID, "running", *detail, pgtype.Timestamptz{}); err != nil {
 			return true, fmt.Errorf("persist running claim payout transfer: %w", err)
 		}
-		return true, fmt.Errorf("claim payout transfer still processing: %s", detail.BatchStatus)
+		return true, nil
 	}
 }
 
@@ -310,15 +387,15 @@ type claimPayoutTransferResolution int
 const (
 	claimPayoutTransferPending claimPayoutTransferResolution = iota
 	claimPayoutTransferSucceeded
-	claimPayoutTransferClosed
+	claimPayoutTransferTerminalFailure
 )
 
-func classifyClaimPayoutTransferStatus(batchStatus string) claimPayoutTransferResolution {
-	switch strings.ToUpper(strings.TrimSpace(batchStatus)) {
-	case "FINISHED", "SUCCESS":
+func classifyClaimPayoutTransferState(transferState string) claimPayoutTransferResolution {
+	switch strings.ToUpper(strings.TrimSpace(transferState)) {
+	case wechatcontracts.DirectMerchantTransferStateSuccess:
 		return claimPayoutTransferSucceeded
-	case "CLOSED", "FAILED":
-		return claimPayoutTransferClosed
+	case wechatcontracts.DirectMerchantTransferStateFail, wechatcontracts.DirectMerchantTransferStateCancelled:
+		return claimPayoutTransferTerminalFailure
 	default:
 		return claimPayoutTransferPending
 	}
@@ -339,7 +416,7 @@ func isDuplicateClaimTransferError(err error) bool {
 		return false
 	}
 	code := strings.ToUpper(payErr.Code)
-	return strings.Contains(code, "OUT_BATCH_NO") || strings.Contains(code, "BATCH_ALREADY") || strings.Contains(code, "DUPLICATE")
+	return strings.Contains(code, "ALREADY_EXISTS") || strings.Contains(code, "DUPLICATE")
 }
 
 // DistributeTaskClaimPayout 分发平台赔付任务。

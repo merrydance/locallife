@@ -376,6 +376,7 @@ type Querier interface {
 	// 媒体资产查询 (Media Asset Queries)
 	// ============================================================
 	CreateMediaAsset(ctx context.Context, arg CreateMediaAssetParams) (MediaAsset, error)
+	CreateMembershipRechargeTransaction(ctx context.Context, arg CreateMembershipRechargeTransactionParams) (MembershipTransaction, error)
 	// Membership Transactions
 	CreateMembershipTransaction(ctx context.Context, arg CreateMembershipTransactionParams) (MembershipTransaction, error)
 	CreateMembershipTransactionWithPaymentOrderID(ctx context.Context, arg CreateMembershipTransactionWithPaymentOrderIDParams) (MembershipTransaction, error)
@@ -732,6 +733,7 @@ type Querier interface {
 	GetMembershipByMerchantAndUserForUpdate(ctx context.Context, arg GetMembershipByMerchantAndUserForUpdateParams) (MerchantMembership, error)
 	GetMembershipConsumeByOrder(ctx context.Context, arg GetMembershipConsumeByOrderParams) (MembershipTransaction, error)
 	GetMembershipForUpdate(ctx context.Context, id int64) (MerchantMembership, error)
+	GetMembershipRechargeTransactionByIdempotencyKey(ctx context.Context, arg GetMembershipRechargeTransactionByIdempotencyKeyParams) (MembershipTransaction, error)
 	GetMembershipTransaction(ctx context.Context, id int64) (MembershipTransaction, error)
 	GetMembershipTransactionByPaymentOrderID(ctx context.Context, paymentOrderID pgtype.Int8) (MembershipTransaction, error)
 	GetMembershipTransactionStats(ctx context.Context, membershipID int64) (GetMembershipTransactionStatsRow, error)
@@ -1187,7 +1189,7 @@ type Querier interface {
 	ListDueClaimRecoveries(ctx context.Context, arg ListDueClaimRecoveriesParams) ([]ClaimRecovery, error)
 	ListEcommerceApplymentsByStatus(ctx context.Context, arg ListEcommerceApplymentsByStatusParams) ([]EcommerceApplyment, error)
 	ListEcommerceApplymentsBySubject(ctx context.Context, arg ListEcommerceApplymentsBySubjectParams) ([]EcommerceApplyment, error)
-	// 获取指定日期范围内收付通退款成功记录（payment_type='profit_sharing'）
+	// 获取指定日期范围内收付通退款成功记录（payment_channel='ecommerce'）
 	// 对应微信 /v3/ecommerce/refunds/apply 产生的退款账单
 	ListEcommerceRefundOrdersForReconciliation(ctx context.Context, arg ListEcommerceRefundOrdersForReconciliationParams) ([]ListEcommerceRefundOrdersForReconciliationRow, error)
 	// 列出已过期的运营商
@@ -1355,7 +1357,7 @@ type Querier interface {
 	ListRefundOrdersByPaymentOrder(ctx context.Context, paymentOrderID int64) ([]RefundOrder, error)
 	ListRefundOrdersByStatus(ctx context.Context, arg ListRefundOrdersByStatusParams) ([]RefundOrder, error)
 	// 获取指定日期范围内直连支付（miniprogram/deposit等）成功退款订单（用于每日对账）
-	// 通过 JOIN payment_orders 过滤 payment_type，排除收付通退款（已单独对账）
+	// 通过 JOIN payment_orders 过滤 payment_channel，排除收付通退款（已单独对账）
 	ListRefundOrdersForReconciliation(ctx context.Context, arg ListRefundOrdersForReconciliationParams) ([]ListRefundOrdersForReconciliationRow, error)
 	ListRegionChildren(ctx context.Context, parentID pgtype.Int8) ([]Region, error)
 	// 列出管理某区域的所有运营商
