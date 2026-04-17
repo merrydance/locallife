@@ -18,6 +18,90 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
+func TestProcessTaskPaymentSuccess_RiderDepositEnsuresProfitSharingReceiver(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	processor := worker.NewTestTaskProcessor(store, nil, nil, ecommerceClient)
+
+	paymentOrder := db.PaymentOrder{
+		ID:           551,
+		UserID:       77,
+		BusinessType: "rider_deposit",
+	}
+	rider := db.Rider{
+		ID:       31,
+		UserID:   paymentOrder.UserID,
+		RealName: "骑手王",
+	}
+	user := db.User{ID: paymentOrder.UserID, WechatOpenid: "rider-openid-77"}
+
+	store.EXPECT().
+		ProcessPaymentSuccessTx(gomock.Any(), gomock.Any()).
+		Return(db.ProcessPaymentSuccessTxResult{Processed: true, PaymentOrder: paymentOrder}, nil)
+	store.EXPECT().GetRiderByUserID(gomock.Any(), paymentOrder.UserID).Return(rider, nil)
+	store.EXPECT().GetUser(gomock.Any(), paymentOrder.UserID).Return(user, nil)
+	ecommerceClient.EXPECT().GetSpAppID().Return("wx_sp_app_123")
+	ecommerceClient.EXPECT().EncryptSensitiveData("骑手王").Return("enc-rider-name", nil)
+	ecommerceClient.EXPECT().
+		AddProfitSharingReceiver(gomock.Any(), &wechatcontracts.AddReceiverRequest{
+			AppID:         "wx_sp_app_123",
+			Type:          wechatcontracts.ReceiverTypePersonal,
+			Account:       user.WechatOpenid,
+			EncryptedName: "enc-rider-name",
+			RelationType:  wechatcontracts.RelationOthers,
+		}).
+		Return(&wechatcontracts.AddReceiverResponse{Type: wechatcontracts.ReceiverTypePersonal, Account: user.WechatOpenid}, nil)
+
+	payload, err := json.Marshal(worker.PaymentSuccessPayload{PaymentOrderID: paymentOrder.ID, BusinessType: paymentOrder.BusinessType})
+	require.NoError(t, err)
+
+	err = processor.ProcessTaskPaymentSuccess(context.Background(), asynq.NewTask(worker.TaskProcessPaymentSuccess, payload))
+	require.NoError(t, err)
+}
+
+func TestProcessTaskRefundResult_RiderDepositDeleteReceiverWhenBalanceZero(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	processor := worker.NewTestTaskProcessor(store, nil, nil, ecommerceClient)
+
+	refundOrder := db.RefundOrder{ID: 702, PaymentOrderID: 551, OutRefundNo: "REFUND_702", RefundAmount: 30000}
+	paymentOrder := db.PaymentOrder{ID: 551, UserID: 77, Amount: 30000, BusinessType: "rider_deposit"}
+	rider := db.Rider{ID: 31, UserID: paymentOrder.UserID, DepositAmount: 0, FrozenDeposit: 0}
+	user := db.User{ID: paymentOrder.UserID, WechatOpenid: "rider-openid-77"}
+
+	gomock.InOrder(
+		store.EXPECT().GetRefundOrderByOutRefundNo(gomock.Any(), refundOrder.OutRefundNo).Return(refundOrder, nil),
+		store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil),
+		store.EXPECT().ResolveRiderDepositRefundTx(gomock.Any(), db.ResolveRiderDepositRefundTxParams{
+			RefundOrderID: refundOrder.ID,
+			RefundStatus:  "SUCCESS",
+			RefundID:      "WX_REFUND_702",
+		}).Return(db.ResolveRiderDepositRefundTxResult{}, nil),
+		store.EXPECT().GetTotalRefundedByPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder.Amount, nil),
+		store.EXPECT().UpdatePaymentOrderToRefunded(gomock.Any(), paymentOrder.ID).Return(db.PaymentOrder{ID: paymentOrder.ID, Status: "refunded"}, nil),
+		store.EXPECT().GetRiderByUserID(gomock.Any(), paymentOrder.UserID).Return(rider, nil),
+		store.EXPECT().GetUser(gomock.Any(), paymentOrder.UserID).Return(user, nil),
+		ecommerceClient.EXPECT().GetSpAppID().Return("wx_sp_app_123"),
+		ecommerceClient.EXPECT().DeleteProfitSharingReceiver(gomock.Any(), &wechatcontracts.DeleteReceiverRequest{
+			AppID:   "wx_sp_app_123",
+			Type:    wechatcontracts.ReceiverTypePersonal,
+			Account: user.WechatOpenid,
+		}).Return(&wechatcontracts.DeleteReceiverResponse{Type: wechatcontracts.ReceiverTypePersonal, Account: user.WechatOpenid}, nil),
+	)
+
+	payload, err := json.Marshal(worker.RefundResultPayload{OutRefundNo: refundOrder.OutRefundNo, RefundStatus: "SUCCESS", RefundID: "WX_REFUND_702"})
+	require.NoError(t, err)
+
+	err = processor.ProcessTaskRefundResult(context.Background(), asynq.NewTask(worker.TaskProcessRefundResult, payload))
+	require.NoError(t, err)
+}
+
 // ==================== ProcessTaskApplymentResult Tests ====================
 
 func TestProcessTaskApplymentResult_Success(t *testing.T) {

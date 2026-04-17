@@ -182,30 +182,11 @@ func (processor *RedisTaskProcessor) publishWSMessage(ctx context.Context, chann
 }
 
 func (processor *RedisTaskProcessor) ensurePersonalProfitSharingReceiver(ctx context.Context, openid, realName string) error {
-	if processor.ecommerceClient == nil || openid == "" {
-		return nil
-	}
+	return processor.profitSharingReceiverSyncService().EnsurePersonalOpenIDReceiver(ctx, openid, realName)
+}
 
-	req := &wechatcontracts.AddReceiverRequest{
-		AppID:        processor.ecommerceClient.GetSpAppID(),
-		Type:         wechatcontracts.ReceiverTypePersonal,
-		Account:      openid,
-		RelationType: wechatcontracts.RelationOthers,
-	}
-	if realName != "" {
-		encryptedName, err := processor.ecommerceClient.EncryptSensitiveData(realName)
-		if err != nil {
-			return fmt.Errorf("encrypt rider name for receiver: %w", err)
-		}
-		req.EncryptedName = encryptedName
-	}
-
-	_, err := processor.ecommerceClient.AddProfitSharingReceiver(ctx, req)
-	if err != nil {
-		return err
-	}
-
-	return nil
+func (processor *RedisTaskProcessor) profitSharingReceiverSyncService() *logic.ProfitSharingReceiverSyncService {
+	return logic.NewProfitSharingReceiverService(processor.store, processor.ecommerceClient)
 }
 
 type operatorProfitSharingReceiverTarget struct {
@@ -668,6 +649,26 @@ func (processor *RedisTaskProcessor) ProcessTaskPaymentSuccess(ctx context.Conte
 		}
 	}
 
+	if paymentOrder.BusinessType == "rider_deposit" {
+		rider, riderErr := processor.store.GetRiderByUserID(ctx, paymentOrder.UserID)
+		if riderErr != nil {
+			log.Error().Err(riderErr).
+				Int64("payment_order_id", paymentOrder.ID).
+				Int64("user_id", paymentOrder.UserID).
+				Msg("get rider for profit sharing receiver sync failed")
+			return fmt.Errorf("get rider for receiver sync: %w", riderErr)
+		}
+
+		if err := processor.profitSharingReceiverSyncService().EnsureRiderReceiver(ctx, rider); err != nil {
+			log.Error().Err(err).
+				Int64("payment_order_id", paymentOrder.ID).
+				Int64("rider_id", rider.ID).
+				Int64("user_id", rider.UserID).
+				Msg("ensure rider profit sharing receiver after deposit payment failed")
+			return fmt.Errorf("ensure rider receiver after payment success: %w", err)
+		}
+	}
+
 	return nil
 }
 
@@ -990,7 +991,7 @@ func (processor *RedisTaskProcessor) ProcessTaskRefundResult(ctx context.Context
 			merchantID = resolvedMerchantID
 		}
 	}
-	riderDepositRefundService := logic.NewRiderDepositRefundService(processor.store, nil)
+	riderDepositRefundService := logic.NewRiderDepositRefundService(processor.store, nil, processor.ecommerceClient)
 
 	// 根据退款状态更新
 	switch payload.RefundStatus {
@@ -1011,7 +1012,7 @@ func (processor *RedisTaskProcessor) ProcessTaskRefundResult(ctx context.Context
 			}
 		}
 
-		if paymentErr == nil && !isReservationRefundPayment(paymentOrder) {
+		if paymentErr == nil && !isReservationRefundPayment(paymentOrder) && !isRiderDepositRefund {
 			processor.maybeMarkPaymentOrderRefunded(ctx, paymentOrder.ID, paymentOrder.Amount)
 			if processor.distributor != nil {
 				expiresAt := time.Now().Add(7 * 24 * time.Hour)

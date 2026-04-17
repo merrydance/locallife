@@ -391,6 +391,62 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/admin/operators/batch/status": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "管理-运营商"
+                ],
+                "summary": "[管理] 批量更新运营商状态",
+                "parameters": [
+                    {
+                        "description": "批量状态更新",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.batchUpdateOperatorStatusAdminRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.batchAdminOperatorStatusResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/admin/operators/region-applications": {
             "get": {
                 "security": [
@@ -32114,6 +32170,23 @@ const docTemplate = `{
                 }
             }
         },
+        "api.adminOperatorStatusResponse": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "integer"
+                },
+                "region_id": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "integer"
+                }
+            }
+        },
         "api.adminRegionExpansionApplicationResponse": {
             "type": "object",
             "properties": {
@@ -32455,6 +32528,40 @@ const docTemplate = `{
                 }
             }
         },
+        "api.batchAdminOperatorStatusFailure": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer"
+                },
+                "error": {
+                    "type": "string"
+                },
+                "operator_id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.batchAdminOperatorStatusResponse": {
+            "type": "object",
+            "properties": {
+                "failed": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.batchAdminOperatorStatusFailure"
+                    }
+                },
+                "message": {
+                    "type": "string"
+                },
+                "updated": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.adminOperatorStatusResponse"
+                    }
+                }
+            }
+        },
         "api.batchDishStatusResponse": {
             "type": "object",
             "properties": {
@@ -32523,6 +32630,30 @@ const docTemplate = `{
                 "is_online": {
                     "description": "true=上架, false=下架",
                     "type": "boolean"
+                }
+            }
+        },
+        "api.batchUpdateOperatorStatusAdminRequest": {
+            "type": "object",
+            "required": [
+                "operator_ids",
+                "status"
+            ],
+            "properties": {
+                "operator_ids": {
+                    "type": "array",
+                    "maxItems": 100,
+                    "minItems": 1,
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "status": {
+                    "type": "string",
+                    "enum": [
+                        "active",
+                        "suspended"
+                    ]
                 }
             }
         },

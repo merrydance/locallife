@@ -1,7 +1,9 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -9,7 +11,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/token"
+	"github.com/rs/zerolog/log"
 )
 
 type listPendingOperatorApplicationsRequest struct {
@@ -57,6 +61,38 @@ type operatorApplicationIDRequest struct {
 
 type rejectOperatorApplicationAdminRequest struct {
 	RejectReason string `json:"reject_reason" binding:"required,min=2,max=200"`
+}
+
+type updateOperatorStatusAdminRequest struct {
+	Status string `json:"status" binding:"required,oneof=active suspended"`
+}
+
+type batchUpdateOperatorStatusAdminRequest struct {
+	OperatorIDs []int64 `json:"operator_ids" binding:"required,min=1,max=100,dive,min=1"`
+	Status      string  `json:"status" binding:"required,oneof=active suspended"`
+}
+
+type adminOperatorStatusResponse struct {
+	ID       int64  `json:"id"`
+	UserID   int64  `json:"user_id"`
+	RegionID int64  `json:"region_id"`
+	Status   string `json:"status"`
+}
+
+type batchAdminOperatorStatusFailure struct {
+	OperatorID int64  `json:"operator_id"`
+	Code       int    `json:"code,omitempty"`
+	Error      string `json:"error"`
+}
+
+type batchAdminOperatorStatusResponse struct {
+	Updated []adminOperatorStatusResponse     `json:"updated"`
+	Failed  []batchAdminOperatorStatusFailure `json:"failed"`
+	Message string                            `json:"message"`
+}
+
+type operatorApprovalTxStore interface {
+	ApproveOperatorApplicationTx(ctx context.Context, arg db.ApproveOperatorApplicationTxParams) (db.ApproveOperatorApplicationTxResult, error)
 }
 
 func operatorNameFromApprovedApplication(app db.OperatorApplication) string {
@@ -272,6 +308,179 @@ func (server *Server) getOperatorRegionsAdmin(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, operatorApplicationRegionsResponse{Regions: resp, Total: len(resp)})
 }
 
+func buildAdminOperatorStatusResponse(operator db.Operator) adminOperatorStatusResponse {
+	return adminOperatorStatusResponse{
+		ID:       operator.ID,
+		UserID:   operator.UserID,
+		RegionID: operator.RegionID,
+		Status:   operator.Status,
+	}
+}
+
+func (server *Server) mapOperatorStatusUpdateError(ctx *gin.Context, operator db.Operator, targetStatus string, err error) (int, ErrorResponse) {
+	var conflictErr *logic.OperatorActiveRegionConflictError
+	var receiverSyncErr *logic.OperatorReceiverSyncError
+
+	switch {
+	case errors.Is(err, logic.ErrUnsupportedOperatorStatus):
+		return http.StatusBadRequest, errorResponse(err)
+	case errors.As(err, &conflictErr):
+		return http.StatusConflict, errorResponse(ErrRegionHasOperator)
+	case errors.Is(err, logic.ErrProfitSharingReceiverOpenIDRequired):
+		log.Error().Err(err).
+			Int64("operator_id", operator.ID).
+			Int64("user_id", operator.UserID).
+			Str("target_status", targetStatus).
+			Msg("operator status update rejected because receiver openid is missing")
+		return http.StatusBadRequest, errorResponse(err)
+	case errors.As(err, &receiverSyncErr):
+		log.Error().Err(err).
+			Int64("operator_id", operator.ID).
+			Int64("user_id", operator.UserID).
+			Str("target_status", targetStatus).
+			Msg("operator status updated but receiver sync failed")
+		return http.StatusBadGateway, errorResponse(err)
+	default:
+		log.Error().Err(err).
+			Int64("operator_id", operator.ID).
+			Int64("user_id", operator.UserID).
+			Str("target_status", targetStatus).
+			Msg("update operator status failed")
+		return http.StatusInternalServerError, internalError(ctx, err)
+	}
+}
+
+func (server *Server) updateOperatorStatusWithService(
+	ctx *gin.Context,
+	statusService *logic.OperatorStatusService,
+	operator db.Operator,
+	targetStatus string,
+) (db.Operator, int, ErrorResponse, bool) {
+	updatedOperator, err := statusService.UpdateStatus(ctx, operator, targetStatus)
+	if err != nil {
+		statusCode, resp := server.mapOperatorStatusUpdateError(ctx, operator, targetStatus, err)
+		return db.Operator{}, statusCode, resp, false
+	}
+
+	return updatedOperator, http.StatusOK, ErrorResponse{}, true
+}
+
+func (server *Server) updateOperatorStatusAdmin(ctx *gin.Context) {
+	type uriReq struct {
+		OperatorID int64 `uri:"operator_id" binding:"required,min=1"`
+	}
+
+	var uri uriReq
+	if err := ctx.ShouldBindUri(&uri); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	var req updateOperatorStatusAdminRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	operator, err := server.store.GetOperator(ctx, uri.OperatorID)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrOperatorNotFound))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	updatedOperator, statusCode, errResp, ok := server.updateOperatorStatusWithService(
+		ctx,
+		server.buildOperatorStatusService(),
+		operator,
+		req.Status,
+	)
+	if !ok {
+		ctx.JSON(statusCode, errResp)
+		return
+	}
+
+	ctx.JSON(http.StatusOK, buildAdminOperatorStatusResponse(updatedOperator))
+}
+
+// batchUpdateOperatorStatusAdmin godoc
+// @Summary [管理] 批量更新运营商状态
+// @Tags 管理-运营商
+// @Accept json
+// @Produce json
+// @Param request body batchUpdateOperatorStatusAdminRequest true "批量状态更新"
+// @Success 200 {object} batchAdminOperatorStatusResponse
+// @Failure 400 {object} ErrorResponse "参数错误"
+// @Failure 401 {object} ErrorResponse "未认证"
+// @Failure 403 {object} ErrorResponse "无权限"
+// @Router /v1/admin/operators/batch/status [post]
+// @Security BearerAuth
+func (server *Server) batchUpdateOperatorStatusAdmin(ctx *gin.Context) {
+	var req batchUpdateOperatorStatusAdminRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	statusService := server.buildOperatorStatusService()
+	updated := make([]adminOperatorStatusResponse, 0, len(req.OperatorIDs))
+	failed := make([]batchAdminOperatorStatusFailure, 0)
+	seen := make(map[int64]struct{}, len(req.OperatorIDs))
+
+	for _, operatorID := range req.OperatorIDs {
+		if _, ok := seen[operatorID]; ok {
+			continue
+		}
+		seen[operatorID] = struct{}{}
+
+		operator, err := server.store.GetOperator(ctx, operatorID)
+		if err != nil {
+			if isNotFoundError(err) {
+				resp := errorResponse(ErrOperatorNotFound)
+				failed = append(failed, batchAdminOperatorStatusFailure{
+					OperatorID: operatorID,
+					Code:       resp.Code,
+					Error:      resp.Error,
+				})
+				continue
+			}
+
+			log.Error().Err(err).
+				Int64("operator_id", operatorID).
+				Str("target_status", req.Status).
+				Msg("load operator for batch status update failed")
+			resp := internalError(ctx, err)
+			failed = append(failed, batchAdminOperatorStatusFailure{
+				OperatorID: operatorID,
+				Code:       resp.Code,
+				Error:      resp.Error,
+			})
+			continue
+		}
+
+		updatedOperator, _, errResp, ok := server.updateOperatorStatusWithService(ctx, statusService, operator, req.Status)
+		if !ok {
+			failed = append(failed, batchAdminOperatorStatusFailure{
+				OperatorID: operatorID,
+				Code:       errResp.Code,
+				Error:      errResp.Error,
+			})
+			continue
+		}
+
+		updated = append(updated, buildAdminOperatorStatusResponse(updatedOperator))
+	}
+
+	ctx.JSON(http.StatusOK, batchAdminOperatorStatusResponse{
+		Updated: updated,
+		Failed:  failed,
+		Message: "批量更新运营商状态完成",
+	})
+}
+
 func (server *Server) approveOperatorApplicationAdmin(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
@@ -312,6 +521,87 @@ func (server *Server) approveOperatorApplicationAdmin(ctx *gin.Context) {
 		return
 	}
 
+	user, err := server.store.GetUser(ctx, app.UserID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	if strings.TrimSpace(user.WechatOpenid) == "" {
+		ctx.JSON(http.StatusBadRequest, errorResponse(logic.ErrProfitSharingReceiverOpenIDRequired))
+		return
+	}
+
+	operatorName := operatorNameFromApprovedApplication(app)
+	if operatorName == "" {
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrOperatorNameRequired))
+		return
+	}
+	contactName := strings.TrimSpace(app.ContactName.String)
+	if contactName == "" {
+		contactName = operatorName
+	}
+	contactPhone := strings.TrimSpace(app.ContactPhone.String)
+
+	years := app.RequestedContractYears
+	if years <= 0 {
+		years = 1
+	}
+	now := time.Now()
+	end := now.AddDate(int(years), 0, 0)
+
+	var startDate pgtype.Date
+	_ = startDate.Scan(now)
+	var endDate pgtype.Date
+	_ = endDate.Scan(end)
+
+	if txStore, ok := server.store.(operatorApprovalTxStore); ok {
+		receiverSync := server.buildProfitSharingReceiverSyncService()
+		receiverName := contactName
+		if receiverName == "" {
+			receiverName = operatorName
+		}
+
+		if err := receiverSync.EnsurePersonalOpenIDReceiver(ctx, strings.TrimSpace(user.WechatOpenid), receiverName); err != nil {
+			log.Error().Err(err).
+				Int64("application_id", app.ID).
+				Int64("user_id", app.UserID).
+				Msg("ensure operator profit sharing receiver failed before approval transaction")
+			if errors.Is(err, logic.ErrProfitSharingReceiverOpenIDRequired) {
+				ctx.JSON(http.StatusBadRequest, errorResponse(err))
+				return
+			}
+			ctx.JSON(http.StatusBadGateway, errorResponse(err))
+			return
+		}
+
+		result, txErr := txStore.ApproveOperatorApplicationTx(ctx, db.ApproveOperatorApplicationTxParams{
+			ApplicationID:     app.ID,
+			ReviewedBy:        pgtype.Int8{Int64: authPayload.UserID, Valid: true},
+			OperatorName:      operatorName,
+			ContactName:       contactName,
+			ContactPhone:      contactPhone,
+			ContractStartDate: startDate,
+			ContractEndDate:   endDate,
+			ContractYears:     years,
+		})
+		if txErr != nil {
+			rollbackCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+			if rollbackErr := receiverSync.DeletePersonalOpenIDReceiver(rollbackCtx, strings.TrimSpace(user.WechatOpenid)); rollbackErr != nil {
+				log.Error().Err(rollbackErr).
+					Int64("application_id", app.ID).
+					Int64("user_id", app.UserID).
+					Msg("rollback operator profit sharing receiver failed after approval transaction error")
+			}
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, txErr))
+			return
+		}
+
+		regionName := server.getRegionName(ctx, result.Application.RegionID)
+		ctx.JSON(http.StatusOK, newOperatorApplicationResponse(result.Application, regionName))
+		return
+	}
+
 	approved, err := server.store.ApproveOperatorApplication(ctx, db.ApproveOperatorApplicationParams{
 		ID: uriReq.ID,
 		ReviewedBy: pgtype.Int8{
@@ -327,29 +617,6 @@ func (server *Server) approveOperatorApplicationAdmin(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
-
-	operatorName := operatorNameFromApprovedApplication(approved)
-	if operatorName == "" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(ErrOperatorNameRequired))
-		return
-	}
-	contactName := strings.TrimSpace(approved.ContactName.String)
-	if contactName == "" {
-		contactName = operatorName
-	}
-	contactPhone := strings.TrimSpace(approved.ContactPhone.String)
-
-	years := approved.RequestedContractYears
-	if years <= 0 {
-		years = 1
-	}
-	now := time.Now()
-	end := now.AddDate(int(years), 0, 0)
-
-	var startDate pgtype.Date
-	_ = startDate.Scan(now)
-	var endDate pgtype.Date
-	_ = endDate.Scan(end)
 
 	operator, err := server.store.CreateOperator(ctx, db.CreateOperatorParams{
 		UserID:       approved.UserID,
@@ -398,6 +665,19 @@ func (server *Server) approveOperatorApplicationAdmin(ctx *gin.Context) {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}
+	}
+
+	if err := server.buildProfitSharingReceiverSyncService().EnsureOperatorReceiver(ctx, operator); err != nil {
+		log.Error().Err(err).
+			Int64("operator_id", operator.ID).
+			Int64("user_id", operator.UserID).
+			Msg("ensure operator profit sharing receiver failed after approval")
+		if errors.Is(err, logic.ErrProfitSharingReceiverOpenIDRequired) {
+			ctx.JSON(http.StatusBadRequest, errorResponse(err))
+			return
+		}
+		ctx.JSON(http.StatusBadGateway, errorResponse(err))
+		return
 	}
 
 	regionName := server.getRegionName(ctx, approved.RegionID)

@@ -9,7 +9,9 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/websocket"
+	"github.com/merrydance/locallife/wechat"
 	"github.com/merrydance/locallife/worker"
 	"github.com/robfig/cron/v3"
 	"github.com/rs/zerolog/log"
@@ -36,12 +38,23 @@ type DataCleanupScheduler struct {
 	store           db.Store
 	taskDistributor worker.TaskDistributor
 	publisher       websocket.PubSubPublisher
+	ecommerceClient wechat.EcommerceClientInterface
 	mu              sync.Mutex
 	alertedPrintLog map[string]time.Time
 }
 
 // NewDataCleanupScheduler 创建数据清理调度器
-func NewDataCleanupScheduler(store db.Store, taskDistributor worker.TaskDistributor, publisher websocket.PubSubPublisher) *DataCleanupScheduler {
+func NewDataCleanupScheduler(
+	store db.Store,
+	taskDistributor worker.TaskDistributor,
+	publisher websocket.PubSubPublisher,
+	ecommerceClients ...wechat.EcommerceClientInterface,
+) *DataCleanupScheduler {
+	var ecommerceClient wechat.EcommerceClientInterface
+	if len(ecommerceClients) > 0 {
+		ecommerceClient = ecommerceClients[0]
+	}
+
 	return &DataCleanupScheduler{
 		cron: cron.New(
 			cron.WithSeconds(),
@@ -53,6 +66,7 @@ func NewDataCleanupScheduler(store db.Store, taskDistributor worker.TaskDistribu
 		store:           store,
 		taskDistributor: taskDistributor,
 		publisher:       publisher,
+		ecommerceClient: ecommerceClient,
 		alertedPrintLog: make(map[string]time.Time),
 	}
 }
@@ -91,6 +105,12 @@ func (s *DataCleanupScheduler) Start() error {
 
 	// 每天凌晨3点执行优惠券过期标记
 	_, err = s.cron.AddFunc("0 0 3 * * *", s.markExpiredVouchers)
+	if err != nil {
+		return err
+	}
+
+	// 每天凌晨3点20分检查合同到期的运营商并自动失效
+	_, err = s.cron.AddFunc("0 20 3 * * *", s.markExpiredOperators)
 	if err != nil {
 		return err
 	}
@@ -176,6 +196,65 @@ func startOfDay(t time.Time) time.Time {
 func sameCalendarDay(a, b time.Time) bool {
 	a = a.In(b.Location())
 	return a.Year() == b.Year() && a.Month() == b.Month() && a.Day() == b.Day()
+}
+
+func (s *DataCleanupScheduler) markExpiredOperators() {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	if s.ecommerceClient == nil {
+		log.Error().Msg("skip expiring operators: ecommerce client not configured")
+		return
+	}
+
+	rows, err := s.store.ListExpiredOperators(ctx)
+	if err != nil {
+		log.Error().Err(err).Msg("failed to list expired operators")
+		return
+	}
+	if len(rows) == 0 {
+		return
+	}
+
+	statusService := logic.NewOperatorStatusService(s.store, s.ecommerceClient)
+	expiredCount := 0
+	for _, row := range rows {
+		operator := db.Operator{
+			ID:                row.ID,
+			UserID:            row.UserID,
+			RegionID:          row.RegionID,
+			Name:              row.Name,
+			ContactName:       row.ContactName,
+			ContactPhone:      row.ContactPhone,
+			WechatMchID:       row.WechatMchID,
+			Status:            row.Status,
+			CreatedAt:         row.CreatedAt,
+			UpdatedAt:         row.UpdatedAt,
+			ContractStartDate: row.ContractStartDate,
+			ContractEndDate:   row.ContractEndDate,
+			ContractYears:     row.ContractYears,
+			SubMchID:          row.SubMchID,
+			Balance:           row.Balance,
+			WalletAccount:     row.WalletAccount,
+			RiderDeposit:      row.RiderDeposit,
+		}
+
+		if _, err := statusService.UpdateStatus(ctx, operator, "suspended"); err != nil {
+			log.Error().Err(err).
+				Int64("operator_id", row.ID).
+				Int64("user_id", row.UserID).
+				Int64("region_id", row.RegionID).
+				Str("region_name", row.RegionName).
+				Msg("failed to suspend expired operator")
+			continue
+		}
+
+		expiredCount++
+	}
+
+	if expiredCount > 0 {
+		log.Info().Int("count", expiredCount).Msg("suspended expired operators")
+	}
 }
 
 func fenToYuanText(amount int64) string {

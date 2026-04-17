@@ -394,6 +394,14 @@ func (server *Server) buildRefundOrchestrator() logic.RefundOrchestrator {
 	)
 }
 
+func (server *Server) buildProfitSharingReceiverSyncService() *logic.ProfitSharingReceiverSyncService {
+	return logic.NewProfitSharingReceiverService(server.store, server.ecommerceClient)
+}
+
+func (server *Server) buildOperatorStatusService() *logic.OperatorStatusService {
+	return logic.NewOperatorStatusService(server.store, server.ecommerceClient)
+}
+
 func (server *Server) buildRiderDepositRefundService() *logic.RiderDepositRefundService {
-	return logic.NewRiderDepositRefundService(server.store, server.directPaymentClient)
+	return logic.NewRiderDepositRefundService(server.store, server.directPaymentClient, server.ecommerceClient)
 }

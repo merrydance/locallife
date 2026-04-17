@@ -677,6 +677,17 @@ definitions:
     - amount
     - notes
     type: object
+  api.adminOperatorStatusResponse:
+    properties:
+      id:
+        type: integer
+      region_id:
+        type: integer
+      status:
+        type: string
+      user_id:
+        type: integer
+    type: object
   api.adminRegionExpansionApplicationResponse:
     properties:
       contact_name:
@@ -900,6 +911,28 @@ definitions:
       brand_id:
         type: integer
     type: object
+  api.batchAdminOperatorStatusFailure:
+    properties:
+      code:
+        type: integer
+      error:
+        type: string
+      operator_id:
+        type: integer
+    type: object
+  api.batchAdminOperatorStatusResponse:
+    properties:
+      failed:
+        items:
+          $ref: '#/definitions/api.batchAdminOperatorStatusFailure'
+        type: array
+      message:
+        type: string
+      updated:
+        items:
+          $ref: '#/definitions/api.adminOperatorStatusResponse'
+        type: array
+    type: object
   api.batchDishStatusResponse:
     properties:
       failed:
@@ -948,6 +981,23 @@ definitions:
     required:
     - dish_ids
     - is_online
+    type: object
+  api.batchUpdateOperatorStatusAdminRequest:
+    properties:
+      operator_ids:
+        items:
+          type: integer
+        maxItems: 100
+        minItems: 1
+        type: array
+      status:
+        enum:
+        - active
+        - suspended
+        type: string
+    required:
+    - operator_ids
+    - status
     type: object
   api.billingGroupListResponse:
     properties:
@@ -10193,6 +10243,41 @@ paths:
       security:
       - BearerAuth: []
       summary: '[管理] 获取运营商管理的区域列表'
+      tags:
+      - 管理-运营商
+  /v1/admin/operators/batch/status:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 批量状态更新
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.batchUpdateOperatorStatusAdminRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.batchAdminOperatorStatusResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 无权限
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: '[管理] 批量更新运营商状态'
       tags:
       - 管理-运营商
   /v1/admin/operators/region-applications:

@@ -33,6 +33,7 @@ const (
 type RiderDepositRefundService struct {
 	store         db.Store
 	paymentClient wechat.DirectPaymentClientInterface
+	receiverSync  *ProfitSharingReceiverSyncService
 }
 
 type SubmitRiderDepositWithdrawalInput struct {
@@ -54,10 +55,20 @@ type SubmitRiderDepositWithdrawalResult struct {
 	Refunds         []RiderDepositWithdrawalRefundItem
 }
 
-func NewRiderDepositRefundService(store db.Store, paymentClient wechat.DirectPaymentClientInterface) *RiderDepositRefundService {
+func NewRiderDepositRefundService(
+	store db.Store,
+	paymentClient wechat.DirectPaymentClientInterface,
+	ecommerceClients ...wechat.EcommerceClientInterface,
+) *RiderDepositRefundService {
+	var receiverSync *ProfitSharingReceiverSyncService
+	if len(ecommerceClients) > 0 && ecommerceClients[0] != nil {
+		receiverSync = NewProfitSharingReceiverService(store, ecommerceClients[0])
+	}
+
 	return &RiderDepositRefundService{
 		store:         store,
 		paymentClient: paymentClient,
+		receiverSync:  receiverSync,
 	}
 }
 
@@ -223,6 +234,29 @@ func (s *RiderDepositRefundService) ResolveRefund(ctx context.Context, refundOrd
 
 	if refundStatus == riderDepositRefundStatusSuccess {
 		s.maybeMarkPaymentOrderRefunded(ctx, paymentOrder.ID, paymentOrder.Amount)
+		if err := s.maybeDeleteRiderReceiver(ctx, paymentOrder.UserID); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (s *RiderDepositRefundService) maybeDeleteRiderReceiver(ctx context.Context, userID int64) error {
+	if s.receiverSync == nil {
+		return nil
+	}
+
+	rider, err := s.store.GetRiderByUserID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("get rider for receiver cleanup: %w", err)
+	}
+	if rider.DepositAmount > 0 || rider.FrozenDeposit > 0 {
+		return nil
+	}
+
+	if err := s.receiverSync.DeleteRiderReceiver(ctx, rider); err != nil {
+		return fmt.Errorf("delete rider profit sharing receiver: %w", err)
 	}
 
 	return nil

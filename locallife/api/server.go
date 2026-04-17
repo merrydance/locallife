@@ -1147,7 +1147,9 @@ func (server *Server) setupRouter() {
 	adminOperatorEntityGroup := authGroup.Group("/admin/operators")
 	adminOperatorEntityGroup.Use(server.CasbinRoleMiddleware(RoleAdmin))
 	{
+		adminOperatorEntityGroup.POST("/batch/status", server.batchUpdateOperatorStatusAdmin)
 		adminOperatorEntityGroup.GET("/:operator_id/regions", server.getOperatorRegionsAdmin)
+		adminOperatorEntityGroup.POST("/:operator_id/status", server.updateOperatorStatusAdmin)
 	}
 
 	// 平台管理员审核运营商区域扩展申请

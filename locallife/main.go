@@ -240,7 +240,7 @@ func main() {
 	schedulerManager.Register("merchant-open-status", scheduler.NewMerchantOpenStatusScheduler(store))
 	schedulerManager.Register("order-timeout", scheduler.NewOrderTimeoutScheduler(store))
 	schedulerManager.Register("takeout-auto-complete", scheduler.NewTakeoutAutoCompleteScheduler(store, taskDistributor))
-	schedulerManager.Register("data-cleanup", scheduler.NewDataCleanupScheduler(store, taskDistributor, reconciliationPublisher))
+	schedulerManager.Register("data-cleanup", scheduler.NewDataCleanupScheduler(store, taskDistributor, reconciliationPublisher, ecommerceClient))
 	schedulerManager.StartAll(ctx, waitGroup)
 
 	runGinServer(ctx, waitGroup, config, store, weatherCache, taskDistributor)
