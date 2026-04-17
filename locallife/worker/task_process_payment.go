@@ -1186,6 +1186,7 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharing(ctx context.Contex
 	regionID := merchant.RegionID
 	var operatorCommission int64
 	var platformCommission int64
+	var operatorCommissionRedirectedToPlatform bool
 	merchantAmount := totalAmount
 
 	config, err := processor.store.GetActiveProfitSharingConfig(ctx, db.GetActiveProfitSharingConfigParams{
@@ -1279,8 +1280,11 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharing(ctx context.Contex
 
 	// 计算分账金额（单位：分）
 	platformCommission = distributableAmount * int64(platformRate) / 100
-	if hasOperator {
-		operatorCommission = distributableAmount * int64(operatorRate) / 100
+	operatorCommission = distributableAmount * int64(operatorRate) / 100
+	if !hasOperator && operatorCommission > 0 {
+		platformCommission += operatorCommission
+		operatorCommission = 0
+		operatorCommissionRedirectedToPlatform = true
 	}
 	merchantAmount = distributableAmount - platformCommission - operatorCommission
 	if merchantAmount < 0 {
@@ -1404,6 +1408,7 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharing(ctx context.Contex
 		Int64("merchant_amount", merchantAmount).
 		Int32("platform_rate", platformRate).
 		Int32("operator_rate", operatorRate).
+		Bool("operator_commission_redirected_to_platform", operatorCommissionRedirectedToPlatform).
 		Bool("need_profit_sharing", needProfitSharing).
 		Msg("profit sharing order created")
 
