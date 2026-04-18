@@ -209,6 +209,9 @@ func (processor *RedisTaskProcessor) rollbackClaimRecovery(ctx context.Context, 
 		return nil
 	}
 	if recovery.Status != "appealed" {
+		if recovery.Status == "waived" {
+			return nil
+		}
 		log.Warn().
 			Int64("appeal_id", payload.AppealID).
 			Int64("claim_id", payload.ClaimID).
@@ -260,6 +263,9 @@ func (processor *RedisTaskProcessor) resumeClaimRecovery(ctx context.Context, pa
 		return nil
 	}
 	if recovery.Status != "appealed" {
+		if recovery.Status == "pending" || recovery.Status == "overdue" {
+			return nil
+		}
 		log.Warn().
 			Int64("appeal_id", payload.AppealID).
 			Int64("claim_id", payload.ClaimID).

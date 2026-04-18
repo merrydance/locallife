@@ -183,6 +183,31 @@ func TestCheckAppealExists(t *testing.T) {
 	require.True(t, exists)
 }
 
+func TestReviewAppealWithCompensationTx_ApprovedWaivesClaimRecovery(t *testing.T) {
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	user := createRandomUser(t)
+
+	order := createCompletedOrderForStats(t, user.ID, merchant.ID, 10000, "takeout", time.Now())
+	claim := createRandomClaim(t, user.ID, order.ID)
+	appeal := createRandomAppeal(t, claim.ID, merchant.ID, "merchant", merchant.RegionID)
+	createRandomClaimRecovery(t, claim.ID, order.ID, "appealed")
+
+	result, err := testStore.ReviewAppealWithCompensationTx(context.Background(), ReviewAppealWithCompensationTxParams{
+		ID:                 appeal.ID,
+		Status:             "approved",
+		ReviewerID:         pgtype.Int8{},
+		ReviewNotes:        pgtype.Text{String: "系统自动复核通过", Valid: true},
+		CompensationAmount: pgtype.Int8{},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "approved", result.Appeal.Status)
+
+	updatedRecovery, err := testStore.GetClaimRecoveryByClaimID(context.Background(), claim.ID)
+	require.NoError(t, err)
+	require.Equal(t, "waived", updatedRecovery.Status)
+}
+
 // ==================== ListMerchantAppeals Tests ====================
 
 func TestListMerchantAppealsForMerchant(t *testing.T) {

@@ -929,6 +929,8 @@ type Querier interface {
 	GetRegionByProviderCode(ctx context.Context, arg GetRegionByProviderCodeParams) (Region, error)
 	// 区域对比分析
 	GetRegionComparison(ctx context.Context, arg GetRegionComparisonParams) ([]GetRegionComparisonRow, error)
+	// 运营商多区域日趋势（跨区域按用户/商户去重）
+	GetManagedRegionsDailyTrend(ctx context.Context, arg GetManagedRegionsDailyTrendParams) ([]GetManagedRegionsDailyTrendRow, error)
 	// 区域日趋势（基于实际分账数据）
 	GetRegionDailyTrend(ctx context.Context, arg GetRegionDailyTrendParams) ([]GetRegionDailyTrendRow, error)
 	GetRegionRuleConfigByRegion(ctx context.Context, regionID int64) (RegionRuleConfig, error)

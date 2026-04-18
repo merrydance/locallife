@@ -9419,6 +9419,21 @@ func (mr *MockStoreMockRecorder) GetRegionComparison(ctx, arg any) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRegionComparison", reflect.TypeOf((*MockStore)(nil).GetRegionComparison), ctx, arg)
 }
 
+// GetManagedRegionsDailyTrend mocks base method.
+func (m *MockStore) GetManagedRegionsDailyTrend(ctx context.Context, arg db.GetManagedRegionsDailyTrendParams) ([]db.GetManagedRegionsDailyTrendRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetManagedRegionsDailyTrend", ctx, arg)
+	ret0, _ := ret[0].([]db.GetManagedRegionsDailyTrendRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetManagedRegionsDailyTrend indicates an expected call of GetManagedRegionsDailyTrend.
+func (mr *MockStoreMockRecorder) GetManagedRegionsDailyTrend(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetManagedRegionsDailyTrend", reflect.TypeOf((*MockStore)(nil).GetManagedRegionsDailyTrend), ctx, arg)
+}
+
 // GetRegionDailyTrend mocks base method.
 func (m *MockStore) GetRegionDailyTrend(ctx context.Context, arg db.GetRegionDailyTrendParams) ([]db.GetRegionDailyTrendRow, error) {
 	m.ctrl.T.Helper()

@@ -55,6 +55,41 @@ func (store *SQLStore) ReviewAppealWithCompensationTx(ctx context.Context, arg R
 			}
 		}
 
+		if arg.Status == "approved" {
+			recovery, recoveryErr := q.GetClaimRecoveryByClaimID(ctx, postProcess.ClaimID)
+			if recoveryErr == nil {
+				if recovery.Status == "appealed" {
+					if _, err := q.MarkClaimRecoveryWaived(ctx, recovery.ID); err != nil && err != ErrRecordNotFound {
+						return fmt.Errorf("waive claim recovery after approved appeal: %w", err)
+					}
+
+					if recovery.RecoveryTarget.Valid && recovery.RecoveryTarget.String == "merchant" {
+						order, err := q.GetOrder(ctx, recovery.OrderID)
+						if err != nil {
+							return fmt.Errorf("get order for approved appeal recovery rollback: %w", err)
+						}
+						if err := q.UnsuspendMerchantTakeout(ctx, order.MerchantID); err != nil {
+							return fmt.Errorf("unsuspend merchant after approved appeal: %w", err)
+						}
+					}
+
+					if recovery.RecoveryTarget.Valid && recovery.RecoveryTarget.String == "rider" {
+						delivery, err := q.GetDeliveryByOrderID(ctx, recovery.OrderID)
+						if err != nil {
+							return fmt.Errorf("get delivery for approved appeal recovery rollback: %w", err)
+						}
+						if delivery.RiderID.Valid {
+							if err := q.UnsuspendRider(ctx, delivery.RiderID.Int64); err != nil {
+								return fmt.Errorf("unsuspend rider after approved appeal: %w", err)
+							}
+						}
+					}
+				}
+			} else if recoveryErr != ErrRecordNotFound {
+				return fmt.Errorf("get claim recovery for approved appeal: %w", recoveryErr)
+			}
+		}
+
 		if arg.Status != "approved" || !arg.CompensationAmount.Valid || arg.CompensationAmount.Int64 <= 0 {
 			return nil
 		}

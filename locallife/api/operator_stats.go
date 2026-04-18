@@ -538,11 +538,11 @@ func (server *Server) getRegionDailyTrend(ctx *gin.Context) {
 	}
 
 	trendByDate := make(map[string]regionDailyTrendRow)
-	for _, regionID := range selection.RegionIDs {
-		trends, queryErr := server.store.GetRegionDailyTrend(ctx, db.GetRegionDailyTrendParams{
-			RegionID: regionID,
-			StartAt:  startDate,
-			EndAt:    endDate,
+	if selection.IsAllRegions {
+		trends, queryErr := server.store.GetManagedRegionsDailyTrend(ctx, db.GetManagedRegionsDailyTrendParams{
+			RegionIds: selection.RegionIDs,
+			StartAt:   startDate,
+			EndAt:     endDate,
 		})
 		if queryErr != nil {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, queryErr))
@@ -551,14 +551,38 @@ func (server *Server) getRegionDailyTrend(ctx *gin.Context) {
 
 		for _, trend := range trends {
 			dateKey := trend.Date.Time.Format("2006-01-02")
-			aggregated := trendByDate[dateKey]
-			aggregated.Date = dateKey
-			aggregated.OrderCount += trend.OrderCount
-			aggregated.TotalGMV += trend.TotalGmv
-			aggregated.TotalCommission += trend.Commission
-			aggregated.ActiveMerchants += trend.ActiveMerchants
-			aggregated.ActiveUsers += trend.ActiveUsers
-			trendByDate[dateKey] = aggregated
+			trendByDate[dateKey] = regionDailyTrendRow{
+				Date:            dateKey,
+				OrderCount:      trend.OrderCount,
+				TotalGMV:        trend.TotalGmv,
+				TotalCommission: trend.Commission,
+				ActiveUsers:     trend.ActiveUsers,
+				ActiveMerchants: trend.ActiveMerchants,
+			}
+		}
+	} else {
+		for _, regionID := range selection.RegionIDs {
+			trends, queryErr := server.store.GetRegionDailyTrend(ctx, db.GetRegionDailyTrendParams{
+				RegionID: regionID,
+				StartAt:  startDate,
+				EndAt:    endDate,
+			})
+			if queryErr != nil {
+				ctx.JSON(http.StatusInternalServerError, internalError(ctx, queryErr))
+				return
+			}
+
+			for _, trend := range trends {
+				dateKey := trend.Date.Time.Format("2006-01-02")
+				aggregated := trendByDate[dateKey]
+				aggregated.Date = dateKey
+				aggregated.OrderCount += trend.OrderCount
+				aggregated.TotalGMV += trend.TotalGmv
+				aggregated.TotalCommission += trend.Commission
+				aggregated.ActiveMerchants += trend.ActiveMerchants
+				aggregated.ActiveUsers += trend.ActiveUsers
+				trendByDate[dateKey] = aggregated
+			}
 		}
 	}
 

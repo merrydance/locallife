@@ -511,6 +511,44 @@ func TestGetRegionDailyTrendAPI(t *testing.T) {
 				require.Equal(t, http.StatusInternalServerError, recorder.Code)
 			},
 		},
+		{
+			name:  "AllManagedRegionsUseDistinctDailyTrend",
+			query: "?start_date=2025-01-01&end_date=2025-01-31",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				regionA := operator.RegionID
+				regionB := operator.RegionID + 1
+				expectActiveOperatorAuth(store, user.ID, operator)
+				expectOperatorManagedRegions(store, operator, regionA, regionB)
+
+				store.EXPECT().
+					GetManagedRegionsDailyTrend(gomock.Any(), gomock.Any()).
+					Return([]db.GetManagedRegionsDailyTrendRow{{
+						Date:            pgtype.Date{Time: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC), Valid: true},
+						OrderCount:      70,
+						TotalGmv:        31000,
+						Commission:      900,
+						ActiveUsers:     40,
+						ActiveMerchants: 7,
+					}}, nil)
+
+				store.EXPECT().
+					GetOperatorProfitSharingStats(gomock.Any(), gomock.Any()).
+					Return(db.GetOperatorProfitSharingStatsRow{TotalOperatorCommission: 520}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var resp []regionDailyTrendRow
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Len(t, resp, 1)
+				require.Equal(t, int32(40), resp[0].ActiveUsers)
+				require.Equal(t, int32(7), resp[0].ActiveMerchants)
+				require.Equal(t, int64(520), resp[0].OperatorIncome)
+			},
+		},
 	}
 
 	for _, tc := range testCases {
