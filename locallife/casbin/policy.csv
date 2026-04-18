@@ -119,9 +119,7 @@ p, operator, /v1/admin/riders/:rider_id/reject, POST
 # Appeals Management
 p, operator, /v1/operator/appeals, GET
 p, operator, /v1/operator/appeals/:id, GET
-p, operator, /v1/operator/appeals/:id/review, POST
 p, operator, /v1/operator/claims/:id/recovery, GET
-p, operator, /v1/operator/claims/:id/recovery/waive, POST
 p, operator, /v1/operator/merchants/:id/resume, POST
 p, operator, /v1/operator/reports/safety, GET
 p, operator, /v1/operator/reports/safety, POST

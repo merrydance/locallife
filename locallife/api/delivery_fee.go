@@ -13,6 +13,20 @@ import (
 	"github.com/merrydance/locallife/token"
 )
 
+var (
+	errInvalidRegionID                = errors.New("invalid region_id")
+	errOperatorRecordNotFound         = errors.New("operator record not found")
+	errOperatorRegionPermissionDenied = errors.New("you do not have permission to manage this region")
+	errOperatorRegionRequired         = errors.New("region_id is required when managing multiple regions")
+	errOperatorNoAssignedRegion       = errors.New("operator has no assigned region")
+)
+
+type operatorRegionSelection struct {
+	RegionID     int64
+	RegionIDs    []int64
+	IsAllRegions bool
+}
+
 // ============================================================================
 // Helper: 权限验证
 // ============================================================================
@@ -32,7 +46,7 @@ func (server *Server) checkOperatorManagesRegion(ctx *gin.Context, regionID int6
 		operator, err = server.store.GetOperatorByUser(ctx, authPayload.UserID)
 		if err != nil {
 			if isNotFoundError(err) {
-				return nil, errors.New("operator record not found")
+				return nil, errOperatorRecordNotFound
 			}
 			return nil, err
 		}
@@ -48,7 +62,7 @@ func (server *Server) checkOperatorManagesRegion(ctx *gin.Context, regionID int6
 	}
 
 	if !manages {
-		return nil, errors.New("you do not have permission to manage this region")
+		return nil, errOperatorRegionPermissionDenied
 	}
 
 	return &operator, nil
@@ -59,7 +73,7 @@ func (server *Server) getOperatorRegionID(ctx *gin.Context) (int64, error) {
 	if regionIDQuery := ctx.Query("region_id"); regionIDQuery != "" {
 		regionID, err := strconv.ParseInt(regionIDQuery, 10, 64)
 		if err != nil || regionID <= 0 {
-			return 0, errors.New("invalid region_id")
+			return 0, errInvalidRegionID
 		}
 		if _, err := server.checkOperatorManagesRegion(ctx, regionID); err != nil {
 			return 0, err
@@ -83,17 +97,17 @@ func (server *Server) getOperatorRegionID(ctx *gin.Context) (int64, error) {
 			return regionRelations[0].RegionID, nil
 		}
 		if len(regionRelations) > 1 {
-			return 0, errors.New("region_id is required when managing multiple regions")
+			return 0, errOperatorRegionRequired
 		}
 
-		return 0, errors.New("operator has no assigned region")
+		return 0, errOperatorNoAssignedRegion
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 	operator, err := server.store.GetOperatorByUser(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
-			return 0, errors.New("operator record not found")
+			return 0, errOperatorRecordNotFound
 		}
 		return 0, err
 	}
@@ -111,10 +125,94 @@ func (server *Server) getOperatorRegionID(ctx *gin.Context) (int64, error) {
 		return regionRelations[0].RegionID, nil
 	}
 	if len(regionRelations) > 1 {
-		return 0, errors.New("region_id is required when managing multiple regions")
+		return 0, errOperatorRegionRequired
 	}
 
-	return 0, errors.New("operator has no assigned region")
+	return 0, errOperatorNoAssignedRegion
+}
+
+func (server *Server) listManagedOperatorRegionIDs(ctx *gin.Context) ([]int64, error) {
+	var operator db.Operator
+	if op, ok := GetOperatorFromContext(ctx); ok {
+		operator = op
+	} else {
+		authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+		var err error
+		operator, err = server.store.GetOperatorByUser(ctx, authPayload.UserID)
+		if err != nil {
+			if isNotFoundError(err) {
+				return nil, errOperatorRecordNotFound
+			}
+			return nil, err
+		}
+	}
+
+	regionIDs := make([]int64, 0, 2)
+	seen := make(map[int64]struct{})
+	addRegionID := func(regionID int64) {
+		if regionID <= 0 {
+			return
+		}
+		if _, ok := seen[regionID]; ok {
+			return
+		}
+		seen[regionID] = struct{}{}
+		regionIDs = append(regionIDs, regionID)
+	}
+
+	addRegionID(operator.RegionID)
+
+	regionRelations, err := server.store.ListOperatorRegions(ctx, operator.ID)
+	if err != nil {
+		return nil, err
+	}
+	for _, rel := range regionRelations {
+		addRegionID(rel.RegionID)
+	}
+
+	if len(regionIDs) == 0 {
+		return nil, errOperatorNoAssignedRegion
+	}
+
+	return regionIDs, nil
+}
+
+func (server *Server) resolveOperatorRegionSelection(ctx *gin.Context) (operatorRegionSelection, error) {
+	if regionIDQuery := ctx.Query("region_id"); regionIDQuery != "" {
+		regionID, err := strconv.ParseInt(regionIDQuery, 10, 64)
+		if err != nil || regionID <= 0 {
+			return operatorRegionSelection{}, errInvalidRegionID
+		}
+		if _, err := server.checkOperatorManagesRegion(ctx, regionID); err != nil {
+			return operatorRegionSelection{}, err
+		}
+		return operatorRegionSelection{RegionID: regionID, RegionIDs: []int64{regionID}}, nil
+	}
+
+	regionIDs, err := server.listManagedOperatorRegionIDs(ctx)
+	if err != nil {
+		return operatorRegionSelection{}, err
+	}
+
+	if len(regionIDs) == 1 {
+		return operatorRegionSelection{RegionID: regionIDs[0], RegionIDs: regionIDs}, nil
+	}
+
+	return operatorRegionSelection{RegionIDs: regionIDs, IsAllRegions: true}, nil
+}
+
+func (server *Server) respondOperatorRegionSelectionError(ctx *gin.Context, err error) {
+	switch {
+	case errors.Is(err, errInvalidRegionID):
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+	case errors.Is(err, errOperatorRecordNotFound),
+		errors.Is(err, errOperatorRegionPermissionDenied),
+		errors.Is(err, errOperatorRegionRequired),
+		errors.Is(err, errOperatorNoAssignedRegion):
+		ctx.JSON(http.StatusForbidden, errorResponse(err))
+	default:
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+	}
 }
 
 // ============================================================================

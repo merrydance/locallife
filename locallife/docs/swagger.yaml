@@ -7600,26 +7600,6 @@ definitions:
       street_number:
         type: string
     type: object
-  api.reviewAppealRequest:
-    properties:
-      compensation_amount:
-        description: 可选补偿金额（分），最大10万元
-        maximum: 10000000
-        minimum: 1
-        type: integer
-      review_notes:
-        maxLength: 500
-        minLength: 5
-        type: string
-      status:
-        enum:
-        - approved
-        - rejected
-        type: string
-    required:
-    - review_notes
-    - status
-    type: object
   api.reviewGroupApplicationRequest:
     properties:
       reject_reason:
@@ -15724,7 +15704,7 @@ paths:
     post:
       consumes:
       - application/json
-      description: 商户对已批准的索赔提交申诉，每个索赔只能申诉一次
+      description: 商户对已批准的索赔提交申诉，提交后由系统自动复核并写回最终结果
       parameters:
       - description: 申诉请求
         in: body
@@ -21524,60 +21504,6 @@ paths:
       summary: 获取申诉详情
       tags:
       - 运营商申诉管理
-  /v1/operator/appeals/{id}/review:
-    post:
-      consumes:
-      - application/json
-      description: 运营商审核申诉，可仅撤销判责与追偿，也可附带补偿金额；系统会自动更新用户信用分
-      parameters:
-      - description: 申诉ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      - description: 审核请求
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/api.reviewAppealRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 审核成功
-          schema:
-            $ref: '#/definitions/api.appealResponse'
-        "400":
-          description: 参数错误或申诉已审核
-          schema:
-            additionalProperties: true
-            type: object
-        "401":
-          description: 未授权
-          schema:
-            additionalProperties: true
-            type: object
-        "403":
-          description: 非运营商用户或申诉不在管辖区域
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: 申诉不存在
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: 服务器错误
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-      - Bearer: []
-      summary: 审核申诉
-      tags:
-      - 运营商申诉管理
   /v1/operator/appeals/summary:
     get:
       consumes:
@@ -21916,54 +21842,6 @@ paths:
       summary: 运营商查看追偿单
       tags:
       - 运营商申诉管理
-  /v1/operator/claims/{id}/recovery/waive:
-    post:
-      consumes:
-      - application/json
-      description: 运营商核销或免除追偿，系统标记为已核销并恢复接单限制
-      parameters:
-      - description: 索赔ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 已核销
-          schema:
-            $ref: '#/definitions/api.claimRecoveryResponse'
-        "400":
-          description: 参数错误
-          schema:
-            additionalProperties: true
-            type: object
-        "401":
-          description: 未授权
-          schema:
-            additionalProperties: true
-            type: object
-        "403":
-          description: 无权限处理该区域
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: 追偿单不存在
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: 服务器错误
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-      - Bearer: []
-      summary: 运营商核销追偿单
-      tags:
-      - 运营商申诉管理
   /v1/operator/merchants:
     get:
       consumes:
@@ -22215,6 +22093,10 @@ paths:
         name: end_date
         required: true
         type: string
+      - description: 区域ID；不传时聚合当前运营商全部可管区域
+        in: query
+        name: region_id
+        type: integer
       - description: '页码 (默认: 1)'
         in: query
         name: page
@@ -22255,7 +22137,7 @@ paths:
       - application/json
       description: 运营商获取管辖区域内商户总数及各状态汇总，供工作台和审批入口使用
       parameters:
-      - description: 区域ID
+      - description: 区域ID；不传时聚合当前运营商全部可管区域
         in: query
         name: region_id
         type: integer
@@ -22871,6 +22753,10 @@ paths:
         name: end_date
         required: true
         type: string
+      - description: 区域ID；不传时聚合当前运营商全部可管区域
+        in: query
+        name: region_id
+        type: integer
       - description: '页码 (默认: 1)'
         in: query
         name: page
@@ -22911,7 +22797,7 @@ paths:
       - application/json
       description: 运营商获取管辖区域内骑手总数及各状态汇总，供工作台和审批入口使用
       parameters:
-      - description: 区域ID
+      - description: 区域ID；不传时聚合当前运营商全部可管区域
         in: query
         name: region_id
         type: integer
@@ -23060,6 +22946,10 @@ paths:
         name: end_date
         required: true
         type: string
+      - description: 区域ID；不传时聚合当前运营商全部可管区域
+        in: query
+        name: region_id
+        type: integer
       produces:
       - application/json
       responses:
@@ -23139,6 +23029,11 @@ paths:
       consumes:
       - application/json
       description: 获取运营商的财务概览信息，数据直接从分账记录（profit_sharing_orders）实时统计
+      parameters:
+      - description: 区域ID；不传时聚合当前运营商全部可管区域
+        in: query
+        name: region_id
+        type: integer
       produces:
       - application/json
       responses:
@@ -23146,6 +23041,10 @@ paths:
           description: 财务概览
           schema:
             $ref: '#/definitions/api.operatorFinanceOverviewResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
         "403":
           description: 无权限
           schema:
@@ -27931,7 +27830,7 @@ paths:
     post:
       consumes:
       - application/json
-      description: 骑手对与自己配送订单相关的索赔提交申诉
+      description: 骑手对与自己配送订单相关的索赔提交申诉，提交后由系统自动复核并写回最终结果
       parameters:
       - description: 申诉请求
         in: body

@@ -15,6 +15,8 @@ import (
 
 // ===========================================================================
 // 补差（Subsidy）API
+// 2026-04-18 备注：Finding 4 已明确 deferred，当前仍保留 legacy operator 补差路由语义，
+// 本轮不推进对象级授权整改本体。
 // 路由（均需 Operator 权限）：
 //   POST /v1/operator/payment-orders/:id/subsidies        createSubsidy
 //   POST /v1/operator/payment-orders/:id/subsidies/return returnSubsidy

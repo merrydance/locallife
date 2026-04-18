@@ -32,3 +32,19 @@ func expectOperatorManagesRegion(store *mockdb.MockStore, operator db.Operator, 
 		AnyTimes().
 		Return(manages, nil)
 }
+
+func expectOperatorManagedRegions(store *mockdb.MockStore, operator db.Operator, regionIDs ...int64) {
+	rows := make([]db.ListOperatorRegionsRow, 0, len(regionIDs))
+	for _, regionID := range regionIDs {
+		rows = append(rows, db.ListOperatorRegionsRow{
+			OperatorID: operator.ID,
+			RegionID:   regionID,
+			Status:     "active",
+		})
+	}
+
+	store.EXPECT().
+		ListOperatorRegions(gomock.Any(), operator.ID).
+		AnyTimes().
+		Return(rows, nil)
+}

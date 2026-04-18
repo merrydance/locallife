@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 	"net/http"
+	"sort"
 	"strconv"
 	"time"
 
@@ -48,20 +49,6 @@ func (server *Server) getRiderFromUserID(ctx *gin.Context, userID int64) (db.Rid
 		return db.Rider{}, err
 	}
 	return rider, nil
-}
-
-// getOperatorFromUserID 根据用户ID获取运营商信息
-func (server *Server) getOperatorFromUserID(ctx *gin.Context, userID int64) (db.Operator, error) {
-	operator, err := server.store.GetOperatorByUser(ctx, userID)
-	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("you are not an operator")))
-		} else {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		}
-		return db.Operator{}, err
-	}
-	return operator, nil
 }
 
 // ========================= Common Types ============================
@@ -667,7 +654,7 @@ type createMerchantAppealRequest struct {
 
 // createMerchantAppeal 商户提交申诉
 // @Summary 提交申诉
-// @Description 商户对已批准的索赔提交申诉，每个索赔只能申诉一次
+// @Description 商户对已批准的索赔提交申诉，提交后由系统自动复核并写回最终结果
 // @Tags 商户申诉管理
 // @Accept json
 // @Produce json
@@ -707,6 +694,10 @@ func (server *Server) createMerchantAppeal(ctx *gin.Context) {
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
+	}
+
+	if appeal.Status == "pending" {
+		appeal = server.autoResolveAppealBestEffort(ctx, appeal)
 	}
 
 	ctx.JSON(http.StatusCreated, newAppealResponse(appeal))
@@ -1162,7 +1153,7 @@ type createRiderAppealRequest struct {
 
 // createRiderAppeal 骑手提交申诉
 // @Summary 提交申诉
-// @Description 骑手对与自己配送订单相关的索赔提交申诉
+// @Description 骑手对与自己配送订单相关的索赔提交申诉，提交后由系统自动复核并写回最终结果
 // @Tags 骑手申诉管理
 // @Accept json
 // @Produce json
@@ -1209,7 +1200,12 @@ func (server *Server) createRiderAppeal(ctx *gin.Context) {
 		status = http.StatusOK
 	}
 
-	ctx.JSON(status, newAppealResponse(result.Appeal))
+	appeal := result.Appeal
+	if appeal.Status == "pending" {
+		appeal = server.autoResolveAppealBestEffort(ctx, appeal)
+	}
+
+	ctx.JSON(status, newAppealResponse(appeal))
 }
 
 // listRiderAppeals 骑手查看申诉列表
@@ -1395,23 +1391,12 @@ func (server *Server) listOperatorAppeals(ctx *gin.Context) {
 		return
 	}
 
-	var regionID int64
-	if req.RegionID != nil && *req.RegionID > 0 {
-		if _, err := server.checkOperatorManagesRegion(ctx, *req.RegionID); err != nil {
-			ctx.JSON(http.StatusForbidden, errorResponse(err))
-			return
-		}
-		regionID = *req.RegionID
-	} else {
-		resolvedRegionID, err := server.getOperatorRegionID(ctx)
-		if err != nil {
-			ctx.JSON(http.StatusForbidden, errorResponse(err))
-			return
-		}
-		regionID = resolvedRegionID
+	selection, err := server.resolveOperatorRegionSelection(ctx)
+	if err != nil {
+		server.respondOperatorRegionSelectionError(ctx, err)
+		return
 	}
 
-	// 设置默认值
 	if req.Page == 0 {
 		req.Page = 1
 	}
@@ -1426,23 +1411,71 @@ func (server *Server) listOperatorAppeals(ctx *gin.Context) {
 		status = *req.Status
 	}
 
-	appeals, err := server.store.ListOperatorAppeals(ctx, db.ListOperatorAppealsParams{
-		RegionID: regionID,
-		Column2:  status,
-		Limit:    req.Limit,
-		Offset:   offset,
-	})
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
+	appeals := make([]db.ListOperatorAppealsRow, 0)
+	var total int64
+	if selection.IsAllRegions {
+		fetchLimit := req.Page * req.Limit
+		for _, regionID := range selection.RegionIDs {
+			regionAppeals, queryErr := server.store.ListOperatorAppeals(ctx, db.ListOperatorAppealsParams{
+				RegionID: regionID,
+				Column2:  status,
+				Limit:    fetchLimit,
+				Offset:   0,
+			})
+			if queryErr != nil {
+				ctx.JSON(http.StatusInternalServerError, internalError(ctx, queryErr))
+				return
+			}
+			appeals = append(appeals, regionAppeals...)
 
-	total, err := server.store.CountOperatorAppeals(ctx, db.CountOperatorAppealsParams{
-		RegionID: regionID,
-		Column2:  status,
-	})
-	if err != nil {
-		total = int64(len(appeals))
+			regionTotal, countErr := server.store.CountOperatorAppeals(ctx, db.CountOperatorAppealsParams{
+				RegionID: regionID,
+				Column2:  status,
+			})
+			if countErr != nil {
+				ctx.JSON(http.StatusInternalServerError, internalError(ctx, countErr))
+				return
+			}
+			total += regionTotal
+		}
+
+		sort.Slice(appeals, func(i, j int) bool {
+			if !appeals[i].CreatedAt.Equal(appeals[j].CreatedAt) {
+				return appeals[i].CreatedAt.After(appeals[j].CreatedAt)
+			}
+			return appeals[i].ID > appeals[j].ID
+		})
+
+		start := int(offset)
+		if start >= len(appeals) {
+			appeals = []db.ListOperatorAppealsRow{}
+		} else {
+			end := start + int(req.Limit)
+			if end > len(appeals) {
+				end = len(appeals)
+			}
+			appeals = appeals[start:end]
+		}
+	} else {
+		appeals, err = server.store.ListOperatorAppeals(ctx, db.ListOperatorAppealsParams{
+			RegionID: selection.RegionID,
+			Column2:  status,
+			Limit:    req.Limit,
+			Offset:   offset,
+		})
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+
+		total, err = server.store.CountOperatorAppeals(ctx, db.CountOperatorAppealsParams{
+			RegionID: selection.RegionID,
+			Column2:  status,
+		})
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
 	}
 
 	response := make([]operatorAppealListItem, len(appeals))
@@ -1493,27 +1526,25 @@ func (server *Server) listOperatorAppealsSummary(ctx *gin.Context) {
 		return
 	}
 
-	var regionID int64
-	if req.RegionID != nil && *req.RegionID > 0 {
-		if _, err := server.checkOperatorManagesRegion(ctx, *req.RegionID); err != nil {
-			ctx.JSON(http.StatusForbidden, errorResponse(err))
-			return
-		}
-		regionID = *req.RegionID
-	} else {
-		resolvedRegionID, err := server.getOperatorRegionID(ctx)
-		if err != nil {
-			ctx.JSON(http.StatusForbidden, errorResponse(err))
-			return
-		}
-		regionID = resolvedRegionID
+	selection, err := server.resolveOperatorRegionSelection(ctx)
+	if err != nil {
+		server.respondOperatorRegionSelectionError(ctx, err)
+		return
 	}
 
 	countStatus := func(status string) (int64, error) {
-		return server.store.CountOperatorAppeals(ctx, db.CountOperatorAppealsParams{
-			RegionID: regionID,
-			Column2:  status,
-		})
+		var total int64
+		for _, regionID := range selection.RegionIDs {
+			count, err := server.store.CountOperatorAppeals(ctx, db.CountOperatorAppealsParams{
+				RegionID: regionID,
+				Column2:  status,
+			})
+			if err != nil {
+				return 0, err
+			}
+			total += count
+		}
+		return total, nil
 	}
 
 	total, err := countStatus("")
@@ -1650,152 +1681,137 @@ func (server *Server) getOperatorAppealDetail(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, resp)
 }
 
-type reviewAppealRequest struct {
-	Status             string `json:"status" binding:"required,oneof=approved rejected"`
-	ReviewNotes        string `json:"review_notes" binding:"required,min=5,max=500"`
-	CompensationAmount *int64 `json:"compensation_amount" binding:"omitempty,min=1,max=10000000"` // 可选补偿金额（分），最大10万元
+type automaticAppealResolution struct {
+	status      string
+	reviewNotes string
+	decisionID  pgtype.Int8
 }
 
-// reviewAppeal 运营商审核申诉
-// @Summary 审核申诉
-// @Description 运营商审核申诉，可仅撤销判责与追偿，也可附带补偿金额；系统会自动更新用户信用分
-// @Tags 运营商申诉管理
-// @Accept json
-// @Produce json
-// @Security Bearer
-// @Param id path int true "申诉ID"
-// @Param request body reviewAppealRequest true "审核请求"
-// @Success 200 {object} appealResponse "审核成功"
-// @Failure 400 {object} map[string]interface{} "参数错误或申诉已审核"
-// @Failure 401 {object} map[string]interface{} "未授权"
-// @Failure 403 {object} map[string]interface{} "非运营商用户或申诉不在管辖区域"
-// @Failure 404 {object} map[string]interface{} "申诉不存在"
-// @Failure 500 {object} map[string]interface{} "服务器错误"
-// @Router /v1/operator/appeals/{id}/review [post]
-func (server *Server) reviewAppeal(ctx *gin.Context) {
-	appealID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
+func (server *Server) autoResolveAppeal(ctx *gin.Context, appeal db.Appeal) (db.Appeal, error) {
+	resolutionResult, err := logic.ResolveAppealAutomatically(ctx, server.store, appeal)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid appeal id")))
-		return
+		return db.Appeal{}, err
+	}
+	resolution := automaticAppealResolution{
+		status:      resolutionResult.Resolution.Status,
+		reviewNotes: resolutionResult.Resolution.ReviewNotes,
+		decisionID:  resolutionResult.Resolution.DecisionID,
+	}
+	reviewResult := resolutionResult.ReviewResult
+
+	if _, err := server.store.CreateBehaviorAppeal(ctx, db.CreateBehaviorAppealParams{
+		EntityType: appeal.AppellantType,
+		EntityID:   appeal.AppellantID,
+		DecisionID: resolution.decisionID,
+		Reason:     appeal.Reason,
+		Evidence: pgtype.Text{
+			String: logic.BuildBehaviorAppealEvidence(appeal),
+			Valid:  true,
+		},
+		Status:   "resolved",
+		ReevalAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
+	}); err != nil {
+		log.Error().Err(err).Int64("appeal_id", appeal.ID).Int64("claim_id", appeal.ClaimID).Str("appellant_type", appeal.AppellantType).Msg("failed to persist resolved behavior appeal record")
 	}
 
-	var req reviewAppealRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
-		return
+	metadata := map[string]any{
+		"status":              resolution.status,
+		"review_notes":        resolution.reviewNotes,
+		"resolution_source":   "system",
+		"compensation_amount": int64(0),
 	}
-
-	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	operator, err := server.getOperatorFromUserID(ctx, authPayload.UserID)
-	if err != nil {
-		return
+	if resolution.decisionID.Valid {
+		metadata["decision_id"] = resolution.decisionID.Int64
 	}
-
-	// 验证申诉属于该运营商的区域
-	appeal, err := server.store.GetAppeal(ctx, appealID)
-	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("appeal not found")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	if _, err := server.checkOperatorManagesRegion(ctx, appeal.RegionID); err != nil {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("this appeal is not in your region")))
-		return
-	}
-
-	if appeal.Status != "pending" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("appeal has already been reviewed")))
-		return
-	}
-
-	// 批准申诉时可选附带补偿金额；未提供则仅撤销判责与追偿。
-	var compensationAmount pgtype.Int8
-	if req.Status == "approved" && req.CompensationAmount != nil {
-		compensationAmount = pgtype.Int8{Int64: *req.CompensationAmount, Valid: true}
-	}
-	if req.Status == "approved" && compensationAmount.Valid && compensationAmount.Int64 > 0 && server.transferClient == nil {
-		ctx.JSON(http.StatusServiceUnavailable, errorResponse(ErrAppealCompensationUnavailable))
-		return
-	}
-
-	// 审核申诉，并在同一事务内持久化申诉补偿动作。
-	reviewResult, err := server.store.ReviewAppealWithCompensationTx(ctx, db.ReviewAppealWithCompensationTxParams{
-		ID:                 appealID,
-		Status:             req.Status,
-		ReviewerID:         pgtype.Int8{Int64: operator.ID, Valid: true},
-		ReviewNotes:        pgtype.Text{String: req.ReviewNotes, Valid: true},
-		CompensationAmount: compensationAmount,
+	regionID := appeal.RegionID
+	appealID := appeal.ID
+	server.writeAuditLog(ctx, AuditLogInput{
+		ActorUserID: 0,
+		ActorRole:   "system",
+		Action:      "system_appeal_resolved",
+		TargetType:  "appeal",
+		TargetID:    &appealID,
+		RegionID:    &regionID,
+		Metadata:    metadata,
 	})
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-	updatedAppeal := reviewResult.Appeal
 
-	if payload, ok := ctx.Get(authorizationPayloadKey); ok {
-		actor := payload.(*token.Payload)
-		metadata := map[string]any{
-			"status":       req.Status,
-			"review_notes": req.ReviewNotes,
-		}
-		if req.CompensationAmount != nil {
-			metadata["compensation_amount"] = *req.CompensationAmount
-		}
-		regionID := appeal.RegionID
-		server.writeAuditLog(ctx, AuditLogInput{
-			ActorUserID: actor.UserID,
-			ActorRole:   "operator",
-			Action:      "operator_appeal_reviewed",
-			TargetType:  "appeal",
-			TargetID:    &appealID,
-			RegionID:    &regionID,
-			Metadata:    metadata,
-		})
-	}
-
-	// 分发异步任务处理后续逻辑（信用分更新、通知等）
 	taskPayload := &worker.ProcessAppealResultPayload{
-		AppealID: appealID,
-		ClaimID:  reviewResult.PostProcess.ClaimID,
-		CompensationActionID: func() int64 {
-			if reviewResult.CompensationAction != nil {
-				return reviewResult.CompensationAction.ID
-			}
-			return 0
-		}(),
-		Status:             req.Status,
-		AppellantType:      reviewResult.PostProcess.AppellantType,
-		AppellantID:        reviewResult.PostProcess.AppellantID,
-		ClaimantUserID:     reviewResult.PostProcess.ClaimantUserID,
-		ClaimType:          reviewResult.PostProcess.ClaimType,
-		ClaimAmount:        reviewResult.PostProcess.ClaimAmount,
-		CompensationAmount: compensationAmount.Int64,
-		OrderNo:            reviewResult.PostProcess.OrderNo,
+		AppealID:             appeal.ID,
+		ClaimID:              reviewResult.PostProcess.ClaimID,
+		CompensationActionID: 0,
+		Status:               resolution.status,
+		AppellantType:        reviewResult.PostProcess.AppellantType,
+		AppellantID:          reviewResult.PostProcess.AppellantID,
+		ClaimantUserID:       reviewResult.PostProcess.ClaimantUserID,
+		ClaimType:            reviewResult.PostProcess.ClaimType,
+		ClaimAmount:          reviewResult.PostProcess.ClaimAmount,
+		CompensationAmount:   0,
+		OrderNo:              reviewResult.PostProcess.OrderNo,
 	}
+	if err := server.dispatchAppealResult(ctx, taskPayload); err != nil {
+		return db.Appeal{}, err
+	}
+
+	return reviewResult.Appeal, nil
+}
+
+func (server *Server) autoResolveAppealBestEffort(ctx *gin.Context, appeal db.Appeal) db.Appeal {
+	resolvedAppeal, err := server.autoResolveAppeal(ctx, appeal)
+	if err == nil {
+		return resolvedAppeal
+	}
+
+	log.Error().Err(logic.LoggableError(err)).
+		Int64("appeal_id", appeal.ID).
+		Int64("claim_id", appeal.ClaimID).
+		Str("appellant_type", appeal.AppellantType).
+		Int64("appellant_id", appeal.AppellantID).
+		Msg("appeal was created but automatic resolution did not fully complete")
 
 	if server.taskDistributor == nil {
-		if inlineErr := server.processAppealResultInline(ctx, taskPayload); inlineErr != nil {
-			if !writeLogicRequestError(ctx, inlineErr) {
-				ctx.JSON(http.StatusInternalServerError, internalError(ctx, inlineErr))
-			}
-			return
-		}
-	} else {
-		if err := server.taskDistributor.DistributeTaskProcessAppealResult(ctx, taskPayload); err != nil {
-			if inlineErr := server.processAppealResultInline(ctx, taskPayload); inlineErr != nil {
-				if !writeLogicRequestError(ctx, inlineErr) {
-					ctx.JSON(http.StatusInternalServerError, internalError(ctx, inlineErr))
-				}
-				return
-			}
-		}
+		log.Warn().
+			Int64("appeal_id", appeal.ID).
+			Int64("claim_id", appeal.ClaimID).
+			Msg("skip automatic appeal resolution retry enqueue because task distributor is unavailable")
+	} else if retryErr := server.taskDistributor.DistributeTaskAutomaticAppealResolution(ctx, &worker.AutomaticAppealResolutionPayload{AppealID: appeal.ID}); retryErr != nil {
+		log.Error().Err(retryErr).
+			Int64("appeal_id", appeal.ID).
+			Int64("claim_id", appeal.ClaimID).
+			Msg("failed to enqueue automatic appeal resolution retry task")
 	}
 
-	ctx.JSON(http.StatusOK, newAppealResponse(updatedAppeal))
+	persistedAppeal, persistedErr := server.store.GetAppeal(ctx, appeal.ID)
+	if persistedErr == nil {
+		return persistedAppeal
+	}
+
+	log.Error().Err(persistedErr).
+		Int64("appeal_id", appeal.ID).
+		Int64("claim_id", appeal.ClaimID).
+		Msg("failed to reload persisted appeal after automatic resolution error")
+
+	return appeal
+}
+
+func deriveAutomaticAppealResolution(appeal db.Appeal, decisions []db.BehaviorDecision) automaticAppealResolution {
+	resolution := logic.DeriveAutomaticAppealResolution(appeal, decisions)
+	return automaticAppealResolution{
+		status:      resolution.Status,
+		reviewNotes: resolution.ReviewNotes,
+		decisionID:  resolution.DecisionID,
+	}
+}
+
+func (server *Server) dispatchAppealResult(ctx *gin.Context, payload *worker.ProcessAppealResultPayload) error {
+	if server.taskDistributor == nil {
+		return server.processAppealResultInline(ctx, payload)
+	}
+
+	if err := server.taskDistributor.DistributeTaskProcessAppealResult(ctx, payload); err != nil {
+		return server.processAppealResultInline(ctx, payload)
+	}
+
+	return nil
 }
 
 func (server *Server) processAppealResultInline(ctx *gin.Context, payload *worker.ProcessAppealResultPayload) error {

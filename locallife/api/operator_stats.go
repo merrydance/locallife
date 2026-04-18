@@ -4,12 +4,14 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
+	"github.com/rs/zerolog/log"
 )
 
 // ==================== 区域统计 ====================
@@ -231,6 +233,7 @@ type operatorMerchantRankingRow struct {
 // @Produce json
 // @Param start_date query string true "开始日期 (格式: 2025-11-01)"
 // @Param end_date query string true "结束日期 (格式: 2025-11-30)"
+// @Param region_id query int false "区域ID；不传时聚合当前运营商全部可管区域"
 // @Param page query int false "页码 (默认: 1)"
 // @Param limit query int false "每页数量 (默认: 20, 最大: 100)"
 // @Success 200 {array} operatorMerchantRankingRow "商户排行列表"
@@ -246,10 +249,9 @@ func (server *Server) getOperatorMerchantRanking(ctx *gin.Context) {
 		return
 	}
 
-	// 获取运营商管理的区域ID
-	regionID, err := server.getOperatorRegionID(ctx)
+	selection, err := server.resolveOperatorRegionSelection(ctx)
 	if err != nil {
-		ctx.JSON(http.StatusForbidden, errorResponse(err))
+		server.respondOperatorRegionSelectionError(ctx, err)
 		return
 	}
 
@@ -268,28 +270,58 @@ func (server *Server) getOperatorMerchantRanking(ctx *gin.Context) {
 		return
 	}
 
-	merchants, err := server.store.GetOperatorMerchantRanking(ctx, db.GetOperatorMerchantRankingParams{
-		RegionID: regionID,
-		StartAt:  startDate,
-		EndAt:    endDate,
-		Limit:    req.Limit,
-		Offset:   offset,
-	})
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
+	fetchLimit := req.Limit
+	if selection.IsAllRegions {
+		fetchLimit = req.Page * req.Limit
 	}
 
-	result := make([]operatorMerchantRankingRow, len(merchants))
-	for i, merchant := range merchants {
-		result[i] = operatorMerchantRankingRow{
-			MerchantID:      merchant.MerchantID,
-			MerchantName:    merchant.MerchantName,
-			OrderCount:      merchant.OrderCount,
-			TotalSales:      merchant.TotalSales,
-			TotalCommission: merchant.Commission,
-			AvgOrderAmount:  int64(merchant.AvgOrderAmount),
+	result := make([]operatorMerchantRankingRow, 0)
+	for _, regionID := range selection.RegionIDs {
+		merchants, queryErr := server.store.GetOperatorMerchantRanking(ctx, db.GetOperatorMerchantRankingParams{
+			RegionID: regionID,
+			StartAt:  startDate,
+			EndAt:    endDate,
+			Limit:    fetchLimit,
+			Offset:   0,
+		})
+		if queryErr != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, queryErr))
+			return
 		}
+
+		for _, merchant := range merchants {
+			result = append(result, operatorMerchantRankingRow{
+				MerchantID:      merchant.MerchantID,
+				MerchantName:    merchant.MerchantName,
+				OrderCount:      merchant.OrderCount,
+				TotalSales:      merchant.TotalSales,
+				TotalCommission: merchant.Commission,
+				AvgOrderAmount:  int64(merchant.AvgOrderAmount),
+			})
+		}
+	}
+
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].TotalSales != result[j].TotalSales {
+			return result[i].TotalSales > result[j].TotalSales
+		}
+		if result[i].TotalCommission != result[j].TotalCommission {
+			return result[i].TotalCommission > result[j].TotalCommission
+		}
+		return result[i].MerchantID < result[j].MerchantID
+	})
+
+	if selection.IsAllRegions {
+		start := int(offset)
+		if start >= len(result) {
+			ctx.JSON(http.StatusOK, []operatorMerchantRankingRow{})
+			return
+		}
+		end := start + int(req.Limit)
+		if end > len(result) {
+			end = len(result)
+		}
+		result = result[start:end]
 	}
 
 	ctx.JSON(http.StatusOK, result)
@@ -315,6 +347,7 @@ type operatorRiderRankingRow struct {
 // @Produce json
 // @Param start_date query string true "开始日期 (格式: 2025-11-01)"
 // @Param end_date query string true "结束日期 (格式: 2025-11-30)"
+// @Param region_id query int false "区域ID；不传时聚合当前运营商全部可管区域"
 // @Param page query int false "页码 (默认: 1)"
 // @Param limit query int false "每页数量 (默认: 20, 最大: 100)"
 // @Success 200 {array} operatorRiderRankingRow "骑手排行列表"
@@ -330,10 +363,9 @@ func (server *Server) getOperatorRiderRanking(ctx *gin.Context) {
 		return
 	}
 
-	// 获取运营商管理的区域ID
-	regionID, err := server.getOperatorRegionID(ctx)
+	selection, err := server.resolveOperatorRegionSelection(ctx)
 	if err != nil {
-		ctx.JSON(http.StatusForbidden, errorResponse(err))
+		server.respondOperatorRegionSelectionError(ctx, err)
 		return
 	}
 
@@ -352,32 +384,85 @@ func (server *Server) getOperatorRiderRanking(ctx *gin.Context) {
 		return
 	}
 
-	riders, err := server.store.GetOperatorRiderRanking(ctx, db.GetOperatorRiderRankingParams{
-		RegionID: regionID,
-		StartAt:  startDate,
-		EndAt:    endDate,
-		Limit:    req.Limit,
-		Offset:   offset,
-	})
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
+	fetchLimit := req.Limit
+	if selection.IsAllRegions {
+		fetchLimit = req.Page * req.Limit
 	}
 
-	result := make([]operatorRiderRankingRow, len(riders))
-	for i, rider := range riders {
-		result[i] = operatorRiderRankingRow{
-			RiderID:                rider.RiderID,
-			RiderName:              rider.RiderName,
-			DeliveryCount:          rider.DeliveryCount,
-			CompletedCount:         rider.CompletedCount,
-			AvgDeliveryTimeSeconds: rider.AvgDeliveryTime,
-			TotalEarnings:          rider.TotalEarnings,
-			CompletionRate:         0,
+	type aggregatedRiderRanking struct {
+		row                  operatorRiderRankingRow
+		totalDeliverySeconds int64
+	}
+	aggregated := make(map[int64]*aggregatedRiderRanking)
+	for _, regionID := range selection.RegionIDs {
+		riders, queryErr := server.store.GetOperatorRiderRanking(ctx, db.GetOperatorRiderRankingParams{
+			RegionID: regionID,
+			StartAt:  startDate,
+			EndAt:    endDate,
+			Limit:    fetchLimit,
+			Offset:   0,
+		})
+		if queryErr != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, queryErr))
+			return
 		}
-		if rider.DeliveryCount > 0 {
-			result[i].CompletionRate = float64(rider.CompletedCount) / float64(rider.DeliveryCount) * 100
+
+		for _, rider := range riders {
+			entry, ok := aggregated[rider.RiderID]
+			if !ok {
+				aggregated[rider.RiderID] = &aggregatedRiderRanking{
+					row: operatorRiderRankingRow{
+						RiderID:                rider.RiderID,
+						RiderName:              rider.RiderName,
+						DeliveryCount:          rider.DeliveryCount,
+						CompletedCount:         rider.CompletedCount,
+						AvgDeliveryTimeSeconds: rider.AvgDeliveryTime,
+						TotalEarnings:          rider.TotalEarnings,
+					},
+					totalDeliverySeconds: int64(rider.AvgDeliveryTime) * int64(rider.DeliveryCount),
+				}
+				continue
+			}
+
+			entry.row.DeliveryCount += rider.DeliveryCount
+			entry.row.CompletedCount += rider.CompletedCount
+			entry.row.TotalEarnings += rider.TotalEarnings
+			entry.totalDeliverySeconds += int64(rider.AvgDeliveryTime) * int64(rider.DeliveryCount)
+			if entry.row.DeliveryCount > 0 {
+				entry.row.AvgDeliveryTimeSeconds = int32(entry.totalDeliverySeconds / int64(entry.row.DeliveryCount))
+			}
 		}
+	}
+
+	result := make([]operatorRiderRankingRow, 0, len(aggregated))
+	for _, rider := range aggregated {
+		if rider.row.DeliveryCount > 0 {
+			rider.row.CompletionRate = float64(rider.row.CompletedCount) / float64(rider.row.DeliveryCount) * 100
+		}
+		result = append(result, rider.row)
+	}
+
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].CompletedCount != result[j].CompletedCount {
+			return result[i].CompletedCount > result[j].CompletedCount
+		}
+		if result[i].DeliveryCount != result[j].DeliveryCount {
+			return result[i].DeliveryCount > result[j].DeliveryCount
+		}
+		return result[i].RiderID < result[j].RiderID
+	})
+
+	if selection.IsAllRegions {
+		start := int(offset)
+		if start >= len(result) {
+			ctx.JSON(http.StatusOK, []operatorRiderRankingRow{})
+			return
+		}
+		end := start + int(req.Limit)
+		if end > len(result) {
+			end = len(result)
+		}
+		result = result[start:end]
 	}
 
 	ctx.JSON(http.StatusOK, result)
@@ -420,6 +505,7 @@ func (server *Server) getCurrentOperatorID(ctx *gin.Context) (int64, error) {
 // @Produce json
 // @Param start_date query string true "开始日期 (格式: 2025-11-01)"
 // @Param end_date query string true "结束日期 (格式: 2025-11-30)"
+// @Param region_id query int false "区域ID；不传时聚合当前运营商全部可管区域"
 // @Success 200 {array} regionDailyTrendRow "每日趋势数据"
 // @Failure 400 {object} ErrorResponse "参数错误"
 // @Failure 403 {object} ErrorResponse "无权限"
@@ -433,10 +519,9 @@ func (server *Server) getRegionDailyTrend(ctx *gin.Context) {
 		return
 	}
 
-	// 获取运营商管理的区域ID
-	regionID, err := server.getOperatorRegionID(ctx)
+	selection, err := server.resolveOperatorRegionSelection(ctx)
 	if err != nil {
-		ctx.JSON(http.StatusForbidden, errorResponse(err))
+		server.respondOperatorRegionSelectionError(ctx, err)
 		return
 	}
 
@@ -446,52 +531,89 @@ func (server *Server) getRegionDailyTrend(ctx *gin.Context) {
 		return
 	}
 
-	trends, err := server.store.GetRegionDailyTrend(ctx, db.GetRegionDailyTrendParams{
-		RegionID: regionID,
-		StartAt:  startDate,
-		EndAt:    endDate,
-	})
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
 	operatorID, err := server.getCurrentOperatorID(ctx)
 	if err != nil {
 		ctx.JSON(http.StatusForbidden, errorResponse(err))
 		return
 	}
 
-	result := make([]regionDailyTrendRow, len(trends))
-	for i, trend := range trends {
+	trendByDate := make(map[string]regionDailyTrendRow)
+	for _, regionID := range selection.RegionIDs {
+		trends, queryErr := server.store.GetRegionDailyTrend(ctx, db.GetRegionDailyTrendParams{
+			RegionID: regionID,
+			StartAt:  startDate,
+			EndAt:    endDate,
+		})
+		if queryErr != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, queryErr))
+			return
+		}
+
+		for _, trend := range trends {
+			dateKey := trend.Date.Time.Format("2006-01-02")
+			aggregated := trendByDate[dateKey]
+			aggregated.Date = dateKey
+			aggregated.OrderCount += trend.OrderCount
+			aggregated.TotalGMV += trend.TotalGmv
+			aggregated.TotalCommission += trend.Commission
+			aggregated.ActiveMerchants += trend.ActiveMerchants
+			aggregated.ActiveUsers += trend.ActiveUsers
+			trendByDate[dateKey] = aggregated
+		}
+	}
+
+	result := make([]regionDailyTrendRow, 0, len(trendByDate))
+	for _, trend := range trendByDate {
+		result = append(result, trend)
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Date < result[j].Date
+	})
+
+	for i, trend := range result {
+		trendDate, parseErr := time.ParseInLocation("2006-01-02", trend.Date, time.Local)
+		if parseErr != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, parseErr))
+			return
+		}
 		dayStart := time.Date(
-			trend.Date.Time.Year(),
-			trend.Date.Time.Month(),
-			trend.Date.Time.Day(),
+			trendDate.Year(),
+			trendDate.Month(),
+			trendDate.Day(),
 			0, 0, 0, 0,
 			time.Local,
 		)
 		dayEnd := dayStart.Add(24*time.Hour - time.Second)
 
-		operatorStats, opErr := server.store.GetOperatorProfitSharingStats(ctx, db.GetOperatorProfitSharingStatsParams{
-			OperatorID: pgtype.Int8{Int64: operatorID, Valid: true},
-			StartAt:    dayStart,
-			EndAt:      dayEnd,
-		})
-		operatorIncome := int64(0)
-		if opErr == nil {
+		var operatorIncome int64
+		if selection.IsAllRegions {
+			operatorStats, opErr := server.store.GetOperatorProfitSharingStats(ctx, db.GetOperatorProfitSharingStatsParams{
+				OperatorID: pgtype.Int8{Int64: operatorID, Valid: true},
+				StartAt:    dayStart,
+				EndAt:      dayEnd,
+			})
+			if opErr != nil {
+				log.Error().Err(opErr).Int64("operator_id", operatorID).Str("date", trend.Date).Msg("daily trend operator income query failed")
+				ctx.JSON(http.StatusInternalServerError, internalError(ctx, opErr))
+				return
+			}
+			operatorIncome = operatorStats.TotalOperatorCommission
+		} else {
+			operatorStats, opErr := server.store.GetOperatorProfitSharingStatsByRegion(ctx, db.GetOperatorProfitSharingStatsByRegionParams{
+				OperatorID: pgtype.Int8{Int64: operatorID, Valid: true},
+				RegionID:   selection.RegionID,
+				StartAt:    dayStart,
+				EndAt:      dayEnd,
+			})
+			if opErr != nil {
+				log.Error().Err(opErr).Int64("operator_id", operatorID).Int64("region_id", selection.RegionID).Str("date", trend.Date).Msg("daily trend operator income query failed")
+				ctx.JSON(http.StatusInternalServerError, internalError(ctx, opErr))
+				return
+			}
 			operatorIncome = operatorStats.TotalOperatorCommission
 		}
 
-		result[i] = regionDailyTrendRow{
-			Date:            trend.Date.Time.Format("2006-01-02"),
-			OrderCount:      trend.OrderCount,
-			TotalGMV:        trend.TotalGmv,
-			TotalCommission: trend.Commission,
-			OperatorIncome:  operatorIncome,
-			ActiveMerchants: trend.ActiveMerchants,
-			ActiveUsers:     trend.ActiveUsers,
-		}
+		result[i].OperatorIncome = operatorIncome
 	}
 
 	ctx.JSON(http.StatusOK, result)
@@ -530,7 +652,9 @@ type operatorFinanceOverviewResponse struct {
 // @Tags 运营商数据统计
 // @Accept json
 // @Produce json
+// @Param region_id query int false "区域ID；不传时聚合当前运营商全部可管区域"
 // @Success 200 {object} operatorFinanceOverviewResponse "财务概览"
+// @Failure 400 {object} ErrorResponse "参数错误"
 // @Failure 403 {object} ErrorResponse "无权限"
 // @Failure 500 {object} ErrorResponse "服务器内部错误"
 // @Security BearerAuth
@@ -542,36 +666,23 @@ func (server *Server) getOperatorFinanceOverview(ctx *gin.Context) {
 		return
 	}
 
-	// 优先使用前端传入的 region_id（区域切换场景），无则取默认区域
-	var regionID int64
-	if qRegionID := ctx.Query("region_id"); qRegionID != "" {
-		var parsed int64
-		if _, err := fmt.Sscanf(qRegionID, "%d", &parsed); err == nil && parsed > 0 {
-			if _, err := server.checkOperatorManagesRegion(ctx, parsed); err != nil {
-				ctx.JSON(http.StatusForbidden, errorResponse(err))
-				return
-			}
-			regionID = parsed
-		}
-	}
-	if regionID == 0 {
-		regionID, err = server.getOperatorRegionID(ctx)
-		if err != nil {
-			ctx.JSON(http.StatusForbidden, errorResponse(err))
-			return
-		}
-	}
-
-	// 获取区域信息
-	region, err := server.store.GetRegion(ctx, regionID)
+	selection, err := server.resolveOperatorRegionSelection(ctx)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		server.respondOperatorRegionSelectionError(ctx, err)
 		return
 	}
 
 	response := operatorFinanceOverviewResponse{
-		RegionID:   regionID,
-		RegionName: region.Name,
+		RegionID:   selection.RegionID,
+		RegionName: "全部区域",
+	}
+	if !selection.IsAllRegions {
+		region, regionErr := server.store.GetRegion(ctx, selection.RegionID)
+		if regionErr != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, regionErr))
+			return
+		}
+		response.RegionName = region.Name
 	}
 
 	// 当月日期范围
@@ -580,29 +691,37 @@ func (server *Server) getOperatorFinanceOverview(ctx *gin.Context) {
 	monthEnd := monthStart.AddDate(0, 1, 0).Add(-time.Second)
 
 	// 查询当月统计（从 profit_sharing_orders 实时计算，只统计分账成功的）
-	monthStats, err := server.store.GetRegionStats(ctx, db.GetRegionStatsParams{
-		RegionID: regionID,
-		StartAt:  monthStart,
-		EndAt:    monthEnd,
-	})
-	if err == nil {
-		response.CurrentMonth.TotalGMV = monthStats.TotalGmv
-		response.CurrentMonth.TotalCommission = monthStats.TotalCommission
-		response.CurrentMonth.TotalOrders = monthStats.TotalOrders
-		// 分账完成的佣金 = 统计的佣金（因为 GetRegionStats 只统计 status='finished' 的记录）
-		response.CurrentMonth.SettledCommission = monthStats.TotalCommission
-		// 微信电商分账是实时的，不存在"待分账"状态
-		response.CurrentMonth.PendingCommission = 0
+	for _, regionID := range selection.RegionIDs {
+		monthStats, monthErr := server.store.GetRegionStats(ctx, db.GetRegionStatsParams{
+			RegionID: regionID,
+			StartAt:  monthStart,
+			EndAt:    monthEnd,
+		})
+		if monthErr != nil {
+			log.Error().Err(monthErr).Int64("region_id", regionID).Msg("finance overview current month stats query failed")
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, monthErr))
+			return
+		}
+		response.CurrentMonth.TotalGMV += monthStats.TotalGmv
+		response.CurrentMonth.TotalCommission += monthStats.TotalCommission
+		response.CurrentMonth.TotalOrders += monthStats.TotalOrders
 	}
+	response.CurrentMonth.SettledCommission = response.CurrentMonth.TotalCommission
+	response.CurrentMonth.PendingCommission = 0
 
-	monthOperatorStats, monthOperatorErr := server.store.GetOperatorProfitSharingStatsByRegion(ctx, db.GetOperatorProfitSharingStatsByRegionParams{
-		OperatorID: pgtype.Int8{Int64: operatorID, Valid: true},
-		RegionID:   regionID,
-		StartAt:    monthStart,
-		EndAt:      monthEnd,
-	})
-	if monthOperatorErr == nil {
-		response.CurrentMonth.OperatorIncome = monthOperatorStats.TotalOperatorCommission
+	for _, regionID := range selection.RegionIDs {
+		monthOperatorStats, monthOperatorErr := server.store.GetOperatorProfitSharingStatsByRegion(ctx, db.GetOperatorProfitSharingStatsByRegionParams{
+			OperatorID: pgtype.Int8{Int64: operatorID, Valid: true},
+			RegionID:   regionID,
+			StartAt:    monthStart,
+			EndAt:      monthEnd,
+		})
+		if monthOperatorErr != nil {
+			log.Error().Err(monthOperatorErr).Int64("operator_id", operatorID).Int64("region_id", regionID).Msg("finance overview current month operator income query failed")
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, monthOperatorErr))
+			return
+		}
+		response.CurrentMonth.OperatorIncome += monthOperatorStats.TotalOperatorCommission
 	}
 
 	// 查询累计统计（全部历史分账成功的订单）
@@ -610,25 +729,35 @@ func (server *Server) getOperatorFinanceOverview(ctx *gin.Context) {
 	allTimeStart := time.Date(StatsStartYear, 1, 1, 0, 0, 0, 0, time.Local)
 	allTimeEnd := time.Date(StatsEndYear, 12, 31, 23, 59, 59, 0, time.Local)
 
-	totalStats, err := server.store.GetRegionStats(ctx, db.GetRegionStatsParams{
-		RegionID: regionID,
-		StartAt:  allTimeStart,
-		EndAt:    allTimeEnd,
-	})
-	if err == nil {
-		response.Total.TotalGMV = totalStats.TotalGmv
-		response.Total.TotalCommission = totalStats.TotalCommission
-		response.Total.SettledCommission = totalStats.TotalCommission // 全部是已分账的
+	for _, regionID := range selection.RegionIDs {
+		totalStats, totalErr := server.store.GetRegionStats(ctx, db.GetRegionStatsParams{
+			RegionID: regionID,
+			StartAt:  allTimeStart,
+			EndAt:    allTimeEnd,
+		})
+		if totalErr != nil {
+			log.Error().Err(totalErr).Int64("region_id", regionID).Msg("finance overview total stats query failed")
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, totalErr))
+			return
+		}
+		response.Total.TotalGMV += totalStats.TotalGmv
+		response.Total.TotalCommission += totalStats.TotalCommission
 	}
+	response.Total.SettledCommission = response.Total.TotalCommission
 
-	totalOperatorStats, totalOperatorErr := server.store.GetOperatorProfitSharingStatsByRegion(ctx, db.GetOperatorProfitSharingStatsByRegionParams{
-		OperatorID: pgtype.Int8{Int64: operatorID, Valid: true},
-		RegionID:   regionID,
-		StartAt:    allTimeStart,
-		EndAt:      allTimeEnd,
-	})
-	if totalOperatorErr == nil {
-		response.Total.OperatorIncome = totalOperatorStats.TotalOperatorCommission
+	for _, regionID := range selection.RegionIDs {
+		totalOperatorStats, totalOperatorErr := server.store.GetOperatorProfitSharingStatsByRegion(ctx, db.GetOperatorProfitSharingStatsByRegionParams{
+			OperatorID: pgtype.Int8{Int64: operatorID, Valid: true},
+			RegionID:   regionID,
+			StartAt:    allTimeStart,
+			EndAt:      allTimeEnd,
+		})
+		if totalOperatorErr != nil {
+			log.Error().Err(totalOperatorErr).Int64("operator_id", operatorID).Int64("region_id", regionID).Msg("finance overview total operator income query failed")
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, totalOperatorErr))
+			return
+		}
+		response.Total.OperatorIncome += totalOperatorStats.TotalOperatorCommission
 	}
 
 	// 添加分成比例信息（基于实时累计结果计算）

@@ -239,6 +239,7 @@ func (processor *RedisTaskProcessor) Start() error {
 	mux.HandleFunc(TypeCheckRiderDamage, processor.HandleCheckRiderDamage)
 
 	// 申诉处理任务
+	mux.HandleFunc(TaskAutomaticAppealResolution, processor.ProcessTaskAutomaticAppealResolution)
 	mux.HandleFunc(TaskProcessAppealResult, processor.ProcessTaskProcessAppealResult)
 
 	// 索赔退款任务

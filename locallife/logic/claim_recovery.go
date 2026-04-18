@@ -20,8 +20,9 @@ type RiderClaimRecoveryInput struct {
 }
 
 type OperatorClaimRecoveryInput struct {
-	ClaimID  int64
-	RegionID int64
+	ClaimID   int64
+	RegionID  int64
+	RegionIDs []int64
 }
 
 type WaiveClaimRecoveryInput struct {
@@ -81,7 +82,7 @@ func GetClaimRecoveryForOperator(ctx context.Context, store db.Store, input Oper
 		return db.ClaimRecovery{}, err
 	}
 
-	if claimInfo.RegionID != input.RegionID {
+	if !operatorManagesClaimRecoveryRegion(claimInfo.RegionID, input.RegionID, input.RegionIDs) {
 		return db.ClaimRecovery{}, NewRequestError(http.StatusForbidden, errors.New("operator does not manage this region"))
 	}
 
@@ -91,6 +92,20 @@ func GetClaimRecoveryForOperator(ctx context.Context, store db.Store, input Oper
 	}
 
 	return recovery, nil
+}
+
+func operatorManagesClaimRecoveryRegion(claimRegionID int64, fallbackRegionID int64, managedRegionIDs []int64) bool {
+	if len(managedRegionIDs) == 0 {
+		return claimRegionID == fallbackRegionID
+	}
+
+	for _, regionID := range managedRegionIDs {
+		if regionID == claimRegionID {
+			return true
+		}
+	}
+
+	return false
 }
 
 func WaiveClaimRecovery(ctx context.Context, store db.Store, input WaiveClaimRecoveryInput) (db.ClaimRecovery, error) {

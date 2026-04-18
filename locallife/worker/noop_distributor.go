@@ -92,6 +92,10 @@ func (NoopTaskDistributor) DistributeTaskProcessAppealResult(ctx context.Context
 	return errors.New("appeal result task distributor unavailable without redis")
 }
 
+func (NoopTaskDistributor) DistributeTaskAutomaticAppealResolution(ctx context.Context, payload *AutomaticAppealResolutionPayload, opts ...asynq.Option) error {
+	return errors.New("automatic appeal resolution task distributor unavailable without redis")
+}
+
 func (NoopTaskDistributor) DistributeTaskClaimPayout(ctx context.Context, payload *ClaimPayoutPayload, opts ...asynq.Option) error {
 	return financialTaskDistributorUnavailable("claim payout")
 }

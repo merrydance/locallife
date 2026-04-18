@@ -2,6 +2,7 @@ package logic
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -135,13 +136,9 @@ func TestCreateMerchantAppealSuccess(t *testing.T) {
 		Times(1).
 		Return(false, nil)
 	store.EXPECT().
-		CreateAppeal(gomock.Any(), gomock.Any()).
+		CreateAppealWithRecoveryTx(gomock.Any(), gomock.Any()).
 		Times(1).
-		Return(db.Appeal{ID: 55, ClaimID: claimID, AppellantType: "merchant", AppellantID: merchantID}, nil)
-	store.EXPECT().
-		GetClaimRecoveryByClaimID(gomock.Any(), claimID).
-		Times(1).
-		Return(db.ClaimRecovery{}, db.ErrRecordNotFound)
+		Return(db.CreateAppealWithRecoveryTxResult{Appeal: db.Appeal{ID: 55, ClaimID: claimID, AppellantType: "merchant", AppellantID: merchantID}}, nil)
 
 	appeal, err := CreateMerchantAppeal(context.Background(), store, CreateMerchantAppealInput{
 		MerchantID:       merchantID,
@@ -153,6 +150,39 @@ func TestCreateMerchantAppealSuccess(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, int64(55), appeal.ID)
+}
+
+func TestCreateMerchantAppealRecoveryTransitionFailure(t *testing.T) {
+	claimID := int64(10)
+	merchantID := int64(20)
+	regionID := int64(30)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetClaimForAppeal(gomock.Any(), claimID).
+		Times(1).
+		Return(db.GetClaimForAppealRow{MerchantID: merchantID, RegionID: regionID, CreatedAt: time.Now()}, nil)
+	store.EXPECT().
+		CheckAppealExists(gomock.Any(), db.CheckAppealExistsParams{ClaimID: claimID, AppellantType: "merchant"}).
+		Times(1).
+		Return(false, nil)
+	store.EXPECT().
+		CreateAppealWithRecoveryTx(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(db.CreateAppealWithRecoveryTxResult{}, fmt.Errorf("mark claim recovery appealed: update failed"))
+
+	_, err := CreateMerchantAppeal(context.Background(), store, CreateMerchantAppealInput{
+		MerchantID:       merchantID,
+		ClaimID:          claimID,
+		Reason:           "test reason",
+		AppealWindowDays: 7,
+		Now:              time.Now(),
+	})
+
+	require.EqualError(t, err, "mark claim recovery appealed: update failed")
 }
 
 func TestCreateRiderAppealClaimNotRelated(t *testing.T) {
@@ -266,13 +296,9 @@ func TestCreateRiderAppealSuccess(t *testing.T) {
 		Times(1).
 		Return(false, nil)
 	store.EXPECT().
-		CreateAppeal(gomock.Any(), gomock.Any()).
+		CreateAppealWithRecoveryTx(gomock.Any(), gomock.Any()).
 		Times(1).
-		Return(db.Appeal{ID: 77, ClaimID: claimID, AppellantType: "rider", AppellantID: riderID}, nil)
-	store.EXPECT().
-		GetClaimRecoveryByClaimID(gomock.Any(), claimID).
-		Times(1).
-		Return(db.ClaimRecovery{}, db.ErrRecordNotFound)
+		Return(db.CreateAppealWithRecoveryTxResult{Appeal: db.Appeal{ID: 77, ClaimID: claimID, AppellantType: "rider", AppellantID: riderID}}, nil)
 
 	result, err := CreateRiderAppeal(context.Background(), store, CreateRiderAppealInput{
 		RiderID:          riderID,

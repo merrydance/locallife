@@ -135,6 +135,13 @@ type TaskDistributor interface {
 		opts ...asynq.Option,
 	) error
 
+	// DistributeTaskAutomaticAppealResolution 分发申诉自动复核重试任务
+	DistributeTaskAutomaticAppealResolution(
+		ctx context.Context,
+		payload *AutomaticAppealResolutionPayload,
+		opts ...asynq.Option,
+	) error
+
 	// DistributeTaskClaimPayout 分发索赔平台赔付任务
 	DistributeTaskClaimPayout(
 		ctx context.Context,

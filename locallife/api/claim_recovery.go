@@ -1,7 +1,6 @@
 package api
 
 import (
-	"errors"
 	"net/http"
 	"strconv"
 	"time"
@@ -185,15 +184,15 @@ func (server *Server) getOperatorClaimRecovery(ctx *gin.Context) {
 		return
 	}
 
-	operator, ok := GetOperatorFromContext(ctx)
-	if !ok {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("operator not found")))
+	regionIDs, err := server.listManagedOperatorRegionIDs(ctx)
+	if err != nil {
+		server.respondOperatorRegionSelectionError(ctx, err)
 		return
 	}
 
 	recovery, err := logic.GetClaimRecoveryForOperator(ctx, server.store, logic.OperatorClaimRecoveryInput{
-		ClaimID:  claimID,
-		RegionID: operator.RegionID,
+		ClaimID:   claimID,
+		RegionIDs: regionIDs,
 	})
 	if err != nil {
 		if writeLogicRequestError(ctx, err) {
@@ -294,48 +293,4 @@ func (server *Server) payRiderClaimRecovery(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, newClaimRecoveryPaymentResponse(result))
-}
-
-// waiveClaimRecovery 运营商核销追偿单
-// @Summary 运营商核销追偿单
-// @Description 运营商核销或免除追偿，系统标记为已核销并恢复接单限制
-// @Tags 运营商申诉管理
-// @Accept json
-// @Produce json
-// @Security Bearer
-// @Param id path int true "索赔ID"
-// @Success 200 {object} claimRecoveryResponse "已核销"
-// @Failure 400 {object} map[string]interface{} "参数错误"
-// @Failure 401 {object} map[string]interface{} "未授权"
-// @Failure 403 {object} map[string]interface{} "无权限处理该区域"
-// @Failure 404 {object} map[string]interface{} "追偿单不存在"
-// @Failure 500 {object} map[string]interface{} "服务器错误"
-// @Router /v1/operator/claims/{id}/recovery/waive [post]
-func (server *Server) waiveClaimRecovery(ctx *gin.Context) {
-	claimID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
-		return
-	}
-
-	operator, ok := GetOperatorFromContext(ctx)
-	if !ok {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("operator not found")))
-		return
-	}
-
-	updated, err := logic.WaiveClaimRecovery(ctx, server.store, logic.WaiveClaimRecoveryInput{
-		ClaimID:  claimID,
-		RegionID: operator.RegionID,
-		Now:      time.Now(),
-	})
-	if err != nil {
-		if writeLogicRequestError(ctx, err) {
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	ctx.JSON(http.StatusOK, newClaimRecoveryResponse(updated))
 }

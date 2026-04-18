@@ -1320,9 +1320,7 @@ func (server *Server) setupRouter() {
 		operatorStatsGroup.GET("/appeals", server.listOperatorAppeals)
 		operatorStatsGroup.GET("/appeals/summary", server.listOperatorAppealsSummary)
 		operatorStatsGroup.GET("/appeals/:id", server.getOperatorAppealDetail)
-		operatorStatsGroup.POST("/appeals/:id/review", server.reviewAppeal)
 		operatorStatsGroup.GET("/claims/:id/recovery", server.getOperatorClaimRecovery)
-		operatorStatsGroup.POST("/claims/:id/recovery/waive", server.waiveClaimRecovery)
 
 		// 规则管理
 		operatorStatsGroup.GET("/rules", server.listOperatorRules)
@@ -1341,7 +1339,7 @@ func (server *Server) setupRouter() {
 		operatorsGroup.GET("/complaints", server.listPendingComplaints)
 		operatorsGroup.POST("/complaints/:id/complete", server.completeComplaint)
 
-		// 补差管理（运营商发起/退回/取消平台补差）
+		// 补差管理（Finding 4 deferred：暂保留 legacy operator 补差路由，不在本轮推进对象级授权整改）
 		operatorPaymentGroup := operatorsGroup.Group("/payment-orders/:id")
 		{
 			operatorPaymentGroup.GET("/profit-sharing/amounts", server.getProfitSharingAmounts)

@@ -283,6 +283,46 @@ func TestGetOperatorMerchantAPI(t *testing.T) {
 	}
 }
 
+func TestGetOperatorMerchantSummaryAPI(t *testing.T) {
+	user, _ := randomUser(t)
+	operator := randomOperator(user.ID)
+	regionA := operator.RegionID
+	regionB := operator.RegionID + 1
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectActiveOperatorAuth(store, user.ID, operator)
+	expectOperatorManagedRegions(store, operator, regionA, regionB)
+
+	store.EXPECT().CountMerchantsByRegion(gomock.Any(), regionA).Return(int64(2), nil)
+	store.EXPECT().CountMerchantsByRegion(gomock.Any(), regionB).Return(int64(3), nil)
+	store.EXPECT().CountMerchantsByRegionWithStatus(gomock.Any(), db.CountMerchantsByRegionWithStatusParams{RegionID: regionA, Column2: "pending"}).Return(int64(1), nil)
+	store.EXPECT().CountMerchantsByRegionWithStatus(gomock.Any(), db.CountMerchantsByRegionWithStatusParams{RegionID: regionB, Column2: "pending"}).Return(int64(2), nil)
+	store.EXPECT().CountMerchantsByRegionWithStatus(gomock.Any(), db.CountMerchantsByRegionWithStatusParams{RegionID: regionA, Column2: "approved"}).Return(int64(1), nil)
+	store.EXPECT().CountMerchantsByRegionWithStatus(gomock.Any(), db.CountMerchantsByRegionWithStatusParams{RegionID: regionB, Column2: "approved"}).Return(int64(1), nil)
+	store.EXPECT().CountMerchantsByRegionWithStatus(gomock.Any(), db.CountMerchantsByRegionWithStatusParams{RegionID: regionA, Column2: "rejected"}).Return(int64(0), nil)
+	store.EXPECT().CountMerchantsByRegionWithStatus(gomock.Any(), db.CountMerchantsByRegionWithStatusParams{RegionID: regionB, Column2: "rejected"}).Return(int64(0), nil)
+	store.EXPECT().CountMerchantsByRegionWithStatus(gomock.Any(), db.CountMerchantsByRegionWithStatusParams{RegionID: regionA, Column2: "suspended"}).Return(int64(0), nil)
+	store.EXPECT().CountMerchantsByRegionWithStatus(gomock.Any(), db.CountMerchantsByRegionWithStatusParams{RegionID: regionB, Column2: "suspended"}).Return(int64(0), nil)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodGet, "/v1/operator/merchants/summary", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp operatorMerchantSummaryResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Equal(t, int64(5), resp.Total)
+	require.Equal(t, int64(3), resp.Pending)
+	require.Equal(t, int64(2), resp.Approved)
+}
+
 func TestGetOperatorMerchantCapabilitiesAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	operator := randomOperator(user.ID)
@@ -624,6 +664,49 @@ func TestGetOperatorRiderAPI(t *testing.T) {
 			tc.checkResponse(t, recorder)
 		})
 	}
+}
+
+func TestGetOperatorRiderSummaryAPI(t *testing.T) {
+	user, _ := randomUser(t)
+	operator := randomOperator(user.ID)
+	regionA := operator.RegionID
+	regionB := operator.RegionID + 1
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectActiveOperatorAuth(store, user.ID, operator)
+	expectOperatorManagedRegions(store, operator, regionA, regionB)
+
+	store.EXPECT().CountRidersByRegion(gomock.Any(), pgtype.Int8{Int64: regionA, Valid: true}).Return(int64(4), nil)
+	store.EXPECT().CountRidersByRegion(gomock.Any(), pgtype.Int8{Int64: regionB, Valid: true}).Return(int64(5), nil)
+	store.EXPECT().CountRidersByRegionWithStatus(gomock.Any(), db.CountRidersByRegionWithStatusParams{RegionID: pgtype.Int8{Int64: regionA, Valid: true}, Status: "pending_approval"}).Return(int64(1), nil)
+	store.EXPECT().CountRidersByRegionWithStatus(gomock.Any(), db.CountRidersByRegionWithStatusParams{RegionID: pgtype.Int8{Int64: regionB, Valid: true}, Status: "pending_approval"}).Return(int64(2), nil)
+	store.EXPECT().CountRidersByRegionWithStatus(gomock.Any(), db.CountRidersByRegionWithStatusParams{RegionID: pgtype.Int8{Int64: regionA, Valid: true}, Status: "active"}).Return(int64(2), nil)
+	store.EXPECT().CountRidersByRegionWithStatus(gomock.Any(), db.CountRidersByRegionWithStatusParams{RegionID: pgtype.Int8{Int64: regionB, Valid: true}, Status: "active"}).Return(int64(2), nil)
+	store.EXPECT().CountRidersByRegionWithStatus(gomock.Any(), db.CountRidersByRegionWithStatusParams{RegionID: pgtype.Int8{Int64: regionA, Valid: true}, Status: "rejected"}).Return(int64(1), nil)
+	store.EXPECT().CountRidersByRegionWithStatus(gomock.Any(), db.CountRidersByRegionWithStatusParams{RegionID: pgtype.Int8{Int64: regionB, Valid: true}, Status: "rejected"}).Return(int64(0), nil)
+	store.EXPECT().CountRidersByRegionWithStatus(gomock.Any(), db.CountRidersByRegionWithStatusParams{RegionID: pgtype.Int8{Int64: regionA, Valid: true}, Status: "suspended"}).Return(int64(0), nil)
+	store.EXPECT().CountRidersByRegionWithStatus(gomock.Any(), db.CountRidersByRegionWithStatusParams{RegionID: pgtype.Int8{Int64: regionB, Valid: true}, Status: "suspended"}).Return(int64(1), nil)
+	store.EXPECT().CountOnlineRidersByRegion(gomock.Any(), pgtype.Int8{Int64: regionA, Valid: true}).Return(int64(1), nil)
+	store.EXPECT().CountOnlineRidersByRegion(gomock.Any(), pgtype.Int8{Int64: regionB, Valid: true}).Return(int64(3), nil)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodGet, "/v1/operator/riders/summary", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp operatorRiderSummaryResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Equal(t, int64(9), resp.Total)
+	require.Equal(t, int64(3), resp.PendingApproval)
+	require.Equal(t, int64(4), resp.Active)
+	require.Equal(t, int64(4), resp.Online)
 }
 
 // ============================================================================

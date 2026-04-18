@@ -2823,6 +2823,21 @@ func (mr *MockStoreMockRecorder) CreateAppeal(ctx, arg any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateAppeal", reflect.TypeOf((*MockStore)(nil).CreateAppeal), ctx, arg)
 }
 
+// CreateAppealWithRecoveryTx mocks base method.
+func (m *MockStore) CreateAppealWithRecoveryTx(ctx context.Context, arg db.CreateAppealWithRecoveryTxParams) (db.CreateAppealWithRecoveryTxResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateAppealWithRecoveryTx", ctx, arg)
+	ret0, _ := ret[0].(db.CreateAppealWithRecoveryTxResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateAppealWithRecoveryTx indicates an expected call of CreateAppealWithRecoveryTx.
+func (mr *MockStoreMockRecorder) CreateAppealWithRecoveryTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateAppealWithRecoveryTx", reflect.TypeOf((*MockStore)(nil).CreateAppealWithRecoveryTx), ctx, arg)
+}
+
 // CreateAuditLog mocks base method.
 func (m *MockStore) CreateAuditLog(ctx context.Context, arg db.CreateAuditLogParams) (db.AuditLog, error) {
 	m.ctrl.T.Helper()

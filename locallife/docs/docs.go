@@ -8907,7 +8907,7 @@ const docTemplate = `{
                         "Bearer": []
                     }
                 ],
-                "description": "商户对已批准的索赔提交申诉，每个索赔只能申诉一次",
+                "description": "商户对已批准的索赔提交申诉，提交后由系统自动复核并写回最终结果",
                 "consumes": [
                     "application/json"
                 ],
@@ -17825,87 +17825,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/v1/operator/appeals/{id}/review": {
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "运营商审核申诉，可仅撤销判责与追偿，也可附带补偿金额；系统会自动更新用户信用分",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "运营商申诉管理"
-                ],
-                "summary": "审核申诉",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "申诉ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "审核请求",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/api.reviewAppealRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "审核成功",
-                        "schema": {
-                            "$ref": "#/definitions/api.appealResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "参数错误或申诉已审核",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "401": {
-                        "description": "未授权",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "403": {
-                        "description": "非运营商用户或申诉不在管辖区域",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "申诉不存在",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "服务器错误",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
         "/v1/operator/application": {
             "get": {
                 "security": [
@@ -18375,78 +18294,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/v1/operator/claims/{id}/recovery/waive": {
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "运营商核销或免除追偿，系统标记为已核销并恢复接单限制",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "运营商申诉管理"
-                ],
-                "summary": "运营商核销追偿单",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "索赔ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "已核销",
-                        "schema": {
-                            "$ref": "#/definitions/api.claimRecoveryResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "参数错误",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "401": {
-                        "description": "未授权",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "403": {
-                        "description": "无权限处理该区域",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "追偿单不存在",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "服务器错误",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
         "/v1/operator/merchants": {
             "get": {
                 "security": [
@@ -18563,6 +18410,12 @@ const docTemplate = `{
                     },
                     {
                         "type": "integer",
+                        "description": "区域ID；不传时聚合当前运营商全部可管区域",
+                        "name": "region_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
                         "description": "页码 (默认: 1)",
                         "name": "page",
                         "in": "query"
@@ -18626,7 +18479,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "区域ID",
+                        "description": "区域ID；不传时聚合当前运营商全部可管区域",
                         "name": "region_id",
                         "in": "query"
                     }
@@ -19724,6 +19577,12 @@ const docTemplate = `{
                     },
                     {
                         "type": "integer",
+                        "description": "区域ID；不传时聚合当前运营商全部可管区域",
+                        "name": "region_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
                         "description": "页码 (默认: 1)",
                         "name": "page",
                         "in": "query"
@@ -19787,7 +19646,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "区域ID",
+                        "description": "区域ID；不传时聚合当前运营商全部可管区域",
                         "name": "region_id",
                         "in": "query"
                     }
@@ -20148,6 +20007,12 @@ const docTemplate = `{
                         "name": "end_date",
                         "in": "query",
                         "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "区域ID；不传时聚合当前运营商全部可管区域",
+                        "name": "region_id",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -20273,11 +20138,25 @@ const docTemplate = `{
                     "运营商数据统计"
                 ],
                 "summary": "获取财务概览",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "区域ID；不传时聚合当前运营商全部可管区域",
+                        "name": "region_id",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "财务概览",
                         "schema": {
                             "$ref": "#/definitions/api.operatorFinanceOverviewResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
                         }
                     },
                     "403": {
@@ -27555,7 +27434,7 @@ const docTemplate = `{
                         "Bearer": []
                     }
                 ],
-                "description": "骑手对与自己配送订单相关的索赔提交申诉",
+                "description": "骑手对与自己配送订单相关的索赔提交申诉，提交后由系统自动复核并写回最终结果",
                 "consumes": [
                     "application/json"
                 ],
@@ -42339,33 +42218,6 @@ const docTemplate = `{
                 },
                 "street_number": {
                     "type": "string"
-                }
-            }
-        },
-        "api.reviewAppealRequest": {
-            "type": "object",
-            "required": [
-                "review_notes",
-                "status"
-            ],
-            "properties": {
-                "compensation_amount": {
-                    "description": "可选补偿金额（分），最大10万元",
-                    "type": "integer",
-                    "maximum": 10000000,
-                    "minimum": 1
-                },
-                "review_notes": {
-                    "type": "string",
-                    "maxLength": 500,
-                    "minLength": 5
-                },
-                "status": {
-                    "type": "string",
-                    "enum": [
-                        "approved",
-                        "rejected"
-                    ]
                 }
             }
         },
