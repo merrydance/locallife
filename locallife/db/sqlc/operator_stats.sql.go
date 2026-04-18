@@ -12,6 +12,68 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const getManagedRegionsDailyTrend = `-- name: GetManagedRegionsDailyTrend :many
+SELECT
+    DATE(ps.created_at) AS date,
+    COUNT(ps.id)::int AS order_count,
+    COALESCE(SUM(ps.total_amount), 0)::bigint AS total_gmv,
+    COALESCE(SUM(ps.platform_commission), 0)::bigint AS commission,
+    COUNT(DISTINCT po.user_id)::int AS active_users,
+    COUNT(DISTINCT ps.merchant_id)::int AS active_merchants
+FROM profit_sharing_orders ps
+JOIN merchants m ON m.id = ps.merchant_id
+JOIN payment_orders po ON po.id = ps.payment_order_id
+WHERE m.region_id = ANY($1::bigint[])
+    AND ps.created_at >= $2
+    AND ps.created_at <= $3
+    AND ps.status = 'finished'
+GROUP BY DATE(ps.created_at)
+ORDER BY date
+`
+
+type GetManagedRegionsDailyTrendParams struct {
+	RegionIds []int64   `json:"region_ids"`
+	StartAt   time.Time `json:"start_at"`
+	EndAt     time.Time `json:"end_at"`
+}
+
+type GetManagedRegionsDailyTrendRow struct {
+	Date            pgtype.Date `json:"date"`
+	OrderCount      int32       `json:"order_count"`
+	TotalGmv        int64       `json:"total_gmv"`
+	Commission      int64       `json:"commission"`
+	ActiveUsers     int32       `json:"active_users"`
+	ActiveMerchants int32       `json:"active_merchants"`
+}
+
+// 运营商多区域日趋势（跨区域按用户/商户去重）
+func (q *Queries) GetManagedRegionsDailyTrend(ctx context.Context, arg GetManagedRegionsDailyTrendParams) ([]GetManagedRegionsDailyTrendRow, error) {
+	rows, err := q.db.Query(ctx, getManagedRegionsDailyTrend, arg.RegionIds, arg.StartAt, arg.EndAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetManagedRegionsDailyTrendRow{}
+	for rows.Next() {
+		var i GetManagedRegionsDailyTrendRow
+		if err := rows.Scan(
+			&i.Date,
+			&i.OrderCount,
+			&i.TotalGmv,
+			&i.Commission,
+			&i.ActiveUsers,
+			&i.ActiveMerchants,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getOperatorMerchantRanking = `-- name: GetOperatorMerchantRanking :many
 SELECT 
     m.id AS merchant_id,
@@ -205,68 +267,6 @@ func (q *Queries) GetRegionDailyTrend(ctx context.Context, arg GetRegionDailyTre
 	items := []GetRegionDailyTrendRow{}
 	for rows.Next() {
 		var i GetRegionDailyTrendRow
-		if err := rows.Scan(
-			&i.Date,
-			&i.OrderCount,
-			&i.TotalGmv,
-			&i.Commission,
-			&i.ActiveUsers,
-			&i.ActiveMerchants,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getManagedRegionsDailyTrend = `-- name: GetManagedRegionsDailyTrend :many
-SELECT
-    DATE(ps.created_at) AS date,
-    COUNT(ps.id)::int AS order_count,
-    COALESCE(SUM(ps.total_amount), 0)::bigint AS total_gmv,
-    COALESCE(SUM(ps.platform_commission), 0)::bigint AS commission,
-    COUNT(DISTINCT po.user_id)::int AS active_users,
-    COUNT(DISTINCT ps.merchant_id)::int AS active_merchants
-FROM profit_sharing_orders ps
-JOIN merchants m ON m.id = ps.merchant_id
-JOIN payment_orders po ON po.id = ps.payment_order_id
-WHERE m.region_id = ANY($1::bigint[])
-    AND ps.created_at >= $2
-    AND ps.created_at <= $3
-    AND ps.status = 'finished'
-GROUP BY DATE(ps.created_at)
-ORDER BY date
-`
-
-type GetManagedRegionsDailyTrendParams struct {
-	RegionIds []int64   `json:"region_ids"`
-	StartAt   time.Time `json:"start_at"`
-	EndAt     time.Time `json:"end_at"`
-}
-
-type GetManagedRegionsDailyTrendRow struct {
-	Date            pgtype.Date `json:"date"`
-	OrderCount      int32       `json:"order_count"`
-	TotalGmv        int64       `json:"total_gmv"`
-	Commission      int64       `json:"commission"`
-	ActiveUsers     int32       `json:"active_users"`
-	ActiveMerchants int32       `json:"active_merchants"`
-}
-
-// 运营商多区域日趋势（跨区域按用户/商户去重）
-func (q *Queries) GetManagedRegionsDailyTrend(ctx context.Context, arg GetManagedRegionsDailyTrendParams) ([]GetManagedRegionsDailyTrendRow, error) {
-	rows, err := q.db.Query(ctx, getManagedRegionsDailyTrend, arg.RegionIds, arg.StartAt, arg.EndAt)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []GetManagedRegionsDailyTrendRow{}
-	for rows.Next() {
-		var i GetManagedRegionsDailyTrendRow
 		if err := rows.Scan(
 			&i.Date,
 			&i.OrderCount,

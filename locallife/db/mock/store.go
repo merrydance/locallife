@@ -7379,6 +7379,21 @@ func (mr *MockStoreMockRecorder) GetMaliciousClaims(ctx, createdAt any) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMaliciousClaims", reflect.TypeOf((*MockStore)(nil).GetMaliciousClaims), ctx, createdAt)
 }
 
+// GetManagedRegionsDailyTrend mocks base method.
+func (m *MockStore) GetManagedRegionsDailyTrend(ctx context.Context, arg db.GetManagedRegionsDailyTrendParams) ([]db.GetManagedRegionsDailyTrendRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetManagedRegionsDailyTrend", ctx, arg)
+	ret0, _ := ret[0].([]db.GetManagedRegionsDailyTrendRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetManagedRegionsDailyTrend indicates an expected call of GetManagedRegionsDailyTrend.
+func (mr *MockStoreMockRecorder) GetManagedRegionsDailyTrend(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetManagedRegionsDailyTrend", reflect.TypeOf((*MockStore)(nil).GetManagedRegionsDailyTrend), ctx, arg)
+}
+
 // GetMatchingRechargeRule mocks base method.
 func (m *MockStore) GetMatchingRechargeRule(ctx context.Context, arg db.GetMatchingRechargeRuleParams) (db.RechargeRule, error) {
 	m.ctrl.T.Helper()
@@ -9417,21 +9432,6 @@ func (m *MockStore) GetRegionComparison(ctx context.Context, arg db.GetRegionCom
 func (mr *MockStoreMockRecorder) GetRegionComparison(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRegionComparison", reflect.TypeOf((*MockStore)(nil).GetRegionComparison), ctx, arg)
-}
-
-// GetManagedRegionsDailyTrend mocks base method.
-func (m *MockStore) GetManagedRegionsDailyTrend(ctx context.Context, arg db.GetManagedRegionsDailyTrendParams) ([]db.GetManagedRegionsDailyTrendRow, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetManagedRegionsDailyTrend", ctx, arg)
-	ret0, _ := ret[0].([]db.GetManagedRegionsDailyTrendRow)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetManagedRegionsDailyTrend indicates an expected call of GetManagedRegionsDailyTrend.
-func (mr *MockStoreMockRecorder) GetManagedRegionsDailyTrend(ctx, arg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetManagedRegionsDailyTrend", reflect.TypeOf((*MockStore)(nil).GetManagedRegionsDailyTrend), ctx, arg)
 }
 
 // GetRegionDailyTrend mocks base method.

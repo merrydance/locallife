@@ -725,6 +725,8 @@ type Querier interface {
 	GetLatestPrintLogByOrderAndPrinter(ctx context.Context, arg GetLatestPrintLogByOrderAndPrinterParams) (PrintLog, error)
 	GetLatestWeatherCoefficient(ctx context.Context, regionID int64) (WeatherCoefficient, error)
 	GetMaliciousClaims(ctx context.Context, createdAt time.Time) ([]Claim, error)
+	// 运营商多区域日趋势（跨区域按用户/商户去重）
+	GetManagedRegionsDailyTrend(ctx context.Context, arg GetManagedRegionsDailyTrendParams) ([]GetManagedRegionsDailyTrendRow, error)
 	GetMatchingRechargeRule(ctx context.Context, arg GetMatchingRechargeRuleParams) (RechargeRule, error)
 	GetMediaAssetByID(ctx context.Context, id int64) (MediaAsset, error)
 	GetMediaAssetByModerationTraceID(ctx context.Context, moderationTraceID pgtype.Text) (MediaAsset, error)
@@ -929,8 +931,6 @@ type Querier interface {
 	GetRegionByProviderCode(ctx context.Context, arg GetRegionByProviderCodeParams) (Region, error)
 	// 区域对比分析
 	GetRegionComparison(ctx context.Context, arg GetRegionComparisonParams) ([]GetRegionComparisonRow, error)
-	// 运营商多区域日趋势（跨区域按用户/商户去重）
-	GetManagedRegionsDailyTrend(ctx context.Context, arg GetManagedRegionsDailyTrendParams) ([]GetManagedRegionsDailyTrendRow, error)
 	// 区域日趋势（基于实际分账数据）
 	GetRegionDailyTrend(ctx context.Context, arg GetRegionDailyTrendParams) ([]GetRegionDailyTrendRow, error)
 	GetRegionRuleConfigByRegion(ctx context.Context, regionID int64) (RegionRuleConfig, error)
