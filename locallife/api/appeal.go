@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"sort"
@@ -1818,7 +1819,10 @@ func (server *Server) processAppealResultInline(ctx *gin.Context, payload *worke
 	switch payload.Status {
 	case "approved":
 		if err := server.waiveClaimRecoveryInline(ctx, payload); err != nil {
-			return err
+			log.Error().Err(logic.LoggableError(err)).Int64("appeal_id", payload.AppealID).Int64("claim_id", payload.ClaimID).Msg("failed to rollback claim recovery inline after automatic appeal resolution")
+		}
+		if err := server.penalizeClaimantInline(ctx, payload); err != nil {
+			log.Error().Err(logic.LoggableError(err)).Int64("appeal_id", payload.AppealID).Int64("claimant_user_id", payload.ClaimantUserID).Msg("failed to penalize claimant inline after automatic appeal resolution")
 		}
 		if payload.CompensationActionID > 0 {
 			if err := worker.ExecuteClaimPayoutAction(ctx, server.store, server.transferClient, payload.CompensationActionID); err != nil {
@@ -1829,34 +1833,32 @@ func (server *Server) processAppealResultInline(ctx *gin.Context, payload *worke
 		}
 	case "rejected":
 		if err := server.resumeClaimRecoveryInline(ctx, payload); err != nil {
-			return err
+			log.Error().Err(logic.LoggableError(err)).Int64("appeal_id", payload.AppealID).Int64("claim_id", payload.ClaimID).Msg("failed to resume claim recovery inline after automatic appeal resolution")
 		}
 	}
 
 	appellantUserID, err := server.getAppellantUserID(ctx, payload.AppellantType, payload.AppellantID)
 	if err != nil {
-		return err
-	}
-
-	appellantTitle, appellantContent := buildAppealNotificationContent(payload, true)
-	if err := server.SendNotification(ctx, SendNotificationParams{
-		UserID:      appellantUserID,
-		Type:        "appeal",
-		Title:       appellantTitle,
-		Content:     appellantContent,
-		RelatedType: "appeal",
-		RelatedID:   payload.AppealID,
-		ExtraData: map[string]any{
-			"appeal_id":      payload.AppealID,
-			"status":         payload.Status,
-			"appellant_type": payload.AppellantType,
-		},
-	}); err != nil {
-		return err
+		log.Error().Err(logic.LoggableError(err)).Int64("appeal_id", payload.AppealID).Str("appellant_type", payload.AppellantType).Int64("appellant_id", payload.AppellantID).Msg("failed to resolve appellant user id for appeal notification")
+	} else {
+		appellantTitle, appellantContent := buildAppealNotificationContent(payload, true)
+		server.SendNotificationSync(ctx, SendNotificationParams{
+			UserID:      appellantUserID,
+			Type:        "appeal",
+			Title:       appellantTitle,
+			Content:     appellantContent,
+			RelatedType: "appeal",
+			RelatedID:   payload.AppealID,
+			ExtraData: map[string]any{
+				"appeal_id":      payload.AppealID,
+				"status":         payload.Status,
+				"appellant_type": payload.AppellantType,
+			},
+		})
 	}
 
 	claimantTitle, claimantContent := buildAppealNotificationContent(payload, false)
-	if err := server.SendNotification(ctx, SendNotificationParams{
+	server.SendNotificationSync(ctx, SendNotificationParams{
 		UserID:      payload.ClaimantUserID,
 		Type:        "appeal",
 		Title:       claimantTitle,
@@ -1867,9 +1869,7 @@ func (server *Server) processAppealResultInline(ctx *gin.Context, payload *worke
 			"appeal_id": payload.AppealID,
 			"status":    payload.Status,
 		},
-	}); err != nil {
-		return err
-	}
+	})
 
 	return nil
 }
@@ -1953,6 +1953,81 @@ func (server *Server) getAppellantUserID(ctx *gin.Context, appellantType string,
 		return 0, err
 	}
 	return rider.UserID, nil
+}
+
+func (server *Server) penalizeClaimantInline(ctx *gin.Context, payload *worker.ProcessAppealResultPayload) error {
+	userID := payload.ClaimantUserID
+	if userID == 0 && payload.ClaimID != 0 {
+		claim, err := server.store.GetClaim(ctx, payload.ClaimID)
+		if err == nil {
+			userID = claim.UserID
+		}
+	}
+	if userID == 0 {
+		return nil
+	}
+
+	if _, err := server.store.GetActiveBehaviorBlocklist(ctx, db.GetActiveBehaviorBlocklistParams{
+		EntityType: "user",
+		EntityID:   userID,
+	}); err == nil {
+		return nil
+	} else if !errors.Is(err, db.ErrRecordNotFound) {
+		return err
+	}
+
+	blockDays := int64(14)
+	if days := server.getRejectServiceCooldownDays(ctx); days > 0 {
+		blockDays = days
+	}
+	blockUntil := time.Now().AddDate(0, 0, int(blockDays))
+
+	if _, err := server.store.CreateBehaviorBlocklist(ctx, db.CreateBehaviorBlocklistParams{
+		EntityType: "user",
+		EntityID:   userID,
+		ReasonCode: "malicious-claim",
+		BlockUntil: pgtype.Timestamptz{Time: blockUntil, Valid: true},
+		Status:     "active",
+	}); err != nil {
+		return err
+	}
+
+	if _, err := server.store.GetUserClaimWarningStatus(ctx, userID); err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			_, createErr := server.store.CreateUserClaimWarning(ctx, db.CreateUserClaimWarningParams{
+				UserID:            userID,
+				LastWarningReason: pgtype.Text{String: "appeal approved: malicious claim", Valid: true},
+				RequiresEvidence:  false,
+			})
+			return createErr
+		}
+		return err
+	}
+
+	return server.store.IncrementUserClaimWarning(ctx, db.IncrementUserClaimWarningParams{
+		UserID:            userID,
+		LastWarningReason: pgtype.Text{String: "appeal approved: malicious claim", Valid: true},
+		RequiresEvidence:  false,
+	})
+}
+
+func (server *Server) getRejectServiceCooldownDays(ctx *gin.Context) int64 {
+	config, err := server.store.GetPlatformConfig(ctx, db.GetPlatformConfigParams{
+		ConfigKey: "behavior_trace.reject_service_cooldown_days",
+		ScopeType: "global",
+		ScopeID:   pgtype.Int8{Valid: false},
+	})
+	if err != nil {
+		return 0
+	}
+
+	var payload struct {
+		Days int64 `json:"days"`
+	}
+	if jsonErr := json.Unmarshal(config.ConfigValue, &payload); jsonErr == nil && payload.Days > 0 {
+		return payload.Days
+	}
+	return 0
 }
 
 func buildAppealNotificationContent(payload *worker.ProcessAppealResultPayload, isAppellant bool) (string, string) {

@@ -390,7 +390,7 @@ func TestCreateMerchantAppealAPI(t *testing.T) {
 			},
 		},
 		{
-			name: "AutoResolveFailureStillReturnsCreatedAppeal",
+			name: "AutoResolveQueueFailureFallsBackInline",
 			body: gin.H{
 				"claim_id": claim.ID,
 				"reason":   "订单包装完好，顾客收货时已当面核对",
@@ -457,15 +457,35 @@ func TestCreateMerchantAppealAPI(t *testing.T) {
 					Times(1).
 					Return(db.ClaimRecovery{}, db.ErrRecordNotFound)
 
+				store.EXPECT().
+					GetActiveBehaviorBlocklist(gomock.Any(), db.GetActiveBehaviorBlocklistParams{EntityType: "user", EntityID: 300}).
+					Times(1).
+					Return(db.BehaviorBlocklist{}, db.ErrRecordNotFound)
+
+				store.EXPECT().
+					GetPlatformConfig(gomock.Any(), db.GetPlatformConfigParams{ConfigKey: "behavior_trace.reject_service_cooldown_days", ScopeType: "global", ScopeID: pgtype.Int8{Valid: false}}).
+					Times(1).
+					Return(db.PlatformConfig{}, db.ErrRecordNotFound)
+
+				store.EXPECT().
+					CreateBehaviorBlocklist(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.BehaviorBlocklist{ID: 1}, nil)
+
+				store.EXPECT().
+					GetUserClaimWarningStatus(gomock.Any(), int64(300)).
+					Times(1).
+					Return(db.UserClaimWarning{}, db.ErrRecordNotFound)
+
+				store.EXPECT().
+					CreateUserClaimWarning(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.UserClaimWarning{ID: 1, UserID: 300}, nil)
+
 				taskDistributor.EXPECT().
 					DistributeTaskProcessAppealResult(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(assertAnError("appeal queue unavailable"))
-
-				taskDistributor.EXPECT().
-					DistributeTaskAutomaticAppealResolution(gomock.Any(), &worker.AutomaticAppealResolutionPayload{AppealID: appeal.ID}).
-					Times(1).
-					Return(nil)
 
 				store.EXPECT().
 					GetMerchant(gomock.Any(), merchant.ID).
@@ -473,9 +493,14 @@ func TestCreateMerchantAppealAPI(t *testing.T) {
 					Return(db.Merchant{}, db.ErrRecordNotFound)
 
 				store.EXPECT().
-					GetAppeal(gomock.Any(), appeal.ID).
+					GetUserNotificationPreferences(gomock.Any(), int64(300)).
 					Times(1).
-					Return(autoApprovedAppeal, nil)
+					Return(db.UserNotificationPreference{}, db.ErrRecordNotFound)
+
+				store.EXPECT().
+					CreateNotification(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.Notification{ID: 1, UserID: 300, Type: "appeal", Title: "索赔申诉结果通知", Content: "test", CreatedAt: time.Now()}, nil)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusCreated, recorder.Code)
@@ -1027,14 +1052,44 @@ func TestCreateMerchantAppealAPI_AutoResolveFailureWithoutTaskDistributorDoesNot
 		Return(db.ClaimRecovery{}, db.ErrRecordNotFound)
 
 	store.EXPECT().
+		GetActiveBehaviorBlocklist(gomock.Any(), db.GetActiveBehaviorBlocklistParams{EntityType: "user", EntityID: 300}).
+		Times(1).
+		Return(db.BehaviorBlocklist{}, db.ErrRecordNotFound)
+
+	store.EXPECT().
+		GetPlatformConfig(gomock.Any(), db.GetPlatformConfigParams{ConfigKey: "behavior_trace.reject_service_cooldown_days", ScopeType: "global", ScopeID: pgtype.Int8{Valid: false}}).
+		Times(1).
+		Return(db.PlatformConfig{}, db.ErrRecordNotFound)
+
+	store.EXPECT().
+		CreateBehaviorBlocklist(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(db.BehaviorBlocklist{ID: 1}, nil)
+
+	store.EXPECT().
+		GetUserClaimWarningStatus(gomock.Any(), int64(300)).
+		Times(1).
+		Return(db.UserClaimWarning{}, db.ErrRecordNotFound)
+
+	store.EXPECT().
+		CreateUserClaimWarning(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(db.UserClaimWarning{ID: 1, UserID: 300}, nil)
+
+	store.EXPECT().
 		GetMerchant(gomock.Any(), merchant.ID).
 		Times(1).
 		Return(db.Merchant{}, db.ErrRecordNotFound)
 
 	store.EXPECT().
-		GetAppeal(gomock.Any(), appeal.ID).
+		GetUserNotificationPreferences(gomock.Any(), int64(300)).
 		Times(1).
-		Return(autoApprovedAppeal, nil)
+		Return(db.UserNotificationPreference{}, db.ErrRecordNotFound)
+
+	store.EXPECT().
+		CreateNotification(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(db.Notification{ID: 1, UserID: 300, Type: "appeal", Title: "索赔申诉结果通知", Content: "test", CreatedAt: time.Now()}, nil)
 
 	server := newTestServer(t, store)
 	server.SetTaskDistributorForTest(nil)

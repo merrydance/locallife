@@ -116,6 +116,12 @@ func (server *Server) SendNotification(ctx context.Context, params SendNotificat
 	return nil
 }
 
+// SendNotificationSync 直接执行通知持久化与可选推送，不依赖任务队列。
+// 仅用于关键 fallback 路径，避免在上游队列不可用时再次丢失通知。
+func (server *Server) SendNotificationSync(ctx context.Context, params SendNotificationParams) {
+	server.sendNotificationInternal(ctx, params)
+}
+
 // sendNotificationInternal executes the notification logic synchronously (internal use)
 func (server *Server) sendNotificationInternal(ctx context.Context, params SendNotificationParams) {
 	// 测试环境跳过WebSocket推送，但仍创建通知记录（如果store不为nil）
