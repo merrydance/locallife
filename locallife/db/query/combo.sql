@@ -16,7 +16,7 @@ INSERT INTO combo_sets (
 ) RETURNING *;
 
 -- name: GetComboSet :one
-SELECT * FROM combo_sets
+SELECT id, merchant_id, name, description, original_price, combo_price, is_online, created_at, updated_at, deleted_at, image_media_asset_id FROM combo_sets
 WHERE id = $1 AND deleted_at IS NULL LIMIT 1;
 
 -- name: GetComboSetWithDetails :one

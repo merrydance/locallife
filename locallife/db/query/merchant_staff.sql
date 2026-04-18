@@ -5,11 +5,11 @@ INSERT INTO merchant_staff (merchant_id, user_id, role, status, invited_by)
 VALUES ($1, $2, $3, $4, $5) RETURNING *;
 
 -- name: GetMerchantStaff :one
-SELECT * FROM merchant_staff
+SELECT id, merchant_id, user_id, role, status, invited_by, created_at, updated_at FROM merchant_staff
 WHERE merchant_id = $1 AND user_id = $2;
 
 -- name: GetMerchantStaffByID :one
-SELECT * FROM merchant_staff
+SELECT id, merchant_id, user_id, role, status, invited_by, created_at, updated_at FROM merchant_staff
 WHERE id = $1;
 
 -- name: ListMerchantStaffByMerchant :many

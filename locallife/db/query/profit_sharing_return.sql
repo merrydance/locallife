@@ -14,15 +14,15 @@ INSERT INTO profit_sharing_returns (
 ) RETURNING *;
 
 -- name: GetProfitSharingReturn :one
-SELECT * FROM profit_sharing_returns
+SELECT id, refund_order_id, profit_sharing_order_id, payment_order_id, sub_mchid, out_order_no, out_return_no, return_mchid, amount, status, return_id, fail_reason, finished_at, created_at, updated_at FROM profit_sharing_returns
 WHERE id = $1 LIMIT 1;
 
 -- name: GetProfitSharingReturnByOutReturnNo :one
-SELECT * FROM profit_sharing_returns
+SELECT id, refund_order_id, profit_sharing_order_id, payment_order_id, sub_mchid, out_order_no, out_return_no, return_mchid, amount, status, return_id, fail_reason, finished_at, created_at, updated_at FROM profit_sharing_returns
 WHERE out_return_no = $1 LIMIT 1;
 
 -- name: ListProfitSharingReturnsByRefundOrder :many
-SELECT * FROM profit_sharing_returns
+SELECT id, refund_order_id, profit_sharing_order_id, payment_order_id, sub_mchid, out_order_no, out_return_no, return_mchid, amount, status, return_id, fail_reason, finished_at, created_at, updated_at FROM profit_sharing_returns
 WHERE refund_order_id = $1
 ORDER BY created_at;
 
@@ -63,7 +63,7 @@ WHERE id = $1
 RETURNING *;
 
 -- name: ListStuckProcessingProfitSharingReturns :many
-SELECT * FROM profit_sharing_returns
+SELECT id, refund_order_id, profit_sharing_order_id, payment_order_id, sub_mchid, out_order_no, out_return_no, return_mchid, amount, status, return_id, fail_reason, finished_at, created_at, updated_at FROM profit_sharing_returns
 WHERE status = 'processing'
   AND updated_at < $1
 ORDER BY updated_at ASC

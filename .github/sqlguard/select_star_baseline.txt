@@ -1,0 +1,3 @@
+# Legacy SELECT * debt baseline.
+# Format: path::QueryName
+# Remove entries as queries are rewritten to explicit columns.

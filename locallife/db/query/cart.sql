@@ -5,11 +5,11 @@ ON CONFLICT (user_id, merchant_id, order_type, table_id, reservation_id) DO UPDA
 RETURNING *;
 
 -- name: GetCart :one
-SELECT * FROM carts
+SELECT id, user_id, merchant_id, updated_at, created_at, order_type, table_id, reservation_id FROM carts
 WHERE id = $1;
 
 -- name: GetCartByUserAndMerchant :one
-SELECT * FROM carts
+SELECT id, user_id, merchant_id, updated_at, created_at, order_type, table_id, reservation_id FROM carts
 WHERE user_id = $1 AND merchant_id = $2 AND order_type = $3 AND table_id IS NOT DISTINCT FROM $4 AND reservation_id IS NOT DISTINCT FROM $5;
 
 -- name: GetCartWithItems :one
@@ -117,11 +117,11 @@ GROUP BY c.id, m.id
 ORDER BY c.updated_at DESC;
 
 -- name: GetCartItemByDishAndCustomizations :one
-SELECT * FROM cart_items
+SELECT id, cart_id, dish_id, combo_id, quantity, customizations, created_at, updated_at FROM cart_items
 WHERE cart_id = $1 AND dish_id = $2 AND customizations IS NOT DISTINCT FROM $3;
 
 -- name: GetCartItemByCombo :one
-SELECT * FROM cart_items
+SELECT id, cart_id, dish_id, combo_id, quantity, customizations, created_at, updated_at FROM cart_items
 WHERE cart_id = $1 AND combo_id = $2;
 
 

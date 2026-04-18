@@ -11,12 +11,12 @@ INSERT INTO web_login_sessions (
 ) RETURNING *;
 
 -- name: GetWebLoginSessionByCode :one
-SELECT * FROM web_login_sessions
+SELECT id, code, status, user_id, expires_at, confirmed_at, consumed_at, web_user_agent, web_client_ip, confirm_client_ip, created_at, updated_at, poll_token FROM web_login_sessions
 WHERE code = $1
 LIMIT 1;
 
 -- name: GetWebLoginSessionByPollToken :one
-SELECT * FROM web_login_sessions
+SELECT id, code, status, user_id, expires_at, confirmed_at, consumed_at, web_user_agent, web_client_ip, confirm_client_ip, created_at, updated_at, poll_token FROM web_login_sessions
 WHERE poll_token = $1
 LIMIT 1;
 

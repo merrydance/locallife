@@ -301,7 +301,7 @@ func (q *Queries) GetRiderForUpdate(ctx context.Context, id int64) (Rider, error
 }
 
 const listNearbyRiders = `-- name: ListNearbyRiders :many
-SELECT id, user_id, real_name, id_card_no, phone, deposit_amount, frozen_deposit, status, is_online, credit_score, current_longitude, current_latitude, location_updated_at, total_orders, total_earnings, online_duration, created_at, updated_at, region_id, application_id, 
+SELECT id, user_id, real_name, id_card_no, phone, deposit_amount, frozen_deposit, status, is_online, credit_score, current_longitude, current_latitude, location_updated_at, total_orders, total_earnings, online_duration, created_at, updated_at, region_id, application_id,
     (6371000 * acos(
         LEAST(1::float8, GREATEST(-1::float8,
             cos(radians($1::float8)) * cos(radians(current_latitude::float8)) * 

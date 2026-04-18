@@ -11,11 +11,11 @@ INSERT INTO regions (
 ) RETURNING *;
 
 -- name: GetRegion :one
-SELECT * FROM regions
+SELECT id, code, name, level, parent_id, longitude, latitude, created_at, qweather_location_id, status FROM regions
 WHERE id = $1 LIMIT 1;
 
 -- name: GetRegionByCode :one
-SELECT * FROM regions
+SELECT id, code, name, level, parent_id, longitude, latitude, created_at, qweather_location_id, status FROM regions
 WHERE code = $1 LIMIT 1;
 
 -- name: GetRegionByProviderCode :one
@@ -40,15 +40,15 @@ DO UPDATE SET
 RETURNING *;
 
 -- name: GetRegionByNameAndLevel :one
-SELECT * FROM regions
+SELECT id, code, name, level, parent_id, longitude, latitude, created_at, qweather_location_id, status FROM regions
 WHERE name = $1 AND level = $2 LIMIT 1;
 
 -- name: GetRegionByNameAndParent :one
-SELECT * FROM regions
+SELECT id, code, name, level, parent_id, longitude, latitude, created_at, qweather_location_id, status FROM regions
 WHERE name = $1 AND parent_id = $2 LIMIT 1;
 
 -- name: ListRegions :many
-SELECT * FROM regions
+SELECT id, code, name, level, parent_id, longitude, latitude, created_at, qweather_location_id, status FROM regions
 WHERE 
   CASE 
     WHEN sqlc.narg(parent_id)::bigint IS NULL THEN TRUE
@@ -63,12 +63,12 @@ LIMIT $1
 OFFSET $2;
 
 -- name: ListRegionChildren :many
-SELECT * FROM regions
+SELECT id, code, name, level, parent_id, longitude, latitude, created_at, qweather_location_id, status FROM regions
 WHERE parent_id = $1
 ORDER BY id;
 
 -- name: SearchRegionsByName :many
-SELECT * FROM regions
+SELECT id, code, name, level, parent_id, longitude, latitude, created_at, qweather_location_id, status FROM regions
 WHERE name LIKE '%' || $1 || '%'
 ORDER BY level, id
 LIMIT $2;
@@ -145,7 +145,7 @@ OFFSET $2;
 
 -- name: GetClosestRegion :one
 -- 根据经纬度获取最近的区县级区域
-SELECT * FROM regions
+SELECT id, code, name, level, parent_id, longitude, latitude, created_at, qweather_location_id, status FROM regions
 WHERE level IN (3, 4)
   AND longitude IS NOT NULL
   AND latitude IS NOT NULL

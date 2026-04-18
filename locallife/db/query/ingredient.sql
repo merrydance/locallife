@@ -14,11 +14,11 @@ INSERT INTO ingredients (
 ) RETURNING *;
 
 -- name: GetIngredient :one
-SELECT * FROM ingredients
+SELECT id, name, is_system, category, is_allergen, created_by, created_at FROM ingredients
 WHERE id = $1 LIMIT 1;
 
 -- name: ListIngredients :many
-SELECT * FROM ingredients
+SELECT id, name, is_system, category, is_allergen, created_by, created_at FROM ingredients
 WHERE 
   (sqlc.narg('is_system')::boolean IS NULL OR is_system = sqlc.narg('is_system'))
   AND (sqlc.narg('category')::text IS NULL OR category = sqlc.narg('category'))
@@ -27,7 +27,7 @@ ORDER BY is_system DESC, name ASC
 LIMIT $1 OFFSET $2;
 
 -- name: SearchIngredients :many
-SELECT * FROM ingredients
+SELECT id, name, is_system, category, is_allergen, created_by, created_at FROM ingredients
 WHERE name ILIKE '%' || $1 || '%'
 ORDER BY is_system DESC, name ASC
 LIMIT $2 OFFSET $3;

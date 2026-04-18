@@ -111,12 +111,12 @@ INSERT INTO rider_profiles (
 ) RETURNING *;
 
 -- name: GetRiderProfile :one
-SELECT * FROM rider_profiles
+SELECT id, rider_id, total_deliveries, completed_deliveries, on_time_deliveries, delayed_deliveries, cancelled_deliveries, total_damage_incidents, customer_complaints, timeout_incidents, recent_7d_damages, recent_7d_delays, recent_30d_damages, recent_30d_delays, recent_30d_complaints, recent_90d_damages, recent_90d_delays, total_online_hours, is_suspended, suspend_reason, suspended_at, suspend_until, updated_at FROM rider_profiles
 WHERE rider_id = $1
 LIMIT 1;
 
 -- name: GetRiderProfileForUpdate :one
-SELECT * FROM rider_profiles
+SELECT id, rider_id, total_deliveries, completed_deliveries, on_time_deliveries, delayed_deliveries, cancelled_deliveries, total_damage_incidents, customer_complaints, timeout_incidents, recent_7d_damages, recent_7d_delays, recent_30d_damages, recent_30d_delays, recent_30d_complaints, recent_90d_damages, recent_90d_delays, total_online_hours, is_suspended, suspend_reason, suspended_at, suspend_until, updated_at FROM rider_profiles
 WHERE rider_id = $1
 LIMIT 1
 FOR UPDATE;
@@ -203,37 +203,37 @@ INSERT INTO claims (
 ) RETURNING *;
 
 -- name: GetClaim :one
-SELECT * FROM claims
+SELECT id, order_id, user_id, claim_type, description, claim_amount, approved_amount, status, approval_type, is_malicious, lookback_result, auto_approval_reason, rejection_reason, reviewer_id, review_notes, created_at, reviewed_at, paid_at, decision_version, decision_reason FROM claims
 WHERE id = $1
 LIMIT 1;
 
 -- name: GetClaimForUpdate :one
-SELECT * FROM claims
+SELECT id, order_id, user_id, claim_type, description, claim_amount, approved_amount, status, approval_type, is_malicious, lookback_result, auto_approval_reason, rejection_reason, reviewer_id, review_notes, created_at, reviewed_at, paid_at, decision_version, decision_reason FROM claims
 WHERE id = $1
 LIMIT 1
 FOR UPDATE;
 
 -- name: ListUserClaims :many
-SELECT * FROM claims
+SELECT id, order_id, user_id, claim_type, description, claim_amount, approved_amount, status, approval_type, is_malicious, lookback_result, auto_approval_reason, rejection_reason, reviewer_id, review_notes, created_at, reviewed_at, paid_at, decision_version, decision_reason FROM claims
 WHERE user_id = $1
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3;
 
 -- name: ListUserClaimsInPeriod :many
-SELECT * FROM claims
+SELECT id, order_id, user_id, claim_type, description, claim_amount, approved_amount, status, approval_type, is_malicious, lookback_result, auto_approval_reason, rejection_reason, reviewer_id, review_notes, created_at, reviewed_at, paid_at, decision_version, decision_reason FROM claims
 WHERE user_id = $1
   AND created_at >= $2
 ORDER BY created_at DESC;
 
 -- name: ListMerchantClaims :many
-SELECT c.* FROM claims c
+SELECT c.id, c.order_id, c.user_id, c.claim_type, c.description, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at, c.decision_version, c.decision_reason FROM claims c
 JOIN orders o ON c.order_id = o.id
 WHERE o.merchant_id = $1
   AND c.created_at >= $2
 ORDER BY c.created_at DESC;
 
 -- name: ListRiderClaims :many
-SELECT c.* FROM claims c
+SELECT c.id, c.order_id, c.user_id, c.claim_type, c.description, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at, c.decision_version, c.decision_reason FROM claims c
 JOIN orders o ON c.order_id = o.id
 JOIN deliveries d ON o.id = d.order_id
 WHERE d.rider_id = $1
@@ -241,7 +241,7 @@ WHERE d.rider_id = $1
 ORDER BY c.created_at DESC;
 
 -- name: GetUserRecentClaims :many
-SELECT * FROM claims
+SELECT id, order_id, user_id, claim_type, description, claim_amount, approved_amount, status, approval_type, is_malicious, lookback_result, auto_approval_reason, rejection_reason, reviewer_id, review_notes, created_at, reviewed_at, paid_at, decision_version, decision_reason FROM claims
 WHERE user_id = $1
   AND created_at >= NOW() - INTERVAL '30 days'
 ORDER BY created_at DESC
@@ -277,13 +277,13 @@ SET paid_at = COALESCE(paid_at, $2)
 WHERE id = $1;
 
 -- name: GetPendingClaims :many
-SELECT * FROM claims
+SELECT id, order_id, user_id, claim_type, description, claim_amount, approved_amount, status, approval_type, is_malicious, lookback_result, auto_approval_reason, rejection_reason, reviewer_id, review_notes, created_at, reviewed_at, paid_at, decision_version, decision_reason FROM claims
 WHERE status = 'pending'
 ORDER BY created_at ASC
 LIMIT $1;
 
 -- name: GetMaliciousClaims :many
-SELECT * FROM claims
+SELECT id, order_id, user_id, claim_type, description, claim_amount, approved_amount, status, approval_type, is_malicious, lookback_result, auto_approval_reason, rejection_reason, reviewer_id, review_notes, created_at, reviewed_at, paid_at, decision_version, decision_reason FROM claims
 WHERE is_malicious = true
   AND created_at >= $1
 ORDER BY created_at DESC;
@@ -312,18 +312,18 @@ INSERT INTO food_safety_incidents (
 ) RETURNING *;
 
 -- name: GetFoodSafetyIncident :one
-SELECT * FROM food_safety_incidents
+SELECT id, order_id, merchant_id, user_id, incident_type, description, order_snapshot, merchant_snapshot, rider_snapshot, status, investigation_report, resolution, created_at, resolved_at FROM food_safety_incidents
 WHERE id = $1
 LIMIT 1;
 
 -- name: ListMerchantFoodSafetyIncidents :many
-SELECT * FROM food_safety_incidents
+SELECT id, order_id, merchant_id, user_id, incident_type, description, order_snapshot, merchant_snapshot, rider_snapshot, status, investigation_report, resolution, created_at, resolved_at FROM food_safety_incidents
 WHERE merchant_id = $1
   AND created_at >= $2
 ORDER BY created_at DESC;
 
 -- name: GetMerchantRecentFoodSafetyReports :many
-SELECT * FROM food_safety_incidents
+SELECT id, order_id, merchant_id, user_id, incident_type, description, order_snapshot, merchant_snapshot, rider_snapshot, status, investigation_report, resolution, created_at, resolved_at FROM food_safety_incidents
 WHERE merchant_id = $1
   AND created_at >= NOW() - INTERVAL '1 hour'
 ORDER BY created_at DESC;
@@ -337,7 +337,7 @@ SET status = $2,
 WHERE id = $1;
 
 -- name: GetActiveFoodSafetyIncidents :many
-SELECT * FROM food_safety_incidents
+SELECT id, order_id, merchant_id, user_id, incident_type, description, order_snapshot, merchant_snapshot, rider_snapshot, status, investigation_report, resolution, created_at, resolved_at FROM food_safety_incidents
 WHERE status IN ('reported', 'investigating', 'merchant-suspended')
 ORDER BY created_at DESC
 LIMIT $1;
@@ -369,19 +369,19 @@ INSERT INTO fraud_patterns (
 ) RETURNING *;
 
 -- name: GetFraudPattern :one
-SELECT * FROM fraud_patterns
+SELECT id, pattern_type, related_user_ids, related_order_ids, related_claim_ids, device_fingerprints, address_ids, ip_addresses, pattern_description, match_count, is_confirmed, reviewer_id, review_notes, action_taken, detected_at, reviewed_at, confirmed_at FROM fraud_patterns
 WHERE id = $1
 LIMIT 1;
 
 -- name: ListFraudPatterns :many
-SELECT * FROM fraud_patterns
+SELECT id, pattern_type, related_user_ids, related_order_ids, related_claim_ids, device_fingerprints, address_ids, ip_addresses, pattern_description, match_count, is_confirmed, reviewer_id, review_notes, action_taken, detected_at, reviewed_at, confirmed_at FROM fraud_patterns
 WHERE pattern_type = sqlc.narg('pattern_type')
   AND detected_at >= sqlc.narg('from_date')
 ORDER BY detected_at DESC
 LIMIT $1 OFFSET $2;
 
 -- name: GetUnconfirmedFraudPatterns :many
-SELECT * FROM fraud_patterns
+SELECT id, pattern_type, related_user_ids, related_order_ids, related_claim_ids, device_fingerprints, address_ids, ip_addresses, pattern_description, match_count, is_confirmed, reviewer_id, review_notes, action_taken, detected_at, reviewed_at, confirmed_at FROM fraud_patterns
 WHERE is_confirmed = false
 ORDER BY match_count DESC, detected_at DESC
 LIMIT $1;
@@ -401,12 +401,12 @@ SET reviewer_id = $2,
 WHERE id = $1;
 
 -- name: GetFraudPatternsByUsers :many
-SELECT * FROM fraud_patterns
+SELECT id, pattern_type, related_user_ids, related_order_ids, related_claim_ids, device_fingerprints, address_ids, ip_addresses, pattern_description, match_count, is_confirmed, reviewer_id, review_notes, action_taken, detected_at, reviewed_at, confirmed_at FROM fraud_patterns
 WHERE related_user_ids && $1::bigint[]
 ORDER BY detected_at DESC;
 
 -- name: GetFraudPatternsByDevice :many
-SELECT * FROM fraud_patterns
+SELECT id, pattern_type, related_user_ids, related_order_ids, related_claim_ids, device_fingerprints, address_ids, ip_addresses, pattern_description, match_count, is_confirmed, reviewer_id, review_notes, action_taken, detected_at, reviewed_at, confirmed_at FROM fraud_patterns
 WHERE device_fingerprints && $1::text[]
   AND detected_at >= $2
 ORDER BY detected_at DESC;
@@ -453,7 +453,7 @@ FROM user_devices
 WHERE device_fingerprint = $1;
 
 -- name: GetDevicesByUserID :many
-SELECT *
+SELECT id, user_id, device_id, device_type, device_model, os_version, app_version, user_agent, ip_address, last_login_at, created_at, first_seen, last_seen, updated_at, device_fingerprint
 FROM user_devices
 WHERE user_id = $1
 ORDER BY last_seen DESC;
@@ -505,7 +505,7 @@ LIMIT 50;
 
 -- name: ListClaimsByTimeWindow :many
 -- 查询指定时间窗口内的索赔（用于协同欺诈检测）
-SELECT c.*, o.address_id
+SELECT c.id, c.order_id, c.user_id, c.claim_type, c.description, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at, c.decision_version, c.decision_reason, o.address_id
 FROM claims c
 JOIN orders o ON c.order_id = o.id
 WHERE c.created_at >= sqlc.arg('start_at')
@@ -515,7 +515,7 @@ ORDER BY c.created_at DESC;
 
 -- name: GetClaimsWithSameAddress :many
 -- 查询使用相同配送地址的索赔
-SELECT DISTINCT c.*, c.user_id
+SELECT DISTINCT c.id, c.order_id, c.user_id, c.claim_type, c.description, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at, c.decision_version, c.decision_reason, c.user_id
 FROM claims c
 JOIN orders o ON c.order_id = o.id
 WHERE o.address_id = $1
@@ -536,7 +536,7 @@ WHERE created_at >= sqlc.arg('start_at')
 
 -- name: GetClaimsByFraudPattern :many
 -- 获取欺诈模式关联的所有索赔详情
-SELECT c.*, o.merchant_id, d.rider_id
+SELECT c.id, c.order_id, c.user_id, c.claim_type, c.description, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at, c.decision_version, c.decision_reason, o.merchant_id, d.rider_id
 FROM claims c
 JOIN orders o ON c.order_id = o.id
 LEFT JOIN deliveries d ON o.id = d.order_id
@@ -567,7 +567,7 @@ GROUP BY d.rider_id;
 
 -- name: GetClaimWithDetails :one
 -- 获取索赔详情（包含订单、商户、用户信息）
-SELECT c.*,
+SELECT c.id, c.order_id, c.user_id, c.claim_type, c.description, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at, c.decision_version, c.decision_reason,
        o.order_no,
        o.merchant_id,
        o.total_amount as order_amount,
@@ -604,7 +604,7 @@ WHERE user_id = $1
 
 -- name: GetUserClaimWarningStatus :one
 -- 获取用户索赔警告状态
-SELECT * FROM user_claim_warnings
+SELECT id, user_id, warning_count, last_warning_at, last_warning_reason, requires_evidence, platform_pay_count, created_at, updated_at FROM user_claim_warnings
 WHERE user_id = $1
 LIMIT 1;
 
@@ -678,7 +678,7 @@ WHERE o.merchant_id = $1
 
 -- name: ListMerchantClaimsByTypeInPeriod :many
 -- 获取商户在指定时间窗口内特定类型的索赔列表
-SELECT c.*
+SELECT c.id, c.order_id, c.user_id, c.claim_type, c.description, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at, c.decision_version, c.decision_reason
 FROM claims c
 JOIN orders o ON c.order_id = o.id
 WHERE o.merchant_id = $1

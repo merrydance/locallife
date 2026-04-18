@@ -7,11 +7,11 @@ INSERT INTO operator_region_applications (
 RETURNING *;
 
 -- name: GetOperatorRegionApplication :one
-SELECT * FROM operator_region_applications
+SELECT id, operator_id, region_id, status, reject_reason, created_at, updated_at FROM operator_region_applications
 WHERE id = $1 LIMIT 1;
 
 -- name: GetOperatorRegionApplicationByOperatorAndRegion :one
-SELECT * FROM operator_region_applications
+SELECT id, operator_id, region_id, status, reject_reason, created_at, updated_at FROM operator_region_applications
 WHERE operator_id = $1 AND region_id = $2 LIMIT 1;
 
 -- name: ListOperatorRegionApplicationsByOperator :many

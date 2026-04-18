@@ -14,12 +14,12 @@ INSERT INTO daily_inventory (
 ) RETURNING *;
 
 -- name: GetDailyInventory :one
-SELECT * FROM daily_inventory
+SELECT id, merchant_id, dish_id, date, total_quantity, sold_quantity, created_at, updated_at, reserved_quantity FROM daily_inventory
 WHERE merchant_id = $1 AND dish_id = $2 AND date = $3
 LIMIT 1;
 
 -- name: GetDailyInventoryForUpdate :one
-SELECT * FROM daily_inventory
+SELECT id, merchant_id, dish_id, date, total_quantity, sold_quantity, created_at, updated_at, reserved_quantity FROM daily_inventory
 WHERE merchant_id = $1 AND dish_id = $2 AND date = $3
 LIMIT 1
 FOR UPDATE;
@@ -48,7 +48,7 @@ WHERE
 ORDER BY d.name ASC;
 
 -- name: ListDailyInventoryByDate :many
-SELECT * FROM daily_inventory
+SELECT id, merchant_id, dish_id, date, total_quantity, sold_quantity, created_at, updated_at, reserved_quantity FROM daily_inventory
 WHERE date = $1
 ORDER BY merchant_id ASC, dish_id ASC;
 

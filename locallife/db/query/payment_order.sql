@@ -26,61 +26,61 @@ INSERT INTO payment_orders (
 ) RETURNING *;
 
 -- name: GetPaymentOrder :one
-SELECT * FROM payment_orders
+SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at, payment_channel, requires_profit_sharing FROM payment_orders
 WHERE id = $1 LIMIT 1;
 
 -- name: GetPaymentOrderForUpdate :one
-SELECT * FROM payment_orders
+SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at, payment_channel, requires_profit_sharing FROM payment_orders
 WHERE id = $1 LIMIT 1
 FOR UPDATE;
 
 -- name: GetPaymentOrderByOutTradeNo :one
-SELECT * FROM payment_orders
+SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at, payment_channel, requires_profit_sharing FROM payment_orders
 WHERE out_trade_no = $1 LIMIT 1;
 
 -- name: GetPaymentOrderByTransactionId :one
-SELECT * FROM payment_orders
+SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at, payment_channel, requires_profit_sharing FROM payment_orders
 WHERE transaction_id = $1 LIMIT 1;
 
 -- name: GetPaymentOrdersByOrder :many
-SELECT * FROM payment_orders
+SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at, payment_channel, requires_profit_sharing FROM payment_orders
 WHERE order_id = $1
 ORDER BY created_at DESC;
 
 -- name: GetPaymentOrdersByReservation :many
-SELECT * FROM payment_orders
+SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at, payment_channel, requires_profit_sharing FROM payment_orders
 WHERE reservation_id = $1
 ORDER BY created_at DESC;
 
 -- name: GetLatestPaymentOrderByReservation :one
-SELECT * FROM payment_orders
+SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at, payment_channel, requires_profit_sharing FROM payment_orders
 WHERE reservation_id = $1
     AND business_type = $2
 ORDER BY created_at DESC
 LIMIT 1;
 
 -- name: GetLatestPaymentOrderByOrder :one
-SELECT * FROM payment_orders
+SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at, payment_channel, requires_profit_sharing FROM payment_orders
 WHERE order_id = $1
     AND business_type = $2
 ORDER BY created_at DESC
 LIMIT 1;
 
 -- name: GetLatestPaymentOrderByBusinessTypeAndAttach :one
-SELECT * FROM payment_orders
+SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at, payment_channel, requires_profit_sharing FROM payment_orders
 WHERE business_type = $1
     AND attach = $2
 ORDER BY created_at DESC
 LIMIT 1;
 
 -- name: ListPaymentOrdersByUser :many
-SELECT * FROM payment_orders
+SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at, payment_channel, requires_profit_sharing FROM payment_orders
 WHERE user_id = $1
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3;
 
 -- name: ListPaymentLedgerEntriesByUser :many
-SELECT *
+SELECT id, entry_type, payment_order_id, refund_order_id, order_id, business_type, amount, status, occurred_at, created_at
 FROM (
     SELECT
         po.id AS id,
@@ -132,7 +132,7 @@ FROM (
 ) AS ledger_entries;
 
 -- name: ListPaymentOrdersByUserAndStatus :many
-SELECT * FROM payment_orders
+SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at, payment_channel, requires_profit_sharing FROM payment_orders
 WHERE user_id = $1 AND status = $2
 ORDER BY created_at DESC
 LIMIT $3 OFFSET $4;
@@ -177,13 +177,13 @@ WHERE id = $1
 RETURNING *;
 
 -- name: ListExpiredPaymentOrders :many
-SELECT * FROM payment_orders
+SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at, payment_channel, requires_profit_sharing FROM payment_orders
 WHERE status = 'pending' AND expires_at < now()
 ORDER BY created_at
 LIMIT $1;
 
 -- name: ListPaidUnprocessedPaymentOrders :many
-SELECT * FROM payment_orders
+SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at, payment_channel, requires_profit_sharing FROM payment_orders
 WHERE status = 'paid'
     AND processed_at IS NULL
     AND paid_at <= $1
@@ -208,7 +208,7 @@ SET status = 'closed'
 WHERE status = 'pending' AND expires_at < now();
 
 -- name: ListPaidUnrefundedPaymentOrders :many
-SELECT po.*
+SELECT po.id, po.order_id, po.reservation_id, po.user_id, po.payment_type, po.business_type, po.amount, po.out_trade_no, po.transaction_id, po.prepay_id, po.status, po.paid_at, po.created_at, po.expires_at, po.attach, po.combined_payment_id, po.processed_at, po.payment_channel, po.requires_profit_sharing
 FROM payment_orders po
 JOIN orders o ON po.order_id = o.id
 WHERE 
@@ -225,7 +225,7 @@ ORDER BY po.created_at
 LIMIT $1;
 
 -- name: ListPaidUnrefundedReservationPaymentOrders :many
-SELECT po.*
+SELECT po.id, po.order_id, po.reservation_id, po.user_id, po.payment_type, po.business_type, po.amount, po.out_trade_no, po.transaction_id, po.prepay_id, po.status, po.paid_at, po.created_at, po.expires_at, po.attach, po.combined_payment_id, po.processed_at, po.payment_channel, po.requires_profit_sharing
 FROM payment_orders po
 JOIN table_reservations r ON po.reservation_id = r.id
 WHERE 
@@ -242,7 +242,7 @@ ORDER BY po.created_at
 LIMIT $1;
 
 -- name: GetPendingPaymentOrderByUserAndBusinessType :one
-SELECT * FROM payment_orders
+SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at, payment_channel, requires_profit_sharing FROM payment_orders
 WHERE user_id = $1
     AND business_type = $2
     AND amount = $3

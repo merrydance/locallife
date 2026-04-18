@@ -20,17 +20,17 @@ INSERT INTO table_reservations (
 ) RETURNING *;
 
 -- name: GetTableReservation :one
-SELECT * FROM table_reservations
+SELECT id, table_id, user_id, merchant_id, reservation_date, reservation_time, guest_count, contact_name, contact_phone, payment_mode, deposit_amount, prepaid_amount, refund_deadline, status, payment_deadline, notes, paid_at, confirmed_at, completed_at, cancelled_at, cancel_reason, created_at, updated_at, checked_in_at, cooking_started_at, source FROM table_reservations
 WHERE id = $1 LIMIT 1;
 
 -- name: GetTableReservationForUpdate :one
-SELECT * FROM table_reservations
+SELECT id, table_id, user_id, merchant_id, reservation_date, reservation_time, guest_count, contact_name, contact_phone, payment_mode, deposit_amount, prepaid_amount, refund_deadline, status, payment_deadline, notes, paid_at, confirmed_at, completed_at, cancelled_at, cancel_reason, created_at, updated_at, checked_in_at, cooking_started_at, source FROM table_reservations
 WHERE id = $1 LIMIT 1
 FOR UPDATE;
 
 -- name: GetTableReservationWithTable :one
 SELECT 
-    tr.*,
+  tr.id, tr.table_id, tr.user_id, tr.merchant_id, tr.reservation_date, tr.reservation_time, tr.guest_count, tr.contact_name, tr.contact_phone, tr.payment_mode, tr.deposit_amount, tr.prepaid_amount, tr.refund_deadline, tr.status, tr.payment_deadline, tr.notes, tr.paid_at, tr.confirmed_at, tr.completed_at, tr.cancelled_at, tr.cancel_reason, tr.created_at, tr.updated_at, tr.checked_in_at, tr.cooking_started_at, tr.source,
     t.table_no,
     t.table_type,
     t.capacity
@@ -41,7 +41,7 @@ WHERE tr.id = $1;
 -- name: ListReservationsByUserWithStatus :many
 -- 用户预订列表：只返回在线预订（source = 'online' 或 NULL），不包括商户代客创建的预订
 SELECT 
-    tr.*,
+  tr.id, tr.table_id, tr.user_id, tr.merchant_id, tr.reservation_date, tr.reservation_time, tr.guest_count, tr.contact_name, tr.contact_phone, tr.payment_mode, tr.deposit_amount, tr.prepaid_amount, tr.refund_deadline, tr.status, tr.payment_deadline, tr.notes, tr.paid_at, tr.confirmed_at, tr.completed_at, tr.cancelled_at, tr.cancel_reason, tr.created_at, tr.updated_at, tr.checked_in_at, tr.cooking_started_at, tr.source,
     t.table_no,
     t.table_type
 FROM table_reservations tr
@@ -65,7 +65,7 @@ LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
 -- name: ListReservationsByMerchant :many
 SELECT 
-    tr.*,
+  tr.id, tr.table_id, tr.user_id, tr.merchant_id, tr.reservation_date, tr.reservation_time, tr.guest_count, tr.contact_name, tr.contact_phone, tr.payment_mode, tr.deposit_amount, tr.prepaid_amount, tr.refund_deadline, tr.status, tr.payment_deadline, tr.notes, tr.paid_at, tr.confirmed_at, tr.completed_at, tr.cancelled_at, tr.cancel_reason, tr.created_at, tr.updated_at, tr.checked_in_at, tr.cooking_started_at, tr.source,
     t.table_no,
     t.table_type
 FROM table_reservations tr
@@ -76,7 +76,7 @@ LIMIT $2 OFFSET $3;
 
 -- name: ListReservationsByMerchantAndDate :many
 SELECT 
-    tr.*,
+  tr.id, tr.table_id, tr.user_id, tr.merchant_id, tr.reservation_date, tr.reservation_time, tr.guest_count, tr.contact_name, tr.contact_phone, tr.payment_mode, tr.deposit_amount, tr.prepaid_amount, tr.refund_deadline, tr.status, tr.payment_deadline, tr.notes, tr.paid_at, tr.confirmed_at, tr.completed_at, tr.cancelled_at, tr.cancel_reason, tr.created_at, tr.updated_at, tr.checked_in_at, tr.cooking_started_at, tr.source,
     t.table_no,
     t.table_type
 FROM table_reservations tr
@@ -87,7 +87,7 @@ ORDER BY tr.reservation_time, t.table_no;
 
 -- name: ListReservationsByMerchantAndStatus :many
 SELECT 
-    tr.*,
+  tr.id, tr.table_id, tr.user_id, tr.merchant_id, tr.reservation_date, tr.reservation_time, tr.guest_count, tr.contact_name, tr.contact_phone, tr.payment_mode, tr.deposit_amount, tr.prepaid_amount, tr.refund_deadline, tr.status, tr.payment_deadline, tr.notes, tr.paid_at, tr.confirmed_at, tr.completed_at, tr.cancelled_at, tr.cancel_reason, tr.created_at, tr.updated_at, tr.checked_in_at, tr.cooking_started_at, tr.source,
     t.table_no,
     t.table_type
 FROM table_reservations tr
@@ -98,13 +98,13 @@ ORDER BY tr.reservation_date, tr.reservation_time
 LIMIT $3 OFFSET $4;
 
 -- name: ListReservationsByTable :many
-SELECT * FROM table_reservations
+SELECT id, table_id, user_id, merchant_id, reservation_date, reservation_time, guest_count, contact_name, contact_phone, payment_mode, deposit_amount, prepaid_amount, refund_deadline, status, payment_deadline, notes, paid_at, confirmed_at, completed_at, cancelled_at, cancel_reason, created_at, updated_at, checked_in_at, cooking_started_at, source FROM table_reservations
 WHERE table_id = $1
 ORDER BY reservation_date DESC, reservation_time DESC
 LIMIT $2 OFFSET $3;
 
 -- name: ListReservationsByTableAndDate :many
-SELECT * FROM table_reservations
+SELECT id, table_id, user_id, merchant_id, reservation_date, reservation_time, guest_count, contact_name, contact_phone, payment_mode, deposit_amount, prepaid_amount, refund_deadline, status, payment_deadline, notes, paid_at, confirmed_at, completed_at, cancelled_at, cancel_reason, created_at, updated_at, checked_in_at, cooking_started_at, source FROM table_reservations
 WHERE table_id = $1 
   AND reservation_date = $2
 ORDER BY reservation_time;
@@ -182,14 +182,14 @@ RETURNING *;
 
 -- name: ListExpiredPendingReservations :many
 -- Find pending reservations that have passed their payment deadline
-SELECT * FROM table_reservations
+SELECT id, table_id, user_id, merchant_id, reservation_date, reservation_time, guest_count, contact_name, contact_phone, payment_mode, deposit_amount, prepaid_amount, refund_deadline, status, payment_deadline, notes, paid_at, confirmed_at, completed_at, cancelled_at, cancel_reason, created_at, updated_at, checked_in_at, cooking_started_at, source FROM table_reservations
 WHERE status = 'pending'
   AND payment_deadline < now()
 ORDER BY payment_deadline;
 
 -- name: ListPendingReservationsNearDeadline :many
 -- Find pending reservations within N minutes of payment deadline (for reminder notifications)
-SELECT * FROM table_reservations
+SELECT id, table_id, user_id, merchant_id, reservation_date, reservation_time, guest_count, contact_name, contact_phone, payment_mode, deposit_amount, prepaid_amount, refund_deadline, status, payment_deadline, notes, paid_at, confirmed_at, completed_at, cancelled_at, cancel_reason, created_at, updated_at, checked_in_at, cooking_started_at, source FROM table_reservations
 WHERE status = 'pending'
   AND payment_deadline > now()
   AND payment_deadline < now() + sqlc.arg(minutes_before)::interval
@@ -250,7 +250,7 @@ WHERE merchant_id = $1
 
 -- name: ListMerchantFutureReservationsForRefund :many
 -- 获取商户未来预订列表（用于熔断后退款处理）
-SELECT * FROM table_reservations
+SELECT id, table_id, user_id, merchant_id, reservation_date, reservation_time, guest_count, contact_name, contact_phone, payment_mode, deposit_amount, prepaid_amount, refund_deadline, status, payment_deadline, notes, paid_at, confirmed_at, completed_at, cancelled_at, cancel_reason, created_at, updated_at, checked_in_at, cooking_started_at, source FROM table_reservations
 WHERE merchant_id = $1 
   AND reservation_date >= CURRENT_DATE
   AND status IN ('pending', 'paid', 'confirmed')
@@ -337,7 +337,7 @@ WHERE merchant_id = $1;
 -- name: ListTodayReservationsByMerchant :many
 -- 获取今日预订列表
 SELECT 
-    tr.*,
+  tr.id, tr.table_id, tr.user_id, tr.merchant_id, tr.reservation_date, tr.reservation_time, tr.guest_count, tr.contact_name, tr.contact_phone, tr.payment_mode, tr.deposit_amount, tr.prepaid_amount, tr.refund_deadline, tr.status, tr.payment_deadline, tr.notes, tr.paid_at, tr.confirmed_at, tr.completed_at, tr.cancelled_at, tr.cancel_reason, tr.created_at, tr.updated_at, tr.checked_in_at, tr.cooking_started_at, tr.source,
     t.table_no,
     t.table_type
 FROM table_reservations tr

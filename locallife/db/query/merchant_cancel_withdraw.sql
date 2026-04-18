@@ -24,19 +24,19 @@ INSERT INTO merchant_cancel_withdraw_applications (
 ) RETURNING *;
 
 -- name: GetMerchantCancelWithdrawApplication :one
-SELECT * FROM merchant_cancel_withdraw_applications
+SELECT id, merchant_id, created_by_user_id, sub_mch_id, out_request_no, applyment_id, withdraw, proof_media_asset_ids, additional_material_asset_ids, remark, local_sync_state, cancel_state, cancel_state_description, withdraw_state, withdraw_state_description, confirm_cancel_url, account_info, account_withdraw_result, latest_query_response, last_error, modify_time, submitted_at, last_query_at, created_at, updated_at, business_license_status_declaration FROM merchant_cancel_withdraw_applications
 WHERE id = $1 LIMIT 1;
 
 -- name: GetMerchantCancelWithdrawApplicationByOutRequestNo :one
-SELECT * FROM merchant_cancel_withdraw_applications
+SELECT id, merchant_id, created_by_user_id, sub_mch_id, out_request_no, applyment_id, withdraw, proof_media_asset_ids, additional_material_asset_ids, remark, local_sync_state, cancel_state, cancel_state_description, withdraw_state, withdraw_state_description, confirm_cancel_url, account_info, account_withdraw_result, latest_query_response, last_error, modify_time, submitted_at, last_query_at, created_at, updated_at, business_license_status_declaration FROM merchant_cancel_withdraw_applications
 WHERE out_request_no = $1 LIMIT 1;
 
 -- name: GetMerchantCancelWithdrawApplicationByApplymentID :one
-SELECT * FROM merchant_cancel_withdraw_applications
+SELECT id, merchant_id, created_by_user_id, sub_mch_id, out_request_no, applyment_id, withdraw, proof_media_asset_ids, additional_material_asset_ids, remark, local_sync_state, cancel_state, cancel_state_description, withdraw_state, withdraw_state_description, confirm_cancel_url, account_info, account_withdraw_result, latest_query_response, last_error, modify_time, submitted_at, last_query_at, created_at, updated_at, business_license_status_declaration FROM merchant_cancel_withdraw_applications
 WHERE applyment_id = $1 LIMIT 1;
 
 -- name: ListMerchantCancelWithdrawApplicationsByMerchant :many
-SELECT * FROM merchant_cancel_withdraw_applications
+SELECT id, merchant_id, created_by_user_id, sub_mch_id, out_request_no, applyment_id, withdraw, proof_media_asset_ids, additional_material_asset_ids, remark, local_sync_state, cancel_state, cancel_state_description, withdraw_state, withdraw_state_description, confirm_cancel_url, account_info, account_withdraw_result, latest_query_response, last_error, modify_time, submitted_at, last_query_at, created_at, updated_at, business_license_status_declaration FROM merchant_cancel_withdraw_applications
 WHERE merchant_id = $1
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3;
@@ -46,7 +46,7 @@ SELECT COUNT(*) FROM merchant_cancel_withdraw_applications
 WHERE merchant_id = $1;
 
 -- name: ListPendingMerchantCancelWithdrawApplications :many
-SELECT * FROM merchant_cancel_withdraw_applications
+SELECT id, merchant_id, created_by_user_id, sub_mch_id, out_request_no, applyment_id, withdraw, proof_media_asset_ids, additional_material_asset_ids, remark, local_sync_state, cancel_state, cancel_state_description, withdraw_state, withdraw_state_description, confirm_cancel_url, account_info, account_withdraw_result, latest_query_response, last_error, modify_time, submitted_at, last_query_at, created_at, updated_at, business_license_status_declaration FROM merchant_cancel_withdraw_applications
 WHERE local_sync_state IN ('submit_succeeded', 'submit_unknown')
     AND COALESCE(cancel_state, '') NOT IN ('REJECTED', 'REVOKED', 'CANCELED', 'FINISH')
 ORDER BY COALESCE(last_query_at, created_at) ASC, id ASC

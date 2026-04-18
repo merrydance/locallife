@@ -27,11 +27,11 @@ INSERT INTO order_items (
 );
 
 -- name: GetOrderItem :one
-SELECT * FROM order_items
+SELECT id, order_id, dish_id, combo_id, name, unit_price, quantity, subtotal, customizations, created_at FROM order_items
 WHERE id = $1 LIMIT 1;
 
 -- name: ListOrderItemsByOrder :many
-SELECT * FROM order_items
+SELECT id, order_id, dish_id, combo_id, name, unit_price, quantity, subtotal, customizations, created_at FROM order_items
 WHERE order_id = $1
 ORDER BY id;
 

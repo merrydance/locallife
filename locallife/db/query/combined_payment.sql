@@ -12,16 +12,16 @@ INSERT INTO combined_payment_orders (
 ) RETURNING *;
 
 -- name: GetCombinedPaymentOrder :one
-SELECT * FROM combined_payment_orders
+SELECT id, user_id, combine_out_trade_no, total_amount, prepay_id, transaction_id, status, paid_at, created_at, expires_at FROM combined_payment_orders
 WHERE id = $1 LIMIT 1;
 
 -- name: GetCombinedPaymentOrderForUpdate :one
-SELECT * FROM combined_payment_orders
+SELECT id, user_id, combine_out_trade_no, total_amount, prepay_id, transaction_id, status, paid_at, created_at, expires_at FROM combined_payment_orders
 WHERE id = $1 LIMIT 1
 FOR UPDATE;
 
 -- name: GetCombinedPaymentOrderByOutTradeNo :one
-SELECT * FROM combined_payment_orders
+SELECT id, user_id, combine_out_trade_no, total_amount, prepay_id, transaction_id, status, paid_at, created_at, expires_at FROM combined_payment_orders
 WHERE combine_out_trade_no = $1 LIMIT 1;
 
 -- name: UpdateCombinedPaymentOrderPrepay :one
@@ -52,14 +52,14 @@ WHERE id = $1 AND status = 'pending'
 RETURNING *;
 
 -- name: ListUserCombinedPaymentOrders :many
-SELECT * FROM combined_payment_orders
+SELECT id, user_id, combine_out_trade_no, total_amount, prepay_id, transaction_id, status, paid_at, created_at, expires_at FROM combined_payment_orders
 WHERE user_id = $1
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3;
 
 -- name: ListPendingCombinedPaymentOrders :many
 -- 查询待支付且已过期的合单（用于定时关闭）
-SELECT * FROM combined_payment_orders
+SELECT id, user_id, combine_out_trade_no, total_amount, prepay_id, transaction_id, status, paid_at, created_at, expires_at FROM combined_payment_orders
 WHERE status = 'pending'
   AND expires_at < now()
 ORDER BY created_at
@@ -82,21 +82,21 @@ INSERT INTO combined_payment_sub_orders (
 ) RETURNING *;
 
 -- name: GetCombinedPaymentSubOrder :one
-SELECT * FROM combined_payment_sub_orders
+SELECT id, combined_payment_id, order_id, merchant_id, sub_mchid, amount, out_trade_no, description, profit_sharing_status, created_at FROM combined_payment_sub_orders
 WHERE id = $1 LIMIT 1;
 
 -- name: GetCombinedPaymentSubOrderByOutTradeNo :one
-SELECT * FROM combined_payment_sub_orders
+SELECT id, combined_payment_id, order_id, merchant_id, sub_mchid, amount, out_trade_no, description, profit_sharing_status, created_at FROM combined_payment_sub_orders
 WHERE out_trade_no = $1 LIMIT 1;
 
 -- name: ListCombinedPaymentSubOrders :many
-SELECT * FROM combined_payment_sub_orders
+SELECT id, combined_payment_id, order_id, merchant_id, sub_mchid, amount, out_trade_no, description, profit_sharing_status, created_at FROM combined_payment_sub_orders
 WHERE combined_payment_id = $1
 ORDER BY created_at;
 
 -- name: ListCombinedPaymentSubOrdersWithMerchant :many
 SELECT 
-    s.*,
+    s.id, s.combined_payment_id, s.order_id, s.merchant_id, s.sub_mchid, s.amount, s.out_trade_no, s.description, s.profit_sharing_status, s.created_at,
     m.name as merchant_name,
     m.logo_media_asset_id as merchant_logo_media_asset_id,
     o.order_no
@@ -118,7 +118,7 @@ WHERE combined_payment_id = $1;
 
 -- name: GetCombinedPaymentSubOrdersByOrder :many
 -- 根据订单ID查询其所有合单子单（一个订单可能参与多次合单支付尝试）
-SELECT * FROM combined_payment_sub_orders
+SELECT id, combined_payment_id, order_id, merchant_id, sub_mchid, amount, out_trade_no, description, profit_sharing_status, created_at FROM combined_payment_sub_orders
 WHERE order_id = $1
 ORDER BY created_at DESC;
 
@@ -128,7 +128,7 @@ ORDER BY created_at DESC;
 -- name: GetCombinedPaymentOrderWithSubOrders :one
 -- 获取合单支付完整信息（主单+所有子单）
 SELECT 
-    c.*,
+    c.id, c.user_id, c.combine_out_trade_no, c.total_amount, c.prepay_id, c.transaction_id, c.status, c.paid_at, c.created_at, c.expires_at,
     COALESCE(
         json_agg(
             json_build_object(

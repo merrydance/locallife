@@ -13,17 +13,17 @@ INSERT INTO user_addresses (
 ) RETURNING *;
 
 -- name: GetUserAddress :one
-SELECT * FROM user_addresses
+SELECT id, user_id, region_id, detail_address, contact_name, contact_phone, longitude, latitude, is_default, created_at, deleted_at FROM user_addresses
 WHERE id = $1 AND deleted_at IS NULL
 LIMIT 1;
 
 -- name: ListUserAddresses :many
-SELECT * FROM user_addresses
+SELECT id, user_id, region_id, detail_address, contact_name, contact_phone, longitude, latitude, is_default, created_at, deleted_at FROM user_addresses
 WHERE user_id = $1 AND deleted_at IS NULL
 ORDER BY is_default DESC, created_at DESC;
 
 -- name: GetUserDefaultAddress :one
-SELECT * FROM user_addresses
+SELECT id, user_id, region_id, detail_address, contact_name, contact_phone, longitude, latitude, is_default, created_at, deleted_at FROM user_addresses
 WHERE user_id = $1 AND is_default = true AND deleted_at IS NULL
 LIMIT 1;
 

@@ -14,20 +14,20 @@ INSERT INTO cloud_printers (
 ) RETURNING *;
 
 -- name: GetCloudPrinter :one
-SELECT * FROM cloud_printers
+SELECT id, merchant_id, printer_name, printer_sn, printer_key, printer_type, print_takeout, print_dine_in, print_reservation, is_active, created_at, updated_at, printer_role FROM cloud_printers
 WHERE id = $1 LIMIT 1;
 
 -- name: GetCloudPrinterBySN :one
-SELECT * FROM cloud_printers
+SELECT id, merchant_id, printer_name, printer_sn, printer_key, printer_type, print_takeout, print_dine_in, print_reservation, is_active, created_at, updated_at, printer_role FROM cloud_printers
 WHERE printer_sn = $1 LIMIT 1;
 
 -- name: ListCloudPrintersByMerchant :many
-SELECT * FROM cloud_printers
+SELECT id, merchant_id, printer_name, printer_sn, printer_key, printer_type, print_takeout, print_dine_in, print_reservation, is_active, created_at, updated_at, printer_role FROM cloud_printers
 WHERE merchant_id = $1
 ORDER BY created_at;
 
 -- name: ListActiveCloudPrintersByMerchant :many
-SELECT * FROM cloud_printers
+SELECT id, merchant_id, printer_name, printer_sn, printer_key, printer_type, print_takeout, print_dine_in, print_reservation, is_active, created_at, updated_at, printer_role FROM cloud_printers
 WHERE merchant_id = $1 AND is_active = true
 ORDER BY created_at;
 

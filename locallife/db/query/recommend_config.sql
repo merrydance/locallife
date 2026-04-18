@@ -1,9 +1,9 @@
 -- name: GetRecommendConfig :one
-SELECT * FROM recommend_configs
+SELECT id, name, distance_weight, route_weight, urgency_weight, profit_weight, max_distance, max_results, is_active, created_at, updated_at FROM recommend_configs
 WHERE name = $1 LIMIT 1;
 
 -- name: GetActiveRecommendConfig :one
-SELECT * FROM recommend_configs
+SELECT id, name, distance_weight, route_weight, urgency_weight, profit_weight, max_distance, max_results, is_active, created_at, updated_at FROM recommend_configs
 WHERE is_active = true
 ORDER BY id DESC
 LIMIT 1;
@@ -37,5 +37,5 @@ WHERE id = $1
 RETURNING *;
 
 -- name: ListRecommendConfigs :many
-SELECT * FROM recommend_configs
+SELECT id, name, distance_weight, route_weight, urgency_weight, profit_weight, max_distance, max_results, is_active, created_at, updated_at FROM recommend_configs
 ORDER BY created_at DESC;

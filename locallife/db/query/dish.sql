@@ -3,7 +3,7 @@
 -- ============================================
 
 -- name: GetDishCategoryByName :one
-SELECT * FROM dish_categories
+SELECT id, name, created_at, deleted_at FROM dish_categories
 WHERE name = $1 LIMIT 1;
 
 -- name: CreateDishCategory :one
@@ -26,7 +26,7 @@ INSERT INTO merchant_dish_categories (
 RETURNING *;
 
 -- name: GetDishCategory :one
-SELECT * FROM dish_categories
+SELECT id, name, created_at, deleted_at FROM dish_categories
 WHERE id = $1 AND deleted_at IS NULL LIMIT 1;
 
 -- name: ListDishCategories :many
@@ -48,7 +48,7 @@ WHERE merchant_id = $1 AND category_id = $2
 RETURNING *;
 
 -- name: GetMerchantDishCategory :one
-SELECT * FROM merchant_dish_categories
+SELECT merchant_id, category_id, sort_order, created_at FROM merchant_dish_categories
 WHERE merchant_id = $1 AND category_id = $2;
 
 -- name: UnlinkMerchantDishCategory :exec
@@ -82,7 +82,7 @@ INSERT INTO dishes (
 ) RETURNING *;
 
 -- name: GetDish :one
-SELECT * FROM dishes
+SELECT id, merchant_id, category_id, name, description, price, member_price, is_available, is_online, sort_order, created_at, updated_at, prepare_time, deleted_at, monthly_sales, repurchase_rate, image_media_asset_id, is_packaging FROM dishes
 WHERE id = $1 AND deleted_at IS NULL LIMIT 1;
 
 -- name: GetDishWithDetails :one
@@ -162,7 +162,7 @@ ORDER BY sort_order ASC, created_at DESC
 LIMIT $2 OFFSET $3;
 
 -- name: SearchDishesByName :many
-SELECT * FROM dishes
+SELECT id, merchant_id, category_id, name, description, price, member_price, is_available, is_online, sort_order, created_at, updated_at, prepare_time, deleted_at, monthly_sales, repurchase_rate, image_media_asset_id, is_packaging FROM dishes
 WHERE 
   merchant_id = $1
   AND deleted_at IS NULL
@@ -421,7 +421,7 @@ INSERT INTO dish_customization_groups (
 ) RETURNING *;
 
 -- name: ListDishCustomizationGroups :many
-SELECT * FROM dish_customization_groups
+SELECT id, dish_id, name, is_required, sort_order, created_at FROM dish_customization_groups
 WHERE dish_id = $1
 ORDER BY sort_order ASC;
 

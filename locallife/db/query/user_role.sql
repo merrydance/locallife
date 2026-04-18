@@ -9,16 +9,16 @@ INSERT INTO user_roles (
 ) RETURNING *;
 
 -- name: GetUserRole :one
-SELECT * FROM user_roles
+SELECT id, user_id, role, status, related_entity_id, created_at FROM user_roles
 WHERE id = $1 LIMIT 1;
 
 -- name: ListUserRoles :many
-SELECT * FROM user_roles
+SELECT id, user_id, role, status, related_entity_id, created_at FROM user_roles
 WHERE user_id = $1 AND status = 'active'
 ORDER BY created_at;
 
 -- name: GetUserRoleByType :one
-SELECT * FROM user_roles
+SELECT id, user_id, role, status, related_entity_id, created_at FROM user_roles
 WHERE user_id = $1 AND role = $2
 LIMIT 1;
 

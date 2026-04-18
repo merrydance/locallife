@@ -7,15 +7,15 @@ INSERT INTO merchant_memberships (
 ) RETURNING *;
 
 -- name: GetMerchantMembership :one
-SELECT * FROM merchant_memberships
+SELECT id, merchant_id, user_id, balance, total_recharged, total_consumed, created_at, updated_at, principal_balance, bonus_balance FROM merchant_memberships
 WHERE id = $1 LIMIT 1;
 
 -- name: GetMembershipByMerchantAndUser :one
-SELECT * FROM merchant_memberships
+SELECT id, merchant_id, user_id, balance, total_recharged, total_consumed, created_at, updated_at, principal_balance, bonus_balance FROM merchant_memberships
 WHERE merchant_id = $1 AND user_id = $2 LIMIT 1;
 
 -- name: ListUserMemberships :many
-SELECT m.*, mer.name as merchant_name, mer.logo_media_asset_id
+SELECT m.id, m.merchant_id, m.user_id, m.balance, m.total_recharged, m.total_consumed, m.created_at, m.updated_at, m.principal_balance, m.bonus_balance, mer.name as merchant_name, mer.logo_media_asset_id
 FROM merchant_memberships m
 JOIN merchants mer ON mer.id = m.merchant_id
 WHERE m.user_id = $1
@@ -23,7 +23,7 @@ ORDER BY m.balance DESC
 LIMIT $2 OFFSET $3;
 
 -- name: ListMerchantMembers :many
-SELECT m.*, u.full_name, u.phone, u.avatar_url, u.avatar_media_asset_id
+SELECT m.id, m.merchant_id, m.user_id, m.balance, m.total_recharged, m.total_consumed, m.created_at, m.updated_at, m.principal_balance, m.bonus_balance, u.full_name, u.phone, u.avatar_url, u.avatar_media_asset_id
 FROM merchant_memberships m
 JOIN users u ON u.id = m.user_id
 WHERE m.merchant_id = $1
@@ -63,12 +63,12 @@ WHERE id = $1 AND balance >= $2
 RETURNING *;
 
 -- name: GetMembershipForUpdate :one
-SELECT * FROM merchant_memberships
+SELECT id, merchant_id, user_id, balance, total_recharged, total_consumed, created_at, updated_at, principal_balance, bonus_balance FROM merchant_memberships
 WHERE id = $1 LIMIT 1
 FOR UPDATE;
 
 -- name: GetMembershipByMerchantAndUserForUpdate :one
-SELECT * FROM merchant_memberships
+SELECT id, merchant_id, user_id, balance, total_recharged, total_consumed, created_at, updated_at, principal_balance, bonus_balance FROM merchant_memberships
 WHERE merchant_id = $1 AND user_id = $2 LIMIT 1
 FOR UPDATE;
 
@@ -87,16 +87,16 @@ INSERT INTO recharge_rules (
 ) RETURNING *;
 
 -- name: GetRechargeRule :one
-SELECT * FROM recharge_rules
+SELECT id, merchant_id, recharge_amount, bonus_amount, is_active, valid_from, valid_until, created_at, updated_at FROM recharge_rules
 WHERE id = $1 LIMIT 1;
 
 -- name: ListMerchantRechargeRules :many
-SELECT * FROM recharge_rules
+SELECT id, merchant_id, recharge_amount, bonus_amount, is_active, valid_from, valid_until, created_at, updated_at FROM recharge_rules
 WHERE merchant_id = $1
 ORDER BY recharge_amount ASC;
 
 -- name: ListActiveRechargeRules :many
-SELECT * FROM recharge_rules
+SELECT id, merchant_id, recharge_amount, bonus_amount, is_active, valid_from, valid_until, created_at, updated_at FROM recharge_rules
 WHERE merchant_id = $1 
     AND is_active = TRUE
     AND valid_from <= NOW()
@@ -104,7 +104,7 @@ WHERE merchant_id = $1
 ORDER BY recharge_amount ASC;
 
 -- name: GetMatchingRechargeRule :one
-SELECT * FROM recharge_rules
+SELECT id, merchant_id, recharge_amount, bonus_amount, is_active, valid_from, valid_until, created_at, updated_at FROM recharge_rules
 WHERE merchant_id = $1 
     AND recharge_amount = $2
     AND is_active = TRUE
@@ -178,15 +178,15 @@ INSERT INTO membership_transactions (
 ) RETURNING *;
 
 -- name: GetMembershipTransaction :one
-SELECT * FROM membership_transactions
+SELECT id, membership_id, type, amount, balance_after, related_order_id, recharge_rule_id, notes, created_at, payment_order_id, principal_amount, bonus_amount, idempotency_key FROM membership_transactions
 WHERE id = $1 LIMIT 1;
 
 -- name: GetMembershipTransactionByPaymentOrderID :one
-SELECT * FROM membership_transactions
+SELECT id, membership_id, type, amount, balance_after, related_order_id, recharge_rule_id, notes, created_at, payment_order_id, principal_amount, bonus_amount, idempotency_key FROM membership_transactions
 WHERE payment_order_id = $1 LIMIT 1;
 
 -- name: GetMembershipConsumeByOrder :one
-SELECT * FROM membership_transactions
+SELECT id, membership_id, type, amount, balance_after, related_order_id, recharge_rule_id, notes, created_at, payment_order_id, principal_amount, bonus_amount, idempotency_key FROM membership_transactions
 WHERE membership_id = $1 AND related_order_id = $2 AND type = 'consume'
 ORDER BY created_at DESC
 LIMIT 1;
@@ -201,13 +201,13 @@ ORDER BY created_at DESC, id DESC
 LIMIT 1;
 
 -- name: ListMembershipTransactions :many
-SELECT * FROM membership_transactions
+SELECT id, membership_id, type, amount, balance_after, related_order_id, recharge_rule_id, notes, created_at, payment_order_id, principal_amount, bonus_amount, idempotency_key FROM membership_transactions
 WHERE membership_id = $1
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3;
 
 -- name: ListMembershipTransactionsByType :many
-SELECT * FROM membership_transactions
+SELECT id, membership_id, type, amount, balance_after, related_order_id, recharge_rule_id, notes, created_at, payment_order_id, principal_amount, bonus_amount, idempotency_key FROM membership_transactions
 WHERE membership_id = $1 AND type = $2
 ORDER BY created_at DESC
 LIMIT $3 OFFSET $4;

@@ -6,7 +6,7 @@ VALUES ($1, $2, 'active')
 RETURNING *;
 
 -- name: GetMerchantBoss :one
-SELECT * FROM merchant_bosses
+SELECT id, user_id, merchant_id, status, created_at, updated_at FROM merchant_bosses
 WHERE user_id = $1 AND merchant_id = $2 AND status = 'active';
 
 -- name: ListMerchantsByBoss :many

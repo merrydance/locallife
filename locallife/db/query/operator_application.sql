@@ -13,26 +13,26 @@ RETURNING *;
 
 -- name: GetOperatorApplicationDraft :one
 -- 获取用户的草稿或可编辑申请（排除已通过的）
-SELECT * FROM operator_applications
+SELECT id, user_id, region_id, name, contact_name, contact_phone, business_license_number, business_license_ocr, legal_person_name, legal_person_id_number, id_card_front_ocr, id_card_back_ocr, requested_contract_years, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, business_license_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id FROM operator_applications
 WHERE user_id = $1 AND status IN ('draft', 'rejected')
 ORDER BY created_at DESC
 LIMIT 1;
 
 -- name: GetOperatorApplicationByID :one
 -- 通过ID获取申请
-SELECT * FROM operator_applications
+SELECT id, user_id, region_id, name, contact_name, contact_phone, business_license_number, business_license_ocr, legal_person_name, legal_person_id_number, id_card_front_ocr, id_card_back_ocr, requested_contract_years, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, business_license_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id FROM operator_applications
 WHERE id = $1;
 
 -- name: GetOperatorApplicationByUserID :one
 -- 获取用户的任意状态申请
-SELECT * FROM operator_applications
+SELECT id, user_id, region_id, name, contact_name, contact_phone, business_license_number, business_license_ocr, legal_person_name, legal_person_id_number, id_card_front_ocr, id_card_back_ocr, requested_contract_years, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, business_license_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id FROM operator_applications
 WHERE user_id = $1
 ORDER BY created_at DESC
 LIMIT 1;
 
 -- name: GetPendingOperatorApplicationByRegion :one
 -- 检查区域是否有待审核或已通过的申请（用于区域独占检查）
-SELECT * FROM operator_applications
+SELECT id, user_id, region_id, name, contact_name, contact_phone, business_license_number, business_license_ocr, legal_person_name, legal_person_id_number, id_card_front_ocr, id_card_back_ocr, requested_contract_years, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, business_license_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id FROM operator_applications
 WHERE region_id = $1 AND status IN ('submitted', 'approved')
 LIMIT 1;
 

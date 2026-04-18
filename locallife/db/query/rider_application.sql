@@ -10,12 +10,12 @@ INSERT INTO rider_applications (
 
 -- name: GetRiderApplication :one
 -- 获取骑手申请
-SELECT * FROM rider_applications
+SELECT id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id FROM rider_applications
 WHERE id = $1;
 
 -- name: GetRiderApplicationByUserID :one
 -- 根据用户ID获取骑手申请
-SELECT * FROM rider_applications
+SELECT id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id FROM rider_applications
 WHERE user_id = $1;
 
 -- name: UpdateRiderApplicationBasicInfo :one
@@ -169,7 +169,7 @@ RETURNING *;
 
 -- name: ListRiderApplications :many
 -- 列出骑手申请（管理员用）
-SELECT * FROM rider_applications
+SELECT id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id FROM rider_applications
 WHERE 
     (sqlc.narg(status)::text IS NULL OR status = sqlc.narg(status))
 ORDER BY 

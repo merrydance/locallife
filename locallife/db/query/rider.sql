@@ -11,15 +11,15 @@ INSERT INTO riders (
 ) RETURNING *;
 
 -- name: GetRider :one
-SELECT * FROM riders
+SELECT id, user_id, real_name, id_card_no, phone, deposit_amount, frozen_deposit, status, is_online, credit_score, current_longitude, current_latitude, location_updated_at, total_orders, total_earnings, online_duration, created_at, updated_at, region_id, application_id FROM riders
 WHERE id = $1 LIMIT 1;
 
 -- name: GetRiderByUserID :one
-SELECT * FROM riders
+SELECT id, user_id, real_name, id_card_no, phone, deposit_amount, frozen_deposit, status, is_online, credit_score, current_longitude, current_latitude, location_updated_at, total_orders, total_earnings, online_duration, created_at, updated_at, region_id, application_id FROM riders
 WHERE user_id = $1 LIMIT 1;
 
 -- name: GetRiderForUpdate :one
-SELECT * FROM riders
+SELECT id, user_id, real_name, id_card_no, phone, deposit_amount, frozen_deposit, status, is_online, credit_score, current_longitude, current_latitude, location_updated_at, total_orders, total_earnings, online_duration, created_at, updated_at, region_id, application_id FROM riders
 WHERE id = $1 LIMIT 1
 FOR UPDATE;
 
@@ -96,18 +96,18 @@ WHERE id = $1
 RETURNING *;
 
 -- name: ListOnlineRiders :many
-SELECT * FROM riders
+SELECT id, user_id, real_name, id_card_no, phone, deposit_amount, frozen_deposit, status, is_online, credit_score, current_longitude, current_latitude, location_updated_at, total_orders, total_earnings, online_duration, created_at, updated_at, region_id, application_id FROM riders
 WHERE is_online = true AND status = 'active'
 ORDER BY location_updated_at DESC;
 
 -- name: ListRidersByStatus :many
-SELECT * FROM riders
+SELECT id, user_id, real_name, id_card_no, phone, deposit_amount, frozen_deposit, status, is_online, credit_score, current_longitude, current_latitude, location_updated_at, total_orders, total_earnings, online_duration, created_at, updated_at, region_id, application_id FROM riders
 WHERE status = $1
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3;
 
 -- name: ListNearbyRiders :many
-SELECT *, 
+SELECT id, user_id, real_name, id_card_no, phone, deposit_amount, frozen_deposit, status, is_online, credit_score, current_longitude, current_latitude, location_updated_at, total_orders, total_earnings, online_duration, created_at, updated_at, region_id, application_id,
     (6371000 * acos(
         LEAST(1::float8, GREATEST(-1::float8,
             cos(radians(sqlc.arg(center_lat)::float8)) * cos(radians(current_latitude::float8)) * 
@@ -140,7 +140,7 @@ WHERE is_online = true AND status = 'active';
 
 -- name: ListRidersByRegion :many
 -- 按区域列出骑手（供运营商管理使用）
-SELECT * FROM riders
+SELECT id, user_id, real_name, id_card_no, phone, deposit_amount, frozen_deposit, status, is_online, credit_score, current_longitude, current_latitude, location_updated_at, total_orders, total_earnings, online_duration, created_at, updated_at, region_id, application_id FROM riders
 WHERE region_id = $1
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3;
@@ -152,7 +152,7 @@ WHERE region_id = $1;
 
 -- name: ListRidersByRegionWithStatus :many
 -- 按区域和状态列出骑手
-SELECT * FROM riders
+SELECT id, user_id, real_name, id_card_no, phone, deposit_amount, frozen_deposit, status, is_online, credit_score, current_longitude, current_latitude, location_updated_at, total_orders, total_earnings, online_duration, created_at, updated_at, region_id, application_id FROM riders
 WHERE region_id = $1 AND status = $2
 ORDER BY created_at DESC
 LIMIT $3 OFFSET $4;

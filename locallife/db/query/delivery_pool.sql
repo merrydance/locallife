@@ -17,20 +17,20 @@ INSERT INTO delivery_pool (
 ) RETURNING *;
 
 -- name: GetDeliveryPoolItem :one
-SELECT * FROM delivery_pool
+SELECT id, order_id, merchant_id, pickup_longitude, pickup_latitude, delivery_longitude, delivery_latitude, distance, delivery_fee, expected_pickup_at, expires_at, priority, created_at, expected_delivery_at FROM delivery_pool
 WHERE id = $1 LIMIT 1;
 
 -- name: GetDeliveryPoolByOrderID :one
-SELECT * FROM delivery_pool
+SELECT id, order_id, merchant_id, pickup_longitude, pickup_latitude, delivery_longitude, delivery_latitude, distance, delivery_fee, expected_pickup_at, expires_at, priority, created_at, expected_delivery_at FROM delivery_pool
 WHERE order_id = $1 LIMIT 1;
 
 -- name: GetDeliveryPoolItemForUpdate :one
-SELECT * FROM delivery_pool
+SELECT id, order_id, merchant_id, pickup_longitude, pickup_latitude, delivery_longitude, delivery_latitude, distance, delivery_fee, expected_pickup_at, expires_at, priority, created_at, expected_delivery_at FROM delivery_pool
 WHERE id = $1 LIMIT 1
 FOR UPDATE;
 
 -- name: GetDeliveryPoolByOrderIDForUpdate :one
-SELECT * FROM delivery_pool
+SELECT id, order_id, merchant_id, pickup_longitude, pickup_latitude, delivery_longitude, delivery_latitude, distance, delivery_fee, expected_pickup_at, expires_at, priority, created_at, expected_delivery_at FROM delivery_pool
 WHERE order_id = $1 LIMIT 1
 FOR UPDATE;
 
@@ -47,7 +47,7 @@ WHERE expires_at < now();
 -- 列出所有待接单的配送池订单
 -- 外卖订单始终可见直到被接单或取消
 -- 动态优先级 = 基础优先级 + 等待时间加成（每等待10分钟加1级）
-SELECT *,
+SELECT id, order_id, merchant_id, pickup_longitude, pickup_latitude, delivery_longitude, delivery_latitude, distance, delivery_fee, expected_pickup_at, expires_at, priority, created_at, expected_delivery_at,
     (priority + EXTRACT(EPOCH FROM (now() - created_at)) / 600)::int AS effective_priority
 FROM delivery_pool
 ORDER BY effective_priority DESC, created_at ASC
@@ -56,7 +56,7 @@ LIMIT $1 OFFSET $2;
 -- name: ListDeliveryPoolNearby :many
 -- 按骑手位置获取附近的可接订单
 -- 动态优先级：等待越久优先级越高
-SELECT *, 
+SELECT id, order_id, merchant_id, pickup_longitude, pickup_latitude, delivery_longitude, delivery_latitude, distance, delivery_fee, expected_pickup_at, expires_at, priority, created_at, expected_delivery_at,
     (6371000 * acos(LEAST(1, GREATEST(-1,
         cos(radians(sqlc.arg(rider_lat)::float8)) * cos(radians(pickup_latitude::float8)) * 
         cos(radians(pickup_longitude::float8) - radians(sqlc.arg(rider_lng)::float8)) + 

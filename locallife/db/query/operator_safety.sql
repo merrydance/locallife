@@ -12,11 +12,11 @@ INSERT INTO safety_reports (
 ) RETURNING *;
 
 -- name: GetSafetyReport :one
-SELECT * FROM safety_reports
+SELECT id, reporter_id, region_id, title, description, level, merchant_ids, status, resolution_notes, created_at, updated_at FROM safety_reports
 WHERE id = $1 LIMIT 1;
 
 -- name: ListSafetyReportsByRegion :many
-SELECT * FROM safety_reports
+SELECT id, reporter_id, region_id, title, description, level, merchant_ids, status, resolution_notes, created_at, updated_at FROM safety_reports
 WHERE region_id = $1
 ORDER BY created_at DESC, id DESC
 LIMIT $2 OFFSET $3;
@@ -26,7 +26,7 @@ SELECT COUNT(*) FROM safety_reports
 WHERE region_id = $1;
 
 -- name: ListSafetyReportsByRegionAndStatus :many
-SELECT * FROM safety_reports
+SELECT id, reporter_id, region_id, title, description, level, merchant_ids, status, resolution_notes, created_at, updated_at FROM safety_reports
 WHERE region_id = $1
     AND status = $2
 ORDER BY created_at DESC, id DESC

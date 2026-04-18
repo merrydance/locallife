@@ -18,26 +18,26 @@ INSERT INTO vouchers (
 ) RETURNING *;
 
 -- name: GetVoucher :one
-SELECT * FROM vouchers
+SELECT id, merchant_id, code, name, description, amount, min_order_amount, total_quantity, claimed_quantity, used_quantity, valid_from, valid_until, is_active, created_at, updated_at, allowed_order_types, deleted_at FROM vouchers
 WHERE id = $1 AND deleted_at IS NULL LIMIT 1;
 
 -- name: GetVoucherByCode :one
-SELECT * FROM vouchers
+SELECT id, merchant_id, code, name, description, amount, min_order_amount, total_quantity, claimed_quantity, used_quantity, valid_from, valid_until, is_active, created_at, updated_at, allowed_order_types, deleted_at FROM vouchers
 WHERE code = $1 AND deleted_at IS NULL LIMIT 1;
 
 -- name: GetVoucherForUpdate :one
-SELECT * FROM vouchers
+SELECT id, merchant_id, code, name, description, amount, min_order_amount, total_quantity, claimed_quantity, used_quantity, valid_from, valid_until, is_active, created_at, updated_at, allowed_order_types, deleted_at FROM vouchers
 WHERE id = $1 AND deleted_at IS NULL LIMIT 1
 FOR UPDATE;
 
 -- name: ListMerchantVouchers :many
-SELECT * FROM vouchers
+SELECT id, merchant_id, code, name, description, amount, min_order_amount, total_quantity, claimed_quantity, used_quantity, valid_from, valid_until, is_active, created_at, updated_at, allowed_order_types, deleted_at FROM vouchers
 WHERE merchant_id = $1 AND deleted_at IS NULL
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3;
 
 -- name: ListActiveVouchers :many
-SELECT * FROM vouchers
+SELECT id, merchant_id, code, name, description, amount, min_order_amount, total_quantity, claimed_quantity, used_quantity, valid_from, valid_until, is_active, created_at, updated_at, allowed_order_types, deleted_at FROM vouchers
 WHERE merchant_id = $1 
     AND deleted_at IS NULL
     AND is_active = TRUE
@@ -110,7 +110,7 @@ JOIN vouchers v ON v.id = uv.voucher_id
 WHERE uv.id = $1 LIMIT 1;
 
 -- name: GetUserVoucherForUpdate :one
-SELECT * FROM user_vouchers
+SELECT id, voucher_id, user_id, status, order_id, used_at, obtained_at, expires_at FROM user_vouchers
 WHERE id = $1 LIMIT 1
 FOR UPDATE;
 

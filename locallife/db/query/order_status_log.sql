@@ -11,7 +11,7 @@ INSERT INTO order_status_logs (
 ) RETURNING *;
 
 -- name: ListOrderStatusLogs :many
-SELECT * FROM order_status_logs
+SELECT id, order_id, from_status, to_status, operator_id, operator_type, notes, created_at FROM order_status_logs
 WHERE order_id = $1
 ORDER BY created_at;
 

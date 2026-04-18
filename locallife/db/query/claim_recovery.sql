@@ -29,20 +29,20 @@ INSERT INTO claim_recovery_events (
 RETURNING *;
 
 -- name: ListClaimRecoveryEventsByRecovery :many
-SELECT *
+SELECT id, recovery_id, decision_id, event_type, payload, created_at
 FROM claim_recovery_events
 WHERE recovery_id = $1
 ORDER BY created_at ASC;
 
 -- name: GetClaimRecoveryByClaimID :one
-SELECT *
+SELECT id, claim_id, order_id, responsible_party, recovery_target, recovery_amount, status, due_at, decision_snapshot, created_at, updated_at, decision_id, recovery_basis
 FROM claim_recoveries
 WHERE claim_id = $1
 ORDER BY id DESC
 LIMIT 1;
 
 -- name: ListDueClaimRecoveries :many
-SELECT *
+SELECT id, claim_id, order_id, responsible_party, recovery_target, recovery_amount, status, due_at, decision_snapshot, created_at, updated_at, decision_id, recovery_basis
 FROM claim_recoveries
 WHERE status = 'pending'
   AND due_at <= $1

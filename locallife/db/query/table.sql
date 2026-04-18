@@ -14,16 +14,16 @@ INSERT INTO tables (
 ) RETURNING *;
 
 -- name: GetTable :one
-SELECT * FROM tables
+SELECT id, merchant_id, table_no, table_type, capacity, description, minimum_spend, qr_code_url, status, current_reservation_id, created_at, updated_at, access_code_hash FROM tables
 WHERE id = $1 LIMIT 1;
 
 -- name: GetTableForUpdate :one
-SELECT * FROM tables
+SELECT id, merchant_id, table_no, table_type, capacity, description, minimum_spend, qr_code_url, status, current_reservation_id, created_at, updated_at, access_code_hash FROM tables
 WHERE id = $1 LIMIT 1
 FOR UPDATE;
 
 -- name: GetTableByMerchantAndNo :one
-SELECT * FROM tables
+SELECT id, merchant_id, table_no, table_type, capacity, description, minimum_spend, qr_code_url, status, current_reservation_id, created_at, updated_at, access_code_hash FROM tables
 WHERE merchant_id = $1 AND table_no = $2 LIMIT 1;
 
 -- name: ListTablesByMerchant :many
@@ -76,7 +76,7 @@ WHERE t.merchant_id = $1
 ORDER BY t.table_no;
 
 -- name: ListAvailableRooms :many
-SELECT * FROM tables
+SELECT id, merchant_id, table_no, table_type, capacity, description, minimum_spend, qr_code_url, status, current_reservation_id, created_at, updated_at, access_code_hash FROM tables
 WHERE merchant_id = $1 
   AND table_type = 'room' 
   AND status = 'available'
@@ -130,12 +130,12 @@ INSERT INTO table_images (
 ) RETURNING *;
 
 -- name: ListTableImages :many
-SELECT * FROM table_images
+SELECT id, table_id, sort_order, is_primary, created_at, media_asset_id FROM table_images
 WHERE table_id = $1
 ORDER BY is_primary DESC, sort_order ASC, created_at ASC;
 
 -- name: GetPrimaryTableImage :one
-SELECT * FROM table_images
+SELECT id, table_id, sort_order, is_primary, created_at, media_asset_id FROM table_images
 WHERE table_id = $1 AND is_primary = TRUE
 LIMIT 1;
 

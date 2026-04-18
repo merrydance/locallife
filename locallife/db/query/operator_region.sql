@@ -9,7 +9,7 @@ INSERT INTO operator_regions (
 ) RETURNING *;
 
 -- name: GetOperatorRegion :one
-SELECT * FROM operator_regions
+SELECT id, operator_id, region_id, status, created_at FROM operator_regions
 WHERE operator_id = $1 AND region_id = $2 LIMIT 1;
 
 -- name: ListOperatorRegions :many

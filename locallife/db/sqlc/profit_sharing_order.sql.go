@@ -827,6 +827,7 @@ WHERE
   AND o.order_type <> 'takeout'
     AND pso.id IS NULL
     AND o.updated_at > now() - INTERVAL '7 days'
+ORDER BY o.updated_at ASC, po.id ASC
 LIMIT $1
 `
 
@@ -1291,7 +1292,7 @@ func (q *Queries) ListProfitSharingOrdersForRetry(ctx context.Context, arg ListP
 
 const listRiderProfitSharingOrders = `-- name: ListRiderProfitSharingOrders :many
 SELECT 
-    p.id, p.payment_order_id, p.merchant_id, p.operator_id, p.order_source, p.total_amount, p.platform_commission, p.operator_commission, p.merchant_amount, p.out_order_no, p.sharing_order_id, p.status, p.finished_at, p.created_at, p.delivery_fee, p.rider_id, p.rider_amount, p.distributable_amount, p.platform_rate, p.operator_rate,
+  p.id, p.payment_order_id, p.merchant_id, p.operator_id, p.order_source, p.total_amount, p.platform_commission, p.operator_commission, p.merchant_amount, p.out_order_no, p.sharing_order_id, p.status, p.finished_at, p.created_at, p.delivery_fee, p.rider_id, p.rider_amount, p.distributable_amount, p.platform_rate, p.operator_rate,
     po.order_id,
     o.order_no,
     m.name as merchant_name

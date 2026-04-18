@@ -4,7 +4,7 @@ VALUES ($1)
 ON CONFLICT (merchant_id) DO NOTHING;
 
 -- name: GetMerchantCapabilities :one
-SELECT * FROM merchant_capabilities
+SELECT merchant_id, open_kitchen_status, dine_in_status, source, note, created_at, updated_at FROM merchant_capabilities
 WHERE merchant_id = $1
 LIMIT 1;
 
@@ -40,7 +40,7 @@ WHERE msl.merchant_id = $1
 ORDER BY t.sort_order ASC, t.name ASC;
 
 -- name: ListMerchantSystemLabelLinks :many
-SELECT *
+SELECT merchant_id, tag_id, source, created_at, updated_at
 FROM merchant_system_labels
 WHERE merchant_id = $1
 ORDER BY tag_id ASC;

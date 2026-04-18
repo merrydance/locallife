@@ -27,31 +27,31 @@ INSERT INTO rider_locations (
 );
 
 -- name: GetRiderLatestLocation :one
-SELECT * FROM rider_locations
+SELECT id, rider_id, delivery_id, longitude, latitude, accuracy, speed, heading, recorded_at FROM rider_locations
 WHERE rider_id = $1
 ORDER BY recorded_at DESC
 LIMIT 1;
 
 -- name: GetDeliveryLatestLocation :one
-SELECT * FROM rider_locations
+SELECT id, rider_id, delivery_id, longitude, latitude, accuracy, speed, heading, recorded_at FROM rider_locations
 WHERE delivery_id = $1
 ORDER BY recorded_at DESC
 LIMIT 1;
 
 -- name: ListRiderLocations :many
-SELECT * FROM rider_locations
+SELECT id, rider_id, delivery_id, longitude, latitude, accuracy, speed, heading, recorded_at FROM rider_locations
 WHERE rider_id = sqlc.arg('rider_id')
     AND recorded_at >= sqlc.arg('start_at')
     AND recorded_at <= sqlc.arg('end_at')
 ORDER BY recorded_at ASC;
 
 -- name: ListDeliveryLocations :many
-SELECT * FROM rider_locations
+SELECT id, rider_id, delivery_id, longitude, latitude, accuracy, speed, heading, recorded_at FROM rider_locations
 WHERE delivery_id = $1
 ORDER BY recorded_at ASC;
 
 -- name: ListDeliveryLocationsSince :many
-SELECT * FROM rider_locations
+SELECT id, rider_id, delivery_id, longitude, latitude, accuracy, speed, heading, recorded_at FROM rider_locations
 WHERE delivery_id = $1
     AND recorded_at > $2
 ORDER BY recorded_at ASC;

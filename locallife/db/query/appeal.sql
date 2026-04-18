@@ -18,13 +18,13 @@ INSERT INTO appeals (
 
 -- name: GetAppeal :one
 -- 获取申诉详情
-SELECT * FROM appeals
+SELECT id, claim_id, appellant_type, appellant_id, reason, status, reviewer_id, review_notes, reviewed_at, compensation_amount, compensated_at, region_id, created_at FROM appeals
 WHERE id = $1
 LIMIT 1;
 
 -- name: GetAppealByClaim :one
 -- 根据索赔ID与申诉方类型获取申诉
-SELECT * FROM appeals
+SELECT id, claim_id, appellant_type, appellant_id, reason, status, reviewer_id, review_notes, reviewed_at, compensation_amount, compensated_at, region_id, created_at FROM appeals
 WHERE claim_id = $1
   AND appellant_type = $2
 LIMIT 1;

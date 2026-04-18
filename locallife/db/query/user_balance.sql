@@ -4,12 +4,12 @@
 
 -- name: GetUserBalance :one
 -- 获取用户余额（不存在则返回nil）
-SELECT * FROM user_balances
+SELECT user_id, balance, frozen_balance, total_income, total_expense, total_withdraw, created_at, updated_at FROM user_balances
 WHERE user_id = $1;
 
 -- name: GetUserBalanceForUpdate :one
 -- 获取用户余额（加锁，用于更新）
-SELECT * FROM user_balances
+SELECT user_id, balance, frozen_balance, total_income, total_expense, total_withdraw, created_at, updated_at FROM user_balances
 WHERE user_id = $1
 FOR UPDATE;
 
@@ -86,27 +86,27 @@ INSERT INTO user_balance_logs (
 
 -- name: ListUserBalanceLogs :many
 -- 获取用户余额变动日志
-SELECT * FROM user_balance_logs
+SELECT id, user_id, type, amount, balance_before, balance_after, related_type, related_id, source_type, source_id, remark, created_at FROM user_balance_logs
 WHERE user_id = $1
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3;
 
 -- name: ListUserBalanceLogsByType :many
 -- 按类型获取用户余额变动日志
-SELECT * FROM user_balance_logs
+SELECT id, user_id, type, amount, balance_before, balance_after, related_type, related_id, source_type, source_id, remark, created_at FROM user_balance_logs
 WHERE user_id = $1 AND type = $2
 ORDER BY created_at DESC
 LIMIT $3 OFFSET $4;
 
 -- name: GetUserBalanceLogByRelated :one
 -- 根据关联信息获取日志（用于幂等检查）
-SELECT * FROM user_balance_logs
+SELECT id, user_id, type, amount, balance_before, balance_after, related_type, related_id, source_type, source_id, remark, created_at FROM user_balance_logs
 WHERE related_type = $1 AND related_id = $2
 LIMIT 1;
 
 -- name: GetUserBalanceLogByRelatedAndType :one
 -- 根据关联信息和类型获取日志（用于幂等检查/回滚）
-SELECT * FROM user_balance_logs
+SELECT id, user_id, type, amount, balance_before, balance_after, related_type, related_id, source_type, source_id, remark, created_at FROM user_balance_logs
 WHERE related_type = $1 AND related_id = $2 AND type = $3
 LIMIT 1;
 

@@ -11,7 +11,7 @@ INSERT INTO wechat_notifications (
 ) RETURNING *;
 
 -- name: GetWechatNotification :one
-SELECT * FROM wechat_notifications
+SELECT id, event_type, resource_type, summary, out_trade_no, transaction_id, processed_at, created_at FROM wechat_notifications
 WHERE id = $1 LIMIT 1;
 
 -- name: CheckNotificationExists :one
@@ -21,12 +21,12 @@ SELECT EXISTS(
 ) AS exists;
 
 -- name: ListWechatNotificationsByOutTradeNo :many
-SELECT * FROM wechat_notifications
+SELECT id, event_type, resource_type, summary, out_trade_no, transaction_id, processed_at, created_at FROM wechat_notifications
 WHERE out_trade_no = $1
 ORDER BY created_at DESC;
 
 -- name: ListStaleUnprocessedWechatNotifications :many
-SELECT * FROM wechat_notifications
+SELECT id, event_type, resource_type, summary, out_trade_no, transaction_id, processed_at, created_at FROM wechat_notifications
 WHERE processed_at IS NULL
     AND created_at <= $1
 ORDER BY created_at

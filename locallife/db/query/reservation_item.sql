@@ -24,7 +24,7 @@ WHERE ri.reservation_id = $1
 ORDER BY ri.id;
 
 -- name: GetReservationItemsByReservation :many
-SELECT * FROM reservation_items
+SELECT id, reservation_id, dish_id, combo_id, quantity, unit_price, total_price, created_at FROM reservation_items
 WHERE reservation_id = $1
 ORDER BY id;
 

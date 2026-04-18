@@ -10,5 +10,5 @@ INSERT INTO reservation_payments (
 RETURNING *;
 
 -- name: GetReservationPaymentByPaymentOrderID :one
-SELECT * FROM reservation_payments
+SELECT id, reservation_id, payment_order_id, amount, type, created_at FROM reservation_payments
 WHERE payment_order_id = $1 LIMIT 1;

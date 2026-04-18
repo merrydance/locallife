@@ -273,7 +273,7 @@ func (q *Queries) ListDeliveryPool(ctx context.Context, arg ListDeliveryPoolPara
 }
 
 const listDeliveryPoolNearby = `-- name: ListDeliveryPoolNearby :many
-SELECT id, order_id, merchant_id, pickup_longitude, pickup_latitude, delivery_longitude, delivery_latitude, distance, delivery_fee, expected_pickup_at, expires_at, priority, created_at, expected_delivery_at, 
+SELECT id, order_id, merchant_id, pickup_longitude, pickup_latitude, delivery_longitude, delivery_latitude, distance, delivery_fee, expected_pickup_at, expires_at, priority, created_at, expected_delivery_at,
     (6371000 * acos(LEAST(1, GREATEST(-1,
         cos(radians($1::float8)) * cos(radians(pickup_latitude::float8)) * 
         cos(radians(pickup_longitude::float8) - radians($2::float8)) + 

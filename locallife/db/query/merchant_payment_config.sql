@@ -8,11 +8,11 @@ INSERT INTO merchant_payment_configs (
 ) RETURNING *;
 
 -- name: GetMerchantPaymentConfig :one
-SELECT * FROM merchant_payment_configs
+SELECT id, merchant_id, sub_mch_id, status, created_at, updated_at, latest_settlement_application_no, latest_settlement_application_submitted_at FROM merchant_payment_configs
 WHERE merchant_id = $1 LIMIT 1;
 
 -- name: GetMerchantPaymentConfigBySubMchID :one
-SELECT * FROM merchant_payment_configs
+SELECT id, merchant_id, sub_mch_id, status, created_at, updated_at, latest_settlement_application_no, latest_settlement_application_submitted_at FROM merchant_payment_configs
 WHERE sub_mch_id = $1 LIMIT 1;
 
 -- name: UpdateMerchantPaymentConfig :one

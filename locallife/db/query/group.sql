@@ -7,13 +7,13 @@ INSERT INTO merchant_group_applications (
 ) RETURNING *;
 
 -- name: GetLatestGroupApplicationByApplicant :one
-SELECT * FROM merchant_group_applications
+SELECT id, applicant_user_id, group_name, contact_phone, license_number, address, region_id, status, reject_reason, reviewed_by, reviewed_at, application_data, created_at, updated_at, license_media_asset_id FROM merchant_group_applications
 WHERE applicant_user_id = $1
 ORDER BY created_at DESC
 LIMIT 1;
 
 -- name: GetGroupApplication :one
-SELECT * FROM merchant_group_applications
+SELECT id, applicant_user_id, group_name, contact_phone, license_number, address, region_id, status, reject_reason, reviewed_by, reviewed_at, application_data, created_at, updated_at, license_media_asset_id FROM merchant_group_applications
 WHERE id = $1;
 
 -- name: UpdateGroupApplicationBasic :one
@@ -101,11 +101,11 @@ INSERT INTO merchant_groups (
 ) RETURNING *;
 
 -- name: GetMerchantGroup :one
-SELECT * FROM merchant_groups
+SELECT id, name, owner_user_id, status, contact_phone, license_number, address, region_id, application_data, created_at, updated_at, license_media_asset_id FROM merchant_groups
 WHERE id = $1;
 
 -- name: ListMerchantGroups :many
-SELECT * FROM merchant_groups
+SELECT id, name, owner_user_id, status, contact_phone, license_number, address, region_id, application_data, created_at, updated_at, license_media_asset_id FROM merchant_groups
 WHERE status = 'active'
   AND ($1::text IS NULL OR name ILIKE '%' || $1 || '%')
 ORDER BY created_at DESC
@@ -132,10 +132,10 @@ INSERT INTO merchant_brands (
 ) RETURNING *;
 
 -- name: GetMerchantBrand :one
-SELECT * FROM merchant_brands WHERE id = $1;
+SELECT id, group_id, name, description, status, created_at, updated_at, logo_media_asset_id FROM merchant_brands WHERE id = $1;
 
 -- name: ListMerchantBrandsByGroup :many
-SELECT * FROM merchant_brands WHERE group_id = $1 ORDER BY created_at DESC;
+SELECT id, group_id, name, description, status, created_at, updated_at, logo_media_asset_id FROM merchant_brands WHERE group_id = $1 ORDER BY created_at DESC;
 
 -- Group members
 -- name: CreateGroupMember :one
@@ -158,10 +158,10 @@ INSERT INTO merchant_group_join_requests (
 ) RETURNING *;
 
 -- name: GetGroupJoinRequest :one
-SELECT * FROM merchant_group_join_requests WHERE id = $1;
+SELECT id, group_id, merchant_id, applicant_user_id, status, reason, reviewed_by, reviewed_at, created_at FROM merchant_group_join_requests WHERE id = $1;
 
 -- name: ListGroupJoinRequestsByGroup :many
-SELECT * FROM merchant_group_join_requests
+SELECT id, group_id, merchant_id, applicant_user_id, status, reason, reviewed_by, reviewed_at, created_at FROM merchant_group_join_requests
 WHERE group_id = $1
 ORDER BY created_at DESC;
 
@@ -196,7 +196,7 @@ DO UPDATE SET
 RETURNING *;
 
 -- name: GetGroupPolicies :one
-SELECT * FROM group_policies WHERE group_id = $1;
+SELECT group_id, pricing_mode, menu_mode, inventory_mode, promotion_mode FROM group_policies WHERE group_id = $1;
 
 -- Templates
 -- name: CreateGroupMenuTemplate :one

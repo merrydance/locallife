@@ -14,29 +14,29 @@ INSERT INTO refund_orders (
 ) RETURNING *;
 
 -- name: GetRefundOrder :one
-SELECT * FROM refund_orders
+SELECT id, payment_order_id, refund_type, refund_amount, refund_reason, out_refund_no, refund_id, platform_refund, operator_refund, merchant_refund, status, refunded_at, created_at FROM refund_orders
 WHERE id = $1 LIMIT 1;
 
 -- name: GetRefundOrderForUpdate :one
-SELECT * FROM refund_orders
+SELECT id, payment_order_id, refund_type, refund_amount, refund_reason, out_refund_no, refund_id, platform_refund, operator_refund, merchant_refund, status, refunded_at, created_at FROM refund_orders
 WHERE id = $1 LIMIT 1
 FOR UPDATE;
 
 -- name: GetRefundOrderByOutRefundNo :one
-SELECT * FROM refund_orders
+SELECT id, payment_order_id, refund_type, refund_amount, refund_reason, out_refund_no, refund_id, platform_refund, operator_refund, merchant_refund, status, refunded_at, created_at FROM refund_orders
 WHERE out_refund_no = $1 LIMIT 1;
 
 -- name: GetRefundOrderByRefundId :one
-SELECT * FROM refund_orders
+SELECT id, payment_order_id, refund_type, refund_amount, refund_reason, out_refund_no, refund_id, platform_refund, operator_refund, merchant_refund, status, refunded_at, created_at FROM refund_orders
 WHERE refund_id = $1 LIMIT 1;
 
 -- name: ListRefundOrdersByPaymentOrder :many
-SELECT * FROM refund_orders
+SELECT id, payment_order_id, refund_type, refund_amount, refund_reason, out_refund_no, refund_id, platform_refund, operator_refund, merchant_refund, status, refunded_at, created_at FROM refund_orders
 WHERE payment_order_id = $1
 ORDER BY created_at DESC;
 
 -- name: ListRefundOrdersByStatus :many
-SELECT * FROM refund_orders
+SELECT id, payment_order_id, refund_type, refund_amount, refund_reason, out_refund_no, refund_id, platform_refund, operator_refund, merchant_refund, status, refunded_at, created_at FROM refund_orders
 WHERE status = $1
 ORDER BY created_at
 LIMIT $2 OFFSET $3;
