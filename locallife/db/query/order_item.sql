@@ -37,7 +37,7 @@ ORDER BY id;
 
 -- name: ListOrderItemsWithDishByOrder :many
 SELECT 
-    oi.*,
+    oi.id, oi.order_id, oi.dish_id, oi.combo_id, oi.name, oi.unit_price, oi.quantity, oi.subtotal, oi.customizations, oi.created_at,
     d.image_media_asset_id as dish_image_media_asset_id
 FROM order_items oi
 LEFT JOIN dishes d ON oi.dish_id = d.id

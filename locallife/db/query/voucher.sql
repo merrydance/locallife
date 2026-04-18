@@ -104,7 +104,7 @@ INSERT INTO user_vouchers (
 ) RETURNING *;
 
 -- name: GetUserVoucher :one
-SELECT uv.*, v.merchant_id, v.code, v.name, v.amount, v.min_order_amount, v.allowed_order_types
+SELECT uv.id, uv.voucher_id, uv.user_id, uv.status, uv.order_id, uv.used_at, uv.obtained_at, uv.expires_at, v.merchant_id, v.code, v.name, v.amount, v.min_order_amount, v.allowed_order_types
 FROM user_vouchers uv
 JOIN vouchers v ON v.id = uv.voucher_id
 WHERE uv.id = $1 LIMIT 1;
@@ -115,7 +115,7 @@ WHERE id = $1 LIMIT 1
 FOR UPDATE;
 
 -- name: ListUserVouchers :many
-SELECT uv.*, v.merchant_id, v.code, v.name, v.amount, v.min_order_amount, v.allowed_order_types, m.name as merchant_name
+SELECT uv.id, uv.voucher_id, uv.user_id, uv.status, uv.order_id, uv.used_at, uv.obtained_at, uv.expires_at, v.merchant_id, v.code, v.name, v.amount, v.min_order_amount, v.allowed_order_types, m.name as merchant_name
 FROM user_vouchers uv
 JOIN vouchers v ON v.id = uv.voucher_id
 JOIN merchants m ON m.id = v.merchant_id
@@ -124,7 +124,7 @@ ORDER BY uv.obtained_at DESC
 LIMIT $2 OFFSET $3;
 
 -- name: ListUserAvailableVouchers :many
-SELECT uv.*, v.merchant_id, v.code, v.name, v.amount, v.min_order_amount, v.allowed_order_types, m.name as merchant_name
+SELECT uv.id, uv.voucher_id, uv.user_id, uv.status, uv.order_id, uv.used_at, uv.obtained_at, uv.expires_at, v.merchant_id, v.code, v.name, v.amount, v.min_order_amount, v.allowed_order_types, m.name as merchant_name
 FROM user_vouchers uv
 JOIN vouchers v ON v.id = uv.voucher_id
 JOIN merchants m ON m.id = v.merchant_id
@@ -135,7 +135,7 @@ ORDER BY v.amount DESC
 LIMIT $2 OFFSET $3;
 
 -- name: ListUserAvailableVouchersForMerchant :many
-SELECT uv.*, v.code, v.name, v.amount, v.min_order_amount, v.allowed_order_types
+SELECT uv.id, uv.voucher_id, uv.user_id, uv.status, uv.order_id, uv.used_at, uv.obtained_at, uv.expires_at, v.code, v.name, v.amount, v.min_order_amount, v.allowed_order_types
 FROM user_vouchers uv
 JOIN vouchers v ON v.id = uv.voucher_id
 WHERE uv.user_id = $1 
