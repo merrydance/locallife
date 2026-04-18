@@ -17,7 +17,7 @@ ORDER BY created_at;
 
 -- name: ListOrderStatusLogsWithOperator :many
 SELECT 
-    osl.*,
+    osl.id, osl.order_id, osl.from_status, osl.to_status, osl.operator_id, osl.operator_type, osl.notes, osl.created_at,
     u.full_name as operator_name
 FROM order_status_logs osl
 LEFT JOIN users u ON osl.operator_id = u.id

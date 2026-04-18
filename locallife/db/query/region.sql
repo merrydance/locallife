@@ -19,7 +19,7 @@ SELECT id, code, name, level, parent_id, longitude, latitude, created_at, qweath
 WHERE code = $1 LIMIT 1;
 
 -- name: GetRegionByProviderCode :one
-SELECT r.* FROM region_external_mappings rem
+SELECT r.id, r.code, r.name, r.level, r.parent_id, r.longitude, r.latitude, r.created_at, r.qweather_location_id, r.status FROM region_external_mappings rem
 JOIN regions r ON r.id = rem.region_id
 WHERE rem.provider = $1 AND rem.external_code = $2
 LIMIT 1;
@@ -107,7 +107,7 @@ WHERE id = $1;
 -- name: ListAvailableRegions :many
 -- 获取可申请区域列表：排除已被有效运营商占用，且排除已提交/已通过的申请占坑
 SELECT 
-  r.*,
+  r.id, r.code, r.name, r.level, r.parent_id, r.longitude, r.latitude, r.created_at, r.qweather_location_id, r.status,
   p.name as parent_name
 FROM regions r
 LEFT JOIN regions p ON r.parent_id = p.id

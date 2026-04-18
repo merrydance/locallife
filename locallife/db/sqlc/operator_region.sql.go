@@ -137,7 +137,7 @@ func (q *Queries) GetOperatorRegion(ctx context.Context, arg GetOperatorRegionPa
 }
 
 const listAllOperatorRegions = `-- name: ListAllOperatorRegions :many
-SELECT or_t.id, or_t.operator_id, or_t.region_id, or_t.status, or_t.created_at, 
+SELECT or_t.id, or_t.operator_id, or_t.region_id, or_t.status, or_t.created_at,
     o.name as operator_name, 
     r.name as region_name, 
     r.code as region_code

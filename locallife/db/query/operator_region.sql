@@ -14,7 +14,7 @@ WHERE operator_id = $1 AND region_id = $2 LIMIT 1;
 
 -- name: ListOperatorRegions :many
 -- 列出运营商管理的所有区域
-SELECT or_t.*, r.name as region_name, r.code as region_code, r.level as region_level
+SELECT or_t.id, or_t.operator_id, or_t.region_id, or_t.status, or_t.created_at, r.name as region_name, r.code as region_code, r.level as region_level
 FROM operator_regions or_t
 JOIN regions r ON or_t.region_id = r.id
 WHERE or_t.operator_id = $1 AND or_t.status = 'active'
@@ -22,7 +22,7 @@ ORDER BY r.code;
 
 -- name: ListRegionOperators :many
 -- 列出管理某区域的所有运营商
-SELECT or_t.*, o.name as operator_name, o.contact_name, o.contact_phone
+SELECT or_t.id, or_t.operator_id, or_t.region_id, or_t.status, or_t.created_at, o.name as operator_name, o.contact_name, o.contact_phone
 FROM operator_regions or_t
 JOIN operators o ON or_t.operator_id = o.id
 WHERE or_t.region_id = $1 AND or_t.status = 'active' AND o.status = 'active';
@@ -53,7 +53,7 @@ SELECT EXISTS(
 
 -- name: GetActiveOperatorByRegion :one
 -- 根据区域获取运营商（通过operator_regions表，支持多区域）
-SELECT o.* FROM operators o
+SELECT o.id, o.user_id, o.region_id, o.name, o.contact_name, o.contact_phone, o.wechat_mch_id, o.status, o.created_at, o.updated_at, o.contract_start_date, o.contract_end_date, o.contract_years, o.sub_mch_id, o.balance, o.wallet_account, o.rider_deposit, o.weather_coeff_extreme, o.weather_coeff_heavy, o.weather_coeff_moderate, o.weather_coeff_light, o.latest_settlement_application_no, o.latest_settlement_application_submitted_at FROM operators o
 JOIN operator_regions or_t ON o.id = or_t.operator_id
 WHERE or_t.region_id = $1 
     AND or_t.status = 'active' 
@@ -62,7 +62,7 @@ LIMIT 1;
 
 -- name: ListAllOperatorRegions :many
 -- 列出所有运营商区域关系（管理后台用）
-SELECT or_t.*, 
+SELECT or_t.id, or_t.operator_id, or_t.region_id, or_t.status, or_t.created_at,
     o.name as operator_name, 
     r.name as region_name, 
     r.code as region_code
