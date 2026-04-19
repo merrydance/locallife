@@ -158,7 +158,7 @@ WHERE
   AND (sqlc.narg('is_online')::boolean IS NULL OR d.is_online = sqlc.narg('is_online'))
   AND (sqlc.narg('is_available')::boolean IS NULL OR d.is_available = sqlc.narg('is_available'))
   AND (sqlc.narg('is_packaging')::boolean IS NULL OR d.is_packaging = sqlc.narg('is_packaging'))
-ORDER BY sort_order ASC, created_at DESC
+ORDER BY sort_order ASC, created_at DESC, id DESC
 LIMIT $2 OFFSET $3;
 
 -- name: SearchDishesByName :many
