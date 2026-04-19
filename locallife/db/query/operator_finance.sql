@@ -34,7 +34,7 @@ WHERE out_request_no = $1 LIMIT 1;
 SELECT id, user_id, amount, status, channel, account_info, reason, created_at, updated_at, out_request_no FROM withdrawal_records
 WHERE channel = $1
     AND status = 'pending'
-ORDER BY created_at ASC
+ORDER BY created_at ASC, id ASC
 LIMIT $2;
 
 -- name: UpdateWithdrawalStatus :one

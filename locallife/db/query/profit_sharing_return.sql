@@ -66,5 +66,5 @@ RETURNING *;
 SELECT id, refund_order_id, profit_sharing_order_id, payment_order_id, sub_mchid, out_order_no, out_return_no, return_mchid, amount, status, return_id, fail_reason, finished_at, created_at, updated_at FROM profit_sharing_returns
 WHERE status = 'processing'
   AND updated_at < $1
-ORDER BY updated_at ASC
+ORDER BY updated_at ASC, id ASC
 LIMIT $2;

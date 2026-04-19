@@ -73,14 +73,14 @@ LIMIT $2 OFFSET $3;
 -- name: ListProfitSharingOrdersByStatus :many
 SELECT id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate FROM profit_sharing_orders
 WHERE status = $1
-ORDER BY created_at
+ORDER BY created_at ASC, id ASC
 LIMIT $2 OFFSET $3;
 
 -- name: ListProfitSharingOrdersForRetry :many
 SELECT id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate FROM profit_sharing_orders
 WHERE status IN ('pending', 'failed', 'processing')
   AND created_at <= $1
-ORDER BY created_at ASC
+ORDER BY created_at ASC, id ASC
 LIMIT $2;
 
 -- name: GetProfitSharingReconciliationSummary :many

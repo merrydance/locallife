@@ -47,5 +47,5 @@ LIMIT $2 OFFSET $3;
 SELECT id, merchant_id, table_id, reservation_id, user_id, active_order_id, status, opened_at, closed_at, created_at, updated_at FROM dining_sessions
 WHERE status = sqlc.arg('status')
   AND opened_at < sqlc.arg('opened_at')
-ORDER BY opened_at ASC
+ORDER BY opened_at ASC, id ASC
 LIMIT sqlc.arg('limit');

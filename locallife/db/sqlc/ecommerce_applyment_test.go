@@ -468,6 +468,47 @@ func TestListPendingEcommerceApplyments(t *testing.T) {
 	}
 }
 
+func TestListPendingEcommerceApplymentsUsesIDTieBreaker(t *testing.T) {
+	sqlStore, ok := testStore.(*SQLStore)
+	require.True(t, ok)
+
+	var pendingCountBefore int64
+	err := sqlStore.connPool.QueryRow(context.Background(), `
+		SELECT count(*)
+		FROM ecommerce_applyments
+		WHERE status IN ('submitted', 'checking', 'auditing', 'account_need_verify', 'to_be_confirmed', 'to_be_signed', 'signing')
+	`).Scan(&pendingCountBefore)
+	require.NoError(t, err)
+
+	tiedCreatedAt := time.Now().UTC().Truncate(time.Microsecond)
+	applyment1 := createRandomEcommerceApplymentForMerchant(t)
+	applyment2 := createRandomEcommerceApplymentForMerchant(t)
+
+	for index, applyment := range []EcommerceApplyment{applyment1, applyment2} {
+		_, err = testStore.UpdateEcommerceApplymentToSubmitted(context.Background(), UpdateEcommerceApplymentToSubmittedParams{
+			ID:          applyment.ID,
+			ApplymentID: pgtype.Int8{Int64: int64(223456789 + index), Valid: true},
+		})
+		require.NoError(t, err)
+	}
+
+	_, err = sqlStore.connPool.Exec(context.Background(),
+		`UPDATE ecommerce_applyments SET created_at = $1 WHERE id = ANY($2)`,
+		tiedCreatedAt,
+		[]int64{applyment1.ID, applyment2.ID},
+	)
+	require.NoError(t, err)
+
+	applyments, err := testStore.ListPendingEcommerceApplyments(context.Background(), ListPendingEcommerceApplymentsParams{
+		Limit:  2,
+		Offset: int32(pendingCountBefore),
+	})
+	require.NoError(t, err)
+	require.Len(t, applyments, 2)
+	require.Equal(t, applyment1.ID, applyments[0].ID)
+	require.Equal(t, applyment2.ID, applyments[1].ID)
+}
+
 func TestCountEcommerceApplymentsByStatus(t *testing.T) {
 	// 创建一些记录
 	createRandomEcommerceApplymentForMerchant(t)

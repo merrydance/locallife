@@ -343,6 +343,50 @@ func TestGetLatestPaymentOrderByOrder(t *testing.T) {
 	require.Equal(t, paymentIDs[len(paymentIDs)-1], latestPayment.ID)
 }
 
+func TestListPaidUnprocessedPaymentOrdersUsesIDTieBreaker(t *testing.T) {
+	user := createRandomUser(t)
+	tiedPaidAt := time.Now().UTC().Truncate(time.Microsecond)
+	var paymentIDs []int64
+
+	for i := 0; i < 2; i++ {
+		payment := createRandomPaymentOrder(t, user.ID)
+		_, err := testStore.UpdatePaymentOrderToPaid(context.Background(), UpdatePaymentOrderToPaidParams{
+			ID:            payment.ID,
+			TransactionID: pgtype.Text{String: util.RandomString(32), Valid: true},
+		})
+		require.NoError(t, err)
+		paymentIDs = append(paymentIDs, payment.ID)
+	}
+
+	_, err := testStore.(*SQLStore).connPool.Exec(context.Background(),
+		`UPDATE payment_orders SET paid_at = $1 WHERE id = ANY($2)`,
+		tiedPaidAt,
+		paymentIDs,
+	)
+	require.NoError(t, err)
+
+	payments, err := testStore.ListPaidUnprocessedPaymentOrders(context.Background(), ListPaidUnprocessedPaymentOrdersParams{
+		PaidAt: pgtype.Timestamptz{Time: tiedPaidAt.Add(time.Second), Valid: true},
+		Limit:  1000,
+	})
+	require.NoError(t, err)
+
+	firstIndex := -1
+	secondIndex := -1
+	for index, payment := range payments {
+		switch payment.ID {
+		case paymentIDs[0]:
+			firstIndex = index
+		case paymentIDs[1]:
+			secondIndex = index
+		}
+	}
+
+	require.NotEqual(t, -1, firstIndex)
+	require.NotEqual(t, -1, secondIndex)
+	require.Less(t, firstIndex, secondIndex)
+}
+
 func TestGetPaymentOrderForUpdate(t *testing.T) {
 	user := createRandomUser(t)
 	payment1 := createRandomPaymentOrder(t, user.ID)

@@ -461,7 +461,7 @@ ORDER BY date DESC;
 SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot FROM orders
 WHERE status = sqlc.arg('status')
   AND created_at < sqlc.arg('created_at')
-ORDER BY created_at ASC
+ORDER BY created_at ASC, id ASC
 LIMIT sqlc.arg('limit');
 
 -- name: ListTakeoutOrdersDeliveredBefore :many
@@ -472,5 +472,5 @@ WHERE order_type = 'takeout'
     AND rider_delivered_at IS NOT NULL
     AND rider_delivered_at < sqlc.arg('delivered_before')
     AND replaced_by_order_id IS NULL
-ORDER BY rider_delivered_at ASC
+ORDER BY rider_delivered_at ASC, id ASC
 LIMIT sqlc.arg('limit');

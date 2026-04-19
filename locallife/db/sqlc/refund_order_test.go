@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/merrydance/locallife/util"
@@ -269,32 +270,47 @@ func TestUpdateRefundOrderToClosed(t *testing.T) {
 func TestListRefundOrdersByStatus(t *testing.T) {
 	user := createRandomUser(t)
 	payment := createRandomPaymentOrder(t, user.ID)
+	var pendingCountBefore int64
+	err := testStore.(*SQLStore).connPool.QueryRow(context.Background(), `SELECT count(*) FROM refund_orders WHERE status = 'pending'`).Scan(&pendingCountBefore)
+	require.NoError(t, err)
+	tiedCreatedAt := time.Now().UTC().Truncate(time.Microsecond)
 
 	// 先将支付单设为已支付
-	_, err := testStore.UpdatePaymentOrderToPaid(context.Background(), UpdatePaymentOrderToPaidParams{
+	_, err = testStore.UpdatePaymentOrderToPaid(context.Background(), UpdatePaymentOrderToPaidParams{
 		ID:            payment.ID,
 		TransactionID: pgtype.Text{String: util.RandomString(32), Valid: true},
 	})
 	require.NoError(t, err)
 
 	// 创建多个 pending 状态的退款
+	var refundIDs []int64
 	for i := 0; i < 2; i++ {
-		createRandomRefundOrder(t, payment.ID, 100)
+		refund := createRandomRefundOrder(t, payment.ID, 100)
+		refundIDs = append(refundIDs, refund.ID)
 	}
+
+	_, err = testStore.(*SQLStore).connPool.Exec(context.Background(),
+		`UPDATE refund_orders SET created_at = $1 WHERE id = ANY($2)`,
+		tiedCreatedAt,
+		refundIDs,
+	)
+	require.NoError(t, err)
 
 	arg := ListRefundOrdersByStatusParams{
 		Status: "pending",
-		Limit:  100,
-		Offset: 0,
+		Limit:  2,
+		Offset: int32(pendingCountBefore),
 	}
 
 	refunds, err := testStore.ListRefundOrdersByStatus(context.Background(), arg)
 	require.NoError(t, err)
-	require.GreaterOrEqual(t, len(refunds), 2)
+	require.Len(t, refunds, 2)
 
 	for _, refund := range refunds {
 		require.Equal(t, "pending", refund.Status)
 	}
+	require.Equal(t, refundIDs[0], refunds[0].ID)
+	require.Equal(t, refundIDs[1], refunds[1].ID)
 }
 
 func TestGetRefundOrderForUpdate(t *testing.T) {

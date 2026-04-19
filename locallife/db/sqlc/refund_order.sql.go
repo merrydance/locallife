@@ -273,7 +273,7 @@ WHERE ro.status = 'pending'
     AND po.reservation_id IS NOT NULL
     AND po.business_type IN ('reservation', 'reservation_addon')
     AND ro.created_at < $1
-ORDER BY ro.created_at ASC
+ORDER BY ro.created_at ASC, ro.id ASC
 LIMIT $2::int
 `
 
@@ -363,7 +363,7 @@ func (q *Queries) ListRefundOrdersByPaymentOrder(ctx context.Context, paymentOrd
 const listRefundOrdersByStatus = `-- name: ListRefundOrdersByStatus :many
 SELECT id, payment_order_id, refund_type, refund_amount, refund_reason, out_refund_no, refund_id, platform_refund, operator_refund, merchant_refund, status, refunded_at, created_at FROM refund_orders
 WHERE status = $1
-ORDER BY created_at
+ORDER BY created_at ASC, id ASC
 LIMIT $2 OFFSET $3
 `
 
@@ -465,7 +465,7 @@ FROM refund_orders ro
 JOIN payment_orders po ON po.id = ro.payment_order_id
 WHERE ro.status = 'processing'
   AND ro.created_at < $1
-ORDER BY ro.created_at ASC
+ORDER BY ro.created_at ASC, ro.id ASC
 LIMIT $2::int
 `
 

@@ -519,7 +519,7 @@ func (q *Queries) GetPendingPaymentOrderByUserAndBusinessType(ctx context.Contex
 const listExpiredPaymentOrders = `-- name: ListExpiredPaymentOrders :many
 SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at, payment_channel, requires_profit_sharing FROM payment_orders
 WHERE status = 'pending' AND expires_at < now()
-ORDER BY created_at
+ORDER BY created_at ASC, id ASC
 LIMIT $1
 `
 
@@ -622,6 +622,7 @@ WHERE status = 'paid'
             WHERE ro.payment_order_id = payment_orders.id
     )
 ORDER BY paid_at
+    , id ASC
 LIMIT $2
 `
 
@@ -685,6 +686,7 @@ WHERE
         AND ro.status IN ('pending', 'processing', 'success')
     )
 ORDER BY po.created_at
+    , po.id ASC
 LIMIT $1
 `
 
@@ -743,6 +745,7 @@ WHERE
         AND ro.status IN ('pending', 'processing', 'success')
     )
 ORDER BY po.created_at
+    , po.id ASC
 LIMIT $1
 `
 
