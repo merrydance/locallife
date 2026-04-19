@@ -18,7 +18,7 @@ WHERE id = $1 LIMIT 1;
 SELECT id, user_id, amount, status, channel, account_info, reason, created_at, updated_at, out_request_no FROM withdrawal_records
 WHERE user_id = $1
     AND channel = $2
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $3 OFFSET $4;
 
 -- name: CountWithdrawalRecords :one
