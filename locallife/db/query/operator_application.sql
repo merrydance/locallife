@@ -170,7 +170,7 @@ RETURNING *;
 -- name: ListPendingOperatorApplications :many
 -- 列出申请（平台管理员用，包含 submitted/approved/rejected）
 SELECT 
-  oa.*,
+  oa.id, oa.user_id, oa.region_id, oa.name, oa.contact_name, oa.contact_phone, oa.business_license_number, oa.business_license_ocr, oa.legal_person_name, oa.legal_person_id_number, oa.id_card_front_ocr, oa.id_card_back_ocr, oa.requested_contract_years, oa.status, oa.reject_reason, oa.reviewed_by, oa.reviewed_at, oa.created_at, oa.updated_at, oa.submitted_at, oa.business_license_media_asset_id, oa.id_card_front_media_asset_id, oa.id_card_back_media_asset_id,
   u.full_name as applicant_name,
   u.phone as applicant_phone,
   r.name as region_name,
@@ -190,7 +190,7 @@ WHERE status IN ('submitted', 'approved', 'rejected');
 -- name: ListOperatorApplications :many
 -- 列出所有申请（支持状态筛选）
 SELECT 
-  oa.*,
+  oa.id, oa.user_id, oa.region_id, oa.name, oa.contact_name, oa.contact_phone, oa.business_license_number, oa.business_license_ocr, oa.legal_person_name, oa.legal_person_id_number, oa.id_card_front_ocr, oa.id_card_back_ocr, oa.requested_contract_years, oa.status, oa.reject_reason, oa.reviewed_by, oa.reviewed_at, oa.created_at, oa.updated_at, oa.submitted_at, oa.business_license_media_asset_id, oa.id_card_front_media_asset_id, oa.id_card_back_media_asset_id,
   r.name as region_name,
   r.code as region_code
 FROM operator_applications oa
