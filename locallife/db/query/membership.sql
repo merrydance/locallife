@@ -203,13 +203,13 @@ LIMIT 1;
 -- name: ListMembershipTransactions :many
 SELECT id, membership_id, type, amount, balance_after, related_order_id, recharge_rule_id, notes, created_at, payment_order_id, principal_amount, bonus_amount, idempotency_key FROM membership_transactions
 WHERE membership_id = $1
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $2 OFFSET $3;
 
 -- name: ListMembershipTransactionsByType :many
 SELECT id, membership_id, type, amount, balance_after, related_order_id, recharge_rule_id, notes, created_at, payment_order_id, principal_amount, bonus_amount, idempotency_key FROM membership_transactions
 WHERE membership_id = $1 AND type = $2
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $3 OFFSET $4;
 
 -- name: GetMembershipTransactionStats :one

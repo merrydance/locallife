@@ -21,7 +21,7 @@ WHERE order_id = $1 LIMIT 1;
 SELECT id, order_id, user_id, merchant_id, content, is_visible, merchant_reply, replied_at, created_at FROM reviews
 WHERE merchant_id = $1
   AND is_visible = true
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $2 OFFSET $3;
 
 -- name: CountReviewsByMerchant :one
@@ -34,7 +34,7 @@ SELECT r.id, r.order_id, r.user_id, r.merchant_id, r.content, r.is_visible, r.me
 FROM reviews r
 JOIN merchants m ON r.merchant_id = m.id
 WHERE r.user_id = $1
-ORDER BY r.created_at DESC
+ORDER BY r.created_at DESC, r.id DESC
 LIMIT $2 OFFSET $3;
 
 -- name: CountReviewsByUser :one
@@ -81,7 +81,7 @@ WHERE review_id = $1;
 -- 商户查看所有评价（包含不可见的）
 SELECT id, order_id, user_id, merchant_id, content, is_visible, merchant_reply, replied_at, created_at FROM reviews
 WHERE merchant_id = $1
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $2 OFFSET $3;
 
 -- name: CountAllReviewsByMerchant :one
