@@ -946,7 +946,7 @@ SELECT id, payment_order_id, merchant_id, operator_id, order_source, total_amoun
 FROM profit_sharing_orders
 WHERE merchant_id = $1
   AND created_at >= $2 AND created_at <= $3
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $5 OFFSET $4
 `
 
@@ -1012,7 +1012,7 @@ FROM profit_sharing_orders
 WHERE merchant_id = $1
   AND status = $2
   AND created_at >= $3 AND created_at <= $4
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $6 OFFSET $5
 `
 
@@ -1077,7 +1077,7 @@ func (q *Queries) ListMerchantSettlementsByStatus(ctx context.Context, arg ListM
 const listProfitSharingOrdersByMerchant = `-- name: ListProfitSharingOrdersByMerchant :many
 SELECT id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate FROM profit_sharing_orders
 WHERE merchant_id = $1
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $2 OFFSET $3
 `
 
@@ -1131,7 +1131,7 @@ func (q *Queries) ListProfitSharingOrdersByMerchant(ctx context.Context, arg Lis
 const listProfitSharingOrdersByOperator = `-- name: ListProfitSharingOrdersByOperator :many
 SELECT id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate FROM profit_sharing_orders
 WHERE operator_id = $1
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $2 OFFSET $3
 `
 

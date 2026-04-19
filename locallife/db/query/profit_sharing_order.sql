@@ -61,13 +61,13 @@ WHERE payment_order_id = $1 LIMIT 1;
 -- name: ListProfitSharingOrdersByMerchant :many
 SELECT id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate FROM profit_sharing_orders
 WHERE merchant_id = $1
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $2 OFFSET $3;
 
 -- name: ListProfitSharingOrdersByOperator :many
 SELECT id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate FROM profit_sharing_orders
 WHERE operator_id = $1
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $2 OFFSET $3;
 
 -- name: ListProfitSharingOrdersByStatus :many
@@ -240,7 +240,7 @@ SELECT id, payment_order_id, merchant_id, operator_id, order_source, total_amoun
 FROM profit_sharing_orders
 WHERE merchant_id = sqlc.arg('merchant_id')
   AND created_at >= sqlc.arg('start_at') AND created_at <= sqlc.arg('end_at')
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
 -- name: ListMerchantSettlementsByStatus :many
@@ -250,7 +250,7 @@ FROM profit_sharing_orders
 WHERE merchant_id = sqlc.arg('merchant_id')
   AND status = sqlc.arg('status')
   AND created_at >= sqlc.arg('start_at') AND created_at <= sqlc.arg('end_at')
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
 -- name: CountMerchantSettlements :one
