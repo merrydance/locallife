@@ -53,7 +53,7 @@
 
 ### 3.2 选择列与返回面
 
-- 默认显式列出需要的列，避免在生产 query 中使用 `SELECT *`。
+- 默认显式列出需要的列，避免在生产 query 中使用 `SELECT *`、`alias.*`、`table.*` 或 `cte.*`。
 - 返回列应与真实调用面匹配，不为了“以后可能会用”而扩大返回面。
 - 当结果顺序会影响业务、分页或测试稳定性时，必须显式 `ORDER BY`。
 
@@ -78,6 +78,7 @@
 | 场景 | 禁止写法 | 推荐写法 |
 | --- | --- | --- |
 | 读取列面 | `SELECT * FROM orders WHERE id = $1;` | `SELECT id, user_id, status, total_amount, created_at FROM orders WHERE id = $1;` |
+| 读取列面 | `SELECT orders.* FROM orders WHERE id = $1;` | `SELECT id, user_id, status, total_amount, created_at FROM orders WHERE id = $1;` |
 | 分页稳定性 | `SELECT id, status FROM orders WHERE user_id = $1 LIMIT $2 OFFSET $3;` | `SELECT id, status FROM orders WHERE user_id = $1 ORDER BY id DESC LIMIT $2 OFFSET $3;` |
 | 无作用域写入 | `UPDATE orders SET status = 'closed';` | `UPDATE orders SET status = 'closed' WHERE id = $1 AND status = 'pending';` |
 | 无列名插入 | `INSERT INTO orders VALUES ($1, $2, $3);` | `INSERT INTO orders (user_id, merchant_id, status) VALUES ($1, $2, $3);` |
@@ -85,7 +86,7 @@
 
 额外说明：
 
-- `SELECT *` 不是“偷懒”，而是会扩大返回面、放大 schema 漂移风险，并让 review 难以判断调用面真实依赖。
+- `SELECT *` 与 `alias.*` / `table.*` / `cte.*` 不是“偷懒”，而是会扩大返回面、放大 schema 漂移风险，并让 review 难以判断调用面真实依赖。
 - `LIMIT` / `OFFSET` 没有 `ORDER BY`，在业务、分页和测试上都不稳定。
 - `UPDATE` / `DELETE` 没有 `WHERE`，默认按事故级危险写法处理。
 - `INSERT INTO ... VALUES (...)` 不写列名，会让 schema 演进时的风险被隐式放大。
@@ -200,12 +201,12 @@ LIMIT $4;
 
 ### 6.1 当前 CI SQL Guard 范围
 
-- 当前 guard 对 `SELECT *` 采用“全仓扫描 + baseline allowlist”模式：
+- 当前 guard 对 `SELECT *` 与 qualified-star 用法采用仓库级扫描：
   - 当前工作树中所有 `locallife/db/query/*.sql` 都会被扫描。
-  - 合法例外仍需使用带理由的 `sqlguard: allow-select-star`。
-  - 历史债务统一记录在 `.github/sqlguard/select_star_baseline.txt`。
+  - `SELECT *` 的历史债务统一记录在 `.github/sqlguard/select_star_baseline.txt`。
   - 新增 `SELECT *` 若不在 baseline 中，会直接失败，即使它不属于旧债文件。
-- 除 `SELECT *` 之外，其余轻量规则仍只检查被本次 diff 实质性触碰到的 query block。
+  - qualified-star 用法当前无 baseline；任何 `alias.*` / `table.*` / `cte.*` 都会直接失败，除非写了带理由的 `sqlguard: allow-qualified-star`。
+- 除 `SELECT *` 与 qualified-star 之外，其余轻量规则仍只检查被本次 diff 实质性触碰到的 query block。
 - 当前 diff-based guard 会拦截三类高信噪比问题：
   - `:many` query 中使用 `LIMIT` 或 `OFFSET` 但没有 `ORDER BY`。
   - `UPDATE` 或 `DELETE` 语句缺少 `WHERE`。
@@ -214,6 +215,7 @@ LIMIT $4;
 - 仅注释改动不会重新触发同一 query block 的 diff-based 历史坏 SQL 检查，但 query 名称变更仍视为实质性变更。
 - 允许的例外必须在对应 query block 内显式说明：
   - `sqlguard: allow-select-star`
+  - `sqlguard: allow-qualified-star`
   - `sqlguard: allow-unordered-limit`
   - `sqlguard: allow-unscoped-write`
   - `sqlguard: allow-implicit-insert-columns`

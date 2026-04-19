@@ -42,6 +42,30 @@ all_query_names_in_file() {
   ' "$repo_root/$file"
 }
 
+normalize_sql_block() {
+  local block="$1"
+
+  printf '%s\n' "$block" | tr '[:upper:]' '[:lower:]' | tr '\n\t' '  ' | tr -s ' '
+}
+
+normalize_sql_body() {
+  local block="$1"
+
+  printf '%s\n' "$block" | sed '/^[[:space:]]*--/d' | tr '[:upper:]' '[:lower:]' | tr '\n\t' '  ' | tr -s ' '
+}
+
+has_select_star_usage() {
+  local normalized_sql="$1"
+
+  [[ "$normalized_sql" =~ select[[:space:]]+\* ]]
+}
+
+has_qualified_star_usage() {
+  local normalized_sql="$1"
+
+  [[ "$normalized_sql" =~ (^|[^[:alnum:]_])([a-z_][a-z0-9_]*)\.\*([^[:alnum:]_]|$) ]]
+}
+
 check_select_star_baseline() {
   local file query_name block normalized key
 
@@ -56,7 +80,8 @@ check_select_star_baseline() {
       block="$(query_block_for_name "$file" "$query_name")"
       [[ -n "$block" ]] || continue
 
-      normalized="$(printf '%s' "$block" | tr '[:upper:]' '[:lower:]' | tr '\n\t' '  ' | tr -s ' ')"
+      normalized="$(normalize_sql_block "$block")"
+      sql_body_normalized="$(normalize_sql_body "$block")"
 
       if [[ "$normalized" == *"sqlguard: allow-select-star"* ]]; then
         if has_sqlguard_justification "$block" "sqlguard: allow-select-star"; then
@@ -69,7 +94,7 @@ check_select_star_baseline() {
         continue
       fi
 
-      if [[ "$normalized" =~ select[[:space:]]+\* ]]; then
+      if has_select_star_usage "$sql_body_normalized"; then
         key="$file::$query_name"
         if [[ -n "${select_star_baseline[$key]:-}" ]]; then
           matched_select_star_baseline["$key"]=1
@@ -97,6 +122,43 @@ check_select_star_baseline() {
       echo "  ℹ️ $stale_entries stale select-star baseline entries detected; consider trimming .github/sqlguard/select_star_baseline.txt"
     fi
   fi
+}
+
+check_qualified_star_usage() {
+  local file query_name block normalized sql_body_normalized
+
+  echo "Checking repository qualified-star usage..."
+
+  while IFS= read -r file; do
+    [[ -f "$repo_root/$file" ]] || continue
+
+    while IFS= read -r query_name; do
+      [[ -n "$query_name" ]] || continue
+
+      block="$(query_block_for_name "$file" "$query_name")"
+      [[ -n "$block" ]] || continue
+
+      normalized="$(normalize_sql_block "$block")"
+      sql_body_normalized="$(normalize_sql_body "$block")"
+
+      if [[ "$normalized" == *"sqlguard: allow-qualified-star"* ]]; then
+        if has_sqlguard_justification "$block" "sqlguard: allow-qualified-star"; then
+          continue
+        fi
+
+        echo "  ❌ $file :: $query_name uses bare 'sqlguard: allow-qualified-star' without a concrete justification"
+        echo "     keep the allow comment on one line and explain why the default rule does not apply and why the exception is safe here"
+        violations=$((violations + 1))
+        continue
+      fi
+
+      if has_qualified_star_usage "$sql_body_normalized"; then
+        echo "  ❌ $file :: $query_name uses qualified star syntax (for example alias.*)"
+        echo "     add explicit columns or annotate with 'sqlguard: allow-qualified-star' when the qualified star is truly required"
+        violations=$((violations + 1))
+      fi
+    done < <(all_query_names_in_file "$file")
+  done < <(find "$repo_root/locallife/db/query" -type f -name '*.sql' | sort | sed "s#^$repo_root/##")
 }
 
 usable_base_ref=1
@@ -288,6 +350,7 @@ has_sqlguard_justification() {
 load_select_star_baseline
 
 check_select_star_baseline
+check_qualified_star_usage
 
 mapfile -t changed_files < <(
   if (( usable_base_ref == 1 )); then
@@ -333,7 +396,8 @@ for file in "${changed_files[@]}"; do
     fi
 
     header="$(printf '%s\n' "$block" | head -n 1)"
-    normalized="$(printf '%s' "$block" | tr '[:upper:]' '[:lower:]' | tr '\n\t' '  ' | tr -s ' ')"
+    normalized="$(normalize_sql_block "$block")"
+    sql_body_normalized="$(normalize_sql_body "$block")"
 
     allow_select_star=0
     if [[ "$normalized" == *"sqlguard: allow-select-star"* ]]; then
@@ -346,9 +410,26 @@ for file in "${changed_files[@]}"; do
       fi
     fi
 
-    if (( allow_select_star == 0 )) && [[ "$normalized" =~ select[[:space:]]+\* ]]; then
+    if (( allow_select_star == 0 )) && has_select_star_usage "$sql_body_normalized"; then
       echo "  ❌ $file :: $query_name uses SELECT * in a touched query block"
       echo "     add explicit columns or annotate with 'sqlguard: allow-select-star' when justified"
+      violations=$((violations + 1))
+    fi
+
+    allow_qualified_star=0
+    if [[ "$normalized" == *"sqlguard: allow-qualified-star"* ]]; then
+      if has_sqlguard_justification "$block" "sqlguard: allow-qualified-star"; then
+        allow_qualified_star=1
+      else
+        echo "  ❌ $file :: $query_name uses bare 'sqlguard: allow-qualified-star' without a concrete justification"
+        echo "     keep the allow comment on one line and explain why the default rule does not apply and why the exception is safe here"
+        violations=$((violations + 1))
+      fi
+    fi
+
+    if (( allow_qualified_star == 0 )) && has_qualified_star_usage "$sql_body_normalized"; then
+      echo "  ❌ $file :: $query_name uses qualified star syntax (for example alias.*) in a touched query block"
+      echo "     add explicit columns or annotate with 'sqlguard: allow-qualified-star' when the qualified star is truly required"
       violations=$((violations + 1))
     fi
 
