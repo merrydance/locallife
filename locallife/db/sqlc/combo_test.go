@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/merrydance/locallife/util"
@@ -160,6 +161,33 @@ func TestListComboSetsByMerchantWithFilter(t *testing.T) {
 		require.True(t, combo.IsOnline)
 		require.NotZero(t, combo.ID)
 	}
+}
+
+func TestListComboSetsByMerchantUsesIDTieBreaker(t *testing.T) {
+	merchant := createRandomMerchantForDish(t)
+	combo1 := createRandomComboSet(t, merchant.ID)
+	combo2 := createRandomComboSet(t, merchant.ID)
+	tiedCreatedAt := time.Now().UTC().Truncate(time.Microsecond)
+
+	store, ok := testStore.(*SQLStore)
+	require.True(t, ok)
+
+	_, err := store.connPool.Exec(context.Background(),
+		"UPDATE combo_sets SET created_at = $1 WHERE id = ANY($2)",
+		tiedCreatedAt,
+		[]int64{combo1.ID, combo2.ID},
+	)
+	require.NoError(t, err)
+
+	rows, err := testStore.ListComboSetsByMerchant(context.Background(), ListComboSetsByMerchantParams{
+		MerchantID: merchant.ID,
+		Limit:      2,
+		Offset:     0,
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+	require.Equal(t, combo2.ID, rows[0].ID)
+	require.Equal(t, combo1.ID, rows[1].ID)
 }
 
 func TestUpdateComboSet(t *testing.T) {

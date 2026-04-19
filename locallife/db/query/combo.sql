@@ -93,7 +93,7 @@ WHERE
   cs.merchant_id = $1
   AND cs.deleted_at IS NULL
   AND (sqlc.narg('is_online')::boolean IS NULL OR cs.is_online = sqlc.narg('is_online'))
-ORDER BY cs.created_at DESC
+ORDER BY cs.created_at DESC, cs.id DESC
 LIMIT $2 OFFSET $3;
 
 -- name: UpdateComboSet :one
