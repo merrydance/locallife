@@ -21,7 +21,7 @@ SELECT id, user_id, type, title, content, related_type, related_id, extra_data, 
 WHERE user_id = $1
   AND (sqlc.narg('is_read')::boolean IS NULL OR is_read = sqlc.narg('is_read'))
   AND (sqlc.narg('type')::text IS NULL OR type = sqlc.narg('type'))
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $2 OFFSET $3;
 
 -- name: CountUserNotifications :one

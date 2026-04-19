@@ -130,6 +130,31 @@ func TestListUserNotifications_WithFilters(t *testing.T) {
 	require.Equal(t, "payment", notifications[0].Type)
 }
 
+func TestListUserNotifications_UsesIDTieBreaker(t *testing.T) {
+	user := createRandomUser(t)
+	tiedCreatedAt := time.Now().UTC().Truncate(time.Microsecond)
+
+	notif1 := createRandomNotification(t, user.ID)
+	notif2 := createRandomNotification(t, user.ID)
+
+	_, err := testStore.(*SQLStore).connPool.Exec(context.Background(),
+		"UPDATE notifications SET created_at = $1 WHERE id = ANY($2)",
+		tiedCreatedAt,
+		[]int64{notif1.ID, notif2.ID},
+	)
+	require.NoError(t, err)
+
+	notifications, err := testStore.ListUserNotifications(context.Background(), ListUserNotificationsParams{
+		UserID: user.ID,
+		Limit:  2,
+		Offset: 0,
+	})
+	require.NoError(t, err)
+	require.Len(t, notifications, 2)
+	require.Equal(t, notif2.ID, notifications[0].ID)
+	require.Equal(t, notif1.ID, notifications[1].ID)
+}
+
 func TestCountUserNotifications(t *testing.T) {
 	user := createRandomUser(t)
 
