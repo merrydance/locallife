@@ -1,6 +1,6 @@
 <custom-navbar title="{{navTitle}}" showBack="{{false}}" />
 
-<view class="container" style="padding-top: {{navBarHeight}}px">
+<view class="container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px;">
   <view class="success-wrap">
     <t-result
       theme="{{resultTheme}}"

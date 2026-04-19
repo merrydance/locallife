@@ -1,7 +1,7 @@
 const fs = require('fs')
 const path = require('path')
 const ts = require('typescript')
-const { repoRoot, getChangedEntries } = require('./gate-utils')
+const { repoRoot, getGateScope, getScopedFiles } = require('./gate-utils')
 
 const SURFACE_ROOTS = ['weapp/miniprogram/pages/', 'weapp/miniprogram/components/']
 const ALLOWLIST = new Set([
@@ -11,14 +11,11 @@ const ALLOWLIST = new Set([
 const FORBIDDEN_CONSOLE_ROLES = new Set(['admin', 'operator', 'merchant', 'rider', 'customer', 'guest'])
 
 function main() {
-  const changedFiles = getChangedEntries()
-    .map((entry) => entry.filePath)
-    .filter((filePath) => SURFACE_ROOTS.some((root) => filePath.startsWith(root)))
-    .filter((filePath) => ['.ts', '.js'].includes(path.extname(filePath)))
+  const changedFiles = getScopedFiles({ roots: SURFACE_ROOTS, extensions: ['.ts', '.js'] })
     .filter((filePath) => !ALLOWLIST.has(filePath))
 
   if (changedFiles.length === 0) {
-    console.log('check-role-contract: no changed Mini Program page/component scripts detected')
+    console.log(`check-role-contract: no ${getGateScope() === 'changed' ? 'changed' : 'scannable'} Mini Program page/component scripts detected`)
     return
   }
 
@@ -67,7 +64,7 @@ function main() {
     process.exit(1)
   }
 
-  console.log(`check-role-contract: validated ${changedFiles.length} changed script file(s)`) 
+  console.log(`check-role-contract: validated ${changedFiles.length} script file(s)`) 
 }
 
 function walk(node, visitor) {

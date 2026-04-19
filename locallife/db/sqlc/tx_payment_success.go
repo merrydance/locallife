@@ -138,7 +138,7 @@ func (store *SQLStore) ProcessPaymentSuccessTx(ctx context.Context, arg ProcessP
 			}
 			reservationID := paymentOrder.ReservationID.Int64
 			// 幂等检查：payment_order_id 有唯一约束，重试时 INSERT 会触发 23505，
-			// 而非 ErrRecordNotFound；必须先查后插，与 rider_deposit/membership_recharge 保持一致。
+			// 而非 ErrRecordNotFound；必须先查后插，与 rider_deposit 保持一致。
 			if _, err := q.GetReservationPaymentByPaymentOrderID(ctx, paymentOrder.ID); err == nil {
 				break // 已处理，幂等跳过
 			} else if !errors.Is(err, ErrRecordNotFound) {
@@ -191,69 +191,6 @@ func (store *SQLStore) ProcessPaymentSuccessTx(ctx context.Context, arg ProcessP
 			}
 			if _, err := syncReservationInventoryWithQueries(ctx, q, reservationID); err != nil {
 				return fmt.Errorf("sync reservation inventory: %w", err)
-			}
-
-		case "membership_recharge":
-			if !paymentOrder.Attach.Valid || paymentOrder.Attach.String == "" {
-				return fmt.Errorf("attach data is missing")
-			}
-
-			var attachData struct {
-				MembershipID   int64  `json:"membership_id"`
-				BonusAmount    int64  `json:"bonus_amount"`
-				RechargeRuleID *int64 `json:"recharge_rule_id"`
-			}
-			if err := json.Unmarshal([]byte(paymentOrder.Attach.String), &attachData); err != nil {
-				return fmt.Errorf("parse attach data: %w", err)
-			}
-
-			if _, err := q.GetMembershipTransactionByPaymentOrderID(ctx, pgtype.Int8{Int64: paymentOrder.ID, Valid: true}); err == nil {
-				break
-			} else if !errors.Is(err, ErrRecordNotFound) {
-				return fmt.Errorf("get membership transaction by payment order: %w", err)
-			}
-
-			membership, err := q.GetMembershipForUpdate(ctx, attachData.MembershipID)
-			if err != nil {
-				return fmt.Errorf("get membership: %w", err)
-			}
-
-			principalAmount := paymentOrder.Amount
-			bonusAmount := attachData.BonusAmount
-			newPrincipal := membership.PrincipalBalance + principalAmount
-			newBonus := membership.BonusBalance + bonusAmount
-			newBalance := newPrincipal + newBonus
-
-			if _, err := q.UpdateMembershipBalance(ctx, UpdateMembershipBalanceParams{
-				ID:               attachData.MembershipID,
-				Balance:          newBalance,
-				PrincipalBalance: newPrincipal,
-				BonusBalance:     newBonus,
-				TotalRecharged:   membership.TotalRecharged + principalAmount + bonusAmount,
-				TotalConsumed:    membership.TotalConsumed,
-			}); err != nil {
-				return fmt.Errorf("update balance: %w", err)
-			}
-
-			var rechargeRuleIDPg pgtype.Int8
-			if attachData.RechargeRuleID != nil {
-				rechargeRuleIDPg = pgtype.Int8{Int64: *attachData.RechargeRuleID, Valid: true}
-			}
-
-			notesPg := pgtype.Text{String: fmt.Sprintf("微信支付充值，订单号：%s", paymentOrder.OutTradeNo), Valid: true}
-			if _, err := q.CreateMembershipTransactionWithPaymentOrderID(ctx, CreateMembershipTransactionWithPaymentOrderIDParams{
-				MembershipID:    attachData.MembershipID,
-				Type:            "recharge",
-				Amount:          principalAmount + bonusAmount,
-				PrincipalAmount: principalAmount,
-				BonusAmount:     bonusAmount,
-				BalanceAfter:    newBalance,
-				RelatedOrderID:  pgtype.Int8{},
-				RechargeRuleID:  rechargeRuleIDPg,
-				Notes:           notesPg,
-				PaymentOrderID:  pgtype.Int8{Int64: paymentOrder.ID, Valid: true},
-			}); err != nil {
-				return fmt.Errorf("create membership transaction: %w", err)
 			}
 
 		case "order":

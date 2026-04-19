@@ -2,6 +2,7 @@ import { claimManagementService } from '../../../../api/appeals-customer-service
 import type { UserClaimType, SubmitClaimResponse } from '../../../../api/appeals-customer-service'
 import { getOrderDetail } from '../../../../api/order'
 import { logger } from '../../../../utils/logger'
+import { getSubmitResultPresentation } from '../../../../utils/user-claim-submit-view'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
 
 const SUPPORTED_USER_CLAIM_TYPES: UserClaimType[] = ['foreign-object', 'damage', 'timeout']
@@ -36,40 +37,6 @@ const TYPE_TITLE_MAP: Record<UserClaimType, string> = {
   'foreign-object': '异物问题反馈',
   'damage': '餐品损坏反馈',
   'timeout': '配送超时反馈'
-}
-
-type SubmitResultPresentation = {
-  icon: string
-  color: string
-  title: string
-  summary: string
-}
-
-function getSubmitResultPresentation(result: SubmitClaimResponse): SubmitResultPresentation {
-  if (result.payout_status === 'paid') {
-    return {
-      icon: 'check-circle-filled',
-      color: '#2e7d32',
-      title: '赔付已到账',
-      summary: '平台已受理并完成自动裁定，赔付已到账。'
-    }
-  }
-
-  if (result.decision_status === 'auto-adjudicated') {
-    return {
-      icon: 'check-circle-filled',
-      color: '#1976d2',
-      title: '已自动裁定',
-      summary: '平台已受理并完成自动裁定，赔付正在处理中。'
-    }
-  }
-
-  return {
-    icon: 'time-filled',
-    color: '#1976d2',
-    title: '平台已受理',
-    summary: '平台已受理您的反馈，正在为您处理。'
-  }
 }
 
 /** 最小索赔原因字数 */
@@ -177,7 +144,7 @@ Page({
     })
   },
 
-  onAmountInput(e: WechatMiniprogram.Input) {
+  onAmountInput(e: WechatMiniprogram.CustomEvent<{ value?: string }>) {
     this.setData({ amountInput: e.detail.value })
     this.validateForm()
   },

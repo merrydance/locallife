@@ -1,7 +1,7 @@
 <custom-navbar title="{{pageTitle}}" showBack="{{true}}" />
 
 <view
-  class="page-container page-shell page-shell--with-nav page-shell--bottom-safe"
+  class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
   style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: 32rpx;"
 >
   <view wx:if="{{accessReady && accessDenied}}" class="loading-state loading-state-page">
@@ -10,7 +10,7 @@
 
   <view wx:elif="{{accessReady && accessErrorMessage}}" class="loading-state loading-state-page">
     <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
-    <t-button theme="primary" size="small" shape="round" bind:tap="onRetryAccess">重新校验</t-button>
+    <t-button theme="primary" bind:tap="onRetryAccess">重新校验</t-button>
   </view>
 
   <view wx:elif="{{initialLoading}}" class="loading-state loading-state-page">
@@ -19,7 +19,7 @@
 
   <view wx:elif="{{initialError}}" class="loading-state loading-state-page">
     <t-empty icon="info-circle" description="{{initialErrorMessage || '订单加载失败，请重试'}}" />
-    <t-button theme="primary" size="small" shape="round" bind:tap="onRetry">重新加载</t-button>
+    <t-button theme="primary" bind:tap="onRetry">重新加载</t-button>
   </view>
 
   <block wx:else>

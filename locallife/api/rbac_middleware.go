@@ -362,20 +362,6 @@ func GetRiderFromContext(ctx *gin.Context) (db.Rider, bool) {
 	return rider, ok
 }
 
-// HasRoleInContext 检查 context 中的用户角色是否包含指定角色
-func HasRoleInContext(ctx *gin.Context, role string) bool {
-	roles, ok := GetUserRolesFromContext(ctx)
-	if !ok {
-		return false
-	}
-	for _, r := range roles {
-		if r.Role == role && r.Status == "active" {
-			return true
-		}
-	}
-	return false
-}
-
 // GetMerchantStaffRoleFromContext 从 context 获取商户员工角色
 func GetMerchantStaffRoleFromContext(ctx *gin.Context) (string, bool) {
 	val, exists := ctx.Get(merchantStaffRoleKey)

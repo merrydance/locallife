@@ -29,6 +29,7 @@ import (
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/util"
 	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	"github.com/stretchr/testify/require"
 )
 
@@ -84,9 +85,9 @@ func (c *integrationTestPaymentClient) GetMchID() string { return "integration-m
 
 func (c *integrationTestPaymentClient) GetAppID() string { return "integration-app" }
 
-func (c *integrationTestPaymentClient) CreateJSAPIOrder(ctx context.Context, req *wechat.JSAPIOrderRequest) (*wechat.JSAPIOrderResponse, *wechat.JSAPIPayParams, error) {
+func (c *integrationTestPaymentClient) CreateJSAPIOrder(ctx context.Context, req *wechatcontracts.DirectJSAPIOrderRequest) (*wechatcontracts.DirectJSAPIOrderResponse, *wechat.JSAPIPayParams, error) {
 	prepayID := "prepay_" + util.RandomString(12)
-	return &wechat.JSAPIOrderResponse{PrepayID: prepayID}, &wechat.JSAPIPayParams{
+	return &wechatcontracts.DirectJSAPIOrderResponse{PrepayID: prepayID}, &wechat.JSAPIPayParams{
 		TimeStamp: strconv.FormatInt(time.Now().Unix(), 10),
 		NonceStr:  util.RandomString(12),
 		Package:   "prepay_id=" + prepayID,
@@ -95,8 +96,8 @@ func (c *integrationTestPaymentClient) CreateJSAPIOrder(ctx context.Context, req
 	}, nil
 }
 
-func (c *integrationTestPaymentClient) QueryOrderByOutTradeNo(ctx context.Context, outTradeNo string) (*wechat.OrderQueryResponse, error) {
-	return &wechat.OrderQueryResponse{OutTradeNo: outTradeNo, TradeState: "SUCCESS"}, nil
+func (c *integrationTestPaymentClient) QueryOrderByOutTradeNo(ctx context.Context, outTradeNo string) (*wechatcontracts.DirectOrderQueryResponse, error) {
+	return &wechatcontracts.DirectOrderQueryResponse{OutTradeNo: outTradeNo, TradeState: wechatcontracts.DirectTradeStateSuccess}, nil
 }
 
 func (c *integrationTestPaymentClient) CloseOrder(ctx context.Context, outTradeNo string) error {
@@ -111,30 +112,38 @@ func (c *integrationTestPaymentClient) QueryRefund(ctx context.Context, outRefun
 	return &wechat.RefundResponse{RefundID: outRefundNo, Status: wechat.RefundStatusSuccess}, nil
 }
 
-func (c *integrationTestPaymentClient) CreateTransfer(ctx context.Context, req *wechat.TransferRequest) (*wechat.TransferResponse, error) {
-	return &wechat.TransferResponse{
-		OutBatchNo:  req.OutBatchNo,
-		BatchID:     "batch_" + util.RandomString(10),
-		BatchStatus: "ACCEPTED",
-		CreateTime:  time.Now().Format(time.RFC3339),
+func (c *integrationTestPaymentClient) CreateTransfer(ctx context.Context, req *wechatcontracts.DirectMerchantTransferCreateRequest) (*wechatcontracts.DirectMerchantTransferCreateResponse, error) {
+	return &wechatcontracts.DirectMerchantTransferCreateResponse{
+		OutBillNo:      req.OutBillNo,
+		TransferBillNo: "wxbill_" + util.RandomString(10),
+		State:          wechatcontracts.DirectMerchantTransferStateAccepted,
+		CreateTime:     time.Now().Format(time.RFC3339),
 	}, nil
 }
 
-func (c *integrationTestPaymentClient) QueryTransfer(ctx context.Context, outBatchNo string) (*wechat.TransferQueryResponse, error) {
-	return &wechat.TransferQueryResponse{
-		OutBatchNo:  outBatchNo,
-		BatchID:     "batch_" + util.RandomString(10),
-		BatchStatus: "FINISHED",
-		CreateTime:  time.Now().Add(-time.Minute).Format(time.RFC3339),
-		UpdateTime:  time.Now().Format(time.RFC3339),
+func (c *integrationTestPaymentClient) QueryTransferByOutBillNo(ctx context.Context, outBillNo string) (*wechatcontracts.DirectMerchantTransferQueryResponse, error) {
+	return &wechatcontracts.DirectMerchantTransferQueryResponse{
+		MchID:          c.GetMchID(),
+		AppID:          c.GetAppID(),
+		OutBillNo:      outBillNo,
+		TransferBillNo: "wxbill_" + util.RandomString(10),
+		State:          wechatcontracts.DirectMerchantTransferStateSuccess,
+		TransferAmount: 1,
+		TransferRemark: "integration",
+		CreateTime:     time.Now().Add(-time.Minute).Format(time.RFC3339),
+		UpdateTime:     time.Now().Format(time.RFC3339),
 	}, nil
 }
 
-func (c *integrationTestPaymentClient) DecryptPaymentNotification(notification *wechat.PaymentNotification) (*wechat.PaymentNotificationResource, error) {
+func (c *integrationTestPaymentClient) DecryptMerchantTransferNotification(notification *wechat.PaymentNotification) (*wechatcontracts.DirectMerchantTransferNotificationResource, error) {
 	return nil, errors.New("integration test payment client does not decrypt notifications")
 }
 
-func (c *integrationTestPaymentClient) DecryptRefundNotification(notification *wechat.PaymentNotification) (*wechat.RefundNotificationResource, error) {
+func (c *integrationTestPaymentClient) DecryptPaymentNotification(notification *wechat.PaymentNotification) (*wechatcontracts.DirectPaymentNotificationResource, error) {
+	return nil, errors.New("integration test payment client does not decrypt notifications")
+}
+
+func (c *integrationTestPaymentClient) DecryptRefundNotification(notification *wechat.PaymentNotification) (*wechatcontracts.DirectRefundNotificationResource, error) {
 	return nil, errors.New("integration test payment client does not decrypt notifications")
 }
 
@@ -142,7 +151,7 @@ func (c *integrationTestPaymentClient) DecryptNotificationRaw(notification *wech
 	return nil, errors.New("integration test payment client does not decrypt notifications")
 }
 
-func (c *integrationTestPaymentClient) VerifyNotificationSignature(signature, timestamp, nonce, body string) error {
+func (c *integrationTestPaymentClient) VerifyNotificationSignature(signature, timestamp, nonce, serial, body string) error {
 	return nil
 }
 
@@ -257,7 +266,8 @@ func initIntegrationServer(t *testing.T) (*api.Server, *db.SQLStore) {
 		integrationServer = server
 	})
 
-	integrationServer.SetPaymentClientForTest(&integrationTestPaymentClient{})
+	client := &integrationTestPaymentClient{}
+	integrationServer.SetPaymentClientsForTest(client, client)
 
 	return integrationServer, integrationStore
 }

@@ -42,22 +42,6 @@ export interface PlatformProfitSharingReconciliationRow {
   total_operator_commission: number;
 }
 
-export interface BillReconciliationReport {
-  id: number;
-  bill_date: string;       // "2006-01-02"
-  bill_type: string;       // "trade" | "ecommerce_trade" | "refund"
-  status: string;          // "pending" | "running" | "completed" | "failed"
-  wxpay_count: number;
-  local_count: number;
-  mismatch_count: number;
-  missing_local: unknown[];
-  missing_wxpay: unknown[];
-  amount_mismatch: unknown[];
-  error_message?: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
 export interface RegionComparisonRow {
   region_id: number;
   region_name: string;

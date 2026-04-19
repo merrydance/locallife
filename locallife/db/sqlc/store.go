@@ -90,18 +90,13 @@ type Store interface {
 	OpenDiningSessionTx(ctx context.Context, arg OpenDiningSessionTxParams) (OpenDiningSessionTxResult, error)
 	TransferDiningSessionTableTx(ctx context.Context, arg TransferDiningSessionTableTxParams) (TransferDiningSessionTableTxResult, error)
 	CloseDiningSessionTx(ctx context.Context, arg CloseDiningSessionTxParams) (CloseDiningSessionTxResult, error)
-	// Claim payout transactions（索赔平台赔付）
-	ClaimPayoutTx(ctx context.Context, arg ClaimPayoutTxParams) (ClaimPayoutTxResult, error)
-	ClaimPayoutRollbackTx(ctx context.Context, arg ClaimPayoutRollbackTxParams) (ClaimPayoutRollbackTxResult, error)
-	AppealCompensationTx(ctx context.Context, arg AppealCompensationTxParams) (AppealCompensationTxResult, error)
 	// Behavior trace transactions
 	CreateClaimWithBehaviorTx(ctx context.Context, arg CreateClaimWithBehaviorTxParams) (CreateClaimWithBehaviorTxResult, error)
+	CreateAppealWithRecoveryTx(ctx context.Context, arg CreateAppealWithRecoveryTxParams) (CreateAppealWithRecoveryTxResult, error)
 	ReviewAppealWithCompensationTx(ctx context.Context, arg ReviewAppealWithCompensationTxParams) (ReviewAppealWithCompensationTxResult, error)
 	// Group multi-store transactions
 	ApproveGroupApplicationTx(ctx context.Context, arg ApproveGroupApplicationTxParams) (ApproveGroupApplicationTxResult, error)
 	ApproveGroupJoinRequestTx(ctx context.Context, arg ApproveGroupJoinRequestTxParams) (ApproveGroupJoinRequestTxResult, error)
-	// Operator transactions
-	WithdrawOperatorTx(ctx context.Context, arg WithdrawOperatorTxParams) (WithdrawOperatorTxResult, error)
 	// Profit sharing config transactions
 	CreateProfitSharingConfigTx(ctx context.Context, arg CreateProfitSharingConfigTxParams) (CreateProfitSharingConfigTxResult, error)
 	UpdateProfitSharingConfigTx(ctx context.Context, arg UpdateProfitSharingConfigTxParams) (UpdateProfitSharingConfigTxResult, error)

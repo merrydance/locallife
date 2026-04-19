@@ -1,0 +1,9 @@
+{
+  "purpose": "Reusable multi-row list skeleton for list and table-like loading states.",
+  "tdesignGroup": "feedback",
+  "tdesignCandidates": [
+    "skeleton"
+  ],
+  "decision": "tdesign-wrapper",
+  "rationale": "The component keeps repeated list-loading structure and spacing consistent while delegating the visual primitive to TDesign skeleton."
+}

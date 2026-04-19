@@ -1,7 +1,7 @@
 -- 商户会员设置查询
 
 -- name: GetMerchantMembershipSettings :one
-SELECT * FROM merchant_membership_settings
+SELECT id, merchant_id, balance_usable_scenes, bonus_usable_scenes, allow_with_voucher, allow_with_discount, max_deduction_percent, created_at, updated_at FROM merchant_membership_settings
 WHERE merchant_id = $1 LIMIT 1;
 
 -- name: CreateMerchantMembershipSettings :one

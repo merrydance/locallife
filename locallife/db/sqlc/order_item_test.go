@@ -153,12 +153,14 @@ func createRandomPaymentOrderWithOrder(t *testing.T, userID int64, orderID *int6
 	}
 
 	arg := CreatePaymentOrderParams{
-		UserID:       userID,
-		PaymentType:  "miniprogram",
-		BusinessType: "order",
-		Amount:       amount,
-		OutTradeNo:   outTradeNo,
-		ExpiresAt:    pgtype.Timestamptz{Time: time.Now().Add(15 * time.Minute), Valid: true},
+		UserID:                userID,
+		PaymentType:           "miniprogram",
+		PaymentChannel:        PaymentChannelDirect,
+		RequiresProfitSharing: false,
+		BusinessType:          "order",
+		Amount:                amount,
+		OutTradeNo:            outTradeNo,
+		ExpiresAt:             pgtype.Timestamptz{Time: time.Now().Add(15 * time.Minute), Valid: true},
 	}
 
 	if orderID != nil {
@@ -274,13 +276,15 @@ func TestGetPaymentOrdersByOrder(t *testing.T) {
 	// 创建关联到订单的支付单
 	outTradeNo := util.RandomString(32)
 	arg := CreatePaymentOrderParams{
-		OrderID:      pgtype.Int8{Int64: order.ID, Valid: true},
-		UserID:       order.UserID,
-		PaymentType:  "miniprogram",
-		BusinessType: "order",
-		Amount:       order.TotalAmount,
-		OutTradeNo:   outTradeNo,
-		ExpiresAt:    pgtype.Timestamptz{Time: time.Now().Add(15 * time.Minute), Valid: true},
+		OrderID:               pgtype.Int8{Int64: order.ID, Valid: true},
+		UserID:                order.UserID,
+		PaymentType:           "miniprogram",
+		PaymentChannel:        PaymentChannelDirect,
+		RequiresProfitSharing: false,
+		BusinessType:          "order",
+		Amount:                order.TotalAmount,
+		OutTradeNo:            outTradeNo,
+		ExpiresAt:             pgtype.Timestamptz{Time: time.Now().Add(15 * time.Minute), Valid: true},
 	}
 
 	_, err := testStore.CreatePaymentOrder(context.Background(), arg)
@@ -298,24 +302,35 @@ func TestGetPaymentOrdersByOrder(t *testing.T) {
 
 func TestGetLatestPaymentOrderByOrder(t *testing.T) {
 	order := createRandomOrder(t)
+	tiedCreatedAt := time.Now().UTC().Truncate(time.Microsecond)
+	var paymentIDs []int64
 
 	// 创建多个关联到订单的支付单
 	for i := 0; i < 2; i++ {
 		outTradeNo := util.RandomString(32)
 		arg := CreatePaymentOrderParams{
-			OrderID:      pgtype.Int8{Int64: order.ID, Valid: true},
-			UserID:       order.UserID,
-			PaymentType:  "miniprogram",
-			BusinessType: "order",
-			Amount:       order.TotalAmount,
-			OutTradeNo:   outTradeNo,
-			ExpiresAt:    pgtype.Timestamptz{Time: time.Now().Add(15 * time.Minute), Valid: true},
+			OrderID:               pgtype.Int8{Int64: order.ID, Valid: true},
+			UserID:                order.UserID,
+			PaymentType:           "miniprogram",
+			PaymentChannel:        PaymentChannelDirect,
+			RequiresProfitSharing: false,
+			BusinessType:          "order",
+			Amount:                order.TotalAmount,
+			OutTradeNo:            outTradeNo,
+			ExpiresAt:             pgtype.Timestamptz{Time: time.Now().Add(15 * time.Minute), Valid: true},
 		}
 
-		_, err := testStore.CreatePaymentOrder(context.Background(), arg)
+		payment, err := testStore.CreatePaymentOrder(context.Background(), arg)
 		require.NoError(t, err)
-		time.Sleep(10 * time.Millisecond) // 确保时间不同
+		paymentIDs = append(paymentIDs, payment.ID)
 	}
+
+	_, err := testStore.(*SQLStore).connPool.Exec(context.Background(),
+		`UPDATE payment_orders SET created_at = $1 WHERE id = ANY($2)`,
+		tiedCreatedAt,
+		paymentIDs,
+	)
+	require.NoError(t, err)
 
 	latestPayment, err := testStore.GetLatestPaymentOrderByOrder(context.Background(), GetLatestPaymentOrderByOrderParams{
 		OrderID:      pgtype.Int8{Int64: order.ID, Valid: true},
@@ -325,6 +340,51 @@ func TestGetLatestPaymentOrderByOrder(t *testing.T) {
 	require.NotEmpty(t, latestPayment)
 
 	require.Equal(t, order.ID, latestPayment.OrderID.Int64)
+	require.Equal(t, paymentIDs[len(paymentIDs)-1], latestPayment.ID)
+}
+
+func TestListPaidUnprocessedPaymentOrdersUsesIDTieBreaker(t *testing.T) {
+	user := createRandomUser(t)
+	tiedPaidAt := time.Now().UTC().Truncate(time.Microsecond)
+	var paymentIDs []int64
+
+	for i := 0; i < 2; i++ {
+		payment := createRandomPaymentOrder(t, user.ID)
+		_, err := testStore.UpdatePaymentOrderToPaid(context.Background(), UpdatePaymentOrderToPaidParams{
+			ID:            payment.ID,
+			TransactionID: pgtype.Text{String: util.RandomString(32), Valid: true},
+		})
+		require.NoError(t, err)
+		paymentIDs = append(paymentIDs, payment.ID)
+	}
+
+	_, err := testStore.(*SQLStore).connPool.Exec(context.Background(),
+		`UPDATE payment_orders SET paid_at = $1 WHERE id = ANY($2)`,
+		tiedPaidAt,
+		paymentIDs,
+	)
+	require.NoError(t, err)
+
+	payments, err := testStore.ListPaidUnprocessedPaymentOrders(context.Background(), ListPaidUnprocessedPaymentOrdersParams{
+		PaidAt: pgtype.Timestamptz{Time: tiedPaidAt.Add(time.Second), Valid: true},
+		Limit:  1000,
+	})
+	require.NoError(t, err)
+
+	firstIndex := -1
+	secondIndex := -1
+	for index, payment := range payments {
+		switch payment.ID {
+		case paymentIDs[0]:
+			firstIndex = index
+		case paymentIDs[1]:
+			secondIndex = index
+		}
+	}
+
+	require.NotEqual(t, -1, firstIndex)
+	require.NotEqual(t, -1, secondIndex)
+	require.Less(t, firstIndex, secondIndex)
 }
 
 func TestGetPaymentOrderForUpdate(t *testing.T) {

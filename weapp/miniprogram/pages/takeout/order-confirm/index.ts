@@ -1,164 +1,45 @@
 import * as CartAPI from '../../../api/cart'
-import { CartItemResponse } from '../../../api/cart'
 import { logger } from '../../../utils/logger'
-import AddressService, { Address } from '../../../api/address'
-import { createOrder, CreateOrderRequest, OrderItemRequest, OrderType } from '../../../api/order'
+import { createOrder, OrderType } from '../../../api/order'
 import {
-  CombinedPaymentOrderResponse,
   createCombinedPaymentOrder,
   createOrderPayment,
-  getCombinedPaymentFollowupMessage,
   isPaymentStatusSuccessful,
   isCombinedPaymentSuccessful,
   recoverCombinedPaymentOrder,
-  shouldRecreateCombinedPayment,
   invokeWechatPay
 } from '../../../api/payment'
-import { formatPriceNoSymbol } from '../../../utils/util'
-import { getPublicImageUrl } from '../../../utils/image'
-import { getMyMemberships, MembershipResponse } from '../../../api/personal'
 import Navigation from '../../../utils/navigation'
 import { getErrorUserMessage } from '../../../utils/user-facing'
-import { globalStore } from '../../../utils/global-store'
-
-interface CartItemView {
-  id: number
-  dishId?: number
-  comboId?: number
-  name: string
-  imageUrl: string
-  quantity: number
-  unitPrice: number
-  priceDisplay: string
-  subtotal: number
-  subtotalDisplay: string
-  specText?: string
-  customizations?: Record<string, unknown>
-  dishImages?: string[]
-}
-
-interface MerchantCartView {
-  merchantId: number
-  merchantName: string
-  orderType: OrderType
-  tableId?: number
-  reservationId?: number
-  items: CartItemView[]
-  totalCount: number
-  subtotal: number
-  subtotalDisplay: string
-  deliveryFee: number
-  deliveryFeeDisplay: string
-  deliveryFeeDiscount: number
-  deliveryDistance: number
-  deliveryEtaMinutes: number
-  deliveryEtaDisplay: string
-  orderTotal: number
-  orderTotalDisplay: string
-  originalTotalDisplay: string // 原价（不含优惠）
-  hasDiscount: boolean         // 是否有优惠
-  appliedPromotions: Array<{ title: string, amount: number, amountDisplay: string, type: string }>
-  ladderPromotions: Array<{ name: string, thresholdDisplay: string, discountDisplay: string, currentHit: boolean, missingNeedDisplay: string }>
-  voucherTrials: Array<{ voucherName: string, amountDisplay: string, trialPayableDisplay: string }>
-  paymentHint: string
-}
-
-interface CheckoutSnapshotItem {
-  id: number
-  dishId?: number
-  comboId?: number
-  name: string
-  imageUrl: string
-  quantity: number
-  unitPrice: number
-  subtotal: number
-  specText?: string
-  customizations?: Record<string, unknown>
-  dishImages?: string[]
-}
-
-interface CheckoutSnapshotCart {
-  cartId?: number
-  merchantId: number
-  merchantName: string
-  orderType?: OrderType
-  tableId?: number
-  reservationId?: number
-  items: CheckoutSnapshotItem[]
-  subtotal: number
-  totalCount?: number
-}
-
-interface CheckoutSnapshotPayload {
-  cartIds?: number[]
-  carts?: CheckoutSnapshotCart[]
-}
-
-const ORDER_CONFIRM_CONCURRENCY = 3
-
-const isWechatPayCancelled = (error: unknown): boolean => {
-  const wxError = error as { errMsg?: string }
-  return !!wxError?.errMsg?.includes('cancel')
-}
-
-const navigateToCombinedPaymentSuccess = (combinedPayment: CombinedPaymentOrderResponse, orderIds: number[]) => {
-  const firstOrderId = combinedPayment.sub_orders?.[0]?.order_id || orderIds[0]
-  const amount = (combinedPayment.total_amount / 100).toFixed(2)
-  const orderNo = combinedPayment.combine_out_trade_no || String(firstOrderId)
-
-  Navigation.toPaymentSuccess({
-    orderId: String(firstOrderId),
-    orderNo,
-    amount,
-    isCombined: true,
-    orderCount: orderIds.length
-  })
-}
-
-const getCombinedPaymentPageMessage = (combinedPayment: CombinedPaymentOrderResponse): string => {
-  const baseMessage = getCombinedPaymentFollowupMessage(combinedPayment)
-  if (shouldRecreateCombinedPayment(combinedPayment)) {
-    return '订单已创建，但当前合单已失效，请在订单列表重新发起支付。'
-  }
-
-  if (baseMessage.includes('支付状态正在同步')) {
-    return '订单支付状态正在同步，请在订单列表刷新后确认。'
-  }
-
-  return '订单已创建，可在订单列表继续完成合单支付。'
-}
-
-async function mapWithConcurrency<T, R>(
-  items: T[],
-  limit: number,
-  worker: (item: T, index: number) => Promise<R>
-): Promise<R[]> {
-  if (items.length === 0) {
-    return []
-  }
-
-  const results = new Array<R>(items.length)
-  const workerCount = Math.max(1, Math.min(limit, items.length))
-  let nextIndex = 0
-
-  async function consumeQueue() {
-    while (nextIndex < items.length) {
-      const currentIndex = nextIndex
-      nextIndex += 1
-      results[currentIndex] = await worker(items[currentIndex], currentIndex)
-    }
-  }
-
-  await Promise.all(Array.from({ length: workerCount }, () => consumeQueue()))
-
-  return results
-}
+import {
+  getCheckoutAddressDetail,
+  getDefaultCheckoutAddress,
+  loadTakeoutMembershipState,
+  type CheckoutAddress
+} from '../../../services/takeout-checkout'
+import {
+  buildAddressSyncKey,
+  buildCheckoutSnapshotPatch,
+  buildOrderConfirmCartViews,
+  buildPricingKey,
+  buildPricingSuccessPatch,
+  buildTakeoutCreateOrderRequest,
+  buildTodaySlots,
+  CheckoutSnapshotPayload,
+  getCombinedPaymentPageMessage,
+  isWechatPayCancelled,
+  mapWithConcurrency,
+  MerchantCartView,
+  navigateToCombinedPaymentSuccess,
+  ORDER_CONFIRM_CONCURRENCY,
+  syncTakeoutCartSummary
+} from '../../../utils/takeout-order-confirm-support'
 
 Page({
   data: {
     carts: [] as MerchantCartView[],
     cartIds: [] as number[],
-    address: null as Address | null,
+    address: null as CheckoutAddress | null,
     remarks: {} as Record<number, string>,
     navBarHeight: 88,
     initLoading: true, // 页面初始化加载标志（用于骨架屏）
@@ -241,26 +122,9 @@ Page({
     }
   },
 
-  buildAddressSyncKey(address: Address | null | undefined) {
-    if (!address) {
-      return ''
-    }
-
-    return [
-      String(address.id || ''),
-      String(address.region_id || ''),
-      address.contact_name || '',
-      address.contact_phone || '',
-      address.detail_address || '',
-      address.latitude || '',
-      address.longitude || '',
-      address.is_default ? '1' : '0'
-    ].join('|')
-  },
-
-  updateAddress(address: Address | null) {
-    const currentAddressKey = this.buildAddressSyncKey(this.data.address)
-    const nextAddressKey = this.buildAddressSyncKey(address)
+  updateAddress(address: CheckoutAddress | null) {
+    const currentAddressKey = buildAddressSyncKey(this.data.address)
+    const nextAddressKey = buildAddressSyncKey(address)
 
     if (currentAddressKey === nextAddressKey) {
       return
@@ -280,58 +144,7 @@ Page({
       this._snapshotFallbackTimer = 0
     }
 
-    const carts = payload.carts.map((cart) => {
-      const items: CartItemView[] = (cart.items || []).map((item) => ({
-        id: item.id,
-        dishId: item.dishId,
-        comboId: item.comboId,
-        name: item.name,
-        imageUrl: item.imageUrl,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        priceDisplay: formatPriceNoSymbol(item.unitPrice),
-        subtotal: item.subtotal,
-        subtotalDisplay: formatPriceNoSymbol(item.subtotal),
-        specText: item.specText || '',
-        customizations: item.customizations || undefined,
-        dishImages: item.dishImages || []
-      }))
-      const totalCount = cart.totalCount || items.reduce((sum, item) => sum + item.quantity, 0)
-
-      return {
-        merchantId: cart.merchantId,
-        merchantName: cart.merchantName || '商家',
-        orderType: cart.orderType || 'takeout',
-        tableId: cart.tableId || undefined,
-        reservationId: cart.reservationId || undefined,
-        items,
-        totalCount,
-        subtotal: cart.subtotal,
-        subtotalDisplay: formatPriceNoSymbol(cart.subtotal),
-        deliveryFee: 0,
-        deliveryFeeDisplay: '待计算',
-        deliveryFeeDiscount: 0,
-        deliveryDistance: 0,
-        deliveryEtaMinutes: 0,
-        deliveryEtaDisplay: '',
-        orderTotal: cart.subtotal,
-        orderTotalDisplay: formatPriceNoSymbol(cart.subtotal),
-        originalTotalDisplay: formatPriceNoSymbol(cart.subtotal),
-        hasDiscount: false,
-        appliedPromotions: [],
-        ladderPromotions: [],
-        voucherTrials: [],
-        paymentHint: ''
-      }
-    })
-
-    this.setData({
-      cartIds: payload.cartIds || this.data.cartIds,
-      carts,
-      initLoading: false,
-      loadError: '',
-      pricingError: ''
-    })
+    this.setData(buildCheckoutSnapshotPatch(payload, this.data.cartIds))
 
     this.requestPricingRefresh(true)
     void this.loadMemberships()
@@ -339,15 +152,7 @@ Page({
   },
 
   syncGlobalCartSummary(carts: MerchantCartView[]) {
-    const totalCount = carts.reduce((sum, cart) => sum + (cart.totalCount || 0), 0)
-    const totalPrice = carts.reduce((sum, cart) => sum + (cart.subtotal || 0), 0)
-
-    globalStore.set('cart', {
-      items: [],
-      totalCount,
-      totalPrice,
-      totalPriceDisplay: `¥${formatPriceNoSymbol(totalPrice)}`
-    })
+    syncTakeoutCartSummary(carts)
   },
 
   onNavHeight(e: WechatMiniprogram.CustomEvent) {
@@ -386,50 +191,7 @@ Page({
         return { merchantCart, merchantId, cartDetail }
       })
 
-      const cartViews: MerchantCartView[] = rawResults
-        .filter(({ cartDetail }) => cartDetail.items && cartDetail.items.length > 0)
-        .map(({ merchantCart, merchantId, cartDetail }) => {
-          const items: CartItemView[] = cartDetail.items.map((item: CartItemResponse) => ({
-            id: item.id,
-            dishId: item.dish_id,
-            comboId: item.combo_id,
-            name: item.name,
-            imageUrl: getPublicImageUrl(item.image_url || ''),
-            quantity: item.quantity,
-            unitPrice: item.unit_price,
-            priceDisplay: formatPriceNoSymbol(item.unit_price),
-            subtotal: item.subtotal,
-            subtotalDisplay: formatPriceNoSymbol(item.subtotal),
-            specText: item.spec_text || '',
-            customizations: item.customizations || undefined,
-            dishImages: (item.combo_member_images || []).map((url: string) => getPublicImageUrl(url))
-          }))
-          return {
-            merchantId,
-            merchantName: merchantCart.merchant_name || '商家',
-            orderType: (merchantCart.order_type || 'takeout') as OrderType,
-            tableId: merchantCart.table_id || undefined,
-            reservationId: merchantCart.reservation_id || undefined,
-            items,
-            totalCount: items.reduce((sum, item) => sum + item.quantity, 0),
-            subtotal: cartDetail.subtotal,
-            subtotalDisplay: formatPriceNoSymbol(cartDetail.subtotal),
-            deliveryFee: 0,
-            deliveryFeeDisplay: '待计算',
-            deliveryFeeDiscount: 0,
-            deliveryDistance: 0,
-            deliveryEtaMinutes: 0,
-            deliveryEtaDisplay: '',
-            orderTotal: cartDetail.subtotal,
-            orderTotalDisplay: formatPriceNoSymbol(cartDetail.subtotal),
-            originalTotalDisplay: formatPriceNoSymbol(cartDetail.subtotal),
-            hasDiscount: false,
-            appliedPromotions: [],
-            ladderPromotions: [],
-            voucherTrials: [],
-            paymentHint: ''
-          }
-        })
+      const cartViews = buildOrderConfirmCartViews(rawResults)
 
       this.setData({ carts: cartViews, initLoading: false })
 
@@ -456,27 +218,7 @@ Page({
     if (!carts || carts.length === 0) return
 
     try {
-      const result = await getMyMemberships()
-      const memberBalances: Record<number, number> = {}
-      const memberBalanceDisplays: Record<number, string> = {}
-      const membershipIds: Record<number, number> = {}
-
-      carts.forEach((cart) => {
-        const membership = result.memberships?.find(
-          (m: MembershipResponse) => m.merchant_id === cart.merchantId
-        )
-        if (membership) {
-          memberBalances[cart.merchantId] = membership.balance
-          memberBalanceDisplays[cart.merchantId] = formatPriceNoSymbol(membership.balance)
-          membershipIds[cart.merchantId] = membership.id
-        }
-      })
-
-      this.setData({
-        memberBalances,
-        memberBalanceDisplays,
-        membershipIds
-      })
+      this.setData(await loadTakeoutMembershipState(carts.map((cart) => cart.merchantId)))
     } catch (error) {
       logger.error('Load memberships failed', error, 'Order-confirm')
     }
@@ -489,7 +231,7 @@ Page({
 
     try {
       this._defaultAddressLoaded = true
-      const defaultAddr = await AddressService.getDefaultAddress()
+      const defaultAddr = await getDefaultCheckoutAddress()
       if (defaultAddr) {
         this.updateAddress(defaultAddr)
       }
@@ -506,7 +248,7 @@ Page({
     }
 
     try {
-      const addr = await AddressService.getAddressDetail(nextAddressId)
+      const addr = await getCheckoutAddressDetail(nextAddressId)
       this.updateAddress(addr)
     } catch (error) {
       logger.error('Load address failed', error, 'Order-confirm')
@@ -531,7 +273,7 @@ Page({
    * 选择预约时间（仅当天，默认营业时段 10:00-22:00，30 分钟粒度）
    */
   async chooseScheduleSlot() {
-    const slots = this.buildTodaySlots(10, 22, 30)
+    const slots = buildTodaySlots(10, 22, 30)
     if (slots.length === 0) {
       wx.showToast({ title: '今日无可选时间', icon: 'none' })
       this.setData({ deliveryTime: 'ASAP', scheduleSlot: '' })
@@ -551,38 +293,8 @@ Page({
   /**
    * 构建当天可选时间段
    */
-  buildTodaySlots(startHour: number, endHour: number, stepMinutes: number): string[] {
-    const now = new Date()
-    const slots: string[] = []
-    for (let h = startHour; h < endHour; h++) {
-      for (let m = 0; m < 60; m += stepMinutes) {
-        const slot = new Date(now)
-        slot.setHours(h, m, 0, 0)
-        if (slot.getTime() > now.getTime()) {
-          const hh = String(slot.getHours()).padStart(2, '0')
-          const mm = String(slot.getMinutes()).padStart(2, '0')
-          slots.push(`${hh}:${mm}`)
-        }
-      }
-    }
-    return slots
-  },
-
-  buildPricingKey() {
-    const { address, carts } = this.data
-    if (!address?.id || !carts || carts.length === 0) {
-      return ''
-    }
-
-    const cartKey = carts
-      .map((cart) => `${cart.merchantId}:${cart.items.map((item) => item.id).join('-')}`)
-      .join('|')
-
-    return `${address.id}:${cartKey}`
-  },
-
   requestPricingRefresh(silent: boolean = false) {
-    const pricingKey = this.buildPricingKey()
+    const pricingKey = buildPricingKey(this.data.address, this.data.carts)
     if (pricingKey && this._pricingInFlight && pricingKey === this._activePricingKey) {
       if (!this._pricingRefreshPending) {
         this._pendingPricingSilent = silent
@@ -613,7 +325,7 @@ Page({
     }
 
     const requestVersion = ++this._pricingRequestVersion
-    const pricingKey = this.buildPricingKey()
+    const pricingKey = buildPricingKey(address, currentCarts)
     this._pricingInFlight = !!pricingKey
 
     if (!address) {
@@ -621,7 +333,7 @@ Page({
       this.setData({
         pricingError: '',
         summaryDeliveryDisplay: '待选择地址',
-        orderTotalDisplay: formatPriceNoSymbol(currentCarts.reduce((s, c) => s + (c.subtotal || 0), 0))
+        orderTotalDisplay: currentCarts.reduce((sum, cart) => sum + (cart.subtotal || 0), 0).toString()
       })
       this._pricingInFlight = false
       this._activePricingKey = ''
@@ -640,76 +352,11 @@ Page({
         return { cart, result }
       })
 
-      const updated = calcResults
-        .filter(({ result }) => !!result)
-        .map(({ cart, result }) => {
-          const deliveryFee = result.delivery_fee || 0
-          const deliveryFeeDiscount = result.delivery_fee_discount || 0
-          const finalDeliveryFee = Math.max(0, deliveryFee - deliveryFeeDiscount)
-          const deliveryDistance = result.delivery_distance || 0
-          const orderTotal = result.total_amount || 0
-          const originalTotal = (cart.subtotal || 0) + deliveryFee
-          const hasDiscount = orderTotal < originalTotal
-
-          const deliveryEtaMinutes = result.delivery_eta_minutes || 0
-          const deliveryEtaDisplay = this.formatEtaWindow(deliveryEtaMinutes)
-          const appliedPromotions = (result.applied_promotions || []).map((p) => ({
-            title: p.title || '优惠',
-            amount: p.amount || 0,
-            amountDisplay: formatPriceNoSymbol(p.amount || 0),
-            type: p.type || 'merchant'
-          }))
-          const ladderPromotions = (result.ladder_promotions || []).map((rule) => ({
-            name: rule.name || '满减活动',
-            thresholdDisplay: formatPriceNoSymbol(rule.threshold || 0),
-            discountDisplay: formatPriceNoSymbol(rule.discount || 0),
-            currentHit: !!rule.current_hit,
-            missingNeedDisplay: formatPriceNoSymbol(rule.missing_need || 0)
-          }))
-          const voucherTrials = (result.voucher_trials || []).map((trial) => ({
-            voucherName: trial.voucher_name || '优惠券',
-            amountDisplay: formatPriceNoSymbol(trial.amount || 0),
-            trialPayableDisplay: formatPriceNoSymbol(trial.trial_payable || 0)
-          }))
-          return {
-            ...cart,
-            deliveryFee,
-            deliveryFeeDisplay: finalDeliveryFee > 0 ? '¥' + formatPriceNoSymbol(finalDeliveryFee) : '免代取费',
-            deliveryFeeDiscount,
-            deliveryDistance,
-            orderTotal,
-            orderTotalDisplay: formatPriceNoSymbol(orderTotal),
-            originalTotalDisplay: formatPriceNoSymbol(originalTotal),
-            hasDiscount,
-            deliveryEtaMinutes,
-            deliveryEtaDisplay,
-            appliedPromotions: appliedPromotions || [],
-            ladderPromotions,
-            voucherTrials,
-            paymentHint: result.payment_assessment?.payment_hint || ''
-          }
-        })
-
-      const summarySubtotal = updated.reduce((sum, c) => {
-        const merchDiscount = (c.appliedPromotions || [])
-          .filter((p) => p.type === 'merchant' || p.type === 'voucher')
-          .reduce((s, p) => s + (p.amount || 0), 0)
-        return sum + (c.subtotal || 0) - merchDiscount
-      }, 0)
-      const summaryDelivery = updated.reduce((sum, c) => sum + Math.max(0, (c.deliveryFee || 0) - (c.deliveryFeeDiscount || 0)), 0)
-      const totalOrderAmount = updated.reduce((sum, c) => sum + (c.orderTotal || 0), 0)
-
       if (requestVersion !== this._pricingRequestVersion) {
         return
       }
 
-      this.setData({
-        carts: updated,
-        pricingError: '',
-        summarySubtotalDisplay: formatPriceNoSymbol(summarySubtotal),
-        summaryDeliveryDisplay: summaryDelivery > 0 ? '¥' + formatPriceNoSymbol(summaryDelivery) : '免代取费',
-        orderTotalDisplay: formatPriceNoSymbol(totalOrderAmount)
-      })
+      this.setData(buildPricingSuccessPatch(calcResults))
     } catch (error) {
       logger.error('Calculate delivery fee failed', error, 'Order-confirm')
       if (requestVersion !== this._pricingRequestVersion) {
@@ -720,7 +367,7 @@ Page({
     } finally {
       if (requestVersion === this._pricingRequestVersion) {
         this._pricingInFlight = false
-        this._activePricingKey = this.buildPricingKey()
+        this._activePricingKey = buildPricingKey(this.data.address, this.data.carts)
         if (this._pricingRefreshPending) {
           const rerunSilent = this._pendingPricingSilent
           this._pricingRefreshPending = false
@@ -733,33 +380,6 @@ Page({
 
   onRetryPricing() {
     this.requestPricingRefresh()
-  },
-
-  formatEtaWindow(etaMinutes: number): string {
-    if (!etaMinutes || etaMinutes <= 0) return ''
-    const padding = 5
-    const now = new Date()
-    const start = new Date(now.getTime() + Math.max(etaMinutes - padding, 0) * 60 * 1000)
-    const end = new Date(now.getTime() + (etaMinutes + padding) * 60 * 1000)
-    return `${this.formatTime(start)}-${this.formatTime(end)}`
-  },
-
-  formatTime(date: Date): string {
-    const hh = String(date.getHours()).padStart(2, '0')
-    const mm = String(date.getMinutes()).padStart(2, '0')
-    return `${hh}:${mm}`
-  },
-
-  normalizeCustomizations(customizations: Record<string, unknown>): Record<string, number | string> {
-    const normalized: Record<string, number | string> = {}
-    Object.entries(customizations).forEach(([key, value]) => {
-      if (typeof value === 'number' || typeof value === 'string') {
-        normalized[key] = value
-      } else if (value !== null && value !== undefined) {
-        normalized[key] = String(value)
-      }
-    })
-    return normalized
   },
 
   async onSubmitOrder() {
@@ -790,30 +410,12 @@ Page({
 
     try {
       for (const cart of carts) {
-        const requestData: CreateOrderRequest = {
-          merchant_id: cart.merchantId,
-          items: cart.items.map((item) => {
-            const orderItem: OrderItemRequest = {
-              quantity: item.quantity
-            }
-            if (item.dishId) orderItem.dish_id = item.dishId
-            if (item.comboId) orderItem.combo_id = item.comboId
-            if (item.customizations) {
-              orderItem.customizations = this.normalizeCustomizations(item.customizations as Record<string, unknown>)
-            }
-            return orderItem
-          }),
-          order_type: cart.orderType,
-          address_id: address.id,
-          notes: remarks[cart.merchantId] || '',
-          delivery_fee: cart.deliveryFee,
-          delivery_fee_discount: cart.deliveryFeeDiscount,
-          delivery_distance: cart.deliveryDistance,
-          // 仅在单商户下单时启用余额支付选择
-          use_balance: carts.length === 1 && this.data.selectedPaymentMethod === 'balance'
-        }
-
-        const order = await createOrder(requestData)
+        const order = await createOrder(buildTakeoutCreateOrderRequest({
+          cart,
+          addressId: address.id,
+          note: remarks[cart.merchantId] || '',
+          useBalance: carts.length === 1 && this.data.selectedPaymentMethod === 'balance'
+        }))
         ordersCreated.push(order.id)
 
         // 按商户清空购物车，避免下单后按商品逐个删除导致请求数线性放大。

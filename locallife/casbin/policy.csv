@@ -33,6 +33,9 @@ p, admin, /v1/platform/profit-sharing/*, GET
 p, admin, /v1/platform/profit-sharing/*, POST
 p, admin, /v1/platform/profit-sharing/*, PATCH
 p, admin, /v1/platform/finance/*, GET
+p, admin, /v1/platform/finance/*, POST
+p, admin, /v1/platform/finance/*, PUT
+p, admin, /v1/platform/finance/*, DELETE
 
 # Platform Rules
 p, admin, /v1/platform/rules, GET
@@ -116,9 +119,7 @@ p, operator, /v1/admin/riders/:rider_id/reject, POST
 # Appeals Management
 p, operator, /v1/operator/appeals, GET
 p, operator, /v1/operator/appeals/:id, GET
-p, operator, /v1/operator/appeals/:id/review, POST
 p, operator, /v1/operator/claims/:id/recovery, GET
-p, operator, /v1/operator/claims/:id/recovery/waive, POST
 p, operator, /v1/operator/merchants/:id/resume, POST
 p, operator, /v1/operator/reports/safety, GET
 p, operator, /v1/operator/reports/safety, POST
@@ -128,15 +129,7 @@ p, operator, /v1/operator/reports/safety/:id/resolve, POST
 # Operator Finance
 p, operator, /v1/operators/me/finance/overview, GET
 p, operator, /v1/operators/me/commission, GET
-p, operator, /v1/operators/me/finance/account/balance, GET
-p, operator, /v1/operators/me/finance/withdraw, POST
-p, operator, /v1/operators/me/finance/withdrawals, GET
-p, operator, /v1/operators/me/finance/withdrawals/:id, GET
 p, operator, /v1/operators/me/profit-sharing/configs, GET
-
-# Operator Ecommerce Applyment (WeChat Secondary Merchant)
-p, operator, /v1/operator/applyment/bindbank, POST
-p, operator, /v1/operator/applyment/status, GET
 
 # Delivery Fee Config Management
 p, operator, /v1/delivery-fee/regions/:region_id/config, POST

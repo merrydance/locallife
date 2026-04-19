@@ -8,7 +8,7 @@ import (
 
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
-	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	mockwechat "github.com/merrydance/locallife/wechat/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -19,9 +19,9 @@ func TestExecuteAppealCompensation_ApprovedExecutesPayoutAction(t *testing.T) {
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	paymentClient := mockwechat.NewMockPaymentClientInterface(ctrl)
+	transferClient := mockwechat.NewMockTransferClientInterface(ctrl)
 	processor := NewTestTaskProcessor(store, nil, nil, nil)
-	processor.SetPaymentClient(paymentClient)
+	processor.SetTransferClient(transferClient)
 
 	detailBytes, err := json.Marshal(claimPayoutActionDetail{
 		AppealID:   21,
@@ -43,6 +43,7 @@ func TestExecuteAppealCompensation_ApprovedExecutesPayoutAction(t *testing.T) {
 
 	store.EXPECT().GetBehaviorAction(gomock.Any(), action.ID).Return(action, nil)
 	store.EXPECT().GetUser(gomock.Any(), int64(22)).Return(db.User{ID: 22, WechatOpenid: "openid-22", FullName: "张三"}, nil)
+	transferClient.EXPECT().GetAppID().Return("wx-mini-app")
 	store.EXPECT().UpdateBehaviorActionExecution(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, arg db.UpdateBehaviorActionExecutionParams) error {
 			require.Equal(t, action.ID, arg.ID)
@@ -50,17 +51,17 @@ func TestExecuteAppealCompensation_ApprovedExecutesPayoutAction(t *testing.T) {
 			return nil
 		},
 	)
-	paymentClient.EXPECT().CreateTransfer(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(ctx context.Context, req *wechat.TransferRequest) (*wechat.TransferResponse, error) {
+	transferClient.EXPECT().CreateTransfer(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, req *wechatcontracts.DirectMerchantTransferCreateRequest) (*wechatcontracts.DirectMerchantTransferCreateResponse, error) {
 			require.Equal(t, int64(1800), req.TransferAmount)
 			require.Equal(t, "openid-22", req.OpenID)
-			return &wechat.TransferResponse{OutBatchNo: req.OutBatchNo, BatchID: "batch-109", BatchStatus: "ACCEPTED"}, nil
+			return &wechatcontracts.DirectMerchantTransferCreateResponse{OutBillNo: req.OutBillNo, TransferBillNo: "wx-bill-109", State: wechatcontracts.DirectMerchantTransferStateAccepted}, nil
 		},
 	)
-	paymentClient.EXPECT().QueryTransfer(gomock.Any(), claimPayoutOutBatchNo(action.ID)).Return(&wechat.TransferQueryResponse{
-		OutBatchNo:  claimPayoutOutBatchNo(action.ID),
-		BatchID:     "batch-109",
-		BatchStatus: "FINISHED",
+	transferClient.EXPECT().QueryTransferByOutBillNo(gomock.Any(), claimPayoutOutBillNo(action.ID)).Return(&wechatcontracts.DirectMerchantTransferQueryResponse{
+		OutBillNo:      claimPayoutOutBillNo(action.ID),
+		TransferBillNo: "wx-bill-109",
+		State:          wechatcontracts.DirectMerchantTransferStateSuccess,
 	}, nil)
 	store.EXPECT().MarkAppealCompensated(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, arg db.MarkAppealCompensatedParams) error {

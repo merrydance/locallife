@@ -4,7 +4,8 @@ import {
   listAvailableRegions,
   listRegionExpansionApplications,
   listRegions,
-  type RegionExpansionApplication
+  type RegionExpansionApplication,
+  type RegionExpansionStatusTheme
 } from '../../../api/operator-application'
 import { logger } from '../../../utils/logger'
 import { getErrorUserMessage } from '../../../utils/user-facing'
@@ -13,7 +14,7 @@ type CityOption = { label: string, value: number }
 type RegionOption = { label: string, secondary: string, value: number }
 type RegionExpansionApplicationView = RegionExpansionApplication & {
   status_label: string
-  status_theme: 'warning' | 'primary' | 'danger'
+  status_theme: RegionExpansionStatusTheme
   is_rejected: boolean
 }
 
@@ -38,6 +39,7 @@ Page({
 
     // 选区状态
     cityOptions:         [] as CityOption[],
+    cityPickerVisible:   false,
     regionOptions:       [] as RegionOption[],
     filteredRegions:     [] as RegionOption[],
     selectedCityIndex:   0,
@@ -104,7 +106,7 @@ Page({
         pageID++
       }
       const selectedCityId = cities[0]?.value || 0
-      this.setData({ cityOptions: cities, selectedCityId, selectedCityName: cities[0]?.label || '' })
+      this.setData({ cityOptions: cities, cityPickerVisible: false, selectedCityId, selectedCityName: cities[0]?.label || '' })
       if (selectedCityId) await this.fetchRegionsByCity(selectedCityId)
     } catch (e: unknown) {
       logger.error('Fetch cities failed', e)
@@ -143,6 +145,37 @@ Page({
     } catch (e: unknown) {
       logger.error('Fetch districts failed', e)
     }
+  },
+
+  onOpenCityPicker() {
+    if (!this.data.cityOptions.length) return
+    this.setData({ cityPickerVisible: true })
+  },
+
+  onCloseCityPicker() {
+    this.setData({ cityPickerVisible: false })
+  },
+
+  onCityConfirm(e: WechatMiniprogram.CustomEvent<{ value: Array<string | number> | null }>) {
+    const values = Array.isArray(e.detail?.value) ? e.detail.value : []
+    const selectedValue = Number(values[0] || 0)
+    const idx = this.data.cityOptions.findIndex((item) => item.value === selectedValue)
+    const city = idx >= 0 ? this.data.cityOptions[idx] : null
+
+    if (!city) {
+      this.setData({ cityPickerVisible: false })
+      return
+    }
+
+    this.setData({
+      cityPickerVisible: false,
+      selectedCityIndex: idx,
+      selectedCityId: city.value,
+      selectedCityName: city.label,
+      selectedRegionId: 0,
+      selectedRegionName: ''
+    })
+    this.fetchRegionsByCity(city.value)
   },
 
   onCityChange(e: WechatMiniprogram.PickerChange) {

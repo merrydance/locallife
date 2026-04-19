@@ -333,7 +333,7 @@ ORDER BY cs.id;
 
 -- name: ListMerchantActiveDiscountRules :many
 -- 获取商户当前有效的满减规则
-SELECT * FROM discount_rules
+SELECT id, merchant_id, name, description, min_order_amount, discount_amount, can_stack_with_voucher, can_stack_with_membership, valid_from, valid_until, is_active, created_at, updated_at, deleted_at, stacking_group FROM discount_rules
 WHERE merchant_id = $1
   AND is_active = true
   AND valid_from <= NOW()
@@ -343,7 +343,7 @@ ORDER BY min_order_amount ASC;
 
 -- name: ListMerchantActiveVouchers :many
 -- 获取商户当前有效的代金券
-SELECT * FROM vouchers
+SELECT id, merchant_id, code, name, description, amount, min_order_amount, total_quantity, claimed_quantity, used_quantity, valid_from, valid_until, is_active, created_at, updated_at, allowed_order_types, deleted_at FROM vouchers
 WHERE merchant_id = $1
   AND is_active = true
   AND valid_from <= NOW()
@@ -354,7 +354,7 @@ ORDER BY amount DESC;
 
 -- name: ListMerchantActiveDeliveryPromotions :many
 -- 获取商户当前有效的配送费优惠
-SELECT * FROM merchant_delivery_promotions
+SELECT id, merchant_id, name, min_order_amount, discount_amount, valid_from, valid_until, is_active, created_at, updated_at FROM merchant_delivery_promotions
 WHERE merchant_id = $1
   AND is_active = true
   AND valid_from <= NOW()

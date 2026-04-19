@@ -1,0 +1,10 @@
+{
+  "purpose": "Compact label-value information row used in detail and summary surfaces for repeated two-column data presentation.",
+  "tdesignGroup": "data",
+  "tdesignCandidates": [
+    "cell",
+    "tag"
+  ],
+  "decision": "tdesign-wrapper",
+  "rationale": "The component standardizes repeated information-row spacing and value alignment on top of TDesign-friendly content patterns without introducing page-specific logic."
+}

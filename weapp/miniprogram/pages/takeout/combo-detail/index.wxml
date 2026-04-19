@@ -1,4 +1,4 @@
-<view class="page-container" style="padding-top: {{navBarHeight}}px;">
+<view class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px;">
   <!-- 自定义导航栏 -->
   <custom-navbar title="套餐详情" showBack="{{true}}" bind:navheight="onNavHeight" />
 

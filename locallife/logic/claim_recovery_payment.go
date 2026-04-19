@@ -12,6 +12,7 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/util"
 	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	"github.com/rs/zerolog/log"
 )
 
@@ -43,7 +44,7 @@ type claimRecoveryPaymentAttach struct {
 	RecoveryTarget string `json:"recovery_target"`
 }
 
-func CreateMerchantClaimRecoveryPayment(ctx context.Context, store db.Store, paymentClient wechat.PaymentClientInterface, input CreateMerchantClaimRecoveryPaymentInput) (ClaimRecoveryPaymentResult, error) {
+func CreateMerchantClaimRecoveryPayment(ctx context.Context, store db.Store, paymentClient wechat.DirectPaymentClientInterface, input CreateMerchantClaimRecoveryPaymentInput) (ClaimRecoveryPaymentResult, error) {
 	claimInfo, err := store.GetClaimForAppeal(ctx, input.ClaimID)
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
@@ -69,7 +70,7 @@ func CreateMerchantClaimRecoveryPayment(ctx context.Context, store db.Store, pay
 	return createClaimRecoveryPayment(ctx, store, paymentClient, recovery, input.PayerUserID, input.ClientIP, "merchant")
 }
 
-func CreateRiderClaimRecoveryPayment(ctx context.Context, store db.Store, paymentClient wechat.PaymentClientInterface, input CreateRiderClaimRecoveryPaymentInput) (ClaimRecoveryPaymentResult, error) {
+func CreateRiderClaimRecoveryPayment(ctx context.Context, store db.Store, paymentClient wechat.DirectPaymentClientInterface, input CreateRiderClaimRecoveryPaymentInput) (ClaimRecoveryPaymentResult, error) {
 	claimInfo, err := store.GetClaimForAppeal(ctx, input.ClaimID)
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
@@ -95,7 +96,7 @@ func CreateRiderClaimRecoveryPayment(ctx context.Context, store db.Store, paymen
 	return createClaimRecoveryPayment(ctx, store, paymentClient, recovery, input.PayerUserID, input.ClientIP, "rider")
 }
 
-func createClaimRecoveryPayment(ctx context.Context, store db.Store, paymentClient wechat.PaymentClientInterface, recovery db.ClaimRecovery, payerUserID int64, clientIP string, recoveryTarget string) (ClaimRecoveryPaymentResult, error) {
+func createClaimRecoveryPayment(ctx context.Context, store db.Store, paymentClient wechat.DirectPaymentClientInterface, recovery db.ClaimRecovery, payerUserID int64, clientIP string, recoveryTarget string) (ClaimRecoveryPaymentResult, error) {
 	if paymentClient == nil {
 		return ClaimRecoveryPaymentResult{}, fmt.Errorf("payment client: not configured")
 	}
@@ -140,14 +141,16 @@ func createClaimRecoveryPayment(ctx context.Context, store db.Store, paymentClie
 
 	expiresAt := time.Now().Add(30 * time.Minute)
 	paymentOrder, err := store.CreatePaymentOrder(ctx, db.CreatePaymentOrderParams{
-		OrderID:      pgtype.Int8{Int64: recovery.OrderID, Valid: true},
-		UserID:       payerUserID,
-		PaymentType:  "miniprogram",
-		BusinessType: businessTypeClaimRecovery,
-		Amount:       recovery.RecoveryAmount,
-		OutTradeNo:   outTradeNo,
-		ExpiresAt:    pgtype.Timestamptz{Time: expiresAt, Valid: true},
-		Attach:       pgtype.Text{String: attachText, Valid: true},
+		OrderID:               pgtype.Int8{Int64: recovery.OrderID, Valid: true},
+		UserID:                payerUserID,
+		PaymentType:           "miniprogram",
+		PaymentChannel:        db.PaymentChannelDirect,
+		RequiresProfitSharing: false,
+		BusinessType:          businessTypeClaimRecovery,
+		Amount:                recovery.RecoveryAmount,
+		OutTradeNo:            outTradeNo,
+		ExpiresAt:             pgtype.Timestamptz{Time: expiresAt, Valid: true},
+		Attach:                pgtype.Text{String: attachText, Valid: true},
 	})
 	if err != nil {
 		if db.ErrorCode(err) == db.UniqueViolation {
@@ -171,17 +174,20 @@ func createClaimRecoveryPayment(ctx context.Context, store db.Store, paymentClie
 		description = "骑手索赔追偿支付"
 	}
 
-	wxResp, payParams, err := paymentClient.CreateJSAPIOrder(ctx, &wechat.JSAPIOrderRequest{
+	wxResp, payParams, err := paymentClient.CreateJSAPIOrder(ctx, &wechatcontracts.DirectJSAPIOrderRequest{
 		OutTradeNo:    outTradeNo,
 		Description:   description,
 		TotalAmount:   recovery.RecoveryAmount,
-		OpenID:        user.WechatOpenid,
+		PayerOpenID:   user.WechatOpenid,
 		ExpireTime:    expiresAt,
 		Attach:        attachText,
 		PayerClientIP: clientIP,
 	})
 	if err != nil {
 		_, _ = store.UpdatePaymentOrderToClosed(ctx, paymentOrder.ID)
+		if mapped := mapDirectJSAPIOrderCreateError(err); mapped != nil {
+			return ClaimRecoveryPaymentResult{}, mapped
+		}
 		return ClaimRecoveryPaymentResult{}, fmt.Errorf("wechat pay: %w", err)
 	}
 
@@ -220,7 +226,7 @@ func getExistingClaimRecoveryPayment(ctx context.Context, store db.Store, attach
 	return &existing, nil
 }
 
-func reuseClaimRecoveryPayment(paymentClient wechat.PaymentClientInterface, recovery db.ClaimRecovery, paymentOrder db.PaymentOrder) (ClaimRecoveryPaymentResult, error) {
+func reuseClaimRecoveryPayment(paymentClient wechat.DirectPaymentClientInterface, recovery db.ClaimRecovery, paymentOrder db.PaymentOrder) (ClaimRecoveryPaymentResult, error) {
 	payParams, err := regenerateClaimRecoveryPayParams(paymentClient, paymentOrder)
 	if err != nil {
 		return ClaimRecoveryPaymentResult{}, err
@@ -234,13 +240,10 @@ func shouldRotateExpiredClaimRecoveryPayment(paymentOrder db.PaymentOrder, now t
 		!paymentOrder.ExpiresAt.Time.After(now)
 }
 
-func closeExpiredClaimRecoveryPayment(ctx context.Context, store db.Store, paymentClient wechat.PaymentClientInterface, paymentOrder db.PaymentOrder) error {
+func closeExpiredClaimRecoveryPayment(ctx context.Context, store db.Store, paymentClient wechat.DirectPaymentClientInterface, paymentOrder db.PaymentOrder) error {
 	if paymentOrder.OutTradeNo != "" && paymentClient != nil {
 		if err := paymentClient.CloseOrder(ctx, paymentOrder.OutTradeNo); err != nil {
-			log.Warn().Err(err).
-				Str("out_trade_no", paymentOrder.OutTradeNo).
-				Int64("payment_order_id", paymentOrder.ID).
-				Msg("close expired claim recovery wechat order failed")
+			return fmt.Errorf("close expired claim recovery wechat order: %w", err)
 		}
 	}
 
@@ -263,7 +266,7 @@ func marshalClaimRecoveryPaymentAttach(recovery db.ClaimRecovery) (string, error
 	return string(attach), nil
 }
 
-func regenerateClaimRecoveryPayParams(paymentClient wechat.PaymentClientInterface, paymentOrder db.PaymentOrder) (*wechat.JSAPIPayParams, error) {
+func regenerateClaimRecoveryPayParams(paymentClient wechat.DirectPaymentClientInterface, paymentOrder db.PaymentOrder) (*wechat.JSAPIPayParams, error) {
 	if !paymentOrder.PrepayID.Valid || paymentOrder.PrepayID.String == "" {
 		return nil, nil
 	}

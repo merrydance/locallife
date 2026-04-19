@@ -8,6 +8,7 @@
     "t-date-time-picker": "tdesign-miniprogram/date-time-picker/date-time-picker",
     "t-empty": "tdesign-miniprogram/empty/empty",
     "t-input": "tdesign-miniprogram/input/input",
+    "t-notice-bar": "tdesign-miniprogram/notice-bar/notice-bar",
     "t-loading": "tdesign-miniprogram/loading/loading",
     "t-picker": "tdesign-miniprogram/picker/picker",
     "t-picker-item": "tdesign-miniprogram/picker-item/picker-item",

@@ -73,8 +73,8 @@ func (processor *RedisTaskProcessor) ProcessTaskUploadShippingInfo(ctx context.C
 
 	now := time.Now()
 
-	switch po.PaymentType {
-	case "profit_sharing":
+	switch {
+	case paymentOrderUsesEcommerceChannel(po):
 		if !po.CombinedPaymentID.Valid {
 			transactionID := ""
 			if po.TransactionID.Valid {
@@ -130,7 +130,7 @@ func (processor *RedisTaskProcessor) ProcessTaskUploadShippingInfo(ctx context.C
 		}
 		log.Info().Int64("order_id", payload.OrderID).Msg("upload_combined_shipping_info ok")
 
-	case "miniprogram":
+	case po.PaymentType == "miniprogram":
 		transactionID := ""
 		if po.TransactionID.Valid {
 			transactionID = po.TransactionID.String

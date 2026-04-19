@@ -1,8 +1,7 @@
-import ConsumerDiscoveryAdapter from '../../adapters/consumer-discovery'
 import CartService from '../../services/cart'
+import type { TakeoutCategoryGridItem } from '../../adapters/takeout-categories'
 import { getUserCarts } from '../../api/cart'
-import { searchMerchantsWithMeta, MerchantSummary, getPublicMerchantDishes, getPublicMerchantDetail, getHasUserOrderedFromMerchant, PublicDiscountRule, PublicVoucher, PublicDeliveryPromotion } from '../../api/merchant'
-import { getActiveCategories } from '../../api/location'
+import { searchMerchantsWithMeta, getPublicMerchantDishes, getPublicMerchantDetail, getHasUserOrderedFromMerchant } from '../../api/merchant'
 import Navigation from '../../utils/navigation'
 import { logger } from '../../utils/logger'
 import { isRateLimitError } from '../../utils/user-facing'
@@ -10,89 +9,31 @@ import { ErrorHandler } from '../../utils/error-handler'
 import { globalStore } from '../../utils/global-store'
 import { requestManager } from '../../utils/request-manager'
 import { getStableBarHeights } from '../../utils/responsive'
-import { getPublicImageUrl } from '../../utils/image'
 import { settleAll } from '../../utils/promise'
 import { formatPrice } from '../../utils/util'
-import { buildMerchantDisplayTags } from '../../adapters/merchant-labels'
-import { buildTakeoutCategoryGridItems, TakeoutCategoryGridItem } from '../../adapters/takeout-categories'
+import {
+  buildTakeoutCategoriesState,
+  buildTakeoutFeaturedDishes,
+  buildTakeoutMerchantFeedItems,
+  buildTakeoutMerchantMetaPatch,
+  chunkArray,
+  openTakeoutLocationPicker,
+  retryTakeoutLocation,
+  showTakeoutLocationGuide,
+  sleep,
+  TAKEOUT_BACKGROUND_DISH_HYDRATION_DELAY_MS,
+  TAKEOUT_BACKGROUND_META_HYDRATION_DELAY_MS,
+  TAKEOUT_FIRST_SCREEN_MERCHANT_COUNT,
+  TAKEOUT_HYDRATION_BATCH_SIZE,
+  TAKEOUT_PAGE_SIZE,
+  TAKEOUT_PRIORITY_META_HYDRATION_DELAY_MS,
+  tryTakeoutLoadData,
+  type MerchantFeedViewModel,
+  type SearchTimer,
+  type UserMessageError
+} from '../../utils/takeout-index-support'
 
 const PAGE_CONTEXT = 'takeout_index'
-const PAGE_SIZE = 10  // 每页条数，用于无限滚动分页
-const DEFAULT_AVG_PREP_MINUTES = 15
-const FIRST_SCREEN_MERCHANT_COUNT = 3
-const HYDRATION_BATCH_SIZE = 2
-const PRIORITY_META_HYDRATION_DELAY_MS = 260
-const BACKGROUND_DISH_HYDRATION_DELAY_MS = 700
-const BACKGROUND_META_HYDRATION_DELAY_MS = 1200
-
-interface FeaturedDish {
-  id: number
-  name: string
-  imageUrl: string
-  priceDisplay: string
-  price: number
-  merchantId: number
-  customization_groups?: unknown[]
-}
-
-interface MerchantFeedViewModel {
-  id: number
-  name: string
-  imageUrl: string
-  isOpen: boolean
-  isOrderingSuspended: boolean
-  distance: string
-  monthlySales: number
-  deliveryFeeDisplay: string
-  promoText: string
-  subsidyText: string
-  tags: string[]
-  systemLabels: string[]
-  displayTags: string[]
-  featuredDishes: FeaturedDish[]
-  dishesLoading: boolean
-  // 详情接口补充字段（异步填充）
-  avgPrepMinutes: number        // 平均出餐时间（分钟）
-  discountPromoText: string     // 满减文案，e.g. "满30减5"
-  voucherText: string           // 券文案，e.g. "领券减5元"
-  deliveryPromoText: string     // 运费优惠文案，e.g. "满30免运费"
-  isNewStore: boolean           // 入驻30天内
-  hasOrdered: boolean           // 当前用户曾成功下单
-  detailLoading: boolean        // 详情是否仍在加载
-  label?: string                // 推荐 / 热销
-}
-
-interface UserMessageError {
-  userMessage?: string
-}
-
-type SearchTimer = ReturnType<typeof setTimeout>
-
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
-function chunkArray<T>(items: T[], size: number): T[][] {
-  const chunks: T[][] = []
-  for (let index = 0; index < items.length; index += size) {
-    chunks.push(items.slice(index, index + size))
-  }
-  return chunks
-}
-
-function deriveMerchantPromotions(tags: string[] = [], deliveryFee?: number) {
-  const promoTag = tags.find((tag) => /促销|满减|折扣|优惠|券/.test(tag)) || ''
-  let subsidyTag = tags.find((tag) => /补贴|免配送|免运费|运费减免|配送补贴/.test(tag)) || ''
-
-  if (!subsidyTag && deliveryFee === 0) {
-    subsidyTag = '运费补贴'
-  }
-
-  return {
-    promoText: promoTag,
-    subsidyText: subsidyTag
-  }
-}
 
 Page({
   data: {
@@ -215,22 +156,9 @@ Page({
     })
   },
 
-  onMerchantRegister() {
-    wx.navigateTo({
-      url: '/pages/register/merchant/index'
-    })
-  },
-
-  onOperatorRegister() {
-    wx.navigateTo({
-      url: '/pages/register/operator/index'
-    })
-  },
-
-  // Gap 1: 搜索框点击跳转到独立搜索页（不再直接聚焦）
-  onSearchTap() {
-    wx.navigateTo({ url: '/pages/takeout/search/index' })
-  },
+  onMerchantRegister() { wx.navigateTo({ url: '/pages/register/merchant/index' }) },
+  onOperatorRegister() { wx.navigateTo({ url: '/pages/register/operator/index' }) },
+  onSearchTap() { wx.navigateTo({ url: '/pages/takeout/search/index' }) },
 
   // 品类网格点击：页内切换筛选，不再跳转独立页
   onCategoryTap(e: WechatMiniprogram.CustomEvent) {
@@ -278,145 +206,30 @@ Page({
 
   // 尝试加载数据，等待 token 准备好，位置未授权则直接引导
   async tryLoadData(retryCount = 0) {
-    const MAX_TOKEN_RETRIES = 20 // Token 最多等待 10 秒
-    const RETRY_INTERVAL = 500
-    const { getToken } = require('../../utils/auth')
-    const app = getApp<IAppOption>()
-
-    const token = getToken()
-    const hasLocation = !!(app.globalData.latitude && app.globalData.longitude)
-
-    // 1. 先等待 Token（登录通常很快）
-    if (!token) {
-      if (retryCount >= MAX_TOKEN_RETRIES) {
-        logger.error('❌ 登录超时', { waitedTime: `${(retryCount * RETRY_INTERVAL) / 1000}秒` }, 'Takeout.tryLoadData')
-        wx.showModal({
-          title: '登录超时',
-          content: '请检查网络连接后重试',
-          confirmText: '重新加载',
-          success: (res) => {
-            if (res.confirm) {
-              wx.reLaunch({ url: '/pages/takeout/index' })
-            }
-          }
-        })
-        return
-      }
-
-      if (retryCount === 0) {
-        logger.info('等待登录...', undefined, 'Takeout.tryLoadData')
-      }
-
-      setTimeout(() => this.tryLoadData(retryCount + 1), RETRY_INTERVAL)
-      return
-    }
-
-    // 2. Token 已就绪，检查位置
-    if (!hasLocation) {
-      // 位置未授权，直接显示引导，不再疯狂重试
-      logger.info('位置未授权，显示引导界面', undefined, 'Takeout.tryLoadData')
-      this.showLocationGuide()
-      return
-    }
-
-    // 3. Token 和位置都准备好，加载数据
-    logger.info('✅ Token 和位置都已准备好，开始加载数据', {
-      tokenLength: token.length,
-      locationName: app.globalData.location?.name || '未知'
-    }, 'Takeout.tryLoadData')
-
-    this.loadData()
+    await tryTakeoutLoadData(this, retryCount, () => this.showLocationGuide())
   },
 
   /**
    * 显示位置引导（页面内提示，不弹窗）
    */
   showLocationGuide() {
-    // 设置页面状态，显示位置引导提示
-    this.setData({
-      needLocation: true,
-      loading: false,
-      address: '请先定位'
-    })
-    logger.info('显示位置引导提示', undefined, 'Takeout.showLocationGuide')
+    showTakeoutLocationGuide(this)
   },
 
-  /**
-   * 用户点击"手动定位"按钮
-   */
-  onManualLocation() {
-    this.openLocationPicker()
-  },
+  onManualLocation() { this.openLocationPicker() },
 
   /**
    * 用户点击"重新定位"按钮
    */
   onRetryLocation() {
-    const app = getApp<IAppOption>()
-    this.setData({ address: '定位中...' })
-
-    // 重新获取位置
-    app.getLocationCoordinates()
-
-    // 位置更新后会通过 globalStore 订阅自动触发 loadData
+    retryTakeoutLocation(this)
   },
 
   /**
    * 打开位置选择器
    */
   openLocationPicker() {
-    wx.chooseLocation({
-      success: async (res) => {
-        const app = getApp<IAppOption>()
-
-        // 更新全局位置
-        app.globalData.latitude = res.latitude
-        app.globalData.longitude = res.longitude
-        app.globalData.location = {
-          name: res.name || res.address,
-          address: res.address
-        }
-
-        // 同步到 globalStore
-        const { globalStore } = require('../../utils/global-store')
-        globalStore.updateLocation(
-          res.latitude,
-          res.longitude,
-          res.name || res.address,
-          res.address
-        )
-
-        logger.info('用户手动选择位置', {
-          latitude: res.latitude,
-          longitude: res.longitude,
-          name: res.name
-        }, 'Takeout.openLocationPicker')
-
-        // 更新导航栏显示
-        this.setData({ address: res.name || res.address })
-
-        // 重新加载数据
-        this.loadData()
-      },
-      fail: (err) => {
-        logger.warn('用户取消选择位置', err, 'Takeout.openLocationPicker')
-
-        // 用户取消，再次提示
-        wx.showModal({
-          title: '需要位置信息',
-          content: '本地生活服务必须基于您的位置才能使用',
-          confirmText: '重新选择',
-          cancelText: '退出',
-          success: (res) => {
-            if (res.confirm) {
-              this.openLocationPicker()
-            } else {
-              wx.switchTab({ url: '/pages/user_center/index' })
-            }
-          }
-        })
-      }
-    })
+    openTakeoutLocationPicker(this, () => this.loadData())
   },
 
   onHide() {
@@ -436,40 +249,15 @@ Page({
     }
   },
 
-  onLocationChange() {
-    this.setData({ page: 1 })
-    this.loadData()
-  },
+  onLocationChange() { this.setData({ page: 1 }); this.loadData() },
 
   async loadCategories() {
-    const app = getApp<IAppOption>()
-    if (!app.globalData.latitude || !app.globalData.longitude) return
-
-    // 需要 token 才能请求，token 未就绪时跳过，待 loadData 时自然会再次调用
-    const { getToken } = require('../../utils/auth')
-    if (!getToken()) return
-
     try {
-      const rawList = await getActiveCategories({
-        user_latitude: app.globalData.latitude,
-        user_longitude: app.globalData.longitude
-      })
-      const MAX_CATEGORIES = 8
-      const availableCategories = rawList.slice(0, MAX_CATEGORIES)
-      const hasRealCategories = availableCategories.length > 0
-      const availableCategoryIds = new Set(availableCategories.map((category) => String(category.id)))
-      const activeCategoryId = this.data.activeCategoryId && availableCategoryIds.has(this.data.activeCategoryId)
-        ? this.data.activeCategoryId
-        : ''
-
-      this.setData({
-        activeCategoryId,
-        cuisineCategories: hasRealCategories
-          ? buildTakeoutCategoryGridItems(availableCategories, activeCategoryId)
-          : []
-      })
+      const categoryState = await buildTakeoutCategoriesState(this.data.activeCategoryId)
+      if (categoryState) {
+        this.setData(categoryState)
+      }
     } catch (e) {
-      // 加载失败不影响主流程，品类网格不显示即可
       logger.warn('[Takeout] 品类加载失败', e, 'Takeout.loadCategories')
     }
   },
@@ -536,7 +324,7 @@ Page({
         tag_id: this.data.activeCategoryId ? Number(this.data.activeCategoryId) : undefined,
         sort_by: 'distance',
         page_id: currentPage,
-        page_size: PAGE_SIZE,
+        page_size: TAKEOUT_PAGE_SIZE,
         user_latitude: app.globalData.latitude || undefined,
         user_longitude: app.globalData.longitude || undefined
       })
@@ -544,38 +332,7 @@ Page({
       const merchants = result.merchants
       const hasMore = result.hasMore
 
-      const feedItems: MerchantFeedViewModel[] = merchants.map((m: MerchantSummary) => {
-        const merchantSummary = ConsumerDiscoveryAdapter.toMerchantSummaryViewModel(m)
-        // 计算"新店"：入驻30天内
-        const isNewStore = m.created_at
-          ? (Date.now() - new Date(m.created_at).getTime()) < 30 * 24 * 60 * 60 * 1000
-          : false
-
-        return {
-          ...deriveMerchantPromotions(merchantSummary.tags, merchantSummary.deliveryFee),
-          id: merchantSummary.id,
-          name: merchantSummary.name,
-          imageUrl: merchantSummary.imageUrl,
-          isOpen: merchantSummary.isOpen,
-          isOrderingSuspended: false,
-          distance: merchantSummary.distanceDisplay,
-          monthlySales: merchantSummary.monthlySales,
-          deliveryFeeDisplay: merchantSummary.deliveryFeeDisplay,
-          tags: merchantSummary.tags,
-          systemLabels: merchantSummary.systemLabels,
-          displayTags: merchantSummary.displayTags.slice(0, 3),
-          featuredDishes: [],
-          dishesLoading: true,
-          avgPrepMinutes: DEFAULT_AVG_PREP_MINUTES,
-          discountPromoText: '',
-          voucherText: '',
-          deliveryPromoText: '',
-          isNewStore,
-          hasOrdered: false,
-          detailLoading: true,
-          label: merchantSummary.label
-        }
-      })
+      const feedItems = buildTakeoutMerchantFeedItems(merchants)
 
       // 记录已有 feed 长度，异步加载菜品时用于按 ID 定位
       if (reset) {
@@ -602,13 +359,13 @@ Page({
    * 将卡片水合拆成优先批次和后台批次，避免第一页首屏产生逐店请求风暴。
    */
   scheduleMerchantHydration(merchantIds: number[], generation: number) {
-    const priorityIds = merchantIds.slice(0, FIRST_SCREEN_MERCHANT_COUNT)
-    const backgroundIds = merchantIds.slice(FIRST_SCREEN_MERCHANT_COUNT)
+    const priorityIds = merchantIds.slice(0, TAKEOUT_FIRST_SCREEN_MERCHANT_COUNT)
+    const backgroundIds = merchantIds.slice(TAKEOUT_FIRST_SCREEN_MERCHANT_COUNT)
 
     this.queueHydrationPhase(priorityIds, generation, 0, this.hydrateMerchantDishesBatch)
-    this.queueHydrationPhase(priorityIds, generation, PRIORITY_META_HYDRATION_DELAY_MS, this.hydrateMerchantMetaBatch)
-    this.queueHydrationPhase(backgroundIds, generation, BACKGROUND_DISH_HYDRATION_DELAY_MS, this.hydrateMerchantDishesBatch)
-    this.queueHydrationPhase(backgroundIds, generation, BACKGROUND_META_HYDRATION_DELAY_MS, this.hydrateMerchantMetaBatch)
+    this.queueHydrationPhase(priorityIds, generation, TAKEOUT_PRIORITY_META_HYDRATION_DELAY_MS, this.hydrateMerchantMetaBatch)
+    this.queueHydrationPhase(backgroundIds, generation, TAKEOUT_BACKGROUND_DISH_HYDRATION_DELAY_MS, this.hydrateMerchantDishesBatch)
+    this.queueHydrationPhase(backgroundIds, generation, TAKEOUT_BACKGROUND_META_HYDRATION_DELAY_MS, this.hydrateMerchantMetaBatch)
   },
 
   queueHydrationPhase(
@@ -633,7 +390,7 @@ Page({
     generation: number,
     worker: (merchantIds: number[], generation: number) => Promise<void>
   ) {
-    for (const chunk of chunkArray(merchantIds, HYDRATION_BATCH_SIZE)) {
+    for (const chunk of chunkArray(merchantIds, TAKEOUT_HYDRATION_BATCH_SIZE)) {
       if (generation !== this._feedHydrationGeneration) return
       await worker.call(this, chunk, generation)
       if (generation !== this._feedHydrationGeneration) return
@@ -663,17 +420,7 @@ Page({
 
       const { dishesResp } = result.value
 
-      const featuredDishes: FeaturedDish[] = dishesResp.dishes.slice(0, 4).map((dish: import('../../api/merchant').PublicDish) => ({
-        id: dish.id,
-        name: dish.name,
-        imageUrl: getPublicImageUrl(dish.image_url || '') || '/assets/placeholder_food.png',
-        priceDisplay: formatPrice(dish.price),
-        price: dish.price,
-        merchantId,
-        customization_groups: dish.customization_groups || []
-      }))
-
-      updates[`merchantFeed[${feedIndex}].featuredDishes`] = featuredDishes
+      updates[`merchantFeed[${feedIndex}].featuredDishes`] = buildTakeoutFeaturedDishes(dishesResp.dishes, merchantId)
     })
 
     if (Object.keys(updates).length > 0) {
@@ -706,57 +453,15 @@ Page({
 
       const { detail, hasOrdered } = result.value
 
-      updates[`merchantFeed[${feedIndex}].avgPrepMinutes`] =
-        (detail.avg_prep_minutes && detail.avg_prep_minutes > 0)
-          ? detail.avg_prep_minutes
-          : DEFAULT_AVG_PREP_MINUTES
-      updates[`merchantFeed[${feedIndex}].tags`] = detail.tags || []
-      updates[`merchantFeed[${feedIndex}].systemLabels`] = detail.system_labels || []
-      updates[`merchantFeed[${feedIndex}].displayTags`] = buildMerchantDisplayTags(
-        detail.system_labels || [],
-        detail.tags || [],
-        3
-      )
-      updates[`merchantFeed[${feedIndex}].isOrderingSuspended`] = !!detail.is_ordering_suspended
-      updates[`merchantFeed[${feedIndex}].discountPromoText`] = this.buildDiscountPromoText(detail.discount_rules)
-      updates[`merchantFeed[${feedIndex}].voucherText`] = this.buildVoucherText(detail.vouchers)
-      updates[`merchantFeed[${feedIndex}].deliveryPromoText`] = this.buildDeliveryPromoText(detail.delivery_promotions)
-      updates[`merchantFeed[${feedIndex}].hasOrdered`] = hasOrdered
+      const metaPatch = buildTakeoutMerchantMetaPatch(detail, hasOrdered)
+      Object.entries(metaPatch).forEach(([key, value]) => {
+        updates[`merchantFeed[${feedIndex}].${key}`] = value
+      })
     })
 
     if (Object.keys(updates).length > 0) {
       this.setData(updates)
     }
-  },
-
-  buildDiscountPromoText(discountRules?: PublicDiscountRule[]) {
-    if (!discountRules || discountRules.length === 0) {
-      return ''
-    }
-
-    const best = discountRules.reduce((current, next) => current.min_order_amount <= next.min_order_amount ? current : next)
-    return `满${(best.min_order_amount / 100).toFixed(0)}减${(best.discount_amount / 100).toFixed(0)}`
-  },
-
-  buildVoucherText(vouchers?: PublicVoucher[]) {
-    if (!vouchers || vouchers.length === 0) {
-      return ''
-    }
-
-    const best = vouchers.reduce((current, next) => current.amount >= next.amount ? current : next)
-    return `领券减${(best.amount / 100).toFixed(0)}元`
-  },
-
-  buildDeliveryPromoText(deliveryPromotions?: PublicDeliveryPromotion[]) {
-    if (!deliveryPromotions || deliveryPromotions.length === 0) {
-      return ''
-    }
-
-    const best = deliveryPromotions.reduce((current, next) => current.min_order_amount <= next.min_order_amount ? current : next)
-    const threshold = best.min_order_amount
-    return threshold === 0
-      ? '免运费'
-      : `满${(threshold / 100).toFixed(0)}免运费`
   },
 
   clearFeedHydrationTimers() {
@@ -794,12 +499,8 @@ Page({
     }
   },
 
-  /**
-   * Feed 卡片中的商户点击事件
-   */
   onMerchantTapFromFeed(e: WechatMiniprogram.CustomEvent) {
-    const { id } = e.detail as { id: number }
-    Navigation.toRestaurantDetail(String(id))
+    Navigation.toRestaurantDetail(String((e.detail as { id: number }).id))
   },
 
   async updateCartDisplay() {
@@ -838,11 +539,6 @@ Page({
     }
   },
 
-  // ==================== 导航方法 ====================
-
-  /**
-   * 点击购物车 - 跳转到购物车页
-   */
   onCheckout() {
     if (this.data.cartTotalCount === 0) {
       wx.showToast({ title: '购物车是空的', icon: 'none' })

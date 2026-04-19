@@ -1,10 +1,14 @@
 import {
-  getMerchantSettlementAccount,
   getMerchantSettlementApplication,
-  getSettlementAccountStatusView,
+  getSettlementVerifyResultText,
+  getSettlementVerifyResultTheme,
   type MerchantSettlementAccountResponse,
   type SettlementApplicationResponse
 } from '../../../../api/merchant-settlement-account'
+import {
+  fetchMerchantPaymentReadiness,
+  type MerchantPaymentReadinessView
+} from '../../../../services/merchant-payment'
 import {
   canManageMerchantApplyment,
   ensureMerchantConsoleAccess
@@ -30,6 +34,7 @@ Page({
     refreshErrorMessage: '',
     loading: false,
     refreshingApplication: false,
+    paymentReadiness: null as MerchantPaymentReadinessView | null,
     settlementAccount: null as MerchantSettlementAccountResponse | null,
     settlementStatusDesc: '',
     applicationNo: '',
@@ -89,20 +94,27 @@ Page({
   async loadData() {
     this.setData({ loading: true, initialError: false, initialErrorMessage: '', refreshErrorMessage: '' })
     try {
-      const settlementAccount = await getMerchantSettlementAccount()
-      const statusView = getSettlementAccountStatusView(settlementAccount.account_status, settlementAccount.status_desc)
+      const paymentReadiness = await fetchMerchantPaymentReadiness()
+      const settlementAccount = paymentReadiness.settlementAccount
+      const nextApplicationNo = String(this.data.applicationNo || settlementAccount?.latest_application_no || '')
 
       this.setData({
+        paymentReadiness,
         settlementAccount,
-        settlementStatusDesc: statusView.statusDesc,
+        settlementStatusDesc: paymentReadiness.summaryDescription,
+        applicationNo: nextApplicationNo,
+        applicationResult: nextApplicationNo ? this.data.applicationResult : null,
+        applicationLoading: false,
+        applicationError: false,
+        applicationErrorMessage: '',
         initialLoading: false,
         initialError: false,
         initialErrorMessage: '',
         loading: false
       })
 
-      if (this.data.applicationNo) {
-        await this.loadApplicationResult(this.data.applicationNo)
+      if (nextApplicationNo) {
+        await this.loadApplicationResult(nextApplicationNo)
       }
     } catch (error) {
       logger.error('Load merchant settlement account failed', error, 'merchant-settlement-account')
@@ -157,12 +169,7 @@ Page({
       return
     }
 
-    const statusView = getSettlementAccountStatusView(
-      this.data.settlementAccount?.account_status,
-      this.data.settlementAccount?.status_desc
-    )
-
-    if (!this.data.settlementAccount || !statusView.isActive) {
+    if (!this.data.paymentReadiness?.canEditSettlementAccount) {
       wx.showToast({ title: '当前账户尚未激活，暂不可更换银行卡', icon: 'none' })
       return
     }
@@ -189,7 +196,9 @@ Page({
       return
     }
 
-    wx.navigateTo({ url: '/pages/merchant/settings/applyment/index' })
+    wx.navigateTo({
+      url: this.data.paymentReadiness?.actionPath || '/pages/merchant/settings/applyment/index'
+    })
   },
 
   formatAccountNumber(value?: string) {
@@ -214,32 +223,10 @@ Page({
   },
 
   getVerifyResultText(result?: string) {
-    switch (String(result || '').toUpperCase()) {
-      case 'VERIFY_SUCCESS':
-      case 'SUCCESS':
-        return '审核通过'
-      case 'VERIFY_FAIL':
-      case 'FAILED':
-        return '审核失败'
-      case 'PROCESSING':
-        return '审核中'
-      default:
-        return result || '处理中'
-    }
+    return getSettlementVerifyResultText(result)
   },
 
   getVerifyResultTheme(result?: string) {
-    switch (String(result || '').toUpperCase()) {
-      case 'VERIFY_SUCCESS':
-      case 'SUCCESS':
-        return 'success'
-      case 'VERIFY_FAIL':
-      case 'FAILED':
-        return 'danger'
-      case 'PROCESSING':
-        return 'warning'
-      default:
-        return 'default'
-    }
+    return getSettlementVerifyResultTheme(result)
   }
 })

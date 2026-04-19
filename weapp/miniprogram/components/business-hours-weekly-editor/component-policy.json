@@ -1,0 +1,12 @@
+{
+  "purpose": "Weekly business-hours editor that coordinates day-level switches, picker confirmation, and slot summaries.",
+  "tdesignGroup": "form",
+  "tdesignCandidates": [
+    "switch",
+    "button",
+    "picker",
+    "tag"
+  ],
+  "decision": "local-component",
+  "rationale": "Weekly schedule editing spans repeated day rows, local picker state, and merchant-only time semantics. A domain component keeps those responsibilities out of the page shell while still using TDesign controls."
+}

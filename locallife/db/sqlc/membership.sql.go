@@ -12,6 +12,66 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const createMembershipRechargeTransaction = `-- name: CreateMembershipRechargeTransaction :one
+INSERT INTO membership_transactions (
+    membership_id,
+    type,
+    amount,
+    principal_amount,
+    bonus_amount,
+    balance_after,
+    related_order_id,
+    recharge_rule_id,
+    notes,
+    idempotency_key
+) VALUES (
+    $1, 'recharge', $2, $3, $4, $5, $6, $7, $8, $9
+) RETURNING id, membership_id, type, amount, balance_after, related_order_id, recharge_rule_id, notes, created_at, payment_order_id, principal_amount, bonus_amount, idempotency_key
+`
+
+type CreateMembershipRechargeTransactionParams struct {
+	MembershipID    int64       `json:"membership_id"`
+	Amount          int64       `json:"amount"`
+	PrincipalAmount int64       `json:"principal_amount"`
+	BonusAmount     int64       `json:"bonus_amount"`
+	BalanceAfter    int64       `json:"balance_after"`
+	RelatedOrderID  pgtype.Int8 `json:"related_order_id"`
+	RechargeRuleID  pgtype.Int8 `json:"recharge_rule_id"`
+	Notes           pgtype.Text `json:"notes"`
+	IdempotencyKey  pgtype.Text `json:"idempotency_key"`
+}
+
+func (q *Queries) CreateMembershipRechargeTransaction(ctx context.Context, arg CreateMembershipRechargeTransactionParams) (MembershipTransaction, error) {
+	row := q.db.QueryRow(ctx, createMembershipRechargeTransaction,
+		arg.MembershipID,
+		arg.Amount,
+		arg.PrincipalAmount,
+		arg.BonusAmount,
+		arg.BalanceAfter,
+		arg.RelatedOrderID,
+		arg.RechargeRuleID,
+		arg.Notes,
+		arg.IdempotencyKey,
+	)
+	var i MembershipTransaction
+	err := row.Scan(
+		&i.ID,
+		&i.MembershipID,
+		&i.Type,
+		&i.Amount,
+		&i.BalanceAfter,
+		&i.RelatedOrderID,
+		&i.RechargeRuleID,
+		&i.Notes,
+		&i.CreatedAt,
+		&i.PaymentOrderID,
+		&i.PrincipalAmount,
+		&i.BonusAmount,
+		&i.IdempotencyKey,
+	)
+	return i, err
+}
+
 const createMembershipTransaction = `-- name: CreateMembershipTransaction :one
 
 INSERT INTO membership_transactions (
@@ -26,7 +86,7 @@ INSERT INTO membership_transactions (
     notes
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9
-) RETURNING id, membership_id, type, amount, balance_after, related_order_id, recharge_rule_id, notes, created_at, payment_order_id, principal_amount, bonus_amount
+) RETURNING id, membership_id, type, amount, balance_after, related_order_id, recharge_rule_id, notes, created_at, payment_order_id, principal_amount, bonus_amount, idempotency_key
 `
 
 type CreateMembershipTransactionParams struct {
@@ -68,6 +128,7 @@ func (q *Queries) CreateMembershipTransaction(ctx context.Context, arg CreateMem
 		&i.PaymentOrderID,
 		&i.PrincipalAmount,
 		&i.BonusAmount,
+		&i.IdempotencyKey,
 	)
 	return i, err
 }
@@ -86,7 +147,7 @@ INSERT INTO membership_transactions (
     payment_order_id
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
-) RETURNING id, membership_id, type, amount, balance_after, related_order_id, recharge_rule_id, notes, created_at, payment_order_id, principal_amount, bonus_amount
+) RETURNING id, membership_id, type, amount, balance_after, related_order_id, recharge_rule_id, notes, created_at, payment_order_id, principal_amount, bonus_amount, idempotency_key
 `
 
 type CreateMembershipTransactionWithPaymentOrderIDParams struct {
@@ -129,6 +190,7 @@ func (q *Queries) CreateMembershipTransactionWithPaymentOrderID(ctx context.Cont
 		&i.PaymentOrderID,
 		&i.PrincipalAmount,
 		&i.BonusAmount,
+		&i.IdempotencyKey,
 	)
 	return i, err
 }
@@ -347,7 +409,7 @@ func (q *Queries) GetMembershipByMerchantAndUserForUpdate(ctx context.Context, a
 }
 
 const getMembershipConsumeByOrder = `-- name: GetMembershipConsumeByOrder :one
-SELECT id, membership_id, type, amount, balance_after, related_order_id, recharge_rule_id, notes, created_at, payment_order_id, principal_amount, bonus_amount FROM membership_transactions
+SELECT id, membership_id, type, amount, balance_after, related_order_id, recharge_rule_id, notes, created_at, payment_order_id, principal_amount, bonus_amount, idempotency_key FROM membership_transactions
 WHERE membership_id = $1 AND related_order_id = $2 AND type = 'consume'
 ORDER BY created_at DESC
 LIMIT 1
@@ -374,6 +436,7 @@ func (q *Queries) GetMembershipConsumeByOrder(ctx context.Context, arg GetMember
 		&i.PaymentOrderID,
 		&i.PrincipalAmount,
 		&i.BonusAmount,
+		&i.IdempotencyKey,
 	)
 	return i, err
 }
@@ -402,8 +465,44 @@ func (q *Queries) GetMembershipForUpdate(ctx context.Context, id int64) (Merchan
 	return i, err
 }
 
+const getMembershipRechargeTransactionByIdempotencyKey = `-- name: GetMembershipRechargeTransactionByIdempotencyKey :one
+SELECT id, membership_id, type, amount, balance_after, related_order_id, recharge_rule_id, notes, created_at, payment_order_id, principal_amount, bonus_amount, idempotency_key
+FROM membership_transactions
+WHERE membership_id = $1
+    AND type = 'recharge'
+    AND idempotency_key = $2
+ORDER BY created_at DESC, id DESC
+LIMIT 1
+`
+
+type GetMembershipRechargeTransactionByIdempotencyKeyParams struct {
+	MembershipID   int64       `json:"membership_id"`
+	IdempotencyKey pgtype.Text `json:"idempotency_key"`
+}
+
+func (q *Queries) GetMembershipRechargeTransactionByIdempotencyKey(ctx context.Context, arg GetMembershipRechargeTransactionByIdempotencyKeyParams) (MembershipTransaction, error) {
+	row := q.db.QueryRow(ctx, getMembershipRechargeTransactionByIdempotencyKey, arg.MembershipID, arg.IdempotencyKey)
+	var i MembershipTransaction
+	err := row.Scan(
+		&i.ID,
+		&i.MembershipID,
+		&i.Type,
+		&i.Amount,
+		&i.BalanceAfter,
+		&i.RelatedOrderID,
+		&i.RechargeRuleID,
+		&i.Notes,
+		&i.CreatedAt,
+		&i.PaymentOrderID,
+		&i.PrincipalAmount,
+		&i.BonusAmount,
+		&i.IdempotencyKey,
+	)
+	return i, err
+}
+
 const getMembershipTransaction = `-- name: GetMembershipTransaction :one
-SELECT id, membership_id, type, amount, balance_after, related_order_id, recharge_rule_id, notes, created_at, payment_order_id, principal_amount, bonus_amount FROM membership_transactions
+SELECT id, membership_id, type, amount, balance_after, related_order_id, recharge_rule_id, notes, created_at, payment_order_id, principal_amount, bonus_amount, idempotency_key FROM membership_transactions
 WHERE id = $1 LIMIT 1
 `
 
@@ -423,12 +522,13 @@ func (q *Queries) GetMembershipTransaction(ctx context.Context, id int64) (Membe
 		&i.PaymentOrderID,
 		&i.PrincipalAmount,
 		&i.BonusAmount,
+		&i.IdempotencyKey,
 	)
 	return i, err
 }
 
 const getMembershipTransactionByPaymentOrderID = `-- name: GetMembershipTransactionByPaymentOrderID :one
-SELECT id, membership_id, type, amount, balance_after, related_order_id, recharge_rule_id, notes, created_at, payment_order_id, principal_amount, bonus_amount FROM membership_transactions
+SELECT id, membership_id, type, amount, balance_after, related_order_id, recharge_rule_id, notes, created_at, payment_order_id, principal_amount, bonus_amount, idempotency_key FROM membership_transactions
 WHERE payment_order_id = $1 LIMIT 1
 `
 
@@ -448,6 +548,7 @@ func (q *Queries) GetMembershipTransactionByPaymentOrderID(ctx context.Context, 
 		&i.PaymentOrderID,
 		&i.PrincipalAmount,
 		&i.BonusAmount,
+		&i.IdempotencyKey,
 	)
 	return i, err
 }
@@ -593,9 +694,9 @@ func (q *Queries) ListActiveRechargeRules(ctx context.Context, merchantID int64)
 }
 
 const listMembershipTransactions = `-- name: ListMembershipTransactions :many
-SELECT id, membership_id, type, amount, balance_after, related_order_id, recharge_rule_id, notes, created_at, payment_order_id, principal_amount, bonus_amount FROM membership_transactions
+SELECT id, membership_id, type, amount, balance_after, related_order_id, recharge_rule_id, notes, created_at, payment_order_id, principal_amount, bonus_amount, idempotency_key FROM membership_transactions
 WHERE membership_id = $1
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $2 OFFSET $3
 `
 
@@ -627,6 +728,7 @@ func (q *Queries) ListMembershipTransactions(ctx context.Context, arg ListMember
 			&i.PaymentOrderID,
 			&i.PrincipalAmount,
 			&i.BonusAmount,
+			&i.IdempotencyKey,
 		); err != nil {
 			return nil, err
 		}
@@ -639,9 +741,9 @@ func (q *Queries) ListMembershipTransactions(ctx context.Context, arg ListMember
 }
 
 const listMembershipTransactionsByType = `-- name: ListMembershipTransactionsByType :many
-SELECT id, membership_id, type, amount, balance_after, related_order_id, recharge_rule_id, notes, created_at, payment_order_id, principal_amount, bonus_amount FROM membership_transactions
+SELECT id, membership_id, type, amount, balance_after, related_order_id, recharge_rule_id, notes, created_at, payment_order_id, principal_amount, bonus_amount, idempotency_key FROM membership_transactions
 WHERE membership_id = $1 AND type = $2
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $3 OFFSET $4
 `
 
@@ -679,6 +781,7 @@ func (q *Queries) ListMembershipTransactionsByType(ctx context.Context, arg List
 			&i.PaymentOrderID,
 			&i.PrincipalAmount,
 			&i.BonusAmount,
+			&i.IdempotencyKey,
 		); err != nil {
 			return nil, err
 		}

@@ -9,9 +9,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
+	wechaterrorcodes "github.com/merrydance/locallife/wechat/errorcodes"
 )
-
-const defaultWechatFundAccountType = "BASIC"
 
 type fundBalanceQueryRequest struct {
 	AccountType string `form:"account_type"`
@@ -25,43 +25,23 @@ type platformAccountBalanceResponse struct {
 	PendingAmount   int64  `json:"pending_amount"`
 }
 
-var subMerchantRealtimeAccountTypes = map[string]struct{}{
-	"BASIC":     {},
-	"FEES":      {},
-	"OPERATION": {},
-	"DEPOSIT":   {},
-}
-
-var subMerchantDayEndAccountTypes = map[string]struct{}{
-	"BASIC":   {},
-	"DEPOSIT": {},
-}
-
-var platformAccountTypes = map[string]struct{}{
-	"BASIC":     {},
-	"FEES":      {},
-	"OPERATION": {},
-}
+type fundBalanceAccountTypeNormalizer func(string) (string, error)
 
 func bindSubMerchantFundBalanceQuery(ctx *gin.Context) (fundBalanceQueryRequest, bool) {
-	return bindFundBalanceQuery(ctx, subMerchantRealtimeAccountTypes, subMerchantDayEndAccountTypes)
+	return bindFundBalanceQuery(ctx, wechatcontracts.NormalizeFundManagementSubMerchantRealtimeAccountType, wechatcontracts.NormalizeFundManagementSubMerchantDayEndAccountType)
 }
 
 func bindPlatformFundBalanceQuery(ctx *gin.Context) (fundBalanceQueryRequest, bool) {
-	return bindFundBalanceQuery(ctx, platformAccountTypes, platformAccountTypes)
+	return bindFundBalanceQuery(ctx, wechatcontracts.NormalizeFundManagementPlatformAccountType, wechatcontracts.NormalizeFundManagementPlatformAccountType)
 }
 
-func bindFundBalanceQuery(ctx *gin.Context, realtimeAllowed, dayEndAllowed map[string]struct{}) (fundBalanceQueryRequest, bool) {
+func bindFundBalanceQuery(ctx *gin.Context, normalizeRealtimeAccountType, normalizeDayEndAccountType fundBalanceAccountTypeNormalizer) (fundBalanceQueryRequest, bool) {
 	var req fundBalanceQueryRequest
 	if err := ctx.ShouldBindQuery(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return fundBalanceQueryRequest{}, false
 	}
 
-	req.AccountType = strings.ToUpper(strings.TrimSpace(req.AccountType))
-	if req.AccountType == "" {
-		req.AccountType = defaultWechatFundAccountType
-	}
 	req.Date = strings.TrimSpace(req.Date)
 
 	if req.Date != "" {
@@ -69,17 +49,21 @@ func bindFundBalanceQuery(ctx *gin.Context, realtimeAllowed, dayEndAllowed map[s
 			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("date must use YYYY-MM-DD format")))
 			return fundBalanceQueryRequest{}, false
 		}
-		if _, ok := dayEndAllowed[req.AccountType]; !ok {
-			ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("account_type %s is not supported for day-end balance", req.AccountType)))
+		accountType, err := normalizeDayEndAccountType(req.AccountType)
+		if err != nil {
+			ctx.JSON(http.StatusBadRequest, errorResponse(err))
 			return fundBalanceQueryRequest{}, false
 		}
+		req.AccountType = accountType
 		return req, true
 	}
 
-	if _, ok := realtimeAllowed[req.AccountType]; !ok {
-		ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("account_type %s is not supported", req.AccountType)))
+	accountType, err := normalizeRealtimeAccountType(req.AccountType)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return fundBalanceQueryRequest{}, false
 	}
+	req.AccountType = accountType
 
 	return req, true
 }
@@ -89,6 +73,22 @@ func loadSubMerchantFundBalance(ctx *gin.Context, client wechat.EcommerceClientI
 		return client.QueryEcommerceFundDayEndBalance(ctx, subMchID, query.Date, query.AccountType)
 	}
 	return client.QueryEcommerceFundBalanceByAccountType(ctx, subMchID, query.AccountType)
+}
+
+func respondFundBalanceQueryError(ctx *gin.Context, operation string, err error) {
+	var contractErr *wechatcontracts.FundManagementContractError
+	if errors.As(err, &contractErr) {
+		ctx.JSON(http.StatusBadGateway, loggedServerError(ctx, fmt.Errorf("%s: %w", operation, err), "微信资金账户返回数据异常，请稍后重试", operation+": upstream contract invalid"))
+		return
+	}
+
+	var wxErr *wechat.WechatPayError
+	if errors.As(err, &wxErr) && wechaterrorcodes.FundManagementCodeEquals(wxErr.Code, wechaterrorcodes.FundManagementCodeNoAuth) {
+		ctx.JSON(http.StatusBadGateway, loggedServerError(ctx, fmt.Errorf("%s: %w", operation, err), "微信侧暂无该账户查询权限，请联系管理员检查收付通配置", operation+": permission denied"))
+		return
+	}
+
+	ctx.JSON(http.StatusBadGateway, loggedServerError(ctx, fmt.Errorf("%s: %w", operation, err), "微信资金账户查询失败，请稍后重试", operation+": upstream failed"))
 }
 
 // getPlatformAccountBalance 查询平台微信支付账户余额
@@ -126,7 +126,7 @@ func (server *Server) getPlatformAccountBalance(ctx *gin.Context) {
 		balance, err = server.ecommerceClient.QueryPlatformFundBalance(ctx, query.AccountType)
 	}
 	if err != nil {
-		ctx.JSON(http.StatusBadGateway, internalError(ctx, fmt.Errorf("query platform fund balance: %w", err)))
+		respondFundBalanceQueryError(ctx, "query platform fund balance", err)
 		return
 	}
 

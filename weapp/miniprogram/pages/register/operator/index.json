@@ -12,6 +12,10 @@
         "t-search": "tdesign-miniprogram/search/search",
         "t-radio": "tdesign-miniprogram/radio/radio",
         "t-radio-group": "tdesign-miniprogram/radio-group/radio-group",
+        "t-checkbox": "tdesign-miniprogram/checkbox/checkbox",
+        "t-checkbox-group": "tdesign-miniprogram/checkbox-group/checkbox-group",
+        "t-picker": "tdesign-miniprogram/picker/picker",
+        "t-picker-item": "tdesign-miniprogram/picker-item/picker-item",
         "t-popup": "tdesign-miniprogram/popup/popup",
         "document-uploader": "/components/document-uploader/index"
     }

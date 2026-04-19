@@ -32,12 +32,14 @@ func createPaidRiderDepositPaymentOrder(t *testing.T, rider Rider, amount int64)
 	}
 
 	paymentOrder, err := testStore.CreatePaymentOrder(context.Background(), CreatePaymentOrderParams{
-		UserID:       rider.UserID,
-		PaymentType:  "miniprogram",
-		BusinessType: "rider_deposit",
-		Amount:       amount,
-		OutTradeNo:   "RD" + util.RandomString(30),
-		ExpiresAt:    pgtype.Timestamptz{Time: time.Now().Add(15 * time.Minute), Valid: true},
+		UserID:                rider.UserID,
+		PaymentType:           "miniprogram",
+		PaymentChannel:        PaymentChannelDirect,
+		RequiresProfitSharing: false,
+		BusinessType:          "rider_deposit",
+		Amount:                amount,
+		OutTradeNo:            "RD" + util.RandomString(30),
+		ExpiresAt:             pgtype.Timestamptz{Time: time.Now().Add(15 * time.Minute), Valid: true},
 	})
 	require.NoError(t, err)
 
@@ -162,13 +164,15 @@ func TestProcessPaymentSuccessTx_OrderSetsPaidFields(t *testing.T) {
 	order := createResult.Order
 
 	paymentOrder, err := testStore.CreatePaymentOrder(context.Background(), CreatePaymentOrderParams{
-		OrderID:      pgtype.Int8{Int64: order.ID, Valid: true},
-		UserID:       user.ID,
-		PaymentType:  "profit_sharing",
-		BusinessType: "order",
-		Amount:       order.TotalAmount,
-		OutTradeNo:   "PO" + util.RandomString(30),
-		ExpiresAt:    pgtype.Timestamptz{Time: time.Now().Add(15 * time.Minute), Valid: true},
+		OrderID:               pgtype.Int8{Int64: order.ID, Valid: true},
+		UserID:                user.ID,
+		PaymentType:           "miniprogram",
+		PaymentChannel:        PaymentChannelEcommerce,
+		RequiresProfitSharing: true,
+		BusinessType:          "order",
+		Amount:                order.TotalAmount,
+		OutTradeNo:            "PO" + util.RandomString(30),
+		ExpiresAt:             pgtype.Timestamptz{Time: time.Now().Add(15 * time.Minute), Valid: true},
 	})
 	require.NoError(t, err)
 

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -10,6 +11,8 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
+	wechaterrorcodes "github.com/merrydance/locallife/wechat/errorcodes"
 	mockwechat "github.com/merrydance/locallife/wechat/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -41,7 +44,6 @@ func TestGetPlatformAccountBalanceAPI(t *testing.T) {
 					Return(&wechat.PlatformFundBalanceResponse{
 						AvailableAmount: 32100,
 						PendingAmount:   12,
-						AccountType:     "OPERATION",
 					}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
@@ -69,7 +71,6 @@ func TestGetPlatformAccountBalanceAPI(t *testing.T) {
 					Return(&wechat.PlatformFundBalanceResponse{
 						AvailableAmount: 1200,
 						PendingAmount:   3,
-						AccountType:     "FEES",
 					}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
@@ -119,4 +120,37 @@ func TestGetPlatformAccountBalanceAPI(t *testing.T) {
 			tc.checkResponse(t, recorder)
 		})
 	}
+}
+
+func TestGetPlatformAccountBalanceAPINoAuthReturnsExplicitMessage(t *testing.T) {
+	admin, _ := randomUser(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ecommerce := mockwechat.NewMockEcommerceClientInterface(ctrl)
+
+	store.EXPECT().
+		ListUserRoles(gomock.Any(), admin.ID).
+		Return([]db.UserRole{{UserID: admin.ID, Role: RoleAdmin, Status: "active"}}, nil)
+
+	ecommerce.EXPECT().
+		QueryPlatformFundBalance(gomock.Any(), wechatcontracts.FundManagementAccountTypeBasic).
+		Return(nil, &wechat.WechatPayError{StatusCode: http.StatusForbidden, Code: wechaterrorcodes.FundManagementCodeNoAuth, Message: "no auth"})
+
+	server := newTestServer(t, store)
+	server.SetEcommerceClientForTest(ecommerce)
+
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodGet, "/v1/platform/finance/account/balance", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, admin.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusBadGateway, recorder.Code)
+	var resp APIResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, "微信侧暂无该账户查询权限，请联系管理员检查收付通配置", resp.Message)
 }

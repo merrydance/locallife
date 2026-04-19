@@ -1,0 +1,9 @@
+{
+  "purpose": "Reusable card skeleton placeholder for list, detail, and dashboard card loading states.",
+  "tdesignGroup": "feedback",
+  "tdesignCandidates": [
+    "skeleton"
+  ],
+  "decision": "tdesign-wrapper",
+  "rationale": "The component only standardizes a recurring skeleton layout and token usage on top of TDesign skeleton primitives so pages do not duplicate loading markup."
+}

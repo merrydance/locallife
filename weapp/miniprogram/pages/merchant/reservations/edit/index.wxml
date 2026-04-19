@@ -2,7 +2,7 @@
 
 <view
   class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
-  style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: 220rpx;"
+  style="--page-shell-nav-height: {{navBarHeight}}px;"
 >
   <view wx:if="{{initialLoading}}" class="state-block">
     <t-loading theme="circular" size="40rpx" text="加载预订编辑信息中..." vertical />
@@ -10,13 +10,13 @@
 
   <view wx:elif="{{initialError}}" class="state-block">
     <t-empty image="error-circle" description="{{initialErrorMessage || '预订编辑页加载失败，请重试'}}" />
-    <t-button theme="primary" size="small" shape="round" bind:tap="onRetry">重新加载</t-button>
+    <t-button theme="primary" bind:tap="onRetry">重新加载</t-button>
   </view>
 
   <block wx:else>
     <view class="page-content">
-      <view wx:if="{{loadWarningMessage}}" class="notice-card notice-card--warning">
-        <text class="notice-text">{{loadWarningMessage}}</text>
+      <view wx:if="{{loadWarningMessage}}" class="notice-banner">
+        <t-notice-bar theme="warning" visible="{{true}}" content="{{loadWarningMessage}}" />
       </view>
 
       <view class="section-panel">
@@ -99,18 +99,14 @@
           indicator
         />
       </view>
-    </view>
-
-    <view class="footer-bar">
-      <t-button
-        block
-        size="large"
-        shape="round"
-        theme="primary"
-        loading="{{submitting}}"
-        disabled="{{isEdit && !isEditable}}"
-        bind:tap="onSubmit"
-      >{{isEdit ? (isEditable ? '保存预订' : '当前状态不可修改') : '创建预订'}}</t-button>
+      <view class="form-actions">
+        <t-button
+          theme="primary"
+          loading="{{submitting}}"
+          disabled="{{isEdit && !isEditable}}"
+          bind:tap="onSubmit"
+        >{{isEdit ? (isEditable ? '保存预订' : '当前状态不可修改') : '创建预订'}}</t-button>
+      </view>
     </view>
 
     <t-picker

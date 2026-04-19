@@ -1,4 +1,5 @@
 /* 餐厅卡片 - 深度适配 Design System */
+@import '../../styles/customer.wxss';
 
 .restaurant-card {
   display: flex;

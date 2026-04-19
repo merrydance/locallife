@@ -13,7 +13,6 @@ import (
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
-	"github.com/merrydance/locallife/wechat"
 	mockwechat "github.com/merrydance/locallife/wechat/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -220,7 +219,7 @@ func TestRechargeMembershipAPI(t *testing.T) {
 		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
 	}{
 		{
-			name: "OK",
+			name: "PaymentPaused",
 			body: map[string]interface{}{
 				"membership_id":   membership.ID,
 				"recharge_amount": 10000, // 100元
@@ -230,60 +229,19 @@ func TestRechargeMembershipAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				// Mock GetMerchantMembership
 				store.EXPECT().
 					GetMerchantMembership(gomock.Any(), gomock.Eq(membership.ID)).
 					Times(1).
 					Return(membership, nil)
 
-				// Mock GetMatchingRechargeRule
 				store.EXPECT().
 					GetMatchingRechargeRule(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(rechargeRule, nil)
-
-				// Mock GetUser for wechat openid
-				store.EXPECT().
-					GetUser(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(user, nil)
-
-				// Mock idempotency check: no existing pending payment order with prepay_id
-				store.EXPECT().
-					GetPendingPaymentOrderByUserAndBusinessType(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.PaymentOrder{}, db.ErrRecordNotFound)
-
-				// Mock CreateEcommercePaymentTx
-				store.EXPECT().
-					CreateEcommercePaymentTx(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.CreateEcommercePaymentTxResult{
-						PaymentOrder: db.PaymentOrder{
-							ID:           1,
-							UserID:       user.ID,
-							OutTradeNo:   "MBRC123",
-							BusinessType: "membership_recharge",
-							Amount:       100 * fenPerYuan,
-						},
-						CombinedPaymentOrder: db.CombinedPaymentOrder{ID: 1},
-						SubMchID:             "sub_mch_001",
-					}, nil)
-
-				// Mock UpdatePaymentOrderPrepayId
-				store.EXPECT().
-					UpdatePaymentOrderPrepayId(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.PaymentOrder{}, nil)
-
-				// Mock UpdateCombinedPaymentOrderPrepay
-				store.EXPECT().
-					UpdateCombinedPaymentOrderPrepay(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.CombinedPaymentOrder{}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
+				require.Equal(t, http.StatusServiceUnavailable, recorder.Code)
+				require.Contains(t, recorder.Body.String(), "会员线上充值已停用，请联系商户线下充值后入账")
 			},
 		},
 		{
@@ -378,26 +336,11 @@ func TestRechargeMembershipAPI(t *testing.T) {
 			tc.buildStubs(store)
 
 			// Create mock payment client
-			paymentClient := mockwechat.NewMockPaymentClientInterface(ctrl)
+			paymentClient := mockwechat.NewMockDirectPaymentClientInterface(ctrl)
 
 			// Create server with mock payment client
 			server := newTestServerWithPayment(t, store, paymentClient)
 
-			if tc.name == "OK" {
-				// Mock ecommerce client with CreateCombineOrder for successful case
-				ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
-				ecommerceClient.EXPECT().
-					CreateCombineOrder(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(&wechat.CombineOrderResponse{PrepayID: "prepay_id_test"}, &wechat.JSAPIPayParams{
-						TimeStamp: "123456",
-						NonceStr:  "random",
-						Package:   "prepay_id=test",
-						SignType:  "RSA",
-						PaySign:   "sign",
-					}, nil)
-				server.SetEcommerceClientForTest(ecommerceClient)
-			}
 			recorder := httptest.NewRecorder()
 
 			data, err := json.Marshal(tc.body)
@@ -407,6 +350,171 @@ func TestRechargeMembershipAPI(t *testing.T) {
 			request, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(data))
 			require.NoError(t, err)
 			request.Header.Set("Content-Type", "application/json")
+
+			tc.setupAuth(t, request, server.tokenMaker)
+			server.router.ServeHTTP(recorder, request)
+			tc.checkResponse(t, recorder)
+		})
+	}
+}
+
+func TestRecordMemberRechargeAPI(t *testing.T) {
+	merchantOwner, _ := randomUser(t)
+	merchant := randomMerchant(merchantOwner.ID)
+	memberUser, _ := randomUser(t)
+	otherUser, _ := randomUser(t)
+	membership := randomMembership(memberUser.ID)
+	membership.MerchantID = merchant.ID
+	rule := randomRechargeRule(merchant.ID)
+	updatedMembership := membership
+	updatedMembership.Balance = membership.Balance + 11000
+	updatedMembership.TotalRecharged = membership.TotalRecharged + 11000
+	transaction := db.MembershipTransaction{ID: 91, MembershipID: membership.ID}
+
+	testCases := []struct {
+		name           string
+		merchantID     int64
+		userID         int64
+		body           map[string]interface{}
+		idempotencyKey string
+		setupAuth      func(t *testing.T, request *http.Request, tokenMaker token.Maker)
+		buildStubs     func(store *mockdb.MockStore)
+		checkResponse  func(t *testing.T, recorder *httptest.ResponseRecorder)
+	}{
+		{
+			name:           "MissingIdempotencyKey",
+			merchantID:     merchant.ID,
+			userID:         memberUser.ID,
+			idempotencyKey: "",
+			body: map[string]interface{}{
+				"recharge_amount": 10000,
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
+				store.EXPECT().GetMembershipByMerchantAndUser(gomock.Any(), gomock.Any()).Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				require.Contains(t, recorder.Body.String(), "Idempotency-Key header is required")
+			},
+		},
+		{
+			name:           "OK",
+			merchantID:     merchant.ID,
+			userID:         memberUser.ID,
+			idempotencyKey: "recharge-api-1",
+			body: map[string]interface{}{
+				"recharge_amount": 10000,
+				"notes":           "线下微信收款",
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
+				store.EXPECT().
+					GetMembershipByMerchantAndUser(gomock.Any(), db.GetMembershipByMerchantAndUserParams{MerchantID: merchant.ID, UserID: memberUser.ID}).
+					Return(membership, nil)
+				store.EXPECT().
+					GetUser(gomock.Any(), memberUser.ID).
+					Return(memberUser, nil)
+				store.EXPECT().
+					GetMembershipRechargeTransactionByIdempotencyKey(gomock.Any(), gomock.Any()).
+					Return(db.MembershipTransaction{}, db.ErrRecordNotFound)
+				store.EXPECT().
+					GetMatchingRechargeRule(gomock.Any(), db.GetMatchingRechargeRuleParams{MerchantID: merchant.ID, RechargeAmount: 10000}).
+					Return(rule, nil)
+				store.EXPECT().
+					RechargeTx(gomock.Any(), db.RechargeTxParams{
+						MembershipID:   membership.ID,
+						RechargeAmount: 10000,
+						BonusAmount:    1000,
+						RechargeRuleID: &rule.ID,
+						Notes:          "线下微信收款",
+						IdempotencyKey: "recharge-api-1",
+					}).
+					Return(db.RechargeTxResult{Membership: updatedMembership, Transaction: transaction}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var rsp merchantMemberRechargeResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &rsp)
+				require.Equal(t, memberUser.ID, rsp.UserID)
+				require.Equal(t, updatedMembership.Balance, rsp.Balance)
+				require.Equal(t, int64(10000), rsp.RechargeAmount)
+				require.Equal(t, int64(1000), rsp.BonusAmount)
+				require.Equal(t, int64(11000), rsp.TotalCredited)
+				require.NotNil(t, rsp.RechargeRuleID)
+				require.Equal(t, rule.ID, *rsp.RechargeRuleID)
+			},
+		},
+		{
+			name:           "Forbidden_NotMerchant",
+			merchantID:     merchant.ID,
+			userID:         memberUser.ID,
+			idempotencyKey: "recharge-api-1",
+			body: map[string]interface{}{
+				"recharge_amount": 10000,
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, otherUser.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveNoAccessibleMerchants(store, otherUser.ID)
+				store.EXPECT().GetMembershipByMerchantAndUser(gomock.Any(), gomock.Any()).Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusForbidden, recorder.Code)
+			},
+		},
+		{
+			name:           "MembershipNotFound",
+			merchantID:     merchant.ID,
+			userID:         memberUser.ID,
+			idempotencyKey: "recharge-api-1",
+			body: map[string]interface{}{
+				"recharge_amount": 10000,
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
+				store.EXPECT().
+					GetMembershipByMerchantAndUser(gomock.Any(), db.GetMembershipByMerchantAndUserParams{MerchantID: merchant.ID, UserID: memberUser.ID}).
+					Return(db.MerchantMembership{}, db.ErrRecordNotFound)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusNotFound, recorder.Code)
+			},
+		},
+	}
+
+	for i := range testCases {
+		tc := testCases[i]
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			tc.buildStubs(store)
+
+			server := newTestServer(t, store)
+			recorder := httptest.NewRecorder()
+
+			data, err := json.Marshal(tc.body)
+			require.NoError(t, err)
+
+			url := fmt.Sprintf("/v1/merchants/%d/members/%d/recharge", tc.merchantID, tc.userID)
+			request, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(data))
+			require.NoError(t, err)
+			request.Header.Set("Content-Type", "application/json")
+			if tc.idempotencyKey != "" {
+				request.Header.Set("Idempotency-Key", tc.idempotencyKey)
+			}
 
 			tc.setupAuth(t, request, server.tokenMaker)
 			server.router.ServeHTTP(recorder, request)

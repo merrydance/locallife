@@ -56,26 +56,40 @@ INSERT INTO payment_orders (
     reservation_id,
     user_id,
     payment_type,
+    payment_channel,
+    requires_profit_sharing,
     business_type,
     amount,
     out_trade_no,
     expires_at,
     attach
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9
-) RETURNING id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6,
+    $7,
+    $8,
+    $9,
+    $10,
+    $11
+) RETURNING id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at, payment_channel, requires_profit_sharing
 `
 
 type CreatePaymentOrderParams struct {
-	OrderID       pgtype.Int8        `json:"order_id"`
-	ReservationID pgtype.Int8        `json:"reservation_id"`
-	UserID        int64              `json:"user_id"`
-	PaymentType   string             `json:"payment_type"`
-	BusinessType  string             `json:"business_type"`
-	Amount        int64              `json:"amount"`
-	OutTradeNo    string             `json:"out_trade_no"`
-	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
-	Attach        pgtype.Text        `json:"attach"`
+	OrderID               pgtype.Int8        `json:"order_id"`
+	ReservationID         pgtype.Int8        `json:"reservation_id"`
+	UserID                int64              `json:"user_id"`
+	PaymentType           string             `json:"payment_type"`
+	PaymentChannel        string             `json:"payment_channel"`
+	RequiresProfitSharing bool               `json:"requires_profit_sharing"`
+	BusinessType          string             `json:"business_type"`
+	Amount                int64              `json:"amount"`
+	OutTradeNo            string             `json:"out_trade_no"`
+	ExpiresAt             pgtype.Timestamptz `json:"expires_at"`
+	Attach                pgtype.Text        `json:"attach"`
 }
 
 func (q *Queries) CreatePaymentOrder(ctx context.Context, arg CreatePaymentOrderParams) (PaymentOrder, error) {
@@ -84,6 +98,8 @@ func (q *Queries) CreatePaymentOrder(ctx context.Context, arg CreatePaymentOrder
 		arg.ReservationID,
 		arg.UserID,
 		arg.PaymentType,
+		arg.PaymentChannel,
+		arg.RequiresProfitSharing,
 		arg.BusinessType,
 		arg.Amount,
 		arg.OutTradeNo,
@@ -109,15 +125,17 @@ func (q *Queries) CreatePaymentOrder(ctx context.Context, arg CreatePaymentOrder
 		&i.Attach,
 		&i.CombinedPaymentID,
 		&i.ProcessedAt,
+		&i.PaymentChannel,
+		&i.RequiresProfitSharing,
 	)
 	return i, err
 }
 
 const getLatestPaymentOrderByBusinessTypeAndAttach = `-- name: GetLatestPaymentOrderByBusinessTypeAndAttach :one
-SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at FROM payment_orders
+SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at, payment_channel, requires_profit_sharing FROM payment_orders
 WHERE business_type = $1
     AND attach = $2
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT 1
 `
 
@@ -147,15 +165,17 @@ func (q *Queries) GetLatestPaymentOrderByBusinessTypeAndAttach(ctx context.Conte
 		&i.Attach,
 		&i.CombinedPaymentID,
 		&i.ProcessedAt,
+		&i.PaymentChannel,
+		&i.RequiresProfitSharing,
 	)
 	return i, err
 }
 
 const getLatestPaymentOrderByOrder = `-- name: GetLatestPaymentOrderByOrder :one
-SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at FROM payment_orders
+SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at, payment_channel, requires_profit_sharing FROM payment_orders
 WHERE order_id = $1
     AND business_type = $2
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT 1
 `
 
@@ -185,15 +205,17 @@ func (q *Queries) GetLatestPaymentOrderByOrder(ctx context.Context, arg GetLates
 		&i.Attach,
 		&i.CombinedPaymentID,
 		&i.ProcessedAt,
+		&i.PaymentChannel,
+		&i.RequiresProfitSharing,
 	)
 	return i, err
 }
 
 const getLatestPaymentOrderByReservation = `-- name: GetLatestPaymentOrderByReservation :one
-SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at FROM payment_orders
+SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at, payment_channel, requires_profit_sharing FROM payment_orders
 WHERE reservation_id = $1
     AND business_type = $2
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT 1
 `
 
@@ -223,12 +245,14 @@ func (q *Queries) GetLatestPaymentOrderByReservation(ctx context.Context, arg Ge
 		&i.Attach,
 		&i.CombinedPaymentID,
 		&i.ProcessedAt,
+		&i.PaymentChannel,
+		&i.RequiresProfitSharing,
 	)
 	return i, err
 }
 
 const getPaymentOrder = `-- name: GetPaymentOrder :one
-SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at FROM payment_orders
+SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at, payment_channel, requires_profit_sharing FROM payment_orders
 WHERE id = $1 LIMIT 1
 `
 
@@ -253,12 +277,14 @@ func (q *Queries) GetPaymentOrder(ctx context.Context, id int64) (PaymentOrder, 
 		&i.Attach,
 		&i.CombinedPaymentID,
 		&i.ProcessedAt,
+		&i.PaymentChannel,
+		&i.RequiresProfitSharing,
 	)
 	return i, err
 }
 
 const getPaymentOrderByOutTradeNo = `-- name: GetPaymentOrderByOutTradeNo :one
-SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at FROM payment_orders
+SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at, payment_channel, requires_profit_sharing FROM payment_orders
 WHERE out_trade_no = $1 LIMIT 1
 `
 
@@ -283,12 +309,14 @@ func (q *Queries) GetPaymentOrderByOutTradeNo(ctx context.Context, outTradeNo st
 		&i.Attach,
 		&i.CombinedPaymentID,
 		&i.ProcessedAt,
+		&i.PaymentChannel,
+		&i.RequiresProfitSharing,
 	)
 	return i, err
 }
 
 const getPaymentOrderByTransactionId = `-- name: GetPaymentOrderByTransactionId :one
-SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at FROM payment_orders
+SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at, payment_channel, requires_profit_sharing FROM payment_orders
 WHERE transaction_id = $1 LIMIT 1
 `
 
@@ -313,12 +341,14 @@ func (q *Queries) GetPaymentOrderByTransactionId(ctx context.Context, transactio
 		&i.Attach,
 		&i.CombinedPaymentID,
 		&i.ProcessedAt,
+		&i.PaymentChannel,
+		&i.RequiresProfitSharing,
 	)
 	return i, err
 }
 
 const getPaymentOrderForUpdate = `-- name: GetPaymentOrderForUpdate :one
-SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at FROM payment_orders
+SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at, payment_channel, requires_profit_sharing FROM payment_orders
 WHERE id = $1 LIMIT 1
 FOR UPDATE
 `
@@ -344,14 +374,16 @@ func (q *Queries) GetPaymentOrderForUpdate(ctx context.Context, id int64) (Payme
 		&i.Attach,
 		&i.CombinedPaymentID,
 		&i.ProcessedAt,
+		&i.PaymentChannel,
+		&i.RequiresProfitSharing,
 	)
 	return i, err
 }
 
 const getPaymentOrdersByOrder = `-- name: GetPaymentOrdersByOrder :many
-SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at FROM payment_orders
+SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at, payment_channel, requires_profit_sharing FROM payment_orders
 WHERE order_id = $1
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 `
 
 func (q *Queries) GetPaymentOrdersByOrder(ctx context.Context, orderID pgtype.Int8) ([]PaymentOrder, error) {
@@ -381,6 +413,8 @@ func (q *Queries) GetPaymentOrdersByOrder(ctx context.Context, orderID pgtype.In
 			&i.Attach,
 			&i.CombinedPaymentID,
 			&i.ProcessedAt,
+			&i.PaymentChannel,
+			&i.RequiresProfitSharing,
 		); err != nil {
 			return nil, err
 		}
@@ -393,9 +427,9 @@ func (q *Queries) GetPaymentOrdersByOrder(ctx context.Context, orderID pgtype.In
 }
 
 const getPaymentOrdersByReservation = `-- name: GetPaymentOrdersByReservation :many
-SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at FROM payment_orders
+SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at, payment_channel, requires_profit_sharing FROM payment_orders
 WHERE reservation_id = $1
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 `
 
 func (q *Queries) GetPaymentOrdersByReservation(ctx context.Context, reservationID pgtype.Int8) ([]PaymentOrder, error) {
@@ -425,6 +459,8 @@ func (q *Queries) GetPaymentOrdersByReservation(ctx context.Context, reservation
 			&i.Attach,
 			&i.CombinedPaymentID,
 			&i.ProcessedAt,
+			&i.PaymentChannel,
+			&i.RequiresProfitSharing,
 		); err != nil {
 			return nil, err
 		}
@@ -437,7 +473,7 @@ func (q *Queries) GetPaymentOrdersByReservation(ctx context.Context, reservation
 }
 
 const getPendingPaymentOrderByUserAndBusinessType = `-- name: GetPendingPaymentOrderByUserAndBusinessType :one
-SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at FROM payment_orders
+SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at, payment_channel, requires_profit_sharing FROM payment_orders
 WHERE user_id = $1
     AND business_type = $2
     AND amount = $3
@@ -474,14 +510,16 @@ func (q *Queries) GetPendingPaymentOrderByUserAndBusinessType(ctx context.Contex
 		&i.Attach,
 		&i.CombinedPaymentID,
 		&i.ProcessedAt,
+		&i.PaymentChannel,
+		&i.RequiresProfitSharing,
 	)
 	return i, err
 }
 
 const listExpiredPaymentOrders = `-- name: ListExpiredPaymentOrders :many
-SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at FROM payment_orders
+SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at, payment_channel, requires_profit_sharing FROM payment_orders
 WHERE status = 'pending' AND expires_at < now()
-ORDER BY created_at
+ORDER BY created_at ASC, id ASC
 LIMIT $1
 `
 
@@ -512,6 +550,8 @@ func (q *Queries) ListExpiredPaymentOrders(ctx context.Context, limit int32) ([]
 			&i.Attach,
 			&i.CombinedPaymentID,
 			&i.ProcessedAt,
+			&i.PaymentChannel,
+			&i.RequiresProfitSharing,
 		); err != nil {
 			return nil, err
 		}
@@ -526,7 +566,7 @@ func (q *Queries) ListExpiredPaymentOrders(ctx context.Context, limit int32) ([]
 const listMiniprogramPaymentOrdersForReconciliation = `-- name: ListMiniprogramPaymentOrdersForReconciliation :many
 SELECT id, out_trade_no, transaction_id, amount, status
 FROM payment_orders
-WHERE payment_type = 'miniprogram'
+WHERE payment_channel = 'direct'
   AND status IN ('paid', 'refunded')
   AND paid_at >= $1
   AND paid_at < $2
@@ -573,7 +613,7 @@ func (q *Queries) ListMiniprogramPaymentOrdersForReconciliation(ctx context.Cont
 }
 
 const listPaidUnprocessedPaymentOrders = `-- name: ListPaidUnprocessedPaymentOrders :many
-SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at FROM payment_orders
+SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at, payment_channel, requires_profit_sharing FROM payment_orders
 WHERE status = 'paid'
     AND processed_at IS NULL
     AND paid_at <= $1
@@ -582,6 +622,7 @@ WHERE status = 'paid'
             WHERE ro.payment_order_id = payment_orders.id
     )
 ORDER BY paid_at
+    , id ASC
 LIMIT $2
 `
 
@@ -617,6 +658,8 @@ func (q *Queries) ListPaidUnprocessedPaymentOrders(ctx context.Context, arg List
 			&i.Attach,
 			&i.CombinedPaymentID,
 			&i.ProcessedAt,
+			&i.PaymentChannel,
+			&i.RequiresProfitSharing,
 		); err != nil {
 			return nil, err
 		}
@@ -629,7 +672,7 @@ func (q *Queries) ListPaidUnprocessedPaymentOrders(ctx context.Context, arg List
 }
 
 const listPaidUnrefundedPaymentOrders = `-- name: ListPaidUnrefundedPaymentOrders :many
-SELECT po.id, po.order_id, po.reservation_id, po.user_id, po.payment_type, po.business_type, po.amount, po.out_trade_no, po.transaction_id, po.prepay_id, po.status, po.paid_at, po.created_at, po.expires_at, po.attach, po.combined_payment_id, po.processed_at
+SELECT po.id, po.order_id, po.reservation_id, po.user_id, po.payment_type, po.business_type, po.amount, po.out_trade_no, po.transaction_id, po.prepay_id, po.status, po.paid_at, po.created_at, po.expires_at, po.attach, po.combined_payment_id, po.processed_at, po.payment_channel, po.requires_profit_sharing
 FROM payment_orders po
 JOIN orders o ON po.order_id = o.id
 WHERE 
@@ -643,6 +686,7 @@ WHERE
         AND ro.status IN ('pending', 'processing', 'success')
     )
 ORDER BY po.created_at
+    , po.id ASC
 LIMIT $1
 `
 
@@ -673,6 +717,8 @@ func (q *Queries) ListPaidUnrefundedPaymentOrders(ctx context.Context, limit int
 			&i.Attach,
 			&i.CombinedPaymentID,
 			&i.ProcessedAt,
+			&i.PaymentChannel,
+			&i.RequiresProfitSharing,
 		); err != nil {
 			return nil, err
 		}
@@ -685,7 +731,7 @@ func (q *Queries) ListPaidUnrefundedPaymentOrders(ctx context.Context, limit int
 }
 
 const listPaidUnrefundedReservationPaymentOrders = `-- name: ListPaidUnrefundedReservationPaymentOrders :many
-SELECT po.id, po.order_id, po.reservation_id, po.user_id, po.payment_type, po.business_type, po.amount, po.out_trade_no, po.transaction_id, po.prepay_id, po.status, po.paid_at, po.created_at, po.expires_at, po.attach, po.combined_payment_id, po.processed_at
+SELECT po.id, po.order_id, po.reservation_id, po.user_id, po.payment_type, po.business_type, po.amount, po.out_trade_no, po.transaction_id, po.prepay_id, po.status, po.paid_at, po.created_at, po.expires_at, po.attach, po.combined_payment_id, po.processed_at, po.payment_channel, po.requires_profit_sharing
 FROM payment_orders po
 JOIN table_reservations r ON po.reservation_id = r.id
 WHERE 
@@ -699,6 +745,7 @@ WHERE
         AND ro.status IN ('pending', 'processing', 'success')
     )
 ORDER BY po.created_at
+    , po.id ASC
 LIMIT $1
 `
 
@@ -729,6 +776,8 @@ func (q *Queries) ListPaidUnrefundedReservationPaymentOrders(ctx context.Context
 			&i.Attach,
 			&i.CombinedPaymentID,
 			&i.ProcessedAt,
+			&i.PaymentChannel,
+			&i.RequiresProfitSharing,
 		); err != nil {
 			return nil, err
 		}
@@ -829,9 +878,9 @@ func (q *Queries) ListPaymentLedgerEntriesByUser(ctx context.Context, arg ListPa
 }
 
 const listPaymentOrdersByUser = `-- name: ListPaymentOrdersByUser :many
-SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at FROM payment_orders
+SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at, payment_channel, requires_profit_sharing FROM payment_orders
 WHERE user_id = $1
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $2 OFFSET $3
 `
 
@@ -868,6 +917,8 @@ func (q *Queries) ListPaymentOrdersByUser(ctx context.Context, arg ListPaymentOr
 			&i.Attach,
 			&i.CombinedPaymentID,
 			&i.ProcessedAt,
+			&i.PaymentChannel,
+			&i.RequiresProfitSharing,
 		); err != nil {
 			return nil, err
 		}
@@ -880,9 +931,9 @@ func (q *Queries) ListPaymentOrdersByUser(ctx context.Context, arg ListPaymentOr
 }
 
 const listPaymentOrdersByUserAndStatus = `-- name: ListPaymentOrdersByUserAndStatus :many
-SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at FROM payment_orders
+SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at, payment_channel, requires_profit_sharing FROM payment_orders
 WHERE user_id = $1 AND status = $2
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $3 OFFSET $4
 `
 
@@ -925,6 +976,8 @@ func (q *Queries) ListPaymentOrdersByUserAndStatus(ctx context.Context, arg List
 			&i.Attach,
 			&i.CombinedPaymentID,
 			&i.ProcessedAt,
+			&i.PaymentChannel,
+			&i.RequiresProfitSharing,
 		); err != nil {
 			return nil, err
 		}
@@ -940,7 +993,7 @@ const setPaymentOrderCombinedID = `-- name: SetPaymentOrderCombinedID :one
 UPDATE payment_orders
 SET combined_payment_id = $2
 WHERE id = $1
-RETURNING id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at
+RETURNING id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at, payment_channel, requires_profit_sharing
 `
 
 type SetPaymentOrderCombinedIDParams struct {
@@ -969,6 +1022,8 @@ func (q *Queries) SetPaymentOrderCombinedID(ctx context.Context, arg SetPaymentO
 		&i.Attach,
 		&i.CombinedPaymentID,
 		&i.ProcessedAt,
+		&i.PaymentChannel,
+		&i.RequiresProfitSharing,
 	)
 	return i, err
 }
@@ -980,7 +1035,7 @@ SET
 WHERE id = $1
     AND status = 'pending'
     AND prepay_id IS NULL
-RETURNING id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at
+RETURNING id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at, payment_channel, requires_profit_sharing
 `
 
 type UpdatePaymentOrderPrepayIdParams struct {
@@ -1009,6 +1064,8 @@ func (q *Queries) UpdatePaymentOrderPrepayId(ctx context.Context, arg UpdatePaym
 		&i.Attach,
 		&i.CombinedPaymentID,
 		&i.ProcessedAt,
+		&i.PaymentChannel,
+		&i.RequiresProfitSharing,
 	)
 	return i, err
 }
@@ -1018,7 +1075,7 @@ UPDATE payment_orders
 SET
     processed_at = now()
 WHERE id = $1 AND status = 'paid' AND processed_at IS NULL
-RETURNING id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at
+RETURNING id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at, payment_channel, requires_profit_sharing
 `
 
 func (q *Queries) UpdatePaymentOrderProcessedAt(ctx context.Context, id int64) (PaymentOrder, error) {
@@ -1042,6 +1099,8 @@ func (q *Queries) UpdatePaymentOrderProcessedAt(ctx context.Context, id int64) (
 		&i.Attach,
 		&i.CombinedPaymentID,
 		&i.ProcessedAt,
+		&i.PaymentChannel,
+		&i.RequiresProfitSharing,
 	)
 	return i, err
 }
@@ -1051,7 +1110,7 @@ UPDATE payment_orders
 SET
     status = 'closed'
 WHERE id = $1 AND status = 'pending'
-RETURNING id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at
+RETURNING id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at, payment_channel, requires_profit_sharing
 `
 
 func (q *Queries) UpdatePaymentOrderToClosed(ctx context.Context, id int64) (PaymentOrder, error) {
@@ -1075,6 +1134,8 @@ func (q *Queries) UpdatePaymentOrderToClosed(ctx context.Context, id int64) (Pay
 		&i.Attach,
 		&i.CombinedPaymentID,
 		&i.ProcessedAt,
+		&i.PaymentChannel,
+		&i.RequiresProfitSharing,
 	)
 	return i, err
 }
@@ -1084,7 +1145,7 @@ UPDATE payment_orders
 SET
     status = 'failed'
 WHERE id = $1 AND status = 'pending'
-RETURNING id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at
+RETURNING id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at, payment_channel, requires_profit_sharing
 `
 
 func (q *Queries) UpdatePaymentOrderToFailed(ctx context.Context, id int64) (PaymentOrder, error) {
@@ -1108,6 +1169,8 @@ func (q *Queries) UpdatePaymentOrderToFailed(ctx context.Context, id int64) (Pay
 		&i.Attach,
 		&i.CombinedPaymentID,
 		&i.ProcessedAt,
+		&i.PaymentChannel,
+		&i.RequiresProfitSharing,
 	)
 	return i, err
 }
@@ -1119,7 +1182,7 @@ SET
     transaction_id = $2,
     paid_at = now()
 WHERE id = $1 AND status = 'pending'
-RETURNING id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at
+RETURNING id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at, payment_channel, requires_profit_sharing
 `
 
 type UpdatePaymentOrderToPaidParams struct {
@@ -1148,6 +1211,8 @@ func (q *Queries) UpdatePaymentOrderToPaid(ctx context.Context, arg UpdatePaymen
 		&i.Attach,
 		&i.CombinedPaymentID,
 		&i.ProcessedAt,
+		&i.PaymentChannel,
+		&i.RequiresProfitSharing,
 	)
 	return i, err
 }
@@ -1157,7 +1222,7 @@ UPDATE payment_orders
 SET
     status = 'refunded'
 WHERE id = $1
-RETURNING id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at
+RETURNING id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at, payment_channel, requires_profit_sharing
 `
 
 func (q *Queries) UpdatePaymentOrderToRefunded(ctx context.Context, id int64) (PaymentOrder, error) {
@@ -1181,6 +1246,8 @@ func (q *Queries) UpdatePaymentOrderToRefunded(ctx context.Context, id int64) (P
 		&i.Attach,
 		&i.CombinedPaymentID,
 		&i.ProcessedAt,
+		&i.PaymentChannel,
+		&i.RequiresProfitSharing,
 	)
 	return i, err
 }

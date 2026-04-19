@@ -1,7 +1,7 @@
 <custom-navbar title="商户管理" showBack="{{true}}" bind:navheight="onNavHeight" />
 
 <view
-  class="page-container page-shell page-shell--with-nav page-shell--bottom-safe {{isLargeScreen ? 'large-screen' : ''}}"
+  class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter {{isLargeScreen ? 'large-screen' : ''}}"
   style="--page-shell-nav-height: {{navBarHeight}}px"
 >
   <view class="header-tools">
@@ -28,7 +28,7 @@
     <!-- 错误状态 -->
     <view wx:if="{{error && !initialLoading}}" class="error-container">
       <t-empty icon="info-circle" description="{{error}}">
-        <t-button slot="action" theme="primary" size="small" bindtap="onRetry" shape="round">重试</t-button>
+        <t-button slot="action" theme="primary" bindtap="onRetry">重试</t-button>
       </t-empty>
     </view>
 
@@ -119,7 +119,6 @@
                   data-id="{{item.id}}"
                   data-name="{{item.name}}"
                   catchtap="stopPropagation"
-                  shape="round"
                 >
                   暂停商户
                 </t-button>
@@ -131,7 +130,6 @@
                   data-id="{{item.id}}"
                   data-name="{{item.name}}"
                   catchtap="stopPropagation"
-                  shape="round"
                 >
                   恢复营业
                 </t-button>
@@ -141,7 +139,6 @@
                   bindtap="onMerchantTap"
                   data-id="{{item.id}}"
                   catchtap="stopPropagation"
-                  shape="round"
                 >
                   管理详情
                 </t-button>

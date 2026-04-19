@@ -224,6 +224,25 @@ export interface PublicDeliveryPromotion {
   discount_amount: number
 }
 
+export interface MerchantPromotionCenterItem {
+  type: string
+  title: string
+  description: string
+  min_amount: number
+  value: number
+  bonus_amount: number
+  valid_until: string
+  rule_id: number
+}
+
+export interface MerchantPromotionCenterResponse {
+  merchant_id: number
+  delivery_fee_rules: MerchantPromotionCenterItem[]
+  discount_rules: MerchantPromotionCenterItem[]
+  vouchers: MerchantPromotionCenterItem[]
+  recharge_rules: MerchantPromotionCenterItem[]
+}
+
 export interface PublicMerchantDetail {
   id: number
   name: string
@@ -263,6 +282,13 @@ export async function getPublicMerchantDetail(merchantId: number, lite = false):
     method: 'GET',
     useCache: true,
     cacheTTL: 5 * 60 * 1000
+  })
+}
+
+export async function getMerchantPromotionCenter(merchantId: number): Promise<MerchantPromotionCenterResponse> {
+  return await request({
+    url: `/v1/merchants/${merchantId}/promotions`,
+    method: 'GET'
   })
 }
 

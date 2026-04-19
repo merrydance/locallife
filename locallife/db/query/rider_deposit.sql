@@ -12,15 +12,15 @@ INSERT INTO rider_deposits (
 ) RETURNING *;
 
 -- name: GetRiderDeposit :one
-SELECT * FROM rider_deposits
+SELECT id, rider_id, amount, type, related_order_id, balance_after, remark, created_at, payment_order_id FROM rider_deposits
 WHERE id = $1 LIMIT 1;
 
 -- name: GetRiderDepositByPaymentOrderID :one
-SELECT * FROM rider_deposits
+SELECT id, rider_id, amount, type, related_order_id, balance_after, remark, created_at, payment_order_id FROM rider_deposits
 WHERE payment_order_id = $1 AND type = 'deposit' LIMIT 1;
 
 -- name: ListRiderDeposits :many
-SELECT * FROM rider_deposits
+SELECT id, rider_id, amount, type, related_order_id, balance_after, remark, created_at, payment_order_id FROM rider_deposits
 WHERE rider_id = $1
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3;
@@ -31,7 +31,7 @@ FROM rider_deposits
 WHERE rider_id = $1;
 
 -- name: ListRiderDepositsByType :many
-SELECT * FROM rider_deposits
+SELECT id, rider_id, amount, type, related_order_id, balance_after, remark, created_at, payment_order_id FROM rider_deposits
 WHERE rider_id = $1 AND type = $2
 ORDER BY created_at DESC
 LIMIT $3 OFFSET $4;

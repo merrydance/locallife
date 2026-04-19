@@ -189,6 +189,61 @@ func TestListAllReviewsByMerchant(t *testing.T) {
 	require.Len(t, reviews, 5) // 所有5条
 }
 
+func TestReviewListQueriesUseIDTieBreaker(t *testing.T) {
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	user := createRandomUser(t)
+	tiedCreatedAt := time.Now().UTC().Truncate(time.Microsecond)
+
+	order1 := createCompletedOrderForStats(t, user.ID, merchant.ID, 10000, "takeout", time.Now())
+	review1 := createRandomReview(t, order1.ID, user.ID, merchant.ID)
+	otherOwner := createRandomUser(t)
+	otherMerchant := createRandomMerchantWithOwner(t, otherOwner.ID)
+	order2 := createCompletedOrderForStats(t, user.ID, otherMerchant.ID, 10000, "takeout", time.Now())
+	review2 := createRandomReview(t, order2.ID, user.ID, otherMerchant.ID)
+
+	merchantUser := createRandomUser(t)
+	order3 := createCompletedOrderForStats(t, merchantUser.ID, merchant.ID, 10000, "takeout", time.Now())
+	review3 := createRandomReview(t, order3.ID, merchantUser.ID, merchant.ID)
+
+	_, err := testStore.(*SQLStore).connPool.Exec(context.Background(),
+		`UPDATE reviews SET created_at = $1 WHERE id = ANY($2)`,
+		tiedCreatedAt,
+		[]int64{review1.ID, review2.ID, review3.ID},
+	)
+	require.NoError(t, err)
+
+	reviewsByUser, err := testStore.ListReviewsByUser(context.Background(), ListReviewsByUserParams{
+		UserID: user.ID,
+		Limit:  2,
+		Offset: 0,
+	})
+	require.NoError(t, err)
+	require.Len(t, reviewsByUser, 2)
+	require.Equal(t, review2.ID, reviewsByUser[0].ID)
+	require.Equal(t, review1.ID, reviewsByUser[1].ID)
+
+	reviewsByMerchant, err := testStore.ListReviewsByMerchant(context.Background(), ListReviewsByMerchantParams{
+		MerchantID: merchant.ID,
+		Limit:      2,
+		Offset:     0,
+	})
+	require.NoError(t, err)
+	require.Len(t, reviewsByMerchant, 2)
+	require.Equal(t, review3.ID, reviewsByMerchant[0].ID)
+	require.Equal(t, review1.ID, reviewsByMerchant[1].ID)
+
+	allReviewsByMerchant, err := testStore.ListAllReviewsByMerchant(context.Background(), ListAllReviewsByMerchantParams{
+		MerchantID: merchant.ID,
+		Limit:      2,
+		Offset:     0,
+	})
+	require.NoError(t, err)
+	require.Len(t, allReviewsByMerchant, 2)
+	require.Equal(t, review3.ID, allReviewsByMerchant[0].ID)
+	require.Equal(t, review1.ID, allReviewsByMerchant[1].ID)
+}
+
 // ==================== Count Tests ====================
 
 func TestCountReviewsByMerchant(t *testing.T) {

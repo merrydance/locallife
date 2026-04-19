@@ -1,7 +1,6 @@
 .page-container {
   min-height: 100vh;
   background: var(--td-bg-color-page);
-  padding: var(--spacer-sm);
   box-sizing: border-box;
 }
 
@@ -31,8 +30,8 @@
 }
 
 .tips {
-  background: var(--td-brand-color-light);
-  border: 1px solid var(--td-brand-color-2);
+  background: var(--td-bg-color-secondarycontainer);
+  border: 1px solid var(--td-component-border);
   color: var(--td-text-color-primary);
   border-radius: var(--radius-lg);
   padding: var(--spacer-sm);
@@ -54,7 +53,7 @@
 }
 
 .accent-total {
-  background: linear-gradient(135deg, var(--td-brand-color-1), var(--td-brand-color-2));
+  background: var(--td-bg-color-secondarycontainer);
 }
 
 .accent-pending {
@@ -66,7 +65,7 @@
 }
 
 .accent-compensated {
-  background: linear-gradient(135deg, var(--td-brand-color-light), var(--td-brand-color-1));
+  background: var(--td-bg-color-secondarycontainer);
 }
 
 .accent-rejected {
@@ -94,29 +93,13 @@
   background: var(--td-bg-color-container);
 }
 
-.inline-banner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--spacer-sm);
-  border-radius: var(--radius-md);
-  padding: var(--spacer-sm) var(--spacer-md);
+.notice-banner {
   margin-bottom: var(--spacer-sm);
 }
 
-.inline-banner-danger {
-  background: rgba(229, 57, 53, 0.08);
-  color: var(--td-error-color);
-}
-
-.inline-banner-text {
-  flex: 1;
+.notice-banner-operation {
   font-size: var(--font-size-sm);
   line-height: 1.6;
-}
-
-.inline-banner-action {
-  font-size: var(--font-size-sm);
   font-weight: 600;
   color: var(--td-brand-color);
 }

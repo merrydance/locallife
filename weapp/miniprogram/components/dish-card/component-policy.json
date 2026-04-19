@@ -1,0 +1,11 @@
+{
+  "purpose": "Dish summary card for list and recommendation surfaces with image, price, tag, and purchase action composition.",
+  "tdesignGroup": "data",
+  "tdesignCandidates": [
+    "image",
+    "tag",
+    "button"
+  ],
+  "decision": "local-component",
+  "rationale": "Dish cards encode shared product semantics such as pricing, availability, and CTA layout. Keeping one card component prevents repeated divergence across consumer and merchant list pages."
+}

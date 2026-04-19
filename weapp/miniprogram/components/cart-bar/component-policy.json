@@ -1,0 +1,11 @@
+{
+  "purpose": "Bottom cart summary bar with primary action, item count, and price presentation for consumer checkout flows.",
+  "tdesignGroup": "navigation",
+  "tdesignCandidates": [
+    "button",
+    "icon",
+    "tag"
+  ],
+  "decision": "local-component",
+  "rationale": "Cart bars combine safe-area handling, summary math, and consumer checkout actions into one repeated pattern. A local component keeps these navigation and action responsibilities consistent across takeout flows."
+}

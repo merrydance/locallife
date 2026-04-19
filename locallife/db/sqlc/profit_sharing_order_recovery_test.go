@@ -39,13 +39,15 @@ func TestListCompletedOrdersMissingProfitSharing_ExcludesTakeout(t *testing.T) {
 	require.NoError(t, err)
 
 	paymentOrder, err := testStore.CreatePaymentOrder(context.Background(), CreatePaymentOrderParams{
-		OrderID:      pgtype.Int8{Int64: order.ID, Valid: true},
-		UserID:       user.ID,
-		PaymentType:  "profit_sharing",
-		BusinessType: "order",
-		Amount:       order.TotalAmount,
-		OutTradeNo:   util.RandomString(24),
-		ExpiresAt:    pgtype.Timestamptz{Time: time.Now().Add(30 * time.Minute), Valid: true},
+		OrderID:               pgtype.Int8{Int64: order.ID, Valid: true},
+		UserID:                user.ID,
+		PaymentType:           "miniprogram",
+		PaymentChannel:        PaymentChannelEcommerce,
+		RequiresProfitSharing: true,
+		BusinessType:          "order",
+		Amount:                order.TotalAmount,
+		OutTradeNo:            util.RandomString(24),
+		ExpiresAt:             pgtype.Timestamptz{Time: time.Now().Add(30 * time.Minute), Valid: true},
 	})
 	require.NoError(t, err)
 
@@ -66,12 +68,15 @@ func TestListCompletedOrdersMissingProfitSharing_ExcludesTakeout(t *testing.T) {
 func TestListCompletedOrdersMissingProfitSharing_IncludesNonTakeout(t *testing.T) {
 	user := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
+	table := createRandomTable(t, merchant.ID)
+	reservation := createRandomReservation(t, user.ID, merchant.ID, table.ID, "confirmed")
 
 	order, err := testStore.CreateOrder(context.Background(), CreateOrderParams{
 		OrderNo:             util.RandomString(20),
 		UserID:              user.ID,
 		MerchantID:          merchant.ID,
-		OrderType:           "takeaway",
+		OrderType:           "dine_in",
+		ReservationID:       pgtype.Int8{Int64: reservation.ID, Valid: true},
 		DeliveryFee:         0,
 		Subtotal:            3600,
 		DiscountAmount:      0,
@@ -89,13 +94,15 @@ func TestListCompletedOrdersMissingProfitSharing_IncludesNonTakeout(t *testing.T
 	require.NoError(t, err)
 
 	paymentOrder, err := testStore.CreatePaymentOrder(context.Background(), CreatePaymentOrderParams{
-		OrderID:      pgtype.Int8{Int64: order.ID, Valid: true},
-		UserID:       user.ID,
-		PaymentType:  "profit_sharing",
-		BusinessType: "order",
-		Amount:       order.TotalAmount,
-		OutTradeNo:   util.RandomString(24),
-		ExpiresAt:    pgtype.Timestamptz{Time: time.Now().Add(30 * time.Minute), Valid: true},
+		OrderID:               pgtype.Int8{Int64: order.ID, Valid: true},
+		UserID:                user.ID,
+		PaymentType:           "miniprogram",
+		PaymentChannel:        PaymentChannelEcommerce,
+		RequiresProfitSharing: true,
+		BusinessType:          "order",
+		Amount:                order.TotalAmount,
+		OutTradeNo:            util.RandomString(24),
+		ExpiresAt:             pgtype.Timestamptz{Time: time.Now().Add(30 * time.Minute), Valid: true},
 	})
 	require.NoError(t, err)
 

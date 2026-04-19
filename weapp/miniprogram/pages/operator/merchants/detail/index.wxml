@@ -1,7 +1,7 @@
 <custom-navbar title="商户详情" showBack="{{true}}" bind:navheight="onNavHeight" />
 
 <view
-  class="page page-shell page-shell--with-nav page-shell--bottom-safe"
+  class="page page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
   style="--page-shell-nav-height: {{navBarHeight}}px"
 >
   <view wx:if="{{loading}}" class="card">
@@ -10,7 +10,7 @@
 
   <view wx:elif="{{error}}" class="card center">
     <t-empty icon="error-circle" description="{{error}}">
-      <t-button slot="action" theme="primary" size="small" bind:tap="onRetry" shape="round">重试</t-button>
+      <t-button slot="action" theme="primary" bind:tap="onRetry">重试</t-button>
     </t-empty>
   </view>
 
@@ -22,7 +22,7 @@
     <!-- 商户基本资料 -->
     <view class="card">
       <view class="merchant-header">
-        <image wx:if="{{detail.logo_url}}" class="logo" src="{{detail.logo_url}}" mode="aspectFill" />
+        <t-image wx:if="{{detail.logo_url}}" class="logo" src="{{detail.logo_url}}" mode="aspectFill" />
         <view wx:else class="logo-placeholder"><text>{{detail.name[0]}}</text></view>
         <view class="header-info">
           <text class="merchant-name">{{detail.name}}</text>
@@ -35,8 +35,8 @@
       </view>
 
       <view class="action-row">
-        <t-button wx:if="{{detail.can_suspend}}" theme="warning" size="small" bindtap="onOpenSuspendDialog" shape="round">暂停商户</t-button>
-        <t-button wx:elif="{{detail.can_resume}}" theme="success" size="small" bindtap="onOpenResumeDialog" shape="round">恢复营业</t-button>
+        <t-button wx:if="{{detail.can_suspend}}" theme="warning" size="small" bindtap="onOpenSuspendDialog">暂停商户</t-button>
+        <t-button wx:elif="{{detail.can_resume}}" theme="success" size="small" bindtap="onOpenResumeDialog">恢复营业</t-button>
       </view>
 
       <view class="section-title">基本资料</view>

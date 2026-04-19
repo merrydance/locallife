@@ -7,8 +7,7 @@
     "t-icon": "tdesign-miniprogram/icon/icon",
     "t-tag": "tdesign-miniprogram/tag/tag",
     "t-sticky": "tdesign-miniprogram/sticky/sticky",
-    "t-check-tag": "tdesign-miniprogram/check-tag/check-tag",
-    "t-notice-bar": "tdesign-miniprogram/notice-bar/notice-bar"
+    "t-check-tag": "tdesign-miniprogram/check-tag/check-tag"
   },
   "navigationStyle": "custom",
   "enablePullDownRefresh": true

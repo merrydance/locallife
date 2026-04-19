@@ -10,7 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
-	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	mockwechat "github.com/merrydance/locallife/wechat/mock"
 	"github.com/merrydance/locallife/worker"
 	mockwk "github.com/merrydance/locallife/worker/mock"
@@ -58,9 +58,9 @@ func TestProcessTaskCombinedPaymentOrderTimeout_RemotePaidReconcilesInsteadOfClo
 		Status:            combinedOrder.Status,
 		SubOrders:         subOrders,
 	}, nil)
-	ecommerceClient.EXPECT().QueryCombineOrder(gomock.Any(), "CP_REMOTE_PAID_1").Return(&wechat.CombineQueryResponse{
+	ecommerceClient.EXPECT().QueryCombineOrder(gomock.Any(), "CP_REMOTE_PAID_1").Return(&wechatcontracts.CombineQueryResponse{
 		CombineOutTradeNo: "CP_REMOTE_PAID_1",
-		SubOrders: []wechat.CombineSubOrderResult{{
+		SubOrders: []wechatcontracts.CombineSubOrderResult{{
 			SubMchID:      "1900001111",
 			OutTradeNo:    "PO_REMOTE_PAID_1",
 			TransactionID: "wx_tx_remote_paid_1",
@@ -146,9 +146,9 @@ func TestProcessTaskCombinedPaymentOrderTimeout_ClosedMainOrderRemotePaidReconci
 		Status:            combinedOrder.Status,
 		SubOrders:         subOrders,
 	}, nil)
-	ecommerceClient.EXPECT().QueryCombineOrder(gomock.Any(), "CP_REMOTE_PAID_2").Return(&wechat.CombineQueryResponse{
+	ecommerceClient.EXPECT().QueryCombineOrder(gomock.Any(), "CP_REMOTE_PAID_2").Return(&wechatcontracts.CombineQueryResponse{
 		CombineOutTradeNo: "CP_REMOTE_PAID_2",
-		SubOrders: []wechat.CombineSubOrderResult{{
+		SubOrders: []wechatcontracts.CombineSubOrderResult{{
 			SubMchID:      "1900002222",
 			OutTradeNo:    "PO_REMOTE_PAID_2",
 			TransactionID: "wx_tx_remote_paid_2",

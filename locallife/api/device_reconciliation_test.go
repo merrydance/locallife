@@ -178,10 +178,19 @@ func TestRetryPrinterReconciliationJobAPI(t *testing.T) {
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder, client *printerClientStub) {
 				require.Equal(t, http.StatusBadGateway, recorder.Code)
 				require.Len(t, client.addInputs, 1)
-				var resp APIResponse
-				require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
-				require.Equal(t, CodeBadGateway, resp.Code)
-				require.Equal(t, "internal server error", resp.Message)
+				var resp struct {
+					Error ErrorResponse                   `json:"error"`
+					Job   printerReconciliationJobResponse `json:"job"`
+				}
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+
+				var envelope APIResponse
+				require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &envelope))
+				require.Equal(t, CodeBadGateway, envelope.Code)
+				require.Equal(t, http.StatusText(http.StatusBadGateway), envelope.Message)
+				require.Equal(t, "provider unavailable", resp.Error.Error)
+				require.Equal(t, db.CloudPrinterReconciliationStatusPending, resp.Job.Status)
+				require.EqualValues(t, job.RetryCount+1, resp.Job.RetryCount)
 			},
 		},
 		{

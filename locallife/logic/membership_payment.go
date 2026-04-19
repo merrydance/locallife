@@ -18,8 +18,8 @@ type MembershipPaymentInput struct {
 
 // ValidateMembershipPayment validates whether membership balance can be used.
 func ValidateMembershipPayment(ctx context.Context, store db.Store, input MembershipPaymentInput) (*db.MerchantMembership, error) {
-	if input.OrderType != "dine_in" && input.OrderType != "takeaway" && input.OrderType != "reservation" {
-		return nil, NewRequestError(http.StatusBadRequest, errors.New("外卖和预定订单暂不支持余额支付"))
+	if !IsMembershipBalanceSupportedOrderType(input.OrderType) {
+		return nil, NewRequestError(http.StatusBadRequest, errors.New("仅堂食和外带自取支持余额支付"))
 	}
 
 	membership, err := store.GetMembershipByMerchantAndUser(ctx, db.GetMembershipByMerchantAndUserParams{
@@ -36,7 +36,7 @@ func ValidateMembershipPayment(ctx context.Context, store db.Store, input Member
 	settings, err := store.GetMerchantMembershipSettings(ctx, input.MerchantID)
 	if err == nil {
 		sceneAllowed := false
-		for _, scene := range settings.BalanceUsableScenes {
+		for _, scene := range sanitizeMembershipUsableScenes(settings.BalanceUsableScenes) {
 			if scene == input.OrderType {
 				sceneAllowed = true
 				break

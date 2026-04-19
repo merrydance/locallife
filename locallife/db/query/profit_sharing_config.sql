@@ -1,7 +1,7 @@
 -- Phase2: 分账规则配置查询（草案）
 
 -- name: GetActiveProfitSharingConfig :one
-SELECT * FROM profit_sharing_configs
+SELECT id, status, order_source, region_id, merchant_id, platform_rate, operator_rate, rider_enabled, priority, effective_at, expires_at, created_by, created_at, updated_at FROM profit_sharing_configs
 WHERE status = 'active'
   AND (order_source = $1 OR order_source = 'all')
   AND (merchant_id IS NULL OR merchant_id = $2)
@@ -63,7 +63,7 @@ WHERE id = $1
 RETURNING *;
 
 -- name: ListProfitSharingConfigs :many
-SELECT * FROM profit_sharing_configs
+SELECT id, status, order_source, region_id, merchant_id, platform_rate, operator_rate, rider_enabled, priority, effective_at, expires_at, created_by, created_at, updated_at FROM profit_sharing_configs
 WHERE (NULLIF($1::text, '') IS NULL OR status = $1)
   AND (NULLIF($2::text, '') IS NULL OR order_source = $2)
   AND ($3::bigint = 0 OR region_id = $3)
@@ -72,7 +72,7 @@ ORDER BY priority ASC, id DESC
 LIMIT $5 OFFSET $6;
 
 -- name: ListProfitSharingConfigsForRegion :many
-SELECT * FROM profit_sharing_configs
+SELECT id, status, order_source, region_id, merchant_id, platform_rate, operator_rate, rider_enabled, priority, effective_at, expires_at, created_by, created_at, updated_at FROM profit_sharing_configs
 WHERE (NULLIF($1::text, '') IS NULL OR status = $1)
   AND (NULLIF($2::text, '') IS NULL OR order_source = $2)
   AND (region_id IS NULL OR region_id = $3)

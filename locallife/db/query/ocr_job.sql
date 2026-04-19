@@ -18,24 +18,24 @@ SET updated_at = ocr_jobs.updated_at
 RETURNING *;
 
 -- name: GetOCRJob :one
-SELECT * FROM ocr_jobs
+SELECT id, idempotency_key, document_type, provider, provider_task_id, media_asset_id, owner_type, owner_id, side, status, attempt_count, max_attempts, next_retry_at, leased_at, lease_owner, error_code, error_message, raw_result, normalized_result, result_version, retention_until, requested_by, created_at, started_at, finished_at, updated_at FROM ocr_jobs
 WHERE id = $1;
 
 -- name: ListOCRJobsByOwner :many
-SELECT * FROM ocr_jobs
+SELECT id, idempotency_key, document_type, provider, provider_task_id, media_asset_id, owner_type, owner_id, side, status, attempt_count, max_attempts, next_retry_at, leased_at, lease_owner, error_code, error_message, raw_result, normalized_result, result_version, retention_until, requested_by, created_at, started_at, finished_at, updated_at FROM ocr_jobs
 WHERE owner_type = $1
   AND owner_id = $2
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $3 OFFSET $4;
 
 -- name: ListPendingOCRJobsByMediaAsset :many
-SELECT * FROM ocr_jobs
+SELECT id, idempotency_key, document_type, provider, provider_task_id, media_asset_id, owner_type, owner_id, side, status, attempt_count, max_attempts, next_retry_at, leased_at, lease_owner, error_code, error_message, raw_result, normalized_result, result_version, retention_until, requested_by, created_at, started_at, finished_at, updated_at FROM ocr_jobs
 WHERE media_asset_id = $1
   AND status = 'pending'
 ORDER BY created_at ASC, id ASC;
 
 -- name: ListOCRDeadLetterJobs :many
-SELECT * FROM ocr_jobs
+SELECT id, idempotency_key, document_type, provider, provider_task_id, media_asset_id, owner_type, owner_id, side, status, attempt_count, max_attempts, next_retry_at, leased_at, lease_owner, error_code, error_message, raw_result, normalized_result, result_version, retention_until, requested_by, created_at, started_at, finished_at, updated_at FROM ocr_jobs
 WHERE status IN ('failed', 'cancelled')
   AND next_retry_at IS NULL
   AND (

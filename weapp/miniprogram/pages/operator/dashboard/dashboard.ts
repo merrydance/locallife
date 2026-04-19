@@ -3,15 +3,16 @@
  * 提供区域管理、商户管理、骑手管理、数据统计等功能入口
  */
 
-import { getOperatorDashboard } from '@/api/operator-basic-management'
-import { getMerchantManagementDashboard } from '@/api/operator-merchant-management'
-import { getRiderManagementDashboard } from '@/api/operator-rider-management'
-import { getOperatorAnalyticsDashboard } from '@/api/operator-analytics'
-import type {
-    OperatorResponse,
-    OperatorFinanceOverviewResponse,
-    RegionStatsResponse
-} from '@/api/operator-basic-management'
+import {
+    loadLegacyOperatorWorkbenchData,
+    loadLegacyOperatorWorkbenchRegionData,
+    type LegacyAppealSummary,
+    type LegacyMerchantSummary,
+    type LegacyOperatorFinanceOverview,
+    type LegacyOperatorInfo,
+    type LegacyRegionStatsItem,
+    type LegacyRiderSummary
+} from '@/services/operator-console'
 
 interface QuickActionDataset {
     url?: string
@@ -26,15 +27,18 @@ Page({
         refreshing: false,
 
         // 运营商信息
-        operatorInfo: null as OperatorResponse | null,
+        operatorInfo: null as LegacyOperatorInfo | null,
 
         // 财务概览
-        financeOverview: null as OperatorFinanceOverviewResponse | null,
+        financeOverview: null as LegacyOperatorFinanceOverview | null,
 
         // 区域统计
-        regionStats: [] as RegionStatsResponse[],
+        regionStats: [] as LegacyRegionStatsItem[],
+        regionPickerOptions: [] as Array<{ label: string, value: string }>,
+        regionPickerVisible: false,
         selectedRegionIdx: 0,   // picker 用 index
         selectedRegionId: 0,    // 实际 region_id，传给 API
+        selectedRegionValue: '',
 
         // 商户摘要
         merchantSummary: {
@@ -42,7 +46,7 @@ Page({
             active: 0,
             suspended: 0,
             pending: 0
-        },
+        } as LegacyMerchantSummary,
 
         // 骑手摘要
         riderSummary: {
@@ -51,7 +55,7 @@ Page({
             online: 0,
             suspended: 0,
             pending: 0
-        },
+        } as LegacyRiderSummary,
 
         // 申诉摘要
         appealSummary: {
@@ -59,7 +63,7 @@ Page({
             pendingAppeals: 0,
             avgResolutionTime: 0,
             satisfactionRate: 0
-        },
+        } as LegacyAppealSummary,
 
         // 快捷入口
         quickActions: [
@@ -94,28 +98,10 @@ Page({
         this.setData({ loading: true, error: null })
 
         try {
-            // 并行加载所有数据
-            const [
-                dashboardData,
-                merchantData,
-                riderData,
-                analyticsData
-            ] = await Promise.all([
-                getOperatorDashboard(),
-                getMerchantManagementDashboard(),
-                getRiderManagementDashboard(),
-                getOperatorAnalyticsDashboard()
-            ])
+            const nextView = await loadLegacyOperatorWorkbenchData()
 
             this.setData({
-                operatorInfo: dashboardData.operatorInfo,
-                financeOverview: dashboardData.financeOverview,
-                regionStats: dashboardData.regionStats,
-                selectedRegionIdx: 0,
-                selectedRegionId: dashboardData.regionStats[0]?.region_id || 0,
-                merchantSummary: merchantData.merchantSummary,
-                riderSummary: riderData.riderSummary,
-                appealSummary: analyticsData.appealSummary,
+                ...nextView,
                 loading: false,
                 initialLoading: false
             })
@@ -131,6 +117,34 @@ Page({
 
     onRetry() {
         this.loadDashboardData()
+    },
+
+    onOpenRegionPicker() {
+        if (this.data.regionStats.length <= 1) {
+            return
+        }
+
+        this.setData({ regionPickerVisible: true })
+    },
+
+    onCloseRegionPicker() {
+        this.setData({ regionPickerVisible: false })
+    },
+
+    onRegionConfirm(e: WechatMiniprogram.CustomEvent<{ value: Array<string | number> | null }>) {
+        const values = Array.isArray(e.detail?.value) ? e.detail.value : []
+        const selectedValue = String(values[0] || '')
+        const idx = this.data.regionPickerOptions.findIndex((item) => item.value === selectedValue)
+        const region = idx >= 0 ? this.data.regionStats[idx] : null
+
+        this.setData({
+            regionPickerVisible: false,
+            selectedRegionIdx: idx >= 0 ? idx : this.data.selectedRegionIdx,
+            selectedRegionId: region?.region_id || this.data.selectedRegionId,
+            selectedRegionValue: selectedValue || this.data.selectedRegionValue
+        })
+
+        if (region?.region_id) this.loadRegionData(region.region_id)
     },
 
     /**
@@ -150,14 +164,10 @@ Page({
         try {
             wx.showLoading({ title: '加载中...' })
 
-            const [merchantData, riderData] = await Promise.all([
-                getMerchantManagementDashboard(regionId),
-                getRiderManagementDashboard(regionId)
-            ])
+            const nextView = await loadLegacyOperatorWorkbenchRegionData(regionId)
 
             this.setData({
-                merchantSummary: merchantData.merchantSummary,
-                riderSummary: riderData.riderSummary
+                ...nextView
             })
         } catch (error) {
             console.error('加载区域数据失败:', error)

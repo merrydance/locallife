@@ -18,17 +18,17 @@ INSERT INTO discount_rules (
 ) RETURNING *;
 
 -- name: GetDiscountRule :one
-SELECT * FROM discount_rules
+SELECT id, merchant_id, name, description, min_order_amount, discount_amount, can_stack_with_voucher, can_stack_with_membership, valid_from, valid_until, is_active, created_at, updated_at, deleted_at, stacking_group FROM discount_rules
 WHERE id = $1 AND deleted_at IS NULL LIMIT 1;
 
 -- name: ListMerchantDiscountRules :many
-SELECT * FROM discount_rules
+SELECT id, merchant_id, name, description, min_order_amount, discount_amount, can_stack_with_voucher, can_stack_with_membership, valid_from, valid_until, is_active, created_at, updated_at, deleted_at, stacking_group FROM discount_rules
 WHERE merchant_id = $1 AND deleted_at IS NULL
 ORDER BY min_order_amount ASC
 LIMIT $2 OFFSET $3;
 
 -- name: ListActiveDiscountRules :many
-SELECT * FROM discount_rules
+SELECT id, merchant_id, name, description, min_order_amount, discount_amount, can_stack_with_voucher, can_stack_with_membership, valid_from, valid_until, is_active, created_at, updated_at, deleted_at, stacking_group FROM discount_rules
 WHERE merchant_id = $1 
     AND deleted_at IS NULL
     AND is_active = TRUE
@@ -37,7 +37,7 @@ WHERE merchant_id = $1
 ORDER BY min_order_amount ASC;
 
 -- name: GetApplicableDiscountRules :many
-SELECT * FROM discount_rules
+SELECT id, merchant_id, name, description, min_order_amount, discount_amount, can_stack_with_voucher, can_stack_with_membership, valid_from, valid_until, is_active, created_at, updated_at, deleted_at, stacking_group FROM discount_rules
 WHERE merchant_id = $1 
     AND deleted_at IS NULL
     AND is_active = TRUE
@@ -47,7 +47,7 @@ WHERE merchant_id = $1
 ORDER BY discount_amount DESC;
 
 -- name: GetBestDiscountRule :one
-SELECT * FROM discount_rules
+SELECT id, merchant_id, name, description, min_order_amount, discount_amount, can_stack_with_voucher, can_stack_with_membership, valid_from, valid_until, is_active, created_at, updated_at, deleted_at, stacking_group FROM discount_rules
 WHERE merchant_id = $1 
     AND deleted_at IS NULL
     AND is_active = TRUE

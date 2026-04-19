@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -12,6 +13,8 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
+	wechaterrorcodes "github.com/merrydance/locallife/wechat/errorcodes"
 	mockwechat "github.com/merrydance/locallife/wechat/mock"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -95,11 +98,10 @@ func TestGetMerchantAccountBalanceAPI_WithDayEndBalance(t *testing.T) {
 	ecommerce.EXPECT().
 		QueryEcommerceFundDayEndBalance(gomock.Any(), paymentConfig.SubMchID, "2026-04-05", "DEPOSIT").
 		Return(&wechat.EcommerceFundBalanceResponse{
-			SubMchID:           paymentConfig.SubMchID,
-			AvailableAmount:    45678,
-			PendingAmount:      9,
-			AccountType:        "DEPOSIT",
-			WithdrawableAmount: 45678,
+			SubMchID:        paymentConfig.SubMchID,
+			AvailableAmount: 45678,
+			PendingAmount:   9,
+			AccountType:     "DEPOSIT",
 		}, nil)
 
 	server := newTestServer(t, store)
@@ -153,6 +155,56 @@ func TestGetMerchantAccountBalanceAPI_InvalidDayEndAccountType(t *testing.T) {
 
 	server.router.ServeHTTP(recorder, req)
 	require.Equal(t, http.StatusBadRequest, recorder.Code)
+}
+
+func TestGetMerchantAccountBalanceAPI_NoAuthReturnsExplicitMessage(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := db.Merchant{
+		ID:          1,
+		RegionID:    1,
+		OwnerUserID: user.ID,
+		Name:        "测试商户",
+		Status:      "approved",
+		IsOpen:      true,
+		CreatedAt:   time.Now(),
+	}
+	paymentConfig := db.MerchantPaymentConfig{
+		MerchantID: merchant.ID,
+		SubMchID:   "sub_mch_merchant_001",
+		Status:     "active",
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ecommerce := mockwechat.NewMockEcommerceClientInterface(ctrl)
+
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+	store.EXPECT().
+		GetMerchantPaymentConfig(gomock.Any(), merchant.ID).
+		Times(1).
+		Return(paymentConfig, nil)
+
+	ecommerce.EXPECT().
+		QueryEcommerceFundBalanceByAccountType(gomock.Any(), paymentConfig.SubMchID, wechatcontracts.FundManagementAccountTypeBasic).
+		Return(nil, &wechat.WechatPayError{StatusCode: http.StatusForbidden, Code: wechaterrorcodes.FundManagementCodeNoAuth, Message: "no auth"})
+
+	server := newTestServer(t, store)
+	server.SetEcommerceClientForTest(ecommerce)
+
+	recorder := httptest.NewRecorder()
+	req, err := http.NewRequest(http.MethodGet, "/v1/merchant/finance/account/balance", nil)
+	require.NoError(t, err)
+	addAuthorization(t, req, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, req)
+	require.Equal(t, http.StatusBadGateway, recorder.Code)
+
+	var resp APIResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, "微信侧暂无该账户查询权限，请联系管理员检查收付通配置", resp.Message)
 }
 
 func TestListMerchantAccountWithdrawalsAPIInactiveConfig(t *testing.T) {
@@ -420,6 +472,191 @@ func TestGetMerchantAccountWithdrawalAPI_PersistsWithdrawIDFromWechat(t *testing
 	var resp merchantWithdrawItem
 	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 	require.Equal(t, "withdraw_test_merchant_001", resp.WithdrawID)
+}
+
+func TestCreateMerchantAccountWithdrawAPIReturnsPendingConfirmationWhenWechatCreateAndQueryFail(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := db.Merchant{
+		ID:          1,
+		RegionID:    1,
+		OwnerUserID: user.ID,
+		Name:        "测试商户",
+		Status:      "approved",
+		IsOpen:      true,
+		CreatedAt:   time.Now(),
+	}
+	paymentConfig := db.MerchantPaymentConfig{
+		MerchantID: merchant.ID,
+		SubMchID:   "sub_mch_123",
+		Status:     "active",
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ecommerce := mockwechat.NewMockEcommerceClientInterface(ctrl)
+
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+	store.EXPECT().
+		GetMerchantPaymentConfig(gomock.Any(), merchant.ID).
+		Times(1).
+		Return(paymentConfig, nil)
+
+	store.EXPECT().
+		GetWithdrawalRecordByOutRequestNo(gomock.Any(), gomock.Any()).
+		Return(db.WithdrawalRecord{}, db.ErrRecordNotFound)
+
+	store.EXPECT().
+		CreateWithdrawalRecord(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ interface{}, arg db.CreateWithdrawalRecordParams) (db.WithdrawalRecord, error) {
+			return db.WithdrawalRecord{
+				ID:          77,
+				UserID:      user.ID,
+				Amount:      arg.Amount,
+				Status:      arg.Status,
+				Channel:     arg.Channel,
+				AccountInfo: arg.AccountInfo,
+				CreatedAt:   time.Now(),
+				UpdatedAt:   time.Now(),
+				OutRequestNo: pgtype.Text{
+					String: arg.OutRequestNo.String,
+					Valid:  arg.OutRequestNo.Valid,
+				},
+			}, nil
+		})
+
+	ecommerce.EXPECT().
+		CreateEcommerceWithdraw(gomock.Any(), gomock.Any()).
+		Return(nil, errors.New("create timeout"))
+
+	ecommerce.EXPECT().
+		QueryEcommerceWithdrawByOutRequestNo(gomock.Any(), paymentConfig.SubMchID, "MW-20260415-001").
+		Return(nil, errors.New("query timeout"))
+
+	store.EXPECT().
+		UpdateWithdrawalStatus(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ interface{}, arg db.UpdateWithdrawalStatusParams) (db.WithdrawalRecord, error) {
+			require.Equal(t, int64(77), arg.ID)
+			require.Equal(t, "pending", arg.Status)
+			require.True(t, arg.Reason.Valid)
+			require.Equal(t, "withdraw request submitted, awaiting wechat confirmation", arg.Reason.String)
+			accountInfoBytes, marshalErr := json.Marshal(merchantWithdrawAccountInfo{
+				MerchantID:   merchant.ID,
+				SubMchID:     paymentConfig.SubMchID,
+				OutRequestNo: "MW-20260415-001",
+				Remark:       "测试提现",
+			})
+			require.NoError(t, marshalErr)
+			return db.WithdrawalRecord{
+				ID:          77,
+				UserID:      user.ID,
+				Amount:      1200,
+				Status:      "pending",
+				Channel:     merchantWithdrawChannel,
+				AccountInfo: accountInfoBytes,
+				Reason:      pgtype.Text{String: arg.Reason.String, Valid: true},
+				CreatedAt:   time.Now(),
+				UpdatedAt:   time.Now(),
+				OutRequestNo: pgtype.Text{
+					String: "MW-20260415-001",
+					Valid:  true,
+				},
+			}, nil
+		})
+
+	server := newTestServer(t, store)
+	server.SetEcommerceClientForTest(ecommerce)
+	server.SetTaskDistributorForTest(nil)
+
+	body := []byte(`{"amount":1200,"remark":"测试提现","out_request_no":"MW-20260415-001"}`)
+	recorder := httptest.NewRecorder()
+	req, err := http.NewRequest(http.MethodPost, "/v1/merchant/finance/account/withdraw", bytes.NewReader(body))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, req, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, req)
+	require.Equal(t, http.StatusAccepted, recorder.Code)
+
+	var resp merchantWithdrawCreateResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Equal(t, merchantWithdrawSyncStatePendingConfirmation, resp.Withdrawal.SyncState)
+	require.Equal(t, "微信提现已提交，但微信侧结果暂未确认，系统将继续同步状态。", resp.Withdrawal.SyncMessage)
+	require.Equal(t, "withdraw request submitted, awaiting wechat confirmation", resp.Withdrawal.Reason)
+	require.Nil(t, resp.Wechat)
+}
+
+func TestGetMerchantAccountWithdrawalAPIReturnsStaleSyncStateWhenWechatQueryFails(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := db.Merchant{
+		ID:          1,
+		RegionID:    1,
+		OwnerUserID: user.ID,
+		Name:        "测试商户",
+		Status:      "approved",
+		IsOpen:      true,
+		CreatedAt:   time.Now(),
+	}
+	paymentConfig := db.MerchantPaymentConfig{
+		MerchantID: merchant.ID,
+		SubMchID:   "sub_mch_123",
+		Status:     "active",
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ecommerce := mockwechat.NewMockEcommerceClientInterface(ctrl)
+
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+	store.EXPECT().
+		GetMerchantPaymentConfig(gomock.Any(), merchant.ID).
+		Times(1).
+		Return(paymentConfig, nil)
+
+	accountInfoBytes, err := json.Marshal(merchantWithdrawAccountInfo{
+		MerchantID:   merchant.ID,
+		SubMchID:     paymentConfig.SubMchID,
+		OutRequestNo: "MW1002",
+	})
+	require.NoError(t, err)
+
+	store.EXPECT().
+		GetWithdrawalRecord(gomock.Any(), int64(89)).
+		Return(db.WithdrawalRecord{
+			ID:          89,
+			UserID:      user.ID,
+			Amount:      1200,
+			Status:      "pending",
+			Channel:     merchantWithdrawChannel,
+			AccountInfo: accountInfoBytes,
+			CreatedAt:   time.Now(),
+			UpdatedAt:   time.Now(),
+		}, nil)
+
+	ecommerce.EXPECT().
+		QueryEcommerceWithdrawByOutRequestNo(gomock.Any(), paymentConfig.SubMchID, "MW1002").
+		Return(nil, errors.New("wechat timeout"))
+
+	server := newTestServer(t, store)
+	server.SetEcommerceClientForTest(ecommerce)
+
+	recorder := httptest.NewRecorder()
+	req, err := http.NewRequest(http.MethodGet, "/v1/merchant/finance/account/withdrawals/89", nil)
+	require.NoError(t, err)
+	addAuthorization(t, req, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, req)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp merchantWithdrawItem
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Equal(t, merchantWithdrawSyncStateStale, resp.SyncState)
+	require.Equal(t, "微信提现状态同步失败，当前展示的是本地缓存结果，请稍后刷新。", resp.SyncMessage)
+	require.Equal(t, "pending", resp.Status)
+	require.Equal(t, "MW1002", resp.OutRequestNo)
 }
 
 func TestGetMerchantFinanceOverviewAPI(t *testing.T) {

@@ -6,7 +6,7 @@
 .toolbar {
   display: flex;
   justify-content: flex-end;
-  padding: 0 var(--spacer-md) var(--spacer-md);
+  padding: 0 0 var(--spacer-md);
 }
 
 .form-card {
@@ -15,7 +15,7 @@
 
 .card {
   background: var(--td-bg-color-container);
-  margin: 0 var(--spacer-md) var(--spacer-md);
+  margin: 0 0 var(--spacer-md);
   padding: var(--spacer-md);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-sm);
@@ -71,7 +71,7 @@
 }
 
 .load-more {
-  padding: 0 var(--spacer-md) var(--spacer-lg);
+  padding: 0 0 var(--spacer-lg);
   display: flex;
   justify-content: center;
 }

@@ -1,3 +1,5 @@
+@import '../../../styles/customer.wxss';
+
 .page-container {
   min-height: 100vh;
   background: #F6F6F6;
@@ -91,6 +93,7 @@
   padding: 24rpx;
 }
 
+/* weapp-gate allow-tdesign-internal-class: 预订确认页单选组需要纵向编排，待抽成统一选项卡片组件后移除 */
 .mode-selector .t-radio-group {
   display: flex;
   flex-direction: column;
@@ -98,6 +101,7 @@
 }
 
 /* 收紧分组标题与内容的间距，优化视觉层级 */
+/* weapp-gate allow-tdesign-internal-class: 预订确认页需压缩 cell-group 标题节距，待统一卡片分组头部后移除 */
 .t-cell-group__title {
   padding: 12rpx 24rpx;
   font-size: 24rpx;
@@ -105,6 +109,7 @@
   background: #f7f7f7;
 }
 
+/* weapp-gate allow-tdesign-internal-class: 预订确认页需压缩 cell-group 内容包裹间距，待统一卡片分组头部后移除 */
 .t-cell-group__wrapper {
   margin-top: 0;
 }

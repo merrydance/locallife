@@ -1,7 +1,7 @@
 <custom-navbar title="申请更多区域" showBack="{{true}}" bind:navheight="onNavHeight" />
 
 <view
-  class="page-container page-shell page-shell--with-nav page-shell--bottom-safe"
+  class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
   style="--page-shell-nav-height: {{navBarHeight}}px"
 >
 
@@ -15,7 +15,7 @@
 
     <view wx:elif="{{listError}}" class="error-wrap">
       <t-empty icon="info-circle" description="{{listError}}">
-        <t-button slot="action" size="small" theme="primary" shape="round" bindtap="onRetry">重试</t-button>
+        <t-button slot="action" theme="primary" bindtap="onRetry">重试</t-button>
       </t-empty>
     </view>
 
@@ -56,12 +56,10 @@
 
       <!-- 城市选择 -->
       <view class="field-label">选择城市</view>
-      <picker mode="selector" range="{{cityOptions}}" range-key="label" value="{{selectedCityIndex}}" bindchange="onCityChange">
-        <view class="picker-display">
-          <text class="{{selectedCityName ? '' : 'placeholder'}}">{{selectedCityName || '请选择城市'}}</text>
-          <text class="picker-arrow">›</text>
-        </view>
-      </picker>
+      <view class="picker-display" bind:tap="onOpenCityPicker">
+        <text class="{{selectedCityName ? '' : 'placeholder'}}">{{selectedCityName || '请选择城市'}}</text>
+        <text class="picker-arrow">›</text>
+      </view>
 
       <!-- 区域搜索 + 列表 -->
       <view class="field-label">选择区县</view>
@@ -104,6 +102,18 @@
           disabled="{{!selectedRegionId || submitting}}"
         >提交申请</t-button>
       </view>
+
+      <t-picker
+        visible="{{cityPickerVisible}}"
+        value="{{[selectedCityId]}}"
+        title="选择城市"
+        cancelBtn="取消"
+        confirmBtn="确认"
+        bind:confirm="onCityConfirm"
+        bind:cancel="onCloseCityPicker"
+      >
+        <t-picker-item options="{{cityOptions}}" />
+      </t-picker>
     </view>
   </view>
 

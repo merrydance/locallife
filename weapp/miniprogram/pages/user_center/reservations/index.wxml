@@ -1,6 +1,6 @@
 <custom-navbar title="我的预订" showBack="{{true}}" bind:navheight="onNavHeight" />
 
-<view class="page" style="padding-top: {{navBarHeight}}px; padding-bottom: env(safe-area-inset-bottom);">
+<view class="page page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px;">
   <!-- 顶部状态栏 -->
   <view class="tabs-wrapper">
     <t-tabs value="{{currentStatus}}" bind:change="onStatusChange" theme="tag" space-evenly="{{false}}">

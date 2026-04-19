@@ -621,7 +621,7 @@ type EcommerceApplyment struct {
 	SubjectID    int64       `json:"subject_id"`
 	OutRequestNo string      `json:"out_request_no"`
 	ApplymentID  pgtype.Int8 `json:"applyment_id"`
-	// 微信主体类型: 2401-小微商户(个人), 2500-个体工商户, 2600-企业
+	// 微信主体类型: 2401-小微商户, 2500-个人卖家, 4-个体工商户, 2-企业, 3-事业单位, 2502-政府机关, 1708-社会组织
 	OrganizationType      string      `json:"organization_type"`
 	BusinessLicenseNumber pgtype.Text `json:"business_license_number"`
 	BusinessLicenseCopy   pgtype.Text `json:"business_license_copy"`
@@ -646,7 +646,7 @@ type EcommerceApplyment struct {
 	Qualifications        []byte      `json:"qualifications"`
 	BusinessAdditionPics  []string    `json:"business_addition_pics"`
 	BusinessAdditionDesc  pgtype.Text `json:"business_addition_desc"`
-	// 进件状态: pending-待提交, submitted-已提交, auditing-审核中, rejected-已驳回, frozen-冻结, to_be_signed-待签约, signing-签约中, rejected_sign-签约失败, finish-完成
+	// 进件状态: pending-待提交, submitted-已提交, checking-资料校验中, auditing-审核中, account_need_verify-待账户验证, to_be_confirmed-待确认, rejected-已驳回, frozen-冻结, to_be_signed-待签约, signing-签约中, rejected_sign-签约失败, finish-完成, canceled-已作废
 	Status                   string             `json:"status"`
 	SignUrl                  pgtype.Text        `json:"sign_url"`
 	SignState                pgtype.Text        `json:"sign_state"`
@@ -666,6 +666,22 @@ type EcommerceApplyment struct {
 	BankAliasCode pgtype.Text `json:"bank_alias_code"`
 	// 微信收付通支行联行号
 	BankBranchID pgtype.Text `json:"bank_branch_id"`
+	// 商户首笔支付成功时间，用于 0.01 结算卡验卡三日巡检
+	SettlementVerifyFirstTradeAt pgtype.Timestamptz `json:"settlement_verify_first_trade_at"`
+	// 最近一次查询微信结算卡验卡结果的时间
+	SettlementVerifyLastCheckedAt pgtype.Timestamptz `json:"settlement_verify_last_checked_at"`
+	// 已执行的每日验卡巡检次数，最多三次
+	SettlementVerifyCheckCount int32 `json:"settlement_verify_check_count"`
+	// 结算卡验卡巡检状态: verifying-巡检中, success-巡检结束且未发现失败, fail-巡检发现失败
+	SettlementVerifyStatus pgtype.Text `json:"settlement_verify_status"`
+	// 微信返回的结算卡验卡失败原因
+	SettlementVerifyFailReason pgtype.Text `json:"settlement_verify_fail_reason"`
+	// 运营商已收到结算卡失败通知的时间
+	SettlementVerifyFailedNotifiedAt pgtype.Timestamptz `json:"settlement_verify_failed_notified_at"`
+	// 微信进件返回的法人扫码验证链接
+	LegalValidationUrl pgtype.Text `json:"legal_validation_url"`
+	// 微信进件返回的汇款账户验证原始信息，敏感字段保持微信返回密文
+	AccountValidation []byte `json:"account_validation"`
 }
 
 // 用户收藏表
@@ -818,6 +834,8 @@ type MembershipTransaction struct {
 	PaymentOrderID  pgtype.Int8 `json:"payment_order_id"`
 	PrincipalAmount int64       `json:"principal_amount"`
 	BonusAmount     int64       `json:"bonus_amount"`
+	// 商户代录会员充值请求幂等键，仅 recharge 交易使用
+	IdempotencyKey pgtype.Text `json:"idempotency_key"`
 }
 
 type Merchant struct {
@@ -938,6 +956,43 @@ type MerchantBusinessHour struct {
 	SpecialDate pgtype.Date `json:"special_date"`
 	CreatedAt   time.Time   `json:"created_at"`
 	UpdatedAt   time.Time   `json:"updated_at"`
+}
+
+// 微信支付商户注销提现申请单
+type MerchantCancelWithdrawApplication struct {
+	ID              int64  `json:"id"`
+	MerchantID      int64  `json:"merchant_id"`
+	CreatedByUserID int64  `json:"created_by_user_id"`
+	SubMchID        string `json:"sub_mch_id"`
+	// 平台侧商户注销申请单号
+	OutRequestNo string `json:"out_request_no"`
+	// 微信支付注销提现申请单号
+	ApplymentID pgtype.Text `json:"applyment_id"`
+	// 是否提取资金：NOT_APPLY_WITHDRAW/APPLY_WITHDRAW
+	Withdraw                   string      `json:"withdraw"`
+	ProofMediaAssetIds         []byte      `json:"proof_media_asset_ids"`
+	AdditionalMaterialAssetIds []byte      `json:"additional_material_asset_ids"`
+	Remark                     pgtype.Text `json:"remark"`
+	// 本地提交同步状态：created/submit_succeeded/submit_unknown/sync_failed
+	LocalSyncState string `json:"local_sync_state"`
+	// 微信支付注销状态 cancel_state
+	CancelState            pgtype.Text `json:"cancel_state"`
+	CancelStateDescription pgtype.Text `json:"cancel_state_description"`
+	// 微信支付提现状态 withdraw_state
+	WithdrawState            pgtype.Text        `json:"withdraw_state"`
+	WithdrawStateDescription pgtype.Text        `json:"withdraw_state_description"`
+	ConfirmCancelUrl         pgtype.Text        `json:"confirm_cancel_url"`
+	AccountInfo              []byte             `json:"account_info"`
+	AccountWithdrawResult    []byte             `json:"account_withdraw_result"`
+	LatestQueryResponse      []byte             `json:"latest_query_response"`
+	LastError                pgtype.Text        `json:"last_error"`
+	ModifyTime               pgtype.Timestamptz `json:"modify_time"`
+	SubmittedAt              pgtype.Timestamptz `json:"submitted_at"`
+	LastQueryAt              pgtype.Timestamptz `json:"last_query_at"`
+	CreatedAt                time.Time          `json:"created_at"`
+	UpdatedAt                time.Time          `json:"updated_at"`
+	// 商户声明的营业执照状态：ACTIVE/CANCELED/REVOKED；仅用于企业主体注销提现材料校验
+	BusinessLicenseStatusDeclaration pgtype.Text `json:"business_license_status_declaration"`
 }
 
 // 商户能力真值表；系统标签由此表派生，不与经营类目混用
@@ -1087,6 +1142,10 @@ type MerchantPaymentConfig struct {
 	Status    string    `json:"status"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+	// 最近一次结算银行卡变更申请单号
+	LatestSettlementApplicationNo pgtype.Text `json:"latest_settlement_application_no"`
+	// 最近一次结算银行卡变更申请提交时间
+	LatestSettlementApplicationSubmittedAt pgtype.Timestamptz `json:"latest_settlement_application_submitted_at"`
 }
 
 // 商户信任画像表 - 信用分驱动食安熔断
@@ -1236,15 +1295,14 @@ type Operator struct {
 	ID     int64 `json:"id"`
 	UserID int64 `json:"user_id"`
 	// 运营商的主要区域（已废弃UNIQUE约束，现通过operator_regions表管理多区域）
-	RegionID       int64              `json:"region_id"`
-	Name           string             `json:"name"`
-	ContactName    string             `json:"contact_name"`
-	ContactPhone   string             `json:"contact_phone"`
-	WechatMchID    pgtype.Text        `json:"wechat_mch_id"`
-	CommissionRate pgtype.Numeric     `json:"commission_rate"`
-	Status         string             `json:"status"`
-	CreatedAt      time.Time          `json:"created_at"`
-	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	RegionID     int64              `json:"region_id"`
+	Name         string             `json:"name"`
+	ContactName  string             `json:"contact_name"`
+	ContactPhone string             `json:"contact_phone"`
+	WechatMchID  pgtype.Text        `json:"wechat_mch_id"`
+	Status       string             `json:"status"`
+	CreatedAt    time.Time          `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 	// 合同开始日期
 	ContractStartDate pgtype.Date `json:"contract_start_date"`
 	// 合同到期日期
@@ -1255,12 +1313,15 @@ type Operator struct {
 	SubMchID             pgtype.Text    `json:"sub_mch_id"`
 	Balance              int64          `json:"balance"`
 	WalletAccount        []byte         `json:"wallet_account"`
-	MerchantDeposit      int64          `json:"merchant_deposit"`
 	RiderDeposit         int64          `json:"rider_deposit"`
 	WeatherCoeffExtreme  pgtype.Numeric `json:"weather_coeff_extreme"`
 	WeatherCoeffHeavy    pgtype.Numeric `json:"weather_coeff_heavy"`
 	WeatherCoeffModerate pgtype.Numeric `json:"weather_coeff_moderate"`
 	WeatherCoeffLight    pgtype.Numeric `json:"weather_coeff_light"`
+	// 最近一次结算银行卡变更申请单号
+	LatestSettlementApplicationNo pgtype.Text `json:"latest_settlement_application_no"`
+	// 最近一次结算银行卡变更申请提交时间
+	LatestSettlementApplicationSubmittedAt pgtype.Timestamptz `json:"latest_settlement_application_submitted_at"`
 }
 
 // 运营商入驻申请表，支持草稿保存和人工审核
@@ -1445,8 +1506,10 @@ type PaymentOrder struct {
 	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
 	Attach        pgtype.Text        `json:"attach"`
 	// 关联的合单支付ID，单商户支付时为NULL
-	CombinedPaymentID pgtype.Int8        `json:"combined_payment_id"`
-	ProcessedAt       pgtype.Timestamptz `json:"processed_at"`
+	CombinedPaymentID     pgtype.Int8        `json:"combined_payment_id"`
+	ProcessedAt           pgtype.Timestamptz `json:"processed_at"`
+	PaymentChannel        string             `json:"payment_channel"`
+	RequiresProfitSharing bool               `json:"requires_profit_sharing"`
 }
 
 // 高峰/特殊时段配置表（午高峰、晚高峰、深夜配送等）
@@ -1676,10 +1739,6 @@ type RegionRuleConfig struct {
 	ID int64 `json:"id"`
 	// 区县ID
 	RegionID int64 `json:"region_id"`
-	// 平台抽成比例（0.03=3%）
-	CommissionRate pgtype.Numeric `json:"commission_rate"`
-	// 商户押金（分）
-	MerchantDeposit int64 `json:"merchant_deposit"`
 	// 骑手押金（分）
 	RiderDeposit int64 `json:"rider_deposit"`
 	// 极端天气系数
@@ -2361,6 +2420,26 @@ type WechatComplaint struct {
 	WxpayUpdateTime        pgtype.Timestamptz `json:"wxpay_update_time"`
 	CreatedAt              time.Time          `json:"created_at"`
 	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+}
+
+// 微信支付平台收付通商户违规通知记录；由违规 webhook 持久化，供平台审计与运营处理
+type WechatMerchantViolation struct {
+	ID                   int64              `json:"id"`
+	RecordID             string             `json:"record_id"`
+	SubMchID             string             `json:"sub_mch_id"`
+	MerchantID           pgtype.Int8        `json:"merchant_id"`
+	CompanyName          string             `json:"company_name"`
+	EventType            string             `json:"event_type"`
+	RiskType             string             `json:"risk_type"`
+	RiskDescription      string             `json:"risk_description"`
+	PunishPlan           string             `json:"punish_plan"`
+	PunishTime           pgtype.Timestamptz `json:"punish_time"`
+	PunishDescription    string             `json:"punish_description"`
+	LatestNotificationID string             `json:"latest_notification_id"`
+	LatestNotifyTime     time.Time          `json:"latest_notify_time"`
+	LastReceivedAt       time.Time          `json:"last_received_at"`
+	CreatedAt            time.Time          `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 }
 
 // 微信支付回调通知记录表，用于防止重复处理（幂等性）

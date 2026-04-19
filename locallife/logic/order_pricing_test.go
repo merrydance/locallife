@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/stretchr/testify/require"
@@ -39,10 +40,11 @@ func TestGetBestDiscountAmount(t *testing.T) {
 			name:     "BestMatch",
 			subtotal: 5000,
 			buildStubs: func(store *mockdb.MockStore) {
+				now := time.Now()
 				rules := []db.DiscountRule{
-					{MinOrderAmount: 1000, DiscountAmount: 200},
-					{MinOrderAmount: 4000, DiscountAmount: 800},
-					{MinOrderAmount: 6000, DiscountAmount: 1200},
+					{MinOrderAmount: 1000, DiscountAmount: 200, ValidFrom: now.Add(-time.Hour), ValidUntil: now.Add(time.Hour)},
+					{MinOrderAmount: 4000, DiscountAmount: 800, ValidFrom: now.Add(-time.Hour), ValidUntil: now.Add(time.Hour)},
+					{MinOrderAmount: 6000, DiscountAmount: 1200, ValidFrom: now.Add(-time.Hour), ValidUntil: now.Add(time.Hour)},
 				}
 				store.EXPECT().
 					ListActiveDiscountRules(gomock.Any(), merchantID).
@@ -69,6 +71,57 @@ func TestGetBestDiscountAmount(t *testing.T) {
 			tc.check(t, amount, err)
 		})
 	}
+}
+
+func TestResolveMerchantDiscount(t *testing.T) {
+	merchantID := int64(10)
+	now := time.Now()
+
+	t.Run("SelectsBestMatchingRuleWithinStackingGroup", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		store := mockdb.NewMockStore(ctrl)
+		store.EXPECT().
+			ListActiveDiscountRules(gomock.Any(), merchantID).
+			Times(1).
+			Return([]db.DiscountRule{
+				{ID: 1, Name: "满20减2", MinOrderAmount: 2000, DiscountAmount: 200, ValidFrom: now.Add(-time.Hour), ValidUntil: now.Add(time.Hour), CanStackWithVoucher: true},
+				{ID: 2, Name: "满50减8", MinOrderAmount: 5000, DiscountAmount: 800, ValidFrom: now.Add(-time.Hour), ValidUntil: now.Add(time.Hour), CanStackWithVoucher: true},
+			}, nil)
+
+		result, err := ResolveMerchantDiscount(context.Background(), store, OrderContext{MerchantID: merchantID, Subtotal: 3000})
+		require.NoError(t, err)
+		require.Equal(t, int64(200), result.DiscountAmount)
+		require.True(t, result.AllowWithVoucher)
+	})
+
+	t.Run("MarksVoucherAsBlockedWhenRuleDisallowsStacking", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		store := mockdb.NewMockStore(ctrl)
+		store.EXPECT().
+			ListActiveDiscountRules(gomock.Any(), merchantID).
+			Times(1).
+			Return([]db.DiscountRule{
+				{
+					ID:                  3,
+					Name:                "会员日满减",
+					MinOrderAmount:      1000,
+					DiscountAmount:      300,
+					ValidFrom:           now.Add(-time.Hour),
+					ValidUntil:          now.Add(time.Hour),
+					CanStackWithVoucher: false,
+					StackingGroup:       pgtype.Text{String: "default", Valid: true},
+				},
+			}, nil)
+
+		result, err := ResolveMerchantDiscount(context.Background(), store, OrderContext{MerchantID: merchantID, Subtotal: 3000})
+		require.NoError(t, err)
+		require.Equal(t, int64(300), result.DiscountAmount)
+		require.False(t, result.AllowWithVoucher)
+	})
 }
 
 func TestValidateVoucher(t *testing.T) {

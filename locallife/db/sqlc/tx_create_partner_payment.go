@@ -36,6 +36,7 @@ func (store *SQLStore) CreatePartnerPaymentTx(ctx context.Context, arg CreatePar
 	var result CreatePartnerPaymentTxResult
 	var linkedReservationID pgtype.Int8
 	resolvedMerchantID := arg.MerchantID
+	requiresProfitSharing := false
 
 	err := store.execTx(ctx, func(q *Queries) error {
 		if arg.OrderID > 0 {
@@ -64,6 +65,7 @@ func (store *SQLStore) CreatePartnerPaymentTx(ctx context.Context, arg CreatePar
 				return &requestError{statusCode: http.StatusConflict, err: fmt.Errorf("order %d merchant changed", arg.OrderID)}
 			}
 			linkedReservationID = order.ReservationID
+			requiresProfitSharing = OrderRequiresProfitSharing(order)
 			if arg.ReservationID > 0 {
 				if !order.ReservationID.Valid || order.ReservationID.Int64 != arg.ReservationID {
 					return &requestError{statusCode: http.StatusConflict, err: fmt.Errorf("order %d reservation link changed", arg.OrderID)}
@@ -135,12 +137,14 @@ func (store *SQLStore) CreatePartnerPaymentTx(ctx context.Context, arg CreatePar
 		}
 
 		createParams := CreatePaymentOrderParams{
-			UserID:       arg.UserID,
-			PaymentType:  "profit_sharing",
-			BusinessType: arg.BusinessType,
-			Amount:       arg.Amount,
-			OutTradeNo:   arg.OutTradeNo,
-			ExpiresAt:    pgtype.Timestamptz{Time: arg.ExpiresAt, Valid: true},
+			UserID:                arg.UserID,
+			PaymentType:           "miniprogram",
+			PaymentChannel:        PaymentChannelEcommerce,
+			RequiresProfitSharing: requiresProfitSharing,
+			BusinessType:          arg.BusinessType,
+			Amount:                arg.Amount,
+			OutTradeNo:            arg.OutTradeNo,
+			ExpiresAt:             pgtype.Timestamptz{Time: arg.ExpiresAt, Valid: true},
 		}
 		if arg.OrderID > 0 {
 			createParams.OrderID = pgtype.Int8{Int64: arg.OrderID, Valid: true}

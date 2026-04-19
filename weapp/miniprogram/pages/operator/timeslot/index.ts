@@ -39,6 +39,8 @@ Page({
     peakConfigs: [] as PeakHourViewItem[],
 
     showPeakModal: false,
+    peakStartTimePickerVisible: false,
+    peakEndTimePickerVisible: false,
     peakForm: {
       startTime: '11:00',
       endTime: '13:00',
@@ -121,6 +123,8 @@ Page({
   onAddPeak() {
     this.setData({
       showPeakModal: true,
+      peakStartTimePickerVisible: false,
+      peakEndTimePickerVisible: false,
       peakForm: {
         startTime: '11:00',
         endTime: '13:00',
@@ -131,7 +135,41 @@ Page({
   },
 
   onClosePeakModal() {
-    this.setData({ showPeakModal: false })
+    this.setData({
+      showPeakModal: false,
+      peakStartTimePickerVisible: false,
+      peakEndTimePickerVisible: false
+    })
+  },
+
+  showPeakStartTimePicker() {
+    this.setData({ peakStartTimePickerVisible: true })
+  },
+
+  hidePeakStartTimePicker() {
+    this.setData({ peakStartTimePickerVisible: false })
+  },
+
+  showPeakEndTimePicker() {
+    this.setData({ peakEndTimePickerVisible: true })
+  },
+
+  hidePeakEndTimePicker() {
+    this.setData({ peakEndTimePickerVisible: false })
+  },
+
+  onPeakStartTimeConfirm(e: WechatMiniprogram.CustomEvent<{ value?: string }>) {
+    this.setData({
+      'peakForm.startTime': String(e.detail.value || ''),
+      peakStartTimePickerVisible: false
+    })
+  },
+
+  onPeakEndTimeConfirm(e: WechatMiniprogram.CustomEvent<{ value?: string }>) {
+    this.setData({
+      'peakForm.endTime': String(e.detail.value || ''),
+      peakEndTimePickerVisible: false
+    })
   },
 
   onPeakFormChange(e: FieldInputEvent) {

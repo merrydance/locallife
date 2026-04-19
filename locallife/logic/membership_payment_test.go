@@ -29,7 +29,16 @@ func TestValidateMembershipPayment(t *testing.T) {
 			check: func(t *testing.T, _ *db.MerchantMembership, err error) {
 				reqErr := assertRequestError(t, err)
 				require.Equal(t, 400, reqErr.Status)
-				require.Equal(t, "外卖和预定订单暂不支持余额支付", reqErr.Err.Error())
+				require.Equal(t, "仅堂食和外带自取支持余额支付", reqErr.Err.Error())
+			},
+		},
+		{
+			name:  "ReservationRejected",
+			input: MembershipPaymentInput{UserID: userID, MerchantID: merchantID, OrderType: "reservation"},
+			check: func(t *testing.T, _ *db.MerchantMembership, err error) {
+				reqErr := assertRequestError(t, err)
+				require.Equal(t, 400, reqErr.Status)
+				require.Equal(t, "仅堂食和外带自取支持余额支付", reqErr.Err.Error())
 			},
 		},
 		{

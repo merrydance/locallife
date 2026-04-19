@@ -25,15 +25,15 @@ WHERE id = $1
 RETURNING *;
 
 -- name: GetReconciliationReport :one
-SELECT * FROM reconciliation_reports
+SELECT id, bill_date, bill_type, status, wxpay_count, local_count, mismatch_count, missing_local, missing_wxpay, amount_mismatch, error_message, created_at, updated_at FROM reconciliation_reports
 WHERE id = $1 LIMIT 1;
 
 -- name: GetReconciliationReportByDateAndType :one
-SELECT * FROM reconciliation_reports
+SELECT id, bill_date, bill_type, status, wxpay_count, local_count, mismatch_count, missing_local, missing_wxpay, amount_mismatch, error_message, created_at, updated_at FROM reconciliation_reports
 WHERE bill_date = $1 AND bill_type = $2
 LIMIT 1;
 
 -- name: ListReconciliationReports :many
-SELECT * FROM reconciliation_reports
+SELECT id, bill_date, bill_type, status, wxpay_count, local_count, mismatch_count, missing_local, missing_wxpay, amount_mismatch, error_message, created_at, updated_at FROM reconciliation_reports
 ORDER BY bill_date DESC, bill_type
 LIMIT $1 OFFSET $2;

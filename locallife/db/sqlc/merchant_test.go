@@ -393,6 +393,49 @@ func TestSearchMerchants_ExcludesTakeoutSuspendedMerchants(t *testing.T) {
 	require.Zero(t, count)
 }
 
+func TestSearchMerchants_ExcludesBindbankSubmittedMerchants(t *testing.T) {
+	region := createRandomRegion(t)
+	keyword := "BINDBANK_SEARCH_MERCHANT_" + util.RandomString(6)
+	activeMerchant := createActiveMerchantInRegion(t, region.ID, keyword+"_active", 39.9080, 116.3970)
+
+	user := createRandomUser(t)
+	appData, _ := json.Marshal(map[string]string{"test": "data"})
+	_, err := testStore.CreateMerchant(context.Background(), CreateMerchantParams{
+		OwnerUserID:     user.ID,
+		Name:            keyword + "_bindbank",
+		Phone:           fmt.Sprintf("138%08d", util.RandomInt(10000000, 99999999)),
+		Address:         "test address " + util.RandomString(10),
+		Latitude:        numericFromFloat(39.9180),
+		Longitude:       numericFromFloat(116.4070),
+		Status:          "bindbank_submitted",
+		ApplicationData: appData,
+		RegionID:        region.ID,
+	})
+	require.NoError(t, err)
+
+	merchants, err := testStore.SearchMerchants(context.Background(), SearchMerchantsParams{
+		Offset:  0,
+		Limit:   10,
+		Column3: keyword,
+		Column4: 39.9082,
+		Column5: 116.3975,
+		RegionID: pgtype.Int8{
+			Int64: region.ID,
+			Valid: true,
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, merchants, 1)
+	require.Equal(t, activeMerchant.ID, merchants[0].ID)
+
+	count, err := testStore.CountSearchMerchants(context.Background(), CountSearchMerchantsParams{
+		Column1:  pgtype.Text{String: keyword, Valid: true},
+		RegionID: pgtype.Int8{Int64: region.ID, Valid: true},
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), count)
+}
+
 func TestSearchMerchants_DistanceSort(t *testing.T) {
 	region := createRandomRegion(t)
 	keyword := "DISTANCE_SORT_MERCHANT_" + util.RandomString(6)
@@ -447,6 +490,55 @@ func TestSearchMerchantsByTag_DistanceSort(t *testing.T) {
 	require.Equal(t, nearMerchant.ID, merchants[0].ID)
 	require.Equal(t, farMerchant.ID, merchants[1].ID)
 	require.LessOrEqual(t, merchants[0].DistanceMeters, merchants[1].DistanceMeters)
+}
+
+func TestSearchMerchantsByTag_ExcludesBindbankSubmittedMerchants(t *testing.T) {
+	region := createRandomRegion(t)
+	tag := createRandomTag(t, "merchant")
+	keyword := "TAG_BINDBANK_SEARCH_MERCHANT_" + util.RandomString(6)
+	activeMerchant := createActiveMerchantInRegion(t, region.ID, keyword+"_active", 39.9080, 116.3970)
+
+	user := createRandomUser(t)
+	appData, _ := json.Marshal(map[string]string{"test": "data"})
+	bindbankMerchant, err := testStore.CreateMerchant(context.Background(), CreateMerchantParams{
+		OwnerUserID:     user.ID,
+		Name:            keyword + "_bindbank",
+		Phone:           fmt.Sprintf("138%08d", util.RandomInt(10000000, 99999999)),
+		Address:         "test address " + util.RandomString(10),
+		Latitude:        numericFromFloat(39.9180),
+		Longitude:       numericFromFloat(116.4070),
+		Status:          "bindbank_submitted",
+		ApplicationData: appData,
+		RegionID:        region.ID,
+	})
+	require.NoError(t, err)
+
+	err = testStore.AddMerchantTag(context.Background(), AddMerchantTagParams{MerchantID: activeMerchant.ID, TagID: tag.ID})
+	require.NoError(t, err)
+	err = testStore.AddMerchantTag(context.Background(), AddMerchantTagParams{MerchantID: bindbankMerchant.ID, TagID: tag.ID})
+	require.NoError(t, err)
+
+	merchants, err := testStore.SearchMerchantsByTag(context.Background(), SearchMerchantsByTagParams{
+		TagID:   tag.ID,
+		UserLat: 39.9082,
+		UserLng: 116.3975,
+		RegionID: pgtype.Int8{
+			Int64: region.ID,
+			Valid: true,
+		},
+		Limit:  10,
+		Offset: 0,
+	})
+	require.NoError(t, err)
+	require.Len(t, merchants, 1)
+	require.Equal(t, activeMerchant.ID, merchants[0].ID)
+
+	count, err := testStore.CountSearchMerchantsByTag(context.Background(), CountSearchMerchantsByTagParams{
+		TagID:    tag.ID,
+		RegionID: pgtype.Int8{Int64: region.ID, Valid: true},
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), count)
 }
 
 // ==================== Merchant Application Tests ====================

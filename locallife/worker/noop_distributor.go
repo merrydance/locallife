@@ -72,6 +72,10 @@ func (NoopTaskDistributor) DistributeTaskProcessMerchantWithdrawResult(ctx conte
 	return financialTaskDistributorUnavailable("merchant withdraw result")
 }
 
+func (NoopTaskDistributor) DistributeTaskProcessMerchantCancelWithdrawResult(ctx context.Context, payload *MerchantCancelWithdrawResultPayload, opts ...asynq.Option) error {
+	return financialTaskDistributorUnavailable("merchant cancel withdraw result")
+}
+
 func (NoopTaskDistributor) DistributeTaskSendNotification(ctx context.Context, payload *SendNotificationPayload, opts ...asynq.Option) error {
 	return nil
 }
@@ -86,6 +90,10 @@ func (NoopTaskDistributor) DistributeTaskCheckRiderDamage(ctx context.Context, r
 
 func (NoopTaskDistributor) DistributeTaskProcessAppealResult(ctx context.Context, payload *ProcessAppealResultPayload, opts ...asynq.Option) error {
 	return errors.New("appeal result task distributor unavailable without redis")
+}
+
+func (NoopTaskDistributor) DistributeTaskAutomaticAppealResolution(ctx context.Context, payload *AutomaticAppealResolutionPayload, opts ...asynq.Option) error {
+	return errors.New("automatic appeal resolution task distributor unavailable without redis")
 }
 
 func (NoopTaskDistributor) DistributeTaskClaimPayout(ctx context.Context, payload *ClaimPayoutPayload, opts ...asynq.Option) error {

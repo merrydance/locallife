@@ -3,81 +3,37 @@
  * 堂食仅允许基于已建立的用餐会话进入；预订点菜允许 reservation 直达。
  */
 
-import { ScanTableCategoryInfo, ScanTableMerchantInfo, ScanTableTableInfo, ScanTableComboInfo, ScanTablePromotionInfo, ScanTableDishInfo } from '../../../api/table'
-import {
-    getCart,
-    addToCart,
-    updateCartItem,
-    removeFromCart,
-    calculateCart,
-    CartResponse,
-    CartItemResponse
-} from '../../../api/cart'
-import { getReservationDetail } from '../../../api/reservation'
-import { getMerchantDishes, PublicDish } from '../../../api/merchant'
-import { getDiningSessionMenu } from '../../../api/dining-session'
-import type { CustomizationGroup } from '../../../api/dish'
-import { formatPriceNoSymbol } from '../../../utils/util'
-import { getPublicImageUrl } from '../../../utils/image'
 import { getStableBarHeights } from '../../../utils/responsive'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 import { clearDineInSessionContext, getDineInSessionContext, saveDineInSessionFromMenu } from '../../../services/dine-in-session'
-
-type MenuDish = {
-    id: number
-    merchant_id: number
-    name: string
-    description?: string
-    price: number
-    member_price?: number | null
-    image_url: string
-    is_available: boolean
-    is_online: boolean
-    category_id?: number
-    category_name?: string
-    sort_order: number
-    tags: string[]
-    customization_groups: CustomizationGroup[]
-    priceDisplay: string
-    memberPriceDisplay: string | null
-    hasCustomizations: boolean
-    cartQty: number
-}
-
-type MenuCategory = {
-    id: number
-    name: string
-    sort_order?: number
-    dishes: MenuDish[]
-}
-
-type CartItemView = CartItemResponse & {
-    priceDisplay: string
-    subtotalDisplay: string
-}
-
-type CartView = CartResponse & {
-    total_quantity: number
-    subtotalDisplay: string
-    items: CartItemView[]
-}
-
-type MerchantInfoView = ScanTableMerchantInfo | { id: number, name: string, logo_url?: string }
-type TableInfoView = ScanTableTableInfo | { table_no: string }
-
-type DrawerDish = MenuDish & {
-    spec_groups?: Array<{
-        id: string
-        name: string
-        is_required: boolean
-        specs: Array<{
-            id: string
-            name: string
-            price_diff: number
-            priceDiffDisplay: string | null
-        }>
-    }>
-}
+import {
+    addMenuItemToCart,
+    calculateMenuCart,
+    getMenuCart,
+    loadDineInSessionMenu,
+    loadReservationMenuSource,
+    removeMenuCartItem,
+    updateMenuCartItem,
+    type MenuComboInfo,
+    type MenuPromotionInfo
+} from '../../../services/dine-in-menu'
+import {
+    buildDishQtyUpdate,
+    buildDrawerState,
+    buildMenuCartDataUpdate,
+    buildOptimisticCartItemUpdate,
+    buildOptimisticDishDeltaUpdate,
+    buildReservationMenuState,
+    buildSessionMenuState,
+    findPlainDishCartItem,
+    validateDrawerSelection,
+    type CartView,
+    type DrawerDish,
+    type MenuCategory,
+    type MenuDish,
+    type MerchantInfoView,
+    type TableInfoView
+} from '../../../utils/dine-in-menu-view'
 
 Page({
     data: {
@@ -98,13 +54,13 @@ Page({
 
         // 菜品数据
         categories: [] as MenuCategory[],
-        combos: [] as ScanTableComboInfo[],
-        promotions: [] as ScanTablePromotionInfo[],
+        combos: [] as MenuComboInfo[],
+        promotions: [] as MenuPromotionInfo[],
         currentCategoryId: 0,
         currentDishes: [] as MenuDish[],
 
         // 购物车数据
-        cart: null as CartResponse | null,
+        cart: null as CartView | null,
         cartTotal: 0,
         cartCount: 0,
 
@@ -130,7 +86,6 @@ Page({
             menus: ['shareAppMessage', 'shareTimeline']
         })
 
-        // 设置导航栏高度
         const { navBarHeight } = getStableBarHeights()
         this.setData({ navBarHeight })
 
@@ -148,12 +103,9 @@ Page({
             return
         }
 
-        let merchantId: number | null = null
-
-        // 方式0: 预订点菜入口 (从预订详情页跳转)
         if (options.reservation_id && options.merchant_id) {
             const reservationId = parseInt(options.reservation_id)
-            merchantId = parseInt(options.merchant_id)
+            const merchantId = parseInt(options.merchant_id)
             this.setData({
                 reservationId,
                 merchantId,
@@ -163,24 +115,19 @@ Page({
             return
         }
 
-        // 旧的桌台直进入口统一回到扫码接入页，不再允许绕过会话建立。
         if (options.table_id && options.merchant_id) {
             wx.redirectTo({ url: `/pages/dine-in/scan-entry/scan-entry?table_id=${options.table_id}` })
             return
         }
 
-        // scene 参数同样统一回到扫码接入页。
         if (options.scene) {
             wx.redirectTo({ url: `/pages/dine-in/scan-entry/scan-entry?scene=${encodeURIComponent(options.scene)}` })
             return
         }
 
-        // 参数错误 - 显示友好提示
         this.showError('请通过扫描桌台二维码进入点餐页面')
     },
-    /**
-     * 显示错误状态
-     */
+
     showError(message: string) {
         this.setData({
             loading: false,
@@ -189,9 +136,6 @@ Page({
         })
     },
 
-    /**
-     * 返回上一页
-     */
     goBack() {
         const pages = getCurrentPages()
         if (pages.length > 1) {
@@ -206,59 +150,15 @@ Page({
         }
     },
 
-    /**
-     * 基于会话初始化页面（扫码堂食唯一真值入口）
-     */
     async initPageBySession(sessionId: number) {
         this.setData({ loading: true, hasError: false })
 
         try {
-            const menuResponse = await getDiningSessionMenu(sessionId)
+            const menuResponse = await loadDineInSessionMenu(sessionId)
             saveDineInSessionFromMenu(menuResponse)
-
-            const allDishes: MenuDish[] = []
-            const processedCategories: MenuCategory[] = (menuResponse.categories || []).map((cat: ScanTableCategoryInfo) => {
-                const dishes = (cat.dishes || []).map((dish: ScanTableDishInfo) => {
-                    const processedDish: MenuDish = {
-                        ...dish,
-                        image_url: getPublicImageUrl(dish.image_url || ''),
-                        priceDisplay: formatPriceNoSymbol(dish.price || 0),
-                        memberPriceDisplay: dish.member_price ? formatPriceNoSymbol(dish.member_price) : null,
-                        hasCustomizations: Array.isArray(dish.customization_groups) && dish.customization_groups.length > 0,
-                        cartQty: 0,
-                        tags: dish.tags || [],
-                        customization_groups: dish.customization_groups || []
-                    }
-                    allDishes.push(processedDish)
-                    return processedDish
-                })
-                return { id: cat.id, name: cat.name, sort_order: cat.sort_order, dishes }
-            })
-
-            const finalCategories: MenuCategory[] = [
-                { id: 0, name: '全部', sort_order: -1, dishes: allDishes },
-                ...processedCategories
-            ]
-
-            this.setData({
-                sessionId: menuResponse.session.id,
-                billingGroupId: menuResponse.billing_group.id,
-                tableId: menuResponse.session.table_id,
-                merchantId: menuResponse.session.merchant_id,
-                reservationId: menuResponse.session.reservation_id || 0,
-                orderType: 'dine_in',
-                tableNo: menuResponse.table.table_no,
-                merchantInfo: menuResponse.merchant,
-                tableInfo: menuResponse.table,
-                categories: finalCategories,
-                combos: menuResponse.combos || [],
-                promotions: menuResponse.promotions || [],
-                currentCategoryId: 0,
-                currentDishes: allDishes,
-                loading: false
-            })
-
-            wx.setNavigationBarTitle({ title: menuResponse.merchant.name })
+            const nextView = buildSessionMenuState(menuResponse)
+            this.setData(nextView.state)
+            wx.setNavigationBarTitle({ title: nextView.title })
             await this.loadCart()
         } catch (error: unknown) {
             clearDineInSessionContext()
@@ -270,100 +170,18 @@ Page({
         }
     },
 
-    /**
-     * 预订点菜初始化（从预订详情页跳转）
-     */
     async initPageForReservation(reservationId: number, merchantId: number) {
         try {
             this.setData({ loading: true, hasError: false })
-
-            // 并行获取预订详情、商户信息和菜品列表
-            const { getPublicMerchantDetail } = require('../../../api/merchant')
-            const [reservation, merchantDetail, dishesResponse] = await Promise.all([
-                getReservationDetail(reservationId),
-                getPublicMerchantDetail(merchantId),
-                getMerchantDishes(merchantId)
-            ])
-
-            // 从预订详情提取桌号（预订必须有桌台）
-            const tableNo = reservation.table_no
-            if (!tableNo) {
-                throw new Error('预订信息缺少桌台号')
-            }
-
-            // 从响应中提取菜品列表，并预处理价格、图片和定制标志
-            const dishes: MenuDish[] = (dishesResponse.dishes || []).map((dish: PublicDish) => {
-                return {
-                    id: dish.id,
-                    merchant_id: merchantId, // 使用已知的 merchantId
-                    name: dish.name,
-                    description: dish.description,
-                    price: dish.price,
-                    member_price: dish.member_price,
-                    image_url: getPublicImageUrl(dish.image_url || ''),
-                    is_available: true, // PublicDish 没有此字段，默认可用
-                    is_online: true, // PublicDish 没有此字段，默认上架
-                    category_id: dish.category_id,
-                    category_name: dish.category_name,
-                    sort_order: 0, // PublicDish 没有此字段
-                    tags: dish.tags || [],
-                    customization_groups: dish.customization_groups || [],
-                    priceDisplay: formatPriceNoSymbol(dish.price || 0),
-                    memberPriceDisplay: dish.member_price ? formatPriceNoSymbol(dish.member_price) : null,
-                    hasCustomizations: Array.isArray(dish.customization_groups) && dish.customization_groups.length > 0,
-                    cartQty: 0
-                }
+            const { reservation, merchantDetail, dishesResponse } = await loadReservationMenuSource(reservationId, merchantId)
+            const nextView = buildReservationMenuState(reservationId, merchantId, {
+                reservation,
+                merchantDetail,
+                dishesResponse
             })
-
-            // 按分类整理菜品
-            const finalCategories: MenuCategory[] = []
-            const categoryMap = new Map<number, MenuCategory>()
-
-            // 添加"全部"分类
-            finalCategories.push({ id: 0, name: '全部', sort_order: -1, dishes: [...dishes] })
-
-            dishes.forEach((dish) => {
-                const catId = dish.category_id || 0
-                const catName = dish.category_name || '其他'
-                if (!categoryMap.has(catId)) {
-                    categoryMap.set(catId, { id: catId, name: catName, dishes: [] })
-                }
-                categoryMap.get(catId)!.dishes.push(dish)
-            })
-
-            // 合并其他分类
-            const otherCategories = Array.from(categoryMap.values()).sort((a, b) => a.id - b.id)
-            finalCategories.push(...otherCategories)
-
-            // 从商户详情获取商户名
-            const merchantName = merchantDetail.name
-            if (!merchantName) {
-                throw new Error('无法获取商户信息')
-            }
-
-            this.setData({
-                reservationId,
-                merchantId,
-                tableNo,
-                merchantInfo: {
-                    id: merchantId,
-                    name: merchantName
-                },
-                tableInfo: {
-                    table_no: tableNo
-                },
-                categories: finalCategories,
-                currentCategoryId: 0,
-                currentDishes: dishes,
-                loading: false
-            })
-
-            // 设置页面标题
-            wx.setNavigationBarTitle({ title: merchantName })
-
-            // 加载购物车
+            this.setData(nextView.state)
+            wx.setNavigationBarTitle({ title: nextView.title })
             await this.loadCart()
-
         } catch (error: unknown) {
             console.error('预订初始化失败:', error)
             const message =
@@ -379,18 +197,19 @@ Page({
         }
     },
 
-    /**
-     * 加载购物车
-     */
     async loadCart() {
         try {
-            const cart = await getCart({
+            const cart = await getMenuCart({
                 merchant_id: this.data.merchantId,
                 order_type: this.data.orderType,
                 table_id: this.data.tableId || undefined,
                 reservation_id: this.data.reservationId || undefined
             })
-            this.applyCartData(cart)
+            this.setData(buildMenuCartDataUpdate({
+                cart,
+                currentDishes: this.data.currentDishes,
+                categories: this.data.categories
+            }))
         } catch (error) {
             console.warn('加载购物车失败:', error)
             this.setData({
@@ -401,9 +220,6 @@ Page({
         }
     },
 
-    /**
-     * 延迟同步购物车（合并多次点击，避免频繁全量更新）
-     */
     scheduleCartSync() {
         const page = this as WechatMiniprogram.Page.Instance<WechatMiniprogram.IAnyObject, WechatMiniprogram.IAnyObject> & { _cartSyncTimer?: number }
         if (page._cartSyncTimer) {
@@ -411,194 +227,65 @@ Page({
         }
         page._cartSyncTimer = setTimeout(async () => {
             try {
-                const cart = await getCart({
+                const cart = await getMenuCart({
                     merchant_id: this.data.merchantId,
                     order_type: this.data.orderType,
                     table_id: this.data.tableId || undefined,
                     reservation_id: this.data.reservationId || undefined
-                }, { loading: false })
-                this.applyCartData(cart)
+                })
+                this.setData(buildMenuCartDataUpdate({
+                    cart,
+                    currentDishes: this.data.currentDishes,
+                    categories: this.data.categories
+                }))
             } catch (error) {
-                // 忽略后台同步失败，避免打断操作
+                void error
             }
         }, 300) as unknown as number
     },
 
-    /**
-     * 应用购物车数据并同步菜品数量（避免整页重绘）
-     */
-    applyCartData(cart: CartResponse) {
-        // 预处理购物车价格，添加 total_quantity 别名
-        const processedCart: CartView = {
-            ...cart,
-            total_quantity: cart.total_count || 0,
-            subtotalDisplay: formatPriceNoSymbol(cart.subtotal || 0),
-            items: (cart.items || []).map((item: CartItemResponse) => ({
-                ...item,
-                image_url: getPublicImageUrl(item.image_url),
-                priceDisplay: formatPriceNoSymbol(item.unit_price || 0),
-                subtotalDisplay: formatPriceNoSymbol(item.subtotal || (item.unit_price || 0) * (item.quantity || 1))
-            }))
-        }
-
-        // 构建菜品ID到购物车数量的映射
-        const cartQtyMap = new Map<number, number>()
-        for (const item of processedCart.items) {
-            if (item.dish_id) {
-                cartQtyMap.set(item.dish_id, (cartQtyMap.get(item.dish_id) || 0) + item.quantity)
-            }
-        }
-
-        const dataUpdate: WechatMiniprogram.IAnyObject = {
-            cart: processedCart,
-            cartTotal: cart.subtotal,
-            cartCount: cart.total_count,
-            totalPrice: cart.subtotal,
-            totalCount: cart.total_count
-        }
-
-        // 仅更新变化的菜品数量，避免整页重绘导致滚动复位
-        this.data.currentDishes.forEach((dish, index) => {
-            const nextQty = cartQtyMap.get(dish.id) || 0
-            if (dish.cartQty !== nextQty) {
-                dataUpdate[`currentDishes[${index}].cartQty`] = nextQty
-            }
-        })
-
-        this.data.categories.forEach((cat, catIndex) => {
-            (cat.dishes || []).forEach((dish, dishIndex) => {
-                const nextQty = cartQtyMap.get(dish.id) || 0
-                if (dish.cartQty !== nextQty) {
-                    dataUpdate[`categories[${catIndex}].dishes[${dishIndex}].cartQty`] = nextQty
-                }
-            })
-        })
-
-        this.setData(dataUpdate)
-    },
-
-    /**
-     * 仅更新指定菜品的数量显示（避免整页重绘）
-     */
     updateDishQtyInLists(dishId: number, nextQty: number) {
-        const dataUpdate: WechatMiniprogram.IAnyObject = {}
-
-        this.data.currentDishes.forEach((dish, index) => {
-            if (dish.id === dishId && dish.cartQty !== nextQty) {
-                dataUpdate[`currentDishes[${index}].cartQty`] = nextQty
-            }
+        const dataUpdate = buildDishQtyUpdate({
+            currentDishes: this.data.currentDishes,
+            categories: this.data.categories,
+            dishId,
+            nextQty
         })
-
-        this.data.categories.forEach((cat, catIndex) => {
-            (cat.dishes || []).forEach((dish, dishIndex) => {
-                if (dish.id === dishId && dish.cartQty !== nextQty) {
-                    dataUpdate[`categories[${catIndex}].dishes[${dishIndex}].cartQty`] = nextQty
-                }
-            })
-        })
-
         if (Object.keys(dataUpdate).length > 0) {
             this.setData(dataUpdate)
         }
     },
 
-    /**
-     * 查找无定制的菜品购物车项
-     */
     findPlainDishCartItem(dishId: number) {
-        return this.data.cart?.items.find((item) => {
-            const hasCustomizations = item.customizations && Object.keys(item.customizations).length > 0
-            return item.dish_id === dishId && !hasCustomizations
-        })
+        return findPlainDishCartItem(this.data.cart, dishId)
     },
 
-    /**
-     * 乐观更新：根据购物车项ID调整数量
-     */
     applyOptimisticCartItemChange(itemId: number, nextQty: number) {
-        const cart = this.data.cart
-        if (!cart) return
-
-        const items = [...(cart.items || [])] as CartItemView[]
-        const index = items.findIndex((item) => item.id === itemId)
-        if (index < 0) return
-
-        const target = items[index]
-        const unitPrice = target.unit_price || (target as { price?: number }).price || 0
-        const prevQty = target.quantity || 0
-        const safeNextQty = Math.max(0, nextQty)
-
-        if (safeNextQty <= 0) {
-            items.splice(index, 1)
-        } else {
-            items[index] = {
-                ...target,
-                quantity: safeNextQty,
-                subtotal: unitPrice * safeNextQty,
-                subtotalDisplay: formatPriceNoSymbol(unitPrice * safeNextQty)
-            } as CartItemView
-        }
-
-        const nextTotalCount = Math.max(0, (cart.total_count || 0) - prevQty + safeNextQty)
-        const nextSubtotal = Math.max(0, (cart.subtotal || 0) - unitPrice * prevQty + unitPrice * safeNextQty)
-        const dataUpdate: WechatMiniprogram.IAnyObject = {
-            'cart.items': items,
-            'cart.total_count': nextTotalCount,
-            'cart.total_quantity': nextTotalCount,
-            'cart.subtotal': nextSubtotal,
-            'cart.subtotalDisplay': formatPriceNoSymbol(nextSubtotal),
-            cartTotal: nextSubtotal,
-            cartCount: nextTotalCount,
-            totalPrice: nextSubtotal,
-            totalCount: nextTotalCount
-        }
-
-        this.setData(dataUpdate)
-
-        if (target.dish_id) {
-            const nextDishQty = items
-                .filter((item) => item.dish_id === target.dish_id)
-                .reduce((sum, item) => sum + (item.quantity || 0), 0)
-            this.updateDishQtyInLists(target.dish_id, nextDishQty)
+        const dataUpdate = buildOptimisticCartItemUpdate({
+            cart: this.data.cart,
+            itemId,
+            nextQty,
+            currentDishes: this.data.currentDishes,
+            categories: this.data.categories
+        })
+        if (dataUpdate) {
+            this.setData(dataUpdate)
         }
     },
 
-    /**
-     * 乐观更新：无定制菜品加减（仅更新数量与合计）
-     */
     applyOptimisticDishDelta(dishId: number, deltaQty: number) {
-        const cart = this.data.cart
-        if (!cart) return
-
-        const dish = this.data.currentDishes.find((d) => d.id === dishId)
-        const unitPrice = dish?.price || 0
-        const currentQty = dish?.cartQty || 0
-        const nextQty = Math.max(0, currentQty + deltaQty)
-
-        const item = this.findPlainDishCartItem(dishId)
-        if (item) {
-            const nextItemQty = Math.max(0, (item.quantity || 0) + deltaQty)
-            this.applyOptimisticCartItemChange(item.id, nextItemQty)
-        } else {
-            const nextTotalCount = Math.max(0, (cart.total_count || 0) + deltaQty)
-            const nextSubtotal = Math.max(0, (cart.subtotal || 0) + unitPrice * deltaQty)
-            this.setData({
-                'cart.total_count': nextTotalCount,
-                'cart.total_quantity': nextTotalCount,
-                'cart.subtotal': nextSubtotal,
-                'cart.subtotalDisplay': formatPriceNoSymbol(nextSubtotal),
-                cartTotal: nextSubtotal,
-                cartCount: nextTotalCount,
-                totalPrice: nextSubtotal,
-                totalCount: nextTotalCount
-            })
-            this.updateDishQtyInLists(dishId, nextQty)
+        const dataUpdate = buildOptimisticDishDeltaUpdate({
+            cart: this.data.cart,
+            currentDishes: this.data.currentDishes,
+            categories: this.data.categories,
+            dishId,
+            deltaQty
+        })
+        if (dataUpdate) {
+            this.setData(dataUpdate)
         }
     },
 
-    /**
-     * 切换分类
-     */
     switchCategory(e: WechatMiniprogram.CustomEvent) {
         const categoryId = e.currentTarget.dataset.id
         const category = this.data.categories.find((c) => c.id === categoryId)
@@ -609,9 +296,6 @@ Page({
         })
     },
 
-    /**
-     * 查看菜品详情
-     */
     viewDishDetail(e: WechatMiniprogram.CustomEvent) {
         const dishId = e.currentTarget.dataset.id
         const dish = this.data.currentDishes.find((d) => d.id === dishId)
@@ -621,18 +305,10 @@ Page({
         }
     },
 
-    /**
-     * 关闭菜品详情
-     */
     closeDishDetail() {
         this.setData({ selectedDish: null })
     },
 
-    // ==================== 选规格 Drawer ====================
-
-    /**
-     * 打开选规格抽屉
-     */
     openCustomDrawer(e: WechatMiniprogram.CustomEvent) {
         const dishId = e.currentTarget.dataset.id
         const dish = this.data.currentDishes.find((d) => d.id === dishId)
@@ -642,101 +318,45 @@ Page({
             this.closeDishDetail()
         }
 
-        // 转换定制组数据格式
-        const spec_groups = (dish.customization_groups || []).map((group) => ({
-            id: String(group.id),
-            name: group.name,
-            is_required: group.is_required,
-            specs: (group.options || []).map((opt) => ({
-                id: String(opt.id),
-                name: opt.tag_name || '选项', // 使用 tag_name
-                price_diff: opt.extra_price || 0,
-                priceDiffDisplay: opt.extra_price ? formatPriceNoSymbol(opt.extra_price) : null
-            }))
-        }))
-
-        // 初始化选中状态
-        const drawerSpecs: Record<string, string> = {}
-        spec_groups.forEach((group) => {
-            // 如果是必选且有选项，默认选中第一个
-            if (group.is_required && group.specs.length > 0) {
-                drawerSpecs[group.id] = group.specs[0].id
-            }
-        })
-
-        const drawerDish: DrawerDish = {
-            ...dish,
-            spec_groups
-        }
-
-        this.setData({
-            drawerDish,
-            drawerSpecs,
-            drawerQty: 1,
-            drawerVisible: true
-        })
+        this.setData(buildDrawerState(dish))
     },
 
-    /**
-     * 关闭选规格抽屉
-     */
     closeCustomDrawer() {
         this.setData({ drawerVisible: false })
     },
 
-    /**
-     * 切换规格选项
-     */
     onDrawerSpecTap(e: WechatMiniprogram.CustomEvent) {
         const { groupId, specId } = e.currentTarget.dataset
         const drawerSpecs = { ...this.data.drawerSpecs }
-        
-        // 简单处理：单选逻辑。如果需要多选，这里需要改
-        // 根据 CustomizationGroup 定义，目前没有 explicitly say single/multi select. 
-        // 但通常 Radio for single, Checkbox for multi. 
-        // 这里暂时假设一个组内单选。
-        // 如果点击已选中的，且非必选，可以取消？暂不支持取消，点击即选中。
-        
         drawerSpecs[groupId] = specId
         this.setData({ drawerSpecs })
     },
 
-    /**
-     * Drawer 数量减
-     */
     onDrawerDecrease() {
         if (this.data.drawerQty > 1) {
             this.setData({ drawerQty: this.data.drawerQty - 1 })
         }
     },
 
-    /**
-     * Drawer 数量加
-     */
     onDrawerIncrease() {
         this.setData({ drawerQty: this.data.drawerQty + 1 })
     },
 
-    /**
-     * 确认选规格加入购物车
-     */
     async onConfirmCustom() {
-        if (!this.data.drawerDish) return
-
         const { drawerDish, drawerSpecs, drawerQty } = this.data
-
-        // 校验必选
-        for (const group of drawerDish.spec_groups || []) {
-            if (group.is_required && !drawerSpecs[group.id]) {
-                wx.showToast({ title: `请选择${group.name}`, icon: 'none' })
-                return
-            }
+        if (!drawerDish) {
+            return
+        }
+        const validationMessage = validateDrawerSelection(drawerDish, drawerSpecs)
+        if (validationMessage) {
+            wx.showToast({ title: validationMessage, icon: 'none' })
+            return
         }
 
         try {
             wx.showLoading({ title: '加入购物车...' })
             
-            await addToCart({
+            await addMenuItemToCart({
                 merchant_id: this.data.merchantId,
                 dish_id: drawerDish.id,
                 quantity: drawerQty,
@@ -758,17 +378,14 @@ Page({
         }
     },
 
-    /**
-     * 更新购物车数量（WXML 事件绑定）
-     */
     async updateItemQuantity(e: WechatMiniprogram.CustomEvent) {
         const { itemId, quantity } = e.currentTarget.dataset
         try {
             this.applyOptimisticCartItemChange(itemId, quantity)
             if (quantity <= 0) {
-                await removeFromCart(itemId, { loading: false })
+                await removeMenuCartItem(itemId, { loading: false })
             } else {
-                await updateCartItem(itemId, { quantity }, { loading: false })
+                await updateMenuCartItem(itemId, { quantity }, { loading: false })
             }
             this.scheduleCartSync()
         } catch (error) {
@@ -777,30 +394,18 @@ Page({
         }
     },
 
-    /**
-     * 显示/隐藏购物车
-     */
     toggleCartVisible() {
         this.setData({ cartVisible: !this.data.cartVisible })
     },
 
-    /**
-     * 显示购物车
-     */
     showCart() {
         this.setData({ cartVisible: true })
     },
 
-    /**
-     * 隐藏购物车
-     */
     hideCart() {
         this.setData({ cartVisible: false })
     },
 
-    /**
-     * 去结算
-     */
     async goToCheckout() {
         const { cart, tableId, merchantId, orderType, reservationId, sessionId, billingGroupId } = this.data
 
@@ -811,7 +416,7 @@ Page({
 
         try {
             // 计算订单金额
-            await calculateCart({
+            await calculateMenuCart({
                 merchant_id: merchantId,
                 order_type: orderType,
                 table_id: this.data.tableId || undefined,
@@ -840,17 +445,11 @@ Page({
         }
     },
 
-    /**
-     * 获取购物车中菜品数量
-     */
     getCartQuantity(dishId: number): number {
         const item = this.data.cart?.items.find((item) => item.dish_id === dishId)
         return item ? item.quantity : 0
     },
 
-    /**
-     * 重试加载
-     */
     onRetry() {
         const { sessionId, reservationId, merchantId, tableId } = this.data
         if (sessionId) {
@@ -862,9 +461,6 @@ Page({
         }
     },
 
-    /**
-     * 分享菜单
-     */
     onShareAppMessage() {
         const { merchantInfo, tableId } = this.data
 
@@ -885,23 +481,18 @@ Page({
         }
     },
 
-    // ==================== 菜品加减控制 ====================
-
-    /**
-     * 增加菜品数量（无定制）
-     */
     async onIncrease(e: WechatMiniprogram.CustomEvent) {
         const dishId = e.currentTarget.dataset.id
         try {
             this.applyOptimisticDishDelta(dishId, 1)
-            await addToCart({
+            await addMenuItemToCart({
                 merchant_id: this.data.merchantId,
                 dish_id: dishId,
                 quantity: 1,
                 order_type: this.data.orderType,
                 table_id: this.data.tableId || undefined,
                 reservation_id: this.data.reservationId || undefined
-            }, { loading: false })
+            })
             this.scheduleCartSync()
         } catch (error) {
             this.loadCart()
@@ -909,9 +500,6 @@ Page({
         }
     },
 
-    /**
-     * 减少菜品数量（无定制）
-     */
     async onDecrease(e: WechatMiniprogram.CustomEvent) {
         const dishId = e.currentTarget.dataset.id
         const cartItem = this.data.cart?.items.find((i) => i.dish_id === dishId)
@@ -920,9 +508,9 @@ Page({
         try {
             this.applyOptimisticDishDelta(dishId, -1)
             if (cartItem.quantity <= 1) {
-                await removeFromCart(cartItem.id, { loading: false })
+                await removeMenuCartItem(cartItem.id, { loading: false })
             } else {
-                await updateCartItem(cartItem.id, { quantity: cartItem.quantity - 1 }, { loading: false })
+                await updateMenuCartItem(cartItem.id, { quantity: cartItem.quantity - 1 }, { loading: false })
             }
             this.scheduleCartSync()
         } catch (error) {

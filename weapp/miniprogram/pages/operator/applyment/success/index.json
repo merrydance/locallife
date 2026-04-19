@@ -1,9 +1,0 @@
-{
-  "navigationBarTitleText": "提交成功",
-  "navigationStyle": "custom",
-  "usingComponents": {
-    "custom-navbar": "/components/custom-navbar/index",
-    "t-button": "tdesign-miniprogram/button/button",
-    "t-icon": "tdesign-miniprogram/icon/icon"
-  }
-}

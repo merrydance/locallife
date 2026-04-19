@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
@@ -365,6 +366,51 @@ func TestListFavoriteDishes(t *testing.T) {
 		require.NotZero(t, fav.DishPrice)
 		require.NotEmpty(t, fav.MerchantName)
 	}
+}
+
+func TestFavoriteListQueriesUseIDTieBreaker(t *testing.T) {
+	user := createRandomUser(t)
+	tiedCreatedAt := time.Now().UTC().Truncate(time.Microsecond)
+
+	merchant1 := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
+	merchant2 := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
+	merchantFavorite1 := addFavoriteMerchantHelper(t, user.ID, merchant1.ID)
+	merchantFavorite2 := addFavoriteMerchantHelper(t, user.ID, merchant2.ID)
+
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	category := createRandomDishCategory(t)
+	dish1 := createRandomDish(t, merchant.ID, category.ID)
+	dish2 := createRandomDish(t, merchant.ID, category.ID)
+	dishFavorite1 := addFavoriteDishHelper(t, user.ID, dish1.ID)
+	dishFavorite2 := addFavoriteDishHelper(t, user.ID, dish2.ID)
+
+	_, err := testStore.(*SQLStore).connPool.Exec(context.Background(),
+		`UPDATE favorites SET created_at = $1 WHERE id = ANY($2)`,
+		tiedCreatedAt,
+		[]int64{merchantFavorite1.ID, merchantFavorite2.ID, dishFavorite1.ID, dishFavorite2.ID},
+	)
+	require.NoError(t, err)
+
+	merchantFavorites, err := testStore.ListFavoriteMerchants(context.Background(), ListFavoriteMerchantsParams{
+		UserID: user.ID,
+		Limit:  2,
+		Offset: 0,
+	})
+	require.NoError(t, err)
+	require.Len(t, merchantFavorites, 2)
+	require.Equal(t, merchantFavorite2.ID, merchantFavorites[0].ID)
+	require.Equal(t, merchantFavorite1.ID, merchantFavorites[1].ID)
+
+	dishFavorites, err := testStore.ListFavoriteDishes(context.Background(), ListFavoriteDishesParams{
+		UserID: user.ID,
+		Limit:  2,
+		Offset: 0,
+	})
+	require.NoError(t, err)
+	require.Len(t, dishFavorites, 2)
+	require.Equal(t, dishFavorite2.ID, dishFavorites[0].ID)
+	require.Equal(t, dishFavorite1.ID, dishFavorites[1].ID)
 }
 
 func TestListFavoriteDishes_Empty(t *testing.T) {

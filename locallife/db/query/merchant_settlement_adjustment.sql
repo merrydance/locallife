@@ -15,12 +15,12 @@ INSERT INTO merchant_settlement_adjustments (
 ) RETURNING *;
 
 -- name: GetMerchantSettlementAdjustmentByRelatedAndType :one
-SELECT * FROM merchant_settlement_adjustments
+SELECT id, merchant_id, adjustment_type, amount, status, related_type, related_id, note, posted_at, created_at, updated_at FROM merchant_settlement_adjustments
 WHERE related_type = $1 AND related_id = $2 AND adjustment_type = $3
 LIMIT 1;
 
 -- name: ListMerchantSettlementAdjustments :many
-SELECT * FROM merchant_settlement_adjustments
+SELECT id, merchant_id, adjustment_type, amount, status, related_type, related_id, note, posted_at, created_at, updated_at FROM merchant_settlement_adjustments
 WHERE merchant_id = sqlc.arg('merchant_id')
   AND created_at >= sqlc.arg('start_at') AND created_at <= sqlc.arg('end_at')
 ORDER BY created_at DESC

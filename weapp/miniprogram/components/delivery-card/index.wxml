@@ -1,55 +1,13 @@
-<wxs module="utils">
-  var getStatusClass = function(status) {
-    if (status == 'PENDING' || status == 'CONFIRMED' || status == 'CREATED' || status === 0) return 'orange';
-    if (status == 'ACCEPTED' || status === 1) return 'blue';
-    if (status == 'PICKED_UP' || status == 'DELIVERING' || status === 2) return 'green';
-    return 'gray';
-  }
-  
-  var getStatusText = function(status) {
-    if (status == 'PENDING' || status == 'CONFIRMED' || status == 'CREATED' || status === 0) return '新任务';
-    if (status == 'ACCEPTED' || status === 1) return '待取货';
-    if (status == 'PICKED_UP' || status == 'DELIVERING' || status === 2) return '配送中';
-    return '已完成';
-  }
-
-  var getBtnClass = function(status) {
-    if (status == 'PENDING' || status == 'CONFIRMED' || status == 'CREATED' || status === 0) return 'btn-orange';
-    if (status == 'ACCEPTED' || status === 1) return 'btn-blue';
-    if (status == 'PICKED_UP' || status == 'DELIVERING' || status === 2) return 'btn-green';
-    return 'btn-gray';
-  }
-
-  var getBtnText = function(status) {
-    if (status == 'PENDING' || status == 'CONFIRMED' || status == 'CREATED' || status === 0) return '抢单';
-    if (status == 'ACCEPTED' || status === 1) return '确认取货';
-    if (status == 'PICKED_UP' || status == 'DELIVERING' || status === 2) return '确认送达';
-    return '查看详情';
-  }
-
-  var formatMoney = function(cents) {
-    return (cents / 100).toFixed(2);
-  }
-
-  module.exports = {
-    getStatusClass: getStatusClass,
-    getStatusText: getStatusText,
-    getBtnClass: getBtnClass,
-    getBtnText: getBtnText,
-    formatMoney: formatMoney
-  }
-</wxs>
-
 <view class="delivery-card" wx:if="{{task}}">
   <!-- Header -->
   <view class="card-header">
     <view class="header-left">
       <text class="task-id">#{{task.id}}</text>
-      <t-tag size="small" variant="dark" theme="default" shape="round" class="tag {{utils.getStatusClass(task.status)}}">
-        {{utils.getStatusText(task.status)}}
+      <t-tag size="small" variant="dark" theme="default" shape="round" class="tag {{taskView.statusClass}}">
+        {{taskView.statusText}}
       </t-tag>
     </view>
-    <text class="income">¥{{utils.formatMoney(task.fee)}}</text>
+    <text class="income">¥{{taskView.incomeText}}</text>
   </view>
 
   <!-- Route Info -->
@@ -84,11 +42,11 @@
   <!-- Big Action Button -->
   <view class="action-area">
     <button 
-      class="big-btn {{utils.getBtnClass(task.status)}}" 
+      class="big-btn {{taskView.buttonClass}}" 
       bindtap="onAction"
       hover-class="btn-hover"
     >
-      {{utils.getBtnText(task.status)}}
+      {{taskView.buttonText}}
     </button>
   </view>
 </view>

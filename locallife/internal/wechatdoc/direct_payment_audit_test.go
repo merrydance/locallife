@@ -1,0 +1,512 @@
+package wechatdoc
+
+import (
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
+
+func TestAuditDirectPaymentAlignment_CoversOrderingEndpoints(t *testing.T) {
+	extraction := &Extraction{
+		Sections: []Section{
+			{
+				Heading:   "接口说明",
+				Path:      []string{"直连支付组", "JSAPI下单", "接口说明"},
+				Endpoints: []Endpoint{{Method: "POST", Path: "/v3/pay/transactions/jsapi"}},
+			},
+			{
+				Heading: "Body 参数",
+				Path:    []string{"直连支付组", "JSAPI下单", "Body 参数"},
+				Fields: []Field{
+					{Name: "appid"},
+					{Name: "mchid"},
+					{Name: "description"},
+					{Name: "out_trade_no"},
+					{Name: "time_expire", Description: "订单失效时间，遵循 RFC3339 标准格式：yyyy-MM-DDTHH:mm:ss+TIMEZONE"},
+					{Name: "attach"},
+					{Name: "notify_url"},
+					{Name: "goods_tag"},
+					{Name: "support_fapiao", EnumValues: []string{"true", "false"}},
+					{Name: "amount.total", Description: "订单总金额，单位为分"},
+					{Name: "amount.currency", EnumValues: []string{"CNY"}},
+					{Name: "payer.openid"},
+					{Name: "detail.cost_price", Description: "商品原价，单位为分"},
+					{Name: "detail.invoice_id"},
+					{Name: "detail.goods_detail.merchant_goods_id"},
+					{Name: "detail.goods_detail.wechatpay_goods_id"},
+					{Name: "detail.goods_detail.goods_name"},
+					{Name: "detail.goods_detail.quantity"},
+					{Name: "detail.goods_detail.unit_price", Description: "商品单价，单位为分"},
+					{Name: "scene_info.payer_client_ip"},
+					{Name: "scene_info.device_id"},
+					{Name: "scene_info.store_info.id"},
+					{Name: "scene_info.store_info.name"},
+					{Name: "scene_info.store_info.area_code"},
+					{Name: "scene_info.store_info.address"},
+					{Name: "settle_info.profit_sharing", EnumValues: []string{"true", "false"}},
+				},
+			},
+			{
+				Heading: "应答参数",
+				Path:    []string{"直连支付组", "JSAPI下单", "应答参数"},
+				Fields:  []Field{{Name: "prepay_id"}},
+			},
+			{
+				Heading:    "错误码",
+				Path:       []string{"直连支付组", "JSAPI下单", "错误码"},
+				ErrorCodes: []ErrorCode{{Code: "PARAM_ERROR"}, {Code: "INVALID_REQUEST"}, {Code: "APPID_MCHID_NOT_MATCH"}, {Code: "MCH_NOT_EXISTS"}, {Code: "NO_AUTH"}, {Code: "SIGN_ERROR"}, {Code: "OUT_TRADE_NO_USED"}, {Code: "FREQUENCY_LIMITED"}, {Code: "SYSTEM_ERROR"}},
+			},
+			{
+				Heading:   "接口说明",
+				Path:      []string{"直连支付组", "微信支付订单号查单", "接口说明"},
+				Endpoints: []Endpoint{{Method: "GET", Path: "/v3/pay/transactions/id/{transaction_id}"}},
+			},
+			{
+				Heading: "Path 参数",
+				Path:    []string{"直连支付组", "微信支付订单号查单", "Path 参数"},
+				Fields:  []Field{{Name: "transaction_id"}},
+			},
+			{
+				Heading: "Query 参数",
+				Path:    []string{"直连支付组", "微信支付订单号查单", "Query 参数"},
+				Fields:  []Field{{Name: "mchid"}},
+			},
+			{
+				Heading: "应答参数",
+				Path:    []string{"直连支付组", "微信支付订单号查单", "应答参数"},
+				Fields: []Field{
+					{Name: "appid"},
+					{Name: "mchid"},
+					{Name: "out_trade_no"},
+					{Name: "transaction_id"},
+					{Name: "trade_type", EnumValues: []string{"JSAPI", "NATIVE", "APP", "MICROPAY", "MWEB", "FACEPAY"}},
+					{Name: "trade_state", EnumValues: []string{"SUCCESS", "REFUND", "NOTPAY", "CLOSED", "REVOKED", "USERPAYING", "PAYERROR"}},
+					{Name: "trade_state_desc"},
+					{Name: "bank_type"},
+					{Name: "attach"},
+					{Name: "success_time", Description: "支付完成时间，遵循 RFC3339 标准格式：yyyy-MM-DDTHH:mm:ss+TIMEZONE"},
+					{Name: "payer.openid"},
+					{Name: "amount.total", Description: "总金额，单位为分"},
+					{Name: "amount.payer_total", Description: "用户支付金额，单位为分"},
+					{Name: "amount.currency", EnumValues: []string{"CNY"}},
+					{Name: "amount.payer_currency", EnumValues: []string{"CNY"}},
+					{Name: "scene_info.device_id"},
+					{Name: "promotion_detail.coupon_id"},
+					{Name: "promotion_detail.name"},
+					{Name: "promotion_detail.scope", EnumValues: []string{"GLOBAL", "SINGLE"}},
+					{Name: "promotion_detail.type", EnumValues: []string{"CASH", "NOCASH"}},
+					{Name: "promotion_detail.amount", Description: "优惠券面额，单位为分"},
+					{Name: "promotion_detail.stock_id"},
+					{Name: "promotion_detail.wechatpay_contribute", Description: "微信出资，单位为分"},
+					{Name: "promotion_detail.merchant_contribute", Description: "商户出资，单位为分"},
+					{Name: "promotion_detail.other_contribute", Description: "其他出资，单位为分"},
+					{Name: "promotion_detail.currency", EnumValues: []string{"CNY"}},
+					{Name: "promotion_detail.goods_detail.goods_id"},
+					{Name: "promotion_detail.goods_detail.quantity"},
+					{Name: "promotion_detail.goods_detail.unit_price", Description: "商品单价，单位为分"},
+					{Name: "promotion_detail.goods_detail.discount_amount", Description: "商品优惠金额，单位为分"},
+					{Name: "promotion_detail.goods_detail.goods_remark"},
+				},
+			},
+			{
+				Heading:    "错误码",
+				Path:       []string{"直连支付组", "微信支付订单号查单", "错误码"},
+				ErrorCodes: []ErrorCode{{Code: "PARAM_ERROR"}, {Code: "INVALID_REQUEST"}, {Code: "MCH_NOT_EXISTS"}, {Code: "SIGN_ERROR"}, {Code: "RULE_LIMIT"}, {Code: "TRADE_ERROR"}, {Code: "ORDER_NOT_EXIST"}, {Code: "FREQUENCY_LIMITED"}, {Code: "SYSTEM_ERROR"}},
+			},
+			{
+				Heading:   "接口说明",
+				Path:      []string{"直连支付组", "商户单号查单", "接口说明"},
+				Endpoints: []Endpoint{{Method: "GET", Path: "/v3/pay/transactions/out-trade-no/{out_trade_no}"}},
+			},
+			{
+				Heading: "Path 参数",
+				Path:    []string{"直连支付组", "商户单号查单", "Path 参数"},
+				Fields:  []Field{{Name: "out_trade_no"}},
+			},
+			{
+				Heading: "Query 参数",
+				Path:    []string{"直连支付组", "商户单号查单", "Query 参数"},
+				Fields:  []Field{{Name: "mchid"}},
+			},
+			{
+				Heading: "应答参数",
+				Path:    []string{"直连支付组", "商户单号查单", "应答参数"},
+				Fields: []Field{
+					{Name: "appid"},
+					{Name: "mchid"},
+					{Name: "out_trade_no"},
+					{Name: "transaction_id"},
+					{Name: "trade_type", EnumValues: []string{"JSAPI", "NATIVE", "APP", "MICROPAY", "MWEB", "FACEPAY"}},
+					{Name: "trade_state", EnumValues: []string{"SUCCESS", "REFUND", "NOTPAY", "CLOSED", "REVOKED", "USERPAYING", "PAYERROR"}},
+					{Name: "trade_state_desc"},
+					{Name: "bank_type"},
+					{Name: "attach"},
+					{Name: "success_time", Description: "支付完成时间，遵循 RFC3339 标准格式：yyyy-MM-DDTHH:mm:ss+TIMEZONE"},
+					{Name: "payer.openid"},
+					{Name: "amount.total", Description: "总金额，单位为分"},
+					{Name: "amount.payer_total", Description: "用户支付金额，单位为分"},
+					{Name: "amount.currency", EnumValues: []string{"CNY"}},
+					{Name: "amount.payer_currency", EnumValues: []string{"CNY"}},
+					{Name: "scene_info.device_id"},
+					{Name: "promotion_detail.coupon_id"},
+					{Name: "promotion_detail.name"},
+					{Name: "promotion_detail.scope", EnumValues: []string{"GLOBAL", "SINGLE"}},
+					{Name: "promotion_detail.type", EnumValues: []string{"CASH", "NOCASH"}},
+					{Name: "promotion_detail.amount", Description: "优惠券面额，单位为分"},
+					{Name: "promotion_detail.stock_id"},
+					{Name: "promotion_detail.wechatpay_contribute", Description: "微信出资，单位为分"},
+					{Name: "promotion_detail.merchant_contribute", Description: "商户出资，单位为分"},
+					{Name: "promotion_detail.other_contribute", Description: "其他出资，单位为分"},
+					{Name: "promotion_detail.currency", EnumValues: []string{"CNY"}},
+					{Name: "promotion_detail.goods_detail.goods_id"},
+					{Name: "promotion_detail.goods_detail.quantity"},
+					{Name: "promotion_detail.goods_detail.unit_price", Description: "商品单价，单位为分"},
+					{Name: "promotion_detail.goods_detail.discount_amount", Description: "商品优惠金额，单位为分"},
+					{Name: "promotion_detail.goods_detail.goods_remark"},
+				},
+			},
+			{
+				Heading:    "错误码",
+				Path:       []string{"直连支付组", "商户单号查单", "错误码"},
+				ErrorCodes: []ErrorCode{{Code: "PARAM_ERROR"}, {Code: "INVALID_REQUEST"}, {Code: "MCH_NOT_EXISTS"}, {Code: "SIGN_ERROR"}, {Code: "RULE_LIMIT"}, {Code: "TRADE_ERROR"}, {Code: "ORDER_NOT_EXIST"}, {Code: "FREQUENCY_LIMITED"}, {Code: "SYSTEM_ERROR"}},
+			},
+			{
+				Heading:   "接口说明",
+				Path:      []string{"直连支付组", "关闭订单", "接口说明"},
+				Endpoints: []Endpoint{{Method: "POST", Path: "/v3/pay/transactions/out-trade-no/{out_trade_no}/close"}},
+			},
+			{
+				Heading: "Path 参数",
+				Path:    []string{"直连支付组", "关闭订单", "Path 参数"},
+				Fields:  []Field{{Name: "out_trade_no"}},
+			},
+			{
+				Heading: "Body 参数",
+				Path:    []string{"直连支付组", "关闭订单", "Body 参数"},
+				Fields:  []Field{{Name: "mchid"}},
+			},
+			{
+				Heading:    "错误码",
+				Path:       []string{"直连支付组", "关闭订单", "错误码"},
+				ErrorCodes: []ErrorCode{{Code: "PARAM_ERROR"}, {Code: "INVALID_REQUEST"}, {Code: "MCH_NOT_EXISTS"}, {Code: "SIGN_ERROR"}, {Code: "RULE_LIMIT"}, {Code: "TRADE_ERROR"}, {Code: "FREQUENCY_LIMITED"}, {Code: "SYSTEM_ERROR"}},
+			},
+			{
+				Heading:   "接口说明",
+				Path:      []string{"直连支付组", "支付通知", "接口说明"},
+				Endpoints: []Endpoint{{Method: "POST", Path: "/v1/webhooks/wechat-pay/notify"}},
+			},
+			{
+				Heading: "Body 参数",
+				Path:    []string{"直连支付组", "支付通知", "Body 参数"},
+				Fields: []Field{
+					{Name: "appid"},
+					{Name: "mchid"},
+					{Name: "out_trade_no"},
+					{Name: "transaction_id"},
+					{Name: "trade_type", EnumValues: []string{"JSAPI", "NATIVE", "APP", "MICROPAY", "MWEB", "FACEPAY"}},
+					{Name: "trade_state", EnumValues: []string{"SUCCESS", "REFUND", "NOTPAY", "CLOSED", "REVOKED", "USERPAYING", "PAYERROR"}},
+					{Name: "trade_state_desc"},
+					{Name: "bank_type"},
+					{Name: "attach"},
+					{Name: "success_time", Description: "支付完成时间，遵循 RFC3339 标准格式：yyyy-MM-DDTHH:mm:ss+TIMEZONE"},
+					{Name: "payer.openid"},
+					{Name: "amount.total", Description: "总金额，单位为分"},
+					{Name: "amount.payer_total", Description: "用户支付金额，单位为分"},
+					{Name: "amount.currency", EnumValues: []string{"CNY"}},
+					{Name: "amount.payer_currency", EnumValues: []string{"CNY"}},
+					{Name: "scene_info.device_id"},
+					{Name: "promotion_detail.coupon_id"},
+					{Name: "promotion_detail.name"},
+					{Name: "promotion_detail.scope", EnumValues: []string{"GLOBAL", "SINGLE"}},
+					{Name: "promotion_detail.type", EnumValues: []string{"CASH", "NOCASH"}},
+					{Name: "promotion_detail.amount", Description: "优惠券面额，单位为分"},
+					{Name: "promotion_detail.stock_id"},
+					{Name: "promotion_detail.wechatpay_contribute", Description: "微信出资，单位为分"},
+					{Name: "promotion_detail.merchant_contribute", Description: "商户出资，单位为分"},
+					{Name: "promotion_detail.other_contribute", Description: "其他出资，单位为分"},
+					{Name: "promotion_detail.currency", EnumValues: []string{"CNY"}},
+					{Name: "promotion_detail.goods_detail.goods_id"},
+					{Name: "promotion_detail.goods_detail.quantity"},
+					{Name: "promotion_detail.goods_detail.unit_price", Description: "商品单价，单位为分"},
+					{Name: "promotion_detail.goods_detail.discount_amount", Description: "商品优惠金额，单位为分"},
+					{Name: "promotion_detail.goods_detail.goods_remark"},
+				},
+			},
+		},
+	}
+
+	report := AuditDirectPaymentAlignment(extraction)
+	require.Equal(t, "direct_payment", report.Scope)
+	require.Equal(t, 5, report.Summary.DocumentedEndpointCount)
+	require.Equal(t, 5, report.Summary.AuditedEndpointCount)
+	require.Empty(t, report.Endpoints)
+}
+
+func TestAuditDirectPaymentAlignment_CoversRefundEndpoints(t *testing.T) {
+	extraction := &Extraction{
+		Sections: []Section{
+			{
+				Heading:   "接口说明",
+				Path:      []string{"直连支付组", "申请退款", "接口说明"},
+				Endpoints: []Endpoint{{Method: "POST", Path: "/v3/refund/domestic/refunds"}},
+			},
+			{
+				Heading: "Body 参数",
+				Path:    []string{"直连支付组", "申请退款", "Body 参数"},
+				Fields: []Field{
+					{Name: "transaction_id"},
+					{Name: "out_trade_no"},
+					{Name: "out_refund_no"},
+					{Name: "reason"},
+					{Name: "notify_url"},
+					{Name: "funds_account", EnumValues: []string{"AVAILABLE", "UNSETTLED"}},
+					{Name: "amount.refund", Description: "退款金额，单位为分"},
+					{Name: "amount.from.account", EnumValues: []string{"AVAILABLE", "UNAVAILABLE"}},
+					{Name: "amount.from.amount", Description: "出资金额，单位为分"},
+					{Name: "amount.total", Description: "原订单金额，单位为分"},
+					{Name: "amount.currency", EnumValues: []string{"CNY"}},
+					{Name: "goods_detail.merchant_goods_id"},
+					{Name: "goods_detail.wechatpay_goods_id"},
+					{Name: "goods_detail.goods_name"},
+					{Name: "goods_detail.unit_price", Description: "商品单价，单位为分"},
+					{Name: "goods_detail.refund_amount", Description: "商品退款金额，单位为分"},
+					{Name: "goods_detail.refund_quantity"},
+				},
+			},
+			{
+				Heading: "应答参数",
+				Path:    []string{"直连支付组", "申请退款", "应答参数"},
+				Fields: []Field{
+					{Name: "refund_id"},
+					{Name: "out_refund_no"},
+					{Name: "transaction_id"},
+					{Name: "out_trade_no"},
+					{Name: "channel", EnumValues: []string{"ORIGINAL", "BALANCE", "OTHER_BALANCE", "OTHER_BANKCARD"}},
+					{Name: "user_received_account"},
+					{Name: "success_time", Description: "退款成功时间，遵循 RFC3339 标准格式：yyyy-MM-DDTHH:mm:ss+TIMEZONE"},
+					{Name: "create_time", Description: "退款创建时间，遵循 RFC3339 标准格式：yyyy-MM-DDTHH:mm:ss+TIMEZONE"},
+					{Name: "status", EnumValues: []string{"SUCCESS", "CLOSED", "PROCESSING", "ABNORMAL"}},
+					{Name: "funds_account", EnumValues: []string{"UNSETTLED", "AVAILABLE", "UNAVAILABLE", "OPERATION", "BASIC", "ECNY_BASIC"}},
+					{Name: "amount.total", Description: "订单总金额，单位为分"},
+					{Name: "amount.refund", Description: "退款金额，单位为分"},
+					{Name: "amount.from.account", EnumValues: []string{"AVAILABLE", "UNAVAILABLE"}},
+					{Name: "amount.from.amount", Description: "退款出资金额，单位为分"},
+					{Name: "amount.payer_total", Description: "用户支付金额，单位为分"},
+					{Name: "amount.payer_refund", Description: "用户退款金额，单位为分"},
+					{Name: "amount.settlement_refund", Description: "应结退款金额，单位为分"},
+					{Name: "amount.settlement_total", Description: "应结订单金额，单位为分"},
+					{Name: "amount.discount_refund", Description: "优惠退款金额，单位为分"},
+					{Name: "amount.refund_fee", Description: "退款手续费，单位为分"},
+					{Name: "amount.currency", EnumValues: []string{"CNY"}},
+					{Name: "promotion_detail.promotion_id"},
+					{Name: "promotion_detail.scope", EnumValues: []string{"GLOBAL", "SINGLE"}},
+					{Name: "promotion_detail.type", EnumValues: []string{"CASH", "NOCASH"}},
+					{Name: "promotion_detail.amount", Description: "优惠金额，单位为分"},
+					{Name: "promotion_detail.refund_amount", Description: "优惠退款金额，单位为分"},
+					{Name: "promotion_detail.goods_detail.merchant_goods_id"},
+					{Name: "promotion_detail.goods_detail.wechatpay_goods_id"},
+					{Name: "promotion_detail.goods_detail.goods_name"},
+					{Name: "promotion_detail.goods_detail.unit_price", Description: "商品单价，单位为分"},
+					{Name: "promotion_detail.goods_detail.refund_amount", Description: "商品退款金额，单位为分"},
+					{Name: "promotion_detail.goods_detail.refund_quantity"},
+				},
+			},
+			{
+				Heading:    "错误码",
+				Path:       []string{"直连支付组", "申请退款", "错误码"},
+				ErrorCodes: []ErrorCode{{Code: "PARAM_ERROR"}, {Code: "INVALID_REQUEST"}, {Code: "SIGN_ERROR"}, {Code: "NOT_ENOUGH"}, {Code: "USER_ACCOUNT_ABNORMAL"}, {Code: "MCH_NOT_EXISTS"}, {Code: "RESOURCE_NOT_EXISTS"}, {Code: "FREQUENCY_LIMITED"}, {Code: "SYSTEM_ERROR"}},
+			},
+			{
+				Heading:   "接口说明",
+				Path:      []string{"直连支付组", "查退款", "接口说明"},
+				Endpoints: []Endpoint{{Method: "GET", Path: "/v3/refund/domestic/refunds/{out_refund_no}"}},
+			},
+			{
+				Heading: "Path 参数",
+				Path:    []string{"直连支付组", "查退款", "Path 参数"},
+				Fields:  []Field{{Name: "out_refund_no"}},
+			},
+			{
+				Heading: "应答参数",
+				Path:    []string{"直连支付组", "查退款", "应答参数"},
+				Fields: []Field{
+					{Name: "refund_id"}, {Name: "out_refund_no"}, {Name: "transaction_id"}, {Name: "out_trade_no"},
+					{Name: "channel", EnumValues: []string{"ORIGINAL", "BALANCE", "OTHER_BALANCE", "OTHER_BANKCARD"}},
+					{Name: "user_received_account"},
+					{Name: "success_time", Description: "退款成功时间，遵循 RFC3339 标准格式：yyyy-MM-DDTHH:mm:ss+TIMEZONE"},
+					{Name: "create_time", Description: "退款创建时间，遵循 RFC3339 标准格式：yyyy-MM-DDTHH:mm:ss+TIMEZONE"},
+					{Name: "status", EnumValues: []string{"SUCCESS", "CLOSED", "PROCESSING", "ABNORMAL"}},
+					{Name: "funds_account", EnumValues: []string{"UNSETTLED", "AVAILABLE", "UNAVAILABLE", "OPERATION", "BASIC", "ECNY_BASIC"}},
+					{Name: "amount.total", Description: "订单总金额，单位为分"},
+					{Name: "amount.refund", Description: "退款金额，单位为分"},
+					{Name: "amount.from.account", EnumValues: []string{"AVAILABLE", "UNAVAILABLE"}},
+					{Name: "amount.from.amount", Description: "退款出资金额，单位为分"},
+					{Name: "amount.payer_total", Description: "用户支付金额，单位为分"},
+					{Name: "amount.payer_refund", Description: "用户退款金额，单位为分"},
+					{Name: "amount.settlement_refund", Description: "应结退款金额，单位为分"},
+					{Name: "amount.settlement_total", Description: "应结订单金额，单位为分"},
+					{Name: "amount.discount_refund", Description: "优惠退款金额，单位为分"},
+					{Name: "amount.refund_fee", Description: "退款手续费，单位为分"},
+					{Name: "amount.currency", EnumValues: []string{"CNY"}},
+					{Name: "promotion_detail.promotion_id"},
+					{Name: "promotion_detail.scope", EnumValues: []string{"GLOBAL", "SINGLE"}},
+					{Name: "promotion_detail.type", EnumValues: []string{"CASH", "NOCASH"}},
+					{Name: "promotion_detail.amount", Description: "优惠金额，单位为分"},
+					{Name: "promotion_detail.refund_amount", Description: "优惠退款金额，单位为分"},
+					{Name: "promotion_detail.goods_detail.merchant_goods_id"},
+					{Name: "promotion_detail.goods_detail.wechatpay_goods_id"},
+					{Name: "promotion_detail.goods_detail.goods_name"},
+					{Name: "promotion_detail.goods_detail.unit_price", Description: "商品单价，单位为分"},
+					{Name: "promotion_detail.goods_detail.refund_amount", Description: "商品退款金额，单位为分"},
+					{Name: "promotion_detail.goods_detail.refund_quantity"},
+				},
+			},
+			{
+				Heading:    "错误码",
+				Path:       []string{"直连支付组", "查退款", "错误码"},
+				ErrorCodes: []ErrorCode{{Code: "PARAM_ERROR"}, {Code: "INVALID_REQUEST"}, {Code: "SIGN_ERROR"}, {Code: "MCH_NOT_EXISTS"}, {Code: "RESOURCE_NOT_EXISTS"}, {Code: "FREQUENCY_LIMITED"}, {Code: "SYSTEM_ERROR"}},
+			},
+			{
+				Heading:   "接口说明",
+				Path:      []string{"直连支付组", "异常退款", "接口说明"},
+				Endpoints: []Endpoint{{Method: "POST", Path: "/v3/refund/domestic/refunds/{refund_id}/apply-abnormal-refund"}},
+			},
+			{
+				Heading: "请求参数",
+				Path:    []string{"直连支付组", "异常退款", "请求参数"},
+				Fields: []Field{
+					{Name: "refund_id"},
+					{Name: "out_refund_no"},
+					{Name: "type", EnumValues: []string{"USER_BANK_CARD", "MERCHANT_BANK_CARD"}},
+					{Name: "bank_type"},
+					{Name: "bank_account"},
+					{Name: "real_name"},
+				},
+			},
+			{
+				Heading: "应答参数",
+				Path:    []string{"直连支付组", "异常退款", "应答参数"},
+				Fields: []Field{
+					{Name: "refund_id"}, {Name: "out_refund_no"}, {Name: "transaction_id"}, {Name: "out_trade_no"},
+					{Name: "channel", EnumValues: []string{"ORIGINAL", "BALANCE", "OTHER_BALANCE", "OTHER_BANKCARD"}},
+					{Name: "user_received_account"},
+					{Name: "success_time", Description: "退款成功时间，遵循 RFC3339 标准格式：yyyy-MM-DDTHH:mm:ss+TIMEZONE"},
+					{Name: "create_time", Description: "退款创建时间，遵循 RFC3339 标准格式：yyyy-MM-DDTHH:mm:ss+TIMEZONE"},
+					{Name: "status", EnumValues: []string{"SUCCESS", "CLOSED", "PROCESSING", "ABNORMAL"}},
+					{Name: "funds_account", EnumValues: []string{"UNSETTLED", "AVAILABLE", "UNAVAILABLE", "OPERATION", "BASIC", "ECNY_BASIC"}},
+					{Name: "amount.total", Description: "订单总金额，单位为分"},
+					{Name: "amount.refund", Description: "退款金额，单位为分"},
+					{Name: "amount.from.account", EnumValues: []string{"AVAILABLE", "UNAVAILABLE"}},
+					{Name: "amount.from.amount", Description: "退款出资金额，单位为分"},
+					{Name: "amount.payer_total", Description: "用户支付金额，单位为分"},
+					{Name: "amount.payer_refund", Description: "用户退款金额，单位为分"},
+					{Name: "amount.settlement_refund", Description: "应结退款金额，单位为分"},
+					{Name: "amount.settlement_total", Description: "应结订单金额，单位为分"},
+					{Name: "amount.discount_refund", Description: "优惠退款金额，单位为分"},
+					{Name: "amount.refund_fee", Description: "退款手续费，单位为分"},
+					{Name: "amount.currency", EnumValues: []string{"CNY"}},
+					{Name: "promotion_detail.promotion_id"},
+					{Name: "promotion_detail.scope", EnumValues: []string{"GLOBAL", "SINGLE"}},
+					{Name: "promotion_detail.type", EnumValues: []string{"CASH", "NOCASH"}},
+					{Name: "promotion_detail.amount", Description: "优惠金额，单位为分"},
+					{Name: "promotion_detail.refund_amount", Description: "优惠退款金额，单位为分"},
+					{Name: "promotion_detail.goods_detail.merchant_goods_id"},
+					{Name: "promotion_detail.goods_detail.wechatpay_goods_id"},
+					{Name: "promotion_detail.goods_detail.goods_name"},
+					{Name: "promotion_detail.goods_detail.unit_price", Description: "商品单价，单位为分"},
+					{Name: "promotion_detail.goods_detail.refund_amount", Description: "商品退款金额，单位为分"},
+					{Name: "promotion_detail.goods_detail.refund_quantity"},
+				},
+			},
+			{
+				Heading:    "错误码",
+				Path:       []string{"直连支付组", "异常退款", "错误码"},
+				ErrorCodes: []ErrorCode{{Code: "PARAM_ERROR"}, {Code: "INVALID_REQUEST"}, {Code: "SIGN_ERROR"}, {Code: "RESOURCE_NOT_EXISTS"}, {Code: "FREQUENCY_LIMITED"}, {Code: "SYSTEM_ERROR"}},
+			},
+			{
+				Heading:   "接口说明",
+				Path:      []string{"直连支付组", "退款通知", "接口说明"},
+				Endpoints: []Endpoint{{Method: "POST", Path: "/v1/webhooks/wechat-pay/refund-notify"}},
+			},
+			{
+				Heading: "Body 参数",
+				Path:    []string{"直连支付组", "退款通知", "Body 参数"},
+				Fields: []Field{
+					{Name: "mchid"},
+					{Name: "out_trade_no"},
+					{Name: "transaction_id"},
+					{Name: "out_refund_no"},
+					{Name: "refund_id"},
+					{Name: "refund_status", EnumValues: []string{"SUCCESS", "CLOSED", "PROCESSING", "ABNORMAL"}},
+					{Name: "success_time", Description: "退款成功时间，遵循 RFC3339 标准格式：yyyy-MM-DDTHH:mm:ss+TIMEZONE"},
+					{Name: "user_received_account"},
+					{Name: "amount.total", Description: "订单总金额，单位为分"},
+					{Name: "amount.refund", Description: "退款金额，单位为分"},
+					{Name: "amount.payer_total", Description: "用户支付金额，单位为分"},
+					{Name: "amount.payer_refund", Description: "用户退款金额，单位为分"},
+				},
+			},
+		},
+	}
+
+	report := AuditDirectPaymentAlignment(extraction)
+	require.Equal(t, 4, report.Summary.DocumentedEndpointCount)
+	require.Equal(t, 4, report.Summary.AuditedEndpointCount)
+	require.Empty(t, report.Endpoints)
+}
+
+func TestAuditDirectPaymentAlignment_ReportsMissingSemanticConstraints(t *testing.T) {
+	extraction := &Extraction{
+		Sections: []Section{
+			{
+				Heading:   "接口说明",
+				Path:      []string{"直连支付组", "JSAPI下单", "接口说明"},
+				Endpoints: []Endpoint{{Method: "POST", Path: "/v3/pay/transactions/jsapi"}},
+			},
+			{
+				Heading: "Body 参数",
+				Path:    []string{"直连支付组", "JSAPI下单", "Body 参数"},
+				Fields: []Field{
+					{Name: "time_expire", Description: "订单失效时间"},
+					{Name: "amount.total", Description: "订单总金额"},
+				},
+			},
+			{
+				Heading:   "接口说明",
+				Path:      []string{"直连支付组", "查退款", "接口说明"},
+				Endpoints: []Endpoint{{Method: "GET", Path: "/v3/refund/domestic/refunds/{out_refund_no}"}},
+			},
+			{
+				Heading: "Path 参数",
+				Path:    []string{"直连支付组", "查退款", "Path 参数"},
+				Fields:  []Field{{Name: "out_refund_no"}},
+			},
+			{
+				Heading: "应答参数",
+				Path:    []string{"直连支付组", "查退款", "应答参数"},
+				Fields: []Field{
+					{Name: "create_time", Description: "退款创建时间"},
+					{Name: "amount.refund", Description: "退款金额"},
+				},
+			},
+		},
+	}
+
+	report := AuditDirectPaymentAlignment(extraction)
+	require.Equal(t, 2, report.Summary.MissingRequestConstraintCount)
+	require.Equal(t, 2, report.Summary.MissingResponseConstraintCount)
+
+	createAudit := findEndpointAudit(report.Endpoints, "POST", "/v3/pay/transactions/jsapi")
+	require.NotNil(t, createAudit)
+	require.Equal(t, []FieldConstraintAudit{
+		{Field: "amount.total", MissingConstraints: []string{"unit_fen"}},
+		{Field: "time_expire", MissingConstraints: []string{"format_rfc3339"}},
+	}, createAudit.MissingRequestConstraints)
+
+	queryRefundAudit := findEndpointAudit(report.Endpoints, "GET", "/v3/refund/domestic/refunds/{out_refund_no}")
+	require.NotNil(t, queryRefundAudit)
+	require.Equal(t, []FieldConstraintAudit{
+		{Field: "amount.refund", MissingConstraints: []string{"unit_fen"}},
+		{Field: "create_time", MissingConstraints: []string{"format_rfc3339"}},
+	}, queryRefundAudit.MissingResponseConstraints)
+}

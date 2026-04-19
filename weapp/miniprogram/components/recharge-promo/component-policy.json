@@ -1,0 +1,12 @@
+{
+  "purpose": "Recharge promotion teaser with amount summary, iconography, and action affordance for membership and wallet surfaces.",
+  "tdesignGroup": "data",
+  "tdesignCandidates": [
+    "button",
+    "icon",
+    "tag",
+    "loading"
+  ],
+  "decision": "local-component",
+  "rationale": "Recharge promotion display mixes financial summary formatting and membership-specific action semantics. A shared domain component keeps that interaction stable."
+}

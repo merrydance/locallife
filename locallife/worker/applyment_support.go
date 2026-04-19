@@ -6,51 +6,46 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
-	"github.com/merrydance/locallife/wechat"
+	"github.com/merrydance/locallife/logic"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 )
 
+func applymentNeedsSignFollowUp(status, signState string) bool {
+	return logic.ApplymentNeedsSignFollowUp(status, signState)
+}
+
 func mapWechatApplymentStateToStatus(wechatState string) string {
-	switch strings.TrimSpace(wechatState) {
-	case "APPLYMENT_STATE_EDITTING":
-		return "pending"
-	case "CHECKING", "ACCOUNT_NEED_VERIFY", "APPLYMENT_STATE_AUDITING", "AUDITING":
-		return "auditing"
-	case "APPLYMENT_STATE_REJECTED", "REJECTED":
-		return "rejected"
-	case "APPLYMENT_STATE_TO_BE_CONFIRMED":
-		return "to_be_confirmed"
-	case "APPLYMENT_STATE_TO_BE_SIGNED", "NEED_SIGN":
-		return "to_be_signed"
-	case "APPLYMENT_STATE_SIGNING":
-		return "signing"
-	case "APPLYMENT_STATE_FINISHED", "FINISH":
-		return "finish"
-	case "APPLYMENT_STATE_FROZEN", "FROZEN":
-		return "frozen"
-	case "APPLYMENT_STATE_CANCELED", "CANCELED":
-		return "canceled"
-	default:
-		return wechatState
-	}
+	return logic.MapWechatApplymentStateToStatus(wechatState)
 }
 
 func normalizeApplymentFollowUpStatus(status, subMchID string) string {
-	if status == "finish" && strings.TrimSpace(subMchID) == "" {
-		return "submitted"
-	}
-	return status
+	return logic.NormalizeResolvedApplymentStatus(status, strings.TrimSpace(subMchID) != "")
 }
 
 func resolveApplymentResultStatus(payload ApplymentResultPayload) string {
 	if payload.ApplymentStatus != "" {
-		return normalizeApplymentFollowUpStatus(payload.ApplymentStatus, payload.SubMchID)
+		return logic.NormalizeResolvedApplymentStatus(
+			logic.ResolveWechatApplymentStatus(payload.ApplymentStatus, payload.ApplymentState, payload.SignState),
+			strings.TrimSpace(payload.SubMchID) != "",
+		)
 	}
-	return normalizeApplymentFollowUpStatus(mapWechatApplymentStateToStatus(payload.ApplymentState), payload.SubMchID)
+	mappedStatus := mapWechatApplymentStateToStatus(payload.ApplymentState)
+	if mappedStatus == "" {
+		return ""
+	}
+	return logic.NormalizeResolvedApplymentStatus(
+		logic.ResolveWechatApplymentStatus("", payload.ApplymentState, payload.SignState),
+		strings.TrimSpace(payload.SubMchID) != "",
+	)
 }
 
-func applymentStatusNeedsAsyncFollowUp(status string) bool {
+func applymentStatusNeedsAsyncFollowUp(status, signState string) bool {
+	if applymentNeedsSignFollowUp(status, signState) {
+		return true
+	}
+
 	switch status {
-	case "finish", "rejected", "to_be_confirmed", "to_be_signed":
+	case "finish", "rejected", "account_need_verify", "to_be_confirmed", "to_be_signed", "frozen", "canceled":
 		return true
 	default:
 		return false
@@ -59,14 +54,14 @@ func applymentStatusNeedsAsyncFollowUp(status string) bool {
 
 func applymentStatusNeedsRemoteQuery(status string) bool {
 	switch status {
-	case "submitted", "auditing", "to_be_confirmed", "to_be_signed", "signing":
+	case "submitted", "checking", "auditing", "account_need_verify", "to_be_confirmed", "to_be_signed", "signing":
 		return true
 	default:
 		return false
 	}
 }
 
-func getRejectReasonFromApplymentAuditDetail(details []wechat.ApplymentAuditDetail) pgtype.Text {
+func getRejectReasonFromApplymentAuditDetail(details []wechatcontracts.ApplymentAuditDetail) pgtype.Text {
 	if len(details) == 0 {
 		return pgtype.Text{}
 	}
@@ -86,12 +81,13 @@ func textValue(value pgtype.Text) string {
 	return value.String
 }
 
-func buildApplymentResultPayload(record db.EcommerceApplymentPendingFollowUp, applymentState, applymentStatus, subMchID string) *ApplymentResultPayload {
+func buildApplymentResultPayload(record db.EcommerceApplymentPendingFollowUp, applymentState, applymentStatus, signState, subMchID string) *ApplymentResultPayload {
 	return &ApplymentResultPayload{
 		ApplymentID:     record.ID,
 		OutRequestNo:    record.OutRequestNo,
 		ApplymentState:  applymentState,
 		ApplymentStatus: normalizeApplymentFollowUpStatus(applymentStatus, subMchID),
+		SignState:       strings.TrimSpace(signState),
 		SubMchID:        strings.TrimSpace(subMchID),
 		SubjectType:     record.SubjectType,
 		SubjectID:       record.SubjectID,

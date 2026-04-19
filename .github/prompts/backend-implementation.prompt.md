@@ -7,7 +7,7 @@ description: "Use when drafting a normal backend implementation request for loca
 Use this template when asking for a concrete backend change in `locallife/`.
 
 Use the backend row in `.github/standards/engineering/AI_PROMPT_GOVERNANCE.md` as the shared source for must-push items, prohibited shortcuts, and review-ready hand-off expectations.
-Use `.github/standards/backend/BACKEND_RISK_MAP.md` to identify repo-specific hot paths before changing payment, refund, delivery, reservation, callback, worker, or scheduler behavior.
+Use `.github/standards/backend/README.md` plus the matching domain README to identify repo-specific hot paths before changing payment, refund, delivery, reservation, callback, worker, or scheduler behavior.
 Use `.github/standards/backend/WORKFLOW_AND_VALIDATION.md` as the canonical source for regeneration triggers, safety regressions, and common validation commands.
 Use `.github/standards/backend/BACKEND_CHANGE_SAFETY_CHECKLIST.md` before claiming a non-trivial backend task is complete.
 
@@ -31,7 +31,7 @@ Required context:
 Optional context:
 
 - Existing reference implementation: <path>
-- Related domain docs: `.github/standards/backend/AGENT.md`, `.github/standards/backend/SYSTEM_PROMPT.md`, `.github/standards/backend/API_CONTRACT_STANDARDS.md`, `.github/standards/backend/BACKEND_RISK_MAP.md`
+- Related domain docs: `.github/standards/backend/AGENT.md`, `.github/standards/backend/SYSTEM_PROMPT.md`, `.github/standards/backend/API_CONTRACT_STANDARDS.md`, `.github/standards/backend/README.md`, `.github/standards/domains/wechat-payment/README.md`
 
 Acceptance checklist:
 

@@ -13,26 +13,26 @@ RETURNING *;
 
 -- name: GetOperatorApplicationDraft :one
 -- 获取用户的草稿或可编辑申请（排除已通过的）
-SELECT * FROM operator_applications
+SELECT id, user_id, region_id, name, contact_name, contact_phone, business_license_number, business_license_ocr, legal_person_name, legal_person_id_number, id_card_front_ocr, id_card_back_ocr, requested_contract_years, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, business_license_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id FROM operator_applications
 WHERE user_id = $1 AND status IN ('draft', 'rejected')
 ORDER BY created_at DESC
 LIMIT 1;
 
 -- name: GetOperatorApplicationByID :one
 -- 通过ID获取申请
-SELECT * FROM operator_applications
+SELECT id, user_id, region_id, name, contact_name, contact_phone, business_license_number, business_license_ocr, legal_person_name, legal_person_id_number, id_card_front_ocr, id_card_back_ocr, requested_contract_years, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, business_license_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id FROM operator_applications
 WHERE id = $1;
 
 -- name: GetOperatorApplicationByUserID :one
 -- 获取用户的任意状态申请
-SELECT * FROM operator_applications
+SELECT id, user_id, region_id, name, contact_name, contact_phone, business_license_number, business_license_ocr, legal_person_name, legal_person_id_number, id_card_front_ocr, id_card_back_ocr, requested_contract_years, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, business_license_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id FROM operator_applications
 WHERE user_id = $1
 ORDER BY created_at DESC
 LIMIT 1;
 
 -- name: GetPendingOperatorApplicationByRegion :one
 -- 检查区域是否有待审核或已通过的申请（用于区域独占检查）
-SELECT * FROM operator_applications
+SELECT id, user_id, region_id, name, contact_name, contact_phone, business_license_number, business_license_ocr, legal_person_name, legal_person_id_number, id_card_front_ocr, id_card_back_ocr, requested_contract_years, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, business_license_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id FROM operator_applications
 WHERE region_id = $1 AND status IN ('submitted', 'approved')
 LIMIT 1;
 
@@ -170,7 +170,7 @@ RETURNING *;
 -- name: ListPendingOperatorApplications :many
 -- 列出申请（平台管理员用，包含 submitted/approved/rejected）
 SELECT 
-  oa.*,
+  oa.id, oa.user_id, oa.region_id, oa.name, oa.contact_name, oa.contact_phone, oa.business_license_number, oa.business_license_ocr, oa.legal_person_name, oa.legal_person_id_number, oa.id_card_front_ocr, oa.id_card_back_ocr, oa.requested_contract_years, oa.status, oa.reject_reason, oa.reviewed_by, oa.reviewed_at, oa.created_at, oa.updated_at, oa.submitted_at, oa.business_license_media_asset_id, oa.id_card_front_media_asset_id, oa.id_card_back_media_asset_id,
   u.full_name as applicant_name,
   u.phone as applicant_phone,
   r.name as region_name,
@@ -179,7 +179,7 @@ FROM operator_applications oa
 LEFT JOIN users u ON u.id = oa.user_id
 JOIN regions r ON r.id = oa.region_id
 WHERE oa.status IN ('submitted', 'approved', 'rejected')
-ORDER BY COALESCE(oa.submitted_at, oa.updated_at, oa.created_at) DESC
+ORDER BY COALESCE(oa.submitted_at, oa.updated_at, oa.created_at) DESC, oa.id DESC
 LIMIT $1 OFFSET $2;
 
 -- name: CountPendingOperatorApplications :one
@@ -190,11 +190,11 @@ WHERE status IN ('submitted', 'approved', 'rejected');
 -- name: ListOperatorApplications :many
 -- 列出所有申请（支持状态筛选）
 SELECT 
-  oa.*,
+  oa.id, oa.user_id, oa.region_id, oa.name, oa.contact_name, oa.contact_phone, oa.business_license_number, oa.business_license_ocr, oa.legal_person_name, oa.legal_person_id_number, oa.id_card_front_ocr, oa.id_card_back_ocr, oa.requested_contract_years, oa.status, oa.reject_reason, oa.reviewed_by, oa.reviewed_at, oa.created_at, oa.updated_at, oa.submitted_at, oa.business_license_media_asset_id, oa.id_card_front_media_asset_id, oa.id_card_back_media_asset_id,
   r.name as region_name,
   r.code as region_code
 FROM operator_applications oa
 JOIN regions r ON r.id = oa.region_id
 WHERE (sqlc.narg(status)::text IS NULL OR oa.status = sqlc.narg(status))
-ORDER BY oa.created_at DESC
+ORDER BY oa.created_at DESC, oa.id DESC
 LIMIT $1 OFFSET $2;

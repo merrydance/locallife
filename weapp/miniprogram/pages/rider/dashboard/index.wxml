@@ -1,12 +1,9 @@
 <custom-navbar title="骑手工作台" showBack="{{true}}" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px">
+<view class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px;">
   <view wx:if="{{initError && !loading}}" class="console-error-banner">
-    <view class="console-error-banner__body">
-      <t-icon name="error-circle" size="32rpx" color="var(--td-warning-color-7)" />
-      <text class="console-error-banner__text">{{initError}}</text>
-    </view>
-    <t-button wx:if="{{initErrorCanRetry}}" theme="primary" shape="round" size="small" bindtap="onRetryLoad">重新加载</t-button>
+    <t-notice-bar theme="warning" visible="{{true}}" content="{{initError}}" />
+    <t-button wx:if="{{initErrorCanRetry}}" theme="primary" bindtap="onRetryLoad">重新加载</t-button>
   </view>
 
   <!-- 1. 骑手状态与简报 -->
@@ -58,8 +55,8 @@
           <text class="runtime-status-desc">{{locationStatusText}} · {{locationUpdatedText}}</text>
           <text class="runtime-status-pending" wx:if="{{locationPendingText}}">{{locationPendingText}}</text>
         </view>
-        <t-button wx:if="{{locationNeedsPermission}}" theme="primary" variant="outline" size="small" shape="round" bindtap="onResolveLocationPermission">开启定位</t-button>
-        <t-button wx:else theme="primary" variant="text" size="small" shape="round" bindtap="onRetryLocationSync">刷新</t-button>
+        <t-button wx:if="{{locationNeedsPermission}}" theme="primary" variant="outline" size="small" bindtap="onResolveLocationPermission">开启定位</t-button>
+        <t-button wx:else theme="primary" variant="text" size="small" bindtap="onRetryLocationSync">刷新</t-button>
       </view>
     </view>
   </t-sticky>
@@ -75,7 +72,7 @@
         <text class="online-reminder-tip">补足押金后回到此页，再打开上线开关即可。</text>
       </view>
     </view>
-    <t-button theme="primary" variant="outline" size="small" shape="round" bindtap="onGoToWallet">去充值</t-button>
+    <t-button theme="primary" variant="outline" size="small" bindtap="onGoToWallet">去充值</t-button>
   </view>
 
   <!-- 3. 任务分类 (Tabs) -->
@@ -86,7 +83,7 @@
           <view class="current-mission-title">当前任务</view>
           <view class="current-mission-subtitle">优先处理手上订单，再返回抢单大厅</view>
         </view>
-        <t-tag theme="{{currentDelivery.status === 'assigned' || currentDelivery.status === 'picking' ? 'warning' : 'success'}}" variant="dark" size="small">{{currentDelivery.status_desc}}</t-tag>
+        <t-tag theme="{{currentDelivery.status_tag_theme}}" variant="dark" size="small">{{currentDelivery.status_desc}}</t-tag>
       </view>
 
       <view class="current-mission-route">
@@ -119,8 +116,8 @@
       </view>
 
       <view class="current-mission-actions">
-        <t-button theme="primary" variant="outline" size="medium" shape="round" bindtap="onGoToDetail" data-order-id="{{currentDelivery.order_id}}">查看详情</t-button>
-        <t-button theme="primary" size="medium" shape="round" bindtap="onGoToNavigation" data-order-id="{{currentDelivery.order_id}}">进入导航</t-button>
+        <t-button theme="primary" variant="outline" bindtap="onGoToDetail" data-order-id="{{currentDelivery.order_id}}">查看详情</t-button>
+        <t-button theme="primary" bindtap="onGoToNavigation" data-order-id="{{currentDelivery.order_id}}">进入导航</t-button>
       </view>
     </view>
 
@@ -237,9 +234,7 @@
               <view class="order-footer">
                 <t-button 
                   theme="primary" 
-                  size="medium" 
                   block
-                  shape="round" 
                   catchtap="onGrabOrder" 
                   data-order-id="{{item.order_id}}"
                 >立即抢单</t-button>
@@ -258,7 +253,7 @@
             icon="info-circle" 
             description="{{isOnline ? '附近暂无可接订单' : '请先上线后再刷新订单'}}" 
           >
-            <t-button wx:if="{{isOnline}}" theme="primary" variant="outline" size="medium" shape="round" bindtap="onRefreshHall">刷新大厅</t-button>
+            <t-button wx:if="{{isOnline}}" theme="primary" variant="outline" bindtap="onRefreshHall">刷新大厅</t-button>
           </t-empty>
         </view>
       </t-tab-panel>
@@ -286,14 +281,14 @@
             >
               <view class="order-header">
                 <view class="status-left">
-                  <t-tag theme="{{item.status === 'assigned' || item.status === 'picking' ? 'warning' : 'success'}}" variant="dark" size="small">{{item.status_desc}}</t-tag>
+                  <t-tag theme="{{item.status_tag_theme}}" variant="dark" size="small">{{item.status_desc}}</t-tag>
                   <text class="item-count" wx:if="{{item.item_count > 0}}">{{item.item_count}}件商品</text>
                 </view>
                 <view class="order-no">#{{item.order_no || item.order_id}}</view>
               </view>
 
               <view class="order-route">
-                 <view class="route-item pickup {{item.status === 'picked' || item.status === 'delivering' ? 'finished' : ''}}">
+                 <view class="route-item pickup {{item.is_pickup_finished ? 'finished' : ''}}">
                   <view class="marker-dot orange"></view>
                   <view class="addr-box">
                     <view class="addr-name">{{item.merchant_name || item.pickup_address}}</view>
@@ -364,8 +359,8 @@
                   <text class="location-runtime-pending" wx:if="{{locationPendingText}}">{{locationPendingText}}</text>
                 </view>
                 <view class="location-runtime-actions">
-                  <t-button wx:if="{{locationNeedsPermission}}" theme="primary" variant="outline" size="small" shape="round" catchtap="onResolveLocationPermission">开启定位</t-button>
-                  <t-button wx:else theme="primary" variant="text" size="small" shape="round" catchtap="onRetryLocationSync">刷新</t-button>
+                  <t-button wx:if="{{locationNeedsPermission}}" theme="primary" variant="outline" size="small" catchtap="onResolveLocationPermission">开启定位</t-button>
+                  <t-button wx:else theme="primary" variant="text" size="small" catchtap="onRetryLocationSync">刷新</t-button>
                 </view>
               </view>
 
@@ -375,10 +370,10 @@
                    <text class="price">¥{{item.rider_earnings / 100}}</text>
                 </view>
                 <view class="action-btns">
-                  <t-button wx:if="{{item.status === 'assigned'}}" theme="primary" size="medium" shape="round" block data-id="{{item.id}}" data-action="startPickup" catchtap="onUpdateStatus">我已到店</t-button>
-                  <t-button wx:if="{{item.status === 'picking'}}" theme="warning" size="medium" shape="round" block data-id="{{item.id}}" data-action="confirmPickup" catchtap="onUpdateStatus">确认取餐</t-button>
-                  <t-button wx:if="{{item.status === 'picked'}}" theme="primary" size="medium" shape="round" block data-id="{{item.id}}" data-action="startDelivery" catchtap="onUpdateStatus">开始配送</t-button>
-                  <t-button wx:if="{{item.status === 'delivering'}}" theme="primary" size="medium" shape="round" block data-id="{{item.id}}" data-action="confirmDelivery" catchtap="onUpdateStatus">确认送达</t-button>
+                  <t-button wx:if="{{item.can_start_pickup}}" theme="primary" block data-id="{{item.id}}" data-action="startPickup" catchtap="onUpdateStatus">我已到店</t-button>
+                  <t-button wx:if="{{item.can_confirm_pickup}}" theme="warning" block data-id="{{item.id}}" data-action="confirmPickup" catchtap="onUpdateStatus">确认取餐</t-button>
+                  <t-button wx:if="{{item.can_start_delivery}}" theme="primary" block data-id="{{item.id}}" data-action="startDelivery" catchtap="onUpdateStatus">开始配送</t-button>
+                  <t-button wx:if="{{item.can_confirm_delivery}}" theme="primary" block data-id="{{item.id}}" data-action="confirmDelivery" catchtap="onUpdateStatus">确认送达</t-button>
                 </view>
               </view>
             </view>
@@ -391,7 +386,7 @@
           />
 
           <t-empty wx:elif="{{!loading}}" icon="info-circle" description="当前没有进行中的任务">
-            <t-button theme="primary" shape="round" size="medium" bindtap="onSwitchToHall">去抢单大厅</t-button>
+            <t-button theme="primary" bindtap="onSwitchToHall">去抢单大厅</t-button>
           </t-empty>
         </view>
       </t-tab-panel>

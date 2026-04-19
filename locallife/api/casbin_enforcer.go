@@ -377,7 +377,7 @@ func (server *Server) LoadOperatorMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		// 检查 operator 状态：审核通过后即可访问运营商页面；仅资金能力依赖微信开户
+		// 检查 operator 状态：审核通过后即可访问运营商页面；资金能力单独受支付配置状态约束
 		if !isOperatorConsoleAccessibleStatus(operator.Status) {
 			ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
 				errors.New("operator account is not available"),

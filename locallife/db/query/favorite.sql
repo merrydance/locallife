@@ -34,7 +34,7 @@ FROM favorites f
 JOIN merchants m ON m.id = f.merchant_id
 LEFT JOIN merchant_profiles mp ON mp.merchant_id = m.id
 WHERE f.user_id = $1 AND f.favorite_type = 'merchant'
-ORDER BY f.created_at DESC
+ORDER BY f.created_at DESC, f.id DESC
 LIMIT $2 OFFSET $3;
 
 -- name: CountFavoriteMerchants :one
@@ -59,7 +59,7 @@ FROM favorites f
 JOIN dishes d ON d.id = f.dish_id
 JOIN merchants m ON m.id = d.merchant_id
 WHERE f.user_id = $1 AND f.favorite_type = 'dish'
-ORDER BY f.created_at DESC
+ORDER BY f.created_at DESC, f.id DESC
 LIMIT $2 OFFSET $3;
 
 -- name: CountFavoriteDishes :one

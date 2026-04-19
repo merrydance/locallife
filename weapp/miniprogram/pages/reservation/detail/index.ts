@@ -1,5 +1,5 @@
 import { ReservationService } from '../../../api/reservation'
-import { processPayment, PaymentCancelledError } from '../../../api/payment'
+import { processPayment, PaymentCancelledError, isPaymentProcessFailed, isPaymentProcessSuccessful } from '../../../api/payment'
 import Navigation from '../../../utils/navigation'
 import { ReservationCardAdapter, ReservationDetailViewModel } from '../../../adapters/reservation-card'
 import { logger } from '../../../utils/logger'
@@ -156,11 +156,14 @@ Page({
         this.setData({ paying: true })
         try {
             const paymentResult = await processPayment(this.data.reservation.id, 'reservation')
+            const paymentOutcome = isPaymentProcessSuccessful(paymentResult)
+                ? 'success'
+                : (isPaymentProcessFailed(paymentResult) ? 'failed' : 'unknown')
 
             Navigation.toReservationPaymentResult({
                 reservationId: String(this.data.id),
                 amount: this.data.reservation.depositDisplay?.replace('¥', '') || '0.00',
-                result: paymentResult.status === 'paid' ? 'success' : paymentResult.status,
+                result: paymentOutcome,
                 source: 'detail'
             })
         } catch (e) {

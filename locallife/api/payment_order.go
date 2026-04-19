@@ -13,6 +13,7 @@ import (
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/util"
 	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	"github.com/merrydance/locallife/worker"
 
 	"github.com/gin-gonic/gin"
@@ -32,12 +33,11 @@ const (
 
 // 业务类型常量
 const (
-	BusinessTypeOrder              = "order"               // 订单支付
-	BusinessTypeReservation        = "reservation"         // 预定押金
-	BusinessTypeReservationAddon   = "reservation_addon"   // 预定加菜补差
-	BusinessTypeMembershipRecharge = "membership_recharge" // 会员充值
-	BusinessTypeRiderDeposit       = "rider_deposit"       // 骑手押金
-	BusinessTypeClaimRecovery      = "claim_recovery"      // 索赔追偿支付
+	BusinessTypeOrder            = "order"             // 订单支付
+	BusinessTypeReservation      = "reservation"       // 预定押金
+	BusinessTypeReservationAddon = "reservation_addon" // 预定加菜补差
+	BusinessTypeRiderDeposit     = "rider_deposit"     // 骑手押金
+	BusinessTypeClaimRecovery    = "claim_recovery"    // 索赔追偿支付
 )
 
 // 支付状态常量
@@ -53,7 +53,7 @@ const (
 
 type createPaymentOrderRequest struct {
 	OrderID      int64  `json:"order_id" binding:"required,min=1"`
-	PaymentType  string `json:"payment_type" binding:"omitempty,oneof=native miniprogram"`
+	PaymentType  string `json:"payment_type" binding:"omitempty,oneof=miniprogram"`
 	BusinessType string `json:"business_type" binding:"required,oneof=order reservation"`
 }
 
@@ -70,6 +70,116 @@ type paymentOrderResponse struct {
 	PayParams    *miniProgramPayParams `json:"pay_params,omitempty"` // 小程序调起支付参数
 	PaidAt       *time.Time            `json:"paid_at,omitempty"`
 	CreatedAt    time.Time             `json:"created_at"`
+}
+
+type paymentOrderQueryResponse struct {
+	ID           int64                          `json:"id"`
+	OrderID      *int64                         `json:"order_id,omitempty"`
+	UserID       int64                          `json:"user_id"`
+	PaymentType  string                         `json:"payment_type"`
+	BusinessType string                         `json:"business_type"`
+	Amount       int64                          `json:"amount"`
+	OutTradeNo   string                         `json:"out_trade_no"`
+	Status       string                         `json:"status"`
+	PrepayID     *string                        `json:"prepay_id,omitempty"`
+	PayParams    *miniProgramPayParams          `json:"pay_params,omitempty"`
+	WechatQuery  *paymentOrderWechatQueryResult `json:"wechat_query,omitempty"`
+	PaidAt       *time.Time                     `json:"paid_at,omitempty"`
+	CreatedAt    time.Time                      `json:"created_at"`
+}
+
+type paymentOrderWechatQueryResult struct {
+	SpAppID         string                              `json:"sp_appid"`
+	SpMchID         string                              `json:"sp_mchid"`
+	SubAppID        string                              `json:"sub_appid,omitempty"`
+	SubMchID        string                              `json:"sub_mchid"`
+	OutTradeNo      string                              `json:"out_trade_no"`
+	TransactionID   string                              `json:"transaction_id,omitempty"`
+	TradeType       string                              `json:"trade_type,omitempty"`
+	TradeState      string                              `json:"trade_state"`
+	TradeStateDesc  string                              `json:"trade_state_desc"`
+	BankType        string                              `json:"bank_type,omitempty"`
+	Attach          string                              `json:"attach,omitempty"`
+	SuccessTime     string                              `json:"success_time,omitempty"`
+	Payer           *paymentOrderWechatPayerResult      `json:"payer,omitempty"`
+	Amount          *paymentOrderWechatAmountResult     `json:"amount,omitempty"`
+	SceneInfo       *paymentOrderWechatSceneInfo        `json:"scene_info,omitempty"`
+	PromotionDetail []paymentOrderWechatPromotionDetail `json:"promotion_detail,omitempty"`
+}
+
+type paymentOrderWechatPayerResult struct {
+	SpOpenID  string `json:"sp_openid,omitempty"`
+	SubOpenID string `json:"sub_openid,omitempty"`
+}
+
+type paymentOrderWechatAmountResult struct {
+	Total         int64  `json:"total"`
+	PayerTotal    int64  `json:"payer_total"`
+	Currency      string `json:"currency,omitempty"`
+	PayerCurrency string `json:"payer_currency,omitempty"`
+}
+
+type paymentOrderWechatSceneInfo struct {
+	DeviceID string `json:"device_id,omitempty"`
+}
+
+type paymentOrderWechatPromotionDetail struct {
+	CouponID            string                                   `json:"coupon_id"`
+	Name                string                                   `json:"name,omitempty"`
+	Scope               string                                   `json:"scope,omitempty"`
+	Type                string                                   `json:"type,omitempty"`
+	Amount              int64                                    `json:"amount"`
+	StockID             string                                   `json:"stock_id,omitempty"`
+	WechatpayContribute int64                                    `json:"wechatpay_contribute,omitempty"`
+	MerchantContribute  int64                                    `json:"merchant_contribute,omitempty"`
+	OtherContribute     int64                                    `json:"other_contribute,omitempty"`
+	Currency            string                                   `json:"currency,omitempty"`
+	GoodsDetail         []paymentOrderWechatPromotionGoodsDetail `json:"goods_detail,omitempty"`
+}
+
+type paymentOrderWechatPromotionGoodsDetail struct {
+	GoodsID        string `json:"goods_id"`
+	Quantity       int64  `json:"quantity"`
+	UnitPrice      int64  `json:"unit_price"`
+	DiscountAmount int64  `json:"discount_amount"`
+	GoodsRemark    string `json:"goods_remark,omitempty"`
+}
+
+func newWechatPromotionDetails(details []wechatcontracts.PartnerPromotionDetail) []paymentOrderWechatPromotionDetail {
+	if len(details) == 0 {
+		return nil
+	}
+
+	result := make([]paymentOrderWechatPromotionDetail, 0, len(details))
+	for _, promotion := range details {
+		item := paymentOrderWechatPromotionDetail{
+			CouponID:            promotion.CouponID,
+			Name:                promotion.Name,
+			Scope:               promotion.Scope,
+			Type:                promotion.Type,
+			Amount:              promotion.Amount,
+			StockID:             promotion.StockID,
+			WechatpayContribute: promotion.WechatpayContribute,
+			MerchantContribute:  promotion.MerchantContribute,
+			OtherContribute:     promotion.OtherContribute,
+			Currency:            promotion.Currency,
+		}
+		if len(promotion.GoodsDetail) > 0 {
+			item.GoodsDetail = make([]paymentOrderWechatPromotionGoodsDetail, 0, len(promotion.GoodsDetail))
+			for _, goods := range promotion.GoodsDetail {
+				item.GoodsDetail = append(item.GoodsDetail, paymentOrderWechatPromotionGoodsDetail{
+					GoodsID:        goods.GoodsID,
+					Quantity:       goods.Quantity,
+					UnitPrice:      goods.UnitPrice,
+					DiscountAmount: goods.DiscountAmount,
+					GoodsRemark:    goods.GoodsRemark,
+				})
+			}
+		}
+		result = append(result, item)
+	}
+
+	return result
 }
 
 type createCombinedPaymentOrderRequest struct {
@@ -109,10 +219,11 @@ type combinedPaymentWechatQueryResult struct {
 }
 
 type combinedPaymentWechatSubOrderResult struct {
-	OutTradeNo  string                            `json:"out_trade_no"`
-	TradeState  string                            `json:"trade_state"`
-	SuccessTime string                            `json:"success_time,omitempty"`
-	Amount      combinedPaymentWechatAmountResult `json:"amount"`
+	OutTradeNo      string                              `json:"out_trade_no"`
+	TradeState      string                              `json:"trade_state"`
+	SuccessTime     string                              `json:"success_time,omitempty"`
+	PromotionDetail []paymentOrderWechatPromotionDetail `json:"promotion_detail,omitempty"`
+	Amount          combinedPaymentWechatAmountResult   `json:"amount"`
 }
 
 type combinedPaymentWechatAmountResult struct {
@@ -169,6 +280,67 @@ func newMiniProgramPayParams(payParams *wechat.JSAPIPayParams) *miniProgramPayPa
 	}
 }
 
+func newPaymentOrderWechatQueryResult(query *wechatcontracts.PartnerOrderQueryResponse) *paymentOrderWechatQueryResult {
+	if query == nil {
+		return nil
+	}
+
+	resp := &paymentOrderWechatQueryResult{
+		SpAppID:        query.SpAppID,
+		SpMchID:        query.SpMchID,
+		SubAppID:       query.SubAppID,
+		SubMchID:       query.SubMchID,
+		OutTradeNo:     query.OutTradeNo,
+		TransactionID:  query.TransactionID,
+		TradeType:      query.TradeType,
+		TradeState:     query.TradeState,
+		TradeStateDesc: query.TradeStateDesc,
+		BankType:       query.BankType,
+		Attach:         query.Attach,
+		SuccessTime:    query.SuccessTime,
+	}
+
+	if query.Payer.SpOpenID != "" || query.Payer.SubOpenID != "" {
+		resp.Payer = &paymentOrderWechatPayerResult{
+			SpOpenID:  query.Payer.SpOpenID,
+			SubOpenID: query.Payer.SubOpenID,
+		}
+	}
+	if query.Amount.Total != 0 || query.Amount.PayerTotal != 0 || query.Amount.Currency != "" || query.Amount.PayerCurrency != "" {
+		resp.Amount = &paymentOrderWechatAmountResult{
+			Total:         query.Amount.Total,
+			PayerTotal:    query.Amount.PayerTotal,
+			Currency:      query.Amount.Currency,
+			PayerCurrency: query.Amount.PayerCurrency,
+		}
+	}
+	if query.SceneInfo != nil && query.SceneInfo.DeviceID != "" {
+		resp.SceneInfo = &paymentOrderWechatSceneInfo{DeviceID: query.SceneInfo.DeviceID}
+	}
+	resp.PromotionDetail = newWechatPromotionDetails(query.PromotionDetail)
+
+	return resp
+}
+
+func newPaymentOrderQueryResponse(paymentOrder db.PaymentOrder, payParams *wechat.JSAPIPayParams, query *wechatcontracts.PartnerOrderQueryResponse) paymentOrderQueryResponse {
+	base := newPaymentOrderResponse(paymentOrder)
+	return paymentOrderQueryResponse{
+		ID:           base.ID,
+		OrderID:      base.OrderID,
+		UserID:       base.UserID,
+		PaymentType:  base.PaymentType,
+		BusinessType: base.BusinessType,
+		Amount:       base.Amount,
+		OutTradeNo:   base.OutTradeNo,
+		Status:       base.Status,
+		PrepayID:     base.PrepayID,
+		PayParams:    newMiniProgramPayParams(payParams),
+		WechatQuery:  newPaymentOrderWechatQueryResult(query),
+		PaidAt:       base.PaidAt,
+		CreatedAt:    base.CreatedAt,
+	}
+}
+
 func buildCombinedPaymentOrderResponse(combinedRow db.GetCombinedPaymentOrderWithSubOrdersRow, payParams *wechat.JSAPIPayParams) (combinedPaymentOrderResponse, error) {
 	var subOrders []combinedPaymentSubOrderResponse
 	if err := json.Unmarshal(combinedRow.SubOrders, &subOrders); err != nil {
@@ -201,9 +373,10 @@ func newCombinedPaymentWechatQueryResult(query *logic.QueryCombinedPaymentWechat
 	subOrders := make([]combinedPaymentWechatSubOrderResult, 0, len(query.SubOrders))
 	for _, subOrder := range query.SubOrders {
 		subOrders = append(subOrders, combinedPaymentWechatSubOrderResult{
-			OutTradeNo:  subOrder.OutTradeNo,
-			TradeState:  subOrder.TradeState,
-			SuccessTime: subOrder.SuccessTime,
+			OutTradeNo:      subOrder.OutTradeNo,
+			TradeState:      subOrder.TradeState,
+			SuccessTime:     subOrder.SuccessTime,
+			PromotionDetail: newWechatPromotionDetails(subOrder.PromotionDetail),
 			Amount: combinedPaymentWechatAmountResult{
 				TotalAmount:   subOrder.Amount.TotalAmount,
 				PayerAmount:   subOrder.Amount.PayerAmount,
@@ -220,14 +393,9 @@ func newCombinedPaymentWechatQueryResult(query *logic.QueryCombinedPaymentWechat
 	}
 }
 
-// generateOutTradeNo 生成商户订单号
-// 格式：P + yyyyMMddHHmmss(14位) + hex随机(8位) = 23位
+// generateOutTradeNo 生成商户订单号。
 func generateOutTradeNo() (string, error) {
 	return util.GenerateOutTradeNo("P")
-}
-
-func generateOutTradeNoWithPrefix(prefix string) (string, error) {
-	return util.GenerateOutTradeNo(prefix)
 }
 
 const (
@@ -266,10 +434,7 @@ func sleepWithContext(ctx context.Context, d time.Duration) bool {
 // @Summary 创建支付订单
 // @Description 为订单或预定创建支付订单，当前主路径会按业务类型自动选择真实支付链路。
 // @Description
-// @Description **兼容字段：**
-// @Description - `payment_type` 仅作为兼容保留字段，可不传。
-// @Description - 对 `order` 和 `reservation` 主支付，系统已统一走平台收付通普通支付。
-// @Description - 旧客户端即使传入 `native` 或 `miniprogram`，也不会再改变底层支付物理链路。
+// @Description `payment_type` 为兼容字段，可不传；当前 `order` 和 `reservation` 主支付统一走平台收付通普通支付。
 // @Description
 // @Description **业务类型：**
 // @Description - order: 订单支付
@@ -300,7 +465,7 @@ func (server *Server) createPaymentOrder(ctx *gin.Context) {
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	server.normalizeCreatePaymentOrderRequest(&req, authPayload.UserID)
+	server.normalizeCreatePaymentOrderRequest(&req)
 
 	facade := server.paymentFacade
 	if facade == nil {
@@ -315,6 +480,10 @@ func (server *Server) createPaymentOrder(ctx *gin.Context) {
 		ClientIP:     ctx.ClientIP(),
 	})
 	if err != nil {
+		if isEcommerceClientNotConfigured(err) {
+			ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "商户支付能力未完成配置，请联系平台处理", "partner payment ecommerce client not configured"))
+			return
+		}
 		if writeLogicRequestError(ctx, err) {
 			return
 		}
@@ -338,28 +507,57 @@ func (server *Server) createPaymentOrder(ctx *gin.Context) {
 	ctx.JSON(http.StatusCreated, resp)
 }
 
-func (server *Server) normalizeCreatePaymentOrderRequest(req *createPaymentOrderRequest, userID int64) {
-	if req.PaymentType == "" {
-		req.PaymentType = PaymentTypeMiniProgram
+// queryPaymentOrder godoc
+// @Summary 查询支付订单远端状态
+// @Description 查询本地普通支付订单详情，并拉取微信收付通单笔支付最新状态，供小程序恢复支付或判断后续动作
+// @Tags 支付管理
+// @Accept json
+// @Produce json
+// @Param id path int true "支付订单ID"
+// @Success 200 {object} paymentOrderQueryResponse "支付订单详情(含微信远端状态)"
+// @Failure 400 {object} ErrorResponse "请求参数错误或支付单不支持该查询"
+// @Failure 401 {object} ErrorResponse "未授权"
+// @Failure 403 {object} ErrorResponse "支付订单不属于当前用户"
+// @Failure 404 {object} ErrorResponse "支付订单不存在"
+// @Failure 503 {object} ErrorResponse "支付服务不可用"
+// @Router /v1/payments/{id}/query [get]
+// @Security BearerAuth
+func (server *Server) queryPaymentOrder(ctx *gin.Context) {
+	var req getPaymentOrderRequest
+	if err := ctx.ShouldBindUri(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
 
-	entry := log.Info()
-	message := "legacy payment_type accepted for create payment order api"
-	if req.PaymentType == PaymentTypeNative {
-		entry = log.Warn()
-		message = "legacy native payment_type ignored for create payment order api"
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	facade := server.paymentFacade
+	if facade == nil {
+		facade = server.buildPaymentFacade()
 	}
 
-	entry.
-		Int64("user_id", userID).
-		Int64("order_id", req.OrderID).
-		Str("business_type", req.BusinessType).
-		Str("payment_type", req.PaymentType).
-		Bool("legacy_client_compat", true).
-		Msg(message)
+	result, err := facade.QueryPaymentOrder(ctx, logic.QueryPaymentOrderInput{
+		UserID:         authPayload.UserID,
+		PaymentOrderID: req.ID,
+	})
+	if err != nil {
+		if isEcommerceClientNotConfigured(err) {
+			ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "商户支付能力未完成配置，当前无法确认支付状态，请联系平台处理", "query payment ecommerce client not configured"))
+			return
+		}
+		if writeLogicRequestError(ctx, err) {
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
 
-	req.PaymentType = PaymentTypeMiniProgram
+	ctx.JSON(http.StatusOK, newPaymentOrderQueryResponse(result.PaymentOrder, result.PayParams, result.WechatOrder))
+}
+
+func (server *Server) normalizeCreatePaymentOrderRequest(req *createPaymentOrderRequest) {
+	if req.PaymentType == "" {
+		req.PaymentType = PaymentTypeMiniProgram
+	}
 }
 
 func (server *Server) scheduleTimeoutForPaymentOrder(ctx context.Context, paymentOrder db.PaymentOrder) {
@@ -400,6 +598,15 @@ func writeLogicRequestError(ctx *gin.Context, err error) bool {
 	if !errors.As(err, &reqErr) {
 		return false
 	}
+	logErr := logic.LoggableError(reqErr)
+	_ = ctx.Error(logErr)
+	log.Error().
+		Err(logErr).
+		Str("request_id", GetRequestID(ctx)).
+		Str("path", ctx.Request.URL.Path).
+		Str("method", ctx.Request.Method).
+		Int("status", reqErr.Status).
+		Msg("payment request rejected")
 	ctx.JSON(reqErr.Status, errorResponse(reqErr.Err))
 	return true
 }
@@ -448,7 +655,7 @@ func (server *Server) createCombinedPaymentOrder(ctx *gin.Context) {
 	})
 	if err != nil {
 		if isEcommerceClientNotConfigured(err) {
-			ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "payment service unavailable", "combined payment ecommerce client not configured"))
+			ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "合单支付能力未完成配置，请联系平台处理", "combined payment ecommerce client not configured"))
 			return
 		}
 		if writeLogicRequestError(ctx, err) {
@@ -597,7 +804,7 @@ func (server *Server) queryCombinedPaymentOrder(ctx *gin.Context) {
 	})
 	if err != nil {
 		if isEcommerceClientNotConfigured(err) {
-			ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "payment service unavailable", "query combined payment ecommerce client not configured"))
+			ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "合单支付能力未完成配置，当前无法确认支付状态，请联系平台处理", "query combined payment ecommerce client not configured"))
 			return
 		}
 		if writeLogicRequestError(ctx, err) {
@@ -656,7 +863,7 @@ func (server *Server) closeCombinedPaymentOrder(ctx *gin.Context) {
 	})
 	if err != nil {
 		if isEcommerceClientNotConfigured(err) {
-			ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "payment service unavailable", "close combined payment ecommerce client not configured"))
+			ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "合单支付能力未完成配置，当前无法关闭支付单，请联系平台处理", "close combined payment ecommerce client not configured"))
 			return
 		}
 		if writeLogicRequestError(ctx, err) {
@@ -869,6 +1076,10 @@ func (server *Server) closePaymentOrder(ctx *gin.Context) {
 		PaymentOrderID: req.ID,
 	})
 	if err != nil {
+		if isEcommerceClientNotConfigured(err) {
+			ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "支付关闭服务暂不可用，请稍后重试", "close payment ecommerce client not configured"))
+			return
+		}
 		if writeLogicRequestError(ctx, err) {
 			return
 		}

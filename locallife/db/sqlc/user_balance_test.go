@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -183,4 +184,50 @@ func TestListUserBalanceLogs(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, logs, 5)
+}
+
+func TestUserBalanceLogListsUseIDTieBreaker(t *testing.T) {
+	user := createRandomUser(t)
+	tiedCreatedAt := time.Now().UTC().Truncate(time.Microsecond)
+	var logIDs []int64
+
+	for i := 0; i < 2; i++ {
+		log, err := testStore.CreateUserBalanceLog(context.Background(), CreateUserBalanceLogParams{
+			UserID:        user.ID,
+			Type:          "claim_payout",
+			Amount:        int64(1000 * (i + 1)),
+			BalanceBefore: int64(1000 * i),
+			BalanceAfter:  int64(1000 * (i + 1)),
+		})
+		require.NoError(t, err)
+		logIDs = append(logIDs, log.ID)
+	}
+
+	_, err := testStore.(*SQLStore).connPool.Exec(context.Background(),
+		"UPDATE user_balance_logs SET created_at = $1 WHERE id = ANY($2)",
+		tiedCreatedAt,
+		logIDs,
+	)
+	require.NoError(t, err)
+
+	logs, err := testStore.ListUserBalanceLogs(context.Background(), ListUserBalanceLogsParams{
+		UserID: user.ID,
+		Limit:  2,
+		Offset: 0,
+	})
+	require.NoError(t, err)
+	require.Len(t, logs, 2)
+	require.Equal(t, logIDs[1], logs[0].ID)
+	require.Equal(t, logIDs[0], logs[1].ID)
+
+	typedLogs, err := testStore.ListUserBalanceLogsByType(context.Background(), ListUserBalanceLogsByTypeParams{
+		UserID: user.ID,
+		Type:   "claim_payout",
+		Limit:  2,
+		Offset: 0,
+	})
+	require.NoError(t, err)
+	require.Len(t, typedLogs, 2)
+	require.Equal(t, logIDs[1], typedLogs[0].ID)
+	require.Equal(t, logIDs[0], typedLogs[1].ID)
 }

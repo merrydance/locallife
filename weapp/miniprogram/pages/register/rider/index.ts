@@ -12,127 +12,30 @@ import { getPrivateMediaUrl } from '../../../utils/image-security'
 import { logger } from '../../../utils/logger'
 import Navigation from '../../../utils/navigation'
 import { buildAgreementConsentPayload } from '../../../api/agreement-consent'
-import { buildMerchantApplicationOCRStatusView, type ApplicationStatus } from '../../../api/onboarding'
+import { type ApplicationStatus } from '../../../api/onboarding'
 import { getErrorDebugMessage, getErrorUserMessage } from '../../../utils/user-facing'
+import {
+  buildRiderOCRPanelState,
+  buildRiderOcrDisplayState,
+  buildRiderUploadFeedback,
+  createUploadFeedback,
+  DEFAULT_RIDER_OCR_DISPLAY_STATE,
+  DEFAULT_RIDER_OCR_PANEL_STATE,
+  DEFAULT_RIDER_UPLOAD_FEEDBACK,
+  EMPTY_UPLOAD_FEEDBACK,
+  isDocumentCorrectionError,
+  isRejectedRiderApplication,
+  pickOCRText,
+  type OCRDisplayStateValue,
+  type RiderUploadFeedback,
+  type UploadFeedback,
+  type UploadField,
+  type UploadFieldValue
+} from '../../../utils/rider-register-view'
 
 type UploadEvent = WechatMiniprogram.CustomEvent<{ path?: string }>
 
-type UploadFieldValue = {
-  url: string
-  rawUrl?: string
-  assetId?: number
-}
-
-type OCRDisplayStateValue = 'idle' | 'processing' | 'done' | 'failed'
-
-type RiderOCRDisplayState = {
-  identity: OCRDisplayStateValue
-  health: OCRDisplayStateValue
-}
-
-type RiderOCRPanelState = {
-  identityProcessing: boolean
-  identityFailed: boolean
-  healthProcessing: boolean
-  healthFailed: boolean
-}
-
-type UploadFeedbackState = 'idle' | 'processing' | 'success' | 'error'
-
-type UploadFeedback = {
-  state: UploadFeedbackState
-  title: string
-  description: string
-}
-
-type RiderUploadFeedback = {
-  idFront: UploadFeedback
-  idBack: UploadFeedback
-  healthCert: UploadFeedback
-}
-
-type UploadField = 'idFront' | 'idBack' | 'healthCert'
-
-const DEFAULT_RIDER_OCR_DISPLAY_STATE: RiderOCRDisplayState = {
-  identity: 'idle',
-  health: 'idle'
-}
-
-const DEFAULT_RIDER_OCR_PANEL_STATE: RiderOCRPanelState = {
-  identityProcessing: false,
-  identityFailed: false,
-  healthProcessing: false,
-  healthFailed: false
-}
-
-const EMPTY_UPLOAD_FEEDBACK: UploadFeedback = {
-  state: 'idle',
-  title: '',
-  description: ''
-}
-
-const DEFAULT_RIDER_UPLOAD_FEEDBACK: RiderUploadFeedback = {
-  idFront: { ...EMPTY_UPLOAD_FEEDBACK },
-  idBack: { ...EMPTY_UPLOAD_FEEDBACK },
-  healthCert: { ...EMPTY_UPLOAD_FEEDBACK }
-}
-
 const getErrorMessage = getErrorUserMessage
-
-function createUploadFeedback(state: UploadFeedbackState, title = '', description = ''): UploadFeedback {
-  return { state, title, description }
-}
-
-function isDocumentCorrectionError(message: string): boolean {
-  return [
-    '身份证',
-    '健康证',
-    '过期',
-    '不一致',
-    '未识别',
-    '资料核验'
-  ].some((keyword) => message.includes(keyword))
-}
-
-function pickOCRText(payload: Record<string, unknown> | undefined, ...keys: string[]): string {
-  for (const key of keys) {
-    const value = payload?.[key]
-    if (typeof value === 'string' && value.trim()) {
-      return value.trim()
-    }
-  }
-  return ''
-}
-
-function hasOCRText(payload: Record<string, unknown> | undefined, ...keys: string[]): boolean {
-  return keys.some((key) => {
-    const value = payload?.[key]
-    return typeof value === 'string' && value.trim().length > 0
-  })
-}
-
-function hasHealthCertKeyFields(payload: Record<string, unknown> | undefined): boolean {
-  return hasOCRText(payload, 'name')
-    && hasOCRText(payload, 'valid_end', 'valid_date', 'valid_period')
-}
-
-function isRejectedRiderApplication(res?: RiderApplicationResponse): boolean {
-  if (!res) return false
-  const statusView = buildRiderApplicationStatusView(res.status)
-  return (statusView.isDraft || statusView.isRejected) && Boolean(res.reject_reason)
-}
-
-function buildRiderOCRPanelState(displayState: RiderOCRDisplayState): RiderOCRPanelState {
-  const identityStatusView = buildMerchantApplicationOCRStatusView(displayState.identity)
-  const healthStatusView = buildMerchantApplicationOCRStatusView(displayState.health)
-
-  return {
-    identityProcessing: identityStatusView.isPending,
-    identityFailed: identityStatusView.isFailed,
-    healthProcessing: healthStatusView.isPending,
-    healthFailed: healthStatusView.isFailed
-  }
-}
 
 Page({
   data: {
@@ -209,7 +112,7 @@ Page({
     const idCardOCR = res.id_card_ocr as Record<string, unknown> | undefined
     const healthCertOCR = res.health_cert_ocr as Record<string, unknown> | undefined
     const statusView = buildRiderApplicationStatusView(res.status)
-    const ocrDisplayState = this.buildRiderOcrDisplayState(res)
+    const ocrDisplayState = buildRiderOcrDisplayState(res, this.data)
     this.setData({
       'formData.realName': res.real_name || pickOCRText(idCardOCR, 'name') || currentForm.realName || '',
       'formData.phone': nextPhone,
@@ -227,7 +130,7 @@ Page({
       healthCert: { url: '', assetId: res.health_cert_asset_id },
       ocrDisplayState,
       ocrPanelState: buildRiderOCRPanelState(ocrDisplayState),
-      uploadFeedback: this.buildRiderUploadFeedback(res)
+      uploadFeedback: buildRiderUploadFeedback(res, this.data)
     }, () => {
       void this.refreshUploadPreviewURLs()
     })
@@ -278,11 +181,11 @@ Page({
       health_cert_asset_id: field === 'healthCert' ? res.health_cert_asset_id : this.data.healthCert.assetId
     }
 
-    const nextOCRDisplayState = this.buildRiderOcrDisplayState(mergedRes)
+    const nextOCRDisplayState = buildRiderOcrDisplayState(mergedRes, this.data)
     const nextData: Record<string, unknown> = {
       ocrDisplayState: nextOCRDisplayState,
       ocrPanelState: buildRiderOCRPanelState(nextOCRDisplayState),
-      uploadFeedback: this.buildRiderUploadFeedback(mergedRes)
+      uploadFeedback: buildRiderUploadFeedback(mergedRes, this.data)
     }
 
     if (field === 'idFront') {
@@ -305,79 +208,6 @@ Page({
     this.setData(nextData, () => {
       void this.refreshUploadPreviewURLs()
     })
-  },
-
-  buildRiderUploadFeedback(res?: RiderApplicationResponse): RiderUploadFeedback {
-    const idCardOCR = res?.id_card_ocr as Record<string, unknown> | undefined
-    const healthCertOCR = res?.health_cert_ocr as Record<string, unknown> | undefined
-    const idStatus = pickOCRText(idCardOCR, 'status')
-    const idError = pickOCRText(idCardOCR, 'error')
-    const healthStatus = pickOCRText(healthCertOCR, 'status')
-    const healthError = pickOCRText(healthCertOCR, 'error')
-    const idStatusView = buildMerchantApplicationOCRStatusView(idStatus)
-    const healthStatusView = buildMerchantApplicationOCRStatusView(healthStatus)
-
-    const idFrontUploaded = Boolean(res?.id_card_front_asset_id || this.data.idFront.assetId || this.data.idFront.url)
-    const idBackUploaded = Boolean(res?.id_card_back_asset_id || this.data.idBack.assetId || this.data.idBack.url)
-    const healthUploaded = Boolean(res?.health_cert_asset_id || this.data.healthCert.assetId || this.data.healthCert.url)
-
-    const idFrontReady = Boolean(
-      pickOCRText(idCardOCR, 'name')
-      && pickOCRText(idCardOCR, 'id_number', 'id_num')
-    )
-    const idBackReady = Boolean(pickOCRText(idCardOCR, 'valid_end', 'valid_date', 'valid_period'))
-    const healthReady = hasHealthCertKeyFields(healthCertOCR)
-    const healthWritebackFailed = healthUploaded && healthStatusView.isReady && !healthReady
-
-    return {
-      idFront: idFrontUploaded
-        ? idStatusView.isFailed
-          ? createUploadFeedback('error', '识别失败', idError || '请重新上传清晰、完整的身份证人像面')
-          : idFrontReady
-            ? createUploadFeedback('success', '识别成功', '已识别姓名和身份证号')
-            : createUploadFeedback('processing', '证照识别中', '正在识别身份证人像面信息')
-        : { ...EMPTY_UPLOAD_FEEDBACK },
-      idBack: idBackUploaded
-        ? idStatusView.isFailed
-          ? createUploadFeedback('error', '识别失败', idError || '请重新上传清晰、完整的身份证国徽面')
-          : idBackReady
-            ? createUploadFeedback('success', '识别成功', '已识别证件有效期')
-            : createUploadFeedback('processing', '证照识别中', '正在识别身份证国徽面信息')
-        : { ...EMPTY_UPLOAD_FEEDBACK },
-      healthCert: healthUploaded
-        ? healthStatusView.isFailed || healthWritebackFailed
-          ? createUploadFeedback('error', '识别失败', healthError || '健康证关键字段未识别，请重新上传清晰、无遮挡的健康证照片')
-          : healthReady
-            ? createUploadFeedback('success', '识别成功', '已识别健康证信息')
-            : createUploadFeedback('processing', '证照识别中', '正在识别健康证信息')
-        : { ...EMPTY_UPLOAD_FEEDBACK }
-    }
-  },
-
-  buildRiderOcrDisplayState(res?: RiderApplicationResponse): RiderOCRDisplayState {
-    const identityUploaded = Boolean(
-      (res?.id_card_front_asset_id || this.data.idFront.assetId || this.data.idFront.url)
-      && (res?.id_card_back_asset_id || this.data.idBack.assetId || this.data.idBack.url)
-    )
-    const healthUploaded = Boolean(res?.health_cert_asset_id || this.data.healthCert.assetId || this.data.healthCert.url)
-    const idCardOCR = res?.id_card_ocr as Record<string, unknown> | undefined
-    const healthCertOCR = res?.health_cert_ocr as Record<string, unknown> | undefined
-    const idCardStatusView = buildMerchantApplicationOCRStatusView(pickOCRText(idCardOCR, 'status'))
-    const healthStatusView = buildMerchantApplicationOCRStatusView(pickOCRText(healthCertOCR, 'status'))
-
-    const identityDone = Boolean(
-      pickOCRText(idCardOCR, 'name')
-      && pickOCRText(idCardOCR, 'id_number', 'id_num')
-      && pickOCRText(idCardOCR, 'valid_end', 'valid_date', 'valid_period')
-    )
-    const healthDone = hasHealthCertKeyFields(healthCertOCR)
-    const identityFailed = idCardStatusView.isFailed
-    const healthFailed = healthStatusView.isFailed || (healthUploaded && healthStatusView.isReady && !healthDone)
-
-    return {
-      identity: identityFailed ? 'failed' : identityDone ? 'done' : identityUploaded ? 'processing' : 'idle',
-      health: healthFailed ? 'failed' : healthDone ? 'done' : healthUploaded ? 'processing' : 'idle'
-    }
   },
 
   setOCRState(type: 'identity' | 'health', status: OCRDisplayStateValue) {

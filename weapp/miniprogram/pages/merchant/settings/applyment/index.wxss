@@ -3,11 +3,6 @@
   background: var(--td-bg-color-page);
 }
 
-.page-content {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacer-md);
-}
 
 .state-block {
   min-height: 60vh;
@@ -40,10 +35,41 @@
   gap: 0;
 }
 
+.section-top--inline {
+  flex-direction: row;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--spacer-md);
+}
+
 .section-title {
   font-size: 30rpx;
   font-weight: 600;
   color: var(--td-text-color-primary);
+}
+
+.section-subtitle {
+  font-size: 24rpx;
+  line-height: 1.7;
+  color: var(--td-text-color-secondary);
+}
+
+.section-copy {
+  font-size: 24rpx;
+  line-height: 1.7;
+  color: var(--td-text-color-secondary);
+}
+
+.section-hint {
+  font-size: 24rpx;
+  line-height: 1.7;
+  color: var(--td-text-color-secondary);
+}
+
+.action-stack {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
 }
 
 .action-row {
@@ -52,6 +78,76 @@
   gap: 16rpx;
 }
 
-.form-panel {
-  padding-bottom: var(--spacer-lg);
+.action-row--compact {
+  margin-top: calc(var(--spacer-sm) * -1);
+}
+
+.popup-panel {
+  padding: var(--spacer-lg) var(--spacer-md) calc(var(--spacer-lg) + var(--safe-area-bottom));
+  background: var(--td-bg-color-container);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+.popup-copy {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-xs);
+  margin-bottom: var(--spacer-md);
+}
+
+.popup-title {
+  font-size: var(--font-size-heading);
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+}
+
+.popup-hint {
+  font-size: var(--font-size-sm);
+  line-height: 1.7;
+  color: var(--td-text-color-secondary);
+}
+
+.qr-popup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-md);
+}
+
+.qr-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacer-sm);
+  padding: var(--spacer-md);
+  border-radius: var(--radius-md);
+  background: var(--td-bg-color-page);
+}
+
+.qr-popup-tip {
+  font-size: var(--font-size-sm);
+  line-height: 1.7;
+  color: var(--td-text-color-secondary);
+  text-align: center;
+}
+
+.popup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--spacer-sm);
+}
+
+.qr-poster-canvas-shell {
+  position: fixed;
+  left: -9999px;
+  top: -9999px;
+  width: 720px;
+  height: 960px;
+  pointer-events: none;
+  opacity: 0;
+}
+
+.qr-poster-canvas {
+  width: 720px;
+  height: 960px;
 }

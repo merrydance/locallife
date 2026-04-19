@@ -8,6 +8,7 @@
     "t-cell": "tdesign-miniprogram/cell/cell",
     "t-tag": "tdesign-miniprogram/tag/tag",
     "t-picker": "tdesign-miniprogram/picker/picker",
+    "t-picker-item": "tdesign-miniprogram/picker-item/picker-item",
     "t-input": "tdesign-miniprogram/input/input",
     "t-loading": "tdesign-miniprogram/loading/loading"
   }

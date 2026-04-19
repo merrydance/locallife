@@ -3,11 +3,6 @@
   background: var(--td-bg-color-page);
 }
 
-.page-content {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacer-md);
-}
 
 .state-block {
   min-height: 60vh;
@@ -32,12 +27,15 @@
   border-radius: var(--radius-lg);
 }
 
-.toolbar-panel,
-.section-panel,
 .entry-card {
   background: var(--td-bg-color-container);
   box-shadow: var(--shadow-sm);
   padding: var(--spacer-md);
+}
+
+.toolbar-panel,
+.section-panel {
+  padding: 0;
 }
 
 .range-group,
@@ -62,6 +60,13 @@
 
 .section-top {
   margin-bottom: var(--spacer-sm);
+}
+
+.toolbar-panel,
+.section-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-sm);
 }
 
 .range-group,
@@ -124,7 +129,8 @@
   gap: 8rpx;
   padding: 28rpx;
   border-radius: var(--radius-lg);
-  background: linear-gradient(135deg, var(--td-brand-color-1), var(--td-bg-color-container));
+  background: var(--td-bg-color-secondarycontainer);
+  border: 1rpx solid var(--td-component-border);
   box-shadow: var(--shadow-sm);
 }
 
@@ -159,7 +165,7 @@
 }
 
 .summary-card--strong {
-  background: linear-gradient(135deg, var(--td-brand-color-1), var(--td-brand-color-2));
+  background: var(--td-bg-color-secondarycontainer);
 }
 
 .summary-card--full {
@@ -181,8 +187,8 @@
 }
 
 .meta-strip {
-  background: var(--td-bg-color-page);
-  padding: 20rpx 24rpx;
+  background: transparent;
+  padding: 0;
 }
 
 .entry-grid {

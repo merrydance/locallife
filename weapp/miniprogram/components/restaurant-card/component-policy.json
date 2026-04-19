@@ -1,0 +1,10 @@
+{
+  "purpose": "Restaurant summary card for recommendation, listing, and search surfaces.",
+  "tdesignGroup": "data",
+  "tdesignCandidates": [
+    "image",
+    "tag"
+  ],
+  "decision": "local-component",
+  "rationale": "Restaurant cards package repeated merchant presentation logic such as logo, labels, distance, and open-state hints into one consistent card boundary."
+}

@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 )
 
 const (
@@ -158,7 +158,6 @@ func (server *Server) getApplymentCatalogCache() *applymentCatalogCache {
 // @Failure 401 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /v1/merchant/applyment/banks [get]
-// @Router /v1/operator/applyment/banks [get]
 // @Security BearerAuth
 func (server *Server) listApplymentBanks(ctx *gin.Context) {
 	if server.ecommerceClient == nil {
@@ -197,7 +196,6 @@ func (server *Server) listApplymentBanks(ctx *gin.Context) {
 // @Failure 401 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /v1/merchant/applyment/banks/search-by-bank-account [get]
-// @Router /v1/operator/applyment/banks/search-by-bank-account [get]
 // @Security BearerAuth
 func (server *Server) searchApplymentBanksByAccount(ctx *gin.Context) {
 	if server.ecommerceClient == nil {
@@ -248,7 +246,6 @@ func (server *Server) searchApplymentBanksByAccount(ctx *gin.Context) {
 // @Failure 401 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /v1/merchant/applyment/areas/provinces [get]
-// @Router /v1/operator/applyment/areas/provinces [get]
 // @Security BearerAuth
 func (server *Server) listApplymentProvinces(ctx *gin.Context) {
 	if server.ecommerceClient == nil {
@@ -280,7 +277,6 @@ func (server *Server) listApplymentProvinces(ctx *gin.Context) {
 // @Failure 401 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /v1/merchant/applyment/areas/provinces/{province_code}/cities [get]
-// @Router /v1/operator/applyment/areas/provinces/{province_code}/cities [get]
 // @Security BearerAuth
 func (server *Server) listApplymentCities(ctx *gin.Context) {
 	if server.ecommerceClient == nil {
@@ -319,7 +315,6 @@ func (server *Server) listApplymentCities(ctx *gin.Context) {
 // @Failure 401 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /v1/merchant/applyment/banks/{bank_alias_code}/branches [get]
-// @Router /v1/operator/applyment/banks/{bank_alias_code}/branches [get]
 // @Security BearerAuth
 func (server *Server) listApplymentBankBranches(ctx *gin.Context) {
 	if server.ecommerceClient == nil {
@@ -368,7 +363,7 @@ func (server *Server) loadApplymentBanks(ctx context.Context, accountType string
 	}
 
 	var (
-		fetch func(context.Context, int, int) (*wechat.CapitalBankListResponse, error)
+		fetch func(context.Context, int, int) (*wechatcontracts.CapitalBankListResponse, error)
 		items []applymentBankOption
 	)
 
@@ -567,7 +562,7 @@ func (server *Server) loadApplymentBranches(ctx context.Context, bankAliasCode s
 	return entry, entry.refreshed, nil
 }
 
-func mapCapitalBankOption(bank wechat.CapitalBank) applymentBankOption {
+func mapCapitalBankOption(bank wechatcontracts.CapitalBank) applymentBankOption {
 	return applymentBankOption{
 		BankAlias:       bank.BankAlias,
 		BankAliasCode:   bank.BankAliasCode,

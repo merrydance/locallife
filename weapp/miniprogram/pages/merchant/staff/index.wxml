@@ -10,7 +10,7 @@
 
   <view wx:elif="{{accessReady && accessErrorMessage}}" class="state-block">
     <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
-    <t-button theme="primary" size="small" shape="round" bindtap="onRetryAccess">重新校验</t-button>
+    <t-button theme="primary" bindtap="onRetryAccess">重新校验</t-button>
   </view>
 
   <block wx:elif="{{accessReady}}">
@@ -20,20 +20,11 @@
 
     <view wx:elif="{{initialError}}" class="state-block">
       <t-empty description="{{initialErrorMessage || '员工列表加载失败，请重试'}}" />
-      <t-button theme="primary" shape="round" bindtap="onRetry">重新加载</t-button>
+      <t-button theme="primary" bindtap="onRetry">重新加载</t-button>
     </view>
 
     <block wx:else>
     <view class="page-content">
-    <t-notice-bar
-      wx:if="{{refreshErrorMessage}}"
-      visible="{{true}}"
-      theme="warning"
-      content="{{refreshErrorMessage}}"
-      prefixIcon="error-circle"
-      t-class="page-notice"
-    />
-
     <view class="section-panel staff-summary-panel">
       <view class="section-head">
         <text class="section-title">门店协作成员</text>
@@ -61,7 +52,7 @@
 
     <view wx:if="{{!staff.length}}" class="empty-wrap">
       <t-empty description="门店还没有成员，先生成扫码邀请，让店员从“我的”页头像卡右上角的扫码入口加入。" />
-      <t-button wx:if="{{canGenerateInvite}}" theme="primary" shape="round" icon="add" bind:tap="onOpenInvitePopup">生成邀请二维码</t-button>
+      <t-button wx:if="{{canGenerateInvite}}" theme="primary" icon="add" bind:tap="onOpenInvitePopup">生成邀请二维码</t-button>
     </view>
 
     <view wx:else class="staff-list">
@@ -69,8 +60,8 @@
         <view class="staff-card-main">
           <view class="staff-header">
             <view class="staff-profile">
-              <image wx:if="{{item.avatar_url}}" class="staff-avatar" src="{{item.avatar_url}}" mode="aspectFill" />
-              <view wx:else class="staff-avatar staff-avatar-fallback">{{item.displayName.slice(0, 1)}}</view>
+              <t-image wx:if="{{item.avatar_url}}" class="staff-avatar" src="{{item.avatar_url}}" mode="aspectFill" />
+              <view wx:else class="staff-avatar staff-avatar-fallback">{{item.displayInitial}}</view>
               <view class="staff-meta">
                 <text class="staff-name">{{item.displayName}}</text>
                 <text class="staff-submeta">用户 ID {{item.user_id}} · 加入于 {{item.joinedAtLabel}}</text>
@@ -140,8 +131,8 @@
         </view>
       </t-radio-group>
       <view class="popup-actions">
-        <t-button block theme="default" size="large" shape="round" bind:tap="onCloseRolePopup">取消</t-button>
-        <t-button block theme="primary" size="large" shape="round" loading="{{roleSubmitting}}" bind:tap="onSubmitRole">保存角色</t-button>
+        <t-button theme="default" bind:tap="onCloseRolePopup">取消</t-button>
+        <t-button theme="primary" loading="{{roleSubmitting}}" bind:tap="onSubmitRole">保存角色</t-button>
       </view>
     </view>
   </t-popup>

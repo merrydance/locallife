@@ -1,6 +1,7 @@
 import dayjs from 'dayjs'
 import { KitchenDisplayService, KitchenOrderItem, KitchenOrderResponse, OrderManagementAdapter } from '../../../../api/order-management'
 import { logger } from '../../../../utils/logger'
+import { getKitchenStatusView, KitchenStatusTheme } from '../../../../utils/merchant-kitchen-detail-view'
 import { getStableBarHeights } from '../../../../utils/responsive'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
 
@@ -9,8 +10,6 @@ interface KitchenDetailOptions {
 }
 
 type KitchenDetailAction = '' | 'preparing' | 'ready'
-type KitchenStatusTheme = 'primary' | 'warning' | 'success'
-
 interface KitchenDetailItemView extends KitchenOrderItem {
   categoryLabel: string
   prepareTimeLabel: string
@@ -47,21 +46,6 @@ function formatTime(value?: string) {
   return parsed.isValid() ? parsed.format('YYYY-MM-DD HH:mm') : value
 }
 
-function getKitchenStatusLabel(status: string) {
-  const map: Record<string, string> = {
-    paid: '待制作',
-    preparing: '制作中',
-    ready: '待取餐'
-  }
-  return map[status] || '状态同步中'
-}
-
-function getKitchenStatusTheme(status: string): KitchenStatusTheme {
-  if (status === 'ready') return 'success'
-  if (status === 'preparing') return 'warning'
-  return 'primary'
-}
-
 function formatKitchenItem(item: KitchenOrderItem): KitchenDetailItemView {
   const customizationSummary = Array.isArray(item.customizations) && item.customizations.length
     ? item.customizations.map((option) => option.option_name).join('、')
@@ -78,6 +62,7 @@ function formatKitchenItem(item: KitchenOrderItem): KitchenDetailItemView {
 
 function buildKitchenDetailView(order: KitchenOrderResponse): KitchenDetailView {
   const remainingMinutes = Math.round(OrderManagementAdapter.getRemainingTime(order))
+  const statusView = getKitchenStatusView(order.status)
   const seatOrPickupLabel = order.table_number || order.table_no
     ? `${order.table_number || order.table_no}号桌`
     : order.pickup_number
@@ -91,8 +76,8 @@ function buildKitchenDetailView(order: KitchenOrderResponse): KitchenDetailView 
     items,
     orderNoShort: order.order_no.slice(-6).toUpperCase(),
     orderTypeLabel: OrderManagementAdapter.formatOrderType(order.order_type),
-    statusLabel: getKitchenStatusLabel(order.status),
-    statusTheme: getKitchenStatusTheme(order.status),
+    statusLabel: statusView.label,
+    statusTheme: statusView.theme,
     waitingLabel: `${order.waiting_minutes || 0} 分钟`,
     remainingLabel: remainingMinutes > 0 ? `预计还需 ${remainingMinutes} 分钟` : '请优先处理',
     seatOrPickupLabel,
@@ -105,9 +90,9 @@ function buildKitchenDetailView(order: KitchenOrderResponse): KitchenDetailView 
     urgencyLabel: order.is_urged ? '顾客已催单，请优先处理' : '当前暂无催单提醒',
     itemCount: items.length,
     totalQuantity,
-    progressCurrent: order.status === 'ready' ? 2 : order.status === 'preparing' ? 1 : 0,
-    canStartPreparing: order.status === 'paid',
-    canMarkReady: order.status === 'preparing'
+    progressCurrent: statusView.progressCurrent,
+    canStartPreparing: statusView.canStartPreparing,
+    canMarkReady: statusView.canMarkReady
   }
 }
 

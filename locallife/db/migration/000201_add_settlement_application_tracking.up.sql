@@ -1,0 +1,13 @@
+ALTER TABLE merchant_payment_configs
+ADD COLUMN latest_settlement_application_no TEXT,
+ADD COLUMN latest_settlement_application_submitted_at TIMESTAMPTZ;
+
+ALTER TABLE operators
+ADD COLUMN latest_settlement_application_no TEXT,
+ADD COLUMN latest_settlement_application_submitted_at TIMESTAMPTZ;
+
+COMMENT ON COLUMN merchant_payment_configs.latest_settlement_application_no IS '最近一次结算银行卡变更申请单号';
+COMMENT ON COLUMN merchant_payment_configs.latest_settlement_application_submitted_at IS '最近一次结算银行卡变更申请提交时间';
+
+COMMENT ON COLUMN operators.latest_settlement_application_no IS '最近一次结算银行卡变更申请单号';
+COMMENT ON COLUMN operators.latest_settlement_application_submitted_at IS '最近一次结算银行卡变更申请提交时间';

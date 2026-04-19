@@ -1,6 +1,12 @@
 import dayjs from 'dayjs'
 import { AppealResponse, appealManagementService } from '../../../../api/appeals-customer-service'
 import { logger } from '../../../../utils/logger'
+import {
+  getMerchantAppealProgressCurrent,
+  getMerchantAppealResultSummary,
+  getMerchantAppealStatusView,
+  MerchantAppealTagTheme
+} from '../../../../utils/merchant-appeal-view'
 import { getStableBarHeights } from '../../../../utils/responsive'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
 
@@ -8,7 +14,7 @@ interface AppealDetailOptions {
   id?: string
 }
 
-type AppealTagTheme = 'warning' | 'success' | 'danger' | 'primary'
+type AppealTagTheme = MerchantAppealTagTheme
 
 interface AppealDetailView {
   id: number
@@ -75,53 +81,12 @@ function formatAppellantType(appellantType?: string) {
   return map[appellantType] || appellantType
 }
 
-function formatAppealStatus(status?: string) {
-  const map: Record<string, string> = {
-    pending: '待审核',
-    approved: '已通过',
-    rejected: '已驳回',
-    compensated: '已赔付'
-  }
-  if (!status) return '-'
-  return map[status] || status
-}
-
-function getAppealTheme(status?: string): AppealTagTheme {
-  if (status === 'pending') return 'warning'
-  if (status === 'approved' || status === 'compensated') return 'success'
-  if (status === 'rejected') return 'danger'
-  return 'primary'
-}
-
-function getResultSummary(appeal: AppealResponse) {
-  if (appeal.status === 'approved') {
-    return {
-      title: '异议已通过',
-      description: '平台已认可商户异议，本条索赔会按复核结果重算责任或回收策略。'
-    }
-  }
-  if (appeal.status === 'compensated') {
-    return {
-      title: '异议已赔付',
-      description: '平台已完成复核补偿，当前结果已进入结案阶段。'
-    }
-  }
-  if (appeal.status === 'rejected') {
-    return {
-      title: '异议已驳回',
-      description: '平台维持原判，商户需按当前责任结果继续处理追偿或结案。'
-    }
-  }
-  return {
-    title: '等待平台复核',
-    description: '异议已经提交，平台会结合责任判定、证据和历史记录给出复核结论。'
-  }
-}
-
 const getErrorMessage = getErrorUserMessage
 
 function toAppealDetailView(appeal: AppealResponse): AppealDetailView {
-  const result = getResultSummary(appeal)
+  const statusView = getMerchantAppealStatusView(appeal.status, '-')
+  const result = getMerchantAppealResultSummary(appeal.status)
+
   return {
     id: appeal.id,
     claimId: appeal.claim_id,
@@ -132,8 +97,8 @@ function toAppealDetailView(appeal: AppealResponse): AppealDetailView {
     approvedAmountText: typeof appeal.claim_approved_amount === 'number' ? formatMoney(appeal.claim_approved_amount) : undefined,
     hasApprovedAmount: typeof appeal.claim_approved_amount === 'number',
     compensationAmountText: formatMoney(appeal.compensation_amount),
-    statusLabel: formatAppealStatus(appeal.status),
-    statusTheme: getAppealTheme(appeal.status),
+    statusLabel: statusView.label,
+    statusTheme: statusView.theme,
     appellantTypeLabel: formatAppellantType(appeal.appellant_type),
     userPhone: appeal.user_phone || undefined,
     hasUserPhone: Boolean(appeal.user_phone),
@@ -148,7 +113,7 @@ function toAppealDetailView(appeal: AppealResponse): AppealDetailView {
     hasCompensatedAt: Boolean(appeal.compensated_at),
     resultTitle: result.title,
     resultDescription: result.description,
-    progressCurrent: appeal.status === 'pending' ? 1 : 2
+    progressCurrent: getMerchantAppealProgressCurrent(appeal.status)
   }
 }
 

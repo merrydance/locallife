@@ -1,5 +1,7 @@
 import {
   type ApplymentAccountType,
+  type ApplymentContactType,
+  type ApplymentContactDocType,
   type ApplymentBankOption,
   type ApplymentBranchOption,
   type ApplymentCityOption,
@@ -11,7 +13,12 @@ import {
   searchApplymentBanksByAccount,
   type ApplymentBindBankPayload
 } from '../../api/applyment-bank'
+import { uploadMedia } from '../../utils/media'
 import { getErrorUserMessage } from '../../utils/user-facing'
+
+const DEFAULT_CONTACT_DOC_TYPE: ApplymentContactDocType = 'IDENTIFICATION_TYPE_MAINLAND_IDCARD'
+
+type ContactDocumentKind = 'front' | 'back'
 
 interface ApplymentBindBankDraft {
   account_type: ApplymentAccountType
@@ -25,6 +32,18 @@ interface ApplymentBindBankDraft {
   bank_name: string
   account_number: string
   account_name: string
+  contact_type: ApplymentContactType
+  contact_name: string
+  contact_id_doc_type: ApplymentContactDocType
+  contact_id_card_number: string
+  contact_id_doc_copy_asset_id: number
+  contact_id_doc_copy_url: string
+  contact_id_doc_copy_raw_url: string
+  contact_id_doc_copy_back_asset_id: number
+  contact_id_doc_copy_back_url: string
+  contact_id_doc_copy_back_raw_url: string
+  contact_id_doc_period_begin: string
+  contact_id_doc_period_end: string
 }
 
 type PartialApplymentBindBankDraft = Partial<ApplymentBindBankDraft>
@@ -34,6 +53,9 @@ interface ApplymentBankFormProperties {
   initialDraft?: PartialApplymentBindBankDraft
   defaultAccountType: ApplymentAccountType
   preloadCatalogs?: boolean
+  showContactFields?: boolean
+  requireAccountName?: boolean
+  uploadBusinessType?: string
 }
 
 type ApplymentBankViewOption = ApplymentBankOption & {
@@ -55,6 +77,12 @@ type ApplymentFormStateOptions = {
   syncSubmit?: boolean
 }
 
+type ContactDocumentFeedback = {
+  state: 'idle' | 'processing' | 'success' | 'error'
+  title: string
+  description: string
+}
+
 function createEmptyDraft(accountType: ApplymentAccountType): ApplymentBindBankDraft {
   return {
     account_type: accountType,
@@ -67,8 +95,48 @@ function createEmptyDraft(accountType: ApplymentAccountType): ApplymentBindBankD
     bank_branch_id: '',
     bank_name: '',
     account_number: '',
-    account_name: ''
+    account_name: '',
+    contact_type: 'LEGAL',
+    contact_name: '',
+    contact_id_doc_type: DEFAULT_CONTACT_DOC_TYPE,
+    contact_id_card_number: '',
+    contact_id_doc_copy_asset_id: 0,
+    contact_id_doc_copy_url: '',
+    contact_id_doc_copy_raw_url: '',
+    contact_id_doc_copy_back_asset_id: 0,
+    contact_id_doc_copy_back_url: '',
+    contact_id_doc_copy_back_raw_url: '',
+    contact_id_doc_period_begin: '',
+    contact_id_doc_period_end: ''
   }
+}
+
+function createIdleFeedback(): ContactDocumentFeedback {
+  return {
+    state: 'idle',
+    title: '',
+    description: ''
+  }
+}
+
+function normalizeContactType(value?: string | null): ApplymentContactType {
+  return value === 'SUPER' ? 'SUPER' : 'LEGAL'
+}
+
+function normalizeContactDocType(value?: string | null): ApplymentContactDocType {
+  return value === DEFAULT_CONTACT_DOC_TYPE ? value : DEFAULT_CONTACT_DOC_TYPE
+}
+
+function normalizeOptionalText(value?: string | null): string {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function isLongTermContactDocument(form: ApplymentBindBankDraft): boolean {
+  return form.contact_id_doc_period_end.trim() === '长期'
+}
+
+function requiresSuperContactFields(form: ApplymentBindBankDraft, showContactFields?: boolean): boolean {
+  return Boolean(showContactFields && form.contact_type === 'SUPER')
 }
 
 function normalizeDraft(
@@ -95,7 +163,19 @@ function normalizeDraft(
     bank_branch_id: typeof draft.bank_branch_id === 'string' ? draft.bank_branch_id : '',
     bank_name: typeof draft.bank_name === 'string' ? draft.bank_name : '',
     account_number: typeof draft.account_number === 'string' ? draft.account_number : '',
-    account_name: typeof draft.account_name === 'string' ? draft.account_name : ''
+    account_name: typeof draft.account_name === 'string' ? draft.account_name : '',
+    contact_type: normalizeContactType(draft.contact_type),
+    contact_name: typeof draft.contact_name === 'string' ? draft.contact_name : '',
+    contact_id_doc_type: normalizeContactDocType(draft.contact_id_doc_type),
+    contact_id_card_number: typeof draft.contact_id_card_number === 'string' ? draft.contact_id_card_number : '',
+    contact_id_doc_copy_asset_id: typeof draft.contact_id_doc_copy_asset_id === 'number' ? draft.contact_id_doc_copy_asset_id : 0,
+    contact_id_doc_copy_url: typeof draft.contact_id_doc_copy_url === 'string' ? draft.contact_id_doc_copy_url : '',
+    contact_id_doc_copy_raw_url: typeof draft.contact_id_doc_copy_raw_url === 'string' ? draft.contact_id_doc_copy_raw_url : '',
+    contact_id_doc_copy_back_asset_id: typeof draft.contact_id_doc_copy_back_asset_id === 'number' ? draft.contact_id_doc_copy_back_asset_id : 0,
+    contact_id_doc_copy_back_url: typeof draft.contact_id_doc_copy_back_url === 'string' ? draft.contact_id_doc_copy_back_url : '',
+    contact_id_doc_copy_back_raw_url: typeof draft.contact_id_doc_copy_back_raw_url === 'string' ? draft.contact_id_doc_copy_back_raw_url : '',
+    contact_id_doc_period_begin: normalizeOptionalText(draft.contact_id_doc_period_begin),
+    contact_id_doc_period_end: normalizeOptionalText(draft.contact_id_doc_period_end)
   }
 }
 
@@ -190,15 +270,28 @@ function findSelectedBranchIndex(branches: ApplymentBranchOption[], form: Applym
   return index >= 0 ? index : 0
 }
 
-function canSubmitForm(form: ApplymentBindBankDraft): boolean {
+function canSubmitForm(form: ApplymentBindBankDraft, showContactFields?: boolean, requireAccountName: boolean = true): boolean {
   const baseValid = Boolean(
     form.account_bank.trim() &&
     form.account_number.trim() &&
-    form.account_name.trim()
+    (!requireAccountName || form.account_name.trim())
   )
 
   if (!baseValid) {
     return false
+  }
+
+  if (requiresSuperContactFields(form, showContactFields)) {
+    if (
+      !form.contact_name.trim() ||
+      !form.contact_id_card_number.trim() ||
+      !form.contact_id_doc_copy_asset_id ||
+      !form.contact_id_doc_copy_back_asset_id ||
+      !form.contact_id_doc_period_begin.trim() ||
+      !form.contact_id_doc_period_end.trim()
+    ) {
+      return false
+    }
   }
 
   if (!form.need_bank_branch) {
@@ -235,6 +328,18 @@ Component({
           void this.preloadSelectableCatalogs()
         }
       }
+    },
+    showContactFields: {
+      type: Boolean,
+      value: false
+    },
+      requireAccountName: {
+        type: Boolean,
+        value: true
+      },
+    uploadBusinessType: {
+      type: String,
+      value: ''
     },
     submitLabel: {
       type: String,
@@ -278,6 +383,12 @@ Component({
     selectedProvinceLabel: '',
     selectedCityLabel: '',
     branchKeyword: '',
+    contactDocCopyFeedbackState: 'idle',
+    contactDocCopyFeedbackTitle: '',
+    contactDocCopyFeedbackDescription: '',
+    contactDocCopyBackFeedbackState: 'idle',
+    contactDocCopyBackFeedbackTitle: '',
+    contactDocCopyBackFeedbackDescription: '',
     canSubmit: false,
     selectedBankLabel: '',
     hasSelectedBank: false
@@ -321,7 +432,7 @@ Component({
       const accountType = properties.defaultAccountType
       const initialDraft = normalizeDraft(accountType, properties.initialDraft)
 
-      this.setFormState(initialDraft, { canSubmit: canSubmitForm(initialDraft) }, { emitDraft: false, syncSubmit: false })
+      this.setFormState(initialDraft, { canSubmit: canSubmitForm(initialDraft, properties.showContactFields, properties.requireAccountName) }, { emitDraft: false, syncSubmit: false })
 
       await this.restoreDraftSelection(initialDraft)
       if (properties.preloadCatalogs) {
@@ -354,6 +465,95 @@ Component({
       return properties.apiBasePath
     },
 
+    getUploadBusinessType() {
+      const properties = this.properties as unknown as ApplymentBankFormProperties
+      return String(properties.uploadBusinessType || '').trim()
+    },
+
+    setContactDocumentFeedback(kind: ContactDocumentKind, feedback: ContactDocumentFeedback) {
+      const prefix = kind === 'front' ? 'contactDocCopy' : 'contactDocCopyBack'
+      this.setData({
+        [`${prefix}FeedbackState`]: feedback.state,
+        [`${prefix}FeedbackTitle`]: feedback.title,
+        [`${prefix}FeedbackDescription`]: feedback.description
+      })
+    },
+
+    buildContactDocumentFields(kind: ContactDocumentKind, result?: { mediaId: number, displayUrl: string, rawUrl: string }) {
+      if (kind === 'front') {
+        return result
+          ? {
+              contact_id_doc_copy_asset_id: result.mediaId,
+              contact_id_doc_copy_url: result.displayUrl,
+              contact_id_doc_copy_raw_url: result.rawUrl
+            }
+          : {
+              contact_id_doc_copy_asset_id: 0,
+              contact_id_doc_copy_url: '',
+              contact_id_doc_copy_raw_url: ''
+            }
+      }
+
+      return result
+        ? {
+            contact_id_doc_copy_back_asset_id: result.mediaId,
+            contact_id_doc_copy_back_url: result.displayUrl,
+            contact_id_doc_copy_back_raw_url: result.rawUrl
+          }
+        : {
+            contact_id_doc_copy_back_asset_id: 0,
+            contact_id_doc_copy_back_url: '',
+            contact_id_doc_copy_back_raw_url: ''
+          }
+    },
+
+    async uploadContactDocument(kind: ContactDocumentKind, path: string) {
+      const uploadBusinessType = this.getUploadBusinessType()
+      if (!uploadBusinessType) {
+        wx.showToast({ title: '当前页面未配置证件上传能力', icon: 'none' })
+        return
+      }
+
+      this.setContactDocumentFeedback(kind, {
+        state: 'processing',
+        title: '证件上传中',
+        description: '请稍候，上传完成后会自动回填到当前表单。'
+      })
+
+      try {
+        const uploadResult = await uploadMedia(path, {
+          businessType: uploadBusinessType,
+          mediaCategory: kind === 'front' ? 'id_card_front' : 'id_card_back'
+        })
+
+        const nextForm: ApplymentBindBankDraft = {
+          ...this.readForm(),
+          ...this.buildContactDocumentFields(kind, {
+            mediaId: uploadResult.mediaId,
+            displayUrl: uploadResult.displayUrl,
+            rawUrl: uploadResult.urls.original || uploadResult.displayUrl
+          })
+        }
+
+        this.setFormState(nextForm)
+        this.setContactDocumentFeedback(kind, {
+          state: 'success',
+          title: '证件已上传',
+          description: '如需更换，请先删除后重新上传。'
+        })
+      } catch (error: unknown) {
+        this.setContactDocumentFeedback(kind, {
+          state: 'error',
+          title: '上传失败',
+          description: getErrorUserMessage(error, '证件上传失败，请稍后重试')
+        })
+        wx.showToast({
+          title: getErrorUserMessage(error, '证件上传失败，请稍后重试'),
+          icon: 'none'
+        })
+      }
+    },
+
     async ensureBanksLoaded(accountType: ApplymentAccountType) {
       if (this.getBanksForType(accountType).length > 0) {
         this.updateBankFilter('')
@@ -365,7 +565,7 @@ Component({
 
     syncCanSubmit(nextForm?: ApplymentBindBankDraft) {
       const form = nextForm || (this.data.form as ApplymentBindBankDraft)
-      this.setData({ canSubmit: canSubmitForm(form) })
+      this.setData({ canSubmit: canSubmitForm(form, this.properties.showContactFields, this.properties.requireAccountName) })
     },
 
     async restoreDraftSelection(draft: ApplymentBindBankDraft) {
@@ -700,7 +900,9 @@ Component({
       const value = e.detail.value || ''
       let nextForm: ApplymentBindBankDraft = {
         ...this.readForm(),
-        [field]: value
+        [field]: field === 'contact_id_doc_period_end' && value.trim() === '长期'
+          ? '长期'
+          : value
       }
 
       if (field === 'account_number' && nextForm.account_type === 'ACCOUNT_TYPE_PRIVATE') {
@@ -742,6 +944,87 @@ Component({
       }
 
       this.setFormState(nextForm)
+    },
+
+    onSuperContactSwitchChange(e: WechatMiniprogram.CustomEvent<{ value?: boolean }>) {
+      const useSuperContact = Boolean(e.detail?.value)
+      const currentForm = this.readForm()
+      const nextContactType: ApplymentContactType = useSuperContact ? 'SUPER' : 'LEGAL'
+
+      if (currentForm.contact_type === nextContactType) {
+        return
+      }
+
+      const nextForm: ApplymentBindBankDraft = useSuperContact
+        ? {
+          ...currentForm,
+          contact_type: 'SUPER',
+          contact_id_doc_type: DEFAULT_CONTACT_DOC_TYPE
+        }
+        : {
+          ...currentForm,
+          contact_type: 'LEGAL',
+          contact_name: '',
+          contact_id_doc_type: DEFAULT_CONTACT_DOC_TYPE,
+          contact_id_card_number: '',
+          contact_id_doc_copy_asset_id: 0,
+          contact_id_doc_copy_url: '',
+          contact_id_doc_copy_raw_url: '',
+          contact_id_doc_copy_back_asset_id: 0,
+          contact_id_doc_copy_back_url: '',
+          contact_id_doc_copy_back_raw_url: '',
+          contact_id_doc_period_begin: '',
+          contact_id_doc_period_end: ''
+        }
+
+      this.setFormState(nextForm)
+      if (!useSuperContact) {
+        this.setContactDocumentFeedback('front', createIdleFeedback())
+        this.setContactDocumentFeedback('back', createIdleFeedback())
+      }
+    },
+
+    onContactDocLongTermToggle() {
+      const currentForm = this.readForm()
+      const nextForm: ApplymentBindBankDraft = {
+        ...currentForm,
+        contact_id_doc_period_end: isLongTermContactDocument(currentForm) ? '' : '长期'
+      }
+      this.setFormState(nextForm)
+    },
+
+    async onContactIDDocCopyChange(e: WechatMiniprogram.CustomEvent<{ path?: string }>) {
+      const path = String(e.detail?.path || '').trim()
+      if (!path) {
+        return
+      }
+      await this.uploadContactDocument('front', path)
+    },
+
+    async onContactIDDocCopyBackChange(e: WechatMiniprogram.CustomEvent<{ path?: string }>) {
+      const path = String(e.detail?.path || '').trim()
+      if (!path) {
+        return
+      }
+      await this.uploadContactDocument('back', path)
+    },
+
+    onContactIDDocCopyRemove() {
+      const nextForm: ApplymentBindBankDraft = {
+        ...this.readForm(),
+        ...this.buildContactDocumentFields('front')
+      }
+      this.setFormState(nextForm)
+      this.setContactDocumentFeedback('front', createIdleFeedback())
+    },
+
+    onContactIDDocCopyBackRemove() {
+      const nextForm: ApplymentBindBankDraft = {
+        ...this.readForm(),
+        ...this.buildContactDocumentFields('back')
+      }
+      this.setFormState(nextForm)
+      this.setContactDocumentFeedback('back', createIdleFeedback())
     },
 
     async onAccountTypeSelect(e: WechatMiniprogram.TouchEvent) {
@@ -1025,8 +1308,9 @@ Component({
     },
 
     onSubmit() {
-      const form = this.data.form as ApplymentBindBankDraft
-      if (!canSubmitForm(form)) {
+      const form = this.readForm()
+      const properties = this.properties as unknown as ApplymentBankFormProperties
+      if (!canSubmitForm(form, properties.showContactFields, properties.requireAccountName)) {
         wx.showToast({ title: '请先补全必填信息', icon: 'none' })
         return
       }
@@ -1042,7 +1326,18 @@ Component({
         bank_branch_id: form.bank_branch_id.trim() || undefined,
         bank_name: form.bank_name.trim() || undefined,
         account_number: form.account_number.trim(),
-        account_name: form.account_name.trim()
+          account_name: form.account_name.trim() || undefined
+      }
+
+      if (properties.showContactFields && form.contact_type === 'SUPER') {
+        payload.contact_type = 'SUPER'
+        payload.contact_name = form.contact_name.trim()
+        payload.contact_id_doc_type = form.contact_id_doc_type
+        payload.contact_id_card_number = form.contact_id_card_number.trim()
+        payload.contact_id_doc_copy_asset_id = form.contact_id_doc_copy_asset_id > 0 ? form.contact_id_doc_copy_asset_id : undefined
+        payload.contact_id_doc_copy_back_asset_id = form.contact_id_doc_copy_back_asset_id > 0 ? form.contact_id_doc_copy_back_asset_id : undefined
+        payload.contact_id_doc_period_begin = form.contact_id_doc_period_begin.trim()
+        payload.contact_id_doc_period_end = form.contact_id_doc_period_end.trim()
       }
 
       this.triggerEvent('submit', payload)

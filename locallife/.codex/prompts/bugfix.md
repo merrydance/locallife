@@ -9,8 +9,8 @@ Canonical prompt:
 Recommended supporting docs:
 
 - `../../.github/standards/backend/WORKFLOW_AND_VALIDATION.md`
-- `../../.github/standards/backend/BACKEND_RISK_MAP.md`
-- `../../docs/production-robustness-review-report.md`
-- `../../docs/order-money-chains-review.md`
+- `../../.github/standards/backend/README.md`
+- `../../.github/standards/backend/RUNTIME_ARCHITECTURE.md`
+- `../../.github/standards/domains/wechat-payment/README.md`
 
 Use the `.github` bugfix prompt directly for real work. Do not maintain a second full bugfix protocol here.

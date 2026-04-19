@@ -20,13 +20,17 @@ func createRandomEcommerceApplymentForMerchant(t *testing.T) EcommerceApplyment 
 
 // createRandomEcommerceApplymentWithSubject 创建指定主体的进件记录
 func createRandomEcommerceApplymentWithSubject(t *testing.T, subjectType string, subjectID int64) EcommerceApplyment {
+	return createRandomEcommerceApplymentWithSubjectAndOrgType(t, subjectType, subjectID, "2401")
+}
+
+func createRandomEcommerceApplymentWithSubjectAndOrgType(t *testing.T, subjectType string, subjectID int64, organizationType string) EcommerceApplyment {
 	outRequestNo := util.RandomString(20)
 
 	arg := CreateEcommerceApplymentParams{
 		SubjectType:           subjectType,
 		SubjectID:             subjectID,
 		OutRequestNo:          outRequestNo,
-		OrganizationType:      "2401", // 小微商户
+		OrganizationType:      organizationType,
 		BusinessLicenseNumber: pgtype.Text{String: util.RandomString(18), Valid: true},
 		BusinessLicenseCopy:   pgtype.Text{String: "https://example.com/license.jpg", Valid: true},
 		MerchantName:          util.RandomString(10),
@@ -84,6 +88,21 @@ func TestCreateEcommerceApplyment(t *testing.T) {
 	createRandomEcommerceApplymentForMerchant(t)
 }
 
+func TestCreateEcommerceApplymentSupportedOrganizationTypes(t *testing.T) {
+	t.Parallel()
+
+	merchant := createRandomMerchantForTest(t)
+	organizationTypes := []string{"2401", "2500", "4", "2", "3", "2502", "1708"}
+
+	for _, organizationType := range organizationTypes {
+		organizationType := organizationType
+		t.Run(organizationType, func(t *testing.T) {
+			applyment := createRandomEcommerceApplymentWithSubjectAndOrgType(t, "merchant", merchant.ID, organizationType)
+			require.Equal(t, organizationType, applyment.OrganizationType)
+		})
+	}
+}
+
 func TestGetEcommerceApplyment(t *testing.T) {
 	applyment1 := createRandomEcommerceApplymentForMerchant(t)
 
@@ -111,11 +130,18 @@ func TestGetEcommerceApplymentByOutRequestNo(t *testing.T) {
 
 func TestGetLatestEcommerceApplymentBySubject(t *testing.T) {
 	merchant := createRandomMerchantForTest(t)
+	tiedCreatedAt := time.Now().UTC().Truncate(time.Microsecond)
 
 	// 创建两个进件记录
 	applyment1 := createRandomEcommerceApplymentWithSubject(t, "merchant", merchant.ID)
-	time.Sleep(10 * time.Millisecond) // 确保时间戳不同
 	applyment2 := createRandomEcommerceApplymentWithSubject(t, "merchant", merchant.ID)
+
+	_, err := testStore.(*SQLStore).connPool.Exec(context.Background(),
+		`UPDATE ecommerce_applyments SET created_at = $1 WHERE id = ANY($2)`,
+		tiedCreatedAt,
+		[]int64{applyment1.ID, applyment2.ID},
+	)
+	require.NoError(t, err)
 
 	// 获取最新的
 	latest, err := testStore.GetLatestEcommerceApplymentBySubject(context.Background(), GetLatestEcommerceApplymentBySubjectParams{
@@ -128,6 +154,28 @@ func TestGetLatestEcommerceApplymentBySubject(t *testing.T) {
 	// 应该是第二个（最新的）
 	require.Equal(t, applyment2.ID, latest.ID)
 	require.NotEqual(t, applyment1.ID, latest.ID)
+}
+
+func TestGetEcommerceApplymentBySubjectUsesIDTieBreaker(t *testing.T) {
+	merchant := createRandomMerchantForTest(t)
+	tiedCreatedAt := time.Now().UTC().Truncate(time.Microsecond)
+
+	applyment1 := createRandomEcommerceApplymentWithSubject(t, "merchant", merchant.ID)
+	applyment2 := createRandomEcommerceApplymentWithSubject(t, "merchant", merchant.ID)
+
+	_, err := testStore.(*SQLStore).connPool.Exec(context.Background(),
+		`UPDATE ecommerce_applyments SET created_at = $1 WHERE id = ANY($2)`,
+		tiedCreatedAt,
+		[]int64{applyment1.ID, applyment2.ID},
+	)
+	require.NoError(t, err)
+
+	latest, err := testStore.GetEcommerceApplymentBySubject(context.Background(), GetEcommerceApplymentBySubjectParams{
+		SubjectType: "merchant",
+		SubjectID:   merchant.ID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, applyment2.ID, latest.ID)
 }
 
 func TestUpdateEcommerceApplymentToSubmitted(t *testing.T) {
@@ -164,6 +212,18 @@ func TestUpdateEcommerceApplymentStatus(t *testing.T) {
 			newStatus: "auditing",
 		},
 		{
+			name:      "Update to checking",
+			newStatus: "checking",
+		},
+		{
+			name:      "Update to account_need_verify",
+			newStatus: "account_need_verify",
+		},
+		{
+			name:      "Update to to_be_confirmed",
+			newStatus: "to_be_confirmed",
+		},
+		{
 			name:         "Update to rejected",
 			newStatus:    "rejected",
 			rejectReason: "资料不符合要求",
@@ -182,6 +242,10 @@ func TestUpdateEcommerceApplymentStatus(t *testing.T) {
 			name:      "Update to finish",
 			newStatus: "finish",
 			subMchID:  "1234567890",
+		},
+		{
+			name:      "Update to canceled",
+			newStatus: "canceled",
 		},
 	}
 
@@ -213,6 +277,35 @@ func TestUpdateEcommerceApplymentStatus(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestUpdateEcommerceApplymentStatusPersistsVerificationFields(t *testing.T) {
+	applyment := createRandomEcommerceApplymentForMerchant(t)
+	accountValidation := []byte(`{"pay_amount":66,"destination_account_number":"6222000000001234","remark":"verify"}`)
+
+	updated, err := testStore.UpdateEcommerceApplymentStatus(context.Background(), UpdateEcommerceApplymentStatusParams{
+		ID:                 applyment.ID,
+		ApplymentID:        pgtype.Int8{Int64: 55667788, Valid: true},
+		Status:             "account_need_verify",
+		RejectReason:       pgtype.Text{},
+		SignUrl:            pgtype.Text{},
+		SignState:          pgtype.Text{},
+		LegalValidationUrl: pgtype.Text{String: "https://wx.example.com/legal-check", Valid: true},
+		AccountValidation:  accountValidation,
+		SubMchID:           pgtype.Text{},
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(55667788), updated.ApplymentID.Int64)
+	require.True(t, updated.LegalValidationUrl.Valid)
+	require.Equal(t, "https://wx.example.com/legal-check", updated.LegalValidationUrl.String)
+	require.JSONEq(t, string(accountValidation), string(updated.AccountValidation))
+
+	found, err := testStore.GetEcommerceApplyment(context.Background(), applyment.ID)
+	require.NoError(t, err)
+	require.Equal(t, int64(55667788), found.ApplymentID.Int64)
+	require.True(t, found.LegalValidationUrl.Valid)
+	require.Equal(t, "https://wx.example.com/legal-check", found.LegalValidationUrl.String)
+	require.JSONEq(t, string(accountValidation), string(found.AccountValidation))
 }
 
 func TestUpdateEcommerceApplymentSubMchID(t *testing.T) {
@@ -294,24 +387,126 @@ func TestListEcommerceApplymentsByStatus(t *testing.T) {
 }
 
 func TestListPendingEcommerceApplyments(t *testing.T) {
-	// 创建一个并设置为已提交状态
-	applyment := createRandomEcommerceApplymentForMerchant(t)
-	_, err := testStore.UpdateEcommerceApplymentToSubmitted(context.Background(), UpdateEcommerceApplymentToSubmittedParams{
-		ID:          applyment.ID,
-		ApplymentID: pgtype.Int8{Int64: 123456789, Valid: true},
+	sqlStore, ok := testStore.(*SQLStore)
+	require.True(t, ok)
+
+	var pendingCountBefore int64
+	err := sqlStore.connPool.QueryRow(context.Background(), `
+		SELECT count(*)
+		FROM ecommerce_applyments
+		WHERE status IN ('submitted', 'checking', 'auditing', 'account_need_verify', 'to_be_confirmed', 'to_be_signed', 'signing')
+	`).Scan(&pendingCountBefore)
+	require.NoError(t, err)
+
+	testCases := []struct {
+		status    string
+		signURL   string
+		signState string
+	}{
+		{status: "submitted"},
+		{status: "checking"},
+		{status: "auditing"},
+		{status: "account_need_verify"},
+		{status: "to_be_confirmed"},
+		{status: "to_be_signed", signURL: "https://pay.weixin.qq.com/sign/xxxx"},
+		{status: "signing", signState: "SIGNING"},
+	}
+
+	createdStatuses := make(map[int64]string, len(testCases))
+	for index, tc := range testCases {
+		applyment := createRandomEcommerceApplymentForMerchant(t)
+		createdStatuses[applyment.ID] = tc.status
+
+		if tc.status == "submitted" {
+			_, err = testStore.UpdateEcommerceApplymentToSubmitted(context.Background(), UpdateEcommerceApplymentToSubmittedParams{
+				ID:          applyment.ID,
+				ApplymentID: pgtype.Int8{Int64: int64(123456789 + index), Valid: true},
+			})
+			require.NoError(t, err)
+			continue
+		}
+
+		_, err = testStore.UpdateEcommerceApplymentStatus(context.Background(), UpdateEcommerceApplymentStatusParams{
+			ID:           applyment.ID,
+			Status:       tc.status,
+			RejectReason: pgtype.Text{},
+			SignUrl:      pgtype.Text{String: tc.signURL, Valid: tc.signURL != ""},
+			SignState:    pgtype.Text{String: tc.signState, Valid: tc.signState != ""},
+			SubMchID:     pgtype.Text{},
+		})
+		require.NoError(t, err)
+	}
+
+	applyments, err := testStore.ListPendingEcommerceApplyments(context.Background(), ListPendingEcommerceApplymentsParams{
+		Limit:  int32(len(testCases)),
+		Offset: int32(pendingCountBefore),
 	})
+	require.NoError(t, err)
+
+	expectedStatuses := map[string]struct{}{
+		"submitted":           {},
+		"checking":            {},
+		"auditing":            {},
+		"account_need_verify": {},
+		"to_be_confirmed":     {},
+		"to_be_signed":        {},
+		"signing":             {},
+	}
+
+	foundStatuses := make(map[int64]string, len(createdStatuses))
+	for _, a := range applyments {
+		_, ok := expectedStatuses[a.Status]
+		require.True(t, ok, "unexpected pending applyment status: %s", a.Status)
+		if _, exists := createdStatuses[a.ID]; exists {
+			foundStatuses[a.ID] = a.Status
+		}
+	}
+
+	require.Len(t, foundStatuses, len(createdStatuses))
+	for id, status := range createdStatuses {
+		require.Equal(t, status, foundStatuses[id])
+	}
+}
+
+func TestListPendingEcommerceApplymentsUsesIDTieBreaker(t *testing.T) {
+	sqlStore, ok := testStore.(*SQLStore)
+	require.True(t, ok)
+
+	var pendingCountBefore int64
+	err := sqlStore.connPool.QueryRow(context.Background(), `
+		SELECT count(*)
+		FROM ecommerce_applyments
+		WHERE status IN ('submitted', 'checking', 'auditing', 'account_need_verify', 'to_be_confirmed', 'to_be_signed', 'signing')
+	`).Scan(&pendingCountBefore)
+	require.NoError(t, err)
+
+	tiedCreatedAt := time.Now().UTC().Truncate(time.Microsecond)
+	applyment1 := createRandomEcommerceApplymentForMerchant(t)
+	applyment2 := createRandomEcommerceApplymentForMerchant(t)
+
+	for index, applyment := range []EcommerceApplyment{applyment1, applyment2} {
+		_, err = testStore.UpdateEcommerceApplymentToSubmitted(context.Background(), UpdateEcommerceApplymentToSubmittedParams{
+			ID:          applyment.ID,
+			ApplymentID: pgtype.Int8{Int64: int64(223456789 + index), Valid: true},
+		})
+		require.NoError(t, err)
+	}
+
+	_, err = sqlStore.connPool.Exec(context.Background(),
+		`UPDATE ecommerce_applyments SET created_at = $1 WHERE id = ANY($2)`,
+		tiedCreatedAt,
+		[]int64{applyment1.ID, applyment2.ID},
+	)
 	require.NoError(t, err)
 
 	applyments, err := testStore.ListPendingEcommerceApplyments(context.Background(), ListPendingEcommerceApplymentsParams{
-		Limit:  10,
-		Offset: 0,
+		Limit:  2,
+		Offset: int32(pendingCountBefore),
 	})
 	require.NoError(t, err)
-
-	// 验证所有记录都是待处理状态
-	for _, a := range applyments {
-		require.Contains(t, []string{"submitted", "auditing", "to_be_signed", "signing"}, a.Status)
-	}
+	require.Len(t, applyments, 2)
+	require.Equal(t, applyment1.ID, applyments[0].ID)
+	require.Equal(t, applyment2.ID, applyments[1].ID)
 }
 
 func TestCountEcommerceApplymentsByStatus(t *testing.T) {

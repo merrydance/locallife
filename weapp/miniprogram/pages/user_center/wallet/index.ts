@@ -3,6 +3,7 @@ import { getPaymentLedger, PaymentLedgerEntry } from '../../../api/payment'
 import ConsumerProfileAdapter from '../../../adapters/consumer-profile'
 import MembershipService from '../../../api/membership'
 import Navigation from '../../../utils/navigation'
+import { getPaymentLedgerStatusView } from '../../../utils/payment-ledger-view'
 
 interface MembershipDisplay {
   id: number
@@ -48,39 +49,7 @@ function mapTransactionDisplay(entry: PaymentLedgerEntry): TransactionDisplay {
   const isRefund = entry.entry_type === 'refund'
   const amount = isRefund ? entry.amount : -entry.amount
   const titleConfig = businessTitleMap[entry.business_type] || { payment: '支付记录', refund: '退款记录' }
-
-  let statusName = '已完成'
-  let statusTheme: TransactionDisplay['statusTheme'] = isRefund ? 'primary' : 'success'
-
-  if (isRefund) {
-    if (entry.status === 'pending' || entry.status === 'processing') {
-      statusName = '退款中'
-      statusTheme = 'warning'
-    } else if (entry.status === 'failed') {
-      statusName = '退款失败'
-      statusTheme = 'error'
-    } else if (entry.status === 'closed') {
-      statusName = '已关闭'
-      statusTheme = 'default'
-    } else {
-      statusName = '退款成功'
-      statusTheme = 'primary'
-    }
-  } else {
-    if (entry.status === 'pending') {
-      statusName = '待支付'
-      statusTheme = 'warning'
-    } else if (entry.status === 'failed') {
-      statusName = '支付失败'
-      statusTheme = 'error'
-    } else if (entry.status === 'closed') {
-      statusName = '已关闭'
-      statusTheme = 'default'
-    } else {
-      statusName = '已支付'
-      statusTheme = 'success'
-    }
-  }
+  const statusView = getPaymentLedgerStatusView(entry)
 
   return {
     id: String(isRefund ? entry.refund_order_id || entry.id : entry.payment_order_id),
@@ -90,8 +59,8 @@ function mapTransactionDisplay(entry: PaymentLedgerEntry): TransactionDisplay {
     title: isRefund ? titleConfig.refund : titleConfig.payment,
     time: formatTransactionTime(entry.occurred_at || entry.created_at),
     status: entry.status,
-    statusName,
-    statusTheme
+    statusName: statusView.statusName,
+    statusTheme: statusView.statusTheme
   }
 }
 

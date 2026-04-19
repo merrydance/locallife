@@ -1,0 +1,10 @@
+{
+  "usingComponents": {
+    "applyment-bank-form": "/components/applyment-bank-form/index",
+    "custom-navbar": "/components/custom-navbar/index",
+    "t-button": "tdesign-miniprogram/button/button",
+    "t-empty": "tdesign-miniprogram/empty/empty",
+    "t-loading": "tdesign-miniprogram/loading/loading"
+  },
+  "navigationStyle": "custom"
+}

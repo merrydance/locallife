@@ -23,7 +23,7 @@ WHERE id = $1
 RETURNING *;
 
 -- name: ListActiveRuleVersions :many
-SELECT rv.* FROM rule_versions rv
+SELECT rv.id, rv.rule_id, rv.version, rv.status, rv.priority, rv.scope, rv.condition, rv.action, rv.gray_config, rv.effective_at, rv.expires_at, rv.created_by, rv.created_at FROM rule_versions rv
 JOIN rules r ON r.id = rv.rule_id
 WHERE r.status = 'active'
   AND rv.status = 'published'

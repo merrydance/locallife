@@ -1,0 +1,11 @@
+{
+  "purpose": "Package or combo summary card with image, price, and CTA presentation for package discovery surfaces.",
+  "tdesignGroup": "data",
+  "tdesignCandidates": [
+    "image",
+    "tag",
+    "button"
+  ],
+  "decision": "local-component",
+  "rationale": "Package cards carry repeated combo-specific pricing and CTA layout that should stay stable across pages instead of being reassembled ad hoc."
+}

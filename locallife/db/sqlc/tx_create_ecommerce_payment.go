@@ -9,7 +9,7 @@ import (
 )
 
 // CreateEcommercePaymentTxParams 单子商户收付通合单支付事务入参
-// 适用于预定押金、预定加菜、会员充值等无 orders 表记录的业务。
+// 适用于预定押金、预定加菜等无 orders 表记录的业务。
 // 注意：由于 combined_payment_sub_orders.order_id NOT NULL 约束，此事务只创建
 // combined_payment_orders 和 payment_orders，不插入 sub_orders 行。
 // 合单回调（handleCombinePaymentNotify）通过 payment_orders.out_trade_no 查找记录，
@@ -18,7 +18,7 @@ type CreateEcommercePaymentTxParams struct {
 	UserID            int64
 	MerchantID        int64
 	Amount            int64
-	BusinessType      string // "reservation" | "reservation_addon" | "membership_recharge"
+	BusinessType      string // "reservation" | "reservation_addon"
 	ReservationID     int64  // 仅 reservation/reservation_addon 时非零
 	CombineOutTradeNo string // 合单主单号
 	OutTradeNo        string // 子单号（对应 payment_orders.out_trade_no 及微信 sub_out_trade_no）
@@ -62,12 +62,13 @@ func (store *SQLStore) CreateEcommercePaymentTx(ctx context.Context, arg CreateE
 
 		// 3. 创建 payment_orders 子单
 		createParams := CreatePaymentOrderParams{
-			UserID:       arg.UserID,
-			PaymentType:  "profit_sharing", // 收付通渠道
-			BusinessType: arg.BusinessType,
-			Amount:       arg.Amount,
-			OutTradeNo:   arg.OutTradeNo,
-			ExpiresAt:    pgtype.Timestamptz{Time: arg.ExpiresAt, Valid: true},
+			UserID:         arg.UserID,
+			PaymentType:    "miniprogram",
+			PaymentChannel: PaymentChannelEcommerce,
+			BusinessType:   arg.BusinessType,
+			Amount:         arg.Amount,
+			OutTradeNo:     arg.OutTradeNo,
+			ExpiresAt:      pgtype.Timestamptz{Time: arg.ExpiresAt, Valid: true},
 		}
 		if arg.ReservationID > 0 {
 			createParams.ReservationID = pgtype.Int8{Int64: arg.ReservationID, Valid: true}

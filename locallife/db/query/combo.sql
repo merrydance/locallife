@@ -16,12 +16,12 @@ INSERT INTO combo_sets (
 ) RETURNING *;
 
 -- name: GetComboSet :one
-SELECT * FROM combo_sets
+SELECT id, merchant_id, name, description, original_price, combo_price, is_online, created_at, updated_at, deleted_at, image_media_asset_id FROM combo_sets
 WHERE id = $1 AND deleted_at IS NULL LIMIT 1;
 
 -- name: GetComboSetWithDetails :one
 SELECT 
-  cs.*,
+  cs.id, cs.merchant_id, cs.name, cs.description, cs.original_price, cs.combo_price, cs.is_online, cs.created_at, cs.updated_at, cs.deleted_at, cs.image_media_asset_id,
   COALESCE(
     json_agg(DISTINCT
       jsonb_build_object(
@@ -93,7 +93,7 @@ WHERE
   cs.merchant_id = $1
   AND cs.deleted_at IS NULL
   AND (sqlc.narg('is_online')::boolean IS NULL OR cs.is_online = sqlc.narg('is_online'))
-ORDER BY cs.created_at DESC
+ORDER BY cs.created_at DESC, cs.id DESC
 LIMIT $2 OFFSET $3;
 
 -- name: UpdateComboSet :one
@@ -145,7 +145,7 @@ INSERT INTO combo_dishes (
 
 -- name: ListComboDishes :many
 SELECT 
-  d.*,
+  d.id, d.merchant_id, d.category_id, d.name, d.description, d.price, d.member_price, d.is_available, d.is_online, d.sort_order, d.created_at, d.updated_at, d.prepare_time, d.deleted_at, d.monthly_sales, d.repurchase_rate, d.image_media_asset_id, d.is_packaging,
   cd.quantity,
   cd.dish_base_price_snapshot,
   cd.customizations,

@@ -14,5 +14,5 @@ DO UPDATE SET
 RETURNING *;
 
 -- name: GetWechatAccessToken :one
-SELECT * FROM wechat_access_tokens
+SELECT id, app_type, access_token, expires_at, created_at FROM wechat_access_tokens
 WHERE app_type = $1 LIMIT 1;

@@ -6,7 +6,7 @@ description: "Use when drafting a backend takeover or onboarding request for loc
 
 Use this template when a new engineer or agent is taking over backend work in `locallife/` and needs a durable, development-ready understanding of the system before making changes.
 
-Use `.github/standards/backend/RUNTIME_ARCHITECTURE.md` to establish the real composition roots and async boundaries, `.github/standards/backend/WORKFLOW_AND_VALIDATION.md` to establish generation and test workflow, and `.github/standards/backend/BACKEND_RISK_MAP.md` to identify the highest-risk production chains.
+Use `.github/standards/backend/RUNTIME_ARCHITECTURE.md` to establish the real composition roots and async boundaries, `.github/standards/backend/WORKFLOW_AND_VALIDATION.md` to establish generation and test workflow, and `.github/standards/backend/README.md` plus the matching domain README to identify the highest-risk production chains.
 
 ## Backend Takeover
 

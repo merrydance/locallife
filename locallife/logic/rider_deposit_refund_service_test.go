@@ -9,6 +9,7 @@ import (
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	mockwechat "github.com/merrydance/locallife/wechat/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -19,7 +20,7 @@ func TestRiderDepositRefundService_SubmitWithdrawal_SynchronousSuccess(t *testin
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	paymentClient := mockwechat.NewMockPaymentClientInterface(ctrl)
+	paymentClient := mockwechat.NewMockDirectPaymentClientInterface(ctrl)
 	service := NewRiderDepositRefundService(store, paymentClient)
 
 	rider := db.Rider{
@@ -98,7 +99,7 @@ func TestRiderDepositRefundService_SubmitWithdrawal_RefundRequestFailureCompensa
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	paymentClient := mockwechat.NewMockPaymentClientInterface(ctrl)
+	paymentClient := mockwechat.NewMockDirectPaymentClientInterface(ctrl)
 	service := NewRiderDepositRefundService(store, paymentClient)
 
 	rider := db.Rider{
@@ -168,7 +169,7 @@ func TestRiderDepositRefundService_SubmitWithdrawal_ApprovedRiderAllowed(t *test
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	paymentClient := mockwechat.NewMockPaymentClientInterface(ctrl)
+	paymentClient := mockwechat.NewMockDirectPaymentClientInterface(ctrl)
 	service := NewRiderDepositRefundService(store, paymentClient)
 
 	rider := db.Rider{
@@ -235,4 +236,50 @@ func TestRiderDepositRefundService_SubmitWithdrawal_ApprovedRiderAllowed(t *test
 	require.NoError(t, err)
 	require.Equal(t, riderDepositWithdrawStatusSuccess, result.Status)
 	require.Equal(t, int64(30000), result.AcceptedAmount)
+}
+
+func TestRiderDepositRefundService_ResolveRefund_DeleteReceiverWhenBalanceZero(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	service := NewRiderDepositRefundService(store, nil, ecommerceClient)
+
+	paymentOrder := db.PaymentOrder{
+		ID:           801,
+		UserID:       901,
+		Amount:       30000,
+		Status:       "paid",
+		BusinessType: "rider_deposit",
+	}
+	rider := db.Rider{
+		ID:            71,
+		UserID:        paymentOrder.UserID,
+		RealName:      "骑手甲",
+		DepositAmount: 0,
+		FrozenDeposit: 0,
+	}
+	user := db.User{ID: paymentOrder.UserID, WechatOpenid: "rider-openid-901"}
+
+	gomock.InOrder(
+		store.EXPECT().ResolveRiderDepositRefundTx(gomock.Any(), db.ResolveRiderDepositRefundTxParams{
+			RefundOrderID: 701,
+			RefundStatus:  riderDepositRefundStatusSuccess,
+			RefundID:      "WX_REFUND_701",
+		}).Return(db.ResolveRiderDepositRefundTxResult{}, nil),
+		store.EXPECT().GetTotalRefundedByPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder.Amount, nil),
+		store.EXPECT().UpdatePaymentOrderToRefunded(gomock.Any(), paymentOrder.ID).Return(db.PaymentOrder{ID: paymentOrder.ID, Status: "refunded"}, nil),
+		store.EXPECT().GetRiderByUserID(gomock.Any(), paymentOrder.UserID).Return(rider, nil),
+		store.EXPECT().GetUser(gomock.Any(), paymentOrder.UserID).Return(user, nil),
+		ecommerceClient.EXPECT().GetSpAppID().Return("wx_sp_app_123"),
+		ecommerceClient.EXPECT().DeleteProfitSharingReceiver(gomock.Any(), &wechatcontracts.DeleteReceiverRequest{
+			AppID:   "wx_sp_app_123",
+			Type:    wechatcontracts.ReceiverTypePersonal,
+			Account: user.WechatOpenid,
+		}).Return(&wechatcontracts.DeleteReceiverResponse{Type: wechatcontracts.ReceiverTypePersonal, Account: user.WechatOpenid}, nil),
+	)
+
+	err := service.ResolveRefund(context.Background(), 701, paymentOrder, riderDepositRefundStatusSuccess, "WX_REFUND_701")
+	require.NoError(t, err)
 }

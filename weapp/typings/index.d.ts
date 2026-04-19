@@ -72,3 +72,4 @@ interface WxPerformance extends Performance {
 declare const global: {
     perfMonitor?: unknown
 } & Record<string, unknown>
+

@@ -13,11 +13,6 @@
   padding: 0 var(--spacer-lg);
 }
 
-.page-content {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacer-md);
-}
 
 .section-panel {
   padding: var(--spacer-md);

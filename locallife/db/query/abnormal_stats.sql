@@ -11,7 +11,7 @@ WHERE entity_type = $1
   AND stat_date <= $4;
 
 -- name: ListAbnormalStatsDaily :many
-SELECT * FROM abnormal_stats_daily
+SELECT id, stat_date, entity_type, entity_id, total_orders, abnormal_claims, created_at, updated_at FROM abnormal_stats_daily
 WHERE entity_type = $1
   AND entity_id = $2
   AND stat_date >= $3

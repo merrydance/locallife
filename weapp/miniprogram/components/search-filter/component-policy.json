@@ -1,0 +1,12 @@
+{
+  "purpose": "Filter bar with keyword, date, and range controls for list-style management pages.",
+  "tdesignGroup": "form",
+  "tdesignCandidates": [
+    "search",
+    "input",
+    "picker",
+    "slider"
+  ],
+  "decision": "local-component",
+  "rationale": "The filter bar coordinates multiple related local filter controls and emits one page-level filter contract. Extracting it reduces repeated filter orchestration in list pages."
+}

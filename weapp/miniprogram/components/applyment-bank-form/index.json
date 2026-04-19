@@ -1,6 +1,7 @@
 {
   "component": true,
   "usingComponents": {
+    "document-uploader": "../document-uploader/index",
     "t-button": "tdesign-miniprogram/button/button",
     "t-cell": "tdesign-miniprogram/cell/cell",
     "t-cell-group": "tdesign-miniprogram/cell-group/cell-group",
@@ -12,6 +13,7 @@
     "t-picker-item": "tdesign-miniprogram/picker-item/picker-item",
     "t-popup": "tdesign-miniprogram/popup/popup",
     "t-search": "tdesign-miniprogram/search/search",
+    "t-switch": "tdesign-miniprogram/switch/switch",
     "t-tag": "tdesign-miniprogram/tag/tag"
   }
 }

@@ -16,6 +16,7 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/util"
 	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	mockwechat "github.com/merrydance/locallife/wechat/mock"
 	"github.com/merrydance/locallife/worker"
 	mockwk "github.com/merrydance/locallife/worker/mock"
@@ -29,16 +30,16 @@ func TestHandlePaymentNotifyIdempotency(t *testing.T) {
 
 	testCases := []struct {
 		name          string
-		buildStubs    func(store *mockdb.MockStore, paymentClient *mockwechat.MockPaymentClientInterface)
+		buildStubs    func(store *mockdb.MockStore, paymentClient *mockwechat.MockDirectPaymentClientInterface)
 		setupRequest  func(t *testing.T) *http.Request
 		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
 	}{
 		{
 			name: "重复通知_直接返回SUCCESS",
-			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockPaymentClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockDirectPaymentClientInterface) {
 				// 先验证签名（必须通过）
 				paymentClient.EXPECT().
-					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+					VerifyNotificationSignature(gomock.Eq("test_signature"), gomock.Eq("1234567890"), gomock.Eq("test_nonce"), gomock.Eq("test_serial"), gomock.Any()).
 					Times(1).
 					Return(nil)
 
@@ -92,10 +93,10 @@ func TestHandlePaymentNotifyIdempotency(t *testing.T) {
 		},
 		{
 			name: "首次通知_验证签名失败",
-			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockPaymentClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockDirectPaymentClientInterface) {
 				// 签名验证失败（先于幂等性检查）
 				paymentClient.EXPECT().
-					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+					VerifyNotificationSignature(gomock.Eq("invalid_signature"), gomock.Eq("1234567890"), gomock.Eq("test_nonce"), gomock.Eq("test_serial"), gomock.Any()).
 					Times(1).
 					Return(wechat.ErrInvalidSignature)
 
@@ -135,9 +136,9 @@ func TestHandlePaymentNotifyIdempotency(t *testing.T) {
 		},
 		{
 			name: "重复通知_查询状态失败返回FAIL",
-			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockPaymentClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockDirectPaymentClientInterface) {
 				paymentClient.EXPECT().
-					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(nil)
 
@@ -185,9 +186,9 @@ func TestHandlePaymentNotifyIdempotency(t *testing.T) {
 		},
 		{
 			name: "重复通知_处理中返回FAIL",
-			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockPaymentClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockDirectPaymentClientInterface) {
 				paymentClient.EXPECT().
-					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(nil)
 
@@ -238,9 +239,9 @@ func TestHandlePaymentNotifyIdempotency(t *testing.T) {
 		},
 		{
 			name: "重复通知_stale claim返回FAIL并释放占位",
-			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockPaymentClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockDirectPaymentClientInterface) {
 				paymentClient.EXPECT().
-					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(nil)
 
@@ -296,9 +297,9 @@ func TestHandlePaymentNotifyIdempotency(t *testing.T) {
 		},
 		{
 			name: "重复通知_stale claim释放失败仍返回FAIL",
-			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockPaymentClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockDirectPaymentClientInterface) {
 				paymentClient.EXPECT().
-					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(nil)
 
@@ -362,7 +363,7 @@ func TestHandlePaymentNotifyIdempotency(t *testing.T) {
 			defer ctrl.Finish()
 
 			store := newMockStoreWithAlertSink(ctrl)
-			paymentClient := mockwechat.NewMockPaymentClientInterface(ctrl)
+			paymentClient := mockwechat.NewMockDirectPaymentClientInterface(ctrl)
 			tc.buildStubs(store, paymentClient)
 
 			// 创建测试服务器
@@ -382,16 +383,16 @@ func TestHandleRefundNotifyIdempotency(t *testing.T) {
 
 	testCases := []struct {
 		name          string
-		buildStubs    func(store *mockdb.MockStore, paymentClient *mockwechat.MockPaymentClientInterface)
+		buildStubs    func(store *mockdb.MockStore, paymentClient *mockwechat.MockDirectPaymentClientInterface)
 		setupRequest  func(t *testing.T) *http.Request
 		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
 	}{
 		{
 			name: "重复退款通知_直接返回SUCCESS",
-			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockPaymentClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockDirectPaymentClientInterface) {
 				// 先验证签名
 				paymentClient.EXPECT().
-					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(nil)
 
@@ -445,7 +446,7 @@ func TestHandleRefundNotifyIdempotency(t *testing.T) {
 			defer ctrl.Finish()
 
 			store := newMockStoreWithAlertSink(ctrl)
-			paymentClient := mockwechat.NewMockPaymentClientInterface(ctrl)
+			paymentClient := mockwechat.NewMockDirectPaymentClientInterface(ctrl)
 			tc.buildStubs(store, paymentClient)
 
 			server := newTestServerWithPaymentClient(t, store, paymentClient)
@@ -465,10 +466,10 @@ func TestHandleRefundNotifyOwnershipMismatch(t *testing.T) {
 	defer ctrl.Finish()
 
 	store := newMockStoreWithAlertSink(ctrl)
-	paymentClient := mockwechat.NewMockPaymentClientInterface(ctrl)
+	paymentClient := mockwechat.NewMockDirectPaymentClientInterface(ctrl)
 
 	paymentClient.EXPECT().
-		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Times(1).
 		Return(nil)
 
@@ -480,7 +481,7 @@ func TestHandleRefundNotifyOwnershipMismatch(t *testing.T) {
 	paymentClient.EXPECT().
 		DecryptRefundNotification(gomock.Any()).
 		Times(1).
-		Return(&wechat.RefundNotificationResource{
+		Return(&wechatcontracts.DirectRefundNotificationResource{
 			MchID:        "mch_wrong",
 			OutTradeNo:   "ORDER_REFUND_1",
 			OutRefundNo:  "REFUND_1",
@@ -549,7 +550,7 @@ func TestHandleCombinePaymentNotifyIdempotency(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
 				// 先验证签名
 				ecommerceClient.EXPECT().
-					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(nil)
 
@@ -631,7 +632,7 @@ func TestHandleCombinePaymentNotify_ClosedOrderEnqueuesAnomalyRefund(t *testing.
 	transactionID := "WX_" + util.RandomString(18)
 
 	ecommerceClient.EXPECT().
-		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil)
 
 	store.EXPECT().
@@ -640,26 +641,10 @@ func TestHandleCombinePaymentNotify_ClosedOrderEnqueuesAnomalyRefund(t *testing.
 
 	ecommerceClient.EXPECT().
 		DecryptCombinePaymentNotification(gomock.Any()).
-		Return(&wechat.CombinePaymentNotification{
-			CombineOutTradeNo: combineOutTradeNo,
-			SubOrders: []wechat.CombineSubOrderResult{{
-				OutTradeNo:    outTradeNo,
-				TransactionID: transactionID,
-				TradeState:    "SUCCESS",
-				Amount: struct {
-					TotalAmount    int64  `json:"total_amount"`
-					PayerAmount    int64  `json:"payer_amount"`
-					Currency       string `json:"currency"`
-					PayerCurrency  string `json:"payer_currency"`
-					SettlementRate int64  `json:"settlement_rate"`
-				}{
-					TotalAmount:   10000,
-					PayerAmount:   10000,
-					Currency:      "CNY",
-					PayerCurrency: "CNY",
-				},
-			}},
-		}, nil)
+		Return(newValidCombinePaymentNotification(combineOutTradeNo, outTradeNo, transactionID, 10000), nil)
+
+	ecommerceClient.EXPECT().GetSpMchID().Return("sp_expected")
+	ecommerceClient.EXPECT().GetSpAppID().Return("app_expected")
 
 	store.EXPECT().
 		GetCombinedPaymentOrderByOutTradeNo(gomock.Any(), combineOutTradeNo).
@@ -707,7 +692,7 @@ func TestHandleEcommercePaymentNotify_DelegatesToPartnerHandler(t *testing.T) {
 	transactionID := "WX_" + util.RandomString(18)
 
 	ecommerceClient.EXPECT().
-		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil)
 
 	store.EXPECT().
@@ -716,22 +701,7 @@ func TestHandleEcommercePaymentNotify_DelegatesToPartnerHandler(t *testing.T) {
 
 	ecommerceClient.EXPECT().
 		DecryptPartnerPaymentNotification(gomock.Any()).
-		Return(&wechat.PartnerPaymentNotificationResource{
-			SpMchID:       "sp_expected",
-			SpAppID:       "app_expected",
-			SubMchID:      "sub_expected",
-			OutTradeNo:    outTradeNo,
-			TransactionID: transactionID,
-			TradeState:    "SUCCESS",
-			Amount: struct {
-				Total         int64  `json:"total"`
-				PayerTotal    int64  `json:"payer_total"`
-				Currency      string `json:"currency"`
-				PayerCurrency string `json:"payer_currency"`
-			}{
-				Total: 8800,
-			},
-		}, nil)
+		Return(newValidPartnerPaymentNotificationResource(outTradeNo, transactionID, "sub_expected", 8800), nil)
 
 	ecommerceClient.EXPECT().GetSpMchID().Return("sp_expected")
 	ecommerceClient.EXPECT().GetSpAppID().Return("app_expected")
@@ -739,12 +709,13 @@ func TestHandleEcommercePaymentNotify_DelegatesToPartnerHandler(t *testing.T) {
 	store.EXPECT().
 		GetPaymentOrderByOutTradeNo(gomock.Any(), outTradeNo).
 		Return(db.PaymentOrder{
-			ID:          88,
-			OutTradeNo:  outTradeNo,
-			Status:      PaymentStatusPaid,
-			PaymentType: "profit_sharing",
-			OrderID:     pgtype.Int8{Int64: 66, Valid: true},
-			ProcessedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
+			ID:             88,
+			OutTradeNo:     outTradeNo,
+			Status:         PaymentStatusPaid,
+			PaymentType:    "profit_sharing",
+			PaymentChannel: db.PaymentChannelEcommerce,
+			OrderID:        pgtype.Int8{Int64: 66, Valid: true},
+			ProcessedAt:    pgtype.Timestamptz{Time: time.Now(), Valid: true},
 		}, nil)
 
 	store.EXPECT().
@@ -764,6 +735,55 @@ func TestHandleEcommercePaymentNotify_DelegatesToPartnerHandler(t *testing.T) {
 	assertWechatNoContentResponse(t, recorder)
 }
 
+func TestHandleEcommercePaymentNotify_ContractValidationFailureReturnsFail(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := newMockStoreWithAlertSink(ctrl)
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+
+	notificationID := util.RandomString(32)
+
+	ecommerceClient.EXPECT().
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil)
+
+	store.EXPECT().
+		TryClaimWechatNotification(gomock.Any(), gomock.Any()).
+		Return(true, nil)
+
+	ecommerceClient.EXPECT().
+		DecryptPartnerPaymentNotification(gomock.Any()).
+		Return(&wechatcontracts.PartnerPaymentNotificationResource{
+			SpMchID:        "sp_expected",
+			SpAppID:        "app_expected",
+			SubMchID:       "sub_expected",
+			OutTradeNo:     "order-1",
+			TradeType:      "JSAPI",
+			TradeState:     "SUCCESS",
+			TradeStateDesc: "success",
+			BankType:       "OTHERS",
+			SuccessTime:    "2026-04-16T10:00:00+08:00",
+			Amount: wechatcontracts.PartnerOrderQueryAmount{
+				Currency:      "CNY",
+				PayerCurrency: "CNY",
+			},
+		}, nil)
+
+	store.EXPECT().
+		ReleaseWechatNotificationClaim(gomock.Any(), notificationID).
+		Return(nil)
+
+	server := newTestServerWithEcommerceClient(t, store, ecommerceClient)
+	recorder := httptest.NewRecorder()
+	request := newEcommercePaymentNotifyRequest(t, notificationID)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusInternalServerError, recorder.Code)
+	assertWechatFailResponse(t, recorder, "notification contract validation failed")
+}
+
 func TestHandleEcommercePaymentNotify_UsesPersistedSubMchIDWhenConfigDrifts(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -776,7 +796,7 @@ func TestHandleEcommercePaymentNotify_UsesPersistedSubMchIDWhenConfigDrifts(t *t
 	transactionID := "WX_" + util.RandomString(18)
 
 	ecommerceClient.EXPECT().
-		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil)
 
 	store.EXPECT().
@@ -785,22 +805,7 @@ func TestHandleEcommercePaymentNotify_UsesPersistedSubMchIDWhenConfigDrifts(t *t
 
 	ecommerceClient.EXPECT().
 		DecryptPartnerPaymentNotification(gomock.Any()).
-		Return(&wechat.PartnerPaymentNotificationResource{
-			SpMchID:       "sp_expected",
-			SpAppID:       "app_expected",
-			SubMchID:      "sub_original",
-			OutTradeNo:    outTradeNo,
-			TransactionID: transactionID,
-			TradeState:    "SUCCESS",
-			Amount: struct {
-				Total         int64  `json:"total"`
-				PayerTotal    int64  `json:"payer_total"`
-				Currency      string `json:"currency"`
-				PayerCurrency string `json:"payer_currency"`
-			}{
-				Total: 8800,
-			},
-		}, nil)
+		Return(newValidPartnerPaymentNotificationResource(outTradeNo, transactionID, "sub_original", 8800), nil)
 
 	ecommerceClient.EXPECT().GetSpMchID().Return("sp_expected")
 	ecommerceClient.EXPECT().GetSpAppID().Return("app_expected")
@@ -808,12 +813,13 @@ func TestHandleEcommercePaymentNotify_UsesPersistedSubMchIDWhenConfigDrifts(t *t
 	store.EXPECT().
 		GetPaymentOrderByOutTradeNo(gomock.Any(), outTradeNo).
 		Return(db.PaymentOrder{
-			ID:          90,
-			OutTradeNo:  outTradeNo,
-			Status:      PaymentStatusPaid,
-			PaymentType: "profit_sharing",
-			Attach:      pgtype.Text{String: "order_id:66;sub_mchid:sub_original", Valid: true},
-			ProcessedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
+			ID:             90,
+			OutTradeNo:     outTradeNo,
+			Status:         PaymentStatusPaid,
+			PaymentType:    "profit_sharing",
+			PaymentChannel: db.PaymentChannelEcommerce,
+			Attach:         pgtype.Text{String: "order_id:66;sub_mchid:sub_original", Valid: true},
+			ProcessedAt:    pgtype.Timestamptz{Time: time.Now(), Valid: true},
 		}, nil)
 
 	server := newTestServerWithEcommerceClient(t, store, ecommerceClient)
@@ -838,7 +844,7 @@ func TestHandleEcommercePaymentNotify_PaidUnprocessedReenqueuesPaymentSuccess(t 
 	transactionID := "WX_" + util.RandomString(18)
 
 	ecommerceClient.EXPECT().
-		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil)
 
 	store.EXPECT().
@@ -847,22 +853,7 @@ func TestHandleEcommercePaymentNotify_PaidUnprocessedReenqueuesPaymentSuccess(t 
 
 	ecommerceClient.EXPECT().
 		DecryptPartnerPaymentNotification(gomock.Any()).
-		Return(&wechat.PartnerPaymentNotificationResource{
-			SpMchID:       "sp_expected",
-			SpAppID:       "app_expected",
-			SubMchID:      "sub_expected",
-			OutTradeNo:    outTradeNo,
-			TransactionID: transactionID,
-			TradeState:    "SUCCESS",
-			Amount: struct {
-				Total         int64  `json:"total"`
-				PayerTotal    int64  `json:"payer_total"`
-				Currency      string `json:"currency"`
-				PayerCurrency string `json:"payer_currency"`
-			}{
-				Total: 8800,
-			},
-		}, nil)
+		Return(newValidPartnerPaymentNotificationResource(outTradeNo, transactionID, "sub_expected", 8800), nil)
 
 	ecommerceClient.EXPECT().GetSpMchID().Return("sp_expected")
 	ecommerceClient.EXPECT().GetSpAppID().Return("app_expected")
@@ -870,13 +861,14 @@ func TestHandleEcommercePaymentNotify_PaidUnprocessedReenqueuesPaymentSuccess(t 
 	store.EXPECT().
 		GetPaymentOrderByOutTradeNo(gomock.Any(), outTradeNo).
 		Return(db.PaymentOrder{
-			ID:           89,
-			OutTradeNo:   outTradeNo,
-			Status:       PaymentStatusPaid,
-			PaymentType:  "profit_sharing",
-			BusinessType: "order",
-			OrderID:      pgtype.Int8{Int64: 67, Valid: true},
-			ProcessedAt:  pgtype.Timestamptz{Valid: false},
+			ID:             89,
+			OutTradeNo:     outTradeNo,
+			Status:         PaymentStatusPaid,
+			PaymentType:    "profit_sharing",
+			PaymentChannel: db.PaymentChannelEcommerce,
+			BusinessType:   "order",
+			OrderID:        pgtype.Int8{Int64: 67, Valid: true},
+			ProcessedAt:    pgtype.Timestamptz{Valid: false},
 		}, nil)
 
 	store.EXPECT().
@@ -923,30 +915,18 @@ func TestHandleEcommercePaymentNotify_ClosedOrderEnqueueFailureEmitsAlert(t *tes
 		return db.PlatformAlertEvent{}, nil
 	})
 
-	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 	store.EXPECT().TryClaimWechatNotification(gomock.Any(), gomock.Any()).Return(true, nil)
-	ecommerceClient.EXPECT().DecryptPartnerPaymentNotification(gomock.Any()).Return(&wechat.PartnerPaymentNotificationResource{
-		SpMchID:       "sp_expected",
-		SpAppID:       "app_expected",
-		SubMchID:      "sub_expected",
-		OutTradeNo:    outTradeNo,
-		TransactionID: transactionID,
-		TradeState:    "SUCCESS",
-		Amount: struct {
-			Total         int64  `json:"total"`
-			PayerTotal    int64  `json:"payer_total"`
-			Currency      string `json:"currency"`
-			PayerCurrency string `json:"payer_currency"`
-		}{Total: 8800},
-	}, nil)
+	ecommerceClient.EXPECT().DecryptPartnerPaymentNotification(gomock.Any()).Return(newValidPartnerPaymentNotificationResource(outTradeNo, transactionID, "sub_expected", 8800), nil)
 	ecommerceClient.EXPECT().GetSpMchID().Return("sp_expected")
 	ecommerceClient.EXPECT().GetSpAppID().Return("app_expected")
 	store.EXPECT().GetPaymentOrderByOutTradeNo(gomock.Any(), outTradeNo).Return(db.PaymentOrder{
-		ID:          88,
-		OutTradeNo:  outTradeNo,
-		Status:      PaymentStatusClosed,
-		PaymentType: "profit_sharing",
-		OrderID:     pgtype.Int8{Int64: 66, Valid: true},
+		ID:             88,
+		OutTradeNo:     outTradeNo,
+		Status:         PaymentStatusClosed,
+		PaymentType:    "profit_sharing",
+		PaymentChannel: db.PaymentChannelEcommerce,
+		OrderID:        pgtype.Int8{Int64: 66, Valid: true},
 	}, nil)
 	store.EXPECT().GetOrder(gomock.Any(), int64(66)).Return(db.Order{ID: 66, MerchantID: 99}, nil)
 	store.EXPECT().GetMerchantPaymentConfig(gomock.Any(), int64(99)).Return(db.MerchantPaymentConfig{MerchantID: 99, SubMchID: "sub_expected"}, nil)
@@ -979,31 +959,19 @@ func TestHandleEcommercePaymentNotify_AmountMismatchEnqueueFailureEmitsAlert(t *
 		return db.PlatformAlertEvent{}, nil
 	})
 
-	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 	store.EXPECT().TryClaimWechatNotification(gomock.Any(), gomock.Any()).Return(true, nil)
-	ecommerceClient.EXPECT().DecryptPartnerPaymentNotification(gomock.Any()).Return(&wechat.PartnerPaymentNotificationResource{
-		SpMchID:       "sp_expected",
-		SpAppID:       "app_expected",
-		SubMchID:      "sub_expected",
-		OutTradeNo:    outTradeNo,
-		TransactionID: transactionID,
-		TradeState:    "SUCCESS",
-		Amount: struct {
-			Total         int64  `json:"total"`
-			PayerTotal    int64  `json:"payer_total"`
-			Currency      string `json:"currency"`
-			PayerCurrency string `json:"payer_currency"`
-		}{Total: 9900},
-	}, nil)
+	ecommerceClient.EXPECT().DecryptPartnerPaymentNotification(gomock.Any()).Return(newValidPartnerPaymentNotificationResource(outTradeNo, transactionID, "sub_expected", 9900), nil)
 	ecommerceClient.EXPECT().GetSpMchID().Return("sp_expected")
 	ecommerceClient.EXPECT().GetSpAppID().Return("app_expected")
 	store.EXPECT().GetPaymentOrderByOutTradeNo(gomock.Any(), outTradeNo).Return(db.PaymentOrder{
-		ID:          88,
-		OutTradeNo:  outTradeNo,
-		Status:      PaymentStatusPending,
-		PaymentType: "profit_sharing",
-		Amount:      8800,
-		OrderID:     pgtype.Int8{Int64: 66, Valid: true},
+		ID:             88,
+		OutTradeNo:     outTradeNo,
+		Status:         PaymentStatusPending,
+		PaymentType:    "profit_sharing",
+		PaymentChannel: db.PaymentChannelEcommerce,
+		Amount:         8800,
+		OrderID:        pgtype.Int8{Int64: 66, Valid: true},
 	}, nil)
 	store.EXPECT().GetOrder(gomock.Any(), int64(66)).Return(db.Order{ID: 66, MerchantID: 99}, nil)
 	store.EXPECT().GetMerchantPaymentConfig(gomock.Any(), int64(99)).Return(db.MerchantPaymentConfig{MerchantID: 99, SubMchID: "sub_expected"}, nil)
@@ -1036,20 +1004,19 @@ func TestHandleCombinePaymentNotify_OwnershipMismatchReturnsFail(t *testing.T) {
 	combineOutTradeNo := "COMB_" + util.RandomString(18)
 
 	ecommerceClient.EXPECT().
-		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil)
 
 	store.EXPECT().
 		TryClaimWechatNotification(gomock.Any(), gomock.Any()).
 		Return(true, nil)
 
+	resource := newValidCombinePaymentNotification(combineOutTradeNo, "SUB_"+util.RandomString(18), "WX_"+util.RandomString(18), 10000)
+	resource.CombineMchID = "sp_wrong"
+
 	ecommerceClient.EXPECT().
 		DecryptCombinePaymentNotification(gomock.Any()).
-		Return(&wechat.CombinePaymentNotification{
-			CombineOutTradeNo: combineOutTradeNo,
-			CombineMchID:      "sp_wrong",
-			CombineAppID:      "app_wrong",
-		}, nil)
+		Return(resource, nil)
 
 	ecommerceClient.EXPECT().
 		GetSpMchID().
@@ -1071,6 +1038,45 @@ func TestHandleCombinePaymentNotify_OwnershipMismatchReturnsFail(t *testing.T) {
 	assertWechatFailResponse(t, recorder, "ownership validation failed")
 }
 
+func TestHandleCombinePaymentNotify_ContractValidationFailureReturnsFail(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := newMockStoreWithAlertSink(ctrl)
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+
+	notificationID := util.RandomString(32)
+
+	ecommerceClient.EXPECT().
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil)
+
+	store.EXPECT().
+		TryClaimWechatNotification(gomock.Any(), gomock.Any()).
+		Return(true, nil)
+
+	ecommerceClient.EXPECT().
+		DecryptCombinePaymentNotification(gomock.Any()).
+		Return(&wechatcontracts.CombinePaymentNotification{
+			CombineOutTradeNo: "combine-1",
+			CombineMchID:      "sp_expected",
+			CombineAppID:      "app_expected",
+		}, nil)
+
+	store.EXPECT().
+		ReleaseWechatNotificationClaim(gomock.Any(), notificationID).
+		Return(nil)
+
+	server := newTestServerWithEcommerceClient(t, store, ecommerceClient)
+	recorder := httptest.NewRecorder()
+	request := newCombinePaymentNotifyRequest(t, notificationID)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusInternalServerError, recorder.Code)
+	assertWechatFailResponse(t, recorder, "notification contract validation failed")
+}
+
 func TestHandleCombinePaymentNotify_SubOrderNotFoundReturnsFail(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -1084,7 +1090,7 @@ func TestHandleCombinePaymentNotify_SubOrderNotFoundReturnsFail(t *testing.T) {
 	transactionID := "WX_" + util.RandomString(18)
 
 	ecommerceClient.EXPECT().
-		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil)
 
 	store.EXPECT().
@@ -1093,26 +1099,10 @@ func TestHandleCombinePaymentNotify_SubOrderNotFoundReturnsFail(t *testing.T) {
 
 	ecommerceClient.EXPECT().
 		DecryptCombinePaymentNotification(gomock.Any()).
-		Return(&wechat.CombinePaymentNotification{
-			CombineOutTradeNo: combineOutTradeNo,
-			SubOrders: []wechat.CombineSubOrderResult{{
-				OutTradeNo:    outTradeNo,
-				TransactionID: transactionID,
-				TradeState:    "SUCCESS",
-				Amount: struct {
-					TotalAmount    int64  `json:"total_amount"`
-					PayerAmount    int64  `json:"payer_amount"`
-					Currency       string `json:"currency"`
-					PayerCurrency  string `json:"payer_currency"`
-					SettlementRate int64  `json:"settlement_rate"`
-				}{
-					TotalAmount:   10000,
-					PayerAmount:   10000,
-					Currency:      "CNY",
-					PayerCurrency: "CNY",
-				},
-			}},
-		}, nil)
+		Return(newValidCombinePaymentNotification(combineOutTradeNo, outTradeNo, transactionID, 10000), nil)
+
+	ecommerceClient.EXPECT().GetSpMchID().Return("sp_expected")
+	ecommerceClient.EXPECT().GetSpAppID().Return("app_expected")
 
 	store.EXPECT().
 		GetCombinedPaymentOrderByOutTradeNo(gomock.Any(), combineOutTradeNo).
@@ -1150,7 +1140,7 @@ func TestHandleCombinePaymentNotify_AmountMismatchEnqueuesRefund(t *testing.T) {
 	transactionID := "WX_" + util.RandomString(18)
 
 	ecommerceClient.EXPECT().
-		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil)
 
 	store.EXPECT().
@@ -1159,28 +1149,10 @@ func TestHandleCombinePaymentNotify_AmountMismatchEnqueuesRefund(t *testing.T) {
 
 	ecommerceClient.EXPECT().
 		DecryptCombinePaymentNotification(gomock.Any()).
-		Return(&wechat.CombinePaymentNotification{
-			CombineOutTradeNo: combineOutTradeNo,
-			SubOrders: []wechat.CombineSubOrderResult{
-				{
-					OutTradeNo:    outTradeNo,
-					TransactionID: transactionID,
-					TradeState:    "SUCCESS",
-					Amount: struct {
-						TotalAmount    int64  `json:"total_amount"`
-						PayerAmount    int64  `json:"payer_amount"`
-						Currency       string `json:"currency"`
-						PayerCurrency  string `json:"payer_currency"`
-						SettlementRate int64  `json:"settlement_rate"`
-					}{
-						TotalAmount:   12000,
-						PayerAmount:   12000,
-						Currency:      "CNY",
-						PayerCurrency: "CNY",
-					},
-				},
-			},
-		}, nil)
+		Return(newValidCombinePaymentNotification(combineOutTradeNo, outTradeNo, transactionID, 12000), nil)
+
+	ecommerceClient.EXPECT().GetSpMchID().Return("sp_expected")
+	ecommerceClient.EXPECT().GetSpAppID().Return("app_expected")
 
 	store.EXPECT().
 		GetCombinedPaymentOrderByOutTradeNo(gomock.Any(), combineOutTradeNo).
@@ -1239,7 +1211,7 @@ func TestHandleCombinePaymentNotify_MainOrderNotFoundReturnsFail(t *testing.T) {
 	transactionID := "WX_" + util.RandomString(18)
 
 	ecommerceClient.EXPECT().
-		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil)
 
 	store.EXPECT().
@@ -1248,26 +1220,10 @@ func TestHandleCombinePaymentNotify_MainOrderNotFoundReturnsFail(t *testing.T) {
 
 	ecommerceClient.EXPECT().
 		DecryptCombinePaymentNotification(gomock.Any()).
-		Return(&wechat.CombinePaymentNotification{
-			CombineOutTradeNo: combineOutTradeNo,
-			SubOrders: []wechat.CombineSubOrderResult{{
-				OutTradeNo:    outTradeNo,
-				TransactionID: transactionID,
-				TradeState:    "SUCCESS",
-				Amount: struct {
-					TotalAmount    int64  `json:"total_amount"`
-					PayerAmount    int64  `json:"payer_amount"`
-					Currency       string `json:"currency"`
-					PayerCurrency  string `json:"payer_currency"`
-					SettlementRate int64  `json:"settlement_rate"`
-				}{
-					TotalAmount:   10000,
-					PayerAmount:   10000,
-					Currency:      "CNY",
-					PayerCurrency: "CNY",
-				},
-			}},
-		}, nil)
+		Return(newValidCombinePaymentNotification(combineOutTradeNo, outTradeNo, transactionID, 10000), nil)
+
+	ecommerceClient.EXPECT().GetSpMchID().Return("sp_expected")
+	ecommerceClient.EXPECT().GetSpAppID().Return("app_expected")
 
 	store.EXPECT().
 		GetCombinedPaymentOrderByOutTradeNo(gomock.Any(), combineOutTradeNo).
@@ -1301,7 +1257,7 @@ func TestHandleCombinePaymentNotify_PaymentSuccessEnqueueFailureReturnsFail(t *t
 	transactionID := "WX_" + util.RandomString(18)
 
 	ecommerceClient.EXPECT().
-		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil)
 
 	store.EXPECT().
@@ -1310,28 +1266,10 @@ func TestHandleCombinePaymentNotify_PaymentSuccessEnqueueFailureReturnsFail(t *t
 
 	ecommerceClient.EXPECT().
 		DecryptCombinePaymentNotification(gomock.Any()).
-		Return(&wechat.CombinePaymentNotification{
-			CombineOutTradeNo: combineOutTradeNo,
-			SubOrders: []wechat.CombineSubOrderResult{
-				{
-					OutTradeNo:    outTradeNo,
-					TransactionID: transactionID,
-					TradeState:    "SUCCESS",
-					Amount: struct {
-						TotalAmount    int64  `json:"total_amount"`
-						PayerAmount    int64  `json:"payer_amount"`
-						Currency       string `json:"currency"`
-						PayerCurrency  string `json:"payer_currency"`
-						SettlementRate int64  `json:"settlement_rate"`
-					}{
-						TotalAmount:   10000,
-						PayerAmount:   10000,
-						Currency:      "CNY",
-						PayerCurrency: "CNY",
-					},
-				},
-			},
-		}, nil)
+		Return(newValidCombinePaymentNotification(combineOutTradeNo, outTradeNo, transactionID, 10000), nil)
+
+	ecommerceClient.EXPECT().GetSpMchID().Return("sp_expected")
+	ecommerceClient.EXPECT().GetSpAppID().Return("app_expected")
 
 	store.EXPECT().
 		GetCombinedPaymentOrderByOutTradeNo(gomock.Any(), combineOutTradeNo).
@@ -1391,28 +1329,11 @@ func TestHandleCombinePaymentNotify_ClosedOrderEnqueueFailureReturnsFail(t *test
 
 	store.EXPECT().CreatePlatformAlertEvent(gomock.Any(), gomock.Any()).Return(db.PlatformAlertEvent{}, nil)
 
-	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 	store.EXPECT().TryClaimWechatNotification(gomock.Any(), gomock.Any()).Return(true, nil)
-	ecommerceClient.EXPECT().DecryptCombinePaymentNotification(gomock.Any()).Return(&wechat.CombinePaymentNotification{
-		CombineOutTradeNo: combineOutTradeNo,
-		SubOrders: []wechat.CombineSubOrderResult{{
-			OutTradeNo:    outTradeNo,
-			TransactionID: transactionID,
-			TradeState:    "SUCCESS",
-			Amount: struct {
-				TotalAmount    int64  `json:"total_amount"`
-				PayerAmount    int64  `json:"payer_amount"`
-				Currency       string `json:"currency"`
-				PayerCurrency  string `json:"payer_currency"`
-				SettlementRate int64  `json:"settlement_rate"`
-			}{
-				TotalAmount:   10000,
-				PayerAmount:   10000,
-				Currency:      "CNY",
-				PayerCurrency: "CNY",
-			},
-		}},
-	}, nil)
+	ecommerceClient.EXPECT().DecryptCombinePaymentNotification(gomock.Any()).Return(newValidCombinePaymentNotification(combineOutTradeNo, outTradeNo, transactionID, 10000), nil)
+	ecommerceClient.EXPECT().GetSpMchID().Return("sp_expected")
+	ecommerceClient.EXPECT().GetSpAppID().Return("app_expected")
 	store.EXPECT().GetCombinedPaymentOrderByOutTradeNo(gomock.Any(), combineOutTradeNo).Return(db.CombinedPaymentOrder{ID: 601, CombineOutTradeNo: combineOutTradeNo, Status: PaymentStatusPending}, nil)
 	store.EXPECT().GetPaymentOrderByOutTradeNo(gomock.Any(), outTradeNo).Return(db.PaymentOrder{
 		ID:                61,
@@ -1435,7 +1356,7 @@ func TestHandleCombinePaymentNotify_ClosedOrderEnqueueFailureReturnsFail(t *test
 	assertWechatFailResponse(t, recorder, "1 orders failed")
 }
 
-func TestHandleOrderSettlementNotify_ProfitSharingEnqueueFailureStillReturnsSuccess(t *testing.T) {
+func TestHandleOrderSettlementNotify_ProfitSharingEnqueueFailureReturnsFailAndReleasesClaim(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -1448,7 +1369,7 @@ func TestHandleOrderSettlementNotify_ProfitSharingEnqueueFailureStillReturnsSucc
 	transactionID := "WX_" + util.RandomString(18)
 
 	ecommerceClient.EXPECT().
-		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil)
 
 	store.EXPECT().
@@ -1471,10 +1392,12 @@ func TestHandleOrderSettlementNotify_ProfitSharingEnqueueFailureStillReturnsSucc
 	store.EXPECT().
 		GetPaymentOrderByOutTradeNo(gomock.Any(), merchantTradeNo).
 		Return(db.PaymentOrder{
-			ID:          21,
-			OutTradeNo:  merchantTradeNo,
-			Status:      PaymentStatusPaid,
-			PaymentType: "profit_sharing",
+			ID:                    21,
+			OutTradeNo:            merchantTradeNo,
+			Status:                PaymentStatusPaid,
+			PaymentType:           "profit_sharing",
+			PaymentChannel:        db.PaymentChannelEcommerce,
+			RequiresProfitSharing: true,
 		}, nil)
 
 	taskDistributor.EXPECT().
@@ -1485,6 +1408,10 @@ func TestHandleOrderSettlementNotify_ProfitSharingEnqueueFailureStillReturnsSucc
 			return errors.New("queue down")
 		})
 
+	store.EXPECT().
+		ReleaseWechatNotificationClaim(gomock.Any(), notificationID).
+		Return(nil)
+
 	server := newTestServerWithEcommerceClient(t, store, ecommerceClient)
 	server.SetTaskDistributorForTest(taskDistributor)
 
@@ -1492,7 +1419,8 @@ func TestHandleOrderSettlementNotify_ProfitSharingEnqueueFailureStillReturnsSucc
 	request := newSettlementNotifyRequest(t, notificationID)
 	server.router.ServeHTTP(recorder, request)
 
-	assertWechatSuccessResponse(t, recorder, "OK")
+	require.Equal(t, http.StatusInternalServerError, recorder.Code)
+	assertWechatFailResponse(t, recorder, "enqueue failed, please retry")
 }
 
 func TestHandleEcommerceRefundNotify_OwnershipMismatchReturnsFail(t *testing.T) {
@@ -1505,7 +1433,7 @@ func TestHandleEcommerceRefundNotify_OwnershipMismatchReturnsFail(t *testing.T) 
 	notificationID := util.RandomString(32)
 
 	ecommerceClient.EXPECT().
-		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Times(1).
 		Return(nil)
 
@@ -1575,7 +1503,7 @@ func TestHandleEcommerceRefundNotify_SuccessReturnsNoContent(t *testing.T) {
 	notificationID := util.RandomString(32)
 
 	ecommerceClient.EXPECT().
-		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Times(1).
 		Return(nil)
 
@@ -1644,6 +1572,79 @@ func TestHandleEcommerceRefundNotify_SuccessReturnsNoContent(t *testing.T) {
 	assertWechatNoContentResponse(t, recorder)
 }
 
+func TestHandleEcommerceRefundNotify_WithoutTaskDistributorReturnsFail(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := newMockStoreWithAlertSink(ctrl)
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+
+	notificationID := util.RandomString(32)
+
+	ecommerceClient.EXPECT().
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(nil)
+
+	store.EXPECT().
+		TryClaimWechatNotification(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(true, nil)
+
+	ecommerceClient.EXPECT().
+		DecryptEcommerceRefundNotification(gomock.Any()).
+		Times(1).
+		Return(&wechat.EcommerceRefundNotification{
+			SpMchID:       "sp_expected",
+			SubMchID:      "sub-001",
+			OutTradeNo:    "ORDER_1",
+			TransactionID: "WX_TX_1",
+			OutRefundNo:   "REFUND_1",
+			RefundID:      "WX_REFUND_1",
+			RefundStatus:  wechat.RefundStatusSuccess,
+		}, nil)
+
+	ecommerceClient.EXPECT().
+		GetSpMchID().
+		Times(1).
+		Return("sp_expected")
+
+	store.EXPECT().
+		ReleaseWechatNotificationClaim(gomock.Any(), notificationID).
+		Times(1).
+		Return(nil)
+
+	server := newTestServerWithEcommerceClient(t, store, ecommerceClient)
+	server.SetTaskDistributorForTest(nil)
+	recorder := httptest.NewRecorder()
+
+	requestBody := map[string]interface{}{
+		"id":            notificationID,
+		"event_type":    "REFUND.SUCCESS",
+		"resource_type": "encrypt-resource",
+		"resource": map[string]interface{}{
+			"algorithm":       "AEAD_AES_256_GCM",
+			"ciphertext":      "mock_encrypted_data",
+			"nonce":           "mock_nonce",
+			"associated_data": "refund",
+		},
+	}
+	bodyBytes, err := json.Marshal(requestBody)
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPost, "/v1/webhooks/wechat-ecommerce/refund-notify", bytes.NewReader(bodyBytes))
+	require.NoError(t, err)
+	request.Header.Set("Wechatpay-Timestamp", "1234567890")
+	request.Header.Set("Wechatpay-Nonce", "test_nonce")
+	request.Header.Set("Wechatpay-Signature", "test_signature")
+	request.Header.Set("Wechatpay-Serial", "test_serial")
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusInternalServerError, recorder.Code)
+	assertWechatFailResponse(t, recorder, "refund result processing unavailable, please retry")
+}
+
 // TestHandleEcommerceRefundNotifyIdempotency 测试平台收付通退款回调的幂等性检查
 func TestHandleEcommerceRefundNotifyIdempotency(t *testing.T) {
 	notificationID := util.RandomString(32)
@@ -1659,7 +1660,7 @@ func TestHandleEcommerceRefundNotifyIdempotency(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
 				// 先验证签名
 				ecommerceClient.EXPECT().
-					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(nil)
 
@@ -1727,12 +1728,19 @@ func TestHandleEcommerceRefundNotifyIdempotency(t *testing.T) {
 }
 
 // newTestServerWithPaymentClient 创建带Mock PaymentClient的测试服务器
-func newTestServerWithPaymentClient(t *testing.T, store db.Store, paymentClient *mockwechat.MockPaymentClientInterface) *Server {
+func newTestServerWithPaymentClient(t *testing.T, store db.Store, paymentClient *mockwechat.MockDirectPaymentClientInterface) *Server {
 	server := newTestServer(t, store)
 
 	// 替换为Mock客户端
-	server.paymentClient = paymentClient
+	server.directPaymentClient = paymentClient
 
+	return server
+}
+
+// newTestServerWithTransferClient 创建带Mock TransferClient的测试服务器
+func newTestServerWithTransferClient(t *testing.T, store db.Store, transferClient *mockwechat.MockTransferClientInterface) *Server {
+	server := newTestServer(t, store)
+	server.transferClient = transferClient
 	return server
 }
 
@@ -1755,17 +1763,17 @@ func TestHandlePaymentNotifyFullFlow(t *testing.T) {
 
 	testCases := []struct {
 		name               string
-		buildStubs         func(store *mockdb.MockStore, paymentClient *mockwechat.MockPaymentClientInterface, taskDistributor *mockwk.MockTaskDistributor)
+		buildStubs         func(store *mockdb.MockStore, paymentClient *mockwechat.MockDirectPaymentClientInterface, taskDistributor *mockwk.MockTaskDistributor)
 		setupRequest       func(t *testing.T) *http.Request
 		checkResponse      func(t *testing.T, recorder *httptest.ResponseRecorder)
 		useTaskDistributor bool
 	}{
 		{
 			name: "支付成功_完整流程",
-			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockPaymentClientInterface, taskDistributor *mockwk.MockTaskDistributor) {
+			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockDirectPaymentClientInterface, taskDistributor *mockwk.MockTaskDistributor) {
 				// 1. 签名验证通过
 				paymentClient.EXPECT().
-					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(nil)
 
@@ -1779,15 +1787,10 @@ func TestHandlePaymentNotifyFullFlow(t *testing.T) {
 				paymentClient.EXPECT().
 					DecryptPaymentNotification(gomock.Any()).
 					Times(1).
-					Return(&wechat.PaymentNotificationResource{
+					Return(&wechatcontracts.DirectPaymentNotificationResource{
 						OutTradeNo:    outTradeNo,
 						TransactionID: transactionID,
-						Amount: struct {
-							Total         int64  `json:"total"`
-							PayerTotal    int64  `json:"payer_total"`
-							Currency      string `json:"currency"`
-							PayerCurrency string `json:"payer_currency"`
-						}{
+						Amount: wechatcontracts.DirectOrderQueryAmount{
 							Total: amount,
 						},
 					}, nil)
@@ -1858,9 +1861,9 @@ func TestHandlePaymentNotifyFullFlow(t *testing.T) {
 		},
 		{
 			name: "金额不匹配_返回SUCCESS避免重试",
-			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockPaymentClientInterface, taskDistributor *mockwk.MockTaskDistributor) {
+			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockDirectPaymentClientInterface, taskDistributor *mockwk.MockTaskDistributor) {
 				paymentClient.EXPECT().
-					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(nil)
 
@@ -1873,15 +1876,10 @@ func TestHandlePaymentNotifyFullFlow(t *testing.T) {
 				paymentClient.EXPECT().
 					DecryptPaymentNotification(gomock.Any()).
 					Times(1).
-					Return(&wechat.PaymentNotificationResource{
+					Return(&wechatcontracts.DirectPaymentNotificationResource{
 						OutTradeNo:    outTradeNo,
 						TransactionID: transactionID,
-						Amount: struct {
-							Total         int64  `json:"total"`
-							PayerTotal    int64  `json:"payer_total"`
-							Currency      string `json:"currency"`
-							PayerCurrency string `json:"payer_currency"`
-						}{
+						Amount: wechatcontracts.DirectOrderQueryAmount{
 							Total: 200 * fenPerYuan,
 						},
 					}, nil)
@@ -1954,9 +1952,9 @@ func TestHandlePaymentNotifyFullFlow(t *testing.T) {
 		},
 		{
 			name: "归属校验失败_返回FAIL触发重试",
-			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockPaymentClientInterface, taskDistributor *mockwk.MockTaskDistributor) {
+			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockDirectPaymentClientInterface, taskDistributor *mockwk.MockTaskDistributor) {
 				paymentClient.EXPECT().
-					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(nil)
 
@@ -1968,17 +1966,12 @@ func TestHandlePaymentNotifyFullFlow(t *testing.T) {
 				paymentClient.EXPECT().
 					DecryptPaymentNotification(gomock.Any()).
 					Times(1).
-					Return(&wechat.PaymentNotificationResource{
+					Return(&wechatcontracts.DirectPaymentNotificationResource{
 						OutTradeNo:    outTradeNo,
 						TransactionID: transactionID,
 						AppID:         "wx_wrong_app",
 						MchID:         "mch_wrong",
-						Amount: struct {
-							Total         int64  `json:"total"`
-							PayerTotal    int64  `json:"payer_total"`
-							Currency      string `json:"currency"`
-							PayerCurrency string `json:"payer_currency"`
-						}{
+						Amount: wechatcontracts.DirectOrderQueryAmount{
 							Total: amount,
 						},
 					}, nil)
@@ -2030,9 +2023,9 @@ func TestHandlePaymentNotifyFullFlow(t *testing.T) {
 		},
 		{
 			name: "订单不存在_返回FAIL触发重试",
-			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockPaymentClientInterface, taskDistributor *mockwk.MockTaskDistributor) {
+			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockDirectPaymentClientInterface, taskDistributor *mockwk.MockTaskDistributor) {
 				paymentClient.EXPECT().
-					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(nil)
 
@@ -2044,15 +2037,10 @@ func TestHandlePaymentNotifyFullFlow(t *testing.T) {
 				paymentClient.EXPECT().
 					DecryptPaymentNotification(gomock.Any()).
 					Times(1).
-					Return(&wechat.PaymentNotificationResource{
+					Return(&wechatcontracts.DirectPaymentNotificationResource{
 						OutTradeNo:    outTradeNo,
 						TransactionID: transactionID,
-						Amount: struct {
-							Total         int64  `json:"total"`
-							PayerTotal    int64  `json:"payer_total"`
-							Currency      string `json:"currency"`
-							PayerCurrency string `json:"payer_currency"`
-						}{
+						Amount: wechatcontracts.DirectOrderQueryAmount{
 							Total: amount,
 						},
 					}, nil)
@@ -2104,9 +2092,9 @@ func TestHandlePaymentNotifyFullFlow(t *testing.T) {
 		},
 		{
 			name: "订单不存在_release失败仍返回FAIL触发重试",
-			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockPaymentClientInterface, taskDistributor *mockwk.MockTaskDistributor) {
+			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockDirectPaymentClientInterface, taskDistributor *mockwk.MockTaskDistributor) {
 				paymentClient.EXPECT().
-					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(nil)
 
@@ -2118,15 +2106,10 @@ func TestHandlePaymentNotifyFullFlow(t *testing.T) {
 				paymentClient.EXPECT().
 					DecryptPaymentNotification(gomock.Any()).
 					Times(1).
-					Return(&wechat.PaymentNotificationResource{
+					Return(&wechatcontracts.DirectPaymentNotificationResource{
 						OutTradeNo:    outTradeNo,
 						TransactionID: transactionID,
-						Amount: struct {
-							Total         int64  `json:"total"`
-							PayerTotal    int64  `json:"payer_total"`
-							Currency      string `json:"currency"`
-							PayerCurrency string `json:"payer_currency"`
-						}{
+						Amount: wechatcontracts.DirectOrderQueryAmount{
 							Total: amount,
 						},
 					}, nil)
@@ -2178,9 +2161,9 @@ func TestHandlePaymentNotifyFullFlow(t *testing.T) {
 		},
 		{
 			name: "订单已支付_幂等返回SUCCESS",
-			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockPaymentClientInterface, taskDistributor *mockwk.MockTaskDistributor) {
+			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockDirectPaymentClientInterface, taskDistributor *mockwk.MockTaskDistributor) {
 				paymentClient.EXPECT().
-					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(nil)
 
@@ -2192,15 +2175,10 @@ func TestHandlePaymentNotifyFullFlow(t *testing.T) {
 				paymentClient.EXPECT().
 					DecryptPaymentNotification(gomock.Any()).
 					Times(1).
-					Return(&wechat.PaymentNotificationResource{
+					Return(&wechatcontracts.DirectPaymentNotificationResource{
 						OutTradeNo:    outTradeNo,
 						TransactionID: transactionID,
-						Amount: struct {
-							Total         int64  `json:"total"`
-							PayerTotal    int64  `json:"payer_total"`
-							Currency      string `json:"currency"`
-							PayerCurrency string `json:"payer_currency"`
-						}{
+						Amount: wechatcontracts.DirectOrderQueryAmount{
 							Total: amount,
 						},
 					}, nil)
@@ -2255,9 +2233,9 @@ func TestHandlePaymentNotifyFullFlow(t *testing.T) {
 		},
 		{
 			name: "非SUCCESS事件类型_忽略处理",
-			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockPaymentClientInterface, taskDistributor *mockwk.MockTaskDistributor) {
+			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockDirectPaymentClientInterface, taskDistributor *mockwk.MockTaskDistributor) {
 				paymentClient.EXPECT().
-					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(nil)
 
@@ -2297,7 +2275,7 @@ func TestHandlePaymentNotifyFullFlow(t *testing.T) {
 		},
 		{
 			name: "无PaymentClient_返回500",
-			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockPaymentClientInterface, taskDistributor *mockwk.MockTaskDistributor) {
+			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockDirectPaymentClientInterface, taskDistributor *mockwk.MockTaskDistributor) {
 				// 不设置任何mock，测试nil client场景
 			},
 			setupRequest: func(t *testing.T) *http.Request {
@@ -2332,7 +2310,7 @@ func TestHandlePaymentNotifyFullFlow(t *testing.T) {
 			defer ctrl.Finish()
 
 			store := newMockStoreWithAlertSink(ctrl)
-			paymentClient := mockwechat.NewMockPaymentClientInterface(ctrl)
+			paymentClient := mockwechat.NewMockDirectPaymentClientInterface(ctrl)
 			taskDistributor := mockwk.NewMockTaskDistributor(ctrl)
 			tc.buildStubs(store, paymentClient, taskDistributor)
 
@@ -2383,6 +2361,38 @@ func newCombinePaymentNotifyRequest(t *testing.T, notificationID string) *http.R
 	return request
 }
 
+func newValidCombinePaymentNotification(combineOutTradeNo, outTradeNo, transactionID string, totalAmount int64) *wechatcontracts.CombinePaymentNotification {
+	return &wechatcontracts.CombinePaymentNotification{
+		CombineAppID:      "app_expected",
+		CombineMchID:      "sp_expected",
+		CombineOutTradeNo: combineOutTradeNo,
+		CombinePayerInfo: &wechatcontracts.CombinePaymentNotificationPayerInfo{
+			OpenID: "payer-openid",
+		},
+		SubOrders: []wechatcontracts.CombinePaymentNotificationSubOrder{{
+			MchID:         "sub_expected",
+			OutTradeNo:    outTradeNo,
+			TransactionID: transactionID,
+			TradeType:     "JSAPI",
+			TradeState:    "SUCCESS",
+			BankType:      "OTHERS",
+			SuccessTime:   "2026-04-16T10:00:00+08:00",
+			Amount: struct {
+				TotalAmount    int64  `json:"total_amount"`
+				PayerAmount    int64  `json:"payer_amount"`
+				Currency       string `json:"currency"`
+				PayerCurrency  string `json:"payer_currency"`
+				SettlementRate int64  `json:"settlement_rate"`
+			}{
+				TotalAmount:   totalAmount,
+				PayerAmount:   totalAmount,
+				Currency:      "CNY",
+				PayerCurrency: "CNY",
+			},
+		}},
+	}
+}
+
 func newEcommercePaymentNotifyRequest(t *testing.T, notificationID string) *http.Request {
 	t.Helper()
 
@@ -2409,6 +2419,30 @@ func newEcommercePaymentNotifyRequest(t *testing.T, notificationID string) *http
 	request.Header.Set("Wechatpay-Serial", "test_serial")
 
 	return request
+}
+
+func newValidPartnerPaymentNotificationResource(outTradeNo, transactionID, subMchID string, totalAmount int64) *wechatcontracts.PartnerPaymentNotificationResource {
+	return &wechatcontracts.PartnerPaymentNotificationResource{
+		SpMchID:        "sp_expected",
+		SpAppID:        "app_expected",
+		SubMchID:       subMchID,
+		OutTradeNo:     outTradeNo,
+		TransactionID:  transactionID,
+		TradeType:      "JSAPI",
+		TradeState:     "SUCCESS",
+		TradeStateDesc: "success",
+		BankType:       "OTHERS",
+		SuccessTime:    "2026-04-16T10:00:00+08:00",
+		Payer: wechatcontracts.PartnerOrderPayerInfo{
+			SpOpenID: "payer-openid",
+		},
+		Amount: wechatcontracts.PartnerOrderQueryAmount{
+			Total:         totalAmount,
+			PayerTotal:    totalAmount,
+			Currency:      "CNY",
+			PayerCurrency: "CNY",
+		},
+	}
 }
 
 func newSettlementNotifyRequest(t *testing.T, notificationID string) *http.Request {
@@ -2467,6 +2501,27 @@ func newEcommerceWithdrawNotifyRequest(t *testing.T, notificationID string) *htt
 	return request
 }
 
+func validWithdrawNotificationResource(t *testing.T, outRequestNo, withdrawID, status, reason string) []byte {
+	t.Helper()
+
+	payload := map[string]string{
+		"sub_mchid":      "sub-mch-001",
+		"withdraw_id":    withdrawID,
+		"out_request_no": outRequestNo,
+		"status":         status,
+		"reason":         reason,
+		"create_time":    "2026-04-06T10:00:00+08:00",
+		"update_time":    "2026-04-06T10:05:00+08:00",
+		"account_type":   "BASIC",
+		"account_number": "6222020202020202",
+		"account_bank":   "招商银行",
+	}
+
+	body, err := json.Marshal(payload)
+	require.NoError(t, err)
+	return body
+}
+
 func assertWechatSuccessResponse(t *testing.T, recorder *httptest.ResponseRecorder, expectedMessage string) {
 	t.Helper()
 	_ = expectedMessage
@@ -2487,6 +2542,285 @@ func assertWechatFailResponse(t *testing.T, recorder *httptest.ResponseRecorder,
 	require.NoError(t, err)
 	require.Equal(t, "FAIL", response["code"])
 	require.Equal(t, expectedMessage, response["message"])
+}
+
+func TestHandleMerchantTransferNotify_SuccessMarksClaimPaid(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := newMockStoreWithAlertSink(ctrl)
+	transferClient := mockwechat.NewMockTransferClientInterface(ctrl)
+	server := newTestServerWithTransferClient(t, store, transferClient)
+
+	notificationID := util.RandomString(32)
+	actionID := int64(42)
+	detailBytes, err := json.Marshal(map[string]any{
+		"claim_id":    int64(88),
+		"user_id":     int64(9),
+		"amount":      int64(1200),
+		"source_type": "claim",
+		"source_id":   int64(88),
+		"out_bill_no": "claimpayout42",
+	})
+	require.NoError(t, err)
+
+	transferClient.EXPECT().
+		VerifyNotificationSignature(gomock.Eq("test_signature"), gomock.Eq("1234567890"), gomock.Eq("test_nonce"), gomock.Eq("test_serial"), gomock.Any()).
+		Return(nil)
+
+	store.EXPECT().
+		TryClaimWechatNotification(gomock.Any(), gomock.Any()).
+		Return(true, nil)
+
+	transferClient.EXPECT().
+		DecryptMerchantTransferNotification(gomock.Any()).
+		Return(&wechatcontracts.DirectMerchantTransferNotificationResource{
+			OutBillNo:      "claimpayout42",
+			TransferBillNo: "transfer-001",
+			State:          wechatcontracts.DirectMerchantTransferStateSuccess,
+		}, nil)
+
+	store.EXPECT().
+		GetBehaviorAction(gomock.Any(), actionID).
+		Return(db.BehaviorAction{
+			ID:           actionID,
+			ActionType:   "payout",
+			TargetEntity: "user",
+			Status:       "running",
+			Detail:       detailBytes,
+		}, nil)
+
+	store.EXPECT().
+		MarkClaimPaid(gomock.Any(), gomock.Any()).
+		Return(nil)
+
+	store.EXPECT().
+		UpdateBehaviorActionExecution(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, params db.UpdateBehaviorActionExecutionParams) error {
+			var detail map[string]any
+			err := json.Unmarshal(params.Detail, &detail)
+			require.NoError(t, err)
+			require.Equal(t, "success", params.Status)
+			require.Equal(t, "claimpayout42", detail["out_bill_no"])
+			require.Equal(t, "transfer-001", detail["transfer_bill_no"])
+			require.Equal(t, wechatcontracts.DirectMerchantTransferStateSuccess, detail["transfer_state"])
+			return nil
+		})
+
+	requestBody := map[string]any{
+		"id":            notificationID,
+		"event_type":    wechatcontracts.DirectMerchantTransferNotifyEventTypeBillFinished,
+		"resource_type": "encrypt-resource",
+		"resource": map[string]any{
+			"algorithm":       "AEAD_AES_256_GCM",
+			"ciphertext":      "mock_encrypted_data",
+			"nonce":           "mock_nonce",
+			"associated_data": "merchant_transfer",
+		},
+	}
+	bodyBytes, err := json.Marshal(requestBody)
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPost, "/v1/webhooks/wechat-pay/merchant-transfer-notify", bytes.NewReader(bodyBytes))
+	require.NoError(t, err)
+	request.Header.Set("Wechatpay-Timestamp", "1234567890")
+	request.Header.Set("Wechatpay-Nonce", "test_nonce")
+	request.Header.Set("Wechatpay-Signature", "test_signature")
+	request.Header.Set("Wechatpay-Serial", "test_serial")
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+	assertWechatNoContentResponse(t, recorder)
+}
+
+func TestHandleMerchantTransferNotify_InvalidOutBillNoReleasesClaim(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := newMockStoreWithAlertSink(ctrl)
+	transferClient := mockwechat.NewMockTransferClientInterface(ctrl)
+	server := newTestServerWithTransferClient(t, store, transferClient)
+
+	notificationID := util.RandomString(32)
+
+	transferClient.EXPECT().
+		VerifyNotificationSignature(gomock.Eq("test_signature"), gomock.Eq("1234567890"), gomock.Eq("test_nonce"), gomock.Eq("test_serial"), gomock.Any()).
+		Return(nil)
+
+	store.EXPECT().
+		TryClaimWechatNotification(gomock.Any(), gomock.Any()).
+		Return(true, nil)
+
+	transferClient.EXPECT().
+		DecryptMerchantTransferNotification(gomock.Any()).
+		Return(&wechatcontracts.DirectMerchantTransferNotificationResource{
+			OutBillNo:      "merchant-transfer-raw-001",
+			TransferBillNo: "transfer-001",
+			State:          wechatcontracts.DirectMerchantTransferStateSuccess,
+		}, nil)
+
+	store.EXPECT().
+		ReleaseWechatNotificationClaim(gomock.Any(), notificationID).
+		Return(nil)
+
+	requestBody := map[string]any{
+		"id":            notificationID,
+		"event_type":    wechatcontracts.DirectMerchantTransferNotifyEventTypeBillFinished,
+		"resource_type": "encrypt-resource",
+		"resource": map[string]any{
+			"algorithm":       "AEAD_AES_256_GCM",
+			"ciphertext":      "mock_encrypted_data",
+			"nonce":           "mock_nonce",
+			"associated_data": "merchant_transfer",
+		},
+	}
+	bodyBytes, err := json.Marshal(requestBody)
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPost, "/v1/webhooks/wechat-pay/merchant-transfer-notify", bytes.NewReader(bodyBytes))
+	require.NoError(t, err)
+	request.Header.Set("Wechatpay-Timestamp", "1234567890")
+	request.Header.Set("Wechatpay-Nonce", "test_nonce")
+	request.Header.Set("Wechatpay-Signature", "test_signature")
+	request.Header.Set("Wechatpay-Serial", "test_serial")
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+	assertWechatFailResponse(t, recorder, "invalid out_bill_no")
+}
+
+func TestHandleMerchantTransferNotify_OwnershipMismatchReleasesClaim(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := newMockStoreWithAlertSink(ctrl)
+	transferClient := mockwechat.NewMockTransferClientInterface(ctrl)
+	server := newTestServerWithTransferClient(t, store, transferClient)
+
+	notificationID := util.RandomString(32)
+
+	transferClient.EXPECT().
+		VerifyNotificationSignature(gomock.Eq("test_signature"), gomock.Eq("1234567890"), gomock.Eq("test_nonce"), gomock.Eq("test_serial"), gomock.Any()).
+		Return(nil)
+
+	store.EXPECT().
+		TryClaimWechatNotification(gomock.Any(), gomock.Any()).
+		Return(true, nil)
+
+	transferClient.EXPECT().
+		DecryptMerchantTransferNotification(gomock.Any()).
+		Return(&wechatcontracts.DirectMerchantTransferNotificationResource{
+			OutBillNo:      "claimpayout42",
+			TransferBillNo: "transfer-001",
+			State:          wechatcontracts.DirectMerchantTransferStateSuccess,
+			MchID:          "mch_wrong",
+		}, nil)
+
+	transferClient.EXPECT().
+		GetMchID().
+		Return("mch_expected")
+
+	store.EXPECT().
+		ReleaseWechatNotificationClaim(gomock.Any(), notificationID).
+		Return(nil)
+
+	requestBody := map[string]any{
+		"id":            notificationID,
+		"event_type":    wechatcontracts.DirectMerchantTransferNotifyEventTypeBillFinished,
+		"resource_type": "encrypt-resource",
+		"resource": map[string]any{
+			"algorithm":       "AEAD_AES_256_GCM",
+			"ciphertext":      "mock_encrypted_data",
+			"nonce":           "mock_nonce",
+			"associated_data": "merchant_transfer",
+		},
+	}
+	bodyBytes, err := json.Marshal(requestBody)
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPost, "/v1/webhooks/wechat-pay/merchant-transfer-notify", bytes.NewReader(bodyBytes))
+	require.NoError(t, err)
+	request.Header.Set("Wechatpay-Timestamp", "1234567890")
+	request.Header.Set("Wechatpay-Nonce", "test_nonce")
+	request.Header.Set("Wechatpay-Signature", "test_signature")
+	request.Header.Set("Wechatpay-Serial", "test_serial")
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusInternalServerError, recorder.Code)
+	assertWechatFailResponse(t, recorder, "ownership validation failed")
+}
+
+func TestHandleRefundNotify_WithoutTaskDistributorReturnsFail(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := newMockStoreWithAlertSink(ctrl)
+	paymentClient := mockwechat.NewMockDirectPaymentClientInterface(ctrl)
+	server := newTestServerWithPaymentClient(t, store, paymentClient)
+	server.taskDistributor = nil
+
+	notificationID := util.RandomString(32)
+	outRefundNo := "RF_" + util.RandomString(10)
+
+	paymentClient.EXPECT().
+		VerifyNotificationSignature(gomock.Eq("test_signature"), gomock.Eq("1234567890"), gomock.Eq("test_nonce"), gomock.Eq("test_serial"), gomock.Any()).
+		Return(nil)
+
+	store.EXPECT().
+		TryClaimWechatNotification(gomock.Any(), gomock.Any()).
+		Return(true, nil)
+
+	paymentClient.EXPECT().
+		DecryptRefundNotification(gomock.Any()).
+		Return(&wechatcontracts.DirectRefundNotificationResource{
+			OutRefundNo:  outRefundNo,
+			OutTradeNo:   "out_trade_no_001",
+			RefundID:     "refund_id_001",
+			RefundStatus: "SUCCESS",
+			MchID:        "mch_expected",
+			Amount: wechatcontracts.DirectRefundNotificationAmount{
+				Refund: 100,
+			},
+		}, nil)
+
+	paymentClient.EXPECT().
+		GetMchID().
+		Return("mch_expected")
+
+	store.EXPECT().
+		ReleaseWechatNotificationClaim(gomock.Any(), notificationID).
+		Return(nil)
+
+	requestBody := map[string]any{
+		"id":            notificationID,
+		"event_type":    "REFUND.SUCCESS",
+		"resource_type": "encrypt-resource",
+		"resource": map[string]any{
+			"algorithm":       "AEAD_AES_256_GCM",
+			"ciphertext":      "mock_encrypted_data",
+			"nonce":           "mock_nonce",
+			"associated_data": "refund",
+		},
+	}
+	bodyBytes, err := json.Marshal(requestBody)
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPost, "/v1/webhooks/wechat-pay/refund-notify", bytes.NewReader(bodyBytes))
+	require.NoError(t, err)
+	request.Header.Set("Wechatpay-Timestamp", "1234567890")
+	request.Header.Set("Wechatpay-Nonce", "test_nonce")
+	request.Header.Set("Wechatpay-Signature", "test_signature")
+	request.Header.Set("Wechatpay-Serial", "test_serial")
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusInternalServerError, recorder.Code)
+	assertWechatFailResponse(t, recorder, "refund result processing unavailable, please retry")
 }
 
 func newMockStoreWithAlertSink(ctrl *gomock.Controller) *mockdb.MockStore {
@@ -2512,9 +2846,9 @@ func TestHandleEcommerceWithdrawNotify_SuccessUpdatesWithdrawal(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 	store.EXPECT().TryClaimWechatNotification(gomock.Any(), gomock.Any()).Return(true, nil)
-	ecommerceClient.EXPECT().DecryptNotificationRaw(gomock.Any()).Return([]byte(`{"sub_mchid":"sub-mch-001","withdraw_id":"wd_001","out_request_no":"MW202604060001","status":"SUCCESS","reason":""}`), nil)
+	ecommerceClient.EXPECT().DecryptNotificationRaw(gomock.Any()).Return(validWithdrawNotificationResource(t, "MW202604060001", "wd_001", "SUCCESS", ""), nil)
 	store.EXPECT().GetWithdrawalRecordByOutRequestNo(gomock.Any(), pgtype.Text{String: "MW202604060001", Valid: true}).Return(db.WithdrawalRecord{
 		ID:          66,
 		UserID:      99,
@@ -2563,9 +2897,9 @@ func TestHandleEcommerceWithdrawNotify_AccountInfoPersistFailureReturnsFail(t *t
 	})
 	require.NoError(t, err)
 
-	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 	store.EXPECT().TryClaimWechatNotification(gomock.Any(), gomock.Any()).Return(true, nil)
-	ecommerceClient.EXPECT().DecryptNotificationRaw(gomock.Any()).Return([]byte(`{"sub_mchid":"sub-mch-001","withdraw_id":"wd_001","out_request_no":"MW202604060001","status":"SUCCESS","reason":""}`), nil)
+	ecommerceClient.EXPECT().DecryptNotificationRaw(gomock.Any()).Return(validWithdrawNotificationResource(t, "MW202604060001", "wd_001", "SUCCESS", ""), nil)
 	store.EXPECT().GetWithdrawalRecordByOutRequestNo(gomock.Any(), pgtype.Text{String: "MW202604060001", Valid: true}).Return(db.WithdrawalRecord{
 		ID:          66,
 		UserID:      99,
@@ -2605,9 +2939,9 @@ func TestHandleEcommerceWithdrawNotify_StatusPersistFailureReturnsFail(t *testin
 	})
 	require.NoError(t, err)
 
-	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 	store.EXPECT().TryClaimWechatNotification(gomock.Any(), gomock.Any()).Return(true, nil)
-	ecommerceClient.EXPECT().DecryptNotificationRaw(gomock.Any()).Return([]byte(`{"sub_mchid":"sub-mch-001","withdraw_id":"wd_001","out_request_no":"MW202604060001","status":"SUCCESS","reason":""}`), nil)
+	ecommerceClient.EXPECT().DecryptNotificationRaw(gomock.Any()).Return(validWithdrawNotificationResource(t, "MW202604060001", "wd_001", "SUCCESS", ""), nil)
 	store.EXPECT().GetWithdrawalRecordByOutRequestNo(gomock.Any(), pgtype.Text{String: "MW202604060001", Valid: true}).Return(db.WithdrawalRecord{
 		ID:          66,
 		UserID:      99,
@@ -2641,9 +2975,9 @@ func TestHandleEcommerceWithdrawNotify_WithdrawalNotFoundReturnsFail(t *testing.
 
 	notificationID := util.RandomString(32)
 
-	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 	store.EXPECT().TryClaimWechatNotification(gomock.Any(), gomock.Any()).Return(true, nil)
-	ecommerceClient.EXPECT().DecryptNotificationRaw(gomock.Any()).Return([]byte(`{"sub_mchid":"sub-mch-001","withdraw_id":"wd_404","out_request_no":"MW404","status":"FAIL","reason":"账户异常"}`), nil)
+	ecommerceClient.EXPECT().DecryptNotificationRaw(gomock.Any()).Return(validWithdrawNotificationResource(t, "MW404", "wd_404", "FAIL", "账户异常"), nil)
 	store.EXPECT().GetWithdrawalRecordByOutRequestNo(gomock.Any(), pgtype.Text{String: "MW404", Valid: true}).Return(db.WithdrawalRecord{}, db.ErrRecordNotFound)
 	store.EXPECT().ReleaseWechatNotificationClaim(gomock.Any(), notificationID).Return(nil)
 
@@ -2666,7 +3000,7 @@ func TestHandleEcommerceWithdrawNotifyIdempotency(t *testing.T) {
 
 	notificationID := util.RandomString(32)
 
-	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 	store.EXPECT().TryClaimWechatNotification(gomock.Any(), gomock.Any()).Return(false, nil)
 	store.EXPECT().GetWechatNotification(gomock.Any(), notificationID).Return(db.WechatNotification{ID: notificationID, ProcessedAt: pgtype.Timestamp{Time: time.Now(), Valid: true}}, nil)
 
@@ -2688,7 +3022,7 @@ func TestHandleEcommerceWithdrawNotify_StaleClaimReturnsFailAndReleases(t *testi
 
 	notificationID := util.RandomString(32)
 
-	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 	store.EXPECT().TryClaimWechatNotification(gomock.Any(), gomock.Any()).Return(false, nil)
 	store.EXPECT().GetWechatNotification(gomock.Any(), notificationID).Return(db.WechatNotification{
 		ID:        notificationID,
@@ -2720,7 +3054,7 @@ func TestHandleApplymentStateNotifyIdempotency(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
 				// 先验证签名
 				ecommerceClient.EXPECT().
-					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(nil)
 
@@ -2768,7 +3102,7 @@ func TestHandleApplymentStateNotifyIdempotency(t *testing.T) {
 			name: "非进件事件类型_忽略处理",
 			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
 				ecommerceClient.EXPECT().
-					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(nil)
 
@@ -2829,6 +3163,550 @@ func TestHandleApplymentStateNotifyIdempotency(t *testing.T) {
 	}
 }
 
+func TestHandleApplymentStateNotify_PreservesStoredSignFields(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := newMockStoreWithAlertSink(ctrl)
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	server := newTestServerWithEcommerceClient(t, store, ecommerceClient)
+
+	notificationID := util.RandomString(32)
+	applyment := db.EcommerceApplyment{
+		ID:                 88,
+		SubjectType:        "merchant",
+		SubjectID:          200,
+		OutRequestNo:       "APPLY_M_88_1234567890",
+		SignUrl:            pgtype.Text{String: "https://sign.example.com/keep", Valid: true},
+		SignState:          pgtype.Text{String: "UNSIGNED", Valid: true},
+		LegalValidationUrl: pgtype.Text{String: "https://wx.example.com/legal-keep", Valid: true},
+		AccountValidation:  wechat.MarshalEcommerceApplymentAccountValidation(&wechatcontracts.EcommerceApplymentAccountValidation{Remark: "keep-existing-validation"}),
+	}
+
+	ecommerceClient.EXPECT().
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(nil)
+
+	store.EXPECT().
+		TryClaimWechatNotification(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(true, nil)
+
+	ecommerceClient.EXPECT().
+		DecryptNotificationRaw(gomock.Any()).
+		Times(1).
+		Return([]byte(`{"applyment_id":88,"out_request_no":"APPLY_M_88_1234567890","applyment_state":"ACCOUNT_NEED_VERIFY"}`), nil)
+
+	store.EXPECT().
+		GetEcommerceApplymentByOutRequestNo(gomock.Any(), "APPLY_M_88_1234567890").
+		Times(1).
+		Return(applyment, nil)
+
+	store.EXPECT().
+		UpdateEcommerceApplymentStatus(gomock.Any(), db.UpdateEcommerceApplymentStatusParams{
+			ID:                 applyment.ID,
+			Status:             "account_need_verify",
+			RejectReason:       pgtype.Text{},
+			SignUrl:            applyment.SignUrl,
+			SignState:          applyment.SignState,
+			LegalValidationUrl: applyment.LegalValidationUrl,
+			AccountValidation:  applyment.AccountValidation,
+			SubMchID:           applyment.SubMchID,
+		}).
+		Times(1).
+		Return(applyment, nil)
+
+	recorder := httptest.NewRecorder()
+	requestBody := map[string]interface{}{
+		"id":            notificationID,
+		"event_type":    "APPLYMENT_STATE.CHANGE",
+		"resource_type": "encrypt-resource",
+		"resource": map[string]interface{}{
+			"algorithm":       "AEAD_AES_256_GCM",
+			"ciphertext":      "mock_encrypted_data",
+			"nonce":           "mock_nonce",
+			"associated_data": "applyment",
+		},
+	}
+	bodyBytes, err := json.Marshal(requestBody)
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPost, "/v1/webhooks/wechat-ecommerce/applyment-notify", bytes.NewReader(bodyBytes))
+	require.NoError(t, err)
+	request.Header.Set("Wechatpay-Timestamp", "1234567890")
+	request.Header.Set("Wechatpay-Nonce", "test_nonce")
+	request.Header.Set("Wechatpay-Signature", "test_signature")
+	request.Header.Set("Wechatpay-Serial", "test_serial")
+
+	server.router.ServeHTTP(recorder, request)
+	assertWechatNoContentResponse(t, recorder)
+}
+
+func TestHandleApplymentStateNotify_WithoutTaskDistributorReturnsFail(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := newMockStoreWithAlertSink(ctrl)
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	server := newTestServerWithEcommerceClient(t, store, ecommerceClient)
+	server.SetTaskDistributorForTest(nil)
+
+	notificationID := util.RandomString(32)
+	applyment := db.EcommerceApplyment{
+		ID:                 88,
+		SubjectType:        "merchant",
+		SubjectID:          200,
+		OutRequestNo:       "APPLY_M_88_1234567890",
+		SignUrl:            pgtype.Text{String: "https://sign.example.com/keep", Valid: true},
+		SignState:          pgtype.Text{String: "UNSIGNED", Valid: true},
+		LegalValidationUrl: pgtype.Text{String: "https://wx.example.com/legal-keep", Valid: true},
+		AccountValidation:  wechat.MarshalEcommerceApplymentAccountValidation(&wechatcontracts.EcommerceApplymentAccountValidation{Remark: "keep-existing-validation"}),
+	}
+
+	ecommerceClient.EXPECT().
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(nil)
+
+	store.EXPECT().
+		TryClaimWechatNotification(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(true, nil)
+
+	ecommerceClient.EXPECT().
+		DecryptNotificationRaw(gomock.Any()).
+		Times(1).
+		Return([]byte(`{"applyment_id":88,"out_request_no":"APPLY_M_88_1234567890","applyment_state":"ACCOUNT_NEED_VERIFY"}`), nil)
+
+	store.EXPECT().
+		GetEcommerceApplymentByOutRequestNo(gomock.Any(), "APPLY_M_88_1234567890").
+		Times(1).
+		Return(applyment, nil)
+
+	store.EXPECT().
+		UpdateEcommerceApplymentStatus(gomock.Any(), db.UpdateEcommerceApplymentStatusParams{
+			ID:                 applyment.ID,
+			Status:             "account_need_verify",
+			RejectReason:       pgtype.Text{},
+			SignUrl:            applyment.SignUrl,
+			SignState:          applyment.SignState,
+			LegalValidationUrl: applyment.LegalValidationUrl,
+			AccountValidation:  applyment.AccountValidation,
+			SubMchID:           applyment.SubMchID,
+		}).
+		Times(1).
+		Return(applyment, nil)
+
+	store.EXPECT().
+		ReleaseWechatNotificationClaim(gomock.Any(), notificationID).
+		Times(1).
+		Return(nil)
+
+	recorder := httptest.NewRecorder()
+	requestBody := map[string]interface{}{
+		"id":            notificationID,
+		"event_type":    "APPLYMENT_STATE.CHANGE",
+		"resource_type": "encrypt-resource",
+		"resource": map[string]interface{}{
+			"algorithm":       "AEAD_AES_256_GCM",
+			"ciphertext":      "mock_encrypted_data",
+			"nonce":           "mock_nonce",
+			"associated_data": "applyment",
+		},
+	}
+	bodyBytes, err := json.Marshal(requestBody)
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPost, "/v1/webhooks/wechat-ecommerce/applyment-notify", bytes.NewReader(bodyBytes))
+	require.NoError(t, err)
+	request.Header.Set("Wechatpay-Timestamp", "1234567890")
+	request.Header.Set("Wechatpay-Nonce", "test_nonce")
+	request.Header.Set("Wechatpay-Signature", "test_signature")
+	request.Header.Set("Wechatpay-Serial", "test_serial")
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusInternalServerError, recorder.Code)
+	assertWechatFailResponse(t, recorder, "applyment result processing unavailable, please retry")
+}
+
+func TestHandleApplymentStateNotify_EnqueueFailureReturnsFail(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := newMockStoreWithAlertSink(ctrl)
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	taskDistributor := mockwk.NewMockTaskDistributor(ctrl)
+	server := newTestServerWithEcommerceClient(t, store, ecommerceClient)
+	server.SetTaskDistributorForTest(taskDistributor)
+
+	notificationID := util.RandomString(32)
+	applyment := db.EcommerceApplyment{
+		ID:                 89,
+		SubjectType:        "merchant",
+		SubjectID:          201,
+		OutRequestNo:       "APPLY_M_89_1234567890",
+		SignUrl:            pgtype.Text{String: "https://sign.example.com/keep", Valid: true},
+		SignState:          pgtype.Text{String: "UNSIGNED", Valid: true},
+		LegalValidationUrl: pgtype.Text{String: "https://wx.example.com/legal-keep", Valid: true},
+		AccountValidation:  wechat.MarshalEcommerceApplymentAccountValidation(&wechatcontracts.EcommerceApplymentAccountValidation{Remark: "keep-existing-validation"}),
+	}
+
+	ecommerceClient.EXPECT().
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(nil)
+
+	store.EXPECT().
+		TryClaimWechatNotification(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(true, nil)
+
+	ecommerceClient.EXPECT().
+		DecryptNotificationRaw(gomock.Any()).
+		Times(1).
+		Return([]byte(`{"applyment_id":89,"out_request_no":"APPLY_M_89_1234567890","applyment_state":"ACCOUNT_NEED_VERIFY"}`), nil)
+
+	store.EXPECT().
+		GetEcommerceApplymentByOutRequestNo(gomock.Any(), "APPLY_M_89_1234567890").
+		Times(1).
+		Return(applyment, nil)
+
+	store.EXPECT().
+		UpdateEcommerceApplymentStatus(gomock.Any(), db.UpdateEcommerceApplymentStatusParams{
+			ID:                 applyment.ID,
+			Status:             "account_need_verify",
+			RejectReason:       pgtype.Text{},
+			SignUrl:            applyment.SignUrl,
+			SignState:          applyment.SignState,
+			LegalValidationUrl: applyment.LegalValidationUrl,
+			AccountValidation:  applyment.AccountValidation,
+			SubMchID:           applyment.SubMchID,
+		}).
+		Times(1).
+		Return(applyment, nil)
+
+	taskDistributor.EXPECT().
+		DistributeTaskProcessApplymentResult(gomock.Any(), gomock.AssignableToTypeOf(&worker.ApplymentResultPayload{}), gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, payload *worker.ApplymentResultPayload, _ ...asynq.Option) error {
+			require.Equal(t, int64(89), payload.ApplymentID)
+			require.Equal(t, "APPLY_M_89_1234567890", payload.OutRequestNo)
+			return errors.New("queue down")
+		})
+
+	store.EXPECT().
+		ReleaseWechatNotificationClaim(gomock.Any(), notificationID).
+		Times(1).
+		Return(nil)
+
+	recorder := httptest.NewRecorder()
+	requestBody := map[string]interface{}{
+		"id":            notificationID,
+		"event_type":    "APPLYMENT_STATE.CHANGE",
+		"resource_type": "encrypt-resource",
+		"resource": map[string]interface{}{
+			"algorithm":       "AEAD_AES_256_GCM",
+			"ciphertext":      "mock_encrypted_data",
+			"nonce":           "mock_nonce",
+			"associated_data": "applyment",
+		},
+	}
+	bodyBytes, err := json.Marshal(requestBody)
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPost, "/v1/webhooks/wechat-ecommerce/applyment-notify", bytes.NewReader(bodyBytes))
+	require.NoError(t, err)
+	request.Header.Set("Wechatpay-Timestamp", "1234567890")
+	request.Header.Set("Wechatpay-Nonce", "test_nonce")
+	request.Header.Set("Wechatpay-Signature", "test_signature")
+	request.Header.Set("Wechatpay-Serial", "test_serial")
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusInternalServerError, recorder.Code)
+	assertWechatFailResponse(t, recorder, "enqueue failed, please retry")
+}
+
+func TestHandleApplymentStateNotify_IgnoresOperatorApplymentAfterRemoval(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := newMockStoreWithAlertSink(ctrl)
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	server := newTestServerWithEcommerceClient(t, store, ecommerceClient)
+
+	notificationID := util.RandomString(32)
+	applyment := db.EcommerceApplyment{
+		ID:           108,
+		SubjectType:  "operator",
+		SubjectID:    320,
+		OutRequestNo: "APPLY_OP_108_1234567890",
+	}
+
+	ecommerceClient.EXPECT().
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(nil)
+
+	store.EXPECT().
+		TryClaimWechatNotification(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(true, nil)
+
+	ecommerceClient.EXPECT().
+		DecryptNotificationRaw(gomock.Any()).
+		Times(1).
+		Return([]byte(`{"applyment_id":108,"out_request_no":"APPLY_OP_108_1234567890","applyment_state":"ACCOUNT_NEED_VERIFY","sub_mchid":"sub_mch_op_108"}`), nil)
+
+	store.EXPECT().
+		GetEcommerceApplymentByOutRequestNo(gomock.Any(), "APPLY_OP_108_1234567890").
+		Times(1).
+		Return(applyment, nil)
+
+	recorder := httptest.NewRecorder()
+	requestBody := map[string]interface{}{
+		"id":            notificationID,
+		"event_type":    "APPLYMENT_STATE.CHANGE",
+		"resource_type": "encrypt-resource",
+		"resource": map[string]interface{}{
+			"algorithm":       "AEAD_AES_256_GCM",
+			"ciphertext":      "mock_encrypted_data",
+			"nonce":           "mock_nonce",
+			"associated_data": "applyment",
+		},
+	}
+	bodyBytes, err := json.Marshal(requestBody)
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPost, "/v1/webhooks/wechat-ecommerce/applyment-notify", bytes.NewReader(bodyBytes))
+	require.NoError(t, err)
+	request.Header.Set("Wechatpay-Timestamp", "1234567890")
+	request.Header.Set("Wechatpay-Nonce", "test_nonce")
+	request.Header.Set("Wechatpay-Signature", "test_signature")
+	request.Header.Set("Wechatpay-Serial", "test_serial")
+
+	server.router.ServeHTTP(recorder, request)
+	assertWechatNoContentResponse(t, recorder)
+}
+
+func TestResolveApplymentCallbackStatus(t *testing.T) {
+	require.Equal(t, "auditing", resolveApplymentCallbackStatus("auditing", "NEW_UPSTREAM_STATE"))
+	require.Equal(t, "account_need_verify", resolveApplymentCallbackStatus("auditing", "ACCOUNT_NEED_VERIFY"))
+	require.Equal(t, "to_be_signed", resolveApplymentCallbackStatus("to_be_signed", "NEED_SIGN"))
+}
+
+func TestHandleProfitSharingNotify_WithoutTaskDistributorReturnsFail(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := newMockStoreWithAlertSink(ctrl)
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	server := newTestServerWithEcommerceClient(t, store, ecommerceClient)
+	server.SetTaskDistributorForTest(nil)
+
+	notificationID := util.RandomString(32)
+	outOrderNo := util.RandomString(16)
+
+	ecommerceClient.EXPECT().
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(nil)
+
+	store.EXPECT().
+		TryClaimWechatNotification(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(true, nil)
+
+	ecommerceClient.EXPECT().
+		DecryptProfitSharingNotification(gomock.Any()).
+		Times(1).
+		Return(&wechatcontracts.ProfitSharingNotification{
+			SPMchID:       "sp_mch_id",
+			SubMchID:      "sub_mch_id",
+			OutOrderNo:    outOrderNo,
+			OrderID:       "wx_order_id",
+			TransactionID: "wx_transaction_id",
+		}, nil)
+
+	ecommerceClient.EXPECT().
+		GetSpMchID().
+		Times(1).
+		Return("sp_mch_id")
+
+	store.EXPECT().
+		GetProfitSharingOrderByOutOrderNo(gomock.Any(), gomock.Eq(outOrderNo)).
+		Times(1).
+		Return(db.ProfitSharingOrder{
+			ID:         1,
+			MerchantID: 21,
+			OutOrderNo: outOrderNo,
+			Status:     "processing",
+		}, nil)
+
+	store.EXPECT().
+		GetMerchantPaymentConfig(gomock.Any(), gomock.Eq(int64(21))).
+		Times(1).
+		Return(db.MerchantPaymentConfig{MerchantID: 21, SubMchID: "sub_mch_id", Status: "active"}, nil)
+
+	ecommerceClient.EXPECT().
+		QueryProfitSharing(gomock.Any(), gomock.Eq("sub_mch_id"), gomock.Eq("wx_transaction_id"), gomock.Eq(outOrderNo)).
+		Times(1).
+		Return(&wechatcontracts.ProfitSharingQueryResponse{
+			Status: wechatcontracts.ProfitSharingStatusFinished,
+			Receivers: []wechatcontracts.ProfitSharingReceiverResult{
+				{Result: wechatcontracts.ProfitSharingResultSuccess, Amount: 1 * fenPerYuan},
+			},
+		}, nil)
+
+	store.EXPECT().
+		UpdateProfitSharingOrderToFinished(gomock.Any(), gomock.Eq(int64(1))).
+		Times(1).
+		Return(db.ProfitSharingOrder{ID: 1, Status: "finished"}, nil)
+
+	store.EXPECT().
+		ReleaseWechatNotificationClaim(gomock.Any(), notificationID).
+		Times(1).
+		Return(nil)
+
+	requestBody := map[string]interface{}{
+		"id":            notificationID,
+		"event_type":    "TRANSACTION.SUCCESS",
+		"resource_type": "encrypt-resource",
+		"resource": map[string]interface{}{
+			"algorithm":       "AEAD_AES_256_GCM",
+			"ciphertext":      "mock_encrypted_data",
+			"nonce":           "mock_nonce",
+			"associated_data": "profit_sharing",
+		},
+	}
+	bodyBytes, err := json.Marshal(requestBody)
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPost, "/v1/webhooks/wechat-ecommerce/profit-sharing-notify", bytes.NewReader(bodyBytes))
+	require.NoError(t, err)
+	request.Header.Set("Wechatpay-Timestamp", "1234567890")
+	request.Header.Set("Wechatpay-Nonce", "test_nonce")
+	request.Header.Set("Wechatpay-Signature", "test_signature")
+	request.Header.Set("Wechatpay-Serial", "test_serial")
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusInternalServerError, recorder.Code)
+	assertWechatFailResponse(t, recorder, "profit sharing result processing unavailable, please retry")
+}
+
+func TestHandleProfitSharingNotify_EnqueueFailureReturnsFail(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := newMockStoreWithAlertSink(ctrl)
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	taskDistributor := mockwk.NewMockTaskDistributor(ctrl)
+	server := newTestServerWithEcommerceClient(t, store, ecommerceClient)
+	server.SetTaskDistributorForTest(taskDistributor)
+
+	notificationID := util.RandomString(32)
+	outOrderNo := util.RandomString(16)
+
+	ecommerceClient.EXPECT().
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(nil)
+
+	store.EXPECT().
+		TryClaimWechatNotification(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(true, nil)
+
+	ecommerceClient.EXPECT().
+		DecryptProfitSharingNotification(gomock.Any()).
+		Times(1).
+		Return(&wechatcontracts.ProfitSharingNotification{
+			SPMchID:       "sp_mch_id",
+			SubMchID:      "sub_mch_id",
+			OutOrderNo:    outOrderNo,
+			OrderID:       "wx_order_id",
+			TransactionID: "wx_transaction_id",
+		}, nil)
+
+	ecommerceClient.EXPECT().
+		GetSpMchID().
+		Times(1).
+		Return("sp_mch_id")
+
+	store.EXPECT().
+		GetProfitSharingOrderByOutOrderNo(gomock.Any(), gomock.Eq(outOrderNo)).
+		Times(1).
+		Return(db.ProfitSharingOrder{
+			ID:         2,
+			MerchantID: 22,
+			OutOrderNo: outOrderNo,
+			Status:     "processing",
+		}, nil)
+
+	store.EXPECT().
+		GetMerchantPaymentConfig(gomock.Any(), gomock.Eq(int64(22))).
+		Times(1).
+		Return(db.MerchantPaymentConfig{MerchantID: 22, SubMchID: "sub_mch_id", Status: "active"}, nil)
+
+	ecommerceClient.EXPECT().
+		QueryProfitSharing(gomock.Any(), gomock.Eq("sub_mch_id"), gomock.Eq("wx_transaction_id"), gomock.Eq(outOrderNo)).
+		Times(1).
+		Return(&wechatcontracts.ProfitSharingQueryResponse{
+			Status: wechatcontracts.ProfitSharingStatusFinished,
+			Receivers: []wechatcontracts.ProfitSharingReceiverResult{
+				{Result: wechatcontracts.ProfitSharingResultSuccess, Amount: 1 * fenPerYuan},
+			},
+		}, nil)
+
+	store.EXPECT().
+		UpdateProfitSharingOrderToFinished(gomock.Any(), gomock.Eq(int64(2))).
+		Times(1).
+		Return(db.ProfitSharingOrder{ID: 2, Status: "finished"}, nil)
+
+	taskDistributor.EXPECT().
+		DistributeTaskProcessProfitSharingResult(gomock.Any(), gomock.AssignableToTypeOf(&worker.ProfitSharingResultPayload{}), gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, payload *worker.ProfitSharingResultPayload, _ ...asynq.Option) error {
+			require.Equal(t, int64(2), payload.ProfitSharingOrderID)
+			require.Equal(t, outOrderNo, payload.OutOrderNo)
+			return errors.New("queue down")
+		})
+
+	store.EXPECT().
+		ReleaseWechatNotificationClaim(gomock.Any(), notificationID).
+		Times(1).
+		Return(nil)
+
+	requestBody := map[string]interface{}{
+		"id":            notificationID,
+		"event_type":    "TRANSACTION.SUCCESS",
+		"resource_type": "encrypt-resource",
+		"resource": map[string]interface{}{
+			"algorithm":       "AEAD_AES_256_GCM",
+			"ciphertext":      "mock_encrypted_data",
+			"nonce":           "mock_nonce",
+			"associated_data": "profit_sharing",
+		},
+	}
+	bodyBytes, err := json.Marshal(requestBody)
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPost, "/v1/webhooks/wechat-ecommerce/profit-sharing-notify", bytes.NewReader(bodyBytes))
+	require.NoError(t, err)
+	request.Header.Set("Wechatpay-Timestamp", "1234567890")
+	request.Header.Set("Wechatpay-Nonce", "test_nonce")
+	request.Header.Set("Wechatpay-Signature", "test_signature")
+	request.Header.Set("Wechatpay-Serial", "test_serial")
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusInternalServerError, recorder.Code)
+	assertWechatFailResponse(t, recorder, "enqueue failed, please retry")
+}
+
 // TestHandleProfitSharingNotifyIdempotency 测试分账回调的幂等性检查
 func TestHandleProfitSharingNotifyIdempotency(t *testing.T) {
 	notificationID := util.RandomString(32)
@@ -2836,16 +3714,16 @@ func TestHandleProfitSharingNotifyIdempotency(t *testing.T) {
 
 	testCases := []struct {
 		name          string
-		buildStubs    func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface)
+		buildStubs    func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface, taskDistributor *mockwk.MockTaskDistributor)
 		setupRequest  func(t *testing.T) *http.Request
 		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
 	}{
 		{
 			name: "重复分账通知_直接返回SUCCESS",
-			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface, taskDistributor *mockwk.MockTaskDistributor) {
 				// 先验证签名
 				ecommerceClient.EXPECT().
-					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(nil)
 
@@ -2891,9 +3769,9 @@ func TestHandleProfitSharingNotifyIdempotency(t *testing.T) {
 		},
 		{
 			name: "分账成功通知_更新订单状态为finished",
-			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface, taskDistributor *mockwk.MockTaskDistributor) {
 				ecommerceClient.EXPECT().
-					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(nil)
 
@@ -2907,8 +3785,8 @@ func TestHandleProfitSharingNotifyIdempotency(t *testing.T) {
 				ecommerceClient.EXPECT().
 					DecryptProfitSharingNotification(gomock.Any()).
 					Times(1).
-					Return(&wechat.ProfitSharingNotification{
-						MchID:         "sp_mch_id",
+					Return(&wechatcontracts.ProfitSharingNotification{
+						SPMchID:       "sp_mch_id",
 						SubMchID:      "sub_mch_id",
 						OutOrderNo:    outOrderNo,
 						OrderID:       "wx_order_id",
@@ -2923,10 +3801,10 @@ func TestHandleProfitSharingNotifyIdempotency(t *testing.T) {
 				ecommerceClient.EXPECT().
 					QueryProfitSharing(gomock.Any(), gomock.Eq("sub_mch_id"), gomock.Eq("wx_transaction_id"), gomock.Eq(outOrderNo)).
 					Times(1).
-					Return(&wechat.ProfitSharingQueryResponse{
-						Status: "FINISHED",
-						Receivers: []wechat.ProfitSharingReceiverResult{
-							{Result: "SUCCESS", Amount: 1 * fenPerYuan},
+					Return(&wechatcontracts.ProfitSharingQueryResponse{
+						Status: wechatcontracts.ProfitSharingStatusFinished,
+						Receivers: []wechatcontracts.ProfitSharingReceiverResult{
+							{Result: wechatcontracts.ProfitSharingResultSuccess, Amount: 1 * fenPerYuan},
 						},
 					}, nil)
 
@@ -2951,6 +3829,14 @@ func TestHandleProfitSharingNotifyIdempotency(t *testing.T) {
 					UpdateProfitSharingOrderToFinished(gomock.Any(), gomock.Eq(int64(1))).
 					Times(1).
 					Return(db.ProfitSharingOrder{ID: 1, Status: "finished"}, nil)
+
+				taskDistributor.EXPECT().
+					DistributeTaskProcessProfitSharingResult(gomock.Any(), gomock.AssignableToTypeOf(&worker.ProfitSharingResultPayload{}), gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ context.Context, payload *worker.ProfitSharingResultPayload, _ ...asynq.Option) error {
+						require.Equal(t, int64(1), payload.ProfitSharingOrderID)
+						require.Equal(t, outOrderNo, payload.OutOrderNo)
+						return nil
+					})
 
 				// 记录通知
 			},
@@ -2985,9 +3871,9 @@ func TestHandleProfitSharingNotifyIdempotency(t *testing.T) {
 		},
 		{
 			name: "分账失败通知_更新订单状态为failed",
-			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface, taskDistributor *mockwk.MockTaskDistributor) {
 				ecommerceClient.EXPECT().
-					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(nil)
 
@@ -2999,8 +3885,8 @@ func TestHandleProfitSharingNotifyIdempotency(t *testing.T) {
 				ecommerceClient.EXPECT().
 					DecryptProfitSharingNotification(gomock.Any()).
 					Times(1).
-					Return(&wechat.ProfitSharingNotification{
-						MchID:         "sp_mch_id",
+					Return(&wechatcontracts.ProfitSharingNotification{
+						SPMchID:       "sp_mch_id",
 						SubMchID:      "sub_mch_id",
 						OutOrderNo:    outOrderNo,
 						OrderID:       "wx_order_id",
@@ -3015,10 +3901,10 @@ func TestHandleProfitSharingNotifyIdempotency(t *testing.T) {
 				ecommerceClient.EXPECT().
 					QueryProfitSharing(gomock.Any(), gomock.Eq("sub_mch_id"), gomock.Eq("wx_transaction_id"), gomock.Eq(outOrderNo)).
 					Times(1).
-					Return(&wechat.ProfitSharingQueryResponse{
-						Status: "FINISHED",
-						Receivers: []wechat.ProfitSharingReceiverResult{
-							{Result: "CLOSED", FailReason: "NO_RELATION", Amount: 1 * fenPerYuan},
+					Return(&wechatcontracts.ProfitSharingQueryResponse{
+						Status: wechatcontracts.ProfitSharingStatusFinished,
+						Receivers: []wechatcontracts.ProfitSharingReceiverResult{
+							{Result: wechatcontracts.ProfitSharingResultClosed, FailReason: wechatcontracts.ProfitSharingFailReasonNoRelation, Amount: 1 * fenPerYuan},
 						},
 					}, nil)
 
@@ -3042,6 +3928,14 @@ func TestHandleProfitSharingNotifyIdempotency(t *testing.T) {
 					UpdateProfitSharingOrderToFailed(gomock.Any(), gomock.Eq(int64(1))).
 					Times(1).
 					Return(db.ProfitSharingOrder{ID: 1, Status: "failed"}, nil)
+
+				taskDistributor.EXPECT().
+					DistributeTaskProcessProfitSharingResult(gomock.Any(), gomock.AssignableToTypeOf(&worker.ProfitSharingResultPayload{}), gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ context.Context, payload *worker.ProfitSharingResultPayload, _ ...asynq.Option) error {
+						require.Equal(t, int64(1), payload.ProfitSharingOrderID)
+						require.Equal(t, outOrderNo, payload.OutOrderNo)
+						return nil
+					})
 			},
 			setupRequest: func(t *testing.T) *http.Request {
 				requestBody := map[string]interface{}{
@@ -3074,9 +3968,9 @@ func TestHandleProfitSharingNotifyIdempotency(t *testing.T) {
 		},
 		{
 			name: "分账查询失败_返回FAIL等待重试",
-			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface, taskDistributor *mockwk.MockTaskDistributor) {
 				ecommerceClient.EXPECT().
-					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(nil)
 
@@ -3088,8 +3982,8 @@ func TestHandleProfitSharingNotifyIdempotency(t *testing.T) {
 				ecommerceClient.EXPECT().
 					DecryptProfitSharingNotification(gomock.Any()).
 					Times(1).
-					Return(&wechat.ProfitSharingNotification{
-						MchID:         "sp_mch_id",
+					Return(&wechatcontracts.ProfitSharingNotification{
+						SPMchID:       "sp_mch_id",
 						SubMchID:      "sub_mch_id",
 						OutOrderNo:    outOrderNo,
 						OrderID:       "wx_order_id",
@@ -3163,7 +4057,7 @@ func TestHandleProfitSharingNotifyIdempotency(t *testing.T) {
 		},
 		{
 			name: "无EcommerceClient_返回500",
-			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface, taskDistributor *mockwk.MockTaskDistributor) {
 				// 不设置任何mock
 			},
 			setupRequest: func(t *testing.T) *http.Request {
@@ -3190,9 +4084,9 @@ func TestHandleProfitSharingNotifyIdempotency(t *testing.T) {
 		},
 		{
 			name: "分账回调子商户归属不匹配_返回FAIL",
-			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface, taskDistributor *mockwk.MockTaskDistributor) {
 				ecommerceClient.EXPECT().
-					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(nil)
 
@@ -3204,8 +4098,8 @@ func TestHandleProfitSharingNotifyIdempotency(t *testing.T) {
 				ecommerceClient.EXPECT().
 					DecryptProfitSharingNotification(gomock.Any()).
 					Times(1).
-					Return(&wechat.ProfitSharingNotification{
-						MchID:         "sp_mch_id",
+					Return(&wechatcontracts.ProfitSharingNotification{
+						SPMchID:       "sp_mch_id",
 						SubMchID:      "sub_mch_wrong",
 						OutOrderNo:    outOrderNo,
 						OrderID:       "wx_order_id",
@@ -3278,13 +4172,15 @@ func TestHandleProfitSharingNotifyIdempotency(t *testing.T) {
 
 			store := newMockStoreWithAlertSink(ctrl)
 			ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
-			tc.buildStubs(store, ecommerceClient)
+			taskDistributor := mockwk.NewMockTaskDistributor(ctrl)
+			tc.buildStubs(store, ecommerceClient, taskDistributor)
 
 			var server *Server
 			if tc.name == "无EcommerceClient_返回500" {
 				server = newTestServer(t, store)
 			} else {
 				server = newTestServerWithEcommerceClient(t, store, ecommerceClient)
+				server.SetTaskDistributorForTest(taskDistributor)
 			}
 			recorder := httptest.NewRecorder()
 

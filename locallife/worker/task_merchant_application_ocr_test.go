@@ -33,7 +33,37 @@ func (stubFoodPermitOCRProvider) Recognize(_ context.Context, capability ocr.Cap
 			DocumentType: ocr.DocumentTypeFoodPermit,
 			RecognizedAt: recognizedAt,
 			FoodPermit: &ocr.FoodPermitResult{
-				RawText: rawText,
+				LicenseNumber: "JY12345678901234",
+				BusinessName:  "本地生活餐饮店",
+				ValidPeriod:   "2026年01月08日至2027年01月08日",
+				RawText:       rawText,
+			},
+		},
+	}, nil
+}
+
+type stubStructuredFoodPermitOCRProvider struct{}
+
+func (stubStructuredFoodPermitOCRProvider) Name() ocr.ProviderName {
+	return ocr.ProviderNameAliyun
+}
+
+func (stubStructuredFoodPermitOCRProvider) Recognize(_ context.Context, capability ocr.Capability, req ocr.RecognizeRequest) (ocr.RecognizeResponse, error) {
+	if capability != ocr.CapabilityAliyunFoodPermit {
+		return ocr.RecognizeResponse{}, nil
+	}
+	recognizedAt := time.Date(2026, 3, 25, 10, 5, 0, 0, time.UTC)
+	return ocr.RecognizeResponse{
+		RawResult: json.RawMessage(`{"structured":true}`),
+		Normalized: ocr.NormalizedResult{
+			DocumentType: ocr.DocumentTypeFoodPermit,
+			RecognizedAt: recognizedAt,
+			FoodPermit: &ocr.FoodPermitResult{
+				LicenseNumber: "JY99887766554433",
+				BusinessName:  "本地生活轻食店",
+				OperatorName:  "王五",
+				ValidPeriod:   "2025年01月08日至2030年12月31日",
+				RawText:       "经营场所：北京市朝阳区测试路100号1楼",
 			},
 		},
 	}, nil
@@ -232,6 +262,85 @@ func TestProcessTaskMerchantApplicationFoodPermitOCR_UsesOCRJob(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestProcessTaskMerchantApplicationFoodPermitOCR_PrefersStructuredFields(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	router, err := ocr.NewStaticRouter(map[ocr.DocumentType]ocr.Route{
+		ocr.DocumentTypeFoodPermit: {
+			Provider:   stubStructuredFoodPermitOCRProvider{},
+			Capability: ocr.CapabilityAliyunFoodPermit,
+		},
+	})
+	require.NoError(t, err)
+
+	processor := &RedisTaskProcessor{
+		store: store,
+		ocrService: ocr.NewService(
+			store,
+			router,
+			stubFoodPermitBinaryReader{},
+		),
+	}
+
+	createdAt := time.Date(2026, 3, 25, 10, 4, 0, 0, time.UTC)
+	startedAt := time.Date(2026, 3, 25, 10, 4, 30, 0, time.UTC)
+	baseJob := db.OcrJob{
+		ID:           88,
+		DocumentType: string(ocr.DocumentTypeFoodPermit),
+		Provider:     string(ocr.ProviderNameAliyun),
+		MediaAssetID: 99,
+		OwnerType:    string(ocr.OwnerTypeMerchantApplication),
+		OwnerID:      77,
+		Status:       string(ocr.JobStatusPending),
+		CreatedAt:    createdAt,
+	}
+
+	gomock.InOrder(
+		store.EXPECT().GetOCRJob(gomock.Any(), int64(88)).Return(baseJob, nil),
+		store.EXPECT().MarkOCRJobProcessing(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, _ db.MarkOCRJobProcessingParams) (db.OcrJob, error) {
+			job := baseJob
+			job.Status = string(ocr.JobStatusProcessing)
+			job.StartedAt = pgtype.Timestamptz{Time: startedAt, Valid: true}
+			return job, nil
+		}),
+		store.EXPECT().CompleteOCRJob(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CompleteOCRJobParams) (db.OcrJob, error) {
+			job := baseJob
+			job.Status = string(ocr.JobStatusSucceeded)
+			job.StartedAt = pgtype.Timestamptz{Time: startedAt, Valid: true}
+			job.NormalizedResult = arg.NormalizedResult
+			job.RawResult = arg.RawResult
+			job.FinishedAt = pgtype.Timestamptz{Time: startedAt.Add(6 * time.Second), Valid: true}
+			return job, nil
+		}),
+		store.EXPECT().UpdateMerchantApplicationFoodPermit(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.UpdateMerchantApplicationFoodPermitParams) (db.MerchantApplication, error) {
+			var payload foodPermitOCRData
+			require.NoError(t, json.Unmarshal(arg.FoodPermitOcr, &payload))
+			require.Equal(t, "JY99887766554433", payload.PermitNo)
+			require.Equal(t, "本地生活轻食店", payload.CompanyName)
+			require.Equal(t, "王五", payload.OperatorName)
+			require.Equal(t, "2025年01月08日", payload.ValidFrom)
+			require.Equal(t, "2030年12月31日", payload.ValidTo)
+			require.Equal(t, "经营场所：北京市朝阳区测试路100号1楼", payload.RawText)
+			return db.MerchantApplication{ID: 77}, nil
+		}),
+	)
+	expectOCRSuccessAuditLog(t, store, db.OcrJob{
+		ID:        88,
+		Status:    string(ocr.JobStatusSucceeded),
+		OwnerType: string(ocr.OwnerTypeMerchantApplication),
+		Provider:  string(ocr.ProviderNameAliyun),
+	})
+
+	payload, err := json.Marshal(merchantApplicationOCRPayload{ApplicationID: 77, OCRJobID: 88})
+	require.NoError(t, err)
+
+	task := asynq.NewTask(TaskMerchantApplicationFoodPermitOCR, payload)
+	err = processor.ProcessTaskMerchantApplicationFoodPermitOCR(context.Background(), task)
+	require.NoError(t, err)
+}
+
 func TestParseFoodPermitOCRText_ExtractsLikelyCompanyName(t *testing.T) {
 	t.Parallel()
 
@@ -252,6 +361,17 @@ func TestParseFoodPermitOCRText_RejectsSuspiciousCompanyName(t *testing.T) {
 	require.Empty(t, data.CompanyName)
 	require.Equal(t, "JY12345678901234", data.PermitNo)
 	require.Equal(t, "2027年01月08日", data.ValidTo)
+}
+
+func TestParseFoodPermitOCRText_UsesRegistrationBusinessName(t *testing.T) {
+	t.Parallel()
+
+	var data foodPermitOCRData
+	parseFoodPermitOCRText(&data, "食品小作坊小餐饮登记证\n商号名称：宁晋县玉水轩鱼味馆\n经营者姓名：张三\n登记证编号：2130528020946\n有效期至：2030年12月31日")
+
+	require.Equal(t, "宁晋县玉水轩鱼味馆", data.CompanyName)
+	require.Equal(t, "2130528020946", data.PermitNo)
+	require.Equal(t, "2030年12月31日", data.ValidTo)
 }
 
 func TestProcessTaskMerchantApplicationBusinessLicenseOCR_UsesOCRJob(t *testing.T) {

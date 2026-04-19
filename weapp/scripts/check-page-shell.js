@@ -1,7 +1,8 @@
 const path = require('path')
 const {
   repoRoot,
-  getChangedEntries,
+  getGateScope,
+  getScopedFiles,
   readFileIfExists,
   listFiles
 } = require('./gate-utils')
@@ -16,16 +17,15 @@ const APPROVED_PAGE_SHELL_SAFE = /page-shell--bottom-safe/
 const APPROVED_SAFE_AREA = /var\(--safe-area-bottom\)|env\(safe-area-inset-bottom\)|--popup-bottom-padding-(?:sm|md|lg)/
 
 function main() {
-  const changedEntries = getChangedEntries()
+  const pageFiles = getScopedFiles({ roots: [PAGE_ROOT], extensions: ['.wxml', '.wxss'] })
   const pageDirs = Array.from(new Set(
-    changedEntries
-      .map((entry) => entry.filePath)
-      .filter((filePath) => filePath.startsWith(PAGE_ROOT))
+    pageFiles
       .map((filePath) => path.dirname(filePath))
+      .filter((dirPath) => !dirPath.includes('/templates'))
   ))
 
   if (pageDirs.length === 0) {
-    console.log('check-page-shell: no changed Mini Program pages detected')
+    console.log(`check-page-shell: no ${getGateScope() === 'changed' ? 'changed' : 'scannable'} Mini Program pages detected`)
     return
   }
 
@@ -71,7 +71,7 @@ function main() {
   }
 
   if (failures.length > 0) {
-    console.error('Page shell gate failed. Changed pages must use the approved shell pattern:')
+    console.error(`Page shell gate failed. ${getGateScope() === 'changed' ? 'Changed' : 'All scanned'} pages must use the approved shell pattern:`)
     console.error('- top gap: `padding-top: calc({{navBarHeight}}px + var(--spacer-sm))` or `.page-shell--with-nav` + `--page-shell-nav-height`')
     console.error('- page gutter: `var(--spacer-md)`')
     console.error('- bottom safe area: `.page-shell--bottom-safe`, `var(--safe-area-bottom)` or `env(safe-area-inset-bottom)`')
@@ -87,7 +87,7 @@ function main() {
     process.exit(1)
   }
 
-  console.log(`check-page-shell: validated ${pageDirs.length} changed page directory(ies)`) 
+  console.log(`check-page-shell: validated ${pageDirs.length} page directory(ies)`) 
 }
 
 main()

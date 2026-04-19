@@ -58,6 +58,7 @@ type RechargeTxParams struct {
 	BonusAmount    int64
 	RechargeRuleID *int64
 	Notes          string
+	IdempotencyKey string
 }
 
 // RechargeTxResult contains the result of recharge transaction
@@ -108,17 +109,31 @@ func (store *SQLStore) RechargeTx(ctx context.Context, arg RechargeTxParams) (Re
 
 		notesPg := pgtype.Text{String: arg.Notes, Valid: arg.Notes != ""}
 
-		result.Transaction, err = q.CreateMembershipTransaction(ctx, CreateMembershipTransactionParams{
-			MembershipID:    arg.MembershipID,
-			Type:            "recharge",
-			Amount:          totalAmount,
-			PrincipalAmount: principalAmount,
-			BonusAmount:     bonusAmount,
-			BalanceAfter:    newBalance,
-			RelatedOrderID:  pgtype.Int8{},
-			RechargeRuleID:  rechargeRuleIDPg,
-			Notes:           notesPg,
-		})
+		if arg.IdempotencyKey != "" {
+			result.Transaction, err = q.CreateMembershipRechargeTransaction(ctx, CreateMembershipRechargeTransactionParams{
+				MembershipID:    arg.MembershipID,
+				Amount:          totalAmount,
+				PrincipalAmount: principalAmount,
+				BonusAmount:     bonusAmount,
+				BalanceAfter:    newBalance,
+				RelatedOrderID:  pgtype.Int8{},
+				RechargeRuleID:  rechargeRuleIDPg,
+				Notes:           notesPg,
+				IdempotencyKey:  pgtype.Text{String: arg.IdempotencyKey, Valid: true},
+			})
+		} else {
+			result.Transaction, err = q.CreateMembershipTransaction(ctx, CreateMembershipTransactionParams{
+				MembershipID:    arg.MembershipID,
+				Type:            "recharge",
+				Amount:          totalAmount,
+				PrincipalAmount: principalAmount,
+				BonusAmount:     bonusAmount,
+				BalanceAfter:    newBalance,
+				RelatedOrderID:  pgtype.Int8{},
+				RechargeRuleID:  rechargeRuleIDPg,
+				Notes:           notesPg,
+			})
+		}
 		if err != nil {
 			return fmt.Errorf("create transaction: %w", err)
 		}

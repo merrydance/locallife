@@ -11,7 +11,7 @@
   --lds-font-md: 16px;
   --lds-font-lg: 20px;
   
-  --lds-primary: #0052d9;
+  --lds-primary: var(--td-brand-color);
   --lds-bg-page: #f1f5f9;
   --lds-bg-container: #ffffff;
   --lds-bg-hover: #f8fafc;

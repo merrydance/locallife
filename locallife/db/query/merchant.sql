@@ -19,23 +19,23 @@ INSERT INTO merchant_applications (
 RETURNING *;
 
 -- name: GetMerchantApplication :one
-SELECT * FROM merchant_applications
+SELECT id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id FROM merchant_applications
 WHERE id = $1 LIMIT 1;
 
 -- name: GetUserMerchantApplication :one
-SELECT * FROM merchant_applications
+SELECT id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id FROM merchant_applications
 WHERE user_id = $1
 ORDER BY created_at DESC
 LIMIT 1;
 
 -- name: ListMerchantApplications :many
-SELECT * FROM merchant_applications
+SELECT id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id FROM merchant_applications
 WHERE status = $1
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3;
 
 -- name: ListAllMerchantApplications :many
-SELECT * FROM merchant_applications
+SELECT id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id FROM merchant_applications
 ORDER BY created_at DESC
 LIMIT $1 OFFSET $2;
 
@@ -51,7 +51,7 @@ WHERE id = $1
 RETURNING *;
 
 -- name: GetMerchantApplicationByLicenseNumber :one
-SELECT * FROM merchant_applications
+SELECT id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id FROM merchant_applications
 WHERE business_license_number = $1
 LIMIT 1;
 
@@ -75,13 +75,13 @@ INSERT INTO merchants (
 RETURNING *;
 
 -- name: GetMerchant :one
-SELECT * FROM merchants
+SELECT id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours FROM merchants
 WHERE id = $1 AND deleted_at IS NULL LIMIT 1;
 
 -- name: GetMerchantByOwner :one
 -- 获取用户关联的商户（支持店主和员工）
 -- 优先返回 owner_user_id 匹配的商户，其次返回 merchant_staff 关联的商户
-SELECT m.* FROM merchants m
+SELECT m.id, m.owner_user_id, m.name, m.description, m.phone, m.address, m.latitude, m.longitude, m.status, m.application_data, m.created_at, m.updated_at, m.version, m.region_id, m.is_open, m.auto_close_at, m.deleted_at, m.pending_owner_bind, m.bind_code, m.bind_code_expires_at, m.group_id, m.brand_id, m.logo_media_asset_id, m.auto_open_by_business_hours FROM merchants m
 LEFT JOIN merchant_staff ms ON m.id = ms.merchant_id AND ms.status = 'active'
 WHERE (m.owner_user_id = $1 OR ms.user_id = $1) AND m.deleted_at IS NULL
 ORDER BY CASE WHEN m.owner_user_id = $1 THEN 0 ELSE 1 END
@@ -89,24 +89,24 @@ LIMIT 1;
 
 -- name: ListMerchantsByOwner :many
 -- 获取用户拥有的所有商户（用于多店铺切换）
-SELECT * FROM merchants
+SELECT id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours FROM merchants
 WHERE owner_user_id = $1 AND deleted_at IS NULL
 ORDER BY created_at ASC;
 
 -- name: GetMerchantByBindCode :one
 -- 通过邀请码获取商户
-SELECT * FROM merchants
+SELECT id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours FROM merchants
 WHERE bind_code = $1 AND deleted_at IS NULL
 LIMIT 1;
 
 -- name: ListMerchants :many
-SELECT * FROM merchants
+SELECT id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours FROM merchants
 WHERE status = $1 AND deleted_at IS NULL
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3;
 
 -- name: ListAllMerchants :many
-SELECT * FROM merchants
+SELECT id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours FROM merchants
 WHERE deleted_at IS NULL
 ORDER BY created_at DESC
 LIMIT $1 OFFSET $2;
@@ -164,7 +164,7 @@ RETURNING *;
 UPDATE merchants SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL;
 
 -- name: SearchMerchants :many
-SELECT m.*, COALESCE(mp.total_orders, 0)::int AS total_orders,
+SELECT m.id, m.owner_user_id, m.name, m.description, m.phone, m.address, m.latitude, m.longitude, m.status, m.application_data, m.created_at, m.updated_at, m.version, m.region_id, m.is_open, m.auto_close_at, m.deleted_at, m.pending_owner_bind, m.bind_code, m.bind_code_expires_at, m.group_id, m.brand_id, m.logo_media_asset_id, m.auto_open_by_business_hours, COALESCE(mp.total_orders, 0)::int AS total_orders,
   COALESCE(
     (SELECT json_agg(t.name)
      FROM tags t
@@ -244,13 +244,13 @@ DELETE FROM merchant_tags
 WHERE merchant_id = $1 AND tag_id = $2;
 
 -- name: ListMerchantTags :many
-SELECT t.* FROM tags t
+SELECT t.id, t.name, t.type, t.sort_order, t.status, t.created_at FROM tags t
 INNER JOIN merchant_tags mt ON t.id = mt.tag_id
 WHERE mt.merchant_id = $1
 ORDER BY t.name;
 
 -- name: ListMerchantsByTag :many
-SELECT m.* FROM merchants m
+SELECT m.id, m.owner_user_id, m.name, m.description, m.phone, m.address, m.latitude, m.longitude, m.status, m.application_data, m.created_at, m.updated_at, m.version, m.region_id, m.is_open, m.auto_close_at, m.deleted_at, m.pending_owner_bind, m.bind_code, m.bind_code_expires_at, m.group_id, m.brand_id, m.logo_media_asset_id, m.auto_open_by_business_hours FROM merchants m
 INNER JOIN merchant_tags mt ON m.id = mt.merchant_id
 WHERE mt.tag_id = $1
   AND m.status = 'active'
@@ -277,34 +277,34 @@ INSERT INTO merchant_business_hours (
 RETURNING *;
 
 -- name: GetBusinessHour :one
-SELECT * FROM merchant_business_hours
+SELECT id, merchant_id, day_of_week, open_time, close_time, is_closed, special_date, created_at, updated_at FROM merchant_business_hours
 WHERE id = $1 LIMIT 1;
 
 -- name: ListMerchantBusinessHours :many
-SELECT * FROM merchant_business_hours
+SELECT id, merchant_id, day_of_week, open_time, close_time, is_closed, special_date, created_at, updated_at FROM merchant_business_hours
 WHERE merchant_id = $1
   AND special_date IS NULL
 ORDER BY day_of_week, open_time;
 
 -- name: ListMerchantBusinessHoursAll :many
-SELECT * FROM merchant_business_hours
+SELECT id, merchant_id, day_of_week, open_time, close_time, is_closed, special_date, created_at, updated_at FROM merchant_business_hours
 WHERE merchant_id = $1
 ORDER BY special_date NULLS FIRST, day_of_week, open_time;
 
 -- name: ListMerchantSpecialHours :many
-SELECT * FROM merchant_business_hours
+SELECT id, merchant_id, day_of_week, open_time, close_time, is_closed, special_date, created_at, updated_at FROM merchant_business_hours
 WHERE merchant_id = $1
   AND special_date IS NOT NULL
 ORDER BY special_date;
 
 -- name: GetBusinessHourByDate :one
-SELECT * FROM merchant_business_hours
+SELECT id, merchant_id, day_of_week, open_time, close_time, is_closed, special_date, created_at, updated_at FROM merchant_business_hours
 WHERE merchant_id = $1
   AND special_date = $2
 LIMIT 1;
 
 -- name: GetBusinessHourByDayOfWeek :one
-SELECT * FROM merchant_business_hours
+SELECT id, merchant_id, day_of_week, open_time, close_time, is_closed, special_date, created_at, updated_at FROM merchant_business_hours
 WHERE merchant_id = $1
   AND day_of_week = $2
   AND special_date IS NULL
@@ -343,7 +343,16 @@ SELECT
   sqlc.embed(merchants),
   COALESCE(
     (
-      SELECT json_agg(tags.*)
+      SELECT json_agg(
+        json_build_object(
+          'id', tags.id,
+          'name', tags.name,
+          'type', tags.type,
+          'sort_order', tags.sort_order,
+          'status', tags.status,
+          'created_at', tags.created_at
+        )
+      )
       FROM tags
       INNER JOIN merchant_tags ON tags.id = merchant_tags.tag_id
       WHERE merchant_tags.merchant_id = merchants.id
@@ -356,7 +365,7 @@ LIMIT 1;
 
 -- name: ListMerchantsWithTagCount :many
 SELECT 
-  m.*,
+  m.id, m.owner_user_id, m.name, m.description, m.phone, m.address, m.latitude, m.longitude, m.status, m.application_data, m.created_at, m.updated_at, m.version, m.region_id, m.is_open, m.auto_close_at, m.deleted_at, m.pending_owner_bind, m.bind_code, m.bind_code_expires_at, m.group_id, m.brand_id, m.logo_media_asset_id, m.auto_open_by_business_hours,
   COUNT(mt.tag_id) as tag_count
 FROM merchants m
 LEFT JOIN merchant_tags mt ON m.id = mt.merchant_id
@@ -454,7 +463,7 @@ WHERE id = $1;
 
 -- name: ListOpenMerchants :many
 -- 获取营业中的商户列表
-SELECT * FROM merchants
+SELECT id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours FROM merchants
 WHERE status = 'active'
   AND is_open = true
 ORDER BY created_at DESC
@@ -497,7 +506,12 @@ mode_by_merchant AS (
   GROUP BY merchant_id
 ),
 effective_rows AS (
-  SELECT tr.*
+  SELECT
+    tr.merchant_id,
+    tr.is_closed,
+    tr.open_time,
+    tr.close_time,
+    tr.special_date
   FROM today_rows tr
   JOIN mode_by_merchant mm ON mm.merchant_id = tr.merchant_id
   WHERE (mm.has_special AND tr.special_date IS NOT NULL)
@@ -507,7 +521,7 @@ desired_state AS (
   SELECT
     mwh.merchant_id,
     CASE
-      WHEN COUNT(er.*) = 0 THEN false
+      WHEN COUNT(er.merchant_id) = 0 THEN false
       WHEN BOOL_OR(er.is_closed) THEN false
       WHEN BOOL_OR((NOT er.is_closed) AND (LOCALTIME >= er.open_time AND LOCALTIME < er.close_time)) THEN true
       ELSE false
@@ -548,7 +562,7 @@ ORDER BY id;
 
 -- name: ListMerchantsByRegion :many
 -- 按区域列出商户（供运营商管理使用）
-SELECT * FROM merchants
+SELECT id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours FROM merchants
 WHERE region_id = $1
   AND deleted_at IS NULL
 ORDER BY created_at DESC
@@ -562,7 +576,7 @@ WHERE region_id = $1
 
 -- name: ListMerchantsByRegionWithStatus :many
 -- 按区域和状态列出商户
-SELECT * FROM merchants
+SELECT id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours FROM merchants
 WHERE region_id = $1
   AND ($2::varchar IS NULL OR status = $2)
   AND deleted_at IS NULL
@@ -593,7 +607,7 @@ WHERE legal_person_id_number = $1
 
 -- name: SearchMerchantsByTag :many
 -- 按标签（菜系）过滤商户，支持区域和位置排序
-SELECT m.*, COALESCE(mp.total_orders, 0)::int AS total_orders,
+SELECT m.id, m.owner_user_id, m.name, m.description, m.phone, m.address, m.latitude, m.longitude, m.status, m.application_data, m.created_at, m.updated_at, m.version, m.region_id, m.is_open, m.auto_close_at, m.deleted_at, m.pending_owner_bind, m.bind_code, m.bind_code_expires_at, m.group_id, m.brand_id, m.logo_media_asset_id, m.auto_open_by_business_hours, COALESCE(mp.total_orders, 0)::int AS total_orders,
   COALESCE(
     (SELECT json_agg(t.name)
      FROM tags t

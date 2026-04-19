@@ -1,7 +1,7 @@
 <custom-navbar title="商户管理" showBack="{{true}}" bind:navheight="onNavHeight" />
 
 <view
-  class="page-container page-shell page-shell--with-nav page-shell--bottom-safe"
+  class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
   style="--page-shell-nav-height: {{navBarHeight}}px"
 >
   <!-- 搜索和筛选 - 始终显示 -->
@@ -29,7 +29,7 @@
     <!-- 错误状态 -->
     <view wx:if="{{error && !initialLoading}}" class="error-container">
       <t-empty icon="info-circle" description="{{error}}">
-        <t-button slot="action" theme="primary" size="small" bindtap="onRetry" shape="round">重试</t-button>
+        <t-button slot="action" theme="primary" bindtap="onRetry">重试</t-button>
       </t-empty>
     </view>
 
@@ -73,7 +73,7 @@
                 </view>
                 <view class="merchant-rating">
                   <t-icon name="star-filled" size="16px" color="#faad14" />
-                  <text class="rating-text">{{item.rating.toFixed(1)}}</text>
+                  <text class="rating-text">{{item.rating_text}}</text>
                 </view>
               </view>
 
@@ -116,7 +116,7 @@
                   data-id="{{item.id}}"
                   data-name="{{item.name}}"
                   catchtap="stopPropagation"
-                 shape="round">
+                >
                   暂停商户
                 </t-button>
                 <t-button
@@ -127,7 +127,7 @@
                   data-id="{{item.id}}"
                   data-name="{{item.name}}"
                   catchtap="stopPropagation"
-                 shape="round">
+                >
                   恢复营业
                 </t-button>
                 <t-button
@@ -136,7 +136,7 @@
                   bindtap="onMerchantTap"
                   data-id="{{item.id}}"
                   catchtap="stopPropagation"
-                 shape="round">
+                >
                   管理详情
                 </t-button>
               </view>

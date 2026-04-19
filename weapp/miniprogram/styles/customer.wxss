@@ -8,6 +8,40 @@
  * 3. 统一视觉 - 一致的间距、字体、圆角、阴影
  */
 
+page {
+  --td-brand-color: #FF6B00;
+  --td-brand-color-1: #FFF0E0;
+  --td-brand-color-2: #FFE1C2;
+  --td-brand-color-3: #FFD2A3;
+  --td-brand-color-4: #FFC385;
+  --td-brand-color-5: #FFB466;
+  --td-brand-color-6: #FFA547;
+  --td-brand-color-7: #FF9629;
+  --td-brand-color-8: #FF880A;
+  --td-brand-color-9: #E66000;
+  --td-brand-color-10: #CC5500;
+  --td-brand-color-light: var(--td-brand-color-1);
+  --td-brand-color-focus: #E66000;
+  --td-brand-color-disabled: #FFC385;
+  --brand-primary: #FF6B00;
+  --brand-primary-light: #FFF0E0;
+  --brand-coral: #FF6B00;
+  --brand-coral-gradient: linear-gradient(135deg, #FF9629 0%, #FF6B00 100%);
+  --customer-card-padding: 24rpx;
+  --customer-card-gap: 24rpx;
+  --customer-card-margin: 16rpx;
+  --customer-card-radius: 24rpx;
+  --customer-card-shadow: var(--shadow-card);
+  --customer-card-shadow-active: var(--shadow-sm);
+  --customer-image-size: 180rpx;
+  --customer-image-radius: 12rpx;
+  --customer-title-size: 32rpx;
+  --customer-subtitle-size: 26rpx;
+  --customer-caption-size: 24rpx;
+  --customer-section-gap: 16rpx;
+  --customer-page-padding: 24rpx;
+}
+
 /* ==================== 设计 Token ==================== */
 
 /* 间距系统 (基于 8rpx = 4px) */

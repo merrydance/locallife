@@ -183,7 +183,7 @@ function mapKnownBackendMessage(url: string, backendMessage: string): string | u
   }
 
   if (normalized.includes('operator account is not active') || normalized.includes('operator is not active')) {
-    return '当前运营账号尚未完成开户，暂时不能加载运营中心数据。'
+    return '当前运营账号状态未生效，暂时不能加载运营中心数据，请联系平台处理。'
   }
 
   if (normalized === 'merchant is closed') {

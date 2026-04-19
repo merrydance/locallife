@@ -9,6 +9,7 @@ import (
 	"github.com/hibiken/asynq"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	"github.com/robfig/cron/v3"
 	"github.com/rs/zerolog/log"
 )
@@ -35,7 +36,7 @@ type RefundRecoveryScheduler struct {
 	runMu           sync.Mutex
 	store           db.Store
 	distributor     TaskDistributor
-	paymentClient   wechat.PaymentClientInterface
+	paymentClient   wechat.DirectPaymentClientInterface
 	ecommerceClient wechat.EcommerceClientInterface
 }
 
@@ -43,7 +44,7 @@ type RefundRecoveryScheduler struct {
 func NewRefundRecoveryScheduler(
 	store db.Store,
 	distributor TaskDistributor,
-	paymentClient wechat.PaymentClientInterface,
+	paymentClient wechat.DirectPaymentClientInterface,
 	ecommerceClient wechat.EcommerceClientInterface,
 ) *RefundRecoveryScheduler {
 	stopCtx, stopCancel := context.WithCancel(context.Background())
@@ -300,6 +301,17 @@ func (s *RefundRecoveryScheduler) recoverStuckProcessingRefunds(ctx context.Cont
 			continue
 		}
 
+		if capabilityErr := s.validateStatusRecoveryCapability(paymentOrder); capabilityErr != nil {
+			log.Warn().Err(capabilityErr).
+				Int64("refund_order_id", refundOrder.ID).
+				Int64("payment_order_id", refundOrder.PaymentOrderID).
+				Str("out_refund_no", refundOrder.OutRefundNo).
+				Str("payment_type", paymentOrder.PaymentType).
+				Str("payment_channel", paymentOrder.PaymentChannel).
+				Msg("skip stuck refund status recovery because required client is unavailable")
+			continue
+		}
+
 		refundStatus, refundID, err := s.queryRefundStatus(ctx, paymentOrder, refundOrder)
 		if err != nil {
 			log.Error().Err(err).
@@ -310,7 +322,7 @@ func (s *RefundRecoveryScheduler) recoverStuckProcessingRefunds(ctx context.Cont
 			continue
 		}
 
-		if refundStatus == wechat.RefundStatusProcessing {
+		if refundStatus == wechatcontracts.EcommerceRefundStatusProcessing {
 			log.Info().
 				Int64("refund_order_id", refundOrder.ID).
 				Str("out_refund_no", refundOrder.OutRefundNo).
@@ -345,11 +357,27 @@ func (s *RefundRecoveryScheduler) recoverStuckProcessingRefunds(ctx context.Cont
 	}
 }
 
-func (s *RefundRecoveryScheduler) queryRefundStatus(ctx context.Context, paymentOrder db.PaymentOrder, refundOrder db.RefundOrder) (string, string, error) {
-	if paymentOrder.PaymentType == "profit_sharing" {
+func (s *RefundRecoveryScheduler) validateStatusRecoveryCapability(paymentOrder db.PaymentOrder) error {
+	if requiresEcommerceRefund(paymentOrder) && !paymentOrderUsesEcommerceChannel(paymentOrder) {
+		return mainBusinessRefundChannelDriftError(paymentOrder, "query refund status")
+	}
+
+	if paymentOrderUsesEcommerceChannel(paymentOrder) {
 		if s.ecommerceClient == nil {
-			return "", "", errRefundRecoveryEcommerceClientMissing
+			return errRefundRecoveryEcommerceClientMissing
 		}
+		return nil
+	}
+
+	if s.paymentClient == nil {
+		return errRefundRecoveryPaymentClientMissing
+	}
+
+	return nil
+}
+
+func (s *RefundRecoveryScheduler) queryRefundStatus(ctx context.Context, paymentOrder db.PaymentOrder, refundOrder db.RefundOrder) (string, string, error) {
+	if paymentOrderUsesEcommerceChannel(paymentOrder) {
 
 		subMchID, err := s.resolveSubMchID(ctx, paymentOrder)
 		if err != nil {
@@ -361,10 +389,6 @@ func (s *RefundRecoveryScheduler) queryRefundStatus(ctx context.Context, payment
 			return "", "", err
 		}
 		return resp.Status, resp.RefundID, nil
-	}
-
-	if s.paymentClient == nil {
-		return "", "", errRefundRecoveryPaymentClientMissing
 	}
 
 	resp, err := s.paymentClient.QueryRefund(ctx, refundOrder.OutRefundNo)

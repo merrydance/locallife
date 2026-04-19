@@ -1,6 +1,6 @@
 <custom-navbar title="工单详情" showBack="{{true}}" bind:navheight="onNavHeight" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px;">
+<view class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px;">
   <view wx:if="{{loading}}" class="loading-container">
     <t-loading theme="circular" size="40rpx" text="加载中..." />
   </view>

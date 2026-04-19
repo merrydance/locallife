@@ -10,17 +10,17 @@ INSERT INTO print_logs (
 ) RETURNING *;
 
 -- name: GetPrintLog :one
-SELECT * FROM print_logs
+SELECT id, order_id, printer_id, print_content, status, error_message, printed_at, created_at, vendor_order_id, task_key FROM print_logs
 WHERE id = $1 LIMIT 1;
 
 -- name: GetPrintLogByTaskKeyAndPrinter :one
-SELECT * FROM print_logs
+SELECT id, order_id, printer_id, print_content, status, error_message, printed_at, created_at, vendor_order_id, task_key FROM print_logs
 WHERE task_key = $1
     AND printer_id = $2
 LIMIT 1;
 
 -- name: GetLatestPrintLogByOrderAndPrinter :one
-SELECT * FROM print_logs
+SELECT id, order_id, printer_id, print_content, status, error_message, printed_at, created_at, vendor_order_id, task_key FROM print_logs
 WHERE order_id = $1
     AND printer_id = $2
 ORDER BY created_at DESC, id DESC
@@ -28,7 +28,7 @@ LIMIT 1;
 
 -- name: ListPrintLogsByOrder :many
 SELECT 
-    pl.*,
+    pl.id, pl.order_id, pl.printer_id, pl.print_content, pl.status, pl.error_message, pl.printed_at, pl.created_at, pl.vendor_order_id, pl.task_key,
     cp.printer_name
 FROM print_logs pl
 INNER JOIN cloud_printers cp ON pl.printer_id = cp.id
@@ -36,7 +36,7 @@ WHERE pl.order_id = $1
 ORDER BY pl.created_at;
 
 -- name: ListPrintLogsByPrinter :many
-SELECT * FROM print_logs
+SELECT id, order_id, printer_id, print_content, status, error_message, printed_at, created_at, vendor_order_id, task_key FROM print_logs
 WHERE printer_id = $1
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3;
@@ -63,7 +63,7 @@ WITH latest AS (
         WHERE o.merchant_id = $1
         ORDER BY pl.order_id, pl.printer_id, pl.created_at DESC
 )
-SELECT * FROM latest
+SELECT id, order_id, order_no, order_type, printer_id, printer_name, printer_type, is_active, status, error_message, vendor_order_id, created_at, printed_at FROM latest
 WHERE status <> 'success'
     AND (sqlc.narg(status)::text IS NULL OR status = sqlc.narg(status))
 ORDER BY created_at DESC

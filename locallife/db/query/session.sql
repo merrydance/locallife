@@ -12,22 +12,22 @@ INSERT INTO sessions (
 ) RETURNING *;
 
 -- name: GetSession :one
-SELECT * FROM sessions
+SELECT id, user_id, access_token, refresh_token, access_token_expires_at, refresh_token_expires_at, user_agent, client_ip, is_revoked, created_at FROM sessions
 WHERE id = $1 LIMIT 1;
 
 -- name: GetSessionByAccessToken :one
-SELECT * FROM sessions
+SELECT id, user_id, access_token, refresh_token, access_token_expires_at, refresh_token_expires_at, user_agent, client_ip, is_revoked, created_at FROM sessions
 WHERE access_token = $1 LIMIT 1;
 
 -- name: GetSessionByRefreshToken :one
-SELECT * FROM sessions
+SELECT id, user_id, access_token, refresh_token, access_token_expires_at, refresh_token_expires_at, user_agent, client_ip, is_revoked, created_at FROM sessions
 WHERE refresh_token = sqlc.arg('refresh_token')
   OR refresh_token = sqlc.arg('refresh_token_fallback')
 LIMIT 1;
 
 -- name: GetSessionByRefreshTokenForUpdate :one
 -- P1-012 修复：加行锁防止并发刷新
-SELECT * FROM sessions
+SELECT id, user_id, access_token, refresh_token, access_token_expires_at, refresh_token_expires_at, user_agent, client_ip, is_revoked, created_at FROM sessions
 WHERE refresh_token = sqlc.arg('refresh_token')
   OR refresh_token = sqlc.arg('refresh_token_fallback')
 LIMIT 1
@@ -58,6 +58,6 @@ DELETE FROM sessions
 WHERE refresh_token_expires_at < NOW();
 
 -- name: ListUserActiveSessions :many
-SELECT * FROM sessions
+SELECT id, user_id, access_token, refresh_token, access_token_expires_at, refresh_token_expires_at, user_agent, client_ip, is_revoked, created_at FROM sessions
 WHERE user_id = $1 AND is_revoked = false
 ORDER BY created_at DESC;

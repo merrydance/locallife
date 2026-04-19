@@ -1,0 +1,11 @@
+{
+  "purpose": "Shared map view wrapper with consistent loading, empty, and surrounding state treatment.",
+  "tdesignGroup": "data",
+  "tdesignCandidates": [
+    "loading",
+    "empty",
+    "icon"
+  ],
+  "decision": "local-component",
+  "rationale": "Map rendering itself is platform-provided, but product surfaces need consistent fallback and container treatment around it. A shared wrapper keeps those states aligned."
+}

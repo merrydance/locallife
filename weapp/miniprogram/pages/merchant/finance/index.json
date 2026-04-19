@@ -12,7 +12,6 @@
     "t-dialog": "tdesign-miniprogram/dialog/dialog",
     "t-empty": "tdesign-miniprogram/empty/empty",
     "t-loading": "tdesign-miniprogram/loading/loading",
-    "t-notice-bar": "tdesign-miniprogram/notice-bar/notice-bar",
     "t-input": "tdesign-miniprogram/input/input"
   }
 }

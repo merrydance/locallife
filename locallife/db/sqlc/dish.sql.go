@@ -1595,7 +1595,7 @@ WHERE
   AND ($5::boolean IS NULL OR d.is_online = $5)
   AND ($6::boolean IS NULL OR d.is_available = $6)
   AND ($7::boolean IS NULL OR d.is_packaging = $7)
-ORDER BY sort_order ASC, created_at DESC
+ORDER BY sort_order ASC, created_at DESC, id DESC
 LIMIT $2 OFFSET $3
 `
 

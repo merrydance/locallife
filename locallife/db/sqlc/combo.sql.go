@@ -690,7 +690,7 @@ WHERE
   cs.merchant_id = $1
   AND cs.deleted_at IS NULL
   AND ($4::boolean IS NULL OR cs.is_online = $4)
-ORDER BY cs.created_at DESC
+ORDER BY cs.created_at DESC, cs.id DESC
 LIMIT $2 OFFSET $3
 `
 

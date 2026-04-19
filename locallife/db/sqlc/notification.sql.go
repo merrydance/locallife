@@ -332,7 +332,7 @@ SELECT id, user_id, type, title, content, related_type, related_id, extra_data, 
 WHERE user_id = $1
   AND ($4::boolean IS NULL OR is_read = $4)
   AND ($5::text IS NULL OR type = $5)
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $2 OFFSET $3
 `
 

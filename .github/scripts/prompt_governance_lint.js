@@ -244,7 +244,7 @@ function lintBackendCanonicalOwners(errors) {
   const codexContextOwners = {
     'locallife/.codex/context/architecture.md': ['Compatibility Pointer', '.github/standards/backend/RUNTIME_ARCHITECTURE.md'],
     'locallife/.codex/context/workflow.md': ['Compatibility Pointer', '.github/standards/backend/WORKFLOW_AND_VALIDATION.md'],
-    'locallife/.codex/context/risk-map.md': ['Compatibility Pointer', '.github/standards/backend/BACKEND_RISK_MAP.md'],
+    'locallife/.codex/context/risk-map.md': ['Compatibility Pointer', '.github/standards/backend/README.md'],
     'locallife/.codex/context/review-loop.md': ['Compatibility Pointer', '.github/standards/backend/FORMAL_REVIEW_DURABILITY.md', '.github/review/open-findings.md', '.github/review/audit-log.md']
   };
 

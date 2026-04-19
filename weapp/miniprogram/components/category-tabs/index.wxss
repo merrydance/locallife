@@ -23,7 +23,7 @@
 }
 
 .tab-item.active {
-  color: #0052D9;
+  color: var(--td-brand-color);
   font-weight: 600;
   font-size: 30rpx;
 }
@@ -33,6 +33,6 @@
   bottom: 12rpx;
   width: 40rpx;
   height: 6rpx;
-  background: #0052D9;
+  background: var(--td-brand-color);
   border-radius: 3rpx;
 }

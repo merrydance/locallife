@@ -9,7 +9,7 @@ Use this template when asking for a backend review that emphasizes end-to-end co
 Use the backend row in `.github/standards/engineering/AI_PROMPT_GOVERNANCE.md` as the shared source for implementation push items, prohibited shortcuts, and findings-first review checks.
 Use `.github/standards/backend/RUNTIME_ARCHITECTURE.md` to keep review scope on the real production path rather than a simplified three-layer sketch.
 Use `.github/standards/backend/WORKFLOW_AND_VALIDATION.md` when deciding which generation and validation steps should have been run.
-Use `.github/standards/backend/BACKEND_RISK_MAP.md` to bias review depth toward already-known high-risk production chains.
+Use `.github/standards/backend/README.md` plus the matching domain README to bias review depth toward already-known high-risk production chains.
 Use `.github/standards/backend/BACKEND_REVIEW_CLOSEOUT_CHECKLIST.md` when the review is formal enough that findings, residual risk, or systemic feedback should become durable project knowledge.
 Use `.github/standards/backend/FORMAL_REVIEW_DURABILITY.md` when deciding where reusable findings should be written back.
 
@@ -56,7 +56,8 @@ Related docs:
 - `.github/standards/backend/API_CONTRACT_STANDARDS.md`
 - `.github/standards/backend/RUNTIME_ARCHITECTURE.md`
 - `.github/standards/backend/WORKFLOW_AND_VALIDATION.md`
-- `.github/standards/backend/BACKEND_RISK_MAP.md`
+- `.github/standards/backend/README.md`
+- `.github/standards/domains/wechat-payment/README.md`
 - `.github/standards/backend/BACKEND_REVIEW_CLOSEOUT_CHECKLIST.md`
 - `.github/standards/backend/FORMAL_REVIEW_DURABILITY.md`
 - If the change touches runbooks, execution plans, or cutover documents, say whether those docs still look active or should move to archive or historical status.

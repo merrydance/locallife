@@ -1,6 +1,6 @@
 <custom-navbar title="平台运营配置" show-back="{{true}}" show-location="{{false}}" bind:navheight="onNavHeight" />
 
-<scroll-view scroll-y class="page-container" style="padding-top: {{navBarHeight}}px">
+<scroll-view scroll-y class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px;">
   <view class="content-inner">
     <view class="welcome-header">
       <view class="title">平台运营配置</view>
@@ -21,7 +21,7 @@
 
     <view wx:if="{{error}}" class="section-card status-wrap">
       <t-empty icon="error-circle" description="{{error}}">
-        <t-button slot="action" theme="primary" shape="round" size="small" bind:tap="onRetry">重试</t-button>
+        <t-button slot="action" theme="primary" bind:tap="onRetry">重试</t-button>
       </t-empty>
     </view>
 
@@ -70,7 +70,7 @@
         </view>
 
         <view class="card-actions">
-          <t-button theme="primary" shape="round" block loading="{{commissionSubmitting}}" bind:tap="onSaveCommissionConfig">保存佣金配置</t-button>
+          <t-button theme="primary" block loading="{{commissionSubmitting}}" bind:tap="onSaveCommissionConfig">保存佣金配置</t-button>
         </view>
       </view>
 
@@ -87,7 +87,7 @@
           <t-input
             value="{{merchantDepositInput}}"
             placeholder="请输入金额"
-            label="商户入驻保证金"
+            label="商户保证金"
             suffix="元"
             align="right"
             bind:change="onMerchantDepositChange"
@@ -95,7 +95,7 @@
           <t-input
             value="{{riderDepositInput}}"
             placeholder="请输入金额"
-            label="骑手入驻押金"
+            label="骑手押金"
             suffix="元"
             align="right"
             bind:change="onRiderDepositChange"
@@ -114,7 +114,7 @@
         </view>
 
         <view class="card-actions">
-          <t-button theme="primary" shape="round" block loading="{{depositSubmitting}}" bind:tap="onSaveDepositConfig">保存保证金配置</t-button>
+          <t-button theme="primary" block loading="{{depositSubmitting}}" bind:tap="onSaveDepositConfig">保存保证金配置</t-button>
         </view>
       </view>
     </view>

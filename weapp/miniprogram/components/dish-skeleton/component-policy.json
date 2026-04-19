@@ -1,0 +1,9 @@
+{
+  "purpose": "Dish-list skeleton placeholder matching the standard dish card layout and spacing rhythm.",
+  "tdesignGroup": "feedback",
+  "tdesignCandidates": [
+    "skeleton"
+  ],
+  "decision": "tdesign-wrapper",
+  "rationale": "The component only wraps TDesign skeleton usage into a repeated dish-card loading shape so product pages stay visually aligned during loading."
+}

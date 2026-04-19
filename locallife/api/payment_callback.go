@@ -7,12 +7,15 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/websocket"
 	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	"github.com/merrydance/locallife/worker"
 
 	"github.com/gin-gonic/gin"
@@ -74,8 +77,9 @@ func (server *Server) readVerifiedEcommerceSuccessNotification(ctx *gin.Context,
 	signature := ctx.GetHeader("Wechatpay-Signature")
 	timestamp := ctx.GetHeader("Wechatpay-Timestamp")
 	nonce := ctx.GetHeader("Wechatpay-Nonce")
+	serial := ctx.GetHeader("Wechatpay-Serial")
 
-	if err := server.ecommerceClient.VerifyNotificationSignature(signature, timestamp, nonce, string(body)); err != nil {
+	if err := server.ecommerceClient.VerifyNotificationSignature(signature, timestamp, nonce, serial, string(body)); err != nil {
 		log.Error().Err(err).Str("callback_type", callbackType).Msg("invalid wechat signature for ecommerce notification")
 		ctx.JSON(http.StatusUnauthorized, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
@@ -116,6 +120,19 @@ func (server *Server) markNotificationProcessed(ctx context.Context, notificatio
 func writeWechatNotifySuccess(ctx *gin.Context, metricLabel string) {
 	_ = metricLabel
 	ctx.Status(http.StatusNoContent)
+}
+
+func parseClaimPayoutActionIDFromOutBillNo(outBillNo string) (int64, error) {
+	trimmed := strings.TrimSpace(outBillNo)
+	const prefix = "claimpayout"
+	if !strings.HasPrefix(trimmed, prefix) {
+		return 0, fmt.Errorf("unsupported claim payout out_bill_no: %s", outBillNo)
+	}
+	actionID, err := strconv.ParseInt(strings.TrimPrefix(trimmed, prefix), 10, 64)
+	if err != nil || actionID <= 0 {
+		return 0, fmt.Errorf("invalid claim payout out_bill_no: %s", outBillNo)
+	}
+	return actionID, nil
 }
 
 func (server *Server) handleDuplicateClaimedNotification(ctx *gin.Context, notificationID, metricLabel string) bool {
@@ -164,7 +181,7 @@ func (server *Server) handleDuplicateClaimedNotification(ctx *gin.Context, notif
 	return false
 }
 
-func (server *Server) validateCombineNotifyOwnership(resource *wechat.CombinePaymentNotification) error {
+func (server *Server) validateCombineNotifyOwnership(resource *wechatcontracts.CombinePaymentNotification) error {
 	if server.ecommerceClient == nil {
 		return errors.New("ecommerce client not configured")
 	}
@@ -177,7 +194,7 @@ func (server *Server) validateCombineNotifyOwnership(resource *wechat.CombinePay
 	return nil
 }
 
-func (server *Server) validatePartnerNotifyOwnership(resource *wechat.PartnerPaymentNotificationResource) error {
+func (server *Server) validatePartnerNotifyOwnership(resource *wechatcontracts.PartnerPaymentNotificationResource) error {
 	if server.ecommerceClient == nil {
 		return errors.New("ecommerce client not configured")
 	}
@@ -200,17 +217,17 @@ func (server *Server) validateEcommerceRefundOwnership(resource *wechat.Ecommerc
 	return nil
 }
 
-func (server *Server) validateProfitSharingOwnership(resource *wechat.ProfitSharingNotification) error {
+func (server *Server) validateProfitSharingOwnership(resource *wechatcontracts.ProfitSharingNotification) error {
 	if server.ecommerceClient == nil {
 		return errors.New("ecommerce client not configured")
 	}
-	if resource.MchID != "" && resource.MchID != server.ecommerceClient.GetSpMchID() {
+	if resource.SPMchID != "" && resource.SPMchID != server.ecommerceClient.GetSpMchID() {
 		return fmt.Errorf("mchid mismatch")
 	}
 	return nil
 }
 
-func (server *Server) validateProfitSharingSubMerchantOwnership(ctx context.Context, resource *wechat.ProfitSharingNotification, order db.ProfitSharingOrder) error {
+func (server *Server) validateProfitSharingSubMerchantOwnership(ctx context.Context, resource *wechatcontracts.ProfitSharingNotification, order db.ProfitSharingOrder) error {
 	if resource == nil {
 		return errors.New("profit sharing resource is nil")
 	}
@@ -233,14 +250,14 @@ func (server *Server) validateProfitSharingSubMerchantOwnership(ctx context.Cont
 	return nil
 }
 
-func (server *Server) validateDirectPaymentOwnership(resource *wechat.PaymentNotificationResource) error {
+func (server *Server) validateDirectPaymentOwnership(resource *wechatcontracts.DirectPaymentNotificationResource) error {
 	if resource == nil {
 		return errors.New("payment resource is nil")
 	}
 	if resource.MchID == "" && resource.AppID == "" {
 		return nil
 	}
-	provider, ok := server.paymentClient.(directPaymentOwnershipProvider)
+	provider, ok := server.directPaymentClient.(directPaymentOwnershipProvider)
 	if !ok {
 		return errors.New("payment client ownership metadata unavailable")
 	}
@@ -253,15 +270,28 @@ func (server *Server) validateDirectPaymentOwnership(resource *wechat.PaymentNot
 	return nil
 }
 
-func (server *Server) validateDirectRefundOwnership(resource *wechat.RefundNotificationResource) error {
+func (server *Server) validateDirectRefundOwnership(resource *wechatcontracts.DirectRefundNotificationResource) error {
 	if resource == nil || resource.MchID == "" {
 		return nil
 	}
-	provider, ok := server.paymentClient.(directPaymentOwnershipProvider)
+	provider, ok := server.directPaymentClient.(directPaymentOwnershipProvider)
 	if !ok {
 		return errors.New("payment client ownership metadata unavailable")
 	}
 	if resource.MchID != provider.GetMchID() {
+		return fmt.Errorf("mchid mismatch")
+	}
+	return nil
+}
+
+func (server *Server) validateDirectMerchantTransferOwnership(resource *wechatcontracts.DirectMerchantTransferNotificationResource) error {
+	if resource == nil || resource.MchID == "" {
+		return nil
+	}
+	if server.transferClient == nil {
+		return errors.New("transfer client ownership metadata unavailable")
+	}
+	if resource.MchID != server.transferClient.GetMchID() {
 		return fmt.Errorf("mchid mismatch")
 	}
 	return nil
@@ -322,7 +352,15 @@ func (server *Server) resolvePaymentOrderSubMchID(ctx context.Context, paymentOr
 	return config.SubMchID, nil
 }
 
-func (server *Server) syncWithdrawalRecordWithWechat(ctx *gin.Context, record db.WithdrawalRecord, resource *wechat.EcommerceWithdrawResponse) (db.WithdrawalRecord, error) {
+type withdrawStatusSyncSnapshot struct {
+	OutRequestNo string
+	SubMchID     string
+	WithdrawID   string
+	Status       string
+	Reason       string
+}
+
+func (server *Server) syncWithdrawalRecordWithWechat(ctx *gin.Context, record db.WithdrawalRecord, resource *withdrawStatusSyncSnapshot) (db.WithdrawalRecord, error) {
 	if resource == nil {
 		return record, errors.New("withdraw resource is nil")
 	}
@@ -356,31 +394,6 @@ func (server *Server) syncWithdrawalRecordWithWechat(ctx *gin.Context, record db
 				return record, fmt.Errorf("persist merchant withdraw account info: %w", err)
 			}
 		}
-	case operatorWithdrawChannel:
-		info := parseOperatorWithdrawAccountInfo(record.AccountInfo)
-		if info.OutRequestNo != "" && info.OutRequestNo != resource.OutRequestNo {
-			return record, fmt.Errorf("operator withdraw out_request_no mismatch")
-		}
-		if info.SubMchID != "" && resource.SubMchID != "" && info.SubMchID != resource.SubMchID {
-			return record, fmt.Errorf("operator withdraw sub_mchid mismatch")
-		}
-		if resource.WithdrawID != "" && info.WithdrawID != resource.WithdrawID {
-			info.WithdrawID = resource.WithdrawID
-			if info.OutRequestNo == "" {
-				info.OutRequestNo = resource.OutRequestNo
-			}
-			if info.SubMchID == "" {
-				info.SubMchID = resource.SubMchID
-			}
-			raw, err := json.Marshal(info)
-			if err != nil {
-				return record, fmt.Errorf("marshal operator withdraw account info: %w", err)
-			}
-			record, err = server.persistWithdrawalRecordAccountInfo(ctx, record, raw)
-			if err != nil {
-				return record, fmt.Errorf("persist operator withdraw account info: %w", err)
-			}
-		}
 	default:
 		return record, fmt.Errorf("unsupported withdrawal channel: %s", record.Channel)
 	}
@@ -392,7 +405,7 @@ func (server *Server) syncWithdrawalRecordWithWechat(ctx *gin.Context, record db
 	return record, nil
 }
 
-func (server *Server) handlePartnerPaymentNotification(ctx *gin.Context, notification wechat.PaymentNotification, resource *wechat.PartnerPaymentNotificationResource) {
+func (server *Server) handlePartnerPaymentNotification(ctx *gin.Context, notification wechat.PaymentNotification, resource *wechatcontracts.PartnerPaymentNotificationResource) {
 	if err := server.validatePartnerNotifyOwnership(resource); err != nil {
 		paymentCallbackFailuresTotal.WithLabelValues("ecommerce_payment", "ownership").Inc()
 		log.Error().Err(err).
@@ -726,8 +739,9 @@ func (server *Server) handleEcommerceWithdrawNotify(ctx *gin.Context) {
 	signature := ctx.GetHeader("Wechatpay-Signature")
 	timestamp := ctx.GetHeader("Wechatpay-Timestamp")
 	nonce := ctx.GetHeader("Wechatpay-Nonce")
+	serial := ctx.GetHeader("Wechatpay-Serial")
 
-	if err := server.ecommerceClient.VerifyNotificationSignature(signature, timestamp, nonce, string(body)); err != nil {
+	if err := server.ecommerceClient.VerifyNotificationSignature(signature, timestamp, nonce, serial, string(body)); err != nil {
 		paymentCallbackFailuresTotal.WithLabelValues("ecommerce_withdraw", "signature").Inc()
 		log.Error().Err(err).Msg("invalid wechat signature for ecommerce withdraw notification")
 		ctx.JSON(http.StatusUnauthorized, wechatPaymentNotifyResponse{Code: "FAIL", Message: "signature verification failed"})
@@ -742,7 +756,7 @@ func (server *Server) handleEcommerceWithdrawNotify(ctx *gin.Context) {
 		return
 	}
 
-	if notification.EventType != "MCHWITHDRAW.CHANGE" {
+	if notification.EventType != wechatcontracts.FundManagementNotificationEventType {
 		log.Info().Str("event_type", notification.EventType).Msg("ignore non-withdraw ecommerce notification")
 		writeWechatNotifySuccess(ctx, "ecommerce_withdraw")
 		return
@@ -761,12 +775,19 @@ func (server *Server) handleEcommerceWithdrawNotify(ctx *gin.Context) {
 		return
 	}
 
-	var resource wechat.EcommerceWithdrawResponse
+	var resource wechatcontracts.WithdrawNotificationResource
 	if err := json.Unmarshal(decrypted, &resource); err != nil {
 		paymentCallbackFailuresTotal.WithLabelValues("ecommerce_withdraw", "parse_resource").Inc()
 		log.Error().Err(err).Str("decrypted", string(decrypted)).Msg("parse ecommerce withdraw resource")
 		server.releaseNotification(ctx, notification.ID, "ecommerce_withdraw")
 		ctx.JSON(http.StatusBadRequest, wechatPaymentNotifyResponse{Code: "FAIL", Message: "parse resource failed"})
+		return
+	}
+	if err := wechatcontracts.ValidateWithdrawNotificationResource("decrypt ecommerce withdraw notification", &resource); err != nil {
+		paymentCallbackFailuresTotal.WithLabelValues("ecommerce_withdraw", "contract_validation").Inc()
+		log.Error().Err(err).Str("notification_id", notification.ID).Msg("validate ecommerce withdraw resource contract")
+		server.releaseNotification(ctx, notification.ID, "ecommerce_withdraw")
+		ctx.JSON(http.StatusBadRequest, wechatPaymentNotifyResponse{Code: "FAIL", Message: "invalid resource contract"})
 		return
 	}
 	if resource.OutRequestNo == "" {
@@ -793,7 +814,13 @@ func (server *Server) handleEcommerceWithdrawNotify(ctx *gin.Context) {
 		return
 	}
 
-	if _, err := server.syncWithdrawalRecordWithWechat(ctx, record, &resource); err != nil {
+	if _, err := server.syncWithdrawalRecordWithWechat(ctx, record, &withdrawStatusSyncSnapshot{
+		OutRequestNo: resource.OutRequestNo,
+		SubMchID:     resource.SubMchID,
+		WithdrawID:   resource.WithdrawID,
+		Status:       resource.Status,
+		Reason:       resource.Reason,
+	}); err != nil {
 		paymentCallbackFailuresTotal.WithLabelValues("ecommerce_withdraw", "sync_withdrawal").Inc()
 		log.Error().Err(err).Int64("withdrawal_record_id", record.ID).Str("out_request_no", resource.OutRequestNo).Msg("sync withdrawal record with ecommerce callback failed")
 		server.releaseNotification(ctx, notification.ID, "ecommerce_withdraw")
@@ -811,8 +838,6 @@ func buildAmountMismatchRefundOutRefundNo(paymentOrder db.PaymentOrder) string {
 		return fmt.Sprintf("RF%d_%d", paymentOrder.ID, paymentOrder.OrderID.Int64)
 	case paymentOrder.ReservationID.Valid:
 		return fmt.Sprintf("RF%d_R%d", paymentOrder.ID, paymentOrder.ReservationID.Int64)
-	case paymentOrder.BusinessType == "membership_recharge":
-		return fmt.Sprintf("RFM%d_M", paymentOrder.ID)
 	case paymentOrder.BusinessType == "rider_deposit":
 		return fmt.Sprintf("RFM%d_D", paymentOrder.ID)
 	default:
@@ -855,6 +880,10 @@ func buildAmountMismatchRefundPayload(paymentOrder db.PaymentOrder, refundAmount
 	}
 	if paymentOrder.ReservationID.Valid {
 		payload.ReservationID = paymentOrder.ReservationID.Int64
+		return payload, true
+	}
+	// 骑手押金无关联订单，但 worker 有独立的直连退款分支
+	if paymentOrder.BusinessType == "rider_deposit" {
 		return payload, true
 	}
 	return nil, false
@@ -977,11 +1006,132 @@ func (server *Server) releaseNotificationWithReason(ctx context.Context, id, cal
 	}
 }
 
+func (server *Server) requireTaskDistributorForNotification(ctx *gin.Context, notificationID, callbackType, responseMessage string) bool {
+	if server.taskDistributor != nil {
+		return true
+	}
+
+	paymentCallbackFailuresTotal.WithLabelValues(callbackType, "task_distributor_missing").Inc()
+	log.Error().
+		Str("notification_id", notificationID).
+		Str("callback_type", callbackType).
+		Msg("callback cannot be acknowledged because task distributor is not configured")
+	server.releaseNotification(ctx, notificationID, callbackType)
+	ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
+		Code:    "FAIL",
+		Message: responseMessage,
+	})
+	return false
+}
+
+// handleMerchantTransferNotify 处理商家转账回调通知。
+// POST /v1/webhooks/wechat-pay/merchant-transfer-notify
+func (server *Server) handleMerchantTransferNotify(ctx *gin.Context) {
+	if server.transferClient == nil {
+		log.Error().Msg("merchant transfer callback received but merchant transfer client is not configured")
+		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
+			Code:    "FAIL",
+			Message: "merchant transfer client not configured",
+		})
+		return
+	}
+
+	body, status, err := readWebhookBody(ctx)
+	if err != nil {
+		paymentCallbackFailuresTotal.WithLabelValues("merchant_transfer", "read_body").Inc()
+		log.Error().Err(err).Msg("read merchant transfer notification body")
+		ctx.JSON(status, wechatPaymentNotifyResponse{Code: "FAIL", Message: "read body failed"})
+		return
+	}
+
+	signature := ctx.GetHeader("Wechatpay-Signature")
+	timestamp := ctx.GetHeader("Wechatpay-Timestamp")
+	nonce := ctx.GetHeader("Wechatpay-Nonce")
+	serial := ctx.GetHeader("Wechatpay-Serial")
+	if err := server.transferClient.VerifyNotificationSignature(signature, timestamp, nonce, serial, string(body)); err != nil {
+		paymentCallbackFailuresTotal.WithLabelValues("merchant_transfer", "signature").Inc()
+		log.Error().Err(err).Msg("invalid wechat signature for merchant transfer notification")
+		ctx.JSON(http.StatusUnauthorized, wechatPaymentNotifyResponse{Code: "FAIL", Message: "signature verification failed"})
+		return
+	}
+
+	var notification wechat.PaymentNotification
+	if err := json.Unmarshal(body, &notification); err != nil {
+		paymentCallbackFailuresTotal.WithLabelValues("merchant_transfer", "parse").Inc()
+		log.Error().Err(err).Msg("parse merchant transfer notification")
+		ctx.JSON(http.StatusBadRequest, wechatPaymentNotifyResponse{Code: "FAIL", Message: "parse notification failed"})
+		return
+	}
+
+	if notification.EventType != wechatcontracts.DirectMerchantTransferNotifyEventTypeBillFinished {
+		log.Info().Str("event_type", notification.EventType).Msg("ignore non-merchant-transfer-finished notification")
+		writeWechatNotifySuccess(ctx, "merchant_transfer")
+		return
+	}
+
+	if !server.tryClaimNotification(ctx, notification, "merchant_transfer") {
+		return
+	}
+
+	resource, err := server.transferClient.DecryptMerchantTransferNotification(&notification)
+	if err != nil {
+		paymentCallbackFailuresTotal.WithLabelValues("merchant_transfer", "decrypt").Inc()
+		log.Error().Err(err).Msg("decrypt merchant transfer notification")
+		server.releaseNotification(ctx, notification.ID, "merchant_transfer")
+		ctx.JSON(http.StatusBadRequest, wechatPaymentNotifyResponse{Code: "FAIL", Message: "decrypt failed"})
+		return
+	}
+
+	if err := server.validateDirectMerchantTransferOwnership(resource); err != nil {
+		paymentCallbackFailuresTotal.WithLabelValues("merchant_transfer", "ownership").Inc()
+		log.Error().Err(err).
+			Str("out_bill_no", resource.OutBillNo).
+			Str("mchid", resource.MchID).
+			Msg("merchant transfer notification ownership validation failed")
+		server.sendAlert(websocket.AlertData{
+			AlertType:   websocket.AlertTypeSystemError,
+			Level:       websocket.AlertLevelCritical,
+			Title:       "商家转账回调归属校验失败",
+			Message:     fmt.Sprintf("商家转账回调 out_bill_no=%s 的归属校验失败，mchid=%s。系统已返回 FAIL 等待微信重试，请排查是否存在错商户转账回调。", resource.OutBillNo, resource.MchID),
+			RelatedID:   0,
+			RelatedType: "behavior_action",
+			Extra: map[string]interface{}{
+				"out_bill_no":      resource.OutBillNo,
+				"transfer_bill_no": resource.TransferBillNo,
+				"mchid":            resource.MchID,
+			},
+		})
+		server.releaseNotification(ctx, notification.ID, "merchant_transfer")
+		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{Code: "FAIL", Message: "ownership validation failed"})
+		return
+	}
+
+	actionID, err := parseClaimPayoutActionIDFromOutBillNo(resource.OutBillNo)
+	if err != nil {
+		paymentCallbackFailuresTotal.WithLabelValues("merchant_transfer", "parse_out_bill_no").Inc()
+		log.Error().Err(err).Str("out_bill_no", resource.OutBillNo).Msg("resolve claim payout action from merchant transfer notification")
+		server.releaseNotification(ctx, notification.ID, "merchant_transfer")
+		ctx.JSON(http.StatusBadRequest, wechatPaymentNotifyResponse{Code: "FAIL", Message: "invalid out_bill_no"})
+		return
+	}
+
+	if err := worker.HandleClaimPayoutTransferNotification(ctx, server.store, actionID, resource); err != nil {
+		paymentCallbackFailuresTotal.WithLabelValues("merchant_transfer", "apply_business").Inc()
+		log.Error().Err(err).Int64("behavior_action_id", actionID).Str("out_bill_no", resource.OutBillNo).Msg("apply merchant transfer notification failed")
+		server.releaseNotification(ctx, notification.ID, "merchant_transfer")
+		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{Code: "FAIL", Message: "apply notification failed"})
+		return
+	}
+
+	server.markNotificationProcessed(ctx, notification.ID, resource.OutBillNo, resource.TransferBillNo)
+	writeWechatNotifySuccess(ctx, "merchant_transfer")
+}
+
 // handlePaymentNotify 处理微信支付回调通知
 // POST /v1/webhooks/wechat-pay/notify
 // 设计原则：快速响应微信，耗时操作放入队列
 func (server *Server) handlePaymentNotify(ctx *gin.Context) {
-	if server.paymentClient == nil {
+	if server.directPaymentClient == nil {
 		log.Error().Msg("payment callback received but payment client is not configured")
 		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
@@ -1006,8 +1156,9 @@ func (server *Server) handlePaymentNotify(ctx *gin.Context) {
 	signature := ctx.GetHeader("Wechatpay-Signature")
 	timestamp := ctx.GetHeader("Wechatpay-Timestamp")
 	nonce := ctx.GetHeader("Wechatpay-Nonce")
+	serial := ctx.GetHeader("Wechatpay-Serial")
 
-	if err := server.paymentClient.VerifyNotificationSignature(signature, timestamp, nonce, string(body)); err != nil {
+	if err := server.directPaymentClient.VerifyNotificationSignature(signature, timestamp, nonce, serial, string(body)); err != nil {
 		paymentCallbackFailuresTotal.WithLabelValues("payment", "signature").Inc()
 		log.Error().
 			Err(err).
@@ -1046,7 +1197,7 @@ func (server *Server) handlePaymentNotify(ctx *gin.Context) {
 	}
 
 	// 解密通知内容
-	resource, err := server.paymentClient.DecryptPaymentNotification(&notification)
+	resource, err := server.directPaymentClient.DecryptPaymentNotification(&notification)
 	if err != nil {
 		paymentCallbackFailuresTotal.WithLabelValues("payment", "decrypt").Inc()
 		log.Error().Err(err).Msg("decrypt payment notification")
@@ -1448,7 +1599,7 @@ func (server *Server) handlePaymentNotify(ctx *gin.Context) {
 // handleRefundNotify 处理微信退款回调通知
 // POST /v1/webhooks/wechat-pay/refund-notify
 func (server *Server) handleRefundNotify(ctx *gin.Context) {
-	if server.paymentClient == nil {
+	if server.directPaymentClient == nil {
 		log.Error().Msg("refund callback received but payment client is not configured")
 		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
@@ -1473,8 +1624,9 @@ func (server *Server) handleRefundNotify(ctx *gin.Context) {
 	signature := ctx.GetHeader("Wechatpay-Signature")
 	timestamp := ctx.GetHeader("Wechatpay-Timestamp")
 	nonce := ctx.GetHeader("Wechatpay-Nonce")
+	serial := ctx.GetHeader("Wechatpay-Serial")
 
-	if err := server.paymentClient.VerifyNotificationSignature(signature, timestamp, nonce, string(body)); err != nil {
+	if err := server.directPaymentClient.VerifyNotificationSignature(signature, timestamp, nonce, serial, string(body)); err != nil {
 		paymentCallbackFailuresTotal.WithLabelValues("refund", "signature").Inc()
 		log.Error().Err(err).Msg("⚠️ invalid wechat signature for refund notification")
 		ctx.JSON(http.StatusUnauthorized, wechatPaymentNotifyResponse{
@@ -1514,7 +1666,7 @@ func (server *Server) handleRefundNotify(ctx *gin.Context) {
 	}
 
 	// 解密通知内容
-	resource, err := server.paymentClient.DecryptRefundNotification(&notification)
+	resource, err := server.directPaymentClient.DecryptRefundNotification(&notification)
 	if err != nil {
 		paymentCallbackFailuresTotal.WithLabelValues("refund", "decrypt").Inc()
 		log.Error().Err(err).Msg("decrypt refund notification")
@@ -1561,34 +1713,41 @@ func (server *Server) handleRefundNotify(ctx *gin.Context) {
 		Int64("refund_amount", resource.Amount.Refund).
 		Msg("received refund notification")
 
-	// 将退款结果处理放入队列
-	if server.taskDistributor != nil {
-		err = server.taskDistributor.DistributeTaskProcessRefundResult(
-			ctx,
-			&worker.RefundResultPayload{
-				OutRefundNo:  resource.OutRefundNo,
-				RefundStatus: resource.RefundStatus,
-				RefundID:     resource.RefundID,
-			},
-			asynq.MaxRetry(3),
-			asynq.Queue(worker.QueueCritical),
-		)
-		if err != nil {
-			paymentCallbackFailuresTotal.WithLabelValues("refund", "enqueue").Inc()
-			log.Error().Err(err).
-				Str("out_refund_no", resource.OutRefundNo).
-				Msg("failed to enqueue refund result task")
-			server.releaseNotification(ctx, notification.ID, "refund")
-			ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
-				Code:    "FAIL",
-				Message: "enqueue failed, please retry",
-			})
-			return
-		}
-	} else {
-		log.Warn().
+	if server.taskDistributor == nil {
+		paymentCallbackFailuresTotal.WithLabelValues("refund", "task_distributor_missing").Inc()
+		log.Error().
 			Str("out_refund_no", resource.OutRefundNo).
-			Msg("refund callback acknowledged without task distributor; refund result processing skipped")
+			Msg("refund callback cannot be acknowledged because task distributor is not configured")
+		server.releaseNotification(ctx, notification.ID, "refund")
+		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
+			Code:    "FAIL",
+			Message: "refund result processing unavailable, please retry",
+		})
+		return
+	}
+
+	// 将退款结果处理放入队列
+	err = server.taskDistributor.DistributeTaskProcessRefundResult(
+		ctx,
+		&worker.RefundResultPayload{
+			OutRefundNo:  resource.OutRefundNo,
+			RefundStatus: resource.RefundStatus,
+			RefundID:     resource.RefundID,
+		},
+		asynq.MaxRetry(3),
+		asynq.Queue(worker.QueueCritical),
+	)
+	if err != nil {
+		paymentCallbackFailuresTotal.WithLabelValues("refund", "enqueue").Inc()
+		log.Error().Err(err).
+			Str("out_refund_no", resource.OutRefundNo).
+			Msg("failed to enqueue refund result task")
+		server.releaseNotification(ctx, notification.ID, "refund")
+		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
+			Code:    "FAIL",
+			Message: "enqueue failed, please retry",
+		})
+		return
 	}
 
 	// 通知ID已在 tryClaimNotification 中原子写入，无需重复记录
@@ -1626,8 +1785,9 @@ func (server *Server) handleEcommerceRefundNotify(ctx *gin.Context) {
 	signature := ctx.GetHeader("Wechatpay-Signature")
 	timestamp := ctx.GetHeader("Wechatpay-Timestamp")
 	nonce := ctx.GetHeader("Wechatpay-Nonce")
+	serial := ctx.GetHeader("Wechatpay-Serial")
 
-	if err := server.ecommerceClient.VerifyNotificationSignature(signature, timestamp, nonce, string(body)); err != nil {
+	if err := server.ecommerceClient.VerifyNotificationSignature(signature, timestamp, nonce, serial, string(body)); err != nil {
 		paymentCallbackFailuresTotal.WithLabelValues("ecommerce_refund", "signature").Inc()
 		log.Error().Err(err).Msg("⚠️ invalid wechat signature for ecommerce refund notification")
 		ctx.JSON(http.StatusUnauthorized, wechatPaymentNotifyResponse{
@@ -1715,36 +1875,34 @@ func (server *Server) handleEcommerceRefundNotify(ctx *gin.Context) {
 		return
 	}
 
+	if !server.requireTaskDistributorForNotification(ctx, notification.ID, "ecommerce_refund", "refund result processing unavailable, please retry") {
+		return
+	}
+
 	// 将退款结果处理放入队列（复用现有退款结果处理逻辑）
-	if server.taskDistributor != nil {
-		err = server.taskDistributor.DistributeTaskProcessRefundResult(
-			ctx,
-			&worker.RefundResultPayload{
-				OutRefundNo:  resource.OutRefundNo,
-				RefundStatus: resource.RefundStatus,
-				RefundID:     resource.RefundID,
-			},
-			asynq.MaxRetry(3),
-			asynq.Queue(worker.QueueCritical),
-		)
-		if err != nil {
-			paymentCallbackFailuresTotal.WithLabelValues("ecommerce_refund", "enqueue").Inc()
-			log.Error().Err(err).
-				Str("out_refund_no", resource.OutRefundNo).
-				Str("sp_mchid", resource.SpMchID).
-				Str("sub_mchid", resource.SubMchID).
-				Msg("⚠️ CRITICAL: failed to enqueue ecommerce refund result task - manual intervention may be required")
-			server.releaseNotification(ctx, notification.ID, "ecommerce_refund")
-			ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
-				Code:    "FAIL",
-				Message: "enqueue failed, please retry",
-			})
-			return
-		}
-	} else {
-		log.Warn().
+	err = server.taskDistributor.DistributeTaskProcessRefundResult(
+		ctx,
+		&worker.RefundResultPayload{
+			OutRefundNo:  resource.OutRefundNo,
+			RefundStatus: resource.RefundStatus,
+			RefundID:     resource.RefundID,
+		},
+		asynq.MaxRetry(3),
+		asynq.Queue(worker.QueueCritical),
+	)
+	if err != nil {
+		paymentCallbackFailuresTotal.WithLabelValues("ecommerce_refund", "enqueue").Inc()
+		log.Error().Err(err).
 			Str("out_refund_no", resource.OutRefundNo).
-			Msg("ecommerce refund callback acknowledged without task distributor; refund result processing skipped")
+			Str("sp_mchid", resource.SpMchID).
+			Str("sub_mchid", resource.SubMchID).
+			Msg("⚠️ CRITICAL: failed to enqueue ecommerce refund result task - manual intervention may be required")
+		server.releaseNotification(ctx, notification.ID, "ecommerce_refund")
+		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
+			Code:    "FAIL",
+			Message: "enqueue failed, please retry",
+		})
+		return
 	}
 
 	// 通知ID已在 tryClaimNotification 中原子写入，无需重复记录
@@ -1782,8 +1940,9 @@ func (server *Server) handleProfitSharingNotify(ctx *gin.Context) {
 	signature := ctx.GetHeader("Wechatpay-Signature")
 	timestamp := ctx.GetHeader("Wechatpay-Timestamp")
 	nonce := ctx.GetHeader("Wechatpay-Nonce")
+	serial := ctx.GetHeader("Wechatpay-Serial")
 
-	if err := server.ecommerceClient.VerifyNotificationSignature(signature, timestamp, nonce, string(body)); err != nil {
+	if err := server.ecommerceClient.VerifyNotificationSignature(signature, timestamp, nonce, serial, string(body)); err != nil {
 		paymentCallbackFailuresTotal.WithLabelValues("profit_sharing", "signature").Inc()
 		log.Error().Err(err).Msg("⚠️ invalid wechat signature for profit sharing notification")
 		ctx.JSON(http.StatusUnauthorized, wechatPaymentNotifyResponse{
@@ -1834,7 +1993,7 @@ func (server *Server) handleProfitSharingNotify(ctx *gin.Context) {
 	}
 
 	log.Info().
-		Str("mch_id", resource.MchID).
+		Str("sp_mch_id", resource.SPMchID).
 		Str("sub_mch_id", resource.SubMchID).
 		Str("out_order_no", resource.OutOrderNo).
 		Str("order_id", resource.OrderID).
@@ -1843,20 +2002,20 @@ func (server *Server) handleProfitSharingNotify(ctx *gin.Context) {
 	if err := server.validateProfitSharingOwnership(resource); err != nil {
 		paymentCallbackFailuresTotal.WithLabelValues("profit_sharing", "ownership").Inc()
 		log.Error().Err(err).
-			Str("mch_id", resource.MchID).
+			Str("sp_mch_id", resource.SPMchID).
 			Str("sub_mch_id", resource.SubMchID).
 			Msg("profit sharing notification ownership validation failed")
 		server.sendAlert(websocket.AlertData{
 			AlertType:   websocket.AlertTypeSystemError,
 			Level:       websocket.AlertLevelCritical,
 			Title:       "分账回调归属校验失败",
-			Message:     fmt.Sprintf("分账回调 out_order_no=%s 的归属校验失败，mch_id=%s, sub_mch_id=%s。系统已返回 FAIL 等待微信重试，请排查是否存在错服务商分账回调。", resource.OutOrderNo, resource.MchID, resource.SubMchID),
+			Message:     fmt.Sprintf("分账回调 out_order_no=%s 的归属校验失败，sp_mch_id=%s, sub_mch_id=%s。系统已返回 FAIL 等待微信重试，请排查是否存在错服务商分账回调。", resource.OutOrderNo, resource.SPMchID, resource.SubMchID),
 			RelatedID:   0,
 			RelatedType: "profit_sharing_order",
 			Extra: map[string]interface{}{
 				"out_order_no": resource.OutOrderNo,
 				"order_id":     resource.OrderID,
-				"mch_id":       resource.MchID,
+				"sp_mch_id":    resource.SPMchID,
 				"sub_mch_id":   resource.SubMchID,
 			},
 		})
@@ -2031,40 +2190,43 @@ func (server *Server) handleProfitSharingNotify(ctx *gin.Context) {
 
 	// 通知ID已在 tryClaimNotification 中原子写入，无需重复记录
 
-	// 📤 CB-3: 异步处理分账结果通知（错误记录日志+告警，notification claim 已写入不需 release）
-	if server.taskDistributor != nil {
-		if enqErr := server.taskDistributor.DistributeTaskProcessProfitSharingResult(
-			ctx,
-			&worker.ProfitSharingResultPayload{
-				ProfitSharingOrderID: profitSharingOrder.ID,
-				OutOrderNo:           resource.OutOrderNo,
-				Result:               finalResult,
-				FailReason:           finalFailReason,
-				MerchantID:           profitSharingOrder.MerchantID,
-			},
-			asynq.MaxRetry(3),
-			asynq.Queue(worker.QueueDefault),
-		); enqErr != nil {
-			paymentCallbackFailuresTotal.WithLabelValues("profit_sharing", "enqueue_result_task").Inc()
-			log.Error().Err(enqErr).
-				Int64("profit_sharing_order_id", profitSharingOrder.ID).
-				Str("out_order_no", resource.OutOrderNo).
-				Msg("⚠️ failed to enqueue profit sharing result task")
-			server.sendAlert(websocket.AlertData{
-				AlertType:   websocket.AlertTypeTaskEnqueueFailure,
-				Level:       websocket.AlertLevelCritical,
-				Title:       "分账结果任务入队失败",
-				Message:     fmt.Sprintf("分账单 %s 结果 %s 已落库，但后续结果任务入队失败。商户（ID=%d）收入到账通知将不会发出；若结果为 FAILED，分账重试任务也不会触发。请人工：1）确认 DB profit_sharing_orders 状态；2）若 SUCCESS 则通知商户资金到账；3）若 FAILED 则手动触发分账重试。", resource.OutOrderNo, finalResult, profitSharingOrder.MerchantID),
-				RelatedID:   profitSharingOrder.ID,
-				RelatedType: "profit_sharing_order",
-				Extra:       map[string]interface{}{"out_order_no": resource.OutOrderNo, "result": finalResult, "merchant_id": profitSharingOrder.MerchantID, "error": enqErr.Error()},
-			})
-		}
-	} else {
-		log.Warn().
+	if !server.requireTaskDistributorForNotification(ctx, notification.ID, "profit_sharing", "profit sharing result processing unavailable, please retry") {
+		return
+	}
+
+	// 📤 CB-3: 异步处理分账结果通知
+	if enqErr := server.taskDistributor.DistributeTaskProcessProfitSharingResult(
+		ctx,
+		&worker.ProfitSharingResultPayload{
+			ProfitSharingOrderID: profitSharingOrder.ID,
+			OutOrderNo:           resource.OutOrderNo,
+			Result:               finalResult,
+			FailReason:           finalFailReason,
+			MerchantID:           profitSharingOrder.MerchantID,
+		},
+		asynq.MaxRetry(3),
+		asynq.Queue(worker.QueueDefault),
+	); enqErr != nil {
+		paymentCallbackFailuresTotal.WithLabelValues("profit_sharing", "enqueue_result_task").Inc()
+		log.Error().Err(enqErr).
 			Int64("profit_sharing_order_id", profitSharingOrder.ID).
 			Str("out_order_no", resource.OutOrderNo).
-			Msg("profit sharing callback acknowledged without task distributor; follow-up processing skipped")
+			Msg("failed to enqueue profit sharing result task")
+		server.sendAlert(websocket.AlertData{
+			AlertType:   websocket.AlertTypeTaskEnqueueFailure,
+			Level:       websocket.AlertLevelCritical,
+			Title:       "分账结果任务入队失败",
+			Message:     fmt.Sprintf("分账单 %s 结果 %s 已落库，但后续结果任务入队失败。商户（ID=%d）收入到账通知将不会发出；若结果为 FAILED，分账重试任务也不会触发。请人工：1）确认 DB profit_sharing_orders 状态；2）若 SUCCESS 则通知商户资金到账；3）若 FAILED 则手动触发分账重试。", resource.OutOrderNo, finalResult, profitSharingOrder.MerchantID),
+			RelatedID:   profitSharingOrder.ID,
+			RelatedType: "profit_sharing_order",
+			Extra:       map[string]interface{}{"out_order_no": resource.OutOrderNo, "result": finalResult, "merchant_id": profitSharingOrder.MerchantID, "error": enqErr.Error()},
+		})
+		server.releaseNotification(ctx, notification.ID, "profit_sharing")
+		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
+			Code:    "FAIL",
+			Message: "enqueue failed, please retry",
+		})
+		return
 	}
 
 	// 快速返回成功
@@ -2094,6 +2256,34 @@ func (server *Server) handleEcommercePaymentNotify(ctx *gin.Context) {
 		})
 		return
 	}
+	if err := wechatcontracts.ValidatePartnerPaymentNotification("decrypt partner payment notification", resource); err != nil {
+		paymentCallbackFailuresTotal.WithLabelValues("ecommerce_payment", "contract_validation").Inc()
+		log.Error().Err(err).
+			Str("notification_id", notification.ID).
+			Str("out_trade_no", resource.OutTradeNo).
+			Str("transaction_id", resource.TransactionID).
+			Msg("partner payment notification contract validation failed")
+		server.sendAlert(websocket.AlertData{
+			AlertType:   websocket.AlertTypeSystemError,
+			Level:       websocket.AlertLevelCritical,
+			Title:       "收付通单笔支付回调契约校验失败",
+			Message:     fmt.Sprintf("收付通单笔支付回调 notification_id=%s 未通过上游契约校验。系统已返回 FAIL 等待微信重试，请核对微信文档与当前通知 contract 是否漂移。", notification.ID),
+			RelatedID:   0,
+			RelatedType: "payment_order",
+			Extra: map[string]interface{}{
+				"notification_id": notification.ID,
+				"out_trade_no":    resource.OutTradeNo,
+				"transaction_id":  resource.TransactionID,
+				"reason":          err.Error(),
+			},
+		})
+		server.releaseNotification(ctx, notification.ID, "ecommerce_payment")
+		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
+			Code:    "FAIL",
+			Message: "notification contract validation failed",
+		})
+		return
+	}
 
 	server.handlePartnerPaymentNotification(ctx, *notification, resource)
 }
@@ -2118,6 +2308,32 @@ func (server *Server) handleCombinePaymentNotify(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
 			Message: "decrypt failed",
+		})
+		return
+	}
+	if err := wechatcontracts.ValidateCombinePaymentNotification("decrypt combine payment notification", resource); err != nil {
+		paymentCallbackFailuresTotal.WithLabelValues("combine_payment", "contract_validation").Inc()
+		log.Error().Err(err).
+			Str("notification_id", notification.ID).
+			Str("combine_out_trade_no", resource.CombineOutTradeNo).
+			Msg("combine payment notification contract validation failed")
+		server.sendAlert(websocket.AlertData{
+			AlertType:   websocket.AlertTypeSystemError,
+			Level:       websocket.AlertLevelCritical,
+			Title:       "合单支付回调契约校验失败",
+			Message:     fmt.Sprintf("合单支付回调 notification_id=%s 未通过上游契约校验。系统已返回 FAIL 等待微信重试，请核对微信文档与当前通知 contract 是否漂移。", notification.ID),
+			RelatedID:   0,
+			RelatedType: "combined_payment_order",
+			Extra: map[string]interface{}{
+				"notification_id":      notification.ID,
+				"combine_out_trade_no": resource.CombineOutTradeNo,
+				"reason":               err.Error(),
+			},
+		})
+		server.releaseNotification(ctx, notification.ID, "combine_payment")
+		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
+			Code:    "FAIL",
+			Message: "notification contract validation failed",
 		})
 		return
 	}
@@ -2570,8 +2786,9 @@ func (server *Server) handleApplymentStateNotify(ctx *gin.Context) {
 	signature := ctx.GetHeader("Wechatpay-Signature")
 	timestamp := ctx.GetHeader("Wechatpay-Timestamp")
 	nonce := ctx.GetHeader("Wechatpay-Nonce")
+	serial := ctx.GetHeader("Wechatpay-Serial")
 
-	if err := server.ecommerceClient.VerifyNotificationSignature(signature, timestamp, nonce, string(body)); err != nil {
+	if err := server.ecommerceClient.VerifyNotificationSignature(signature, timestamp, nonce, serial, string(body)); err != nil {
 		log.Error().
 			Err(err).
 			Str("signature", signature).
@@ -2619,18 +2836,7 @@ func (server *Server) handleApplymentStateNotify(ctx *gin.Context) {
 		return
 	}
 
-	// 使用 paymentClient 解密
-	if server.paymentClient == nil {
-		log.Error().Msg("payment client not configured for decryption")
-		server.releaseNotification(ctx, notification.ID, "applyment")
-		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
-			Code:    "FAIL",
-			Message: "payment client not configured",
-		})
-		return
-	}
-
-	decrypted, err := server.paymentClient.DecryptNotificationRaw(&paymentNotification)
+	decrypted, err := server.ecommerceClient.DecryptNotificationRaw(&paymentNotification)
 	if err != nil {
 		log.Error().Err(err).Msg("decrypt applyment notification")
 		server.releaseNotification(ctx, notification.ID, "applyment")
@@ -2676,24 +2882,26 @@ func (server *Server) handleApplymentStateNotify(ctx *gin.Context) {
 		})
 		return
 	}
-	if applyment.SubjectType != "merchant" && applyment.SubjectType != "operator" {
+	if applyment.SubjectType != "merchant" {
 		log.Warn().
 			Int64("applyment_id", applyment.ID).
 			Str("subject_type", applyment.SubjectType).
-			Msg("ignore unsupported applyment subject type")
+			Msg("ignore non-merchant applyment subject type")
 		server.markNotificationProcessed(ctx, notification.ID, "", "")
 		writeWechatNotifySuccess(ctx, "applyment")
 		return
 	}
 
-	// 映射状态
-	newStatus := mapApplymentStateToDBStatus(resource.ApplymentState)
-	if newStatus == "finish" && resource.SubMchID == "" {
+	// 映射状态；未知上游状态时保持本地状态，避免查询/回调入口写入不一致语义。
+	mappedStatus := mapApplymentStateToDBStatus(resource.ApplymentState)
+	newStatus := resolveApplymentCallbackStatus(applyment.Status, resource.ApplymentState)
+	if mappedStatus == "finish" && resource.SubMchID == "" {
 		newStatus = "submitted"
 	}
+	shouldActivate := newStatus == "finish" && resource.SubMchID != ""
 
-	// 如果有二级商户号，说明开户成功
-	if resource.SubMchID != "" {
+	// 只有申请单真正完成时才激活主体；提前返回的 sub_mch_id 只落进件记录，供后续签约/验证流程使用。
+	if shouldActivate {
 		// 🔐 CB-4: 三步进件激活更新在单个事务中原子完成（UpdateEcommerceApplymentSubMchID +
 		// UpdateMerchantPaymentConfig + UpdateMerchantStatus），任意失败整体回滚。
 		if txErr := server.store.ApplymentSubMchActivationTx(ctx, db.ApplymentSubMchActivationTxParams{
@@ -2710,77 +2918,62 @@ func (server *Server) handleApplymentStateNotify(ctx *gin.Context) {
 			ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{Code: "FAIL", Message: "internal error"})
 			return
 		}
-		// 非商户主体的额外更新（不在激活事务内，但各自幂等安全）
-		switch applyment.SubjectType {
-		case "operator":
-			if _, err = server.store.UpdateOperatorSubMchID(ctx, db.UpdateOperatorSubMchIDParams{
-				ID:       applyment.SubjectID,
-				SubMchID: pgtype.Text{String: resource.SubMchID, Valid: true},
-			}); err != nil {
-				log.Error().Err(err).Int64("operator_id", applyment.SubjectID).Msg("update operator sub_mch_id")
-				server.releaseNotification(ctx, notification.ID, "applyment")
-				ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{Code: "FAIL", Message: "internal error"})
-				return
-			}
-			// 绑卡成功，恢复到 active（清除 bindbank_submitted 瞬时状态）
-			if _, err = server.store.UpdateOperatorStatus(ctx, db.UpdateOperatorStatusParams{
-				ID:     applyment.SubjectID,
-				Status: "active",
-			}); err != nil {
-				log.Error().Err(err).Int64("operator_id", applyment.SubjectID).Msg("reset operator status to active after sub_mch_id binding")
-			}
-		}
 	} else {
+		nextSubMchID := applyment.SubMchID
+		if resource.SubMchID != "" {
+			nextSubMchID = pgtype.Text{String: resource.SubMchID, Valid: true}
+		}
 		// 更新进件状态
 		_, err = server.store.UpdateEcommerceApplymentStatus(ctx, db.UpdateEcommerceApplymentStatusParams{
-			ID:           applyment.ID,
-			Status:       newStatus,
-			RejectReason: pgtype.Text{}, // 如果有驳回原因需要主动查询
+			ID:                 applyment.ID,
+			ApplymentID:        applyment.ApplymentID,
+			Status:             newStatus,
+			RejectReason:       pgtype.Text{},     // 如果有驳回原因需要主动查询
+			SignUrl:            applyment.SignUrl, // 回调资源不带签约字段，保留已落库值避免被清空
+			SignState:          applyment.SignState,
+			LegalValidationUrl: applyment.LegalValidationUrl,
+			AccountValidation:  applyment.AccountValidation,
+			SubMchID:           nextSubMchID,
 		})
 		if err != nil {
 			log.Error().Err(err).Int64("applyment_id", applyment.ID).Msg("update applyment status")
 		}
 
-		if applyment.SubjectType == "operator" && (newStatus == "rejected" || newStatus == "canceled") {
-			// 绑卡被拒/撤销，回到 active（绑卡是可选步骤，不阻塞运营）
-			_, err = server.store.UpdateOperatorStatus(ctx, db.UpdateOperatorStatusParams{
-				ID:     applyment.SubjectID,
-				Status: "active",
-			})
-			if err != nil {
-				log.Error().Err(err).Int64("operator_id", applyment.SubjectID).Msg("reset operator status to active after bindbank rejection")
-			}
-		}
 	}
 
 	// 通知ID已在 tryClaimApplymentNotification 中原子写入，无需重复记录
 
+	if !server.requireTaskDistributorForNotification(ctx, notification.ID, "applyment", "applyment result processing unavailable, please retry") {
+		return
+	}
+
 	// 📤 异步处理：发送通知 + 添加分账接收方
-	if server.taskDistributor != nil {
-		if err := server.taskDistributor.DistributeTaskProcessApplymentResult(
-			ctx,
-			&worker.ApplymentResultPayload{
-				ApplymentID:     applyment.ID,
-				OutRequestNo:    resource.OutRequestNo,
-				ApplymentState:  resource.ApplymentState,
-				ApplymentStatus: newStatus,
-				SubMchID:        resource.SubMchID,
-				SubjectType:     applyment.SubjectType,
-				SubjectID:       applyment.SubjectID,
-			},
-			asynq.MaxRetry(3),
-			asynq.Queue(worker.QueueDefault),
-		); err != nil {
-			log.Error().Err(err).
-				Int64("applyment_id", applyment.ID).
-				Str("out_request_no", resource.OutRequestNo).
-				Msg("enqueue applyment follow-up task failed")
-		}
-	} else {
-		log.Warn().
+	if err := server.taskDistributor.DistributeTaskProcessApplymentResult(
+		ctx,
+		&worker.ApplymentResultPayload{
+			ApplymentID:     applyment.ID,
+			OutRequestNo:    resource.OutRequestNo,
+			ApplymentState:  resource.ApplymentState,
+			ApplymentStatus: newStatus,
+			SignState:       strings.TrimSpace(applyment.SignState.String),
+			SubMchID:        resource.SubMchID,
+			SubjectType:     applyment.SubjectType,
+			SubjectID:       applyment.SubjectID,
+		},
+		asynq.MaxRetry(3),
+		asynq.Queue(worker.QueueDefault),
+	); err != nil {
+		paymentCallbackFailuresTotal.WithLabelValues("applyment", "enqueue").Inc()
+		log.Error().Err(err).
 			Int64("applyment_id", applyment.ID).
 			Str("out_request_no", resource.OutRequestNo).
-			Msg("applyment callback acknowledged without task distributor; follow-up processing skipped")
+			Msg("enqueue applyment follow-up task failed")
+		server.releaseNotification(ctx, notification.ID, "applyment")
+		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
+			Code:    "FAIL",
+			Message: "enqueue failed, please retry",
+		})
+		return
 	}
 
 	writeWechatNotifySuccess(ctx, "applyment")
@@ -2789,38 +2982,17 @@ func (server *Server) handleApplymentStateNotify(ctx *gin.Context) {
 
 // mapApplymentStateToDBStatus 将微信进件状态映射为数据库状态
 func mapApplymentStateToDBStatus(wechatState string) string {
-	switch wechatState {
-	case "APPLYMENT_STATE_EDITTING":
-		return "editing"
-	case "APPLYMENT_STATE_AUDITING":
-		return "auditing"
-	case "CHECKING", "ACCOUNT_NEED_VERIFY", "AUDITING":
-		return "auditing"
-	case "APPLYMENT_STATE_REJECTED":
-		return "rejected"
-	case "REJECTED":
-		return "rejected"
-	case "APPLYMENT_STATE_TO_BE_CONFIRMED":
-		return "to_be_confirmed"
-	case "APPLYMENT_STATE_TO_BE_SIGNED":
-		return "to_be_signed"
-	case "NEED_SIGN":
-		return "to_be_signed"
-	case "APPLYMENT_STATE_SIGNING":
-		return "signing"
-	case "APPLYMENT_STATE_FINISHED":
-		return "finish"
-	case "FINISH":
-		return "finish"
-	case "APPLYMENT_STATE_FROZEN", "FROZEN":
-		return "frozen"
-	case "APPLYMENT_STATE_CANCELED":
-		return "canceled"
-	case "CANCELED":
-		return "canceled"
-	default:
-		return wechatState
+	return logic.MapWechatApplymentStateToStatus(wechatState)
+}
+
+func resolveApplymentCallbackStatus(currentStatus, wechatState string) string {
+	if strings.TrimSpace(wechatState) == "NEED_SIGN" {
+		switch strings.TrimSpace(currentStatus) {
+		case "to_be_signed", "signing":
+			return currentStatus
+		}
 	}
+	return logic.ResolveWechatApplymentStatus(currentStatus, wechatState, "")
 }
 
 // handleOrderSettlementNotify 处理微信订单结算事件通知
@@ -2854,8 +3026,9 @@ func (server *Server) handleOrderSettlementNotify(ctx *gin.Context) {
 	signature := ctx.GetHeader("Wechatpay-Signature")
 	timestamp := ctx.GetHeader("Wechatpay-Timestamp")
 	nonce := ctx.GetHeader("Wechatpay-Nonce")
+	serial := ctx.GetHeader("Wechatpay-Serial")
 
-	if err := server.ecommerceClient.VerifyNotificationSignature(signature, timestamp, nonce, string(body)); err != nil {
+	if err := server.ecommerceClient.VerifyNotificationSignature(signature, timestamp, nonce, serial, string(body)); err != nil {
 		paymentCallbackFailuresTotal.WithLabelValues("settlement", "signature").Inc()
 		log.Error().
 			Err(err).
@@ -2939,47 +3112,53 @@ func (server *Server) handleOrderSettlementNotify(ctx *gin.Context) {
 				return
 			}
 
-			if po.Status != "paid" || po.PaymentType != "profit_sharing" || !po.OrderID.Valid {
+			if po.Status != "paid" || !db.PaymentOrderUsesEcommerceChannel(po) || !db.PaymentOrderRequiresProfitSharing(po) || !po.OrderID.Valid {
 				log.Info().
 					Int64("payment_order_id", po.ID).
 					Str("status", po.Status).
-					Str("type", po.PaymentType).
+					Str("payment_type", po.PaymentType).
+					Str("payment_channel", po.PaymentChannel).
 					Msg("settlement fallback: payment order not eligible for profit sharing, skip")
 				server.markNotificationProcessed(ctx, notification.ID, resource.MerchantTradeNo, resource.TransactionID)
 				writeWechatNotifySuccess(ctx, "settlement")
 				return
 			}
 
-			if server.taskDistributor != nil {
-				err = server.taskDistributor.DistributeTaskProcessProfitSharing(
-					ctx,
-					&worker.ProfitSharingPayload{
-						PaymentOrderID: po.ID,
-						OrderID:        po.OrderID.Int64,
+			if !server.requireTaskDistributorForNotification(ctx, notification.ID, "settlement", "profit sharing dispatch unavailable, please retry") {
+				return
+			}
+
+			err = server.taskDistributor.DistributeTaskProcessProfitSharing(
+				ctx,
+				&worker.ProfitSharingPayload{
+					PaymentOrderID: po.ID,
+					OrderID:        po.OrderID.Int64,
+				},
+				asynq.MaxRetry(5),
+				asynq.ProcessIn(2*time.Second),
+				asynq.Queue(worker.QueueCritical),
+			)
+			if err != nil {
+				paymentCallbackFailuresTotal.WithLabelValues("settlement", "enqueue_profit_sharing_task").Inc()
+				log.Error().Err(err).Int64("payment_order_id", po.ID).Str("merchant_trade_no", resource.MerchantTradeNo).Msg("settlement fallback profit sharing task enqueue failed")
+				server.sendAlert(websocket.AlertData{
+					AlertType:   websocket.AlertTypeTaskEnqueueFailure,
+					Level:       websocket.AlertLevelCritical,
+					Title:       "结算分账任务入队失败",
+					Message:     fmt.Sprintf("支付单 %d 已进入结算事件，但分账任务入队失败，需要人工介入确认商户结算", po.ID),
+					RelatedID:   po.ID,
+					RelatedType: "payment_order",
+					Extra: map[string]interface{}{
+						"merchant_trade_no": resource.MerchantTradeNo,
+						"out_trade_no":      po.OutTradeNo,
+						"order_id":          po.OrderID.Int64,
+						"payment_order_id":  po.ID,
+						"error":             err.Error(),
 					},
-					asynq.MaxRetry(5),
-					asynq.ProcessIn(2*time.Second),
-					asynq.Queue(worker.QueueCritical),
-				)
-				if err != nil {
-					paymentCallbackFailuresTotal.WithLabelValues("settlement", "enqueue_profit_sharing_task").Inc()
-					log.Error().Err(err).Int64("payment_order_id", po.ID).Str("merchant_trade_no", resource.MerchantTradeNo).Msg("settlement fallback profit sharing task enqueue failed")
-					server.sendAlert(websocket.AlertData{
-						AlertType:   websocket.AlertTypeTaskEnqueueFailure,
-						Level:       websocket.AlertLevelCritical,
-						Title:       "结算分账任务入队失败",
-						Message:     fmt.Sprintf("支付单 %d 已进入结算事件，但分账任务入队失败，需要人工介入确认商户结算", po.ID),
-						RelatedID:   po.ID,
-						RelatedType: "payment_order",
-						Extra: map[string]interface{}{
-							"merchant_trade_no": resource.MerchantTradeNo,
-							"out_trade_no":      po.OutTradeNo,
-							"order_id":          po.OrderID.Int64,
-							"payment_order_id":  po.ID,
-							"error":             err.Error(),
-						},
-					})
-				}
+				})
+				server.releaseNotification(ctx, notification.ID, "settlement")
+				ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{Code: "FAIL", Message: "enqueue failed, please retry"})
+				return
 			}
 
 			server.markNotificationProcessed(ctx, notification.ID, resource.MerchantTradeNo, resource.TransactionID)
@@ -3016,11 +3195,12 @@ func (server *Server) handleOrderSettlementNotify(ctx *gin.Context) {
 		return
 	}
 
-	if po.Status != "paid" || po.PaymentType != "profit_sharing" {
+	if po.Status != "paid" || !db.PaymentOrderUsesEcommerceChannel(po) || !db.PaymentOrderRequiresProfitSharing(po) {
 		log.Info().
 			Int64("payment_order_id", po.ID).
 			Str("status", po.Status).
-			Str("type", po.PaymentType).
+			Str("payment_type", po.PaymentType).
+			Str("payment_channel", po.PaymentChannel).
 			Msg("settlement: payment order not eligible for profit sharing, skip")
 		server.markNotificationProcessed(ctx, notification.ID, subOrder.OutTradeNo, resource.TransactionID)
 		writeWechatNotifySuccess(ctx, "settlement")
@@ -3029,57 +3209,57 @@ func (server *Server) handleOrderSettlementNotify(ctx *gin.Context) {
 
 	// 通知ID已在 tryClaimNotification 中原子写入，无需重复记录
 
+	if !server.requireTaskDistributorForNotification(ctx, notification.ID, "settlement", "profit sharing dispatch unavailable, please retry") {
+		return
+	}
+
 	// 📤 派发分账任务
-	if server.taskDistributor != nil {
-		err = server.taskDistributor.DistributeTaskProcessProfitSharing(
-			ctx,
-			&worker.ProfitSharingPayload{
-				PaymentOrderID: po.ID,
-				OrderID:        subOrder.OrderID,
-			},
-			asynq.MaxRetry(5),
-			asynq.ProcessIn(2*time.Second), // 短暂延迟确保数据库一致性
-			asynq.Queue(worker.QueueCritical),
-		)
-		if err != nil {
-			paymentCallbackFailuresTotal.WithLabelValues("settlement", "enqueue_profit_sharing_task").Inc()
-			log.Error().Err(err).
-				Int64("payment_order_id", po.ID).
-				Str("merchant_trade_no", resource.MerchantTradeNo).
-				Msg("⚠️ ALERT: settlement profit sharing task enqueue failed")
-			server.sendAlert(websocket.AlertData{
-				AlertType:   websocket.AlertTypeTaskEnqueueFailure,
-				Level:       websocket.AlertLevelCritical,
-				Title:       "结算分账任务入队失败",
-				Message:     fmt.Sprintf("支付单 %d 已进入结算事件，但分账任务入队失败，需要人工介入确认商户结算", po.ID),
-				RelatedID:   po.ID,
-				RelatedType: "payment_order",
-				Extra: map[string]interface{}{
-					"merchant_trade_no": resource.MerchantTradeNo,
-					"out_trade_no":      subOrder.OutTradeNo,
-					"order_id":          subOrder.OrderID,
-					"payment_order_id":  po.ID,
-					"error":             err.Error(),
-				},
-			})
-		} else {
-			log.Info().
-				Int64("payment_order_id", po.ID).
-				Int64("order_id", subOrder.OrderID).
-				Str("confirm_method", func() string {
-					if resource.ConfirmReceiveMethod == 2 {
-						return "T+2 auto"
-					}
-					return "user"
-				}()).
-				Msg("profit sharing task dispatched via settlement event")
-		}
-	} else {
-		log.Warn().
+	err = server.taskDistributor.DistributeTaskProcessProfitSharing(
+		ctx,
+		&worker.ProfitSharingPayload{
+			PaymentOrderID: po.ID,
+			OrderID:        subOrder.OrderID,
+		},
+		asynq.MaxRetry(5),
+		asynq.ProcessIn(2*time.Second), // 短暂延迟确保数据库一致性
+		asynq.Queue(worker.QueueCritical),
+	)
+	if err != nil {
+		paymentCallbackFailuresTotal.WithLabelValues("settlement", "enqueue_profit_sharing_task").Inc()
+		log.Error().Err(err).
 			Int64("payment_order_id", po.ID).
 			Str("merchant_trade_no", resource.MerchantTradeNo).
-			Msg("settlement callback acknowledged without task distributor; profit sharing dispatch skipped")
+			Msg("⚠️ ALERT: settlement profit sharing task enqueue failed")
+		server.sendAlert(websocket.AlertData{
+			AlertType:   websocket.AlertTypeTaskEnqueueFailure,
+			Level:       websocket.AlertLevelCritical,
+			Title:       "结算分账任务入队失败",
+			Message:     fmt.Sprintf("支付单 %d 已进入结算事件，但分账任务入队失败，需要人工介入确认商户结算", po.ID),
+			RelatedID:   po.ID,
+			RelatedType: "payment_order",
+			Extra: map[string]interface{}{
+				"merchant_trade_no": resource.MerchantTradeNo,
+				"out_trade_no":      subOrder.OutTradeNo,
+				"order_id":          subOrder.OrderID,
+				"payment_order_id":  po.ID,
+				"error":             err.Error(),
+			},
+		})
+		server.releaseNotification(ctx, notification.ID, "settlement")
+		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{Code: "FAIL", Message: "enqueue failed, please retry"})
+		return
 	}
+
+	log.Info().
+		Int64("payment_order_id", po.ID).
+		Int64("order_id", subOrder.OrderID).
+		Str("confirm_method", func() string {
+			if resource.ConfirmReceiveMethod == 2 {
+				return "T+2 auto"
+			}
+			return "user"
+		}()).
+		Msg("profit sharing task dispatched via settlement event")
 
 	server.markNotificationProcessed(ctx, notification.ID, subOrder.OutTradeNo, resource.TransactionID)
 	writeWechatNotifySuccess(ctx, "settlement")

@@ -15,7 +15,7 @@
 }
 
 .list {
-  padding: var(--spacer-md);
+  padding: 0;
 }
 
 .card {
@@ -85,7 +85,7 @@
 
 /* 骨架屏 */
 .skeleton-container {
-  padding: var(--spacer-md);
+  padding: 0;
 }
 
 .load-more {

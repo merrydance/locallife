@@ -12,7 +12,7 @@ import (
 )
 
 const getRegionRuleConfigByRegion = `-- name: GetRegionRuleConfigByRegion :one
-SELECT id, region_id, commission_rate, merchant_deposit, rider_deposit, weather_coeff_extreme, weather_coeff_heavy, weather_coeff_moderate, weather_coeff_light, created_at, updated_at
+SELECT id, region_id, rider_deposit, weather_coeff_extreme, weather_coeff_heavy, weather_coeff_moderate, weather_coeff_light, created_at, updated_at
 FROM region_rule_configs
 WHERE region_id = $1
 LIMIT 1
@@ -24,8 +24,6 @@ func (q *Queries) GetRegionRuleConfigByRegion(ctx context.Context, regionID int6
 	err := row.Scan(
 		&i.ID,
 		&i.RegionID,
-		&i.CommissionRate,
-		&i.MerchantDeposit,
 		&i.RiderDeposit,
 		&i.WeatherCoeffExtreme,
 		&i.WeatherCoeffHeavy,
@@ -40,8 +38,6 @@ func (q *Queries) GetRegionRuleConfigByRegion(ctx context.Context, regionID int6
 const upsertRegionRuleConfig = `-- name: UpsertRegionRuleConfig :one
 INSERT INTO region_rule_configs (
   region_id,
-  commission_rate,
-  merchant_deposit,
   rider_deposit,
   weather_coeff_extreme,
   weather_coeff_heavy,
@@ -50,31 +46,25 @@ INSERT INTO region_rule_configs (
 )
 VALUES (
   $1,
-  COALESCE($2::numeric, 0.0300),
-  COALESCE($3::bigint, 500000),
-  COALESCE($4::bigint, 20000),
-  COALESCE($5::numeric, 2.00),
-  COALESCE($6::numeric, 1.80),
-  COALESCE($7::numeric, 1.30),
-  COALESCE($8::numeric, 1.10)
+  COALESCE($2::bigint, 20000),
+  COALESCE($3::numeric, 2.00),
+  COALESCE($4::numeric, 1.80),
+  COALESCE($5::numeric, 1.30),
+  COALESCE($6::numeric, 1.10)
 )
 ON CONFLICT (region_id) DO UPDATE
 SET
-  commission_rate = COALESCE($2::numeric, region_rule_configs.commission_rate),
-  merchant_deposit = COALESCE($3::bigint, region_rule_configs.merchant_deposit),
-  rider_deposit = COALESCE($4::bigint, region_rule_configs.rider_deposit),
-  weather_coeff_extreme = COALESCE($5::numeric, region_rule_configs.weather_coeff_extreme),
-  weather_coeff_heavy = COALESCE($6::numeric, region_rule_configs.weather_coeff_heavy),
-  weather_coeff_moderate = COALESCE($7::numeric, region_rule_configs.weather_coeff_moderate),
-  weather_coeff_light = COALESCE($8::numeric, region_rule_configs.weather_coeff_light),
+  rider_deposit = COALESCE($2::bigint, region_rule_configs.rider_deposit),
+  weather_coeff_extreme = COALESCE($3::numeric, region_rule_configs.weather_coeff_extreme),
+  weather_coeff_heavy = COALESCE($4::numeric, region_rule_configs.weather_coeff_heavy),
+  weather_coeff_moderate = COALESCE($5::numeric, region_rule_configs.weather_coeff_moderate),
+  weather_coeff_light = COALESCE($6::numeric, region_rule_configs.weather_coeff_light),
   updated_at = NOW()
-RETURNING id, region_id, commission_rate, merchant_deposit, rider_deposit, weather_coeff_extreme, weather_coeff_heavy, weather_coeff_moderate, weather_coeff_light, created_at, updated_at
+RETURNING id, region_id, rider_deposit, weather_coeff_extreme, weather_coeff_heavy, weather_coeff_moderate, weather_coeff_light, created_at, updated_at
 `
 
 type UpsertRegionRuleConfigParams struct {
 	RegionID             int64          `json:"region_id"`
-	CommissionRate       pgtype.Numeric `json:"commission_rate"`
-	MerchantDeposit      pgtype.Int8    `json:"merchant_deposit"`
 	RiderDeposit         pgtype.Int8    `json:"rider_deposit"`
 	WeatherCoeffExtreme  pgtype.Numeric `json:"weather_coeff_extreme"`
 	WeatherCoeffHeavy    pgtype.Numeric `json:"weather_coeff_heavy"`
@@ -85,8 +75,6 @@ type UpsertRegionRuleConfigParams struct {
 func (q *Queries) UpsertRegionRuleConfig(ctx context.Context, arg UpsertRegionRuleConfigParams) (RegionRuleConfig, error) {
 	row := q.db.QueryRow(ctx, upsertRegionRuleConfig,
 		arg.RegionID,
-		arg.CommissionRate,
-		arg.MerchantDeposit,
 		arg.RiderDeposit,
 		arg.WeatherCoeffExtreme,
 		arg.WeatherCoeffHeavy,
@@ -97,8 +85,6 @@ func (q *Queries) UpsertRegionRuleConfig(ctx context.Context, arg UpsertRegionRu
 	err := row.Scan(
 		&i.ID,
 		&i.RegionID,
-		&i.CommissionRate,
-		&i.MerchantDeposit,
 		&i.RiderDeposit,
 		&i.WeatherCoeffExtreme,
 		&i.WeatherCoeffHeavy,

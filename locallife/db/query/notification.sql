@@ -13,15 +13,15 @@ INSERT INTO notifications (
 ) RETURNING *;
 
 -- name: GetNotification :one
-SELECT * FROM notifications
+SELECT id, user_id, type, title, content, related_type, related_id, extra_data, is_read, read_at, is_pushed, pushed_at, created_at, expires_at FROM notifications
 WHERE id = $1;
 
 -- name: ListUserNotifications :many
-SELECT * FROM notifications
+SELECT id, user_id, type, title, content, related_type, related_id, extra_data, is_read, read_at, is_pushed, pushed_at, created_at, expires_at FROM notifications
 WHERE user_id = $1
   AND (sqlc.narg('is_read')::boolean IS NULL OR is_read = sqlc.narg('is_read'))
   AND (sqlc.narg('type')::text IS NULL OR type = sqlc.narg('type'))
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $2 OFFSET $3;
 
 -- name: CountUserNotifications :one
@@ -75,7 +75,7 @@ DELETE FROM notifications
 WHERE expires_at < now();
 
 -- name: GetNotificationsByRelated :many
-SELECT * FROM notifications
+SELECT id, user_id, type, title, content, related_type, related_id, extra_data, is_read, read_at, is_pushed, pushed_at, created_at, expires_at FROM notifications
 WHERE related_type = $1
   AND related_id = $2
 ORDER BY created_at DESC;
@@ -83,7 +83,7 @@ ORDER BY created_at DESC;
 -- ==================== 用户通知偏好设置 ====================
 
 -- name: GetUserNotificationPreferences :one
-SELECT * FROM user_notification_preferences
+SELECT id, user_id, enable_order_notifications, enable_payment_notifications, enable_delivery_notifications, enable_system_notifications, enable_food_safety_notifications, do_not_disturb_start, do_not_disturb_end, created_at, updated_at FROM user_notification_preferences
 WHERE user_id = $1;
 
 -- name: CreateUserNotificationPreferences :one

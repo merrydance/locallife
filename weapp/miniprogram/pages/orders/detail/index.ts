@@ -2,7 +2,6 @@ import Navigation from '../../../utils/navigation'
 import { logger } from '../../../utils/logger'
 import CartService from '../../../services/cart'
 import {
-  getOrderDetail,
   confirmOrder,
   cancelOrder,
   urgeOrder,
@@ -31,9 +30,8 @@ import {
 import { OrderAdapter } from '../../../adapters/order'
 import { OrderDetail } from '../../../models/order'
 import { generateOrderTimeline } from '../../../utils/timeline'
-import { ReservationService, ReservationResponse } from '../../../api/reservation'
-import ReviewService from '../../../api/review'
 import { getErrorUserMessage } from '../../../utils/user-facing'
+import { loadOrderDetailBundle, getOrderReview, type OrderDetailReservation } from '../../../services/order-detail'
 
 // 取消原因选项
 const CANCEL_REASONS = [
@@ -53,7 +51,7 @@ Page({
     orderId: '',
     order: null as OrderDetail | null,
     orderDTO: null as OrderResponse | null,
-    reservationInfo: null as ReservationResponse | null,
+    reservationInfo: null as OrderDetailReservation | null,
     navBarHeight: 88,
     loading: true,
     isError: false,
@@ -109,17 +107,8 @@ Page({
     }
 
     try {
-      const orderDTO = await getOrderDetail(parseInt(this.data.orderId))
+      const { orderDTO, reservationInfo } = await loadOrderDetailBundle(parseInt(this.data.orderId))
       const order = OrderAdapter.toDetailViewModel(orderDTO)
-
-      let reservationInfo: ReservationResponse | null = null
-      if (orderDTO.order_type === 'reservation' && orderDTO.reservation_id) {
-        try {
-          reservationInfo = await ReservationService.getReservationDetail(orderDTO.reservation_id)
-        } catch (e) {
-          logger.warn('Fetch reservation detail failed', e)
-        }
-      }
 
       const actions = orderDTO.actions || []
 
@@ -553,7 +542,7 @@ Page({
   
   async checkReviewStatus() {
     try {
-      const review = await ReviewService.getReviewByOrderId(parseInt(this.data.orderId))
+      const review = await getOrderReview(parseInt(this.data.orderId))
       if (review && review.id) {
         this.setData({ isReviewed: true })
       }

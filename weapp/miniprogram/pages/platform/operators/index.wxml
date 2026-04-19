@@ -1,7 +1,7 @@
 <custom-navbar title="运营商管理" show-back="{{true}}" show-location="{{false}}" bind:navheight="onNavHeight" />
 
 <view
-  class="operators-page page-shell page-shell--with-nav page-shell--bottom-safe"
+  class="operators-page page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
   style="--page-shell-nav-height: {{navBarHeight}}px"
 >
   <scroll-view
@@ -13,16 +13,12 @@
     bindscrolltolower="onLoadMore"
   >
     <view class="operators-container">
-
-      <!-- ── Tab 切换 ── -->
       <view class="tab-wrap">
         <t-tabs value="{{activeTab}}" bind:change="onTabChange" theme="tag" space-evenly="{{false}}">
           <t-tab-panel label="运营商入驻" value="onboarding" />
           <t-tab-panel label="区域扩展申请 {{regionFilterStats.pending > 0 ? '(' + regionFilterStats.pending + ')' : ''}}" value="region" />
         </t-tabs>
       </view>
-
-      <!-- ══════════════════ Tab 1: 运营商入驻申请 ══════════════════ -->
       <block wx:if="{{activeTab === 'onboarding'}}">
         <view class="summary-card">
           <text class="summary-title">申请总数</text>
@@ -47,9 +43,7 @@
 
           <view class="sort-row">
             <text class="sort-label">排序</text>
-            <picker mode="selector" range="{{sortOptionLabels}}" value="{{sortIndex}}" bindchange="onSortPickerChange">
-              <view class="sort-picker">{{sortOptionLabels[sortIndex]}}</view>
-            </picker>
+            <view class="sort-picker" bind:tap="onOpenSortPicker">{{sortOptionLabels[sortIndex]}}</view>
           </view>
         </view>
 
@@ -59,9 +53,21 @@
 
         <view wx:if="{{error}}" class="section-card status-wrap">
           <t-empty icon="error-circle" description="{{error}}">
-            <t-button slot="action" theme="primary" shape="round" size="small" bind:tap="onRetry">重试</t-button>
+            <t-button slot="action" theme="primary" bind:tap="onRetry">重试</t-button>
           </t-empty>
         </view>
+
+        <t-picker
+          visible="{{sortPickerVisible}}"
+          value="{{[String(sortIndex)]}}"
+          title="选择排序方式"
+          cancelBtn="取消"
+          confirmBtn="确认"
+          bind:confirm="onSortConfirm"
+          bind:cancel="onCloseSortPicker"
+        >
+          <t-picker-item options="{{sortPickerOptions}}" />
+        </t-picker>
 
         <view wx:if="{{!loading && !error && applications.length === 0}}" class="section-card status-wrap">
           <t-empty description="当前筛选下暂无运营商申请" />
@@ -100,8 +106,6 @@
 
         <view wx:if="{{!loading && !hasMore && applications.length > 0}}" class="no-more">没有更多了</view>
       </block>
-
-      <!-- ══════════════════ Tab 2: 区域扩展申请 ══════════════════ -->
       <block wx:elif="{{activeTab === 'region'}}">
         <view class="summary-card">
           <text class="summary-title">扩展申请总数</text>
@@ -131,7 +135,7 @@
 
         <view wx:if="{{regionError}}" class="section-card status-wrap">
           <t-empty icon="error-circle" description="{{regionError}}">
-            <t-button slot="action" theme="primary" shape="round" size="small" bind:tap="onRegionRetry">重试</t-button>
+            <t-button slot="action" theme="primary" bind:tap="onRegionRetry">重试</t-button>
           </t-empty>
         </view>
 
@@ -166,12 +170,12 @@
           </view>
           <view wx:if="{{item.canReview}}" class="action-row">
             <t-button
-              size="small" theme="primary" shape="round"
+              size="small" theme="primary"
               data-id="{{item.id}}" data-name="{{item.operator_name}}" data-region="{{item.region_name}}"
               bind:tap="onApproveRegion"
             >通过</t-button>
             <t-button
-              size="small" theme="danger" variant="outline" shape="round"
+              size="small" theme="danger" variant="outline"
               data-id="{{item.id}}" data-name="{{item.operator_name}}" data-region="{{item.region_name}}"
               bind:tap="onRejectRegion"
             >驳回</t-button>
@@ -180,12 +184,9 @@
 
         <view wx:if="{{!regionLoading && !regionHasMore && regionDisplayApps.length > 0}}" class="no-more">没有更多了</view>
       </block>
-
     </view>
   </scroll-view>
 </view>
-
-<!-- 驳回弹窗 -->
 <t-dialog
   visible="{{rejectDialogVisible}}"
   title="驳回申请"

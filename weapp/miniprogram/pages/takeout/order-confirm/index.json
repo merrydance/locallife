@@ -6,6 +6,7 @@
         "t-button": "tdesign-miniprogram/button/button",
         "t-tag": "tdesign-miniprogram/tag/tag",
         "t-icon": "tdesign-miniprogram/icon/icon",
+        "t-empty": "tdesign-miniprogram/empty/empty",
         "remark-input": "/components/remark-input/index",
         "merchant-promos": "/components/merchant-promos/index",
         "t-radio": "tdesign-miniprogram/radio/radio",

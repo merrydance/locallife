@@ -88,3 +88,22 @@ WHERE m.region_id = sqlc.arg('region_id')
   AND ps.status = 'finished'  -- 只统计分账成功的订单
 GROUP BY DATE(ps.created_at)
 ORDER BY date;
+
+-- name: GetManagedRegionsDailyTrend :many
+-- 运营商多区域日趋势（跨区域按用户/商户去重）
+SELECT
+    DATE(ps.created_at) AS date,
+    COUNT(ps.id)::int AS order_count,
+    COALESCE(SUM(ps.total_amount), 0)::bigint AS total_gmv,
+    COALESCE(SUM(ps.platform_commission), 0)::bigint AS commission,
+    COUNT(DISTINCT po.user_id)::int AS active_users,
+    COUNT(DISTINCT ps.merchant_id)::int AS active_merchants
+FROM profit_sharing_orders ps
+JOIN merchants m ON m.id = ps.merchant_id
+JOIN payment_orders po ON po.id = ps.payment_order_id
+WHERE m.region_id = ANY(sqlc.arg('region_ids')::bigint[])
+    AND ps.created_at >= sqlc.arg('start_at')
+    AND ps.created_at <= sqlc.arg('end_at')
+    AND ps.status = 'finished'
+GROUP BY DATE(ps.created_at)
+ORDER BY date;

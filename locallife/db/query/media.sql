@@ -21,15 +21,15 @@ INSERT INTO media_assets (
 ) RETURNING *;
 
 -- name: GetMediaAssetByID :one
-SELECT * FROM media_assets
+SELECT id, object_key, visibility, media_category, mime_type, file_size, width, height, checksum_sha256, upload_status, moderation_status, uploaded_by, source_client, created_at, updated_at, deleted_at, moderation_trace_id FROM media_assets
 WHERE id = $1 AND deleted_at IS NULL;
 
 -- name: GetMediaAssetByObjectKey :one
-SELECT * FROM media_assets
+SELECT id, object_key, visibility, media_category, mime_type, file_size, width, height, checksum_sha256, upload_status, moderation_status, uploaded_by, source_client, created_at, updated_at, deleted_at, moderation_trace_id FROM media_assets
 WHERE object_key = $1 AND deleted_at IS NULL;
 
 -- name: GetMediaAssetByModerationTraceID :one
-SELECT * FROM media_assets
+SELECT id, object_key, visibility, media_category, mime_type, file_size, width, height, checksum_sha256, upload_status, moderation_status, uploaded_by, source_client, created_at, updated_at, deleted_at, moderation_trace_id FROM media_assets
 WHERE moderation_trace_id = $1 AND deleted_at IS NULL;
 
 -- name: ConfirmMediaAssetUploaded :one
@@ -78,7 +78,7 @@ WHERE id = $1 AND deleted_at IS NULL
 RETURNING *;
 
 -- name: ListMediaAssetsByUploader :many
-SELECT * FROM media_assets
+SELECT id, object_key, visibility, media_category, mime_type, file_size, width, height, checksum_sha256, upload_status, moderation_status, uploaded_by, source_client, created_at, updated_at, deleted_at, moderation_trace_id FROM media_assets
 WHERE uploaded_by = $1
   AND deleted_at IS NULL
 ORDER BY created_at DESC
@@ -108,10 +108,10 @@ INSERT INTO media_upload_sessions (
 ) RETURNING *;
 
 -- name: GetUploadSession :one
-SELECT * FROM media_upload_sessions WHERE id = $1;
+SELECT id, media_asset_id, user_id, business_type, media_category, visibility, object_key, checksum_sha256, content_type, content_length, status, expire_at, created_at FROM media_upload_sessions WHERE id = $1;
 
 -- name: GetPendingUploadSessionByIdempotencyKey :one
-SELECT * FROM media_upload_sessions
+SELECT id, media_asset_id, user_id, business_type, media_category, visibility, object_key, checksum_sha256, content_type, content_length, status, expire_at, created_at FROM media_upload_sessions
 WHERE user_id        = $1
   AND media_category = $2
   AND checksum_sha256 = $3

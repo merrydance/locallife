@@ -796,7 +796,16 @@ SELECT
   merchants.id, merchants.owner_user_id, merchants.name, merchants.description, merchants.phone, merchants.address, merchants.latitude, merchants.longitude, merchants.status, merchants.application_data, merchants.created_at, merchants.updated_at, merchants.version, merchants.region_id, merchants.is_open, merchants.auto_close_at, merchants.deleted_at, merchants.pending_owner_bind, merchants.bind_code, merchants.bind_code_expires_at, merchants.group_id, merchants.brand_id, merchants.logo_media_asset_id, merchants.auto_open_by_business_hours,
   COALESCE(
     (
-      SELECT json_agg(tags.*)
+      SELECT json_agg(
+        json_build_object(
+          'id', tags.id,
+          'name', tags.name,
+          'type', tags.type,
+          'sort_order', tags.sort_order,
+          'status', tags.status,
+          'created_at', tags.created_at
+        )
+      )
       FROM tags
       INNER JOIN merchant_tags ON tags.id = merchant_tags.tag_id
       WHERE merchant_tags.merchant_id = merchants.id
@@ -2229,7 +2238,12 @@ mode_by_merchant AS (
   GROUP BY merchant_id
 ),
 effective_rows AS (
-  SELECT tr.merchant_id, tr.is_closed, tr.open_time, tr.close_time, tr.special_date
+  SELECT
+    tr.merchant_id,
+    tr.is_closed,
+    tr.open_time,
+    tr.close_time,
+    tr.special_date
   FROM today_rows tr
   JOIN mode_by_merchant mm ON mm.merchant_id = tr.merchant_id
   WHERE (mm.has_special AND tr.special_date IS NOT NULL)
@@ -2239,7 +2253,7 @@ desired_state AS (
   SELECT
     mwh.merchant_id,
     CASE
-      WHEN COUNT(er.*) = 0 THEN false
+      WHEN COUNT(er.merchant_id) = 0 THEN false
       WHEN BOOL_OR(er.is_closed) THEN false
       WHEN BOOL_OR((NOT er.is_closed) AND (LOCALTIME >= er.open_time AND LOCALTIME < er.close_time)) THEN true
       ELSE false

@@ -22,6 +22,7 @@ type MerchantListView = OperatorMerchantItem & {
     status_theme: 'success' | 'warning' | 'default'
     can_suspend: boolean
     can_resume: boolean
+    rating_text: string
 }
 
 function adaptMerchant(item: OperatorMerchantItem): MerchantListView {
@@ -32,7 +33,8 @@ function adaptMerchant(item: OperatorMerchantItem): MerchantListView {
         status_label: statusDisplay.label,
         status_theme: statusDisplay.theme,
         can_suspend: statusDisplay.canSuspend,
-        can_resume: statusDisplay.canResume
+        can_resume: statusDisplay.canResume,
+        rating_text: typeof item.rating === 'number' ? item.rating.toFixed(1) : '--'
     }
 }
 

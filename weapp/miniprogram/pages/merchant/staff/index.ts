@@ -22,6 +22,7 @@ type EditableMerchantStaffRole = Exclude<MerchantStaffRole, 'owner' | 'pending'>
 
 interface StaffView extends MerchantStaffItem {
   displayName: string
+  displayInitial: string
   roleLabel: string
   roleTheme: string
   statusLabel: string
@@ -86,6 +87,7 @@ function toStaffView(item: MerchantStaffItem, canManageRoles: boolean): StaffVie
   return {
     ...item,
     displayName: item.full_name || `用户 #${item.user_id}`,
+    displayInitial: (item.full_name || `用户 #${item.user_id}`).slice(0, 1),
     roleLabel: roleMeta.label,
     roleTheme: roleMeta.theme,
     statusLabel: statusMeta.label,

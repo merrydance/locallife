@@ -110,6 +110,8 @@ Page({
     isEdit: false,
     merchantId: 0,
     ruleId: 0,
+    validFromPickerVisible: false,
+    validUntilPickerVisible: false,
     formData: createDefaultFormData() as DiscountRuleFormData
   },
 
@@ -234,6 +236,36 @@ Page({
     }
 
     this.setData({ [`formData.${field}`]: String(e.detail.value || '') })
+  },
+
+  showValidFromPicker() {
+    this.setData({ validFromPickerVisible: true })
+  },
+
+  hideValidFromPicker() {
+    this.setData({ validFromPickerVisible: false })
+  },
+
+  showValidUntilPicker() {
+    this.setData({ validUntilPickerVisible: true })
+  },
+
+  hideValidUntilPicker() {
+    this.setData({ validUntilPickerVisible: false })
+  },
+
+  onValidFromConfirm(e: WechatMiniprogram.CustomEvent<{ value?: string }>) {
+    this.setData({
+      'formData.valid_from': String(e.detail.value || ''),
+      validFromPickerVisible: false
+    })
+  },
+
+  onValidUntilConfirm(e: WechatMiniprogram.CustomEvent<{ value?: string }>) {
+    this.setData({
+      'formData.valid_until': String(e.detail.value || ''),
+      validUntilPickerVisible: false
+    })
   },
 
   onSwitchChange(e: WechatMiniprogram.CustomEvent<{ value: boolean }>) {

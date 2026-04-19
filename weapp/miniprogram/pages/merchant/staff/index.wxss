@@ -3,11 +3,6 @@
   background: var(--td-bg-color-page);
 }
 
-.page-content {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacer-md);
-}
 
 .state-block,
 .popup-state,
@@ -33,8 +28,6 @@
   overflow: hidden;
 }
 
-.section-panel,
-.summary-strip,
 .staff-card,
 .popup-sheet {
   background: var(--td-bg-color-container);
@@ -44,7 +37,6 @@
 
 .section-panel {
   position: relative;
-  padding: var(--spacer-md);
   display: flex;
   flex-direction: column;
   gap: var(--spacer-sm);
@@ -109,7 +101,7 @@
 
 .summary-strip {
   display: flex;
-  overflow: hidden;
+  gap: var(--spacer-sm);
 }
 
 .summary-item {
@@ -119,10 +111,12 @@
   align-items: center;
   gap: 8rpx;
   padding: var(--spacer-sm) var(--spacer-xs);
+  border-radius: var(--radius-md);
+  background: var(--td-bg-color-secondarycontainer);
 }
 
 .summary-item + .summary-item {
-  border-left: 1px solid var(--td-component-stroke);
+  border-left: none;
 }
 
 .summary-value {
@@ -275,8 +269,9 @@
 }
 
 .popup-actions {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: var(--spacer-xs);
   margin-top: var(--spacer-sm);
 }

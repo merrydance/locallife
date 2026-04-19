@@ -18,12 +18,15 @@ run_case() {
   local expected_text="$3"
   local base_sql="$4"
   local head_sql="$5"
+  local baseline_sql="${6:-}"
 
   local case_dir="$tmp_root/$case_name"
-  mkdir -p "$case_dir/locallife/db/query"
+  mkdir -p "$case_dir/locallife/db/query" "$case_dir/.github/sqlguard"
 
   pushd "$case_dir" >/dev/null
   git init -q
+
+  printf '%s\n' "$baseline_sql" > .github/sqlguard/select_star_baseline.txt
 
   printf '%s\n' "$base_sql" > locallife/db/query/sample.sql
   git add locallife/db/query/sample.sql
@@ -64,6 +67,19 @@ ORDER BY created_at DESC
 LIMIT \$1;" \
   "-- name: ListSample :many
 SELECT * FROM sample_items
+ORDER BY created_at DESC
+LIMIT \$1;"
+
+run_case \
+  qualified_star_violation \
+  1 \
+  "uses qualified star syntax" \
+  "-- name: ListSample :many
+SELECT id, created_at FROM sample_items
+ORDER BY created_at DESC
+LIMIT \$1;" \
+  "-- name: ListSample :many
+SELECT sample_items.* FROM sample_items
 ORDER BY created_at DESC
 LIMIT \$1;"
 
@@ -119,6 +135,20 @@ ORDER BY created_at DESC
 LIMIT \$1;"
 
 run_case \
+  allow_qualified_star_passes \
+  0 \
+  "SQL guardrail passed" \
+  "-- name: ListSample :many
+SELECT id, created_at FROM sample_items
+ORDER BY created_at DESC
+LIMIT \$1;" \
+  "-- name: ListSample :many
+-- sqlguard: allow-qualified-star row_to_json(sample_items.*) must mirror a vendor-defined shape in one place only
+SELECT row_to_json(sample_items.*) FROM sample_items
+ORDER BY created_at DESC
+LIMIT \$1;"
+
+run_case \
   allow_unordered_limit_passes \
   0 \
   "SQL guardrail passed" \
@@ -151,7 +181,8 @@ LIMIT \$1;
 SELECT id, created_at FROM safe_items
 WHERE merchant_id = \$2
 ORDER BY created_at DESC
-LIMIT \$1;"
+LIMIT \$1;" \
+  "locallife/db/query/sample.sql::LegacyBadQuery"
 
 run_case \
   comment_only_change_in_legacy_bad_query_does_not_fail \
@@ -163,7 +194,8 @@ LIMIT \$1;" \
   "-- name: LegacyBadQuery :many
 -- refreshed comment only; SQL should not be re-linted on this change alone
 SELECT * FROM legacy_items
-LIMIT \$1;"
+LIMIT \$1;" \
+  "locallife/db/query/sample.sql::LegacyBadQuery"
 
 run_case \
   implicit_insert_columns_violation \
@@ -207,6 +239,20 @@ ORDER BY created_at DESC
 LIMIT \$1;"
 
 run_case \
+  bare_allow_qualified_star_rejected \
+  1 \
+  "bare 'sqlguard: allow-qualified-star'" \
+  "-- name: ListSample :many
+SELECT id, created_at FROM sample_items
+ORDER BY created_at DESC
+LIMIT \$1;" \
+  "-- name: ListSample :many
+-- sqlguard: allow-qualified-star
+SELECT sample_items.* FROM sample_items
+ORDER BY created_at DESC
+LIMIT \$1;"
+
+run_case \
   bare_allow_implicit_insert_rejected \
   1 \
   "bare 'sqlguard: allow-implicit-insert-columns'" \
@@ -229,6 +275,157 @@ SELECT * FROM legacy_items
 LIMIT \$1;" \
   "-- name: RenamedLegacyBadQuery :many
 SELECT * FROM legacy_items
-LIMIT \$1;"
+LIMIT \$1;" \
+  "locallife/db/query/sample.sql::LegacyBadQuery"
+
+case_dir="$tmp_root/repository_wide_select_star_outside_baseline_fails"
+mkdir -p "$case_dir/locallife/db/query" "$case_dir/.github/sqlguard"
+
+pushd "$case_dir" >/dev/null
+git init -q
+
+printf '%s\n' "" > .github/sqlguard/select_star_baseline.txt
+
+cat <<'EOF' > locallife/db/query/legacy.sql
+-- name: LegacyBadQuery :many
+SELECT * FROM legacy_items
+LIMIT $1;
+EOF
+
+cat <<'EOF' > locallife/db/query/sample.sql
+-- name: SafeQuery :many
+SELECT id, created_at FROM safe_items
+ORDER BY created_at DESC
+LIMIT $1;
+EOF
+
+git add locallife/db/query/legacy.sql locallife/db/query/sample.sql .github/sqlguard/select_star_baseline.txt
+git -c user.name='SQL Guard Test' -c user.email='sql-guard-test@example.com' commit -q -m 'base'
+
+cat <<'EOF' > locallife/db/query/sample.sql
+-- name: SafeQuery :many
+SELECT id, created_at FROM safe_items
+WHERE merchant_id = $2
+ORDER BY created_at DESC
+LIMIT $1;
+EOF
+
+git add locallife/db/query/sample.sql
+git -c user.name='SQL Guard Test' -c user.email='sql-guard-test@example.com' commit -q -m 'head'
+
+set +e
+output="$(bash "$guard_script" HEAD~1 HEAD 2>&1)"
+status=$?
+set -e
+
+if [[ "$status" -ne 1 ]]; then
+  echo "Case 'repository_wide_select_star_outside_baseline_fails' returned exit code $status, expected 1"
+  echo "$output"
+  exit 1
+fi
+
+if [[ "$output" != *"outside the repository baseline"* ]]; then
+  echo "Case 'repository_wide_select_star_outside_baseline_fails' did not include expected repository baseline failure text"
+  echo "$output"
+  exit 1
+fi
+
+popd >/dev/null
+
+case_dir="$tmp_root/repository_wide_qualified_star_fails"
+mkdir -p "$case_dir/locallife/db/query" "$case_dir/.github/sqlguard"
+
+pushd "$case_dir" >/dev/null
+git init -q
+
+printf '%s\n' "" > .github/sqlguard/select_star_baseline.txt
+
+cat <<'EOF' > locallife/db/query/legacy.sql
+-- name: LegacyBadQuery :many
+SELECT legacy_items.* FROM legacy_items
+LIMIT $1;
+EOF
+
+cat <<'EOF' > locallife/db/query/sample.sql
+-- name: SafeQuery :many
+SELECT id, created_at FROM safe_items
+ORDER BY created_at DESC
+LIMIT $1;
+EOF
+
+git add locallife/db/query/legacy.sql locallife/db/query/sample.sql .github/sqlguard/select_star_baseline.txt
+git -c user.name='SQL Guard Test' -c user.email='sql-guard-test@example.com' commit -q -m 'base'
+
+cat <<'EOF' > locallife/db/query/sample.sql
+-- name: SafeQuery :many
+SELECT id, created_at FROM safe_items
+WHERE merchant_id = $2
+ORDER BY created_at DESC
+LIMIT $1;
+EOF
+
+git add locallife/db/query/sample.sql
+git -c user.name='SQL Guard Test' -c user.email='sql-guard-test@example.com' commit -q -m 'head'
+
+set +e
+output="$(bash "$guard_script" HEAD~1 HEAD 2>&1)"
+status=$?
+set -e
+
+if [[ "$status" -ne 1 ]]; then
+  echo "Case 'repository_wide_qualified_star_fails' returned exit code $status, expected 1"
+  echo "$output"
+  exit 1
+fi
+
+if [[ "$output" != *"uses qualified star syntax"* ]]; then
+  echo "Case 'repository_wide_qualified_star_fails' did not include expected qualified-star failure text"
+  echo "$output"
+  exit 1
+fi
+
+popd >/dev/null
+
+case_dir="$tmp_root/no_base_ref_still_checks_baseline"
+mkdir -p "$case_dir/locallife/db/query" "$case_dir/.github/sqlguard"
+
+pushd "$case_dir" >/dev/null
+git init -q
+
+printf '%s\n' "" > .github/sqlguard/select_star_baseline.txt
+
+cat <<'EOF' > locallife/db/query/sample.sql
+-- name: LegacyBadQuery :many
+SELECT * FROM legacy_items
+LIMIT $1;
+EOF
+
+git add locallife/db/query/sample.sql .github/sqlguard/select_star_baseline.txt
+git -c user.name='SQL Guard Test' -c user.email='sql-guard-test@example.com' commit -q -m 'base'
+
+set +e
+output="$(bash "$guard_script" 0000000000000000000000000000000000000000 HEAD 2>&1)"
+status=$?
+set -e
+
+if [[ "$status" -ne 1 ]]; then
+  echo "Case 'no_base_ref_still_checks_baseline' returned exit code $status, expected 1"
+  echo "$output"
+  exit 1
+fi
+
+if [[ "$output" != *"outside the repository baseline"* ]]; then
+  echo "Case 'no_base_ref_still_checks_baseline' did not include expected repository baseline failure text"
+  echo "$output"
+  exit 1
+fi
+
+if [[ "$output" != *"skipping diff-based SQL guard checks"* ]]; then
+  echo "Case 'no_base_ref_still_checks_baseline' did not mention skipping diff-based checks"
+  echo "$output"
+  exit 1
+fi
+
+popd >/dev/null
 
 echo "backend_sql_guard self-test passed."

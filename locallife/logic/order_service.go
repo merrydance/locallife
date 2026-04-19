@@ -31,7 +31,7 @@ type OrderService struct {
 	eventPublisher        OrderEventPublisher
 	taskScheduler         TaskScheduler
 	normalizer            DishCustomizationNormalizer
-	paymentClient         wechat.PaymentClientInterface
+	paymentClient         wechat.DirectPaymentClientInterface
 	ecommerceClient       wechat.EcommerceClientInterface
 	clock                 Clock
 	idGenerator           IDGenerator
@@ -45,7 +45,7 @@ func NewOrderService(
 	eventPublisher OrderEventPublisher,
 	taskScheduler TaskScheduler,
 	normalizer DishCustomizationNormalizer,
-	paymentClient wechat.PaymentClientInterface,
+	paymentClient wechat.DirectPaymentClientInterface,
 	ecommerceClient wechat.EcommerceClientInterface,
 	clock Clock,
 	idGenerator IDGenerator,
@@ -180,8 +180,14 @@ func (s *OrderService) CreateOrder(ctx context.Context, input CreateOrderCommand
 	}
 
 	discountAmount := int64(0)
-	if bestAmount, getErr := GetBestDiscountAmount(ctx, s.store, input.MerchantID, subtotal); getErr == nil {
-		discountAmount = bestAmount
+	merchantDiscountResult := MerchantDiscountResult{AllowWithVoucher: true}
+	if resolvedDiscount, getErr := ResolveMerchantDiscount(ctx, s.store, OrderContext{
+		MerchantID: input.MerchantID,
+		OrderType:  input.OrderType,
+		Subtotal:   subtotal,
+	}); getErr == nil {
+		merchantDiscountResult = resolvedDiscount
+		discountAmount = resolvedDiscount.DiscountAmount
 	}
 
 	var voucherAmount int64
@@ -196,6 +202,9 @@ func (s *OrderService) CreateOrder(ctx context.Context, input CreateOrderCommand
 		})
 		if validateErr != nil {
 			return CreateOrderCommandResult{}, validateErr
+		}
+		if !merchantDiscountResult.AllowWithVoucher {
+			return CreateOrderCommandResult{}, NewRequestError(http.StatusBadRequest, errors.New("当前活动不可与所选优惠券叠加"))
 		}
 		userVoucherID = voucherResult.UserVoucherID
 		voucherAmount = voucherResult.VoucherAmount
@@ -472,7 +481,7 @@ func (s *OrderService) UrgeOrder(ctx context.Context, input UrgeOrderInput) (Urg
 
 func (s *OrderService) ReplaceOrder(ctx context.Context, input ReplaceOrderInput) (ReplaceOrderResult, error) {
 	normalize := s.buildNormalizerFunc()
-	result, err := ReplaceReservationOrder(ctx, s.store, s.paymentClient, s.ecommerceClient, input, normalize)
+	result, err := ReplaceReservationOrder(ctx, s.store, s.ecommerceClient, input, normalize)
 	if err != nil {
 		return ReplaceOrderResult{}, err
 	}
@@ -590,7 +599,7 @@ func (s *OrderService) RejectMerchantOrder(ctx context.Context, input MerchantOr
 		})
 	}
 
-	refundResult, refundErr := ProcessMerchantRejectRefund(ctx, s.store, s.paymentClient, s.ecommerceClient, MerchantRejectRefundInput{
+	refundResult, refundErr := ProcessMerchantRejectRefund(ctx, s.store, s.ecommerceClient, MerchantRejectRefundInput{
 		MerchantID: input.MerchantID,
 		OrderID:    result.Order.ID,
 		Reason:     input.Reason,

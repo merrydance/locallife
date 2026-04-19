@@ -11,13 +11,13 @@ INSERT INTO order_status_logs (
 ) RETURNING *;
 
 -- name: ListOrderStatusLogs :many
-SELECT * FROM order_status_logs
+SELECT id, order_id, from_status, to_status, operator_id, operator_type, notes, created_at FROM order_status_logs
 WHERE order_id = $1
 ORDER BY created_at;
 
 -- name: ListOrderStatusLogsWithOperator :many
 SELECT 
-    osl.*,
+    osl.id, osl.order_id, osl.from_status, osl.to_status, osl.operator_id, osl.operator_type, osl.notes, osl.created_at,
     u.full_name as operator_name
 FROM order_status_logs osl
 LEFT JOIN users u ON osl.operator_id = u.id

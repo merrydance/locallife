@@ -1,3 +1,5 @@
+@import '../../../styles/customer.wxss';
+
 /* 协议中心 - 遵循 .github/standards/weapp/DESIGN_SYSTEM.md 规范 */
 
 .page-scroll {
@@ -41,11 +43,12 @@
   padding: 100rpx 0;
 }
 
-/* TDesign 覆盖 */
+/* weapp-gate allow-tdesign-internal-class: 协议列表页需要去掉默认卡片底色与收紧说明字级，待替换成只读列表壳子后移除 */
 .t-cell-group {
   background-color: transparent !important;
 }
 
+/* weapp-gate allow-tdesign-internal-class: 协议列表说明文案需缩小字级，待替换成只读列表壳子后移除 */
 .t-cell__description {
   font-size: var(--font-size-sm) !important;
   color: var(--td-text-color-secondary) !important;

@@ -20,6 +20,7 @@ import (
 	"github.com/merrydance/locallife/scheduler"
 	"github.com/merrydance/locallife/util"
 	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	mockwechat "github.com/merrydance/locallife/wechat/mock"
 	"github.com/merrydance/locallife/worker"
 	"github.com/stretchr/testify/require"
@@ -89,14 +90,14 @@ type claimPayoutActionDetailSnapshot struct {
 	AppealID        int64  `json:"appeal_id"`
 	UserID          int64  `json:"user_id"`
 	Amount          int64  `json:"amount"`
-	OutBatchNo      string `json:"out_batch_no"`
-	BatchID         string `json:"batch_id"`
-	BatchStatus     string `json:"batch_status"`
+	OutBillNo       string `json:"out_bill_no"`
+	TransferBillNo  string `json:"transfer_bill_no"`
+	TransferState   string `json:"transfer_state"`
 	LastError       string `json:"last_error"`
 	TerminalFailure bool   `json:"terminal_failure"`
 }
 
-func newFinishedClaimPayoutPaymentClient(t *testing.T, store *db.SQLStore, userID, amount int64, transferRemark, batchRemark string) *mockwechat.MockPaymentClientInterface {
+func newFinishedClaimPayoutPaymentClient(t *testing.T, store *db.SQLStore, userID, amount int64, transferRemark, batchRemark string) *mockwechat.MockTransferClientInterface {
 	t.Helper()
 
 	ctrl := gomock.NewController(t)
@@ -105,62 +106,67 @@ func newFinishedClaimPayoutPaymentClient(t *testing.T, store *db.SQLStore, userI
 	user, err := store.GetUser(context.Background(), userID)
 	require.NoError(t, err)
 
-	mockPaymentClient := mockwechat.NewMockPaymentClientInterface(ctrl)
+	mockPaymentClient := mockwechat.NewMockTransferClientInterface(ctrl)
 	batchID := "batch-integration"
 	outBatchNo := ""
+	mockPaymentClient.EXPECT().GetAppID().AnyTimes().Return("integration-app")
 
 	mockPaymentClient.EXPECT().
 		CreateTransfer(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(ctx context.Context, req *wechat.TransferRequest) (*wechat.TransferResponse, error) {
+		DoAndReturn(func(ctx context.Context, req *wechatcontracts.DirectMerchantTransferCreateRequest) (*wechatcontracts.DirectMerchantTransferCreateResponse, error) {
 			require.Equal(t, amount, req.TransferAmount)
 			require.Equal(t, user.WechatOpenid, req.OpenID)
 			require.Equal(t, user.FullName, req.UserName)
 			require.Equal(t, transferRemark, req.TransferRemark)
-			require.Equal(t, batchRemark, req.BatchRemark)
-			outBatchNo = req.OutBatchNo
-			return &wechat.TransferResponse{
-				OutBatchNo:  req.OutBatchNo,
-				BatchID:     batchID,
-				BatchStatus: "ACCEPTED",
-				CreateTime:  "2026-03-27T10:00:00+08:00",
+			outBatchNo = req.OutBillNo
+			_ = batchRemark
+			return &wechatcontracts.DirectMerchantTransferCreateResponse{
+				OutBillNo:      req.OutBillNo,
+				TransferBillNo: batchID,
+				State:          wechatcontracts.DirectMerchantTransferStateAccepted,
+				CreateTime:     "2026-03-27T10:00:00+08:00",
 			}, nil
 		})
 
 	mockPaymentClient.EXPECT().
-		QueryTransfer(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(ctx context.Context, gotOutBatchNo string) (*wechat.TransferQueryResponse, error) {
+		QueryTransferByOutBillNo(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(ctx context.Context, gotOutBillNo string) (*wechatcontracts.DirectMerchantTransferQueryResponse, error) {
 			require.NotEmpty(t, outBatchNo)
-			require.Equal(t, outBatchNo, gotOutBatchNo)
-			return &wechat.TransferQueryResponse{
-				OutBatchNo:  gotOutBatchNo,
-				BatchID:     batchID,
-				BatchStatus: "FINISHED",
-				CreateTime:  "2026-03-27T10:00:00+08:00",
-				UpdateTime:  "2026-03-27T10:01:00+08:00",
+			require.Equal(t, outBatchNo, gotOutBillNo)
+			return &wechatcontracts.DirectMerchantTransferQueryResponse{
+				MchID:          "integration-mch",
+				AppID:          "integration-app",
+				OutBillNo:      gotOutBillNo,
+				TransferBillNo: batchID,
+				State:          wechatcontracts.DirectMerchantTransferStateSuccess,
+				TransferAmount: amount,
+				TransferRemark: transferRemark,
+				CreateTime:     "2026-03-27T10:00:00+08:00",
+				UpdateTime:     "2026-03-27T10:01:00+08:00",
 			}, nil
 		})
 
 	return mockPaymentClient
 }
 
-func newClaimRecoveryPaymentClient(t *testing.T, store *db.SQLStore, userID, amount int64, description string) *mockwechat.MockPaymentClientInterface {
+func newClaimRecoveryPaymentClient(t *testing.T, store *db.SQLStore, userID, amount int64, description string) *mockwechat.MockDirectPaymentClientInterface {
 	ctrl := gomock.NewController(t)
 	t.Cleanup(ctrl.Finish)
 
 	user, err := store.GetUser(context.Background(), userID)
 	require.NoError(t, err)
 
-	mockPaymentClient := mockwechat.NewMockPaymentClientInterface(ctrl)
+	mockPaymentClient := mockwechat.NewMockDirectPaymentClientInterface(ctrl)
 	mockPaymentClient.EXPECT().
 		CreateJSAPIOrder(gomock.Any(), gomock.Any()).
 		Times(1).
-		DoAndReturn(func(ctx context.Context, req *wechat.JSAPIOrderRequest) (*wechat.JSAPIOrderResponse, *wechat.JSAPIPayParams, error) {
+		DoAndReturn(func(ctx context.Context, req *wechatcontracts.DirectJSAPIOrderRequest) (*wechatcontracts.DirectJSAPIOrderResponse, *wechat.JSAPIPayParams, error) {
 			require.Equal(t, amount, req.TotalAmount)
-			require.Equal(t, user.WechatOpenid, req.OpenID)
+			require.Equal(t, user.WechatOpenid, req.PayerOpenID)
 			require.Equal(t, description, req.Description)
 			require.NotEmpty(t, req.OutTradeNo)
 			require.NotEmpty(t, req.Attach)
-			return &wechat.JSAPIOrderResponse{PrepayID: "prepay_claim_recovery_integration"}, &wechat.JSAPIPayParams{
+			return &wechatcontracts.DirectJSAPIOrderResponse{PrepayID: "prepay_claim_recovery_integration"}, &wechat.JSAPIPayParams{
 				TimeStamp: "1711526400",
 				NonceStr:  "claim_recovery_nonce",
 				Package:   "prepay_id=prepay_claim_recovery_integration",
@@ -343,7 +349,7 @@ func createTakeoutCombinedPaymentFixture(t *testing.T, server *api.Server, store
 		OrderID:      pgtype.Int8{Int64: created.ID, Valid: true},
 		BusinessType: "order",
 	}); err == nil {
-		if existingPayment.Status == "pending" && existingPayment.PaymentType != "profit_sharing" {
+		if existingPayment.Status == "pending" && !db.PaymentOrderUsesEcommerceChannel(existingPayment) {
 			_, err = integrationPool.Exec(ctx, `UPDATE payment_orders SET status = 'closed' WHERE id = $1`, existingPayment.ID)
 			require.NoError(t, err)
 		}
@@ -371,16 +377,15 @@ func createTakeoutCombinedPaymentFixture(t *testing.T, server *api.Server, store
 	}
 }
 
-func newIntegrationCombineQueryResponse(combineOutTradeNo, outTradeNo, tradeState, transactionID string, amount int64) *wechat.CombineQueryResponse {
-	resp := &wechat.CombineQueryResponse{
+func newIntegrationCombineQueryResponse(combineOutTradeNo, outTradeNo, tradeState, transactionID string, amount int64) *wechatcontracts.CombineQueryResponse {
+	resp := &wechatcontracts.CombineQueryResponse{
 		CombineOutTradeNo: combineOutTradeNo,
-		SubOrders: []wechat.CombineSubOrderResult{{
-			OutTradeNo:     outTradeNo,
-			TransactionID:  transactionID,
-			TradeType:      "JSAPI",
-			TradeState:     tradeState,
-			TradeStateDesc: "integration",
-			SuccessTime:    time.Now().UTC().Format(time.RFC3339),
+		SubOrders: []wechatcontracts.CombineSubOrderResult{{
+			OutTradeNo:    outTradeNo,
+			TransactionID: transactionID,
+			TradeType:     "JSAPI",
+			TradeState:    tradeState,
+			SuccessTime:   time.Now().UTC().Format(time.RFC3339),
 		}},
 	}
 	resp.SubOrders[0].Amount = struct {
@@ -398,16 +403,20 @@ func newIntegrationCombineQueryResponse(combineOutTradeNo, outTradeNo, tradeStat
 	return resp
 }
 
-func newIntegrationCombinePaymentNotification(combineOutTradeNo, outTradeNo, transactionID string, amount int64) *wechat.CombinePaymentNotification {
-	resp := &wechat.CombinePaymentNotification{
+func newIntegrationCombinePaymentNotification(combineOutTradeNo, outTradeNo, transactionID string, amount int64) *wechatcontracts.CombinePaymentNotification {
+	resp := &wechatcontracts.CombinePaymentNotification{
+		CombineAppID:      "wx-integration-app",
+		CombineMchID:      "combine-mch-integration",
 		CombineOutTradeNo: combineOutTradeNo,
-		SubOrders: []wechat.CombineSubOrderResult{{
-			OutTradeNo:     outTradeNo,
-			TransactionID:  transactionID,
-			TradeState:     "SUCCESS",
-			TradeStateDesc: "integration",
-			TradeType:      "JSAPI",
-			SuccessTime:    time.Now().UTC().Format(time.RFC3339),
+		CombinePayerInfo:  &wechatcontracts.CombinePaymentNotificationPayerInfo{OpenID: "integration-openid"},
+		SubOrders: []wechatcontracts.CombinePaymentNotificationSubOrder{{
+			MchID:         "sub-mch-integration",
+			OutTradeNo:    outTradeNo,
+			TransactionID: transactionID,
+			TradeState:    "SUCCESS",
+			TradeType:     "JSAPI",
+			BankType:      "CMC",
+			SuccessTime:   time.Now().UTC().Format(time.RFC3339),
 		}},
 	}
 	resp.SubOrders[0].Amount = struct {
@@ -641,7 +650,7 @@ func TestTakeoutJourneyB1Integration(t *testing.T) {
 	mockEcommerceClient.EXPECT().
 		CreatePartnerJSAPIOrder(gomock.Any(), gomock.Any()).
 		Times(1).
-		Return(&wechat.PartnerJSAPIOrderResponse{PrepayID: "prepay_b1_integration_001"}, &wechat.JSAPIPayParams{
+		Return(&wechatcontracts.PartnerJSAPIOrderResponse{PrepayID: "prepay_b1_integration_001"}, &wechat.JSAPIPayParams{
 			TimeStamp: "1",
 			NonceStr:  "nonce",
 			Package:   "prepay_id=prepay_b1_integration_001",
@@ -661,7 +670,6 @@ func TestTakeoutJourneyB1Integration(t *testing.T) {
 		ContactName:       "contact_" + util.RandomString(6),
 		ContactPhone:      "138" + util.RandomString(8),
 		WechatMchID:       pgtype.Text{Valid: false},
-		CommissionRate:    commissionRate,
 		Status:            "active",
 		ContractStartDate: pgtype.Date{Valid: false},
 		ContractEndDate:   pgtype.Date{Valid: false},
@@ -709,12 +717,12 @@ func TestTakeoutJourneyB1Integration(t *testing.T) {
 	}
 	orderID := created.ID
 
-	// 2) 创建支付单：/v1/payments（native 不依赖外部微信客户端）
+	// 2) 创建支付单：/v1/payments
 	var payment takeoutPaymentOrderResponse
 	{
 		payBody := map[string]any{
 			"order_id":      orderID,
-			"payment_type":  "native",
+			"payment_type":  "miniprogram",
 			"business_type": "order",
 		}
 		rec := doJSON(t, server, http.MethodPost, "/v1/payments", payBody, customer.ID)
@@ -928,7 +936,7 @@ func TestTakeoutJourneyB1WebhookIntegration(t *testing.T) {
 	mockEcommerceClient.EXPECT().
 		CreatePartnerJSAPIOrder(gomock.Any(), gomock.Any()).
 		Times(1).
-		Return(&wechat.PartnerJSAPIOrderResponse{PrepayID: "prepay_b1_webhook_001"}, &wechat.JSAPIPayParams{
+		Return(&wechatcontracts.PartnerJSAPIOrderResponse{PrepayID: "prepay_b1_webhook_001"}, &wechat.JSAPIPayParams{
 			TimeStamp: "1",
 			NonceStr:  "nonce",
 			Package:   "prepay_id=prepay_b1_webhook_001",
@@ -964,7 +972,7 @@ func TestTakeoutJourneyB1WebhookIntegration(t *testing.T) {
 	{
 		payBody := map[string]any{
 			"order_id":      orderID,
-			"payment_type":  "native",
+			"payment_type":  "miniprogram",
 			"business_type": "order",
 		}
 		rec := doJSON(t, server, http.MethodPost, "/v1/payments", payBody, customer.ID)
@@ -977,25 +985,20 @@ func TestTakeoutJourneyB1WebhookIntegration(t *testing.T) {
 	require.NoError(t, err)
 
 	// 3) 注入 mock payment client 与任务分发器
-	mockPaymentClient := mockwechat.NewMockPaymentClientInterface(ctrl)
+	mockPaymentClient := mockwechat.NewMockDirectPaymentClientInterface(ctrl)
 	mockPaymentClient.EXPECT().
-		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Times(1).
 		Return(nil)
 
 	mockPaymentClient.EXPECT().
 		DecryptPaymentNotification(gomock.Any()).
 		Times(1).
-		Return(&wechat.PaymentNotificationResource{
+		Return(&wechatcontracts.DirectPaymentNotificationResource{
 			TransactionID: "integration_tx_webhook_001",
 			OutTradeNo:    paymentOrder.OutTradeNo,
 			TradeState:    "SUCCESS",
-			Amount: struct {
-				Total         int64  `json:"total"`
-				PayerTotal    int64  `json:"payer_total"`
-				Currency      string `json:"currency"`
-				PayerCurrency string `json:"payer_currency"`
-			}{
+			Amount: wechatcontracts.DirectOrderQueryAmount{
 				Total:         paymentOrder.Amount,
 				PayerTotal:    paymentOrder.Amount,
 				Currency:      "CNY",
@@ -1004,9 +1007,9 @@ func TestTakeoutJourneyB1WebhookIntegration(t *testing.T) {
 		}, nil)
 
 	distributor := &capturePaymentSuccessDistributor{}
-	server.SetPaymentClientForTest(mockPaymentClient)
+	server.SetDirectPaymentClientForTest(mockPaymentClient)
 	server.SetTaskDistributorForTest(distributor)
-	defer server.SetPaymentClientForTest(nil)
+	defer server.SetDirectPaymentClientForTest(nil)
 	defer server.SetTaskDistributorForTest(nil)
 
 	// 4) 触发支付回调
@@ -1129,7 +1132,7 @@ func TestTakeoutJourneyB0CombinedPaymentIntegration(t *testing.T) {
 		OrderID:      pgtype.Int8{Int64: orderID, Valid: true},
 		BusinessType: "order",
 	}); err == nil {
-		if existingPayment.Status == "pending" && existingPayment.PaymentType != "profit_sharing" {
+		if existingPayment.Status == "pending" && !db.PaymentOrderUsesEcommerceChannel(existingPayment) {
 			_, err = integrationPool.Exec(ctx, `UPDATE payment_orders SET status = 'closed' WHERE id = $1`, existingPayment.ID)
 			require.NoError(t, err)
 		}
@@ -1142,7 +1145,7 @@ func TestTakeoutJourneyB0CombinedPaymentIntegration(t *testing.T) {
 	mockEcommerceClient.EXPECT().
 		CreateCombineOrder(gomock.Any(), gomock.Any()).
 		Times(1).
-		Return(&wechat.CombineOrderResponse{PrepayID: "prepay_combined_001"}, &wechat.JSAPIPayParams{
+		Return(&wechatcontracts.CombineOrderResponse{PrepayID: "prepay_combined_001"}, &wechat.JSAPIPayParams{
 			TimeStamp: "1",
 			NonceStr:  "nonce",
 			Package:   "prepay_id=prepay_combined_001",
@@ -1211,7 +1214,7 @@ func TestTakeoutJourneyB0CombinedPaymentQueryRecoveryBeforeCallbackIntegration(t
 	mockEcommerceClient.EXPECT().
 		CreateCombineOrder(gomock.Any(), gomock.Any()).
 		Times(1).
-		Return(&wechat.CombineOrderResponse{PrepayID: "prepay_combined_recovery_001"}, &wechat.JSAPIPayParams{
+		Return(&wechatcontracts.CombineOrderResponse{PrepayID: "prepay_combined_recovery_001"}, &wechat.JSAPIPayParams{
 			TimeStamp: "1",
 			NonceStr:  "nonce",
 			Package:   "prepay_id=prepay_combined_recovery_001",
@@ -1280,7 +1283,7 @@ func TestTakeoutJourneyB0CombinedPaymentDelayedCallbackRecoveryIntegration(t *te
 	mockEcommerceClient.EXPECT().
 		CreateCombineOrder(gomock.Any(), gomock.Any()).
 		Times(1).
-		Return(&wechat.CombineOrderResponse{PrepayID: "prepay_combined_delayed_001"}, &wechat.JSAPIPayParams{
+		Return(&wechatcontracts.CombineOrderResponse{PrepayID: "prepay_combined_delayed_001"}, &wechat.JSAPIPayParams{
 			TimeStamp: "1",
 			NonceStr:  "nonce",
 			Package:   "prepay_id=prepay_combined_delayed_001",
@@ -1330,9 +1333,17 @@ func TestTakeoutJourneyB0CombinedPaymentDelayedCallbackRecoveryIntegration(t *te
 	require.Equal(t, "pending", paymentOrder.Status)
 
 	mockEcommerceClient.EXPECT().
-		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Times(1).
 		Return(nil)
+	mockEcommerceClient.EXPECT().
+		GetSpMchID().
+		Times(1).
+		Return("combine-mch-integration")
+	mockEcommerceClient.EXPECT().
+		GetSpAppID().
+		Times(1).
+		Return("wx-integration-app")
 	mockEcommerceClient.EXPECT().
 		DecryptCombinePaymentNotification(gomock.Any()).
 		Times(1).
@@ -1442,13 +1453,14 @@ func TestTakeoutJourneyB0DeliveryRecommendIntegration(t *testing.T) {
 	require.NoError(t, err)
 
 	payment, err := store.CreatePaymentOrder(ctx, db.CreatePaymentOrderParams{
-		OrderID:      pgtype.Int8{Int64: orderID, Valid: true},
-		UserID:       customer.ID,
-		PaymentType:  "miniprogram",
-		BusinessType: "order",
-		Amount:       orderForPayment.TotalAmount,
-		OutTradeNo:   fmt.Sprintf("b0_recommend_%d_%d", orderID, util.RandomInt(1000, 9999)),
-		ExpiresAt:    pgtype.Timestamptz{Time: time.Now().Add(30 * time.Minute), Valid: true},
+		OrderID:        pgtype.Int8{Int64: orderID, Valid: true},
+		UserID:         customer.ID,
+		PaymentType:    "miniprogram",
+		PaymentChannel: db.PaymentChannelDirect,
+		BusinessType:   "order",
+		Amount:         orderForPayment.TotalAmount,
+		OutTradeNo:     fmt.Sprintf("b0_recommend_%d_%d", orderID, util.RandomInt(1000, 9999)),
+		ExpiresAt:      pgtype.Timestamptz{Time: time.Now().Add(30 * time.Minute), Valid: true},
 	})
 	require.NoError(t, err)
 
@@ -1621,13 +1633,14 @@ func TestTakeoutJourneyB4PaymentOrderTimeoutIntegration(t *testing.T) {
 	require.NoError(t, err)
 
 	po, err := store.CreatePaymentOrder(ctx, db.CreatePaymentOrderParams{
-		OrderID:      pgtype.Int8{Int64: created.ID, Valid: true},
-		UserID:       customer.ID,
-		PaymentType:  "miniprogram",
-		BusinessType: "order",
-		Amount:       orderForPayment.TotalAmount,
-		OutTradeNo:   fmt.Sprintf("b4_order_%d_%d", created.ID, util.RandomInt(1000, 9999)),
-		ExpiresAt:    pgtype.Timestamptz{Time: time.Now().Add(30 * time.Minute), Valid: true},
+		OrderID:        pgtype.Int8{Int64: created.ID, Valid: true},
+		UserID:         customer.ID,
+		PaymentType:    "miniprogram",
+		PaymentChannel: db.PaymentChannelDirect,
+		BusinessType:   "order",
+		Amount:         orderForPayment.TotalAmount,
+		OutTradeNo:     fmt.Sprintf("b4_order_%d_%d", created.ID, util.RandomInt(1000, 9999)),
+		ExpiresAt:      pgtype.Timestamptz{Time: time.Now().Add(30 * time.Minute), Valid: true},
 	})
 	require.NoError(t, err)
 
@@ -1692,7 +1705,7 @@ func TestTakeoutJourneyB7MerchantRejectRefundIntegration(t *testing.T) {
 	mockEcommerceClient.EXPECT().
 		CreatePartnerJSAPIOrder(gomock.Any(), gomock.Any()).
 		Times(1).
-		Return(&wechat.PartnerJSAPIOrderResponse{PrepayID: "prepay_b7_integration_001"}, &wechat.JSAPIPayParams{
+		Return(&wechatcontracts.PartnerJSAPIOrderResponse{PrepayID: "prepay_b7_integration_001"}, &wechat.JSAPIPayParams{
 			TimeStamp: "1",
 			NonceStr:  "nonce",
 			Package:   "prepay_id=prepay_b7_integration_001",
@@ -1728,7 +1741,7 @@ func TestTakeoutJourneyB7MerchantRejectRefundIntegration(t *testing.T) {
 	{
 		payBody := map[string]any{
 			"order_id":      orderID,
-			"payment_type":  "native",
+			"payment_type":  "miniprogram",
 			"business_type": "order",
 		}
 		rec := doJSON(t, server, http.MethodPost, "/v1/payments", payBody, customer.ID)
@@ -1842,13 +1855,14 @@ func TestTakeoutJourneyB5PaymentRecoveryIntegration(t *testing.T) {
 	require.NoError(t, err)
 
 	payment, err := store.CreatePaymentOrder(ctx, db.CreatePaymentOrderParams{
-		OrderID:      pgtype.Int8{Int64: created.ID, Valid: true},
-		UserID:       customer.ID,
-		PaymentType:  "miniprogram",
-		BusinessType: "order",
-		Amount:       orderForPayment.TotalAmount,
-		OutTradeNo:   fmt.Sprintf("b5_order_%d_%d", created.ID, util.RandomInt(1000, 9999)),
-		ExpiresAt:    pgtype.Timestamptz{Time: time.Now().Add(30 * time.Minute), Valid: true},
+		OrderID:        pgtype.Int8{Int64: created.ID, Valid: true},
+		UserID:         customer.ID,
+		PaymentType:    "miniprogram",
+		PaymentChannel: db.PaymentChannelDirect,
+		BusinessType:   "order",
+		Amount:         orderForPayment.TotalAmount,
+		OutTradeNo:     fmt.Sprintf("b5_order_%d_%d", created.ID, util.RandomInt(1000, 9999)),
+		ExpiresAt:      pgtype.Timestamptz{Time: time.Now().Add(30 * time.Minute), Valid: true},
 	})
 	require.NoError(t, err)
 
@@ -2025,13 +2039,14 @@ func TestDineInJourneyA1Integration(t *testing.T) {
 	require.NoError(t, err)
 
 	po, err := store.CreatePaymentOrder(ctx, db.CreatePaymentOrderParams{
-		OrderID:      pgtype.Int8{Int64: orderID, Valid: true},
-		UserID:       customer.ID,
-		PaymentType:  "miniprogram",
-		BusinessType: "order",
-		Amount:       orderForPayment.TotalAmount,
-		OutTradeNo:   fmt.Sprintf("a1_order_%d_%d", orderID, util.RandomInt(1000, 9999)),
-		ExpiresAt:    pgtype.Timestamptz{Time: time.Now().Add(30 * time.Minute), Valid: true},
+		OrderID:        pgtype.Int8{Int64: orderID, Valid: true},
+		UserID:         customer.ID,
+		PaymentType:    "miniprogram",
+		PaymentChannel: db.PaymentChannelDirect,
+		BusinessType:   "order",
+		Amount:         orderForPayment.TotalAmount,
+		OutTradeNo:     fmt.Sprintf("a1_order_%d_%d", orderID, util.RandomInt(1000, 9999)),
+		ExpiresAt:      pgtype.Timestamptz{Time: time.Now().Add(30 * time.Minute), Valid: true},
 	})
 	require.NoError(t, err)
 
@@ -2039,25 +2054,20 @@ func TestDineInJourneyA1Integration(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockPaymentClient := mockwechat.NewMockPaymentClientInterface(ctrl)
+	mockPaymentClient := mockwechat.NewMockDirectPaymentClientInterface(ctrl)
 	mockPaymentClient.EXPECT().
-		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Times(1).
 		Return(nil)
 
 	mockPaymentClient.EXPECT().
 		DecryptPaymentNotification(gomock.Any()).
 		Times(1).
-		Return(&wechat.PaymentNotificationResource{
+		Return(&wechatcontracts.DirectPaymentNotificationResource{
 			TransactionID: "integration_tx_dinein_001",
 			OutTradeNo:    po.OutTradeNo,
 			TradeState:    "SUCCESS",
-			Amount: struct {
-				Total         int64  `json:"total"`
-				PayerTotal    int64  `json:"payer_total"`
-				Currency      string `json:"currency"`
-				PayerCurrency string `json:"payer_currency"`
-			}{
+			Amount: wechatcontracts.DirectOrderQueryAmount{
 				Total:         po.Amount,
 				PayerTotal:    po.Amount,
 				Currency:      "CNY",
@@ -2066,9 +2076,9 @@ func TestDineInJourneyA1Integration(t *testing.T) {
 		}, nil)
 
 	distributor := &capturePaymentSuccessDistributor{}
-	server.SetPaymentClientForTest(mockPaymentClient)
+	server.SetDirectPaymentClientForTest(mockPaymentClient)
 	server.SetTaskDistributorForTest(distributor)
-	defer server.SetPaymentClientForTest(nil)
+	defer server.SetDirectPaymentClientForTest(nil)
 	defer server.SetTaskDistributorForTest(nil)
 
 	notificationID := "notify_dinein_" + util.RandomString(8)
@@ -2509,7 +2519,7 @@ func TestReservationJourneyC1Integration(t *testing.T) {
 	mockEcommerceClient.EXPECT().
 		CreatePartnerJSAPIOrder(gomock.Any(), gomock.Any()).
 		Times(1).
-		Return(&wechat.PartnerJSAPIOrderResponse{PrepayID: "prepay_reservation_c1_001"}, &wechat.JSAPIPayParams{
+		Return(&wechatcontracts.PartnerJSAPIOrderResponse{PrepayID: "prepay_reservation_c1_001"}, &wechat.JSAPIPayParams{
 			TimeStamp: "1",
 			NonceStr:  "nonce",
 			Package:   "prepay_id=prepay_reservation_c1_001",
@@ -2542,7 +2552,7 @@ func TestReservationJourneyC1Integration(t *testing.T) {
 	{
 		payBody := map[string]any{
 			"order_id":      created.ID,
-			"payment_type":  "native",
+			"payment_type":  "miniprogram",
 			"business_type": "reservation",
 		}
 		rec := doJSON(t, server, http.MethodPost, "/v1/payments", payBody, customer.ID)
@@ -2556,24 +2566,33 @@ func TestReservationJourneyC1Integration(t *testing.T) {
 
 	// 3) 走平台收付通普通支付回调 + 任务入队
 	mockEcommerceClient.EXPECT().
-		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Times(1).
 		Return(nil)
+	mockEcommerceClient.EXPECT().
+		GetSpMchID().
+		Times(1).
+		Return("sp_mch_reservation_c1")
+	mockEcommerceClient.EXPECT().
+		GetSpAppID().
+		Times(1).
+		Return("wx-integration-app")
 
 	mockEcommerceClient.EXPECT().
 		DecryptPartnerPaymentNotification(gomock.Any()).
 		Times(1).
-		Return(&wechat.PartnerPaymentNotificationResource{
-			SubMchID:      "sub_mch_reservation_c1",
-			OutTradeNo:    po.OutTradeNo,
-			TransactionID: "integration_tx_reservation_001",
-			TradeState:    "SUCCESS",
-			Amount: struct {
-				Total         int64  `json:"total"`
-				PayerTotal    int64  `json:"payer_total"`
-				Currency      string `json:"currency"`
-				PayerCurrency string `json:"payer_currency"`
-			}{
+		Return(&wechatcontracts.PartnerPaymentNotificationResource{
+			SpAppID:        "wx-integration-app",
+			SpMchID:        "sp_mch_reservation_c1",
+			SubMchID:       "sub_mch_reservation_c1",
+			OutTradeNo:     po.OutTradeNo,
+			TransactionID:  "integration_tx_reservation_001",
+			TradeType:      "JSAPI",
+			TradeState:     "SUCCESS",
+			TradeStateDesc: "支付成功",
+			BankType:       "CMC",
+			SuccessTime:    time.Now().UTC().Format(time.RFC3339),
+			Amount: wechatcontracts.PartnerOrderQueryAmount{
 				Total:         po.Amount,
 				PayerTotal:    po.Amount,
 				Currency:      "CNY",
@@ -2871,7 +2890,7 @@ func TestReservationJourneyCNoShowIntegration(t *testing.T) {
 	mockEcommerceClient.EXPECT().
 		CreatePartnerJSAPIOrder(gomock.Any(), gomock.Any()).
 		Times(1).
-		Return(&wechat.PartnerJSAPIOrderResponse{PrepayID: "prepay_reservation_noshow_001"}, &wechat.JSAPIPayParams{
+		Return(&wechatcontracts.PartnerJSAPIOrderResponse{PrepayID: "prepay_reservation_noshow_001"}, &wechat.JSAPIPayParams{
 			TimeStamp: "1",
 			NonceStr:  "nonce",
 			Package:   "prepay_id=prepay_reservation_noshow_001",
@@ -2904,7 +2923,7 @@ func TestReservationJourneyCNoShowIntegration(t *testing.T) {
 	{
 		payBody := map[string]any{
 			"order_id":      created.ID,
-			"payment_type":  "native",
+			"payment_type":  "miniprogram",
 			"business_type": "reservation",
 		}
 		rec := doJSON(t, server, http.MethodPost, "/v1/payments", payBody, customer.ID)
@@ -2918,24 +2937,33 @@ func TestReservationJourneyCNoShowIntegration(t *testing.T) {
 
 	// 3) 走平台收付通普通支付回调 + 任务入队
 	mockEcommerceClient.EXPECT().
-		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Times(1).
 		Return(nil)
+	mockEcommerceClient.EXPECT().
+		GetSpMchID().
+		Times(1).
+		Return("sp_mch_reservation_noshow")
+	mockEcommerceClient.EXPECT().
+		GetSpAppID().
+		Times(1).
+		Return("wx-integration-app")
 
 	mockEcommerceClient.EXPECT().
 		DecryptPartnerPaymentNotification(gomock.Any()).
 		Times(1).
-		Return(&wechat.PartnerPaymentNotificationResource{
-			SubMchID:      "sub_mch_reservation_noshow",
-			OutTradeNo:    po.OutTradeNo,
-			TransactionID: "integration_tx_reservation_noshow_001",
-			TradeState:    "SUCCESS",
-			Amount: struct {
-				Total         int64  `json:"total"`
-				PayerTotal    int64  `json:"payer_total"`
-				Currency      string `json:"currency"`
-				PayerCurrency string `json:"payer_currency"`
-			}{
+		Return(&wechatcontracts.PartnerPaymentNotificationResource{
+			SpAppID:        "wx-integration-app",
+			SpMchID:        "sp_mch_reservation_noshow",
+			SubMchID:       "sub_mch_reservation_noshow",
+			OutTradeNo:     po.OutTradeNo,
+			TransactionID:  "integration_tx_reservation_noshow_001",
+			TradeType:      "JSAPI",
+			TradeState:     "SUCCESS",
+			TradeStateDesc: "支付成功",
+			BankType:       "CMC",
+			SuccessTime:    time.Now().UTC().Format(time.RFC3339),
+			Amount: wechatcontracts.PartnerOrderQueryAmount{
 				Total:         po.Amount,
 				PayerTotal:    po.Amount,
 				Currency:      "CNY",
@@ -3020,7 +3048,7 @@ func TestReservationJourneyCCancelRefundIntegration(t *testing.T) {
 	mockEcommerceClient.EXPECT().
 		CreatePartnerJSAPIOrder(gomock.Any(), gomock.Any()).
 		Times(1).
-		Return(&wechat.PartnerJSAPIOrderResponse{PrepayID: "prepay_reservation_cancel_001"}, &wechat.JSAPIPayParams{
+		Return(&wechatcontracts.PartnerJSAPIOrderResponse{PrepayID: "prepay_reservation_cancel_001"}, &wechat.JSAPIPayParams{
 			TimeStamp: "1",
 			NonceStr:  "nonce",
 			Package:   "prepay_id=prepay_reservation_cancel_001",
@@ -3053,7 +3081,7 @@ func TestReservationJourneyCCancelRefundIntegration(t *testing.T) {
 	{
 		payBody := map[string]any{
 			"order_id":      created.ID,
-			"payment_type":  "native",
+			"payment_type":  "miniprogram",
 			"business_type": "reservation",
 		}
 		rec := doJSON(t, server, http.MethodPost, "/v1/payments", payBody, customer.ID)
@@ -3087,7 +3115,7 @@ func TestReservationJourneyCCancelRefundIntegration(t *testing.T) {
 	require.Equal(t, "paid", currentPayment.Status)
 	require.Greater(t, currentPayment.Amount, int64(0))
 
-	// 退款走收付通路径（payment_type = "profit_sharing"）
+	// 退款走收付通路径（payment_channel = "ecommerce"）
 	mockEcommerceClient.EXPECT().
 		CreateEcommerceRefund(gomock.Any(), gomock.Any()).
 		Times(1).
@@ -3108,11 +3136,12 @@ func TestReservationJourneyCCancelRefundIntegration(t *testing.T) {
 
 	updatedPayment, err := store.GetPaymentOrder(ctx, payment.ID)
 	require.NoError(t, err)
-	require.Equal(t, "refunded", updatedPayment.Status)
+	require.Equal(t, "paid", updatedPayment.Status)
 
 	refunds, err := store.ListRefundOrdersByPaymentOrder(ctx, payment.ID)
 	require.NoError(t, err)
 	require.NotEmpty(t, refunds)
+	require.Equal(t, "processing", refunds[0].Status)
 }
 
 // TestReservationJourneyCCancelAfterDeadlineIntegration
@@ -3151,7 +3180,7 @@ func TestReservationJourneyCCancelAfterDeadlineIntegration(t *testing.T) {
 	mockEcommerceClient.EXPECT().
 		CreatePartnerJSAPIOrder(gomock.Any(), gomock.Any()).
 		Times(1).
-		Return(&wechat.PartnerJSAPIOrderResponse{PrepayID: "prepay_reservation_cancel_deadline_001"}, &wechat.JSAPIPayParams{
+		Return(&wechatcontracts.PartnerJSAPIOrderResponse{PrepayID: "prepay_reservation_cancel_deadline_001"}, &wechat.JSAPIPayParams{
 			TimeStamp: "1",
 			NonceStr:  "nonce",
 			Package:   "prepay_id=prepay_reservation_cancel_deadline_001",
@@ -3184,7 +3213,7 @@ func TestReservationJourneyCCancelAfterDeadlineIntegration(t *testing.T) {
 	{
 		payBody := map[string]any{
 			"order_id":      created.ID,
-			"payment_type":  "native",
+			"payment_type":  "miniprogram",
 			"business_type": "reservation",
 		}
 		rec := doJSON(t, server, http.MethodPost, "/v1/payments", payBody, customer.ID)
@@ -3265,7 +3294,7 @@ func TestReservationJourneyCRefundNotifyIntegration(t *testing.T) {
 	mockEcommerceClient.EXPECT().
 		CreatePartnerJSAPIOrder(gomock.Any(), gomock.Any()).
 		Times(1).
-		Return(&wechat.PartnerJSAPIOrderResponse{PrepayID: "prepay_reservation_refund_notify_001"}, &wechat.JSAPIPayParams{
+		Return(&wechatcontracts.PartnerJSAPIOrderResponse{PrepayID: "prepay_reservation_refund_notify_001"}, &wechat.JSAPIPayParams{
 			TimeStamp: "1",
 			NonceStr:  "nonce",
 			Package:   "prepay_id=prepay_reservation_refund_notify_001",
@@ -3298,7 +3327,7 @@ func TestReservationJourneyCRefundNotifyIntegration(t *testing.T) {
 	{
 		payBody := map[string]any{
 			"order_id":      created.ID,
-			"payment_type":  "native",
+			"payment_type":  "miniprogram",
 			"business_type": "reservation",
 		}
 		rec := doJSON(t, server, http.MethodPost, "/v1/payments", payBody, customer.ID)
@@ -3334,7 +3363,7 @@ func TestReservationJourneyCRefundNotifyIntegration(t *testing.T) {
 
 	// 3) 退款回调通知（收付通渠道）
 	mockEcommerceClient.EXPECT().
-		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Times(1).
 		Return(nil)
 
@@ -3410,12 +3439,13 @@ func TestRiderDepositRefundCallbackAccountingIntegration(t *testing.T) {
 	require.NoError(t, err)
 
 	paymentOrder, err := store.CreatePaymentOrder(ctx, db.CreatePaymentOrderParams{
-		UserID:       rider.UserID,
-		PaymentType:  "miniprogram",
-		BusinessType: "rider_deposit",
-		Amount:       30000,
-		OutTradeNo:   "rd_refund_notify_" + util.RandomString(10),
-		ExpiresAt:    pgtype.Timestamptz{Time: time.Now().Add(15 * time.Minute), Valid: true},
+		UserID:         rider.UserID,
+		PaymentType:    "miniprogram",
+		PaymentChannel: db.PaymentChannelDirect,
+		BusinessType:   "rider_deposit",
+		Amount:         30000,
+		OutTradeNo:     "rd_refund_notify_" + util.RandomString(10),
+		ExpiresAt:      pgtype.Timestamptz{Time: time.Now().Add(15 * time.Minute), Valid: true},
 	})
 	require.NoError(t, err)
 
@@ -3569,7 +3599,7 @@ func TestClaimJourneyD1Integration(t *testing.T) {
 
 	mockPaymentClient := newFinishedClaimPayoutPaymentClient(t, store, customer.ID, order.TotalAmount, "platform payout", "claim payout")
 	processor := worker.NewTestTaskProcessor(store, worker.NewNoopTaskDistributor(), nil, nil)
-	processor.SetPaymentClient(mockPaymentClient)
+	processor.SetTransferClient(mockPaymentClient)
 	payloadBytes, err := json.Marshal(worker.ClaimPayoutPayload{ActionID: payoutAction.ID})
 	require.NoError(t, err)
 	require.NoError(t, processor.ProcessTaskClaimPayout(ctx, asynq.NewTask(worker.TaskClaimPayout, payloadBytes)))
@@ -3580,9 +3610,9 @@ func TestClaimJourneyD1Integration(t *testing.T) {
 
 	payoutAction, payoutDetail = findPayoutActionForClaimOrAppeal(t, store, orderID, claim.ID, 0)
 	require.Equal(t, "success", payoutAction.Status)
-	require.Equal(t, "FINISHED", payoutDetail.BatchStatus)
-	require.NotEmpty(t, payoutDetail.OutBatchNo)
-	require.Equal(t, "batch-integration", payoutDetail.BatchID)
+	require.Equal(t, wechatcontracts.DirectMerchantTransferStateSuccess, payoutDetail.TransferState)
+	require.NotEmpty(t, payoutDetail.OutBillNo)
+	require.Equal(t, "batch-integration", payoutDetail.TransferBillNo)
 	require.False(t, payoutDetail.TerminalFailure)
 	require.Empty(t, payoutDetail.LastError)
 
@@ -3751,13 +3781,14 @@ func TestClaimJourneyD3RiderAppealIntegration(t *testing.T) {
 
 	// 2) 直接落库支付单并模拟支付成功，避免 legacy native payment API 漂移影响 rider appeal 旅程
 	payment, err := store.CreatePaymentOrder(ctx, db.CreatePaymentOrderParams{
-		OrderID:      pgtype.Int8{Int64: orderID, Valid: true},
-		UserID:       customer.ID,
-		PaymentType:  "miniprogram",
-		BusinessType: "order",
-		Amount:       orderForPayment.TotalAmount,
-		OutTradeNo:   fmt.Sprintf("d3_order_%d_%d", orderID, util.RandomInt(1000, 9999)),
-		ExpiresAt:    pgtype.Timestamptz{Time: time.Now().Add(30 * time.Minute), Valid: true},
+		OrderID:        pgtype.Int8{Int64: orderID, Valid: true},
+		UserID:         customer.ID,
+		PaymentType:    "miniprogram",
+		PaymentChannel: db.PaymentChannelDirect,
+		BusinessType:   "order",
+		Amount:         orderForPayment.TotalAmount,
+		OutTradeNo:     fmt.Sprintf("d3_order_%d_%d", orderID, util.RandomInt(1000, 9999)),
+		ExpiresAt:      pgtype.Timestamptz{Time: time.Now().Add(30 * time.Minute), Valid: true},
 	})
 	require.NoError(t, err)
 
@@ -3881,7 +3912,6 @@ func TestClaimJourneyD4OperatorReviewIntegration(t *testing.T) {
 		ContactName:       "contact_" + util.RandomString(6),
 		ContactPhone:      "138" + util.RandomString(8),
 		WechatMchID:       pgtype.Text{Valid: false},
-		CommissionRate:    commissionRate,
 		Status:            "active",
 		ContractStartDate: pgtype.Date{Valid: false},
 		ContractEndDate:   pgtype.Date{Valid: false},
@@ -4022,7 +4052,6 @@ func TestClaimJourneyD5AppealReviewNotificationsIntegration(t *testing.T) {
 		ContactName:       "contact_" + util.RandomString(6),
 		ContactPhone:      "138" + util.RandomString(8),
 		WechatMchID:       pgtype.Text{Valid: false},
-		CommissionRate:    commissionRate,
 		Status:            "active",
 		ContractStartDate: pgtype.Date{Valid: false},
 		ContractEndDate:   pgtype.Date{Valid: false},
@@ -4106,9 +4135,9 @@ func TestClaimJourneyD5AppealReviewNotificationsIntegration(t *testing.T) {
 	}
 
 	server.SetTaskDistributorForTest(nil)
-	server.SetPaymentClientForTest(newFinishedClaimPayoutPaymentClient(t, store, merchantOwner.ID, 500, "appeal compensation", "appeal compensation"))
+	server.SetTransferClientForTest(newFinishedClaimPayoutPaymentClient(t, store, merchantOwner.ID, 500, "appeal compensation", "appeal compensation"))
 	defer server.SetTaskDistributorForTest(worker.NewNoopTaskDistributor())
-	defer server.SetPaymentClientForTest(nil)
+	defer server.SetTransferClientForTest(nil)
 
 	// 5) 运营商审核申诉
 	{
@@ -4130,9 +4159,9 @@ func TestClaimJourneyD5AppealReviewNotificationsIntegration(t *testing.T) {
 	require.Equal(t, "success", compensationAction.Status)
 	require.Equal(t, merchantOwner.ID, compensationDetail.UserID)
 	require.Equal(t, int64(500), compensationDetail.Amount)
-	require.Equal(t, "FINISHED", compensationDetail.BatchStatus)
-	require.NotEmpty(t, compensationDetail.OutBatchNo)
-	require.Equal(t, "batch-integration", compensationDetail.BatchID)
+	require.Equal(t, wechatcontracts.DirectMerchantTransferStateSuccess, compensationDetail.TransferState)
+	require.NotEmpty(t, compensationDetail.OutBillNo)
+	require.Equal(t, "batch-integration", compensationDetail.TransferBillNo)
 	require.False(t, compensationDetail.TerminalFailure)
 
 	recovery, err := store.GetClaimRecoveryByClaimID(ctx, claimResp.ClaimID)
@@ -4188,7 +4217,6 @@ func TestClaimJourneyD6AppealRejectRecoveryResumeIntegration(t *testing.T) {
 		ContactName:       "contact_" + util.RandomString(6),
 		ContactPhone:      "138" + util.RandomString(8),
 		WechatMchID:       pgtype.Text{Valid: false},
-		CommissionRate:    commissionRate,
 		Status:            "active",
 		ContractStartDate: pgtype.Date{Valid: false},
 		ContractEndDate:   pgtype.Date{Valid: false},
@@ -4338,7 +4366,6 @@ func TestClaimJourneyD7AppealReviewEnqueueIntegration(t *testing.T) {
 		ContactName:       "contact_" + util.RandomString(6),
 		ContactPhone:      "138" + util.RandomString(8),
 		WechatMchID:       pgtype.Text{Valid: false},
-		CommissionRate:    commissionRate,
 		Status:            "active",
 		ContractStartDate: pgtype.Date{Valid: false},
 		ContractEndDate:   pgtype.Date{Valid: false},
@@ -4486,7 +4513,6 @@ func TestClaimJourneyD8AppealResultWorkerIntegration(t *testing.T) {
 		ContactName:       "contact_" + util.RandomString(6),
 		ContactPhone:      "138" + util.RandomString(8),
 		WechatMchID:       pgtype.Text{Valid: false},
-		CommissionRate:    commissionRate,
 		Status:            "active",
 		ContractStartDate: pgtype.Date{Valid: false},
 		ContractEndDate:   pgtype.Date{Valid: false},
@@ -4594,7 +4620,7 @@ func TestClaimJourneyD8AppealResultWorkerIntegration(t *testing.T) {
 
 	distributor := &captureSendNotificationDistributor{}
 	processor := worker.NewTestTaskProcessor(store, distributor, nil, nil)
-	processor.SetPaymentClient(newFinishedClaimPayoutPaymentClient(t, store, merchantOwner.ID, 500, "appeal compensation", "appeal compensation"))
+	processor.SetTransferClient(newFinishedClaimPayoutPaymentClient(t, store, merchantOwner.ID, 500, "appeal compensation", "appeal compensation"))
 
 	payloadBytes, err := json.Marshal(payloads[0])
 	require.NoError(t, err)
@@ -4610,9 +4636,9 @@ func TestClaimJourneyD8AppealResultWorkerIntegration(t *testing.T) {
 	require.Equal(t, "success", compensationAction.Status)
 	require.Equal(t, merchantOwner.ID, compensationDetail.UserID)
 	require.Equal(t, int64(500), compensationDetail.Amount)
-	require.Equal(t, "FINISHED", compensationDetail.BatchStatus)
-	require.NotEmpty(t, compensationDetail.OutBatchNo)
-	require.Equal(t, "batch-integration", compensationDetail.BatchID)
+	require.Equal(t, wechatcontracts.DirectMerchantTransferStateSuccess, compensationDetail.TransferState)
+	require.NotEmpty(t, compensationDetail.OutBillNo)
+	require.Equal(t, "batch-integration", compensationDetail.TransferBillNo)
 	require.False(t, compensationDetail.TerminalFailure)
 
 	recovery, err = store.GetClaimRecoveryByClaimID(ctx, claimResp.ClaimID)
@@ -4843,8 +4869,8 @@ func TestClaimJourneyD10MerchantRecoveryPayIntegration(t *testing.T) {
 	require.True(t, recovery.RecoveryTarget.Valid)
 	require.Equal(t, "merchant", recovery.RecoveryTarget.String)
 
-	server.SetPaymentClientForTest(newClaimRecoveryPaymentClient(t, store, merchantOwner.ID, recovery.RecoveryAmount, "商户索赔追偿支付"))
-	defer server.SetPaymentClientForTest(nil)
+	server.SetDirectPaymentClientForTest(newClaimRecoveryPaymentClient(t, store, merchantOwner.ID, recovery.RecoveryAmount, "商户索赔追偿支付"))
+	defer server.SetDirectPaymentClientForTest(nil)
 
 	// 4) 商户支付追偿单
 	var payResp claimRecoveryPaymentCreateResponse
@@ -4898,7 +4924,6 @@ func TestClaimJourneyD11OperatorRecoveryWaiveIntegration(t *testing.T) {
 		ContactName:       "contact_" + util.RandomString(6),
 		ContactPhone:      "138" + util.RandomString(8),
 		WechatMchID:       pgtype.Text{Valid: false},
-		CommissionRate:    commissionRate,
 		Status:            "active",
 		ContractStartDate: pgtype.Date{Valid: false},
 		ContractEndDate:   pgtype.Date{Valid: false},
@@ -5041,13 +5066,14 @@ func TestClaimJourneyD12RiderRecoveryPayIntegration(t *testing.T) {
 
 	// 2) 直接落库支付单并模拟支付成功，避免 legacy native payment API 漂移影响 rider recovery 旅程
 	payment, err := store.CreatePaymentOrder(ctx, db.CreatePaymentOrderParams{
-		OrderID:      pgtype.Int8{Int64: orderID, Valid: true},
-		UserID:       customer.ID,
-		PaymentType:  "miniprogram",
-		BusinessType: "order",
-		Amount:       orderForPayment.TotalAmount,
-		OutTradeNo:   fmt.Sprintf("d12_order_%d_%d", orderID, util.RandomInt(1000, 9999)),
-		ExpiresAt:    pgtype.Timestamptz{Time: time.Now().Add(30 * time.Minute), Valid: true},
+		OrderID:        pgtype.Int8{Int64: orderID, Valid: true},
+		UserID:         customer.ID,
+		PaymentType:    "miniprogram",
+		PaymentChannel: db.PaymentChannelDirect,
+		BusinessType:   "order",
+		Amount:         orderForPayment.TotalAmount,
+		OutTradeNo:     fmt.Sprintf("d12_order_%d_%d", orderID, util.RandomInt(1000, 9999)),
+		ExpiresAt:      pgtype.Timestamptz{Time: time.Now().Add(30 * time.Minute), Valid: true},
 	})
 	require.NoError(t, err)
 
@@ -5118,8 +5144,8 @@ func TestClaimJourneyD12RiderRecoveryPayIntegration(t *testing.T) {
 	require.True(t, recovery.RecoveryTarget.Valid)
 	require.Equal(t, "rider", recovery.RecoveryTarget.String)
 
-	server.SetPaymentClientForTest(newClaimRecoveryPaymentClient(t, store, riderUser.ID, recovery.RecoveryAmount, "骑手索赔追偿支付"))
-	defer server.SetPaymentClientForTest(nil)
+	server.SetDirectPaymentClientForTest(newClaimRecoveryPaymentClient(t, store, riderUser.ID, recovery.RecoveryAmount, "骑手索赔追偿支付"))
+	defer server.SetDirectPaymentClientForTest(nil)
 
 	// 7) 骑手支付追偿单
 	var payResp claimRecoveryPaymentCreateResponse
@@ -5173,7 +5199,6 @@ func TestClaimJourneyD13OperatorRecoveryViewIntegration(t *testing.T) {
 		ContactName:       "contact_" + util.RandomString(6),
 		ContactPhone:      "138" + util.RandomString(8),
 		WechatMchID:       pgtype.Text{Valid: false},
-		CommissionRate:    commissionRate,
 		Status:            "active",
 		ContractStartDate: pgtype.Date{Valid: false},
 		ContractEndDate:   pgtype.Date{Valid: false},
@@ -5399,13 +5424,14 @@ func TestClaimJourneyD15RiderRecoveryViewIntegration(t *testing.T) {
 
 	// 2) 直接落库支付单并模拟支付成功，避免 legacy native payment API 漂移影响 rider recovery 旅程
 	payment, err := store.CreatePaymentOrder(ctx, db.CreatePaymentOrderParams{
-		OrderID:      pgtype.Int8{Int64: orderID, Valid: true},
-		UserID:       customer.ID,
-		PaymentType:  "miniprogram",
-		BusinessType: "order",
-		Amount:       orderForPayment.TotalAmount,
-		OutTradeNo:   fmt.Sprintf("d15_order_%d_%d", orderID, util.RandomInt(1000, 9999)),
-		ExpiresAt:    pgtype.Timestamptz{Time: time.Now().Add(30 * time.Minute), Valid: true},
+		OrderID:        pgtype.Int8{Int64: orderID, Valid: true},
+		UserID:         customer.ID,
+		PaymentType:    "miniprogram",
+		PaymentChannel: db.PaymentChannelDirect,
+		BusinessType:   "order",
+		Amount:         orderForPayment.TotalAmount,
+		OutTradeNo:     fmt.Sprintf("d15_order_%d_%d", orderID, util.RandomInt(1000, 9999)),
+		ExpiresAt:      pgtype.Timestamptz{Time: time.Now().Add(30 * time.Minute), Valid: true},
 	})
 	require.NoError(t, err)
 
@@ -5660,13 +5686,14 @@ func TestClaimJourneyD17RiderRecoveryForbiddenIntegration(t *testing.T) {
 
 	// 2) 直接落库支付单并模拟支付成功，避免 legacy native payment API 漂移影响 rider recovery 旅程
 	payment, err := store.CreatePaymentOrder(ctx, db.CreatePaymentOrderParams{
-		OrderID:      pgtype.Int8{Int64: orderID, Valid: true},
-		UserID:       customer.ID,
-		PaymentType:  "miniprogram",
-		BusinessType: "order",
-		Amount:       orderForPayment.TotalAmount,
-		OutTradeNo:   fmt.Sprintf("d17_order_%d_%d", orderID, util.RandomInt(1000, 9999)),
-		ExpiresAt:    pgtype.Timestamptz{Time: time.Now().Add(30 * time.Minute), Valid: true},
+		OrderID:        pgtype.Int8{Int64: orderID, Valid: true},
+		UserID:         customer.ID,
+		PaymentType:    "miniprogram",
+		PaymentChannel: db.PaymentChannelDirect,
+		BusinessType:   "order",
+		Amount:         orderForPayment.TotalAmount,
+		OutTradeNo:     fmt.Sprintf("d17_order_%d_%d", orderID, util.RandomInt(1000, 9999)),
+		ExpiresAt:      pgtype.Timestamptz{Time: time.Now().Add(30 * time.Minute), Valid: true},
 	})
 	require.NoError(t, err)
 
@@ -5771,7 +5798,6 @@ func TestClaimJourneyD18OperatorRecoveryCrossRegionForbiddenIntegration(t *testi
 		ContactName:       "contact_" + util.RandomString(6),
 		ContactPhone:      "138" + util.RandomString(8),
 		WechatMchID:       pgtype.Text{Valid: false},
-		CommissionRate:    commissionRate,
 		Status:            "active",
 		ContractStartDate: pgtype.Date{Valid: false},
 		ContractEndDate:   pgtype.Date{Valid: false},
@@ -5909,7 +5935,6 @@ func TestClaimJourneyD21OperatorRecoveryNotFoundIntegration(t *testing.T) {
 		ContactName:       "contact_" + util.RandomString(6),
 		ContactPhone:      "138" + util.RandomString(8),
 		WechatMchID:       pgtype.Text{Valid: false},
-		CommissionRate:    commissionRate,
 		Status:            "active",
 		ContractStartDate: pgtype.Date{Valid: false},
 		ContractEndDate:   pgtype.Date{Valid: false},
@@ -6005,8 +6030,8 @@ func TestClaimJourneyD22MerchantRecoveryViewAfterPayIntegration(t *testing.T) {
 	// 4) 商户支付追偿单
 	{
 		recovery := ensureIntegrationMerchantRecovery(t, store, orderID, claimResp.ClaimID, order.TotalAmount)
-		server.SetPaymentClientForTest(newClaimRecoveryPaymentClient(t, store, merchantOwner.ID, recovery.RecoveryAmount, "商户索赔追偿支付"))
-		defer server.SetPaymentClientForTest(nil)
+		server.SetDirectPaymentClientForTest(newClaimRecoveryPaymentClient(t, store, merchantOwner.ID, recovery.RecoveryAmount, "商户索赔追偿支付"))
+		defer server.SetDirectPaymentClientForTest(nil)
 
 		url := fmt.Sprintf("/v1/merchant/claims/%d/recovery/pay", claimResp.ClaimID)
 		rec := doJSON(t, server, http.MethodPost, url, nil, merchantOwner.ID)
@@ -6087,13 +6112,14 @@ func TestClaimJourneyD23RiderRecoveryViewAfterPayIntegration(t *testing.T) {
 
 	// 2) 直接落库支付单并模拟支付成功，避免 legacy native payment API 漂移影响 rider recovery 旅程
 	payment, err := store.CreatePaymentOrder(ctx, db.CreatePaymentOrderParams{
-		OrderID:      pgtype.Int8{Int64: orderID, Valid: true},
-		UserID:       customer.ID,
-		PaymentType:  "miniprogram",
-		BusinessType: "order",
-		Amount:       orderForPayment.TotalAmount,
-		OutTradeNo:   fmt.Sprintf("d23_order_%d_%d", orderID, util.RandomInt(1000, 9999)),
-		ExpiresAt:    pgtype.Timestamptz{Time: time.Now().Add(30 * time.Minute), Valid: true},
+		OrderID:        pgtype.Int8{Int64: orderID, Valid: true},
+		UserID:         customer.ID,
+		PaymentType:    "miniprogram",
+		PaymentChannel: db.PaymentChannelDirect,
+		BusinessType:   "order",
+		Amount:         orderForPayment.TotalAmount,
+		OutTradeNo:     fmt.Sprintf("d23_order_%d_%d", orderID, util.RandomInt(1000, 9999)),
+		ExpiresAt:      pgtype.Timestamptz{Time: time.Now().Add(30 * time.Minute), Valid: true},
 	})
 	require.NoError(t, err)
 
@@ -6162,8 +6188,8 @@ func TestClaimJourneyD23RiderRecoveryViewAfterPayIntegration(t *testing.T) {
 	{
 		recovery, err := store.GetClaimRecoveryByClaimID(ctx, claimResp.ClaimID)
 		require.NoError(t, err)
-		server.SetPaymentClientForTest(newClaimRecoveryPaymentClient(t, store, riderUser.ID, recovery.RecoveryAmount, "骑手索赔追偿支付"))
-		defer server.SetPaymentClientForTest(nil)
+		server.SetDirectPaymentClientForTest(newClaimRecoveryPaymentClient(t, store, riderUser.ID, recovery.RecoveryAmount, "骑手索赔追偿支付"))
+		defer server.SetDirectPaymentClientForTest(nil)
 
 		url := fmt.Sprintf("/v1/rider/claims/%d/recovery/pay", claimResp.ClaimID)
 		rec := doJSON(t, server, http.MethodPost, url, nil, riderUser.ID)
@@ -6217,7 +6243,6 @@ func TestClaimJourneyD24OperatorRecoveryViewAfterWaiveIntegration(t *testing.T) 
 		ContactName:       "contact_" + util.RandomString(6),
 		ContactPhone:      "138" + util.RandomString(8),
 		WechatMchID:       pgtype.Text{Valid: false},
-		CommissionRate:    commissionRate,
 		Status:            "active",
 		ContractStartDate: pgtype.Date{Valid: false},
 		ContractEndDate:   pgtype.Date{Valid: false},
@@ -6491,13 +6516,14 @@ func TestClaimJourneyD26RiderAppealDetailNotFoundIntegration(t *testing.T) {
 
 	// 2) 直接落库支付单并模拟支付成功，避免 legacy native payment API 漂移影响 rider appeal 旅程
 	payment, err := store.CreatePaymentOrder(ctx, db.CreatePaymentOrderParams{
-		OrderID:      pgtype.Int8{Int64: orderID, Valid: true},
-		UserID:       customer.ID,
-		PaymentType:  "miniprogram",
-		BusinessType: "order",
-		Amount:       orderForPayment.TotalAmount,
-		OutTradeNo:   fmt.Sprintf("d26_order_%d_%d", orderID, util.RandomInt(1000, 9999)),
-		ExpiresAt:    pgtype.Timestamptz{Time: time.Now().Add(30 * time.Minute), Valid: true},
+		OrderID:        pgtype.Int8{Int64: orderID, Valid: true},
+		UserID:         customer.ID,
+		PaymentType:    "miniprogram",
+		PaymentChannel: db.PaymentChannelDirect,
+		BusinessType:   "order",
+		Amount:         orderForPayment.TotalAmount,
+		OutTradeNo:     fmt.Sprintf("d26_order_%d_%d", orderID, util.RandomInt(1000, 9999)),
+		ExpiresAt:      pgtype.Timestamptz{Time: time.Now().Add(30 * time.Minute), Valid: true},
 	})
 	require.NoError(t, err)
 
@@ -6615,7 +6641,6 @@ func TestClaimJourneyD27OperatorAppealDetailNotFoundIntegration(t *testing.T) {
 		ContactName:       "contact_" + util.RandomString(6),
 		ContactPhone:      "138" + util.RandomString(8),
 		WechatMchID:       pgtype.Text{Valid: false},
-		CommissionRate:    commissionRate,
 		Status:            "active",
 		ContractStartDate: pgtype.Date{Valid: false},
 		ContractEndDate:   pgtype.Date{Valid: false},
@@ -6733,7 +6758,6 @@ func TestClaimJourneyD28OperatorReviewCrossRegionForbiddenIntegration(t *testing
 		ContactName:       "contact_" + util.RandomString(6),
 		ContactPhone:      "138" + util.RandomString(8),
 		WechatMchID:       pgtype.Text{Valid: false},
-		CommissionRate:    commissionRate,
 		Status:            "active",
 		ContractStartDate: pgtype.Date{Valid: false},
 		ContractEndDate:   pgtype.Date{Valid: false},
@@ -6855,7 +6879,6 @@ func TestClaimJourneyD29OperatorReviewAlreadyReviewedIntegration(t *testing.T) {
 		ContactName:       "contact_" + util.RandomString(6),
 		ContactPhone:      "138" + util.RandomString(8),
 		WechatMchID:       pgtype.Text{Valid: false},
-		CommissionRate:    commissionRate,
 		Status:            "active",
 		ContractStartDate: pgtype.Date{Valid: false},
 		ContractEndDate:   pgtype.Date{Valid: false},
@@ -7151,13 +7174,14 @@ func TestClaimJourneyD31RiderAppealDuplicateIntegration(t *testing.T) {
 
 	// 2) 直接落库支付单并模拟支付成功，避免 legacy native payment API 漂移影响 rider appeal 旅程
 	payment, err := store.CreatePaymentOrder(ctx, db.CreatePaymentOrderParams{
-		OrderID:      pgtype.Int8{Int64: orderID, Valid: true},
-		UserID:       customer.ID,
-		PaymentType:  "miniprogram",
-		BusinessType: "order",
-		Amount:       orderForPayment.TotalAmount,
-		OutTradeNo:   fmt.Sprintf("d31_order_%d_%d", orderID, util.RandomInt(1000, 9999)),
-		ExpiresAt:    pgtype.Timestamptz{Time: time.Now().Add(30 * time.Minute), Valid: true},
+		OrderID:        pgtype.Int8{Int64: orderID, Valid: true},
+		UserID:         customer.ID,
+		PaymentType:    "miniprogram",
+		PaymentChannel: db.PaymentChannelDirect,
+		BusinessType:   "order",
+		Amount:         orderForPayment.TotalAmount,
+		OutTradeNo:     fmt.Sprintf("d31_order_%d_%d", orderID, util.RandomInt(1000, 9999)),
+		ExpiresAt:      pgtype.Timestamptz{Time: time.Now().Add(30 * time.Minute), Valid: true},
 	})
 	require.NoError(t, err)
 
@@ -7317,13 +7341,14 @@ func TestClaimJourneyD32RiderAppealDuplicateConflictIntegration(t *testing.T) {
 
 	// 2) 直接落库支付单并模拟支付成功，避免 legacy native payment API 漂移影响 rider appeal 旅程
 	payment, err := store.CreatePaymentOrder(ctx, db.CreatePaymentOrderParams{
-		OrderID:      pgtype.Int8{Int64: orderID, Valid: true},
-		UserID:       customer.ID,
-		PaymentType:  "miniprogram",
-		BusinessType: "order",
-		Amount:       orderForPayment.TotalAmount,
-		OutTradeNo:   fmt.Sprintf("d32_order_%d_%d", orderID, util.RandomInt(1000, 9999)),
-		ExpiresAt:    pgtype.Timestamptz{Time: time.Now().Add(30 * time.Minute), Valid: true},
+		OrderID:        pgtype.Int8{Int64: orderID, Valid: true},
+		UserID:         customer.ID,
+		PaymentType:    "miniprogram",
+		PaymentChannel: db.PaymentChannelDirect,
+		BusinessType:   "order",
+		Amount:         orderForPayment.TotalAmount,
+		OutTradeNo:     fmt.Sprintf("d32_order_%d_%d", orderID, util.RandomInt(1000, 9999)),
+		ExpiresAt:      pgtype.Timestamptz{Time: time.Now().Add(30 * time.Minute), Valid: true},
 	})
 	require.NoError(t, err)
 
@@ -7438,7 +7463,6 @@ func TestClaimJourneyD33OperatorAppealListByStatusIntegration(t *testing.T) {
 		ContactName:       "contact_" + util.RandomString(6),
 		ContactPhone:      "138" + util.RandomString(8),
 		WechatMchID:       pgtype.Text{Valid: false},
-		CommissionRate:    commissionRate,
 		Status:            "active",
 		ContractStartDate: pgtype.Date{Valid: false},
 		ContractEndDate:   pgtype.Date{Valid: false},
@@ -7641,7 +7665,6 @@ func TestClaimJourneyD34OperatorAppealListEmptyIntegration(t *testing.T) {
 		ContactName:       "contact_" + util.RandomString(6),
 		ContactPhone:      "138" + util.RandomString(8),
 		WechatMchID:       pgtype.Text{Valid: false},
-		CommissionRate:    commissionRate,
 		Status:            "active",
 		ContractStartDate: pgtype.Date{Valid: false},
 		ContractEndDate:   pgtype.Date{Valid: false},
@@ -7772,7 +7795,6 @@ func TestClaimJourneyD37OperatorAppealListPaginationIntegration(t *testing.T) {
 		ContactName:       "contact_" + util.RandomString(6),
 		ContactPhone:      "138" + util.RandomString(8),
 		WechatMchID:       pgtype.Text{Valid: false},
-		CommissionRate:    commissionRate,
 		Status:            "active",
 		ContractStartDate: pgtype.Date{Valid: false},
 		ContractEndDate:   pgtype.Date{Valid: false},
@@ -8070,13 +8092,14 @@ func TestClaimJourneyD39RiderAppealListPaginationIntegration(t *testing.T) {
 		require.NoError(t, err)
 
 		payment, err := store.CreatePaymentOrder(ctx, db.CreatePaymentOrderParams{
-			OrderID:      pgtype.Int8{Int64: created.ID, Valid: true},
-			UserID:       customer.ID,
-			PaymentType:  "miniprogram",
-			BusinessType: "order",
-			Amount:       orderForPayment.TotalAmount,
-			OutTradeNo:   fmt.Sprintf("d39_order_%d_%d", created.ID, util.RandomInt(1000, 9999)),
-			ExpiresAt:    pgtype.Timestamptz{Time: time.Now().Add(30 * time.Minute), Valid: true},
+			OrderID:        pgtype.Int8{Int64: created.ID, Valid: true},
+			UserID:         customer.ID,
+			PaymentType:    "miniprogram",
+			PaymentChannel: db.PaymentChannelDirect,
+			BusinessType:   "order",
+			Amount:         orderForPayment.TotalAmount,
+			OutTradeNo:     fmt.Sprintf("d39_order_%d_%d", created.ID, util.RandomInt(1000, 9999)),
+			ExpiresAt:      pgtype.Timestamptz{Time: time.Now().Add(30 * time.Minute), Valid: true},
 		})
 		require.NoError(t, err)
 
@@ -8213,7 +8236,6 @@ func TestClaimJourneyD40OperatorAppealListInvalidStatusIntegration(t *testing.T)
 		ContactName:       "contact_" + util.RandomString(6),
 		ContactPhone:      "138" + util.RandomString(8),
 		WechatMchID:       pgtype.Text{Valid: false},
-		CommissionRate:    commissionRate,
 		Status:            "active",
 		ContractStartDate: pgtype.Date{Valid: false},
 		ContractEndDate:   pgtype.Date{Valid: false},
@@ -8300,7 +8322,6 @@ func TestClaimJourneyD43OperatorAppealListDefaultPaginationIntegration(t *testin
 		ContactName:       "contact_" + util.RandomString(6),
 		ContactPhone:      "138" + util.RandomString(8),
 		WechatMchID:       pgtype.Text{Valid: false},
-		CommissionRate:    commissionRate,
 		Status:            "active",
 		ContractStartDate: pgtype.Date{Valid: false},
 		ContractEndDate:   pgtype.Date{Valid: false},
@@ -8443,7 +8464,6 @@ func TestClaimJourneyD48OperatorAppealDetailInvalidIDIntegration(t *testing.T) {
 		ContactName:       "contact_" + util.RandomString(6),
 		ContactPhone:      "138" + util.RandomString(8),
 		WechatMchID:       pgtype.Text{Valid: false},
-		CommissionRate:    commissionRate,
 		Status:            "active",
 		ContractStartDate: pgtype.Date{Valid: false},
 		ContractEndDate:   pgtype.Date{Valid: false},
@@ -8526,13 +8546,14 @@ func TestTakeoutJourneyB2Integration(t *testing.T) {
 	require.NoError(t, err)
 
 	payment, err := store.CreatePaymentOrder(ctx, db.CreatePaymentOrderParams{
-		OrderID:      pgtype.Int8{Int64: orderID, Valid: true},
-		UserID:       customer.ID,
-		PaymentType:  "miniprogram",
-		BusinessType: "order",
-		Amount:       orderForPayment.TotalAmount,
-		OutTradeNo:   fmt.Sprintf("b2_order_%d_%d", orderID, util.RandomInt(1000, 9999)),
-		ExpiresAt:    pgtype.Timestamptz{Time: time.Now().Add(30 * time.Minute), Valid: true},
+		OrderID:        pgtype.Int8{Int64: orderID, Valid: true},
+		UserID:         customer.ID,
+		PaymentType:    "miniprogram",
+		PaymentChannel: db.PaymentChannelDirect,
+		BusinessType:   "order",
+		Amount:         orderForPayment.TotalAmount,
+		OutTradeNo:     fmt.Sprintf("b2_order_%d_%d", orderID, util.RandomInt(1000, 9999)),
+		ExpiresAt:      pgtype.Timestamptz{Time: time.Now().Add(30 * time.Minute), Valid: true},
 	})
 	require.NoError(t, err)
 
@@ -8817,15 +8838,17 @@ func TestTakeoutJourneyB3Integration(t *testing.T) {
 	order, err := store.GetOrder(ctx, orderID)
 	require.NoError(t, err)
 
-	// 2) 创建 profit_sharing 支付单（API 不支持该类型；这里直接落库以验收分账/恢复逻辑）
+	// 2) 创建 ecommerce 支付单（API 不支持该类型；这里直接落库以验收分账/恢复逻辑）
 	po, err := store.CreatePaymentOrder(ctx, db.CreatePaymentOrderParams{
-		OrderID:      pgtype.Int8{Int64: orderID, Valid: true},
-		UserID:       customer.ID,
-		PaymentType:  "profit_sharing",
-		BusinessType: "order",
-		Amount:       order.TotalAmount,
-		OutTradeNo:   fmt.Sprintf("PS_%d_%d", orderID, util.RandomInt(1000, 9999)),
-		ExpiresAt:    pgtype.Timestamptz{Time: time.Now().Add(30 * time.Minute), Valid: true},
+		OrderID:               pgtype.Int8{Int64: orderID, Valid: true},
+		UserID:                customer.ID,
+		PaymentType:           "miniprogram",
+		PaymentChannel:        db.PaymentChannelEcommerce,
+		RequiresProfitSharing: db.OrderRequiresProfitSharing(order),
+		BusinessType:          "order",
+		Amount:                order.TotalAmount,
+		OutTradeNo:            fmt.Sprintf("PS_%d_%d", orderID, util.RandomInt(1000, 9999)),
+		ExpiresAt:             pgtype.Timestamptz{Time: time.Now().Add(30 * time.Minute), Valid: true},
 	})
 	require.NoError(t, err)
 

@@ -28,13 +28,13 @@ SET config_value = EXCLUDED.config_value,
 RETURNING *;
 
 -- name: GetPlatformConfig :one
-SELECT * FROM platform_configs
+SELECT id, config_key, config_value, scope_type, scope_id, created_at, updated_at FROM platform_configs
 WHERE config_key = $1 AND scope_type = $2 AND scope_id IS NOT DISTINCT FROM $3
 ORDER BY updated_at DESC, id DESC
 LIMIT 1;
 
 -- name: ListPlatformConfigsByKey :many
-SELECT * FROM platform_configs
+SELECT id, config_key, config_value, scope_type, scope_id, created_at, updated_at FROM platform_configs
 WHERE config_key = $1
 ORDER BY scope_type, scope_id;
 
@@ -91,12 +91,12 @@ INSERT INTO behavior_decisions (
 ) RETURNING *;
 
 -- name: GetBehaviorDecision :one
-SELECT * FROM behavior_decisions
+SELECT id, order_id, user_id, merchant_id, rider_id, decision_version, reason_codes, responsible_party, compensation_source, decision_status, trace_summary, created_at, updated_at, reservation_id, claim_id, decision_mode, responsibility_domain, payout_mode, effective_status, confidence_score, user_risk_score, merchant_liability_score, rider_liability_score, fallback_reason, restriction_reason, liability_shares, score_breakdown, graph_hits, fact_snapshot, supersedes_decision_id, overturned_by_decision_id, profile_effect_applied FROM behavior_decisions
 WHERE id = $1
 LIMIT 1;
 
 -- name: ListBehaviorDecisionsByOrder :many
-SELECT * FROM behavior_decisions
+SELECT id, order_id, user_id, merchant_id, rider_id, decision_version, reason_codes, responsible_party, compensation_source, decision_status, trace_summary, created_at, updated_at, reservation_id, claim_id, decision_mode, responsibility_domain, payout_mode, effective_status, confidence_score, user_risk_score, merchant_liability_score, rider_liability_score, fallback_reason, restriction_reason, liability_shares, score_breakdown, graph_hits, fact_snapshot, supersedes_decision_id, overturned_by_decision_id, profile_effect_applied FROM behavior_decisions
 WHERE order_id = $1
 ORDER BY created_at DESC;
 
@@ -176,7 +176,7 @@ INSERT INTO behavior_decision_effects (
 ) RETURNING *;
 
 -- name: ListBehaviorDecisionEffectsByDecision :many
-SELECT * FROM behavior_decision_effects
+SELECT id, decision_id, entity_type, entity_id, metric_key, delta_value, status, applied_at, reverted_at, reverted_by_decision_id, note, created_at FROM behavior_decision_effects
 WHERE decision_id = $1
 ORDER BY created_at ASC;
 
@@ -204,7 +204,7 @@ WHERE decision_id = $1
   AND status = 'applied';
 
 -- name: ListBehaviorTraceSnapshotsByDecision :many
-SELECT * FROM behavior_trace_snapshots
+SELECT id, decision_id, window_days, abnormal_count, total_count, abnormal_rate, association_hits, created_at, actor_type, actor_id, window_key, stats_scope, metric_payload, association_payload, snapshot_version FROM behavior_trace_snapshots
 WHERE decision_id = $1
 ORDER BY created_at ASC;
 
@@ -237,12 +237,12 @@ SET status = $2,
 WHERE id = $1;
 
 -- name: GetBehaviorAction :one
-SELECT * FROM behavior_actions
+SELECT id, decision_id, action_type, target_entity, status, detail, executed_at, created_at FROM behavior_actions
 WHERE id = $1
 LIMIT 1;
 
 -- name: ListBehaviorActionsByStatusAndType :many
-SELECT * FROM behavior_actions
+SELECT id, decision_id, action_type, target_entity, status, detail, executed_at, created_at FROM behavior_actions
 WHERE status = $1
     AND action_type = $2
     AND target_entity = $3
@@ -250,7 +250,7 @@ ORDER BY created_at ASC
 LIMIT $4;
 
 -- name: ListBehaviorActionsByDecision :many
-SELECT * FROM behavior_actions
+SELECT id, decision_id, action_type, target_entity, status, detail, executed_at, created_at FROM behavior_actions
 WHERE decision_id = $1
 ORDER BY created_at ASC;
 
@@ -278,7 +278,7 @@ SET status = $2,
 WHERE id = $1;
 
 -- name: ListBehaviorAppealsByEntity :many
-SELECT * FROM behavior_appeals
+SELECT id, entity_type, entity_id, decision_id, reason, evidence, status, created_at, reeval_at FROM behavior_appeals
 WHERE entity_type = $1 AND entity_id = $2
 ORDER BY created_at DESC;
 
@@ -298,7 +298,7 @@ INSERT INTO behavior_blocklist (
 ) RETURNING *;
 
 -- name: GetActiveBehaviorBlocklist :one
-SELECT * FROM behavior_blocklist
+SELECT id, entity_type, entity_id, reason_code, block_until, status, created_at, updated_at FROM behavior_blocklist
 WHERE entity_type = $1 AND entity_id = $2 AND status = 'active'
 LIMIT 1;
 
@@ -309,6 +309,6 @@ SET status = $2,
 WHERE id = $1;
 
 -- name: ListActiveBehaviorBlocklists :many
-SELECT * FROM behavior_blocklist
+SELECT id, entity_type, entity_id, reason_code, block_until, status, created_at, updated_at FROM behavior_blocklist
 WHERE status = 'active'
 ORDER BY created_at DESC;

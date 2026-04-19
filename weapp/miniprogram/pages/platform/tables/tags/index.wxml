@@ -10,25 +10,26 @@
 
   <view wx:elif="{{initialError}}" class="state-block">
     <t-empty icon="error-circle" description="{{initialErrorMessage || '桌台标签加载失败，请重试'}}" />
-    <t-button theme="primary" size="small" shape="round" bind:tap="onRetry">重新加载</t-button>
+    <t-button theme="primary" bind:tap="onRetry">重新加载</t-button>
   </view>
 
   <block wx:else>
     <view class="page-content">
-      <view wx:if="{{refreshErrorMessage}}" class="warning-banner">
-        <text class="warning-banner-text">{{refreshErrorMessage}}</text>
-        <t-button size="small" theme="default" shape="round" bind:tap="onRetryRefresh">重新同步</t-button>
+      <view wx:if="{{refreshErrorMessage}}" class="notice-banner">
+        <t-notice-bar theme="error" visible="{{true}}" content="{{refreshErrorMessage}}">
+          <text slot="operation" class="notice-banner-operation" bind:tap="onRetryRefresh">重新同步</text>
+        </t-notice-bar>
       </view>
 
       <view class="action-strip">
         <text class="action-strip-copy">平台统一维护桌台标签，商户侧编辑页只负责选择与快速新增。</text>
-        <t-button block size="medium" theme="primary" shape="round" bind:tap="onCreateTag">新建标签</t-button>
+        <t-button block theme="primary" bind:tap="onCreateTag">新建标签</t-button>
       </view>
 
       <view class="list-section">
         <view class="list-header">
           <text class="list-title">当前标签列表</text>
-          <t-button size="small" theme="default" shape="round" bind:tap="onRetryRefresh">刷新</t-button>
+          <t-button theme="default" bind:tap="onRetryRefresh">刷新</t-button>
         </view>
 
         <view wx:if="{{!tags.length}}" class="section-empty">

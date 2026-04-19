@@ -13,20 +13,20 @@ INSERT INTO subsidy_orders (
 ) RETURNING *;
 
 -- name: GetSubsidyOrder :one
-SELECT * FROM subsidy_orders
+SELECT id, payment_order_id, sub_mch_id, transaction_id, out_subsidy_no, payer_amount, amount, description, status, wxpay_subsidy_id, fail_reason, out_return_no, return_amount, return_status, return_wxpay_id, return_fail_reason, created_at, updated_at FROM subsidy_orders
 WHERE id = $1 LIMIT 1;
 
 -- name: GetSubsidyOrderByOutSubsidyNo :one
-SELECT * FROM subsidy_orders
+SELECT id, payment_order_id, sub_mch_id, transaction_id, out_subsidy_no, payer_amount, amount, description, status, wxpay_subsidy_id, fail_reason, out_return_no, return_amount, return_status, return_wxpay_id, return_fail_reason, created_at, updated_at FROM subsidy_orders
 WHERE out_subsidy_no = $1 LIMIT 1;
 
 -- name: GetSubsidyOrderByPaymentOrderID :one
 -- 一个 payment_order 只应有一条补差
-SELECT * FROM subsidy_orders
+SELECT id, payment_order_id, sub_mch_id, transaction_id, out_subsidy_no, payer_amount, amount, description, status, wxpay_subsidy_id, fail_reason, out_return_no, return_amount, return_status, return_wxpay_id, return_fail_reason, created_at, updated_at FROM subsidy_orders
 WHERE payment_order_id = $1 LIMIT 1;
 
 -- name: GetSubsidyOrderForUpdate :one
-SELECT * FROM subsidy_orders
+SELECT id, payment_order_id, sub_mch_id, transaction_id, out_subsidy_no, payer_amount, amount, description, status, wxpay_subsidy_id, fail_reason, out_return_no, return_amount, return_status, return_wxpay_id, return_fail_reason, created_at, updated_at FROM subsidy_orders
 WHERE id = $1
 LIMIT 1
 FOR UPDATE;
@@ -89,6 +89,6 @@ RETURNING *;
 
 -- name: ListSubsidyOrdersByPaymentIDs :many
 -- 批量查询（用于退款流程判断是否需要退回补差）
-SELECT * FROM subsidy_orders
+SELECT id, payment_order_id, sub_mch_id, transaction_id, out_subsidy_no, payer_amount, amount, description, status, wxpay_subsidy_id, fail_reason, out_return_no, return_amount, return_status, return_wxpay_id, return_fail_reason, created_at, updated_at FROM subsidy_orders
 WHERE payment_order_id = ANY(@payment_order_ids::bigint[])
   AND status = 'success';

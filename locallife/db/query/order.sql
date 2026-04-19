@@ -33,21 +33,21 @@ INSERT INTO orders (
 ) RETURNING *;
 
 -- name: GetOrder :one
-SELECT * FROM orders
+SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot FROM orders
 WHERE id = $1 LIMIT 1;
 
 -- name: GetOrderForUpdate :one
-SELECT * FROM orders
+SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot FROM orders
 WHERE id = $1 LIMIT 1
 FOR UPDATE;
 
 -- name: GetOrderByOrderNo :one
-SELECT * FROM orders
+SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot FROM orders
 WHERE order_no = $1 LIMIT 1;
 
 -- name: GetOrderWithDetails :one
 SELECT 
-    o.*,
+    o.id, o.order_no, o.user_id, o.merchant_id, o.order_type, o.address_id, o.delivery_fee, o.delivery_distance, o.table_id, o.reservation_id, o.subtotal, o.discount_amount, o.delivery_fee_discount, o.total_amount, o.status, o.payment_method, o.paid_at, o.notes, o.created_at, o.updated_at, o.completed_at, o.cancelled_at, o.cancel_reason, o.final_amount, o.platform_commission, o.user_voucher_id, o.voucher_amount, o.balance_paid, o.membership_id, o.fulfillment_status, o.replaced_by_order_id, o.pickup_code, o.dispatch_order_id, o.flow_id, o.status_hint, o.badges, o.exception_state, o.claim_channel, o.overtime, o.prep_start_at, o.ready_at, o.courier_accept_at, o.picked_at, o.rider_delivered_at, o.user_delivered_at, o.auto_user_delivered_at, o.delivery_duration, o.delivery_contact_name_snapshot, o.delivery_contact_phone_snapshot, o.delivery_address_snapshot, o.delivery_longitude_snapshot, o.delivery_latitude_snapshot,
     m.name as merchant_name,
     m.phone as merchant_phone,
     m.address as merchant_address,
@@ -76,17 +76,17 @@ WHERE o.id = $1;
 
 -- name: ListOrdersByUser :many
 SELECT 
-    o.*,
+    o.id, o.order_no, o.user_id, o.merchant_id, o.order_type, o.address_id, o.delivery_fee, o.delivery_distance, o.table_id, o.reservation_id, o.subtotal, o.discount_amount, o.delivery_fee_discount, o.total_amount, o.status, o.payment_method, o.paid_at, o.notes, o.created_at, o.updated_at, o.completed_at, o.cancelled_at, o.cancel_reason, o.final_amount, o.platform_commission, o.user_voucher_id, o.voucher_amount, o.balance_paid, o.membership_id, o.fulfillment_status, o.replaced_by_order_id, o.pickup_code, o.dispatch_order_id, o.flow_id, o.status_hint, o.badges, o.exception_state, o.claim_channel, o.overtime, o.prep_start_at, o.ready_at, o.courier_accept_at, o.picked_at, o.rider_delivered_at, o.user_delivered_at, o.auto_user_delivered_at, o.delivery_duration, o.delivery_contact_name_snapshot, o.delivery_contact_phone_snapshot, o.delivery_address_snapshot, o.delivery_longitude_snapshot, o.delivery_latitude_snapshot,
     m.name as merchant_name
 FROM orders o
 INNER JOIN merchants m ON o.merchant_id = m.id
 WHERE o.user_id = $1
-ORDER BY o.created_at DESC
+ORDER BY o.created_at DESC, o.id DESC
 LIMIT $2 OFFSET $3;
 
 -- name: ListOrdersByUserWithFilters :many
 SELECT
-        o.*,
+    o.id, o.order_no, o.user_id, o.merchant_id, o.order_type, o.address_id, o.delivery_fee, o.delivery_distance, o.table_id, o.reservation_id, o.subtotal, o.discount_amount, o.delivery_fee_discount, o.total_amount, o.status, o.payment_method, o.paid_at, o.notes, o.created_at, o.updated_at, o.completed_at, o.cancelled_at, o.cancel_reason, o.final_amount, o.platform_commission, o.user_voucher_id, o.voucher_amount, o.balance_paid, o.membership_id, o.fulfillment_status, o.replaced_by_order_id, o.pickup_code, o.dispatch_order_id, o.flow_id, o.status_hint, o.badges, o.exception_state, o.claim_channel, o.overtime, o.prep_start_at, o.ready_at, o.courier_accept_at, o.picked_at, o.rider_delivered_at, o.user_delivered_at, o.auto_user_delivered_at, o.delivery_duration, o.delivery_contact_name_snapshot, o.delivery_contact_phone_snapshot, o.delivery_address_snapshot, o.delivery_longitude_snapshot, o.delivery_latitude_snapshot,
         m.name as merchant_name,
         pending_combined_payment.combined_payment_id,
         pending_combined_payment.combine_out_trade_no
@@ -109,7 +109,7 @@ WHERE o.user_id = sqlc.arg('user_id')
     AND (sqlc.narg('status')::text IS NULL OR o.status = sqlc.narg('status'))
     AND (sqlc.narg('order_type')::text IS NULL OR o.order_type = sqlc.narg('order_type'))
     AND (sqlc.narg('reservation_id')::bigint IS NULL OR o.reservation_id IS NOT DISTINCT FROM sqlc.narg('reservation_id'))
-ORDER BY o.created_at DESC
+ORDER BY o.created_at DESC, o.id DESC
 LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
 -- name: CountOrdersByUserWithFilters :one
@@ -121,12 +121,12 @@ WHERE o.user_id = sqlc.arg('user_id')
 
 -- name: ListOrdersByUserAndStatus :many
 SELECT 
-    o.*,
+    o.id, o.order_no, o.user_id, o.merchant_id, o.order_type, o.address_id, o.delivery_fee, o.delivery_distance, o.table_id, o.reservation_id, o.subtotal, o.discount_amount, o.delivery_fee_discount, o.total_amount, o.status, o.payment_method, o.paid_at, o.notes, o.created_at, o.updated_at, o.completed_at, o.cancelled_at, o.cancel_reason, o.final_amount, o.platform_commission, o.user_voucher_id, o.voucher_amount, o.balance_paid, o.membership_id, o.fulfillment_status, o.replaced_by_order_id, o.pickup_code, o.dispatch_order_id, o.flow_id, o.status_hint, o.badges, o.exception_state, o.claim_channel, o.overtime, o.prep_start_at, o.ready_at, o.courier_accept_at, o.picked_at, o.rider_delivered_at, o.user_delivered_at, o.auto_user_delivered_at, o.delivery_duration, o.delivery_contact_name_snapshot, o.delivery_contact_phone_snapshot, o.delivery_address_snapshot, o.delivery_longitude_snapshot, o.delivery_latitude_snapshot,
     m.name as merchant_name
 FROM orders o
 INNER JOIN merchants m ON o.merchant_id = m.id
 WHERE o.user_id = $1 AND o.status = $2
-ORDER BY o.created_at DESC
+ORDER BY o.created_at DESC, o.id DESC
 LIMIT $3 OFFSET $4;
 
 -- name: HasUserOrderedFromMerchant :one
@@ -137,29 +137,29 @@ SELECT EXISTS(
 ) AS has_ordered;
 
 -- name: ListOrdersByMerchant :many
-SELECT * FROM orders
+SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot FROM orders
 WHERE merchant_id = $1
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $2 OFFSET $3;
 
 -- name: ListOrdersByMerchantAndStatus :many
-SELECT * FROM orders
+SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot FROM orders
 WHERE merchant_id = $1 AND status = $2
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $3 OFFSET $4;
 
 -- name: ListOrdersByMerchantAndStatuses :many
-SELECT * FROM orders
+SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot FROM orders
 WHERE merchant_id = $1 AND status = ANY($2::text[])
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $3 OFFSET $4;
 
 -- name: ListOrdersByMerchantWithFilters :many
-SELECT * FROM orders
+SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot FROM orders
 WHERE merchant_id = sqlc.arg('merchant_id')
     AND (sqlc.narg('status')::text IS NULL OR status = sqlc.narg('status')::text)
     AND (sqlc.narg('order_type')::text IS NULL OR order_type = sqlc.narg('order_type')::text)
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
 -- name: CountOrdersByMerchant :one
@@ -177,10 +177,10 @@ WHERE merchant_id = sqlc.arg('merchant_id')
     AND (sqlc.narg('order_type')::text IS NULL OR order_type = sqlc.narg('order_type')::text);
 
 -- name: GetLatestOrderByReservation :one
-SELECT * FROM orders
+SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot FROM orders
 WHERE reservation_id = $1
     AND replaced_by_order_id IS NULL
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT 1;
 
 -- name: UpdateOrderStatus :one
@@ -340,7 +340,7 @@ WHERE merchant_id = sqlc.arg(merchant_id)
 
 -- name: ListMerchantOrdersByStatus :many
 -- 根据商户ID和状态查询订单（用于厨房显示）
-SELECT * FROM orders
+SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot FROM orders
 WHERE merchant_id = $1 AND status = $2 AND replaced_by_order_id IS NULL
 ORDER BY created_at ASC
 LIMIT $3 OFFSET $4;
@@ -458,19 +458,19 @@ ORDER BY date DESC;
 
 -- name: ListPendingOrdersBefore :many
 -- 获取超时未支付的 pending 订单（创建时间早于指定时间）
-SELECT * FROM orders
+SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot FROM orders
 WHERE status = sqlc.arg('status')
   AND created_at < sqlc.arg('created_at')
-ORDER BY created_at ASC
+ORDER BY created_at ASC, id ASC
 LIMIT sqlc.arg('limit');
 
 -- name: ListTakeoutOrdersDeliveredBefore :many
 -- 获取已送达但未完成超过一定时间的外卖订单（用于自动完成）
-SELECT * FROM orders
+SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot FROM orders
 WHERE order_type = 'takeout'
     AND status IN ('rider_delivered', 'user_delivered')
     AND rider_delivered_at IS NOT NULL
     AND rider_delivered_at < sqlc.arg('delivered_before')
     AND replaced_by_order_id IS NULL
-ORDER BY rider_delivered_at ASC
+ORDER BY rider_delivered_at ASC, id ASC
 LIMIT sqlc.arg('limit');

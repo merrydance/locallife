@@ -1,6 +1,6 @@
 ---
 name: "Mini Program Implementation Template"
-description: "Use when drafting any Mini Program implementation request for weapp/, including normal page or component changes, diagnosis-first page方案 before coding, payment-adjacent flows, and TDesign-first UI refactors. Trigger phrases: update Mini Program page, 小程序页面, 小程序页面方案, 小程序 UI 重构, TDesign 重构, TDesign-first 页面重写, 全页重构, 整页重新布局, 极简美学, build Mini Program page, create merchant page, 新建商户页面, 新建运营页面, 新建平台页面, fix component behavior, 列表空态和错误态, wire page state, improve weak-network UX, implement service-to-view change, setData 热点, 弱网体验, 小程序支付, 支付结果, login recovery after pay, duplicate tap guard, 重复点击支付, 图标按钮替代文字按钮, 组件拆分重构."
+description: "Use when drafting any Mini Program implementation request for weapp/, including normal page or component changes, diagnosis-first page方案 before coding, payment-adjacent flows, and TDesign-first UI refactors. Trigger phrases: update Mini Program page, 小程序页面, 小程序页面方案, 小程序 UI 重构, TDesign 重构, TDesign-first 页面重写, 全页重构, 整页重新布局, 极简美学, build Mini Program page, create merchant page, 新建商户页面, 新建运营页面, 新建平台页面, fix component behavior, 列表空态和错误态, wire page state, improve weak-network UX, implement service-to-view change, setData 热点, 弱网体验, 小程序支付, 支付结果, login recovery after pay, duplicate tap guard, 重复点击支付, 组件拆分重构."
 ---
 # Mini Program Implementation Template
 
@@ -25,22 +25,46 @@ Request:
 
 Implementation must push:
 
-- Start from the user task, first-screen essentials, and current-page boundary before coding or styling
+- Start from backend-supported capabilities and the user task before coding or styling
 - Treat the real backend contract as the only source of truth for fields, statuses, permissions, pagination, and metric meaning
-- Keep information architecture and page boundary decisions ahead of component and styling choices, following the role-matched weapp standards instead of local page guesswork
+- First inventory backend entities, fields, states, actions, permissions, and async outcomes; then group them into task domains before deciding any view structure
+- Decide component boundaries before page polish: if a region owns local state, repeated add/remove/edit flows, dense editing UI, or reusable task-specific interaction, extract a dedicated domain component first
+- Decide page boundaries after capability grouping and component boundaries: choose one page vs a page group by task continuity, first-screen clarity, information density, local-state complexity, and failure/recovery behavior
+- Keep information architecture and page boundary decisions ahead of TDesign and styling choices, following the role-matched weapp standards instead of local page guesswork
 - For TDesign-first refactor or style-reset requests, default to full-page information architecture and layout redesign rather than patching the legacy page shell unless the user explicitly asks for a local adjustment only
 - Use TDesign MCP and the role-matched design standard to justify major component choices and any user-visible non-TDesign exception
-- Extract complex regions into dedicated domain components when they own local state, repeated add/remove/edit flows, dense layout, or reusable task-specific interaction
+- Keep first-screen copy structural and brief: push guidance down into labels, field notes, state strips, and action-adjacent copy instead of explanatory hero cards or standalone guide blocks unless the explanation itself is the task
+- Keep non-consumer pages restrained: prefer page shell + content container + TDesign components, and make every extra local wrapper earn its keep through layout, state ownership, summary, or danger containment
+- Default section-level and row-level local actions to TDesign icon buttons or icon-led small buttons; if a text-only local action remains, name the exception and why icon-led affordance would be misleading or insufficient
+- Check TDesign MCP against the installed Mini Program component set before introducing any user-visible local control or wrapper exception, and state the exact component or supported composition chosen
+- If TDesign or an officially supported TDesign outer composition already solves the task, do not add a user-visible local notice/card/panel/footer shell; keep LocalLife customization at page shell, shared layout, and token-level branding only
 - Wire service calls, page state, handlers, WXML, WXSS, and user-visible feedback end to end
 - State which role-side design document governed the visual decisions and whether any exception crossed that boundary
+- For non-consumer pages, do not import `styles/customer.wxss` or carry customer-side brand-token styling unless the governing standard explicitly allows that boundary exception
 - Report any user-visible area that still does not use TDesign, any backend-contract ambiguity, and any remaining weak-network, re-entry, duplicate-tap, or payment-state risk
+- For native-to-TDesign replacement tasks, default to replacing native controls with TDesign equivalents where available (for example image->image, button->button, input->input, textarea->textarea, switch->switch, checkbox/radio groups, tag-like status), and explicitly list non-replaceable native tags that remain due platform capability gaps (commonly scroll-view, navigator, picker wrappers)
+
+Installed TDesign Miniprogram component inventory (verified against MCP and the repository's `tdesign-miniprogram@^1.13.1`; choose from this list first):
+
+- feedback: action-sheet, dialog, dropdown-menu, guide, loading, message, notice-bar, overlay, popover, popup, pull-down-refresh, swipe-cell, toast
+- data: avatar, badge, cell, collapse, count-down, empty, footer, grid, image-viewer, image, progress, qrcode, result, skeleton, sticky, swiper, tag, watermark
+- navigation: back-top, drawer, indexes, navbar, side-bar, steps, tab-bar, tabs
+- base: button, divider, fab, icon, layout, link
+- form: calendar, cascader, checkbox, color-picker, date-time-picker, form, input, picker, radio, rate, search, slider, stepper, switch, textarea, tree-select, upload
 
 Implementation must not do:
 
 - Do not invent backend fields, states, permissions, metric semantics, or pagination conclusions
+- Do not map one backend interface to one page by default
+- Do not decide page count, section layout, or component choice before capability grouping and page-boundary reasoning are explicit
+- Do not keep adding capabilities to one page once it no longer has a single clear primary task
 - Do not preserve the legacy page layout by default when the request is a refactor, redesign, style unification, or TDesign rewrite
 - Do not jump from the old WXML structure straight to component selection without first inventorying the backend-supported capabilities and actions
 - Do not force unfinished, future, unsupported, or cross-role capabilities into the current page just to make it look complete
+- Do not spend first-screen budget on explanatory hero cards, guide cards, or stacked instruction blocks for single-task non-consumer pages
+- Do not default to text-only local edit/delete/add/test/status buttons when an icon button or icon-led small button would communicate the action
+- Do not wrap TDesign regions in extra local notice/card/panel shells unless the wrapper owns real layout, state, summary, warning, or danger responsibility
+- Do not build non-consumer pages by skinning TDesign with customer-side token imports or extra decorative wrapper layers when the task can be expressed by page shell plus native TDesign composition
 - Do not leave business-specific styles in global styles unless they are truly shared
 - Do not carry customer-side brand colors, decorative token language, or marketing-style visual treatment into merchant, operator, platform, rider, or other non-consumer surfaces by default
 - Do not override TDesign internals for page-local taste when official props, theme hooks, or page-level layout control would suffice
@@ -72,6 +96,8 @@ Acceptance focus:
 
 - The hand-off names the task risk level, the role-side design document used, and the validation depth chosen for that risk
 - The implementation is closed across service, state, handlers, render branches, feedback, and any affected payment or recovery path
+- The first screen enters the task directly instead of opening with explanatory cards or stacked guidance copy
+- Non-consumer local actions default to icon buttons or icon-led small buttons, and any text-only exception is called out explicitly
 - If backend semantics are ambiguous or required fields are missing, the request states whether backend clarification or backend changes are needed instead of guessing in the page layer
 - Any visual-system exception, non-TDesign exception, or remaining weak-network / re-entry / duplicate-tap / unknown-result risk is stated explicitly
 
@@ -81,12 +107,12 @@ TDesign-first refactor mode:
 - Before coding, explicitly map backend-supported capabilities, states, and actions into page sections and first-screen priority rather than treating the existing DOM tree as the page architecture
 - Use TDesign MCP to justify each major component choice by task fit; only fall back to native or local custom user-visible controls after recording why TDesign and supported outer composition do not satisfy the need
 - Complex business areas should be split into dedicated components with explicit input, output, and page-owned orchestration boundaries rather than staying as one oversized page file
-- Delivery notes for this mode must name the page sections that were relaid out, the TDesign components chosen for each major area, and every deliberate exception from TDesign-first usage
+- Delivery notes for this mode must name the page sections that were relaid out, the TDesign components chosen for each major area, every deliberate exception from TDesign-first usage, and which explanatory copy or text-action patterns were removed, demoted, or retained with justification
 
 Diagnosis-first mode:
 
-- If the user asked for a page方案, do not jump straight to code. First establish page task, first-screen hierarchy, page boundary, backend truth, and TDesign-first UI composition.
-- The diagnosis-first structure must cover: target page, user role, primary task, current problems, first-screen essentials, backend-source verification, problem diagnosis, proposed solution, implementation steps, non-goals, risk level, and validation plan.
+- If the user asked for a page方案, do not jump straight to code. First establish backend capability inventory, capability grouping, component boundaries, page boundaries, first-screen hierarchy, backend truth, and then TDesign-first UI composition.
+- The diagnosis-first structure must cover: backend capability inventory, capability grouping, target user role, primary task, proposed component boundaries, page vs page-group decision, first-screen essentials, backend-source verification, problem diagnosis, proposed solution, implementation steps, non-goals, risk level, and validation plan.
 - The page solution must keep UI consistency, small-screen usability, TDesign-first composition, and page shell stability as required deliverables instead of optional polish.
 - The page solution must explicitly state whether the page belongs to consumer or non-consumer visual scope and avoid borrowing the wrong side's design language.
 

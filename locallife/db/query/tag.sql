@@ -10,17 +10,17 @@ INSERT INTO tags (
 RETURNING *;
 
 -- name: GetTag :one
-SELECT * FROM tags
+SELECT id, name, type, sort_order, status, created_at FROM tags
 WHERE id = $1 LIMIT 1;
 
 -- name: ListTags :many
-SELECT * FROM tags
+SELECT id, name, type, sort_order, status, created_at FROM tags
 WHERE type = $1 AND status = 'active'
 ORDER BY sort_order ASC, name ASC
 LIMIT $2 OFFSET $3;
 
 -- name: ListAllTagsByType :many
-SELECT * FROM tags
+SELECT id, name, type, sort_order, status, created_at FROM tags
 WHERE type = $1 AND status = 'active'
 ORDER BY sort_order ASC, name ASC;
 
@@ -38,7 +38,7 @@ DELETE FROM tags
 WHERE id = $1;
 
 -- name: SearchTags :many
-SELECT * FROM tags
+SELECT id, name, type, sort_order, status, created_at FROM tags
 WHERE type = $1
   AND name ILIKE '%' || $2 || '%'
 ORDER BY name

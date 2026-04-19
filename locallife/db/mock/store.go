@@ -312,21 +312,6 @@ func (mr *MockStoreMockRecorder) AllocateDailyPickupSequence(ctx, arg any) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AllocateDailyPickupSequence", reflect.TypeOf((*MockStore)(nil).AllocateDailyPickupSequence), ctx, arg)
 }
 
-// AppealCompensationTx mocks base method.
-func (m *MockStore) AppealCompensationTx(ctx context.Context, arg db.AppealCompensationTxParams) (db.AppealCompensationTxResult, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AppealCompensationTx", ctx, arg)
-	ret0, _ := ret[0].(db.AppealCompensationTxResult)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// AppealCompensationTx indicates an expected call of AppealCompensationTx.
-func (mr *MockStoreMockRecorder) AppealCompensationTx(ctx, arg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppealCompensationTx", reflect.TypeOf((*MockStore)(nil).AppealCompensationTx), ctx, arg)
-}
-
 // ApplymentSubMchActivationTx mocks base method.
 func (m *MockStore) ApplymentSubMchActivationTx(ctx context.Context, arg db.ApplymentSubMchActivationTxParams) error {
 	m.ctrl.T.Helper()
@@ -788,36 +773,6 @@ func (m *MockStore) CheckUserVoucherExists(ctx context.Context, arg db.CheckUser
 func (mr *MockStoreMockRecorder) CheckUserVoucherExists(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckUserVoucherExists", reflect.TypeOf((*MockStore)(nil).CheckUserVoucherExists), ctx, arg)
-}
-
-// ClaimPayoutRollbackTx mocks base method.
-func (m *MockStore) ClaimPayoutRollbackTx(ctx context.Context, arg db.ClaimPayoutRollbackTxParams) (db.ClaimPayoutRollbackTxResult, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ClaimPayoutRollbackTx", ctx, arg)
-	ret0, _ := ret[0].(db.ClaimPayoutRollbackTxResult)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ClaimPayoutRollbackTx indicates an expected call of ClaimPayoutRollbackTx.
-func (mr *MockStoreMockRecorder) ClaimPayoutRollbackTx(ctx, arg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClaimPayoutRollbackTx", reflect.TypeOf((*MockStore)(nil).ClaimPayoutRollbackTx), ctx, arg)
-}
-
-// ClaimPayoutTx mocks base method.
-func (m *MockStore) ClaimPayoutTx(ctx context.Context, arg db.ClaimPayoutTxParams) (db.ClaimPayoutTxResult, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ClaimPayoutTx", ctx, arg)
-	ret0, _ := ret[0].(db.ClaimPayoutTxResult)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ClaimPayoutTx indicates an expected call of ClaimPayoutTx.
-func (mr *MockStoreMockRecorder) ClaimPayoutTx(ctx, arg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClaimPayoutTx", reflect.TypeOf((*MockStore)(nil).ClaimPayoutTx), ctx, arg)
 }
 
 // ClaimVoucherTx mocks base method.
@@ -1711,6 +1666,21 @@ func (m *MockStore) CountMerchantBosses(ctx context.Context, merchantID int64) (
 func (mr *MockStoreMockRecorder) CountMerchantBosses(ctx, merchantID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountMerchantBosses", reflect.TypeOf((*MockStore)(nil).CountMerchantBosses), ctx, merchantID)
+}
+
+// CountMerchantCancelWithdrawApplicationsByMerchant mocks base method.
+func (m *MockStore) CountMerchantCancelWithdrawApplicationsByMerchant(ctx context.Context, merchantID int64) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountMerchantCancelWithdrawApplicationsByMerchant", ctx, merchantID)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountMerchantCancelWithdrawApplicationsByMerchant indicates an expected call of CountMerchantCancelWithdrawApplicationsByMerchant.
+func (mr *MockStoreMockRecorder) CountMerchantCancelWithdrawApplicationsByMerchant(ctx, merchantID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountMerchantCancelWithdrawApplicationsByMerchant", reflect.TypeOf((*MockStore)(nil).CountMerchantCancelWithdrawApplicationsByMerchant), ctx, merchantID)
 }
 
 // CountMerchantClaimsByType mocks base method.
@@ -2793,6 +2763,21 @@ func (mr *MockStoreMockRecorder) CountWechatComplaintsByMerchant(ctx, arg any) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountWechatComplaintsByMerchant", reflect.TypeOf((*MockStore)(nil).CountWechatComplaintsByMerchant), ctx, arg)
 }
 
+// CountWechatMerchantViolations mocks base method.
+func (m *MockStore) CountWechatMerchantViolations(ctx context.Context, arg db.CountWechatMerchantViolationsParams) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountWechatMerchantViolations", ctx, arg)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountWechatMerchantViolations indicates an expected call of CountWechatMerchantViolations.
+func (mr *MockStoreMockRecorder) CountWechatMerchantViolations(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountWechatMerchantViolations", reflect.TypeOf((*MockStore)(nil).CountWechatMerchantViolations), ctx, arg)
+}
+
 // CountWithdrawalRecords mocks base method.
 func (m *MockStore) CountWithdrawalRecords(ctx context.Context, arg db.CountWithdrawalRecordsParams) (int64, error) {
 	m.ctrl.T.Helper()
@@ -2836,6 +2821,21 @@ func (m *MockStore) CreateAppeal(ctx context.Context, arg db.CreateAppealParams)
 func (mr *MockStoreMockRecorder) CreateAppeal(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateAppeal", reflect.TypeOf((*MockStore)(nil).CreateAppeal), ctx, arg)
+}
+
+// CreateAppealWithRecoveryTx mocks base method.
+func (m *MockStore) CreateAppealWithRecoveryTx(ctx context.Context, arg db.CreateAppealWithRecoveryTxParams) (db.CreateAppealWithRecoveryTxResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateAppealWithRecoveryTx", ctx, arg)
+	ret0, _ := ret[0].(db.CreateAppealWithRecoveryTxResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateAppealWithRecoveryTx indicates an expected call of CreateAppealWithRecoveryTx.
+func (mr *MockStoreMockRecorder) CreateAppealWithRecoveryTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateAppealWithRecoveryTx", reflect.TypeOf((*MockStore)(nil).CreateAppealWithRecoveryTx), ctx, arg)
 }
 
 // CreateAuditLog mocks base method.
@@ -3528,6 +3528,21 @@ func (mr *MockStoreMockRecorder) CreateMediaAsset(ctx, arg any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateMediaAsset", reflect.TypeOf((*MockStore)(nil).CreateMediaAsset), ctx, arg)
 }
 
+// CreateMembershipRechargeTransaction mocks base method.
+func (m *MockStore) CreateMembershipRechargeTransaction(ctx context.Context, arg db.CreateMembershipRechargeTransactionParams) (db.MembershipTransaction, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateMembershipRechargeTransaction", ctx, arg)
+	ret0, _ := ret[0].(db.MembershipTransaction)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateMembershipRechargeTransaction indicates an expected call of CreateMembershipRechargeTransaction.
+func (mr *MockStoreMockRecorder) CreateMembershipRechargeTransaction(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateMembershipRechargeTransaction", reflect.TypeOf((*MockStore)(nil).CreateMembershipRechargeTransaction), ctx, arg)
+}
+
 // CreateMembershipTransaction mocks base method.
 func (m *MockStore) CreateMembershipTransaction(ctx context.Context, arg db.CreateMembershipTransactionParams) (db.MembershipTransaction, error) {
 	m.ctrl.T.Helper()
@@ -3631,6 +3646,21 @@ func (m *MockStore) CreateMerchantBrand(ctx context.Context, arg db.CreateMercha
 func (mr *MockStoreMockRecorder) CreateMerchantBrand(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateMerchantBrand", reflect.TypeOf((*MockStore)(nil).CreateMerchantBrand), ctx, arg)
+}
+
+// CreateMerchantCancelWithdrawApplication mocks base method.
+func (m *MockStore) CreateMerchantCancelWithdrawApplication(ctx context.Context, arg db.CreateMerchantCancelWithdrawApplicationParams) (db.MerchantCancelWithdrawApplication, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateMerchantCancelWithdrawApplication", ctx, arg)
+	ret0, _ := ret[0].(db.MerchantCancelWithdrawApplication)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateMerchantCancelWithdrawApplication indicates an expected call of CreateMerchantCancelWithdrawApplication.
+func (mr *MockStoreMockRecorder) CreateMerchantCancelWithdrawApplication(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateMerchantCancelWithdrawApplication", reflect.TypeOf((*MockStore)(nil).CreateMerchantCancelWithdrawApplication), ctx, arg)
 }
 
 // CreateMerchantGroup mocks base method.
@@ -5864,21 +5894,6 @@ func (mr *MockStoreMockRecorder) GetApplicableDiscountRules(ctx, arg any) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetApplicableDiscountRules", reflect.TypeOf((*MockStore)(nil).GetApplicableDiscountRules), ctx, arg)
 }
 
-// GetApprovedOperatorApplicationByUserID mocks base method.
-func (m *MockStore) GetApprovedOperatorApplicationByUserID(ctx context.Context, userID int64) (db.OperatorApplication, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetApprovedOperatorApplicationByUserID", ctx, userID)
-	ret0, _ := ret[0].(db.OperatorApplication)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetApprovedOperatorApplicationByUserID indicates an expected call of GetApprovedOperatorApplicationByUserID.
-func (mr *MockStoreMockRecorder) GetApprovedOperatorApplicationByUserID(ctx, userID any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetApprovedOperatorApplicationByUserID", reflect.TypeOf((*MockStore)(nil).GetApprovedOperatorApplicationByUserID), ctx, userID)
-}
-
 // GetBehaviorAction mocks base method.
 func (m *MockStore) GetBehaviorAction(ctx context.Context, id int64) (db.BehaviorAction, error) {
 	m.ctrl.T.Helper()
@@ -7364,6 +7379,21 @@ func (mr *MockStoreMockRecorder) GetMaliciousClaims(ctx, createdAt any) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMaliciousClaims", reflect.TypeOf((*MockStore)(nil).GetMaliciousClaims), ctx, createdAt)
 }
 
+// GetManagedRegionsDailyTrend mocks base method.
+func (m *MockStore) GetManagedRegionsDailyTrend(ctx context.Context, arg db.GetManagedRegionsDailyTrendParams) ([]db.GetManagedRegionsDailyTrendRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetManagedRegionsDailyTrend", ctx, arg)
+	ret0, _ := ret[0].([]db.GetManagedRegionsDailyTrendRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetManagedRegionsDailyTrend indicates an expected call of GetManagedRegionsDailyTrend.
+func (mr *MockStoreMockRecorder) GetManagedRegionsDailyTrend(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetManagedRegionsDailyTrend", reflect.TypeOf((*MockStore)(nil).GetManagedRegionsDailyTrend), ctx, arg)
+}
+
 // GetMatchingRechargeRule mocks base method.
 func (m *MockStore) GetMatchingRechargeRule(ctx context.Context, arg db.GetMatchingRechargeRuleParams) (db.RechargeRule, error) {
 	m.ctrl.T.Helper()
@@ -7482,6 +7512,21 @@ func (m *MockStore) GetMembershipForUpdate(ctx context.Context, id int64) (db.Me
 func (mr *MockStoreMockRecorder) GetMembershipForUpdate(ctx, id any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMembershipForUpdate", reflect.TypeOf((*MockStore)(nil).GetMembershipForUpdate), ctx, id)
+}
+
+// GetMembershipRechargeTransactionByIdempotencyKey mocks base method.
+func (m *MockStore) GetMembershipRechargeTransactionByIdempotencyKey(ctx context.Context, arg db.GetMembershipRechargeTransactionByIdempotencyKeyParams) (db.MembershipTransaction, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetMembershipRechargeTransactionByIdempotencyKey", ctx, arg)
+	ret0, _ := ret[0].(db.MembershipTransaction)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetMembershipRechargeTransactionByIdempotencyKey indicates an expected call of GetMembershipRechargeTransactionByIdempotencyKey.
+func (mr *MockStoreMockRecorder) GetMembershipRechargeTransactionByIdempotencyKey(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMembershipRechargeTransactionByIdempotencyKey", reflect.TypeOf((*MockStore)(nil).GetMembershipRechargeTransactionByIdempotencyKey), ctx, arg)
 }
 
 // GetMembershipTransaction mocks base method.
@@ -7692,6 +7737,51 @@ func (m *MockStore) GetMerchantByOwner(ctx context.Context, ownerUserID int64) (
 func (mr *MockStoreMockRecorder) GetMerchantByOwner(ctx, ownerUserID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMerchantByOwner", reflect.TypeOf((*MockStore)(nil).GetMerchantByOwner), ctx, ownerUserID)
+}
+
+// GetMerchantCancelWithdrawApplication mocks base method.
+func (m *MockStore) GetMerchantCancelWithdrawApplication(ctx context.Context, id int64) (db.MerchantCancelWithdrawApplication, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetMerchantCancelWithdrawApplication", ctx, id)
+	ret0, _ := ret[0].(db.MerchantCancelWithdrawApplication)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetMerchantCancelWithdrawApplication indicates an expected call of GetMerchantCancelWithdrawApplication.
+func (mr *MockStoreMockRecorder) GetMerchantCancelWithdrawApplication(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMerchantCancelWithdrawApplication", reflect.TypeOf((*MockStore)(nil).GetMerchantCancelWithdrawApplication), ctx, id)
+}
+
+// GetMerchantCancelWithdrawApplicationByApplymentID mocks base method.
+func (m *MockStore) GetMerchantCancelWithdrawApplicationByApplymentID(ctx context.Context, applymentID pgtype.Text) (db.MerchantCancelWithdrawApplication, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetMerchantCancelWithdrawApplicationByApplymentID", ctx, applymentID)
+	ret0, _ := ret[0].(db.MerchantCancelWithdrawApplication)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetMerchantCancelWithdrawApplicationByApplymentID indicates an expected call of GetMerchantCancelWithdrawApplicationByApplymentID.
+func (mr *MockStoreMockRecorder) GetMerchantCancelWithdrawApplicationByApplymentID(ctx, applymentID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMerchantCancelWithdrawApplicationByApplymentID", reflect.TypeOf((*MockStore)(nil).GetMerchantCancelWithdrawApplicationByApplymentID), ctx, applymentID)
+}
+
+// GetMerchantCancelWithdrawApplicationByOutRequestNo mocks base method.
+func (m *MockStore) GetMerchantCancelWithdrawApplicationByOutRequestNo(ctx context.Context, outRequestNo string) (db.MerchantCancelWithdrawApplication, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetMerchantCancelWithdrawApplicationByOutRequestNo", ctx, outRequestNo)
+	ret0, _ := ret[0].(db.MerchantCancelWithdrawApplication)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetMerchantCancelWithdrawApplicationByOutRequestNo indicates an expected call of GetMerchantCancelWithdrawApplicationByOutRequestNo.
+func (mr *MockStoreMockRecorder) GetMerchantCancelWithdrawApplicationByOutRequestNo(ctx, outRequestNo any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMerchantCancelWithdrawApplicationByOutRequestNo", reflect.TypeOf((*MockStore)(nil).GetMerchantCancelWithdrawApplicationByOutRequestNo), ctx, outRequestNo)
 }
 
 // GetMerchantCapabilities mocks base method.
@@ -8862,36 +8952,6 @@ func (m *MockStore) GetPlatformDailyStats(ctx context.Context, arg db.GetPlatfor
 func (mr *MockStoreMockRecorder) GetPlatformDailyStats(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPlatformDailyStats", reflect.TypeOf((*MockStore)(nil).GetPlatformDailyStats), ctx, arg)
-}
-
-// GetPlatformOperatorRuleBaselineFromOperator mocks base method.
-func (m *MockStore) GetPlatformOperatorRuleBaselineFromOperator(ctx context.Context) (db.GetPlatformOperatorRuleBaselineFromOperatorRow, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetPlatformOperatorRuleBaselineFromOperator", ctx)
-	ret0, _ := ret[0].(db.GetPlatformOperatorRuleBaselineFromOperatorRow)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetPlatformOperatorRuleBaselineFromOperator indicates an expected call of GetPlatformOperatorRuleBaselineFromOperator.
-func (mr *MockStoreMockRecorder) GetPlatformOperatorRuleBaselineFromOperator(ctx any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPlatformOperatorRuleBaselineFromOperator", reflect.TypeOf((*MockStore)(nil).GetPlatformOperatorRuleBaselineFromOperator), ctx)
-}
-
-// GetPlatformOperatorRuleBaselineFromRegion mocks base method.
-func (m *MockStore) GetPlatformOperatorRuleBaselineFromRegion(ctx context.Context) (db.GetPlatformOperatorRuleBaselineFromRegionRow, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetPlatformOperatorRuleBaselineFromRegion", ctx)
-	ret0, _ := ret[0].(db.GetPlatformOperatorRuleBaselineFromRegionRow)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetPlatformOperatorRuleBaselineFromRegion indicates an expected call of GetPlatformOperatorRuleBaselineFromRegion.
-func (mr *MockStoreMockRecorder) GetPlatformOperatorRuleBaselineFromRegion(ctx any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPlatformOperatorRuleBaselineFromRegion", reflect.TypeOf((*MockStore)(nil).GetPlatformOperatorRuleBaselineFromRegion), ctx)
 }
 
 // GetPlatformOverview mocks base method.
@@ -10889,6 +10949,21 @@ func (mr *MockStoreMockRecorder) GetWechatComplaintByComplaintIDForUpdate(ctx, c
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWechatComplaintByComplaintIDForUpdate", reflect.TypeOf((*MockStore)(nil).GetWechatComplaintByComplaintIDForUpdate), ctx, complaintID)
 }
 
+// GetWechatMerchantViolationByRecordID mocks base method.
+func (m *MockStore) GetWechatMerchantViolationByRecordID(ctx context.Context, recordID string) (db.WechatMerchantViolation, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetWechatMerchantViolationByRecordID", ctx, recordID)
+	ret0, _ := ret[0].(db.WechatMerchantViolation)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetWechatMerchantViolationByRecordID indicates an expected call of GetWechatMerchantViolationByRecordID.
+func (mr *MockStoreMockRecorder) GetWechatMerchantViolationByRecordID(ctx, recordID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWechatMerchantViolationByRecordID", reflect.TypeOf((*MockStore)(nil).GetWechatMerchantViolationByRecordID), ctx, recordID)
+}
+
 // GetWechatNotification mocks base method.
 func (m *MockStore) GetWechatNotification(ctx context.Context, id string) (db.WechatNotification, error) {
 	m.ctrl.T.Helper()
@@ -12564,6 +12639,21 @@ func (mr *MockStoreMockRecorder) ListMerchantApplications(ctx, arg any) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListMerchantApplications", reflect.TypeOf((*MockStore)(nil).ListMerchantApplications), ctx, arg)
 }
 
+// ListMerchantApplymentsPendingSettlementVerification mocks base method.
+func (m *MockStore) ListMerchantApplymentsPendingSettlementVerification(ctx context.Context, arg db.ListMerchantApplymentsPendingSettlementVerificationParams) ([]db.ListMerchantApplymentsPendingSettlementVerificationRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListMerchantApplymentsPendingSettlementVerification", ctx, arg)
+	ret0, _ := ret[0].([]db.ListMerchantApplymentsPendingSettlementVerificationRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListMerchantApplymentsPendingSettlementVerification indicates an expected call of ListMerchantApplymentsPendingSettlementVerification.
+func (mr *MockStoreMockRecorder) ListMerchantApplymentsPendingSettlementVerification(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListMerchantApplymentsPendingSettlementVerification", reflect.TypeOf((*MockStore)(nil).ListMerchantApplymentsPendingSettlementVerification), ctx, arg)
+}
+
 // ListMerchantBrandsByGroup mocks base method.
 func (m *MockStore) ListMerchantBrandsByGroup(ctx context.Context, groupID int64) ([]db.MerchantBrand, error) {
 	m.ctrl.T.Helper()
@@ -12607,6 +12697,21 @@ func (m *MockStore) ListMerchantBusinessHoursAll(ctx context.Context, merchantID
 func (mr *MockStoreMockRecorder) ListMerchantBusinessHoursAll(ctx, merchantID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListMerchantBusinessHoursAll", reflect.TypeOf((*MockStore)(nil).ListMerchantBusinessHoursAll), ctx, merchantID)
+}
+
+// ListMerchantCancelWithdrawApplicationsByMerchant mocks base method.
+func (m *MockStore) ListMerchantCancelWithdrawApplicationsByMerchant(ctx context.Context, arg db.ListMerchantCancelWithdrawApplicationsByMerchantParams) ([]db.MerchantCancelWithdrawApplication, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListMerchantCancelWithdrawApplicationsByMerchant", ctx, arg)
+	ret0, _ := ret[0].([]db.MerchantCancelWithdrawApplication)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListMerchantCancelWithdrawApplicationsByMerchant indicates an expected call of ListMerchantCancelWithdrawApplicationsByMerchant.
+func (mr *MockStoreMockRecorder) ListMerchantCancelWithdrawApplicationsByMerchant(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListMerchantCancelWithdrawApplicationsByMerchant", reflect.TypeOf((*MockStore)(nil).ListMerchantCancelWithdrawApplicationsByMerchant), ctx, arg)
 }
 
 // ListMerchantClaims mocks base method.
@@ -13642,6 +13747,21 @@ func (m *MockStore) ListPendingEcommerceApplyments(ctx context.Context, arg db.L
 func (mr *MockStoreMockRecorder) ListPendingEcommerceApplyments(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPendingEcommerceApplyments", reflect.TypeOf((*MockStore)(nil).ListPendingEcommerceApplyments), ctx, arg)
+}
+
+// ListPendingMerchantCancelWithdrawApplications mocks base method.
+func (m *MockStore) ListPendingMerchantCancelWithdrawApplications(ctx context.Context, limit int32) ([]db.MerchantCancelWithdrawApplication, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListPendingMerchantCancelWithdrawApplications", ctx, limit)
+	ret0, _ := ret[0].([]db.MerchantCancelWithdrawApplication)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListPendingMerchantCancelWithdrawApplications indicates an expected call of ListPendingMerchantCancelWithdrawApplications.
+func (mr *MockStoreMockRecorder) ListPendingMerchantCancelWithdrawApplications(ctx, limit any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPendingMerchantCancelWithdrawApplications", reflect.TypeOf((*MockStore)(nil).ListPendingMerchantCancelWithdrawApplications), ctx, limit)
 }
 
 // ListPendingOCRJobsByMediaAsset mocks base method.
@@ -15069,6 +15189,21 @@ func (mr *MockStoreMockRecorder) ListWechatComplaintsBySubMchID(ctx, arg any) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListWechatComplaintsBySubMchID", reflect.TypeOf((*MockStore)(nil).ListWechatComplaintsBySubMchID), ctx, arg)
 }
 
+// ListWechatMerchantViolations mocks base method.
+func (m *MockStore) ListWechatMerchantViolations(ctx context.Context, arg db.ListWechatMerchantViolationsParams) ([]db.WechatMerchantViolation, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListWechatMerchantViolations", ctx, arg)
+	ret0, _ := ret[0].([]db.WechatMerchantViolation)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListWechatMerchantViolations indicates an expected call of ListWechatMerchantViolations.
+func (mr *MockStoreMockRecorder) ListWechatMerchantViolations(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListWechatMerchantViolations", reflect.TypeOf((*MockStore)(nil).ListWechatMerchantViolations), ctx, arg)
+}
+
 // ListWechatNotificationsByOutTradeNo mocks base method.
 func (m *MockStore) ListWechatNotificationsByOutTradeNo(ctx context.Context, outTradeNo pgtype.Text) ([]db.WechatNotification, error) {
 	m.ctrl.T.Helper()
@@ -15228,6 +15363,21 @@ func (m *MockStore) MarkEcommerceApplymentResultProcessed(ctx context.Context, a
 func (mr *MockStoreMockRecorder) MarkEcommerceApplymentResultProcessed(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkEcommerceApplymentResultProcessed", reflect.TypeOf((*MockStore)(nil).MarkEcommerceApplymentResultProcessed), ctx, arg)
+}
+
+// MarkEcommerceApplymentSettlementVerifyFailedNotified mocks base method.
+func (m *MockStore) MarkEcommerceApplymentSettlementVerifyFailedNotified(ctx context.Context, id int64) (db.EcommerceApplyment, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MarkEcommerceApplymentSettlementVerifyFailedNotified", ctx, id)
+	ret0, _ := ret[0].(db.EcommerceApplyment)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MarkEcommerceApplymentSettlementVerifyFailedNotified indicates an expected call of MarkEcommerceApplymentSettlementVerifyFailedNotified.
+func (mr *MockStoreMockRecorder) MarkEcommerceApplymentSettlementVerifyFailedNotified(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkEcommerceApplymentSettlementVerifyFailedNotified", reflect.TypeOf((*MockStore)(nil).MarkEcommerceApplymentSettlementVerifyFailedNotified), ctx, id)
 }
 
 // MarkNoShowTx mocks base method.
@@ -16947,90 +17097,6 @@ func (mr *MockStoreMockRecorder) UnsuspendRider(ctx, riderID any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnsuspendRider", reflect.TypeOf((*MockStore)(nil).UnsuspendRider), ctx, riderID)
 }
 
-// UpdateAllOperatorsCommissionRate mocks base method.
-func (m *MockStore) UpdateAllOperatorsCommissionRate(ctx context.Context, commissionRate pgtype.Numeric) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateAllOperatorsCommissionRate", ctx, commissionRate)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// UpdateAllOperatorsCommissionRate indicates an expected call of UpdateAllOperatorsCommissionRate.
-func (mr *MockStoreMockRecorder) UpdateAllOperatorsCommissionRate(ctx, commissionRate any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateAllOperatorsCommissionRate", reflect.TypeOf((*MockStore)(nil).UpdateAllOperatorsCommissionRate), ctx, commissionRate)
-}
-
-// UpdateAllOperatorsMerchantDeposit mocks base method.
-func (m *MockStore) UpdateAllOperatorsMerchantDeposit(ctx context.Context, merchantDeposit int64) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateAllOperatorsMerchantDeposit", ctx, merchantDeposit)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// UpdateAllOperatorsMerchantDeposit indicates an expected call of UpdateAllOperatorsMerchantDeposit.
-func (mr *MockStoreMockRecorder) UpdateAllOperatorsMerchantDeposit(ctx, merchantDeposit any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateAllOperatorsMerchantDeposit", reflect.TypeOf((*MockStore)(nil).UpdateAllOperatorsMerchantDeposit), ctx, merchantDeposit)
-}
-
-// UpdateAllOperatorsRiderDeposit mocks base method.
-func (m *MockStore) UpdateAllOperatorsRiderDeposit(ctx context.Context, riderDeposit int64) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateAllOperatorsRiderDeposit", ctx, riderDeposit)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// UpdateAllOperatorsRiderDeposit indicates an expected call of UpdateAllOperatorsRiderDeposit.
-func (mr *MockStoreMockRecorder) UpdateAllOperatorsRiderDeposit(ctx, riderDeposit any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateAllOperatorsRiderDeposit", reflect.TypeOf((*MockStore)(nil).UpdateAllOperatorsRiderDeposit), ctx, riderDeposit)
-}
-
-// UpdateAllRegionRuleConfigCommissionRate mocks base method.
-func (m *MockStore) UpdateAllRegionRuleConfigCommissionRate(ctx context.Context, commissionRate pgtype.Numeric) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateAllRegionRuleConfigCommissionRate", ctx, commissionRate)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// UpdateAllRegionRuleConfigCommissionRate indicates an expected call of UpdateAllRegionRuleConfigCommissionRate.
-func (mr *MockStoreMockRecorder) UpdateAllRegionRuleConfigCommissionRate(ctx, commissionRate any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateAllRegionRuleConfigCommissionRate", reflect.TypeOf((*MockStore)(nil).UpdateAllRegionRuleConfigCommissionRate), ctx, commissionRate)
-}
-
-// UpdateAllRegionRuleConfigMerchantDeposit mocks base method.
-func (m *MockStore) UpdateAllRegionRuleConfigMerchantDeposit(ctx context.Context, merchantDeposit int64) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateAllRegionRuleConfigMerchantDeposit", ctx, merchantDeposit)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// UpdateAllRegionRuleConfigMerchantDeposit indicates an expected call of UpdateAllRegionRuleConfigMerchantDeposit.
-func (mr *MockStoreMockRecorder) UpdateAllRegionRuleConfigMerchantDeposit(ctx, merchantDeposit any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateAllRegionRuleConfigMerchantDeposit", reflect.TypeOf((*MockStore)(nil).UpdateAllRegionRuleConfigMerchantDeposit), ctx, merchantDeposit)
-}
-
-// UpdateAllRegionRuleConfigRiderDeposit mocks base method.
-func (m *MockStore) UpdateAllRegionRuleConfigRiderDeposit(ctx context.Context, riderDeposit int64) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateAllRegionRuleConfigRiderDeposit", ctx, riderDeposit)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// UpdateAllRegionRuleConfigRiderDeposit indicates an expected call of UpdateAllRegionRuleConfigRiderDeposit.
-func (mr *MockStoreMockRecorder) UpdateAllRegionRuleConfigRiderDeposit(ctx, riderDeposit any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateAllRegionRuleConfigRiderDeposit", reflect.TypeOf((*MockStore)(nil).UpdateAllRegionRuleConfigRiderDeposit), ctx, riderDeposit)
-}
-
 // UpdateBehaviorActionExecution mocks base method.
 func (m *MockStore) UpdateBehaviorActionExecution(ctx context.Context, arg db.UpdateBehaviorActionExecutionParams) error {
 	m.ctrl.T.Helper()
@@ -17678,6 +17744,21 @@ func (mr *MockStoreMockRecorder) UpdateDishesCategory(ctx, arg any) *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDishesCategory", reflect.TypeOf((*MockStore)(nil).UpdateDishesCategory), ctx, arg)
 }
 
+// UpdateEcommerceApplymentSettlementVerification mocks base method.
+func (m *MockStore) UpdateEcommerceApplymentSettlementVerification(ctx context.Context, arg db.UpdateEcommerceApplymentSettlementVerificationParams) (db.EcommerceApplyment, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateEcommerceApplymentSettlementVerification", ctx, arg)
+	ret0, _ := ret[0].(db.EcommerceApplyment)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateEcommerceApplymentSettlementVerification indicates an expected call of UpdateEcommerceApplymentSettlementVerification.
+func (mr *MockStoreMockRecorder) UpdateEcommerceApplymentSettlementVerification(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateEcommerceApplymentSettlementVerification", reflect.TypeOf((*MockStore)(nil).UpdateEcommerceApplymentSettlementVerification), ctx, arg)
+}
+
 // UpdateEcommerceApplymentStatus mocks base method.
 func (m *MockStore) UpdateEcommerceApplymentStatus(ctx context.Context, arg db.UpdateEcommerceApplymentStatusParams) (db.EcommerceApplyment, error) {
 	m.ctrl.T.Helper()
@@ -18005,6 +18086,21 @@ func (mr *MockStoreMockRecorder) UpdateMerchantBossStatus(ctx, arg any) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateMerchantBossStatus", reflect.TypeOf((*MockStore)(nil).UpdateMerchantBossStatus), ctx, arg)
 }
 
+// UpdateMerchantCancelWithdrawApplicationSync mocks base method.
+func (m *MockStore) UpdateMerchantCancelWithdrawApplicationSync(ctx context.Context, arg db.UpdateMerchantCancelWithdrawApplicationSyncParams) (db.MerchantCancelWithdrawApplication, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateMerchantCancelWithdrawApplicationSync", ctx, arg)
+	ret0, _ := ret[0].(db.MerchantCancelWithdrawApplication)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateMerchantCancelWithdrawApplicationSync indicates an expected call of UpdateMerchantCancelWithdrawApplicationSync.
+func (mr *MockStoreMockRecorder) UpdateMerchantCancelWithdrawApplicationSync(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateMerchantCancelWithdrawApplicationSync", reflect.TypeOf((*MockStore)(nil).UpdateMerchantCancelWithdrawApplicationSync), ctx, arg)
+}
+
 // UpdateMerchantCapabilitiesTx mocks base method.
 func (m *MockStore) UpdateMerchantCapabilitiesTx(ctx context.Context, arg db.UpdateMerchantCapabilitiesTxParams) (db.UpdateMerchantCapabilitiesTxResult, error) {
 	m.ctrl.T.Helper()
@@ -18107,6 +18203,21 @@ func (m *MockStore) UpdateMerchantPaymentConfig(ctx context.Context, arg db.Upda
 func (mr *MockStoreMockRecorder) UpdateMerchantPaymentConfig(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateMerchantPaymentConfig", reflect.TypeOf((*MockStore)(nil).UpdateMerchantPaymentConfig), ctx, arg)
+}
+
+// UpdateMerchantPaymentConfigSettlementApplication mocks base method.
+func (m *MockStore) UpdateMerchantPaymentConfigSettlementApplication(ctx context.Context, arg db.UpdateMerchantPaymentConfigSettlementApplicationParams) (db.MerchantPaymentConfig, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateMerchantPaymentConfigSettlementApplication", ctx, arg)
+	ret0, _ := ret[0].(db.MerchantPaymentConfig)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateMerchantPaymentConfigSettlementApplication indicates an expected call of UpdateMerchantPaymentConfigSettlementApplication.
+func (mr *MockStoreMockRecorder) UpdateMerchantPaymentConfigSettlementApplication(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateMerchantPaymentConfigSettlementApplication", reflect.TypeOf((*MockStore)(nil).UpdateMerchantPaymentConfigSettlementApplication), ctx, arg)
 }
 
 // UpdateMerchantProfile mocks base method.
@@ -18331,21 +18442,6 @@ func (m *MockStore) UpdateOperatorStatus(ctx context.Context, arg db.UpdateOpera
 func (mr *MockStoreMockRecorder) UpdateOperatorStatus(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateOperatorStatus", reflect.TypeOf((*MockStore)(nil).UpdateOperatorStatus), ctx, arg)
-}
-
-// UpdateOperatorSubMchID mocks base method.
-func (m *MockStore) UpdateOperatorSubMchID(ctx context.Context, arg db.UpdateOperatorSubMchIDParams) (db.Operator, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateOperatorSubMchID", ctx, arg)
-	ret0, _ := ret[0].(db.Operator)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// UpdateOperatorSubMchID indicates an expected call of UpdateOperatorSubMchID.
-func (mr *MockStoreMockRecorder) UpdateOperatorSubMchID(ctx, arg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateOperatorSubMchID", reflect.TypeOf((*MockStore)(nil).UpdateOperatorSubMchID), ctx, arg)
 }
 
 // UpdateOrderDisplayConfig mocks base method.
@@ -19903,6 +19999,21 @@ func (mr *MockStoreMockRecorder) UpsertWechatComplaint(ctx, arg any) *gomock.Cal
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertWechatComplaint", reflect.TypeOf((*MockStore)(nil).UpsertWechatComplaint), ctx, arg)
 }
 
+// UpsertWechatMerchantViolation mocks base method.
+func (m *MockStore) UpsertWechatMerchantViolation(ctx context.Context, arg db.UpsertWechatMerchantViolationParams) (db.WechatMerchantViolation, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpsertWechatMerchantViolation", ctx, arg)
+	ret0, _ := ret[0].(db.WechatMerchantViolation)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpsertWechatMerchantViolation indicates an expected call of UpsertWechatMerchantViolation.
+func (mr *MockStoreMockRecorder) UpsertWechatMerchantViolation(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertWechatMerchantViolation", reflect.TypeOf((*MockStore)(nil).UpsertWechatMerchantViolation), ctx, arg)
+}
+
 // UseVoucherTx mocks base method.
 func (m *MockStore) UseVoucherTx(ctx context.Context, arg db.UseVoucherTxParams) (db.UseVoucherTxResult, error) {
 	m.ctrl.T.Helper()
@@ -19916,19 +20027,4 @@ func (m *MockStore) UseVoucherTx(ctx context.Context, arg db.UseVoucherTxParams)
 func (mr *MockStoreMockRecorder) UseVoucherTx(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UseVoucherTx", reflect.TypeOf((*MockStore)(nil).UseVoucherTx), ctx, arg)
-}
-
-// WithdrawOperatorTx mocks base method.
-func (m *MockStore) WithdrawOperatorTx(ctx context.Context, arg db.WithdrawOperatorTxParams) (db.WithdrawOperatorTxResult, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "WithdrawOperatorTx", ctx, arg)
-	ret0, _ := ret[0].(db.WithdrawOperatorTxResult)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// WithdrawOperatorTx indicates an expected call of WithdrawOperatorTx.
-func (mr *MockStoreMockRecorder) WithdrawOperatorTx(ctx, arg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WithdrawOperatorTx", reflect.TypeOf((*MockStore)(nil).WithdrawOperatorTx), ctx, arg)
 }

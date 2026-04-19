@@ -17,11 +17,11 @@ INSERT INTO order_display_configs (
 ) RETURNING *;
 
 -- name: GetOrderDisplayConfig :one
-SELECT * FROM order_display_configs
+SELECT id, merchant_id, enable_print, print_takeout, print_dine_in, print_reservation, enable_voice, voice_takeout, voice_dine_in, enable_kds, kds_url, created_at, updated_at, print_dispatch_mode, print_trigger_mode FROM order_display_configs
 WHERE id = $1 LIMIT 1;
 
 -- name: GetOrderDisplayConfigByMerchant :one
-SELECT * FROM order_display_configs
+SELECT id, merchant_id, enable_print, print_takeout, print_dine_in, print_reservation, enable_voice, voice_takeout, voice_dine_in, enable_kds, kds_url, created_at, updated_at, print_dispatch_mode, print_trigger_mode FROM order_display_configs
 WHERE merchant_id = $1 LIMIT 1;
 
 -- name: UpdateOrderDisplayConfig :one

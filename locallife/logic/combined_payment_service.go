@@ -16,6 +16,7 @@ import (
 
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 )
 
 const (
@@ -87,18 +88,19 @@ type QueryCombinedPaymentWechatAmount struct {
 }
 
 type QueryCombinedPaymentWechatSubOrder struct {
-	MchID         string
-	SubMchID      string
-	SubAppID      string
-	SubOpenID     string
-	OutTradeNo    string
-	TransactionID string
-	TradeType     string
-	TradeState    string
-	BankType      string
-	Attach        string
-	SuccessTime   string
-	Amount        QueryCombinedPaymentWechatAmount
+	MchID           string
+	SubMchID        string
+	SubAppID        string
+	SubOpenID       string
+	OutTradeNo      string
+	TransactionID   string
+	TradeType       string
+	TradeState      string
+	BankType        string
+	Attach          string
+	SuccessTime     string
+	PromotionDetail []wechatcontracts.PartnerPromotionDetail
+	Amount          QueryCombinedPaymentWechatAmount
 }
 
 type QueryCombinedPaymentWechatOrder struct {
@@ -192,7 +194,7 @@ func (svc *CombinedPaymentService) CreateCombinedPaymentOrder(ctx context.Contex
 			if attempt < concurrentPaymentRetry {
 				continue
 			}
-			return result, NewRequestError(http.StatusConflict, errors.New("combined payment order is being recreated, please retry"))
+			return result, NewRequestError(http.StatusConflict, errors.New("合单支付正在重建，请返回支付结果页刷新后再重试"))
 		}
 
 		if mapped := mapCombinedPaymentError(err); mapped != nil {
@@ -201,11 +203,11 @@ func (svc *CombinedPaymentService) CreateCombinedPaymentOrder(ctx context.Contex
 		return result, fmt.Errorf("create combined payment: %w", err)
 	}
 
-	wechatSubOrders := make([]wechat.SubOrder, 0, len(txResult.OrderInfos))
+	wechatSubOrders := make([]wechatcontracts.SubOrder, 0, len(txResult.OrderInfos))
 	subOrders := make([]CombinedSubOrder, 0, len(txResult.OrderInfos))
 	for _, info := range txResult.OrderInfos {
 		description := fmt.Sprintf("%s - Order Payment", info.Merchant.Name)
-		wechatSubOrders = append(wechatSubOrders, wechat.SubOrder{
+		wechatSubOrders = append(wechatSubOrders, wechatcontracts.SubOrder{
 			SubMchID:    info.PaymentConfig.SubMchID,
 			Amount:      info.PaymentOrder.Amount,
 			OutTradeNo:  info.PaymentOrder.OutTradeNo,
@@ -223,12 +225,12 @@ func (svc *CombinedPaymentService) CreateCombinedPaymentOrder(ctx context.Contex
 		})
 	}
 
-	combineResp, payParams, err := svc.ecommerceClient.CreateCombineOrder(ctx, &wechat.CombineOrderRequest{
+	combineResp, payParams, err := svc.ecommerceClient.CreateCombineOrder(ctx, &wechatcontracts.CombineOrderRequest{
 		CombineOutTradeNo: txResult.CombinedPaymentOrder.CombineOutTradeNo,
 		SubOrders:         wechatSubOrders,
 		PayerOpenID:       user.WechatOpenid,
 		ExpireTime:        expiresAt,
-		SceneInfo: &wechat.CombineSceneInfo{
+		SceneInfo: &wechatcontracts.CombineSceneInfo{
 			PayerClientIP: input.ClientIP,
 		},
 	})
@@ -240,7 +242,7 @@ func (svc *CombinedPaymentService) CreateCombinedPaymentOrder(ctx context.Contex
 			_, _ = svc.store.UpdatePaymentOrderToClosed(cleanupCtx, info.PaymentOrder.ID)
 		}
 		_, _ = svc.store.UpdateCombinedPaymentOrderToClosed(cleanupCtx, txResult.CombinedPaymentOrder.ID)
-		return result, fmt.Errorf("create combine order: %w", err)
+		return result, mapCombineOrderCreateError(err)
 	}
 	if combineResp == nil || strings.TrimSpace(combineResp.PrepayID) == "" {
 		cleanupCtx := context.Background()
@@ -248,7 +250,7 @@ func (svc *CombinedPaymentService) CreateCombinedPaymentOrder(ctx context.Contex
 			_, _ = svc.store.UpdatePaymentOrderToClosed(cleanupCtx, info.PaymentOrder.ID)
 		}
 		_, _ = svc.store.UpdateCombinedPaymentOrderToClosed(cleanupCtx, txResult.CombinedPaymentOrder.ID)
-		return result, fmt.Errorf("create combine order: empty prepay id")
+		return result, mapCombineOrderCreateError(errors.New("create combine order: empty prepay id"))
 	}
 
 	updatedCombined, err := svc.store.UpdateCombinedPaymentOrderPrepay(ctx, db.UpdateCombinedPaymentOrderPrepayParams{
@@ -265,9 +267,9 @@ func (svc *CombinedPaymentService) CreateCombinedPaymentOrder(ctx context.Contex
 		}
 		_, _ = svc.store.UpdateCombinedPaymentOrderToFailed(cleanupCtx, txResult.CombinedPaymentOrder.ID)
 		if svc.ecommerceClient != nil {
-			closeSubs := make([]wechat.SubOrderClose, 0, len(wechatSubOrders))
+			closeSubs := make([]wechatcontracts.SubOrderClose, 0, len(wechatSubOrders))
 			for _, sub := range wechatSubOrders {
-				closeSubs = append(closeSubs, wechat.SubOrderClose{MchID: sub.MchID, SubMchID: sub.SubMchID, SubAppID: sub.SubAppID, OutTradeNo: sub.OutTradeNo})
+				closeSubs = append(closeSubs, wechatcontracts.SubOrderClose{MchID: sub.MchID, SubMchID: sub.SubMchID, SubAppID: sub.SubAppID, OutTradeNo: sub.OutTradeNo})
 			}
 			if closeErr := svc.ecommerceClient.CloseCombineOrder(cleanupCtx, txResult.CombinedPaymentOrder.CombineOutTradeNo, closeSubs); closeErr != nil {
 				log.Warn().Err(closeErr).Str("combine_out_trade_no", txResult.CombinedPaymentOrder.CombineOutTradeNo).Msg("close wechat combine order after prepay update failure")
@@ -364,7 +366,10 @@ func (svc *CombinedPaymentService) resolveConcurrentCombinedPayment(
 		}
 
 		payParams, signErr := svc.signExistingCombinedPaymentOrder(combinedRow)
-		if signErr == nil && payParams != nil {
+		if signErr != nil {
+			return result, true, fmt.Errorf("sign concurrent combined payment order: %w", signErr)
+		}
+		if payParams != nil {
 			result, buildErr := buildExistingCombinedPaymentResult(combinedRow, payParams)
 			if buildErr != nil {
 				return CreateCombinedPaymentOrderResult{}, true, buildErr
@@ -417,7 +422,7 @@ func (svc *CombinedPaymentService) QueryCombinedPaymentOrder(ctx context.Context
 
 	queryResp, err := svc.ecommerceClient.QueryCombineOrder(ctx, detail.CombinedPayment.CombineOutTradeNo)
 	if err != nil {
-		return QueryCombinedPaymentOrderResult{}, fmt.Errorf("query combine order: %w", err)
+		return QueryCombinedPaymentOrderResult{}, mapCombineOrderQueryError(err)
 	}
 	wechatOrder := mapCombinedWechatOrder(queryResp)
 
@@ -462,19 +467,19 @@ func (svc *CombinedPaymentService) CloseCombinedPaymentOrder(ctx context.Context
 		return CloseCombinedPaymentOrderResult{}, err
 	}
 
-	closeSubs := make([]wechat.SubOrderClose, 0, len(subPayloads))
+	closeSubs := make([]wechatcontracts.SubOrderClose, 0, len(subPayloads))
 	for _, sub := range subPayloads {
 		if sub.SubMchID == "" || sub.OutTradeNo == "" {
 			continue
 		}
-		closeSubs = append(closeSubs, wechat.SubOrderClose{SubMchID: sub.SubMchID, OutTradeNo: sub.OutTradeNo})
+		closeSubs = append(closeSubs, wechatcontracts.SubOrderClose{SubMchID: sub.SubMchID, OutTradeNo: sub.OutTradeNo})
 	}
 	if len(closeSubs) == 0 {
 		return CloseCombinedPaymentOrderResult{}, NewRequestError(http.StatusBadRequest, errors.New("no sub orders available to close"))
 	}
 
 	if err := svc.ecommerceClient.CloseCombineOrder(ctx, combinedRow.CombineOutTradeNo, closeSubs); err != nil {
-		return CloseCombinedPaymentOrderResult{}, err
+		return CloseCombinedPaymentOrderResult{}, mapCombineOrderCloseError(err)
 	}
 
 	// 收集子单 OutTradeNo 用于事务关闭
@@ -654,7 +659,7 @@ func (svc *CombinedPaymentService) shouldExposeCombinedPaymentPayParams(combined
 	return wechatOrder.AggregateTradeState == paymentStatusPending
 }
 
-func mapCombinedWechatOrder(queryResp *wechat.CombineQueryResponse) *QueryCombinedPaymentWechatOrder {
+func mapCombinedWechatOrder(queryResp *wechatcontracts.CombineQueryResponse) *QueryCombinedPaymentWechatOrder {
 	if queryResp == nil {
 		return nil
 	}
@@ -664,17 +669,18 @@ func mapCombinedWechatOrder(queryResp *wechat.CombineQueryResponse) *QueryCombin
 	for _, subOrder := range queryResp.SubOrders {
 		tradeStates = append(tradeStates, subOrder.TradeState)
 		subOrders = append(subOrders, QueryCombinedPaymentWechatSubOrder{
-			MchID:         subOrder.MchID,
-			SubMchID:      subOrder.SubMchID,
-			SubAppID:      subOrder.SubAppID,
-			SubOpenID:     subOrder.SubOpenID,
-			OutTradeNo:    subOrder.OutTradeNo,
-			TransactionID: subOrder.TransactionID,
-			TradeType:     subOrder.TradeType,
-			TradeState:    subOrder.TradeState,
-			BankType:      subOrder.BankType,
-			Attach:        subOrder.Attach,
-			SuccessTime:   subOrder.SuccessTime,
+			MchID:           subOrder.MchID,
+			SubMchID:        subOrder.SubMchID,
+			SubAppID:        subOrder.SubAppID,
+			SubOpenID:       subOrder.SubOpenID,
+			OutTradeNo:      subOrder.OutTradeNo,
+			TransactionID:   subOrder.TransactionID,
+			TradeType:       subOrder.TradeType,
+			TradeState:      subOrder.TradeState,
+			BankType:        subOrder.BankType,
+			Attach:          subOrder.Attach,
+			SuccessTime:     subOrder.SuccessTime,
+			PromotionDetail: subOrder.PromotionDetail,
 			Amount: QueryCombinedPaymentWechatAmount{
 				TotalAmount:   subOrder.Amount.TotalAmount,
 				PayerAmount:   subOrder.Amount.PayerAmount,
@@ -759,17 +765,20 @@ func mapCombinedPaymentError(err error) error {
 	if err == nil {
 		return nil
 	}
+	if errors.Is(err, db.ErrCombinedPaymentUnsupportedOrderType) {
+		return NewRequestError(http.StatusBadRequest, errors.New("外带订单不支持合单支付，请使用普通支付入口"))
+	}
 
 	msg := err.Error()
 	switch {
 	case containsAny(msg, []string{"does not belong to user"}):
-		return NewRequestError(http.StatusForbidden, errors.New("order does not belong to you"))
+		return NewRequestError(http.StatusForbidden, errors.New("订单不属于当前用户"))
 	case containsAny(msg, []string{"status is", "expect pending"}):
-		return NewRequestError(http.StatusBadRequest, errors.New("order is not in pending status"))
+		return NewRequestError(http.StatusBadRequest, errors.New("订单已不在待支付状态，请刷新页面确认"))
 	case containsAny(msg, []string{"payment config invalid"}):
-		return NewRequestError(http.StatusBadRequest, errors.New("merchant payment config invalid"))
+		return NewRequestError(http.StatusBadRequest, errors.New("商户支付配置无效，请联系平台处理"))
 	case containsAny(msg, []string{"has", "payment order"}):
-		return NewRequestError(http.StatusBadRequest, errors.New("order has active payment order"))
+		return NewRequestError(http.StatusBadRequest, errors.New("订单已有进行中的支付单，请先刷新支付结果"))
 	default:
 		return nil
 	}

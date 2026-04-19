@@ -16,6 +16,7 @@ import (
 	"github.com/merrydance/locallife/cloudprint"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/docs"
+	"github.com/merrydance/locallife/internal/wechatruntime"
 	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/maps"
 	"github.com/merrydance/locallife/media"
@@ -63,10 +64,11 @@ type Server struct {
 	tokenMaker              token.Maker
 	auditWriter             AuditWriter
 	wechatClient            wechat.WechatClient
-	paymentClient           wechat.PaymentClientInterface   // 小程序直连支付（押金、充值）
-	ecommerceClient         wechat.EcommerceClientInterface // 平台收付通（订单支付分账）
-	dataEncryptor           util.DataEncryptor              // 敏感数据加密器（本地存储加密）
-	mapClient               maps.TencentMapClientInterface  // 地图客户端（自建 OSM）
+	directPaymentClient     wechat.DirectPaymentClientInterface // 小程序直连支付（骑手押金、追偿付款）
+	transferClient          wechat.TransferClientInterface      // 商家转账到零钱（索赔赔付）
+	ecommerceClient         wechat.EcommerceClientInterface     // 平台收付通（订单支付分账）
+	dataEncryptor           util.DataEncryptor                  // 敏感数据加密器（本地存储加密）
+	mapClient               maps.TencentMapClientInterface      // 地图客户端（自建 OSM）
 	weatherCache            weather.WeatherCache
 	taskDistributor         worker.TaskDistributor
 	wsHub                   *websocket.Hub           // WebSocket连接管理（骑手和商户）
@@ -91,17 +93,41 @@ type Server struct {
 	redisClient             *redis.Client // Redis 客户端（绑定码等功能使用）
 }
 
-// SetPaymentClientForTest injects a payment client in tests.
+// SetDirectPaymentClientForTest injects a payment client in tests.
 // It rebuilds the cached order services immediately so they pick up the new
 // client; this prevents nil-pointer panics in handlers that access
-// orderCommandSvc / orderQuerySvc directly.
-func (server *Server) SetPaymentClientForTest(client wechat.PaymentClientInterface) {
-	server.paymentClient = client
+// orderCommandSvc / orderQuerySvc directly. Transfer client injection must be
+// handled separately via SetTransferClientForTest.
+func (server *Server) SetDirectPaymentClientForTest(client wechat.DirectPaymentClientInterface) {
+	server.directPaymentClient = client
 	newSvc := server.buildOrderCommandService()
 	server.orderCommandSvc = newSvc
 	if qs, ok := newSvc.(logic.OrderQueryService); ok {
 		server.orderQuerySvc = qs
 	}
+}
+
+// SetTransferClientForTest injects a transfer client in tests.
+func (server *Server) SetTransferClientForTest(client wechat.TransferClientInterface) {
+	server.transferClient = client
+}
+
+// SetPaymentClientsForTest injects direct payment and transfer clients together
+// for tests that need to manage both capabilities as one runtime fixture.
+func (server *Server) SetPaymentClientsForTest(directClient wechat.DirectPaymentClientInterface, transferClient wechat.TransferClientInterface) {
+	server.directPaymentClient = directClient
+	server.transferClient = transferClient
+	newSvc := server.buildOrderCommandService()
+	server.orderCommandSvc = newSvc
+	if qs, ok := newSvc.(logic.OrderQueryService); ok {
+		server.orderQuerySvc = qs
+	}
+}
+
+// ResetPaymentClientsForTest clears direct payment and transfer clients
+// together so shared test servers do not leak runtime state across cases.
+func (server *Server) ResetPaymentClientsForTest() {
+	server.SetPaymentClientsForTest(nil, nil)
 }
 
 // SetTaskDistributorForTest injects a task distributor in tests.
@@ -145,53 +171,37 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 	wechatClient := wechat.NewClient(config.WechatMiniAppID, config.WechatMiniAppSecret, store)
 
 	// 创建微信支付客户端（如果配置了支付参数）
-	var paymentClient wechat.PaymentClientInterface
+	var paymentClient wechat.DirectPaymentClientInterface
+	var transferClient wechat.TransferClientInterface
 	var ecommerceClient wechat.EcommerceClientInterface
-	if config.WechatPayMchID != "" && config.WechatPayPrivateKeyPath != "" {
-		if err := config.ValidateWechatEcommerceConfig(); err != nil {
+	if config.HasWechatPayRuntimeConfig() {
+		if err := config.ValidateWechatPayConfig(); err != nil {
 			return nil, err
 		}
 
-		// 小程序直连支付客户端（用于押金、充值等）
-		paymentClient, err = wechat.NewPaymentClient(wechat.PaymentClientConfig{
-			MchID:                   config.WechatPayMchID,
-			AppID:                   config.WechatMiniAppID,
-			SerialNumber:            config.WechatPaySerialNumber,
-			HTTPTimeout:             config.WechatPayHTTPTimeout,
-			PrivateKeyPath:          config.WechatPayPrivateKeyPath,
-			APIV3Key:                config.WechatPayAPIV3Key,
-			NotifyURL:               config.WechatPayNotifyURL,
-			RefundNotifyURL:         config.WechatPayRefundNotifyURL,
-			PlatformCertificatePath: config.WechatPayPlatformCertificatePath,
-			PlatformPublicKeyPath:   config.WechatPayPlatformPublicKeyPath,
-			PlatformPublicKeyID:     config.WechatPayPlatformPublicKeyID,
+		// 商户微信支付客户端：同一套商户配置下承载直连支付与商家转账能力。
+		merchantClient, err := wechat.NewDirectPaymentClient(wechat.DirectPaymentClientConfig{
+			MchID:                     config.WechatPayMchID,
+			AppID:                     config.WechatMiniAppID,
+			SerialNumber:              config.WechatPaySerialNumber,
+			HTTPTimeout:               config.WechatPayHTTPTimeout,
+			PrivateKeyPath:            config.WechatPayPrivateKeyPath,
+			APIV3Key:                  config.WechatPayAPIV3Key,
+			NotifyURL:                 config.WechatPayNotifyURL,
+			RefundNotifyURL:           config.WechatPayRefundNotifyURL,
+			MerchantTransferNotifyURL: config.EffectiveWechatPayMerchantTransferNotifyURL(),
+			PlatformPublicKeyPath:     config.WechatPayPlatformPublicKeyPath,
+			PlatformPublicKeyID:       config.WechatPayPlatformPublicKeyID,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("cannot create payment client: %w", err)
 		}
+		paymentClient = merchantClient
+		transferClient = merchantClient
+	}
 
-		// 平台收付通客户端（用于订单支付分账）
-		ecommerceClient, err = wechat.NewEcommerceClient(wechat.EcommerceClientConfig{
-			PaymentClientConfig: wechat.PaymentClientConfig{
-				MchID:                   config.WechatEcommerceSpMchID,
-				AppID:                   config.WechatEcommerceSpAppID,
-				SerialNumber:            config.EffectiveWechatEcommerceSerialNumber(),
-				HTTPTimeout:             config.WechatPayHTTPTimeout,
-				PrivateKeyPath:          config.EffectiveWechatEcommercePrivateKeyPath(),
-				APIV3Key:                config.EffectiveWechatEcommerceAPIV3Key(),
-				NotifyURL:               config.EffectiveWechatEcommercePaymentNotifyURL(),
-				RefundNotifyURL:         config.EffectiveWechatEcommerceRefundNotifyURL(),
-				PlatformCertificatePath: config.WechatPayPlatformCertificatePath,
-				PlatformPublicKeyPath:   config.EffectiveWechatEcommercePlatformPublicKeyPath(),
-				PlatformPublicKeyID:     config.EffectiveWechatEcommercePlatformPublicKeyID(),
-			},
-			SpMchID:           config.WechatEcommerceSpMchID,
-			SpAppID:           config.WechatEcommerceSpAppID,
-			SpMchName:         config.WechatEcommerceSpName,
-			PartnerNotifyURL:  config.EffectiveWechatEcommercePaymentNotifyURL(),
-			CombineNotifyURL:  config.EffectiveWechatEcommerceCombineNotifyURL(),
-			WithdrawNotifyURL: config.EffectiveWechatEcommerceWithdrawNotifyURL(),
-		})
+	if config.HasWechatEcommerceRuntimeConfig() {
+		ecommerceClient, err = wechatruntime.BuildEcommerceClient(config)
 		if err != nil {
 			return nil, fmt.Errorf("cannot create ecommerce client: %w", err)
 		}
@@ -294,23 +304,24 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 	}
 
 	server := &Server{
-		config:          config,
-		store:           store,
-		tokenMaker:      tokenMaker,
-		auditWriter:     auditWriter,
-		wechatClient:    wechatClient,
-		paymentClient:   paymentClient,
-		ecommerceClient: ecommerceClient,
-		dataEncryptor:   dataEncryptor,
-		mapClient:       mapClient,
-		weatherCache:    weatherCache,
-		taskDistributor: taskDistributor,
-		printerClient:   cloudprint.NewFeieyunClientFromConfig(config),
-		wsHub:           wsHub,
-		wsPubSub:        wsPubSub,
-		rulesEngine:     engine,
-		imageDeleter:    newImageDeleteWorker(),
-		keywordWorker:   newSearchKeywordWorker(store),
+		config:              config,
+		store:               store,
+		tokenMaker:          tokenMaker,
+		auditWriter:         auditWriter,
+		wechatClient:        wechatClient,
+		directPaymentClient: paymentClient,
+		transferClient:      transferClient,
+		ecommerceClient:     ecommerceClient,
+		dataEncryptor:       dataEncryptor,
+		mapClient:           mapClient,
+		weatherCache:        weatherCache,
+		taskDistributor:     taskDistributor,
+		printerClient:       cloudprint.NewFeieyunClientFromConfig(config),
+		wsHub:               wsHub,
+		wsPubSub:            wsPubSub,
+		rulesEngine:         engine,
+		imageDeleter:        newImageDeleteWorker(),
+		keywordWorker:       newSearchKeywordWorker(store),
 	}
 
 	// 初始化 Redis 客户端（供绑定码等功能使用）
@@ -522,6 +533,7 @@ func (server *Server) setupRouter() {
 		// 小程序直连支付回调
 		webhooksGroup.POST("/wechat-pay/notify", server.handlePaymentNotify)
 		webhooksGroup.POST("/wechat-pay/refund-notify", server.handleRefundNotify)
+		webhooksGroup.POST("/wechat-pay/merchant-transfer-notify", server.handleMerchantTransferNotify)
 		// 平台收付通回调
 		webhooksGroup.POST("/wechat-ecommerce/payment-notify", server.handleEcommercePaymentNotify)
 		webhooksGroup.POST("/wechat-ecommerce/combine-notify", server.handleCombinePaymentNotify)
@@ -531,6 +543,7 @@ func (server *Server) setupRouter() {
 		webhooksGroup.POST("/wechat-ecommerce/profit-sharing-notify", server.handleProfitSharingNotify)
 		// 微信用户投诉通知（合规要求，状态变更实时推送）
 		webhooksGroup.POST("/wechat-ecommerce/complaint-notify", server.handleComplaintNotify)
+		webhooksGroup.POST("/wechat-ecommerce/violation-notify", server.handleViolationNotify)
 		// 小程序「发货信息管理」结算事件（trade_manage_order_settlement）
 		webhooksGroup.POST("/wechat-miniprogram/settlement-notify", server.handleOrderSettlementNotify)
 	}
@@ -613,18 +626,6 @@ func (server *Server) setupRouter() {
 	authGroup.DELETE("/operator/application/documents/:document_type", server.deleteOperatorApplicationDocument)
 	authGroup.POST("/operator/application/submit", server.submitOperatorApplication)      // 提交申请
 	authGroup.POST("/operator/application/reset", server.resetOperatorApplicationToDraft) // 重置为草稿
-
-	// M5.2: 运营商开户（微信支付二级商户进件）
-	operatorApplymentGroup := authGroup.Group("/operator/applyment")
-	{
-		operatorApplymentGroup.GET("/banks", server.listApplymentBanks)
-		operatorApplymentGroup.GET("/banks/search-by-bank-account", server.searchApplymentBanksByAccount)
-		operatorApplymentGroup.GET("/banks/:bank_alias_code/branches", server.listApplymentBankBranches)
-		operatorApplymentGroup.GET("/areas/provinces", server.listApplymentProvinces)
-		operatorApplymentGroup.GET("/areas/provinces/:province_code/cities", server.listApplymentCities)
-		operatorApplymentGroup.POST("/bindbank", server.operatorBindBank)        // 绑定银行卡开户
-		operatorApplymentGroup.GET("/status", server.getOperatorApplymentStatus) // 获取开户状态
-	}
 
 	// M1: 用户相关路由
 	authGroup.GET("/users/me", server.getCurrentUser)
@@ -1048,6 +1049,7 @@ func (server *Server) setupRouter() {
 		paymentGroup.GET("/ledger", server.listPaymentLedger)
 		paymentGroup.GET("", server.listPaymentOrders)
 		paymentGroup.GET("/:id", server.getPaymentOrder)
+		paymentGroup.GET("/:id/query", server.queryPaymentOrder)
 		paymentGroup.POST("/:id/close", server.closePaymentOrder)
 		paymentGroup.GET("/:id/refunds", server.listRefundOrdersByPayment)
 	}
@@ -1145,7 +1147,9 @@ func (server *Server) setupRouter() {
 	adminOperatorEntityGroup := authGroup.Group("/admin/operators")
 	adminOperatorEntityGroup.Use(server.CasbinRoleMiddleware(RoleAdmin))
 	{
+		adminOperatorEntityGroup.POST("/batch/status", server.batchUpdateOperatorStatusAdmin)
 		adminOperatorEntityGroup.GET("/:operator_id/regions", server.getOperatorRegionsAdmin)
+		adminOperatorEntityGroup.POST("/:operator_id/status", server.updateOperatorStatusAdmin)
 	}
 
 	// 平台管理员审核运营商区域扩展申请
@@ -1214,6 +1218,9 @@ func (server *Server) setupRouter() {
 		merchantFinanceGroup.GET("/settlement-timeline", server.listMerchantSettlementTimeline)
 		merchantFinanceGroup.GET("/account/balance", server.getMerchantAccountBalance)
 		merchantFinanceGroup.GET("/account/settlement-account", server.getMerchantSettlementAccount)
+		merchantFinanceGroup.GET("/account/cancel-withdraw/eligibility", server.getMerchantCancelWithdrawEligibility)
+		merchantFinanceGroup.GET("/account/cancel-withdraw/applications", server.listMerchantCancelWithdrawApplications)
+		merchantFinanceGroup.GET("/account/cancel-withdraw/applications/:id", server.getMerchantCancelWithdrawApplication)
 		merchantFinanceGroup.GET("/account/withdrawals", server.listMerchantAccountWithdrawals)
 		merchantFinanceGroup.GET("/account/withdrawals/:id", server.getMerchantAccountWithdrawal)
 	}
@@ -1222,6 +1229,7 @@ func (server *Server) setupRouter() {
 	merchantFinanceOwnerGroup.Use(server.MerchantStaffMiddleware("owner"))
 	{
 		merchantFinanceOwnerGroup.POST("/account/withdraw", server.createMerchantAccountWithdraw)
+		merchantFinanceOwnerGroup.POST("/account/cancel-withdraw/applications", server.createMerchantCancelWithdrawApplication)
 		merchantFinanceOwnerGroup.POST("/account/settlement-account", server.modifyMerchantSettlementAccount)
 		merchantFinanceOwnerGroup.GET("/account/settlement-account/applications/:application_no", server.getMerchantSettlementApplication)
 	}
@@ -1312,9 +1320,7 @@ func (server *Server) setupRouter() {
 		operatorStatsGroup.GET("/appeals", server.listOperatorAppeals)
 		operatorStatsGroup.GET("/appeals/summary", server.listOperatorAppealsSummary)
 		operatorStatsGroup.GET("/appeals/:id", server.getOperatorAppealDetail)
-		operatorStatsGroup.POST("/appeals/:id/review", server.reviewAppeal)
 		operatorStatsGroup.GET("/claims/:id/recovery", server.getOperatorClaimRecovery)
-		operatorStatsGroup.POST("/claims/:id/recovery/waive", server.waiveClaimRecovery)
 
 		// 规则管理
 		operatorStatsGroup.GET("/rules", server.listOperatorRules)
@@ -1327,22 +1333,17 @@ func (server *Server) setupRouter() {
 	{
 		operatorsGroup.GET("/finance/overview", server.getOperatorFinanceOverview)
 		operatorsGroup.GET("/commission", server.getOperatorCommission)
-		operatorsGroup.GET("/finance/account/balance", server.getOperatorAccountBalance)
-		operatorsGroup.GET("/finance/account/settlement-account", server.getOperatorSettlementAccount)
-		operatorsGroup.POST("/finance/account/settlement-account", server.modifyOperatorSettlementAccount)
-		operatorsGroup.GET("/finance/account/settlement-account/applications/:application_no", server.getOperatorSettlementApplication)
-		operatorsGroup.POST("/finance/withdraw", server.withdrawOperator) // New
-		operatorsGroup.GET("/finance/withdrawals", server.listOperatorWithdrawals)
-		operatorsGroup.GET("/finance/withdrawals/:id", server.getOperatorWithdrawal)
 		operatorsGroup.GET("/profit-sharing/configs", server.listOperatorProfitSharingConfigs)
 
 		// 用户投诉管理（运营商视角：查看所有待处理投诉，可完结投诉）
 		operatorsGroup.GET("/complaints", server.listPendingComplaints)
 		operatorsGroup.POST("/complaints/:id/complete", server.completeComplaint)
 
-		// 补差管理（运营商发起/退回/取消平台补差）
+		// 补差管理（Finding 4 deferred：暂保留 legacy operator 补差路由，不在本轮推进对象级授权整改）
 		operatorPaymentGroup := operatorsGroup.Group("/payment-orders/:id")
 		{
+			operatorPaymentGroup.GET("/profit-sharing/amounts", server.getProfitSharingAmounts)
+			operatorPaymentGroup.POST("/profit-sharing/receivers/delete", server.deleteProfitSharingReceiver)
 			operatorPaymentGroup.POST("/subsidies", server.createSubsidy)
 			operatorPaymentGroup.POST("/subsidies/return", server.returnSubsidy)
 			operatorPaymentGroup.POST("/subsidies/cancel", server.cancelSubsidy)
@@ -1379,7 +1380,6 @@ func (server *Server) setupRouter() {
 		platformStatsGroup.GET("/riders/ranking", server.getRiderRanking)
 		platformStatsGroup.GET("/hourly", server.getHourlyDistribution)
 		platformStatsGroup.GET("/realtime", server.getRealtimeDashboard)
-		platformStatsGroup.GET("/bill-reconciliation", server.getBillReconciliationReports)
 	}
 
 	// 平台分账规则配置（管理）
@@ -1409,6 +1409,12 @@ func (server *Server) setupRouter() {
 	platformFinanceGroup.Use(server.CasbinRoleMiddleware(RoleAdmin))
 	{
 		platformFinanceGroup.GET("/account/balance", server.getPlatformAccountBalance)
+		platformFinanceGroup.GET("/wechat-ecommerce/violation-notification", server.getPlatformViolationNotificationConfig)
+		platformFinanceGroup.POST("/wechat-ecommerce/violation-notification", server.createPlatformViolationNotificationConfig)
+		platformFinanceGroup.PUT("/wechat-ecommerce/violation-notification", server.updatePlatformViolationNotificationConfig)
+		platformFinanceGroup.DELETE("/wechat-ecommerce/violation-notification", server.deletePlatformViolationNotificationConfig)
+		platformFinanceGroup.GET("/wechat-ecommerce/violations", server.listPlatformWechatMerchantViolations)
+		platformFinanceGroup.GET("/wechat-ecommerce/violations/:record_id", server.getPlatformWechatMerchantViolation)
 	}
 
 	platformOperatorRulesGroup := authGroup.Group("/platform/operator-rules")
@@ -1600,6 +1606,9 @@ func (server *Server) setupRouter() {
 
 		// 获取会员详情（含交易记录）
 		merchantMembersGroup.GET("/:user_id", server.getMerchantMemberDetail)
+
+		// 商户代录会员充值（线下收款后入账）
+		merchantMembersGroup.POST("/:user_id/recharge", server.recordMemberRecharge)
 
 		// 调整会员余额（退款/扣减）
 		merchantMembersGroup.POST("/:user_id/balance", server.adjustMemberBalance)

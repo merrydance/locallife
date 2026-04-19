@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	"github.com/rs/zerolog/log"
 )
 
@@ -25,15 +26,10 @@ type MerchantRejectRefundResult struct {
 }
 
 // ProcessMerchantRejectRefund handles full refund for a merchant-rejected order.
-// 路由规则：
-//   - payment_type == "profit_sharing"（收付通合单支付）→ 走电商退款接口 CreateEcommerceRefund
-//   - 其他（直连支付，如骑手押金）→ 走直连退款接口 CreateRefund
-//
-// 注意：商户拒单发生在订单完成之前，此时分账尚未执行，无需做分账回退。
+// 主营订单退款必须走收付通链路，历史非收付通支付单不再自动兼容。
 func ProcessMerchantRejectRefund(
 	ctx context.Context,
 	store db.Store,
-	paymentClient wechat.PaymentClientInterface,
 	ecommerceClient wechat.EcommerceClientInterface,
 	input MerchantRejectRefundInput,
 ) (MerchantRejectRefundResult, error) {
@@ -69,20 +65,19 @@ func ProcessMerchantRejectRefund(
 		}
 	}
 	result.PaymentOrder = &paymentOrder
+	if !paymentOrderUsesEcommerceChannel(paymentOrder) {
+		return result, mainBusinessEcommerceOnlyError("处理商户拒单退款")
+	}
 
 	reason := fmt.Sprintf("商户拒单：%s", input.Reason)
 	outRefundNo, err := generateOutRefundNo()
 	if err != nil {
 		return result, fmt.Errorf("generate out refund no: %w", err)
 	}
-	refundType := paymentOrder.PaymentType
-	if refundType == paymentTypeNative {
-		refundType = paymentTypeMiniProgram
-	}
 
 	txResult, err := store.CreateRefundOrderTx(ctx, db.CreateRefundOrderTxParams{
 		PaymentOrderID: paymentOrder.ID,
-		RefundType:     refundType,
+		RefundType:     paymentTypeProfitSharing,
 		RefundAmount:   paymentOrder.Amount,
 		RefundReason:   reason,
 		OutRefundNo:    outRefundNo,
@@ -95,12 +90,7 @@ func ProcessMerchantRejectRefund(
 	}
 	refundOrder := txResult.RefundOrder
 	result.RefundOrder = &refundOrder
-
-	// 根据支付类型选择退款通道
-	if paymentOrder.PaymentType == paymentTypeProfitSharing {
-		return result, processMerchantRejectEcommerceRefund(ctx, store, ecommerceClient, paymentOrder, refundOrder, outRefundNo, reason, input.MerchantID)
-	}
-	return result, processMerchantRejectDirectRefund(ctx, store, paymentClient, paymentOrder, refundOrder, outRefundNo, reason)
+	return result, processMerchantRejectEcommerceRefund(ctx, store, ecommerceClient, paymentOrder, refundOrder, outRefundNo, reason, input.MerchantID)
 }
 
 // processMerchantRejectEcommerceRefund 收付通合单支付订单的商户拒单退款。
@@ -123,79 +113,27 @@ func processMerchantRejectEcommerceRefund(
 		return fmt.Errorf("get merchant payment config: %w", err)
 	}
 
-	wxRefund, err := ecommerceClient.CreateEcommerceRefund(ctx, &wechat.EcommerceRefundRequest{
-		SubMchID:     paymentConfig.SubMchID,
-		OutTradeNo:   paymentOrder.OutTradeNo,
-		OutRefundNo:  outRefundNo,
-		Reason:       reason,
-		RefundAmount: paymentOrder.Amount,
-		TotalAmount:  paymentOrder.Amount,
+	wxRefund, err := createEcommerceRefundContract(ctx, ecommerceClient, &wechatcontracts.EcommerceRefundRequest{
+		SubMchID:    paymentConfig.SubMchID,
+		OutTradeNo:  paymentOrder.OutTradeNo,
+		OutRefundNo: outRefundNo,
+		Reason:      reason,
+		Amount: &wechatcontracts.EcommerceRefundRequestAmount{
+			Refund:   paymentOrder.Amount,
+			Total:    paymentOrder.Amount,
+			Currency: wechatcontracts.EcommerceRefundCurrencyCNY,
+		},
 	})
 	if err != nil {
 		// 微信API失败时保持pending状态，由 RefundRecoveryScheduler 每5分钟自动补偿重试
 		return fmt.Errorf("wechat ecommerce refund api: %w", err)
 	}
 
-	switch wxRefund.Status {
-	case wechat.RefundStatusSuccess:
-		if _, dbErr := store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID); dbErr != nil {
-			log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as success")
-		}
-		if _, dbErr := store.UpdatePaymentOrderToRefunded(ctx, paymentOrder.ID); dbErr != nil {
-			log.Error().Err(dbErr).Int64("payment_order_id", paymentOrder.ID).Msg("failed to mark payment order as refunded")
-		}
-	case wechat.RefundStatusProcessing:
-		if _, dbErr := store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
-			ID:       refundOrder.ID,
-			RefundID: pgtype.Text{String: wxRefund.RefundID, Valid: true},
-		}); dbErr != nil {
-			log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as processing")
-		}
-	}
-	return nil
-}
-
-// processMerchantRejectDirectRefund 直连支付订单的商户拒单退款（如骑手押金等）。
-func processMerchantRejectDirectRefund(
-	ctx context.Context,
-	store db.Store,
-	paymentClient wechat.PaymentClientInterface,
-	paymentOrder db.PaymentOrder,
-	refundOrder db.RefundOrder,
-	outRefundNo, reason string,
-) error {
-	if paymentClient == nil {
-		return nil
-	}
-
-	wxRefund, err := paymentClient.CreateRefund(ctx, &wechat.RefundRequest{
-		OutTradeNo:   paymentOrder.OutTradeNo,
-		OutRefundNo:  outRefundNo,
-		Reason:       reason,
-		RefundAmount: paymentOrder.Amount,
-		TotalAmount:  paymentOrder.Amount,
-	})
-	if err != nil {
-		// R-05 修复：微信API失败时不标记为failed，保持pending状态
-		// 由 RefundRecoveryScheduler 每5分钟自动补偿重试
-		return fmt.Errorf("wechat refund api: %w", err)
-	}
-
-	switch wxRefund.Status {
-	case wechat.RefundStatusSuccess:
-		if _, dbErr := store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID); dbErr != nil {
-			log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as success")
-		}
-		if _, dbErr := store.UpdatePaymentOrderToRefunded(ctx, paymentOrder.ID); dbErr != nil {
-			log.Error().Err(dbErr).Int64("payment_order_id", paymentOrder.ID).Msg("failed to mark payment order as refunded")
-		}
-	case wechat.RefundStatusProcessing:
-		if _, dbErr := store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
-			ID:       refundOrder.ID,
-			RefundID: pgtype.Text{String: wxRefund.RefundID, Valid: true},
-		}); dbErr != nil {
-			log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as processing")
-		}
+	if _, dbErr := store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
+		ID:       refundOrder.ID,
+		RefundID: pgtype.Text{String: wxRefund.RefundID, Valid: wxRefund.RefundID != ""},
+	}); dbErr != nil {
+		log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as processing")
 	}
 	return nil
 }

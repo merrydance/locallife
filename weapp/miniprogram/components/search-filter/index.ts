@@ -8,6 +8,7 @@ Component({
 
   data: {
     showFilter: false,
+    datePickerVisible: false,
     filters: {
       date: '',
       mealPeriod: 'all',
@@ -17,13 +18,29 @@ Component({
   },
 
   methods: {
-    onSearchInput(e: WechatMiniprogram.Input) {
+    onSearchInput(e: WechatMiniprogram.CustomEvent<{ value?: string }>) {
       const keyword = e.detail.value
       this.triggerEvent('search', { keyword })
     },
 
     toggleFilter() {
       this.setData({ showFilter: !this.data.showFilter })
+    },
+
+    openDatePicker() {
+      this.setData({ datePickerVisible: true })
+    },
+
+    closeDatePicker() {
+      this.setData({ datePickerVisible: false })
+    },
+
+    onDateConfirm(e: WechatMiniprogram.CustomEvent<{ value?: string }>) {
+      this.setData({
+        'filters.date': String(e.detail.value || ''),
+        datePickerVisible: false
+      })
+      this.applyFilters()
     },
 
     onDateChange(e: WechatMiniprogram.PickerChange) {
@@ -37,8 +54,9 @@ Component({
       this.applyFilters()
     },
 
-    onGuestCountChange(e: WechatMiniprogram.SliderChange) {
+    onGuestCountChange(e: WechatMiniprogram.CustomEvent<{ value?: number }>) {
       this.setData({ 'filters.guestCount': e.detail.value })
+      this.applyFilters()
     },
 
     onGuestCountConfirm() {

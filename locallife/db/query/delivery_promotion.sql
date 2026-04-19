@@ -12,16 +12,16 @@ INSERT INTO merchant_delivery_promotions (
 ) RETURNING *;
 
 -- name: GetDeliveryPromotion :one
-SELECT * FROM merchant_delivery_promotions
+SELECT id, merchant_id, name, min_order_amount, discount_amount, valid_from, valid_until, is_active, created_at, updated_at FROM merchant_delivery_promotions
 WHERE id = $1 LIMIT 1;
 
 -- name: ListDeliveryPromotionsByMerchant :many
-SELECT * FROM merchant_delivery_promotions
+SELECT id, merchant_id, name, min_order_amount, discount_amount, valid_from, valid_until, is_active, created_at, updated_at FROM merchant_delivery_promotions
 WHERE merchant_id = $1
 ORDER BY min_order_amount;
 
 -- name: ListActiveDeliveryPromotionsByMerchant :many
-SELECT * FROM merchant_delivery_promotions
+SELECT id, merchant_id, name, min_order_amount, discount_amount, valid_from, valid_until, is_active, created_at, updated_at FROM merchant_delivery_promotions
 WHERE merchant_id = $1 
   AND is_active = true
   AND valid_from <= now()
@@ -30,7 +30,7 @@ ORDER BY min_order_amount;
 
 -- name: GetBestDeliveryPromotion :one
 -- 获取满足订单金额条件的最优促销（减免金额最大的那条）
-SELECT * FROM merchant_delivery_promotions
+SELECT id, merchant_id, name, min_order_amount, discount_amount, valid_from, valid_until, is_active, created_at, updated_at FROM merchant_delivery_promotions
 WHERE merchant_id = $1
   AND is_active = true
   AND valid_from <= now()

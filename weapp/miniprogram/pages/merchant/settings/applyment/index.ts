@@ -2,30 +2,71 @@ import {
   buildMerchantApplymentStatusView,
   DEFAULT_MERCHANT_APPLYMENT_STATUS_VIEW,
   type ApplymentStatusResponse,
-  getMerchantApplymentStatus,
-  merchantBindBank
+  getMerchantApplymentStatus
 } from '../../../../api/merchant-applyment'
-import type { ApplymentBindBankPayload } from '../../../../api/applyment-bank'
 import {
   ensureMerchantApplymentAccess,
   getMerchantConsoleAccessErrorMessage,
   isMerchantConsoleAccessDenied,
   isMerchantConsoleAccessGranted
 } from '../../../../utils/console-access'
+import { saveApplymentQRCodePosterToAlbum } from '../../../../utils/applyment-qrcode'
 import { logger } from '../../../../utils/logger'
 import { getStableBarHeights } from '../../../../utils/responsive'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
 
 const APPLYMENT_AUTO_REFRESH_WINDOW_MS = 60 * 1000
+const APPLYMENT_FORCE_REFRESH_STORAGE_KEY = 'merchantApplymentShouldRefresh'
 
 const EMPTY_APPLYMENT: ApplymentStatusResponse = {
   status: '',
   status_desc: ''
 }
 
+interface ApplymentQRCodeDialogState {
+  visible: boolean
+  title: string
+  description: string
+  hint: string
+  value: string
+  saving: boolean
+}
+
 const getErrorMessage = getErrorUserMessage
 
 let applymentRequestPending = false
+
+function copyText(data: string, successTitle: string) {
+  const trimmed = String(data || '').trim()
+  if (!trimmed) {
+    return
+  }
+
+  wx.setClipboardData({
+    data: trimmed,
+    success: () => {
+      wx.showToast({ title: successTitle, icon: 'success' })
+    }
+  })
+}
+
+function getMiniProgramErrorMessage(error: unknown): string {
+  if (typeof error === 'string') {
+    return error
+  }
+  if (error && typeof error === 'object' && 'errMsg' in error && typeof error.errMsg === 'string') {
+    return error.errMsg
+  }
+  if (error instanceof Error) {
+    return error.message
+  }
+  return ''
+}
+
+function isPermissionDeniedError(error: unknown): boolean {
+  const message = getMiniProgramErrorMessage(error)
+  return message.includes('auth deny') || message.includes('auth denied')
+}
 
 function shouldAutoRefresh(lastLoadedAt: number, freshnessWindowMs: number) {
   return !lastLoadedAt || Date.now() - lastLoadedAt >= freshnessWindowMs
@@ -47,10 +88,15 @@ Page({
     statusLoaded: false,
     applymentStatus: EMPTY_APPLYMENT as ApplymentStatusResponse | null,
     applymentView: { ...DEFAULT_MERCHANT_APPLYMENT_STATUS_VIEW },
-    bindBankDraft: null as ApplymentBindBankPayload | null,
-    showBindForm: false,
-    submittingBind: false,
-    refreshingStatus: false
+    refreshingStatus: false,
+    qrCodeDialog: {
+      visible: false,
+      title: '签约二维码',
+      description: '',
+      hint: '',
+      value: '',
+      saving: false
+    } as ApplymentQRCodeDialogState
   },
 
   async onLoad() {
@@ -65,9 +111,15 @@ Page({
       this.data.accessDenied ||
       this.data.accessErrorMessage ||
       this.data.initialLoading ||
-      this.data.submittingBind ||
-      this.data.showBindForm
+      this.data.loadingApplyment
     ) {
+      return
+    }
+
+    const shouldForceRefresh = wx.getStorageSync(APPLYMENT_FORCE_REFRESH_STORAGE_KEY) === '1'
+    if (shouldForceRefresh) {
+      wx.removeStorageSync(APPLYMENT_FORCE_REFRESH_STORAGE_KEY)
+      void this.loadApplyment({ silent: this.data.statusLoaded, force: true })
       return
     }
 
@@ -105,10 +157,15 @@ Page({
       statusLoaded: false,
       applymentStatus: EMPTY_APPLYMENT,
       applymentView: { ...DEFAULT_MERCHANT_APPLYMENT_STATUS_VIEW },
-      bindBankDraft: null,
-      showBindForm: false,
-      submittingBind: false,
-      refreshingStatus: false
+      refreshingStatus: false,
+      qrCodeDialog: {
+        visible: false,
+        title: '签约二维码',
+        description: '',
+        hint: '',
+        value: '',
+        saving: false
+      }
     })
 
     const accessResult = await ensureMerchantApplymentAccess()
@@ -184,8 +241,11 @@ Page({
         initialErrorMessage: '',
         refreshErrorMessage: '',
         lastLoadedAt: Date.now(),
-        showBindForm: applymentView.canSubmitOpenInfo ? this.data.showBindForm : false,
-        bindBankDraft: applymentView.canSubmitOpenInfo ? this.data.bindBankDraft : null
+        qrCodeDialog: {
+          ...this.data.qrCodeDialog,
+          visible: false,
+          saving: false
+        }
       })
     } catch (error: unknown) {
       logger.error('Load merchant applyment page failed', error, 'merchant-applyment-page')
@@ -237,7 +297,7 @@ Page({
     })
   },
 
-  onShowBindForm() {
+  onOpenSubmitPage() {
     if (!this.data.applymentView.canSubmitOpenInfo) {
       wx.showToast({
         title: this.data.applymentView.blockReason || this.data.applymentView.guideText || '当前状态暂不支持重新提交',
@@ -246,57 +306,103 @@ Page({
       return
     }
 
-    this.setData({ showBindForm: true })
+    wx.navigateTo({ url: '/pages/merchant/settings/applyment/submit/index' })
   },
 
-  onHideBindForm() {
-    this.setData({ showBindForm: false })
-  },
-
-  onBindDraftChange(e: WechatMiniprogram.CustomEvent<ApplymentBindBankPayload>) {
-    this.setData({ bindBankDraft: e.detail })
-  },
-
-  async onSubmitBindBank(e: WechatMiniprogram.CustomEvent<ApplymentBindBankPayload>) {
-    if (this.data.submittingBind) {
+  openQRCodeDialog(payload: Omit<ApplymentQRCodeDialogState, 'visible' | 'saving'>) {
+    if (!payload.value) {
       return
     }
 
-    this.setData({ submittingBind: true })
-    wx.showLoading({ title: '提交中...' })
-
-    try {
-      await merchantBindBank(e.detail)
-      this.setData({
-        bindBankDraft: null,
-        showBindForm: false
-      })
-      await this.loadApplyment({
-        silent: true,
-        force: true
-      })
-      wx.showToast({ title: '进件资料已提交', icon: 'success' })
-    } catch (error: unknown) {
-      logger.error('Submit merchant applyment bind bank failed', error, 'merchant-applyment-page')
-      wx.showToast({ title: getErrorMessage(error, '提交进件资料失败，请稍后重试'), icon: 'none' })
-    } finally {
-      wx.hideLoading()
-      this.setData({ submittingBind: false })
-    }
-  },
-
-  onCopySignUrl() {
-    const signURL = this.data.applymentView.signURL
-    if (!signURL) {
-      return
-    }
-
-    wx.setClipboardData({
-      data: signURL,
-      success: () => {
-        wx.showToast({ title: '签约链接已复制', icon: 'success' })
+    this.setData({
+      qrCodeDialog: {
+        ...payload,
+        visible: true,
+        saving: false
       }
     })
+  },
+
+  onShowSignQRCode() {
+    this.openQRCodeDialog({
+      title: '微信支付签约二维码',
+      description: '请使用超级管理员微信扫码完成签约确认。',
+      hint: '如果当前手机就是签约微信，可先保存二维码到相册，再尝试通过微信扫一扫从相册识别。',
+      value: this.data.applymentView.signURL
+    })
+  },
+
+  onShowLegalValidationQRCode() {
+    this.openQRCodeDialog({
+      title: '法人验证二维码',
+      description: '请使用法人微信扫码完成验证。',
+      hint: '如果当前手机就是法人验证微信，可先保存二维码到相册，再尝试通过微信扫一扫从相册识别。',
+      value: this.data.applymentView.legalValidationURL
+    })
+  },
+
+  onCloseQRCodeDialog() {
+    if (this.data.qrCodeDialog.saving) {
+      return
+    }
+
+    this.setData({
+      'qrCodeDialog.visible': false,
+      'qrCodeDialog.saving': false
+    })
+  },
+
+  async onSaveQRCodeToAlbum() {
+    if (this.data.qrCodeDialog.saving || !this.data.qrCodeDialog.value) {
+      return
+    }
+
+    this.setData({ 'qrCodeDialog.saving': true })
+    wx.showLoading({ title: '保存中...' })
+
+    try {
+      await saveApplymentQRCodePosterToAlbum({
+        page: this,
+        canvasSelector: '#applymentQrcodePosterCanvas',
+        value: this.data.qrCodeDialog.value,
+        title: this.data.qrCodeDialog.title,
+        subtitle: this.data.qrCodeDialog.description
+      })
+      wx.showToast({ title: '二维码已保存到相册', icon: 'success' })
+    } catch (error: unknown) {
+      if (isPermissionDeniedError(error)) {
+        wx.showModal({
+          title: '需要相册权限',
+          content: '请在设置中开启“保存到相册”权限后重试。',
+          confirmText: '去设置',
+          success: (result) => {
+            if (result.confirm) {
+              wx.openSetting()
+            }
+          }
+        })
+      } else {
+        wx.showToast({
+          title: getErrorMessage(error, '保存二维码失败，请稍后重试'),
+          icon: 'none'
+        })
+      }
+    } finally {
+      wx.hideLoading()
+      this.setData({ 'qrCodeDialog.saving': false })
+    }
+  },
+
+  onCopyValidationAccountNumber() {
+    copyText(this.data.applymentView.accountValidation?.destinationAccountNumber || '', '收款卡号已复制')
+  },
+
+  onCopyValidationRemark() {
+    copyText(this.data.applymentView.accountValidation?.remark || '', '汇款备注已复制')
+  },
+
+  onGoSettlementAccount() {
+    wx.navigateTo({ url: '/pages/merchant/finance/settlement-account/index' })
   },
 
   async onRefreshStatus() {

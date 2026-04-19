@@ -7,16 +7,16 @@ INSERT INTO operator_region_applications (
 RETURNING *;
 
 -- name: GetOperatorRegionApplication :one
-SELECT * FROM operator_region_applications
+SELECT id, operator_id, region_id, status, reject_reason, created_at, updated_at FROM operator_region_applications
 WHERE id = $1 LIMIT 1;
 
 -- name: GetOperatorRegionApplicationByOperatorAndRegion :one
-SELECT * FROM operator_region_applications
+SELECT id, operator_id, region_id, status, reject_reason, created_at, updated_at FROM operator_region_applications
 WHERE operator_id = $1 AND region_id = $2 LIMIT 1;
 
 -- name: ListOperatorRegionApplicationsByOperator :many
 -- 列出某运营商的所有区域扩展申请
-SELECT ora.*, r.name AS region_name, r.code AS region_code
+SELECT ora.id, ora.operator_id, ora.region_id, ora.status, ora.reject_reason, ora.created_at, ora.updated_at, r.name AS region_name, r.code AS region_code
 FROM operator_region_applications ora
 JOIN regions r ON ora.region_id = r.id
 WHERE ora.operator_id = $1
@@ -24,7 +24,7 @@ ORDER BY ora.created_at DESC;
 
 -- name: ListPendingRegionApplications :many
 -- 管理后台：列出所有待审核的区域扩展申请
-SELECT ora.*, r.name AS region_name, r.code AS region_code,
+SELECT ora.id, ora.operator_id, ora.region_id, ora.status, ora.reject_reason, ora.created_at, ora.updated_at, r.name AS region_name, r.code AS region_code,
        o.name AS operator_name, o.contact_name, o.contact_phone
 FROM operator_region_applications ora
 JOIN regions r ON ora.region_id = r.id
@@ -38,7 +38,7 @@ SELECT COUNT(*) FROM operator_region_applications WHERE status = 'pending';
 
 -- name: ListAllRegionApplicationsAdmin :many
 -- 管理后台：列出所有区域扩展申请（支持状态过滤，NULL 表示不过滤）
-SELECT ora.*, r.name AS region_name, r.code AS region_code,
+SELECT ora.id, ora.operator_id, ora.region_id, ora.status, ora.reject_reason, ora.created_at, ora.updated_at, r.name AS region_name, r.code AS region_code,
        o.name AS operator_name, o.contact_name, o.contact_phone
 FROM operator_region_applications ora
 JOIN regions r ON ora.region_id = r.id

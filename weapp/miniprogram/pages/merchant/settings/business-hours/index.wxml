@@ -2,7 +2,7 @@
 
 <view
   class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
-  style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: 176rpx;"
+  style="--page-shell-nav-height: {{navBarHeight}}px;"
 >
   <view wx:if="{{accessReady && accessDenied}}" class="state-block">
     <t-empty icon="error-circle" description="当前账号无商户权限，请返回“我的”切换身份" />
@@ -10,7 +10,7 @@
 
   <view wx:elif="{{accessReady && accessErrorMessage}}" class="state-block">
     <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
-    <t-button theme="primary" shape="round" bindtap="onRetryAccess">重新校验</t-button>
+    <t-button theme="primary" bindtap="onRetryAccess">重新校验</t-button>
   </view>
 
   <block wx:else>
@@ -20,20 +20,19 @@
 
   <view wx:elif="{{initialError}}" class="state-block">
     <t-empty description="{{initialErrorMessage || '营业时间加载失败，请重试'}}" />
-    <t-button theme="primary" size="small" shape="round" bind:tap="onRetry">重新加载</t-button>
+    <t-button theme="primary" bind:tap="onRetry">重新加载</t-button>
   </view>
 
   <block wx:else>
     <view class="page-content">
-      <view wx:if="{{actionNoticeMessage}}" class="notice-card notice-card--success">
-        <text class="notice-text">{{actionNoticeMessage}}</text>
+      <view wx:if="{{actionNoticeMessage}}" class="notice-banner">
+        <t-notice-bar theme="success" visible="{{true}}" content="{{actionNoticeMessage}}" />
       </view>
 
-      <view wx:if="{{refreshErrorMessage}}" class="notice-card notice-card--warning notice-card--split">
-        <view class="notice-copy">
-          <text class="notice-text">{{refreshErrorMessage}}</text>
-        </view>
-        <text class="notice-action" bind:tap="onRetryRefresh">重新同步</text>
+      <view wx:if="{{refreshErrorMessage}}" class="notice-banner">
+        <t-notice-bar theme="warning" visible="{{true}}" content="{{refreshErrorMessage}}">
+          <text slot="operation" class="notice-banner-operation" bind:tap="onRetryRefresh">重新同步</text>
+        </t-notice-bar>
       </view>
 
       <view class="section-panel">
@@ -69,10 +68,9 @@
           </view>
         </view>
       </view>
-    </view>
-
-    <view class="footer-bar">
-      <t-button theme="primary" size="large" shape="round" block loading="{{saving}}" disabled="{{saving || initialLoading || timePickerVisible}}" bind:tap="onSave">保存营业时间</t-button>
+      <view class="form-actions">
+        <t-button theme="primary" loading="{{saving}}" disabled="{{saving || initialLoading || timePickerVisible}}" bind:tap="onSave">保存营业时间</t-button>
+      </view>
     </view>
   </block>
   </block>

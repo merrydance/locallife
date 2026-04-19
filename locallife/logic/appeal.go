@@ -105,7 +105,7 @@ func CreateMerchantAppeal(ctx context.Context, store db.Store, input CreateMerch
 		return db.Appeal{}, NewRequestError(http.StatusConflict, errors.New("appeal already exists for this claim"))
 	}
 
-	appeal, err := store.CreateAppeal(ctx, db.CreateAppealParams{
+	result, err := store.CreateAppealWithRecoveryTx(ctx, db.CreateAppealWithRecoveryTxParams{
 		ClaimID:       input.ClaimID,
 		AppellantType: "merchant",
 		AppellantID:   input.MerchantID,
@@ -116,11 +116,7 @@ func CreateMerchantAppeal(ctx context.Context, store db.Store, input CreateMerch
 		return db.Appeal{}, err
 	}
 
-	if recovery, recoveryErr := store.GetClaimRecoveryByClaimID(ctx, input.ClaimID); recoveryErr == nil {
-		_, _ = store.MarkClaimRecoveryAppealed(ctx, recovery.ID)
-	}
-
-	return appeal, nil
+	return result.Appeal, nil
 }
 
 func ListMerchantAppeals(ctx context.Context, store db.Store, input ListMerchantAppealsInput) (MerchantAppealsResult, error) {
@@ -224,7 +220,7 @@ func CreateRiderAppeal(ctx context.Context, store db.Store, input CreateRiderApp
 		return result, nil
 	}
 
-	appeal, err := store.CreateAppeal(ctx, db.CreateAppealParams{
+	txResult, err := store.CreateAppealWithRecoveryTx(ctx, db.CreateAppealWithRecoveryTxParams{
 		ClaimID:       input.ClaimID,
 		AppellantType: "rider",
 		AppellantID:   input.RiderID,
@@ -235,11 +231,7 @@ func CreateRiderAppeal(ctx context.Context, store db.Store, input CreateRiderApp
 		return result, err
 	}
 
-	if recovery, recoveryErr := store.GetClaimRecoveryByClaimID(ctx, input.ClaimID); recoveryErr == nil {
-		_, _ = store.MarkClaimRecoveryAppealed(ctx, recovery.ID)
-	}
-
-	result.Appeal = appeal
+	result.Appeal = txResult.Appeal
 	return result, nil
 }
 

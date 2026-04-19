@@ -48,21 +48,22 @@ type TaskProcessor interface {
 }
 
 type RedisTaskProcessor struct {
-	server            *asynq.Server
-	store             db.Store
-	distributor       TaskDistributor                 // 用于在任务中分发后续任务
-	wechatClient      wechat.WechatClient             // 微信小程序客户端（用于证照OCR等）
-	paymentClient     wechat.PaymentClientInterface   // 平台直连支付客户端（赔付到零钱）
-	ecommerceClient   wechat.EcommerceClientInterface // 平台收付通客户端（分账）
-	pubSubPublisher   websocket.PubSubPublisher       // Pub/Sub 发布器（用于推送通知）
-	deliveryBroadcast *logic.DeliveryBroadcastLogic
-	mediaRegistry     *media.Registry
-	ocrService        *ocr.Service
-	printerClient     cloudprint.Client
-	config            util.Config
-	roleCache         map[int64]cachedUserRoles
-	roleCacheMu       sync.RWMutex
-	roleCacheTTL      time.Duration
+	server              *asynq.Server
+	store               db.Store
+	distributor         TaskDistributor                     // 用于在任务中分发后续任务
+	wechatClient        wechat.WechatClient                 // 微信小程序客户端（用于证照OCR等）
+	directPaymentClient wechat.DirectPaymentClientInterface // 直连支付客户端（骑手押金/追偿退款）
+	transferClient      wechat.TransferClientInterface      // 商家转账客户端（索赔赔付到零钱）
+	ecommerceClient     wechat.EcommerceClientInterface     // 平台收付通客户端（分账）
+	pubSubPublisher     websocket.PubSubPublisher           // Pub/Sub 发布器（用于推送通知）
+	deliveryBroadcast   *logic.DeliveryBroadcastLogic
+	mediaRegistry       *media.Registry
+	ocrService          *ocr.Service
+	printerClient       cloudprint.Client
+	config              util.Config
+	roleCache           map[int64]cachedUserRoles
+	roleCacheMu         sync.RWMutex
+	roleCacheTTL        time.Duration
 }
 
 type testStoreWithNoopPlatformAlertPersistence struct {
@@ -132,7 +133,7 @@ func NewRedisTaskProcessor(
 		store:             store,
 		distributor:       distributor,
 		wechatClient:      wechatClient,
-		paymentClient:     nil,
+		transferClient:    nil,
 		ecommerceClient:   ecommerceClient,
 		pubSubPublisher:   pubSubPublisher,
 		deliveryBroadcast: deliveryBroadcast,
@@ -145,8 +146,12 @@ func NewRedisTaskProcessor(
 	}
 }
 
-func (processor *RedisTaskProcessor) SetPaymentClient(paymentClient wechat.PaymentClientInterface) {
-	processor.paymentClient = paymentClient
+func (processor *RedisTaskProcessor) SetDirectPaymentClient(directPaymentClient wechat.DirectPaymentClientInterface) {
+	processor.directPaymentClient = directPaymentClient
+}
+
+func (processor *RedisTaskProcessor) SetTransferClient(transferClient wechat.TransferClientInterface) {
+	processor.transferClient = transferClient
 }
 
 func (processor *RedisTaskProcessor) SetPrinterClientForTest(client cloudprint.Client) {
@@ -159,12 +164,13 @@ func NewTestTaskProcessor(
 	distributor TaskDistributor,
 	wechatClient wechat.WechatClient,
 	ecommerceClient wechat.EcommerceClientInterface,
+	paymentClient ...wechat.DirectPaymentClientInterface,
 ) *RedisTaskProcessor {
 	if store != nil {
 		store = testStoreWithNoopPlatformAlertPersistence{Store: store}
 	}
 	ocrService, _ := newMerchantApplicationOCRService(store, nil, wechatClient, util.Config{})
-	return &RedisTaskProcessor{
+	p := &RedisTaskProcessor{
 		store:           store,
 		distributor:     distributor,
 		wechatClient:    wechatClient,
@@ -175,6 +181,10 @@ func NewTestTaskProcessor(
 		roleCache:       make(map[int64]cachedUserRoles),
 		roleCacheTTL:    1 * time.Minute,
 	}
+	if len(paymentClient) > 0 {
+		p.directPaymentClient = paymentClient[0]
+	}
+	return p
 }
 
 func newMerchantApplicationOCRService(store db.Store, reader ocr.BinaryReader, wechatClient wechat.WechatClient, config util.Config) (*ocr.Service, error) {
@@ -220,15 +230,16 @@ func (processor *RedisTaskProcessor) Start() error {
 	mux.HandleFunc(TaskSendNotification, processor.ProcessTaskSendNotification)
 	mux.HandleFunc(TaskProcessProfitSharingReturnResult, processor.ProcessTaskProfitSharingReturnResult)
 	mux.HandleFunc(TaskProcessMerchantWithdrawResult, processor.ProcessTaskMerchantWithdrawResult)
+	mux.HandleFunc(TaskProcessMerchantCancelWithdrawResult, processor.ProcessTaskMerchantCancelWithdrawResult)
 	mux.HandleFunc(TaskProcessAnomalyRefund, processor.ProcessTaskAnomalyRefund)
 	mux.HandleFunc(TaskPrintOrder, processor.ProcessTaskPrintOrder)
 
 	// TrustScore系统任务
-	mux.HandleFunc(TypeHandleSuspiciousPattern, processor.HandleSuspiciousPattern)
 	mux.HandleFunc(TypeCheckMerchantForeignObject, processor.HandleCheckMerchantForeignObject)
 	mux.HandleFunc(TypeCheckRiderDamage, processor.HandleCheckRiderDamage)
 
 	// 申诉处理任务
+	mux.HandleFunc(TaskAutomaticAppealResolution, processor.ProcessTaskAutomaticAppealResolution)
 	mux.HandleFunc(TaskProcessAppealResult, processor.ProcessTaskProcessAppealResult)
 
 	// 索赔退款任务

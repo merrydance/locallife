@@ -1,6 +1,6 @@
 <custom-navbar title="平台管理中心" show-back="{{true}}" show-location="{{false}}" bind:navheight="onNavHeight" />
 
-<view class="platform-dashboard" style="padding-top: {{navBarHeight}}px;">
+<view class="platform-dashboard page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px;">
   <scroll-view
     scroll-y
     class="dashboard-scroll"
@@ -11,11 +11,8 @@
   >
     <view class="dashboard-container">
       <view wx:if="{{error}}" class="console-error-banner">
-        <view class="console-error-banner__body">
-          <t-icon name="error-circle" size="32rpx" color="var(--td-warning-color-7)" />
-          <text class="console-error-banner__text">{{error}}</text>
-        </view>
-        <t-button wx:if="{{errorCanRetry}}" theme="primary" shape="round" size="small" bind:tap="onRetry">重新加载</t-button>
+        <t-notice-bar theme="warning" visible="{{true}}" content="{{error}}" />
+        <t-button wx:if="{{errorCanRetry}}" theme="primary" bind:tap="onRetry">重新加载</t-button>
       </view>
 
       <view class="section-card">

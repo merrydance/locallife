@@ -288,37 +288,6 @@ export async function listMerchantSettlementTimeline(
   })
 }
 
-/* ─────────────────────────── 收付通进件 ─────────────────────────── */
-
-export interface ApplymentStatusResponse {
-  status: string
-  status_desc: string
-  can_submit?: boolean
-  block_reason?: string
-  sign_url?: string
-  sub_mch_id?: string
-  reject_reason?: string
-}
-
-const MERCHANT_APPLYMENT_ACTIVE_STATUSES = new Set(['active', 'finish'])
-const MERCHANT_APPLYMENT_SIGNING_STATUSES = new Set(['to_be_signed', 'signing', 'need_sign'])
-
-export function getMerchantApplymentStatusView(status?: string, statusDesc?: string, blockReason?: string) {
-  const normalizedStatus = String(status || '').trim().toLowerCase()
-  const isActivated = MERCHANT_APPLYMENT_ACTIVE_STATUSES.has(normalizedStatus)
-  const needsSign = MERCHANT_APPLYMENT_SIGNING_STATUSES.has(normalizedStatus)
-
-  return {
-    normalizedStatus,
-    isActivated,
-    needsSign,
-    statusDesc: statusDesc || '',
-    blockReason: blockReason || (needsSign
-      ? '收付通签约尚未完成，请先完成签约后再营业。'
-      : '营业前需要先完成收付通进件并激活账户。')
-  }
-}
-
 export type MerchantFinanceStatusTheme = 'success' | 'warning' | 'danger' | 'primary' | 'default'
 
 export function getMerchantAccountStatusView(status?: string, statusDesc?: string) {
@@ -360,37 +329,3 @@ export function getMerchantWithdrawStatusView(status?: string) {
   }
 }
 
-export interface MerchantBindBankRequest {
-  account_type: 'ACCOUNT_TYPE_BUSINESS' | 'ACCOUNT_TYPE_PRIVATE'
-  account_bank: string
-  account_bank_code?: number
-  bank_alias?: string
-  bank_alias_code?: string
-  need_bank_branch?: boolean
-  bank_address_code?: string
-  bank_branch_id?: string
-  bank_name?: string
-  account_number: string
-  account_name: string
-}
-
-export interface MerchantBindBankResponse {
-  applyment_id: number
-  status: string
-  message: string
-}
-
-export async function getMerchantApplymentStatus(): Promise<ApplymentStatusResponse> {
-  return request({
-    url: '/v1/merchant/applyment/status',
-    method: 'GET'
-  })
-}
-
-export async function merchantBindBank(payload: MerchantBindBankRequest): Promise<MerchantBindBankResponse> {
-  return request({
-    url: '/v1/merchant/applyment/bindbank',
-    method: 'POST',
-    data: payload
-  })
-}

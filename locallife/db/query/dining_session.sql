@@ -10,15 +10,15 @@ INSERT INTO dining_sessions (
 RETURNING *;
 
 -- name: GetDiningSession :one
-SELECT * FROM dining_sessions WHERE id = $1;
+SELECT id, merchant_id, table_id, reservation_id, user_id, active_order_id, status, opened_at, closed_at, created_at, updated_at FROM dining_sessions WHERE id = $1;
 
 -- name: GetActiveDiningSessionByTable :one
-SELECT * FROM dining_sessions
+SELECT id, merchant_id, table_id, reservation_id, user_id, active_order_id, status, opened_at, closed_at, created_at, updated_at FROM dining_sessions
 WHERE table_id = $1 AND status = 'open'
 LIMIT 1;
 
 -- name: GetActiveDiningSessionByReservation :one
-SELECT * FROM dining_sessions
+SELECT id, merchant_id, table_id, reservation_id, user_id, active_order_id, status, opened_at, closed_at, created_at, updated_at FROM dining_sessions
 WHERE reservation_id = $1 AND status = 'open'
 LIMIT 1;
 
@@ -38,14 +38,14 @@ WHERE id = $1
 RETURNING *;
 
 -- name: ListDiningSessionsByUser :many
-SELECT * FROM dining_sessions
+SELECT id, merchant_id, table_id, reservation_id, user_id, active_order_id, status, opened_at, closed_at, created_at, updated_at FROM dining_sessions
 WHERE user_id = $1
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $2 OFFSET $3;
 
 -- name: ListOpenDiningSessionsBefore :many
-SELECT * FROM dining_sessions
+SELECT id, merchant_id, table_id, reservation_id, user_id, active_order_id, status, opened_at, closed_at, created_at, updated_at FROM dining_sessions
 WHERE status = sqlc.arg('status')
   AND opened_at < sqlc.arg('opened_at')
-ORDER BY opened_at ASC
+ORDER BY opened_at ASC, id ASC
 LIMIT sqlc.arg('limit');

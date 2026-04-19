@@ -152,7 +152,7 @@
 }
 
 .feedback-processing {
-  border: 2rpx solid rgba(0, 82, 217, 0.12);
+  border: 2rpx solid var(--td-brand-color-2);
 }
 
 .feedback-success {
@@ -186,7 +186,7 @@
 }
 
 .feedback-title-processing {
-  color: #0052D9;
+  color: var(--td-brand-color);
 }
 
 .feedback-title-success {

@@ -53,7 +53,7 @@
 
 ### 3.2 选择列与返回面
 
-- 默认显式列出需要的列，避免在生产 query 中使用 `SELECT *`。
+- 默认显式列出需要的列，避免在生产 query 中使用 `SELECT *`、`alias.*`、`table.*` 或 `cte.*`。
 - 返回列应与真实调用面匹配，不为了“以后可能会用”而扩大返回面。
 - 当结果顺序会影响业务、分页或测试稳定性时，必须显式 `ORDER BY`。
 
@@ -78,6 +78,7 @@
 | 场景 | 禁止写法 | 推荐写法 |
 | --- | --- | --- |
 | 读取列面 | `SELECT * FROM orders WHERE id = $1;` | `SELECT id, user_id, status, total_amount, created_at FROM orders WHERE id = $1;` |
+| 读取列面 | `SELECT orders.* FROM orders WHERE id = $1;` | `SELECT id, user_id, status, total_amount, created_at FROM orders WHERE id = $1;` |
 | 分页稳定性 | `SELECT id, status FROM orders WHERE user_id = $1 LIMIT $2 OFFSET $3;` | `SELECT id, status FROM orders WHERE user_id = $1 ORDER BY id DESC LIMIT $2 OFFSET $3;` |
 | 无作用域写入 | `UPDATE orders SET status = 'closed';` | `UPDATE orders SET status = 'closed' WHERE id = $1 AND status = 'pending';` |
 | 无列名插入 | `INSERT INTO orders VALUES ($1, $2, $3);` | `INSERT INTO orders (user_id, merchant_id, status) VALUES ($1, $2, $3);` |
@@ -85,7 +86,7 @@
 
 额外说明：
 
-- `SELECT *` 不是“偷懒”，而是会扩大返回面、放大 schema 漂移风险，并让 review 难以判断调用面真实依赖。
+- `SELECT *` 与 `alias.*` / `table.*` / `cte.*` 不是“偷懒”，而是会扩大返回面、放大 schema 漂移风险，并让 review 难以判断调用面真实依赖。
 - `LIMIT` / `OFFSET` 没有 `ORDER BY`，在业务、分页和测试上都不稳定。
 - `UPDATE` / `DELETE` 没有 `WHERE`，默认按事故级危险写法处理。
 - `INSERT INTO ... VALUES (...)` 不写列名，会让 schema 演进时的风险被隐式放大。
@@ -200,17 +201,21 @@ LIMIT $4;
 
 ### 6.1 当前 CI SQL Guard 范围
 
-- 当前轻量 guard 只检查被本次 diff 实质性触碰到的 query block，而不是重扫整个文件的历史债务。
-- 当前 guard 会拦截三类高信噪比问题：
-- 当前 guard 会拦截四类高信噪比问题：
-  - 变更 query block 中出现 `SELECT *`。
+- 当前 guard 对 `SELECT *` 与 qualified-star 用法采用仓库级扫描：
+  - 当前工作树中所有 `locallife/db/query/*.sql` 都会被扫描。
+  - `SELECT *` 的历史债务统一记录在 `.github/sqlguard/select_star_baseline.txt`。
+  - 新增 `SELECT *` 若不在 baseline 中，会直接失败，即使它不属于旧债文件。
+  - qualified-star 用法当前无 baseline；任何 `alias.*` / `table.*` / `cte.*` 都会直接失败，除非写了带理由的 `sqlguard: allow-qualified-star`。
+- 除 `SELECT *` 与 qualified-star 之外，其余轻量规则仍只检查被本次 diff 实质性触碰到的 query block。
+- 当前 diff-based guard 会拦截三类高信噪比问题：
   - `:many` query 中使用 `LIMIT` 或 `OFFSET` 但没有 `ORDER BY`。
   - `UPDATE` 或 `DELETE` 语句缺少 `WHERE`。
   - `INSERT INTO <table> VALUES (...)` 这类未显式声明列名的插入语句。
 - 当前 guard **不会** 自动拦截所有 SQL 坏味道；例如状态迁移条件过宽、热路径 `COUNT(*)` 或查询列面过大但不是 `SELECT *`，仍主要依赖实现者与 reviewer 按本标准收口。
-- 仅注释改动不会重新触发同一 query block 的历史坏 SQL 检查，但 query 名称变更仍视为实质性变更。
+- 仅注释改动不会重新触发同一 query block 的 diff-based 历史坏 SQL 检查，但 query 名称变更仍视为实质性变更。
 - 允许的例外必须在对应 query block 内显式说明：
   - `sqlguard: allow-select-star`
+  - `sqlguard: allow-qualified-star`
   - `sqlguard: allow-unordered-limit`
   - `sqlguard: allow-unscoped-write`
   - `sqlguard: allow-implicit-insert-columns`
@@ -224,7 +229,8 @@ LIMIT $4;
 ### 6.2 本地校验命令
 
 - 日常本地自测当前 guard：`bash .github/scripts/test_backend_sql_guard.sh`
-- 仅检查当前工作树相对某个 base ref 的 SQL 变更：`bash .github/scripts/backend_sql_guard.sh <base_sha> HEAD`
+- 对当前工作树执行全仓 `SELECT *` baseline 校验并叠加 diff-based 规则：`bash .github/scripts/backend_sql_guard.sh <base_sha> HEAD`
+- 如需维护历史债务台账，同步更新 `.github/sqlguard/select_star_baseline.txt`，确保只保留仍存在的 legacy `SELECT *` query block。
 - CI 中会先执行 guard 自测，再对本次变更运行 guard，最后执行 sqlc、mock、swagger 生成物一致性检查。
 
 ## 7. 性能与可运维性

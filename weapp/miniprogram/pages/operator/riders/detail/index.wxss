@@ -1,7 +1,6 @@
 .page {
   min-height: 100vh;
   background: var(--td-bg-color-page);
-  padding: var(--spacer-md);
   display: flex;
   flex-direction: column;
   gap: var(--spacer-md);

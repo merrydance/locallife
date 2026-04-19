@@ -1,13 +1,13 @@
 <custom-navbar title="配送导航" showBack="{{true}}" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px;">
+<view class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px;">
   <view class="loading-box" wx:if="{{loading}}">
     <t-loading theme="circular" size="40rpx" text="正在加载导航..." />
   </view>
 
   <view class="error-box" wx:elif="{{errorMessage}}">
     <t-empty icon="error-circle" description="{{errorMessage}}" />
-    <t-button theme="primary" shape="round" bindtap="onRetry">重新加载</t-button>
+    <t-button theme="primary" bindtap="onRetry">重新加载</t-button>
   </view>
 
   <block wx:elif="{{delivery}}">
@@ -42,13 +42,13 @@
       </view>
 
       <view class="primary-action-row">
-        <t-button theme="primary" size="large" shape="round" block bindtap="onOpenNextStop">导航到下一站</t-button>
+        <t-button theme="primary" size="large" block bindtap="onOpenNextStop">导航到下一站</t-button>
       </view>
 
       <view class="secondary-actions">
-        <t-button theme="primary" variant="outline" size="medium" shape="round" bindtap="onOpenMerchant">到商家</t-button>
-        <t-button theme="primary" variant="outline" size="medium" shape="round" bindtap="onOpenCustomer">到顾客</t-button>
-        <t-button theme="default" variant="text" size="medium" shape="round" bindtap="onRetryLocation">
+        <t-button theme="primary" variant="outline" bindtap="onOpenMerchant">到商家</t-button>
+        <t-button theme="primary" variant="outline" bindtap="onOpenCustomer">到顾客</t-button>
+        <t-button theme="default" variant="text" bindtap="onRetryLocation">
           {{needsLocationPermission ? '开启定位' : '刷新定位'}}
         </t-button>
       </view>

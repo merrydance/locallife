@@ -48,7 +48,7 @@ Then open the smallest relevant backend deep docs for the current task instead o
 - `RUNTIME_ARCHITECTURE.md` for real entrypoints, async boundaries, or takeover context
 - `WORKFLOW_AND_VALIDATION.md` for commands, regeneration, and validation depth
 - `API_CONTRACT_STANDARDS.md` for route, status-code, and empty-state semantics
-- `BACKEND_RISK_MAP.md` for funds, state machines, callback, worker, and recovery hot paths
+- matching `domain README` for payment and other high-risk domain hot paths
 
 Common commands:
 
@@ -156,7 +156,7 @@ Use these docs as references instead of rewriting them:
 
 - Media backend and migration docs: `.github/standards/domains/media/*`
 - OCR rollout and refactor docs: `.github/standards/domains/ocr/*`
-- WeChat payment plans and runbooks: `.github/standards/domains/wechat-payment/*`
+- WeChat payment standards, baselines, plans, and runbooks: `.github/standards/domains/wechat-payment/*`
 - API contract rules: `.github/standards/backend/API_CONTRACT_STANDARDS.md`
 
 ## Practical Defaults For Agents

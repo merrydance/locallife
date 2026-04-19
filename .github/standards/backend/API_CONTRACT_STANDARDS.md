@@ -21,13 +21,12 @@
    | `/v1/bind-merchant` | POST | 账号绑定商户 |
    | `/v1/merchant/application/submit` | POST | 提交商户入驻申请 |
    | `/v1/merchant/application/reset` | POST | 重置商户申请 |
-   | `/v1/merchant/bindbank` | POST | 商户绑定银行卡 |
+   | `/v1/merchant/applyment/bindbank` | POST | 商户绑定银行卡 |
    | `/v1/merchant/orders/{id}/accept` | POST | 商户接单 |
    | `/v1/merchant/orders/{id}/reject` | POST | 商户拒单 |
    | `/v1/merchant/orders/{id}/complete` | POST | 商户标记完成 |
    | `/v1/operator/application/submit` | POST | 提交运营商申请 |
    | `/v1/operator/application/reset` | POST | 重置运营商申请 |
-   | `/v1/operator/applyment/bindbank` | POST | 运营商绑定银行卡 |
    | `/v1/operators/me/rules/{id}/disable` | POST | 禁用运营商规则 |
    | `/v1/rider/application/submit` | POST | 提交骑手申请 |
    | `/v1/rider/application/reset` | POST | 重置骑手申请 |

@@ -311,6 +311,63 @@ func TestListUserVouchers(t *testing.T) {
 	require.Len(t, vouchers, 3)
 }
 
+func TestVoucherListQueriesUseIDTieBreaker(t *testing.T) {
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	user := createRandomUser(t)
+	tiedAt := time.Now().UTC().Truncate(time.Microsecond)
+
+	voucher1 := createRandomVoucher(t, merchant.ID)
+	voucher2 := createRandomVoucher(t, merchant.ID)
+
+	_, err := testStore.(*SQLStore).connPool.Exec(context.Background(),
+		"UPDATE vouchers SET created_at = $1 WHERE id = ANY($2)",
+		tiedAt,
+		[]int64{voucher1.ID, voucher2.ID},
+	)
+	require.NoError(t, err)
+
+	merchantVouchers, err := testStore.ListMerchantVouchers(context.Background(), ListMerchantVouchersParams{
+		MerchantID: merchant.ID,
+		Limit:      2,
+		Offset:     0,
+	})
+	require.NoError(t, err)
+	require.Len(t, merchantVouchers, 2)
+	require.Equal(t, voucher2.ID, merchantVouchers[0].ID)
+	require.Equal(t, voucher1.ID, merchantVouchers[1].ID)
+
+	activeVouchers, err := testStore.ListActiveVouchers(context.Background(), ListActiveVouchersParams{
+		MerchantID: merchant.ID,
+		Limit:      2,
+		Offset:     0,
+	})
+	require.NoError(t, err)
+	require.Len(t, activeVouchers, 2)
+	require.Equal(t, voucher2.ID, activeVouchers[0].ID)
+	require.Equal(t, voucher1.ID, activeVouchers[1].ID)
+
+	userVoucher1 := createRandomUserVoucher(t, voucher1.ID, user.ID)
+	userVoucher2 := createRandomUserVoucher(t, voucher2.ID, user.ID)
+
+	_, err = testStore.(*SQLStore).connPool.Exec(context.Background(),
+		"UPDATE user_vouchers SET obtained_at = $1 WHERE id = ANY($2)",
+		tiedAt,
+		[]int64{userVoucher1.ID, userVoucher2.ID},
+	)
+	require.NoError(t, err)
+
+	userVouchers, err := testStore.ListUserVouchers(context.Background(), ListUserVouchersParams{
+		UserID: user.ID,
+		Limit:  2,
+		Offset: 0,
+	})
+	require.NoError(t, err)
+	require.Len(t, userVouchers, 2)
+	require.Equal(t, userVoucher2.ID, userVouchers[0].ID)
+	require.Equal(t, userVoucher1.ID, userVouchers[1].ID)
+}
+
 func TestListUserAvailableVouchers(t *testing.T) {
 	user := createRandomUser(t)
 	owner := createRandomUser(t)

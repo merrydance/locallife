@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 
 	"github.com/rs/zerolog/log"
 )
@@ -35,7 +36,6 @@ type ReplaceOrderResult struct {
 func ReplaceReservationOrder(
 	ctx context.Context,
 	store db.Store,
-	paymentClient wechat.PaymentClientInterface,
 	ecommerceClient wechat.EcommerceClientInterface,
 	input ReplaceOrderInput,
 	normalize NormalizeDishCustomizationsFunc,
@@ -161,7 +161,7 @@ func ReplaceReservationOrder(
 		result.PaymentOrderID = &payOrder.ID
 	} else if delta < 0 {
 		refundAmount := -delta
-		if refundAmount > 0 && (paymentClient != nil || ecommerceClient != nil) {
+		if refundAmount > 0 && ecommerceClient != nil {
 			refundAllocations, err := buildReservationRefundAllocations(ctx, store, reservation.ID, refundAmount)
 			if err != nil {
 				return ReplaceOrderResult{}, err
@@ -180,13 +180,12 @@ func ReplaceReservationOrder(
 					return ReplaceOrderResult{}, fmt.Errorf("generate out refund no: %w", err)
 				}
 
-				refundType := allocation.PaymentOrder.PaymentType
-				if refundType == paymentTypeNative {
-					refundType = paymentTypeMiniProgram
+				if !paymentOrderUsesEcommerceChannel(allocation.PaymentOrder) {
+					return ReplaceOrderResult{}, mainBusinessEcommerceOnlyError("处理改菜退款")
 				}
 				refundOrder, err := store.CreateRefundOrder(ctx, db.CreateRefundOrderParams{
 					PaymentOrderID: allocation.PaymentOrder.ID,
-					RefundType:     refundType,
+					RefundType:     paymentTypeProfitSharing,
 					RefundAmount:   allocation.RefundAmount,
 					RefundReason:   pgtype.Text{String: refundReason, Valid: true},
 					OutRefundNo:    outRefundNo,
@@ -196,7 +195,7 @@ func ReplaceReservationOrder(
 					return ReplaceOrderResult{}, err
 				}
 
-				refundStatus, refundErr := processReplaceOrderRefund(ctx, store, paymentClient, ecommerceClient, oldOrder.MerchantID, allocation.PaymentOrder, outRefundNo, refundReason, allocation.RefundAmount)
+				refundStatus, refundID, refundErr := processReplaceOrderRefund(ctx, store, ecommerceClient, oldOrder.MerchantID, allocation.PaymentOrder, outRefundNo, refundReason, allocation.RefundAmount)
 				if refundErr != nil {
 					if _, dbErr := store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
 						log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as failed")
@@ -204,12 +203,12 @@ func ReplaceReservationOrder(
 					return ReplaceOrderResult{}, refundErr
 				}
 				switch refundStatus {
-				case wechat.RefundStatusSuccess:
+				case wechatcontracts.DirectRefundStatusSuccess:
 					if _, dbErr := store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID); dbErr != nil {
 						log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as success")
 					}
-				case wechat.RefundStatusProcessing:
-					if _, dbErr := store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{ID: refundOrder.ID}); dbErr != nil {
+				case wechatcontracts.DirectRefundStatusProcessing:
+					if _, dbErr := store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{ID: refundOrder.ID, RefundID: pgtype.Text{String: refundID, Valid: refundID != ""}}); dbErr != nil {
 						log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as processing")
 					}
 				}
@@ -276,7 +275,7 @@ func createReplaceOrderEcommercePayment(
 		return db.PaymentOrder{}, fmt.Errorf("create partner payment: %w", err)
 	}
 
-	orderResp, _, err := ecommerceClient.CreatePartnerJSAPIOrder(ctx, &wechat.PartnerJSAPIOrderRequest{
+	orderResp, _, err := ecommerceClient.CreatePartnerJSAPIOrder(ctx, &wechatcontracts.PartnerJSAPIOrderRequest{
 		SubMchID:      txResult.SubMchID,
 		Description:   merchantName,
 		OutTradeNo:    txResult.PaymentOrder.OutTradeNo,
@@ -316,50 +315,39 @@ func createReplaceOrderEcommercePayment(
 func processReplaceOrderRefund(
 	ctx context.Context,
 	store db.Store,
-	paymentClient wechat.PaymentClientInterface,
 	ecommerceClient wechat.EcommerceClientInterface,
 	merchantID int64,
 	paymentOrder db.PaymentOrder,
 	outRefundNo string,
 	reason string,
 	refundAmount int64,
-) (string, error) {
-	if paymentOrder.PaymentType == "profit_sharing" {
-		if ecommerceClient == nil {
-			return "", errors.New("ecommerce client not configured")
-		}
-		paymentConfig, err := store.GetMerchantPaymentConfig(ctx, merchantID)
-		if err != nil {
-			return "", fmt.Errorf("get merchant payment config: %w", err)
-		}
-		refundResp, err := ecommerceClient.CreateEcommerceRefund(ctx, &wechat.EcommerceRefundRequest{
-			SubMchID:     paymentConfig.SubMchID,
-			OutTradeNo:   paymentOrder.OutTradeNo,
-			OutRefundNo:  outRefundNo,
-			Reason:       reason,
-			RefundAmount: refundAmount,
-			TotalAmount:  paymentOrder.Amount,
-		})
-		if err != nil {
-			return "", err
-		}
-		return refundResp.Status, nil
+) (string, string, error) {
+	if !paymentOrderUsesEcommerceChannel(paymentOrder) {
+		return "", "", mainBusinessEcommerceOnlyError("处理改菜退款")
 	}
 
-	if paymentClient == nil {
-		return "", errors.New("payment client not configured")
+	if ecommerceClient == nil {
+		return "", "", errors.New("ecommerce client not configured")
 	}
-	wxRefund, err := paymentClient.CreateRefund(ctx, &wechat.RefundRequest{
-		OutTradeNo:   paymentOrder.OutTradeNo,
-		OutRefundNo:  outRefundNo,
-		Reason:       reason,
-		RefundAmount: refundAmount,
-		TotalAmount:  paymentOrder.Amount,
+	paymentConfig, err := store.GetMerchantPaymentConfig(ctx, merchantID)
+	if err != nil {
+		return "", "", fmt.Errorf("get merchant payment config: %w", err)
+	}
+	refundResp, err := createEcommerceRefundContract(ctx, ecommerceClient, &wechatcontracts.EcommerceRefundRequest{
+		SubMchID:    paymentConfig.SubMchID,
+		OutTradeNo:  paymentOrder.OutTradeNo,
+		OutRefundNo: outRefundNo,
+		Reason:      reason,
+		Amount: &wechatcontracts.EcommerceRefundRequestAmount{
+			Refund:   refundAmount,
+			Total:    paymentOrder.Amount,
+			Currency: wechatcontracts.EcommerceRefundCurrencyCNY,
+		},
 	})
 	if err != nil {
-		return "", err
+		return "", "", mapEcommerceRefundCreateError(err)
 	}
-	return wxRefund.Status, nil
+	return wechatcontracts.EcommerceRefundStatusProcessing, refundResp.RefundID, nil
 }
 
 func generateOrderNo() (string, error) {

@@ -10,10 +10,6 @@
   box-shadow: var(--shadow-sm);
 }
 
-.form-content {
-  padding: 0 var(--spacer-md);
-}
-
 .step-view {
   display: block;
 }
@@ -156,10 +152,12 @@
   font-weight: 600;
   color: var(--td-text-color-primary);
 }
+/* weapp-gate allow-tdesign-internal-class: 骑手 OCR 结果区仍借用 t-cell 标题/说明样式，待替换为显式预览条目后移除 */
 .ocr-section-card .t-cell__title {
   color: var(--td-text-color-secondary);
   font-weight: 400;
 }
+/* weapp-gate allow-tdesign-internal-class: 骑手 OCR 结果区仍借用 t-cell 标题/说明样式，待替换为显式预览条目后移除 */
 .ocr-section-card .t-cell__note {
   color: var(--td-text-color-primary);
   font-weight: 500;
@@ -274,14 +272,14 @@
 }
 
 .btn-group {
-  display: grid;
-  grid-template-columns: 1fr 1.5fr;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 24rpx;
 }
 
-.footer-bar t-button,
 .footer-action-btn {
-  width: 100%;
+  flex: 0 0 auto;
 }
 
 /* animations */

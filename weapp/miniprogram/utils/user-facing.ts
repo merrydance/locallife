@@ -260,7 +260,7 @@ export function mapBackendMessageToUserMessage(rawMessage: string, fallback: str
     normalized.includes('账号未激活') ||
     normalized.includes('尚未完成开户')
   ) {
-    return '当前账号尚未完成开通，暂时无法使用该功能'
+    return '当前账号状态未生效，暂时无法使用该功能，请联系平台处理。'
   }
 
   if (

@@ -108,11 +108,8 @@ func (engine *PromotionEngine) CalculateFinalPrice(ctx context.Context, opt Orde
 	}
 	res.LadderPromotions = buildLadderPromotions(activeRules, opt, engine.now())
 
-	selectedRules := pickBestRulesByStackingGroup(activeRules)
+	selectedRules := pickBestMatchingRulesByStackingGroup(activeRules, opt, engine.now())
 	for _, rule := range selectedRules {
-		if !isRuleMatch(rule, opt, engine.now()) {
-			continue
-		}
 		res.MerchantDiscount += rule.DiscountAmount
 		res.AppliedPromotions = append(res.AppliedPromotions, AppliedPromotion{
 			Title:  rule.Name,
@@ -219,6 +216,18 @@ func pickBestRulesByStackingGroup(rules []db.DiscountRule) []db.DiscountRule {
 		res = append(res, rule)
 	}
 	return res
+}
+
+func pickBestMatchingRulesByStackingGroup(rules []db.DiscountRule, opt OrderContext, now time.Time) []db.DiscountRule {
+	matching := make([]db.DiscountRule, 0, len(rules))
+	for _, rule := range rules {
+		if !isRuleMatch(rule, opt, now) {
+			continue
+		}
+		matching = append(matching, rule)
+	}
+
+	return pickBestRulesByStackingGroup(matching)
 }
 
 func isExclusiveStackingGroup(group string) bool {
@@ -367,12 +376,16 @@ func applyMembershipSettings(
 ) {
 	principal := membership.PrincipalBalance
 	bonus := membership.BonusBalance
-
-	if !containsString(settings.BalanceUsableScenes, opt.OrderType) {
+	if !IsMembershipBalanceSupportedOrderType(opt.OrderType) {
 		principal = 0
-	}
-	if !containsString(settings.BonusUsableScenes, opt.OrderType) {
 		bonus = 0
+	} else {
+		if !containsString(sanitizeMembershipUsableScenes(settings.BalanceUsableScenes), opt.OrderType) {
+			principal = 0
+		}
+		if !containsString(sanitizeMembershipUsableScenes(settings.BonusUsableScenes), opt.OrderType) {
+			bonus = 0
+		}
 	}
 
 	if res.MerchantDiscount > 0 && hasMembershipExclusivePromo {

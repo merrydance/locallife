@@ -5,16 +5,16 @@ ON CONFLICT (user_id, merchant_id, order_type, table_id, reservation_id) DO UPDA
 RETURNING *;
 
 -- name: GetCart :one
-SELECT * FROM carts
+SELECT id, user_id, merchant_id, updated_at, created_at, order_type, table_id, reservation_id FROM carts
 WHERE id = $1;
 
 -- name: GetCartByUserAndMerchant :one
-SELECT * FROM carts
+SELECT id, user_id, merchant_id, updated_at, created_at, order_type, table_id, reservation_id FROM carts
 WHERE user_id = $1 AND merchant_id = $2 AND order_type = $3 AND table_id IS NOT DISTINCT FROM $4 AND reservation_id IS NOT DISTINCT FROM $5;
 
 -- name: GetCartWithItems :one
 SELECT 
-    c.*,
+    c.id, c.user_id, c.merchant_id, c.updated_at, c.created_at, c.order_type, c.table_id, c.reservation_id,
     COALESCE(
         json_agg(
             json_build_object(
@@ -71,7 +71,7 @@ WHERE id = $1;
 
 -- name: GetCartItem :one
 SELECT 
-    ci.*,
+    ci.id, ci.cart_id, ci.dish_id, ci.combo_id, ci.quantity, ci.customizations, ci.created_at, ci.updated_at,
     d.name AS dish_name,
     d.price AS dish_price,
     d.member_price AS dish_member_price,
@@ -86,7 +86,7 @@ WHERE ci.id = $1;
 
 -- name: ListCartItems :many
 SELECT 
-    ci.*,
+    ci.id, ci.cart_id, ci.dish_id, ci.combo_id, ci.quantity, ci.customizations, ci.created_at, ci.updated_at,
     d.name AS dish_name,
     d.image_media_asset_id AS dish_image_media_asset_id,
     d.price AS dish_price,
@@ -105,7 +105,7 @@ ORDER BY ci.created_at;
 
 -- name: GetUserCarts :many
 SELECT 
-    c.*,
+    c.id, c.user_id, c.merchant_id, c.updated_at, c.created_at, c.order_type, c.table_id, c.reservation_id,
     m.name AS merchant_name,
     m.logo_media_asset_id AS merchant_logo_media_asset_id,
     COUNT(ci.id) AS item_count
@@ -117,11 +117,11 @@ GROUP BY c.id, m.id
 ORDER BY c.updated_at DESC;
 
 -- name: GetCartItemByDishAndCustomizations :one
-SELECT * FROM cart_items
+SELECT id, cart_id, dish_id, combo_id, quantity, customizations, created_at, updated_at FROM cart_items
 WHERE cart_id = $1 AND dish_id = $2 AND customizations IS NOT DISTINCT FROM $3;
 
 -- name: GetCartItemByCombo :one
-SELECT * FROM cart_items
+SELECT id, cart_id, dish_id, combo_id, quantity, customizations, created_at, updated_at FROM cart_items
 WHERE cart_id = $1 AND combo_id = $2;
 
 
@@ -187,7 +187,7 @@ ORDER BY c.updated_at DESC;
 -- name: GetUserCartsByMerchantIDs :many
 -- 根据商户ID列表获取用户购物车（用于合单结算时验证）
 SELECT 
-    c.*,
+    c.id, c.user_id, c.merchant_id, c.updated_at, c.created_at, c.order_type, c.table_id, c.reservation_id,
     m.name AS merchant_name,
     mpc.sub_mch_id AS sub_mchid,
     m.status AS merchant_status
@@ -200,7 +200,7 @@ ORDER BY c.updated_at DESC;
 -- name: ListCartItemsForCheckout :many
 -- 获取购物车商品详情（用于结算时校验价格和可用性）
 SELECT 
-    ci.*,
+    ci.id, ci.cart_id, ci.dish_id, ci.combo_id, ci.quantity, ci.customizations, ci.created_at, ci.updated_at,
     d.name AS dish_name,
     d.image_media_asset_id AS dish_image_media_asset_id,
     d.price AS dish_price,

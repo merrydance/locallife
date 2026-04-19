@@ -1,7 +1,6 @@
 .page-container {
   min-height: 100vh;
   background: var(--td-bg-color-page);
-  padding: 0 var(--spacer-md) calc(var(--spacer-lg) + var(--safe-area-bottom));
 }
 
 .state-block {

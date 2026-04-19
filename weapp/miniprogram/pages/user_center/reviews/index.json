@@ -4,6 +4,7 @@
     "t-image": "tdesign-miniprogram/image/image",
     "t-tag": "tdesign-miniprogram/tag/tag",
     "t-button": "tdesign-miniprogram/button/button",
+    "t-rate": "tdesign-miniprogram/rate/rate",
     "t-loading": "tdesign-miniprogram/loading/loading",
     "t-empty": "tdesign-miniprogram/empty/empty",
     "t-skeleton": "tdesign-miniprogram/skeleton/skeleton",

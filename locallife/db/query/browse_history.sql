@@ -9,13 +9,13 @@ ON CONFLICT (user_id, target_type, target_id) DO UPDATE SET
 RETURNING *;
 
 -- name: ListBrowseHistory :many
-SELECT * FROM browse_history
+SELECT id, user_id, target_type, target_id, last_viewed_at, view_count FROM browse_history
 WHERE user_id = $1
 ORDER BY last_viewed_at DESC
 LIMIT $2 OFFSET $3;
 
 -- name: ListBrowseHistoryByType :many
-SELECT * FROM browse_history
+SELECT id, user_id, target_type, target_id, last_viewed_at, view_count FROM browse_history
 WHERE user_id = $1 AND target_type = $2
 ORDER BY last_viewed_at DESC
 LIMIT $3 OFFSET $4;

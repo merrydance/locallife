@@ -1,6 +1,6 @@
 <custom-navbar title="提现申请" show-back="{{true}}" bind:navheight="onNavHeight" />
 
-<view class="page" style="padding-top: {{navBarHeight}}px;">
+<view class="page page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px;">
   <scroll-view
     class="content"
     scroll-y
@@ -20,7 +20,7 @@
 
       <view wx:elif="{{loadError}}" class="state-wrap">
         <t-empty icon="info-circle" description="{{loadError}}">
-          <t-button slot="action" theme="primary" shape="round" size="small" bindtap="onRetryLoad">重试</t-button>
+          <t-button slot="action" theme="primary" bindtap="onRetryLoad">重试</t-button>
         </t-empty>
       </view>
 
@@ -52,7 +52,7 @@
 
       <view wx:elif="{{loadError}}" class="state-wrap">
         <t-empty description="资金数据异常，暂不可提现">
-          <t-button slot="action" theme="primary" shape="round" size="small" bindtap="onRetryLoad">重试</t-button>
+          <t-button slot="action" theme="primary" bindtap="onRetryLoad">重试</t-button>
         </t-empty>
       </view>
 
@@ -103,7 +103,7 @@
 
       <view wx:elif="{{commissionError}}" class="state-wrap">
         <t-empty icon="info-circle" description="{{commissionError}}">
-          <t-button slot="action" theme="primary" shape="round" size="small" bindtap="onRetryLoad">重试</t-button>
+          <t-button slot="action" theme="primary" bindtap="onRetryLoad">重试</t-button>
         </t-empty>
       </view>
 

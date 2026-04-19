@@ -1,0 +1,11 @@
+{
+  "purpose": "Delivery map presentation component that combines route context, marker state, and surrounding delivery metadata.",
+  "tdesignGroup": "data",
+  "tdesignCandidates": [
+    "icon",
+    "tag",
+    "loading"
+  ],
+  "decision": "local-component",
+  "rationale": "Map-based delivery presentation mixes location rendering with delivery-specific labels and fallback states. A local component keeps mapping concerns out of page code while staying inside the approved visual system around the map surface."
+}

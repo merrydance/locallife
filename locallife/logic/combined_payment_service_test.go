@@ -13,6 +13,7 @@ import (
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	mockwechat "github.com/merrydance/locallife/wechat/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -124,7 +125,7 @@ func TestCreateCombinedPaymentOrder(t *testing.T) {
 			check: func(t *testing.T, _ CreateCombinedPaymentOrderResult, err error) {
 				reqErr := assertRequestError(t, err)
 				require.Equal(t, 403, reqErr.Status)
-				require.Equal(t, "order does not belong to you", reqErr.Err.Error())
+				require.Equal(t, "订单不属于当前用户", reqErr.Err.Error())
 			},
 		},
 		{
@@ -144,7 +145,7 @@ func TestCreateCombinedPaymentOrder(t *testing.T) {
 			check: func(t *testing.T, _ CreateCombinedPaymentOrderResult, err error) {
 				reqErr := assertRequestError(t, err)
 				require.Equal(t, 400, reqErr.Status)
-				require.Equal(t, "order is not in pending status", reqErr.Err.Error())
+				require.Equal(t, "订单已不在待支付状态，请刷新页面确认", reqErr.Err.Error())
 			},
 		},
 		{
@@ -164,7 +165,27 @@ func TestCreateCombinedPaymentOrder(t *testing.T) {
 			check: func(t *testing.T, _ CreateCombinedPaymentOrderResult, err error) {
 				reqErr := assertRequestError(t, err)
 				require.Equal(t, 400, reqErr.Status)
-				require.Equal(t, "merchant payment config invalid", reqErr.Err.Error())
+				require.Equal(t, "商户支付配置无效，请联系平台处理", reqErr.Err.Error())
+			},
+		},
+		{
+			name:  "CreateTxMappedUnsupportedTakeaway",
+			input: baseInput,
+			buildStubs: func(store *mockdb.MockStore, client *mockwechat.MockEcommerceClientInterface) {
+				store.EXPECT().
+					GetUser(gomock.Any(), baseInput.UserID).
+					Times(1).
+					Return(db.User{ID: baseInput.UserID, WechatOpenid: "openid-1"}, nil)
+
+				store.EXPECT().
+					CreateCombinedPaymentTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.CreateCombinedPaymentTxResult{}, db.ErrCombinedPaymentUnsupportedOrderType)
+			},
+			check: func(t *testing.T, _ CreateCombinedPaymentOrderResult, err error) {
+				reqErr := assertRequestError(t, err)
+				require.Equal(t, 400, reqErr.Status)
+				require.Equal(t, "外带订单不支持合单支付，请使用普通支付入口", reqErr.Err.Error())
 			},
 		},
 		{
@@ -184,7 +205,7 @@ func TestCreateCombinedPaymentOrder(t *testing.T) {
 			check: func(t *testing.T, _ CreateCombinedPaymentOrderResult, err error) {
 				reqErr := assertRequestError(t, err)
 				require.Equal(t, 400, reqErr.Status)
-				require.Equal(t, "order has active payment order", reqErr.Err.Error())
+				require.Equal(t, "订单已有进行中的支付单，请先刷新支付结果", reqErr.Err.Error())
 			},
 		},
 		{
@@ -251,7 +272,7 @@ func TestCreateCombinedPaymentOrder(t *testing.T) {
 				client.EXPECT().
 					CreateCombineOrder(gomock.Any(), gomock.Any()).
 					Times(1).
-					DoAndReturn(func(ctx context.Context, req *wechat.CombineOrderRequest) (*wechat.CombineOrderResponse, *wechat.JSAPIPayParams, error) {
+					DoAndReturn(func(ctx context.Context, req *wechatcontracts.CombineOrderRequest) (*wechatcontracts.CombineOrderResponse, *wechat.JSAPIPayParams, error) {
 						require.Equal(t, "openid-1", req.PayerOpenID)
 						require.Equal(t, "127.0.0.1", req.SceneInfo.PayerClientIP)
 						require.Len(t, req.SubOrders, 2)
@@ -308,7 +329,7 @@ func TestCreateCombinedPaymentOrder(t *testing.T) {
 				client.EXPECT().
 					CreateCombineOrder(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(&wechat.CombineOrderResponse{PrepayID: "   "}, &wechat.JSAPIPayParams{TimeStamp: "1", NonceStr: "n", Package: "p", SignType: "RSA", PaySign: "s"}, nil)
+					Return(&wechatcontracts.CombineOrderResponse{PrepayID: "   "}, &wechat.JSAPIPayParams{TimeStamp: "1", NonceStr: "n", Package: "p", SignType: "RSA", PaySign: "s"}, nil)
 				// Cleanup: payment order and combined order should be marked as closed
 				store.EXPECT().
 					UpdatePaymentOrderToClosed(gomock.Any(), int64(7051)).
@@ -321,7 +342,9 @@ func TestCreateCombinedPaymentOrder(t *testing.T) {
 			},
 			check: func(t *testing.T, _ CreateCombinedPaymentOrderResult, err error) {
 				require.Error(t, err)
-				require.Contains(t, err.Error(), "create combine order: empty prepay id")
+				reqErr := assertRequestError(t, err)
+				require.Equal(t, http.StatusBadGateway, reqErr.Status)
+				require.Equal(t, "微信支付未返回可用预支付会话，请返回订单页重新发起支付", reqErr.Err.Error())
 			},
 		},
 		{
@@ -368,7 +391,9 @@ func TestCreateCombinedPaymentOrder(t *testing.T) {
 			},
 			check: func(t *testing.T, _ CreateCombinedPaymentOrderResult, err error) {
 				require.Error(t, err)
-				require.Contains(t, err.Error(), "create combine order: empty prepay id")
+				reqErr := assertRequestError(t, err)
+				require.Equal(t, http.StatusBadGateway, reqErr.Status)
+				require.Equal(t, "微信支付未返回可用预支付会话，请返回订单页重新发起支付", reqErr.Err.Error())
 			},
 		},
 		{
@@ -415,14 +440,14 @@ func TestCreateCombinedPaymentOrder(t *testing.T) {
 				client.EXPECT().
 					CreateCombineOrder(gomock.Any(), gomock.Any()).
 					Times(1).
-					DoAndReturn(func(ctx context.Context, req *wechat.CombineOrderRequest) (*wechat.CombineOrderResponse, *wechat.JSAPIPayParams, error) {
+					DoAndReturn(func(ctx context.Context, req *wechatcontracts.CombineOrderRequest) (*wechatcontracts.CombineOrderResponse, *wechat.JSAPIPayParams, error) {
 						require.Equal(t, "openid-ok", req.PayerOpenID)
 						require.Equal(t, "127.0.0.1", req.SceneInfo.PayerClientIP)
 						require.Len(t, req.SubOrders, 2)
 						require.Equal(t, "190001", req.SubOrders[0].SubMchID)
 						require.Equal(t, "PO-11", req.SubOrders[0].OutTradeNo)
 						require.Equal(t, int64(3200), req.SubOrders[0].Amount)
-						return &wechat.CombineOrderResponse{PrepayID: "wx-prepay-1"}, &wechat.JSAPIPayParams{TimeStamp: "1", NonceStr: "n", Package: "p", SignType: "RSA", PaySign: "s"}, nil
+						return &wechatcontracts.CombineOrderResponse{PrepayID: "wx-prepay-1"}, &wechat.JSAPIPayParams{TimeStamp: "1", NonceStr: "n", Package: "p", SignType: "RSA", PaySign: "s"}, nil
 					})
 
 				store.EXPECT().
@@ -474,7 +499,7 @@ func TestCreateCombinedPaymentOrder(t *testing.T) {
 				client.EXPECT().
 					CreateCombineOrder(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(&wechat.CombineOrderResponse{PrepayID: "wx-prepay-update-fail"}, &wechat.JSAPIPayParams{TimeStamp: "1", NonceStr: "n", Package: "p", SignType: "RSA", PaySign: "s"}, nil)
+					Return(&wechatcontracts.CombineOrderResponse{PrepayID: "wx-prepay-update-fail"}, &wechat.JSAPIPayParams{TimeStamp: "1", NonceStr: "n", Package: "p", SignType: "RSA", PaySign: "s"}, nil)
 
 				store.EXPECT().
 					UpdateCombinedPaymentOrderPrepay(gomock.Any(), db.UpdateCombinedPaymentOrderPrepayParams{
@@ -594,7 +619,70 @@ func TestCreateCombinedPaymentOrder_ReusesConcurrentPendingCombinedPayment(t *te
 	require.Equal(t, []int64{11, 22}, []int64{result.SubOrders[0].OrderID, result.SubOrders[1].OrderID})
 }
 
-func TestCreateCombinedPaymentOrder_ConcurrentPendingCombinedWithoutPayParamsReturnsConflict(t *testing.T) {
+func TestCreateCombinedPaymentOrder_ConcurrentPendingCombinedSigningFailureReturnsError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	client := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	svc := NewCombinedPaymentService(store, client)
+
+	input := CreateCombinedPaymentOrderInput{
+		UserID:   1001,
+		OrderIDs: []int64{11, 22},
+		ClientIP: "127.0.0.1",
+	}
+
+	subOrders, err := json.Marshal([]combinedSubOrderPayload{
+		{OrderID: 11, PaymentOrderID: 7001, MerchantID: 501, SubMchID: "190001", Amount: 3200, OutTradeNo: "P11", Description: "m1 - Order Payment"},
+		{OrderID: 22, PaymentOrderID: 7002, MerchantID: 502, SubMchID: "190002", Amount: 4800, OutTradeNo: "P22", Description: "m2 - Order Payment"},
+	})
+	require.NoError(t, err)
+
+	store.EXPECT().
+		GetUser(gomock.Any(), input.UserID).
+		Return(db.User{ID: input.UserID, WechatOpenid: "openid-1"}, nil)
+	store.EXPECT().
+		CreateCombinedPaymentTx(gomock.Any(), gomock.Any()).
+		Return(db.CreateCombinedPaymentTxResult{}, db.ErrOrderPendingPaymentConflict)
+	store.EXPECT().
+		GetLatestPaymentOrderByOrder(gomock.Any(), db.GetLatestPaymentOrderByOrderParams{
+			OrderID:      pgtype.Int8{Int64: 11, Valid: true},
+			BusinessType: businessTypeOrder,
+		}).
+		Times(1).
+		Return(db.PaymentOrder{ID: 7001, Status: paymentStatusPending, CombinedPaymentID: pgtype.Int8{Int64: 9001, Valid: true}}, nil)
+	store.EXPECT().
+		GetLatestPaymentOrderByOrder(gomock.Any(), db.GetLatestPaymentOrderByOrderParams{
+			OrderID:      pgtype.Int8{Int64: 22, Valid: true},
+			BusinessType: businessTypeOrder,
+		}).
+		Times(1).
+		Return(db.PaymentOrder{ID: 7002, Status: paymentStatusPending, CombinedPaymentID: pgtype.Int8{Int64: 9001, Valid: true}}, nil)
+	store.EXPECT().
+		GetCombinedPaymentOrderWithSubOrders(gomock.Any(), int64(9001)).
+		Times(1).
+		Return(db.GetCombinedPaymentOrderWithSubOrdersRow{
+			ID:                9001,
+			UserID:            input.UserID,
+			CombineOutTradeNo: "CP20260406000001",
+			TotalAmount:       8000,
+			PrepayID:          pgtype.Text{String: "combine-prepay-9001", Valid: true},
+			Status:            paymentStatusPending,
+			SubOrders:         subOrders,
+		}, nil)
+	client.EXPECT().
+		GenerateJSAPIPayParams("combine-prepay-9001").
+		Times(1).
+		Return(nil, errors.New("signing unavailable"))
+
+	_, err = svc.CreateCombinedPaymentOrder(context.Background(), input)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "sign concurrent combined payment order")
+	require.Contains(t, err.Error(), "signing unavailable")
+}
+
+func TestCreateCombinedPaymentOrder_ConcurrentPendingCombinedWithoutPrepayReturnsConflict(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -642,14 +730,9 @@ func TestCreateCombinedPaymentOrder_ConcurrentPendingCombinedWithoutPayParamsRet
 			UserID:            input.UserID,
 			CombineOutTradeNo: "CP20260406000001",
 			TotalAmount:       8000,
-			PrepayID:          pgtype.Text{String: "combine-prepay-9001", Valid: true},
 			Status:            paymentStatusPending,
 			SubOrders:         subOrders,
 		}, nil)
-	client.EXPECT().
-		GenerateJSAPIPayParams("combine-prepay-9001").
-		Times(outTradeNoMaxRetry).
-		Return(nil, errors.New("signing unavailable"))
 
 	_, err = svc.CreateCombinedPaymentOrder(context.Background(), input)
 	reqErr := assertRequestError(t, err)
@@ -806,9 +889,9 @@ func TestQueryCombinedPaymentOrder(t *testing.T) {
 				client.EXPECT().
 					QueryCombineOrder(gomock.Any(), "CP20260406000001").
 					Times(1).
-					Return(&wechat.CombineQueryResponse{
+					Return(&wechatcontracts.CombineQueryResponse{
 						CombineOutTradeNo: "CP20260406000001",
-						SubOrders: []wechat.CombineSubOrderResult{
+						SubOrders: []wechatcontracts.CombineSubOrderResult{
 							{
 								OutTradeNo:    "PO-11",
 								TransactionID: "wx-txn-11",
@@ -853,9 +936,9 @@ func TestQueryCombinedPaymentOrder(t *testing.T) {
 				client.EXPECT().
 					QueryCombineOrder(gomock.Any(), "CP20260406000001").
 					Times(1).
-					Return(&wechat.CombineQueryResponse{
+					Return(&wechatcontracts.CombineQueryResponse{
 						CombineOutTradeNo: "CP20260406000001",
-						SubOrders: []wechat.CombineSubOrderResult{{
+						SubOrders: []wechatcontracts.CombineSubOrderResult{{
 							OutTradeNo: "PO-11",
 							TradeType:  "JSAPI",
 							TradeState: "NOTPAY",
@@ -898,9 +981,9 @@ func TestQueryCombinedPaymentOrder(t *testing.T) {
 				client.EXPECT().
 					QueryCombineOrder(gomock.Any(), "CP20260406000001").
 					Times(1).
-					Return(&wechat.CombineQueryResponse{
+					Return(&wechatcontracts.CombineQueryResponse{
 						CombineOutTradeNo: "CP20260406000001",
-						SubOrders: []wechat.CombineSubOrderResult{{
+						SubOrders: []wechatcontracts.CombineSubOrderResult{{
 							OutTradeNo:    "PO-11",
 							TransactionID: "wx-txn-11",
 							TradeType:     "JSAPI",
@@ -940,9 +1023,9 @@ func TestQueryCombinedPaymentOrder(t *testing.T) {
 				client.EXPECT().
 					QueryCombineOrder(gomock.Any(), "CP20260406000001").
 					Times(1).
-					Return(&wechat.CombineQueryResponse{
+					Return(&wechatcontracts.CombineQueryResponse{
 						CombineOutTradeNo: "CP20260406000001",
-						SubOrders: []wechat.CombineSubOrderResult{
+						SubOrders: []wechatcontracts.CombineSubOrderResult{
 							{
 								OutTradeNo:    "PO-11",
 								TransactionID: "wx-txn-11",
@@ -1119,7 +1202,7 @@ func TestCloseCombinedPaymentOrder(t *testing.T) {
 					Return(combinedRow, nil)
 
 				client.EXPECT().
-					CloseCombineOrder(gomock.Any(), "C202001010000000001", []wechat.SubOrderClose{{SubMchID: "1900001111", OutTradeNo: "P202001010000000001"}}).
+					CloseCombineOrder(gomock.Any(), "C202001010000000001", []wechatcontracts.SubOrderClose{{SubMchID: "1900001111", OutTradeNo: "P202001010000000001"}}).
 					Times(1).
 					Return(errors.New("wechat close failed"))
 			},
@@ -1144,7 +1227,7 @@ func TestCloseCombinedPaymentOrder(t *testing.T) {
 					Return(combinedRow, nil)
 
 				client.EXPECT().
-					CloseCombineOrder(gomock.Any(), "C202001010000000001", []wechat.SubOrderClose{{SubMchID: "1900001111", OutTradeNo: "P202001010000000001"}}).
+					CloseCombineOrder(gomock.Any(), "C202001010000000001", []wechatcontracts.SubOrderClose{{SubMchID: "1900001111", OutTradeNo: "P202001010000000001"}}).
 					Times(1).
 					Return(nil)
 
@@ -1177,7 +1260,7 @@ func TestCloseCombinedPaymentOrder(t *testing.T) {
 					Return(combinedRow, nil)
 
 				client.EXPECT().
-					CloseCombineOrder(gomock.Any(), "C202001010000000001", []wechat.SubOrderClose{{SubMchID: "1900001111", OutTradeNo: "P202001010000000001"}}).
+					CloseCombineOrder(gomock.Any(), "C202001010000000001", []wechatcontracts.SubOrderClose{{SubMchID: "1900001111", OutTradeNo: "P202001010000000001"}}).
 					Times(1).
 					Return(nil)
 
@@ -1215,7 +1298,7 @@ func TestCloseCombinedPaymentOrder(t *testing.T) {
 					Return(combinedRow, nil)
 
 				client.EXPECT().
-					CloseCombineOrder(gomock.Any(), "C202001010000000001", []wechat.SubOrderClose{{SubMchID: "1900001111", OutTradeNo: "P202001010000000001"}}).
+					CloseCombineOrder(gomock.Any(), "C202001010000000001", []wechatcontracts.SubOrderClose{{SubMchID: "1900001111", OutTradeNo: "P202001010000000001"}}).
 					Times(1).
 					Return(nil)
 
@@ -1306,28 +1389,28 @@ func TestMapCombinedPaymentError(t *testing.T) {
 			err:            errors.New("order 100 does not belong to user"),
 			expectReqError: true,
 			expectedStatus: 403,
-			expectedMsg:    "order does not belong to you",
+			expectedMsg:    "订单不属于当前用户",
 		},
 		{
 			name:           "InvalidStatus",
 			err:            errors.New("order 100 status is paid, expect pending"),
 			expectReqError: true,
 			expectedStatus: 400,
-			expectedMsg:    "order is not in pending status",
+			expectedMsg:    "订单已不在待支付状态，请刷新页面确认",
 		},
 		{
 			name:           "InvalidPaymentConfig",
 			err:            errors.New("merchant 9 payment config invalid"),
 			expectReqError: true,
 			expectedStatus: 400,
-			expectedMsg:    "merchant payment config invalid",
+			expectedMsg:    "商户支付配置无效，请联系平台处理",
 		},
 		{
 			name:           "ActivePaymentOrder",
 			err:            errors.New("order 100 has processing payment order"),
 			expectReqError: true,
 			expectedStatus: 400,
-			expectedMsg:    "order has active payment order",
+			expectedMsg:    "订单已有进行中的支付单，请先刷新支付结果",
 		},
 		{
 			name:           "Unmapped",
@@ -1356,4 +1439,25 @@ func TestMapCombinedPaymentError(t *testing.T) {
 			require.Equal(t, tc.expectedMsg, reqErr.Err.Error())
 		})
 	}
+}
+
+func TestMapCombineOrderQueryError(t *testing.T) {
+	err := mapCombineOrderQueryError(&wechat.WechatPayError{StatusCode: 404, Code: "ORDERNOTEXIST", Message: "订单不存在"})
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, http.StatusBadGateway, reqErr.Status)
+	require.Equal(t, "微信侧暂未确认该支付单，请保留当前订单并稍后刷新结果", reqErr.Err.Error())
+}
+
+func TestMapCombineOrderQueryError_ContractDrift(t *testing.T) {
+	err := mapCombineOrderQueryError(&wechat.CombineOrderQueryContractError{Message: "query combine order: wechat response missing combine_mchid"})
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, http.StatusBadGateway, reqErr.Status)
+	require.Equal(t, "微信支付状态返回异常，请不要重复支付，返回订单页后重新查询", reqErr.Err.Error())
+}
+
+func TestMapCombineOrderCloseError(t *testing.T) {
+	err := mapCombineOrderCloseError(&wechat.WechatPayError{StatusCode: 202, Code: "USERPAYING", Message: "用户支付中"})
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, http.StatusConflict, reqErr.Status)
+	require.Equal(t, "支付处理中，请先刷新支付结果确认后再决定是否关闭", reqErr.Err.Error())
 }

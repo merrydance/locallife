@@ -14,6 +14,7 @@ type SafetyReportDetailView = SafetyReportItem & {
   is_pending: boolean
   is_resolved: boolean
   is_rejected: boolean
+  merchant_ids_text: string
 }
 
 interface InputDetail {
@@ -40,7 +41,8 @@ Page({
     recoverReason: '',
     singleResumeMerchantId: '',
     singleResumeReason: '',
-    recoveredMerchantIds: [] as number[]
+    recoveredMerchantIds: [] as number[],
+    recoveredMerchantIdsText: '无'
   },
 
   onLoad(options: Record<string, string>) {
@@ -75,10 +77,12 @@ Page({
           status_theme: statusDisplay.theme,
           is_pending: statusDisplay.isPending,
           is_resolved: statusDisplay.isResolved,
-          is_rejected: statusDisplay.isRejected
+          is_rejected: statusDisplay.isRejected,
+          merchant_ids_text: normalizedReport.merchant_ids.length > 0 ? normalizedReport.merchant_ids.join(', ') : '无'
         },
         resolutionStatus: statusDisplay.isRejected ? 'rejected' : 'resolved',
         resolutionNotes: normalizedReport.resolution_notes || '',
+        recoveredMerchantIdsText: this.data.recoveredMerchantIds.length > 0 ? this.data.recoveredMerchantIds.join(', ') : '无',
         loading: false,
         initialLoading: false
       })
@@ -150,7 +154,11 @@ Page({
         recover_merchant_ids: recoverMerchantIds,
         recover_reason: this.data.recoverReason || undefined
       })
-      this.setData({ recoveredMerchantIds: result.recovered_merchant_ids || [] })
+      const recoveredMerchantIds = result.recovered_merchant_ids || []
+      this.setData({
+        recoveredMerchantIds,
+        recoveredMerchantIdsText: recoveredMerchantIds.length > 0 ? recoveredMerchantIds.join(', ') : '无'
+      })
       await this.loadDetail()
     } catch (error: unknown) {
       const message = getErrorUserMessage(error, '处置失败，请稍后重试')
@@ -184,7 +192,8 @@ Page({
       this.setData({
         singleResumeMerchantId: '',
         singleResumeReason: '',
-        recoveredMerchantIds: [...this.data.recoveredMerchantIds, merchantId]
+        recoveredMerchantIds: [...this.data.recoveredMerchantIds, merchantId],
+        recoveredMerchantIdsText: [...this.data.recoveredMerchantIds, merchantId].join(', ')
       })
       await this.loadDetail()
     } catch (error: unknown) {

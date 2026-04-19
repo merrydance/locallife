@@ -10,7 +10,7 @@
 
   <view wx:elif="{{accessReady && accessErrorMessage}}" class="state-block">
     <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
-    <t-button theme="primary" size="small" shape="round" bind:tap="onRetryAccess">重新校验</t-button>
+    <t-button theme="primary" bind:tap="onRetryAccess">重新校验</t-button>
   </view>
 
   <view wx:elif="{{initialLoading}}" class="state-block">
@@ -19,20 +19,11 @@
 
   <view wx:elif="{{initialError}}" class="state-block">
     <t-empty icon="error-circle" description="{{initialErrorMessage || '满减规则加载失败，请重试'}}" />
-    <t-button theme="primary" size="small" shape="round" bind:tap="onRetry">重新加载</t-button>
+    <t-button theme="primary" bind:tap="onRetry">重新加载</t-button>
   </view>
 
   <block wx:else>
     <view class="page-content">
-      <t-notice-bar
-        wx:if="{{refreshErrorMessage}}"
-        visible="{{true}}"
-        theme="warning"
-        content="{{refreshErrorMessage}}"
-        prefixIcon="error-circle"
-        t-class="page-notice"
-      />
-
       <view class="result-bar">
         <text class="result-summary">{{resultSummaryText}}</text>
       </view>
@@ -45,7 +36,7 @@
 
       <view wx:else class="rule-list">
         <block wx:for="{{rules}}" wx:key="id">
-          <t-cell-group class="rule-card" theme="card">
+          <t-cell-group class="rule-card">
             <view class="rule-card-main" bindtap="onEditRule" data-id="{{item.id}}">
               <view class="rule-content">
                 <view class="rule-header">
@@ -116,7 +107,7 @@
 
         <view class="list-footer">
           <t-loading wx:if="{{loadingMore}}" theme="circular" size="32rpx" text="加载更多规则中..." />
-          <t-button wx:elif="{{hasMore}}" theme="default" shape="round" size="large" bind:tap="onLoadMore">继续加载更多</t-button>
+          <t-button wx:elif="{{hasMore}}" theme="default" bind:tap="onLoadMore">继续加载更多</t-button>
           <text wx:else class="list-footer-text">已完成当前结果加载</text>
         </view>
       </view>

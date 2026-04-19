@@ -430,6 +430,33 @@ func TestCreateMembershipTransaction(t *testing.T) {
 	require.Equal(t, int64(10000), tx.BalanceAfter)
 }
 
+func TestCreateMembershipRechargeTransactionUniqueIdempotencyKey(t *testing.T) {
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	user := createRandomUser(t)
+
+	membership := createRandomMembership(t, merchant.ID, user.ID)
+	arg := CreateMembershipRechargeTransactionParams{
+		MembershipID:    membership.ID,
+		Amount:          10000,
+		PrincipalAmount: 10000,
+		BonusAmount:     0,
+		BalanceAfter:    10000,
+		RelatedOrderID:  pgtype.Int8{Valid: false},
+		RechargeRuleID:  pgtype.Int8{Valid: false},
+		Notes:           pgtype.Text{String: "首次充值", Valid: true},
+		IdempotencyKey:  pgtype.Text{String: "merchant-recharge-1", Valid: true},
+	}
+
+	firstTx, err := testStore.CreateMembershipRechargeTransaction(context.Background(), arg)
+	require.NoError(t, err)
+	require.NotZero(t, firstTx.ID)
+
+	_, err = testStore.CreateMembershipRechargeTransaction(context.Background(), arg)
+	require.Error(t, err)
+	require.Equal(t, UniqueViolation, ErrorCode(err))
+}
+
 func TestListMembershipTransactions(t *testing.T) {
 	owner := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, owner.ID)
@@ -512,6 +539,58 @@ func TestListMembershipTransactionsByType(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, consumeTransactions, 2)
+}
+
+func TestMembershipTransactionListsUseIDTieBreaker(t *testing.T) {
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	user := createRandomUser(t)
+	membership := createRandomMembership(t, merchant.ID, user.ID)
+	tiedCreatedAt := time.Now().UTC().Truncate(time.Microsecond)
+
+	createTransaction := func(txType string, amount int64, balanceAfter int64) MembershipTransaction {
+		tx, err := testStore.CreateMembershipTransaction(context.Background(), CreateMembershipTransactionParams{
+			MembershipID:   membership.ID,
+			Type:           txType,
+			Amount:         amount,
+			BalanceAfter:   balanceAfter,
+			RelatedOrderID: pgtype.Int8{Valid: false},
+			RechargeRuleID: pgtype.Int8{Valid: false},
+		})
+		require.NoError(t, err)
+		return tx
+	}
+
+	firstRecharge := createTransaction("recharge", 1000, 1000)
+	secondRecharge := createTransaction("recharge", 2000, 3000)
+
+	_, err := testStore.(*SQLStore).connPool.Exec(context.Background(),
+		`UPDATE membership_transactions SET created_at = $1 WHERE id = ANY($2)`,
+		tiedCreatedAt,
+		[]int64{firstRecharge.ID, secondRecharge.ID},
+	)
+	require.NoError(t, err)
+
+	transactions, err := testStore.ListMembershipTransactions(context.Background(), ListMembershipTransactionsParams{
+		MembershipID: membership.ID,
+		Limit:        2,
+		Offset:       0,
+	})
+	require.NoError(t, err)
+	require.Len(t, transactions, 2)
+	require.Equal(t, secondRecharge.ID, transactions[0].ID)
+	require.Equal(t, firstRecharge.ID, transactions[1].ID)
+
+	rechargeTransactions, err := testStore.ListMembershipTransactionsByType(context.Background(), ListMembershipTransactionsByTypeParams{
+		MembershipID: membership.ID,
+		Type:         "recharge",
+		Limit:        2,
+		Offset:       0,
+	})
+	require.NoError(t, err)
+	require.Len(t, rechargeTransactions, 2)
+	require.Equal(t, secondRecharge.ID, rechargeTransactions[0].ID)
+	require.Equal(t, firstRecharge.ID, rechargeTransactions[1].ID)
 }
 
 func TestGetMembershipTransactionStats(t *testing.T) {

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/merrydance/locallife/util"
@@ -283,6 +284,36 @@ func TestListDishesByMerchant(t *testing.T) {
 	for _, dish := range dishes {
 		require.Equal(t, merchant.ID, dish.MerchantID)
 	}
+}
+
+func TestListDishesByMerchantUsesIDTieBreaker(t *testing.T) {
+	merchant := createRandomMerchantForDish(t)
+	category := createRandomDishCategory(t)
+	dish1 := createRandomDish(t, merchant.ID, category.ID)
+	dish2 := createRandomDish(t, merchant.ID, category.ID)
+	tiedCreatedAt := time.Now().UTC().Truncate(time.Microsecond)
+	sharedSortOrder := int16(7)
+
+	store, ok := testStore.(*SQLStore)
+	require.True(t, ok)
+
+	_, err := store.connPool.Exec(context.Background(),
+		"UPDATE dishes SET created_at = $1, sort_order = $2 WHERE id = ANY($3)",
+		tiedCreatedAt,
+		sharedSortOrder,
+		[]int64{dish1.ID, dish2.ID},
+	)
+	require.NoError(t, err)
+
+	rows, err := testStore.ListDishesByMerchant(context.Background(), ListDishesByMerchantParams{
+		MerchantID: merchant.ID,
+		Limit:      2,
+		Offset:     0,
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+	require.Equal(t, dish2.ID, rows[0].ID)
+	require.Equal(t, dish1.ID, rows[1].ID)
 }
 
 func TestListDishesByMerchantWithFilters(t *testing.T) {

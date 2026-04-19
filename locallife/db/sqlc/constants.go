@@ -70,6 +70,7 @@ const (
 	RiderApplicationStatusApproved  = "approved"
 
 	PlatformConfigScopeGlobal        = "global"
+	PlatformConfigScopeOperator      = "operator"
 	PlatformConfigKeyRiderDepositFen = "platform_rule.rider_deposit_fen"
 	DefaultRiderDepositThresholdFen  = 20000
 
@@ -92,6 +93,35 @@ const (
 	MerchantCapabilityStatusUnknown = "unknown"
 	MerchantCapabilityStatusYes     = "yes"
 	MerchantCapabilityStatusNo      = "no"
+
+	MerchantCancelWithdrawLocalSyncStateCreated         = "created"
+	MerchantCancelWithdrawLocalSyncStateSubmitSucceeded = "submit_succeeded"
+	MerchantCancelWithdrawLocalSyncStateSubmitUnknown   = "submit_unknown"
+	MerchantCancelWithdrawLocalSyncStateSyncFailed      = "sync_failed"
+
+	MerchantCancelWithdrawModeNoWithdraw = "NOT_APPLY_WITHDRAW"
+	MerchantCancelWithdrawModeWithdraw   = "APPLY_WITHDRAW"
+
+	MerchantCancelWithdrawBusinessLicenseStatusActive   = "ACTIVE"
+	MerchantCancelWithdrawBusinessLicenseStatusCanceled = "CANCELED"
+	MerchantCancelWithdrawBusinessLicenseStatusRevoked  = "REVOKED"
+
+	MerchantCancelStateAccepted               = "ACCEPTED"
+	MerchantCancelStateReviewing              = "REVIEWING"
+	MerchantCancelStateRejected               = "REJECTED"
+	MerchantCancelStateWaitingMerchantConfirm = "WAITING_MERCHANT_CONFIRM"
+	MerchantCancelStateRevoked                = "REVOKED"
+	MerchantCancelStateSystemProcessing       = "SYSTEM_PROCESSING"
+	MerchantCancelStateCanceled               = "CANCELED"
+	MerchantCancelStateFundProcessing         = "FUND_PROCESSING"
+	MerchantCancelStateFinish                 = "FINISH"
+
+	PaymentChannelDirect    = "direct"
+	PaymentChannelEcommerce = "ecommerce"
+
+	MerchantCancelWithdrawStateProcessing = "WITHDRAW_PROCESSING"
+	MerchantCancelWithdrawStateException  = "WITHDRAW_EXCEPTION"
+	MerchantCancelWithdrawStateSucceed    = "WITHDRAW_SUCCEED"
 
 	MerchantCapabilitySourceSystemDefault   = "system_default"
 	MerchantCapabilitySourceManualReview    = "manual_review"

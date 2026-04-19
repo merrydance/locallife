@@ -1,0 +1,13 @@
+{
+  "purpose": "Merchant applyment bank selection form with search, picker, recommendation tags, and inline loading or empty states.",
+  "tdesignGroup": "form",
+  "tdesignCandidates": [
+    "input",
+    "picker",
+    "search",
+    "tag",
+    "cell"
+  ],
+  "decision": "local-component",
+  "rationale": "Bank selection combines search, grouped field display, picker confirmation, and merchant-specific recovery states into one workflow surface. Keeping it as a domain component prevents every applyment page from reassembling the same TDesign composition."
+}

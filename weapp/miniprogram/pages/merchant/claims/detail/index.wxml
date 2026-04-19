@@ -1,28 +1,29 @@
 <custom-navbar title="索赔详情" showBack="{{true}}" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px;">
+<view class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px;">
   <view wx:if="{{loading && !detail}}" class="state-block">
     <t-loading theme="circular" text="加载索赔详情中..." vertical />
   </view>
 
   <view wx:elif="{{initialError}}" class="state-block">
     <t-empty description="{{initialErrorMessage || '索赔详情加载失败，请重试'}}" />
-    <view class="retry-button" bindtap="onRetry">重新加载</view>
+    <t-button theme="primary" bindtap="onRetry">重新加载</t-button>
   </view>
 
   <view wx:elif="{{detail}}" class="content">
     <view class="page-head">
       <view class="head-copy">查看索赔处理进度、责任判定、异议状态与追偿回款。</view>
-      <t-button size="small" variant="outline" shape="round" bindtap="onViewAppeals">异议记录</t-button>
+      <t-button size="small" variant="outline" bindtap="onViewAppeals">异议记录</t-button>
     </view>
 
-    <view wx:if="{{actionNoticeMessage}}" class="inline-banner inline-banner-warning">
-      <text class="inline-banner-text">{{actionNoticeMessage}}</text>
+    <view wx:if="{{actionNoticeMessage}}" class="notice-banner">
+      <t-notice-bar theme="warning" visible="{{true}}" content="{{actionNoticeMessage}}" />
     </view>
 
-    <view wx:if="{{refreshErrorMessage}}" class="inline-banner inline-banner-danger">
-      <text class="inline-banner-text">{{refreshErrorMessage}}</text>
-      <text class="inline-banner-action" bindtap="onRetryRefresh">重新同步</text>
+    <view wx:if="{{refreshErrorMessage}}" class="notice-banner">
+      <t-notice-bar theme="error" visible="{{true}}" content="{{refreshErrorMessage}}">
+        <text slot="operation" class="notice-banner-operation" bindtap="onRetryRefresh">重新同步</text>
+      </t-notice-bar>
     </view>
 
     <view class="hero-card">
@@ -111,7 +112,7 @@
         <text class="desc-value">{{detail.traceSummary}}</text>
       </view>
       <view class="action-row" wx:if="{{decisionError}}">
-        <t-button theme="primary" variant="outline" shape="round" bindtap="onRetryDecision" loading="{{decisionLoading}}">重试责任判定</t-button>
+        <t-button theme="primary" variant="outline" bindtap="onRetryDecision" loading="{{decisionLoading}}">重试责任判定</t-button>
       </view>
     </view>
 
@@ -158,7 +159,7 @@
         当前订单暂无骑手履约数据，骑手行为摘要暂不可用。
       </view>
       <view class="action-row" wx:if="{{behaviorError}}">
-        <t-button theme="primary" variant="outline" shape="round" bindtap="onRetryBehavior" loading="{{behaviorLoading}}">重试摘要</t-button>
+        <t-button theme="primary" variant="outline" bindtap="onRetryBehavior" loading="{{behaviorLoading}}">重试摘要</t-button>
       </view>
     </view>
 
@@ -194,7 +195,7 @@
       </block>
 
       <view class="action-row" wx:if="{{riskError}}">
-        <t-button theme="primary" variant="outline" shape="round" bindtap="onRetryRisk" loading="{{riskLoading}}">重试风险提示</t-button>
+        <t-button theme="primary" variant="outline" bindtap="onRetryRisk" loading="{{riskLoading}}">重试风险提示</t-button>
       </view>
     </view>
 
@@ -224,13 +225,13 @@
         <text class="desc-value">{{detail.reviewNotes}}</text>
       </view>
       <view class="action-row" wx:if="{{detail.hasAppeal}}">
-        <t-button theme="primary" variant="outline" shape="round" bindtap="onViewAppealDetail">查看异议详情</t-button>
+        <t-button theme="primary" variant="outline" bindtap="onViewAppealDetail">查看异议详情</t-button>
       </view>
       <view class="action-row" wx:if="{{recoveryError}}">
-        <t-button theme="primary" variant="outline" shape="round" bindtap="onRetryRecovery" loading="{{recoveryLoading}}">重试追偿信息</t-button>
+        <t-button theme="primary" variant="outline" bindtap="onRetryRecovery" loading="{{recoveryLoading}}">重试追偿信息</t-button>
       </view>
       <view class="action-row" wx:if="{{detail.canPayRecovery}}">
-        <t-button theme="primary" shape="round" loading="{{recoveryPaying}}" bindtap="onPayRecovery">支付追偿款</t-button>
+        <t-button theme="primary" loading="{{recoveryPaying}}" bindtap="onPayRecovery">支付追偿款</t-button>
       </view>
     </view>
 
@@ -244,7 +245,7 @@
         bindchange="onAppealInput"
       />
       <view class="action-row">
-        <t-button theme="warning" shape="round" loading="{{submitting}}" bindtap="onSubmitAppeal">提交异议</t-button>
+        <t-button theme="warning" loading="{{submitting}}" bindtap="onSubmitAppeal">提交异议</t-button>
       </view>
     </view>
   </view>

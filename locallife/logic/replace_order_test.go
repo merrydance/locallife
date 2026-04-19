@@ -9,6 +9,7 @@ import (
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	wechatmock "github.com/merrydance/locallife/wechat/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -27,7 +28,6 @@ func TestReplaceReservationOrder_OrderNotFound(t *testing.T) {
 	_, err := ReplaceReservationOrder(
 		context.Background(),
 		store,
-		nil,
 		nil,
 		ReplaceOrderInput{UserID: 1, OrderID: 10},
 		func(context.Context, int64, map[string]interface{}) ([]byte, int64, error) { return nil, 0, nil },
@@ -70,14 +70,14 @@ func TestReplaceReservationOrder_DeltaPositive(t *testing.T) {
 	session := db.DiningSession{ID: 77, UserID: userID}
 	dish := db.Dish{ID: dishID, MerchantID: merchantID, Name: "Noodles", Price: 1500, IsOnline: true, IsAvailable: true}
 	paymentOrder := db.PaymentOrder{
-		ID:            222,
-		UserID:        userID,
-		OrderID:       pgtype.Int8{Int64: 111, Valid: true},
-		ReservationID: pgtype.Int8{Int64: reservationID, Valid: true},
-		PaymentType:   "profit_sharing",
-		BusinessType:  "order",
-		Amount:        500,
-		OutTradeNo:    "RO111202603230001",
+		ID:             222,
+		OrderID:        pgtype.Int8{Int64: 111, Valid: true},
+		ReservationID:  pgtype.Int8{Int64: reservationID, Valid: true},
+		PaymentType:    "profit_sharing",
+		PaymentChannel: db.PaymentChannelEcommerce,
+		BusinessType:   "order",
+		Amount:         500,
+		OutTradeNo:     "RO111202603230001",
 	}
 
 	store.EXPECT().
@@ -147,14 +147,14 @@ func TestReplaceReservationOrder_DeltaPositive(t *testing.T) {
 	ecommerceClient.EXPECT().
 		CreatePartnerJSAPIOrder(gomock.Any(), gomock.Any()).
 		Times(1).
-		DoAndReturn(func(_ context.Context, req *wechat.PartnerJSAPIOrderRequest) (*wechat.PartnerJSAPIOrderResponse, *wechat.JSAPIPayParams, error) {
+		DoAndReturn(func(_ context.Context, req *wechatcontracts.PartnerJSAPIOrderRequest) (*wechatcontracts.PartnerJSAPIOrderResponse, *wechat.JSAPIPayParams, error) {
 			require.Equal(t, "1900000109", req.SubMchID)
 			require.Equal(t, "openid-1", req.PayerOpenID)
 			require.Equal(t, int64(500), req.TotalAmount)
 			require.Equal(t, "Test Merchant - Reservation Adjustment", req.Description)
 			require.Equal(t, "order_id:111", req.Attach)
 			require.True(t, req.ProfitSharing)
-			return &wechat.PartnerJSAPIOrderResponse{PrepayID: "prepay-replace-1"}, &wechat.JSAPIPayParams{}, nil
+			return &wechatcontracts.PartnerJSAPIOrderResponse{PrepayID: "prepay-replace-1"}, &wechat.JSAPIPayParams{}, nil
 		})
 	store.EXPECT().
 		UpdatePaymentOrderPrepayId(gomock.Any(), gomock.Any()).
@@ -167,7 +167,6 @@ func TestReplaceReservationOrder_DeltaPositive(t *testing.T) {
 	result, err := ReplaceReservationOrder(
 		context.Background(),
 		store,
-		nil,
 		ecommerceClient,
 		ReplaceOrderInput{
 			UserID:  userID,
@@ -185,12 +184,12 @@ func TestReplaceReservationOrder_DeltaPositive(t *testing.T) {
 	require.False(t, result.RefundInitiated)
 }
 
-func TestReplaceReservationOrder_RefundDirect(t *testing.T) {
+func TestReplaceReservationOrder_RejectsNonEcommerceRefundChain(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	paymentClient := wechatmock.NewMockPaymentClientInterface(ctrl)
+	ecommerceClient := wechatmock.NewMockEcommerceClientInterface(ctrl)
 
 	orderID := int64(12)
 	userID := int64(22)
@@ -266,33 +265,11 @@ func TestReplaceReservationOrder_RefundDirect(t *testing.T) {
 		GetTotalRefundedByPaymentOrder(gomock.Any(), int64(444)).
 		Times(1).
 		Return(int64(0), nil)
-	store.EXPECT().
-		CreateRefundOrder(gomock.Any(), gomock.Any()).
-		Times(1).
-		DoAndReturn(func(_ context.Context, arg db.CreateRefundOrderParams) (db.RefundOrder, error) {
-			require.Equal(t, int64(500), arg.RefundAmount)
-			require.Equal(t, int64(444), arg.PaymentOrderID)
-			require.Equal(t, "miniprogram", arg.RefundType)
-			return db.RefundOrder{ID: 555}, nil
-		})
-	paymentClient.EXPECT().
-		CreateRefund(gomock.Any(), gomock.Any()).
-		Times(1).
-		DoAndReturn(func(_ context.Context, req *wechat.RefundRequest) (*wechat.RefundResponse, error) {
-			require.Equal(t, "out_1", req.OutTradeNo)
-			require.Equal(t, int64(500), req.RefundAmount)
-			return &wechat.RefundResponse{Status: wechat.RefundStatusSuccess}, nil
-		})
-	store.EXPECT().
-		UpdateRefundOrderToSuccess(gomock.Any(), int64(555)).
-		Times(1).
-		Return(db.RefundOrder{}, nil)
 
-	result, err := ReplaceReservationOrder(
+	_, err := ReplaceReservationOrder(
 		context.Background(),
 		store,
-		paymentClient,
-		nil,
+		ecommerceClient,
 		ReplaceOrderInput{
 			UserID:  userID,
 			OrderID: orderID,
@@ -302,10 +279,9 @@ func TestReplaceReservationOrder_RefundDirect(t *testing.T) {
 		},
 		func(context.Context, int64, map[string]interface{}) ([]byte, int64, error) { return nil, 0, nil },
 	)
-	require.NoError(t, err)
-	require.Equal(t, int64(-500), result.Delta)
-	require.Nil(t, result.PaymentOrderID)
-	require.True(t, result.RefundInitiated)
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, http.StatusConflict, reqErr.Status)
+	require.Equal(t, "当前主营业务支付单不属于收付通链路，无法处理改菜退款，请联系平台处理", reqErr.Err.Error())
 }
 
 func TestReplaceReservationOrder_RefundProfitSharing(t *testing.T) {
@@ -382,7 +358,7 @@ func TestReplaceReservationOrder_RefundProfitSharing(t *testing.T) {
 	store.EXPECT().
 		GetPaymentOrdersByReservation(gomock.Any(), pgtype.Int8{Int64: reservationID, Valid: true}).
 		Times(1).
-		Return([]db.PaymentOrder{{ID: 444, Status: "paid", OutTradeNo: "out_1", Amount: 1000, PaymentType: "profit_sharing", BusinessType: businessTypeReservation, ReservationID: pgtype.Int8{Int64: reservationID, Valid: true}}}, nil)
+		Return([]db.PaymentOrder{{ID: 444, Status: "paid", OutTradeNo: "out_1", Amount: 1000, PaymentType: "profit_sharing", PaymentChannel: db.PaymentChannelEcommerce, BusinessType: businessTypeReservation, ReservationID: pgtype.Int8{Int64: reservationID, Valid: true}}}, nil)
 	store.EXPECT().
 		GetTotalRefundedByPaymentOrder(gomock.Any(), int64(444)).
 		Times(1).
@@ -407,17 +383,19 @@ func TestReplaceReservationOrder_RefundProfitSharing(t *testing.T) {
 			require.Equal(t, "1900000109", req.SubMchID)
 			require.Equal(t, "out_1", req.OutTradeNo)
 			require.Equal(t, int64(500), req.RefundAmount)
-			return &wechat.EcommerceRefundResponse{Status: wechat.RefundStatusSuccess}, nil
+			return &wechat.EcommerceRefundResponse{RefundID: "erefund_replace_1"}, nil
 		})
 	store.EXPECT().
-		UpdateRefundOrderToSuccess(gomock.Any(), int64(555)).
+		UpdateRefundOrderToProcessing(gomock.Any(), db.UpdateRefundOrderToProcessingParams{
+			ID:       555,
+			RefundID: pgtype.Text{String: "erefund_replace_1", Valid: true},
+		}).
 		Times(1).
 		Return(db.RefundOrder{}, nil)
 
 	result, err := ReplaceReservationOrder(
 		context.Background(),
 		store,
-		nil,
 		ecommerceClient,
 		ReplaceOrderInput{
 			UserID:  userID,
@@ -440,7 +418,7 @@ func TestReplaceReservationOrder_RefundInsufficientCoverageReturnsConflict(t *te
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	paymentClient := wechatmock.NewMockPaymentClientInterface(ctrl)
+	ecommerceClient := wechatmock.NewMockEcommerceClientInterface(ctrl)
 
 	orderID := int64(15)
 	userID := int64(25)
@@ -501,8 +479,7 @@ func TestReplaceReservationOrder_RefundInsufficientCoverageReturnsConflict(t *te
 	_, err := ReplaceReservationOrder(
 		context.Background(),
 		store,
-		paymentClient,
-		nil,
+		ecommerceClient,
 		ReplaceOrderInput{
 			UserID:  userID,
 			OrderID: orderID,

@@ -2,7 +2,7 @@
 
 <view
   class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
-  style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: 220rpx;"
+  style="--page-shell-nav-height: {{navBarHeight}}px;"
 >
   <view wx:if="{{accessReady && accessDenied}}" class="state-block">
     <t-empty icon="lock-on" description="当前账号无商户权限，请返回“我的”切换身份" />
@@ -10,7 +10,7 @@
 
   <view wx:elif="{{accessReady && accessErrorMessage}}" class="state-block">
     <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
-    <t-button theme="primary" size="small" shape="round" bind:tap="onRetryAccess">重新校验</t-button>
+    <t-button theme="primary" bind:tap="onRetryAccess">重新校验</t-button>
   </view>
 
   <view wx:elif="{{initialLoading}}" class="state-block">
@@ -19,7 +19,7 @@
 
   <view wx:elif="{{initialError}}" class="state-block">
     <t-empty icon="error-circle" description="{{initialErrorMessage || '配送优惠编辑页加载失败，请重试'}}" />
-    <t-button theme="primary" size="small" shape="round" bind:tap="onRetry">重新加载</t-button>
+    <t-button theme="primary" bind:tap="onRetry">重新加载</t-button>
   </view>
 
   <block wx:else>
@@ -39,8 +39,9 @@
             bind:change="onFormInputChange"
           />
           <t-input
-            label="最低订单金额(元)"
+            label="最低金额"
             type="digit"
+            suffix="元"
             placeholder="如 30.00"
             value="{{formData.min_order_yuan}}"
             data-field="min_order_yuan"
@@ -65,12 +66,8 @@
         </view>
 
         <t-cell-group theme="card">
-          <picker mode="date" value="{{formData.valid_from}}" bindchange="onDateChange" data-field="valid_from">
-            <t-cell title="开始日期" arrow note="{{formData.valid_from || '请选择'}}" />
-          </picker>
-          <picker mode="date" value="{{formData.valid_until}}" bindchange="onDateChange" data-field="valid_until">
-            <t-cell title="结束日期" arrow note="{{formData.valid_until || '请选择'}}" />
-          </picker>
+          <t-cell title="开始日期" arrow note="{{formData.valid_from || '请选择'}}" bind:tap="showValidFromPicker" />
+          <t-cell title="结束日期" arrow note="{{formData.valid_until || '请选择'}}" bind:tap="showValidUntilPicker" />
         </t-cell-group>
       </view>
 
@@ -85,12 +82,31 @@
           </t-cell>
         </t-cell-group>
       </view>
+      <view class="form-actions">
+        <t-button theme="primary" loading="{{submitting}}" bind:tap="onSubmit">
+        {{isEdit ? '保存配送优惠' : '创建配送优惠'}}
+        </t-button>
+      </view>
     </view>
 
-    <view class="footer-bar">
-      <t-button block theme="primary" size="large" shape="round" loading="{{submitting}}" bind:tap="onSubmit">
-        {{isEdit ? '保存配送优惠' : '创建配送优惠'}}
-      </t-button>
-    </view>
+    <t-date-time-picker
+      title="选择开始日期"
+      visible="{{validFromPickerVisible}}"
+      mode="date"
+      format="YYYY-MM-DD"
+      defaultValue="{{formData.valid_from}}"
+      bind:confirm="onValidFromConfirm"
+      bind:cancel="hideValidFromPicker"
+    />
+
+    <t-date-time-picker
+      title="选择结束日期"
+      visible="{{validUntilPickerVisible}}"
+      mode="date"
+      format="YYYY-MM-DD"
+      defaultValue="{{formData.valid_until}}"
+      bind:confirm="onValidUntilConfirm"
+      bind:cancel="hideValidUntilPicker"
+    />
   </block>
 </view>

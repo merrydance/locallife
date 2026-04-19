@@ -22,7 +22,7 @@ The files listed here are the active reusable prompt set for this workspace. Pro
 - `backend-review-closure.prompt.md`
 - `backend-sql-review.prompt.md`
 - `backend-integration-test.prompt.md`
-- `backend-payment-runbook.prompt.md`
+- `backend-payment-domain.prompt.md`
 - `backend-takeover.prompt.md`
 - `business-flow-mermaid.prompt.md`
 - `general-task-loop.prompt.md`
@@ -44,7 +44,7 @@ Treat this directory as a logical layered system even though files are stored fl
 
 - Protocol layer: `general-implementation.prompt.md`, `general-review.prompt.md`, `general-incident-followup.prompt.md`, `general-task-loop.prompt.md`
 - Stack layer: `backend-implementation.prompt.md`, `backend-review-closure.prompt.md`, `backend-bugfix.prompt.md`, `backend-takeover.prompt.md`, `flutter-bugfix.prompt.md`, `flutter-implementation.prompt.md`, `flutter-review.prompt.md`, `web-implementation.prompt.md`, `web-review.prompt.md`, `weapp-implementation.prompt.md`, `weapp-review.prompt.md`
-- Domain / workflow layer: `backend-payment-runbook.prompt.md`, `backend-sql-review.prompt.md`, `backend-integration-test.prompt.md`, `backend-task-card-implementation.prompt.md`, `backend-phase-batch-implementation.prompt.md`, `business-flow-mermaid.prompt.md`
+- Domain / workflow layer: `backend-payment-domain.prompt.md`, `backend-sql-review.prompt.md`, `backend-integration-test.prompt.md`, `backend-task-card-implementation.prompt.md`, `backend-phase-batch-implementation.prompt.md`, `business-flow-mermaid.prompt.md`
 
 Layering rules:
 
@@ -61,7 +61,7 @@ See `.github/standards/engineering/AI_PROMPT_GOVERNANCE.md` for the authoritativ
 Use this order to avoid prompt collisions:
 
 1. If the request is diagramming only, use `business-flow-mermaid.prompt.md`.
-2. If the request is backend payment-specific, use `backend-payment-runbook.prompt.md`.
+2. If the request is backend payment-specific or belongs to WeChat platform-ecommerce flows such as applyment, settlement account, withdraw, profit sharing, refund, complaint, or payment callbacks, use `backend-payment-domain.prompt.md`.
 3. If the request is backend takeover or onboarding focused, use `backend-takeover.prompt.md`.
 4. If the request is backend production bugfix or regression focused, use `backend-bugfix.prompt.md`.
 5. If the request is backend SQL or migration review-focused, use `backend-sql-review.prompt.md`.
@@ -83,7 +83,7 @@ Use this order to avoid prompt collisions:
 - `backend-implementation.prompt.md`: normal backend feature work outside payment-specialized, takeover, root-cause bugfix, or task-card-specialized flows.
 - `backend-takeover.prompt.md`: backend onboarding or new-owner context-building requests before implementation starts.
 - `backend-sql-review.prompt.md`: backend SQL, migration, sqlc propagation, index, or persistence-focused review requests.
-- `backend-payment-runbook.prompt.md`: WeChat payment, callback, refund, runbook, or audit-ledger work.
+- `backend-payment-domain.prompt.md`: WeChat payment or platform-ecommerce work, including applyment, settlement account, closeout, callback, refund, profit sharing, withdraw, complaint, or audit-ledger paths.
 - `flutter-bugfix.prompt.md`: Flutter merchant app regression,漏单、重复提醒、auth refresh、keep-alive、dedup、接单链路等根因修复请求。
 - `flutter-implementation.prompt.md`: all Flutter merchant app implementation requests, including auth binding, push, keep-alive, order alert, dedup, and weak-network recovery work.
 - `flutter-review.prompt.md`: all Flutter merchant app review requests, especially reliability-sensitive flows such as dedup, auth refresh, keep-alive, and accept-order paths.
@@ -94,6 +94,7 @@ Cross-cutting governance rule:
 
 - When using `general-*` prompts for high-risk or cross-surface work, include a risk classification guess, validation scope, and expected residual-risk or release-readiness output instead of treating the task as routine.
 - Implementation and review prompts should reuse the shared push / prohibit / review matrix from `.github/standards/engineering/AI_PROMPT_GOVERNANCE.md` instead of drifting into separate local rule sets.
+- Payment-domain prompts should mirror `.github/standards/domains/wechat-payment/README.md`: official docs first, then capability-group identification, then caller propagation and focused validation.
 
 ## Routing Test Cases
 
@@ -112,45 +113,48 @@ Expected target: `backend-takeover.prompt.md`
 Expected target: `backend-review-closure.prompt.md`
 
 5. "给微信支付回调和退款链路做一次实现和审查请求模板。"
-Expected target: `backend-payment-runbook.prompt.md`
+Expected target: `backend-payment-domain.prompt.md`
 
-6. "审查这个 db/query 和 migration 变更，重点看 sqlc 传播、索引遗漏和事务风险。"
+6. "补一下平台收付通商户进件申请单查询和签约状态处理，顺便检查字段和错误码是不是跟官方文档完全一致。"
+Expected target: `backend-payment-domain.prompt.md`
+
+7. "审查这个 db/query 和 migration 变更，重点看 sqlc 传播、索引遗漏和事务风险。"
 Expected target: `backend-sql-review.prompt.md`
 
-7. "给这个小程序页面做页面方案，先诊断 setData 热点和弱网体验，再给实施方案。"
+8. "给这个小程序页面做页面方案，先诊断 setData 热点和弱网体验，再给实施方案。"
 Expected target: `weapp-implementation.prompt.md`
 
-8. "修一下小程序支付完成后返回页状态丢失和重复点击支付的问题。"
+9. "修一下小程序支付完成后返回页状态丢失和重复点击支付的问题。"
 Expected target: `weapp-implementation.prompt.md`
 
-9. "改一下小程序页面的列表空态和错误态。"
+10. "改一下小程序页面的列表空态和错误态。"
 Expected target: `weapp-implementation.prompt.md`
 
-10. "把这个小程序页面完全用 TDesign 重构，整页重新布局成极简风格，复杂区块拆成组件，新增删除改成图标按钮。"
+11. "把这个小程序页面完全用 TDesign 重构，整页重新布局成极简风格，复杂区块拆成组件，新增删除改成图标按钮。"
 Expected target: `weapp-implementation.prompt.md`
 
-11. "从整体升级角度审查一下 weapp 的交互和风格，既看现行规范，也看后端真相、页面连贯性和常见低质量模式。"
+12. "从整体升级角度审查一下 weapp 的交互和风格，既看现行规范，也看后端真相、页面连贯性和常见低质量模式。"
 Expected target: `weapp-review.prompt.md`
 
-12. "给 merchant_app 做绑定码登录、推送注册和前台服务的实现请求模板。"
+13. "给 merchant_app 做绑定码登录、推送注册和前台服务的实现请求模板。"
 Expected target: `flutter-implementation.prompt.md`
 
-13. "修这个 Flutter 商户端漏单问题，先追真实根因，再说明为什么不能只在 Widget 打补丁。"
+14. "修这个 Flutter 商户端漏单问题，先追真实根因，再说明为什么不能只在 Widget 打补丁。"
 Expected target: `flutter-bugfix.prompt.md`
 
-14. "审查这个 Flutter 商户端改动，重点看 provider wiring、消息去重、弱网恢复和接单链路。"
+15. "审查这个 Flutter 商户端改动，重点看 provider wiring、消息去重、弱网恢复和接单链路。"
 Expected target: `flutter-review.prompt.md`
 
-15. "这个需求要同时改 backend 和 web，帮我整理一份实现请求。"
+16. "这个需求要同时改 backend 和 web，帮我整理一份实现请求。"
 Expected target: `general-implementation.prompt.md`
 
-16. "把这段报销审批流程整理成 Mermaid，补上驳回和超时分支。"
+17. "把这段报销审批流程整理成 Mermaid，补上驳回和超时分支。"
 Expected target: `business-flow-mermaid.prompt.md`
 
-17. "把这组任务按 开发 -> review -> 修复 -> review -> 文档同步 的顺序跑完，直到任务清单完成。"
+18. "把这组任务按 开发 -> review -> 修复 -> review -> 文档同步 的顺序跑完，直到任务清单完成。"
 Expected target: `general-task-loop.prompt.md`
 
-18. "把这次线上事故的结论落成规则、workflow、测试和 runbook 更新清单。"
+19. "把这次线上事故的结论落成规则、workflow、测试和 runbook 更新清单。"
 Expected target: `general-incident-followup.prompt.md`
 
 ## Maintenance Rule

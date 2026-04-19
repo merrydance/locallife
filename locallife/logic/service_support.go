@@ -9,6 +9,7 @@ import (
 
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 )
 
 type SystemClock struct{}
@@ -96,7 +97,7 @@ func (DefaultOrderPolicy) ValidateCreateInput(input CreateOrderCommandInput) err
 }
 
 type DefaultPaymentFacade struct {
-	paymentClient   wechat.PaymentClientInterface
+	paymentClient   wechat.DirectPaymentClientInterface
 	ecommerceClient wechat.EcommerceClientInterface
 	paymentService  *PaymentOrderService
 	ledgerService   *PaymentLedgerService
@@ -105,13 +106,13 @@ type DefaultPaymentFacade struct {
 
 func NewDefaultPaymentFacade(
 	store db.Store,
-	paymentClient wechat.PaymentClientInterface,
+	paymentClient wechat.DirectPaymentClientInterface,
 	ecommerceClient wechat.EcommerceClientInterface,
 ) PaymentFacade {
 	return &DefaultPaymentFacade{
 		paymentClient:   paymentClient,
 		ecommerceClient: ecommerceClient,
-		paymentService:  NewPaymentOrderService(store, paymentClient, ecommerceClient),
+		paymentService:  NewPaymentOrderService(store, ecommerceClient),
 		ledgerService:   NewPaymentLedgerService(store),
 		combinedService: NewCombinedPaymentService(store, ecommerceClient),
 	}
@@ -141,6 +142,10 @@ func (f *DefaultPaymentFacade) GetPaymentOrder(ctx context.Context, input GetPay
 	return f.paymentService.GetPaymentOrder(ctx, input)
 }
 
+func (f *DefaultPaymentFacade) QueryPaymentOrder(ctx context.Context, input QueryPaymentOrderInput) (QueryPaymentOrderResult, error) {
+	return f.paymentService.QueryPaymentOrder(ctx, input)
+}
+
 func (f *DefaultPaymentFacade) ListPaymentOrders(ctx context.Context, input ListPaymentOrdersInput) (ListPaymentOrdersResult, error) {
 	return f.paymentService.ListPaymentOrders(ctx, input)
 }
@@ -153,28 +158,19 @@ func (f *DefaultPaymentFacade) ClosePaymentOrder(ctx context.Context, input Clos
 	return f.paymentService.ClosePaymentOrder(ctx, input)
 }
 
-func (f *DefaultPaymentFacade) CreateRefund(ctx context.Context, req *wechat.RefundRequest) (*wechat.RefundResponse, error) {
-	if f.paymentClient == nil {
-		return nil, fmt.Errorf("payment client not configured")
-	}
-	return f.paymentClient.CreateRefund(ctx, req)
+func (f *DefaultPaymentFacade) CreateRefund(ctx context.Context, req *wechatcontracts.DirectRefundRequest) (*wechatcontracts.DirectRefundResponse, error) {
+	return createDirectRefundContract(ctx, f.paymentClient, req)
 }
 
-func (f *DefaultPaymentFacade) CreateEcommerceRefund(ctx context.Context, req *wechat.EcommerceRefundRequest) (*wechat.EcommerceRefundResponse, error) {
-	if f.ecommerceClient == nil {
-		return nil, fmt.Errorf("ecommerce client not configured")
-	}
-	return f.ecommerceClient.CreateEcommerceRefund(ctx, req)
+func (f *DefaultPaymentFacade) CreateEcommerceRefund(ctx context.Context, req *wechatcontracts.EcommerceRefundRequest) (*wechatcontracts.EcommerceRefundCreateResponse, error) {
+	return createEcommerceRefundContract(ctx, f.ecommerceClient, req)
 }
 
-func (f *DefaultPaymentFacade) ApplyEcommerceAbnormalRefund(ctx context.Context, req *wechat.EcommerceAbnormalRefundRequest) (*wechat.EcommerceRefundResponse, error) {
-	if f.ecommerceClient == nil {
-		return nil, fmt.Errorf("ecommerce client not configured")
-	}
-	return f.ecommerceClient.ApplyEcommerceAbnormalRefund(ctx, req)
+func (f *DefaultPaymentFacade) ApplyEcommerceAbnormalRefund(ctx context.Context, req *wechatcontracts.EcommerceAbnormalRefundRequest) (*wechatcontracts.EcommerceRefundQueryResponse, error) {
+	return applyEcommerceAbnormalRefundContract(ctx, f.ecommerceClient, req)
 }
 
-func (f *DefaultPaymentFacade) CreateProfitSharingReturn(ctx context.Context, req *wechat.ProfitSharingReturnRequest) (*wechat.ProfitSharingReturnResponse, error) {
+func (f *DefaultPaymentFacade) CreateProfitSharingReturn(ctx context.Context, req *wechatcontracts.ProfitSharingReturnRequest) (*wechatcontracts.ProfitSharingReturnResponse, error) {
 	if f.ecommerceClient == nil {
 		return nil, fmt.Errorf("ecommerce client not configured")
 	}

@@ -8,6 +8,8 @@
         "t-steps": "tdesign-miniprogram/steps/steps",
         "t-step-item": "tdesign-miniprogram/step-item/step-item",
         "t-loading": "tdesign-miniprogram/loading/loading",
+        "t-checkbox": "tdesign-miniprogram/checkbox/checkbox",
+        "t-checkbox-group": "tdesign-miniprogram/checkbox-group/checkbox-group",
         "t-popup": "tdesign-miniprogram/popup/popup",
         "document-uploader": "../../../../components/document-uploader/index"
     }

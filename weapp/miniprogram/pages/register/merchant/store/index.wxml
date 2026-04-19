@@ -175,12 +175,12 @@
   <!-- 底部操作栏 -->
   <view class="submit-bar">
         <view class="consent-row" wx:if="{{currentStep === 0 || currentStep === 4}}">
-            <checkbox-group bindchange="onConsentChange">
+            <t-checkbox-group bindchange="onConsentChange">
                 <label class="consent-label">
-                    <checkbox value="agree" checked="{{consentChecked}}" color="var(--td-brand-color)" />
+                    <t-checkbox value="agree" checked="{{consentChecked}}"></t-checkbox>
                     <text>我已阅读并同意</text>
                 </label>
-            </checkbox-group>
+            </t-checkbox-group>
             <view class="consent-links">
                 <text class="consent-link" data-type="USER_AGREEMENT" data-title="用户服务协议" catchtap="onViewAgreement">《用户服务协议》</text>
                 <text>和</text>
@@ -189,18 +189,18 @@
         </view>
 
     <block wx:if="{{currentStep === 0}}">
-                  <t-button block class="submit-btn" theme="primary" size="large" bindtap="nextStep" shape="round">开始入驻</t-button>
+                   <t-button block class="submit-btn" theme="primary" bindtap="nextStep">开始入驻</t-button>
     </block>
     <block wx:if="{{currentStep > 0 && currentStep < 4}}">
          <view class="btn-row">
-              <t-button block class="half-btn" theme="default" size="large" bindtap="prevStep" shape="round">上一步</t-button>
-              <t-button block class="half-btn" theme="primary" size="large" bindtap="nextStep" shape="round">下一步</t-button>
+                <t-button class="half-btn" theme="default" bindtap="prevStep">上一步</t-button>
+                <t-button class="half-btn" theme="primary" bindtap="nextStep">下一步</t-button>
          </view>
     </block>
     <block wx:if="{{currentStep === 4}}">
          <view class="btn-row">
-              <t-button block class="half-btn" theme="default" size="large" bindtap="prevStep" disabled="{{isSubmitting}}" shape="round">上一步</t-button>
-                        <t-button block class="half-btn" theme="primary" size="large" bindtap="onSubmit" loading="{{isSubmitting}}" disabled="{{isSubmitting}}" shape="round">提交入驻</t-button>
+                <t-button class="half-btn" theme="default" bindtap="prevStep" disabled="{{isSubmitting}}">上一步</t-button>
+                        <t-button class="half-btn" theme="primary" bindtap="onSubmit" loading="{{isSubmitting}}" disabled="{{isSubmitting}}">提交入驻</t-button>
          </view>
     </block>
   </view>
@@ -214,8 +214,8 @@
             <text class="consent-link" data-type="USER_AGREEMENT" data-title="用户服务协议" catchtap="onViewAgreement">《用户服务协议》</text>
             <text class="consent-link" data-type="PRIVACY_POLICY" data-title="隐私政策" catchtap="onViewAgreement">《隐私政策》</text>
         </view>
-        <t-button block theme="primary" size="large" bindtap="onConfirmConsent" shape="round">我已阅读并同意，继续</t-button>
-        <t-button block variant="text" size="large" bindtap="closeConsentPopup">暂不继续</t-button>
+        <t-button block theme="primary" bindtap="onConfirmConsent">我已阅读并同意，继续</t-button>
+        <t-button block variant="text" bindtap="closeConsentPopup">暂不继续</t-button>
     </view>
 </t-popup>
 

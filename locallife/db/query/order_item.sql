@@ -27,17 +27,17 @@ INSERT INTO order_items (
 );
 
 -- name: GetOrderItem :one
-SELECT * FROM order_items
+SELECT id, order_id, dish_id, combo_id, name, unit_price, quantity, subtotal, customizations, created_at FROM order_items
 WHERE id = $1 LIMIT 1;
 
 -- name: ListOrderItemsByOrder :many
-SELECT * FROM order_items
+SELECT id, order_id, dish_id, combo_id, name, unit_price, quantity, subtotal, customizations, created_at FROM order_items
 WHERE order_id = $1
 ORDER BY id;
 
 -- name: ListOrderItemsWithDishByOrder :many
 SELECT 
-    oi.*,
+    oi.id, oi.order_id, oi.dish_id, oi.combo_id, oi.name, oi.unit_price, oi.quantity, oi.subtotal, oi.customizations, oi.created_at,
     d.image_media_asset_id as dish_image_media_asset_id
 FROM order_items oi
 LEFT JOIN dishes d ON oi.dish_id = d.id

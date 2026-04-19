@@ -14,7 +14,7 @@
 
   <view wx:elif="{{accessErrorMessage}}" class="state-block">
     <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
-    <t-button theme="primary" shape="round" bind:tap="onRetryAccess">重新校验</t-button>
+    <t-button theme="primary" bind:tap="onRetryAccess">重新校验</t-button>
   </view>
 
   <view wx:elif="{{initialLoading}}" class="state-block">
@@ -23,19 +23,10 @@
 
   <view wx:elif="{{initialError}}" class="state-block">
     <t-empty icon="error-circle" description="{{initialErrorMessage || '账单数据加载失败，请重试'}}" />
-    <t-button theme="primary" shape="round" bind:tap="onRetry">重新加载</t-button>
+    <t-button theme="primary" bind:tap="onRetry">重新加载</t-button>
   </view>
 
   <view wx:else class="page-content">
-    <t-notice-bar
-      wx:if="{{refreshErrorMessage}}"
-      visible="{{true}}"
-      theme="warning"
-      content="{{refreshErrorMessage}}"
-      prefixIcon="error-circle"
-      t-class="page-notice"
-    />
-
     <t-tabs
       value="{{currentRange}}"
       bind:change="onRangeChange"
@@ -52,7 +43,7 @@
       <t-tag size="small" theme="default" variant="light-outline">更新 {{updatedAtLabel}}</t-tag>
     </view>
 
-    <t-grid column="4" gutter="12" theme="card" border="{{false}}" t-class="finance-grid finance-summary-grid">
+    <t-grid column="4" gutter="12" border="{{false}}" t-class="finance-grid finance-summary-grid">
       <t-grid-item
         wx:for="{{overviewTiles}}"
         wx:key="id"
@@ -66,7 +57,7 @@
       />
     </t-grid>
 
-    <t-grid column="3" gutter="12" theme="card" border="{{false}}" hover="{{true}}" t-class="finance-grid finance-entry-grid">
+    <t-grid column="3" gutter="12" border="{{false}}" hover="{{true}}" t-class="finance-grid finance-entry-grid">
       <t-grid-item
         wx:for="{{analysisEntries}}"
         wx:key="id"

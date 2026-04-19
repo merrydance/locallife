@@ -12,7 +12,7 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/token"
-	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	"github.com/rs/zerolog/log"
 )
 
@@ -222,6 +222,10 @@ func (server *Server) depositRider(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, errorResponse(ErrRiderNotActivated))
 		return
 	}
+	if server.directPaymentClient == nil {
+		ctx.JSON(http.StatusServiceUnavailable, errorResponse(errors.New("payment service not configured")))
+		return
+	}
 
 	// 创建支付订单
 	// 骑手押金充值使用单独的 business_type，回调时根据 user_id 找到对应骑手
@@ -249,12 +253,14 @@ func (server *Server) depositRider(ctx *gin.Context) {
 				return
 			}
 			paymentOrder, err = server.store.CreatePaymentOrder(ctx, db.CreatePaymentOrderParams{
-				UserID:       authPayload.UserID,
-				PaymentType:  PaymentTypeMiniProgram,
-				BusinessType: BusinessTypeRiderDeposit, // 骑手押金充值
-				Amount:       req.Amount,
-				OutTradeNo:   outTradeNo,
-				ExpiresAt:    pgtype.Timestamptz{Time: expiresAt, Valid: true},
+				UserID:                authPayload.UserID,
+				PaymentType:           PaymentTypeMiniProgram,
+				PaymentChannel:        db.PaymentChannelDirect,
+				RequiresProfitSharing: false,
+				BusinessType:          BusinessTypeRiderDeposit, // 骑手押金充值
+				Amount:                req.Amount,
+				OutTradeNo:            outTradeNo,
+				ExpiresAt:             pgtype.Timestamptz{Time: expiresAt, Valid: true},
 			})
 			if err == nil {
 				break
@@ -280,44 +286,45 @@ func (server *Server) depositRider(ctx *gin.Context) {
 	}
 
 	// 调用微信支付 API 创建预支付订单
-	if server.paymentClient != nil {
-		user, err := server.store.GetUser(ctx, authPayload.UserID)
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get user: %w", err)))
+	user, err := server.store.GetUser(ctx, authPayload.UserID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get user: %w", err)))
+		return
+	}
+
+	wxResp, payParams, err := server.directPaymentClient.CreateJSAPIOrder(ctx, &wechatcontracts.DirectJSAPIOrderRequest{
+		OutTradeNo:    outTradeNo,
+		Description:   "骑手押金充值",
+		TotalAmount:   req.Amount,
+		PayerOpenID:   user.WechatOpenid,
+		ExpireTime:    expiresAt,
+		Attach:        fmt.Sprintf("deposit:rider_%d", authPayload.UserID),
+		PayerClientIP: ctx.ClientIP(),
+	})
+	if err != nil {
+		_, _ = server.store.UpdatePaymentOrderToClosed(ctx, paymentOrder.ID)
+		if writeLogicRequestError(ctx, logic.MapDirectJSAPIOrderCreateError(err)) {
 			return
 		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("wechat pay: %w", err)))
+		return
+	}
 
-		wxResp, payParams, err := server.paymentClient.CreateJSAPIOrder(ctx, &wechat.JSAPIOrderRequest{
-			OutTradeNo:    outTradeNo,
-			Description:   "骑手押金充值",
-			TotalAmount:   req.Amount,
-			OpenID:        user.WechatOpenid,
-			ExpireTime:    expiresAt,
-			Attach:        fmt.Sprintf("deposit:rider_%d", authPayload.UserID), // 押金充值标识
-			PayerClientIP: ctx.ClientIP(),                                      // 用户终端IP
-		})
-		if err != nil {
-			_, _ = server.store.UpdatePaymentOrderToClosed(ctx, paymentOrder.ID)
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("wechat pay: %w", err)))
-			return
-		}
+	// 更新 prepay_id（非关键字段：为空不影响支付回调或退款，仅影响审计对账）
+	if _, err := server.store.UpdatePaymentOrderPrepayId(ctx, db.UpdatePaymentOrderPrepayIdParams{
+		ID:       paymentOrder.ID,
+		PrepayID: pgtype.Text{String: wxResp.PrepayID, Valid: true},
+	}); err != nil {
+		log.Warn().Err(err).Int64("payment_order_id", paymentOrder.ID).Msg("failed to update prepay_id, record will lack prepay_id for audit")
+	}
 
-		// 更新 prepay_id（非关键字段：为空不影响支付回调或退款，仅影响审计对账）
-		if _, err := server.store.UpdatePaymentOrderPrepayId(ctx, db.UpdatePaymentOrderPrepayIdParams{
-			ID:       paymentOrder.ID,
-			PrepayID: pgtype.Text{String: wxResp.PrepayID, Valid: true},
-		}); err != nil {
-			log.Warn().Err(err).Int64("payment_order_id", paymentOrder.ID).Msg("failed to update prepay_id, record will lack prepay_id for audit")
-		}
-
-		// 返回支付参数
-		resp["pay_params"] = map[string]string{
-			"timeStamp": payParams.TimeStamp,
-			"nonceStr":  payParams.NonceStr,
-			"package":   payParams.Package,
-			"signType":  payParams.SignType,
-			"paySign":   payParams.PaySign,
-		}
+	// 返回支付参数
+	resp["pay_params"] = map[string]string{
+		"timeStamp": payParams.TimeStamp,
+		"nonceStr":  payParams.NonceStr,
+		"package":   payParams.Package,
+		"signType":  payParams.SignType,
+		"paySign":   payParams.PaySign,
 	}
 
 	ctx.JSON(http.StatusOK, resp)

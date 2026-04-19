@@ -12,7 +12,7 @@ import (
 )
 
 const getOperatorForUpdate = `-- name: GetOperatorForUpdate :one
-SELECT id, user_id, region_id, name, contact_name, contact_phone, wechat_mch_id, commission_rate, status, created_at, updated_at, contract_start_date, contract_end_date, contract_years, sub_mch_id, balance, wallet_account, merchant_deposit, rider_deposit, weather_coeff_extreme, weather_coeff_heavy, weather_coeff_moderate, weather_coeff_light FROM operators
+SELECT id, user_id, region_id, name, contact_name, contact_phone, wechat_mch_id, status, created_at, updated_at, contract_start_date, contract_end_date, contract_years, sub_mch_id, balance, wallet_account, rider_deposit, weather_coeff_extreme, weather_coeff_heavy, weather_coeff_moderate, weather_coeff_light, latest_settlement_application_no, latest_settlement_application_submitted_at FROM operators
 WHERE id = $1 LIMIT 1 FOR NO KEY UPDATE
 `
 
@@ -27,7 +27,6 @@ func (q *Queries) GetOperatorForUpdate(ctx context.Context, id int64) (Operator,
 		&i.ContactName,
 		&i.ContactPhone,
 		&i.WechatMchID,
-		&i.CommissionRate,
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -37,12 +36,13 @@ func (q *Queries) GetOperatorForUpdate(ctx context.Context, id int64) (Operator,
 		&i.SubMchID,
 		&i.Balance,
 		&i.WalletAccount,
-		&i.MerchantDeposit,
 		&i.RiderDeposit,
 		&i.WeatherCoeffExtreme,
 		&i.WeatherCoeffHeavy,
 		&i.WeatherCoeffModerate,
 		&i.WeatherCoeffLight,
+		&i.LatestSettlementApplicationNo,
+		&i.LatestSettlementApplicationSubmittedAt,
 	)
 	return i, err
 }
@@ -67,7 +67,7 @@ const updateOperatorBalance = `-- name: UpdateOperatorBalance :one
 UPDATE operators
 SET balance = balance + $1
 WHERE id = $2
-RETURNING id, user_id, region_id, name, contact_name, contact_phone, wechat_mch_id, commission_rate, status, created_at, updated_at, contract_start_date, contract_end_date, contract_years, sub_mch_id, balance, wallet_account, merchant_deposit, rider_deposit, weather_coeff_extreme, weather_coeff_heavy, weather_coeff_moderate, weather_coeff_light
+RETURNING id, user_id, region_id, name, contact_name, contact_phone, wechat_mch_id, status, created_at, updated_at, contract_start_date, contract_end_date, contract_years, sub_mch_id, balance, wallet_account, rider_deposit, weather_coeff_extreme, weather_coeff_heavy, weather_coeff_moderate, weather_coeff_light, latest_settlement_application_no, latest_settlement_application_submitted_at
 `
 
 type UpdateOperatorBalanceParams struct {
@@ -86,7 +86,6 @@ func (q *Queries) UpdateOperatorBalance(ctx context.Context, arg UpdateOperatorB
 		&i.ContactName,
 		&i.ContactPhone,
 		&i.WechatMchID,
-		&i.CommissionRate,
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -96,12 +95,13 @@ func (q *Queries) UpdateOperatorBalance(ctx context.Context, arg UpdateOperatorB
 		&i.SubMchID,
 		&i.Balance,
 		&i.WalletAccount,
-		&i.MerchantDeposit,
 		&i.RiderDeposit,
 		&i.WeatherCoeffExtreme,
 		&i.WeatherCoeffHeavy,
 		&i.WeatherCoeffModerate,
 		&i.WeatherCoeffLight,
+		&i.LatestSettlementApplicationNo,
+		&i.LatestSettlementApplicationSubmittedAt,
 	)
 	return i, err
 }
@@ -109,38 +109,32 @@ func (q *Queries) UpdateOperatorBalance(ctx context.Context, arg UpdateOperatorB
 const updateOperatorRules = `-- name: UpdateOperatorRules :one
 UPDATE operators
 SET 
-    merchant_deposit = COALESCE($1, merchant_deposit),
-    rider_deposit = COALESCE($2, rider_deposit),
-    weather_coeff_extreme = COALESCE($3, weather_coeff_extreme),
-    weather_coeff_heavy = COALESCE($4, weather_coeff_heavy),
-    weather_coeff_moderate = COALESCE($5, weather_coeff_moderate),
-    weather_coeff_light = COALESCE($6, weather_coeff_light),
-    commission_rate = COALESCE($7, commission_rate),
+    rider_deposit = COALESCE($1, rider_deposit),
+    weather_coeff_extreme = COALESCE($2, weather_coeff_extreme),
+    weather_coeff_heavy = COALESCE($3, weather_coeff_heavy),
+    weather_coeff_moderate = COALESCE($4, weather_coeff_moderate),
+    weather_coeff_light = COALESCE($5, weather_coeff_light),
     updated_at = NOW()
-WHERE id = $8
-RETURNING id, user_id, region_id, name, contact_name, contact_phone, wechat_mch_id, commission_rate, status, created_at, updated_at, contract_start_date, contract_end_date, contract_years, sub_mch_id, balance, wallet_account, merchant_deposit, rider_deposit, weather_coeff_extreme, weather_coeff_heavy, weather_coeff_moderate, weather_coeff_light
+WHERE id = $6
+RETURNING id, user_id, region_id, name, contact_name, contact_phone, wechat_mch_id, status, created_at, updated_at, contract_start_date, contract_end_date, contract_years, sub_mch_id, balance, wallet_account, rider_deposit, weather_coeff_extreme, weather_coeff_heavy, weather_coeff_moderate, weather_coeff_light, latest_settlement_application_no, latest_settlement_application_submitted_at
 `
 
 type UpdateOperatorRulesParams struct {
-	MerchantDeposit      pgtype.Int8    `json:"merchant_deposit"`
 	RiderDeposit         pgtype.Int8    `json:"rider_deposit"`
 	WeatherCoeffExtreme  pgtype.Numeric `json:"weather_coeff_extreme"`
 	WeatherCoeffHeavy    pgtype.Numeric `json:"weather_coeff_heavy"`
 	WeatherCoeffModerate pgtype.Numeric `json:"weather_coeff_moderate"`
 	WeatherCoeffLight    pgtype.Numeric `json:"weather_coeff_light"`
-	CommissionRate       pgtype.Numeric `json:"commission_rate"`
 	ID                   int64          `json:"id"`
 }
 
 func (q *Queries) UpdateOperatorRules(ctx context.Context, arg UpdateOperatorRulesParams) (Operator, error) {
 	row := q.db.QueryRow(ctx, updateOperatorRules,
-		arg.MerchantDeposit,
 		arg.RiderDeposit,
 		arg.WeatherCoeffExtreme,
 		arg.WeatherCoeffHeavy,
 		arg.WeatherCoeffModerate,
 		arg.WeatherCoeffLight,
-		arg.CommissionRate,
 		arg.ID,
 	)
 	var i Operator
@@ -152,7 +146,6 @@ func (q *Queries) UpdateOperatorRules(ctx context.Context, arg UpdateOperatorRul
 		&i.ContactName,
 		&i.ContactPhone,
 		&i.WechatMchID,
-		&i.CommissionRate,
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -162,12 +155,13 @@ func (q *Queries) UpdateOperatorRules(ctx context.Context, arg UpdateOperatorRul
 		&i.SubMchID,
 		&i.Balance,
 		&i.WalletAccount,
-		&i.MerchantDeposit,
 		&i.RiderDeposit,
 		&i.WeatherCoeffExtreme,
 		&i.WeatherCoeffHeavy,
 		&i.WeatherCoeffModerate,
 		&i.WeatherCoeffLight,
+		&i.LatestSettlementApplicationNo,
+		&i.LatestSettlementApplicationSubmittedAt,
 	)
 	return i, err
 }

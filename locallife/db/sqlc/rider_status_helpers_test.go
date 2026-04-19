@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -10,10 +11,12 @@ import (
 )
 
 type stubRiderDepositThresholdReader struct {
-	activeOperator Operator
-	operatorErr    error
-	platformConfig PlatformConfig
-	platformErr    error
+	activeOperator     Operator
+	operatorErr        error
+	platformConfig     PlatformConfig
+	platformErr        error
+	platformConfigs    map[string]PlatformConfig
+	platformConfigErrs map[string]error
 }
 
 type stubRiderOperationalStatusReconciler struct {
@@ -28,7 +31,25 @@ type stubRiderOperationalStatusReconciler struct {
 	onlineErr        error
 }
 
-func (s stubRiderDepositThresholdReader) GetPlatformConfig(context.Context, GetPlatformConfigParams) (PlatformConfig, error) {
+func depositScopeKey(arg GetPlatformConfigParams) string {
+	scopeID := int64(0)
+	if arg.ScopeID.Valid {
+		scopeID = arg.ScopeID.Int64
+	}
+	return fmt.Sprintf("%s|%s|%d", arg.ConfigKey, arg.ScopeType, scopeID)
+}
+
+func (s stubRiderDepositThresholdReader) GetPlatformConfig(_ context.Context, arg GetPlatformConfigParams) (PlatformConfig, error) {
+	if s.platformConfigs != nil {
+		key := depositScopeKey(arg)
+		if err, ok := s.platformConfigErrs[key]; ok {
+			return PlatformConfig{}, err
+		}
+		if config, ok := s.platformConfigs[key]; ok {
+			return config, nil
+		}
+		return PlatformConfig{}, ErrRecordNotFound
+	}
 	return s.platformConfig, s.platformErr
 }
 
@@ -82,6 +103,56 @@ func TestGetEffectiveRiderDepositThreshold_UsesOperatorConfigForRegion(t *testin
 	}, pgtype.Int8{Int64: 11, Valid: true})
 	require.NoError(t, err)
 	require.Equal(t, int64(26000), threshold)
+}
+
+func TestGetEffectiveRiderDepositThreshold_UsesPlatformFallbackWhenOperatorStillOnLegacyDefault(t *testing.T) {
+	threshold, err := GetEffectiveRiderDepositThreshold(context.Background(), stubRiderDepositThresholdReader{
+		activeOperator: Operator{ID: 9, RiderDeposit: DefaultRiderDepositThresholdFen},
+		platformConfigs: map[string]PlatformConfig{
+			depositScopeKey(GetPlatformConfigParams{
+				ConfigKey: PlatformConfigKeyRiderDepositFen,
+				ScopeType: PlatformConfigScopeGlobal,
+				ScopeID:   pgtype.Int8{Valid: false},
+			}): {
+				ConfigKey:   PlatformConfigKeyRiderDepositFen,
+				ScopeType:   PlatformConfigScopeGlobal,
+				ScopeID:     pgtype.Int8{Valid: false},
+				ConfigValue: []byte(`{"amount_fen":32000}`),
+			},
+		},
+	}, pgtype.Int8{Int64: 11, Valid: true})
+	require.NoError(t, err)
+	require.Equal(t, int64(32000), threshold)
+}
+
+func TestGetEffectiveRiderDepositThreshold_UsesOperatorScopedConfigAtLegacyDefaultValue(t *testing.T) {
+	threshold, err := GetEffectiveRiderDepositThreshold(context.Background(), stubRiderDepositThresholdReader{
+		activeOperator: Operator{ID: 9, RiderDeposit: DefaultRiderDepositThresholdFen},
+		platformConfigs: map[string]PlatformConfig{
+			depositScopeKey(GetPlatformConfigParams{
+				ConfigKey: PlatformConfigKeyRiderDepositFen,
+				ScopeType: PlatformConfigScopeOperator,
+				ScopeID:   pgtype.Int8{Int64: 9, Valid: true},
+			}): {
+				ConfigKey:   PlatformConfigKeyRiderDepositFen,
+				ScopeType:   PlatformConfigScopeOperator,
+				ScopeID:     pgtype.Int8{Int64: 9, Valid: true},
+				ConfigValue: []byte(`{"amount_fen":20000}`),
+			},
+			depositScopeKey(GetPlatformConfigParams{
+				ConfigKey: PlatformConfigKeyRiderDepositFen,
+				ScopeType: PlatformConfigScopeGlobal,
+				ScopeID:   pgtype.Int8{Valid: false},
+			}): {
+				ConfigKey:   PlatformConfigKeyRiderDepositFen,
+				ScopeType:   PlatformConfigScopeGlobal,
+				ScopeID:     pgtype.Int8{Valid: false},
+				ConfigValue: []byte(`{"amount_fen":32000}`),
+			},
+		},
+	}, pgtype.Int8{Int64: 11, Valid: true})
+	require.NoError(t, err)
+	require.Equal(t, int64(DefaultRiderDepositThresholdFen), threshold)
 }
 
 func TestGetEffectiveRiderDepositThreshold_UsesPlatformFallbackWhenOperatorMissing(t *testing.T) {

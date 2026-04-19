@@ -10,15 +10,15 @@ INSERT INTO users (
 ) RETURNING *;
 
 -- name: GetUser :one
-SELECT * FROM users
+SELECT id, wechat_openid, wechat_unionid, full_name, phone, avatar_url, created_at, avatar_media_asset_id FROM users
 WHERE id = $1 LIMIT 1;
 
 -- name: GetUserByWechatOpenID :one
-SELECT * FROM users
+SELECT id, wechat_openid, wechat_unionid, full_name, phone, avatar_url, created_at, avatar_media_asset_id FROM users
 WHERE wechat_openid = $1 LIMIT 1;
 
 -- name: GetUserByPhone :one
-SELECT * FROM users
+SELECT id, wechat_openid, wechat_unionid, full_name, phone, avatar_url, created_at, avatar_media_asset_id FROM users
 WHERE phone = $1 LIMIT 1;
 
 -- name: UpdateUser :one
@@ -33,7 +33,7 @@ WHERE id = sqlc.arg(id)
 RETURNING *;
 
 -- name: ListUsers :many
-SELECT * FROM users
+SELECT id, wechat_openid, wechat_unionid, full_name, phone, avatar_url, created_at, avatar_media_asset_id FROM users
 ORDER BY id
 LIMIT $1
 OFFSET $2;

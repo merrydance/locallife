@@ -1,6 +1,6 @@
 <custom-navbar title="索赔详情" showBack="{{true}}" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px;">
+<view class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px;">
   <view wx:if="{{loading && !detail}}" class="state-block">
     <t-loading theme="circular" text="加载索赔详情中..." vertical />
   </view>
@@ -15,13 +15,14 @@
       <view class="head-copy">查看索赔处理进度、责任判定、行为摘要，以及追偿和申诉的最终状态。</view>
     </view>
 
-    <view wx:if="{{actionNoticeMessage}}" class="inline-banner inline-banner-warning">
-      <text class="inline-banner-text">{{actionNoticeMessage}}</text>
+    <view wx:if="{{actionNoticeMessage}}" class="notice-banner">
+      <t-notice-bar theme="warning" visible="{{true}}" content="{{actionNoticeMessage}}" />
     </view>
 
-    <view wx:if="{{refreshErrorMessage}}" class="inline-banner inline-banner-danger">
-      <text class="inline-banner-text">{{refreshErrorMessage}}</text>
-      <text class="inline-banner-action" bindtap="onRetryRefresh">重新同步</text>
+    <view wx:if="{{refreshErrorMessage}}" class="notice-banner">
+      <t-notice-bar theme="error" visible="{{true}}" content="{{refreshErrorMessage}}">
+        <text slot="operation" class="notice-banner-operation" bindtap="onRetryRefresh">重新同步</text>
+      </t-notice-bar>
     </view>
 
     <view class="hero-card">

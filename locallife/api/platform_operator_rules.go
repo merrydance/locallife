@@ -31,7 +31,6 @@ type updatePlatformOperatorRuleRequest struct {
 }
 
 const (
-	merchantDepositConfigKey                = "platform_rule.merchant_deposit_fen"
 	riderDepositConfigKey                   = "platform_rule.rider_deposit_fen"
 	platformOperationalConfigsSuccessorPath = "/v1/platform/operational-configs"
 )
@@ -88,7 +87,7 @@ func markPlatformOperatorRulesDeprecated(ctx *gin.Context) {
 
 // listPlatformOperationalConfigs 获取平台运营配置列表
 // @Summary 获取平台运营配置列表
-// @Description 获取平台维护的运营真实配置项，包括平台佣金、运营商佣金、商户保证金与骑手押金。
+// @Description 获取平台维护的运营真实配置项，包括平台佣金、运营商佣金、骑手押金与运费默认值。
 // @Tags Platform
 // @Produce json
 // @Security BearerAuth
@@ -103,7 +102,7 @@ func (server *Server) listPlatformOperationalConfigs(ctx *gin.Context) {
 
 // listPlatformOperatorRules 获取平台运营配置列表（兼容旧路径）
 // @Summary [Deprecated] 获取平台运营配置列表（兼容路径）
-// @Description 获取平台维护的运营真实配置项，包括平台佣金、运营商佣金、商户保证金与骑手押金。请迁移到 /v1/platform/operational-configs。
+// @Description 获取平台维护的运营真实配置项，包括平台佣金、运营商佣金、骑手押金与运费默认值。请迁移到 /v1/platform/operational-configs。
 // @Tags Platform
 // @Produce json
 // @Security BearerAuth
@@ -120,9 +119,8 @@ func (server *Server) listPlatformOperatorRules(ctx *gin.Context) {
 func (server *Server) renderPlatformOperationalConfigs(ctx *gin.Context) {
 	platformRate := int32(2)
 	operatorRate := int32(3)
-	merchantDeposit := int64(500000)
 	riderDeposit := int64(db.DefaultRiderDepositThresholdFen)
-	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	deliveryFeeDefault := defaultDeliveryFeeConfig()
 
 	if config, err := server.store.GetActiveProfitSharingConfig(ctx, db.GetActiveProfitSharingConfigParams{
 		OrderSource: "takeout",
@@ -136,34 +134,30 @@ func (server *Server) renderPlatformOperationalConfigs(ctx *gin.Context) {
 		return
 	}
 
-	baseline, err := server.store.GetPlatformOperatorRuleBaselineFromRegion(ctx)
-	if err == nil {
-		merchantDeposit = baseline.MerchantDeposit
-	} else if !isNotFoundError(err) {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	} else {
-		fallback, fallbackErr := server.store.GetPlatformOperatorRuleBaselineFromOperator(ctx)
-		if fallbackErr == nil {
-			merchantDeposit = fallback.MerchantDeposit
-		} else if !isNotFoundError(fallbackErr) {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fallbackErr))
-			return
-		}
-	}
-
-	if configuredMerchantDeposit, ok, cfgErr := server.getGlobalDepositFen(ctx, merchantDepositConfigKey); cfgErr != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, cfgErr))
-		return
-	} else if ok {
-		merchantDeposit = configuredMerchantDeposit
-	}
-
 	if configuredRiderDeposit, ok, cfgErr := server.getGlobalDepositFen(ctx, riderDepositConfigKey); cfgErr != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, cfgErr))
 		return
 	} else if ok {
 		riderDeposit = configuredRiderDeposit
+	}
+
+	if configuredDeliveryFee, ok, cfgErr := server.getGlobalDeliveryFeeDefaultConfig(ctx); cfgErr != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, cfgErr))
+		return
+	} else if ok {
+		deliveryFeeDefault = configuredDeliveryFee
+	}
+
+	deliveryValueRatio := DefaultValueRatio * 100
+	if deliveryFeeDefault.ValueRatio.Valid {
+		if value, err := deliveryFeeDefault.ValueRatio.Float64Value(); err == nil {
+			deliveryValueRatio = value.Float64 * 100
+		}
+	}
+
+	deliveryMaxFee := "不限"
+	if deliveryFeeDefault.MaxFee.Valid {
+		deliveryMaxFee = fenToYuanString(deliveryFeeDefault.MaxFee.Int64, 2)
 	}
 
 	rules := []platformOperatorRuleItem{
@@ -188,16 +182,6 @@ func (server *Server) renderPlatformOperationalConfigs(ctx *gin.Context) {
 			Editable: true,
 		},
 		{
-			ID:       "platform_rule_2",
-			Name:     "商户入驻保证金",
-			Key:      "MERCHANT_DEPOSIT",
-			Value:    fenToYuanString(merchantDeposit, 2),
-			Unit:     "元",
-			Desc:     "商户入驻需缴纳的保证金（全局生效）",
-			Category: "platform",
-			Editable: true,
-		},
-		{
 			ID:       "platform_rule_3",
 			Name:     "骑手入驻押金",
 			Key:      "RIDER_DEPOSIT",
@@ -207,9 +191,67 @@ func (server *Server) renderPlatformOperationalConfigs(ctx *gin.Context) {
 			Category: "platform",
 			Editable: true,
 		},
+		{
+			ID:       "platform_rule_4",
+			Name:     "基础运费",
+			Key:      "BASE_DELIVERY_FEE",
+			Value:    fenToYuanString(deliveryFeeDefault.BaseFee, 2),
+			Unit:     "元",
+			Desc:     "平台默认值；仅在区域未配置运费时生效",
+			Category: "delivery",
+			Editable: true,
+		},
+		{
+			ID:       "platform_rule_5",
+			Name:     "基础距离",
+			Key:      "BASE_DISTANCE",
+			Value:    strconv.FormatInt(int64(deliveryFeeDefault.BaseDistance), 10),
+			Unit:     "米",
+			Desc:     "平台默认值；仅在区域未配置运费时生效",
+			Category: "delivery",
+			Editable: true,
+		},
+		{
+			ID:       "platform_rule_6",
+			Name:     "超距加价",
+			Key:      "EXTRA_FEE_PER_KM",
+			Value:    fenToYuanString(deliveryFeeDefault.ExtraFeePerKm, 2),
+			Unit:     "元/km",
+			Desc:     "平台默认值；仅在区域未配置运费时生效",
+			Category: "delivery",
+			Editable: true,
+		},
+		{
+			ID:       "platform_rule_7",
+			Name:     "最低运费",
+			Key:      "MIN_DELIVERY_FEE",
+			Value:    fenToYuanString(deliveryFeeDefault.MinFee, 2),
+			Unit:     "元",
+			Desc:     "平台默认值；仅在区域未配置运费时生效",
+			Category: "delivery",
+			Editable: true,
+		},
+		{
+			ID:       "platform_rule_8",
+			Name:     "最高运费",
+			Key:      "MAX_DELIVERY_FEE",
+			Value:    deliveryMaxFee,
+			Unit:     "元",
+			Desc:     "平台默认值；仅在区域未配置运费时生效",
+			Category: "delivery",
+			Editable: true,
+		},
+		{
+			ID:       "platform_rule_9",
+			Name:     "货值费率",
+			Key:      "DELIVERY_VALUE_RATIO",
+			Value:    strconv.FormatFloat(deliveryValueRatio, 'f', 2, 64),
+			Unit:     "%",
+			Desc:     "平台默认值；仅在区域未配置运费时生效",
+			Category: "delivery",
+			Editable: true,
+		},
 	}
-
-	_ = authPayload
 
 	ctx.JSON(http.StatusOK, listPlatformOperatorRulesResponse{Rules: rules})
 }
@@ -276,7 +318,7 @@ func (server *Server) upsertGlobalProfitSharingConfig(ctx *gin.Context, platform
 // @Tags Platform
 // @Accept json
 // @Produce json
-// @Param key path string true "配置Key (PLATFORM_COMMISSION, OPERATOR_COMMISSION, MERCHANT_DEPOSIT, RIDER_DEPOSIT)"
+// @Param key path string true "配置Key (PLATFORM_COMMISSION, OPERATOR_COMMISSION, RIDER_DEPOSIT, BASE_DELIVERY_FEE, BASE_DISTANCE, EXTRA_FEE_PER_KM, MIN_DELIVERY_FEE, MAX_DELIVERY_FEE, DELIVERY_VALUE_RATIO)"
 // @Param request body updatePlatformOperatorRuleRequest true "新值"
 // @Security BearerAuth
 // @Success 200 {object} MessageResponse "更新成功"
@@ -296,7 +338,7 @@ func (server *Server) updatePlatformOperationalConfig(ctx *gin.Context) {
 // @Tags Platform
 // @Accept json
 // @Produce json
-// @Param key path string true "配置Key (PLATFORM_COMMISSION, OPERATOR_COMMISSION, MERCHANT_DEPOSIT, RIDER_DEPOSIT)"
+// @Param key path string true "配置Key (PLATFORM_COMMISSION, OPERATOR_COMMISSION, RIDER_DEPOSIT, BASE_DELIVERY_FEE, BASE_DISTANCE, EXTRA_FEE_PER_KM, MIN_DELIVERY_FEE, MAX_DELIVERY_FEE, DELIVERY_VALUE_RATIO)"
 // @Param request body updatePlatformOperatorRuleRequest true "新值"
 // @Security BearerAuth
 // @Success 200 {object} MessageResponse "更新成功"
@@ -320,10 +362,14 @@ func (server *Server) applyPlatformOperationalConfigUpdate(ctx *gin.Context) {
 		return
 	}
 
-	value, err := strconv.ParseFloat(req.Value, 64)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidNumberFormat))
-		return
+	value := 0.0
+	if !(key == "MAX_DELIVERY_FEE" && req.Value == "不限") {
+		parsedValue, err := strconv.ParseFloat(req.Value, 64)
+		if err != nil {
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidNumberFormat))
+			return
+		}
+		value = parsedValue
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
@@ -380,36 +426,6 @@ func (server *Server) applyPlatformOperationalConfigUpdate(ctx *gin.Context) {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}
-		// 同步 commission_rate 到 region_rule_configs 和 operators（DB 以小数存储，如 3% → 0.03）
-		rateDecimal := numericFromFloat(value / 100)
-		if err := server.store.UpdateAllRegionRuleConfigCommissionRate(ctx, rateDecimal); err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-		if err := server.store.UpdateAllOperatorsCommissionRate(ctx, rateDecimal); err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-
-	case "MERCHANT_DEPOSIT":
-		if value < 0 {
-			ctx.JSON(http.StatusBadRequest, errorResponse(ErrAmountNegative))
-			return
-		}
-
-		amountFen := yuanToFen(value)
-		if err := server.upsertGlobalDepositFen(ctx, merchantDepositConfigKey, amountFen); err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-		if err := server.store.UpdateAllRegionRuleConfigMerchantDeposit(ctx, amountFen); err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-		if err := server.store.UpdateAllOperatorsMerchantDeposit(ctx, amountFen); err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
 
 	case "RIDER_DEPOSIT":
 		if value < 0 {
@@ -423,6 +439,70 @@ func (server *Server) applyPlatformOperationalConfigUpdate(ctx *gin.Context) {
 			return
 		}
 		if err := server.syncAllRiderOperationalStatuses(ctx); err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+
+	case "BASE_DELIVERY_FEE", "BASE_DISTANCE", "EXTRA_FEE_PER_KM", "MIN_DELIVERY_FEE", "MAX_DELIVERY_FEE", "DELIVERY_VALUE_RATIO":
+		config, ok, cfgErr := server.getGlobalDeliveryFeeDefaultConfig(ctx)
+		if cfgErr != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, cfgErr))
+			return
+		}
+		if !ok {
+			config = defaultDeliveryFeeConfig()
+		}
+
+		switch key {
+		case "BASE_DELIVERY_FEE":
+			if value < 0 {
+				ctx.JSON(http.StatusBadRequest, errorResponse(ErrAmountNegative))
+				return
+			}
+			config.BaseFee = yuanToFen(value)
+		case "BASE_DISTANCE":
+			if value < 0 {
+				ctx.JSON(http.StatusBadRequest, errorResponse(ErrDistanceNegative))
+				return
+			}
+			config.BaseDistance = int32(value)
+		case "EXTRA_FEE_PER_KM":
+			if value < 0 {
+				ctx.JSON(http.StatusBadRequest, errorResponse(ErrAmountNegative))
+				return
+			}
+			config.ExtraFeePerKm = yuanToFen(value)
+		case "MIN_DELIVERY_FEE":
+			if value < 0 {
+				ctx.JSON(http.StatusBadRequest, errorResponse(ErrAmountNegative))
+				return
+			}
+			config.MinFee = yuanToFen(value)
+		case "MAX_DELIVERY_FEE":
+			if req.Value == "不限" || value <= 0 {
+				config.MaxFee = pgtype.Int8{Valid: false}
+			} else {
+				config.MaxFee = pgtype.Int8{Int64: yuanToFen(value), Valid: true}
+			}
+		case "DELIVERY_VALUE_RATIO":
+			if value < 0 || value > 100 {
+				ctx.JSON(http.StatusBadRequest, errorResponse(ErrValueRateOutOfRange))
+				return
+			}
+			config.ValueRatio = numericFromFloat(value / 100.0)
+		}
+
+		var maxFee *int64
+		if config.MaxFee.Valid {
+			currentMaxFee := config.MaxFee.Int64
+			maxFee = &currentMaxFee
+		}
+		if err := validateMinMaxFee(config.MinFee, maxFee); err != nil {
+			ctx.JSON(http.StatusBadRequest, errorResponse(err))
+			return
+		}
+
+		if err := server.upsertGlobalDeliveryFeeDefaultConfig(ctx, config); err != nil {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}

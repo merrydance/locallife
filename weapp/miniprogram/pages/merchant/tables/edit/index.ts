@@ -11,7 +11,6 @@ import {
   isPermissionDeniedError,
   isUserCancelledError,
   normalizeQRCodeUrl,
-  normalizeTableBusinessStatus,
   saveTableQRCodePosterToAlbum,
   TABLE_UPLOAD_FILE_STATUS,
   toSafeTableImages,
@@ -20,146 +19,26 @@ import {
   type TableFormData,
   type TableTagOption,
   type TableUploadFile
-} from '../shared'
-
-interface TableEditPageOptions {
-  id?: string
-}
-
-interface TableQRCodeContext {
-  tableNo: string
-  qrCodeUrl: string
-}
-
-interface FormInputDetail {
-  value: string
-}
-
-type TableImageRole = 'cover' | 'gallery'
-
-function buildSelectedTagState(tagIds: number[]): Record<string, boolean> {
-  return tagIds.reduce<Record<string, boolean>>((result, id) => {
-    result[String(id)] = true
-    return result
-  }, {})
-}
-
-function mergeSelectableTableTags(primaryTags: TableTagOption[], fallbackTags: TableTagOption[]): TableTagOption[] {
-  const mergedTags: TableTagOption[] = []
-  const seenTagIds = new Set<number>()
-
-  for (const tag of [...primaryTags, ...fallbackTags]) {
-    if (!tag || !Number.isFinite(tag.id) || tag.id <= 0) {
-      continue
-    }
-    if (seenTagIds.has(tag.id)) {
-      continue
-    }
-    seenTagIds.add(tag.id)
-    mergedTags.push(tag)
-  }
-
-  return mergedTags
-}
-
-function removeWarningMessageSegment(source: string, target: string): string {
-  return source
-    .split('；')
-    .map((item) => item.trim())
-    .filter((item) => item && item !== target)
-    .join('；')
-}
-
-function mapTableImageToUploadFile(image: TableImageResponse): TableUploadFile | null {
-  if (typeof image.image_url !== 'string' || !image.image_url) {
-    return null
-  }
-
-  return {
-    url: image.image_url,
-    status: TABLE_UPLOAD_FILE_STATUS.done,
-    mediaId: typeof image.media_asset_id === 'number' ? image.media_asset_id : undefined,
-    imageId: typeof image.id === 'number' ? image.id : undefined,
-    isPersisted: true
-  }
-}
-
-function splitTableImageFiles(tableImages: TableImageResponse[]) {
-  const coverFiles: TableUploadFile[] = []
-  const galleryFiles: TableUploadFile[] = []
-
-  for (const image of ensureArray(tableImages)) {
-    const file = mapTableImageToUploadFile(image)
-    if (!file) {
-      continue
-    }
-
-    if (image.is_primary && coverFiles.length === 0) {
-      coverFiles.push(file)
-      continue
-    }
-
-    galleryFiles.push(file)
-  }
-
-  return { coverFiles, galleryFiles }
-}
-
-function pickPendingBoundFiles(files: TableUploadFile[]): TableUploadFile[] {
-  return ensureArray(files).filter((file) => typeof file.mediaId === 'number' && file.mediaId > 0 && !file.imageId)
-}
-
-function buildPersistedUploadFile(savedImage: TableImageResponse | null | undefined, fallbackUrl: string, mediaId: number): TableUploadFile {
-  return {
-    url: (typeof savedImage?.image_url === 'string' && savedImage.image_url) ? savedImage.image_url : fallbackUrl,
-    status: TABLE_UPLOAD_FILE_STATUS.done,
-    mediaId,
-    imageId: typeof savedImage?.id === 'number' ? savedImage.id : undefined,
-    isPersisted: true
-  }
-}
-
-function mapTableDetailToFormData(table: TableResponse): TableFormData {
-  const normalizedStatus = normalizeTableBusinessStatus(table.status)
-
-  return {
-    table_no: table.table_no || '',
-    table_type: table.table_type === 'room' ? 'room' : 'table',
-    capacity: typeof table.capacity === 'number' ? table.capacity : 4,
-    description: table.description || '',
-    minimum_spend_yuan: typeof table.minimum_spend === 'number' && table.minimum_spend > 0
-      ? (table.minimum_spend / 100).toFixed(2)
-      : '',
-    status: normalizedStatus,
-    tag_ids: ensureArray(table.tags)
-      .map((tag) => Number(tag.id))
-      .filter((id) => Number.isFinite(id) && id > 0)
-  }
-}
-
-function findUploadFileIndex(files: TableUploadFile[], localPath: string): number {
-  return files.findIndex((file) => file.localPath === localPath)
-}
-
-function replaceUploadFileAt(files: TableUploadFile[], index: number, file: TableUploadFile): TableUploadFile[] {
-  if (index < 0 || index >= files.length) {
-    return files
-  }
-
-  const nextFiles = [...files]
-  nextFiles[index] = file
-  return nextFiles
-}
-
-function removeUploadFileAt(files: TableUploadFile[], index: number): TableUploadFile[] {
-  if (index < 0 || index >= files.length) {
-    return files
-  }
-
-  const nextFiles = [...files]
-  nextFiles.splice(index, 1)
-  return nextFiles
-}
+} from '../../../../utils/merchant-tables-shared'
+import {
+  buildPersistedUploadFile,
+  buildSelectedTagState,
+  buildTableQRCodeContext,
+  buildTableSubmitPayload,
+  findUploadFileIndex,
+  FormInputDetail,
+  hasTableTagName,
+  mapTableDetailToFormData,
+  mergeSelectableTableTags,
+  pickPendingBoundFiles,
+  removeUploadFileAt,
+  removeWarningMessageSegment,
+  replaceUploadFileAt,
+  splitTableImageFiles,
+  TableEditPageOptions,
+  TableImageRole,
+  validateTableBeforeSubmit
+} from '../shared/table-edit-view'
 
 Page({
   data: {
@@ -306,10 +185,7 @@ Page({
   },
 
   onManageTags() {
-    if (this.data.tagSubmitting) {
-      return
-    }
-
+    if (this.data.tagSubmitting) return
     this.setData({
       createTagDialogVisible: true,
       createTagInputValue: ''
@@ -317,23 +193,12 @@ Page({
   },
 
   onCloseCreateTagDialog() {
-    if (this.data.tagSubmitting) {
-      return
-    }
-
-    this.setData({
-      createTagDialogVisible: false,
-      createTagInputValue: ''
-    })
+    if (this.data.tagSubmitting) return
+    this.setData({ createTagDialogVisible: false, createTagInputValue: '' })
   },
 
   onCreateTagInputChange(e: WechatMiniprogram.CustomEvent<FormInputDetail>) {
     this.setData({ createTagInputValue: (e.detail?.value || '').replace(/^\s+/, '') })
-  },
-
-  hasTagName(name: string): boolean {
-    const normalizedName = name.trim()
-    return ensureArray(this.data.availableTags).some((tag) => (tag.name || '').trim() === normalizedName)
   },
 
   async onConfirmCreateTagDialog() {
@@ -347,7 +212,7 @@ Page({
       return
     }
 
-    if (this.hasTagName(name)) {
+    if (hasTableTagName(this.data.availableTags, name)) {
       wx.showToast({ title: '标签名称已存在', icon: 'none' })
       return
     }
@@ -397,19 +262,13 @@ Page({
 
   onTypeSelect(e: WechatMiniprogram.TouchEvent) {
     const { value } = e.currentTarget.dataset as { value?: 'table' | 'room' }
-    if (!value || value === this.data.formData.table_type) {
-      return
-    }
-
+    if (!value || value === this.data.formData.table_type) return
     this.setData({ 'formData.table_type': value })
   },
 
   onStatusSelect(e: WechatMiniprogram.TouchEvent) {
     const { value } = e.currentTarget.dataset as { value?: TableFormData['status'] }
-    if (!value || value === this.data.formData.status) {
-      return
-    }
-
+    if (!value || value === this.data.formData.status) return
     this.setData({ 'formData.status': value })
   },
 
@@ -435,9 +294,7 @@ Page({
   },
 
   setRoleUploadFiles(role: TableImageRole, files: TableUploadFile[]) {
-    this.setData(role === 'cover'
-      ? { coverUploadFiles: files }
-      : { galleryUploadFiles: files })
+    this.setData(role === 'cover' ? { coverUploadFiles: files } : { galleryUploadFiles: files })
   },
 
   onCoverAdd(e: WechatMiniprogram.CustomEvent<{ files?: Array<{ url?: string }> }>) {
@@ -579,13 +436,6 @@ Page({
 
     this.setRoleUploadFiles(role, removeUploadFileAt(uploadFiles, index))
   },
-  getTableQRCodeContext(): TableQRCodeContext {
-    return {
-      tableNo: this.data.formData.table_no || this.data.qrCodeTableNo || '',
-      qrCodeUrl: normalizeQRCodeUrl(this.data.qrCodeImageUrl)
-    }
-  },
-
   async fetchTableQRCode(fallbackUrl = '') {
     if (!this.data.tableId) {
       return
@@ -634,7 +484,7 @@ Page({
       return
     }
 
-    const context = this.getTableQRCodeContext()
+    const context = buildTableQRCodeContext(this.data.formData, this.data.qrCodeTableNo, this.data.qrCodeImageUrl)
     const shouldFetch = fetchFresh || !context.qrCodeUrl
 
     this.setData({
@@ -716,56 +566,6 @@ Page({
     }
   },
 
-  validateBeforeSubmit(): string {
-    const formData = this.data.formData
-    const tableNo = (formData.table_no || '').trim()
-    const uploadFiles = [
-      ...this.getRoleUploadFiles('cover'),
-      ...this.getRoleUploadFiles('gallery')
-    ]
-
-    if (!tableNo) {
-      return '请填写桌号或包间名'
-    }
-
-    if (!Number.isInteger(formData.capacity) || formData.capacity < 1 || formData.capacity > 100) {
-      return '人数需在 1 到 100 之间'
-    }
-
-    if (uploadFiles.some((file) => file.status === TABLE_UPLOAD_FILE_STATUS.loading)) {
-      return '图片仍在上传中，请稍候'
-    }
-
-    if (uploadFiles.some((file) => file.status === TABLE_UPLOAD_FILE_STATUS.failed)) {
-      return '有图片上传失败，请删除后重试'
-    }
-
-    if (formData.minimum_spend_yuan && formData.minimum_spend_yuan.trim()) {
-      const parsed = Number(formData.minimum_spend_yuan)
-      if (!Number.isFinite(parsed) || parsed < 0) {
-        return '最低消费金额不合法'
-      }
-    }
-
-    return ''
-  },
-
-  buildSubmitPayload() {
-    const formData = this.data.formData
-    const minimumSpend = formData.minimum_spend_yuan && formData.minimum_spend_yuan.trim()
-      ? Math.round(Number(formData.minimum_spend_yuan) * 100)
-      : undefined
-
-    return {
-      table_no: (formData.table_no || '').trim(),
-      table_type: formData.table_type,
-      capacity: formData.capacity,
-      description: (formData.description || '').trim() || undefined,
-      minimum_spend: minimumSpend,
-      tag_ids: ensureArray(formData.tag_ids)
-    }
-  },
-
   async uploadPendingImages(tableId: number) {
     let failedCount = 0
 
@@ -796,9 +596,7 @@ Page({
   async notifyPreviousPage() {
     const pages = getCurrentPages()
     const prevPage = pages[pages.length - 2] as { refreshAll?: (showLoading?: boolean) => Promise<void> | void } | undefined
-    if (prevPage?.refreshAll) {
-      await prevPage.refreshAll(false)
-    }
+    if (prevPage?.refreshAll) await prevPage.refreshAll(false)
   },
 
   async onSubmit() {
@@ -806,7 +604,10 @@ Page({
       return
     }
 
-    const validationMessage = this.validateBeforeSubmit()
+    const validationMessage = validateTableBeforeSubmit(this.data.formData, [
+      ...this.getRoleUploadFiles('cover'),
+      ...this.getRoleUploadFiles('gallery')
+    ])
     if (validationMessage) {
       wx.showToast({ title: validationMessage, icon: 'none' })
       return
@@ -815,7 +616,7 @@ Page({
     this.setData({ submitting: true })
 
     try {
-      const payload = this.buildSubmitPayload()
+      const payload = buildTableSubmitPayload(this.data.formData)
 
       if (this.data.isEdit && this.data.tableId > 0) {
         const updatePayload: UpdateTableRequest = {

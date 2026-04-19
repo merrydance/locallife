@@ -10,6 +10,7 @@ import (
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	mockwechat "github.com/merrydance/locallife/wechat/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -85,10 +86,12 @@ func TestRefundServiceApplyAbnormalRefundProcessing(t *testing.T) {
 		Status:         "failed",
 	}
 	paymentOrder := db.PaymentOrder{
-		ID:          22,
-		PaymentType: paymentTypeProfitSharing,
-		Amount:      5000,
-		OrderID:     pgtype.Int8{Int64: 33, Valid: true},
+		ID:                    22,
+		PaymentType:           paymentTypeProfitSharing,
+		PaymentChannel:        db.PaymentChannelEcommerce,
+		RequiresProfitSharing: true,
+		Amount:                5000,
+		OrderID:               pgtype.Int8{Int64: 33, Valid: true},
 	}
 	order := db.Order{ID: 33, MerchantID: 44}
 	paymentConfig := db.MerchantPaymentConfig{MerchantID: 44, SubMchID: "1900000109", Status: "active"}
@@ -158,7 +161,7 @@ func TestRefundServiceApplyAbnormalRefundRejectsNonFailedRefund(t *testing.T) {
 	require.Equal(t, 400, requestErr.Status)
 }
 
-func TestCreateRefundOrder_ProfitSharingReturnAmbiguousErrorFallsBackToPolling(t *testing.T) {
+func TestCreateRefundOrder_ProfitSharingReturnNotEnoughFallsBackToPolling(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -175,11 +178,13 @@ func TestCreateRefundOrder_ProfitSharingReturnAmbiguousErrorFallsBackToPolling(t
 
 	merchant := db.Merchant{ID: 44, OwnerUserID: 7}
 	paymentOrder := db.PaymentOrder{
-		ID:          22,
-		Amount:      1000,
-		Status:      "paid",
-		PaymentType: paymentTypeProfitSharing,
-		OrderID:     pgtype.Int8{Int64: 33, Valid: true},
+		ID:                    22,
+		Amount:                1000,
+		Status:                "paid",
+		PaymentType:           paymentTypeProfitSharing,
+		PaymentChannel:        db.PaymentChannelEcommerce,
+		RequiresProfitSharing: true,
+		OrderID:               pgtype.Int8{Int64: 33, Valid: true},
 	}
 	order := db.Order{ID: 33, MerchantID: merchant.ID}
 	refundOrder := db.RefundOrder{ID: 55, PaymentOrderID: paymentOrder.ID, OutRefundNo: "RF-logic-001", Status: "pending"}
@@ -226,13 +231,12 @@ func TestCreateRefundOrder_ProfitSharingReturnAmbiguousErrorFallsBackToPolling(t
 	}).Return(returnRecord, nil)
 	ecommerceClient.EXPECT().GetSpMchID().Return("service-mchid-001")
 	ecommerceClient.EXPECT().CreateProfitSharingReturn(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(_ context.Context, req *wechat.ProfitSharingReturnRequest) (*wechat.ProfitSharingReturnResponse, error) {
+		func(_ context.Context, req *wechatcontracts.ProfitSharingReturnRequest) (*wechatcontracts.ProfitSharingReturnResponse, error) {
 			require.Equal(t, "sub-mchid-001", req.SubMchID)
 			require.Equal(t, profitSharingOrder.OutOrderNo, req.OutOrderNo)
 			require.Equal(t, returnRecord.OutReturnNo, req.OutReturnNo)
-			require.Equal(t, wechat.ReceiverTypeMerchant, req.ReturnAccountType)
-			require.Equal(t, "service-mchid-001", req.ReturnAccount)
-			return nil, &wechat.WechatPayError{Code: "PAYER_ACCOUNT_ABNORMAL", Message: "分账方账户异常", StatusCode: 400}
+			require.Equal(t, "service-mchid-001", req.ReturnMchID)
+			return nil, &wechat.WechatPayError{Code: "NOT_ENOUGH", Message: "余额不足", StatusCode: 400}
 		},
 	)
 	store.EXPECT().UpdateProfitSharingReturnToProcessing(gomock.Any(), db.UpdateProfitSharingReturnToProcessingParams{
@@ -275,12 +279,14 @@ func TestCreateRefundOrder_BlocksPersonalProfitSharingReturn(t *testing.T) {
 
 	merchant := db.Merchant{ID: 44, OwnerUserID: 7}
 	paymentOrder := db.PaymentOrder{
-		ID:            23,
-		Amount:        1000,
-		Status:        "paid",
-		PaymentType:   paymentTypeProfitSharing,
-		TransactionID: pgtype.Text{String: "wx_txn_23", Valid: true},
-		OrderID:       pgtype.Int8{Int64: 33, Valid: true},
+		ID:                    23,
+		Amount:                1000,
+		Status:                "paid",
+		PaymentType:           paymentTypeProfitSharing,
+		PaymentChannel:        db.PaymentChannelEcommerce,
+		RequiresProfitSharing: true,
+		TransactionID:         pgtype.Text{String: "wx_txn_23", Valid: true},
+		OrderID:               pgtype.Int8{Int64: 33, Valid: true},
 	}
 	order := db.Order{ID: 33, MerchantID: merchant.ID}
 	refundOrder := db.RefundOrder{ID: 56, PaymentOrderID: paymentOrder.ID, OutRefundNo: "RF-logic-002", Status: "pending"}
@@ -320,4 +326,41 @@ func TestCreateRefundOrder_BlocksPersonalProfitSharingReturn(t *testing.T) {
 	require.True(t, errors.As(err, &requestErr))
 	require.Equal(t, 400, requestErr.Status)
 	require.Contains(t, err.Error(), "订单包含个人分账，当前不支持自动退款")
+}
+
+func TestCreateRefundOrder_RejectsMainBusinessNonEcommercePaymentOrder(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	service := NewRefundService(
+		store,
+		NewDefaultPaymentFacade(store, nil, nil),
+		nil,
+		nil,
+		refundServiceIDGeneratorStub{outRefundNo: "RF-logic-003"},
+	)
+
+	merchant := db.Merchant{ID: 45, OwnerUserID: 8}
+	paymentOrder := db.PaymentOrder{
+		ID:          24,
+		Amount:      1000,
+		Status:      "paid",
+		PaymentType: paymentTypeMiniProgram,
+		OrderID:     pgtype.Int8{Int64: 34, Valid: true},
+	}
+
+	store.EXPECT().GetMerchantByOwner(gomock.Any(), merchant.OwnerUserID).Return(merchant, nil)
+	store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil)
+
+	_, err := service.CreateRefundOrder(context.Background(), CreateRefundOrderInput{
+		ActorUserID:    merchant.OwnerUserID,
+		PaymentOrderID: paymentOrder.ID,
+		RefundType:     "merchant_cancel",
+		RefundAmount:   300,
+		RefundReason:   "商品售罄",
+	})
+	requestErr := assertRequestError(t, err)
+	require.Equal(t, 409, requestErr.Status)
+	require.Equal(t, "当前主营业务支付单不属于收付通链路，无法发起退款，请联系平台处理", requestErr.Err.Error())
 }

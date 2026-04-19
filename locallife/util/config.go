@@ -44,8 +44,8 @@ type Config struct {
 	WechatPayAPIV3Key                      string        `mapstructure:"WECHAT_PAY_API_V3_KEY"`                        // APIv3密钥
 	WechatPayNotifyURL                     string        `mapstructure:"WECHAT_PAY_NOTIFY_URL"`                        // 支付回调URL
 	WechatPayRefundNotifyURL               string        `mapstructure:"WECHAT_PAY_REFUND_NOTIFY_URL"`                 // 退款回调URL
+	WechatPayMerchantTransferNotifyURL     string        `mapstructure:"WECHAT_PAY_MERCHANT_TRANSFER_NOTIFY_URL"`      // 商家转账回调URL
 	WechatShippingSettleNotifyURL          string        `mapstructure:"WECHAT_SHIPPING_SETTLE_NOTIFY_URL"`            // 发货结算事件回调URL（trade_manage_order_settlement）
-	WechatPayPlatformCertificatePath       string        `mapstructure:"WECHAT_PAY_PLATFORM_CERTIFICATE_PATH"`         // 微信支付平台证书路径（已弃用，建议使用公钥）
 	WechatPayPlatformPublicKeyPath         string        `mapstructure:"WECHAT_PAY_PLATFORM_PUBLIC_KEY_PATH"`          // 微信支付平台公钥路径（推荐）
 	WechatPayPlatformPublicKeyID           string        `mapstructure:"WECHAT_PAY_PLATFORM_PUBLIC_KEY_ID"`            // 微信支付平台公钥ID
 	WechatPayHTTPTimeout                   time.Duration `mapstructure:"WECHAT_PAY_HTTP_TIMEOUT"`                      // HTTP请求超时时间
@@ -55,6 +55,7 @@ type Config struct {
 	WechatEcommerceCombineNotifyURL        string        `mapstructure:"WECHAT_ECOMMERCE_COMBINE_NOTIFY_URL"`          // 收付通合单支付回调URL
 	WechatEcommerceRefundNotifyURL         string        `mapstructure:"WECHAT_ECOMMERCE_REFUND_NOTIFY_URL"`           // 收付通退款回调URL
 	WechatEcommerceWithdrawNotifyURL       string        `mapstructure:"WECHAT_ECOMMERCE_WITHDRAW_NOTIFY_URL"`         // 收付通提现回调URL
+	WechatEcommerceViolationNotifyURL      string        `mapstructure:"WECHAT_ECOMMERCE_VIOLATION_NOTIFY_URL"`        // 收付通商户违规通知回调URL
 	WechatEcommerceSpName                  string        `mapstructure:"WECHAT_ECOMMERCE_SP_NAME"`                     // 收付通服务商主体全称（可选，用于分账接收方姓名）
 	WechatEcommerceSpSerialNumber          string        `mapstructure:"WECHAT_ECOMMERCE_SP_SERIAL_NUMBER"`            // 收付通服务商 API 证书序列号
 	WechatEcommerceSpPrivateKeyPath        string        `mapstructure:"WECHAT_ECOMMERCE_SP_PRIVATE_KEY_PATH"`         // 收付通服务商 API 私钥文件路径
@@ -175,80 +176,112 @@ type Config struct {
 	ImageVariantDetailWidth int `mapstructure:"IMAGE_VARIANT_DETAIL_WIDTH"` // 详情主图，默认 960
 }
 
-func (c Config) EffectiveWechatEcommerceSerialNumber() string {
-	if c.WechatEcommerceSpSerialNumber != "" {
-		return c.WechatEcommerceSpSerialNumber
-	}
-	return c.WechatPaySerialNumber
-}
-
-func (c Config) EffectiveWechatEcommercePrivateKeyPath() string {
-	if c.WechatEcommerceSpPrivateKeyPath != "" {
-		return c.WechatEcommerceSpPrivateKeyPath
-	}
-	return c.WechatPayPrivateKeyPath
-}
-
-func (c Config) EffectiveWechatEcommerceAPIV3Key() string {
-	if c.WechatEcommerceSpAPIV3Key != "" {
-		return c.WechatEcommerceSpAPIV3Key
-	}
-	return c.WechatPayAPIV3Key
-}
-
-func (c Config) EffectiveWechatEcommercePlatformPublicKeyPath() string {
-	if c.WechatEcommerceSpPlatformPublicKeyPath != "" {
-		return c.WechatEcommerceSpPlatformPublicKeyPath
-	}
-	return c.WechatPayPlatformPublicKeyPath
-}
-
-func (c Config) EffectiveWechatEcommercePlatformPublicKeyID() string {
-	if c.WechatEcommerceSpPlatformPublicKeyID != "" {
-		return c.WechatEcommerceSpPlatformPublicKeyID
-	}
-	return c.WechatPayPlatformPublicKeyID
-}
-
-func deriveWechatEcommerceWebhookURL(current, explicit, fallbackPath string) string {
-	if strings.TrimSpace(explicit) != "" {
-		return strings.TrimSpace(explicit)
-	}
-
-	trimmed := strings.TrimSpace(current)
-	if trimmed == "" {
-		return ""
-	}
-
-	if parsed, err := url.Parse(trimmed); err == nil {
-		parsed.Path = fallbackPath
-		parsed.RawPath = ""
-		parsed.RawQuery = ""
-		parsed.Fragment = ""
-		return parsed.String()
-	}
-
-	return trimmed
-}
-
 func (c Config) EffectiveWechatEcommercePaymentNotifyURL() string {
-	return deriveWechatEcommerceWebhookURL(c.WechatPayNotifyURL, c.WechatEcommercePaymentNotifyURL, "/v1/webhooks/wechat-ecommerce/payment-notify")
+	return strings.TrimSpace(c.WechatEcommercePaymentNotifyURL)
 }
 
 func (c Config) EffectiveWechatEcommerceCombineNotifyURL() string {
-	return deriveWechatEcommerceWebhookURL(c.WechatPayNotifyURL, c.WechatEcommerceCombineNotifyURL, "/v1/webhooks/wechat-ecommerce/combine-notify")
+	return strings.TrimSpace(c.WechatEcommerceCombineNotifyURL)
 }
 
 func (c Config) EffectiveWechatEcommerceRefundNotifyURL() string {
-	return deriveWechatEcommerceWebhookURL(c.WechatPayRefundNotifyURL, c.WechatEcommerceRefundNotifyURL, "/v1/webhooks/wechat-ecommerce/refund-notify")
+	return strings.TrimSpace(c.WechatEcommerceRefundNotifyURL)
 }
 
 func (c Config) EffectiveWechatEcommerceWithdrawNotifyURL() string {
-	return deriveWechatEcommerceWebhookURL(c.WechatPayNotifyURL, c.WechatEcommerceWithdrawNotifyURL, "/v1/webhooks/wechat-ecommerce/withdraw-notify")
+	return strings.TrimSpace(c.WechatEcommerceWithdrawNotifyURL)
+}
+
+func (c Config) EffectiveWechatEcommerceViolationNotifyURL() string {
+	return strings.TrimSpace(c.WechatEcommerceViolationNotifyURL)
+}
+
+func (c Config) EffectiveWechatPayMerchantTransferNotifyURL() string {
+	return strings.TrimSpace(c.WechatPayMerchantTransferNotifyURL)
+}
+
+func (c Config) HasWechatPayRuntimeConfig() bool {
+	return strings.TrimSpace(c.WechatPayMchID) != "" ||
+		strings.TrimSpace(c.WechatPaySerialNumber) != "" ||
+		strings.TrimSpace(c.WechatPayPrivateKeyPath) != "" ||
+		strings.TrimSpace(c.WechatPayAPIV3Key) != "" ||
+		strings.TrimSpace(c.WechatPayPlatformPublicKeyPath) != "" ||
+		strings.TrimSpace(c.WechatPayPlatformPublicKeyID) != ""
+}
+
+func (c Config) HasWechatEcommerceRuntimeConfig() bool {
+	return strings.TrimSpace(c.WechatEcommerceSpMchID) != "" ||
+		strings.TrimSpace(c.WechatEcommerceSpAppID) != "" ||
+		strings.TrimSpace(c.WechatEcommerceSpSerialNumber) != "" ||
+		strings.TrimSpace(c.WechatEcommerceSpPrivateKeyPath) != "" ||
+		strings.TrimSpace(c.WechatEcommerceSpAPIV3Key) != "" ||
+		strings.TrimSpace(c.WechatEcommerceSpPlatformPublicKeyPath) != "" ||
+		strings.TrimSpace(c.WechatEcommerceSpPlatformPublicKeyID) != "" ||
+		strings.TrimSpace(c.WechatEcommerceSpName) != ""
+}
+
+func (c Config) ValidateWechatPayConfig() error {
+	if !c.HasWechatPayRuntimeConfig() {
+		return nil
+	}
+
+	if c.WechatPayMchID == "" || c.WechatPaySerialNumber == "" || c.WechatPayPrivateKeyPath == "" || c.WechatPayAPIV3Key == "" {
+		return fmt.Errorf("WECHAT_PAY_MCH_ID, WECHAT_PAY_SERIAL_NUMBER, WECHAT_PAY_PRIVATE_KEY_PATH and WECHAT_PAY_API_V3_KEY are required when wechat pay is enabled")
+	}
+
+	if strings.TrimSpace(c.WechatMiniAppID) == "" {
+		return fmt.Errorf("WECHAT_MINI_APP_ID is required when wechat pay is enabled")
+	}
+
+	if err := validateAbsoluteConfigURL("WECHAT_PAY_NOTIFY_URL", c.WechatPayNotifyURL); err != nil {
+		return err
+	}
+
+	if err := validateAbsoluteConfigURL("WECHAT_PAY_REFUND_NOTIFY_URL", c.WechatPayRefundNotifyURL); err != nil {
+		return err
+	}
+
+	if err := validateAbsoluteConfigURL("WECHAT_PAY_MERCHANT_TRANSFER_NOTIFY_URL", c.WechatPayMerchantTransferNotifyURL); err != nil {
+		return err
+	}
+
+	if c.WechatPayPlatformPublicKeyPath == "" || c.WechatPayPlatformPublicKeyID == "" {
+		return fmt.Errorf("WECHAT_PAY_PLATFORM_PUBLIC_KEY_PATH and WECHAT_PAY_PLATFORM_PUBLIC_KEY_ID are required when wechat pay is enabled")
+	}
+
+	return nil
+}
+
+func validateAbsoluteConfigURL(fieldName string, raw string) error {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return fmt.Errorf("%s is required when wechat pay is enabled", fieldName)
+	}
+
+	parsed, err := url.Parse(trimmed)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return fmt.Errorf("%s must be a valid absolute URL when wechat pay is enabled", fieldName)
+	}
+
+	return nil
+}
+
+func validateRequiredAbsoluteConfigURL(fieldName string, raw string, scope string) error {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return fmt.Errorf("%s is required when %s", fieldName, scope)
+	}
+
+	parsed, err := url.Parse(trimmed)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return fmt.Errorf("%s must be a valid absolute URL when %s", fieldName, scope)
+	}
+
+	return nil
 }
 
 func (c Config) ValidateWechatEcommerceConfig() error {
-	if c.WechatPayMchID == "" || c.WechatPayPrivateKeyPath == "" {
+	if !c.HasWechatEcommerceRuntimeConfig() {
 		return nil
 	}
 
@@ -256,14 +289,28 @@ func (c Config) ValidateWechatEcommerceConfig() error {
 		return fmt.Errorf("WECHAT_ECOMMERCE_SP_MCHID and WECHAT_ECOMMERCE_SP_APPID are required when wechat pay is enabled")
 	}
 
-	if c.WechatEcommerceSpMchID != c.WechatPayMchID {
-		if c.WechatEcommerceSpSerialNumber == "" || c.WechatEcommerceSpPrivateKeyPath == "" || c.WechatEcommerceSpAPIV3Key == "" {
-			return fmt.Errorf("WECHAT_ECOMMERCE_SP_SERIAL_NUMBER, WECHAT_ECOMMERCE_SP_PRIVATE_KEY_PATH and WECHAT_ECOMMERCE_SP_API_V3_KEY are required when WECHAT_ECOMMERCE_SP_MCHID differs from WECHAT_PAY_MCH_ID")
-		}
+	if c.WechatEcommerceSpSerialNumber == "" || c.WechatEcommerceSpPrivateKeyPath == "" || c.WechatEcommerceSpAPIV3Key == "" {
+		return fmt.Errorf("WECHAT_ECOMMERCE_SP_SERIAL_NUMBER, WECHAT_ECOMMERCE_SP_PRIVATE_KEY_PATH and WECHAT_ECOMMERCE_SP_API_V3_KEY are required when wechat ecommerce is enabled")
 	}
 
-	if (c.WechatEcommerceSpPlatformPublicKeyPath == "") != (c.WechatEcommerceSpPlatformPublicKeyID == "") {
-		return fmt.Errorf("WECHAT_ECOMMERCE_SP_PLATFORM_PUBLIC_KEY_PATH and WECHAT_ECOMMERCE_SP_PLATFORM_PUBLIC_KEY_ID must be provided together")
+	if c.WechatEcommerceSpPlatformPublicKeyPath == "" || c.WechatEcommerceSpPlatformPublicKeyID == "" {
+		return fmt.Errorf("WECHAT_ECOMMERCE_SP_PLATFORM_PUBLIC_KEY_PATH and WECHAT_ECOMMERCE_SP_PLATFORM_PUBLIC_KEY_ID are required when wechat ecommerce is enabled")
+	}
+
+	if err := validateRequiredAbsoluteConfigURL("WECHAT_ECOMMERCE_PAYMENT_NOTIFY_URL", c.WechatEcommercePaymentNotifyURL, "wechat ecommerce is enabled"); err != nil {
+		return err
+	}
+	if err := validateRequiredAbsoluteConfigURL("WECHAT_ECOMMERCE_COMBINE_NOTIFY_URL", c.WechatEcommerceCombineNotifyURL, "wechat ecommerce is enabled"); err != nil {
+		return err
+	}
+	if err := validateRequiredAbsoluteConfigURL("WECHAT_ECOMMERCE_REFUND_NOTIFY_URL", c.WechatEcommerceRefundNotifyURL, "wechat ecommerce is enabled"); err != nil {
+		return err
+	}
+	if err := validateRequiredAbsoluteConfigURL("WECHAT_ECOMMERCE_WITHDRAW_NOTIFY_URL", c.WechatEcommerceWithdrawNotifyURL, "wechat ecommerce is enabled"); err != nil {
+		return err
+	}
+	if err := validateRequiredAbsoluteConfigURL("WECHAT_ECOMMERCE_VIOLATION_NOTIFY_URL", c.WechatEcommerceViolationNotifyURL, "wechat ecommerce is enabled"); err != nil {
+		return err
 	}
 
 	return nil

@@ -219,6 +219,60 @@ func TestOCRJobStateTransition_ProcessingToPendingThenFailed(t *testing.T) {
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 }
 
+func TestListOCRJobsByOwnerUsesIDTieBreaker(t *testing.T) {
+	user := createRandomUser(t)
+	asset1 := createRandomMediaAsset(t, user.ID)
+	asset2 := createRandomMediaAsset(t, user.ID)
+	tiedCreatedAt := time.Now().UTC().Truncate(time.Microsecond)
+
+	job1, err := testStore.UpsertOCRJob(context.Background(), UpsertOCRJobParams{
+		IdempotencyKey: fmt.Sprintf("%d:business_license:merchant_application:%d:front", asset1.ID, user.ID),
+		DocumentType:   "business_license",
+		Provider:       "aliyun",
+		MediaAssetID:   asset1.ID,
+		OwnerType:      "merchant_application",
+		OwnerID:        user.ID,
+		Side:           "front",
+		MaxAttempts:    3,
+		RequestedBy:    user.ID,
+	})
+	require.NoError(t, err)
+
+	job2, err := testStore.UpsertOCRJob(context.Background(), UpsertOCRJobParams{
+		IdempotencyKey: fmt.Sprintf("%d:food_permit:merchant_application:%d:back", asset2.ID, user.ID),
+		DocumentType:   "food_permit",
+		Provider:       "aliyun",
+		MediaAssetID:   asset2.ID,
+		OwnerType:      "merchant_application",
+		OwnerID:        user.ID,
+		Side:           "back",
+		MaxAttempts:    3,
+		RequestedBy:    user.ID,
+	})
+	require.NoError(t, err)
+
+	store, ok := testStore.(*SQLStore)
+	require.True(t, ok)
+
+	_, err = store.connPool.Exec(context.Background(),
+		"UPDATE ocr_jobs SET created_at = $1 WHERE id = ANY($2)",
+		tiedCreatedAt,
+		[]int64{job1.ID, job2.ID},
+	)
+	require.NoError(t, err)
+
+	jobs, err := testStore.ListOCRJobsByOwner(context.Background(), ListOCRJobsByOwnerParams{
+		OwnerType: "merchant_application",
+		OwnerID:   user.ID,
+		Limit:     2,
+		Offset:    0,
+	})
+	require.NoError(t, err)
+	require.Len(t, jobs, 2)
+	require.Equal(t, job2.ID, jobs[0].ID)
+	require.Equal(t, job1.ID, jobs[1].ID)
+}
+
 func TestMarkOCRJobProcessing_ConcurrentSingleLease(t *testing.T) {
 	job := createRandomOCRJob(t)
 

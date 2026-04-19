@@ -21,15 +21,15 @@ INSERT INTO deliveries (
 ) RETURNING *;
 
 -- name: GetDelivery :one
-SELECT * FROM deliveries
+SELECT id, order_id, rider_id, pickup_address, pickup_longitude, pickup_latitude, pickup_contact, pickup_phone, picked_at, delivery_address, delivery_longitude, delivery_latitude, delivery_contact, delivery_phone, delivered_at, distance, delivery_fee, rider_earnings, status, estimated_pickup_at, estimated_delivery_at, is_damaged, is_delayed, damage_amount, damage_reason, created_at, assigned_at, completed_at, rider_delivered_at FROM deliveries
 WHERE id = $1 LIMIT 1;
 
 -- name: GetDeliveryByOrderID :one
-SELECT * FROM deliveries
+SELECT id, order_id, rider_id, pickup_address, pickup_longitude, pickup_latitude, pickup_contact, pickup_phone, picked_at, delivery_address, delivery_longitude, delivery_latitude, delivery_contact, delivery_phone, delivered_at, distance, delivery_fee, rider_earnings, status, estimated_pickup_at, estimated_delivery_at, is_damaged, is_delayed, damage_amount, damage_reason, created_at, assigned_at, completed_at, rider_delivered_at FROM deliveries
 WHERE order_id = $1 LIMIT 1;
 
 -- name: GetDeliveryForUpdate :one
-SELECT * FROM deliveries
+SELECT id, order_id, rider_id, pickup_address, pickup_longitude, pickup_latitude, pickup_contact, pickup_phone, picked_at, delivery_address, delivery_longitude, delivery_latitude, delivery_contact, delivery_phone, delivered_at, distance, delivery_fee, rider_earnings, status, estimated_pickup_at, estimated_delivery_at, is_damaged, is_delayed, damage_amount, damage_reason, created_at, assigned_at, completed_at, rider_delivered_at FROM deliveries
 WHERE id = $1 LIMIT 1
 FOR UPDATE;
 
@@ -105,26 +105,26 @@ WHERE id = $1
 RETURNING *;
 
 -- name: ListDeliveriesByRider :many
-SELECT * FROM deliveries
+SELECT id, order_id, rider_id, pickup_address, pickup_longitude, pickup_latitude, pickup_contact, pickup_phone, picked_at, delivery_address, delivery_longitude, delivery_latitude, delivery_contact, delivery_phone, delivered_at, distance, delivery_fee, rider_earnings, status, estimated_pickup_at, estimated_delivery_at, is_damaged, is_delayed, damage_amount, damage_reason, created_at, assigned_at, completed_at, rider_delivered_at FROM deliveries
 WHERE rider_id = $1
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3;
 
 -- name: ListDeliveriesByRiderAndStatus :many
-SELECT * FROM deliveries
+SELECT id, order_id, rider_id, pickup_address, pickup_longitude, pickup_latitude, pickup_contact, pickup_phone, picked_at, delivery_address, delivery_longitude, delivery_latitude, delivery_contact, delivery_phone, delivered_at, distance, delivery_fee, rider_earnings, status, estimated_pickup_at, estimated_delivery_at, is_damaged, is_delayed, damage_amount, damage_reason, created_at, assigned_at, completed_at, rider_delivered_at FROM deliveries
 WHERE rider_id = $1 AND status = $2
 ORDER BY created_at DESC
 LIMIT $3 OFFSET $4;
 
 -- name: ListRiderActiveDeliveries :many
-SELECT * FROM deliveries
+SELECT id, order_id, rider_id, pickup_address, pickup_longitude, pickup_latitude, pickup_contact, pickup_phone, picked_at, delivery_address, delivery_longitude, delivery_latitude, delivery_contact, delivery_phone, delivered_at, distance, delivery_fee, rider_earnings, status, estimated_pickup_at, estimated_delivery_at, is_damaged, is_delayed, damage_amount, damage_reason, created_at, assigned_at, completed_at, rider_delivered_at FROM deliveries
 WHERE rider_id = $1 AND status IN ('assigned', 'picking', 'picked', 'delivering')
 ORDER BY created_at ASC;
 
 -- name: ListPendingDeliveries :many
-SELECT * FROM deliveries
+SELECT id, order_id, rider_id, pickup_address, pickup_longitude, pickup_latitude, pickup_contact, pickup_phone, picked_at, delivery_address, delivery_longitude, delivery_latitude, delivery_contact, delivery_phone, delivered_at, distance, delivery_fee, rider_earnings, status, estimated_pickup_at, estimated_delivery_at, is_damaged, is_delayed, damage_amount, damage_reason, created_at, assigned_at, completed_at, rider_delivered_at FROM deliveries
 WHERE status = 'pending'
-ORDER BY created_at ASC
+ORDER BY created_at ASC, id ASC
 LIMIT $1;
 
 -- name: CountRiderDeliveries :one
@@ -157,8 +157,8 @@ RETURNING *;
 
 -- name: ListPendingDeliveriesBefore :many
 -- 获取超时未接单的配送单
-SELECT * FROM deliveries
+SELECT id, order_id, rider_id, pickup_address, pickup_longitude, pickup_latitude, pickup_contact, pickup_phone, picked_at, delivery_address, delivery_longitude, delivery_latitude, delivery_contact, delivery_phone, delivered_at, distance, delivery_fee, rider_earnings, status, estimated_pickup_at, estimated_delivery_at, is_damaged, is_delayed, damage_amount, damage_reason, created_at, assigned_at, completed_at, rider_delivered_at FROM deliveries
 WHERE status = sqlc.arg('status')
   AND created_at < sqlc.arg('created_at')
-ORDER BY created_at ASC
+ORDER BY created_at ASC, id ASC
 LIMIT sqlc.arg('limit');

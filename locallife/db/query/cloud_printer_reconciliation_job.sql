@@ -27,12 +27,12 @@ DO UPDATE SET
 RETURNING *;
 
 -- name: GetCloudPrinterReconciliationJob :one
-SELECT * FROM cloud_printer_reconciliation_jobs
+SELECT id, merchant_id, printer_id, printer_name, printer_sn, printer_key, printer_type, desired_action, source_action, status, failure_reason, last_error, retry_count, resolved_at, created_at, updated_at FROM cloud_printer_reconciliation_jobs
 WHERE id = $1
 LIMIT 1;
 
 -- name: ListCloudPrinterReconciliationJobsByMerchant :many
-SELECT * FROM cloud_printer_reconciliation_jobs
+SELECT id, merchant_id, printer_id, printer_name, printer_sn, printer_key, printer_type, desired_action, source_action, status, failure_reason, last_error, retry_count, resolved_at, created_at, updated_at FROM cloud_printer_reconciliation_jobs
 WHERE merchant_id = $1
   AND (sqlc.narg(status)::text IS NULL OR status = sqlc.narg(status))
 ORDER BY created_at DESC;

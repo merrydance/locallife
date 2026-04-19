@@ -29,7 +29,7 @@ type UpdateMembershipSettingsInput struct {
 func defaultMembershipSettings(merchantID int64) MembershipSettingsResult {
 	return MembershipSettingsResult{
 		MerchantID:          merchantID,
-		BalanceUsableScenes: []string{"dine_in", "takeout", "reservation"},
+		BalanceUsableScenes: []string{"dine_in", "takeaway"},
 		BonusUsableScenes:   []string{"dine_in"},
 		AllowWithVoucher:    true,
 		AllowWithDiscount:   true,
@@ -40,8 +40,8 @@ func defaultMembershipSettings(merchantID int64) MembershipSettingsResult {
 func settingsResultFromModel(settings db.MerchantMembershipSetting) MembershipSettingsResult {
 	return MembershipSettingsResult{
 		MerchantID:          settings.MerchantID,
-		BalanceUsableScenes: settings.BalanceUsableScenes,
-		BonusUsableScenes:   settings.BonusUsableScenes,
+		BalanceUsableScenes: sanitizeMembershipUsableScenes(settings.BalanceUsableScenes),
+		BonusUsableScenes:   sanitizeMembershipUsableScenes(settings.BonusUsableScenes),
 		AllowWithVoucher:    settings.AllowWithVoucher,
 		AllowWithDiscount:   settings.AllowWithDiscount,
 		MaxDeductionPercent: settings.MaxDeductionPercent,
@@ -91,10 +91,10 @@ func UpdateMembershipSettingsForOwner(ctx context.Context, store db.Store, input
 	maxPercent := defaults.MaxDeductionPercent
 
 	if input.BalanceUsableScenes != nil {
-		balanceScenes = input.BalanceUsableScenes
+		balanceScenes = sanitizeMembershipUsableScenes(input.BalanceUsableScenes)
 	}
 	if input.BonusUsableScenes != nil {
-		bonusScenes = input.BonusUsableScenes
+		bonusScenes = sanitizeMembershipUsableScenes(input.BonusUsableScenes)
 	}
 	if input.AllowWithVoucher != nil {
 		allowVoucher = *input.AllowWithVoucher

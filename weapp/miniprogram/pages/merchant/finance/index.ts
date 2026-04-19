@@ -1,13 +1,16 @@
 import {
   createMerchantWithdraw,
   getMerchantAccountBalance,
-  getMerchantAccountStatusView,
   getMerchantWithdrawal,
   getMerchantWithdrawStatusView,
   listMerchantWithdrawals,
   type MerchantAccountBalanceResponse,
   type MerchantWithdrawItem
 } from '../../../api/merchant-finance-account'
+import {
+  fetchMerchantPaymentReadiness,
+  type MerchantPaymentReadinessView
+} from '../../../services/merchant-payment'
 import {
   canManageMerchantApplyment,
   ensureMerchantConsoleAccess
@@ -42,9 +45,13 @@ Page({
     loading: false,
     loadedOnce: false,
     refreshErrorMessage: '',
+    readinessSummaryTitle: '',
     balanceStatusDesc: '',
+    readinessActionText: '',
+    readinessActionPath: '',
     notConfigured: false,
     balance: EMPTY_BALANCE as MerchantAccountBalanceResponse,
+    paymentReadiness: null as MerchantPaymentReadinessView | null,
     withdrawAmountYuan: '',
     withdrawRemark: '',
     isWithdrawDialogVisible: false,
@@ -115,14 +122,33 @@ Page({
     })
 
     try {
+      const paymentReadiness = await fetchMerchantPaymentReadiness()
+
+      if (!paymentReadiness.canOpenWithdraw) {
+        this.setData({
+          initialLoading: false,
+          initialError: false,
+          initialErrorMessage: '',
+          loading: false,
+          loadedOnce: true,
+          paymentReadiness,
+          notConfigured: true,
+          readinessSummaryTitle: paymentReadiness.summaryTitle,
+          balanceStatusDesc: paymentReadiness.summaryDescription,
+          readinessActionText: paymentReadiness.actionText,
+          readinessActionPath: paymentReadiness.actionPath,
+          balance: EMPTY_BALANCE,
+          withdrawals: [],
+          refreshErrorMessage: ''
+        })
+
+        return
+      }
+
       const [balance, records] = await Promise.all([
         getMerchantAccountBalance(),
         listMerchantWithdrawals(1, 20)
       ])
-
-      const accountStatus = balance.account_status || records.account_status || ''
-      const statusDesc = balance.status_desc || records.status_desc || ''
-      const accountStatusView = getMerchantAccountStatusView(accountStatus, statusDesc)
 
       this.setData({
         initialLoading: false,
@@ -130,10 +156,14 @@ Page({
         initialErrorMessage: '',
         loading: false,
         loadedOnce: true,
+        paymentReadiness,
         balance,
-        notConfigured: !accountStatusView.isActive,
-        balanceStatusDesc: accountStatusView.statusDesc,
-        withdrawals: accountStatusView.isActive ? (records.withdrawals || []) : [],
+        notConfigured: false,
+        readinessSummaryTitle: paymentReadiness.summaryTitle,
+        balanceStatusDesc: paymentReadiness.summaryDescription,
+        readinessActionText: paymentReadiness.actionText,
+        readinessActionPath: paymentReadiness.actionPath,
+        withdrawals: records.withdrawals || [],
         refreshErrorMessage: ''
       })
     } catch (error) {
@@ -145,8 +175,13 @@ Page({
           initialErrorMessage: '',
           loading: false,
           loadedOnce: true,
+          paymentReadiness: null,
           notConfigured: true,
+          readinessSummaryTitle: '先完成收付通开户',
           balanceStatusDesc: '暂未查询到收付通账户，请先完成收付通进件和签约。',
+          readinessActionText: '去完成开户',
+          readinessActionPath: '/pages/merchant/settings/applyment/index',
+          balance: EMPTY_BALANCE,
           withdrawals: [],
           refreshErrorMessage: ''
         })
@@ -190,6 +225,11 @@ Page({
     }
 
     void this.loadData()
+  },
+
+  onGoPaymentSetup() {
+    const actionPath = this.data.readinessActionPath || '/pages/merchant/settings/applyment/index'
+    wx.navigateTo({ url: actionPath })
   },
 
   onWithdrawAmountChange(e: WechatMiniprogram.CustomEvent<InputChangeDetail>) {

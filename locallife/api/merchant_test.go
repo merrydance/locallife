@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -454,4 +455,98 @@ func TestGetPublicMerchantDetail_ReturnsOrderingSuspendedFlag(t *testing.T) {
 	var resp publicMerchantDetailResponse
 	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 	require.True(t, resp.IsOrderingSuspended)
+}
+
+func TestGetPublicMerchantDetail_AllowsBindbankSubmittedStorefrontPreview(t *testing.T) {
+	merchant := randomMerchant(util.RandomInt(1, 1000))
+	merchant.Status = "bindbank_submitted"
+	merchant.IsOpen = true
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetMerchant(gomock.Any(), merchant.ID).
+		Times(1).
+		Return(merchant, nil)
+	store.EXPECT().
+		ListMerchantTags(gomock.Any(), merchant.ID).
+		Times(1).
+		Return([]db.Tag{}, nil)
+	store.EXPECT().
+		ListMerchantSystemLabels(gomock.Any(), merchant.ID).
+		Times(1).
+		Return([]db.Tag{}, nil)
+	store.EXPECT().
+		GetMerchantProfile(gomock.Any(), merchant.ID).
+		Times(1).
+		Return(db.GetMerchantProfileRow{}, nil)
+	store.EXPECT().
+		GetMerchantAvgPrepMinutes(gomock.Any(), merchant.ID).
+		Times(1).
+		Return(int32(0), nil)
+	store.EXPECT().
+		ListMerchantActiveDiscountRules(gomock.Any(), merchant.ID).
+		Times(1).
+		Return([]db.DiscountRule{}, nil)
+	store.EXPECT().
+		ListMerchantActiveVouchers(gomock.Any(), merchant.ID).
+		Times(1).
+		Return([]db.Voucher{}, nil)
+	store.EXPECT().
+		ListMerchantActiveDeliveryPromotions(gomock.Any(), merchant.ID).
+		Times(1).
+		Return([]db.MerchantDeliveryPromotion{}, nil)
+
+	server := newTestServer(t, store)
+
+	request, err := http.NewRequest(http.MethodGet, "/v1/public/merchants/"+strconv.FormatInt(merchant.ID, 10)+"?lite=true", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, merchant.OwnerUserID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp publicMerchantDetailResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.False(t, resp.IsOpen, "进件审核中的店铺页应可浏览，但不可下单")
+}
+
+func TestPublicMerchantStorefrontSubresources_RejectUnavailableMerchant(t *testing.T) {
+	merchant := randomMerchant(util.RandomInt(1, 1000))
+	merchant.Status = "suspended"
+
+	testCases := []struct {
+		name string
+		path string
+	}{
+		{name: "Dishes", path: "/v1/public/merchants/%d/dishes"},
+		{name: "Combos", path: "/v1/public/merchants/%d/combos"},
+		{name: "Rooms", path: "/v1/public/merchants/%d/rooms"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			store.EXPECT().
+				GetMerchant(gomock.Any(), merchant.ID).
+				Times(1).
+				Return(merchant, nil)
+
+			server := newTestServer(t, store)
+
+			request, err := http.NewRequest(http.MethodGet, fmt.Sprintf(tc.path, merchant.ID), nil)
+			require.NoError(t, err)
+			addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, merchant.OwnerUserID, time.Minute)
+
+			recorder := httptest.NewRecorder()
+			server.router.ServeHTTP(recorder, request)
+			require.Equal(t, http.StatusNotFound, recorder.Code)
+		})
+	}
 }

@@ -580,7 +580,7 @@ func (q *Queries) GetTableReservationForUpdate(ctx context.Context, id int64) (T
 
 const getTableReservationWithTable = `-- name: GetTableReservationWithTable :one
 SELECT 
-    tr.id, tr.table_id, tr.user_id, tr.merchant_id, tr.reservation_date, tr.reservation_time, tr.guest_count, tr.contact_name, tr.contact_phone, tr.payment_mode, tr.deposit_amount, tr.prepaid_amount, tr.refund_deadline, tr.status, tr.payment_deadline, tr.notes, tr.paid_at, tr.confirmed_at, tr.completed_at, tr.cancelled_at, tr.cancel_reason, tr.created_at, tr.updated_at, tr.checked_in_at, tr.cooking_started_at, tr.source,
+  tr.id, tr.table_id, tr.user_id, tr.merchant_id, tr.reservation_date, tr.reservation_time, tr.guest_count, tr.contact_name, tr.contact_phone, tr.payment_mode, tr.deposit_amount, tr.prepaid_amount, tr.refund_deadline, tr.status, tr.payment_deadline, tr.notes, tr.paid_at, tr.confirmed_at, tr.completed_at, tr.cancelled_at, tr.cancel_reason, tr.created_at, tr.updated_at, tr.checked_in_at, tr.cooking_started_at, tr.source,
     t.table_no,
     t.table_type,
     t.capacity
@@ -828,7 +828,7 @@ func (q *Queries) ListPendingReservationsNearDeadline(ctx context.Context, minut
 
 const listReservationsByMerchant = `-- name: ListReservationsByMerchant :many
 SELECT 
-    tr.id, tr.table_id, tr.user_id, tr.merchant_id, tr.reservation_date, tr.reservation_time, tr.guest_count, tr.contact_name, tr.contact_phone, tr.payment_mode, tr.deposit_amount, tr.prepaid_amount, tr.refund_deadline, tr.status, tr.payment_deadline, tr.notes, tr.paid_at, tr.confirmed_at, tr.completed_at, tr.cancelled_at, tr.cancel_reason, tr.created_at, tr.updated_at, tr.checked_in_at, tr.cooking_started_at, tr.source,
+  tr.id, tr.table_id, tr.user_id, tr.merchant_id, tr.reservation_date, tr.reservation_time, tr.guest_count, tr.contact_name, tr.contact_phone, tr.payment_mode, tr.deposit_amount, tr.prepaid_amount, tr.refund_deadline, tr.status, tr.payment_deadline, tr.notes, tr.paid_at, tr.confirmed_at, tr.completed_at, tr.cancelled_at, tr.cancel_reason, tr.created_at, tr.updated_at, tr.checked_in_at, tr.cooking_started_at, tr.source,
     t.table_no,
     t.table_type
 FROM table_reservations tr
@@ -926,7 +926,7 @@ func (q *Queries) ListReservationsByMerchant(ctx context.Context, arg ListReserv
 
 const listReservationsByMerchantAndDate = `-- name: ListReservationsByMerchantAndDate :many
 SELECT 
-    tr.id, tr.table_id, tr.user_id, tr.merchant_id, tr.reservation_date, tr.reservation_time, tr.guest_count, tr.contact_name, tr.contact_phone, tr.payment_mode, tr.deposit_amount, tr.prepaid_amount, tr.refund_deadline, tr.status, tr.payment_deadline, tr.notes, tr.paid_at, tr.confirmed_at, tr.completed_at, tr.cancelled_at, tr.cancel_reason, tr.created_at, tr.updated_at, tr.checked_in_at, tr.cooking_started_at, tr.source,
+  tr.id, tr.table_id, tr.user_id, tr.merchant_id, tr.reservation_date, tr.reservation_time, tr.guest_count, tr.contact_name, tr.contact_phone, tr.payment_mode, tr.deposit_amount, tr.prepaid_amount, tr.refund_deadline, tr.status, tr.payment_deadline, tr.notes, tr.paid_at, tr.confirmed_at, tr.completed_at, tr.cancelled_at, tr.cancel_reason, tr.created_at, tr.updated_at, tr.checked_in_at, tr.cooking_started_at, tr.source,
     t.table_no,
     t.table_type
 FROM table_reservations tr
@@ -1023,7 +1023,7 @@ func (q *Queries) ListReservationsByMerchantAndDate(ctx context.Context, arg Lis
 
 const listReservationsByMerchantAndStatus = `-- name: ListReservationsByMerchantAndStatus :many
 SELECT 
-    tr.id, tr.table_id, tr.user_id, tr.merchant_id, tr.reservation_date, tr.reservation_time, tr.guest_count, tr.contact_name, tr.contact_phone, tr.payment_mode, tr.deposit_amount, tr.prepaid_amount, tr.refund_deadline, tr.status, tr.payment_deadline, tr.notes, tr.paid_at, tr.confirmed_at, tr.completed_at, tr.cancelled_at, tr.cancel_reason, tr.created_at, tr.updated_at, tr.checked_in_at, tr.cooking_started_at, tr.source,
+  tr.id, tr.table_id, tr.user_id, tr.merchant_id, tr.reservation_date, tr.reservation_time, tr.guest_count, tr.contact_name, tr.contact_phone, tr.payment_mode, tr.deposit_amount, tr.prepaid_amount, tr.refund_deadline, tr.status, tr.payment_deadline, tr.notes, tr.paid_at, tr.confirmed_at, tr.completed_at, tr.cancelled_at, tr.cancel_reason, tr.created_at, tr.updated_at, tr.checked_in_at, tr.cooking_started_at, tr.source,
     t.table_no,
     t.table_type
 FROM table_reservations tr
@@ -1247,7 +1247,7 @@ func (q *Queries) ListReservationsByTableAndDate(ctx context.Context, arg ListRe
 
 const listReservationsByUserWithStatus = `-- name: ListReservationsByUserWithStatus :many
 SELECT 
-    tr.id, tr.table_id, tr.user_id, tr.merchant_id, tr.reservation_date, tr.reservation_time, tr.guest_count, tr.contact_name, tr.contact_phone, tr.payment_mode, tr.deposit_amount, tr.prepaid_amount, tr.refund_deadline, tr.status, tr.payment_deadline, tr.notes, tr.paid_at, tr.confirmed_at, tr.completed_at, tr.cancelled_at, tr.cancel_reason, tr.created_at, tr.updated_at, tr.checked_in_at, tr.cooking_started_at, tr.source,
+  tr.id, tr.table_id, tr.user_id, tr.merchant_id, tr.reservation_date, tr.reservation_time, tr.guest_count, tr.contact_name, tr.contact_phone, tr.payment_mode, tr.deposit_amount, tr.prepaid_amount, tr.refund_deadline, tr.status, tr.payment_deadline, tr.notes, tr.paid_at, tr.confirmed_at, tr.completed_at, tr.cancelled_at, tr.cancel_reason, tr.created_at, tr.updated_at, tr.checked_in_at, tr.cooking_started_at, tr.source,
     t.table_no,
     t.table_type
 FROM table_reservations tr
@@ -1365,7 +1365,7 @@ func (q *Queries) ListReservationsByUserWithStatus(ctx context.Context, arg List
 
 const listTodayReservationsByMerchant = `-- name: ListTodayReservationsByMerchant :many
 SELECT 
-    tr.id, tr.table_id, tr.user_id, tr.merchant_id, tr.reservation_date, tr.reservation_time, tr.guest_count, tr.contact_name, tr.contact_phone, tr.payment_mode, tr.deposit_amount, tr.prepaid_amount, tr.refund_deadline, tr.status, tr.payment_deadline, tr.notes, tr.paid_at, tr.confirmed_at, tr.completed_at, tr.cancelled_at, tr.cancel_reason, tr.created_at, tr.updated_at, tr.checked_in_at, tr.cooking_started_at, tr.source,
+  tr.id, tr.table_id, tr.user_id, tr.merchant_id, tr.reservation_date, tr.reservation_time, tr.guest_count, tr.contact_name, tr.contact_phone, tr.payment_mode, tr.deposit_amount, tr.prepaid_amount, tr.refund_deadline, tr.status, tr.payment_deadline, tr.notes, tr.paid_at, tr.confirmed_at, tr.completed_at, tr.cancelled_at, tr.cancel_reason, tr.created_at, tr.updated_at, tr.checked_in_at, tr.cooking_started_at, tr.source,
     t.table_no,
     t.table_type
 FROM table_reservations tr

@@ -138,7 +138,7 @@ func (q *Queries) DeleteOldWeatherCoefficients(ctx context.Context, recordedAt t
 const getLatestWeatherCoefficient = `-- name: GetLatestWeatherCoefficient :one
 SELECT id, region_id, recorded_at, weather_data, warning_data, weather_type, weather_code, temperature, feels_like, humidity, wind_speed, wind_scale, precip, visibility, has_warning, warning_type, warning_level, warning_severity, warning_text, weather_coefficient, warning_coefficient, final_coefficient, delivery_suspended, suspend_reason, created_at FROM weather_coefficients
 WHERE region_id = $1
-ORDER BY recorded_at DESC
+ORDER BY recorded_at DESC, id DESC
 LIMIT 1
 `
 
@@ -216,7 +216,7 @@ func (q *Queries) GetWeatherCoefficient(ctx context.Context, id int64) (WeatherC
 const listRecentWeatherCoefficients = `-- name: ListRecentWeatherCoefficients :many
 SELECT id, region_id, recorded_at, weather_data, warning_data, weather_type, weather_code, temperature, feels_like, humidity, wind_speed, wind_scale, precip, visibility, has_warning, warning_type, warning_level, warning_severity, warning_text, weather_coefficient, warning_coefficient, final_coefficient, delivery_suspended, suspend_reason, created_at FROM weather_coefficients
 WHERE region_id = $1 AND recorded_at >= $2
-ORDER BY recorded_at DESC
+ORDER BY recorded_at DESC, id DESC
 `
 
 type ListRecentWeatherCoefficientsParams struct {
@@ -357,7 +357,7 @@ func (q *Queries) ListSuspendedRegions(ctx context.Context) ([]WeatherCoefficien
 const listWeatherCoefficients = `-- name: ListWeatherCoefficients :many
 SELECT id, region_id, recorded_at, weather_data, warning_data, weather_type, weather_code, temperature, feels_like, humidity, wind_speed, wind_scale, precip, visibility, has_warning, warning_type, warning_level, warning_severity, warning_text, weather_coefficient, warning_coefficient, final_coefficient, delivery_suspended, suspend_reason, created_at FROM weather_coefficients
 WHERE region_id = $1
-ORDER BY recorded_at DESC
+ORDER BY recorded_at DESC, id DESC
 LIMIT $2 OFFSET $3
 `
 

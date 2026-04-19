@@ -1,3 +1,5 @@
+@import "../../../styles/register-operator-hero.wxss";
+
 .page-container {
   min-height: 100vh;
   background-color: var(--td-bg-color-page);
@@ -10,124 +12,8 @@
   margin-bottom: var(--spacer-md);
 }
 
-.form-content {
-  padding: 0 var(--spacer-md);
-}
-
 .step-view {
   display: block;
-}
-
-/* Hero Section */
-.hero-card {
-  background: linear-gradient(135deg, #FF6B58 0%, #E53935 100%);
-  border-radius: var(--radius-lg);
-  padding: 64rpx 40rpx;
-  color: #FFFFFF;
-  margin-top: var(--spacer-md);
-  position: relative;
-  overflow: hidden;
-  box-shadow: 0 12rpx 32rpx rgba(255, 107, 88, 0.2);
-}
-
-.partner-badge {
-  display: inline-block;
-  background: rgba(255, 255, 255, 0.2);
-  padding: 8rpx 20rpx;
-  border-radius: 40rpx;
-  font-size: 20rpx;
-  font-weight: bold;
-  letter-spacing: 2rpx;
-  margin-bottom: 32rpx;
-  border: 1rpx solid rgba(255, 255, 255, 0.3);
-}
-
-.hero-title {
-  font-size: 44rpx;
-  font-weight: bold;
-  margin-bottom: 16rpx;
-}
-
-.hero-subtitle {
-  font-size: 26rpx;
-  opacity: 0.8;
-  margin-bottom: 64rpx;
-}
-
-.feature-list {
-  display: flex;
-  flex-direction: column;
-  gap: 32rpx;
-}
-
-.feature-item {
-  display: flex;
-  align-items: center;
-  background: rgba(255, 255, 255, 0.1);
-  padding: 24rpx;
-  border-radius: var(--radius-md);
-  backdrop-filter: blur(10px);
-}
-
-.feature-icon {
-  width: 80rpx;
-  height: 80rpx;
-  background: #FFFFFF;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-right: 24rpx;
-}
-
-.feature-info {
-  flex: 1;
-}
-
-.feature-title {
-  display: block;
-  font-size: 30rpx;
-  font-weight: bold;
-  margin-bottom: 4rpx;
-}
-
-.feature-desc {
-  display: block;
-  font-size: 22rpx;
-  opacity: 0.7;
-}
-
-.operation-flow {
-  margin-top: 64rpx;
-  padding: 40rpx;
-  background: #FFFFFF;
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-}
-
-.flow-title {
-  font-size: 28rpx;
-  font-weight: bold;
-  text-align: center;
-  margin-bottom: 40rpx;
-}
-
-.flow-steps {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.flow-node {
-  font-size: 22rpx;
-  color: var(--td-text-color-secondary);
-}
-
-.flow-line {
-  flex: 1;
-  height: 2rpx;
-  background: var(--td-component-stroke);
-  margin: 0 12rpx;
 }
 
 /* Form Styles */
@@ -282,35 +168,13 @@
 
 .btn-group {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: var(--spacer-md);
 }
 
 .btn-group t-button {
-  flex: 1;
-  width: 100%;
-}
-
-.bottom-action t-button {
-  width: 100%;
-}
-
-/* Animation */
-.animate-fade-in {
-  animation: fadeIn 0.4s ease-out both;
-}
-
-.animate-slide-up {
-  animation: slideUp 0.5s ease-out both;
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10rpx); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes slideUp {
-  from { opacity: 0; transform: translateY(40rpx); }
-  to { opacity: 1; transform: translateY(0); }
+  flex: 0 0 auto;
 }
 
 /* Region Popup Styles */

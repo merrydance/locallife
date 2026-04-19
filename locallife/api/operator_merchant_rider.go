@@ -194,7 +194,7 @@ func (server *Server) listOperatorMerchants(ctx *gin.Context) {
 // @Tags 运营商-商户骑手管理
 // @Accept json
 // @Produce json
-// @Param region_id query int false "区域ID"
+// @Param region_id query int false "区域ID；不传时聚合当前运营商全部可管区域"
 // @Success 200 {object} operatorMerchantSummaryResponse
 // @Failure 400 {object} errorMessage "请求参数错误"
 // @Failure 401 {object} errorMessage "未授权"
@@ -209,29 +209,34 @@ func (server *Server) getOperatorMerchantSummary(ctx *gin.Context) {
 		return
 	}
 
-	targetRegionID := req.RegionID
-	if targetRegionID == 0 {
-		resolvedRegionID, err := server.getOperatorRegionID(ctx)
-		if err != nil {
-			ctx.JSON(http.StatusForbidden, errorResponse(err))
-			return
-		}
-		targetRegionID = resolvedRegionID
-	} else {
-		if _, err := server.checkOperatorManagesRegion(ctx, targetRegionID); err != nil {
-			ctx.JSON(http.StatusForbidden, errorResponse(err))
-			return
-		}
+	selection, err := server.resolveOperatorRegionSelection(ctx)
+	if err != nil {
+		server.respondOperatorRegionSelectionError(ctx, err)
+		return
 	}
 
 	countStatus := func(status string) (int64, error) {
-		if status == "" {
-			return server.store.CountMerchantsByRegion(ctx, targetRegionID)
+		var total int64
+		for _, regionID := range selection.RegionIDs {
+			if status == "" {
+				count, countErr := server.store.CountMerchantsByRegion(ctx, regionID)
+				if countErr != nil {
+					return 0, countErr
+				}
+				total += count
+				continue
+			}
+
+			count, countErr := server.store.CountMerchantsByRegionWithStatus(ctx, db.CountMerchantsByRegionWithStatusParams{
+				RegionID: regionID,
+				Column2:  status,
+			})
+			if countErr != nil {
+				return 0, countErr
+			}
+			total += count
 		}
-		return server.store.CountMerchantsByRegionWithStatus(ctx, db.CountMerchantsByRegionWithStatusParams{
-			RegionID: targetRegionID,
-			Column2:  status,
-		})
+		return total, nil
 	}
 
 	total, err := countStatus("")
@@ -858,7 +863,7 @@ func (server *Server) listOperatorRiders(ctx *gin.Context) {
 // @Tags 运营商-商户骑手管理
 // @Accept json
 // @Produce json
-// @Param region_id query int false "区域ID"
+// @Param region_id query int false "区域ID；不传时聚合当前运营商全部可管区域"
 // @Success 200 {object} operatorRiderSummaryResponse
 // @Failure 400 {object} errorMessage "请求参数错误"
 // @Failure 401 {object} errorMessage "未授权"
@@ -873,35 +878,35 @@ func (server *Server) getOperatorRiderSummary(ctx *gin.Context) {
 		return
 	}
 
-	operator, ok := GetOperatorFromContext(ctx)
-	if !ok {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("operator not found in context")))
+	selection, err := server.resolveOperatorRegionSelection(ctx)
+	if err != nil {
+		server.respondOperatorRegionSelectionError(ctx, err)
 		return
 	}
 
-	targetRegionID := req.RegionID
-	if targetRegionID == 0 {
-		if operator.RegionID == 0 {
-			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("operator has no assigned region")))
-			return
-		}
-		targetRegionID = operator.RegionID
-	} else {
-		if _, err := server.checkOperatorManagesRegion(ctx, targetRegionID); err != nil {
-			ctx.JSON(http.StatusForbidden, errorResponse(err))
-			return
-		}
-	}
-
-	regionID := pgtype.Int8{Int64: targetRegionID, Valid: true}
 	countStatus := func(status string) (int64, error) {
-		if status == "" {
-			return server.store.CountRidersByRegion(ctx, regionID)
+		var total int64
+		for _, regionID := range selection.RegionIDs {
+			regionScope := pgtype.Int8{Int64: regionID, Valid: true}
+			if status == "" {
+				count, countErr := server.store.CountRidersByRegion(ctx, regionScope)
+				if countErr != nil {
+					return 0, countErr
+				}
+				total += count
+				continue
+			}
+
+			count, countErr := server.store.CountRidersByRegionWithStatus(ctx, db.CountRidersByRegionWithStatusParams{
+				RegionID: regionScope,
+				Status:   status,
+			})
+			if countErr != nil {
+				return 0, countErr
+			}
+			total += count
 		}
-		return server.store.CountRidersByRegionWithStatus(ctx, db.CountRidersByRegionWithStatusParams{
-			RegionID: regionID,
-			Status:   status,
-		})
+		return total, nil
 	}
 
 	total, err := countStatus("")
@@ -929,10 +934,14 @@ func (server *Server) getOperatorRiderSummary(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
-	online, err := server.store.CountOnlineRidersByRegion(ctx, regionID)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
+	var online int64
+	for _, regionID := range selection.RegionIDs {
+		count, countErr := server.store.CountOnlineRidersByRegion(ctx, pgtype.Int8{Int64: regionID, Valid: true})
+		if countErr != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, countErr))
+			return
+		}
+		online += count
 	}
 
 	ctx.JSON(http.StatusOK, operatorRiderSummaryResponse{

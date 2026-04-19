@@ -3,7 +3,6 @@ package worker_test
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"testing"
 
 	"github.com/hibiken/asynq"
@@ -17,86 +16,12 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-func TestProcessTaskInitiateRefund_MembershipRechargeMismatchRefund(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	store := mockdb.NewMockStore(ctrl)
-	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
-
-	attachBytes, err := json.Marshal(map[string]int64{"membership_id": 77})
-	require.NoError(t, err)
-
-	paymentOrder := db.PaymentOrder{
-		ID:           2,
-		OutTradeNo:   "MBR_PAY_2",
-		Amount:       10000,
-		Status:       "paid",
-		BusinessType: "membership_recharge",
-		PaymentType:  "profit_sharing",
-		Attach:       pgtype.Text{String: string(attachBytes), Valid: true},
-	}
-	refundOrder := db.RefundOrder{ID: 22, PaymentOrderID: 2, Status: "pending", OutRefundNo: "RFM2_M"}
-
-	store.EXPECT().
-		GetPaymentOrder(gomock.Any(), int64(2)).
-		Return(paymentOrder, nil)
-	store.EXPECT().
-		GetMembershipForUpdate(gomock.Any(), int64(77)).
-		Return(db.MerchantMembership{ID: 77, MerchantID: 55}, nil)
-	store.EXPECT().
-		GetMerchantPaymentConfig(gomock.Any(), int64(55)).
-		Return(db.MerchantPaymentConfig{MerchantID: 55, SubMchID: "sub_mch_55"}, nil)
-	store.EXPECT().
-		GetRefundOrderByOutRefundNo(gomock.Any(), "RFM2_M").
-		Return(db.RefundOrder{}, db.ErrRecordNotFound)
-	store.EXPECT().
-		CreateRefundOrder(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, arg db.CreateRefundOrderParams) (db.RefundOrder, error) {
-			require.Equal(t, int64(2), arg.PaymentOrderID)
-			require.Equal(t, int64(12000), arg.RefundAmount)
-			require.Equal(t, "RFM2_M", arg.OutRefundNo)
-			return refundOrder, nil
-		})
-	ecommerceClient.EXPECT().
-		CreateEcommerceRefund(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, req *wechat.EcommerceRefundRequest) (*wechat.EcommerceRefundResponse, error) {
-			require.Equal(t, "sub_mch_55", req.SubMchID)
-			require.Equal(t, "MBR_PAY_2", req.OutTradeNo)
-			require.Equal(t, "RFM2_M", req.OutRefundNo)
-			require.Equal(t, int64(12000), req.RefundAmount)
-			require.Equal(t, int64(12000), req.TotalAmount)
-			return &wechat.EcommerceRefundResponse{RefundID: "refund_membership_2", Status: wechat.RefundStatusSuccess}, nil
-		})
-	store.EXPECT().
-		UpdateRefundOrderToSuccess(gomock.Any(), refundOrder.ID).
-		Return(db.RefundOrder{ID: refundOrder.ID, PaymentOrderID: refundOrder.PaymentOrderID, Status: "success", OutRefundNo: refundOrder.OutRefundNo}, nil)
-	store.EXPECT().
-		GetTotalRefundedByPaymentOrder(gomock.Any(), paymentOrder.ID).
-		Return(int64(12000), nil)
-	store.EXPECT().
-		UpdatePaymentOrderToRefunded(gomock.Any(), paymentOrder.ID).
-		Return(db.PaymentOrder{ID: paymentOrder.ID, Status: "refunded"}, nil)
-
-	processor := worker.NewTestTaskProcessor(store, nil, nil, ecommerceClient)
-	payloadBytes, err := json.Marshal(worker.PayloadProcessRefund{
-		PaymentOrderID: paymentOrder.ID,
-		RefundAmount:   12000,
-		Reason:         "金额异常，系统自动退款",
-	})
-	require.NoError(t, err)
-
-	task := asynq.NewTask(worker.TaskProcessRefund, payloadBytes)
-	err = processor.ProcessTaskInitiateRefund(context.Background(), task)
-	require.NoError(t, err)
-}
-
 func TestProcessTaskInitiateRefund_RiderDepositMismatchRefund(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	paymentClient := mockwechat.NewMockDirectPaymentClientInterface(ctrl)
 
 	paymentOrder := db.PaymentOrder{
 		ID:           3,
@@ -122,7 +47,7 @@ func TestProcessTaskInitiateRefund_RiderDepositMismatchRefund(t *testing.T) {
 			require.Equal(t, "RFM3_D", arg.OutRefundNo)
 			return refundOrder, nil
 		})
-	ecommerceClient.EXPECT().
+	paymentClient.EXPECT().
 		CreateRefund(gomock.Any(), gomock.Any()).
 		DoAndReturn(func(_ context.Context, req *wechat.RefundRequest) (*wechat.RefundResponse, error) {
 			require.Equal(t, "RIDER_PAY_3", req.OutTradeNo)
@@ -141,7 +66,7 @@ func TestProcessTaskInitiateRefund_RiderDepositMismatchRefund(t *testing.T) {
 		UpdatePaymentOrderToRefunded(gomock.Any(), paymentOrder.ID).
 		Return(db.PaymentOrder{ID: paymentOrder.ID, Status: "refunded"}, nil)
 
-	processor := worker.NewTestTaskProcessor(store, nil, nil, ecommerceClient)
+	processor := worker.NewTestTaskProcessor(store, nil, nil, nil, paymentClient)
 	payloadBytes, err := json.Marshal(worker.PayloadProcessRefund{
 		PaymentOrderID: paymentOrder.ID,
 		RefundAmount:   12000,
@@ -154,59 +79,132 @@ func TestProcessTaskInitiateRefund_RiderDepositMismatchRefund(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestProcessTaskInitiateRefund_MembershipRechargeMismatchRefund_StatusPersistFailure(t *testing.T) {
+func TestProcessTaskInitiateRefund_ClaimRecoveryDirectRefundWithoutEcommerceConfig(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
-
-	attachBytes, err := json.Marshal(map[string]int64{"membership_id": 77})
-	require.NoError(t, err)
+	paymentClient := mockwechat.NewMockDirectPaymentClientInterface(ctrl)
 
 	paymentOrder := db.PaymentOrder{
-		ID:           2,
-		OutTradeNo:   "MBR_PAY_2",
-		Amount:       10000,
+		ID:           5,
+		OutTradeNo:   "CLAIM_PAY_5",
+		Amount:       8800,
 		Status:       "paid",
-		BusinessType: "membership_recharge",
-		PaymentType:  "profit_sharing",
-		Attach:       pgtype.Text{String: string(attachBytes), Valid: true},
+		BusinessType: "claim_recovery",
+		PaymentType:  "miniprogram",
+		OrderID:      toPgInt8(15),
 	}
-	refundOrder := db.RefundOrder{ID: 22, PaymentOrderID: 2, Status: "pending", OutRefundNo: "RFM2_M"}
+	order := db.Order{ID: 15, MerchantID: 25}
+	refundOrder := db.RefundOrder{ID: 55, PaymentOrderID: 5, Status: "pending", OutRefundNo: "RF5_15"}
 
 	store.EXPECT().
-		GetPaymentOrder(gomock.Any(), int64(2)).
+		GetPaymentOrder(gomock.Any(), int64(5)).
 		Return(paymentOrder, nil)
 	store.EXPECT().
-		GetMembershipForUpdate(gomock.Any(), int64(77)).
-		Return(db.MerchantMembership{ID: 77, MerchantID: 55}, nil)
+		GetOrder(gomock.Any(), int64(15)).
+		Return(order, nil)
 	store.EXPECT().
-		GetMerchantPaymentConfig(gomock.Any(), int64(55)).
-		Return(db.MerchantPaymentConfig{MerchantID: 55, SubMchID: "sub_mch_55"}, nil)
-	store.EXPECT().
-		GetRefundOrderByOutRefundNo(gomock.Any(), "RFM2_M").
+		GetRefundOrderByOutRefundNo(gomock.Any(), "RF5_15").
 		Return(db.RefundOrder{}, db.ErrRecordNotFound)
 	store.EXPECT().
-		CreateRefundOrder(gomock.Any(), gomock.Any()).
-		Return(refundOrder, nil)
-	ecommerceClient.EXPECT().
-		CreateEcommerceRefund(gomock.Any(), gomock.Any()).
-		Return(&wechat.EcommerceRefundResponse{RefundID: "refund_membership_2", Status: wechat.RefundStatusSuccess}, nil)
+		CreateRefundOrderTx(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.CreateRefundOrderTxParams) (db.CreateRefundOrderTxResult, error) {
+			require.Equal(t, int64(5), arg.PaymentOrderID)
+			require.Equal(t, int64(1200), arg.RefundAmount)
+			require.Equal(t, "RF5_15", arg.OutRefundNo)
+			return db.CreateRefundOrderTxResult{RefundOrder: refundOrder}, nil
+		})
+	paymentClient.EXPECT().
+		CreateRefund(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, req *wechat.RefundRequest) (*wechat.RefundResponse, error) {
+			require.Equal(t, "CLAIM_PAY_5", req.OutTradeNo)
+			require.Equal(t, "RF5_15", req.OutRefundNo)
+			require.Equal(t, int64(1200), req.RefundAmount)
+			require.Equal(t, int64(8800), req.TotalAmount)
+			return &wechat.RefundResponse{RefundID: "refund_claim_5", Status: wechat.RefundStatusSuccess}, nil
+		})
 	store.EXPECT().
 		UpdateRefundOrderToSuccess(gomock.Any(), refundOrder.ID).
-		Return(db.RefundOrder{}, errors.New("persist refund success failed"))
+		Return(db.RefundOrder{ID: refundOrder.ID, PaymentOrderID: refundOrder.PaymentOrderID, Status: "success", OutRefundNo: refundOrder.OutRefundNo}, nil)
+	store.EXPECT().
+		GetTotalRefundedByPaymentOrder(gomock.Any(), paymentOrder.ID).
+		Return(int64(1200), nil)
 
-	processor := worker.NewTestTaskProcessor(store, nil, nil, ecommerceClient)
+	processor := worker.NewTestTaskProcessor(store, nil, nil, nil, paymentClient)
 	payloadBytes, err := json.Marshal(worker.PayloadProcessRefund{
 		PaymentOrderID: paymentOrder.ID,
-		RefundAmount:   12000,
-		Reason:         "金额异常，系统自动退款",
+		RefundAmount:   1200,
+		Reason:         "追偿金额异常，系统自动退款",
 	})
 	require.NoError(t, err)
 
 	task := asynq.NewTask(worker.TaskProcessRefund, payloadBytes)
 	err = processor.ProcessTaskInitiateRefund(context.Background(), task)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "mark refund order as success")
+	require.NoError(t, err)
+}
+
+func TestProcessTaskAnomalyRefund_ClaimRecoveryDirectRefundWithoutEcommerceConfig(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	paymentClient := mockwechat.NewMockDirectPaymentClientInterface(ctrl)
+
+	paymentOrder := db.PaymentOrder{
+		ID:           7,
+		OutTradeNo:   "CLAIM_PAY_7",
+		Amount:       6600,
+		Status:       "closed",
+		BusinessType: "claim_recovery",
+		PaymentType:  "miniprogram",
+		OrderID:      toPgInt8(17),
+	}
+	refundOrder := db.RefundOrder{ID: 77, PaymentOrderID: 7, Status: "pending", OutRefundNo: "CRF7"}
+
+	store.EXPECT().
+		GetPaymentOrder(gomock.Any(), int64(7)).
+		Return(paymentOrder, nil)
+	store.EXPECT().
+		CreateAnomalyRefundRecord(gomock.Any(), db.CreateAnomalyRefundRecordParams{
+			PaymentOrderID: paymentOrder.ID,
+			RefundAmount:   6600,
+			OutRefundNo:    "CRF7",
+		}).
+		Return(refundOrder, nil)
+	paymentClient.EXPECT().
+		CreateRefund(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, req *wechat.RefundRequest) (*wechat.RefundResponse, error) {
+			require.Equal(t, "CLAIM_PAY_7", req.OutTradeNo)
+			require.Equal(t, "CRF7", req.OutRefundNo)
+			require.Equal(t, int64(6600), req.RefundAmount)
+			require.Equal(t, int64(6600), req.TotalAmount)
+			return &wechat.RefundResponse{RefundID: "refund_claim_7", Status: wechat.RefundStatusSuccess}, nil
+		})
+	store.EXPECT().
+		UpdateRefundOrderToSuccess(gomock.Any(), refundOrder.ID).
+		Return(db.RefundOrder{ID: refundOrder.ID, PaymentOrderID: refundOrder.PaymentOrderID, Status: "success", OutRefundNo: refundOrder.OutRefundNo}, nil)
+	store.EXPECT().
+		GetTotalRefundedByPaymentOrder(gomock.Any(), paymentOrder.ID).
+		Return(int64(6600), nil)
+	store.EXPECT().
+		UpdatePaymentOrderToRefunded(gomock.Any(), paymentOrder.ID).
+		Return(db.PaymentOrder{ID: paymentOrder.ID, Status: "refunded"}, nil)
+
+	processor := worker.NewTestTaskProcessor(store, nil, nil, nil, paymentClient)
+	payloadBytes, err := json.Marshal(worker.PayloadProcessAnomalyRefund{
+		PaymentOrderID: paymentOrder.ID,
+		TransactionID:  "wx_tx_claim_7",
+		RefundAmount:   6600,
+		OutRefundNo:    "CRF7",
+	})
+	require.NoError(t, err)
+
+	task := asynq.NewTask(worker.TaskProcessAnomalyRefund, payloadBytes)
+	err = processor.ProcessTaskAnomalyRefund(context.Background(), task)
+	require.NoError(t, err)
+}
+
+func toPgInt8(value int64) pgtype.Int8 {
+	return pgtype.Int8{Int64: value, Valid: true}
 }

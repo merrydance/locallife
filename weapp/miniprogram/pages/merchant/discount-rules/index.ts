@@ -1,156 +1,30 @@
 import { getStableBarHeights } from '../../../utils/responsive'
 import {
-  buildMerchantDiscountRuleStatusView,
   deleteMerchantDiscountRule,
   listMerchantDiscountRules,
-  type MerchantDiscountRuleResponse,
   updateMerchantDiscountRule
 } from '../../../api/merchant'
 import { ensureMerchantConsoleAccess } from '../../../utils/console-access'
 import { logger } from '../../../utils/logger'
 import { syncCurrentMerchantContext } from '../../../utils/current-merchant'
 import { getErrorUserMessage } from '../../../utils/user-facing'
-
-interface DiscountRuleView extends MerchantDiscountRuleResponse {
-  min_order_amount_yuan: string
-  discount_amount_yuan: string
-  valid_range_text: string
-  stacking_text: string
-  statusPending: boolean
-  deletePending: boolean
-}
-
-interface DiscountRulePageChunk {
-  rules: DiscountRuleView[]
-  pageId: number
-  pageSize: number
-  total?: number
-}
-
-interface DiscountRulePageProbeResult {
-  hasMore: boolean
-  total: number
-  nextPageCache: DiscountRulePageChunk | null
-}
-
-const DISCOUNT_RULES_PAGE_SIZE = 50
-const DISCOUNT_RULES_AUTO_REFRESH_WINDOW_MS = 60 * 1000
-
-function formatAmount(amount: number) {
-  return (amount / 100).toFixed(2)
-}
-
-function formatDate(date: string) {
-  return String(date || '').slice(0, 10)
-}
-
-function buildStackingText(rule: MerchantDiscountRuleResponse) {
-  const parts: string[] = []
-
-  if (rule.can_stack_with_voucher) {
-    parts.push('可叠加代金券')
-  }
-  if (rule.can_stack_with_membership) {
-    parts.push('可叠加会员权益')
-  }
-  if (rule.stacking_group) {
-    parts.push(`分组 ${rule.stacking_group}`)
-  }
-
-  return parts.length ? parts.join(' · ') : '默认不与其他优惠叠加'
-}
-
-function buildRuleView(rule: MerchantDiscountRuleResponse): DiscountRuleView {
-  const statusView = buildMerchantDiscountRuleStatusView(rule)
-
-  return {
-    ...rule,
-    status_code: statusView.code,
-    status_label: statusView.label,
-    status_theme: statusView.theme,
-    min_order_amount_yuan: formatAmount(rule.min_order_amount),
-    discount_amount_yuan: formatAmount(rule.discount_amount),
-    valid_range_text: `${formatDate(rule.valid_from)} 至 ${formatDate(rule.valid_until)}`,
-    stacking_text: buildStackingText(rule),
-    statusPending: false,
-    deletePending: false
-  }
-}
-
-function buildResultSummaryText(visibleCount: number) {
-  return `当前已加载 ${visibleCount} 条满减规则`
-}
-
-function buildPresentationUpdate(rules: DiscountRuleView[]) {
-  return {
-    rules,
-    resultSummaryText: buildResultSummaryText(rules.length),
-    emptyDescription: '当前还没有满减规则，先新增一个'
-  }
-}
-
-function appendRuleViews(existingRules: DiscountRuleView[], incomingRules: DiscountRuleView[]) {
-  if (!incomingRules.length) {
-    return existingRules
-  }
-
-  const merged = [...existingRules]
-  const seen = new Set(existingRules.map((item) => item.id))
-
-  incomingRules.forEach((rule) => {
-    if (seen.has(rule.id)) {
-      return
-    }
-
-    seen.add(rule.id)
-    merged.push(rule)
-  })
-
-  return merged
-}
-
-function upsertRuleView(rules: DiscountRuleView[], rule: MerchantDiscountRuleResponse) {
-  const nextRule = buildRuleView(rule)
-  const index = rules.findIndex((item) => item.id === nextRule.id)
-
-  if (index === -1) {
-    return [nextRule, ...rules]
-  }
-
-  const nextRules = [...rules]
-  nextRules[index] = nextRule
-  return nextRules
-}
-
-function removeRuleView(rules: DiscountRuleView[], ruleId: number) {
-  return rules.filter((item) => item.id !== ruleId)
-}
-
-function hasReliableTotal(total: number | undefined, loadedCount: number) {
-  return typeof total === 'number' && total > loadedCount
-}
-
-function normalizeTotal(total: number | undefined, fallback: number) {
-  return typeof total === 'number' && total >= 0 ? total : fallback
-}
-
-function resolveTargetPageCount(pageId: number, pageSize: number, visibleCount: number) {
-  const normalizedPageSize = pageSize > 0 ? pageSize : DISCOUNT_RULES_PAGE_SIZE
-  const visiblePageCount = visibleCount > 0 ? Math.ceil(visibleCount / normalizedPageSize) : 1
-  return Math.max(pageId || 0, visiblePageCount, 1)
-}
-
-function shouldAutoRefresh(lastLoadedAt: number, freshnessWindowMs: number) {
-  return !lastLoadedAt || Date.now() - lastLoadedAt >= freshnessWindowMs
-}
-
-function buildEditPageUrl(ruleId?: number) {
-  if (ruleId && ruleId > 0) {
-    return `/pages/merchant/discount-rules/edit/index?id=${ruleId}`
-  }
-
-  return '/pages/merchant/discount-rules/edit/index'
-}
+import {
+  appendRuleViews,
+  buildDiscountRuleEditPageUrl,
+  buildDiscountRulePresentationUpdate,
+  buildRuleView,
+  DISCOUNT_RULES_AUTO_REFRESH_WINDOW_MS,
+  DISCOUNT_RULES_PAGE_SIZE,
+  hasReliableTotal,
+  normalizeTotal,
+  removeRuleView,
+  resolveTargetPageCount,
+  shouldAutoRefresh,
+  upsertRuleView,
+  type DiscountRulePageChunk,
+  type DiscountRulePageProbeResult,
+  type DiscountRuleView
+} from '../../../utils/merchant-discount-rules-view'
 
 Page({
   data: {
@@ -308,7 +182,7 @@ Page({
           deleteDialogSubmitting: false,
           deleteDialogRuleId: 0,
           deleteDialogRuleName: '',
-          ...buildPresentationUpdate([])
+          ...buildDiscountRulePresentationUpdate([])
         })
         return true
       }
@@ -508,7 +382,7 @@ Page({
       )
 
       this.setData({
-        ...buildPresentationUpdate(result.rules),
+        ...buildDiscountRulePresentationUpdate(result.rules),
         pageId: result.pageId,
         pageSize: result.pageSize,
         total: result.total,
@@ -562,7 +436,7 @@ Page({
       const pagination = await this.resolveRulePageBoundary(nextChunk, mergedRules.length)
 
       this.setData({
-        ...buildPresentationUpdate(mergedRules),
+        ...buildDiscountRulePresentationUpdate(mergedRules),
         pageId: nextChunk.pageId,
         pageSize: nextChunk.pageSize,
         total: Math.max(pagination.total, mergedRules.length),
@@ -593,7 +467,7 @@ Page({
     this.setData({ refreshErrorMessage: '', needsReloadOnShow: true })
 
     wx.navigateTo({
-      url: buildEditPageUrl(),
+      url: buildDiscountRuleEditPageUrl(),
       fail: (err) => {
         logger.error('Navigate to discount rule create page failed', err)
         this.setData({ needsReloadOnShow: false })
@@ -616,7 +490,7 @@ Page({
     this.setData({ refreshErrorMessage: '', needsReloadOnShow: true })
 
     wx.navigateTo({
-      url: buildEditPageUrl(id),
+      url: buildDiscountRuleEditPageUrl(id),
       fail: (err) => {
         logger.error('Navigate to discount rule edit page failed', err)
         this.setData({ needsReloadOnShow: false })
@@ -647,7 +521,7 @@ Page({
       rule.id === id ? { ...rule, statusPending: true } : rule
     ))
 
-    this.setData(buildPresentationUpdate(pendingRules))
+    this.setData(buildDiscountRulePresentationUpdate(pendingRules))
 
     try {
       const updatedRule = await updateMerchantDiscountRule(this.data.merchantId, id, {
@@ -656,7 +530,7 @@ Page({
 
       const nextRules = upsertRuleView(pendingRules, updatedRule)
       this.setData({
-        ...buildPresentationUpdate(nextRules),
+        ...buildDiscountRulePresentationUpdate(nextRules),
         total: Math.max(this.data.total, nextRules.length),
         initialLoading: false,
         initialError: false,
@@ -670,7 +544,7 @@ Page({
       const restoredRules = pendingRules.map((rule) => (
         rule.id === id ? { ...targetRule, statusPending: false } : rule
       ))
-      this.setData(buildPresentationUpdate(restoredRules))
+      this.setData(buildDiscountRulePresentationUpdate(restoredRules))
       wx.showToast({ title: getErrorUserMessage(err, '更新状态失败，请稍后重试'), icon: 'none' })
     }
   },
@@ -718,7 +592,7 @@ Page({
     ))
 
     this.setData({
-      ...buildPresentationUpdate(pendingRules),
+      ...buildDiscountRulePresentationUpdate(pendingRules),
       deleteDialogSubmitting: true
     })
 
@@ -726,7 +600,7 @@ Page({
       await deleteMerchantDiscountRule(this.data.merchantId, ruleId)
       const nextRules = removeRuleView(pendingRules, ruleId)
       this.setData({
-        ...buildPresentationUpdate(nextRules),
+        ...buildDiscountRulePresentationUpdate(nextRules),
         total: Math.max(this.data.total - 1, nextRules.length, 0),
         deleteDialogVisible: false,
         deleteDialogSubmitting: false,
@@ -746,7 +620,7 @@ Page({
         rule.id === ruleId ? { ...rule, deletePending: false } : rule
       ))
       this.setData({
-        ...buildPresentationUpdate(restoredRules),
+        ...buildDiscountRulePresentationUpdate(restoredRules),
         deleteDialogSubmitting: false
       })
       wx.showToast({ title: getErrorUserMessage(err, '删除满减规则失败，请稍后重试'), icon: 'none' })

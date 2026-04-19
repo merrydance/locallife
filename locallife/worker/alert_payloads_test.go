@@ -11,6 +11,7 @@ import (
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
+	wechaterrorcodes "github.com/merrydance/locallife/wechat/errorcodes"
 	mockwechat "github.com/merrydance/locallife/wechat/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -29,14 +30,15 @@ func (p *testPublisher) Publish(ctx context.Context, channel string, payload []b
 
 func TestRefundOrderAlertExtra_IncludesCommonIdentifiers(t *testing.T) {
 	paymentOrder := db.PaymentOrder{
-		ID:            11,
-		OrderID:       pgtype.Int8{Int64: 22, Valid: true},
-		UserID:        33,
-		PaymentType:   "profit_sharing",
-		BusinessType:  "takeout_order",
-		Amount:        4567,
-		OutTradeNo:    "OT123",
-		TransactionID: pgtype.Text{String: "WX123", Valid: true},
+		ID:             11,
+		OrderID:        pgtype.Int8{Int64: 22, Valid: true},
+		UserID:         33,
+		PaymentType:    "profit_sharing",
+		PaymentChannel: db.PaymentChannelEcommerce,
+		BusinessType:   "takeout_order",
+		Amount:         4567,
+		OutTradeNo:     "OT123",
+		TransactionID:  pgtype.Text{String: "WX123", Valid: true},
 	}
 	refundOrder := db.RefundOrder{
 		ID:             44,
@@ -62,8 +64,9 @@ func TestRefundOrderAlertExtra_IncludesCommonIdentifiers(t *testing.T) {
 
 func TestAbnormalRefundActionExtra_ForEcommerceRefundIncludesAdminAction(t *testing.T) {
 	paymentOrder := db.PaymentOrder{
-		ID:          11,
-		PaymentType: "profit_sharing",
+		ID:             11,
+		PaymentType:    "profit_sharing",
+		PaymentChannel: db.PaymentChannelEcommerce,
 	}
 	refundOrder := db.RefundOrder{
 		ID:       44,
@@ -103,12 +106,13 @@ func TestProcessTaskRefundResult_AbnormalPublishesActionableAlertForEcommerceRef
 	processor.pubSubPublisher = publisher
 
 	paymentOrder := db.PaymentOrder{
-		ID:          11,
-		OrderID:     pgtype.Int8{Int64: 22, Valid: true},
-		UserID:      33,
-		PaymentType: "profit_sharing",
-		Amount:      4567,
-		OutTradeNo:  "OT123",
+		ID:             11,
+		OrderID:        pgtype.Int8{Int64: 22, Valid: true},
+		UserID:         33,
+		PaymentType:    "profit_sharing",
+		PaymentChannel: db.PaymentChannelEcommerce,
+		Amount:         4567,
+		OutTradeNo:     "OT123",
 	}
 	refundOrder := db.RefundOrder{
 		ID:             44,
@@ -281,7 +285,7 @@ func TestProcessTaskMerchantWithdrawResult_RequestNotFoundMarksFailed(t *testing
 	processor := NewTestTaskProcessor(store, nil, nil, ecommerceClient)
 	publisher := &testPublisher{}
 	processor.pubSubPublisher = publisher
-	queryErr := &wechat.WechatPayError{StatusCode: 404, Code: "RESOURCE_NOT_EXISTS", Message: "withdraw not found"}
+	queryErr := &wechat.WechatPayError{StatusCode: 404, Code: wechaterrorcodes.FundManagementCodeOrderNotExist, Message: "withdraw not found"}
 
 	accountInfoBytes, err := json.Marshal(merchantWithdrawAccountInfo{
 		MerchantID:   88,
@@ -327,7 +331,7 @@ func TestProcessTaskMerchantWithdrawResult_RequestNotFoundMarksFailed(t *testing
 	require.EqualValues(t, float64(record.ID), extra["withdrawal_record_id"])
 	require.Equal(t, "req-404", extra["out_request_no"])
 	require.Equal(t, "withdraw_request_not_found", extra["result"])
-	require.Contains(t, extra["fail_reason"].(string), "RESOURCE_NOT_EXISTS")
+	require.Contains(t, extra["fail_reason"].(string), wechaterrorcodes.FundManagementCodeOrderNotExist)
 }
 
 func TestProcessTaskMerchantWithdrawResult_TerminalStatusSkipsWechatQuery(t *testing.T) {

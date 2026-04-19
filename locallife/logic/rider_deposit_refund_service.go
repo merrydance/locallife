@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	"github.com/rs/zerolog/log"
 )
 
@@ -31,7 +32,8 @@ const (
 
 type RiderDepositRefundService struct {
 	store         db.Store
-	paymentClient wechat.PaymentClientInterface
+	paymentClient wechat.DirectPaymentClientInterface
+	receiverSync  *ProfitSharingReceiverSyncService
 }
 
 type SubmitRiderDepositWithdrawalInput struct {
@@ -53,10 +55,20 @@ type SubmitRiderDepositWithdrawalResult struct {
 	Refunds         []RiderDepositWithdrawalRefundItem
 }
 
-func NewRiderDepositRefundService(store db.Store, paymentClient wechat.PaymentClientInterface) *RiderDepositRefundService {
+func NewRiderDepositRefundService(
+	store db.Store,
+	paymentClient wechat.DirectPaymentClientInterface,
+	ecommerceClients ...wechat.EcommerceClientInterface,
+) *RiderDepositRefundService {
+	var receiverSync *ProfitSharingReceiverSyncService
+	if len(ecommerceClients) > 0 && ecommerceClients[0] != nil {
+		receiverSync = NewProfitSharingReceiverService(store, ecommerceClients[0])
+	}
+
 	return &RiderDepositRefundService{
 		store:         store,
 		paymentClient: paymentClient,
+		receiverSync:  receiverSync,
 	}
 }
 
@@ -117,42 +129,45 @@ func (s *RiderDepositRefundService) SubmitWithdrawal(ctx context.Context, input 
 	}
 
 	for _, plan := range prepareResult.RefundPlans {
-		wxRefund, refundErr := s.paymentClient.CreateRefund(ctx, &wechat.RefundRequest{
-			OutTradeNo:   plan.SourcePaymentOrder.OutTradeNo,
-			OutRefundNo:  plan.RefundOrder.OutRefundNo,
-			Reason:       input.Remark,
-			RefundAmount: plan.RefundOrder.RefundAmount,
-			TotalAmount:  plan.SourcePaymentOrder.Amount,
+		wxRefund, refundErr := createDirectRefundContract(ctx, s.paymentClient, &wechatcontracts.DirectRefundRequest{
+			OutTradeNo:  plan.SourcePaymentOrder.OutTradeNo,
+			OutRefundNo: plan.RefundOrder.OutRefundNo,
+			Reason:      input.Remark,
+			Amount: &wechatcontracts.DirectRefundRequestAmount{
+				Refund:   plan.RefundOrder.RefundAmount,
+				Total:    plan.SourcePaymentOrder.Amount,
+				Currency: wechatcontracts.DirectRefundCurrencyCNY,
+			},
 		})
 		if refundErr != nil {
 			resolveErr := s.ResolveRefund(ctx, plan.RefundOrder.ID, plan.SourcePaymentOrder, riderDepositRefundStatusFailed, "")
 			if resolveErr != nil {
-				return result, fmt.Errorf("request rider deposit refund failed: %w; compensation failed: %v", refundErr, resolveErr)
+				return result, fmt.Errorf("request rider deposit refund failed: %w; compensation failed: %v", LoggableError(refundErr), resolveErr)
 			}
-			log.Warn().Err(refundErr).Int64("refund_order_id", plan.RefundOrder.ID).Msg("rider deposit refund request failed, compensation applied")
+			log.Warn().Err(LoggableError(refundErr)).Int64("refund_order_id", plan.RefundOrder.ID).Msg("rider deposit refund request failed, compensation applied")
 			continue
 		}
 
 		itemStatus := riderDepositWithdrawStatusProcessing
 		switch wxRefund.Status {
-		case wechat.RefundStatusSuccess:
+		case wechatcontracts.DirectRefundStatusSuccess:
 			err = s.ResolveRefund(ctx, plan.RefundOrder.ID, plan.SourcePaymentOrder, riderDepositRefundStatusSuccess, wxRefund.RefundID)
 			if err != nil {
 				return result, fmt.Errorf("settle rider refund success: %w", err)
 			}
 			itemStatus = riderDepositWithdrawStatusSuccess
-		case wechat.RefundStatusProcessing:
+		case wechatcontracts.DirectRefundStatusProcessing:
 			err = s.MarkRefundProcessing(ctx, plan.RefundOrder.ID, wxRefund.RefundID)
 			if err != nil {
 				return result, fmt.Errorf("mark rider refund processing: %w", err)
 			}
-		case wechat.RefundStatusClosed:
+		case wechatcontracts.DirectRefundStatusClosed:
 			err = s.ResolveRefund(ctx, plan.RefundOrder.ID, plan.SourcePaymentOrder, riderDepositRefundStatusClosed, wxRefund.RefundID)
 			if err != nil {
 				return result, fmt.Errorf("close rider refund: %w", err)
 			}
 			continue
-		case wechat.RefundStatusAbnormal:
+		case wechatcontracts.DirectRefundStatusAbnormal:
 			err = s.ResolveRefund(ctx, plan.RefundOrder.ID, plan.SourcePaymentOrder, riderDepositRefundStatusAbnormal, wxRefund.RefundID)
 			if err != nil {
 				return result, fmt.Errorf("fail rider refund: %w", err)
@@ -219,6 +234,29 @@ func (s *RiderDepositRefundService) ResolveRefund(ctx context.Context, refundOrd
 
 	if refundStatus == riderDepositRefundStatusSuccess {
 		s.maybeMarkPaymentOrderRefunded(ctx, paymentOrder.ID, paymentOrder.Amount)
+		if err := s.maybeDeleteRiderReceiver(ctx, paymentOrder.UserID); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (s *RiderDepositRefundService) maybeDeleteRiderReceiver(ctx context.Context, userID int64) error {
+	if s.receiverSync == nil {
+		return nil
+	}
+
+	rider, err := s.store.GetRiderByUserID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("get rider for receiver cleanup: %w", err)
+	}
+	if rider.DepositAmount > 0 || rider.FrozenDeposit > 0 {
+		return nil
+	}
+
+	if err := s.receiverSync.DeleteRiderReceiver(ctx, rider); err != nil {
+		return fmt.Errorf("delete rider profit sharing receiver: %w", err)
 	}
 
 	return nil

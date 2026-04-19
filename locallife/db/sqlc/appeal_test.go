@@ -183,6 +183,31 @@ func TestCheckAppealExists(t *testing.T) {
 	require.True(t, exists)
 }
 
+func TestReviewAppealWithCompensationTx_ApprovedWaivesClaimRecovery(t *testing.T) {
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	user := createRandomUser(t)
+
+	order := createCompletedOrderForStats(t, user.ID, merchant.ID, 10000, "takeout", time.Now())
+	claim := createRandomClaim(t, user.ID, order.ID)
+	appeal := createRandomAppeal(t, claim.ID, merchant.ID, "merchant", merchant.RegionID)
+	createRandomClaimRecovery(t, claim.ID, order.ID, "appealed")
+
+	result, err := testStore.ReviewAppealWithCompensationTx(context.Background(), ReviewAppealWithCompensationTxParams{
+		ID:                 appeal.ID,
+		Status:             "approved",
+		ReviewerID:         pgtype.Int8{},
+		ReviewNotes:        pgtype.Text{String: "系统自动复核通过", Valid: true},
+		CompensationAmount: pgtype.Int8{},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "approved", result.Appeal.Status)
+
+	updatedRecovery, err := testStore.GetClaimRecoveryByClaimID(context.Background(), claim.ID)
+	require.NoError(t, err)
+	require.Equal(t, "waived", updatedRecovery.Status)
+}
+
 // ==================== ListMerchantAppeals Tests ====================
 
 func TestListMerchantAppealsForMerchant(t *testing.T) {
@@ -237,6 +262,39 @@ func TestListMerchantAppealsForMerchant_FilterByStatus(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, appeals, 1)
 	require.Equal(t, "pending", appeals[0].Status)
+}
+
+func TestListMerchantAppealsForMerchant_UsesIDTieBreaker(t *testing.T) {
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	tiedCreatedAt := time.Now().UTC().Truncate(time.Microsecond)
+	var appealIDs []int64
+
+	for i := 0; i < 2; i++ {
+		user := createRandomUser(t)
+		order := createCompletedOrderForStats(t, user.ID, merchant.ID, 10000, "takeout", time.Now())
+		claim := createRandomClaim(t, user.ID, order.ID)
+		appeal := createRandomAppeal(t, claim.ID, merchant.ID, "merchant", merchant.RegionID)
+		appealIDs = append(appealIDs, appeal.ID)
+	}
+
+	_, err := testStore.(*SQLStore).connPool.Exec(context.Background(),
+		"UPDATE appeals SET created_at = $1 WHERE id = ANY($2)",
+		tiedCreatedAt,
+		appealIDs,
+	)
+	require.NoError(t, err)
+
+	appeals, err := testStore.ListMerchantAppealsForMerchant(context.Background(), ListMerchantAppealsForMerchantParams{
+		AppellantID: merchant.ID,
+		Status:      pgtype.Text{},
+		Limit:       2,
+		Offset:      0,
+	})
+	require.NoError(t, err)
+	require.Len(t, appeals, 2)
+	require.Equal(t, appealIDs[1], appeals[0].ID)
+	require.Equal(t, appealIDs[0], appeals[1].ID)
 }
 
 func TestCountMerchantAppealsForMerchant(t *testing.T) {
@@ -318,6 +376,39 @@ func TestListMerchantClaimsForMerchant_FilterByBucket(t *testing.T) {
 	require.Len(t, claims, 1)
 	require.Equal(t, appealedClaim.ID, claims[0].ID)
 	require.Equal(t, "appealed", claims[0].RecoveryStatus)
+}
+
+func TestListMerchantClaimsForMerchant_UsesIDTieBreaker(t *testing.T) {
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	tiedCreatedAt := time.Now().UTC().Truncate(time.Microsecond)
+	var claimIDs []int64
+
+	for i := 0; i < 2; i++ {
+		user := createRandomUser(t)
+		order := createCompletedOrderForStats(t, user.ID, merchant.ID, 10000, "takeout", time.Now())
+		claim := createRandomClaim(t, user.ID, order.ID)
+		createRandomClaimRecovery(t, claim.ID, order.ID, "pending")
+		claimIDs = append(claimIDs, claim.ID)
+	}
+
+	_, err := testStore.(*SQLStore).connPool.Exec(context.Background(),
+		"UPDATE claims SET created_at = $1 WHERE id = ANY($2)",
+		tiedCreatedAt,
+		claimIDs,
+	)
+	require.NoError(t, err)
+
+	claims, err := testStore.ListMerchantClaimsForMerchant(context.Background(), ListMerchantClaimsForMerchantParams{
+		MerchantID: merchant.ID,
+		Bucket:     pgtype.Text{},
+		Limit:      2,
+		Offset:     0,
+	})
+	require.NoError(t, err)
+	require.Len(t, claims, 2)
+	require.Equal(t, claimIDs[1], claims[0].ID)
+	require.Equal(t, claimIDs[0], claims[1].ID)
 }
 
 func TestCountMerchantClaimsForMerchant_FilterByBucket(t *testing.T) {
@@ -482,6 +573,39 @@ func TestListOperatorAppeals_FilterByStatus(t *testing.T) {
 	}
 }
 
+func TestListOperatorAppeals_UsesIDTieBreaker(t *testing.T) {
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	tiedCreatedAt := time.Now().UTC().Truncate(time.Microsecond)
+	var appealIDs []int64
+
+	for i := 0; i < 2; i++ {
+		user := createRandomUser(t)
+		order := createCompletedOrderForStats(t, user.ID, merchant.ID, 10000, "takeout", time.Now())
+		claim := createRandomClaim(t, user.ID, order.ID)
+		appeal := createRandomAppeal(t, claim.ID, merchant.ID, "merchant", merchant.RegionID)
+		appealIDs = append(appealIDs, appeal.ID)
+	}
+
+	_, err := testStore.(*SQLStore).connPool.Exec(context.Background(),
+		"UPDATE appeals SET created_at = $1 WHERE id = ANY($2)",
+		tiedCreatedAt,
+		appealIDs,
+	)
+	require.NoError(t, err)
+
+	appeals, err := testStore.ListOperatorAppeals(context.Background(), ListOperatorAppealsParams{
+		RegionID: merchant.RegionID,
+		Column2:  "pending",
+		Limit:    2,
+		Offset:   0,
+	})
+	require.NoError(t, err)
+	require.Len(t, appeals, 2)
+	require.Equal(t, appealIDs[1], appeals[0].ID)
+	require.Equal(t, appealIDs[0], appeals[1].ID)
+}
+
 func TestCountOperatorAppeals(t *testing.T) {
 	owner := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, owner.ID)
@@ -539,6 +663,40 @@ func TestListRiderAppeals(t *testing.T) {
 	}
 }
 
+func TestListRiderAppeals_UsesIDTieBreaker(t *testing.T) {
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	riderUser := createRandomUser(t)
+	rider := createRandomRiderWithUser(t, riderUser.ID)
+	tiedCreatedAt := time.Now().UTC().Truncate(time.Microsecond)
+	var appealIDs []int64
+
+	for i := 0; i < 2; i++ {
+		user := createRandomUser(t)
+		order := createCompletedOrderForStats(t, user.ID, merchant.ID, 10000, "takeout", time.Now())
+		claim := createRandomClaim(t, user.ID, order.ID)
+		appeal := createRandomAppeal(t, claim.ID, rider.ID, "rider", merchant.RegionID)
+		appealIDs = append(appealIDs, appeal.ID)
+	}
+
+	_, err := testStore.(*SQLStore).connPool.Exec(context.Background(),
+		"UPDATE appeals SET created_at = $1 WHERE id = ANY($2)",
+		tiedCreatedAt,
+		appealIDs,
+	)
+	require.NoError(t, err)
+
+	appeals, err := testStore.ListRiderAppeals(context.Background(), ListRiderAppealsParams{
+		AppellantID: rider.ID,
+		Limit:       2,
+		Offset:      0,
+	})
+	require.NoError(t, err)
+	require.Len(t, appeals, 2)
+	require.Equal(t, appealIDs[1], appeals[0].ID)
+	require.Equal(t, appealIDs[0], appeals[1].ID)
+}
+
 func TestCountRiderAppeals(t *testing.T) {
 	owner := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, owner.ID)
@@ -556,6 +714,48 @@ func TestCountRiderAppeals(t *testing.T) {
 	count, err := testStore.CountRiderAppeals(context.Background(), rider.ID)
 	require.NoError(t, err)
 	require.Equal(t, int64(3), count)
+}
+
+func TestListRiderClaimsForRider_UsesIDTieBreaker(t *testing.T) {
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	riderUser := createRandomUser(t)
+	rider := createRandomRiderWithUser(t, riderUser.ID)
+	tiedCreatedAt := time.Now().UTC().Truncate(time.Microsecond)
+	var claimIDs []int64
+
+	for i := 0; i < 2; i++ {
+		user := createRandomUser(t)
+		order := createCompletedOrderForStats(t, user.ID, merchant.ID, 10000, "takeout", time.Now())
+		delivery := createRandomDeliveryWithOrder(t, order.ID)
+		_, err := testStore.AssignDelivery(context.Background(), AssignDeliveryParams{
+			ID:      delivery.ID,
+			RiderID: pgtype.Int8{Int64: rider.ID, Valid: true},
+		})
+		require.NoError(t, err)
+
+		claim := createRandomClaim(t, user.ID, order.ID)
+		createRandomClaimRecovery(t, claim.ID, order.ID, "pending")
+		claimIDs = append(claimIDs, claim.ID)
+	}
+
+	_, err := testStore.(*SQLStore).connPool.Exec(context.Background(),
+		"UPDATE claims SET created_at = $1 WHERE id = ANY($2)",
+		tiedCreatedAt,
+		claimIDs,
+	)
+	require.NoError(t, err)
+
+	claims, err := testStore.ListRiderClaimsForRider(context.Background(), ListRiderClaimsForRiderParams{
+		RiderID: pgtype.Int8{Int64: rider.ID, Valid: true},
+		Limit:   2,
+		Offset:  0,
+		Bucket:  pgtype.Text{},
+	})
+	require.NoError(t, err)
+	require.Len(t, claims, 2)
+	require.Equal(t, claimIDs[1], claims[0].ID)
+	require.Equal(t, claimIDs[0], claims[1].ID)
 }
 
 // ==================== GetClaimForAppeal Tests ====================

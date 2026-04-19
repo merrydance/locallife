@@ -16,6 +16,6 @@ INSERT INTO platform_alert_events (
 SELECT COUNT(*) FROM platform_alert_events;
 
 -- name: ListPlatformAlertEvents :many
-SELECT * FROM platform_alert_events
+SELECT id, alert_type, level, title, message, related_id, related_type, extra, emitted_at FROM platform_alert_events
 ORDER BY emitted_at DESC, id DESC
 LIMIT $1 OFFSET $2;

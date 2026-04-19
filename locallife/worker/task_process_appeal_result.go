@@ -66,6 +66,11 @@ func (processor *RedisTaskProcessor) ProcessTaskProcessAppealResult(ctx context.
 		return fmt.Errorf("unmarshal payload: %w", err)
 	}
 
+	return processor.processAppealResult(ctx, payload)
+}
+
+func (processor *RedisTaskProcessor) processAppealResult(ctx context.Context, payload ProcessAppealResultPayload) error {
+
 	log.Info().
 		Int64("appeal_id", payload.AppealID).
 		Str("status", payload.Status).
@@ -191,7 +196,7 @@ func (processor *RedisTaskProcessor) executeAppealCompensation(ctx context.Conte
 	if payload.Status != "approved" || payload.CompensationActionID == 0 {
 		return nil
 	}
-	return ExecuteClaimPayoutAction(ctx, processor.store, processor.paymentClient, payload.CompensationActionID)
+	return ExecuteClaimPayoutAction(ctx, processor.store, processor.transferClient, payload.CompensationActionID)
 }
 
 func (processor *RedisTaskProcessor) rollbackClaimRecovery(ctx context.Context, payload ProcessAppealResultPayload) error {
@@ -204,6 +209,15 @@ func (processor *RedisTaskProcessor) rollbackClaimRecovery(ctx context.Context, 
 		return nil
 	}
 	if recovery.Status != "appealed" {
+		if recovery.Status == "waived" {
+			return nil
+		}
+		log.Warn().
+			Int64("appeal_id", payload.AppealID).
+			Int64("claim_id", payload.ClaimID).
+			Int64("recovery_id", recovery.ID).
+			Str("recovery_status", recovery.Status).
+			Msg("skip claim recovery rollback because recovery is not in appealed status")
 		return nil
 	}
 
@@ -249,6 +263,15 @@ func (processor *RedisTaskProcessor) resumeClaimRecovery(ctx context.Context, pa
 		return nil
 	}
 	if recovery.Status != "appealed" {
+		if recovery.Status == "pending" || recovery.Status == "overdue" {
+			return nil
+		}
+		log.Warn().
+			Int64("appeal_id", payload.AppealID).
+			Int64("claim_id", payload.ClaimID).
+			Int64("recovery_id", recovery.ID).
+			Str("recovery_status", recovery.Status).
+			Msg("skip claim recovery resume because recovery is not in appealed status")
 		return nil
 	}
 

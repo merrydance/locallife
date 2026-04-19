@@ -1,0 +1,11 @@
+{
+  "purpose": "User avatar and authentication image wrapper with loading, failure fallback, and consistent image presentation.",
+  "tdesignGroup": "data",
+  "tdesignCandidates": [
+    "image",
+    "loading",
+    "icon"
+  ],
+  "decision": "local-component",
+  "rationale": "Avatar upload and auth-image rendering need a stable fallback contract and page-independent failure handling. A local component keeps the image state model consistent while still composing TDesign primitives."
+}

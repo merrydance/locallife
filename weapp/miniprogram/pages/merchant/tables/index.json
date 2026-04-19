@@ -12,7 +12,6 @@
     "t-popup": "tdesign-miniprogram/popup/popup",
     "t-cell-group": "tdesign-miniprogram/cell-group/cell-group",
     "t-divider": "tdesign-miniprogram/divider/divider",
-    "t-notice-bar": "tdesign-miniprogram/notice-bar/notice-bar",
     "t-sticky": "tdesign-miniprogram/sticky/sticky",
     "custom-navbar": "/components/custom-navbar/index"
   },

@@ -492,7 +492,7 @@ const listPendingCombinedPaymentOrders = `-- name: ListPendingCombinedPaymentOrd
 SELECT id, user_id, combine_out_trade_no, total_amount, prepay_id, transaction_id, status, paid_at, created_at, expires_at FROM combined_payment_orders
 WHERE status = 'pending'
   AND expires_at < now()
-ORDER BY created_at
+ORDER BY created_at ASC, id ASC
 LIMIT $1
 `
 
@@ -531,7 +531,7 @@ func (q *Queries) ListPendingCombinedPaymentOrders(ctx context.Context, limit in
 const listUserCombinedPaymentOrders = `-- name: ListUserCombinedPaymentOrders :many
 SELECT id, user_id, combine_out_trade_no, total_amount, prepay_id, transaction_id, status, paid_at, created_at, expires_at FROM combined_payment_orders
 WHERE user_id = $1
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $2 OFFSET $3
 `
 

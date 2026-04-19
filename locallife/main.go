@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
@@ -18,6 +19,7 @@ import (
 	"github.com/merrydance/locallife/autotag"
 	db "github.com/merrydance/locallife/db/sqlc"
 	_ "github.com/merrydance/locallife/docs" // Swagger docs
+	"github.com/merrydance/locallife/internal/wechatruntime"
 	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/media"
 	"github.com/merrydance/locallife/scheduler"
@@ -97,6 +99,9 @@ func main() {
 		if config.RedisAddress == "" {
 			log.Fatal().Msg("REDIS_ADDRESS is required in production (financial tasks require a real task queue)")
 		}
+		if err := validateProductionPaymentRuntime(config); err != nil {
+			log.Fatal().Err(err).Msg("invalid production payment runtime")
+		}
 	}
 
 	// ✅ P1-4: 优化数据库连接池配置
@@ -169,10 +174,21 @@ func main() {
 
 	runDBMetricsCollector(ctx, waitGroup, connPool)
 
-	var billClient wechat.BillClientInterface
 	var reconciliationPublisher websocket.PubSubPublisher
-	claimPayoutPaymentClient := buildClaimPayoutPaymentClient(config)
-	ecommerceClient := buildEcommerceClient(config)
+	merchantRuntimeClient, err := buildMerchantWechatClient(config)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to create merchant wechat client for runtime")
+	}
+	var directPaymentClient wechat.DirectPaymentClientInterface
+	var transferClient wechat.TransferClientInterface
+	if merchantRuntimeClient != nil {
+		directPaymentClient = merchantRuntimeClient
+		transferClient = merchantRuntimeClient
+	}
+	ecommerceClient, err := buildEcommerceClient(config)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to create ecommerce client for runtime")
+	}
 	if config.RedisAddress != "" {
 		// 初始化逻辑层
 		redisClient := redis.NewClient(&redis.Options{
@@ -180,7 +196,7 @@ func main() {
 			Password: config.RedisPassword,
 		})
 		deliveryBroadcast := logic.NewDeliveryBroadcastLogic(store, redisClient)
-		taskDistributor, billClient = runTaskProcessor(ctx, waitGroup, config, redisOpt, store, deliveryBroadcast)
+		taskDistributor = runTaskProcessor(ctx, waitGroup, config, redisOpt, store, directPaymentClient, transferClient, ecommerceClient, deliveryBroadcast)
 		reconciliationPublisher = websocket.NewRedisPublisher(redisClient)
 	}
 
@@ -199,20 +215,32 @@ func main() {
 	schedulerManager.Register("payment-recovery", worker.NewPaymentRecoveryScheduler(store, taskDistributor))
 	schedulerManager.Register("wechat-notification-recovery", worker.NewWechatNotificationRecoveryScheduler(store))
 	schedulerManager.Register("profit-sharing-recovery", worker.NewProfitSharingRecoveryScheduler(store, taskDistributor))
-	schedulerManager.Register("refund-recovery", worker.NewRefundRecoveryScheduler(store, taskDistributor, claimPayoutPaymentClient, ecommerceClient))
+	if directPaymentClient == nil {
+		log.Warn().Msg("refund recovery direct status branch disabled: payment client not configured")
+	}
+	if ecommerceClient == nil {
+		log.Warn().Msg("refund recovery ecommerce status branch disabled: ecommerce client not configured")
+		log.Warn().Msg("applyment recovery remote-query branch disabled: ecommerce client not configured")
+	}
+	schedulerManager.Register("refund-recovery", worker.NewRefundRecoveryScheduler(store, taskDistributor, directPaymentClient, ecommerceClient))
 	schedulerManager.Register("applyment-recovery", worker.NewApplymentRecoveryScheduler(store, taskDistributor, ecommerceClient))
-	schedulerManager.Register("merchant-withdraw-recovery", worker.NewMerchantWithdrawRecoveryScheduler(store, taskDistributor))
-	if claimPayoutPaymentClient != nil {
-		schedulerManager.Register("claim-payout-recovery", worker.NewClaimPayoutRecoveryScheduler(store, claimPayoutPaymentClient))
+	if ecommerceClient != nil {
+		schedulerManager.Register("applyment-settlement-verification", worker.NewApplymentSettlementVerificationScheduler(store, taskDistributor, ecommerceClient))
 	} else {
-		log.Warn().Msg("claim payout recovery scheduler disabled: payment client not configured")
+		log.Warn().Msg("applyment settlement verification scheduler disabled: ecommerce client not configured")
+	}
+	schedulerManager.Register("merchant-withdraw-recovery", worker.NewMerchantWithdrawRecoveryScheduler(store, taskDistributor))
+	schedulerManager.Register("merchant-cancel-withdraw-recovery", worker.NewMerchantCancelWithdrawRecoveryScheduler(store, taskDistributor))
+	if transferClient != nil {
+		schedulerManager.Register("claim-payout-recovery", worker.NewClaimPayoutRecoveryScheduler(store, transferClient))
+	} else {
+		log.Warn().Msg("claim payout recovery scheduler disabled: transfer client not configured")
 	}
 	schedulerManager.Register("claim-recovery", worker.NewClaimRecoveryScheduler(store))
 	schedulerManager.Register("merchant-open-status", scheduler.NewMerchantOpenStatusScheduler(store))
 	schedulerManager.Register("order-timeout", scheduler.NewOrderTimeoutScheduler(store))
 	schedulerManager.Register("takeout-auto-complete", scheduler.NewTakeoutAutoCompleteScheduler(store, taskDistributor))
-	schedulerManager.Register("data-cleanup", scheduler.NewDataCleanupScheduler(store, taskDistributor, reconciliationPublisher))
-	schedulerManager.Register("bill-reconciliation", worker.NewBillReconciliationScheduler(store, billClient, reconciliationPublisher))
+	schedulerManager.Register("data-cleanup", scheduler.NewDataCleanupScheduler(store, taskDistributor, reconciliationPublisher, ecommerceClient))
 	schedulerManager.StartAll(ctx, waitGroup)
 
 	runGinServer(ctx, waitGroup, config, store, weatherCache, taskDistributor)
@@ -236,69 +264,47 @@ func runDBMigration(migrationURL string, dbSource string) {
 	log.Info().Msg("db migrated successfully")
 }
 
-func buildClaimPayoutPaymentClient(config util.Config) wechat.PaymentClientInterface {
-	if config.WechatPayMchID == "" || config.WechatPayPrivateKeyPath == "" {
-		return nil
+func buildMerchantWechatClient(config util.Config) (*wechat.DirectPaymentClient, error) {
+	if !config.HasWechatPayRuntimeConfig() {
+		return nil, nil
 	}
 
-	paymentClient, err := wechat.NewPaymentClient(wechat.PaymentClientConfig{
-		MchID:                   config.WechatPayMchID,
-		AppID:                   config.WechatMiniAppID,
-		SerialNumber:            config.WechatPaySerialNumber,
-		HTTPTimeout:             config.WechatPayHTTPTimeout,
-		PrivateKeyPath:          config.WechatPayPrivateKeyPath,
-		APIV3Key:                config.WechatPayAPIV3Key,
-		NotifyURL:               config.WechatPayNotifyURL,
-		RefundNotifyURL:         config.WechatPayRefundNotifyURL,
-		PlatformCertificatePath: config.WechatPayPlatformCertificatePath,
-		PlatformPublicKeyPath:   config.WechatPayPlatformPublicKeyPath,
-		PlatformPublicKeyID:     config.WechatPayPlatformPublicKeyID,
+	if err := config.ValidateWechatPayConfig(); err != nil {
+		return nil, err
+	}
+
+	directPaymentClient, err := wechat.NewDirectPaymentClient(wechat.DirectPaymentClientConfig{
+		MchID:                     config.WechatPayMchID,
+		AppID:                     config.WechatMiniAppID,
+		SerialNumber:              config.WechatPaySerialNumber,
+		HTTPTimeout:               config.WechatPayHTTPTimeout,
+		PrivateKeyPath:            config.WechatPayPrivateKeyPath,
+		APIV3Key:                  config.WechatPayAPIV3Key,
+		NotifyURL:                 config.WechatPayNotifyURL,
+		RefundNotifyURL:           config.WechatPayRefundNotifyURL,
+		MerchantTransferNotifyURL: config.EffectiveWechatPayMerchantTransferNotifyURL(),
+		PlatformPublicKeyPath:     config.WechatPayPlatformPublicKeyPath,
+		PlatformPublicKeyID:       config.WechatPayPlatformPublicKeyID,
 	})
 	if err != nil {
-		log.Warn().Err(err).Msg("failed to create payment client, claim payout transfer disabled")
-		return nil
+		return nil, err
 	}
 
-	return paymentClient
+	return directPaymentClient, nil
 }
 
-func buildEcommerceClient(config util.Config) wechat.EcommerceClientInterface {
-	if config.WechatPayMchID == "" || config.WechatPayPrivateKeyPath == "" {
+func validateProductionPaymentRuntime(config util.Config) error {
+	if config.Environment != "production" {
 		return nil
 	}
-
-	if err := config.ValidateWechatEcommerceConfig(); err != nil {
-		log.Warn().Err(err).Msg("invalid ecommerce config, profit sharing disabled")
-		return nil
+	if !config.HasWechatEcommerceRuntimeConfig() {
+		return fmt.Errorf("wechat ecommerce runtime config is required in production for main-business payments")
 	}
+	return config.ValidateWechatEcommerceConfig()
+}
 
-	client, err := wechat.NewEcommerceClient(wechat.EcommerceClientConfig{
-		PaymentClientConfig: wechat.PaymentClientConfig{
-			MchID:                   config.WechatEcommerceSpMchID,
-			AppID:                   config.WechatEcommerceSpAppID,
-			SerialNumber:            config.EffectiveWechatEcommerceSerialNumber(),
-			HTTPTimeout:             config.WechatPayHTTPTimeout,
-			PrivateKeyPath:          config.EffectiveWechatEcommercePrivateKeyPath(),
-			APIV3Key:                config.EffectiveWechatEcommerceAPIV3Key(),
-			NotifyURL:               config.EffectiveWechatEcommercePaymentNotifyURL(),
-			RefundNotifyURL:         config.EffectiveWechatEcommerceRefundNotifyURL(),
-			PlatformCertificatePath: config.WechatPayPlatformCertificatePath,
-			PlatformPublicKeyPath:   config.EffectiveWechatEcommercePlatformPublicKeyPath(),
-			PlatformPublicKeyID:     config.EffectiveWechatEcommercePlatformPublicKeyID(),
-		},
-		SpMchID:           config.WechatEcommerceSpMchID,
-		SpAppID:           config.WechatEcommerceSpAppID,
-		SpMchName:         config.WechatEcommerceSpName,
-		PartnerNotifyURL:  config.EffectiveWechatEcommercePaymentNotifyURL(),
-		CombineNotifyURL:  config.EffectiveWechatEcommerceCombineNotifyURL(),
-		WithdrawNotifyURL: config.EffectiveWechatEcommerceWithdrawNotifyURL(),
-	})
-	if err != nil {
-		log.Warn().Err(err).Msg("failed to create ecommerce client, profit sharing disabled")
-		return nil
-	}
-
-	return client
+func buildEcommerceClient(config util.Config) (wechat.EcommerceClientInterface, error) {
+	return wechatruntime.BuildEcommerceClient(config)
 }
 
 func runTaskProcessor(
@@ -307,26 +313,19 @@ func runTaskProcessor(
 	config util.Config,
 	redisOpt asynq.RedisClientOpt,
 	store db.Store,
+	directPaymentClient wechat.DirectPaymentClientInterface,
+	transferClient wechat.TransferClientInterface,
+	ecommerceClient wechat.EcommerceClientInterface,
 	deliveryBroadcast *logic.DeliveryBroadcastLogic,
-) (worker.TaskDistributor, wechat.BillClientInterface) {
+) worker.TaskDistributor {
 	// 创建任务分发器
 	taskDistributor := worker.NewRedisTaskDistributor(redisOpt)
 
 	// 创建平台收付通客户端（用于分账）
 	wechatClient := wechat.NewClient(config.WechatMiniAppID, config.WechatMiniAppSecret, store)
 
-	paymentClient := buildClaimPayoutPaymentClient(config)
-	ecommerceClient := buildEcommerceClient(config)
 	if ecommerceClient != nil {
 		log.Info().Msg("ecommerce client created for profit sharing")
-	}
-
-	// billClient 用于每日对账调度器；*EcommerceClient 同时满足 BillClientInterface
-	var billClient wechat.BillClientInterface
-	if ecommerceClient != nil {
-		if bc, ok := ecommerceClient.(wechat.BillClientInterface); ok {
-			billClient = bc
-		}
 	}
 
 	var mediaStorage media.ObjectStorage
@@ -350,7 +349,8 @@ func runTaskProcessor(
 
 	// 创建并启动任务处理器（传入 distributor 以支持任务链）
 	taskProcessor := worker.NewRedisTaskProcessor(redisOpt, store, taskDistributor, wechatClient, ecommerceClient, deliveryBroadcast, mediaRegistry, config)
-	taskProcessor.SetPaymentClient(paymentClient)
+	taskProcessor.SetDirectPaymentClient(directPaymentClient)
+	taskProcessor.SetTransferClient(transferClient)
 	log.Info().Msg("start task processor")
 
 	waitGroup.Go(func() error {
@@ -365,7 +365,7 @@ func runTaskProcessor(
 		return nil
 	})
 
-	return taskDistributor, billClient
+	return taskDistributor
 }
 
 func runDBMetricsCollector(ctx context.Context, waitGroup *errgroup.Group, pool *pgxpool.Pool) {

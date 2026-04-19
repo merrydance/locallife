@@ -57,7 +57,7 @@ func refundOrderAlertExtra(paymentOrder db.PaymentOrder, refundOrder db.RefundOr
 }
 
 func abnormalRefundActionExtra(paymentOrder db.PaymentOrder, refundOrder db.RefundOrder) map[string]interface{} {
-	if paymentOrder.PaymentType != "profit_sharing" {
+	if !paymentOrderUsesEcommerceChannel(paymentOrder) {
 		return nil
 	}
 	if !refundOrder.RefundID.Valid || refundOrder.RefundID.String == "" {

@@ -15,11 +15,13 @@ func TestCreateRefundOrderTx_CountsPendingAndProcessingRefunds(t *testing.T) {
 	user := createRandomUser(t)
 
 	payment, err := testStore.CreatePaymentOrder(ctx, CreatePaymentOrderParams{
-		UserID:       user.ID,
-		PaymentType:  "miniprogram",
-		BusinessType: "order",
-		Amount:       1000,
-		OutTradeNo:   util.RandomString(32),
+		UserID:                user.ID,
+		PaymentType:           "miniprogram",
+		PaymentChannel:        PaymentChannelDirect,
+		RequiresProfitSharing: false,
+		BusinessType:          "order",
+		Amount:                1000,
+		OutTradeNo:            util.RandomString(32),
 	})
 	require.NoError(t, err)
 

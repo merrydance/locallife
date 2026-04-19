@@ -23,8 +23,6 @@
   </view>
 
   <view wx:else class="page-content">
-    <t-notice-bar wx:if="{{refreshErrorMessage}}" class="page-notice" theme="warning" content="{{refreshErrorMessage}}" />
-
     <view class="toolbar-panel">
       <view class="range-group">
         <view

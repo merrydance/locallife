@@ -1,6 +1,8 @@
 package api
 
 import (
+	"bytes"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -31,6 +33,66 @@ func randomWechatComplaintForTest(merchantID int64) db.WechatComplaint {
 		CreatedAt:       now,
 		UpdatedAt:       pgtype.Timestamptz{Time: now, Valid: true},
 	}
+}
+
+func TestHandleComplaintNotify_SerialHeaderForwarded(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := newMockStoreWithAlertSink(ctrl)
+	ecommerce := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	server := newTestServer(t, store)
+	server.SetEcommerceClientForTest(ecommerce)
+
+	ecommerce.EXPECT().
+		VerifyNotificationSignature(gomock.Eq("test_signature"), gomock.Eq("1712808000"), gomock.Eq("test_nonce"), gomock.Eq("test_serial"), gomock.Any()).
+		Return(nil)
+	store.EXPECT().CheckNotificationExists(gomock.Any(), "complaint-notify-001").Return(false, nil)
+	ecommerce.EXPECT().DecryptComplaintNotification(gomock.Any()).Return(&wechat.ComplaintNotification{
+		ComplaintID: "complaint_test_001",
+		ActionType:  "COMPLAINT_STATE_CHANGE",
+		State:       wechat.ComplaintStateProcessing,
+	}, nil)
+	store.EXPECT().UpdateWechatComplaintState(gomock.Any(), gomock.Any()).DoAndReturn(func(_ any, arg db.UpdateWechatComplaintStateParams) (db.WechatComplaint, error) {
+		require.Equal(t, "complaint_test_001", arg.ComplaintID)
+		require.Equal(t, string(wechat.ComplaintStateProcessing), arg.ComplaintState)
+		require.True(t, arg.WxpayUpdateTime.Valid)
+		return randomWechatComplaintForTest(0), nil
+	})
+
+	recorder := httptest.NewRecorder()
+	req := newComplaintNotifyRequest(t)
+	server.router.ServeHTTP(recorder, req)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.JSONEq(t, `{"code":"SUCCESS","message":"OK"}`, recorder.Body.String())
+}
+
+func newComplaintNotifyRequest(t *testing.T) *http.Request {
+	t.Helper()
+	body, err := json.Marshal(map[string]any{
+		"id":            "complaint-notify-001",
+		"create_time":   "2026-04-11T12:00:00+08:00",
+		"event_type":    "COMPLAINT.STATE_CHANGE",
+		"resource_type": "encrypt-resource",
+		"summary":       "complaint notify",
+		"resource": map[string]any{
+			"algorithm":       "AEAD_AES_256_GCM",
+			"ciphertext":      "ciphertext",
+			"nonce":           "nonce-value",
+			"associated_data": "complaint",
+			"original_type":   "complaint",
+		},
+	})
+	require.NoError(t, err)
+
+	req, err := http.NewRequest(http.MethodPost, "/v1/webhooks/wechat-ecommerce/complaint-notify", bytes.NewReader(body))
+	require.NoError(t, err)
+	req.Header.Set("Wechatpay-Signature", "test_signature")
+	req.Header.Set("Wechatpay-Serial", "test_serial")
+	req.Header.Set("Wechatpay-Timestamp", "1712808000")
+	req.Header.Set("Wechatpay-Nonce", "test_nonce")
+	return req
 }
 
 func TestCompleteComplaintAPI(t *testing.T) {

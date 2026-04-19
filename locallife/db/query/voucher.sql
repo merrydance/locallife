@@ -18,33 +18,33 @@ INSERT INTO vouchers (
 ) RETURNING *;
 
 -- name: GetVoucher :one
-SELECT * FROM vouchers
+SELECT id, merchant_id, code, name, description, amount, min_order_amount, total_quantity, claimed_quantity, used_quantity, valid_from, valid_until, is_active, created_at, updated_at, allowed_order_types, deleted_at FROM vouchers
 WHERE id = $1 AND deleted_at IS NULL LIMIT 1;
 
 -- name: GetVoucherByCode :one
-SELECT * FROM vouchers
+SELECT id, merchant_id, code, name, description, amount, min_order_amount, total_quantity, claimed_quantity, used_quantity, valid_from, valid_until, is_active, created_at, updated_at, allowed_order_types, deleted_at FROM vouchers
 WHERE code = $1 AND deleted_at IS NULL LIMIT 1;
 
 -- name: GetVoucherForUpdate :one
-SELECT * FROM vouchers
+SELECT id, merchant_id, code, name, description, amount, min_order_amount, total_quantity, claimed_quantity, used_quantity, valid_from, valid_until, is_active, created_at, updated_at, allowed_order_types, deleted_at FROM vouchers
 WHERE id = $1 AND deleted_at IS NULL LIMIT 1
 FOR UPDATE;
 
 -- name: ListMerchantVouchers :many
-SELECT * FROM vouchers
+SELECT id, merchant_id, code, name, description, amount, min_order_amount, total_quantity, claimed_quantity, used_quantity, valid_from, valid_until, is_active, created_at, updated_at, allowed_order_types, deleted_at FROM vouchers
 WHERE merchant_id = $1 AND deleted_at IS NULL
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $2 OFFSET $3;
 
 -- name: ListActiveVouchers :many
-SELECT * FROM vouchers
+SELECT id, merchant_id, code, name, description, amount, min_order_amount, total_quantity, claimed_quantity, used_quantity, valid_from, valid_until, is_active, created_at, updated_at, allowed_order_types, deleted_at FROM vouchers
 WHERE merchant_id = $1 
     AND deleted_at IS NULL
     AND is_active = TRUE
     AND valid_from <= NOW()
     AND valid_until >= NOW()
     AND claimed_quantity < total_quantity
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $2 OFFSET $3;
 
 -- name: UpdateVoucher :one
@@ -104,27 +104,27 @@ INSERT INTO user_vouchers (
 ) RETURNING *;
 
 -- name: GetUserVoucher :one
-SELECT uv.*, v.merchant_id, v.code, v.name, v.amount, v.min_order_amount, v.allowed_order_types
+SELECT uv.id, uv.voucher_id, uv.user_id, uv.status, uv.order_id, uv.used_at, uv.obtained_at, uv.expires_at, v.merchant_id, v.code, v.name, v.amount, v.min_order_amount, v.allowed_order_types
 FROM user_vouchers uv
 JOIN vouchers v ON v.id = uv.voucher_id
 WHERE uv.id = $1 LIMIT 1;
 
 -- name: GetUserVoucherForUpdate :one
-SELECT * FROM user_vouchers
+SELECT id, voucher_id, user_id, status, order_id, used_at, obtained_at, expires_at FROM user_vouchers
 WHERE id = $1 LIMIT 1
 FOR UPDATE;
 
 -- name: ListUserVouchers :many
-SELECT uv.*, v.merchant_id, v.code, v.name, v.amount, v.min_order_amount, v.allowed_order_types, m.name as merchant_name
+SELECT uv.id, uv.voucher_id, uv.user_id, uv.status, uv.order_id, uv.used_at, uv.obtained_at, uv.expires_at, v.merchant_id, v.code, v.name, v.amount, v.min_order_amount, v.allowed_order_types, m.name as merchant_name
 FROM user_vouchers uv
 JOIN vouchers v ON v.id = uv.voucher_id
 JOIN merchants m ON m.id = v.merchant_id
 WHERE uv.user_id = $1
-ORDER BY uv.obtained_at DESC
+ORDER BY uv.obtained_at DESC, uv.id DESC
 LIMIT $2 OFFSET $3;
 
 -- name: ListUserAvailableVouchers :many
-SELECT uv.*, v.merchant_id, v.code, v.name, v.amount, v.min_order_amount, v.allowed_order_types, m.name as merchant_name
+SELECT uv.id, uv.voucher_id, uv.user_id, uv.status, uv.order_id, uv.used_at, uv.obtained_at, uv.expires_at, v.merchant_id, v.code, v.name, v.amount, v.min_order_amount, v.allowed_order_types, m.name as merchant_name
 FROM user_vouchers uv
 JOIN vouchers v ON v.id = uv.voucher_id
 JOIN merchants m ON m.id = v.merchant_id
@@ -135,7 +135,7 @@ ORDER BY v.amount DESC
 LIMIT $2 OFFSET $3;
 
 -- name: ListUserAvailableVouchersForMerchant :many
-SELECT uv.*, v.code, v.name, v.amount, v.min_order_amount, v.allowed_order_types
+SELECT uv.id, uv.voucher_id, uv.user_id, uv.status, uv.order_id, uv.used_at, uv.obtained_at, uv.expires_at, v.code, v.name, v.amount, v.min_order_amount, v.allowed_order_types
 FROM user_vouchers uv
 JOIN vouchers v ON v.id = uv.voucher_id
 WHERE uv.user_id = $1 

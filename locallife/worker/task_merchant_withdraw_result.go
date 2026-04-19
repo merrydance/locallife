@@ -11,6 +11,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
+	wechaterrorcodes "github.com/merrydance/locallife/wechat/errorcodes"
 	"github.com/rs/zerolog/log"
 )
 
@@ -18,7 +20,6 @@ const (
 	TaskProcessMerchantWithdrawResult = "payment:process_merchant_withdraw_result"
 	merchantWithdrawMaxRetry          = 5
 	merchantWithdrawChannel           = "wechat_ecommerce_fund"
-	operatorWithdrawChannel           = "wechat_ecommerce_fund_operator"
 )
 
 // MerchantWithdrawResultPayload 商户提现状态轮询任务载荷
@@ -38,9 +39,9 @@ type merchantWithdrawAccountInfo struct {
 
 func mapWechatWithdrawStatus(status string) string {
 	switch strings.ToUpper(status) {
-	case "SUCCESS":
+	case wechatcontracts.FundManagementWithdrawStatusSuccess:
 		return "success"
-	case "FAIL", "REFUND", "CLOSE":
+	case wechatcontracts.FundManagementWithdrawStatusFail, wechatcontracts.FundManagementWithdrawStatusRefund, wechatcontracts.FundManagementWithdrawStatusClose:
 		return "failed"
 	default:
 		return "pending"
@@ -93,7 +94,7 @@ func (processor *RedisTaskProcessor) ProcessTaskMerchantWithdrawResult(ctx conte
 		return fmt.Errorf("get withdrawal record: %w", err)
 	}
 
-	if record.Channel != merchantWithdrawChannel && record.Channel != operatorWithdrawChannel {
+	if record.Channel != merchantWithdrawChannel {
 		return fmt.Errorf("withdrawal channel mismatch: %w", asynq.SkipRetry)
 	}
 
@@ -114,9 +115,9 @@ func (processor *RedisTaskProcessor) ProcessTaskMerchantWithdrawResult(ctx conte
 	if err != nil {
 		if payload.RetryCount >= merchantWithdrawMaxRetry && isWechatWithdrawRequestNotFound(err) {
 			_, _ = processor.store.UpdateWithdrawalStatus(ctx, db.UpdateWithdrawalStatusParams{
-				ID:     record.ID,
-				Status: "failed",
-				Reason: pgtype.Text{String: fmt.Sprintf("withdraw request not found in wechat after retries: %v", err), Valid: true},
+				ID:          record.ID,
+				Status:      "failed",
+				Reason:      pgtype.Text{String: fmt.Sprintf("withdraw request not found in wechat after retries: %v", err), Valid: true},
 				ClearReason: false,
 			})
 			processor.publishAlert(ctx, AlertData{
@@ -137,9 +138,9 @@ func (processor *RedisTaskProcessor) ProcessTaskMerchantWithdrawResult(ctx conte
 
 		if payload.RetryCount >= merchantWithdrawMaxRetry {
 			_, _ = processor.store.UpdateWithdrawalStatus(ctx, db.UpdateWithdrawalStatusParams{
-				ID:     record.ID,
-				Status: "pending",
-				Reason: pgtype.Text{String: fmt.Sprintf("query withdraw result failed: %v", err), Valid: true},
+				ID:          record.ID,
+				Status:      "pending",
+				Reason:      pgtype.Text{String: fmt.Sprintf("query withdraw result failed: %v", err), Valid: true},
 				ClearReason: false,
 			})
 			processor.publishAlert(ctx, AlertData{
@@ -178,9 +179,9 @@ func (processor *RedisTaskProcessor) ProcessTaskMerchantWithdrawResult(ctx conte
 
 	if newStatus != record.Status || reason.Valid || clearReason {
 		_, err = processor.store.UpdateWithdrawalStatus(ctx, db.UpdateWithdrawalStatusParams{
-			ID:     record.ID,
-			Status: newStatus,
-			Reason: reason,
+			ID:          record.ID,
+			Status:      newStatus,
+			Reason:      reason,
 			ClearReason: clearReason,
 		})
 		if err != nil {
@@ -221,6 +222,5 @@ func isWechatWithdrawRequestNotFound(err error) bool {
 		return false
 	}
 
-	code := strings.ToUpper(payErr.Code)
-	return payErr.StatusCode == 404 || strings.Contains(code, "NOT_FOUND") || strings.Contains(code, "RESOURCE_NOT_EXISTS")
+	return payErr.StatusCode == 404 || wechaterrorcodes.FundManagementCodeEquals(payErr.Code, wechaterrorcodes.FundManagementCodeOrderNotExist)
 }

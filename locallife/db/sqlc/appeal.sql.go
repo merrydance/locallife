@@ -362,7 +362,7 @@ func (q *Queries) GetAppealForPostProcess(ctx context.Context, id int64) (GetApp
 
 const getAppealWithDetails = `-- name: GetAppealWithDetails :one
 SELECT 
-    a.id, a.claim_id, a.appellant_type, a.appellant_id, a.reason, a.status, a.reviewer_id, a.review_notes, a.reviewed_at, a.compensation_amount, a.compensated_at, a.region_id, a.created_at,
+  a.id, a.claim_id, a.appellant_type, a.appellant_id, a.reason, a.status, a.reviewer_id, a.review_notes, a.reviewed_at, a.compensation_amount, a.compensated_at, a.region_id, a.created_at,
     c.claim_type,
     c.claim_amount,
     c.approved_amount AS claim_approved_amount,
@@ -447,7 +447,7 @@ func (q *Queries) GetAppealWithDetails(ctx context.Context, id int64) (GetAppeal
 
 const getClaimForAppeal = `-- name: GetClaimForAppeal :one
 SELECT 
-    c.id, c.order_id, c.user_id, c.claim_type, c.description, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at, c.decision_version, c.decision_reason,
+  c.id, c.order_id, c.user_id, c.claim_type, c.description, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at, c.decision_version, c.decision_reason,
     o.merchant_id,
     m.region_id,
     d.rider_id
@@ -520,7 +520,7 @@ func (q *Queries) GetClaimForAppeal(ctx context.Context, id int64) (GetClaimForA
 
 const getMerchantAppealDetail = `-- name: GetMerchantAppealDetail :one
 SELECT 
-    a.id, a.claim_id, a.appellant_type, a.appellant_id, a.reason, a.status, a.reviewer_id, a.review_notes, a.reviewed_at, a.compensation_amount, a.compensated_at, a.region_id, a.created_at,
+  a.id, a.claim_id, a.appellant_type, a.appellant_id, a.reason, a.status, a.reviewer_id, a.review_notes, a.reviewed_at, a.compensation_amount, a.compensated_at, a.region_id, a.created_at,
     c.claim_type,
     c.claim_amount,
     c.approved_amount AS claim_approved_amount,
@@ -597,7 +597,7 @@ func (q *Queries) GetMerchantAppealDetail(ctx context.Context, arg GetMerchantAp
 
 const getMerchantClaimDetailForMerchant = `-- name: GetMerchantClaimDetailForMerchant :one
 SELECT 
-    c.id, c.order_id, c.user_id, c.claim_type, c.description, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at, c.decision_version, c.decision_reason,
+  c.id, c.order_id, c.user_id, c.claim_type, c.description, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at, c.decision_version, c.decision_reason,
     o.order_no,
     o.total_amount AS order_amount,
     o.created_at AS order_created_at,
@@ -693,7 +693,7 @@ func (q *Queries) GetMerchantClaimDetailForMerchant(ctx context.Context, arg Get
 
 const getOperatorAppealDetail = `-- name: GetOperatorAppealDetail :one
 SELECT 
-    a.id, a.claim_id, a.appellant_type, a.appellant_id, a.reason, a.status, a.reviewer_id, a.review_notes, a.reviewed_at, a.compensation_amount, a.compensated_at, a.region_id, a.created_at,
+  a.id, a.claim_id, a.appellant_type, a.appellant_id, a.reason, a.status, a.reviewer_id, a.review_notes, a.reviewed_at, a.compensation_amount, a.compensated_at, a.region_id, a.created_at,
     c.claim_type,
     c.claim_amount,
     c.approved_amount AS claim_approved_amount,
@@ -801,7 +801,7 @@ func (q *Queries) GetOperatorAppealDetail(ctx context.Context, arg GetOperatorAp
 
 const getRiderAppealDetail = `-- name: GetRiderAppealDetail :one
 SELECT 
-    a.id, a.claim_id, a.appellant_type, a.appellant_id, a.reason, a.status, a.reviewer_id, a.review_notes, a.reviewed_at, a.compensation_amount, a.compensated_at, a.region_id, a.created_at,
+  a.id, a.claim_id, a.appellant_type, a.appellant_id, a.reason, a.status, a.reviewer_id, a.review_notes, a.reviewed_at, a.compensation_amount, a.compensated_at, a.region_id, a.created_at,
     c.claim_type,
     c.claim_amount,
     c.approved_amount AS claim_approved_amount,
@@ -878,7 +878,7 @@ func (q *Queries) GetRiderAppealDetail(ctx context.Context, arg GetRiderAppealDe
 
 const getRiderClaimDetailForRider = `-- name: GetRiderClaimDetailForRider :one
 SELECT 
-    c.id, c.order_id, c.user_id, c.claim_type, c.description, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at, c.decision_version, c.decision_reason,
+  c.id, c.order_id, c.user_id, c.claim_type, c.description, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at, c.decision_version, c.decision_reason,
     o.order_no,
     o.total_amount AS order_amount,
     o.created_at AS order_created_at,
@@ -986,7 +986,7 @@ func (q *Queries) GetRiderClaimDetailForRider(ctx context.Context, arg GetRiderC
 const listMerchantAppealsForMerchant = `-- name: ListMerchantAppealsForMerchant :many
 
 SELECT 
-    a.id, a.claim_id, a.appellant_type, a.appellant_id, a.reason, a.status, a.reviewer_id, a.review_notes, a.reviewed_at, a.compensation_amount, a.compensated_at, a.region_id, a.created_at,
+  a.id, a.claim_id, a.appellant_type, a.appellant_id, a.reason, a.status, a.reviewer_id, a.review_notes, a.reviewed_at, a.compensation_amount, a.compensated_at, a.region_id, a.created_at,
     c.claim_type,
     c.claim_amount,
     c.description AS claim_description,
@@ -997,7 +997,7 @@ JOIN orders o ON c.order_id = o.id
 WHERE a.appellant_type = 'merchant'
   AND a.appellant_id = $1
   AND ($2::text IS NULL OR a.status = $2::text)
-ORDER BY a.created_at DESC
+ORDER BY a.created_at DESC, a.id DESC
 LIMIT $4 OFFSET $3
 `
 
@@ -1075,7 +1075,7 @@ func (q *Queries) ListMerchantAppealsForMerchant(ctx context.Context, arg ListMe
 
 const listMerchantClaimsForMerchant = `-- name: ListMerchantClaimsForMerchant :many
 SELECT 
-    c.id, c.order_id, c.user_id, c.claim_type, c.description, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at, c.decision_version, c.decision_reason,
+  c.id, c.order_id, c.user_id, c.claim_type, c.description, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at, c.decision_version, c.decision_reason,
     o.order_no,
     o.total_amount AS order_amount,
     u.phone AS user_phone,
@@ -1114,7 +1114,7 @@ WHERE o.merchant_id = $1
       AND (cr.status IN ('paid', 'waived') OR a.status IN ('approved', 'compensated'))
     )
   )
-ORDER BY c.created_at DESC
+ORDER BY c.created_at DESC, c.id DESC
 LIMIT $4 OFFSET $3
 `
 
@@ -1212,7 +1212,7 @@ func (q *Queries) ListMerchantClaimsForMerchant(ctx context.Context, arg ListMer
 const listOperatorAppeals = `-- name: ListOperatorAppeals :many
 
 SELECT 
-    a.id, a.claim_id, a.appellant_type, a.appellant_id, a.reason, a.status, a.reviewer_id, a.review_notes, a.reviewed_at, a.compensation_amount, a.compensated_at, a.region_id, a.created_at,
+  a.id, a.claim_id, a.appellant_type, a.appellant_id, a.reason, a.status, a.reviewer_id, a.review_notes, a.reviewed_at, a.compensation_amount, a.compensated_at, a.region_id, a.created_at,
     c.claim_type,
     c.claim_amount,
     c.description AS claim_description,
@@ -1231,7 +1231,8 @@ WHERE a.region_id = $1
   AND (NULLIF($2::TEXT, '') IS NULL OR a.status = $2)
 ORDER BY 
     CASE WHEN a.status = 'pending' THEN 0 ELSE 1 END,
-    a.created_at DESC
+    a.created_at DESC,
+    a.id DESC
 LIMIT $3 OFFSET $4
 `
 
@@ -1316,7 +1317,7 @@ func (q *Queries) ListOperatorAppeals(ctx context.Context, arg ListOperatorAppea
 const listRiderAppeals = `-- name: ListRiderAppeals :many
 
 SELECT 
-    a.id, a.claim_id, a.appellant_type, a.appellant_id, a.reason, a.status, a.reviewer_id, a.review_notes, a.reviewed_at, a.compensation_amount, a.compensated_at, a.region_id, a.created_at,
+  a.id, a.claim_id, a.appellant_type, a.appellant_id, a.reason, a.status, a.reviewer_id, a.review_notes, a.reviewed_at, a.compensation_amount, a.compensated_at, a.region_id, a.created_at,
     c.claim_type,
     c.claim_amount,
     c.description AS claim_description,
@@ -1326,7 +1327,7 @@ JOIN claims c ON a.claim_id = c.id
 JOIN orders o ON c.order_id = o.id
 WHERE a.appellant_type = 'rider'
   AND a.appellant_id = $1
-ORDER BY a.created_at DESC
+ORDER BY a.created_at DESC, a.id DESC
 LIMIT $2 OFFSET $3
 `
 
@@ -1398,7 +1399,7 @@ func (q *Queries) ListRiderAppeals(ctx context.Context, arg ListRiderAppealsPara
 
 const listRiderClaimsForRider = `-- name: ListRiderClaimsForRider :many
 SELECT 
-    c.id, c.order_id, c.user_id, c.claim_type, c.description, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at, c.decision_version, c.decision_reason,
+  c.id, c.order_id, c.user_id, c.claim_type, c.description, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at, c.decision_version, c.decision_reason,
     o.order_no,
     o.total_amount AS order_amount,
     u.phone AS user_phone,
@@ -1438,7 +1439,7 @@ WHERE d.rider_id = $1
       AND (cr.status IN ('paid', 'waived') OR a.status IN ('approved', 'compensated'))
     )
   )
-ORDER BY c.created_at DESC
+ORDER BY c.created_at DESC, c.id DESC
 LIMIT $2 OFFSET $3
 `
 

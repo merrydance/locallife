@@ -5,10 +5,8 @@
 }
 
 .page-content {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacer-md);
   padding-top: var(--spacer-md);
+  padding-bottom: 0;
 }
 
 .state-block {
@@ -21,8 +19,6 @@
   padding: 0 var(--spacer-lg);
 }
 
-.action-strip,
-.warning-banner,
 .list-section,
 .category-row,
 .popup-panel {
@@ -31,27 +27,25 @@
   box-shadow: var(--shadow-sm);
 }
 
+.notice-banner {
+  margin-bottom: 0;
+}
+
 .action-strip {
   padding: var(--spacer-md);
   display: flex;
   flex-wrap: wrap;
   gap: var(--spacer-sm);
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
 }
 
-.warning-banner {
-  padding: var(--spacer-sm) var(--spacer-md);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--spacer-sm);
-  background: var(--td-warning-color-1);
-}
-
-.warning-banner-text {
-  flex: 1;
+.notice-banner-operation {
   font-size: var(--font-size-sm);
   line-height: 1.6;
-  color: #8a5a00;
+  color: var(--td-brand-color);
+  font-weight: 600;
 }
 
 .list-section {
@@ -175,8 +169,7 @@
   .action-strip,
   .list-header,
   .category-row-main,
-  .category-actions,
-  .warning-banner {
+  .category-actions {
     align-items: flex-start;
     flex-direction: column;
   }

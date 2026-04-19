@@ -1,7 +1,7 @@
 .page-container {
   min-height: 100vh;
   background: var(--td-bg-color-page);
-  padding-bottom: 24rpx;
+  padding-bottom: 0;
 }
 
 .state-block {
@@ -15,7 +15,7 @@
 }
 
 .date-card {
-  margin: 24rpx 24rpx 20rpx;
+  margin: 24rpx 0 20rpx;
   padding: 18rpx 20rpx;
   background: var(--td-bg-color-container);
   border-radius: 12rpx;
@@ -38,7 +38,7 @@
 }
 
 .refresh-banner {
-  margin: 0 24rpx 20rpx;
+  margin: 0 0 20rpx;
   padding: 18rpx 20rpx;
   background: var(--td-bg-color-container);
   border-radius: 12rpx;
@@ -69,7 +69,7 @@
 }
 
 .inventory-list {
-  padding: 0 24rpx;
+  padding: 0;
 }
 
 .inventory-card {
@@ -164,13 +164,6 @@
 
 .qty-input {
   width: 220rpx;
-  border-radius: 10rpx;
-  overflow: hidden;
-}
-
-.qty-input__inner {
-  font-size: 28rpx;
-  font-weight: 600;
 }
 
 .unlimited-wrap {

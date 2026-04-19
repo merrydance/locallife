@@ -10,7 +10,7 @@
 
   <view wx:elif="{{accessReady && accessErrorMessage}}" class="state-block">
     <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
-    <t-button theme="primary" size="small" shape="round" bind:tap="onRetryAccess">重新校验</t-button>
+    <t-button theme="primary" bind:tap="onRetryAccess">重新校验</t-button>
   </view>
 
   <view wx:elif="{{!accessReady}}" class="state-block">
@@ -24,20 +24,11 @@
 
     <view wx:elif="{{initialError}}" class="state-block">
       <t-empty icon="error-circle" description="{{initialErrorMessage || '桌台列表加载失败，请重试'}}" />
-      <t-button theme="primary" size="small" shape="round" bind:tap="onRetry">重新加载</t-button>
+      <t-button theme="primary" bind:tap="onRetry">重新加载</t-button>
     </view>
 
     <block wx:else>
       <view class="page-content">
-        <t-notice-bar
-          wx:if="{{refreshErrorMessage}}"
-          visible="{{true}}"
-          theme="warning"
-          content="{{refreshErrorMessage}}"
-          prefixIcon="error-circle"
-          t-class="page-notice"
-        />
-
         <t-sticky offset-top="{{navBarHeight}}" z-index="40">
           <view class="control-panel">
             <view class="tabs-shell tabs-shell--top">
@@ -81,7 +72,7 @@
 
         <block wx:else>
           <view class="table-list">
-            <t-cell-group wx:for="{{tables}}" wx:key="id" class="table-card" theme="card">
+            <t-cell-group wx:for="{{tables}}" wx:key="id" class="table-card">
               <view class="table-card-main" bindtap="onEditTable" data-id="{{item.id}}">
                 <t-image
                   t-class="table-cover"
@@ -191,14 +182,14 @@
           </view>
 
           <view wx:else class="qr-card">
-            <image class="qr-image" src="{{qrCodeImageUrl}}" mode="aspectFit" />
+            <t-image class="qr-image" src="{{qrCodeImageUrl}}" mode="aspectFit" />
             <text class="qr-popup-tip">顾客扫码即可进入当前桌台点餐页面，保存时会自动生成大字版打印海报。</text>
           </view>
 
           <view class="popup-actions">
-            <t-button block size="large" shape="round" theme="default" bind:tap="onCloseQRCodePopup">关闭</t-button>
-            <t-button wx:if="{{qrCodeError}}" block size="large" shape="round" theme="primary" bind:tap="onRetryQRCode">重新生成</t-button>
-            <t-button wx:else block size="large" shape="round" theme="primary" bind:tap="onDownloadQRCode" loading="{{qrCodeDownloading}}" disabled="{{qrCodeLoading || !qrCodeImageUrl}}">下载打印海报</t-button>
+            <t-button theme="default" bind:tap="onCloseQRCodePopup">关闭</t-button>
+            <t-button wx:if="{{qrCodeError}}" theme="primary" bind:tap="onRetryQRCode">重新生成</t-button>
+            <t-button wx:else theme="primary" bind:tap="onDownloadQRCode" loading="{{qrCodeDownloading}}" disabled="{{qrCodeLoading || !qrCodeImageUrl}}">下载打印海报</t-button>
           </view>
         </view>
       </t-popup>

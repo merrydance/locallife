@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 
 	"github.com/rs/zerolog/log"
 )
@@ -232,10 +233,7 @@ func ModifyReservationDishes(
 			return result, fmt.Errorf("generate out refund no: %w", genErr)
 		}
 
-		refundType := allocation.PaymentOrder.PaymentType
-		if refundType == paymentTypeNative {
-			refundType = paymentTypeMiniProgram
-		}
+		refundType := refundTypeForPaymentOrder(allocation.PaymentOrder)
 
 		if _, createErr := store.CreateRefundOrderTx(ctx, db.CreateRefundOrderTxParams{
 			PaymentOrderID: allocation.PaymentOrder.ID,
@@ -405,9 +403,9 @@ func createReservationAddonPaymentOrder(
 		return db.PaymentOrder{}, nil, mapReservationEcommerceError(err)
 	}
 
-	combineResp, payParams, err := ecommerceClient.CreateCombineOrder(ctx, &wechat.CombineOrderRequest{
+	combineResp, payParams, err := ecommerceClient.CreateCombineOrder(ctx, &wechatcontracts.CombineOrderRequest{
 		CombineOutTradeNo: combineOutTradeNo,
-		SubOrders: []wechat.SubOrder{
+		SubOrders: []wechatcontracts.SubOrder{
 			{
 				SubMchID:    txResult.SubMchID,
 				Amount:      amount,
@@ -418,7 +416,7 @@ func createReservationAddonPaymentOrder(
 		},
 		PayerOpenID: user.WechatOpenid,
 		ExpireTime:  expiresAt,
-		SceneInfo: &wechat.CombineSceneInfo{
+		SceneInfo: &wechatcontracts.CombineSceneInfo{
 			PayerClientIP: clientIP,
 		},
 	})

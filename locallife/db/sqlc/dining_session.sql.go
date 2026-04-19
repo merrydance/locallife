@@ -163,7 +163,7 @@ func (q *Queries) GetDiningSession(ctx context.Context, id int64) (DiningSession
 const listDiningSessionsByUser = `-- name: ListDiningSessionsByUser :many
 SELECT id, merchant_id, table_id, reservation_id, user_id, active_order_id, status, opened_at, closed_at, created_at, updated_at FROM dining_sessions
 WHERE user_id = $1
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $2 OFFSET $3
 `
 
@@ -209,7 +209,7 @@ const listOpenDiningSessionsBefore = `-- name: ListOpenDiningSessionsBefore :man
 SELECT id, merchant_id, table_id, reservation_id, user_id, active_order_id, status, opened_at, closed_at, created_at, updated_at FROM dining_sessions
 WHERE status = $1
   AND opened_at < $2
-ORDER BY opened_at ASC
+ORDER BY opened_at ASC, id ASC
 LIMIT $3
 `
 

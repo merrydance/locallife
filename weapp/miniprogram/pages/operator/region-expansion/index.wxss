@@ -1,5 +1,5 @@
 .page-container {
-  padding: var(--spacer-md);
+  padding: 0;
   background: var(--td-bg-color-page);
   min-height: 100vh;
   box-sizing: border-box;
@@ -114,7 +114,7 @@
 }
 
 .region-item.selected {
-  background: var(--td-brand-color-light);
+  background: var(--td-bg-color-secondarycontainer);
 }
 
 .region-item-name {
@@ -146,8 +146,9 @@
 .selected-region-tip {
   margin-top: 16rpx;
   font-size: 26rpx;
-  color: var(--td-brand-color);
-  background: var(--td-brand-color-light);
+  color: var(--td-text-color-primary);
+  background: var(--td-bg-color-secondarycontainer);
+  border: 1rpx solid var(--td-component-border);
   border-radius: 8rpx;
   padding: 12rpx 20rpx;
 }

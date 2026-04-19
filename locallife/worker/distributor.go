@@ -100,6 +100,13 @@ type TaskDistributor interface {
 		opts ...asynq.Option,
 	) error
 
+	// DistributeTaskProcessMerchantCancelWithdrawResult 分发商户注销提现状态轮询任务
+	DistributeTaskProcessMerchantCancelWithdrawResult(
+		ctx context.Context,
+		payload *MerchantCancelWithdrawResultPayload,
+		opts ...asynq.Option,
+	) error
+
 	// DistributeTaskSendNotification 分发发送通知任务
 	DistributeTaskSendNotification(
 		ctx context.Context,
@@ -125,6 +132,13 @@ type TaskDistributor interface {
 	DistributeTaskProcessAppealResult(
 		ctx context.Context,
 		payload *ProcessAppealResultPayload,
+		opts ...asynq.Option,
+	) error
+
+	// DistributeTaskAutomaticAppealResolution 分发申诉自动复核重试任务
+	DistributeTaskAutomaticAppealResolution(
+		ctx context.Context,
+		payload *AutomaticAppealResolutionPayload,
 		opts ...asynq.Option,
 	) error
 

@@ -90,7 +90,7 @@ func (s *MerchantWithdrawRecoveryScheduler) runOnce(ctx context.Context) {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 
-	channels := []string{merchantWithdrawChannel, operatorWithdrawChannel}
+	channels := []string{merchantWithdrawChannel}
 	for _, channel := range channels {
 		records, err := s.store.ListPendingWithdrawalRecordsByChannel(ctx, db.ListPendingWithdrawalRecordsByChannelParams{
 			Channel: channel,

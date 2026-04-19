@@ -5,11 +5,15 @@
     "t-check-tag": "tdesign-miniprogram/check-tag/check-tag",
     "t-dialog": "tdesign-miniprogram/dialog/dialog",
     "t-loading": "tdesign-miniprogram/loading/loading",
+    "t-notice-bar": "tdesign-miniprogram/notice-bar/notice-bar",
     "t-empty": "tdesign-miniprogram/empty/empty",
+    "t-image": "tdesign-miniprogram/image/image",
     "t-switch": "tdesign-miniprogram/switch/switch",
     "t-stepper": "tdesign-miniprogram/stepper/stepper",
     "t-input": "tdesign-miniprogram/input/input",
-    "t-textarea": "tdesign-miniprogram/textarea/textarea"
+    "t-textarea": "tdesign-miniprogram/textarea/textarea",
+    "t-checkbox": "tdesign-miniprogram/checkbox/checkbox",
+    "t-checkbox-group": "tdesign-miniprogram/checkbox-group/checkbox-group"
   },
   "navigationStyle": "custom"
 }

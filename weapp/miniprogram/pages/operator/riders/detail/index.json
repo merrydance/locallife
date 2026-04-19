@@ -5,6 +5,9 @@
     "t-tag": "tdesign-miniprogram/tag/tag",
     "t-empty": "tdesign-miniprogram/empty/empty",
     "t-button": "tdesign-miniprogram/button/button",
+    "t-dialog": "tdesign-miniprogram/dialog/dialog",
+    "t-loading": "tdesign-miniprogram/loading/loading",
+    "t-textarea": "tdesign-miniprogram/textarea/textarea",
     "card-skeleton": "/components/card-skeleton/index"
   }
 }

@@ -3,6 +3,7 @@ import { uploadMedia, type MediaUploadResult } from '../utils/media'
 import type { AgreementConsentPayload } from './agreement-consent'
 import { waitForOCRJobTerminal, waitForOCRWriteback } from './ocr-jobs'
 import { AppError, ErrorType } from '../utils/error-handler'
+import type { StatusTagTheme } from '../utils/status-tag'
 
 const OCR_ENQUEUE_RETRY_DELAY_MS = 1500
 const OCR_ENQUEUE_MAX_ATTEMPTS = 3
@@ -68,7 +69,7 @@ export interface MerchantApplicationStatusView {
   isApproved: boolean
   isRejected: boolean
   tagText: string
-  tagTheme: 'primary' | 'success' | 'warning' | 'danger'
+  tagTheme: StatusTagTheme
   badgeText: string
   guideText: string
   editTip: string
@@ -145,7 +146,7 @@ export function buildMerchantApplicationStatusView(status?: ApplicationStatus | 
         isApproved: false,
         isRejected: false,
         tagText: '草稿中',
-        tagTheme: 'primary',
+        tagTheme: 'default',
         badgeText: '草稿',
         guideText: '填写主体资料并上传证照，确认定位后提交审核。',
         editTip: '可保存草稿，提交前请确认无误',

@@ -28,40 +28,40 @@ ON CONFLICT (complaint_id) DO UPDATE SET
 RETURNING *;
 
 -- name: GetWechatComplaint :one
-SELECT * FROM wechat_complaints
+SELECT id, complaint_id, complaint_time, payer_openid, complaint_detail, complaint_state, transaction_id, out_trade_no, sub_mch_id, merchant_id, payer_complaint_full_info, amount, response_content, responded_at, media_ids, completed_at, last_synced_at, wxpay_update_time, created_at, updated_at FROM wechat_complaints
 WHERE id = $1 LIMIT 1;
 
 -- name: GetWechatComplaintByComplaintID :one
-SELECT * FROM wechat_complaints
+SELECT id, complaint_id, complaint_time, payer_openid, complaint_detail, complaint_state, transaction_id, out_trade_no, sub_mch_id, merchant_id, payer_complaint_full_info, amount, response_content, responded_at, media_ids, completed_at, last_synced_at, wxpay_update_time, created_at, updated_at FROM wechat_complaints
 WHERE complaint_id = $1 LIMIT 1;
 
 -- name: GetWechatComplaintByComplaintIDForUpdate :one
-SELECT * FROM wechat_complaints
+SELECT id, complaint_id, complaint_time, payer_openid, complaint_detail, complaint_state, transaction_id, out_trade_no, sub_mch_id, merchant_id, payer_complaint_full_info, amount, response_content, responded_at, media_ids, completed_at, last_synced_at, wxpay_update_time, created_at, updated_at FROM wechat_complaints
 WHERE complaint_id = $1
 LIMIT 1
 FOR UPDATE;
 
 -- name: ListWechatComplaintsByMerchant :many
 -- 商户侧查看自己收到的投诉（按投诉时间倒序）
-SELECT * FROM wechat_complaints
+SELECT id, complaint_id, complaint_time, payer_openid, complaint_detail, complaint_state, transaction_id, out_trade_no, sub_mch_id, merchant_id, payer_complaint_full_info, amount, response_content, responded_at, media_ids, completed_at, last_synced_at, wxpay_update_time, created_at, updated_at FROM wechat_complaints
 WHERE merchant_id = $1
-  AND ($2::text IS NULL OR complaint_state = $2)
-ORDER BY complaint_time DESC
+    AND (NULLIF($2::text, '') IS NULL OR complaint_state = $2)
+ORDER BY complaint_time DESC, id DESC
 LIMIT $3 OFFSET $4;
 
 -- name: ListWechatComplaintsBySubMchID :many
 -- 通过 sub_mch_id 查询（运营商/平台使用）
-SELECT * FROM wechat_complaints
+SELECT id, complaint_id, complaint_time, payer_openid, complaint_detail, complaint_state, transaction_id, out_trade_no, sub_mch_id, merchant_id, payer_complaint_full_info, amount, response_content, responded_at, media_ids, completed_at, last_synced_at, wxpay_update_time, created_at, updated_at FROM wechat_complaints
 WHERE sub_mch_id = $1
-  AND ($2::text IS NULL OR complaint_state = $2)
-ORDER BY complaint_time DESC
+    AND (NULLIF($2::text, '') IS NULL OR complaint_state = $2)
+ORDER BY complaint_time DESC, id DESC
 LIMIT $3 OFFSET $4;
 
 -- name: ListPendingWechatComplaints :many
 -- 运营商查看所有待处理投诉（按投诉时间倒序）
-SELECT * FROM wechat_complaints
+SELECT id, complaint_id, complaint_time, payer_openid, complaint_detail, complaint_state, transaction_id, out_trade_no, sub_mch_id, merchant_id, payer_complaint_full_info, amount, response_content, responded_at, media_ids, completed_at, last_synced_at, wxpay_update_time, created_at, updated_at FROM wechat_complaints
 WHERE complaint_state IN ('PENDING_RESPONSE', 'PROCESSING')
-ORDER BY complaint_time ASC
+ORDER BY complaint_time ASC, id ASC
 LIMIT $1 OFFSET $2;
 
 -- name: UpdateWechatComplaintResponse :one
@@ -99,4 +99,4 @@ RETURNING *;
 -- name: CountWechatComplaintsByMerchant :one
 SELECT COUNT(*) FROM wechat_complaints
 WHERE merchant_id = $1
-  AND ($2::text IS NULL OR complaint_state = $2);
+    AND (NULLIF($2::text, '') IS NULL OR complaint_state = $2);

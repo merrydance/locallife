@@ -13,24 +13,24 @@ INSERT INTO delivery_fee_configs (
 ) RETURNING *;
 
 -- name: GetDeliveryFeeConfig :one
-SELECT * FROM delivery_fee_configs
+SELECT id, region_id, base_fee, base_distance, extra_fee_per_km, value_ratio, max_fee, min_fee, is_active, created_at, updated_at FROM delivery_fee_configs
 WHERE id = $1 LIMIT 1;
 
 -- name: GetDeliveryFeeConfigByRegion :one
-SELECT * FROM delivery_fee_configs
+SELECT id, region_id, base_fee, base_distance, extra_fee_per_km, value_ratio, max_fee, min_fee, is_active, created_at, updated_at FROM delivery_fee_configs
 WHERE region_id = $1 LIMIT 1;
 
 -- name: GetActiveDeliveryFeeConfigByRegion :one
-SELECT * FROM delivery_fee_configs
+SELECT id, region_id, base_fee, base_distance, extra_fee_per_km, value_ratio, max_fee, min_fee, is_active, created_at, updated_at FROM delivery_fee_configs
 WHERE region_id = $1 AND is_active = true LIMIT 1;
 
 -- name: ListDeliveryFeeConfigs :many
-SELECT * FROM delivery_fee_configs
+SELECT id, region_id, base_fee, base_distance, extra_fee_per_km, value_ratio, max_fee, min_fee, is_active, created_at, updated_at FROM delivery_fee_configs
 ORDER BY region_id
 LIMIT $1 OFFSET $2;
 
 -- name: ListActiveDeliveryFeeConfigs :many
-SELECT * FROM delivery_fee_configs
+SELECT id, region_id, base_fee, base_distance, extra_fee_per_km, value_ratio, max_fee, min_fee, is_active, created_at, updated_at FROM delivery_fee_configs
 WHERE is_active = true
 ORDER BY region_id;
 

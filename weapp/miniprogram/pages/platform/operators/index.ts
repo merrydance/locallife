@@ -61,6 +61,16 @@ Page({
     sortBy: 'latest' as SortBy,
     sortOptionLabels: ['最新提交', '最早提交', '名称 A-Z', '名称 Z-A', '通过在前', '拒绝在前', '待审在前'],
     sortOptions: ['latest', 'earliest', 'name_asc', 'name_desc', 'approved_first', 'rejected_first', 'submitted_first'] as SortBy[],
+    sortPickerOptions: [
+      { label: '最新提交', value: '0' },
+      { label: '最早提交', value: '1' },
+      { label: '名称 A-Z', value: '2' },
+      { label: '名称 Z-A', value: '3' },
+      { label: '通过在前', value: '4' },
+      { label: '拒绝在前', value: '5' },
+      { label: '待审在前', value: '6' }
+    ],
+    sortPickerVisible: false,
     sortIndex: 0,
     filterStats: {
       all: 0,
@@ -378,6 +388,28 @@ Page({
     const applications = this.applyFilterAndSort(this.data.rawApplications, status, this.data.sortBy)
     this.setData({
       statusFilter: status,
+      applications
+    })
+  },
+
+  onOpenSortPicker() {
+    this.setData({ sortPickerVisible: true })
+  },
+
+  onCloseSortPicker() {
+    this.setData({ sortPickerVisible: false })
+  },
+
+  onSortConfirm(e: WechatMiniprogram.CustomEvent<{ value: Array<string | number> | null }>) {
+    const values = Array.isArray(e.detail?.value) ? e.detail.value : []
+    const index = Number(values[0] || 0)
+    const sortBy = this.data.sortOptions[index] || 'latest'
+    const applications = this.applyFilterAndSort(this.data.rawApplications, this.data.statusFilter, sortBy)
+
+    this.setData({
+      sortPickerVisible: false,
+      sortIndex: index,
+      sortBy,
       applications
     })
   },

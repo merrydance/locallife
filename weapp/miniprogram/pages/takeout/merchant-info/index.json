@@ -2,6 +2,7 @@
   "navigationBarTitleText": "商家信息",
   "usingComponents": {
     "custom-navbar": "/components/custom-navbar/index",
+    "t-button": "tdesign-miniprogram/button/button",
     "t-image": "tdesign-miniprogram/image/image",
     "t-tag": "tdesign-miniprogram/tag/tag",
     "t-empty": "tdesign-miniprogram/empty/empty"

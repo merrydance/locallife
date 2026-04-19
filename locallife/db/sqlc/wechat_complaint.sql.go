@@ -15,7 +15,7 @@ import (
 const countWechatComplaintsByMerchant = `-- name: CountWechatComplaintsByMerchant :one
 SELECT COUNT(*) FROM wechat_complaints
 WHERE merchant_id = $1
-  AND ($2::text IS NULL OR complaint_state = $2)
+    AND (NULLIF($2::text, '') IS NULL OR complaint_state = $2)
 `
 
 type CountWechatComplaintsByMerchantParams struct {
@@ -134,7 +134,7 @@ func (q *Queries) GetWechatComplaintByComplaintIDForUpdate(ctx context.Context, 
 const listPendingWechatComplaints = `-- name: ListPendingWechatComplaints :many
 SELECT id, complaint_id, complaint_time, payer_openid, complaint_detail, complaint_state, transaction_id, out_trade_no, sub_mch_id, merchant_id, payer_complaint_full_info, amount, response_content, responded_at, media_ids, completed_at, last_synced_at, wxpay_update_time, created_at, updated_at FROM wechat_complaints
 WHERE complaint_state IN ('PENDING_RESPONSE', 'PROCESSING')
-ORDER BY complaint_time ASC
+ORDER BY complaint_time ASC, id ASC
 LIMIT $1 OFFSET $2
 `
 
@@ -188,8 +188,8 @@ func (q *Queries) ListPendingWechatComplaints(ctx context.Context, arg ListPendi
 const listWechatComplaintsByMerchant = `-- name: ListWechatComplaintsByMerchant :many
 SELECT id, complaint_id, complaint_time, payer_openid, complaint_detail, complaint_state, transaction_id, out_trade_no, sub_mch_id, merchant_id, payer_complaint_full_info, amount, response_content, responded_at, media_ids, completed_at, last_synced_at, wxpay_update_time, created_at, updated_at FROM wechat_complaints
 WHERE merchant_id = $1
-  AND ($2::text IS NULL OR complaint_state = $2)
-ORDER BY complaint_time DESC
+    AND (NULLIF($2::text, '') IS NULL OR complaint_state = $2)
+ORDER BY complaint_time DESC, id DESC
 LIMIT $3 OFFSET $4
 `
 
@@ -250,8 +250,8 @@ func (q *Queries) ListWechatComplaintsByMerchant(ctx context.Context, arg ListWe
 const listWechatComplaintsBySubMchID = `-- name: ListWechatComplaintsBySubMchID :many
 SELECT id, complaint_id, complaint_time, payer_openid, complaint_detail, complaint_state, transaction_id, out_trade_no, sub_mch_id, merchant_id, payer_complaint_full_info, amount, response_content, responded_at, media_ids, completed_at, last_synced_at, wxpay_update_time, created_at, updated_at FROM wechat_complaints
 WHERE sub_mch_id = $1
-  AND ($2::text IS NULL OR complaint_state = $2)
-ORDER BY complaint_time DESC
+    AND (NULLIF($2::text, '') IS NULL OR complaint_state = $2)
+ORDER BY complaint_time DESC, id DESC
 LIMIT $3 OFFSET $4
 `
 

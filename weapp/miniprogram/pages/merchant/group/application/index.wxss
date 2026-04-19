@@ -20,7 +20,7 @@
 }
 
 .form-content {
-  padding: 0 var(--spacer-md);
+  padding: 0;
 }
 
 .step-view {
@@ -60,9 +60,9 @@
 .requirement-tip {
   margin-top: 40rpx;
   padding: 24rpx;
-  background: #EBF2FF;
+  background: var(--td-bg-color-secondarycontainer);
   border-radius: var(--radius-md);
-  color: var(--td-brand-color);
+  color: var(--td-text-color-primary);
   font-size: 24rpx;
   display: flex;
   gap: 12rpx;
@@ -128,7 +128,7 @@
   margin: 12rpx 16rpx 0;
   border: 2rpx solid var(--td-error-color);
   border-radius: var(--radius-md);
-  background: #FFF6F6;
+  background: var(--td-error-color-1);
   overflow: hidden;
 }
 
@@ -173,11 +173,13 @@
   margin-left: 8rpx;
 }
 
+/* weapp-gate allow-tdesign-internal-class: OCR 预览仍复用 t-cell 结构，标题与说明的轻量排版待后续改成显式插槽后移除 */
 .ocr-preview .t-cell__title {
   color: var(--td-text-color-secondary);
   font-weight: 400;
 }
 
+/* weapp-gate allow-tdesign-internal-class: OCR 预览仍复用 t-cell 结构，标题与说明的轻量排版待后续改成显式插槽后移除 */
 .ocr-preview .t-cell__note {
   color: var(--td-text-color-primary);
   font-weight: 500;
@@ -187,18 +189,18 @@
   margin-top: var(--spacer-md);
   padding: 24rpx;
   border-radius: var(--radius-md);
-  background: #FFF7E8;
-  border: 1rpx solid #F3D19C;
+  background: var(--td-warning-color-1);
+  border: 1rpx solid var(--td-component-border);
 }
 
 .ocr-note {
   font-size: 24rpx;
   line-height: 1.6;
-  color: #8A5A00;
+  color: var(--td-warning-color-7);
 }
 
 .ocr-note.error {
-  color: #C62828;
+  color: var(--td-error-color);
 }
 
 .review-header {
@@ -233,14 +235,14 @@
 }
 
 .btn-group {
-  display: grid;
-  grid-template-columns: 1fr 1.5fr;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 24rpx;
 }
 
-.btn-group t-button,
-.action-bar t-button {
-  width: 100%;
+.btn-group t-button {
+  flex: 0 0 auto;
 }
 
 .step-view.center {

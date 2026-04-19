@@ -79,7 +79,7 @@
 
 业务域层模板：
 
-- `backend-payment-runbook.prompt.md`
+- `backend-payment-domain.prompt.md`
 - `backend-sql-review.prompt.md`
 - `backend-integration-test.prompt.md`
 - `backend-task-card-implementation.prompt.md`
@@ -90,6 +90,7 @@
 
 - 技术栈层 Prompt 不要重复定义通用风险分级与发布口径，应复用协议层和工程治理标准。
 - 业务域层 Prompt 只在该域存在明显独特失败模式时新增，不要为了“更专业”滥建新文件。
+- 对外部平台且以异步能力组为主的业务域，domain prompt 必须把任务收束到“能力组 + caller 传播 + focused validation”，而不是按单个 endpoint 组织任务。
 
 ### Layer 4: Agents And Gates
 
@@ -147,7 +148,7 @@ Prompt 库必须接受和代码同等级的基础门禁。
 
 | Area | Implementation Must Push | Implementation Must Not | Review Must Check |
 | --- | --- | --- | --- |
-| Backend | 闭环打通 handler / logic / store / route / DTO / tests；状态常量复用 `db/sqlc/constants.go`；识别并执行 `make sqlc` / `make mock` / `make swagger`；对仓库级高风险链路参考 `BACKEND_RISK_MAP.md`；说明验证范围与残余风险 | 不要把业务逻辑塞进 handler；不要新增魔法状态字符串；不要只改 SQL、DTO 或 handler 而不做全链路传播；不要跳过生成步骤判断；不要把生产 bugfix 当成表层补丁而不追真实写边界或恢复路径 | 传播是否断层；新增逻辑是否真正可达；生成物是否提交；回调、异步、支付、上传、OCR、鉴权等高风险路径是否真实验证；正式 review 是否形成 durable closeout |
+| Backend | 闭环打通 handler / logic / store / route / DTO / tests；状态常量复用 `db/sqlc/constants.go`；识别并执行 `make sqlc` / `make mock` / `make swagger`；对仓库级高风险链路参考 `backend/README.md` 与匹配的 domain README；说明验证范围与残余风险 | 不要把业务逻辑塞进 handler；不要新增魔法状态字符串；不要只改 SQL、DTO 或 handler 而不做全链路传播；不要跳过生成步骤判断；不要把生产 bugfix 当成表层补丁而不追真实写边界或恢复路径 | 传播是否断层；新增逻辑是否真正可达；生成物是否提交；回调、异步、支付、上传、OCR、鉴权等高风险路径是否真实验证；正式 review 是否形成 durable closeout |
 
 ### 3.2 Web
 
@@ -159,7 +160,7 @@ Prompt 库必须接受和代码同等级的基础门禁。
 
 | Area | Implementation Must Push | Implementation Must Not | Review Must Check |
 | --- | --- | --- | --- |
-| Weapp | 以后端契约为唯一真相；service / state / handlers / WXML / WXSS / feedback 一起改；显式处理 loading / success / empty / error / retry / re-entry；说明弱网、重复点击与冷启动恢复 | 不要猜后端字段、状态、权限或统计语义；不要只改 WXML / WXSS；不要把金额语义、角色边界或结果语义混掉；不要把重写 TDesign 内部样式当常规方案 | setData 粒度、状态恢复、弱网与重入、支付结果、角色边界、页面壳一致性、反馈通道是否正确 |
+| Weapp | 以后端契约为唯一真相；先盘点后端能力并组合成任务域，再决定组件边界和一页还是一组页面；service / state / handlers / WXML / WXSS / feedback 一起改；显式处理 loading / success / empty / error / retry / re-entry；说明弱网、重复点击与冷启动恢复；必要说明默认下沉到标题、note、状态或动作附近；非顾客侧局部动作默认用 TDesign 图标按钮或 icon-led small button；优先用 page shell + 内容容器 + TDesign 组件表达，而不是再包本地视觉壳 | 不要猜后端字段、状态、权限或统计语义；不要按接口数量机械拆页面；不要把所有能力堆进同一页面；不要只改 WXML / WXSS；不要把金额语义、角色边界或结果语义混掉；不要把重写 TDesign 内部样式当常规方案；不要在单任务页首屏堆解释卡或说明块；不要默认保留文本型局部编辑/删除/测试/状态按钮；不要为了“更完整”再叠局部卡片壳和说明壳 | 能力组合是否合理；组件与页面边界是否清楚；setData 粒度、状态恢复、弱网与重入、支付结果、角色边界、页面壳一致性、反馈通道是否正确；是否出现解释卡漂移、文本动作漂移和本地视觉壳膨胀 |
 
 ### 3.4 Flutter Merchant App
 
@@ -180,6 +181,23 @@ Prompt 库必须接受和代码同等级的基础门禁。
 - 新 Prompt 必须补齐 `description` 中的 `Trigger phrases:`，否则不能进入可执行路由断言体系。
 - 如果新 Prompt 只是补充技术栈或业务域细节，应优先更新现有技术栈层或业务域层 Prompt。
 - 如果新规则是长期有效的，应先落到 standards，再镜像到 Prompt。
+
+## 4.1 Async Capability-Group Rule
+
+当某个业务域满足以下特征时，应默认按“能力组治理”而不是“单接口治理”组织 Prompt 与 instructions：
+
+- 主要依赖外部平台接口
+- 一组接口共同完成一个业务能力
+- 存在回调、轮询、恢复任务、状态页或异步通知
+- caller 分布在 integration boundary 之外
+
+治理要求：
+
+- 先有官方文档基线，再有仓库内传播矩阵，再让 instructions 和 prompt 镜像执行规则。
+- Domain prompt 必须要求声明当前能力组、caller 传播面、验证范围和残余风险。
+- 如果没有仓库内传播矩阵，prompt 不得把任务表述成“已完整对齐”，只能推动补齐矩阵或明确标注治理缺口。
+
+平台收付通 / 微信支付域默认属于这一类。
 
 ## 5. Maintenance Rules
 

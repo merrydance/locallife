@@ -1,3 +1,5 @@
+@import '../../../../styles/customer.wxss';
+
 /* Pages User Center Addresses Edit */
 .page-container {
   min-height: 100vh;
@@ -64,13 +66,13 @@
   padding: 0 var(--spacer-md);
 }
 
-/* TDesign Override */
+/* weapp-gate allow-tdesign-internal-class: 地址编辑页单选组需要横向紧凑排布，待抽成地址偏好选项容器后移除 */
 .t-radio-group {
   display: flex;
   gap: var(--spacer-lg);
 }
 
-/* TDesign Component Overrides if needed */
+/* weapp-gate allow-tdesign-internal-class: 地址表单暂时依赖内部 label 颜色统一，待迁到显式 label 文本后移除 */
 .t-input__label {
   color: var(--td-text-color-primary) !important;
 }

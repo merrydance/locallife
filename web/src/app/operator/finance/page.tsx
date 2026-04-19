@@ -72,14 +72,16 @@ export default function OperatorFinancePage() {
             balanceRes = balanceResult.value;
             if ((balanceRes.account_status ?? "active") !== "active") {
               nextFinanceLocked = true;
-              nextFinanceNotice = balanceRes.status_desc || "收付通账户尚未开通，请先完成进件流程。";
+              nextFinanceNotice =
+                balanceRes.status_desc || "当前运营账号支付配置未生效，请联系平台处理。";
             }
           }
           if (withdrawalsResult.status === "fulfilled") {
             withdrawalsRes = withdrawalsResult.value;
             if (!nextFinanceNotice && (withdrawalsRes.account_status ?? "active") !== "active") {
               nextFinanceLocked = true;
-              nextFinanceNotice = withdrawalsRes.status_desc || "收付通账户尚未开通，请先完成进件流程。";
+              nextFinanceNotice =
+                withdrawalsRes.status_desc || "当前运营账号支付配置未生效，请联系平台处理。";
             }
           }
 
@@ -97,7 +99,7 @@ export default function OperatorFinancePage() {
               withdrawalsMessage.includes("operator payment config is not active");
             if (blockedByPaymentConfig) {
               nextFinanceLocked = true;
-              nextFinanceNotice = "收付通账户尚未开通，请先完成签约与进件。";
+              nextFinanceNotice = "当前运营账号支付配置未生效，请联系平台处理。";
             } else {
               nextFinanceLocked = true;
               nextFinanceError = "财务数据加载失败，请稍后重试。";

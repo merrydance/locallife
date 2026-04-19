@@ -6,16 +6,8 @@ import {
   checkInReservation,
   completeReservationByMerchant,
   confirmReservationByMerchant,
-  formatReservationStatus,
-  getMerchantReservationActionState,
-  getReservationStatusTheme,
-  isReservationPendingPayment,
   markReservationNoShow,
-  MerchantReservationActionKey,
-  MerchantReservationFilterStatus,
-  ReservationResponse,
   ReservationService,
-  ReservationStatusTheme,
   startCookingReservation
 } from '../../../api/reservation'
 import { logger } from '../../../utils/logger'
@@ -26,261 +18,30 @@ import {
   isMerchantConsoleAccessDenied,
   isMerchantConsoleAccessGranted
 } from '../../../utils/console-access'
-
-type ReservationWorkbenchTab = 'all' | 'paid' | 'confirmed' | 'checked_in' | 'completed' | 'exception'
-type ReservationMutationKey = MerchantReservationActionKey
-type ReservationPrimaryActionKey = ReservationMutationKey | ''
-
-interface ReservationCardView extends ReservationResponse {
-  statusLabel: string
-  statusTheme: ReservationStatusTheme
-  titleText: string
-  subtitleText: string
-  sourceLabel: string
-  paymentLabel: string
-  itemPreview: string
-  cookingStartedNotice: string
-  canEdit: boolean
-  canCancel: boolean
-  canConfirm: boolean
-  canCheckIn: boolean
-  canStartCooking: boolean
-  canNoShow: boolean
-  canComplete: boolean
-  primaryActionKey: ReservationPrimaryActionKey
-  primaryActionLabel: string
-  showMoreActions: boolean
-}
-
-interface ReservationWorkbenchTabOption {
-  key: ReservationWorkbenchTab
-  label: string
-}
-
-interface RefreshPageOptions {
-  showLoading?: boolean
-  preserveList?: boolean
-}
-
-interface LoadReservationListOptions {
-  showLoading?: boolean
-  preserveCurrent?: boolean
-}
-
-interface ReservationActionSheetItem {
-  label: string
-  key: MerchantReservationActionKey | 'edit' | 'cancel_reason'
-  reason?: string
-  color?: 'default' | 'danger'
-}
-
-type ReservationActionSheetMode = 'actions' | 'cancel_reasons' | ''
-
-const PAGE_AUTO_REFRESH_WINDOW_MS = 60 * 1000
-const RESERVATION_CANCEL_REASONS = ['顾客临时取消', '桌台冲突需改约', '商户暂停营业', '信息填写有误', '其他原因']
-const DEFAULT_TAB_OPTIONS: ReservationWorkbenchTabOption[] = [
-  { key: 'all', label: '全部' },
-  { key: 'paid', label: '待确认' },
-  { key: 'confirmed', label: '已确认' },
-  { key: 'checked_in', label: '已到店' },
-  { key: 'completed', label: '已完成' },
-  { key: 'exception', label: '异常' }
-]
+import {
+  buildListSummaryText,
+  buildReservationCard,
+  buildReservationEditUrl,
+  buildReservationMoreActionItems,
+  buildReservationWorkbenchResetPatch,
+  DEFAULT_TAB_OPTIONS,
+  getReservationActionDialogConfig,
+  getReservationActionLoadingText,
+  getReservationActionSuccessText,
+  getReservationListStatusFilter,
+  LoadReservationListOptions,
+  PAGE_AUTO_REFRESH_WINDOW_MS,
+  RefreshPageOptions,
+  RESERVATION_CANCEL_REASONS,
+  type ReservationActionSheetItem,
+  type ReservationActionSheetMode,
+  type ReservationCardView,
+  type ReservationMutationKey,
+  type ReservationPrimaryActionKey,
+  type ReservationWorkbenchTab
+} from '../../../utils/merchant-reservations-view'
 
 const getErrorMessage = getErrorUserMessage
-
-function formatReservationSource(source?: string): string {
-  switch (source) {
-    case 'online':
-      return '线上预订'
-    case 'phone':
-      return '电话预订'
-    case 'walkin':
-      return '到店预订'
-    case 'merchant':
-      return '店内代录'
-    default:
-      return '未标记来源'
-  }
-}
-
-function formatPaymentMode(reservation: ReservationResponse): string {
-  const prepaidAmount = reservation.prepaid_amount || 0
-  const depositAmount = reservation.deposit_amount || 0
-  const hasPaidRecord = Boolean(reservation.paid_at)
-
-  if (prepaidAmount > 0) return '全款预付'
-  if (depositAmount > 0) return '定金预订'
-  if (reservation.source === 'merchant' || reservation.source === 'phone' || reservation.source === 'walkin') {
-    return '到店结算'
-  }
-
-  if (reservation.payment_mode === 'full') {
-    return hasPaidRecord ? '已全额支付' : '线上预订'
-  }
-
-  if (reservation.payment_mode === 'deposit') {
-    if (hasPaidRecord) return '已支付定金'
-    if (isReservationPendingPayment(reservation.status)) return '待支付定金'
-    return '未见支付记录'
-  }
-
-  return hasPaidRecord ? '已支付' : '未见支付记录'
-}
-
-function formatReservationItems(reservation: ReservationResponse): string {
-  if (!reservation.items?.length) return '未预点菜'
-
-  return reservation.items
-    .slice(0, 2)
-    .map((item) => `${item.name || (item.type === 'combo' ? '套餐' : '菜品')} x${item.quantity}`)
-    .join('，')
-}
-
-function formatCookingStartedNotice(value?: string): string {
-  if (!value) return ''
-
-  const startedAt = dayjs(value)
-  if (!startedAt.isValid()) return '已通知后厨起菜'
-
-  return `已于 ${startedAt.format('HH:mm')} 通知后厨起菜`
-}
-
-function buildReservationCard(reservation: ReservationResponse): ReservationCardView {
-  const actionState = getMerchantReservationActionState(reservation)
-  const tableLabel = reservation.table_no || '未分配桌台'
-
-  return {
-    ...reservation,
-    statusLabel: formatReservationStatus(reservation.status),
-    statusTheme: getReservationStatusTheme(reservation.status),
-    titleText: `${reservation.reservation_time} · ${tableLabel}`,
-    subtitleText: `${reservation.contact_name} · ${reservation.contact_phone}`,
-    sourceLabel: formatReservationSource(reservation.source),
-    paymentLabel: formatPaymentMode(reservation),
-    itemPreview: formatReservationItems(reservation),
-    cookingStartedNotice: formatCookingStartedNotice(reservation.cooking_started_at),
-    ...actionState
-  }
-}
-
-function getReservationActionDialogConfig(
-  actionKey: ReservationMutationKey,
-  contact?: string,
-  cancelReason?: string
-): { title: string, content: string, confirmText: string, confirmTheme: 'primary' | 'danger' } {
-  switch (actionKey) {
-    case 'confirm':
-      return {
-        title: '确认预订',
-        content: `确认 ${contact || '该顾客'} 的预订后，状态会进入“已确认”。`,
-        confirmText: '确认预订',
-        confirmTheme: 'primary'
-      }
-    case 'check_in':
-      return {
-        title: '登记顾客到店',
-        content: `${contact || '该顾客'} 到店后，预订会进入“已到店”状态，可继续安排入座或完成预订。`,
-        confirmText: '确认登记',
-        confirmTheme: 'primary'
-      }
-    case 'start_cooking':
-      return {
-        title: '通知后厨起菜',
-        content: `确认通知后厨为${contact || '该顾客'}备菜后，厨房看板会同步显示起菜状态。`,
-        confirmText: '立即通知',
-        confirmTheme: 'primary'
-      }
-    case 'complete':
-      return {
-        title: '完成预订',
-        content: `确认 ${contact || '该顾客'} 已离店并完成就餐后，桌台会释放回空闲状态。`,
-        confirmText: '确认完成',
-        confirmTheme: 'primary'
-      }
-    case 'no_show':
-      return {
-        title: '标记未到店',
-        content: `确认 ${contact || '该顾客'} 未到店后，预订会进入“未到店”状态且不可直接恢复。`,
-        confirmText: '确认标记',
-        confirmTheme: 'danger'
-      }
-    case 'cancel':
-      return {
-        title: '取消预订',
-        content: `将按“${cancelReason || '其他原因'}”取消该预订。若已支付，系统会按当前退款策略处理。`,
-        confirmText: '确认取消',
-        confirmTheme: 'danger'
-      }
-    default:
-      return {
-        title: '确认操作',
-        content: '请确认是否继续执行当前操作。',
-        confirmText: '确认',
-        confirmTheme: 'primary'
-      }
-  }
-}
-
-function getReservationActionLoadingText(actionKey: ReservationMutationKey): string {
-  switch (actionKey) {
-    case 'confirm':
-      return '正在确认预订...'
-    case 'check_in':
-      return '正在登记到店...'
-    case 'start_cooking':
-      return '正在通知后厨...'
-    case 'complete':
-      return '正在完成预订...'
-    case 'no_show':
-      return '正在标记未到店...'
-    case 'cancel':
-      return '正在取消预订...'
-    default:
-      return '处理中...'
-  }
-}
-
-function getReservationActionSuccessText(actionKey: ReservationMutationKey): string {
-  switch (actionKey) {
-    case 'confirm':
-      return '预订已确认'
-    case 'check_in':
-      return '已登记到店'
-    case 'start_cooking':
-      return '已通知后厨起菜'
-    case 'complete':
-      return '预订已完成'
-    case 'no_show':
-      return '已标记未到店'
-    case 'cancel':
-      return '预订已取消'
-    default:
-      return '操作已完成'
-  }
-}
-
-function buildListSummaryText(currentTab: ReservationWorkbenchTab, total: number) {
-  if (currentTab === 'all') {
-    return `当前共 ${total} 条预订`
-  }
-
-  const labelMap: Record<ReservationWorkbenchTab, string> = {
-    all: '全部预订',
-    paid: '待确认预订',
-    confirmed: '已确认预订',
-    checked_in: '已到店预订',
-    completed: '已完成预订',
-    exception: '异常预订'
-  }
-
-  return `${labelMap[currentTab]}共 ${total} 条`
-}
-
-function getReservationListStatusFilter(tab: ReservationWorkbenchTab): MerchantReservationFilterStatus | undefined {
-  if (tab === 'all') return undefined
-  return tab
-}
 
 Page({
   data: {
@@ -494,16 +255,11 @@ Page({
   },
 
   onOpenDatePicker() {
-    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage || this.data.pageSyncing || this.data.listLoading) {
-      return
-    }
-
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage || this.data.pageSyncing || this.data.listLoading) return
     this.setData({ datePickerVisible: true })
   },
 
-  onCloseDatePicker() {
-    this.setData({ datePickerVisible: false })
-  },
+  onCloseDatePicker() { this.setData({ datePickerVisible: false }) },
 
   applyDateSelection(nextDate: string) {
     if (!nextDate || nextDate === this.data.date) {
@@ -522,9 +278,7 @@ Page({
     })
   },
 
-  onDateConfirm(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
-    this.applyDateSelection(e.detail?.value || '')
-  },
+  onDateConfirm(e: WechatMiniprogram.CustomEvent<{ value: string }>) { this.applyDateSelection(e.detail?.value || '') },
 
   async onTabChange(e: WechatMiniprogram.CustomEvent<{ value: ReservationWorkbenchTab }>) {
     const nextTab = e.detail.value
@@ -551,27 +305,17 @@ Page({
       void this.onRetryAccess()
       return
     }
-
-    void this.refreshPage({
-      showLoading: false,
-      preserveList: this.data.reservations.length > 0
-    })
+    void this.refreshPage({ showLoading: false, preserveList: this.data.reservations.length > 0 })
   },
 
-  onReachBottom() {
-    void this.loadReservationList()
-  },
-
-  onLoadMore() {
-    void this.loadReservationList()
-  },
+  onReachBottom() { void this.loadReservationList() },
+  onLoadMore() { void this.loadReservationList() },
 
   onRetry() {
     if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) {
       void this.onRetryAccess()
       return
     }
-
     void this.refreshPage({ showLoading: true, preserveList: false })
   },
 
@@ -580,86 +324,34 @@ Page({
       void this.onRetryAccess()
       return
     }
-
-    void this.refreshPage({
-      showLoading: false,
-      preserveList: this.data.reservations.length > 0
-    })
+    void this.refreshPage({ showLoading: false, preserveList: this.data.reservations.length > 0 })
   },
 
-  onRetryList() {
-    void this.loadReservationList(true, { showLoading: true, preserveCurrent: false })
-  },
+  onRetryList() { void this.loadReservationList(true, { showLoading: true, preserveCurrent: false }) },
 
   async onRetryAccess() {
-    this.setData({
-      accessReady: false,
-      accessDenied: false,
-      accessErrorMessage: '',
-      initialLoading: true,
-      initialError: false,
-      initialErrorMessage: '',
-      pageSyncing: false,
-      lastLoadedAt: 0,
-      listAvailable: false,
-      listInitialError: false,
-      listInitialErrorMessage: '',
-      listRefreshErrorMessage: '',
-      listLoading: false,
-      reservations: [],
-      listPage: 1,
-      listHasMore: true,
-      listTotal: 0,
-      datePickerVisible: false,
-      listSummaryText: '当前共 0 条预订',
-      actionSubmittingKey: '',
-      confirmDialogVisible: false,
-      confirmDialogTitle: '',
-      confirmDialogContent: '',
-      confirmDialogConfirmText: '确认',
-      confirmDialogConfirmTheme: 'primary',
-      confirmDialogSubmitting: false,
-      confirmDialogAction: '',
-      confirmDialogReservationId: 0,
-      confirmDialogContact: '',
-      confirmDialogCancelReason: '',
-      actionSheetVisible: false,
-      actionSheetMode: '',
-      actionSheetDescription: '',
-      actionSheetItems: [],
-      actionSheetReservationId: 0,
-      actionSheetReservationContact: ''
-    })
+    this.setData(buildReservationWorkbenchResetPatch(this.data.date))
 
     await this.initializePage()
   },
 
   onActionsCatch() {},
 
-  getReservationCard(id: number) {
-    return this.data.reservations.find((item) => item.id === id)
-  },
+  getReservationCard(id: number) { return this.data.reservations.find((item) => item.id === id) },
 
   openReservationEditPage(id?: number) {
-    const baseUrl = '/pages/merchant/reservations/edit/index'
-    const url = id ? `${baseUrl}?id=${id}` : `${baseUrl}?date=${this.data.date}`
-    wx.navigateTo({ url })
+    wx.navigateTo({ url: buildReservationEditUrl(this.data.date, id) })
   },
 
-  onOpenCreatePage() {
-    this.openReservationEditPage()
-  },
+  onOpenCreatePage() { this.openReservationEditPage() },
 
   onReservationCardTap(e: WechatMiniprogram.TouchEvent) {
     const { id } = e.currentTarget.dataset as { id?: number }
-    if (!id) return
-    this.openReservationEditPage(id)
+    if (id) this.openReservationEditPage(id)
   },
-
   onOpenEditPage(e: WechatMiniprogram.TouchEvent) {
     const { id } = e.currentTarget.dataset as { id?: number }
-    if (!id) return
-    this.openReservationEditPage(id)
+    if (id) this.openReservationEditPage(id)
   },
 
   showFeedbackToast(theme: 'success' | 'warning' | 'error', message: string, duration = 2200) {
@@ -736,13 +428,8 @@ Page({
     )
   },
 
-  onActionSheetCancel() {
-    this.resetReservationActionSheet()
-  },
-
-  onActionSheetClose() {
-    this.resetReservationActionSheet()
-  },
+  onActionSheetCancel() { this.resetReservationActionSheet() },
+  onActionSheetClose() { this.resetReservationActionSheet() },
 
   onActionSheetSelected(
     e: WechatMiniprogram.CustomEvent<{ selected?: ReservationActionSheetItem | string, index?: number }>
@@ -817,10 +504,7 @@ Page({
     })
   },
 
-  onCancelConfirmDialog() {
-    if (this.data.confirmDialogSubmitting) return
-    this.resetConfirmDialogState()
-  },
+  onCancelConfirmDialog() { if (!this.data.confirmDialogSubmitting) this.resetConfirmDialogState() },
 
   async executeReservationAction(
     reservationId: number,
@@ -950,29 +634,7 @@ Page({
     const reservation = this.getReservationCard(id)
     if (!reservation) return
 
-    const optionDefs: Array<{ label: string, key: ReservationMutationKey | 'edit' }> = []
-    if (reservation.canEdit) {
-      optionDefs.push({ label: '编辑预订', key: 'edit' })
-    }
-    if (reservation.canConfirm && reservation.primaryActionKey !== 'confirm') {
-      optionDefs.push({ label: '确认预订', key: 'confirm' })
-    }
-    if (reservation.canCheckIn && reservation.primaryActionKey !== 'check_in') {
-      optionDefs.push({ label: '登记到店', key: 'check_in' })
-    }
-    if (reservation.canStartCooking && reservation.primaryActionKey !== 'start_cooking') {
-      optionDefs.push({ label: '通知后厨起菜', key: 'start_cooking' })
-    }
-    if (reservation.canComplete && reservation.primaryActionKey !== 'complete') {
-      optionDefs.push({ label: '完成预订', key: 'complete' })
-    }
-    if (reservation.canNoShow) {
-      optionDefs.push({ label: '标记未到店', key: 'no_show' })
-    }
-    if (reservation.canCancel) {
-      optionDefs.push({ label: '取消预订', key: 'cancel' })
-    }
-
+    const optionDefs = buildReservationMoreActionItems(reservation)
     if (!optionDefs.length) return
 
     this.openReservationActionSheet(
@@ -980,11 +642,7 @@ Page({
       id,
       reservation.contact_name,
       `${reservation.contact_name || '当前顾客'} 的预订操作`,
-      optionDefs.map((item) => ({
-        label: item.label,
-        key: item.key,
-        color: item.key === 'cancel' || item.key === 'no_show' ? 'danger' : 'default'
-      }))
+      optionDefs
     )
   }
 })

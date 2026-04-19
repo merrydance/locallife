@@ -2,7 +2,7 @@
 
 Canonical source:
 
-- `../../.github/standards/backend/BACKEND_RISK_MAP.md`
+- `../../.github/standards/backend/README.md`
 
 This legacy `.codex` file remains only as a compatibility entrypoint for older backend prompts and notes.
 

@@ -456,7 +456,7 @@ const getLatestOrderByReservation = `-- name: GetLatestOrderByReservation :one
 SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot FROM orders
 WHERE reservation_id = $1
     AND replaced_by_order_id IS NULL
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT 1
 `
 
@@ -1228,7 +1228,7 @@ func (q *Queries) ListMerchantPromotionOrders(ctx context.Context, arg ListMerch
 const listOrdersByMerchant = `-- name: ListOrdersByMerchant :many
 SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot FROM orders
 WHERE merchant_id = $1
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $2 OFFSET $3
 `
 
@@ -1314,7 +1314,7 @@ func (q *Queries) ListOrdersByMerchant(ctx context.Context, arg ListOrdersByMerc
 const listOrdersByMerchantAndStatus = `-- name: ListOrdersByMerchantAndStatus :many
 SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot FROM orders
 WHERE merchant_id = $1 AND status = $2
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $3 OFFSET $4
 `
 
@@ -1406,7 +1406,7 @@ func (q *Queries) ListOrdersByMerchantAndStatus(ctx context.Context, arg ListOrd
 const listOrdersByMerchantAndStatuses = `-- name: ListOrdersByMerchantAndStatuses :many
 SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot FROM orders
 WHERE merchant_id = $1 AND status = ANY($2::text[])
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $3 OFFSET $4
 `
 
@@ -1500,7 +1500,7 @@ SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee,
 WHERE merchant_id = $1
     AND ($2::text IS NULL OR status = $2::text)
     AND ($3::text IS NULL OR order_type = $3::text)
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $5 OFFSET $4
 `
 
@@ -1598,7 +1598,7 @@ SELECT
 FROM orders o
 INNER JOIN merchants m ON o.merchant_id = m.id
 WHERE o.user_id = $1
-ORDER BY o.created_at DESC
+ORDER BY o.created_at DESC, o.id DESC
 LIMIT $2 OFFSET $3
 `
 
@@ -1745,7 +1745,7 @@ SELECT
 FROM orders o
 INNER JOIN merchants m ON o.merchant_id = m.id
 WHERE o.user_id = $1 AND o.status = $2
-ORDER BY o.created_at DESC
+ORDER BY o.created_at DESC, o.id DESC
 LIMIT $3 OFFSET $4
 `
 
@@ -1893,7 +1893,7 @@ func (q *Queries) ListOrdersByUserAndStatus(ctx context.Context, arg ListOrdersB
 
 const listOrdersByUserWithFilters = `-- name: ListOrdersByUserWithFilters :many
 SELECT
-        o.id, o.order_no, o.user_id, o.merchant_id, o.order_type, o.address_id, o.delivery_fee, o.delivery_distance, o.table_id, o.reservation_id, o.subtotal, o.discount_amount, o.delivery_fee_discount, o.total_amount, o.status, o.payment_method, o.paid_at, o.notes, o.created_at, o.updated_at, o.completed_at, o.cancelled_at, o.cancel_reason, o.final_amount, o.platform_commission, o.user_voucher_id, o.voucher_amount, o.balance_paid, o.membership_id, o.fulfillment_status, o.replaced_by_order_id, o.pickup_code, o.dispatch_order_id, o.flow_id, o.status_hint, o.badges, o.exception_state, o.claim_channel, o.overtime, o.prep_start_at, o.ready_at, o.courier_accept_at, o.picked_at, o.rider_delivered_at, o.user_delivered_at, o.auto_user_delivered_at, o.delivery_duration, o.delivery_contact_name_snapshot, o.delivery_contact_phone_snapshot, o.delivery_address_snapshot, o.delivery_longitude_snapshot, o.delivery_latitude_snapshot,
+    o.id, o.order_no, o.user_id, o.merchant_id, o.order_type, o.address_id, o.delivery_fee, o.delivery_distance, o.table_id, o.reservation_id, o.subtotal, o.discount_amount, o.delivery_fee_discount, o.total_amount, o.status, o.payment_method, o.paid_at, o.notes, o.created_at, o.updated_at, o.completed_at, o.cancelled_at, o.cancel_reason, o.final_amount, o.platform_commission, o.user_voucher_id, o.voucher_amount, o.balance_paid, o.membership_id, o.fulfillment_status, o.replaced_by_order_id, o.pickup_code, o.dispatch_order_id, o.flow_id, o.status_hint, o.badges, o.exception_state, o.claim_channel, o.overtime, o.prep_start_at, o.ready_at, o.courier_accept_at, o.picked_at, o.rider_delivered_at, o.user_delivered_at, o.auto_user_delivered_at, o.delivery_duration, o.delivery_contact_name_snapshot, o.delivery_contact_phone_snapshot, o.delivery_address_snapshot, o.delivery_longitude_snapshot, o.delivery_latitude_snapshot,
         m.name as merchant_name,
         pending_combined_payment.combined_payment_id,
         pending_combined_payment.combine_out_trade_no
@@ -1916,7 +1916,7 @@ WHERE o.user_id = $1
     AND ($2::text IS NULL OR o.status = $2)
     AND ($3::text IS NULL OR o.order_type = $3)
     AND ($4::bigint IS NULL OR o.reservation_id IS NOT DISTINCT FROM $4)
-ORDER BY o.created_at DESC
+ORDER BY o.created_at DESC, o.id DESC
 LIMIT $6 OFFSET $5
 `
 
@@ -2075,7 +2075,7 @@ const listPendingOrdersBefore = `-- name: ListPendingOrdersBefore :many
 SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot FROM orders
 WHERE status = $1
   AND created_at < $2
-ORDER BY created_at ASC
+ORDER BY created_at ASC, id ASC
 LIMIT $3
 `
 
@@ -2167,7 +2167,7 @@ WHERE order_type = 'takeout'
     AND rider_delivered_at IS NOT NULL
     AND rider_delivered_at < $1
     AND replaced_by_order_id IS NULL
-ORDER BY rider_delivered_at ASC
+ORDER BY rider_delivered_at ASC, id ASC
 LIMIT $2
 `
 

@@ -5,6 +5,7 @@ import { isPreparingOrderStatus, isReadyOrderStatus } from '../../../api/order'
 import { ensureMerchantConsoleAccess } from '../../../utils/console-access'
 import { logger } from '../../../utils/logger'
 import { getStableBarHeights } from '../../../utils/responsive'
+import { resolveStatusTagTheme, type StatusTagTheme } from '../../../utils/status-tag'
 import { wsManager, WSMessageType } from '../../../utils/websocket'
 
 type WsUnsubscribe = () => void
@@ -22,6 +23,8 @@ interface KitchenBoardOrder extends KitchenOrderResponse {
   order_type_label: string
   waiting_label: string
   remaining_label: string
+  remaining_tag_text: string
+  remaining_tag_theme: StatusTagTheme
   preparation_label: string
   seat_or_pickup_label: string
   created_time_label: string
@@ -60,6 +63,12 @@ function formatKitchenOrder(order: KitchenOrderResponse): KitchenBoardOrder {
     order_type_label: OrderManagementAdapter.formatOrderType(order.order_type),
     waiting_label: `${order.waiting_minutes || 0}分钟`,
     remaining_label: remainingMinutes > 0 ? `剩余${remainingMinutes}分钟` : '请尽快处理',
+    remaining_tag_text: OrderManagementAdapter.isOrderOverdue(order)
+      ? '已超时'
+      : (remainingMinutes > 0 ? `剩余${remainingMinutes}分钟` : '请尽快处理'),
+    remaining_tag_theme: OrderManagementAdapter.isOrderOverdue(order)
+      ? resolveStatusTagTheme('danger')
+      : resolveStatusTagTheme('success'),
     preparation_label: preparationMinutes === null ? '--' : `${preparationMinutes}分钟`,
     seat_or_pickup_label: seatOrPickupLabel,
     created_time_label: dayjs(order.created_at).format('HH:mm'),

@@ -4,9 +4,9 @@
  * 可用于所有支付页面
  */
 
-import { rechargeMembership, getMyMemberships, MembershipResponse } from '../../api/personal'
+import { rechargeMembership, getMyMemberships, MembershipResponse, claimVoucher } from '../../api/personal'
+import { getMerchantPromotionCenter, MerchantPromotionCenterResponse } from '../../api/merchant'
 import { formatPriceNoSymbol } from '../../utils/util'
-import { request } from '../../utils/request'
 import { getErrorDebugMessage, getErrorUserMessage } from '../../utils/user-facing'
 
 /** 优惠项目类型 - 对齐后端 api.promotionItem */
@@ -20,15 +20,6 @@ interface PromotionItem {
     valid_until: string    // 有效期
     rule_id: number        // 规则ID（充值活动用）
     displayTitle?: string  // 展现用的格式化标题
-}
-
-/** 商户优惠响应 */
-interface MerchantPromotionsResponse {
-    merchant_id: number
-    delivery_fee_rules: PromotionItem[]
-    discount_rules: PromotionItem[]
-    vouchers: PromotionItem[]
-    recharge_rules: PromotionItem[]
 }
 
 /** 展示用的充值项 */
@@ -126,10 +117,7 @@ Component({
 
             try {
                 // 调用聚合API获取所有优惠
-                const result = await request<MerchantPromotionsResponse>({
-                    url: `/v1/merchants/${merchantId}/promotions`,
-                    method: 'GET'
-                })
+                const result = await getMerchantPromotionCenter(merchantId) as MerchantPromotionCenterResponse
 
                 if (!result) {
                     this.setData({ loading: false })
@@ -304,10 +292,7 @@ Component({
 
             try {
                 // 调用领券API
-                await request({
-                    url: `/v1/vouchers/${voucherId}/claim`,
-                    method: 'POST'
-                })
+                await claimVoucher(voucherId)
 
                 wx.showToast({
                     title: '领取成功',

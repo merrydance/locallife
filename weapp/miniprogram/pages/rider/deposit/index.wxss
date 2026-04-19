@@ -91,24 +91,8 @@
   color: var(--td-text-color-secondary);
 }
 
-.action-notice {
+.notice-banner {
   margin: 0 0 24rpx;
-  padding: 20rpx 24rpx;
-  border-radius: var(--radius-md);
-}
-
-.action-notice-success {
-  background: var(--td-success-color-1);
-}
-
-.action-notice-warning {
-  background: var(--td-warning-color-1);
-}
-
-.action-notice-text {
-  font-size: var(--font-size-xxs);
-  line-height: 1.6;
-  color: var(--td-text-color-primary);
 }
 
 /* 历史列表 */

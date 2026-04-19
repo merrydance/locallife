@@ -1,7 +1,7 @@
 -- Reservation inventory tracking
 
 -- name: ListReservationInventoryByReservation :many
-SELECT * FROM reservation_inventory
+SELECT id, reservation_id, dish_id, quantity, created_at, updated_at FROM reservation_inventory
 WHERE reservation_id = $1
 ORDER BY dish_id;
 

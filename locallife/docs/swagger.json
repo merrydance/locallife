@@ -385,6 +385,62 @@
                 }
             }
         },
+        "/v1/admin/operators/batch/status": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "管理-运营商"
+                ],
+                "summary": "[管理] 批量更新运营商状态",
+                "parameters": [
+                    {
+                        "description": "批量状态更新",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.batchUpdateOperatorStatusAdminRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.batchAdminOperatorStatusResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/admin/operators/region-applications": {
             "get": {
                 "security": [
@@ -2748,12 +2804,6 @@
                     },
                     "400": {
                         "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Config not found",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -8551,7 +8601,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "用户为会员卡充值，支持微信/支付宝支付，自动匹配赠送规则",
+                "description": "会员线上充值已暂停，请联系商户线下收款后代录入账",
                 "consumes": [
                     "application/json"
                 ],
@@ -8561,7 +8611,7 @@
                 "tags": [
                     "会员管理"
                 ],
-                "summary": "会员卡充值",
+                "summary": "会员卡充值（已暂停）",
                 "parameters": [
                     {
                         "description": "充值信息",
@@ -8574,12 +8624,6 @@
                     }
                 ],
                 "responses": {
-                    "200": {
-                        "description": "支付参数和交易信息",
-                        "schema": {
-                            "type": "object"
-                        }
-                    },
                     "400": {
                         "description": "参数错误或用户未绑定微信",
                         "schema": {
@@ -8606,6 +8650,12 @@
                     },
                     "500": {
                         "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "会员储值支付已暂停",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -8851,7 +8901,7 @@
                         "Bearer": []
                     }
                 ],
-                "description": "商户对已批准的索赔提交申诉，每个索赔只能申诉一次",
+                "description": "商户对已批准的索赔提交申诉，提交后由系统自动复核并写回最终结果",
                 "consumes": [
                     "application/json"
                 ],
@@ -9676,7 +9726,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "商户审核通过后，绑定银行卡信息并提交微信二级商户进件",
+                "description": "商户审核通过后，绑定银行卡信息并提交微信二级商户进件。\n错误语义与当前实现保持一致：本地资料校验失败、微信 PARAM_ERROR、INVALID_REQUEST、RESOURCE_ALREADY_EXISTS 返回 400；微信 SIGN_ERROR 返回 401；微信 NO_AUTH 返回 403；微信 RESOURCE_NOT_EXISTS 返回 404；本地存在进行中的申请或已完成开户返回 409；微信 SYSTEM_ERROR 或服务端内部失败返回 500。\n所有错误均写入请求日志，响应中的 error 字段会返回清晰的说明或操作指引。",
                 "consumes": [
                     "application/json"
                 ],
@@ -9719,6 +9769,18 @@
                     },
                     "403": {
                         "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -11350,6 +11412,332 @@
                 }
             }
         },
+        "/v1/merchant/finance/account/cancel-withdraw/applications": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "返回当前商户的注销提现申请列表。若收付通账户未激活，则返回空列表并带 account_status/status_desc。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户财务"
+                ],
+                "summary": "查询商户注销提现申请列表",
+                "parameters": [
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 1,
+                        "description": "页码",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "maximum": 100,
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 20,
+                        "description": "每页数量",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.merchantCancelWithdrawListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "认证失败",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "商户不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "创建商户注销提现申请并提交微信注销提现接口。服务端会先校验主体状态、上传证明材料，并按微信错误码返回明确语义，不会把已知微信错误降级为“提交结果未知”。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户财务"
+                ],
+                "summary": "创建商户注销提现申请",
+                "parameters": [
+                    {
+                        "description": "创建注销提现申请",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.createMerchantCancelWithdrawRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "同 out_request_no 已存在本地申请，返回现有申请",
+                        "schema": {
+                            "$ref": "#/definitions/api.merchantCancelWithdrawCreateResponse"
+                        }
+                    },
+                    "201": {
+                        "description": "创建成功",
+                        "schema": {
+                            "$ref": "#/definitions/api.merchantCancelWithdrawCreateResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "微信签名失败",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "商户支付账户、进件记录或申请不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "当前不满足注销提现条件或申请已存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "商户支付账户未激活",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "微信限频",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "内部错误或微信服务异常",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "微信返回契约不合法",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "服务不可用或微信要求稍后重试",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/merchant/finance/account/cancel-withdraw/applications/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "查询当前商户的注销提现申请详情。若申请尚未终态，服务端会先尝试同步一次微信状态。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户财务"
+                ],
+                "summary": "查询商户注销提现申请详情",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "本地申请 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.merchantCancelWithdrawItem"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "认证失败",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "商户或申请不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "微信限频",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "内部错误或微信服务异常",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "微信返回契约不合法",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "服务不可用",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/merchant/finance/account/cancel-withdraw/eligibility": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "查询当前商户的收付通账户状态与微信注销提现资格校验结果。若收付通账户未激活，则返回 200 且 eligible=false，不触发微信调用。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户财务"
+                ],
+                "summary": "查询商户注销提现资格",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.merchantCancelWithdrawEligibilityResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "认证失败",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "商户不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "微信限频",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "内部错误或微信服务异常",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "微信返回契约不合法",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "服务不可用",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/merchant/finance/account/settlement-account": {
             "get": {
                 "security": [
@@ -11365,6 +11753,14 @@
                     "商户财务"
                 ],
                 "summary": "查询商户结算账户",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "银行账号展示规则（默认 ACCOUNT_NUMBER_RULE_MASK_V1）",
+                        "name": "account_number_rule",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -11392,7 +11788,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "商户修改自己的收付通结算银行账户。account_number 和 account_name 传入明文，服务端负责加密后转发给微信支付。",
+                "description": "商户修改自己的收付通结算银行账户。account_number 传入明文后由服务端加密；account_name 仅在需要修改开户名称时传明文，未传时保持当前开户名称不变。",
                 "consumes": [
                     "application/json"
                 ],
@@ -11427,6 +11823,12 @@
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
                     },
+                    "401": {
+                        "description": "微信签名失败",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
                     "403": {
                         "description": "无权限",
                         "schema": {
@@ -11445,14 +11847,14 @@
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
                     },
-                    "500": {
-                        "description": "加密失败",
+                    "429": {
+                        "description": "请求过于频繁",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
                     },
-                    "502": {
-                        "description": "微信支付下游异常",
+                    "500": {
+                        "description": "加密失败",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -11490,6 +11892,10 @@
                         "required": true
                     },
                     {
+                        "enum": [
+                            "ACCOUNT_NUMBER_RULE_MASK_V1",
+                            "ACCOUNT_NUMBER_RULE_MASK_V2"
+                        ],
                         "type": "string",
                         "description": "银行账号展示规则（默认 ACCOUNT_NUMBER_RULE_MASK_V1）",
                         "name": "account_number_rule",
@@ -11501,6 +11907,18 @@
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/api.settlementApplicationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "微信签名失败",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
                         }
                     },
                     "403": {
@@ -11521,14 +11939,14 @@
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
                     },
-                    "500": {
-                        "description": "内部错误",
+                    "429": {
+                        "description": "请求过于频繁",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
                     },
-                    "502": {
-                        "description": "微信支付下游异常",
+                    "500": {
+                        "description": "内部错误",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -14956,6 +15374,96 @@
                 }
             }
         },
+        "/v1/merchants/{id}/members/{user_id}/recharge": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "商户记录用户已在线下完成的会员充值，并自动按当前充赠规则入账",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "会员管理-商户"
+                ],
+                "summary": "商户代录会员充值",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "商户ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "用户ID",
+                        "name": "user_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "幂等键，同一笔充值重试必须复用同一个值",
+                        "name": "Idempotency-Key",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "充值入账信息",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.recordMemberRechargeBody"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "入账后的会员信息",
+                        "schema": {
+                            "$ref": "#/definitions/api.merchantMemberRechargeResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "非商户用户",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "会员不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/merchants/{id}/promotions": {
             "get": {
                 "description": "获取商户所有活跃的优惠活动（满返运费、满减、可领优惠券、充值活动）",
@@ -17311,87 +17819,6 @@
                 }
             }
         },
-        "/v1/operator/appeals/{id}/review": {
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "运营商审核申诉，可仅撤销判责与追偿，也可附带补偿金额；系统会自动更新用户信用分",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "运营商申诉管理"
-                ],
-                "summary": "审核申诉",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "申诉ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "审核请求",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/api.reviewAppealRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "审核成功",
-                        "schema": {
-                            "$ref": "#/definitions/api.appealResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "参数错误或申诉已审核",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "401": {
-                        "description": "未授权",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "403": {
-                        "description": "非运营商用户或申诉不在管辖区域",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "申诉不存在",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "服务器错误",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
         "/v1/operator/application": {
             "get": {
                 "security": [
@@ -17789,397 +18216,6 @@
                 }
             }
         },
-        "/v1/operator/applyment/areas/provinces": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "查询微信收付通支行检索所需的省份列表",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "开户"
-                ],
-                "summary": "查询开户省份列表",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/api.applymentProvinceListResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "503": {
-                        "description": "Service Unavailable",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/operator/applyment/areas/provinces/{province_code}/cities": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "根据省份编码查询微信收付通支行检索所需的城市列表",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "开户"
-                ],
-                "summary": "查询开户城市列表",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "省份编码",
-                        "name": "province_code",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/api.applymentCityListResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "503": {
-                        "description": "Service Unavailable",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/operator/applyment/banks": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "查询微信收付通支持的对公或对私开户银行列表，返回后端缓存快照",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "开户"
-                ],
-                "summary": "查询进件银行列表",
-                "parameters": [
-                    {
-                        "enum": [
-                            "ACCOUNT_TYPE_BUSINESS",
-                            "ACCOUNT_TYPE_PRIVATE"
-                        ],
-                        "type": "string",
-                        "description": "账户类型",
-                        "name": "account_type",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/api.applymentBankListResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "503": {
-                        "description": "Service Unavailable",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/operator/applyment/banks/search-by-bank-account": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "根据个人银行卡号识别开户银行候选，仅适用于对私账户",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "开户"
-                ],
-                "summary": "识别对私银行卡开户银行",
-                "parameters": [
-                    {
-                        "enum": [
-                            "ACCOUNT_TYPE_BUSINESS",
-                            "ACCOUNT_TYPE_PRIVATE"
-                        ],
-                        "type": "string",
-                        "description": "账户类型",
-                        "name": "account_type",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "银行卡号",
-                        "name": "account_number",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/api.applymentBankSearchResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "503": {
-                        "description": "Service Unavailable",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/operator/applyment/banks/{bank_alias_code}/branches": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "根据银行别名编码和城市编码查询微信收付通支行列表",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "开户"
-                ],
-                "summary": "查询开户支行列表",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "银行别名编码",
-                        "name": "bank_alias_code",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "城市编码",
-                        "name": "city_code",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/api.applymentBranchListResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "503": {
-                        "description": "Service Unavailable",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/operator/applyment/bindbank": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "运营商审核通过后，绑定银行卡信息并提交微信二级商户进件",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "运营商"
-                ],
-                "summary": "运营商绑定银行卡并提交微信开户",
-                "parameters": [
-                    {
-                        "description": "银行卡信息",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/api.operatorBindBankRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/api.operatorBindBankResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/operator/applyment/status": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "获取运营商微信支付开户申请状态",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "运营商"
-                ],
-                "summary": "获取运营商开户状态",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/api.operatorApplymentStatusResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/v1/operator/claims/{id}/recovery": {
             "get": {
                 "security": [
@@ -18210,78 +18246,6 @@
                 "responses": {
                     "200": {
                         "description": "追偿单详情",
-                        "schema": {
-                            "$ref": "#/definitions/api.claimRecoveryResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "参数错误",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "401": {
-                        "description": "未授权",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "403": {
-                        "description": "无权限处理该区域",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "追偿单不存在",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "服务器错误",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/operator/claims/{id}/recovery/waive": {
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "运营商核销或免除追偿，系统标记为已核销并恢复接单限制",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "运营商申诉管理"
-                ],
-                "summary": "运营商核销追偿单",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "索赔ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "已核销",
                         "schema": {
                             "$ref": "#/definitions/api.claimRecoveryResponse"
                         }
@@ -18440,6 +18404,12 @@
                     },
                     {
                         "type": "integer",
+                        "description": "区域ID；不传时聚合当前运营商全部可管区域",
+                        "name": "region_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
                         "description": "页码 (默认: 1)",
                         "name": "page",
                         "in": "query"
@@ -18503,7 +18473,7 @@
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "区域ID",
+                        "description": "区域ID；不传时聚合当前运营商全部可管区域",
                         "name": "region_id",
                         "in": "query"
                     }
@@ -19601,6 +19571,12 @@
                     },
                     {
                         "type": "integer",
+                        "description": "区域ID；不传时聚合当前运营商全部可管区域",
+                        "name": "region_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
                         "description": "页码 (默认: 1)",
                         "name": "page",
                         "in": "query"
@@ -19664,7 +19640,7 @@
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "区域ID",
+                        "description": "区域ID；不传时聚合当前运营商全部可管区域",
                         "name": "region_id",
                         "in": "query"
                     }
@@ -20025,6 +20001,12 @@
                         "name": "end_date",
                         "in": "query",
                         "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "区域ID；不传时聚合当前运营商全部可管区域",
+                        "name": "region_id",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -20132,186 +20114,6 @@
                 }
             }
         },
-        "/v1/operators/me/finance/account/settlement-account": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "运营商查询自己的收付通结算账户（银行账户）信息，商户号从认证 session 取",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "运营商财务"
-                ],
-                "summary": "查询运营商结算账户",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/api.operatorSettlementAccountResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "无权限",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "503": {
-                        "description": "微信客户端未配置",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            },
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "运营商修改自己的收付通结算银行账户。account_number 和 account_name 传入明文，服务端负责加密后转发给微信支付。",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "运营商财务"
-                ],
-                "summary": "修改运营商结算账户",
-                "parameters": [
-                    {
-                        "description": "修改结算账户请求",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/api.modifySettlementAccountRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/api.modifySettlementAccountApplicationResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "运营商未激活或无权限",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "422": {
-                        "description": "运营商收付通账户未激活",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "加密失败",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "502": {
-                        "description": "微信支付下游异常",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "503": {
-                        "description": "微信客户端未配置",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/operators/me/finance/account/settlement-account/applications/{application_no}": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "运营商查询自己的结算账户修改申请审核结果。",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "运营商财务"
-                ],
-                "summary": "查询运营商结算账户修改申请状态",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "修改结算账户申请单号",
-                        "name": "application_no",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "银行账号展示规则（默认 ACCOUNT_NUMBER_RULE_MASK_V1）",
-                        "name": "account_number_rule",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/api.settlementApplicationResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "运营商未激活或无权限",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "申请单不存在",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "422": {
-                        "description": "运营商收付通账户未激活",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "502": {
-                        "description": "微信支付下游异常",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "503": {
-                        "description": "微信客户端未配置",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/v1/operators/me/finance/overview": {
             "get": {
                 "security": [
@@ -20330,11 +20132,25 @@
                     "运营商数据统计"
                 ],
                 "summary": "获取财务概览",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "区域ID；不传时聚合当前运营商全部可管区域",
+                        "name": "region_id",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "财务概览",
                         "schema": {
                             "$ref": "#/definitions/api.operatorFinanceOverviewResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
                         }
                     },
                     "403": {
@@ -20352,14 +20168,14 @@
                 }
             }
         },
-        "/v1/operators/me/finance/withdraw": {
-            "post": {
+        "/v1/operators/me/payment-orders/{id}/profit-sharing/amounts": {
+            "get": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
                 ],
-                "description": "运营商发起收付通提现到绑定银行卡",
+                "description": "运营商按支付单查询微信侧剩余待分账金额，仅适用于收付通分账订单",
                 "consumes": [
                     "application/json"
                 ],
@@ -20369,40 +20185,101 @@
                 "tags": [
                     "运营商财务"
                 ],
-                "summary": "运营商提现",
+                "summary": "查询待分账金额",
                 "parameters": [
                     {
-                        "description": "提现请求",
+                        "type": "integer",
+                        "description": "支付单ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "待分账金额",
+                        "schema": {
+                            "$ref": "#/definitions/api.profitSharingAmountsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误或支付单类型不支持",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "支付单不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "微信支付接口不可用",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/operators/me/payment-orders/{id}/profit-sharing/receivers/delete": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "运营商按支付单上下文删除微信分账接收方关系，仅适用于收付通分账订单",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营商财务"
+                ],
+                "summary": "删除分账接收方关系",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "支付单ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "删除请求",
                         "name": "request",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api.withdrawOperatorRequest"
+                            "$ref": "#/definitions/api.deleteProfitSharingReceiverRequest"
                         }
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "提现申请提交成功",
+                        "description": "删除结果",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/api.deleteProfitSharingReceiverResponse"
                         }
                     },
                     "400": {
-                        "description": "参数错误或余额不足",
+                        "description": "请求参数错误或支付单类型不支持",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
                     },
-                    "403": {
-                        "description": "无权限",
+                    "404": {
+                        "description": "支付单不存在",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
                     },
-                    "500": {
-                        "description": "服务器内部错误",
+                    "502": {
+                        "description": "微信支付接口不可用",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -21215,7 +21092,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "根据购物车商品计算订单金额，用于下单前预览。\n\n**计算内容：**\n- 商品小计（基于购物车商品）\n- 配送费（外卖订单，基于实时位置或配送地址）\n- 满减优惠\n- 满返运费优惠\n- 优惠券抵扣\n\n**配送费计算方式：**\n- 传入 latitude/longitude：使用实时位置计算（浏览阶段）\n- 传入 address_id：使用已保存地址计算（下单阶段）\n- 两者都传：优先使用 address_id",
+                "description": "根据购物车商品计算订单金额，用于下单前预览。\n\n**计算内容：**\n- 商品小计（基于购物车商品）\n- 配送费（外卖订单，基于实时位置或配送地址）\n- 商户营销优惠与优惠券抵扣\n- 满返运费优惠\n- 推荐优惠券、阶梯优惠和代金券试算\n- 会员余额支付能力评估\n\n**配送费计算方式：**\n- 传入 latitude/longitude：使用实时位置计算（浏览阶段）\n- 传入 address_id：使用已保存地址计算（下单阶段）\n- 两者都传：优先使用 address_id",
                 "consumes": [
                     "application/json"
                 ],
@@ -21744,7 +21621,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "为订单或预定创建支付订单，当前主路径会按业务类型自动选择真实支付链路。\n\n**兼容字段：**\n- `payment_type` 仅作为兼容保留字段，可不传。\n- 对 `order` 和 `reservation` 主支付，系统已统一走平台收付通普通支付。\n- 旧客户端即使传入 `native` 或 `miniprogram`，也不会再改变底层支付物理链路。\n\n**业务类型：**\n- order: 订单支付\n- reservation: 预定押金\n\n**幂等性：** 如果已存在待支付的支付订单，将直接返回该订单。\n\n**安全限制：**\n- 订单必须属于当前用户\n- 订单必须处于pending状态",
+                "description": "为订单或预定创建支付订单，当前主路径会按业务类型自动选择真实支付链路。\n\n`payment_type` 为兼容字段，可不传；当前 `order` 和 `reservation` 主支付统一走平台收付通普通支付。\n\n**业务类型：**\n- order: 订单支付\n- reservation: 预定押金\n\n**幂等性：** 如果已存在待支付的支付订单，将直接返回该订单。\n\n**安全限制：**\n- 订单必须属于当前用户\n- 订单必须处于pending状态",
                 "consumes": [
                     "application/json"
                 ],
@@ -22273,6 +22150,73 @@
                 }
             }
         },
+        "/v1/payments/{id}/query": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "查询本地普通支付订单详情，并拉取微信收付通单笔支付最新状态，供小程序恢复支付或判断后续动作",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "支付管理"
+                ],
+                "summary": "查询支付订单远端状态",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "支付订单ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "支付订单详情(含微信远端状态)",
+                        "schema": {
+                            "$ref": "#/definitions/api.paymentOrderQueryResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误或支付单不支持该查询",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "支付订单不属于当前用户",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "支付订单不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "支付服务不可用",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/payments/{id}/refunds": {
             "get": {
                 "security": [
@@ -22477,6 +22421,373 @@
                 }
             }
         },
+        "/v1/platform/finance/wechat-ecommerce/violation-notification": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "管理员查询微信支付平台收付通商户违规通知回调地址；未配置时返回 configured=false",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "平台财务"
+                ],
+                "summary": "查询商户违规通知回调地址",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.platformViolationNotificationConfigResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "微信支付调用失败",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "支付服务未配置",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "管理员更新微信支付平台收付通商户违规通知回调地址；未传 notify_url 时使用当前服务配置",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "平台财务"
+                ],
+                "summary": "更新商户违规通知回调地址",
+                "parameters": [
+                    {
+                        "description": "回调地址配置",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/api.platformViolationNotificationConfigRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.platformViolationNotificationConfigResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "微信支付调用失败",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "支付服务未配置",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "管理员在微信支付平台收付通侧创建商户违规通知回调地址；未传 notify_url 时使用当前服务配置",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "平台财务"
+                ],
+                "summary": "创建商户违规通知回调地址",
+                "parameters": [
+                    {
+                        "description": "回调地址配置",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/api.platformViolationNotificationConfigRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.platformViolationNotificationConfigResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "微信支付调用失败",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "支付服务未配置",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "管理员删除微信支付平台收付通商户违规通知回调地址；若微信侧已不存在则幂等返回 204",
+                "tags": [
+                    "平台财务"
+                ],
+                "summary": "删除商户违规通知回调地址",
+                "responses": {
+                    "204": {
+                        "description": "删除成功"
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "微信支付调用失败",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "支付服务未配置",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/platform/finance/wechat-ecommerce/violations": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "管理员分页查看微信支付平台收付通商户违规记录，支持按 merchant_id、sub_mch_id、event_type、risk_type 过滤",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "平台财务"
+                ],
+                "summary": "查询商户违规记录列表",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "商户ID",
+                        "name": "merchant_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "二级商户号",
+                        "name": "sub_mch_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "违规事件类型",
+                        "name": "event_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "风险类型",
+                        "name": "risk_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "页码，默认 1",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "每页数量，默认 20，最大 100",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.listPlatformWechatMerchantViolationsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/platform/finance/wechat-ecommerce/violations/{record_id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "管理员按 record_id 查询单条微信支付平台收付通商户违规记录",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "平台财务"
+                ],
+                "summary": "获取商户违规记录详情",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "微信侧违规记录ID",
+                        "name": "record_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.platformWechatMerchantViolationResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "违规记录不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/platform/operational-configs": {
             "get": {
                 "security": [
@@ -22484,7 +22795,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "获取平台维护的运营真实配置项，包括平台佣金、运营商佣金、商户保证金与骑手押金。",
+                "description": "获取平台维护的运营真实配置项，包括平台佣金、运营商佣金、骑手押金与运费默认值。",
                 "produces": [
                     "application/json"
                 ],
@@ -22541,7 +22852,7 @@
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "配置Key (PLATFORM_COMMISSION, OPERATOR_COMMISSION, MERCHANT_DEPOSIT, RIDER_DEPOSIT)",
+                        "description": "配置Key (PLATFORM_COMMISSION, OPERATOR_COMMISSION, RIDER_DEPOSIT, BASE_DELIVERY_FEE, BASE_DISTANCE, EXTRA_FEE_PER_KM, MIN_DELIVERY_FEE, MAX_DELIVERY_FEE, DELIVERY_VALUE_RATIO)",
                         "name": "key",
                         "in": "path",
                         "required": true
@@ -22603,7 +22914,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "获取平台维护的运营真实配置项，包括平台佣金、运营商佣金、商户保证金与骑手押金。请迁移到 /v1/platform/operational-configs。",
+                "description": "获取平台维护的运营真实配置项，包括平台佣金、运营商佣金、骑手押金与运费默认值。请迁移到 /v1/platform/operational-configs。",
                 "produces": [
                     "application/json"
                 ],
@@ -22660,7 +22971,7 @@
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "配置Key (PLATFORM_COMMISSION, OPERATOR_COMMISSION, MERCHANT_DEPOSIT, RIDER_DEPOSIT)",
+                        "description": "配置Key (PLATFORM_COMMISSION, OPERATOR_COMMISSION, RIDER_DEPOSIT, BASE_DELIVERY_FEE, BASE_DISTANCE, EXTRA_FEE_PER_KM, MIN_DELIVERY_FEE, MAX_DELIVERY_FEE, DELIVERY_VALUE_RATIO)",
                         "name": "key",
                         "in": "path",
                         "required": true
@@ -23291,77 +23602,6 @@
                         "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/platform/stats/bill-reconciliation": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "列出微信支付账单与本地数据库的对账报告，按账单日期倒序排列",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Platform"
-                ],
-                "summary": "获取每日账单对账报告列表",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "页码 (从1开始)",
-                        "name": "page_id",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "每页条数 (1-100)",
-                        "name": "page_size",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "对账报告列表",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/api.billReconciliationReportResponse"
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    },
-                    "401": {
-                        "description": "未授权",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    },
-                    "403": {
-                        "description": "权限不足",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    },
-                    "500": {
-                        "description": "服务器内部错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
                         }
                     }
                 }
@@ -27188,7 +27428,7 @@
                         "Bearer": []
                     }
                 ],
-                "description": "骑手对与自己配送订单相关的索赔提交申诉",
+                "description": "骑手对与自己配送订单相关的索赔提交申诉，提交后由系统自动复核并写回最终结果",
                 "consumes": [
                     "application/json"
                 ],
@@ -31803,6 +32043,23 @@
                 }
             }
         },
+        "api.adminOperatorStatusResponse": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "integer"
+                },
+                "region_id": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "integer"
+                }
+            }
+        },
         "api.adminRegionExpansionApplicationResponse": {
             "type": "object",
             "properties": {
@@ -31951,6 +32208,38 @@
             "properties": {
                 "region_id": {
                     "type": "integer"
+                }
+            }
+        },
+        "api.applymentAccountValidationResponse": {
+            "type": "object",
+            "properties": {
+                "account_name": {
+                    "type": "string"
+                },
+                "account_no": {
+                    "type": "string"
+                },
+                "city": {
+                    "type": "string"
+                },
+                "deadline": {
+                    "type": "string"
+                },
+                "destination_account_bank": {
+                    "type": "string"
+                },
+                "destination_account_name": {
+                    "type": "string"
+                },
+                "destination_account_number": {
+                    "type": "string"
+                },
+                "pay_amount": {
+                    "type": "integer"
+                },
+                "remark": {
+                    "type": "string"
                 }
             }
         },
@@ -32112,6 +32401,40 @@
                 }
             }
         },
+        "api.batchAdminOperatorStatusFailure": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer"
+                },
+                "error": {
+                    "type": "string"
+                },
+                "operator_id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.batchAdminOperatorStatusResponse": {
+            "type": "object",
+            "properties": {
+                "failed": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.batchAdminOperatorStatusFailure"
+                    }
+                },
+                "message": {
+                    "type": "string"
+                },
+                "updated": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.adminOperatorStatusResponse"
+                    }
+                }
+            }
+        },
         "api.batchDishStatusResponse": {
             "type": "object",
             "properties": {
@@ -32183,59 +32506,27 @@
                 }
             }
         },
-        "api.billReconciliationReportResponse": {
+        "api.batchUpdateOperatorStatusAdminRequest": {
             "type": "object",
+            "required": [
+                "operator_ids",
+                "status"
+            ],
             "properties": {
-                "amount_mismatch": {
+                "operator_ids": {
                     "type": "array",
-                    "items": {
-                        "type": "integer"
-                    }
-                },
-                "bill_date": {
-                    "description": "\"2006-01-02\"",
-                    "type": "string"
-                },
-                "bill_type": {
-                    "description": "trade | ecommerce_trade | refund",
-                    "type": "string"
-                },
-                "created_at": {
-                    "type": "string"
-                },
-                "error_message": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "integer"
-                },
-                "local_count": {
-                    "type": "integer"
-                },
-                "mismatch_count": {
-                    "type": "integer"
-                },
-                "missing_local": {
-                    "type": "array",
-                    "items": {
-                        "type": "integer"
-                    }
-                },
-                "missing_wxpay": {
-                    "type": "array",
+                    "maxItems": 100,
+                    "minItems": 1,
                     "items": {
                         "type": "integer"
                     }
                 },
                 "status": {
-                    "description": "pending | running | completed | failed",
-                    "type": "string"
-                },
-                "updated_at": {
-                    "type": "string"
-                },
-                "wxpay_count": {
-                    "type": "integer"
+                    "type": "string",
+                    "enum": [
+                        "active",
+                        "suspended"
+                    ]
                 }
             }
         },
@@ -33129,6 +33420,12 @@
                 "out_trade_no": {
                     "type": "string"
                 },
+                "promotion_detail": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.paymentOrderWechatPromotionDetail"
+                    }
+                },
                 "success_time": {
                     "type": "string"
                 },
@@ -33795,6 +34092,52 @@
                 }
             }
         },
+        "api.createMerchantCancelWithdrawRequest": {
+            "type": "object",
+            "required": [
+                "withdraw"
+            ],
+            "properties": {
+                "additional_material_asset_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "business_license_status_declaration": {
+                    "type": "string",
+                    "enum": [
+                        "ACTIVE",
+                        "CANCELED",
+                        "REVOKED"
+                    ]
+                },
+                "out_request_no": {
+                    "type": "string",
+                    "maxLength": 32
+                },
+                "payee_info": {
+                    "$ref": "#/definitions/api.merchantCancelWithdrawPayeeInfoRequest"
+                },
+                "proof_media_asset_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "remark": {
+                    "type": "string",
+                    "maxLength": 32
+                },
+                "withdraw": {
+                    "type": "string",
+                    "enum": [
+                        "NOT_APPLY_WITHDRAW",
+                        "APPLY_WITHDRAW"
+                    ]
+                }
+            }
+        },
         "api.createOCRJobRequest": {
             "type": "object",
             "required": [
@@ -33950,7 +34293,6 @@
                 "payment_type": {
                     "type": "string",
                     "enum": [
-                        "native",
                         "miniprogram"
                     ]
                 }
@@ -34744,6 +35086,38 @@
                 },
                 "total_sales": {
                     "type": "integer"
+                }
+            }
+        },
+        "api.deleteProfitSharingReceiverRequest": {
+            "type": "object",
+            "required": [
+                "account",
+                "type"
+            ],
+            "properties": {
+                "account": {
+                    "type": "string"
+                },
+                "appid": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.deleteProfitSharingReceiverResponse": {
+            "type": "object",
+            "properties": {
+                "account": {
+                    "type": "string"
+                },
+                "payment_order_id": {
+                    "type": "integer"
+                },
+                "type": {
+                    "type": "string"
                 }
             }
         },
@@ -36551,6 +36925,26 @@
                 }
             }
         },
+        "api.listPlatformWechatMerchantViolationsResponse": {
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer"
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "violations": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.platformWechatMerchantViolationResponse"
+                    }
+                }
+            }
+        },
         "api.listProfitSharingConfigAuditsResponse": {
             "type": "object",
             "properties": {
@@ -37014,6 +37408,14 @@
         "api.merchantApplymentStatusResponse": {
             "type": "object",
             "properties": {
+                "account_validation": {
+                    "description": "汇款验证信息",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/api.applymentAccountValidationResponse"
+                        }
+                    ]
+                },
                 "block_reason": {
                     "description": "不允许提交时的阻塞原因",
                     "type": "string"
@@ -37022,8 +37424,16 @@
                     "description": "是否允许提交或重新提交进件",
                     "type": "boolean"
                 },
+                "legal_validation_url": {
+                    "description": "法人扫码验证链接",
+                    "type": "string"
+                },
                 "reject_reason": {
                     "description": "拒绝原因",
+                    "type": "string"
+                },
+                "sign_state": {
+                    "description": "签约状态",
                     "type": "string"
                 },
                 "sign_url": {
@@ -37089,6 +37499,43 @@
                 "bank_name": {
                     "type": "string"
                 },
+                "contact_id_card_number": {
+                    "type": "string",
+                    "maxLength": 32,
+                    "minLength": 15
+                },
+                "contact_id_doc_copy_asset_id": {
+                    "type": "integer"
+                },
+                "contact_id_doc_copy_back_asset_id": {
+                    "type": "integer"
+                },
+                "contact_id_doc_period_begin": {
+                    "type": "string"
+                },
+                "contact_id_doc_period_end": {
+                    "type": "string"
+                },
+                "contact_id_doc_type": {
+                    "type": "string",
+                    "enum": [
+                        "IDENTIFICATION_TYPE_MAINLAND_IDCARD"
+                    ]
+                },
+                "contact_name": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "minLength": 2
+                },
+                "contact_type": {
+                    "type": "string",
+                    "enum": [
+                        "LEGAL",
+                        "SUPER",
+                        "65",
+                        "66"
+                    ]
+                },
                 "need_bank_branch": {
                     "type": "boolean"
                 }
@@ -37097,17 +37544,370 @@
         "api.merchantBindBankResponse": {
             "type": "object",
             "properties": {
+                "account_validation": {
+                    "description": "汇款验证信息",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/api.applymentAccountValidationResponse"
+                        }
+                    ]
+                },
                 "applyment_id": {
                     "description": "微信申请单号",
                     "type": "integer"
+                },
+                "legal_validation_url": {
+                    "description": "法人扫码验证链接",
+                    "type": "string"
                 },
                 "message": {
                     "description": "消息",
                     "type": "string"
                 },
+                "reject_reason": {
+                    "description": "拒绝原因",
+                    "type": "string"
+                },
+                "sign_state": {
+                    "description": "签约状态",
+                    "type": "string"
+                },
+                "sign_url": {
+                    "description": "签约链接",
+                    "type": "string"
+                },
                 "status": {
                     "description": "状态",
                     "type": "string"
+                },
+                "status_desc": {
+                    "description": "状态描述",
+                    "type": "string"
+                },
+                "sub_mch_id": {
+                    "description": "二级商户号",
+                    "type": "string"
+                }
+            }
+        },
+        "api.merchantCancelWithdrawAccountInfo": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "integer"
+                },
+                "out_account_type": {
+                    "type": "string",
+                    "enum": [
+                        "BASIC_ACCOUNT",
+                        "OPERATE_ACCOUNT",
+                        "MARGIN_ACCOUNT",
+                        "TRADE_FEE_ACCOUNT"
+                    ]
+                }
+            }
+        },
+        "api.merchantCancelWithdrawAccountWithdrawResult": {
+            "type": "object",
+            "properties": {
+                "out_account_type": {
+                    "type": "string"
+                },
+                "pay_state": {
+                    "type": "string",
+                    "enum": [
+                        "PAY_PROCESSING",
+                        "PAY_SUCCEED",
+                        "PAY_FAIL",
+                        "BANK_REFUNDED"
+                    ]
+                },
+                "state_description": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.merchantCancelWithdrawBankAccountInfoRequest": {
+            "type": "object",
+            "properties": {
+                "account_bank": {
+                    "type": "string"
+                },
+                "account_name": {
+                    "type": "string"
+                },
+                "account_number": {
+                    "type": "string"
+                },
+                "bank_branch_id": {
+                    "type": "string"
+                },
+                "bank_branch_name": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.merchantCancelWithdrawBlockReason": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "CONSUMER_COMPLAINT_UNPROCESSED",
+                        "HAS_BLOCKING_CONTROL",
+                        "FUNDS_PENDING_PROCESSING",
+                        "OTHER_REASON"
+                    ]
+                }
+            }
+        },
+        "api.merchantCancelWithdrawCreateResponse": {
+            "type": "object",
+            "properties": {
+                "application": {
+                    "$ref": "#/definitions/api.merchantCancelWithdrawItem"
+                }
+            }
+        },
+        "api.merchantCancelWithdrawEligibilityItem": {
+            "type": "object",
+            "properties": {
+                "account_info": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.merchantCancelWithdrawAccountInfo"
+                    }
+                },
+                "block_reasons": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.merchantCancelWithdrawBlockReason"
+                    }
+                },
+                "merchant_state": {
+                    "type": "string",
+                    "enum": [
+                        "NORMAL",
+                        "HAS_BEEN_CANCELLED"
+                    ]
+                },
+                "sub_mchid": {
+                    "type": "string"
+                },
+                "validate_result": {
+                    "type": "string",
+                    "enum": [
+                        "ALLOW_CANCEL_WITHDRAW",
+                        "NOT_ALLOW_CANCEL_WITHDRAW"
+                    ]
+                }
+            }
+        },
+        "api.merchantCancelWithdrawEligibilityResponse": {
+            "type": "object",
+            "properties": {
+                "account_status": {
+                    "type": "string"
+                },
+                "eligibility": {
+                    "$ref": "#/definitions/api.merchantCancelWithdrawEligibilityItem"
+                },
+                "eligible": {
+                    "type": "boolean"
+                },
+                "status_desc": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.merchantCancelWithdrawIdentityInfoRequest": {
+            "type": "object",
+            "properties": {
+                "id_doc_type": {
+                    "type": "string",
+                    "enum": [
+                        "IDENTIFICATION_TYPE_ID_CARD",
+                        "IDENTIFICATION_TYPE_OVERSEA_PASSPORT",
+                        "IDENTIFICATION_TYPE_HONGKONG_PASSPORT",
+                        "IDENTIFICATION_TYPE_MACAO_PASSPORT",
+                        "IDENTIFICATION_TYPE_TAIWAN_PASSPORT",
+                        "IDENTIFICATION_TYPE_FOREIGN_RESIDENT",
+                        "IDENTIFICATION_TYPE_HONGKONG_MACAO_RESIDENT",
+                        "IDENTIFICATION_TYPE_TAIWAN_RESIDENT"
+                    ]
+                },
+                "identification_name": {
+                    "type": "string"
+                },
+                "identification_no": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.merchantCancelWithdrawItem": {
+            "type": "object",
+            "properties": {
+                "account_info": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.merchantCancelWithdrawAccountInfo"
+                    }
+                },
+                "account_withdraw_result": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.merchantCancelWithdrawAccountWithdrawResult"
+                    }
+                },
+                "additional_material_asset_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "applyment_id": {
+                    "type": "string"
+                },
+                "business_license_status_declaration": {
+                    "type": "string",
+                    "enum": [
+                        "ACTIVE",
+                        "CANCELED",
+                        "REVOKED"
+                    ]
+                },
+                "cancel_state": {
+                    "type": "string",
+                    "enum": [
+                        "ACCEPTED",
+                        "REVIEWING",
+                        "REJECTED",
+                        "WAITING_MERCHANT_CONFIRM",
+                        "REVOKED",
+                        "SYSTEM_PROCESSING",
+                        "CANCELED",
+                        "FUND_PROCESSING",
+                        "FINISH"
+                    ]
+                },
+                "cancel_state_description": {
+                    "type": "string"
+                },
+                "confirm_cancel_url": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "last_error": {
+                    "type": "string"
+                },
+                "last_query_at": {
+                    "type": "string"
+                },
+                "local_sync_state": {
+                    "type": "string",
+                    "enum": [
+                        "created",
+                        "submit_succeeded",
+                        "submit_unknown",
+                        "sync_failed"
+                    ]
+                },
+                "modify_time": {
+                    "type": "string"
+                },
+                "out_request_no": {
+                    "type": "string"
+                },
+                "proof_media_asset_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "remark": {
+                    "type": "string"
+                },
+                "sub_mchid": {
+                    "type": "string"
+                },
+                "submitted_at": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "withdraw": {
+                    "type": "string",
+                    "enum": [
+                        "NOT_APPLY_WITHDRAW",
+                        "APPLY_WITHDRAW"
+                    ]
+                },
+                "withdraw_state": {
+                    "type": "string",
+                    "enum": [
+                        "WITHDRAW_PROCESSING",
+                        "WITHDRAW_EXCEPTION",
+                        "WITHDRAW_SUCCEED"
+                    ]
+                },
+                "withdraw_state_description": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.merchantCancelWithdrawListResponse": {
+            "type": "object",
+            "properties": {
+                "account_status": {
+                    "type": "string"
+                },
+                "applications": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.merchantCancelWithdrawItem"
+                    }
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "status_desc": {
+                    "type": "string"
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "total_pages": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.merchantCancelWithdrawPayeeInfoRequest": {
+            "type": "object",
+            "properties": {
+                "account_type": {
+                    "type": "string",
+                    "enum": [
+                        "ACCOUNT_TYPE_CORPORATE",
+                        "ACCOUNT_TYPE_PERSONAL"
+                    ]
+                },
+                "bank_account_info": {
+                    "$ref": "#/definitions/api.merchantCancelWithdrawBankAccountInfoRequest"
+                },
+                "identity_info": {
+                    "$ref": "#/definitions/api.merchantCancelWithdrawIdentityInfoRequest"
                 }
             }
         },
@@ -37452,6 +38252,53 @@
                     "items": {
                         "$ref": "#/definitions/api.transactionResponse"
                     }
+                },
+                "user_id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.merchantMemberRechargeResponse": {
+            "type": "object",
+            "properties": {
+                "avatar_url": {
+                    "type": "string"
+                },
+                "balance": {
+                    "type": "integer"
+                },
+                "bonus_amount": {
+                    "type": "integer"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "full_name": {
+                    "type": "string"
+                },
+                "membership_id": {
+                    "type": "integer"
+                },
+                "phone": {
+                    "type": "string"
+                },
+                "recharge_amount": {
+                    "type": "integer"
+                },
+                "recharge_rule_id": {
+                    "type": "integer"
+                },
+                "total_consumed": {
+                    "type": "integer"
+                },
+                "total_credited": {
+                    "type": "integer"
+                },
+                "total_recharged": {
+                    "type": "integer"
+                },
+                "transaction_id": {
+                    "type": "integer"
                 },
                 "user_id": {
                     "type": "integer"
@@ -37996,6 +38843,9 @@
                 "account_status": {
                     "type": "string"
                 },
+                "latest_application_no": {
+                    "type": "string"
+                },
                 "status_desc": {
                     "type": "string"
                 }
@@ -38151,22 +39001,34 @@
             ],
             "properties": {
                 "account_bank": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 128
                 },
                 "account_name": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 128
                 },
                 "account_number": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 32
                 },
                 "account_type": {
-                    "type": "string"
+                    "type": "string",
+                    "enum": [
+                        "ACCOUNT_TYPE_BUSINESS",
+                        "ACCOUNT_TYPE_PRIVATE"
+                    ]
                 },
                 "bank_branch_id": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 128
                 },
                 "bank_name": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 128
+                },
+                "need_bank_branch": {
+                    "type": "boolean"
                 }
             }
         },
@@ -38484,116 +39346,6 @@
                 }
             }
         },
-        "api.operatorApplymentStatusResponse": {
-            "type": "object",
-            "properties": {
-                "applyment_id": {
-                    "description": "微信进件ID",
-                    "type": "integer"
-                },
-                "block_reason": {
-                    "description": "不允许提交时的阻塞原因",
-                    "type": "string"
-                },
-                "can_submit": {
-                    "description": "是否允许提交或重新提交进件",
-                    "type": "boolean"
-                },
-                "created_at": {
-                    "type": "string"
-                },
-                "reject_reason": {
-                    "description": "拒绝原因",
-                    "type": "string"
-                },
-                "sign_url": {
-                    "description": "签约链接",
-                    "type": "string"
-                },
-                "status": {
-                    "description": "状态",
-                    "type": "string"
-                },
-                "status_desc": {
-                    "description": "状态描述",
-                    "type": "string"
-                },
-                "sub_mch_id": {
-                    "description": "二级商户号（开户成功后返回）",
-                    "type": "string"
-                },
-                "updated_at": {
-                    "type": "string"
-                }
-            }
-        },
-        "api.operatorBindBankRequest": {
-            "type": "object",
-            "required": [
-                "account_bank",
-                "account_name",
-                "account_number",
-                "account_type"
-            ],
-            "properties": {
-                "account_bank": {
-                    "type": "string",
-                    "maxLength": 128
-                },
-                "account_bank_code": {
-                    "type": "integer"
-                },
-                "account_name": {
-                    "type": "string",
-                    "maxLength": 128
-                },
-                "account_number": {
-                    "type": "string"
-                },
-                "account_type": {
-                    "type": "string",
-                    "enum": [
-                        "ACCOUNT_TYPE_BUSINESS",
-                        "ACCOUNT_TYPE_PRIVATE"
-                    ]
-                },
-                "bank_address_code": {
-                    "type": "string"
-                },
-                "bank_alias": {
-                    "type": "string"
-                },
-                "bank_alias_code": {
-                    "type": "string"
-                },
-                "bank_branch_id": {
-                    "type": "string"
-                },
-                "bank_name": {
-                    "type": "string"
-                },
-                "need_bank_branch": {
-                    "type": "boolean"
-                }
-            }
-        },
-        "api.operatorBindBankResponse": {
-            "type": "object",
-            "properties": {
-                "applyment_id": {
-                    "description": "微信申请单号",
-                    "type": "integer"
-                },
-                "message": {
-                    "description": "消息",
-                    "type": "string"
-                },
-                "status": {
-                    "description": "状态",
-                    "type": "string"
-                }
-            }
-        },
         "api.operatorCommissionItem": {
             "type": "object",
             "properties": {
@@ -38830,20 +39582,6 @@
                 }
             }
         },
-        "api.operatorSettlementAccountResponse": {
-            "type": "object",
-            "properties": {
-                "account": {
-                    "$ref": "#/definitions/api.settlementAccountInfo"
-                },
-                "account_status": {
-                    "type": "string"
-                },
-                "status_desc": {
-                    "type": "string"
-                }
-            }
-        },
         "api.orderBadge": {
             "type": "object",
             "properties": {
@@ -38901,7 +39639,7 @@
                     "example": 200
                 },
                 "discount_amount": {
-                    "description": "满减优惠 (单位：分)",
+                    "description": "营销优惠总减免（分），包含商户优惠和优惠券抵扣",
                     "type": "integer",
                     "example": 500
                 },
@@ -38911,6 +39649,21 @@
                     "items": {
                         "$ref": "#/definitions/api.orderCalculationItem"
                     }
+                },
+                "ladder_promotions": {
+                    "description": "阶梯优惠试算信息",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/logic.LadderPromotion"
+                    }
+                },
+                "payment_assessment": {
+                    "description": "会员余额支付能力评估",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/logic.PaymentAssessment"
+                        }
+                    ]
                 },
                 "promotions": {
                     "description": "优惠明细",
@@ -38924,10 +39677,25 @@
                     "type": "integer",
                     "example": 5760
                 },
+                "suggested_voucher": {
+                    "description": "推荐可用优惠券（仅试算，不自动使用）",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/logic.SuggestedVoucher"
+                        }
+                    ]
+                },
                 "total_amount": {
                     "description": "最终应付金额 (单位：分)",
                     "type": "integer",
                     "example": 5560
+                },
+                "voucher_trials": {
+                    "description": "代金券试算信息",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/logic.VoucherTrial"
+                    }
                 }
             }
         },
@@ -39381,6 +40149,50 @@
                 }
             }
         },
+        "api.paymentOrderQueryResponse": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "integer"
+                },
+                "business_type": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "order_id": {
+                    "type": "integer"
+                },
+                "out_trade_no": {
+                    "type": "string"
+                },
+                "paid_at": {
+                    "type": "string"
+                },
+                "pay_params": {
+                    "$ref": "#/definitions/api.miniProgramPayParams"
+                },
+                "payment_type": {
+                    "type": "string"
+                },
+                "prepay_id": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "integer"
+                },
+                "wechat_query": {
+                    "$ref": "#/definitions/api.paymentOrderWechatQueryResult"
+                }
+            }
+        },
         "api.paymentOrderResponse": {
             "type": "object",
             "properties": {
@@ -39424,6 +40236,159 @@
                 },
                 "user_id": {
                     "type": "integer"
+                }
+            }
+        },
+        "api.paymentOrderWechatAmountResult": {
+            "type": "object",
+            "properties": {
+                "currency": {
+                    "type": "string"
+                },
+                "payer_currency": {
+                    "type": "string"
+                },
+                "payer_total": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.paymentOrderWechatPayerResult": {
+            "type": "object",
+            "properties": {
+                "sp_openid": {
+                    "type": "string"
+                },
+                "sub_openid": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.paymentOrderWechatPromotionDetail": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "integer"
+                },
+                "coupon_id": {
+                    "type": "string"
+                },
+                "currency": {
+                    "type": "string"
+                },
+                "goods_detail": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.paymentOrderWechatPromotionGoodsDetail"
+                    }
+                },
+                "merchant_contribute": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "other_contribute": {
+                    "type": "integer"
+                },
+                "scope": {
+                    "type": "string"
+                },
+                "stock_id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                },
+                "wechatpay_contribute": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.paymentOrderWechatPromotionGoodsDetail": {
+            "type": "object",
+            "properties": {
+                "discount_amount": {
+                    "type": "integer"
+                },
+                "goods_id": {
+                    "type": "string"
+                },
+                "goods_remark": {
+                    "type": "string"
+                },
+                "quantity": {
+                    "type": "integer"
+                },
+                "unit_price": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.paymentOrderWechatQueryResult": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "$ref": "#/definitions/api.paymentOrderWechatAmountResult"
+                },
+                "attach": {
+                    "type": "string"
+                },
+                "bank_type": {
+                    "type": "string"
+                },
+                "out_trade_no": {
+                    "type": "string"
+                },
+                "payer": {
+                    "$ref": "#/definitions/api.paymentOrderWechatPayerResult"
+                },
+                "promotion_detail": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.paymentOrderWechatPromotionDetail"
+                    }
+                },
+                "scene_info": {
+                    "$ref": "#/definitions/api.paymentOrderWechatSceneInfo"
+                },
+                "sp_appid": {
+                    "type": "string"
+                },
+                "sp_mchid": {
+                    "type": "string"
+                },
+                "sub_appid": {
+                    "type": "string"
+                },
+                "sub_mchid": {
+                    "type": "string"
+                },
+                "success_time": {
+                    "type": "string"
+                },
+                "trade_state": {
+                    "type": "string"
+                },
+                "trade_state_desc": {
+                    "type": "string"
+                },
+                "trade_type": {
+                    "type": "string"
+                },
+                "transaction_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.paymentOrderWechatSceneInfo": {
+            "type": "object",
+            "properties": {
+                "device_id": {
+                    "type": "string"
                 }
             }
         },
@@ -39646,6 +40611,81 @@
                 }
             }
         },
+        "api.platformViolationNotificationConfigRequest": {
+            "type": "object",
+            "properties": {
+                "notify_url": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.platformViolationNotificationConfigResponse": {
+            "type": "object",
+            "properties": {
+                "configured": {
+                    "type": "boolean"
+                },
+                "effective_notify_url": {
+                    "type": "string"
+                },
+                "notify_url": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.platformWechatMerchantViolationResponse": {
+            "type": "object",
+            "properties": {
+                "company_name": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "event_type": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "last_received_at": {
+                    "type": "string"
+                },
+                "latest_notification_id": {
+                    "type": "string"
+                },
+                "latest_notify_time": {
+                    "type": "string"
+                },
+                "merchant_id": {
+                    "type": "integer"
+                },
+                "punish_description": {
+                    "type": "string"
+                },
+                "punish_plan": {
+                    "type": "string"
+                },
+                "punish_time": {
+                    "type": "string"
+                },
+                "record_id": {
+                    "type": "string"
+                },
+                "risk_description": {
+                    "type": "string"
+                },
+                "risk_type": {
+                    "type": "string"
+                },
+                "sub_mch_id": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
         "api.printMerchantOrderResponse": {
             "type": "object",
             "properties": {
@@ -39829,6 +40869,20 @@
                 },
                 "expire_at": {
                     "type": "string"
+                }
+            }
+        },
+        "api.profitSharingAmountsResponse": {
+            "type": "object",
+            "properties": {
+                "payment_order_id": {
+                    "type": "integer"
+                },
+                "transaction_id": {
+                    "type": "string"
+                },
+                "unsplit_amount": {
+                    "type": "integer"
                 }
             }
         },
@@ -40510,6 +41564,23 @@
                 }
             }
         },
+        "api.recordMemberRechargeBody": {
+            "type": "object",
+            "required": [
+                "recharge_amount"
+            ],
+            "properties": {
+                "notes": {
+                    "type": "string",
+                    "maxLength": 200
+                },
+                "recharge_amount": {
+                    "type": "integer",
+                    "maximum": 100000000,
+                    "minimum": 1
+                }
+            }
+        },
         "api.refundOrderResponse": {
             "type": "object",
             "properties": {
@@ -41141,33 +42212,6 @@
                 },
                 "street_number": {
                     "type": "string"
-                }
-            }
-        },
-        "api.reviewAppealRequest": {
-            "type": "object",
-            "required": [
-                "review_notes",
-                "status"
-            ],
-            "properties": {
-                "compensation_amount": {
-                    "description": "可选补偿金额（分），最大10万元",
-                    "type": "integer",
-                    "maximum": 10000000,
-                    "minimum": 1
-                },
-                "review_notes": {
-                    "type": "string",
-                    "maxLength": 500,
-                    "minLength": 5
-                },
-                "status": {
-                    "type": "string",
-                    "enum": [
-                        "approved",
-                        "rejected"
-                    ]
                 }
             }
         },
@@ -42344,6 +43388,13 @@
         },
         "api.settlementApplicationResponse": {
             "type": "object",
+            "required": [
+                "account_bank",
+                "account_name",
+                "account_number",
+                "account_type",
+                "verify_result"
+            ],
             "properties": {
                 "account_bank": {
                     "type": "string"
@@ -42355,7 +43406,11 @@
                     "type": "string"
                 },
                 "account_type": {
-                    "type": "string"
+                    "type": "string",
+                    "enum": [
+                        "ACCOUNT_TYPE_BUSINESS",
+                        "ACCOUNT_TYPE_PRIVATE"
+                    ]
                 },
                 "bank_branch_id": {
                     "type": "string"
@@ -42370,7 +43425,12 @@
                     "type": "string"
                 },
                 "verify_result": {
-                    "type": "string"
+                    "type": "string",
+                    "enum": [
+                        "AUDIT_SUCCESS",
+                        "AUDITING",
+                        "AUDIT_FAIL"
+                    ]
                 }
             }
         },
@@ -44245,26 +45305,6 @@
                 },
                 "user": {
                     "$ref": "#/definitions/api.userResponse"
-                }
-            }
-        },
-        "api.withdrawOperatorRequest": {
-            "type": "object",
-            "required": [
-                "amount"
-            ],
-            "properties": {
-                "amount": {
-                    "type": "integer",
-                    "minimum": 100
-                },
-                "out_request_no": {
-                    "type": "string",
-                    "maxLength": 64
-                },
-                "remark": {
-                    "type": "string",
-                    "maxLength": 128
                 }
             }
         },

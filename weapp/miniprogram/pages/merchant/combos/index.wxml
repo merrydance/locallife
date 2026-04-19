@@ -10,7 +10,7 @@
 
   <view wx:elif="{{accessReady && accessErrorMessage}}" class="state-block">
     <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
-    <t-button theme="primary" size="small" shape="round" bind:tap="onRetryAccess">重新校验</t-button>
+    <t-button theme="primary" bind:tap="onRetryAccess">重新校验</t-button>
   </view>
 
   <view wx:elif="{{initialLoading}}" class="state-block">
@@ -19,20 +19,11 @@
 
   <view wx:elif="{{initialError}}" class="state-block">
     <t-empty icon="error-circle" description="{{initialErrorMessage || '套餐加载失败，请重试'}}" />
-    <t-button theme="primary" size="small" shape="round" bind:tap="onRetry">重新加载</t-button>
+    <t-button theme="primary" bind:tap="onRetry">重新加载</t-button>
   </view>
 
   <block wx:else>
     <view class="page-content">
-      <t-notice-bar
-        wx:if="{{refreshErrorMessage}}"
-        visible="{{true}}"
-        theme="warning"
-        content="{{refreshErrorMessage}}"
-        prefixIcon="error-circle"
-        t-class="page-notice"
-      />
-
       <t-sticky offset-top="{{navBarHeight}}" z-index="40">
         <view class="control-panel">
           <view class="filter-panel">
@@ -68,7 +59,7 @@
       <block wx:else>
         <view class="combo-list">
           <block wx:for="{{combos}}" wx:key="id">
-            <t-cell-group class="combo-card" theme="card">
+            <t-cell-group class="combo-card">
               <view class="combo-card-main" bindtap="onEditCombo" data-id="{{item.id}}">
                 <t-image
                   t-class="combo-cover"

@@ -3,6 +3,7 @@ import { uploadMedia } from '../utils/media'
 import { enqueueOCRJobAndRefresh } from './ocr-jobs'
 import { ApplicationStatus } from './onboarding'
 import type { AgreementConsentPayload } from './agreement-consent'
+import { resolveStatusTagTheme, type StatusTagTheme } from '../utils/status-tag'
 
 type OCRResult = Record<string, unknown>
 
@@ -265,7 +266,7 @@ export interface RegionExpansionApplication {
 }
 
 export type RegionExpansionStatus = RegionExpansionApplication['status']
-export type RegionExpansionStatusTheme = 'warning' | 'primary' | 'danger'
+export type RegionExpansionStatusTheme = StatusTagTheme
 
 export function getRegionExpansionStatusDisplay(status: RegionExpansionStatus) {
   const labelMap: Record<RegionExpansionStatus, string> = {
@@ -274,14 +275,14 @@ export function getRegionExpansionStatusDisplay(status: RegionExpansionStatus) {
     rejected: '已拒绝'
   }
   const themeMap: Record<RegionExpansionStatus, RegionExpansionStatusTheme> = {
-    pending: 'warning',
-    approved: 'primary',
-    rejected: 'danger'
+    pending: resolveStatusTagTheme('warning'),
+    approved: resolveStatusTagTheme('info'),
+    rejected: resolveStatusTagTheme('danger')
   }
 
   return {
     label: labelMap[status] || status,
-    theme: themeMap[status] || 'warning',
+    theme: themeMap[status] || resolveStatusTagTheme('warning'),
     isPending: status === 'pending',
     isApproved: status === 'approved',
     isRejected: status === 'rejected'

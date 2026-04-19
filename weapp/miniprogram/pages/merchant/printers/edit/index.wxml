@@ -2,7 +2,7 @@
 
 <view
   class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
-  style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: 220rpx;"
+  style="--page-shell-nav-height: {{navBarHeight}}px;"
 >
   <view wx:if="{{!accessReady || initialLoading}}" class="state-block">
     <t-loading theme="circular" size="40rpx" text="加载打印机信息中..." vertical />
@@ -10,17 +10,17 @@
 
   <view wx:elif="{{accessDenied}}" class="state-block">
     <t-empty icon="lock-on" description="{{accessDeniedMessage || '打印设备和后厨协同设置仅支持老板或店长管理'}}" />
-    <t-button theme="primary" size="small" shape="round" bind:tap="onRetryAccess">重新校验</t-button>
+    <t-button theme="primary" bind:tap="onRetryAccess">重新校验</t-button>
   </view>
 
   <view wx:elif="{{accessErrorMessage}}" class="state-block">
     <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
-    <t-button theme="primary" size="small" shape="round" bind:tap="onRetryAccess">重新校验</t-button>
+    <t-button theme="primary" bind:tap="onRetryAccess">重新校验</t-button>
   </view>
 
   <view wx:elif="{{initialError}}" class="state-block">
     <t-empty icon="error-circle" description="{{initialErrorMessage || '打印机编辑页加载失败，请重试'}}" />
-    <t-button theme="primary" size="small" shape="round" bind:tap="onRetry">重新加载</t-button>
+    <t-button theme="primary" bind:tap="onRetry">重新加载</t-button>
   </view>
 
   <block wx:else>
@@ -48,10 +48,10 @@
             bind:change="onFormInputChange"
           />
           <t-input
-            label="{{isEdit ? '打印机密钥（留空不修改）' : '打印机密钥'}}"
+            label="打印机密钥"
             value="{{formData.printer_key}}"
             data-field="printer_key"
-            placeholder="请输入打印机密钥"
+            placeholder="{{isEdit ? '编辑时留空则不修改' : '请输入打印机密钥'}}"
             bind:change="onFormInputChange"
           />
         </t-cell-group>
@@ -130,8 +130,8 @@
         </view>
       </view>
 
-      <view class="footer-bar">
-        <t-button block theme="primary" size="large" shape="round" loading="{{submitting}}" bind:tap="onSubmit">
+      <view class="form-actions">
+        <t-button theme="primary" loading="{{submitting}}" bind:tap="onSubmit">
           {{isEdit ? '保存打印机' : '新增打印机'}}
         </t-button>
       </view>

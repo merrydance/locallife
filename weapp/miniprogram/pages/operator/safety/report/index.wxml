@@ -1,10 +1,10 @@
 <custom-navbar title="食安事件" showBack="{{true}}" bind:navheight="onNavHeight" />
 <view
-  class="page-container page-shell page-shell--with-nav page-shell--bottom-safe"
+  class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
   style="--page-shell-nav-height: {{navBarHeight}}px"
 >
   <view class="toolbar">
-    <t-button theme="primary" size="small" bindtap="onToggleSubmit" shape="round">
+    <t-button theme="primary" size="small" bindtap="onToggleSubmit">
       {{submitVisible ? '收起提交' : '新建事件'}}
     </t-button>
   </view>
@@ -22,8 +22,8 @@
         <t-radio value="critical" label="严重" />
       </t-radio-group>
     </view>
-    <t-input label="关联商户ID" placeholder="可选，多个用英文逗号分隔" value="{{submitMerchantIdsRaw}}" bindchange="onSubmitMerchantIdsChange" />
-    <t-button theme="primary" block bindtap="onSubmitReport" loading="{{submitLoading}}" shape="round">提交事件</t-button>
+    <t-input label="关联商户" placeholder="可选，填写商户ID，多个用英文逗号分隔" value="{{submitMerchantIdsRaw}}" bindchange="onSubmitMerchantIdsChange" />
+    <t-button theme="primary" block bindtap="onSubmitReport" loading="{{submitLoading}}">提交事件</t-button>
   </view>
 
   <t-tabs value="{{status}}" bind:change="onTabChange" t-class="sticky-tabs">
@@ -59,7 +59,7 @@
     </view>
 
     <view class="load-more">
-      <t-button wx:if="{{hasMore}}" size="small" bindtap="onLoadMore" loading="{{loadingMore}}" shape="round">加载更多</t-button>
+      <t-button wx:if="{{hasMore}}" size="small" bindtap="onLoadMore" loading="{{loadingMore}}">加载更多</t-button>
       <text wx:elif="{{!hasMore}}" class="no-more-text">没有更多事件了</text>
     </view>
   </view>

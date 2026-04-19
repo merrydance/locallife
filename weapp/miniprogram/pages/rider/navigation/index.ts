@@ -4,12 +4,16 @@ import { getStableBarHeights } from '../../../utils/responsive'
 import { riderLiveLocationSession, RiderLiveLocationState } from '../../../utils/rider-live-location'
 import { locationService } from '../../../utils/location'
 import { logger } from '../../../utils/logger'
+import { getRiderLocationStatusView } from '../../../utils/rider-location-status-view'
+import {
+  getRiderNavigationNextStop,
+  isRiderDeliveryTrackedStatus
+} from '../../../utils/rider-delivery-view'
+import { resolveStatusTagTheme, type StatusTagTheme } from '../../../utils/status-tag'
 
 interface RiderNavigationOptions {
   id?: string
 }
-
-type TagTheme = 'primary' | 'success' | 'warning' | 'danger' | 'default'
 
 let riderNavigationUnsubscribe: null | (() => void) = null
 
@@ -26,10 +30,6 @@ function formatRelativeTime(timeStr: string): string {
   const hours = Math.floor(minutes / 60)
   if (hours < 24) return `${hours} 小时前`
   return `${Math.floor(hours / 24)} 天前`
-}
-
-function isTrackableDelivery(status: Delivery['status']): boolean {
-  return status === 'assigned' || status === 'picking' || status === 'picked' || status === 'delivering'
 }
 
 function toMapPoint(point: DeliveryLocationPoint | null): MapPoint | null {
@@ -57,7 +57,7 @@ Page({
     latestUpdateText: '暂无定位记录',
     pendingText: '',
     locationStatusText: '等待定位',
-    locationStatusTheme: 'default' as TagTheme,
+    locationStatusTheme: resolveStatusTagTheme('neutral') as StatusTagTheme,
     nextStopTitle: '下一站',
     nextStopAddress: '',
     nextStopLatitude: 0,
@@ -77,7 +77,7 @@ Page({
 
   onShow() {
     const { delivery } = this.data
-    if (delivery && isTrackableDelivery(delivery.status)) {
+    if (delivery && isRiderDeliveryTrackedStatus(delivery.status)) {
       void riderLiveLocationSession.setActiveDelivery(delivery.id, 'rider_navigation_show')
     }
   },
@@ -126,7 +126,7 @@ Page({
         latestUpdateText: latestResult?.recorded_at ? `最近上传 ${formatRelativeTime(latestResult.recorded_at)}` : '暂无定位记录'
       })
 
-      if (isTrackableDelivery(delivery.status)) {
+      if (isRiderDeliveryTrackedStatus(delivery.status)) {
         await riderLiveLocationSession.setActiveDelivery(delivery.id, 'rider_navigation_fetch')
       }
 
@@ -148,19 +148,7 @@ Page({
   },
 
   updateNextStop(delivery: Delivery) {
-    const nextStop = delivery.status === 'assigned' || delivery.status === 'picking'
-      ? {
-          title: '下一站 · 商家',
-          address: delivery.pickup_address,
-          latitude: delivery.pickup_latitude,
-          longitude: delivery.pickup_longitude
-        }
-      : {
-          title: '下一站 · 顾客',
-          address: delivery.delivery_address,
-          latitude: delivery.delivery_latitude,
-          longitude: delivery.delivery_longitude
-        }
+    const nextStop = getRiderNavigationNextStop(delivery)
 
     this.setData({
       nextStopTitle: nextStop.title,
@@ -228,40 +216,14 @@ Page({
       return
     }
 
-    let locationStatusText = '等待连续定位启动'
-    let locationStatusTheme: TagTheme = 'default'
-    let needsLocationPermission = false
-
-    switch (state.uploadState) {
-      case 'tracking':
-        locationStatusText = '定位正常'
-        locationStatusTheme = 'success'
-        break
-      case 'uploading':
-        locationStatusText = '正在上传位置'
-        locationStatusTheme = 'primary'
-        break
-      case 'retrying':
-        locationStatusText = '网络恢复后会自动补发'
-        locationStatusTheme = 'warning'
-        break
-      case 'permission_required':
-        locationStatusText = '需要开启定位权限'
-        locationStatusTheme = 'danger'
-        needsLocationPermission = true
-        break
-      case 'starting':
-        locationStatusText = '正在开启连续定位'
-        locationStatusTheme = 'warning'
-        break
-    }
+    const locationStatusView = getRiderLocationStatusView(state.uploadState)
 
     this.setData({
       latestUpdateText: state.lastUploadedAt ? `最近上传 ${formatRelativeTime(state.lastUploadedAt)}` : this.data.latestUpdateText,
       pendingText: state.pendingCount > 0 ? `待补发 ${state.pendingCount} 个定位点` : '',
-      locationStatusText,
-      locationStatusTheme,
-      needsLocationPermission
+      locationStatusText: locationStatusView.text,
+      locationStatusTheme: locationStatusView.theme,
+      needsLocationPermission: locationStatusView.needsPermission
     })
 
     if (state.latestPoint) {

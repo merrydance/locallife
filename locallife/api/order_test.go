@@ -4242,6 +4242,26 @@ func TestCreateOrderWithBalanceAPI(t *testing.T) {
 					GetDeliveryFeeConfigByRegion(gomock.Any(), region.ID).
 					Times(1).
 					Return(db.DeliveryFeeConfig{}, db.ErrRecordNotFound)
+				store.EXPECT().
+					GetPlatformConfig(gomock.Any(), db.GetPlatformConfigParams{
+						ConfigKey: deliveryFeeDefaultConfigKey,
+						ScopeType: db.PlatformConfigScopeGlobal,
+						ScopeID:   pgtype.Int8{Valid: false},
+					}).
+					Times(1).
+					Return(db.PlatformConfig{}, db.ErrRecordNotFound)
+				store.EXPECT().
+					GetLatestWeatherCoefficient(gomock.Any(), region.ID).
+					Times(1).
+					Return(db.WeatherCoefficient{}, db.ErrRecordNotFound)
+				store.EXPECT().
+					ListPeakHourConfigsByRegion(gomock.Any(), region.ID).
+					Times(1).
+					Return([]db.PeakHourConfig{}, nil)
+				store.EXPECT().
+					ListActiveDeliveryPromotionsByMerchant(gomock.Any(), merchant.ID).
+					Times(1).
+					Return([]db.MerchantDeliveryPromotion{}, nil)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -4249,7 +4269,7 @@ func TestCreateOrderWithBalanceAPI(t *testing.T) {
 				var response APIResponse
 				err := json.Unmarshal(recorder.Body.Bytes(), &response)
 				require.NoError(t, err)
-				require.Contains(t, response.Message, "外卖和预定订单暂不支持余额支付")
+				require.Contains(t, response.Message, "仅堂食和外带自取支持余额支付")
 			},
 		},
 		{

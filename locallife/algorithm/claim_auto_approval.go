@@ -25,12 +25,6 @@ type NotificationDistributor interface {
 	SendUserNotification(ctx context.Context, userID int64, notificationType, title, content string, relatedType string, relatedID int64) error
 }
 
-// ClaimPayoutDistributor 分发正式 payout action。
-// algorithm 层只负责触发持久化 payout action 的执行；具体入队和重试由下游实现负责。
-type ClaimPayoutDistributor interface {
-	EnqueueClaimPayoutAction(ctx context.Context, actionID int64) error
-}
-
 // ClaimAutoApproval 索赔自动审核器
 // 设计理念：
 // 1. 所有索赔都赔付，不存在不赔的情况
@@ -40,7 +34,6 @@ type ClaimAutoApproval struct {
 	store                   db.Store
 	lookbackChecker         *LookbackChecker
 	notificationDistributor NotificationDistributor // 可选。用于把用户通知动作分发到通知中心链路。
-	payoutDistributor       ClaimPayoutDistributor  // 可选。用于把 payout action 分发到异步执行链路。
 	wsHub                   WebSocketHub            // 可选。仅用于商户/骑手的实时 WebSocket fallback。
 }
 
@@ -112,11 +105,6 @@ func NewClaimAutoApproval(store db.Store, wsHub WebSocketHub) *ClaimAutoApproval
 // 未设置时，用户侧 notify action 不会在 algorithm 层直接送达，但通知中心链路可由上层自行接入。
 func (caa *ClaimAutoApproval) SetNotificationDistributor(distributor NotificationDistributor) {
 	caa.notificationDistributor = distributor
-}
-
-// SetClaimPayoutDistributor 设置 payout action 分发器（可选）。
-func (caa *ClaimAutoApproval) SetClaimPayoutDistributor(distributor ClaimPayoutDistributor) {
-	caa.payoutDistributor = distributor
 }
 
 // EvaluateClaim 评估异常订单索赔申请。
@@ -566,16 +554,6 @@ func (caa *ClaimAutoApproval) CreateClaimWithDecisionAndEvidence(
 	caa.applyPersistedDecisionSideEffects(ctx, userID, result.BehaviorDecision, decision)
 	caa.executePersistedBehaviorActions(ctx, result)
 
-	// 餐损赔付后的事后处理
-	if claimType == ClaimTypeDamage && decision.NeedsReview {
-		// 发现可疑模式，异步进行信用分处理
-		// 使用Worker任务异步执行（如果未配置worker则降级为goroutine）
-		// 接入方法：在API层通过caa.SetTaskDistributor(server.taskDistributor)设置
-		// 然后通过worker.NewHandleSuspiciousPatternTask分发任务
-		// 当前降级：直接用goroutine（生产环境建议使用Worker）
-		go caa.handleSuspiciousPattern(ctx, userID, claim.ID, claimType, decision.LookbackData)
-	}
-
 	return &claim, nil
 }
 
@@ -595,28 +573,11 @@ func (caa *ClaimAutoApproval) applyPersistedDecisionSideEffects(ctx context.Cont
 }
 
 func (caa *ClaimAutoApproval) executePersistedBehaviorActions(ctx context.Context, result db.CreateClaimWithBehaviorTxResult) {
-	if result.PayoutAction != nil {
-		caa.executePayoutAction(ctx, *result.PayoutAction)
-	}
 	if result.RestrictionAction != nil {
 		caa.executeRestrictionAction(ctx, *result.RestrictionAction)
 	}
 	if result.NotificationAction != nil {
 		caa.executeNotificationAction(ctx, *result.NotificationAction)
-	}
-}
-
-func (caa *ClaimAutoApproval) executePayoutAction(ctx context.Context, action db.BehaviorAction) {
-	if action.ID == 0 {
-		log.Warn().Msg("skip persisted payout action without action id")
-		return
-	}
-	if caa.payoutDistributor == nil {
-		log.Error().Int64("behavior_action_id", action.ID).Msg("claim payout distributor unavailable during persisted payout execution")
-		return
-	}
-	if err := caa.payoutDistributor.EnqueueClaimPayoutAction(ctx, action.ID); err != nil {
-		log.Error().Err(err).Int64("behavior_action_id", action.ID).Msg("dispatch persisted payout action failed")
 	}
 }
 
@@ -718,54 +679,6 @@ func persistedBehaviorDecisionReason(behaviorDecision db.BehaviorDecision) strin
 		return behaviorDecision.RestrictionReason.String
 	}
 	return ""
-}
-
-// handleSuspiciousPattern 处理可疑的餐损索赔模式
-// 已经赔付，但根据信用分和模式进行事后处罚
-func (caa *ClaimAutoApproval) handleSuspiciousPattern(
-	ctx context.Context,
-	userID int64,
-	claimID int64,
-	claimType string,
-	lookback *LookbackResult,
-) {
-	_ = claimType
-	// 根据索赔频率和模式发出警告
-	var reason string
-	var warningMessage string
-
-	if lookback != nil && lookback.ClaimsFound >= 5 {
-		// 高频索赔（5次以上）
-		reason = "高频索赔处罚"
-		warningMessage = fmt.Sprintf("您最近%s内已索赔%d次，被系统判定为恶意索赔风险",
-			lookback.Period, lookback.ClaimsFound)
-	} else if lookback != nil && lookback.ClaimsFound >= 3 {
-		// 频繁索赔（3次以上）
-		reason = "频繁索赔警告"
-		warningMessage = fmt.Sprintf("您最近%s内5笔订单中已索赔%d次，系统判定有恶意索赔风险。继续索赔将影响您的账号使用。",
-			lookback.Period, lookback.ClaimsFound)
-	} else {
-		// 可疑但次数不多，轻微扣分
-		reason = "可疑模式提醒"
-		warningMessage = "系统检测到可疑索赔模式，请注意"
-	}
-
-	// 发送用户通知。
-	// 当前阶段只要求把通知写入通知中心；用户在小程序内可通过通知列表和未读计数接口获取。
-	// 普通用户不要求在本链路上接 WebSocket，也不要求额外补微信订阅消息离线触达。
-	if caa.notificationDistributor != nil {
-		_ = caa.notificationDistributor.SendUserNotification(
-			ctx,
-			userID,
-			"system",       // notificationType
-			"索赔风险提醒",       // title
-			warningMessage, // content
-			"claim",        // relatedType
-			claimID,        // relatedID
-		)
-	}
-
-	_ = reason
 }
 
 // sendNotification 发送商户/骑手 WebSocket 实时通知。
