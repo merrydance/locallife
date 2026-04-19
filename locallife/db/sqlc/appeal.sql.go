@@ -1114,7 +1114,7 @@ WHERE o.merchant_id = $1
       AND (cr.status IN ('paid', 'waived') OR a.status IN ('approved', 'compensated'))
     )
   )
-ORDER BY c.created_at DESC
+ORDER BY c.created_at DESC, c.id DESC
 LIMIT $4 OFFSET $3
 `
 

@@ -378,6 +378,39 @@ func TestListMerchantClaimsForMerchant_FilterByBucket(t *testing.T) {
 	require.Equal(t, "appealed", claims[0].RecoveryStatus)
 }
 
+func TestListMerchantClaimsForMerchant_UsesIDTieBreaker(t *testing.T) {
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	tiedCreatedAt := time.Now().UTC().Truncate(time.Microsecond)
+	var claimIDs []int64
+
+	for i := 0; i < 2; i++ {
+		user := createRandomUser(t)
+		order := createCompletedOrderForStats(t, user.ID, merchant.ID, 10000, "takeout", time.Now())
+		claim := createRandomClaim(t, user.ID, order.ID)
+		createRandomClaimRecovery(t, claim.ID, order.ID, "pending")
+		claimIDs = append(claimIDs, claim.ID)
+	}
+
+	_, err := testStore.(*SQLStore).connPool.Exec(context.Background(),
+		"UPDATE claims SET created_at = $1 WHERE id = ANY($2)",
+		tiedCreatedAt,
+		claimIDs,
+	)
+	require.NoError(t, err)
+
+	claims, err := testStore.ListMerchantClaimsForMerchant(context.Background(), ListMerchantClaimsForMerchantParams{
+		MerchantID: merchant.ID,
+		Bucket:     pgtype.Text{},
+		Limit:      2,
+		Offset:     0,
+	})
+	require.NoError(t, err)
+	require.Len(t, claims, 2)
+	require.Equal(t, claimIDs[1], claims[0].ID)
+	require.Equal(t, claimIDs[0], claims[1].ID)
+}
+
 func TestCountMerchantClaimsForMerchant_FilterByBucket(t *testing.T) {
 	owner := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, owner.ID)

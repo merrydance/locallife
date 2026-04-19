@@ -140,7 +140,7 @@ WHERE o.merchant_id = sqlc.arg('merchant_id')
       AND (cr.status IN ('paid', 'waived') OR a.status IN ('approved', 'compensated'))
     )
   )
-ORDER BY c.created_at DESC
+ORDER BY c.created_at DESC, c.id DESC
 LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
 -- name: CountMerchantClaimsForMerchant :one
