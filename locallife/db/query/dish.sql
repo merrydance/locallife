@@ -30,7 +30,7 @@ SELECT id, name, created_at, deleted_at FROM dish_categories
 WHERE id = $1 AND deleted_at IS NULL LIMIT 1;
 
 -- name: ListDishCategories :many
-SELECT c.*, mdc.sort_order FROM dish_categories c
+SELECT c.id, c.name, c.created_at, c.deleted_at, mdc.sort_order FROM dish_categories c
 JOIN merchant_dish_categories mdc ON c.id = mdc.category_id
 WHERE mdc.merchant_id = $1
 ORDER BY mdc.sort_order ASC, c.name ASC;
@@ -87,7 +87,7 @@ WHERE id = $1 AND deleted_at IS NULL LIMIT 1;
 
 -- name: GetDishWithDetails :one
 SELECT 
-  d.*,
+  d.id, d.merchant_id, d.category_id, d.name, d.description, d.price, d.member_price, d.is_available, d.is_online, d.sort_order, d.created_at, d.updated_at, d.prepare_time, d.deleted_at, d.monthly_sales, d.repurchase_rate, d.image_media_asset_id, d.is_packaging,
   dc.name as category_name,
   COALESCE(
     json_agg(DISTINCT
@@ -120,7 +120,7 @@ GROUP BY d.id, dc.name;
 
 -- name: ListDishesByMerchant :many
 SELECT 
-  d.*,
+  d.id, d.merchant_id, d.category_id, d.name, d.description, d.price, d.member_price, d.is_available, d.is_online, d.sort_order, d.created_at, d.updated_at, d.prepare_time, d.deleted_at, d.monthly_sales, d.repurchase_rate, d.image_media_asset_id, d.is_packaging,
   COALESCE(
     (
       SELECT json_agg(
@@ -183,7 +183,7 @@ WHERE
 -- name: SearchDishesGlobal :many
 -- 全局菜品搜索（跨商户），只搜索已激活商户的上架菜品
 SELECT 
-  d.*,
+  d.id, d.merchant_id, d.category_id, d.name, d.description, d.price, d.member_price, d.is_available, d.is_online, d.sort_order, d.created_at, d.updated_at, d.prepare_time, d.deleted_at, d.monthly_sales, d.repurchase_rate, d.image_media_asset_id, d.is_packaging,
   m.name AS merchant_name,
   m.logo_media_asset_id AS merchant_logo_asset_id,
   m.is_open AS merchant_is_open,
@@ -359,7 +359,7 @@ INSERT INTO dish_ingredients (
 
 -- name: ListDishIngredients :many
 SELECT 
-  i.*
+  i.id, i.name, i.is_system, i.category, i.is_allergen, i.created_by, i.created_at
 FROM ingredients i
 JOIN dish_ingredients di ON i.id = di.ingredient_id
 WHERE di.dish_id = $1
@@ -454,7 +454,7 @@ INSERT INTO dish_customization_options (
 
 -- name: ListDishCustomizationOptions :many
 SELECT 
-  dco.*,
+  dco.id, dco.group_id, dco.tag_id, dco.extra_price, dco.sort_order,
   t.name as tag_name,
   t.type as tag_type
 FROM dish_customization_options dco
@@ -464,7 +464,7 @@ ORDER BY dco.sort_order ASC;
 
 -- name: GetDishWithCustomizations :one
 SELECT 
-  d.*,
+  d.id, d.merchant_id, d.category_id, d.name, d.description, d.price, d.member_price, d.is_available, d.is_online, d.sort_order, d.created_at, d.updated_at, d.prepare_time, d.deleted_at, d.monthly_sales, d.repurchase_rate, d.image_media_asset_id, d.is_packaging,
   COALESCE(
     json_agg(
       json_build_object(
@@ -497,7 +497,7 @@ GROUP BY d.id;
 
 -- name: GetDishComplete :one
 SELECT 
-  d.*,
+  d.id, d.merchant_id, d.category_id, d.name, d.description, d.price, d.member_price, d.is_available, d.is_online, d.sort_order, d.created_at, d.updated_at, d.prepare_time, d.deleted_at, d.monthly_sales, d.repurchase_rate, d.image_media_asset_id, d.is_packaging,
   dc.name as category_name,
   COALESCE(
     json_agg(DISTINCT
