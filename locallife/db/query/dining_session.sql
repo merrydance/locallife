@@ -40,7 +40,7 @@ RETURNING *;
 -- name: ListDiningSessionsByUser :many
 SELECT id, merchant_id, table_id, reservation_id, user_id, active_order_id, status, opened_at, closed_at, created_at, updated_at FROM dining_sessions
 WHERE user_id = $1
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $2 OFFSET $3;
 
 -- name: ListOpenDiningSessionsBefore :many
