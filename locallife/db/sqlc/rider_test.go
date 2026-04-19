@@ -369,17 +369,27 @@ func TestCreateRiderDeposit(t *testing.T) {
 
 func TestListRiderDeposits(t *testing.T) {
 	rider := createActiveRider(t)
+	tiedCreatedAt := time.Now().UTC().Truncate(time.Microsecond)
+	var depositIDs []int64
 
 	// 创建几笔押金记录
 	for i := 0; i < 3; i++ {
-		_, err := testStore.CreateRiderDeposit(context.Background(), CreateRiderDepositParams{
+		deposit, err := testStore.CreateRiderDeposit(context.Background(), CreateRiderDepositParams{
 			RiderID:      rider.ID,
 			Amount:       int64((i + 1) * 10000),
 			Type:         "deposit",
 			BalanceAfter: int64((i + 1) * 10000),
 		})
 		require.NoError(t, err)
+		depositIDs = append(depositIDs, deposit.ID)
 	}
+
+	_, err := testStore.(*SQLStore).connPool.Exec(context.Background(),
+		`UPDATE rider_deposits SET created_at = $1 WHERE id = ANY($2)`,
+		tiedCreatedAt,
+		depositIDs,
+	)
+	require.NoError(t, err)
 
 	deposits, err := testStore.ListRiderDeposits(context.Background(), ListRiderDepositsParams{
 		RiderID: rider.ID,
@@ -388,11 +398,9 @@ func TestListRiderDeposits(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, len(deposits), 3)
-
-	// 验证按时间倒序
-	for i := 0; i < len(deposits)-1; i++ {
-		require.GreaterOrEqual(t, deposits[i].CreatedAt, deposits[i+1].CreatedAt)
-	}
+	require.Equal(t, depositIDs[2], deposits[0].ID)
+	require.Equal(t, depositIDs[1], deposits[1].ID)
+	require.Equal(t, depositIDs[0], deposits[2].ID)
 }
 
 // ==================== Rider Location Tests ====================

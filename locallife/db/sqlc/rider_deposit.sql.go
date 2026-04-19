@@ -142,7 +142,7 @@ func (q *Queries) GetRiderDepositStats(ctx context.Context, riderID int64) (GetR
 const listRiderDeposits = `-- name: ListRiderDeposits :many
 SELECT id, rider_id, amount, type, related_order_id, balance_after, remark, created_at, payment_order_id FROM rider_deposits
 WHERE rider_id = $1
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $2 OFFSET $3
 `
 
