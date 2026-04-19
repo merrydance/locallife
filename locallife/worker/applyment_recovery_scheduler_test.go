@@ -13,17 +13,28 @@ import (
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	mockwechat "github.com/merrydance/locallife/wechat/mock"
 	"github.com/merrydance/locallife/worker"
-	mockwk "github.com/merrydance/locallife/worker/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
+
+type applymentRecoveryTestDistributor struct {
+	worker.NoopTaskDistributor
+	onProcessApplymentResult func(context.Context, *worker.ApplymentResultPayload, ...asynq.Option) error
+}
+
+func (d *applymentRecoveryTestDistributor) DistributeTaskProcessApplymentResult(ctx context.Context, payload *worker.ApplymentResultPayload, opts ...asynq.Option) error {
+	if d.onProcessApplymentResult != nil {
+		return d.onProcessApplymentResult(ctx, payload, opts...)
+	}
+	return nil
+}
 
 func TestApplymentRecoverySchedulerRunOnceRequeuesLocalUnprocessedFollowUp(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	distributor := mockwk.NewMockTaskDistributor(ctrl)
+	distributor := &applymentRecoveryTestDistributor{}
 
 	store.EXPECT().
 		ListEcommerceApplymentsPendingFollowUp(gomock.Any(), gomock.Any()).
@@ -37,14 +48,12 @@ func TestApplymentRecoverySchedulerRunOnceRequeuesLocalUnprocessedFollowUp(t *te
 			UpdatedAt:    time.Now().Add(-5 * time.Minute),
 		}}, nil)
 
-	distributor.EXPECT().
-		DistributeTaskProcessApplymentResult(gomock.Any(), gomock.AssignableToTypeOf(&worker.ApplymentResultPayload{}), gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, payload *worker.ApplymentResultPayload, _ ...asynq.Option) error {
-			require.Equal(t, int64(11), payload.ApplymentID)
-			require.Equal(t, "finish", payload.ApplymentStatus)
-			require.Equal(t, "sub_mch_001", payload.SubMchID)
-			return nil
-		})
+	distributor.onProcessApplymentResult = func(_ context.Context, payload *worker.ApplymentResultPayload, _ ...asynq.Option) error {
+		require.Equal(t, int64(11), payload.ApplymentID)
+		require.Equal(t, "finish", payload.ApplymentStatus)
+		require.Equal(t, "sub_mch_001", payload.SubMchID)
+		return nil
+	}
 
 	scheduler := worker.NewApplymentRecoveryScheduler(store, distributor, nil)
 	scheduler.RunOnce()
@@ -55,7 +64,7 @@ func TestApplymentRecoverySchedulerRunOnceQueriesSubmittedMerchantAndReconcilesS
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	distributor := mockwk.NewMockTaskDistributor(ctrl)
+	distributor := &applymentRecoveryTestDistributor{}
 	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
 
 	store.EXPECT().
@@ -88,14 +97,12 @@ func TestApplymentRecoverySchedulerRunOnceQueriesSubmittedMerchantAndReconcilesS
 		}).
 		Return(nil)
 
-	distributor.EXPECT().
-		DistributeTaskProcessApplymentResult(gomock.Any(), gomock.AssignableToTypeOf(&worker.ApplymentResultPayload{}), gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, payload *worker.ApplymentResultPayload, _ ...asynq.Option) error {
-			require.Equal(t, "FINISH", payload.ApplymentState)
-			require.Equal(t, "finish", payload.ApplymentStatus)
-			require.Equal(t, "sub_mch_991", payload.SubMchID)
-			return nil
-		})
+	distributor.onProcessApplymentResult = func(_ context.Context, payload *worker.ApplymentResultPayload, _ ...asynq.Option) error {
+		require.Equal(t, "FINISH", payload.ApplymentState)
+		require.Equal(t, "finish", payload.ApplymentStatus)
+		require.Equal(t, "sub_mch_991", payload.SubMchID)
+		return nil
+	}
 
 	scheduler := worker.NewApplymentRecoveryScheduler(store, distributor, ecommerceClient)
 	scheduler.RunOnce()
@@ -106,7 +113,7 @@ func TestApplymentRecoverySchedulerRunOnceIgnoresOperatorRecords(t *testing.T) {
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	distributor := mockwk.NewMockTaskDistributor(ctrl)
+	distributor := &applymentRecoveryTestDistributor{}
 
 	store.EXPECT().
 		ListEcommerceApplymentsPendingFollowUp(gomock.Any(), gomock.Any()).
@@ -128,7 +135,7 @@ func TestApplymentRecoverySchedulerRunOnceIgnoresOperatorSubmittedRecords(t *tes
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	distributor := mockwk.NewMockTaskDistributor(ctrl)
+	distributor := &applymentRecoveryTestDistributor{}
 
 	store.EXPECT().
 		ListEcommerceApplymentsPendingFollowUp(gomock.Any(), gomock.Any()).
@@ -151,7 +158,7 @@ func TestApplymentRecoverySchedulerRunOnceFallsBackToOutRequestNoAfterIDQueryFai
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	distributor := mockwk.NewMockTaskDistributor(ctrl)
+	distributor := &applymentRecoveryTestDistributor{}
 	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
 
 	store.EXPECT().
@@ -188,14 +195,12 @@ func TestApplymentRecoverySchedulerRunOnceFallsBackToOutRequestNoAfterIDQueryFai
 			return db.EcommerceApplyment{ID: arg.ID, Status: arg.Status}, nil
 		})
 
-	distributor.EXPECT().
-		DistributeTaskProcessApplymentResult(gomock.Any(), gomock.AssignableToTypeOf(&worker.ApplymentResultPayload{}), gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, payload *worker.ApplymentResultPayload, _ ...asynq.Option) error {
-			require.Equal(t, "AUDITING", payload.ApplymentState)
-			require.Equal(t, "UNSIGNED", payload.SignState)
-			require.Equal(t, "auditing", payload.ApplymentStatus)
-			return nil
-		})
+	distributor.onProcessApplymentResult = func(_ context.Context, payload *worker.ApplymentResultPayload, _ ...asynq.Option) error {
+		require.Equal(t, "AUDITING", payload.ApplymentState)
+		require.Equal(t, "UNSIGNED", payload.SignState)
+		require.Equal(t, "auditing", payload.ApplymentStatus)
+		return nil
+	}
 
 	scheduler := worker.NewApplymentRecoveryScheduler(store, distributor, ecommerceClient)
 	scheduler.RunOnce()
@@ -206,7 +211,7 @@ func TestApplymentRecoverySchedulerRunOnceSkipsRemoteQueryWithoutEcommerceClient
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	distributor := mockwk.NewMockTaskDistributor(ctrl)
+	distributor := &applymentRecoveryTestDistributor{}
 
 	store.EXPECT().
 		ListEcommerceApplymentsPendingFollowUp(gomock.Any(), gomock.Any()).
@@ -229,7 +234,7 @@ func TestApplymentRecoverySchedulerRunOnceEnqueuesFrozenFollowUp(t *testing.T) {
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	distributor := mockwk.NewMockTaskDistributor(ctrl)
+	distributor := &applymentRecoveryTestDistributor{}
 	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
 
 	store.EXPECT().
@@ -266,13 +271,11 @@ func TestApplymentRecoverySchedulerRunOnceEnqueuesFrozenFollowUp(t *testing.T) {
 			return db.EcommerceApplyment{ID: arg.ID, Status: arg.Status}, nil
 		})
 
-	distributor.EXPECT().
-		DistributeTaskProcessApplymentResult(gomock.Any(), gomock.AssignableToTypeOf(&worker.ApplymentResultPayload{}), gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, payload *worker.ApplymentResultPayload, _ ...asynq.Option) error {
-			require.Equal(t, "FROZEN", payload.ApplymentState)
-			require.Equal(t, "frozen", payload.ApplymentStatus)
-			return nil
-		})
+	distributor.onProcessApplymentResult = func(_ context.Context, payload *worker.ApplymentResultPayload, _ ...asynq.Option) error {
+		require.Equal(t, "FROZEN", payload.ApplymentState)
+		require.Equal(t, "frozen", payload.ApplymentStatus)
+		return nil
+	}
 
 	scheduler := worker.NewApplymentRecoveryScheduler(store, distributor, ecommerceClient)
 	scheduler.RunOnce()
