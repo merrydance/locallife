@@ -368,6 +368,44 @@ func TestListPendingOperatorApplications(t *testing.T) {
 	require.True(t, hasSubmitted, "列表中应包含至少一个 submitted 状态申请")
 }
 
+func TestOperatorApplicationListsUseIDTieBreaker(t *testing.T) {
+	tiedAt := time.Now().UTC().Truncate(time.Microsecond)
+	var appIDs []int64
+
+	for i := 0; i < 2; i++ {
+		app := createCompleteOperatorApplication(t)
+		submitted, err := testStore.SubmitOperatorApplication(context.Background(), app.ID)
+		require.NoError(t, err)
+		appIDs = append(appIDs, submitted.ID)
+	}
+
+	_, err := testStore.(*SQLStore).connPool.Exec(context.Background(),
+		`UPDATE operator_applications SET created_at = $1, submitted_at = $1 WHERE id = ANY($2)`,
+		tiedAt,
+		appIDs,
+	)
+	require.NoError(t, err)
+
+	pendingApps, err := testStore.ListPendingOperatorApplications(context.Background(), ListPendingOperatorApplicationsParams{
+		Limit:  2,
+		Offset: 0,
+	})
+	require.NoError(t, err)
+	require.Len(t, pendingApps, 2)
+	require.Equal(t, appIDs[1], pendingApps[0].ID)
+	require.Equal(t, appIDs[0], pendingApps[1].ID)
+
+	apps, err := testStore.ListOperatorApplications(context.Background(), ListOperatorApplicationsParams{
+		Limit:  2,
+		Offset: 0,
+		Status: pgtype.Text{String: "submitted", Valid: true},
+	})
+	require.NoError(t, err)
+	require.Len(t, apps, 2)
+	require.Equal(t, appIDs[1], apps[0].ID)
+	require.Equal(t, appIDs[0], apps[1].ID)
+}
+
 func TestCountPendingOperatorApplications(t *testing.T) {
 	// 创建一个待审核的申请
 	app := createCompleteOperatorApplication(t)

@@ -413,7 +413,7 @@ SELECT
 FROM operator_applications oa
 JOIN regions r ON r.id = oa.region_id
 WHERE ($3::text IS NULL OR oa.status = $3)
-ORDER BY oa.created_at DESC
+ORDER BY oa.created_at DESC, oa.id DESC
 LIMIT $1 OFFSET $2
 `
 
@@ -509,7 +509,7 @@ FROM operator_applications oa
 LEFT JOIN users u ON u.id = oa.user_id
 JOIN regions r ON r.id = oa.region_id
 WHERE oa.status IN ('submitted', 'approved', 'rejected')
-ORDER BY COALESCE(oa.submitted_at, oa.updated_at, oa.created_at) DESC
+ORDER BY COALESCE(oa.submitted_at, oa.updated_at, oa.created_at) DESC, oa.id DESC
 LIMIT $1 OFFSET $2
 `
 
