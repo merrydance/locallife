@@ -24,7 +24,7 @@ WHERE user_id = $1 LIMIT 1;
 
 -- name: ListOperators :many
 SELECT 
-    o.*,
+    o.id, o.user_id, o.region_id, o.name, o.contact_name, o.contact_phone, o.wechat_mch_id, o.status, o.created_at, o.updated_at, o.contract_start_date, o.contract_end_date, o.contract_years, o.sub_mch_id, o.balance, o.wallet_account, o.rider_deposit, o.weather_coeff_extreme, o.weather_coeff_heavy, o.weather_coeff_moderate, o.weather_coeff_light, o.latest_settlement_application_no, o.latest_settlement_application_submitted_at,
     r.name as region_name
 FROM operators o
 INNER JOIN regions r ON o.region_id = r.id
@@ -52,7 +52,7 @@ SELECT COUNT(*) FROM operators;
 -- name: ListExpiringOperators :many
 -- 列出即将到期的运营商（用于提前通知续约）
 SELECT 
-    o.*,
+    o.id, o.user_id, o.region_id, o.name, o.contact_name, o.contact_phone, o.wechat_mch_id, o.status, o.created_at, o.updated_at, o.contract_start_date, o.contract_end_date, o.contract_years, o.sub_mch_id, o.balance, o.wallet_account, o.rider_deposit, o.weather_coeff_extreme, o.weather_coeff_heavy, o.weather_coeff_moderate, o.weather_coeff_light, o.latest_settlement_application_no, o.latest_settlement_application_submitted_at,
     r.name as region_name
 FROM operators o
 INNER JOIN regions r ON o.region_id = r.id
@@ -64,7 +64,7 @@ ORDER BY o.contract_end_date ASC;
 -- name: ListExpiredOperators :many
 -- 列出已过期的运营商
 SELECT 
-    o.*,
+    o.id, o.user_id, o.region_id, o.name, o.contact_name, o.contact_phone, o.wechat_mch_id, o.status, o.created_at, o.updated_at, o.contract_start_date, o.contract_end_date, o.contract_years, o.sub_mch_id, o.balance, o.wallet_account, o.rider_deposit, o.weather_coeff_extreme, o.weather_coeff_heavy, o.weather_coeff_moderate, o.weather_coeff_light, o.latest_settlement_application_no, o.latest_settlement_application_submitted_at,
     r.name as region_name
 FROM operators o
 INNER JOIN regions r ON o.region_id = r.id

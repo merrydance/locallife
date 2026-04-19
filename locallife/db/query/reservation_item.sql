@@ -12,7 +12,7 @@ INSERT INTO reservation_items (
 
 -- name: ListReservationItems :many
 SELECT 
-    ri.*,
+    ri.id, ri.reservation_id, ri.dish_id, ri.combo_id, ri.quantity, ri.unit_price, ri.total_price, ri.created_at,
     d.name as dish_name,
     d.image_media_asset_id as dish_image_media_asset_id,
     cs.name as combo_name,
