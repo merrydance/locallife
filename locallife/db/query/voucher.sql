@@ -33,7 +33,7 @@ FOR UPDATE;
 -- name: ListMerchantVouchers :many
 SELECT id, merchant_id, code, name, description, amount, min_order_amount, total_quantity, claimed_quantity, used_quantity, valid_from, valid_until, is_active, created_at, updated_at, allowed_order_types, deleted_at FROM vouchers
 WHERE merchant_id = $1 AND deleted_at IS NULL
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $2 OFFSET $3;
 
 -- name: ListActiveVouchers :many
@@ -44,7 +44,7 @@ WHERE merchant_id = $1
     AND valid_from <= NOW()
     AND valid_until >= NOW()
     AND claimed_quantity < total_quantity
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $2 OFFSET $3;
 
 -- name: UpdateVoucher :one
@@ -120,7 +120,7 @@ FROM user_vouchers uv
 JOIN vouchers v ON v.id = uv.voucher_id
 JOIN merchants m ON m.id = v.merchant_id
 WHERE uv.user_id = $1
-ORDER BY uv.obtained_at DESC
+ORDER BY uv.obtained_at DESC, uv.id DESC
 LIMIT $2 OFFSET $3;
 
 -- name: ListUserAvailableVouchers :many
