@@ -698,7 +698,7 @@ const listMerchantGroups = `-- name: ListMerchantGroups :many
 SELECT id, name, owner_user_id, status, contact_phone, license_number, address, region_id, application_data, created_at, updated_at, license_media_asset_id FROM merchant_groups
 WHERE status = 'active'
   AND ($1::text IS NULL OR name ILIKE '%' || $1 || '%')
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $2 OFFSET $3
 `
 
