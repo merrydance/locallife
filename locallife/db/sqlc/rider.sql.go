@@ -453,7 +453,7 @@ func (q *Queries) ListOnlineRiders(ctx context.Context) ([]Rider, error) {
 const listRidersByRegion = `-- name: ListRidersByRegion :many
 SELECT id, user_id, real_name, id_card_no, phone, deposit_amount, frozen_deposit, status, is_online, credit_score, current_longitude, current_latitude, location_updated_at, total_orders, total_earnings, online_duration, created_at, updated_at, region_id, application_id FROM riders
 WHERE region_id = $1
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $2 OFFSET $3
 `
 
@@ -508,7 +508,7 @@ func (q *Queries) ListRidersByRegion(ctx context.Context, arg ListRidersByRegion
 const listRidersByRegionWithStatus = `-- name: ListRidersByRegionWithStatus :many
 SELECT id, user_id, real_name, id_card_no, phone, deposit_amount, frozen_deposit, status, is_online, credit_score, current_longitude, current_latitude, location_updated_at, total_orders, total_earnings, online_duration, created_at, updated_at, region_id, application_id FROM riders
 WHERE region_id = $1 AND status = $2
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $3 OFFSET $4
 `
 
@@ -569,7 +569,7 @@ func (q *Queries) ListRidersByRegionWithStatus(ctx context.Context, arg ListRide
 const listRidersByStatus = `-- name: ListRidersByStatus :many
 SELECT id, user_id, real_name, id_card_no, phone, deposit_amount, frozen_deposit, status, is_online, credit_score, current_longitude, current_latitude, location_updated_at, total_orders, total_earnings, online_duration, created_at, updated_at, region_id, application_id FROM riders
 WHERE status = $1
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $2 OFFSET $3
 `
 

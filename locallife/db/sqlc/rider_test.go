@@ -676,6 +676,54 @@ func TestListRidersByRegion_Pagination(t *testing.T) {
 	require.NotEqual(t, page1[0].ID, page2[0].ID)
 }
 
+func TestRiderListQueriesUseIDTieBreaker(t *testing.T) {
+	region := createRandomRegion(t)
+	regionID := pgtype.Int8{Int64: region.ID, Valid: true}
+	tiedCreatedAt := time.Now().UTC().Truncate(time.Microsecond)
+
+	rider1 := createRiderInRegion(t, region.ID, "active")
+	rider2 := createRiderInRegion(t, region.ID, "active")
+	riderIDs := []int64{rider1.ID, rider2.ID}
+
+	_, err := testStore.(*SQLStore).connPool.Exec(context.Background(),
+		"UPDATE riders SET created_at = $1 WHERE id = ANY($2)",
+		tiedCreatedAt,
+		riderIDs,
+	)
+	require.NoError(t, err)
+
+	statusRiders, err := testStore.ListRidersByStatus(context.Background(), ListRidersByStatusParams{
+		Status: "active",
+		Limit:  2,
+		Offset: 0,
+	})
+	require.NoError(t, err)
+	require.Len(t, statusRiders, 2)
+	require.Equal(t, rider2.ID, statusRiders[0].ID)
+	require.Equal(t, rider1.ID, statusRiders[1].ID)
+
+	regionRiders, err := testStore.ListRidersByRegion(context.Background(), ListRidersByRegionParams{
+		RegionID: regionID,
+		Limit:    2,
+		Offset:   0,
+	})
+	require.NoError(t, err)
+	require.Len(t, regionRiders, 2)
+	require.Equal(t, rider2.ID, regionRiders[0].ID)
+	require.Equal(t, rider1.ID, regionRiders[1].ID)
+
+	regionStatusRiders, err := testStore.ListRidersByRegionWithStatus(context.Background(), ListRidersByRegionWithStatusParams{
+		RegionID: regionID,
+		Status:   "active",
+		Limit:    2,
+		Offset:   0,
+	})
+	require.NoError(t, err)
+	require.Len(t, regionStatusRiders, 2)
+	require.Equal(t, rider2.ID, regionStatusRiders[0].ID)
+	require.Equal(t, rider1.ID, regionStatusRiders[1].ID)
+}
+
 func TestCountRidersByRegion(t *testing.T) {
 	region := createRandomRegion(t)
 	regionID := pgtype.Int8{Int64: region.ID, Valid: true}

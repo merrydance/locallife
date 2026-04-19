@@ -103,7 +103,7 @@ ORDER BY location_updated_at DESC;
 -- name: ListRidersByStatus :many
 SELECT id, user_id, real_name, id_card_no, phone, deposit_amount, frozen_deposit, status, is_online, credit_score, current_longitude, current_latitude, location_updated_at, total_orders, total_earnings, online_duration, created_at, updated_at, region_id, application_id FROM riders
 WHERE status = $1
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $2 OFFSET $3;
 
 -- name: ListNearbyRiders :many
@@ -142,7 +142,7 @@ WHERE is_online = true AND status = 'active';
 -- 按区域列出骑手（供运营商管理使用）
 SELECT id, user_id, real_name, id_card_no, phone, deposit_amount, frozen_deposit, status, is_online, credit_score, current_longitude, current_latitude, location_updated_at, total_orders, total_earnings, online_duration, created_at, updated_at, region_id, application_id FROM riders
 WHERE region_id = $1
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $2 OFFSET $3;
 
 -- name: CountRidersByRegion :one
@@ -154,7 +154,7 @@ WHERE region_id = $1;
 -- 按区域和状态列出骑手
 SELECT id, user_id, real_name, id_card_no, phone, deposit_amount, frozen_deposit, status, is_online, credit_score, current_longitude, current_latitude, location_updated_at, total_orders, total_earnings, online_duration, created_at, updated_at, region_id, application_id FROM riders
 WHERE region_id = $1 AND status = $2
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $3 OFFSET $4;
 
 -- name: CountRidersByRegionWithStatus :one
