@@ -263,7 +263,7 @@ WHERE tt.table_id = $1
 ORDER BY t.name;
 
 -- name: ListTablesByTag :many
-SELECT tb.* FROM tables tb
+SELECT tb.id, tb.merchant_id, tb.table_no, tb.table_type, tb.capacity, tb.description, tb.minimum_spend, tb.qr_code_url, tb.status, tb.current_reservation_id, tb.created_at, tb.updated_at, tb.access_code_hash FROM tables tb
 INNER JOIN table_tags tt ON tb.id = tt.table_id
 WHERE tt.tag_id = $1
 ORDER BY tb.table_no;
