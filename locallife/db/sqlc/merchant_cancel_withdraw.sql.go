@@ -227,7 +227,7 @@ func (q *Queries) GetMerchantCancelWithdrawApplicationByOutRequestNo(ctx context
 const listMerchantCancelWithdrawApplicationsByMerchant = `-- name: ListMerchantCancelWithdrawApplicationsByMerchant :many
 SELECT id, merchant_id, created_by_user_id, sub_mch_id, out_request_no, applyment_id, withdraw, proof_media_asset_ids, additional_material_asset_ids, remark, local_sync_state, cancel_state, cancel_state_description, withdraw_state, withdraw_state_description, confirm_cancel_url, account_info, account_withdraw_result, latest_query_response, last_error, modify_time, submitted_at, last_query_at, created_at, updated_at, business_license_status_declaration FROM merchant_cancel_withdraw_applications
 WHERE merchant_id = $1
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $2 OFFSET $3
 `
 
