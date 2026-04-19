@@ -46,7 +46,7 @@ LIMIT $2 OFFSET $3;
 -- name: ListRecentWeatherCoefficients :many
 SELECT id, region_id, recorded_at, weather_data, warning_data, weather_type, weather_code, temperature, feels_like, humidity, wind_speed, wind_scale, precip, visibility, has_warning, warning_type, warning_level, warning_severity, warning_text, weather_coefficient, warning_coefficient, final_coefficient, delivery_suspended, suspend_reason, created_at FROM weather_coefficients
 WHERE region_id = $1 AND recorded_at >= $2
-ORDER BY recorded_at DESC;
+ORDER BY recorded_at DESC, id DESC;
 
 -- name: ListRegionsWithWarning :many
 SELECT DISTINCT region_id FROM weather_coefficients

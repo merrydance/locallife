@@ -446,6 +446,50 @@ func TestListWeatherCoefficients(t *testing.T) {
 	require.Equal(t, coeff1.ID, coeffs[1].ID)
 }
 
+func TestListRecentWeatherCoefficientsUsesIDTieBreaker(t *testing.T) {
+	regionID := getCleanRegionID(t)
+	tiedRecordedAt := time.Now().UTC().Truncate(time.Microsecond)
+	weatherCoeff := pgtype.Numeric{}
+	_ = weatherCoeff.Scan("1.0")
+	warningCoeff := pgtype.Numeric{}
+	_ = warningCoeff.Scan("1.0")
+	finalCoeff := pgtype.Numeric{}
+	_ = finalCoeff.Scan("1.0")
+
+	createWeatherCoeff := func(weatherType string) WeatherCoefficient {
+		coeff, err := testStore.CreateWeatherCoefficient(context.Background(), CreateWeatherCoefficientParams{
+			RegionID:           regionID,
+			RecordedAt:         tiedRecordedAt,
+			WeatherData:        []byte(`{"temp":25}`),
+			WarningData:        []byte(`{}`),
+			WeatherType:        weatherType,
+			Temperature:        pgtype.Int2{Int16: 25, Valid: true},
+			FeelsLike:          pgtype.Int2{Int16: 27, Valid: true},
+			Humidity:           pgtype.Int2{Int16: 60, Valid: true},
+			WindSpeed:          pgtype.Int2{Int16: 10, Valid: true},
+			HasWarning:         false,
+			WeatherCoefficient: weatherCoeff,
+			WarningCoefficient: warningCoeff,
+			FinalCoefficient:   finalCoeff,
+			DeliverySuspended:  false,
+		})
+		require.NoError(t, err)
+		return coeff
+	}
+
+	coeff1 := createWeatherCoeff("sunny")
+	coeff2 := createWeatherCoeff("cloudy")
+
+	coeffs, err := testStore.ListRecentWeatherCoefficients(context.Background(), ListRecentWeatherCoefficientsParams{
+		RegionID:   regionID,
+		RecordedAt: tiedRecordedAt.Add(-time.Second),
+	})
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, len(coeffs), 2)
+	require.Equal(t, coeff2.ID, coeffs[0].ID)
+	require.Equal(t, coeff1.ID, coeffs[1].ID)
+}
+
 func TestWeatherCoefficientWithWarning(t *testing.T) {
 	regionID := getCleanRegionID(t)
 

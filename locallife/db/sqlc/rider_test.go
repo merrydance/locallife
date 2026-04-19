@@ -503,6 +503,67 @@ func TestListRiderLocations(t *testing.T) {
 	}
 }
 
+func TestListRiderLocationsUsesIDTieBreaker(t *testing.T) {
+	rider := createOnlineRider(t)
+	tiedRecordedAt := time.Now().UTC().Truncate(time.Microsecond)
+	var locationIDs []int64
+
+	for i := 0; i < 2; i++ {
+		location, err := testStore.CreateRiderLocation(context.Background(), CreateRiderLocationParams{
+			RiderID:    rider.ID,
+			Longitude:  numericFromFloat(116.404 + float64(i)*0.001),
+			Latitude:   numericFromFloat(39.915 + float64(i)*0.001),
+			RecordedAt: tiedRecordedAt,
+		})
+		require.NoError(t, err)
+		locationIDs = append(locationIDs, location.ID)
+	}
+
+	locations, err := testStore.ListRiderLocations(context.Background(), ListRiderLocationsParams{
+		RiderID: rider.ID,
+		StartAt: tiedRecordedAt.Add(-time.Second),
+		EndAt:   tiedRecordedAt.Add(time.Second),
+	})
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, len(locations), 2)
+	require.Equal(t, locationIDs[0], locations[0].ID)
+	require.Equal(t, locationIDs[1], locations[1].ID)
+}
+
+func TestListDeliveryLocationsUseIDTieBreaker(t *testing.T) {
+	rider := createOnlineRider(t)
+	delivery := createRandomDelivery(t)
+	tiedRecordedAt := time.Now().UTC().Truncate(time.Microsecond)
+	var locationIDs []int64
+
+	for i := 0; i < 2; i++ {
+		location, err := testStore.CreateRiderLocation(context.Background(), CreateRiderLocationParams{
+			RiderID:    rider.ID,
+			DeliveryID: pgtype.Int8{Int64: delivery.ID, Valid: true},
+			Longitude:  numericFromFloat(116.404 + float64(i)*0.001),
+			Latitude:   numericFromFloat(39.915 + float64(i)*0.001),
+			RecordedAt: tiedRecordedAt,
+		})
+		require.NoError(t, err)
+		locationIDs = append(locationIDs, location.ID)
+	}
+
+	locations, err := testStore.ListDeliveryLocations(context.Background(), pgtype.Int8{Int64: delivery.ID, Valid: true})
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, len(locations), 2)
+	require.Equal(t, locationIDs[0], locations[0].ID)
+	require.Equal(t, locationIDs[1], locations[1].ID)
+
+	locationsSince, err := testStore.ListDeliveryLocationsSince(context.Background(), ListDeliveryLocationsSinceParams{
+		DeliveryID: pgtype.Int8{Int64: delivery.ID, Valid: true},
+		RecordedAt: tiedRecordedAt.Add(-time.Second),
+	})
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, len(locationsSince), 2)
+	require.Equal(t, locationIDs[0], locationsSince[0].ID)
+	require.Equal(t, locationIDs[1], locationsSince[1].ID)
+}
+
 func TestGetRiderLatestLocation(t *testing.T) {
 	rider := createOnlineRider(t)
 	tiedRecordedAt := time.Now().UTC().Truncate(time.Microsecond)

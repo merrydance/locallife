@@ -148,7 +148,7 @@ func (q *Queries) GetRiderLatestLocation(ctx context.Context, riderID int64) (Ri
 const listDeliveryLocations = `-- name: ListDeliveryLocations :many
 SELECT id, rider_id, delivery_id, longitude, latitude, accuracy, speed, heading, recorded_at FROM rider_locations
 WHERE delivery_id = $1
-ORDER BY recorded_at ASC
+ORDER BY recorded_at ASC, id ASC
 `
 
 func (q *Queries) ListDeliveryLocations(ctx context.Context, deliveryID pgtype.Int8) ([]RiderLocation, error) {
@@ -185,7 +185,7 @@ const listDeliveryLocationsSince = `-- name: ListDeliveryLocationsSince :many
 SELECT id, rider_id, delivery_id, longitude, latitude, accuracy, speed, heading, recorded_at FROM rider_locations
 WHERE delivery_id = $1
     AND recorded_at > $2
-ORDER BY recorded_at ASC
+ORDER BY recorded_at ASC, id ASC
 `
 
 type ListDeliveryLocationsSinceParams struct {
@@ -228,7 +228,7 @@ SELECT id, rider_id, delivery_id, longitude, latitude, accuracy, speed, heading,
 WHERE rider_id = $1
     AND recorded_at >= $2
     AND recorded_at <= $3
-ORDER BY recorded_at ASC
+ORDER BY recorded_at ASC, id ASC
 `
 
 type ListRiderLocationsParams struct {
