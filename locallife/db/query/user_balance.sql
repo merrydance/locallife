@@ -88,14 +88,14 @@ INSERT INTO user_balance_logs (
 -- 获取用户余额变动日志
 SELECT id, user_id, type, amount, balance_before, balance_after, related_type, related_id, source_type, source_id, remark, created_at FROM user_balance_logs
 WHERE user_id = $1
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $2 OFFSET $3;
 
 -- name: ListUserBalanceLogsByType :many
 -- 按类型获取用户余额变动日志
 SELECT id, user_id, type, amount, balance_before, balance_after, related_type, related_id, source_type, source_id, remark, created_at FROM user_balance_logs
 WHERE user_id = $1 AND type = $2
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $3 OFFSET $4;
 
 -- name: GetUserBalanceLogByRelated :one

@@ -370,7 +370,7 @@ func (q *Queries) GetUserBalanceLogByRelatedAndType(ctx context.Context, arg Get
 const listUserBalanceLogs = `-- name: ListUserBalanceLogs :many
 SELECT id, user_id, type, amount, balance_before, balance_after, related_type, related_id, source_type, source_id, remark, created_at FROM user_balance_logs
 WHERE user_id = $1
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $2 OFFSET $3
 `
 
@@ -417,7 +417,7 @@ func (q *Queries) ListUserBalanceLogs(ctx context.Context, arg ListUserBalanceLo
 const listUserBalanceLogsByType = `-- name: ListUserBalanceLogsByType :many
 SELECT id, user_id, type, amount, balance_before, balance_after, related_type, related_id, source_type, source_id, remark, created_at FROM user_balance_logs
 WHERE user_id = $1 AND type = $2
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $3 OFFSET $4
 `
 
