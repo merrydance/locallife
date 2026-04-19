@@ -716,6 +716,48 @@ func TestCountRiderAppeals(t *testing.T) {
 	require.Equal(t, int64(3), count)
 }
 
+func TestListRiderClaimsForRider_UsesIDTieBreaker(t *testing.T) {
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	riderUser := createRandomUser(t)
+	rider := createRandomRiderWithUser(t, riderUser.ID)
+	tiedCreatedAt := time.Now().UTC().Truncate(time.Microsecond)
+	var claimIDs []int64
+
+	for i := 0; i < 2; i++ {
+		user := createRandomUser(t)
+		order := createCompletedOrderForStats(t, user.ID, merchant.ID, 10000, "takeout", time.Now())
+		delivery := createRandomDeliveryWithOrder(t, order.ID)
+		_, err := testStore.AssignDelivery(context.Background(), AssignDeliveryParams{
+			ID:      delivery.ID,
+			RiderID: pgtype.Int8{Int64: rider.ID, Valid: true},
+		})
+		require.NoError(t, err)
+
+		claim := createRandomClaim(t, user.ID, order.ID)
+		createRandomClaimRecovery(t, claim.ID, order.ID, "pending")
+		claimIDs = append(claimIDs, claim.ID)
+	}
+
+	_, err := testStore.(*SQLStore).connPool.Exec(context.Background(),
+		"UPDATE claims SET created_at = $1 WHERE id = ANY($2)",
+		tiedCreatedAt,
+		claimIDs,
+	)
+	require.NoError(t, err)
+
+	claims, err := testStore.ListRiderClaimsForRider(context.Background(), ListRiderClaimsForRiderParams{
+		RiderID: pgtype.Int8{Int64: rider.ID, Valid: true},
+		Limit:   2,
+		Offset:  0,
+		Bucket:  pgtype.Text{},
+	})
+	require.NoError(t, err)
+	require.Len(t, claims, 2)
+	require.Equal(t, claimIDs[1], claims[0].ID)
+	require.Equal(t, claimIDs[0], claims[1].ID)
+}
+
 // ==================== GetClaimForAppeal Tests ====================
 
 func TestGetClaimForAppeal(t *testing.T) {

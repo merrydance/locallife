@@ -285,7 +285,7 @@ WHERE d.rider_id = $1
       AND (cr.status IN ('paid', 'waived') OR a.status IN ('approved', 'compensated'))
     )
   )
-ORDER BY c.created_at DESC
+ORDER BY c.created_at DESC, c.id DESC
 LIMIT $2 OFFSET $3;
 
 -- name: CountRiderClaimsForRider :one
