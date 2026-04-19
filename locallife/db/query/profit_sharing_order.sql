@@ -180,7 +180,7 @@ FROM profit_sharing_orders p
 JOIN payment_orders po ON po.id = p.payment_order_id
 WHERE p.merchant_id = sqlc.arg('merchant_id')
   AND p.created_at >= sqlc.arg('start_at') AND p.created_at <= sqlc.arg('end_at')
-ORDER BY p.created_at DESC
+ORDER BY p.created_at DESC, p.id DESC
 LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
 -- name: CountMerchantFinanceOrders :one

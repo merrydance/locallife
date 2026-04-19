@@ -102,4 +102,16 @@ func TestProfitSharingListQueriesUseIDTieBreaker(t *testing.T) {
 	require.Len(t, settlementsByStatus, 2)
 	require.Equal(t, secondOrder.ID, settlementsByStatus[0].ID)
 	require.Equal(t, firstOrder.ID, settlementsByStatus[1].ID)
+
+	financeOrders, err := testStore.ListMerchantFinanceOrders(context.Background(), ListMerchantFinanceOrdersParams{
+		MerchantID: merchant.ID,
+		StartAt:    startAt,
+		EndAt:      endAt,
+		Limit:      2,
+		Offset:     0,
+	})
+	require.NoError(t, err)
+	require.Len(t, financeOrders, 2)
+	require.Equal(t, secondOrder.ID, financeOrders[0].ID)
+	require.Equal(t, firstOrder.ID, financeOrders[1].ID)
 }

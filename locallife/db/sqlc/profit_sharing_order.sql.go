@@ -874,7 +874,7 @@ FROM profit_sharing_orders p
 JOIN payment_orders po ON po.id = p.payment_order_id
 WHERE p.merchant_id = $1
   AND p.created_at >= $2 AND p.created_at <= $3
-ORDER BY p.created_at DESC
+ORDER BY p.created_at DESC, p.id DESC
 LIMIT $5 OFFSET $4
 `
 
