@@ -32,7 +32,7 @@ LIMIT 1;
 -- name: GetAppealWithDetails :one
 -- 获取申诉详情（包含索赔和订单信息）
 SELECT 
-    a.*,
+  a.id, a.claim_id, a.appellant_type, a.appellant_id, a.reason, a.status, a.reviewer_id, a.review_notes, a.reviewed_at, a.compensation_amount, a.compensated_at, a.region_id, a.created_at,
     c.claim_type,
     c.claim_amount,
     c.approved_amount AS claim_approved_amount,
@@ -57,7 +57,7 @@ LIMIT 1;
 -- name: ListMerchantAppealsForMerchant :many
 -- 商户查询自己的申诉列表
 SELECT 
-    a.*,
+  a.id, a.claim_id, a.appellant_type, a.appellant_id, a.reason, a.status, a.reviewer_id, a.review_notes, a.reviewed_at, a.compensation_amount, a.compensated_at, a.region_id, a.created_at,
     c.claim_type,
     c.claim_amount,
     c.description AS claim_description,
@@ -81,7 +81,7 @@ WHERE appellant_type = 'merchant'
 -- name: GetMerchantAppealDetail :one
 -- 商户查看自己的申诉详情
 SELECT 
-    a.*,
+  a.id, a.claim_id, a.appellant_type, a.appellant_id, a.reason, a.status, a.reviewer_id, a.review_notes, a.reviewed_at, a.compensation_amount, a.compensated_at, a.region_id, a.created_at,
     c.claim_type,
     c.claim_amount,
     c.approved_amount AS claim_approved_amount,
@@ -101,7 +101,7 @@ LIMIT 1;
 -- name: ListMerchantClaimsForMerchant :many
 -- 商户查看收到的索赔列表（未申诉的+已申诉的）
 SELECT 
-    c.*,
+  c.id, c.order_id, c.user_id, c.claim_type, c.description, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at, c.decision_version, c.decision_reason,
     o.order_no,
     o.total_amount AS order_amount,
     u.phone AS user_phone,
@@ -180,7 +180,7 @@ WHERE o.merchant_id = sqlc.arg('merchant_id')
 -- name: GetMerchantClaimDetailForMerchant :one
 -- 商户查看索赔详情
 SELECT 
-    c.*,
+  c.id, c.order_id, c.user_id, c.claim_type, c.description, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at, c.decision_version, c.decision_reason,
     o.order_no,
     o.total_amount AS order_amount,
     o.created_at AS order_created_at,
@@ -203,7 +203,7 @@ LIMIT 1;
 -- name: ListRiderAppeals :many
 -- 骑手查询自己的申诉列表
 SELECT 
-    a.*,
+  a.id, a.claim_id, a.appellant_type, a.appellant_id, a.reason, a.status, a.reviewer_id, a.review_notes, a.reviewed_at, a.compensation_amount, a.compensated_at, a.region_id, a.created_at,
     c.claim_type,
     c.claim_amount,
     c.description AS claim_description,
@@ -225,7 +225,7 @@ WHERE appellant_type = 'rider'
 -- name: GetRiderAppealDetail :one
 -- 骑手查看自己的申诉详情
 SELECT 
-    a.*,
+  a.id, a.claim_id, a.appellant_type, a.appellant_id, a.reason, a.status, a.reviewer_id, a.review_notes, a.reviewed_at, a.compensation_amount, a.compensated_at, a.region_id, a.created_at,
     c.claim_type,
     c.claim_amount,
     c.approved_amount AS claim_approved_amount,
@@ -245,7 +245,7 @@ LIMIT 1;
 -- name: ListRiderClaimsForRider :many
 -- 骑手查看收到的索赔列表（通过配送单关联）
 SELECT 
-    c.*,
+  c.id, c.order_id, c.user_id, c.claim_type, c.description, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at, c.decision_version, c.decision_reason,
     o.order_no,
     o.total_amount AS order_amount,
     u.phone AS user_phone,
@@ -326,7 +326,7 @@ WHERE d.rider_id = $1
 -- name: GetRiderClaimDetailForRider :one
 -- 骑手查看索赔详情
 SELECT 
-    c.*,
+  c.id, c.order_id, c.user_id, c.claim_type, c.description, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at, c.decision_version, c.decision_reason,
     o.order_no,
     o.total_amount AS order_amount,
     o.created_at AS order_created_at,
@@ -358,7 +358,7 @@ LIMIT 1;
 -- name: ListOperatorAppeals :many
 -- 运营商查询区域内的申诉列表
 SELECT 
-    a.*,
+  a.id, a.claim_id, a.appellant_type, a.appellant_id, a.reason, a.status, a.reviewer_id, a.review_notes, a.reviewed_at, a.compensation_amount, a.compensated_at, a.region_id, a.created_at,
     c.claim_type,
     c.claim_amount,
     c.description AS claim_description,
@@ -389,7 +389,7 @@ WHERE region_id = $1
 -- name: GetOperatorAppealDetail :one
 -- 运营商查看申诉详情
 SELECT 
-    a.*,
+  a.id, a.claim_id, a.appellant_type, a.appellant_id, a.reason, a.status, a.reviewer_id, a.review_notes, a.reviewed_at, a.compensation_amount, a.compensated_at, a.region_id, a.created_at,
     c.claim_type,
     c.claim_amount,
     c.approved_amount AS claim_approved_amount,
@@ -469,7 +469,7 @@ WHERE a.id = $1;
 -- name: GetClaimForAppeal :one
 -- 获取索赔信息（用于创建申诉时验证）
 SELECT 
-    c.*,
+  c.id, c.order_id, c.user_id, c.claim_type, c.description, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at, c.decision_version, c.decision_reason,
     o.merchant_id,
     m.region_id,
     d.rider_id

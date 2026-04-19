@@ -343,7 +343,16 @@ SELECT
   sqlc.embed(merchants),
   COALESCE(
     (
-      SELECT json_agg(tags.*)
+      SELECT json_agg(
+        json_build_object(
+          'id', tags.id,
+          'name', tags.name,
+          'type', tags.type,
+          'sort_order', tags.sort_order,
+          'status', tags.status,
+          'created_at', tags.created_at
+        )
+      )
       FROM tags
       INNER JOIN merchant_tags ON tags.id = merchant_tags.tag_id
       WHERE merchant_tags.merchant_id = merchants.id
@@ -497,7 +506,12 @@ mode_by_merchant AS (
   GROUP BY merchant_id
 ),
 effective_rows AS (
-  SELECT tr.*
+  SELECT
+    tr.merchant_id,
+    tr.is_closed,
+    tr.open_time,
+    tr.close_time,
+    tr.special_date
   FROM today_rows tr
   JOIN mode_by_merchant mm ON mm.merchant_id = tr.merchant_id
   WHERE (mm.has_special AND tr.special_date IS NOT NULL)
@@ -507,7 +521,7 @@ desired_state AS (
   SELECT
     mwh.merchant_id,
     CASE
-      WHEN COUNT(er.*) = 0 THEN false
+      WHEN COUNT(er.merchant_id) = 0 THEN false
       WHEN BOOL_OR(er.is_closed) THEN false
       WHEN BOOL_OR((NOT er.is_closed) AND (LOCALTIME >= er.open_time AND LOCALTIME < er.close_time)) THEN true
       ELSE false
