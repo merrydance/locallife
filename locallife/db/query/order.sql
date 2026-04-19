@@ -81,7 +81,7 @@ SELECT
 FROM orders o
 INNER JOIN merchants m ON o.merchant_id = m.id
 WHERE o.user_id = $1
-ORDER BY o.created_at DESC
+ORDER BY o.created_at DESC, o.id DESC
 LIMIT $2 OFFSET $3;
 
 -- name: ListOrdersByUserWithFilters :many
@@ -109,7 +109,7 @@ WHERE o.user_id = sqlc.arg('user_id')
     AND (sqlc.narg('status')::text IS NULL OR o.status = sqlc.narg('status'))
     AND (sqlc.narg('order_type')::text IS NULL OR o.order_type = sqlc.narg('order_type'))
     AND (sqlc.narg('reservation_id')::bigint IS NULL OR o.reservation_id IS NOT DISTINCT FROM sqlc.narg('reservation_id'))
-ORDER BY o.created_at DESC
+ORDER BY o.created_at DESC, o.id DESC
 LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
 -- name: CountOrdersByUserWithFilters :one
@@ -126,7 +126,7 @@ SELECT
 FROM orders o
 INNER JOIN merchants m ON o.merchant_id = m.id
 WHERE o.user_id = $1 AND o.status = $2
-ORDER BY o.created_at DESC
+ORDER BY o.created_at DESC, o.id DESC
 LIMIT $3 OFFSET $4;
 
 -- name: HasUserOrderedFromMerchant :one
@@ -139,19 +139,19 @@ SELECT EXISTS(
 -- name: ListOrdersByMerchant :many
 SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot FROM orders
 WHERE merchant_id = $1
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $2 OFFSET $3;
 
 -- name: ListOrdersByMerchantAndStatus :many
 SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot FROM orders
 WHERE merchant_id = $1 AND status = $2
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $3 OFFSET $4;
 
 -- name: ListOrdersByMerchantAndStatuses :many
 SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot FROM orders
 WHERE merchant_id = $1 AND status = ANY($2::text[])
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $3 OFFSET $4;
 
 -- name: ListOrdersByMerchantWithFilters :many
@@ -159,7 +159,7 @@ SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee,
 WHERE merchant_id = sqlc.arg('merchant_id')
     AND (sqlc.narg('status')::text IS NULL OR status = sqlc.narg('status')::text)
     AND (sqlc.narg('order_type')::text IS NULL OR order_type = sqlc.narg('order_type')::text)
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
 -- name: CountOrdersByMerchant :one

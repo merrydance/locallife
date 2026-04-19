@@ -715,5 +715,5 @@ WHERE rider_id = $1
 SELECT id, address_id
 FROM orders
 WHERE user_id = $1
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $2;
