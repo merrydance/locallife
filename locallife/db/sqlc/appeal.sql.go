@@ -997,7 +997,7 @@ JOIN orders o ON c.order_id = o.id
 WHERE a.appellant_type = 'merchant'
   AND a.appellant_id = $1
   AND ($2::text IS NULL OR a.status = $2::text)
-ORDER BY a.created_at DESC
+ORDER BY a.created_at DESC, a.id DESC
 LIMIT $4 OFFSET $3
 `
 
@@ -1231,7 +1231,8 @@ WHERE a.region_id = $1
   AND (NULLIF($2::TEXT, '') IS NULL OR a.status = $2)
 ORDER BY 
     CASE WHEN a.status = 'pending' THEN 0 ELSE 1 END,
-    a.created_at DESC
+    a.created_at DESC,
+    a.id DESC
 LIMIT $3 OFFSET $4
 `
 
@@ -1326,7 +1327,7 @@ JOIN claims c ON a.claim_id = c.id
 JOIN orders o ON c.order_id = o.id
 WHERE a.appellant_type = 'rider'
   AND a.appellant_id = $1
-ORDER BY a.created_at DESC
+ORDER BY a.created_at DESC, a.id DESC
 LIMIT $2 OFFSET $3
 `
 
