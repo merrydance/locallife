@@ -16,7 +16,7 @@ RETURNING *;
 SELECT id, keyword, type, created_at
 FROM search_histories
 WHERE user_id = $1
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $2;
 
 -- name: DeleteSearchHistory :exec
