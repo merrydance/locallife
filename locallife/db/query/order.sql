@@ -427,7 +427,7 @@ WHERE merchant_id = sqlc.arg('merchant_id')
         AND status IN ('user_delivered', 'completed')
     AND created_at >= sqlc.arg('start_at')
     AND created_at <= sqlc.arg('end_at')
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
 -- name: CountMerchantPromotionOrders :one

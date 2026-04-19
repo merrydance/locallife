@@ -1164,7 +1164,7 @@ WHERE merchant_id = $1
         AND status IN ('user_delivered', 'completed')
     AND created_at >= $2
     AND created_at <= $3
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $5 OFFSET $4
 `
 

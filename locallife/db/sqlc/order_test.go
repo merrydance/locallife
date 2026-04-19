@@ -206,6 +206,54 @@ func TestListOrdersByMerchantAndStatus(t *testing.T) {
 	}
 }
 
+func TestListMerchantPromotionOrdersUsesIDTieBreaker(t *testing.T) {
+	merchantOwner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, merchantOwner.ID)
+	customer := createRandomUser(t)
+	tiedCreatedAt := time.Now().UTC().Truncate(time.Microsecond)
+	startAt := tiedCreatedAt.Add(-time.Minute)
+	endAt := tiedCreatedAt.Add(time.Minute)
+
+	createPromotionOrder := func() Order {
+		order, err := testStore.CreateOrder(context.Background(), CreateOrderParams{
+			OrderNo:             util.RandomString(20),
+			UserID:              customer.ID,
+			MerchantID:          merchant.ID,
+			OrderType:           "takeaway",
+			DeliveryFee:         500,
+			Subtotal:            3000,
+			DiscountAmount:      0,
+			DeliveryFeeDiscount: 200,
+			TotalAmount:         3300,
+			Status:              "completed",
+		})
+		require.NoError(t, err)
+		return order
+	}
+
+	firstOrder := createPromotionOrder()
+	secondOrder := createPromotionOrder()
+
+	_, err := testStore.(*SQLStore).connPool.Exec(context.Background(),
+		`UPDATE orders SET created_at = $1 WHERE id = ANY($2)`,
+		tiedCreatedAt,
+		[]int64{firstOrder.ID, secondOrder.ID},
+	)
+	require.NoError(t, err)
+
+	orders, err := testStore.ListMerchantPromotionOrders(context.Background(), ListMerchantPromotionOrdersParams{
+		MerchantID: merchant.ID,
+		StartAt:    startAt,
+		EndAt:      endAt,
+		Limit:      2,
+		Offset:     0,
+	})
+	require.NoError(t, err)
+	require.Len(t, orders, 2)
+	require.Equal(t, secondOrder.ID, orders[0].ID)
+	require.Equal(t, firstOrder.ID, orders[1].ID)
+}
+
 func TestUpdateOrderStatus(t *testing.T) {
 	order := createRandomOrder(t)
 	require.Equal(t, "pending", order.Status)
