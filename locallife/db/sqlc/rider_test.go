@@ -505,19 +505,21 @@ func TestListRiderLocations(t *testing.T) {
 
 func TestGetRiderLatestLocation(t *testing.T) {
 	rider := createOnlineRider(t)
+	tiedRecordedAt := time.Now().UTC().Truncate(time.Microsecond)
+	var latestLocationID int64
 
 	// 创建几个位置记录
 	var lastLng float64
 	for i := 0; i < 3; i++ {
 		lastLng = 116.404 + float64(i)*0.001
-		_, err := testStore.CreateRiderLocation(context.Background(), CreateRiderLocationParams{
+		location, err := testStore.CreateRiderLocation(context.Background(), CreateRiderLocationParams{
 			RiderID:    rider.ID,
 			Longitude:  numericFromFloat(lastLng),
 			Latitude:   numericFromFloat(39.915),
-			RecordedAt: time.Now(),
+			RecordedAt: tiedRecordedAt,
 		})
 		require.NoError(t, err)
-		time.Sleep(10 * time.Millisecond) // 确保时间戳不同
+		latestLocationID = location.ID
 	}
 
 	location, err := testStore.GetRiderLatestLocation(context.Background(), rider.ID)
@@ -525,6 +527,7 @@ func TestGetRiderLatestLocation(t *testing.T) {
 
 	lng, _ := location.Longitude.Float64Value()
 	require.InDelta(t, lastLng, lng.Float64, 0.0001)
+	require.Equal(t, latestLocationID, location.ID)
 }
 
 // ==================== 运营商骑手管理集成测试 ====================

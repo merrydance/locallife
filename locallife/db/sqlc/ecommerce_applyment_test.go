@@ -130,11 +130,18 @@ func TestGetEcommerceApplymentByOutRequestNo(t *testing.T) {
 
 func TestGetLatestEcommerceApplymentBySubject(t *testing.T) {
 	merchant := createRandomMerchantForTest(t)
+	tiedCreatedAt := time.Now().UTC().Truncate(time.Microsecond)
 
 	// 创建两个进件记录
 	applyment1 := createRandomEcommerceApplymentWithSubject(t, "merchant", merchant.ID)
-	time.Sleep(10 * time.Millisecond) // 确保时间戳不同
 	applyment2 := createRandomEcommerceApplymentWithSubject(t, "merchant", merchant.ID)
+
+	_, err := testStore.(*SQLStore).connPool.Exec(context.Background(),
+		`UPDATE ecommerce_applyments SET created_at = $1 WHERE id = ANY($2)`,
+		tiedCreatedAt,
+		[]int64{applyment1.ID, applyment2.ID},
+	)
+	require.NoError(t, err)
 
 	// 获取最新的
 	latest, err := testStore.GetLatestEcommerceApplymentBySubject(context.Background(), GetLatestEcommerceApplymentBySubjectParams{
@@ -147,6 +154,28 @@ func TestGetLatestEcommerceApplymentBySubject(t *testing.T) {
 	// 应该是第二个（最新的）
 	require.Equal(t, applyment2.ID, latest.ID)
 	require.NotEqual(t, applyment1.ID, latest.ID)
+}
+
+func TestGetEcommerceApplymentBySubjectUsesIDTieBreaker(t *testing.T) {
+	merchant := createRandomMerchantForTest(t)
+	tiedCreatedAt := time.Now().UTC().Truncate(time.Microsecond)
+
+	applyment1 := createRandomEcommerceApplymentWithSubject(t, "merchant", merchant.ID)
+	applyment2 := createRandomEcommerceApplymentWithSubject(t, "merchant", merchant.ID)
+
+	_, err := testStore.(*SQLStore).connPool.Exec(context.Background(),
+		`UPDATE ecommerce_applyments SET created_at = $1 WHERE id = ANY($2)`,
+		tiedCreatedAt,
+		[]int64{applyment1.ID, applyment2.ID},
+	)
+	require.NoError(t, err)
+
+	latest, err := testStore.GetEcommerceApplymentBySubject(context.Background(), GetEcommerceApplymentBySubjectParams{
+		SubjectType: "merchant",
+		SubjectID:   merchant.ID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, applyment2.ID, latest.ID)
 }
 
 func TestUpdateEcommerceApplymentToSubmitted(t *testing.T) {

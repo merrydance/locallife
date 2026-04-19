@@ -390,7 +390,7 @@ func (q *Queries) GetEcommerceApplymentByOutRequestNo(ctx context.Context, outRe
 const getEcommerceApplymentBySubject = `-- name: GetEcommerceApplymentBySubject :one
 SELECT id, subject_type, subject_id, out_request_no, applyment_id, organization_type, business_license_number, business_license_copy, merchant_name, legal_person, id_card_number, id_card_name, id_card_valid_time, id_card_front_copy, id_card_back_copy, account_type, account_bank, bank_address_code, bank_name, account_number, account_name, contact_name, contact_id_card_number, mobile_phone, contact_email, merchant_shortname, qualifications, business_addition_pics, business_addition_desc, status, sign_url, sign_state, reject_reason, sub_mch_id, created_at, submitted_at, audited_at, updated_at, result_task_processed_state, result_task_processed_at, account_bank_code, bank_alias, bank_alias_code, bank_branch_id, settlement_verify_first_trade_at, settlement_verify_last_checked_at, settlement_verify_check_count, settlement_verify_status, settlement_verify_fail_reason, settlement_verify_failed_notified_at, legal_validation_url, account_validation FROM ecommerce_applyments
 WHERE subject_type = $1 AND subject_id = $2
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT 1
 `
 
@@ -462,7 +462,7 @@ func (q *Queries) GetEcommerceApplymentBySubject(ctx context.Context, arg GetEco
 const getLatestEcommerceApplymentBySubject = `-- name: GetLatestEcommerceApplymentBySubject :one
 SELECT id, subject_type, subject_id, out_request_no, applyment_id, organization_type, business_license_number, business_license_copy, merchant_name, legal_person, id_card_number, id_card_name, id_card_valid_time, id_card_front_copy, id_card_back_copy, account_type, account_bank, bank_address_code, bank_name, account_number, account_name, contact_name, contact_id_card_number, mobile_phone, contact_email, merchant_shortname, qualifications, business_addition_pics, business_addition_desc, status, sign_url, sign_state, reject_reason, sub_mch_id, created_at, submitted_at, audited_at, updated_at, result_task_processed_state, result_task_processed_at, account_bank_code, bank_alias, bank_alias_code, bank_branch_id, settlement_verify_first_trade_at, settlement_verify_last_checked_at, settlement_verify_check_count, settlement_verify_status, settlement_verify_fail_reason, settlement_verify_failed_notified_at, legal_validation_url, account_validation FROM ecommerce_applyments
 WHERE subject_type = $1 AND subject_id = $2
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT 1
 `
 
@@ -534,7 +534,7 @@ func (q *Queries) GetLatestEcommerceApplymentBySubject(ctx context.Context, arg 
 const listEcommerceApplymentsByStatus = `-- name: ListEcommerceApplymentsByStatus :many
 SELECT id, subject_type, subject_id, out_request_no, applyment_id, organization_type, business_license_number, business_license_copy, merchant_name, legal_person, id_card_number, id_card_name, id_card_valid_time, id_card_front_copy, id_card_back_copy, account_type, account_bank, bank_address_code, bank_name, account_number, account_name, contact_name, contact_id_card_number, mobile_phone, contact_email, merchant_shortname, qualifications, business_addition_pics, business_addition_desc, status, sign_url, sign_state, reject_reason, sub_mch_id, created_at, submitted_at, audited_at, updated_at, result_task_processed_state, result_task_processed_at, account_bank_code, bank_alias, bank_alias_code, bank_branch_id, settlement_verify_first_trade_at, settlement_verify_last_checked_at, settlement_verify_check_count, settlement_verify_status, settlement_verify_fail_reason, settlement_verify_failed_notified_at, legal_validation_url, account_validation FROM ecommerce_applyments
 WHERE status = $1
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $2 OFFSET $3
 `
 
@@ -620,7 +620,7 @@ func (q *Queries) ListEcommerceApplymentsByStatus(ctx context.Context, arg ListE
 const listEcommerceApplymentsBySubject = `-- name: ListEcommerceApplymentsBySubject :many
 SELECT id, subject_type, subject_id, out_request_no, applyment_id, organization_type, business_license_number, business_license_copy, merchant_name, legal_person, id_card_number, id_card_name, id_card_valid_time, id_card_front_copy, id_card_back_copy, account_type, account_bank, bank_address_code, bank_name, account_number, account_name, contact_name, contact_id_card_number, mobile_phone, contact_email, merchant_shortname, qualifications, business_addition_pics, business_addition_desc, status, sign_url, sign_state, reject_reason, sub_mch_id, created_at, submitted_at, audited_at, updated_at, result_task_processed_state, result_task_processed_at, account_bank_code, bank_alias, bank_alias_code, bank_branch_id, settlement_verify_first_trade_at, settlement_verify_last_checked_at, settlement_verify_check_count, settlement_verify_status, settlement_verify_fail_reason, settlement_verify_failed_notified_at, legal_validation_url, account_validation FROM ecommerce_applyments
 WHERE subject_type = $1 AND subject_id = $2
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 `
 
 type ListEcommerceApplymentsBySubjectParams struct {

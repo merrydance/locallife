@@ -29,13 +29,13 @@ INSERT INTO rider_locations (
 -- name: GetRiderLatestLocation :one
 SELECT id, rider_id, delivery_id, longitude, latitude, accuracy, speed, heading, recorded_at FROM rider_locations
 WHERE rider_id = $1
-ORDER BY recorded_at DESC
+ORDER BY recorded_at DESC, id DESC
 LIMIT 1;
 
 -- name: GetDeliveryLatestLocation :one
 SELECT id, rider_id, delivery_id, longitude, latitude, accuracy, speed, heading, recorded_at FROM rider_locations
 WHERE delivery_id = $1
-ORDER BY recorded_at DESC
+ORDER BY recorded_at DESC, id DESC
 LIMIT 1;
 
 -- name: ListRiderLocations :many

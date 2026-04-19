@@ -302,6 +302,8 @@ func TestGetPaymentOrdersByOrder(t *testing.T) {
 
 func TestGetLatestPaymentOrderByOrder(t *testing.T) {
 	order := createRandomOrder(t)
+	tiedCreatedAt := time.Now().UTC().Truncate(time.Microsecond)
+	var paymentIDs []int64
 
 	// 创建多个关联到订单的支付单
 	for i := 0; i < 2; i++ {
@@ -318,10 +320,17 @@ func TestGetLatestPaymentOrderByOrder(t *testing.T) {
 			ExpiresAt:             pgtype.Timestamptz{Time: time.Now().Add(15 * time.Minute), Valid: true},
 		}
 
-		_, err := testStore.CreatePaymentOrder(context.Background(), arg)
+		payment, err := testStore.CreatePaymentOrder(context.Background(), arg)
 		require.NoError(t, err)
-		time.Sleep(10 * time.Millisecond) // 确保时间不同
+		paymentIDs = append(paymentIDs, payment.ID)
 	}
+
+	_, err := testStore.(*SQLStore).connPool.Exec(context.Background(),
+		`UPDATE payment_orders SET created_at = $1 WHERE id = ANY($2)`,
+		tiedCreatedAt,
+		paymentIDs,
+	)
+	require.NoError(t, err)
 
 	latestPayment, err := testStore.GetLatestPaymentOrderByOrder(context.Background(), GetLatestPaymentOrderByOrderParams{
 		OrderID:      pgtype.Int8{Int64: order.ID, Valid: true},
@@ -331,6 +340,7 @@ func TestGetLatestPaymentOrderByOrder(t *testing.T) {
 	require.NotEmpty(t, latestPayment)
 
 	require.Equal(t, order.ID, latestPayment.OrderID.Int64)
+	require.Equal(t, paymentIDs[len(paymentIDs)-1], latestPayment.ID)
 }
 
 func TestGetPaymentOrderForUpdate(t *testing.T) {

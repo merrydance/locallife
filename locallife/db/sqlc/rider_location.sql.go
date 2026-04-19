@@ -100,7 +100,7 @@ func (q *Queries) DeleteOldRiderLocations(ctx context.Context, recordedAt time.T
 const getDeliveryLatestLocation = `-- name: GetDeliveryLatestLocation :one
 SELECT id, rider_id, delivery_id, longitude, latitude, accuracy, speed, heading, recorded_at FROM rider_locations
 WHERE delivery_id = $1
-ORDER BY recorded_at DESC
+ORDER BY recorded_at DESC, id DESC
 LIMIT 1
 `
 
@@ -124,7 +124,7 @@ func (q *Queries) GetDeliveryLatestLocation(ctx context.Context, deliveryID pgty
 const getRiderLatestLocation = `-- name: GetRiderLatestLocation :one
 SELECT id, rider_id, delivery_id, longitude, latitude, accuracy, speed, heading, recorded_at FROM rider_locations
 WHERE rider_id = $1
-ORDER BY recorded_at DESC
+ORDER BY recorded_at DESC, id DESC
 LIMIT 1
 `
 

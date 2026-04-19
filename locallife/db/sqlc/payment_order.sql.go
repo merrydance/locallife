@@ -135,7 +135,7 @@ const getLatestPaymentOrderByBusinessTypeAndAttach = `-- name: GetLatestPaymentO
 SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at, payment_channel, requires_profit_sharing FROM payment_orders
 WHERE business_type = $1
     AND attach = $2
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT 1
 `
 
@@ -175,7 +175,7 @@ const getLatestPaymentOrderByOrder = `-- name: GetLatestPaymentOrderByOrder :one
 SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at, payment_channel, requires_profit_sharing FROM payment_orders
 WHERE order_id = $1
     AND business_type = $2
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT 1
 `
 
@@ -215,7 +215,7 @@ const getLatestPaymentOrderByReservation = `-- name: GetLatestPaymentOrderByRese
 SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at, payment_channel, requires_profit_sharing FROM payment_orders
 WHERE reservation_id = $1
     AND business_type = $2
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT 1
 `
 
@@ -383,7 +383,7 @@ func (q *Queries) GetPaymentOrderForUpdate(ctx context.Context, id int64) (Payme
 const getPaymentOrdersByOrder = `-- name: GetPaymentOrdersByOrder :many
 SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at, payment_channel, requires_profit_sharing FROM payment_orders
 WHERE order_id = $1
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 `
 
 func (q *Queries) GetPaymentOrdersByOrder(ctx context.Context, orderID pgtype.Int8) ([]PaymentOrder, error) {
@@ -429,7 +429,7 @@ func (q *Queries) GetPaymentOrdersByOrder(ctx context.Context, orderID pgtype.In
 const getPaymentOrdersByReservation = `-- name: GetPaymentOrdersByReservation :many
 SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at, payment_channel, requires_profit_sharing FROM payment_orders
 WHERE reservation_id = $1
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 `
 
 func (q *Queries) GetPaymentOrdersByReservation(ctx context.Context, reservationID pgtype.Int8) ([]PaymentOrder, error) {
