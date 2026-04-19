@@ -35,6 +35,8 @@ type TaskProcessor interface {
 	ProcessTaskReservationPaymentTimeout(ctx context.Context, task *asynq.Task) error
 	// ProcessTaskReservationNoShowAlert 处理预定未到店提醒任务
 	ProcessTaskReservationNoShowAlert(ctx context.Context, task *asynq.Task) error
+	// ProcessTaskReservationFoodSafetyAlert 处理食安停业预订提醒任务
+	ProcessTaskReservationFoodSafetyAlert(ctx context.Context, task *asynq.Task) error
 	// ProcessTaskPaymentSuccess 处理支付成功任务
 	ProcessTaskPaymentSuccess(ctx context.Context, task *asynq.Task) error
 	// ProcessTaskRefundResult 处理退款结果任务
@@ -223,6 +225,7 @@ func (processor *RedisTaskProcessor) Start() error {
 	mux.HandleFunc(TaskReservationPaymentTimeout, processor.ProcessTaskReservationPaymentTimeout)
 	mux.HandleFunc(TaskOrderPaymentTimeout, processor.ProcessTaskOrderPaymentTimeout)
 	mux.HandleFunc(TaskReservationNoShowAlert, processor.ProcessTaskReservationNoShowAlert)
+	mux.HandleFunc(TaskReservationFoodSafetyAlert, processor.ProcessTaskReservationFoodSafetyAlert)
 	mux.HandleFunc(TaskProcessPaymentSuccess, processor.ProcessTaskPaymentSuccess)
 	mux.HandleFunc(TaskProcessRefund, processor.ProcessTaskInitiateRefund)
 	mux.HandleFunc(TaskProcessRefundResult, processor.ProcessTaskRefundResult)

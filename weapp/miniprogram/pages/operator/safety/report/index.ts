@@ -1,48 +1,44 @@
 import {
   operatorBasicManagementService,
-  SubmitSafetyReportRequest,
-  getSafetyReportStatusDisplay,
-  type SafetyReportStatus,
-  type SafetyReportStatusTheme
+  getFoodSafetyCaseStatusDisplay,
+  type OperatorFoodSafetyCaseItem,
+  type OperatorFoodSafetyCaseStatus,
+  type OperatorFoodSafetyCaseStatusTheme
 } from '../../../../api/operator-basic-management'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
 
-type SafetyStatusFilter = '' | SafetyReportStatus
-
-type SafetyLevel = 'low' | 'medium' | 'high' | 'critical'
+type SafetyStatusFilter = '' | OperatorFoodSafetyCaseStatus
 
 interface TabChangeDetail {
   value: SafetyStatusFilter
 }
 
-interface LevelChangeDetail {
-  value: SafetyLevel
-}
-
-type SafetyReportView = {
+type FoodSafetyCaseView = {
   id: number
-  title: string
-  level: SafetyLevel
-  level_label: string
-  status: SafetyReportStatus
+  merchant_id: number
+  primary_product_key: string
+  primary_product_label: string
+  trigger_reason: string
+  status: OperatorFoodSafetyCaseStatus
   status_label: string
-  status_theme: SafetyReportStatusTheme
+  status_theme: OperatorFoodSafetyCaseStatusTheme
+  suspended_at: string
   created_at: string
 }
 
-function formatSafetyLevel(level: SafetyLevel): string {
-  const labels: Record<SafetyLevel, string> = {
-    low: '低',
-    medium: '中',
-    high: '高',
-    critical: '严重'
+function formatProductLabel(item: OperatorFoodSafetyCaseItem): string {
+  if (item.primary_product_label?.trim()) {
+    return item.primary_product_label.trim()
   }
-  return labels[level]
+  if (item.primary_product_key?.trim()) {
+    return item.primary_product_key.trim()
+  }
+  return '未识别问题商品'
 }
 
 Page({
   data: {
-    reports: [] as SafetyReportView[],
+    cases: [] as FoodSafetyCaseView[],
     loading: false,
     loadingMore: false,
     initialLoading: true,
@@ -51,22 +47,16 @@ Page({
     status: '' as SafetyStatusFilter,
     page: 1,
     limit: 20,
-    hasMore: false,
-    submitVisible: false,
-    submitLoading: false,
-    submitTitle: '',
-    submitDescription: '',
-    submitLevel: 'medium' as SafetyLevel,
-    submitMerchantIdsRaw: ''
+    hasMore: false
   },
 
   onLoad() {
-    this.loadReports(true)
+    this.loadCases(true)
   },
 
   onShow() {
     if (!this.data.initialLoading) {
-      this.loadReports(true)
+      this.loadCases(true)
     }
   },
 
@@ -75,22 +65,28 @@ Page({
   },
 
   onPullDownRefresh() {
-    this.loadReports(true).finally(() => {
+    this.loadCases(true).finally(() => {
       wx.stopPullDownRefresh()
     })
   },
 
-  adaptReport(item: { id: number, title: string, level: SafetyLevel, status: SafetyReportStatus, created_at: string }): SafetyReportView {
-    const statusDisplay = getSafetyReportStatusDisplay(item.status)
+  adaptCase(item: OperatorFoodSafetyCaseItem): FoodSafetyCaseView {
+    const statusDisplay = getFoodSafetyCaseStatusDisplay(item.status)
     return {
-      ...item,
-      level_label: formatSafetyLevel(item.level),
+      id: item.id,
+      merchant_id: item.merchant_id,
+      primary_product_key: item.primary_product_key,
+      primary_product_label: formatProductLabel(item),
+      trigger_reason: item.trigger_reason,
+      status: item.status,
       status_label: statusDisplay.label,
-      status_theme: statusDisplay.theme
+      status_theme: statusDisplay.theme,
+      suspended_at: item.suspended_at,
+      created_at: item.created_at
     }
   },
 
-  async loadReports(reset = false) {
+  async loadCases(reset = false) {
     if (this.data.loading || (this.data.loadingMore && !reset)) return
     const nextPage = reset ? 1 : this.data.page
     if (reset) {
@@ -100,14 +96,14 @@ Page({
     }
 
     try {
-      const res = await operatorBasicManagementService.getSafetyReports({
+      const res = await operatorBasicManagementService.getFoodSafetyCases({
         page: nextPage,
         limit: this.data.limit,
         status: this.data.status || undefined
       })
-      const current = reset ? [] : this.data.reports
+      const current = reset ? [] : this.data.cases
       this.setData({
-        reports: [...current, ...(res.items || []).map((item) => this.adaptReport(item))],
+        cases: [...current, ...(res.items || []).map((item) => this.adaptCase(item))],
         page: nextPage + 1,
         hasMore: Boolean(res.has_more),
         loading: false,
@@ -115,82 +111,19 @@ Page({
         initialLoading: false
       })
     } catch (error: unknown) {
-      const message = getErrorUserMessage(error, '加载食安事件失败，请稍后重试')
+      const message = getErrorUserMessage(error, '加载食安案件失败，请稍后重试')
       this.setData({ loading: false, loadingMore: false, initialLoading: false, error: message })
     }
   },
 
   onTabChange(e: WechatMiniprogram.CustomEvent<TabChangeDetail>) {
     this.setData({ status: e.detail.value })
-    this.loadReports(true)
+    this.loadCases(true)
   },
 
   onLoadMore() {
     if (!this.data.hasMore || this.data.loading) return
-    this.loadReports(false)
-  },
-
-  onToggleSubmit() {
-    this.setData({ submitVisible: !this.data.submitVisible })
-  },
-
-  onSubmitTitleChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
-    this.setData({ submitTitle: e.detail.value || '' })
-  },
-
-  onSubmitDescriptionChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
-    this.setData({ submitDescription: e.detail.value || '' })
-  },
-
-  onSubmitLevelChange(e: WechatMiniprogram.CustomEvent<LevelChangeDetail>) {
-    this.setData({ submitLevel: e.detail.value })
-  },
-
-  onSubmitMerchantIdsChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
-    this.setData({ submitMerchantIdsRaw: e.detail.value || '' })
-  },
-
-  parseMerchantIds(raw: string): number[] {
-    if (!raw.trim()) return []
-    return raw.split(',').map((token) => Number(token.trim())).filter((id) => Number.isInteger(id) && id > 0)
-  },
-
-  async onSubmitReport() {
-    if (!this.data.submitTitle.trim()) {
-      wx.showToast({ title: '请输入事件标题', icon: 'none' })
-      return
-    }
-    if (this.data.submitDescription.trim().length < 5) {
-      wx.showToast({ title: '事件描述至少 5 个字符', icon: 'none' })
-      return
-    }
-
-    const payload: SubmitSafetyReportRequest = {
-      title: this.data.submitTitle.trim(),
-      description: this.data.submitDescription.trim(),
-      level: this.data.submitLevel,
-      merchant_ids: this.parseMerchantIds(this.data.submitMerchantIdsRaw)
-    }
-
-    try {
-      this.setData({ submitLoading: true })
-      wx.showLoading({ title: '提交中', mask: true })
-      await operatorBasicManagementService.submitSafetyReport(payload)
-      this.setData({
-        submitVisible: false,
-        submitTitle: '',
-        submitDescription: '',
-        submitLevel: 'medium',
-        submitMerchantIdsRaw: ''
-      })
-      this.loadReports(true)
-    } catch (error: unknown) {
-      const message = getErrorUserMessage(error, '提交失败，请稍后重试')
-      wx.showToast({ title: message, icon: 'none' })
-    } finally {
-      this.setData({ submitLoading: false })
-      wx.hideLoading()
-    }
+    this.loadCases(false)
   },
 
   onDetail(e: WechatMiniprogram.TouchEvent) {

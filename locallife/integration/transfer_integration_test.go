@@ -62,9 +62,11 @@ p, customer, /v1/dining-sessions/*, POST
 # Operator policies
 p, operator, /v1/operator/appeals, GET
 p, operator, /v1/operator/appeals/*, GET
-p, operator, /v1/operator/appeals/*, POST
-p, operator, /v1/operator/claims/*/recovery/waive, POST
 p, operator, /v1/operator/claims/*/recovery, GET
+p, operator, /v1/operator/food-safety/cases, GET
+p, operator, /v1/operator/food-safety/cases/*, GET
+p, operator, /v1/operator/food-safety/cases/*/investigate, POST
+p, operator, /v1/operator/food-safety/cases/*/resolve, POST
 p, operator, /v1/operators/me/*, GET
 
 # Admin policies
@@ -286,6 +288,8 @@ func resetIntegrationData(t *testing.T) {
 	for attempt := 0; attempt < 5; attempt++ {
 		_, err = integrationPool.Exec(context.Background(), `
 			TRUNCATE TABLE
+				food_safety_incidents,
+				food_safety_cases,
 				ocr_jobs,
 				operator_applications,
 				rider_applications,

@@ -105,6 +105,9 @@ type Store interface {
 	RefreshSessionTx(ctx context.Context, arg RefreshSessionTxParams) (RefreshSessionTxResult, error)
 	// Order replacement transaction
 	ReplaceOrderTx(ctx context.Context, arg ReplaceOrderTxParams) (ReplaceOrderTxResult, error)
+	// Food safety transactions
+	ReportFoodSafetyIncidentTx(ctx context.Context, arg ReportFoodSafetyIncidentTxParams) (ReportFoodSafetyIncidentTxResult, error)
+	ResolveFoodSafetyCaseTx(ctx context.Context, arg ResolveFoodSafetyCaseTxParams) (ResolveFoodSafetyCaseTxResult, error)
 }
 
 // SQLStore provides all functions to execute SQL queries and transactions

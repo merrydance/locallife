@@ -26,9 +26,9 @@ const APPEAL_STATUS_LABELS: Record<string, string> = {
 };
 
 const SAFETY_STATUS_LABELS: Record<string, string> = {
-  pending: "待处理",
+  "merchant-suspended": "已熔断",
+  investigating: "调查中",
   resolved: "已处置",
-  rejected: "已驳回",
 };
 
 const SAFETY_LEVEL_LABELS: Record<string, string> = {
@@ -108,9 +108,9 @@ export const appealStatusOptions: SelectOption[] = [
 
 export const safetyStatusOptions: SelectOption[] = [
   { value: "all", label: "全部状态" },
-  { value: "pending", label: "待处理" },
+  { value: "merchant-suspended", label: "已熔断" },
+  { value: "investigating", label: "调查中" },
   { value: "resolved", label: "已处置" },
-  { value: "rejected", label: "已驳回" },
 ];
 
 export const safetyLevelOptions: SelectOption[] = [
@@ -127,8 +127,17 @@ export const appealReviewOptions: SelectOption[] = [
 
 export const safetyResolveOptions: SelectOption[] = [
   { value: "resolved", label: "处置完成" },
-  { value: "rejected", label: "驳回" },
 ];
+
+export function formatFoodSafetyIncidentType(type: string): string {
+  const labels: Record<string, string> = {
+    "foreign-object": "异物",
+    contamination: "污染变质",
+    expired: "过期变质",
+  };
+
+  return labels[type] ?? type;
+}
 
 export function formatMerchantStatus(status: string): string {
   return MERCHANT_STATUS_LABELS[status] ?? status;

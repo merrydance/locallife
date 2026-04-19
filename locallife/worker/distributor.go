@@ -44,6 +44,13 @@ type TaskDistributor interface {
 		opts ...asynq.Option,
 	) error
 
+	// DistributeTaskReservationFoodSafetyAlert 分发食安停业预订提醒任务
+	DistributeTaskReservationFoodSafetyAlert(
+		ctx context.Context,
+		payload *PayloadReservationFoodSafetyAlert,
+		opts ...asynq.Option,
+	) error
+
 	// DistributeTaskProcessPaymentSuccess 分发支付成功处理任务
 	DistributeTaskProcessPaymentSuccess(
 		ctx context.Context,

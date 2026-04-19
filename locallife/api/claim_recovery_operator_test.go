@@ -19,6 +19,9 @@ func TestGetOperatorClaimRecoveryAPI(t *testing.T) {
 	managedRegion := randomRegion()
 	operator.RegionID = managedRegion.ID
 	unmanagedRegion := randomRegion()
+	if unmanagedRegion.ID == managedRegion.ID {
+		unmanagedRegion.ID = managedRegion.ID + 1
+	}
 
 	claim := db.GetClaimForAppealRow{
 		ID:         1,

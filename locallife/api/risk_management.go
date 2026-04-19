@@ -722,7 +722,6 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 
 // ReportFoodSafetyRequest 上报食安请求
 type ReportFoodSafetyRequest struct {
-	ReporterID    int64  `json:"reporter_id" binding:"required,min=1"`
 	MerchantID    int64  `json:"merchant_id" binding:"required,min=1"`
 	OrderID       int64  `json:"order_id" binding:"required,min=1"`
 	IncidentType  string `json:"incident_type" binding:"required,oneof=foreign-object contamination expired"`
@@ -733,9 +732,23 @@ type ReportFoodSafetyRequest struct {
 // ReportFoodSafetyResponse 食安上报响应
 type ReportFoodSafetyResponse struct {
 	IncidentID        int64  `json:"incident_id"`
+	CaseID            *int64 `json:"case_id,omitempty"`
 	MerchantSuspended bool   `json:"merchant_suspended"`
 	SuspendDuration   *int   `json:"suspend_duration,omitempty"` // 小时
 	Message           string `json:"message"`
+}
+
+func canReportFoodSafetyForOrder(order db.Order) bool {
+	switch order.OrderType {
+	case OrderTypeTakeout:
+		return order.Status == OrderStatusRiderDelivered ||
+			order.Status == OrderStatusUserDelivered ||
+			order.Status == OrderStatusCompleted
+	case OrderTypeTakeaway, OrderTypeDineIn, OrderTypeReservation:
+		return order.Status == OrderStatusCompleted
+	default:
+		return order.Status == OrderStatusCompleted
+	}
 }
 
 // ReportFoodSafety 上报食安问题
@@ -757,70 +770,351 @@ func (server *Server) ReportFoodSafety(ctx *gin.Context) {
 		return
 	}
 
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
 	// 验证严重程度
 	if req.SeverityLevel < 1 || req.SeverityLevel > 5 {
 		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("severity_level must be between 1 and 5")))
 		return
 	}
 
+	order, err := server.store.GetOrder(ctx, req.OrderID)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrOrderNotFound))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get order: %w", err)))
+		return
+	}
+
+	if order.UserID != authPayload.UserID {
+		ctx.JSON(http.StatusForbidden, errorResponse(ErrOrderNotOwned))
+		return
+	}
+
+	if order.MerchantID != req.MerchantID {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("order does not belong to the provided merchant")))
+		return
+	}
+
+	if !canReportFoodSafetyForOrder(order) {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("food safety reports require a fulfilled order")))
+		return
+	}
+
+	orderItems, err := server.store.ListOrderItemsWithDishByOrder(ctx, order.ID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("list order items for food safety report %d: %w", order.ID, err)))
+		return
+	}
+
+	orderSnapshot, merchantSnapshot, riderSnapshot, err := buildFoodSafetyIncidentSnapshots(order, orderItems, authPayload.UserID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("build food safety incident snapshots for order %d: %w", order.ID, err)))
+		return
+	}
+	productKey, productLabel := buildFoodSafetyPrimaryProduct(orderItems)
+
 	// 创建食安处理器
 	handler := algorithm.NewFoodSafetyHandler(server.store, server.wsHub)
 
-	// 评估食安举报（无证据输入）
+	// 评估食安举报
 	result, err := handler.EvaluateFoodSafetyReport(
 		ctx,
-		req.ReporterID,
-		req.MerchantID,
-		nil,
+		algorithm.FoodSafetyReportInput{
+			ReporterUserID: authPayload.UserID,
+			MerchantID:     req.MerchantID,
+			Order:          order,
+		},
 	)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("evaluate food safety report for order %d: %w", req.OrderID, err)))
 		return
 	}
 
-	// 创建食安事件记录
-	incident, err := server.store.CreateFoodSafetyIncident(ctx, db.CreateFoodSafetyIncidentParams{
-		UserID:           req.ReporterID,
-		MerchantID:       req.MerchantID,
-		OrderID:          req.OrderID,
-		IncidentType:     req.IncidentType,
-		Description:      req.Description,
-		OrderSnapshot:    []byte{},
-		MerchantSnapshot: []byte{},
-		RiderSnapshot:    []byte{},
-		Status:           "pending",
-		CreatedAt:        time.Now(),
+	txResult, err := server.store.ReportFoodSafetyIncidentTx(ctx, db.ReportFoodSafetyIncidentTxParams{
+		CreateFoodSafetyIncidentParams: db.CreateFoodSafetyIncidentParams{
+			UserID:           authPayload.UserID,
+			MerchantID:       order.MerchantID,
+			OrderID:          order.ID,
+			IncidentType:     req.IncidentType,
+			Description:      req.Description,
+			OrderSnapshot:    orderSnapshot,
+			MerchantSnapshot: merchantSnapshot,
+			RiderSnapshot:    riderSnapshot,
+			Status:           foodSafetyIncidentStatusFromResult(result),
+			CreatedAt:        time.Now(),
+		},
+		ProductKey:                productKey,
+		ProductLabel:              productLabel,
+		ShouldCircuitBreak:        result.ShouldCircuitBreak,
+		CircuitBreakReason:        fmt.Sprintf("同商户1小时内多名顾客食安举报触发熔断（订单ID: %d）", order.ID),
+		CircuitBreakDurationHours: result.DurationHours,
 	})
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("create food safety incident for order %d: %w", req.OrderID, err)))
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("report food safety incident for order %d: %w", req.OrderID, err)))
 		return
 	}
 
-	// 执行熔断
-	if result.ShouldCircuitBreak {
-		err = handler.CircuitBreakMerchant(
-			ctx,
-			req.MerchantID,
-			fmt.Sprintf("食安举报确认（事件ID: %d）", incident.ID),
-			result.DurationHours,
-		)
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("circuit break merchant %d: %w", req.MerchantID, err)))
-			return
+	if result.ShouldCircuitBreak && txResult.OpenedNewCase {
+		if server.wsHub != nil {
+			handler.NotifyMerchantCircuitBreak(order.MerchantID)
 		}
+		server.dispatchFoodSafetySuspensionFollowUps(ctx, txResult)
+	}
+
+	merchantSuspended := txResult.Case != nil && txResult.Case.Status != "resolved"
+	responseMessage := result.Message
+	if txResult.ReusedExistingIncident {
+		responseMessage = "当前订单已有有效食安上报，已复用现有记录"
 	}
 
 	resp := ReportFoodSafetyResponse{
-		IncidentID:        incident.ID,
-		MerchantSuspended: result.ShouldCircuitBreak,
-		Message:           result.Message,
+		IncidentID:        txResult.Incident.ID,
+		MerchantSuspended: merchantSuspended,
+		Message:           responseMessage,
+	}
+	if txResult.Case != nil {
+		resp.CaseID = &txResult.Case.ID
 	}
 
-	if result.ShouldCircuitBreak {
+	if merchantSuspended && txResult.OpenedNewCase {
 		resp.SuspendDuration = &result.DurationHours
 	}
 
 	ctx.JSON(http.StatusOK, resp)
+}
+
+func (server *Server) dispatchFoodSafetySuspensionFollowUps(ctx *gin.Context, txResult db.ReportFoodSafetyIncidentTxResult) {
+	if server.taskDistributor == nil || txResult.Case == nil {
+		return
+	}
+
+	merchant, err := server.store.GetMerchant(ctx, txResult.Case.MerchantID)
+	if err != nil {
+		log.Error().Err(err).Int64("merchant_id", txResult.Case.MerchantID).Msg("get merchant for food safety follow-up failed")
+		return
+	}
+
+	server.enqueueFoodSafetyNotification(ctx, &worker.SendNotificationPayload{
+		UserID:            merchant.OwnerUserID,
+		Type:              "food_safety",
+		Title:             "食安停业告警",
+		Content:           "您的店铺已因顾客食安上报触发停业，请立即停止外卖履约并联系平台处理。",
+		RelatedType:       "merchant",
+		RelatedID:         merchant.ID,
+		IgnorePreferences: true,
+		ExtraData: map[string]any{
+			"case_id":        txResult.Case.ID,
+			"merchant_id":    merchant.ID,
+			"scene":          "food_safety_suspension",
+			"trigger_reason": txResult.Case.TriggerReason,
+		},
+	})
+
+	for _, reservation := range txResult.AffectedReservations {
+		server.scheduleFoodSafetyReservationAlert(ctx, reservation)
+	}
+
+	for _, pausedOrder := range txResult.AffectedTakeoutOrders {
+		server.enqueueFoodSafetyNotification(ctx, &worker.SendNotificationPayload{
+			UserID:            pausedOrder.UserID,
+			Type:              "food_safety",
+			Title:             "订单暂停提醒",
+			Content:           "商户因食安事件暂停营业，您的外卖订单已暂停履约。请等待商家或平台联系；退款需由您或商家主动发起。",
+			RelatedType:       "order",
+			RelatedID:         pausedOrder.ID,
+			IgnorePreferences: true,
+			ExtraData: map[string]any{
+				"order_id":    pausedOrder.ID,
+				"merchant_id": pausedOrder.MerchantID,
+				"scene":       "food_safety_order_paused",
+			},
+		})
+
+		delivery, err := server.store.GetDeliveryByOrderID(ctx, pausedOrder.ID)
+		if err != nil || !delivery.RiderID.Valid {
+			continue
+		}
+
+		rider, err := server.store.GetRider(ctx, delivery.RiderID.Int64)
+		if err != nil {
+			log.Error().Err(err).Int64("order_id", pausedOrder.ID).Int64("rider_id", delivery.RiderID.Int64).Msg("get rider for food safety pause notification failed")
+			continue
+		}
+
+		server.enqueueFoodSafetyNotification(ctx, &worker.SendNotificationPayload{
+			UserID:            rider.UserID,
+			Type:              "food_safety",
+			Title:             "订单暂停提醒",
+			Content:           "关联商户因食安事件暂停营业，请立即停止继续履约并等待平台或商家进一步处理。",
+			RelatedType:       "delivery",
+			RelatedID:         delivery.ID,
+			IgnorePreferences: true,
+			ExtraData: map[string]any{
+				"order_id":    pausedOrder.ID,
+				"delivery_id": delivery.ID,
+				"merchant_id": pausedOrder.MerchantID,
+				"scene":       "food_safety_order_paused",
+			},
+		})
+	}
+}
+
+func (server *Server) scheduleFoodSafetyReservationAlert(ctx *gin.Context, reservation db.TableReservation) {
+	if server.taskDistributor == nil {
+		return
+	}
+
+	reservationTime := time.Date(
+		reservation.ReservationDate.Time.Year(), reservation.ReservationDate.Time.Month(), reservation.ReservationDate.Time.Day(),
+		int(reservation.ReservationTime.Microseconds/1000000/3600), int((reservation.ReservationTime.Microseconds/1000000%3600)/60), 0, 0, time.Local,
+	)
+	alertTime := reservationTime.Add(-3 * time.Hour)
+	options := []asynq.Option{
+		asynq.Queue(worker.QueueDefault),
+		asynq.MaxRetry(3),
+		asynq.Unique(45 * 24 * time.Hour),
+	}
+	if alertTime.After(time.Now()) {
+		options = append(options, asynq.ProcessAt(alertTime))
+	} else {
+		options = append(options, asynq.ProcessIn(0))
+	}
+
+	if err := server.taskDistributor.DistributeTaskReservationFoodSafetyAlert(ctx, &worker.PayloadReservationFoodSafetyAlert{
+		ReservationID: reservation.ID,
+	}, options...); err != nil {
+		log.Error().Err(err).Int64("reservation_id", reservation.ID).Msg("enqueue reservation food safety alert failed")
+	}
+}
+
+func (server *Server) enqueueFoodSafetyNotification(ctx *gin.Context, payload *worker.SendNotificationPayload) {
+	if server.taskDistributor == nil {
+		return
+	}
+	if err := server.taskDistributor.DistributeTaskSendNotification(
+		ctx,
+		payload,
+		asynq.Queue(worker.QueueDefault),
+		asynq.MaxRetry(3),
+	); err != nil {
+		log.Error().Err(err).Int64("user_id", payload.UserID).Str("title", payload.Title).Msg("enqueue food safety notification failed")
+	}
+}
+
+func buildFoodSafetyPrimaryProduct(items []db.ListOrderItemsWithDishByOrderRow) (string, string) {
+	keys := make([]string, 0, len(items))
+	labels := make([]string, 0, len(items))
+
+	for _, item := range items {
+		name := strings.TrimSpace(item.Name)
+		switch {
+		case item.DishID.Valid:
+			keys = appendUniqueFoodSafetyStrings(keys, fmt.Sprintf("dish:%d", item.DishID.Int64))
+		case item.ComboID.Valid:
+			keys = appendUniqueFoodSafetyStrings(keys, fmt.Sprintf("combo:%d", item.ComboID.Int64))
+		case name != "":
+			keys = appendUniqueFoodSafetyStrings(keys, "name:"+strings.ToLower(name))
+		}
+		if name != "" {
+			labels = appendUniqueFoodSafetyStrings(labels, name)
+		}
+	}
+
+	if len(keys) == 1 {
+		label := ""
+		if len(labels) > 0 {
+			label = labels[0]
+		}
+		return keys[0], label
+	}
+
+	if len(labels) == 0 {
+		return "", ""
+	}
+
+	return "", strings.Join(labels, "、")
+}
+
+func appendUniqueFoodSafetyStrings(values []string, candidate string) []string {
+	candidate = strings.TrimSpace(candidate)
+	if candidate == "" {
+		return values
+	}
+	for _, value := range values {
+		if value == candidate {
+			return values
+		}
+	}
+	return append(values, candidate)
+}
+
+func foodSafetyIncidentStatusFromResult(result *algorithm.FoodSafetyCheckResult) string {
+	if result != nil && result.IsMalicious {
+		return "rejected"
+	}
+	return "reported"
+}
+
+func buildFoodSafetyIncidentSnapshots(order db.Order, items []db.ListOrderItemsWithDishByOrderRow, reporterUserID int64) ([]byte, []byte, []byte, error) {
+	var addressID *int64
+	if order.AddressID.Valid {
+		addressID = &order.AddressID.Int64
+	}
+
+	itemPayload := make([]map[string]interface{}, 0, len(items))
+	for _, item := range items {
+		payload := map[string]interface{}{
+			"name":       item.Name,
+			"quantity":   item.Quantity,
+			"subtotal":   item.Subtotal,
+			"dish_id":    nil,
+			"combo_id":   nil,
+			"created_at": item.CreatedAt,
+		}
+		if item.DishID.Valid {
+			payload["dish_id"] = item.DishID.Int64
+		}
+		if item.ComboID.Valid {
+			payload["combo_id"] = item.ComboID.Int64
+		}
+		itemPayload = append(itemPayload, payload)
+	}
+
+	orderSnapshot, err := json.Marshal(map[string]interface{}{
+		"order_id":         order.ID,
+		"order_no":         order.OrderNo,
+		"user_id":          order.UserID,
+		"reporter_user_id": reporterUserID,
+		"merchant_id":      order.MerchantID,
+		"order_type":       order.OrderType,
+		"address_id":       addressID,
+		"status":           order.Status,
+		"total_amount":     order.TotalAmount,
+		"delivery_fee":     order.DeliveryFee,
+		"created_at":       order.CreatedAt,
+		"completed_at":     order.CompletedAt,
+		"items":            itemPayload,
+	})
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	merchantSnapshot, err := json.Marshal(map[string]interface{}{
+		"merchant_id": order.MerchantID,
+	})
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	riderSnapshot, err := json.Marshal(map[string]interface{}{})
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	return orderSnapshot, merchantSnapshot, riderSnapshot, nil
 }
 
 // TriggerFraudDetectionRequest 触发欺诈检测请求

@@ -5,57 +5,39 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { PageContent, PageHeader, PageShell } from "@/components/merchant/layout/page-shell";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
-import { PageContent, PageHeader, PageShell } from "@/components/merchant/layout/page-shell";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { apiGet, apiPost } from "@/lib/api";
 import {
-  formatSafetyLevel,
+  formatFoodSafetyIncidentType,
   formatSafetyStatus,
-  safetyLevelOptions,
-  safetyResolveOptions,
   safetyStatusOptions,
 } from "@/lib/operator-display";
 import type {
-  OperatorMerchantListResponse,
-  SafetyReportItem,
-  SafetyReportListResponse,
+  OperatorFoodSafetyCaseDetailResponse,
+  OperatorFoodSafetyCaseItem,
+  OperatorFoodSafetyCaseListResponse,
 } from "@/types/operator-console";
 
 export default function OperatorSafetyPage() {
   const [status, setStatus] = useState<string>("all");
-  const [data, setData] = useState<SafetyReportListResponse | null>(null);
-  const [detail, setDetail] = useState<SafetyReportItem | null>(null);
+  const [data, setData] = useState<OperatorFoodSafetyCaseListResponse | null>(null);
+  const [detail, setDetail] = useState<OperatorFoodSafetyCaseDetailResponse | null>(null);
+  const [investigationReport, setInvestigationReport] = useState("");
+  const [merchantRectificationReport, setMerchantRectificationReport] = useState("");
+  const [resolution, setResolution] = useState("");
   const [error, setError] = useState<string | null>(null);
-
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [level, setLevel] = useState("medium");
-  const [selectedMerchantId, setSelectedMerchantId] = useState<string>("none");
-  const [merchantOptions, setMerchantOptions] = useState<Array<{ id: number; name: string }>>([]);
-
-  const [resolveStatus, setResolveStatus] = useState<"resolved" | "rejected">("resolved");
-  const [resolutionNotes, setResolutionNotes] = useState("");
-  const [recoverMerchantId, setRecoverMerchantId] = useState<string>("none");
-  const [recoverReason, setRecoverReason] = useState("");
-  const [submittingReport, setSubmittingReport] = useState(false);
-  const [resolvingReport, setResolvingReport] = useState(false);
-  const [reportDialogOpen, setReportDialogOpen] = useState(false);
-  const [submitConfirmOpen, setSubmitConfirmOpen] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [investigating, setInvestigating] = useState(false);
+  const [resolving, setResolving] = useState(false);
+  const [investigateConfirmOpen, setInvestigateConfirmOpen] = useState(false);
   const [resolveConfirmOpen, setResolveConfirmOpen] = useState(false);
 
   const load = useCallback(() => {
-    apiGet<SafetyReportListResponse>("/operator/reports/safety", {
+    apiGet<OperatorFoodSafetyCaseListResponse>("/operator/food-safety/cases", {
       page: 1,
       limit: 20,
       status: status === "all" ? undefined : status,
@@ -72,94 +54,92 @@ export default function OperatorSafetyPage() {
   }, [load]);
 
   useEffect(() => {
-    apiGet<OperatorMerchantListResponse>("/operator/merchants", { page: 1, limit: 200 })
-      .then((res) => {
-        const merchants = (res.merchants ?? []).map((item) => ({ id: item.id, name: item.name }));
-        setMerchantOptions(merchants);
-      })
-      .catch(() => setMerchantOptions([]));
-  }, []);
-
-  useEffect(() => {
     if (error) {
       toast.error(error);
     }
   }, [error]);
 
-  const submit = async () => {
-    const selectedID = Number(selectedMerchantId);
-    const ids = selectedMerchantId !== "none" && Number.isFinite(selectedID) && selectedID > 0 ? [selectedID] : [];
-    setSubmittingReport(true);
-    try {
-      await apiPost("/operator/reports/safety", {
-        title,
-        description,
-        level,
-        merchant_ids: ids,
-        images: [],
-      });
-      setTitle("");
-      setDescription("");
-      setSelectedMerchantId("none");
-      setReportDialogOpen(false);
-      load();
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "提交失败");
-    } finally {
-      setSubmittingReport(false);
+  useEffect(() => {
+    if (message) {
+      toast.success(message);
     }
+  }, [message]);
+
+  const syncDraftsFromCase = (item: OperatorFoodSafetyCaseItem) => {
+    setInvestigationReport(item.investigation_report ?? "");
+    setMerchantRectificationReport(item.merchant_rectification_report ?? "");
+    setResolution(item.resolution ?? "");
   };
 
   const loadDetail = (id: number) => {
-    apiGet<SafetyReportItem>(`/operator/reports/safety/${id}`)
-      .then(setDetail)
+    apiGet<OperatorFoodSafetyCaseDetailResponse>(`/operator/food-safety/cases/${id}`)
+      .then((res) => {
+        setDetail(res);
+        syncDraftsFromCase(res.case);
+      })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : "详情加载失败"));
   };
 
-  const resolve = async () => {
-    if (!detail) return;
-
-    const selectedID = Number(recoverMerchantId);
-    const ids = recoverMerchantId !== "none" && Number.isFinite(selectedID) && selectedID > 0 ? [selectedID] : [];
-
-    if (ids.length > 0 && recoverReason.trim().length < 2) {
-      setError("填写恢复商户时必须提供恢复原因（至少2个字符）");
+  const submitInvestigation = async () => {
+    if (!detail) {
+      return;
+    }
+    if (investigationReport.trim().length < 10) {
+      setError("调查报告至少需要 10 个字");
       return;
     }
 
-    setResolvingReport(true);
+    setInvestigating(true);
     try {
-      await apiPost(`/operator/reports/safety/${detail.id}/resolve`, {
-        status: resolveStatus,
-        resolution_notes: resolutionNotes,
-        recover_merchant_ids: ids,
-        recover_reason: ids.length > 0 ? recoverReason.trim() : undefined,
+      const updated = await apiPost<OperatorFoodSafetyCaseItem>(`/operator/food-safety/cases/${detail.case.id}/investigate`, {
+        investigation_report: investigationReport.trim(),
       });
-      setResolutionNotes("");
-      setRecoverMerchantId("none");
-      setRecoverReason("");
-      loadDetail(detail.id);
+      setMessage(`案件 #${updated.id} 已更新为调查中`);
       load();
+      loadDetail(detail.case.id);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "处置失败");
+      setError(err instanceof Error ? err.message : "提交调查报告失败");
     } finally {
-      setResolvingReport(false);
+      setInvestigating(false);
+    }
+  };
+
+  const submitResolution = async () => {
+    if (!detail) {
+      return;
+    }
+    if (merchantRectificationReport.trim().length < 10) {
+      setError("商户整改报告至少需要 10 个字");
+      return;
+    }
+    if (resolution.trim().length < 5) {
+      setError("处置结论至少需要 5 个字");
+      return;
+    }
+
+    setResolving(true);
+    try {
+      const updated = await apiPost<OperatorFoodSafetyCaseItem>(`/operator/food-safety/cases/${detail.case.id}/resolve`, {
+        investigation_report: investigationReport.trim() || undefined,
+        merchant_rectification_report: merchantRectificationReport.trim(),
+        resolution: resolution.trim(),
+      });
+      setMessage(`案件 #${updated.id} 已结案并恢复商户营业资格`);
+      load();
+      loadDetail(detail.case.id);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "提交结案失败");
+    } finally {
+      setResolving(false);
     }
   };
 
   return (
     <PageShell>
       <PageHeader
-        title="食安事件"
-        description="提交、筛选与处置区域食安事件"
-        actions={
-          <div className="flex items-center gap-2">
-            <Badge variant="secondary">运营商</Badge>
-            <Button size="sm" onClick={() => setReportDialogOpen(true)}>
-              手动上报
-            </Button>
-          </div>
-        }
+        title="食安案件"
+        description="查看顾客食安上报触发的熔断案件，并完成调查与结案恢复"
+        actions={<Badge variant="secondary">运营商</Badge>}
       />
       <PageContent className="space-y-4">
         <Card>
@@ -169,7 +149,7 @@ export default function OperatorSafetyPage() {
           <CardContent className="flex flex-col gap-3 md:flex-row md:items-center">
             <Select value={status} onValueChange={setStatus}>
               <SelectTrigger className="w-full md:w-52">
-                <SelectValue placeholder="状态筛选" />
+                <SelectValue placeholder="案件状态" />
               </SelectTrigger>
               <SelectContent>
                 {safetyStatusOptions.map((option) => (
@@ -185,37 +165,39 @@ export default function OperatorSafetyPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>事件列表</CardTitle>
+            <CardTitle>案件列表</CardTitle>
           </CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>ID</TableHead>
-                  <TableHead>标题</TableHead>
-                  <TableHead>等级</TableHead>
+                  <TableHead>案件ID</TableHead>
+                  <TableHead>商户</TableHead>
+                  <TableHead>问题产品</TableHead>
                   <TableHead>状态</TableHead>
+                  <TableHead>触发时间</TableHead>
                   <TableHead>操作</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {(data?.items ?? []).map((item) => (
-                  <TableRow key={item.id}>
+                  <TableRow key={item.id} className={detail?.case.id === item.id ? "bg-muted/50" : undefined}>
                     <TableCell>{item.id}</TableCell>
-                    <TableCell>{item.title}</TableCell>
-                    <TableCell>{formatSafetyLevel(item.level)}</TableCell>
+                    <TableCell>{item.merchant_id}</TableCell>
+                    <TableCell>{item.primary_product_label || item.primary_product_key || "未识别"}</TableCell>
                     <TableCell>{formatSafetyStatus(item.status)}</TableCell>
+                    <TableCell>{new Date(item.suspended_at).toLocaleString()}</TableCell>
                     <TableCell>
                       <Button variant="outline" size="sm" onClick={() => loadDetail(item.id)}>
-                        详情
+                        查看详情
                       </Button>
                     </TableCell>
                   </TableRow>
                 ))}
                 {(!data || data.items.length === 0) && (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-muted-foreground">
-                      暂无数据
+                    <TableCell colSpan={6} className="text-muted-foreground">
+                      当前筛选条件下暂无案件
                     </TableCell>
                   </TableRow>
                 )}
@@ -225,129 +207,151 @@ export default function OperatorSafetyPage() {
         </Card>
 
         {detail && (
-          <Card>
-            <CardHeader>
-              <CardTitle>事件详情 #{detail.id}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="text-sm">标题：{detail.title}</div>
-              <div className="text-sm">描述：{detail.description}</div>
-              <div className="text-sm">等级：{formatSafetyLevel(detail.level)}</div>
-              <div className="text-sm">状态：{formatSafetyStatus(detail.status)}</div>
-              <div className="text-sm">上报人：{detail.reporter_id}</div>
-              <div className="text-sm">涉及商户：{detail.merchant_ids.length > 0 ? detail.merchant_ids.join(", ") : "-"}</div>
-              <div className="text-sm">创建时间：{new Date(detail.created_at).toLocaleString()}</div>
-              <div className="text-sm">更新时间：{new Date(detail.updated_at).toLocaleString()}</div>
-              {detail.resolution_notes && <div className="text-sm">处置说明：{detail.resolution_notes}</div>}
-              {detail.images.length > 0 && <div className="text-sm">图片数量：{detail.images.length}</div>}
-              {detail.status === "pending" && (
-                <div className="grid gap-3 rounded-lg border p-4">
-                  <Select value={resolveStatus} onValueChange={(value: "resolved" | "rejected") => setResolveStatus(value)}>
-                    <SelectTrigger className="w-full md:w-48">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {safetyResolveOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Textarea
-                    value={resolutionNotes}
-                    onChange={(e) => setResolutionNotes(e.target.value)}
-                    placeholder="处置说明"
-                  />
-                  <Select value={recoverMerchantId} onValueChange={setRecoverMerchantId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="选择恢复商户（可选）" />
-                    </SelectTrigger>
-                    <SelectContent className="max-h-72">
-                      <SelectItem value="none">不恢复指定商户</SelectItem>
-                      {merchantOptions.map((merchant) => (
-                        <SelectItem key={merchant.id} value={String(merchant.id)}>
-                          {merchant.name}（{merchant.id}）
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Textarea
-                    value={recoverReason}
-                    onChange={(e) => setRecoverReason(e.target.value)}
-                    placeholder="恢复原因（填写恢复商户时必填）"
-                  />
-                  <Button onClick={() => setResolveConfirmOpen(true)} disabled={resolvingReport}>
-                    {resolvingReport ? "提交中" : "提交处置"}
-                  </Button>
+          <>
+            <Card>
+              <CardHeader>
+                <CardTitle>案件详情 #{detail.case.id}</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-2 text-sm md:grid-cols-2">
+                  <div>商户 ID：{detail.case.merchant_id}</div>
+                  <div>区域 ID：{detail.case.region_id}</div>
+                  <div>问题产品：{detail.case.primary_product_label || detail.case.primary_product_key || "未识别"}</div>
+                  <div>案件状态：{formatSafetyStatus(detail.case.status)}</div>
+                  <div>熔断时间：{new Date(detail.case.suspended_at).toLocaleString()}</div>
+                  <div>最近更新：{new Date(detail.case.updated_at).toLocaleString()}</div>
+                  <div>案件创建：{new Date(detail.case.created_at).toLocaleString()}</div>
+                  <div>关联上报数：{detail.incidents.length}</div>
+                  {detail.case.resolved_at && <div>结案时间：{new Date(detail.case.resolved_at).toLocaleString()}</div>}
                 </div>
-              )}
-            </CardContent>
-          </Card>
+                <div className="rounded-lg border p-4 text-sm">
+                  <div className="font-medium">触发原因</div>
+                  <div className="mt-2 text-muted-foreground">{detail.case.trigger_reason}</div>
+                </div>
+                {detail.case.investigation_report && (
+                  <div className="rounded-lg border p-4 text-sm">
+                    <div className="font-medium">调查报告</div>
+                    <div className="mt-2 whitespace-pre-wrap text-muted-foreground">{detail.case.investigation_report}</div>
+                  </div>
+                )}
+                {detail.case.merchant_rectification_report && (
+                  <div className="rounded-lg border p-4 text-sm">
+                    <div className="font-medium">商户整改报告</div>
+                    <div className="mt-2 whitespace-pre-wrap text-muted-foreground">{detail.case.merchant_rectification_report}</div>
+                  </div>
+                )}
+                {detail.case.resolution && (
+                  <div className="rounded-lg border p-4 text-sm">
+                    <div className="font-medium">处置结论</div>
+                    <div className="mt-2 whitespace-pre-wrap text-muted-foreground">{detail.case.resolution}</div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>关联顾客上报</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>事件ID</TableHead>
+                      <TableHead>订单ID</TableHead>
+                      <TableHead>用户ID</TableHead>
+                      <TableHead>类型</TableHead>
+                      <TableHead>状态</TableHead>
+                      <TableHead>上报时间</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {detail.incidents.map((item) => (
+                      <TableRow key={item.id}>
+                        <TableCell>{item.id}</TableCell>
+                        <TableCell>{item.order_id}</TableCell>
+                        <TableCell>{item.user_id}</TableCell>
+                        <TableCell>{formatFoodSafetyIncidentType(item.incident_type)}</TableCell>
+                        <TableCell>{formatSafetyStatus(item.status)}</TableCell>
+                        <TableCell>{new Date(item.created_at).toLocaleString()}</TableCell>
+                      </TableRow>
+                    ))}
+                    {detail.incidents.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-muted-foreground">
+                          暂无关联上报事件
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+
+            {detail.case.status !== "resolved" && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>调查与结案</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid gap-3">
+                    <Textarea
+                      value={investigationReport}
+                      onChange={(event) => setInvestigationReport(event.target.value)}
+                      placeholder="填写调查报告，说明现场核查、样本判断、同批次排查等结论"
+                      className="min-h-32"
+                    />
+                    {detail.case.status === "merchant-suspended" && (
+                      <div className="flex justify-end">
+                        <Button onClick={() => setInvestigateConfirmOpen(true)} disabled={investigating}>
+                          {investigating ? "提交中" : "提交调查报告"}
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="grid gap-3 rounded-lg border p-4">
+                    <div className="text-sm font-medium">结案恢复</div>
+                    <Textarea
+                      value={merchantRectificationReport}
+                      onChange={(event) => setMerchantRectificationReport(event.target.value)}
+                      placeholder="填写商户整改报告，例如后厨整改、原料更换、制度复核等内容"
+                      className="min-h-28"
+                    />
+                    <Textarea
+                      value={resolution}
+                      onChange={(event) => setResolution(event.target.value)}
+                      placeholder="填写处置结论，例如监管上报情况、复核结果与恢复依据"
+                      className="min-h-24"
+                    />
+                    <div className="flex justify-end">
+                      <Button onClick={() => setResolveConfirmOpen(true)} disabled={resolving}>
+                        {resolving ? "提交中" : "完成结案并恢复商户"}
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </>
         )}
 
-        <Dialog open={reportDialogOpen} onOpenChange={setReportDialogOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>手动上报食安事件</DialogTitle>
-              <DialogDescription>低频操作，按需填写后提交。</DialogDescription>
-            </DialogHeader>
-            <div className="grid gap-3">
-              <Textarea value={title} onChange={(e) => setTitle(e.target.value)} placeholder="标题（至少5字）" />
-              <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="描述（至少10字）" />
-              <Select value={level} onValueChange={setLevel}>
-                <SelectTrigger>
-                  <SelectValue placeholder="事件等级" />
-                </SelectTrigger>
-                <SelectContent>
-                  {safetyLevelOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={selectedMerchantId} onValueChange={setSelectedMerchantId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="选择商户（可选）" />
-                </SelectTrigger>
-                <SelectContent className="max-h-72">
-                  <SelectItem value="none">不关联指定商户</SelectItem>
-                  {merchantOptions.map((merchant) => (
-                    <SelectItem key={merchant.id} value={String(merchant.id)}>
-                      {merchant.name}（{merchant.id}）
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setReportDialogOpen(false)}>
-                取消
-              </Button>
-              <Button onClick={() => setSubmitConfirmOpen(true)} disabled={submittingReport}>
-                {submittingReport ? "提交中" : "提交事件"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
         <ConfirmDialog
-          open={submitConfirmOpen}
-          onOpenChange={setSubmitConfirmOpen}
-          title="确认提交食安事件？"
-          description="提交后将进入区域食安事件流转，关键操作会记录审计日志。"
+          open={investigateConfirmOpen}
+          onOpenChange={setInvestigateConfirmOpen}
+          title="确认提交调查报告？"
+          description="提交后案件会进入调查中状态，并保留当前报告内容作为案件调查记录。"
           confirmText="确认提交"
-          onConfirm={submit}
+          onConfirm={submitInvestigation}
         />
 
         <ConfirmDialog
           open={resolveConfirmOpen}
           onOpenChange={setResolveConfirmOpen}
-          title="确认提交处置结果？"
-          description="处置结果生效后将更新事件状态，并可能恢复指定商户。"
-          confirmText="确认处置"
-          onConfirm={resolve}
+          title="确认完成结案并恢复商户？"
+          description="结案后将同步关闭关联食安事件，并恢复商户营业资格。请确认调查与整改材料已完整。"
+          confirmText="确认结案"
+          onConfirm={submitResolution}
         />
       </PageContent>
     </PageShell>

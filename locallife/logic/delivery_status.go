@@ -38,6 +38,9 @@ func mapDeliveryStateTransitionError(err error) error {
 	if errors.Is(err, db.ErrDeliveryStateTransitionConflict) {
 		return NewRequestError(http.StatusConflict, errors.New("配送状态已变化，请刷新后重试"))
 	}
+	if errors.Is(err, db.ErrTakeoutOrderPausedByFoodSafety) {
+		return NewRequestError(http.StatusForbidden, errors.New("该外卖订单因食安事件已暂停履约，请等待平台处理"))
+	}
 	return err
 }
 

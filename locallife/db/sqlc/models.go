@@ -698,6 +698,23 @@ type Favorite struct {
 	CreatedAt time.Time   `json:"created_at"`
 }
 
+type FoodSafetyCase struct {
+	ID                          int64              `json:"id"`
+	MerchantID                  int64              `json:"merchant_id"`
+	RegionID                    int64              `json:"region_id"`
+	PrimaryProductKey           string             `json:"primary_product_key"`
+	PrimaryProductLabel         string             `json:"primary_product_label"`
+	Status                      string             `json:"status"`
+	TriggerReason               string             `json:"trigger_reason"`
+	InvestigationReport         pgtype.Text        `json:"investigation_report"`
+	MerchantRectificationReport pgtype.Text        `json:"merchant_rectification_report"`
+	Resolution                  pgtype.Text        `json:"resolution"`
+	SuspendedAt                 time.Time          `json:"suspended_at"`
+	ResolvedAt                  pgtype.Timestamptz `json:"resolved_at"`
+	CreatedAt                   time.Time          `json:"created_at"`
+	UpdatedAt                   time.Time          `json:"updated_at"`
+}
+
 // 食品安全事件表 - 唯一需要证据的场景
 type FoodSafetyIncident struct {
 	ID           int64  `json:"id"`
@@ -718,6 +735,9 @@ type FoodSafetyIncident struct {
 	Resolution          pgtype.Text        `json:"resolution"`
 	CreatedAt           time.Time          `json:"created_at"`
 	ResolvedAt          pgtype.Timestamptz `json:"resolved_at"`
+	PrimaryProductKey   string             `json:"primary_product_key"`
+	PrimaryProductLabel string             `json:"primary_product_label"`
+	CaseID              pgtype.Int8        `json:"case_id"`
 }
 
 // 欺诈模式检测表 - 纯规则引擎（设备指纹+地址聚类+协同索赔）

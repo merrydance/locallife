@@ -536,6 +536,25 @@ func (mr *MockTaskDistributorMockRecorder) DistributeTaskProcessRefundResult(ctx
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DistributeTaskProcessRefundResult", reflect.TypeOf((*MockTaskDistributor)(nil).DistributeTaskProcessRefundResult), varargs...)
 }
 
+// DistributeTaskReservationFoodSafetyAlert mocks base method.
+func (m *MockTaskDistributor) DistributeTaskReservationFoodSafetyAlert(ctx context.Context, payload *worker.PayloadReservationFoodSafetyAlert, opts ...asynq.Option) error {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, payload}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DistributeTaskReservationFoodSafetyAlert", varargs...)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DistributeTaskReservationFoodSafetyAlert indicates an expected call of DistributeTaskReservationFoodSafetyAlert.
+func (mr *MockTaskDistributorMockRecorder) DistributeTaskReservationFoodSafetyAlert(ctx, payload any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, payload}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DistributeTaskReservationFoodSafetyAlert", reflect.TypeOf((*MockTaskDistributor)(nil).DistributeTaskReservationFoodSafetyAlert), varargs...)
+}
+
 // DistributeTaskReservationNoShowAlert mocks base method.
 func (m *MockTaskDistributor) DistributeTaskReservationNoShowAlert(ctx context.Context, payload *worker.PayloadReservationNoShowAlert, opts ...asynq.Option) error {
 	m.ctrl.T.Helper()

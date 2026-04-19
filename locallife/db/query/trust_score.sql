@@ -292,6 +292,97 @@ ORDER BY created_at DESC;
 -- food_safety_incidents（食品安全事件）
 -- ==========================================
 
+-- name: CreateFoodSafetyCase :one
+INSERT INTO food_safety_cases (
+    merchant_id,
+    region_id,
+    primary_product_key,
+    primary_product_label,
+    status,
+    trigger_reason,
+    suspended_at
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7
+) RETURNING id, merchant_id, region_id, primary_product_key, primary_product_label, status, trigger_reason, investigation_report, merchant_rectification_report, resolution, suspended_at, resolved_at, created_at, updated_at;
+
+-- name: GetFoodSafetyCase :one
+SELECT id, merchant_id, region_id, primary_product_key, primary_product_label, status, trigger_reason, investigation_report, merchant_rectification_report, resolution, suspended_at, resolved_at, created_at, updated_at FROM food_safety_cases
+WHERE id = $1
+LIMIT 1;
+
+-- name: GetFoodSafetyCaseForUpdate :one
+SELECT id, merchant_id, region_id, primary_product_key, primary_product_label, status, trigger_reason, investigation_report, merchant_rectification_report, resolution, suspended_at, resolved_at, created_at, updated_at FROM food_safety_cases
+WHERE id = $1
+LIMIT 1
+FOR UPDATE;
+
+-- name: GetOpenFoodSafetyCaseByMerchant :one
+SELECT id, merchant_id, region_id, primary_product_key, primary_product_label, status, trigger_reason, investigation_report, merchant_rectification_report, resolution, suspended_at, resolved_at, created_at, updated_at FROM food_safety_cases
+WHERE merchant_id = $1
+  AND status IN ('merchant-suspended', 'investigating')
+ORDER BY created_at DESC, id DESC
+LIMIT 1;
+
+-- name: ListFoodSafetyCasesByRegion :many
+SELECT id, merchant_id, region_id, primary_product_key, primary_product_label, status, trigger_reason, investigation_report, merchant_rectification_report, resolution, suspended_at, resolved_at, created_at, updated_at FROM food_safety_cases
+WHERE region_id = $1
+ORDER BY created_at DESC, id DESC
+LIMIT $2 OFFSET $3;
+
+-- name: CountFoodSafetyCasesByRegion :one
+SELECT COUNT(*) FROM food_safety_cases
+WHERE region_id = $1;
+
+-- name: ListFoodSafetyCasesByRegionAndStatus :many
+SELECT id, merchant_id, region_id, primary_product_key, primary_product_label, status, trigger_reason, investigation_report, merchant_rectification_report, resolution, suspended_at, resolved_at, created_at, updated_at FROM food_safety_cases
+WHERE region_id = $1
+  AND status = $2
+ORDER BY created_at DESC, id DESC
+LIMIT $3 OFFSET $4;
+
+-- name: CountFoodSafetyCasesByRegionAndStatus :one
+SELECT COUNT(*) FROM food_safety_cases
+WHERE region_id = $1
+  AND status = $2;
+
+-- name: UpdateFoodSafetyCaseInvestigation :one
+UPDATE food_safety_cases
+SET status = 'investigating',
+    investigation_report = $2,
+    updated_at = NOW()
+WHERE id = $1
+RETURNING id, merchant_id, region_id, primary_product_key, primary_product_label, status, trigger_reason, investigation_report, merchant_rectification_report, resolution, suspended_at, resolved_at, created_at, updated_at;
+
+-- name: ResolveFoodSafetyCase :one
+UPDATE food_safety_cases
+SET status = 'resolved',
+    investigation_report = COALESCE(sqlc.narg('investigation_report'), investigation_report),
+    merchant_rectification_report = COALESCE(sqlc.narg('merchant_rectification_report'), merchant_rectification_report),
+    resolution = COALESCE(sqlc.narg('resolution'), resolution),
+    resolved_at = COALESCE(sqlc.narg('resolved_at'), resolved_at),
+    updated_at = NOW()
+WHERE id = $1
+RETURNING id, merchant_id, region_id, primary_product_key, primary_product_label, status, trigger_reason, investigation_report, merchant_rectification_report, resolution, suspended_at, resolved_at, created_at, updated_at;
+
+-- name: ListFoodSafetyIncidentsByCase :many
+SELECT id, order_id, merchant_id, user_id, incident_type, description, order_snapshot, merchant_snapshot, rider_snapshot, status, investigation_report, resolution, primary_product_key, primary_product_label, case_id, created_at, resolved_at FROM food_safety_incidents
+WHERE case_id = $1
+ORDER BY created_at DESC, id DESC;
+
+-- name: LinkFoodSafetyIncidentsToCase :execrows
+UPDATE food_safety_incidents
+SET case_id = sqlc.arg('case_id'),
+    status = sqlc.arg('status')
+WHERE id = ANY(sqlc.arg('incident_ids')::bigint[]);
+
+-- name: ResolveFoodSafetyIncidentsByCase :exec
+UPDATE food_safety_incidents
+SET status = 'resolved',
+    investigation_report = COALESCE(sqlc.narg('investigation_report'), investigation_report),
+    resolution = COALESCE(sqlc.narg('resolution'), resolution),
+    resolved_at = COALESCE(sqlc.narg('resolved_at'), resolved_at)
+WHERE case_id = $1;
+
 -- name: CreateFoodSafetyIncident :one
 INSERT INTO food_safety_incidents (
     order_id,
@@ -305,26 +396,46 @@ INSERT INTO food_safety_incidents (
     status,
     investigation_report,
     resolution,
+    primary_product_key,
+    primary_product_label,
+    case_id,
     created_at,
     resolved_at
 ) VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
 ) RETURNING *;
 
 -- name: GetFoodSafetyIncident :one
-SELECT id, order_id, merchant_id, user_id, incident_type, description, order_snapshot, merchant_snapshot, rider_snapshot, status, investigation_report, resolution, created_at, resolved_at FROM food_safety_incidents
+SELECT id, order_id, merchant_id, user_id, incident_type, description, order_snapshot, merchant_snapshot, rider_snapshot, status, investigation_report, resolution, primary_product_key, primary_product_label, case_id, created_at, resolved_at FROM food_safety_incidents
 WHERE id = $1
 LIMIT 1;
 
 -- name: ListMerchantFoodSafetyIncidents :many
-SELECT id, order_id, merchant_id, user_id, incident_type, description, order_snapshot, merchant_snapshot, rider_snapshot, status, investigation_report, resolution, created_at, resolved_at FROM food_safety_incidents
+SELECT id, order_id, merchant_id, user_id, incident_type, description, order_snapshot, merchant_snapshot, rider_snapshot, status, investigation_report, resolution, primary_product_key, primary_product_label, case_id, created_at, resolved_at FROM food_safety_incidents
 WHERE merchant_id = $1
   AND created_at >= $2
 ORDER BY created_at DESC;
 
 -- name: GetMerchantRecentFoodSafetyReports :many
-SELECT id, order_id, merchant_id, user_id, incident_type, description, order_snapshot, merchant_snapshot, rider_snapshot, status, investigation_report, resolution, created_at, resolved_at FROM food_safety_incidents
+SELECT id, order_id, merchant_id, user_id, incident_type, description, order_snapshot, merchant_snapshot, rider_snapshot, status, investigation_report, resolution, primary_product_key, primary_product_label, case_id, created_at, resolved_at FROM food_safety_incidents
 WHERE merchant_id = $1
+  AND status = 'reported'
+  AND created_at >= NOW() - INTERVAL '1 hour'
+ORDER BY created_at DESC;
+
+-- name: GetOpenFoodSafetyIncidentByOrderAndUser :one
+SELECT id, order_id, merchant_id, user_id, incident_type, description, order_snapshot, merchant_snapshot, rider_snapshot, status, investigation_report, resolution, primary_product_key, primary_product_label, case_id, created_at, resolved_at FROM food_safety_incidents
+WHERE order_id = $1
+  AND user_id = $2
+  AND status IN ('reported', 'investigating', 'merchant-suspended')
+ORDER BY created_at DESC, id DESC
+LIMIT 1;
+
+-- name: GetMerchantRecentFoodSafetyReportsByProduct :many
+SELECT id, order_id, merchant_id, user_id, incident_type, description, order_snapshot, merchant_snapshot, rider_snapshot, status, investigation_report, resolution, primary_product_key, primary_product_label, case_id, created_at, resolved_at FROM food_safety_incidents
+WHERE merchant_id = $1
+  AND primary_product_key = $2
+  AND status = 'reported'
   AND created_at >= NOW() - INTERVAL '1 hour'
 ORDER BY created_at DESC;
 
@@ -337,7 +448,7 @@ SET status = $2,
 WHERE id = $1;
 
 -- name: GetActiveFoodSafetyIncidents :many
-SELECT id, order_id, merchant_id, user_id, incident_type, description, order_snapshot, merchant_snapshot, rider_snapshot, status, investigation_report, resolution, created_at, resolved_at FROM food_safety_incidents
+SELECT id, order_id, merchant_id, user_id, incident_type, description, order_snapshot, merchant_snapshot, rider_snapshot, status, investigation_report, resolution, primary_product_key, primary_product_label, case_id, created_at, resolved_at FROM food_safety_incidents
 WHERE status IN ('reported', 'investigating', 'merchant-suspended')
 ORDER BY created_at DESC
 LIMIT $1;

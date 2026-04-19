@@ -40,6 +40,10 @@ func (NoopTaskDistributor) DistributeTaskReservationNoShowAlert(ctx context.Cont
 	return nil
 }
 
+func (NoopTaskDistributor) DistributeTaskReservationFoodSafetyAlert(ctx context.Context, payload *PayloadReservationFoodSafetyAlert, opts ...asynq.Option) error {
+	return nil
+}
+
 func (NoopTaskDistributor) DistributeTaskProcessPaymentSuccess(ctx context.Context, payload *PaymentSuccessPayload, opts ...asynq.Option) error {
 	return financialTaskDistributorUnavailable("payment success")
 }

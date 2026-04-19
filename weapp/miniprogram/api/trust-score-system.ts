@@ -125,16 +125,15 @@ export interface SuspendMerchantRequest extends Record<string, unknown> {
 export interface ReportFoodSafetyRequest extends Record<string, unknown> {
     merchant_id: number                          // 商户ID（必填）
     order_id: number                             // 订单ID（必填）
-    reporter_id: number                          // 报告人ID（必填）
     incident_type: 'foreign-object' | 'contamination' | 'expired'  // 事件类型（必填）
     severity_level: number                       // 严重程度（1-5，必填）
     description: string                          // 描述（10-1000字符，必填）
-    evidence_photos: string                      // 证据图片（最大500字符，必填）
 }
 
 /** 食品安全报告响应 - 对齐 api.ReportFoodSafetyResponse */
 export interface ReportFoodSafetyResponse {
     incident_id: number                          // 事件ID
+    case_id?: number                             // 触发熔断时关联案件ID
     merchant_suspended: boolean                  // 商户是否被暂停
     message: string                              // 消息
     suspend_duration?: number                    // 暂停时长（小时）
@@ -227,38 +226,11 @@ export interface ReviewClaimRequest extends Record<string, unknown> {
 
 // ==================== 食品安全相关类型 ====================
 
-/** 食品安全报告请求 - 基于swagger api.foodSafetyReportRequest */
-export interface FoodSafetyReportRequest extends Record<string, unknown> {
-    merchant_id: number
-    reporter_id: number
-    report_type: 'hygiene' | 'quality' | 'safety' | 'other'
-    description: string
-    severity: 'low' | 'medium' | 'high' | 'critical'
-    evidence_files?: string[]
-    location?: string
-    incident_time?: string
-}
+/** 食品安全报告请求 - 对齐 api.ReportFoodSafetyRequest */
+export type FoodSafetyReportRequest = ReportFoodSafetyRequest
 
-/** 食品安全报告响应 - 基于swagger api.foodSafetyReportResponse */
-export interface FoodSafetyReportResponse {
-    id: number
-    merchant_id: number
-    merchant_name: string
-    reporter_id: number
-    reporter_name: string
-    report_type: string
-    description: string
-    severity: string
-    status: 'pending' | 'investigating' | 'resolved' | 'dismissed'
-    evidence_files: string[]
-    location?: string
-    incident_time?: string
-    created_at: string
-    updated_at: string
-    investigation_notes?: string
-    resolution?: string
-    safety_rating_impact?: number
-}
+/** 食品安全报告响应 - 对齐 api.ReportFoodSafetyResponse */
+export type FoodSafetyReportResponse = ReportFoodSafetyResponse
 
 // ==================== 信任分恢复相关类型 ====================
 
@@ -802,42 +774,18 @@ export class TrustScoreSystemAdapter {
      * 适配食品安全报告数据
      */
     static adaptFoodSafetyReport(data: FoodSafetyReportResponse): {
-        id: number
-        merchantId: number
-        merchantName: string
-        reporterId: number
-        reporterName: string
-        reportType: string
+        incidentId: number
+        caseId?: number
         description: string
-        severity: string
-        status: 'pending' | 'investigating' | 'resolved' | 'dismissed'
-        evidenceFiles: string[]
-        location?: string
-        incidentTime?: string
-        createdAt: string
-        updatedAt: string
-        investigationNotes?: string
-        resolution?: string
-        safetyRatingImpact?: number
+        status: 'recorded' | 'merchant-suspended'
+        suspendDuration?: number
     } {
         return {
-            id: data.id,
-            merchantId: data.merchant_id,
-            merchantName: data.merchant_name,
-            reporterId: data.reporter_id,
-            reporterName: data.reporter_name,
-            reportType: data.report_type,
-            description: data.description,
-            severity: data.severity,
-            status: data.status,
-            evidenceFiles: data.evidence_files,
-            location: data.location,
-            incidentTime: data.incident_time,
-            createdAt: data.created_at,
-            updatedAt: data.updated_at,
-            investigationNotes: data.investigation_notes,
-            resolution: data.resolution,
-            safetyRatingImpact: data.safety_rating_impact
+            incidentId: data.incident_id,
+            caseId: data.case_id,
+            description: data.message,
+            status: data.merchant_suspended ? 'merchant-suspended' : 'recorded',
+            suspendDuration: data.suspend_duration
         }
     }
 }
@@ -1085,19 +1033,19 @@ export function validateFoodSafetyReportRequest(request: FoodSafetyReportRequest
         return { valid: false, message: '商户ID无效' }
     }
 
-    if (!request.reporter_id || request.reporter_id <= 0) {
-        return { valid: false, message: '举报人ID无效' }
+    if (!request.order_id || request.order_id <= 0) {
+        return { valid: false, message: '订单ID无效' }
     }
 
-    if (!request.report_type || !['hygiene', 'quality', 'safety', 'other'].includes(request.report_type)) {
-        return { valid: false, message: '报告类型无效' }
+    if (!request.incident_type || !['foreign-object', 'contamination', 'expired'].includes(request.incident_type)) {
+        return { valid: false, message: '事件类型无效' }
     }
 
     if (!request.description || request.description.trim() === '') {
         return { valid: false, message: '描述不能为空' }
     }
 
-    if (!request.severity || !['low', 'medium', 'high', 'critical'].includes(request.severity)) {
+    if (!request.severity_level || request.severity_level < 1 || request.severity_level > 5) {
         return { valid: false, message: '严重程度无效' }
     }
 

@@ -154,6 +154,14 @@ WHERE merchant_id = $1 AND status = ANY($2::text[])
 ORDER BY created_at DESC, id DESC
 LIMIT $3 OFFSET $4;
 
+-- name: ListMerchantActiveTakeoutOrdersForFoodSafety :many
+SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot FROM orders
+WHERE merchant_id = $1
+    AND order_type = 'takeout'
+    AND replaced_by_order_id IS NULL
+    AND status IN ('paid', 'preparing', 'ready', 'courier_accepted', 'picked', 'delivering')
+ORDER BY created_at ASC, id ASC;
+
 -- name: ListOrdersByMerchantWithFilters :many
 SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot FROM orders
 WHERE merchant_id = sqlc.arg('merchant_id')
@@ -309,6 +317,28 @@ SET
     updated_at = now()
 WHERE id = sqlc.arg('id')
 RETURNING *;
+
+-- name: UpdateOrderFoodSafetyPauseState :one
+UPDATE orders
+SET
+    exception_state = sqlc.arg('exception_state'),
+    status_hint = sqlc.arg('status_hint'),
+    claim_channel = sqlc.arg('claim_channel'),
+    updated_at = now()
+WHERE id = sqlc.arg('id')
+RETURNING *;
+
+-- name: ClearMerchantFoodSafetyPausedOrders :execrows
+UPDATE orders
+SET
+    exception_state = NULL,
+    status_hint = NULL,
+    claim_channel = NULL,
+    updated_at = now()
+WHERE merchant_id = $1
+  AND order_type = 'takeout'
+  AND exception_state = 'food_safety_paused'
+  AND status IN ('paid', 'preparing', 'ready', 'courier_accepted', 'picked', 'delivering');
 
 -- name: UpdateOrderToCancelled :one
 UPDATE orders

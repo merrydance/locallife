@@ -41,6 +41,9 @@ func (d *automaticAppealResolutionTestDistributor) DistributeTaskOrderPaymentTim
 func (d *automaticAppealResolutionTestDistributor) DistributeTaskReservationNoShowAlert(context.Context, *PayloadReservationNoShowAlert, ...asynq.Option) error {
 	return nil
 }
+func (d *automaticAppealResolutionTestDistributor) DistributeTaskReservationFoodSafetyAlert(context.Context, *PayloadReservationFoodSafetyAlert, ...asynq.Option) error {
+	return nil
+}
 func (d *automaticAppealResolutionTestDistributor) DistributeTaskProcessPaymentSuccess(context.Context, *PaymentSuccessPayload, ...asynq.Option) error {
 	return nil
 }

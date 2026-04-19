@@ -257,6 +257,13 @@ WHERE merchant_id = $1
   AND (deposit_amount > 0 OR prepaid_amount > 0)
 ORDER BY reservation_date, reservation_time;
 
+-- name: ListMerchantFutureReservationsForFoodSafetyAlert :many
+SELECT id, table_id, user_id, merchant_id, reservation_date, reservation_time, guest_count, contact_name, contact_phone, payment_mode, deposit_amount, prepaid_amount, refund_deadline, status, payment_deadline, notes, paid_at, confirmed_at, completed_at, cancelled_at, cancel_reason, created_at, updated_at, checked_in_at, cooking_started_at, source FROM table_reservations
+WHERE merchant_id = $1
+  AND status IN ('pending', 'paid', 'confirmed')
+  AND (reservation_date + reservation_time) >= NOW()
+ORDER BY reservation_date, reservation_time;
+
 -- name: CountFutureReservationsByTable :one
 -- 检查某桌台是否有未来的有效预定（用于删除桌台前检查）
 SELECT COUNT(*) FROM table_reservations

@@ -268,6 +268,8 @@ func newTestServerWithPayment(t *testing.T, store db.Store, paymentClient wechat
 	}
 
 	server.setupRouter()
+	server.wsHub = nil
+	server.wsPubSub = nil
 	return server
 }
 
@@ -294,6 +296,8 @@ func newTestServerWithTaskDistributor(t *testing.T, store db.Store, taskDistribu
 	}
 
 	server.setupRouter()
+	server.wsHub = nil
+	server.wsPubSub = nil
 	return server
 }
 

@@ -1,28 +1,27 @@
 import {
   operatorBasicManagementService,
-  SafetyReportItem,
-  getSafetyReportStatusDisplay,
-  type SafetyReportStatusTheme
+  getFoodSafetyCaseStatusDisplay,
+  type OperatorFoodSafetyCaseItem,
+  type OperatorFoodSafetyCaseStatus,
+  type OperatorFoodSafetyCaseStatusTheme,
+  type OperatorFoodSafetyIncidentItem
 } from '../../../../api/operator-basic-management'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
 
-type ResolveStatus = 'resolved' | 'rejected'
-
-type SafetyReportDetailView = SafetyReportItem & {
+type FoodSafetyCaseDetailView = OperatorFoodSafetyCaseItem & {
   status_label: string
-  status_theme: SafetyReportStatusTheme
-  is_pending: boolean
+  status_theme: OperatorFoodSafetyCaseStatusTheme
+  is_active: boolean
   is_resolved: boolean
-  is_rejected: boolean
-  merchant_ids_text: string
+}
+
+type FoodSafetyIncidentView = OperatorFoodSafetyIncidentItem & {
+  status_label: string
+  status_theme: OperatorFoodSafetyCaseStatusTheme
 }
 
 interface InputDetail {
   value: string
-}
-
-interface RadioChangeDetail {
-  value: ResolveStatus
 }
 
 Page({
@@ -31,18 +30,14 @@ Page({
     navBarHeight: 88,
     loading: true,
     initialLoading: true,
-    submitting: false,
-    resumeSubmitting: false,
+    investigateSubmitting: false,
+    resolveSubmitting: false,
     error: '',
-    report: null as SafetyReportDetailView | null,
-    resolutionStatus: 'resolved' as ResolveStatus,
-    resolutionNotes: '',
-    recoverMerchantIdsRaw: '',
-    recoverReason: '',
-    singleResumeMerchantId: '',
-    singleResumeReason: '',
-    recoveredMerchantIds: [] as number[],
-    recoveredMerchantIdsText: '无'
+    caseDetail: null as FoodSafetyCaseDetailView | null,
+    incidents: [] as FoodSafetyIncidentView[],
+    investigationReport: '',
+    merchantRectificationReport: '',
+    resolution: ''
   },
 
   onLoad(options: Record<string, string>) {
@@ -62,27 +57,27 @@ Page({
   async loadDetail() {
     this.setData({ loading: true, error: '' })
     try {
-      const report = await operatorBasicManagementService.getSafetyReportDetail(this.data.id)
-      const normalizedReport: SafetyReportItem = {
-        ...report,
-        merchant_ids: Array.isArray((report as unknown as { merchant_ids?: unknown }).merchant_ids)
-          ? report.merchant_ids
-          : []
-      }
-      const statusDisplay = getSafetyReportStatusDisplay(normalizedReport.status)
+      const response = await operatorBasicManagementService.getFoodSafetyCaseDetail(this.data.id)
+      const statusDisplay = getFoodSafetyCaseStatusDisplay(response.case.status)
       this.setData({
-        report: {
-          ...normalizedReport,
+        caseDetail: {
+          ...response.case,
           status_label: statusDisplay.label,
           status_theme: statusDisplay.theme,
-          is_pending: statusDisplay.isPending,
-          is_resolved: statusDisplay.isResolved,
-          is_rejected: statusDisplay.isRejected,
-          merchant_ids_text: normalizedReport.merchant_ids.length > 0 ? normalizedReport.merchant_ids.join(', ') : '无'
+          is_active: statusDisplay.isActive,
+          is_resolved: statusDisplay.isResolved
         },
-        resolutionStatus: statusDisplay.isRejected ? 'rejected' : 'resolved',
-        resolutionNotes: normalizedReport.resolution_notes || '',
-        recoveredMerchantIdsText: this.data.recoveredMerchantIds.length > 0 ? this.data.recoveredMerchantIds.join(', ') : '无',
+        incidents: (response.incidents || []).map((item) => {
+          const incidentStatus = getFoodSafetyCaseStatusDisplay(item.status as OperatorFoodSafetyCaseStatus)
+          return {
+            ...item,
+            status_label: incidentStatus.label,
+            status_theme: incidentStatus.theme
+          }
+        }),
+        investigationReport: response.case.investigation_report || '',
+        merchantRectificationReport: response.case.merchant_rectification_report || '',
+        resolution: response.case.resolution || '',
         loading: false,
         initialLoading: false
       })
@@ -96,111 +91,81 @@ Page({
     this.loadDetail()
   },
 
-  onResolutionStatusChange(e: WechatMiniprogram.CustomEvent<RadioChangeDetail>) {
-    this.setData({ resolutionStatus: e.detail.value })
+  onInvestigationReportChange(e: WechatMiniprogram.CustomEvent<InputDetail>) {
+    this.setData({ investigationReport: e.detail.value })
   },
 
-  onResolutionNotesChange(e: WechatMiniprogram.CustomEvent<InputDetail>) {
-    this.setData({ resolutionNotes: e.detail.value })
+  onMerchantRectificationReportChange(e: WechatMiniprogram.CustomEvent<InputDetail>) {
+    this.setData({ merchantRectificationReport: e.detail.value })
   },
 
-  onRecoverMerchantIdsChange(e: WechatMiniprogram.CustomEvent<InputDetail>) {
-    this.setData({ recoverMerchantIdsRaw: e.detail.value })
+  onResolutionChange(e: WechatMiniprogram.CustomEvent<InputDetail>) {
+    this.setData({ resolution: e.detail.value })
   },
 
-  onRecoverReasonChange(e: WechatMiniprogram.CustomEvent<InputDetail>) {
-    this.setData({ recoverReason: e.detail.value })
-  },
-
-  onSingleResumeMerchantIdChange(e: WechatMiniprogram.CustomEvent<InputDetail>) {
-    this.setData({ singleResumeMerchantId: e.detail.value })
-  },
-
-  onSingleResumeReasonChange(e: WechatMiniprogram.CustomEvent<InputDetail>) {
-    this.setData({ singleResumeReason: e.detail.value })
-  },
-
-  parseMerchantIds(raw: string): number[] {
-    if (!raw.trim()) return []
-    return raw
-      .split(',')
-      .map((token) => Number(token.trim()))
-      .filter((id) => Number.isInteger(id) && id > 0)
-  },
-
-  async onSubmitResolution() {
-    if (!this.data.report?.is_pending) {
-      wx.showToast({ title: '事件已处理，当前为只读状态', icon: 'none' })
+  async onSubmitInvestigation() {
+    if (!this.data.caseDetail?.is_active) {
+      wx.showToast({ title: '案件已结案，当前为只读状态', icon: 'none' })
       return
     }
 
-    if (!this.data.resolutionNotes.trim()) {
-      wx.showToast({ title: '请填写处置报告', icon: 'none' })
-      return
-    }
-
-    const recoverMerchantIds = this.parseMerchantIds(this.data.recoverMerchantIdsRaw)
-    if (recoverMerchantIds.length > 0 && !this.data.recoverReason.trim()) {
-      wx.showToast({ title: '请填写恢复原因', icon: 'none' })
+    const investigationReport = this.data.investigationReport.trim()
+    if (investigationReport.length < 10) {
+      wx.showToast({ title: '调查报告至少 10 个字符', icon: 'none' })
       return
     }
 
     try {
-      this.setData({ submitting: true })
-      wx.showLoading({ title: '提交中' })
-      const result = await operatorBasicManagementService.resolveSafetyReport(this.data.id, {
-        status: this.data.resolutionStatus,
-        resolution_notes: this.data.resolutionNotes,
-        recover_merchant_ids: recoverMerchantIds,
-        recover_reason: this.data.recoverReason || undefined
-      })
-      const recoveredMerchantIds = result.recovered_merchant_ids || []
-      this.setData({
-        recoveredMerchantIds,
-        recoveredMerchantIdsText: recoveredMerchantIds.length > 0 ? recoveredMerchantIds.join(', ') : '无'
+      this.setData({ investigateSubmitting: true })
+      wx.showLoading({ title: '保存中' })
+      await operatorBasicManagementService.investigateFoodSafetyCase(this.data.id, {
+        investigation_report: investigationReport
       })
       await this.loadDetail()
+      wx.showToast({ title: '调查报告已保存', icon: 'success' })
     } catch (error: unknown) {
-      const message = getErrorUserMessage(error, '处置失败，请稍后重试')
+      const message = getErrorUserMessage(error, '保存调查报告失败，请稍后重试')
       wx.showToast({ title: message, icon: 'none' })
     } finally {
-      this.setData({ submitting: false })
+      this.setData({ investigateSubmitting: false })
       wx.hideLoading()
     }
   },
 
-  async onResumeSingleMerchant() {
-    if (!this.data.report?.is_pending) {
-      wx.showToast({ title: '事件已处理，当前为只读状态', icon: 'none' })
+  async onSubmitResolution() {
+    if (!this.data.caseDetail?.is_active) {
+      wx.showToast({ title: '案件已结案，当前为只读状态', icon: 'none' })
       return
     }
 
-    const merchantId = Number(this.data.singleResumeMerchantId)
-    if (!merchantId) {
-      wx.showToast({ title: '请输入有效商户ID', icon: 'none' })
+    const investigationReport = this.data.investigationReport.trim() || this.data.caseDetail.investigation_report || undefined
+    const merchantRectificationReport = this.data.merchantRectificationReport.trim()
+    const resolution = this.data.resolution.trim()
+
+    if (merchantRectificationReport.length < 10) {
+      wx.showToast({ title: '整改报告至少 10 个字符', icon: 'none' })
       return
     }
-    if (!this.data.singleResumeReason.trim()) {
-      wx.showToast({ title: '请填写恢复原因', icon: 'none' })
+    if (resolution.length < 5) {
+      wx.showToast({ title: '结案结论至少 5 个字符', icon: 'none' })
       return
     }
 
     try {
-      this.setData({ resumeSubmitting: true })
-      wx.showLoading({ title: '恢复中' })
-      await operatorBasicManagementService.resumeMerchant(merchantId, this.data.singleResumeReason)
-      this.setData({
-        singleResumeMerchantId: '',
-        singleResumeReason: '',
-        recoveredMerchantIds: [...this.data.recoveredMerchantIds, merchantId],
-        recoveredMerchantIdsText: [...this.data.recoveredMerchantIds, merchantId].join(', ')
+      this.setData({ resolveSubmitting: true })
+      wx.showLoading({ title: '提交中' })
+      await operatorBasicManagementService.resolveFoodSafetyCase(this.data.id, {
+        investigation_report: investigationReport,
+        merchant_rectification_report: merchantRectificationReport,
+        resolution
       })
       await this.loadDetail()
+      wx.showToast({ title: '案件已结案', icon: 'success' })
     } catch (error: unknown) {
-      const message = getErrorUserMessage(error, '恢复失败，请稍后重试')
+      const message = getErrorUserMessage(error, '处置失败，请稍后重试')
       wx.showToast({ title: message, icon: 'none' })
     } finally {
-      this.setData({ resumeSubmitting: false })
+      this.setData({ resolveSubmitting: false })
       wx.hideLoading()
     }
   }

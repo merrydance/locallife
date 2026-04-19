@@ -370,9 +370,6 @@ definitions:
       order_id:
         minimum: 1
         type: integer
-      reporter_id:
-        minimum: 1
-        type: integer
       severity_level:
         maximum: 5
         minimum: 1
@@ -382,11 +379,12 @@ definitions:
     - incident_type
     - merchant_id
     - order_id
-    - reporter_id
     - severity_level
     type: object
   api.ReportFoodSafetyResponse:
     properties:
+      case_id:
+        type: integer
       incident_id:
         type: integer
       merchant_suspended:
@@ -3335,6 +3333,30 @@ definitions:
         description: 总服务费（平台+运营商）
         type: integer
     type: object
+  api.foodSafetyCaseDetailResponse:
+    properties:
+      case:
+        $ref: '#/definitions/api.operatorFoodSafetyCaseResponse'
+      incidents:
+        items:
+          $ref: '#/definitions/api.operatorFoodSafetyIncidentResponse'
+        type: array
+    type: object
+  api.foodSafetyCaseListResponse:
+    properties:
+      has_more:
+        type: boolean
+      items:
+        items:
+          $ref: '#/definitions/api.operatorFoodSafetyCaseResponse'
+        type: array
+      limit:
+        type: integer
+      page:
+        type: integer
+      total:
+        type: integer
+    type: object
   api.generateAppBindCodeResponse:
     properties:
       code:
@@ -3576,6 +3598,15 @@ definitions:
       unlimited_dishes:
         description: 无限库存菜品数
         type: integer
+    type: object
+  api.investigateOperatorFoodSafetyCaseRequest:
+    properties:
+      investigation_report:
+        maxLength: 4000
+        minLength: 10
+        type: string
+    required:
+    - investigation_report
     type: object
   api.joinMembershipRequest:
     properties:
@@ -5734,6 +5765,64 @@ definitions:
             type: integer
         type: object
     type: object
+  api.operatorFoodSafetyCaseResponse:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: integer
+      investigation_report:
+        type: string
+      merchant_id:
+        type: integer
+      merchant_rectification_report:
+        type: string
+      primary_product_key:
+        type: string
+      primary_product_label:
+        type: string
+      region_id:
+        type: integer
+      resolution:
+        type: string
+      resolved_at:
+        type: string
+      status:
+        type: string
+      suspended_at:
+        type: string
+      trigger_reason:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  api.operatorFoodSafetyIncidentResponse:
+    properties:
+      case_id:
+        type: integer
+      created_at:
+        type: string
+      description:
+        type: string
+      id:
+        type: integer
+      incident_type:
+        type: string
+      merchant_id:
+        type: integer
+      order_id:
+        type: integer
+      primary_product_key:
+        type: string
+      primary_product_label:
+        type: string
+      resolved_at:
+        type: string
+      status:
+        type: string
+      user_id:
+        type: integer
+    type: object
   api.operatorMerchantRankingRow:
     properties:
       avg_order_amount:
@@ -7527,28 +7616,23 @@ definitions:
       pending_count:
         type: integer
     type: object
-  api.resolveSafetyReportRequest:
+  api.resolveOperatorFoodSafetyCaseRequest:
     properties:
-      recover_merchant_ids:
-        items:
-          type: integer
-        type: array
-      recover_reason:
-        maxLength: 500
-        minLength: 2
+      investigation_report:
+        maxLength: 4000
+        minLength: 10
         type: string
-      resolution_notes:
-        maxLength: 1000
+      merchant_rectification_report:
+        maxLength: 4000
+        minLength: 10
+        type: string
+      resolution:
+        maxLength: 2000
         minLength: 5
         type: string
-      status:
-        enum:
-        - resolved
-        - rejected
-        type: string
     required:
-    - resolution_notes
-    - status
+    - merchant_rectification_report
+    - resolution
     type: object
   api.respondToComplaintRequest:
     properties:
@@ -8431,36 +8515,6 @@ definitions:
         type: string
       user_id:
         type: integer
-    type: object
-  api.submitSafetyReportRequest:
-    properties:
-      description:
-        minLength: 10
-        type: string
-      images:
-        items:
-          type: string
-        type: array
-      level:
-        enum:
-        - low
-        - medium
-        - high
-        - critical
-        type: string
-      merchant_ids:
-        description: 涉及商户
-        items:
-          type: integer
-        type: array
-      title:
-        maxLength: 100
-        minLength: 5
-        type: string
-    required:
-    - description
-    - level
-    - title
     type: object
   api.successMessageResponse:
     properties:
@@ -9812,33 +9866,6 @@ definitions:
       version:
         type: integer
     type: object
-  db.SafetyReport:
-    properties:
-      created_at:
-        type: string
-      description:
-        type: string
-      id:
-        type: integer
-      level:
-        type: string
-      merchant_ids:
-        items:
-          type: integer
-        type: array
-      region_id:
-        type: integer
-      reporter_id:
-        type: integer
-      resolution_notes:
-        $ref: '#/definitions/pgtype.Text'
-      status:
-        type: string
-      title:
-        type: string
-      updated_at:
-        type: string
-    type: object
   logic.AppliedPromotion:
     properties:
       amount:
@@ -9931,13 +9958,6 @@ definitions:
       int64:
         format: int64
         type: integer
-      valid:
-        type: boolean
-    type: object
-  pgtype.Text:
-    properties:
-      string:
-        type: string
       valid:
         type: boolean
     type: object
@@ -21842,6 +21862,165 @@ paths:
       summary: 运营商查看追偿单
       tags:
       - 运营商申诉管理
+  /v1/operator/food-safety/cases:
+    get:
+      consumes:
+      - application/json
+      description: 获取当前运营商辖区内由顾客食安上报触发的案件列表
+      parameters:
+      - description: 页码
+        in: query
+        name: page
+        type: integer
+      - description: 每页数量
+        in: query
+        name: limit
+        type: integer
+      - description: 案件状态
+        enum:
+        - merchant-suspended
+        - investigating
+        - resolved
+        in: query
+        name: status
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.foodSafetyCaseListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取食安案件列表
+      tags:
+      - 运营商功能
+  /v1/operator/food-safety/cases/{id}:
+    get:
+      consumes:
+      - application/json
+      description: 获取当前运营商辖区内的单个食安案件和关联上报事件
+      parameters:
+      - description: 案件ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.foodSafetyCaseDetailResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取食安案件详情
+      tags:
+      - 运营商功能
+  /v1/operator/food-safety/cases/{id}/investigate:
+    post:
+      consumes:
+      - application/json
+      description: 运营商对顾客食安上报触发的案件录入调查报告，并将案件置为调查中
+      parameters:
+      - description: 案件ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 调查报告
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.investigateOperatorFoodSafetyCaseRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.operatorFoodSafetyCaseResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 填写食安案件调查报告
+      tags:
+      - 运营商功能
+  /v1/operator/food-safety/cases/{id}/resolve:
+    post:
+      consumes:
+      - application/json
+      description: 运营商提交调查结论和商户整改报告，原子恢复商户并关闭关联事件
+      parameters:
+      - description: 案件ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 处置信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.resolveOperatorFoodSafetyCaseRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.operatorFoodSafetyCaseResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 完成食安案件处置并恢复商户
+      tags:
+      - 运营商功能
   /v1/operator/merchants:
     get:
       consumes:
@@ -22449,153 +22628,6 @@ paths:
       summary: 获取区域统计
       tags:
       - 运营商数据统计
-  /v1/operator/reports/safety:
-    get:
-      consumes:
-      - application/json
-      description: 按运营商所属区域分页查询食安事件
-      parameters:
-      - description: 页码
-        in: query
-        name: page
-        type: integer
-      - description: 每页条数
-        in: query
-        name: limit
-        type: integer
-      - description: 状态
-        enum:
-        - pending
-        - resolved
-        - rejected
-        in: query
-        name: status
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 查询成功
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: 参数错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "403":
-          description: 无权限
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 获取食安事件列表
-      tags:
-      - 运营商功能
-    post:
-      consumes:
-      - application/json
-      description: 运营商提交食品安全事件报告，可能触发熔断机制
-      parameters:
-      - description: 报告内容
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/api.submitSafetyReportRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 提交成功
-          schema:
-            $ref: '#/definitions/api.MessageResponse'
-        "400":
-          description: 参数错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "403":
-          description: 无权限
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 提交食安报告
-      tags:
-      - 运营商功能
-  /v1/operator/reports/safety/{id}:
-    get:
-      consumes:
-      - application/json
-      description: 获取运营商区域内食安事件详情
-      parameters:
-      - description: 事件ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 查询成功
-          schema:
-            $ref: '#/definitions/db.SafetyReport'
-        "403":
-          description: 无权限
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "404":
-          description: 未找到
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 获取食安事件详情
-      tags:
-      - 运营商功能
-  /v1/operator/reports/safety/{id}/resolve:
-    post:
-      consumes:
-      - application/json
-      description: 运营商填写处置报告，支持恢复商户上线
-      parameters:
-      - description: 事件ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      - description: 处理信息
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/api.resolveSafetyReportRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 处理成功
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: 参数错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "403":
-          description: 无权限
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "404":
-          description: 未找到
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 处理食安事件
-      tags:
-      - 运营商功能
   /v1/operator/riders:
     get:
       consumes:

@@ -1311,11 +1311,10 @@ func (server *Server) setupRouter() {
 		// I will just add the safe ones for now: realtime and safety report.
 		// And withdraw.
 
-		// 食安熔断 (New)
-		operatorStatsGroup.GET("/reports/safety", server.listSafetyReports)
-		operatorStatsGroup.POST("/reports/safety", server.submitSafetyReport)
-		operatorStatsGroup.GET("/reports/safety/:id", server.getSafetyReportDetail)
-		operatorStatsGroup.POST("/reports/safety/:id/resolve", server.resolveSafetyReport)
+		operatorStatsGroup.GET("/food-safety/cases", server.listOperatorFoodSafetyCases)
+		operatorStatsGroup.GET("/food-safety/cases/:id", server.getOperatorFoodSafetyCase)
+		operatorStatsGroup.POST("/food-safety/cases/:id/investigate", server.investigateOperatorFoodSafetyCase)
+		operatorStatsGroup.POST("/food-safety/cases/:id/resolve", server.resolveOperatorFoodSafetyCase)
 
 		operatorStatsGroup.GET("/appeals", server.listOperatorAppeals)
 		operatorStatsGroup.GET("/appeals/summary", server.listOperatorAppealsSummary)
