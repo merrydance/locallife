@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -1337,6 +1338,53 @@ func TestSubmitClaimAPI_ApprovedPayoutRequiresTransferClient(t *testing.T) {
 	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 	require.Equal(t, submitClaimCompensationStatusAwaiting, resp.CompensationStatus)
 	require.Empty(t, resp.PayoutStatus)
+}
+
+func TestSubmitClaimAPI_DuplicateOrderClaimReturnsConflict(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	order := randomOrder(user.ID, merchant.ID)
+	order.Status = OrderStatusCompleted
+	order.TotalAmount = 5600
+
+	approvedAmount := int64(1200)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().GetOrder(gomock.Any(), order.ID).Return(order, nil)
+	store.EXPECT().GetActiveBehaviorBlocklist(gomock.Any(), gomock.Any()).Return(db.BehaviorBlocklist{}, db.ErrRecordNotFound)
+	store.EXPECT().ListUserClaimsInPeriod(gomock.Any(), gomock.Any()).Return([]db.Claim{}, nil)
+	store.EXPECT().GetDevicesByUserID(gomock.Any(), user.ID).Return([]db.UserDevice{}, nil)
+	store.EXPECT().CreateClaimWithBehaviorTx(gomock.Any(), gomock.Any()).Return(db.CreateClaimWithBehaviorTxResult{}, &pgconn.PgError{
+		Code:           db.UniqueViolation,
+		ConstraintName: "claims_order_id_unique",
+	})
+
+	server := newTestServer(t, store)
+
+	body, err := json.Marshal(SubmitClaimRequest{
+		OrderID:     order.ID,
+		ClaimType:   "foreign-object",
+		ClaimAmount: approvedAmount,
+		ClaimReason: "餐品里发现异物，需要平台介入处理",
+	})
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPost, "/v1/claims", bytes.NewReader(body))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusConflict, recorder.Code)
+
+	var resp ErrorResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, ErrOrderAlreadyHasClaim.Message, resp.Error)
 }
 
 func TestListUserClaimsAPI_ReturnsUserFacingLifecycle(t *testing.T) {

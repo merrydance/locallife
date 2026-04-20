@@ -12,6 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hibiken/asynq"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/merrydance/locallife/algorithm"
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -205,6 +206,17 @@ func claimAwaitingCustomerConfirmation(claim db.Claim) bool {
 	}
 
 	return claim.Status == db.ClaimStatusWaitingCustomerConfirmation
+}
+
+func isDuplicateOrderClaimError(err error) bool {
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) {
+		return false
+	}
+	if pgErr.Code != db.UniqueViolation {
+		return false
+	}
+	return strings.Contains(pgErr.ConstraintName, "claims_order_id_unique")
 }
 
 // claimLegacyCompensating keeps pre-confirmation rollout rows readable as processing.
@@ -668,6 +680,10 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 		recoveryPlan,
 	)
 	if err != nil {
+		if isDuplicateOrderClaimError(err) {
+			ctx.JSON(http.StatusConflict, errorResponse(ErrOrderAlreadyHasClaim))
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("create claim with decision: %w", err)))
 		return
 	}

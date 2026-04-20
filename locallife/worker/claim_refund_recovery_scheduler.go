@@ -68,6 +68,10 @@ func (s *ClaimPayoutRecoveryScheduler) Stop() {
 	log.Info().Msg("claim payout recovery scheduler stopped")
 }
 
+func (s *ClaimPayoutRecoveryScheduler) RunOnce() {
+	s.runOnce(context.Background())
+}
+
 func (s *ClaimPayoutRecoveryScheduler) runOnce(ctx context.Context) {
 	if !s.runMu.TryLock() {
 		log.Warn().Msg("claim payout recovery already running, skipping concurrent execution")
