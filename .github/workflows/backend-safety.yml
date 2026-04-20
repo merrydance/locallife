@@ -77,4 +77,4 @@ jobs:
           go install github.com/swaggo/swag/cmd/swag@v1.16.6
 
       - name: Check generated artifacts
-        run: PATH=/usr/local/go/bin:$HOME/go/bin:$PATH make check-generated
+        run: make check-generated

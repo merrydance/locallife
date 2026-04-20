@@ -67,7 +67,7 @@
 - 模块：`golang.org/x/image`
 - 当前版本：`v0.33.0`
 - 修复版本：`v0.38.0`
-- 扫描命令：`GOTOOLCHAIN=go1.25.8+auto "$HOME/go/bin/govulncheck" -show verbose ./...`
+- 扫描命令：`"$HOME/go/bin/govulncheck" -show verbose ./...`
 - 扫描日期：`2026-04-05`
 - 扫描结果：`Your code is affected by 0 vulnerabilities ... 1 vulnerability in modules you require, but your code doesn't appear to call these vulnerabilities.`
 - 当前判定：`不可达模块风险`
