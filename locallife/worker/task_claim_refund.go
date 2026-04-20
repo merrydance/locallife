@@ -13,6 +13,7 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
+	"github.com/rs/zerolog/log"
 )
 
 const (
@@ -63,7 +64,7 @@ func (processor *RedisTaskProcessor) ProcessTaskClaimPayout(ctx context.Context,
 		return fmt.Errorf("failed to unmarshal claim payout payload: %w", asynq.SkipRetry)
 	}
 
-	if err := ExecuteClaimPayoutAction(ctx, processor.store, processor.transferClient, payload.ActionID); err != nil {
+	if err := ExecuteClaimPayoutAction(ctx, processor.store, processor.distributor, processor.transferClient, payload.ActionID); err != nil {
 		return fmt.Errorf("failed to execute claim payout action: %w", err)
 	}
 
@@ -71,7 +72,7 @@ func (processor *RedisTaskProcessor) ProcessTaskClaimPayout(ctx context.Context,
 }
 
 // ExecuteClaimPayoutAction 执行索赔赔付动作，behavior_action 作为持久化 outbox。
-func ExecuteClaimPayoutAction(ctx context.Context, store db.Store, transferClient wechat.TransferClientInterface, actionID int64) error {
+func ExecuteClaimPayoutAction(ctx context.Context, store db.Store, distributor TaskDistributor, transferClient wechat.TransferClientInterface, actionID int64) error {
 	action, err := store.GetBehaviorAction(ctx, actionID)
 	if err != nil {
 		return fmt.Errorf("get behavior action: %w", err)
@@ -95,6 +96,18 @@ func ExecuteClaimPayoutAction(ctx context.Context, store db.Store, transferClien
 		_ = markClaimPayoutActionFailure(ctx, store, action.ID, detail, true)
 		return fmt.Errorf("invalid behavior action detail for claim payout")
 	}
+	if detail.ClaimID > 0 {
+		claim, err := store.GetClaim(ctx, detail.ClaimID)
+		if err != nil {
+			return fmt.Errorf("get claim for payout action: %w", err)
+		}
+		if claim.Status == db.ClaimStatusWithdrawn || claim.Status == db.ClaimStatusRejected {
+			detail.LastError = fmt.Sprintf("claim %d is not eligible for payout execution in status %s", detail.ClaimID, claim.Status)
+			detail.TerminalFailure = true
+			_ = markClaimPayoutActionFailure(ctx, store, action.ID, detail, true)
+			return nil
+		}
+	}
 	if transferClient == nil {
 		detail.LastError = "transfer client is not configured for claim payout"
 		detail.TerminalFailure = false
@@ -105,7 +118,7 @@ func ExecuteClaimPayoutAction(ctx context.Context, store db.Store, transferClien
 		return nil
 	}
 	if action.Status == "running" && detail.OutBillNo != "" {
-		resolved, err := reconcileClaimPayoutTransfer(ctx, store, transferClient, action.ID, &detail)
+		resolved, err := reconcileClaimPayoutTransfer(ctx, store, distributor, transferClient, action.ID, &detail)
 		if err != nil {
 			return err
 		}
@@ -156,7 +169,7 @@ func ExecuteClaimPayoutAction(ctx context.Context, store db.Store, transferClien
 		applyTransferCreateResponse(&detail, transferResp)
 	}
 
-	resolved, err := reconcileClaimPayoutTransfer(ctx, store, transferClient, action.ID, &detail)
+	resolved, err := reconcileClaimPayoutTransfer(ctx, store, distributor, transferClient, action.ID, &detail)
 	if err != nil {
 		return err
 	}
@@ -167,7 +180,7 @@ func ExecuteClaimPayoutAction(ctx context.Context, store db.Store, transferClien
 }
 
 // HandleClaimPayoutTransferNotification 根据商家转账终态通知推进平台赔付动作。
-func HandleClaimPayoutTransferNotification(ctx context.Context, store db.Store, actionID int64, resource *wechatcontracts.DirectMerchantTransferNotificationResource) error {
+func HandleClaimPayoutTransferNotification(ctx context.Context, store db.Store, distributor TaskDistributor, actionID int64, resource *wechatcontracts.DirectMerchantTransferNotificationResource) error {
 	if resource == nil {
 		return fmt.Errorf("claim payout transfer notification resource is nil")
 	}
@@ -193,7 +206,7 @@ func HandleClaimPayoutTransferNotification(ctx context.Context, store db.Store, 
 	applyTransferNotificationResource(&detail, resource)
 	switch classifyClaimPayoutTransferState(detail.TransferState) {
 	case claimPayoutTransferSucceeded:
-		if err := markClaimPayoutOutcome(ctx, store, detail); err != nil {
+		if err := markClaimPayoutOutcome(ctx, store, distributor, detail); err != nil {
 			return fmt.Errorf("mark claim payout outcome: %w", err)
 		}
 		executedAt := pgtype.Timestamptz{Time: time.Now(), Valid: true}
@@ -305,7 +318,7 @@ func applyTransferNotificationResource(detail *claimPayoutActionDetail, resource
 	detail.LastError = ""
 }
 
-func reconcileClaimPayoutTransfer(ctx context.Context, store db.Store, transferClient wechat.TransferClientInterface, actionID int64, detail *claimPayoutActionDetail) (bool, error) {
+func reconcileClaimPayoutTransfer(ctx context.Context, store db.Store, distributor TaskDistributor, transferClient wechat.TransferClientInterface, actionID int64, detail *claimPayoutActionDetail) (bool, error) {
 	if detail.OutBillNo == "" {
 		return false, nil
 	}
@@ -333,7 +346,7 @@ func reconcileClaimPayoutTransfer(ctx context.Context, store db.Store, transferC
 	applyTransferQueryResponse(detail, transferResp)
 	switch classifyClaimPayoutTransferState(detail.TransferState) {
 	case claimPayoutTransferSucceeded:
-		if err := markClaimPayoutOutcome(ctx, store, *detail); err != nil {
+		if err := markClaimPayoutOutcome(ctx, store, distributor, *detail); err != nil {
 			detail.LastError = err.Error()
 			if updateErr := updateClaimPayoutAction(ctx, store, actionID, "failed", *detail, pgtype.Timestamptz{}); updateErr != nil {
 				return true, fmt.Errorf("mark claim payout outcome: %w (persist detail: %v)", err, updateErr)
@@ -365,7 +378,7 @@ func reconcileClaimPayoutTransfer(ctx context.Context, store db.Store, transferC
 	}
 }
 
-func markClaimPayoutOutcome(ctx context.Context, store db.Store, detail claimPayoutActionDetail) error {
+func markClaimPayoutOutcome(ctx context.Context, store db.Store, distributor TaskDistributor, detail claimPayoutActionDetail) error {
 	switch {
 	case detail.AppealID > 0:
 		return store.MarkAppealCompensated(ctx, db.MarkAppealCompensatedParams{
@@ -373,13 +386,51 @@ func markClaimPayoutOutcome(ctx context.Context, store db.Store, detail claimPay
 			CompensatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
 		})
 	case detail.ClaimID > 0:
-		return store.MarkClaimPaid(ctx, db.MarkClaimPaidParams{
+		paidAt := pgtype.Timestamptz{Time: time.Now(), Valid: true}
+		if err := store.MarkClaimPaid(ctx, db.MarkClaimPaidParams{
 			ID:     detail.ClaimID,
-			PaidAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
-		})
+			PaidAt: paidAt,
+		}); err != nil {
+			return err
+		}
+		result, err := store.FinalizeClaimCompensationAfterPayoutTx(ctx, db.FinalizeClaimCompensationAfterPayoutTxParams{ClaimID: detail.ClaimID})
+		if err != nil {
+			return err
+		}
+		if err := enqueueClaimPostPayoutActions(ctx, distributor, result); err != nil {
+			log.Warn().Err(err).Int64("claim_id", detail.ClaimID).Msg("enqueue claim post-payout actions failed; recovery scheduler will retry")
+		}
+		return nil
 	default:
 		return fmt.Errorf("unsupported behavior action detail")
 	}
+}
+
+func enqueueClaimPostPayoutActions(ctx context.Context, distributor TaskDistributor, result db.FinalizeClaimCompensationAfterPayoutTxResult) error {
+	if distributor == nil {
+		return nil
+	}
+	if result.RestrictionAction != nil {
+		if err := distributor.DistributeTaskClaimBehaviorAction(
+			ctx,
+			&ClaimBehaviorActionPayload{ActionID: result.RestrictionAction.ID},
+			asynq.Queue(QueueCritical),
+			asynq.MaxRetry(10),
+		); err != nil {
+			return fmt.Errorf("enqueue claim restriction action %d: %w", result.RestrictionAction.ID, err)
+		}
+	}
+	if result.NotificationAction != nil {
+		if err := distributor.DistributeTaskClaimBehaviorAction(
+			ctx,
+			&ClaimBehaviorActionPayload{ActionID: result.NotificationAction.ID},
+			asynq.Queue(QueueDefault),
+			asynq.MaxRetry(5),
+		); err != nil {
+			return fmt.Errorf("enqueue claim notification action %d: %w", result.NotificationAction.ID, err)
+		}
+	}
+	return nil
 }
 
 type claimPayoutTransferResolution int

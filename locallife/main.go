@@ -236,6 +236,7 @@ func main() {
 	} else {
 		log.Warn().Msg("claim payout recovery scheduler disabled: transfer client not configured")
 	}
+	schedulerManager.Register("claim-behavior-action-recovery", worker.NewClaimBehaviorActionRecoveryScheduler(store, taskDistributor))
 	schedulerManager.Register("claim-recovery", worker.NewClaimRecoveryScheduler(store))
 	schedulerManager.Register("merchant-open-status", scheduler.NewMerchantOpenStatusScheduler(store))
 	schedulerManager.Register("order-timeout", scheduler.NewOrderTimeoutScheduler(store))

@@ -1115,7 +1115,7 @@ func (server *Server) handleMerchantTransferNotify(ctx *gin.Context) {
 		return
 	}
 
-	if err := worker.HandleClaimPayoutTransferNotification(ctx, server.store, actionID, resource); err != nil {
+	if err := worker.HandleClaimPayoutTransferNotification(ctx, server.store, server.taskDistributor, actionID, resource); err != nil {
 		paymentCallbackFailuresTotal.WithLabelValues("merchant_transfer", "apply_business").Inc()
 		log.Error().Err(err).Int64("behavior_action_id", actionID).Str("out_bill_no", resource.OutBillNo).Msg("apply merchant transfer notification failed")
 		server.releaseNotification(ctx, notification.ID, "merchant_transfer")

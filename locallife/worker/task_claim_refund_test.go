@@ -16,6 +16,10 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
+func expectClaimPayoutClaimLookup(store *mockdb.MockStore, claimID int64, status string) {
+	store.EXPECT().GetClaim(gomock.Any(), claimID).Return(db.Claim{ID: claimID, Status: status}, nil)
+}
+
 func TestProcessTaskClaimPayout_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -45,6 +49,7 @@ func TestProcessTaskClaimPayout_Success(t *testing.T) {
 	}
 
 	store.EXPECT().GetBehaviorAction(gomock.Any(), action.ID).Return(action, nil)
+	expectClaimPayoutClaimLookup(store, 11, db.ClaimStatusApproved)
 	store.EXPECT().GetUser(gomock.Any(), int64(22)).Return(db.User{ID: 22, WechatOpenid: "openid-22", FullName: "张三"}, nil)
 	transferClient.EXPECT().GetAppID().Return("wx-mini-app")
 	store.EXPECT().UpdateBehaviorActionExecution(gomock.Any(), gomock.Any()).DoAndReturn(
@@ -83,6 +88,7 @@ func TestProcessTaskClaimPayout_Success(t *testing.T) {
 			return nil
 		},
 	)
+	store.EXPECT().FinalizeClaimCompensationAfterPayoutTx(gomock.Any(), db.FinalizeClaimCompensationAfterPayoutTxParams{ClaimID: 11}).Return(db.FinalizeClaimCompensationAfterPayoutTxResult{Claim: db.Claim{ID: 11}}, nil)
 	store.EXPECT().UpdateBehaviorActionExecution(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, arg db.UpdateBehaviorActionExecutionParams) error {
 			require.Equal(t, action.ID, arg.ID)
@@ -131,6 +137,7 @@ func TestProcessTaskClaimPayout_FailureMarksActionFailed(t *testing.T) {
 	}
 
 	store.EXPECT().GetBehaviorAction(gomock.Any(), action.ID).Return(action, nil)
+	expectClaimPayoutClaimLookup(store, 11, db.ClaimStatusApproved)
 	store.EXPECT().GetUser(gomock.Any(), int64(22)).Return(db.User{ID: 22, WechatOpenid: "openid-22", FullName: "张三"}, nil)
 	transferClient.EXPECT().GetAppID().Return("wx-mini-app")
 	store.EXPECT().UpdateBehaviorActionExecution(gomock.Any(), gomock.Any()).DoAndReturn(
@@ -214,6 +221,7 @@ func TestProcessTaskClaimPayout_WechatCreateTransferErrorsPersistRetryableDetail
 			}
 
 			store.EXPECT().GetBehaviorAction(gomock.Any(), action.ID).Return(action, nil)
+			expectClaimPayoutClaimLookup(store, 11, db.ClaimStatusApproved)
 			store.EXPECT().GetUser(gomock.Any(), int64(22)).Return(db.User{ID: 22, WechatOpenid: "openid-22", FullName: "张三"}, nil)
 			transferClient.EXPECT().GetAppID().Return("wx-mini-app")
 			store.EXPECT().UpdateBehaviorActionExecution(gomock.Any(), gomock.Any()).DoAndReturn(
@@ -280,6 +288,7 @@ func TestProcessTaskClaimPayout_WithoutTransferClientRemainsRetryable(t *testing
 	}
 
 	store.EXPECT().GetBehaviorAction(gomock.Any(), action.ID).Return(action, nil)
+	expectClaimPayoutClaimLookup(store, 11, db.ClaimStatusApproved)
 	store.EXPECT().UpdateBehaviorActionExecution(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, arg db.UpdateBehaviorActionExecutionParams) error {
 			require.Equal(t, action.ID, arg.ID)
@@ -327,6 +336,7 @@ func TestProcessTaskClaimPayout_DuplicateTransferStillMarksClaimPaid(t *testing.
 	}
 
 	store.EXPECT().GetBehaviorAction(gomock.Any(), action.ID).Return(action, nil)
+	expectClaimPayoutClaimLookup(store, 11, db.ClaimStatusApproved)
 	store.EXPECT().GetUser(gomock.Any(), int64(22)).Return(db.User{ID: 22, WechatOpenid: "openid-22", FullName: "张三"}, nil)
 	transferClient.EXPECT().GetAppID().Return("wx-mini-app")
 	store.EXPECT().UpdateBehaviorActionExecution(gomock.Any(), gomock.Any()).DoAndReturn(
@@ -343,6 +353,7 @@ func TestProcessTaskClaimPayout_DuplicateTransferStillMarksClaimPaid(t *testing.
 		State:          wechatcontracts.DirectMerchantTransferStateSuccess,
 	}, nil)
 	store.EXPECT().MarkClaimPaid(gomock.Any(), gomock.Any()).Return(nil)
+	store.EXPECT().FinalizeClaimCompensationAfterPayoutTx(gomock.Any(), db.FinalizeClaimCompensationAfterPayoutTxParams{ClaimID: 11}).Return(db.FinalizeClaimCompensationAfterPayoutTxResult{Claim: db.Claim{ID: 11}}, nil)
 	store.EXPECT().UpdateBehaviorActionExecution(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, arg db.UpdateBehaviorActionExecutionParams) error {
 			require.Equal(t, action.ID, arg.ID)
@@ -351,6 +362,55 @@ func TestProcessTaskClaimPayout_DuplicateTransferStillMarksClaimPaid(t *testing.
 			var persisted claimPayoutActionDetail
 			require.NoError(t, json.Unmarshal(arg.Detail, &persisted))
 			require.Equal(t, wechatcontracts.DirectMerchantTransferStateSuccess, persisted.TransferState)
+			return nil
+		},
+	)
+
+	payloadBytes, err := json.Marshal(ClaimPayoutPayload{ActionID: action.ID})
+	require.NoError(t, err)
+
+	err = processor.ProcessTaskClaimPayout(context.Background(), asynq.NewTask(TaskClaimPayout, payloadBytes))
+	require.NoError(t, err)
+}
+
+func TestProcessTaskClaimPayout_WithdrawnClaimMarksTerminalFailure(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	transferClient := mockwechat.NewMockTransferClientInterface(ctrl)
+	processor := NewTestTaskProcessor(store, nil, nil, nil)
+	processor.SetTransferClient(transferClient)
+
+	detailBytes, err := json.Marshal(claimPayoutActionDetail{
+		ClaimID:    11,
+		UserID:     22,
+		Amount:     3300,
+		SourceType: "platform",
+		Remark:     "platform payout",
+	})
+	require.NoError(t, err)
+
+	action := db.BehaviorAction{
+		ID:           99,
+		DecisionID:   77,
+		ActionType:   "payout",
+		TargetEntity: "user",
+		Status:       "created",
+		Detail:       detailBytes,
+	}
+
+	store.EXPECT().GetBehaviorAction(gomock.Any(), action.ID).Return(action, nil)
+	expectClaimPayoutClaimLookup(store, 11, db.ClaimStatusWithdrawn)
+	store.EXPECT().UpdateBehaviorActionExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, arg db.UpdateBehaviorActionExecutionParams) error {
+			require.Equal(t, action.ID, arg.ID)
+			require.Equal(t, "failed", arg.Status)
+			var persisted claimPayoutActionDetail
+			require.NoError(t, json.Unmarshal(arg.Detail, &persisted))
+			require.True(t, persisted.TerminalFailure)
+			require.Contains(t, persisted.LastError, "claim 11 is not eligible for payout execution")
+			require.False(t, arg.ExecutedAt.Valid)
 			return nil
 		},
 	)
@@ -463,12 +523,14 @@ func TestProcessTaskClaimPayout_RunningActionQueriesUntilFinished(t *testing.T) 
 	}
 
 	store.EXPECT().GetBehaviorAction(gomock.Any(), action.ID).Return(action, nil)
+	expectClaimPayoutClaimLookup(store, 11, db.ClaimStatusApproved)
 	transferClient.EXPECT().QueryTransferByOutBillNo(gomock.Any(), claimPayoutOutBillNo(action.ID)).Return(&wechatcontracts.DirectMerchantTransferQueryResponse{
 		OutBillNo:      claimPayoutOutBillNo(action.ID),
 		TransferBillNo: "wx-bill-99",
 		State:          wechatcontracts.DirectMerchantTransferStateSuccess,
 	}, nil)
 	store.EXPECT().MarkClaimPaid(gomock.Any(), gomock.Any()).Return(nil)
+	store.EXPECT().FinalizeClaimCompensationAfterPayoutTx(gomock.Any(), db.FinalizeClaimCompensationAfterPayoutTxParams{ClaimID: 11}).Return(db.FinalizeClaimCompensationAfterPayoutTxResult{Claim: db.Claim{ID: 11}}, nil)
 	store.EXPECT().UpdateBehaviorActionExecution(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, arg db.UpdateBehaviorActionExecutionParams) error {
 			require.Equal(t, action.ID, arg.ID)
@@ -539,6 +601,7 @@ func TestProcessTaskClaimPayout_RunningActionQueryWechatErrorsPersistRetryableDe
 			}
 
 			store.EXPECT().GetBehaviorAction(gomock.Any(), action.ID).Return(action, nil)
+			expectClaimPayoutClaimLookup(store, 11, db.ClaimStatusApproved)
 			transferClient.EXPECT().QueryTransferByOutBillNo(gomock.Any(), claimPayoutOutBillNo(action.ID)).Return(nil, tc.wxErr)
 			store.EXPECT().UpdateBehaviorActionExecution(gomock.Any(), gomock.Any()).DoAndReturn(
 				func(ctx context.Context, arg db.UpdateBehaviorActionExecutionParams) error {
@@ -594,6 +657,7 @@ func TestProcessTaskClaimPayout_RunningActionQueryNotFoundKeepsActionRunning(t *
 	}
 
 	store.EXPECT().GetBehaviorAction(gomock.Any(), action.ID).Return(action, nil)
+	expectClaimPayoutClaimLookup(store, 11, db.ClaimStatusApproved)
 	transferClient.EXPECT().QueryTransferByOutBillNo(gomock.Any(), claimPayoutOutBillNo(action.ID)).Return(nil, &wechat.WechatPayError{StatusCode: 404, Code: "NOT_FOUND", Message: "单据不存在"})
 	store.EXPECT().UpdateBehaviorActionExecution(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, arg db.UpdateBehaviorActionExecutionParams) error {
@@ -668,6 +732,7 @@ func TestProcessTaskClaimPayout_RunningActionTerminalFailurePersistsFailureReaso
 			}
 
 			store.EXPECT().GetBehaviorAction(gomock.Any(), action.ID).Return(action, nil)
+			expectClaimPayoutClaimLookup(store, 11, db.ClaimStatusApproved)
 			transferClient.EXPECT().QueryTransferByOutBillNo(gomock.Any(), claimPayoutOutBillNo(action.ID)).Return(&wechatcontracts.DirectMerchantTransferQueryResponse{
 				OutBillNo:      claimPayoutOutBillNo(action.ID),
 				TransferBillNo: "wx-bill-99",

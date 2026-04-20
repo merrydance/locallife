@@ -1440,6 +1440,8 @@ func (server *Server) setupRouter() {
 	claimsGroup := authGroup.Group("/claims")
 	{
 		claimsGroup.POST("", server.SubmitClaim)
+		claimsGroup.POST("/:id/confirm-continue", server.ConfirmContinueClaim)
+		claimsGroup.POST("/:id/withdraw", server.WithdrawClaim)
 		claimsGroup.GET("", server.ListUserClaims)
 		claimsGroup.GET("/:id", server.GetClaimDetail)
 		// ReviewClaim 入口停止使用：裁决全自动，仅保留审计旁路

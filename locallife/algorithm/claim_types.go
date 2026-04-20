@@ -24,7 +24,6 @@ const (
 const (
 	DecisionModeMerchantRecovery = db.BehaviorDecisionModeMerchantRecovery
 	DecisionModeRiderRecovery    = db.BehaviorDecisionModeRiderRecovery
-	DecisionModePlatformFallback = db.BehaviorDecisionModePlatformFallback
 	DecisionModeUserRestricted   = db.BehaviorDecisionModeUserRestricted
 )
 
@@ -37,16 +36,16 @@ const (
 
 // Claim behavior statuses
 const (
-	ClaimBehaviorNormal           = "normal"
-	ClaimBehaviorWarned           = "warned"
-	ClaimBehaviorPlatformFallback = DecisionModePlatformFallback
-	ClaimBehaviorUserRestricted   = DecisionModeUserRestricted
+	ClaimBehaviorNormal         = "normal"
+	ClaimBehaviorWarned         = "warned"
+	ClaimBehaviorUserRestricted = DecisionModeUserRestricted
 )
 
 // Claim statuses
 const (
-	ClaimStatusPending      = "pending"
-	ClaimStatusAutoApproved = "auto-approved"
+	ClaimStatusPending                     = db.ClaimStatusPending
+	ClaimStatusAutoApproved                = db.ClaimStatusAutoApproved
+	ClaimStatusWaitingCustomerConfirmation = db.ClaimStatusWaitingCustomerConfirmation
 )
 
 // Behavior thresholds
@@ -91,7 +90,6 @@ func DecisionApprovalType(decisionType string) string {
 	case ApprovalTypeAuto,
 		DecisionModeMerchantRecovery,
 		DecisionModeRiderRecovery,
-		DecisionModePlatformFallback,
 		DecisionModeUserRestricted:
 		return ApprovalTypeAuto
 	default:

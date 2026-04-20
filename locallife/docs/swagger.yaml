@@ -482,11 +482,14 @@ definitions:
       compensation_source:
         description: merchant, rider, platform
         type: string
+      compensation_status:
+        type: string
+      customer_action:
+        type: string
+      customer_action_required:
+        type: boolean
       decision_status:
         description: auto-adjudicated
-        type: string
-      payout_eta:
-        description: 预计赔付时间
         type: string
       payout_status:
         description: processing, paid
@@ -494,7 +497,6 @@ definitions:
       reason:
         type: string
       status:
-        description: accepted
         type: string
       warning:
         description: 警告信息
@@ -9475,8 +9477,14 @@ definitions:
         type: integer
       claim_type:
         type: string
+      compensation_status:
+        type: string
       created_at:
         type: string
+      customer_action:
+        type: string
+      customer_action_required:
+        type: boolean
       decision_status:
         description: auto-adjudicated, rejected
         type: string
@@ -9486,8 +9494,6 @@ definitions:
         type: integer
       order_id:
         type: integer
-      payout_eta:
-        type: string
       payout_status:
         description: processing, paid
         type: string
@@ -9496,7 +9502,6 @@ definitions:
       reason:
         type: string
       status:
-        description: accepted, rejected
         type: string
     type: object
   api.userClaimsListResponse:
@@ -11384,6 +11389,100 @@ paths:
       security:
       - BearerAuth: []
       summary: 获取索赔详情
+      tags:
+      - 索赔管理
+  /v1/claims/{id}/confirm-continue:
+    post:
+      consumes:
+      - application/json
+      description: 用户确认继续已完成判责的索赔，系统进入补偿执行阶段
+      parameters:
+      - description: 索赔ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 索赔状态
+          schema:
+            $ref: '#/definitions/api.userClaimResponse'
+        "400":
+          description: 无效的索赔ID
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 该索赔不属于当前用户
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 索赔不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "409":
+          description: 当前索赔状态不允许继续
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 确认继续索赔
+      tags:
+      - 索赔管理
+  /v1/claims/{id}/withdraw:
+    post:
+      consumes:
+      - application/json
+      description: 用户撤回已完成判责但尚未进入补偿执行的索赔
+      parameters:
+      - description: 索赔ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 索赔状态
+          schema:
+            $ref: '#/definitions/api.userClaimResponse'
+        "400":
+          description: 无效的索赔ID
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 该索赔不属于当前用户
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 索赔不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "409":
+          description: 当前索赔状态不允许撤回
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 撤回索赔
       tags:
       - 索赔管理
   /v1/combos:

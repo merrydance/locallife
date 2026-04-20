@@ -26,12 +26,18 @@ const (
 	OrderExceptionStateFoodSafetyPaused = "food_safety_paused"
 	ClaimChannelFoodSafety              = "food_safety"
 
+	ClaimStatusPending                     = "pending"
+	ClaimStatusAutoApproved                = "auto-approved"
+	ClaimStatusWaitingCustomerConfirmation = "waiting_customer_confirmation"
+	ClaimStatusApproved                    = "approved"
+	ClaimStatusRejected                    = "rejected"
+	ClaimStatusWithdrawn                   = "withdrawn"
+
 	OrderTypeTakeout     = "takeout"
 	OrderTypeReservation = "reservation"
 
 	BehaviorDecisionModeMerchantRecovery = "merchant_recovery"
 	BehaviorDecisionModeRiderRecovery    = "rider_recovery"
-	BehaviorDecisionModePlatformFallback = "platform_fallback"
 	BehaviorDecisionModeUserRestricted   = "user_restricted"
 
 	BehaviorResponsibilityDomainMerchant = "merchant_domain"

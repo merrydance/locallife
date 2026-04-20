@@ -92,6 +92,8 @@ type Store interface {
 	CloseDiningSessionTx(ctx context.Context, arg CloseDiningSessionTxParams) (CloseDiningSessionTxResult, error)
 	// Behavior trace transactions
 	CreateClaimWithBehaviorTx(ctx context.Context, arg CreateClaimWithBehaviorTxParams) (CreateClaimWithBehaviorTxResult, error)
+	CreateClaimCompensationTx(ctx context.Context, arg CreateClaimCompensationTxParams) (CreateClaimCompensationTxResult, error)
+	FinalizeClaimCompensationAfterPayoutTx(ctx context.Context, arg FinalizeClaimCompensationAfterPayoutTxParams) (FinalizeClaimCompensationAfterPayoutTxResult, error)
 	CreateAppealWithRecoveryTx(ctx context.Context, arg CreateAppealWithRecoveryTxParams) (CreateAppealWithRecoveryTxResult, error)
 	ReviewAppealWithCompensationTx(ctx context.Context, arg ReviewAppealWithCompensationTxParams) (ReviewAppealWithCompensationTxResult, error)
 	// Group multi-store transactions

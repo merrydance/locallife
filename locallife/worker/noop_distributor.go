@@ -104,6 +104,10 @@ func (NoopTaskDistributor) DistributeTaskClaimPayout(ctx context.Context, payloa
 	return financialTaskDistributorUnavailable("claim payout")
 }
 
+func (NoopTaskDistributor) DistributeTaskClaimBehaviorAction(ctx context.Context, payload *ClaimBehaviorActionPayload, opts ...asynq.Option) error {
+	return errors.New("claim behavior action task distributor unavailable without redis")
+}
+
 func (NoopTaskDistributor) DistributeTaskMerchantApplicationBusinessLicenseOCR(ctx context.Context, applicationID int64, mediaAssetID int64, ocrJobID int64, opts ...asynq.Option) error {
 	return nil
 }

@@ -1825,7 +1825,7 @@ func (server *Server) processAppealResultInline(ctx *gin.Context, payload *worke
 			log.Error().Err(logic.LoggableError(err)).Int64("appeal_id", payload.AppealID).Int64("claimant_user_id", payload.ClaimantUserID).Msg("failed to penalize claimant inline after automatic appeal resolution")
 		}
 		if payload.CompensationActionID > 0 {
-			if err := worker.ExecuteClaimPayoutAction(ctx, server.store, server.transferClient, payload.CompensationActionID); err != nil {
+			if err := worker.ExecuteClaimPayoutAction(ctx, server.store, server.taskDistributor, server.transferClient, payload.CompensationActionID); err != nil {
 				mappedErr := logic.MapClaimPayoutTransferExecutionError(err)
 				log.Error().Err(logic.LoggableError(mappedErr)).Int64("appeal_id", payload.AppealID).Int64("behavior_action_id", payload.CompensationActionID).Msg("failed to execute appeal compensation action inline")
 				return mappedErr

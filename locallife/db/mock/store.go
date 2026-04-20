@@ -3063,6 +3063,21 @@ func (mr *MockStoreMockRecorder) CreateClaim(ctx, arg any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateClaim", reflect.TypeOf((*MockStore)(nil).CreateClaim), ctx, arg)
 }
 
+// CreateClaimCompensationTx mocks base method.
+func (m *MockStore) CreateClaimCompensationTx(ctx context.Context, arg db.CreateClaimCompensationTxParams) (db.CreateClaimCompensationTxResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateClaimCompensationTx", ctx, arg)
+	ret0, _ := ret[0].(db.CreateClaimCompensationTxResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateClaimCompensationTx indicates an expected call of CreateClaimCompensationTx.
+func (mr *MockStoreMockRecorder) CreateClaimCompensationTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateClaimCompensationTx", reflect.TypeOf((*MockStore)(nil).CreateClaimCompensationTx), ctx, arg)
+}
+
 // CreateClaimRecovery mocks base method.
 func (m *MockStore) CreateClaimRecovery(ctx context.Context, arg db.CreateClaimRecoveryParams) (db.ClaimRecovery, error) {
 	m.ctrl.T.Helper()
@@ -5639,6 +5654,21 @@ func (mr *MockStoreMockRecorder) FailPendingOCRJob(ctx, arg any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FailPendingOCRJob", reflect.TypeOf((*MockStore)(nil).FailPendingOCRJob), ctx, arg)
 }
 
+// FinalizeClaimCompensationAfterPayoutTx mocks base method.
+func (m *MockStore) FinalizeClaimCompensationAfterPayoutTx(ctx context.Context, arg db.FinalizeClaimCompensationAfterPayoutTxParams) (db.FinalizeClaimCompensationAfterPayoutTxResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FinalizeClaimCompensationAfterPayoutTx", ctx, arg)
+	ret0, _ := ret[0].(db.FinalizeClaimCompensationAfterPayoutTxResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FinalizeClaimCompensationAfterPayoutTx indicates an expected call of FinalizeClaimCompensationAfterPayoutTx.
+func (mr *MockStoreMockRecorder) FinalizeClaimCompensationAfterPayoutTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FinalizeClaimCompensationAfterPayoutTx", reflect.TypeOf((*MockStore)(nil).FinalizeClaimCompensationAfterPayoutTx), ctx, arg)
+}
+
 // FreezeUserBalance mocks base method.
 func (m *MockStore) FreezeUserBalance(ctx context.Context, arg db.FreezeUserBalanceParams) (db.UserBalance, error) {
 	m.ctrl.T.Helper()
@@ -7287,6 +7317,21 @@ func (m *MockStore) GetInventoryStats(ctx context.Context, arg db.GetInventorySt
 func (mr *MockStoreMockRecorder) GetInventoryStats(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetInventoryStats", reflect.TypeOf((*MockStore)(nil).GetInventoryStats), ctx, arg)
+}
+
+// GetLatestBehaviorDecisionByClaimID mocks base method.
+func (m *MockStore) GetLatestBehaviorDecisionByClaimID(ctx context.Context, claimID pgtype.Int8) (db.BehaviorDecision, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetLatestBehaviorDecisionByClaimID", ctx, claimID)
+	ret0, _ := ret[0].(db.BehaviorDecision)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetLatestBehaviorDecisionByClaimID indicates an expected call of GetLatestBehaviorDecisionByClaimID.
+func (mr *MockStoreMockRecorder) GetLatestBehaviorDecisionByClaimID(ctx, claimID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLatestBehaviorDecisionByClaimID", reflect.TypeOf((*MockStore)(nil).GetLatestBehaviorDecisionByClaimID), ctx, claimID)
 }
 
 // GetLatestEcommerceApplymentBySubject mocks base method.
@@ -17291,6 +17336,21 @@ func (mr *MockStoreMockRecorder) UpdateBehaviorActionExecution(ctx, arg any) *go
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateBehaviorActionExecution", reflect.TypeOf((*MockStore)(nil).UpdateBehaviorActionExecution), ctx, arg)
 }
 
+// UpdateBehaviorActionExecutionIfCurrent mocks base method.
+func (m *MockStore) UpdateBehaviorActionExecutionIfCurrent(ctx context.Context, arg db.UpdateBehaviorActionExecutionIfCurrentParams) (db.BehaviorAction, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateBehaviorActionExecutionIfCurrent", ctx, arg)
+	ret0, _ := ret[0].(db.BehaviorAction)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateBehaviorActionExecutionIfCurrent indicates an expected call of UpdateBehaviorActionExecutionIfCurrent.
+func (mr *MockStoreMockRecorder) UpdateBehaviorActionExecutionIfCurrent(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateBehaviorActionExecutionIfCurrent", reflect.TypeOf((*MockStore)(nil).UpdateBehaviorActionExecutionIfCurrent), ctx, arg)
+}
+
 // UpdateBehaviorActionStatus mocks base method.
 func (m *MockStore) UpdateBehaviorActionStatus(ctx context.Context, arg db.UpdateBehaviorActionStatusParams) error {
 	m.ctrl.T.Helper()
@@ -17447,6 +17507,21 @@ func (m *MockStore) UpdateClaimStatus(ctx context.Context, arg db.UpdateClaimSta
 func (mr *MockStoreMockRecorder) UpdateClaimStatus(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateClaimStatus", reflect.TypeOf((*MockStore)(nil).UpdateClaimStatus), ctx, arg)
+}
+
+// UpdateClaimStatusIfCurrent mocks base method.
+func (m *MockStore) UpdateClaimStatusIfCurrent(ctx context.Context, arg db.UpdateClaimStatusIfCurrentParams) (db.Claim, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateClaimStatusIfCurrent", ctx, arg)
+	ret0, _ := ret[0].(db.Claim)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateClaimStatusIfCurrent indicates an expected call of UpdateClaimStatusIfCurrent.
+func (mr *MockStoreMockRecorder) UpdateClaimStatusIfCurrent(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateClaimStatusIfCurrent", reflect.TypeOf((*MockStore)(nil).UpdateClaimStatusIfCurrent), ctx, arg)
 }
 
 // UpdateCloudPrinter mocks base method.

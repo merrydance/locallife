@@ -99,6 +99,25 @@ func (mr *MockTaskDistributorMockRecorder) DistributeTaskCheckRiderDamage(ctx, r
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DistributeTaskCheckRiderDamage", reflect.TypeOf((*MockTaskDistributor)(nil).DistributeTaskCheckRiderDamage), varargs...)
 }
 
+// DistributeTaskClaimBehaviorAction mocks base method.
+func (m *MockTaskDistributor) DistributeTaskClaimBehaviorAction(ctx context.Context, payload *worker.ClaimBehaviorActionPayload, opts ...asynq.Option) error {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, payload}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DistributeTaskClaimBehaviorAction", varargs...)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DistributeTaskClaimBehaviorAction indicates an expected call of DistributeTaskClaimBehaviorAction.
+func (mr *MockTaskDistributorMockRecorder) DistributeTaskClaimBehaviorAction(ctx, payload any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, payload}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DistributeTaskClaimBehaviorAction", reflect.TypeOf((*MockTaskDistributor)(nil).DistributeTaskClaimBehaviorAction), varargs...)
+}
+
 // DistributeTaskClaimPayout mocks base method.
 func (m *MockTaskDistributor) DistributeTaskClaimPayout(ctx context.Context, payload *worker.ClaimPayoutPayload, opts ...asynq.Option) error {
 	m.ctrl.T.Helper()

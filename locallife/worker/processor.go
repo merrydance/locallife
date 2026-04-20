@@ -246,6 +246,7 @@ func (processor *RedisTaskProcessor) Start() error {
 	mux.HandleFunc(TaskProcessAppealResult, processor.ProcessTaskProcessAppealResult)
 
 	// 索赔退款任务
+	mux.HandleFunc(TaskClaimBehaviorAction, processor.ProcessTaskClaimBehaviorAction)
 	mux.HandleFunc(TaskClaimPayout, processor.ProcessTaskClaimPayout)
 
 	// 进件/分账结果处理任务

@@ -719,6 +719,7 @@ type Querier interface {
 	GetHourlyDistribution(ctx context.Context, arg GetHourlyDistributionParams) ([]GetHourlyDistributionRow, error)
 	GetIngredient(ctx context.Context, id int64) (Ingredient, error)
 	GetInventoryStats(ctx context.Context, arg GetInventoryStatsParams) (GetInventoryStatsRow, error)
+	GetLatestBehaviorDecisionByClaimID(ctx context.Context, claimID pgtype.Int8) (BehaviorDecision, error)
 	GetLatestEcommerceApplymentBySubject(ctx context.Context, arg GetLatestEcommerceApplymentBySubjectParams) (EcommerceApplyment, error)
 	GetLatestGroupApplicationByApplicant(ctx context.Context, applicantUserID int64) (MerchantGroupApplication, error)
 	GetLatestOrderByReservation(ctx context.Context, reservationID pgtype.Int8) (Order, error)
@@ -1603,6 +1604,7 @@ type Querier interface {
 	UnsuspendMerchantTakeout(ctx context.Context, merchantID int64) error
 	UnsuspendRider(ctx context.Context, riderID int64) error
 	UpdateBehaviorActionExecution(ctx context.Context, arg UpdateBehaviorActionExecutionParams) error
+	UpdateBehaviorActionExecutionIfCurrent(ctx context.Context, arg UpdateBehaviorActionExecutionIfCurrentParams) (BehaviorAction, error)
 	UpdateBehaviorActionStatus(ctx context.Context, arg UpdateBehaviorActionStatusParams) error
 	UpdateBehaviorAppealStatus(ctx context.Context, arg UpdateBehaviorAppealStatusParams) error
 	UpdateBehaviorBlocklistStatus(ctx context.Context, arg UpdateBehaviorBlocklistStatusParams) error
@@ -1615,6 +1617,7 @@ type Querier interface {
 	UpdateCartItemQuantityRelative(ctx context.Context, arg UpdateCartItemQuantityRelativeParams) (CartItem, error)
 	UpdateClaimLookbackResult(ctx context.Context, arg UpdateClaimLookbackResultParams) error
 	UpdateClaimStatus(ctx context.Context, arg UpdateClaimStatusParams) error
+	UpdateClaimStatusIfCurrent(ctx context.Context, arg UpdateClaimStatusIfCurrentParams) (Claim, error)
 	UpdateCloudPrinter(ctx context.Context, arg UpdateCloudPrinterParams) (CloudPrinter, error)
 	UpdateCombinedPaymentOrderPrepay(ctx context.Context, arg UpdateCombinedPaymentOrderPrepayParams) (CombinedPaymentOrder, error)
 	UpdateCombinedPaymentOrderToClosed(ctx context.Context, id int64) (CombinedPaymentOrder, error)

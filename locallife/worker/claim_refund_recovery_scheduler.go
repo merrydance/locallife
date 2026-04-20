@@ -95,7 +95,7 @@ func (s *ClaimPayoutRecoveryScheduler) runOnce(ctx context.Context) {
 			if action.Status == "failed" && isClaimPayoutTerminalFailure(action.Detail) {
 				continue
 			}
-			if err := ExecuteClaimPayoutAction(ctx, s.store, s.transferClient, action.ID); err != nil {
+			if err := ExecuteClaimPayoutAction(ctx, s.store, nil, s.transferClient, action.ID); err != nil {
 				log.Error().Err(err).Int64("behavior_action_id", action.ID).Msg("recover claim payout action failed")
 			}
 		}

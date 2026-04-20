@@ -61,26 +61,30 @@ type reservationStatusResponse struct {
 }
 
 type claimSubmitResponse struct {
-	ClaimID            int64   `json:"claim_id"`
-	Status             string  `json:"status"`
-	DecisionStatus     string  `json:"decision_status"`
-	PayoutStatus       string  `json:"payout_status"`
-	ApprovedAmount     *int64  `json:"approved_amount"`
-	CompensationSource string  `json:"compensation_source"`
-	PayoutETA          *string `json:"payout_eta"`
-	Reason             string  `json:"reason"`
+	ClaimID                int64  `json:"claim_id"`
+	Status                 string `json:"status"`
+	DecisionStatus         string `json:"decision_status"`
+	CompensationStatus     string `json:"compensation_status"`
+	PayoutStatus           string `json:"payout_status"`
+	CustomerActionRequired bool   `json:"customer_action_required"`
+	CustomerAction         string `json:"customer_action"`
+	ApprovedAmount         *int64 `json:"approved_amount"`
+	CompensationSource     string `json:"compensation_source"`
+	Reason                 string `json:"reason"`
 }
 
 func requireAcceptedClaimSubmission(t *testing.T, claimResp claimSubmitResponse, approvedAmount int64) {
 	t.Helper()
 
 	require.NotZero(t, claimResp.ClaimID)
-	require.Equal(t, "accepted", claimResp.Status)
+	require.Equal(t, "warned_waiting_customer_confirmation", claimResp.Status)
 	require.Equal(t, "auto-adjudicated", claimResp.DecisionStatus)
-	require.Equal(t, "processing", claimResp.PayoutStatus)
+	require.Equal(t, "awaiting_compensation", claimResp.CompensationStatus)
+	require.Empty(t, claimResp.PayoutStatus)
+	require.True(t, claimResp.CustomerActionRequired)
+	require.Equal(t, "confirm_continue", claimResp.CustomerAction)
 	require.NotNil(t, claimResp.ApprovedAmount)
 	require.Equal(t, approvedAmount, *claimResp.ApprovedAmount)
-	require.NotNil(t, claimResp.PayoutETA)
 	require.NotEmpty(t, claimResp.CompensationSource)
 	require.NotEmpty(t, claimResp.Reason)
 }

@@ -95,6 +95,12 @@ SELECT id, order_id, user_id, merchant_id, rider_id, decision_version, reason_co
 WHERE id = $1
 LIMIT 1;
 
+-- name: GetLatestBehaviorDecisionByClaimID :one
+SELECT id, order_id, user_id, merchant_id, rider_id, decision_version, reason_codes, responsible_party, compensation_source, decision_status, trace_summary, created_at, updated_at, reservation_id, claim_id, decision_mode, responsibility_domain, payout_mode, effective_status, confidence_score, user_risk_score, merchant_liability_score, rider_liability_score, fallback_reason, restriction_reason, liability_shares, score_breakdown, graph_hits, fact_snapshot, supersedes_decision_id, overturned_by_decision_id, profile_effect_applied FROM behavior_decisions
+WHERE claim_id = $1
+ORDER BY created_at DESC, id DESC
+LIMIT 1;
+
 -- name: ListBehaviorDecisionsByOrder :many
 SELECT id, order_id, user_id, merchant_id, rider_id, decision_version, reason_codes, responsible_party, compensation_source, decision_status, trace_summary, created_at, updated_at, reservation_id, claim_id, decision_mode, responsibility_domain, payout_mode, effective_status, confidence_score, user_risk_score, merchant_liability_score, rider_liability_score, fallback_reason, restriction_reason, liability_shares, score_breakdown, graph_hits, fact_snapshot, supersedes_decision_id, overturned_by_decision_id, profile_effect_applied FROM behavior_decisions
 WHERE order_id = $1
@@ -187,7 +193,6 @@ SELECT
         COALESCE(SUM(delta_value) FILTER (WHERE metric_key = 'effective_liability_claims' AND status = 'applied'), 0)::BIGINT AS effective_liability_claims,
         COALESCE(SUM(delta_value) FILTER (WHERE metric_key = 'merchant_recovered_claims' AND status = 'applied'), 0)::BIGINT AS merchant_recovered_claims,
         COALESCE(SUM(delta_value) FILTER (WHERE metric_key = 'rider_recovered_claims' AND status = 'applied'), 0)::BIGINT AS rider_recovered_claims,
-        COALESCE(SUM(delta_value) FILTER (WHERE metric_key = 'platform_fallback_claims' AND status = 'applied'), 0)::BIGINT AS platform_fallback_claims,
         COALESCE(SUM(delta_value) FILTER (WHERE metric_key = 'malicious_confirmed_claims' AND status = 'applied'), 0)::BIGINT AS malicious_confirmed_claims
 FROM behavior_decision_effects
 WHERE entity_type = sqlc.arg('entity_type')
@@ -235,6 +240,15 @@ SET status = $2,
     detail = $3,
     executed_at = COALESCE(sqlc.narg('executed_at'), executed_at)
 WHERE id = $1;
+
+-- name: UpdateBehaviorActionExecutionIfCurrent :one
+UPDATE behavior_actions
+SET status = $3,
+        detail = COALESCE(sqlc.narg('detail'), detail),
+        executed_at = COALESCE(sqlc.narg('executed_at'), executed_at)
+WHERE id = $1
+    AND status = $2
+RETURNING *;
 
 -- name: GetBehaviorAction :one
 SELECT id, decision_id, action_type, target_entity, status, detail, executed_at, created_at FROM behavior_actions

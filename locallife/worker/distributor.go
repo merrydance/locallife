@@ -156,6 +156,13 @@ type TaskDistributor interface {
 		opts ...asynq.Option,
 	) error
 
+	// DistributeTaskClaimBehaviorAction 分发索赔行为动作执行任务
+	DistributeTaskClaimBehaviorAction(
+		ctx context.Context,
+		payload *ClaimBehaviorActionPayload,
+		opts ...asynq.Option,
+	) error
+
 	// ==================== 商户入驻证照OCR（异步） ====================
 
 	// DistributeTaskMerchantApplicationBusinessLicenseOCR 分发营业执照OCR任务

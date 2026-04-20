@@ -3454,6 +3454,79 @@ func (q *Queries) UpdateClaimStatus(ctx context.Context, arg UpdateClaimStatusPa
 	return err
 }
 
+const updateClaimStatusIfCurrent = `-- name: UpdateClaimStatusIfCurrent :one
+UPDATE claims
+SET status = $1,
+    approval_type = COALESCE($2, approval_type),
+    approved_amount = COALESCE($3, approved_amount),
+    is_malicious = COALESCE($4, is_malicious),
+    auto_approval_reason = COALESCE($5, auto_approval_reason),
+    rejection_reason = COALESCE($6, rejection_reason),
+    reviewer_id = COALESCE($7, reviewer_id),
+    review_notes = COALESCE($8, review_notes),
+    reviewed_at = COALESCE($9, reviewed_at),
+    paid_at = COALESCE($10, paid_at)
+WHERE id = $11
+  AND status = $12
+RETURNING id, order_id, user_id, claim_type, description, claim_amount, approved_amount, status, approval_type, is_malicious, lookback_result, auto_approval_reason, rejection_reason, reviewer_id, review_notes, created_at, reviewed_at, paid_at, decision_version, decision_reason
+`
+
+type UpdateClaimStatusIfCurrentParams struct {
+	Status             string             `json:"status"`
+	ApprovalType       pgtype.Text        `json:"approval_type"`
+	ApprovedAmount     pgtype.Int8        `json:"approved_amount"`
+	IsMalicious        pgtype.Bool        `json:"is_malicious"`
+	AutoApprovalReason pgtype.Text        `json:"auto_approval_reason"`
+	RejectionReason    pgtype.Text        `json:"rejection_reason"`
+	ReviewerID         pgtype.Int8        `json:"reviewer_id"`
+	ReviewNotes        pgtype.Text        `json:"review_notes"`
+	ReviewedAt         pgtype.Timestamptz `json:"reviewed_at"`
+	PaidAt             pgtype.Timestamptz `json:"paid_at"`
+	ID                 int64              `json:"id"`
+	CurrentStatus      string             `json:"current_status"`
+}
+
+func (q *Queries) UpdateClaimStatusIfCurrent(ctx context.Context, arg UpdateClaimStatusIfCurrentParams) (Claim, error) {
+	row := q.db.QueryRow(ctx, updateClaimStatusIfCurrent,
+		arg.Status,
+		arg.ApprovalType,
+		arg.ApprovedAmount,
+		arg.IsMalicious,
+		arg.AutoApprovalReason,
+		arg.RejectionReason,
+		arg.ReviewerID,
+		arg.ReviewNotes,
+		arg.ReviewedAt,
+		arg.PaidAt,
+		arg.ID,
+		arg.CurrentStatus,
+	)
+	var i Claim
+	err := row.Scan(
+		&i.ID,
+		&i.OrderID,
+		&i.UserID,
+		&i.ClaimType,
+		&i.Description,
+		&i.ClaimAmount,
+		&i.ApprovedAmount,
+		&i.Status,
+		&i.ApprovalType,
+		&i.IsMalicious,
+		&i.LookbackResult,
+		&i.AutoApprovalReason,
+		&i.RejectionReason,
+		&i.ReviewerID,
+		&i.ReviewNotes,
+		&i.CreatedAt,
+		&i.ReviewedAt,
+		&i.PaidAt,
+		&i.DecisionVersion,
+		&i.DecisionReason,
+	)
+	return i, err
+}
+
 const updateFoodSafetyCaseInvestigation = `-- name: UpdateFoodSafetyCaseInvestigation :one
 UPDATE food_safety_cases
 SET status = 'investigating',

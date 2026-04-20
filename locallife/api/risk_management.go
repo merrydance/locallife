@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -120,37 +121,37 @@ func applyClaimRuleDecisionOverride(decision *algorithm.Decision, ruleDecision r
 	// 真正的正式副作用仍以下游事务返回的 persisted behavior decision/action 为准，
 	// 这里不要重新派生 payout/recovery/block/notify 等执行动作。
 	normalizedAction := normalizeClaimRuleAction(ruleDecision.Action)
+	appliedAction := ""
 	switch normalizedAction {
-	case "platform-fallback":
-		decision.Type = algorithm.DecisionModePlatformFallback
-		decision.Approved = true
-		decision.CompensationSource = algorithm.CompensationSourcePlatform
-		decision.NeedsReview = false
 	case "merchant-recovery":
+		appliedAction = normalizedAction
 		decision.Type = algorithm.DecisionModeMerchantRecovery
 		decision.Approved = true
 		decision.CompensationSource = algorithm.CompensationSourceMerchant
 	case "rider-recovery":
+		appliedAction = normalizedAction
 		decision.Type = algorithm.DecisionModeRiderRecovery
 		decision.Approved = true
 		decision.CompensationSource = algorithm.CompensationSourceRider
 	case "user-restricted":
+		appliedAction = normalizedAction
 		decision.Type = algorithm.DecisionModeUserRestricted
 		decision.Approved = true
 		decision.BehaviorStatus = algorithm.ClaimBehaviorUserRestricted
 		decision.CompensationSource = algorithm.CompensationSourcePlatform
 	case "instant", "auto":
+		appliedAction = normalizedAction
 		decision.Type = normalizedAction
 	}
 
-	if ruleDecision.Reason != "" && normalizedAction != "" {
+	if ruleDecision.Reason != "" && appliedAction != "" {
 		decision.Reason = ruleDecision.Reason
-		if normalizedAction == "platform-fallback" || normalizedAction == "user-restricted" {
+		if appliedAction == "user-restricted" {
 			decision.Warning = ruleDecision.Reason
 		}
 	}
 
-	return normalizedAction
+	return appliedAction
 }
 
 // SubmitClaimRequest 提交索赔请求
@@ -164,43 +165,63 @@ type SubmitClaimRequest struct {
 
 // SubmitClaimResponse 索赔响应
 type SubmitClaimResponse struct {
-	ClaimID            int64   `json:"claim_id"`
-	Status             string  `json:"status"`                    // accepted
-	DecisionStatus     string  `json:"decision_status,omitempty"` // auto-adjudicated
-	PayoutStatus       string  `json:"payout_status,omitempty"`   // processing, paid
-	ApprovedAmount     *int64  `json:"approved_amount,omitempty"`
-	CompensationSource string  `json:"compensation_source,omitempty"` // merchant, rider, platform
-	Reason             string  `json:"reason"`
-	PayoutETA          *string `json:"payout_eta,omitempty"` // 预计赔付时间
-	Warning            *string `json:"warning,omitempty"`    // 警告信息
+	ClaimID                int64   `json:"claim_id"`
+	Status                 string  `json:"status"`
+	DecisionStatus         string  `json:"decision_status,omitempty"` // auto-adjudicated
+	CompensationStatus     string  `json:"compensation_status,omitempty"`
+	PayoutStatus           string  `json:"payout_status,omitempty"` // processing, paid
+	CustomerActionRequired bool    `json:"customer_action_required"`
+	CustomerAction         string  `json:"customer_action,omitempty"`
+	ApprovedAmount         *int64  `json:"approved_amount,omitempty"`
+	CompensationSource     string  `json:"compensation_source,omitempty"` // merchant, rider, platform
+	Reason                 string  `json:"reason"`
+	Warning                *string `json:"warning,omitempty"` // 警告信息
 }
 
 const (
-	submitClaimStatusAccepted                = "accepted"
-	submitClaimStatusRejected                = "rejected"
-	submitClaimDecisionStatusAutoAdjudicated = "auto-adjudicated"
-	submitClaimDecisionStatusRejected        = "rejected"
-	submitClaimPayoutStatusProcessing        = "processing"
-	submitClaimPayoutStatusPaid              = "paid"
+	submitClaimStatusAccepted                 = "accepted"
+	submitClaimStatusRejected                 = "rejected"
+	submitClaimStatusClosed                   = "closed"
+	submitClaimStatusWaitingCustomerConfirm   = "warned_waiting_customer_confirmation"
+	submitClaimDecisionStatusAutoAdjudicated  = "auto-adjudicated"
+	submitClaimDecisionStatusRejected         = "rejected"
+	submitClaimCompensationStatusAwaiting     = "awaiting_compensation"
+	submitClaimCompensationStatusCompensating = "compensating"
+	submitClaimCompensationStatusCompensated  = "compensated"
+	submitClaimPayoutStatusProcessing         = "processing"
+	submitClaimPayoutStatusPaid               = "paid"
+	claimCustomerActionConfirmContinue        = "confirm_continue"
+	claimReviewNoteCustomerWithdrawn          = "claim withdrawn by customer before compensation execution"
+	claimReasonCustomerWithdrawn              = "用户已主动撤回索赔，未进入补偿执行"
 )
 
-func submitClaimPayoutETA(decisionType string) *string {
-	eta := "1-3个工作日"
-	if decisionType == algorithm.ApprovalTypeInstant {
-		eta = "即时到账"
-	}
-	return &eta
+func claimWasWithdrawnByCustomer(claim db.Claim) bool {
+	return claim.Status == db.ClaimStatusWithdrawn
 }
 
-func claimApprovalTypeValue(claim db.Claim) string {
-	if claim.ApprovalType.Valid {
-		return claim.ApprovalType.String
+func claimAwaitingCustomerConfirmation(claim db.Claim) bool {
+	if !claim.ApprovedAmount.Valid || claim.ApprovedAmount.Int64 <= 0 || claim.PaidAt.Valid {
+		return false
 	}
-	return ""
+
+	return claim.Status == db.ClaimStatusWaitingCustomerConfirmation
+}
+
+// claimLegacyCompensating keeps pre-confirmation rollout rows readable as processing.
+// New compensation writes must not treat auto-approved as an executable state.
+func claimLegacyCompensating(claim db.Claim) bool {
+	if !claim.ApprovedAmount.Valid || claim.ApprovedAmount.Int64 <= 0 || claim.PaidAt.Valid {
+		return false
+	}
+
+	return claim.Status == db.ClaimStatusAutoApproved
 }
 
 func userClaimReason(claim db.Claim) string {
-	if claim.Status == "rejected" {
+	if claimWasWithdrawnByCustomer(claim) {
+		return claimReasonCustomerWithdrawn
+	}
+	if claim.Status == db.ClaimStatusRejected {
 		if claim.RejectionReason.Valid && claim.RejectionReason.String != "" {
 			return claim.RejectionReason.String
 		}
@@ -221,6 +242,9 @@ func userClaimReason(claim db.Claim) string {
 }
 
 func userClaimProcessedAt(claim db.Claim) *time.Time {
+	if claimWasWithdrawnByCustomer(claim) && claim.ReviewedAt.Valid {
+		return &claim.ReviewedAt.Time
+	}
 	if claim.PaidAt.Valid {
 		return &claim.PaidAt.Time
 	}
@@ -230,27 +254,43 @@ func userClaimProcessedAt(claim db.Claim) *time.Time {
 	return nil
 }
 
-func userClaimLifecycleFromClaim(claim db.Claim) (string, string, string, *string) {
-	if claim.Status == "rejected" {
-		return submitClaimStatusRejected, submitClaimDecisionStatusRejected, "", nil
+func userClaimLifecycleFromClaim(claim db.Claim) (string, string, string, string, bool, string) {
+	if claimWasWithdrawnByCustomer(claim) {
+		decisionStatus := ""
+		if claim.ApprovedAmount.Valid && claim.ApprovedAmount.Int64 > 0 {
+			decisionStatus = submitClaimDecisionStatusAutoAdjudicated
+		}
+		return submitClaimStatusClosed, decisionStatus, "", "", false, ""
+	}
+
+	if claim.Status == db.ClaimStatusRejected {
+		return submitClaimStatusRejected, submitClaimDecisionStatusRejected, "", "", false, ""
 	}
 
 	status := submitClaimStatusAccepted
 	decisionStatus := ""
+	compensationStatus := ""
 	payoutStatus := ""
-	var payoutETA *string
+	customerActionRequired := false
+	customerAction := ""
 
 	if claim.ApprovedAmount.Valid && claim.ApprovedAmount.Int64 > 0 {
 		decisionStatus = submitClaimDecisionStatusAutoAdjudicated
 		if claim.PaidAt.Valid {
+			compensationStatus = submitClaimCompensationStatusCompensated
 			payoutStatus = submitClaimPayoutStatusPaid
-		} else {
+		} else if claim.Status == db.ClaimStatusApproved || claimLegacyCompensating(claim) {
+			compensationStatus = submitClaimCompensationStatusCompensating
 			payoutStatus = submitClaimPayoutStatusProcessing
-			payoutETA = submitClaimPayoutETA(claimApprovalTypeValue(claim))
+		} else if claimAwaitingCustomerConfirmation(claim) {
+			status = submitClaimStatusWaitingCustomerConfirm
+			compensationStatus = submitClaimCompensationStatusAwaiting
+			customerActionRequired = true
+			customerAction = claimCustomerActionConfirmContinue
 		}
 	}
 
-	return status, decisionStatus, payoutStatus, payoutETA
+	return status, decisionStatus, compensationStatus, payoutStatus, customerActionRequired, customerAction
 }
 
 // SubmitClaim 提交索赔
@@ -463,16 +503,11 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 		}
 		decision, err := server.rulesEngine.Evaluate(ctx, ruleInput)
 		if err != nil {
-			// 规则引擎故障时仍继续自动裁定，不再转人工审核。
+			// 规则引擎故障时仍继续 deterministic claims adjudication，不允许回落到平台兜底模式。
 			log.Error().Err(err).
 				Int64("order_id", req.OrderID).
 				Int64("user_id", authPayload.UserID).
-				Msg("Rules engine evaluation failed, falling back to deterministic platform_fallback adjudication")
-
-			ruleDecision = rules.Decision{
-				Action: "platform-fallback",
-				Reason: "系统风控服务暂时不可用，已按平台自动裁定继续处理",
-			}
+				Msg("Rules engine evaluation failed, continuing deterministic claims adjudication")
 		} else {
 			server.recordRuleHit(ctx, ruleInput, decision, RoleCustomer)
 			ruleDecision = decision
@@ -555,13 +590,18 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 	recoveryAmount := decision.Amount
 	if ruleDecision.Meta != nil {
 		if v, ok := ruleDecision.Meta["responsible_party"].(string); ok && v != "" {
-			responsibleParty = v
+			switch v {
+			case "merchant", "rider", "user":
+				responsibleParty = v
+			}
 		}
 		if v, ok := ruleDecision.Meta["recovery_required"].(bool); ok {
 			recoveryRequired = v
 		}
 		if v, ok := ruleDecision.Meta["recovery_target"].(string); ok && v != "" {
-			recoveryTarget = v
+			if v == "merchant" || v == "rider" {
+				recoveryTarget = v
+			}
 		}
 		if v, ok := ruleDecision.Meta["recovery_amount"].(float64); ok {
 			recoveryAmount = int64(v)
@@ -570,12 +610,6 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 			recoveryAmount = v
 		}
 	}
-	if responsibleParty == "platform_fallback" {
-		decision.CompensationSource = algorithm.CompensationSourcePlatform
-		decision.Type = algorithm.DecisionModePlatformFallback
-		recoveryRequired = false
-		recoveryTarget = ""
-	}
 	if responsibleParty == "unknown" && decision.CompensationSource != "" {
 		switch decision.CompensationSource {
 		case algorithm.CompensationSourceMerchant:
@@ -583,12 +617,10 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 		case algorithm.CompensationSourceRider:
 			responsibleParty = "rider"
 		case algorithm.CompensationSourcePlatform:
-			responsibleParty = "platform_fallback"
+			if decision.Type == algorithm.DecisionModeUserRestricted || decision.BehaviorStatus == algorithm.ClaimBehaviorUserRestricted {
+				responsibleParty = "user"
+			}
 		}
-	}
-	if responsibleParty == "platform_fallback" {
-		recoveryRequired = false
-		recoveryTarget = ""
 	}
 	if !recoveryRequired {
 		recoveryRequired = responsibleParty == "merchant" || responsibleParty == "rider"
@@ -623,11 +655,6 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 			DecisionSnapshot: decisionSnapshotJSON,
 		}
 	}
-	if decision.Approved && decision.Amount > 0 && server.transferClient == nil {
-		ctx.JSON(http.StatusServiceUnavailable, errorResponse(ErrClaimPayoutServiceUnavailable))
-		return
-	}
-
 	// 创建索赔记录（必要时在同一事务中创建追偿单）
 	claim, err := approver.CreateClaimWithDecisionAndEvidence(
 		ctx,
@@ -646,18 +673,21 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 	}
 
 	// 构造响应
+	status, decisionStatus, compensationStatus, payoutStatus, customerActionRequired, customerAction := userClaimLifecycleFromClaim(*claim)
 	resp := SubmitClaimResponse{
-		ClaimID:            claim.ID,
-		Status:             submitClaimStatusAccepted,
-		CompensationSource: decision.CompensationSource,
-		Reason:             decision.Reason,
+		ClaimID:                claim.ID,
+		Status:                 status,
+		DecisionStatus:         decisionStatus,
+		CompensationStatus:     compensationStatus,
+		PayoutStatus:           payoutStatus,
+		CustomerActionRequired: customerActionRequired,
+		CustomerAction:         customerAction,
+		CompensationSource:     decision.CompensationSource,
+		Reason:                 decision.Reason,
 	}
 
 	if decision.Approved {
 		resp.ApprovedAmount = &decision.Amount
-		resp.DecisionStatus = submitClaimDecisionStatusAutoAdjudicated
-		resp.PayoutStatus = submitClaimPayoutStatusProcessing
-		resp.PayoutETA = submitClaimPayoutETA(algorithm.DecisionApprovalType(decision.Type))
 	}
 
 	// 如果有警告信息，添加到响应
@@ -670,14 +700,11 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 		"claim_type":          req.ClaimType,
 		"status":              resp.Status,
 		"decision_status":     resp.DecisionStatus,
-		"payout_status":       resp.PayoutStatus,
+		"compensation_status": resp.CompensationStatus,
 		"compensation_source": resp.CompensationSource,
 		"requested_amount":    req.ClaimAmount,
 		"approved_amount":     decision.Amount,
 		"auto_adjudicated":    decision.Approved,
-	}
-	if resp.PayoutETA != nil {
-		metadata["payout_eta"] = *resp.PayoutETA
 	}
 	if resp.Warning != nil {
 		metadata["warning"] = *resp.Warning
@@ -1411,19 +1438,21 @@ func (server *Server) ResumeRider(ctx *gin.Context) {
 // ==================== 用户索赔查询 API ====================
 
 type userClaimResponse struct {
-	ID             int64      `json:"id"`
-	OrderID        int64      `json:"order_id"`
-	ClaimType      string     `json:"claim_type"`
-	Description    string     `json:"description"`
-	ClaimAmount    int64      `json:"claim_amount"`
-	ApprovedAmount *int64     `json:"approved_amount,omitempty"`
-	Status         string     `json:"status"`                    // accepted, rejected
-	DecisionStatus string     `json:"decision_status,omitempty"` // auto-adjudicated, rejected
-	PayoutStatus   string     `json:"payout_status,omitempty"`   // processing, paid
-	Reason         string     `json:"reason,omitempty"`
-	PayoutETA      *string    `json:"payout_eta,omitempty"`
-	CreatedAt      time.Time  `json:"created_at"`
-	ProcessedAt    *time.Time `json:"processed_at,omitempty"`
+	ID                     int64      `json:"id"`
+	OrderID                int64      `json:"order_id"`
+	ClaimType              string     `json:"claim_type"`
+	Description            string     `json:"description"`
+	ClaimAmount            int64      `json:"claim_amount"`
+	ApprovedAmount         *int64     `json:"approved_amount,omitempty"`
+	Status                 string     `json:"status"`
+	DecisionStatus         string     `json:"decision_status,omitempty"` // auto-adjudicated, rejected
+	CompensationStatus     string     `json:"compensation_status,omitempty"`
+	PayoutStatus           string     `json:"payout_status,omitempty"` // processing, paid
+	CustomerActionRequired bool       `json:"customer_action_required"`
+	CustomerAction         string     `json:"customer_action,omitempty"`
+	Reason                 string     `json:"reason,omitempty"`
+	CreatedAt              time.Time  `json:"created_at"`
+	ProcessedAt            *time.Time `json:"processed_at,omitempty"`
 }
 
 type riderSuspendResponse struct {
@@ -1440,20 +1469,22 @@ type userClaimsListResponse struct {
 }
 
 func newUserClaimResponse(claim db.Claim) userClaimResponse {
-	status, decisionStatus, payoutStatus, payoutETA := userClaimLifecycleFromClaim(claim)
+	status, decisionStatus, compensationStatus, payoutStatus, customerActionRequired, customerAction := userClaimLifecycleFromClaim(claim)
 	resp := userClaimResponse{
-		ID:             claim.ID,
-		OrderID:        claim.OrderID,
-		ClaimType:      claim.ClaimType,
-		Description:    claim.Description,
-		ClaimAmount:    claim.ClaimAmount,
-		Status:         status,
-		DecisionStatus: decisionStatus,
-		PayoutStatus:   payoutStatus,
-		Reason:         userClaimReason(claim),
-		PayoutETA:      payoutETA,
-		CreatedAt:      claim.CreatedAt,
-		ProcessedAt:    userClaimProcessedAt(claim),
+		ID:                     claim.ID,
+		OrderID:                claim.OrderID,
+		ClaimType:              claim.ClaimType,
+		Description:            claim.Description,
+		ClaimAmount:            claim.ClaimAmount,
+		Status:                 status,
+		DecisionStatus:         decisionStatus,
+		CompensationStatus:     compensationStatus,
+		PayoutStatus:           payoutStatus,
+		CustomerActionRequired: customerActionRequired,
+		CustomerAction:         customerAction,
+		Reason:                 userClaimReason(claim),
+		CreatedAt:              claim.CreatedAt,
+		ProcessedAt:            userClaimProcessedAt(claim),
 	}
 
 	if claim.ApprovedAmount.Valid {
@@ -1461,6 +1492,127 @@ func newUserClaimResponse(claim db.Claim) userClaimResponse {
 	}
 
 	return resp
+}
+
+func (server *Server) enqueueClaimCompensationActions(ctx context.Context, result db.CreateClaimCompensationTxResult) error {
+	if result.RestrictionAction != nil {
+		if err := server.taskDistributor.DistributeTaskClaimBehaviorAction(
+			ctx,
+			&worker.ClaimBehaviorActionPayload{ActionID: result.RestrictionAction.ID},
+			asynq.Queue(worker.QueueCritical),
+			asynq.MaxRetry(10),
+		); err != nil {
+			return fmt.Errorf("enqueue claim restriction action %d: %w", result.RestrictionAction.ID, err)
+		}
+	}
+
+	if result.NotificationAction != nil {
+		if err := server.taskDistributor.DistributeTaskClaimBehaviorAction(
+			ctx,
+			&worker.ClaimBehaviorActionPayload{ActionID: result.NotificationAction.ID},
+			asynq.Queue(worker.QueueDefault),
+			asynq.MaxRetry(5),
+		); err != nil {
+			return fmt.Errorf("enqueue claim notification action %d: %w", result.NotificationAction.ID, err)
+		}
+	}
+
+	if result.PayoutAction != nil {
+		if err := server.taskDistributor.DistributeTaskClaimPayout(
+			ctx,
+			&worker.ClaimPayoutPayload{ActionID: result.PayoutAction.ID},
+			asynq.Queue(worker.QueueCritical),
+			asynq.MaxRetry(10),
+		); err != nil {
+			return fmt.Errorf("enqueue claim payout action %d: %w", result.PayoutAction.ID, err)
+		}
+	}
+
+	return nil
+}
+
+// WithdrawClaim 撤回尚未进入补偿执行的索赔
+// @Summary 撤回索赔
+// @Description 用户撤回已完成判责但尚未进入补偿执行的索赔
+// @Tags 索赔管理
+// @Accept json
+// @Produce json
+// @Param id path int true "索赔ID"
+// @Success 200 {object} userClaimResponse "索赔状态"
+// @Failure 400 {object} ErrorResponse "无效的索赔ID"
+// @Failure 401 {object} ErrorResponse "未授权"
+// @Failure 403 {object} ErrorResponse "该索赔不属于当前用户"
+// @Failure 404 {object} ErrorResponse "索赔不存在"
+// @Failure 409 {object} ErrorResponse "当前索赔状态不允许撤回"
+// @Failure 500 {object} ErrorResponse "内部错误"
+// @Router /v1/claims/{id}/withdraw [post]
+// @Security BearerAuth
+func (server *Server) WithdrawClaim(ctx *gin.Context) {
+	claimIDStr := ctx.Param("id")
+	claimID, err := strconv.ParseInt(claimIDStr, 10, 64)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidClaimID))
+		return
+	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
+	claim, err := server.store.GetClaim(ctx, claimID)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrClaimNotFound))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get claim %d: %w", claimID, err)))
+		return
+	}
+
+	if claim.UserID != authPayload.UserID {
+		ctx.JSON(http.StatusForbidden, errorResponse(ErrClaimNotOwned))
+		return
+	}
+
+	if claimWasWithdrawnByCustomer(claim) {
+		ctx.JSON(http.StatusOK, newUserClaimResponse(claim))
+		return
+	}
+
+	if claim.Status == db.ClaimStatusApproved || claim.PaidAt.Valid || claim.Status == db.ClaimStatusRejected || !claim.ApprovedAmount.Valid || claim.ApprovedAmount.Int64 <= 0 || !claimAwaitingCustomerConfirmation(claim) {
+		ctx.JSON(http.StatusConflict, errorResponse(ErrClaimCannotBeWithdrawn))
+		return
+	}
+
+	withdrewAt := pgtype.Timestamptz{Time: time.Now(), Valid: true}
+	updatedClaim, err := server.store.UpdateClaimStatusIfCurrent(ctx, db.UpdateClaimStatusIfCurrentParams{
+		ID:            claim.ID,
+		CurrentStatus: claim.Status,
+		Status:        db.ClaimStatusWithdrawn,
+		ReviewNotes:   pgtype.Text{String: claimReviewNoteCustomerWithdrawn, Valid: true},
+		ReviewedAt:    withdrewAt,
+	})
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusConflict, errorResponse(ErrClaimCannotBeWithdrawn))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("withdraw claim %d: %w", claim.ID, err)))
+		return
+	}
+
+	server.writeAuditLog(ctx, AuditLogInput{
+		ActorUserID: authPayload.UserID,
+		ActorRole:   "customer",
+		Action:      "user_claim_withdrawn",
+		TargetType:  "claim",
+		TargetID:    &claim.ID,
+		Metadata: map[string]any{
+			"claim_id": claim.ID,
+			"order_id": claim.OrderID,
+			"status":   submitClaimStatusClosed,
+		},
+	})
+
+	ctx.JSON(http.StatusOK, newUserClaimResponse(updatedClaim))
 }
 
 // ListUserClaims 获取用户的索赔列表
@@ -1564,4 +1716,92 @@ func (server *Server) GetClaimDetail(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, newUserClaimResponse(claim))
+}
+
+// ConfirmContinueClaim 确认继续索赔并进入补偿阶段
+// @Summary 确认继续索赔
+// @Description 用户确认继续已完成判责的索赔，系统进入补偿执行阶段
+// @Tags 索赔管理
+// @Accept json
+// @Produce json
+// @Param id path int true "索赔ID"
+// @Success 200 {object} userClaimResponse "索赔状态"
+// @Failure 400 {object} ErrorResponse "无效的索赔ID"
+// @Failure 401 {object} ErrorResponse "未授权"
+// @Failure 403 {object} ErrorResponse "该索赔不属于当前用户"
+// @Failure 404 {object} ErrorResponse "索赔不存在"
+// @Failure 409 {object} ErrorResponse "当前索赔状态不允许继续"
+// @Failure 500 {object} ErrorResponse "内部错误"
+// @Router /v1/claims/{id}/confirm-continue [post]
+// @Security BearerAuth
+func (server *Server) ConfirmContinueClaim(ctx *gin.Context) {
+	claimIDStr := ctx.Param("id")
+	claimID, err := strconv.ParseInt(claimIDStr, 10, 64)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidClaimID))
+		return
+	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
+	claim, err := server.store.GetClaim(ctx, claimID)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrClaimNotFound))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get claim %d: %w", claimID, err)))
+		return
+	}
+
+	if claim.UserID != authPayload.UserID {
+		ctx.JSON(http.StatusForbidden, errorResponse(ErrClaimNotOwned))
+		return
+	}
+
+	if claimWasWithdrawnByCustomer(claim) || claim.Status == db.ClaimStatusRejected || !claim.ApprovedAmount.Valid || claim.ApprovedAmount.Int64 <= 0 {
+		ctx.JSON(http.StatusConflict, errorResponse(ErrClaimCannotContinue))
+		return
+	}
+
+	if claim.PaidAt.Valid {
+		ctx.JSON(http.StatusOK, newUserClaimResponse(claim))
+		return
+	}
+
+	if claim.Status != db.ClaimStatusApproved && !claimAwaitingCustomerConfirmation(claim) {
+		ctx.JSON(http.StatusConflict, errorResponse(ErrClaimCannotContinue))
+		return
+	}
+
+	result, err := server.store.CreateClaimCompensationTx(ctx, db.CreateClaimCompensationTxParams{ClaimID: claim.ID})
+	if err != nil {
+		if db.IsClaimCompensationNotEligible(err) {
+			ctx.JSON(http.StatusConflict, errorResponse(ErrClaimCannotContinue))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("create claim compensation tx: %w", err)))
+		return
+	}
+
+	if err := server.enqueueClaimCompensationActions(ctx, result); err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("enqueue claim compensation actions: %w", err)))
+		return
+	}
+
+	server.writeAuditLog(ctx, AuditLogInput{
+		ActorUserID: authPayload.UserID,
+		ActorRole:   "customer",
+		Action:      "user_claim_continue_confirmed",
+		TargetType:  "claim",
+		TargetID:    &claim.ID,
+		Metadata: map[string]any{
+			"claim_id":               claim.ID,
+			"compensation_triggered": result.PayoutAction != nil,
+			"recovery_created":       result.RecoveryAction != nil,
+			"restriction_created":    result.RestrictionAction != nil,
+		},
+	})
+
+	ctx.JSON(http.StatusOK, newUserClaimResponse(result.Claim))
 }

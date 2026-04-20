@@ -266,6 +266,22 @@ SET status = $2,
     paid_at = COALESCE(sqlc.narg('paid_at'), paid_at)
 WHERE id = $1;
 
+-- name: UpdateClaimStatusIfCurrent :one
+UPDATE claims
+SET status = sqlc.arg('status'),
+    approval_type = COALESCE(sqlc.narg('approval_type'), approval_type),
+    approved_amount = COALESCE(sqlc.narg('approved_amount'), approved_amount),
+    is_malicious = COALESCE(sqlc.narg('is_malicious'), is_malicious),
+    auto_approval_reason = COALESCE(sqlc.narg('auto_approval_reason'), auto_approval_reason),
+    rejection_reason = COALESCE(sqlc.narg('rejection_reason'), rejection_reason),
+    reviewer_id = COALESCE(sqlc.narg('reviewer_id'), reviewer_id),
+    review_notes = COALESCE(sqlc.narg('review_notes'), review_notes),
+    reviewed_at = COALESCE(sqlc.narg('reviewed_at'), reviewed_at),
+    paid_at = COALESCE(sqlc.narg('paid_at'), paid_at)
+WHERE id = sqlc.arg('id')
+  AND status = sqlc.arg('current_status')
+RETURNING id, order_id, user_id, claim_type, description, claim_amount, approved_amount, status, approval_type, is_malicious, lookback_result, auto_approval_reason, rejection_reason, reviewer_id, review_notes, created_at, reviewed_at, paid_at, decision_version, decision_reason;
+
 -- name: UpdateClaimLookbackResult :exec
 UPDATE claims
 SET lookback_result = $2

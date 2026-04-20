@@ -607,7 +607,6 @@ SELECT
         COALESCE(SUM(delta_value) FILTER (WHERE metric_key = 'effective_liability_claims' AND status = 'applied'), 0)::BIGINT AS effective_liability_claims,
         COALESCE(SUM(delta_value) FILTER (WHERE metric_key = 'merchant_recovered_claims' AND status = 'applied'), 0)::BIGINT AS merchant_recovered_claims,
         COALESCE(SUM(delta_value) FILTER (WHERE metric_key = 'rider_recovered_claims' AND status = 'applied'), 0)::BIGINT AS rider_recovered_claims,
-        COALESCE(SUM(delta_value) FILTER (WHERE metric_key = 'platform_fallback_claims' AND status = 'applied'), 0)::BIGINT AS platform_fallback_claims,
         COALESCE(SUM(delta_value) FILTER (WHERE metric_key = 'malicious_confirmed_claims' AND status = 'applied'), 0)::BIGINT AS malicious_confirmed_claims
 FROM behavior_decision_effects
 WHERE entity_type = $1
@@ -629,7 +628,6 @@ type GetBehaviorEffectSummaryRow struct {
 	EffectiveLiabilityClaims int64 `json:"effective_liability_claims"`
 	MerchantRecoveredClaims  int64 `json:"merchant_recovered_claims"`
 	RiderRecoveredClaims     int64 `json:"rider_recovered_claims"`
-	PlatformFallbackClaims   int64 `json:"platform_fallback_claims"`
 	MaliciousConfirmedClaims int64 `json:"malicious_confirmed_claims"`
 }
 
@@ -647,8 +645,54 @@ func (q *Queries) GetBehaviorEffectSummary(ctx context.Context, arg GetBehaviorE
 		&i.EffectiveLiabilityClaims,
 		&i.MerchantRecoveredClaims,
 		&i.RiderRecoveredClaims,
-		&i.PlatformFallbackClaims,
 		&i.MaliciousConfirmedClaims,
+	)
+	return i, err
+}
+
+const getLatestBehaviorDecisionByClaimID = `-- name: GetLatestBehaviorDecisionByClaimID :one
+SELECT id, order_id, user_id, merchant_id, rider_id, decision_version, reason_codes, responsible_party, compensation_source, decision_status, trace_summary, created_at, updated_at, reservation_id, claim_id, decision_mode, responsibility_domain, payout_mode, effective_status, confidence_score, user_risk_score, merchant_liability_score, rider_liability_score, fallback_reason, restriction_reason, liability_shares, score_breakdown, graph_hits, fact_snapshot, supersedes_decision_id, overturned_by_decision_id, profile_effect_applied FROM behavior_decisions
+WHERE claim_id = $1
+ORDER BY created_at DESC, id DESC
+LIMIT 1
+`
+
+func (q *Queries) GetLatestBehaviorDecisionByClaimID(ctx context.Context, claimID pgtype.Int8) (BehaviorDecision, error) {
+	row := q.db.QueryRow(ctx, getLatestBehaviorDecisionByClaimID, claimID)
+	var i BehaviorDecision
+	err := row.Scan(
+		&i.ID,
+		&i.OrderID,
+		&i.UserID,
+		&i.MerchantID,
+		&i.RiderID,
+		&i.DecisionVersion,
+		&i.ReasonCodes,
+		&i.ResponsibleParty,
+		&i.CompensationSource,
+		&i.DecisionStatus,
+		&i.TraceSummary,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ReservationID,
+		&i.ClaimID,
+		&i.DecisionMode,
+		&i.ResponsibilityDomain,
+		&i.PayoutMode,
+		&i.EffectiveStatus,
+		&i.ConfidenceScore,
+		&i.UserRiskScore,
+		&i.MerchantLiabilityScore,
+		&i.RiderLiabilityScore,
+		&i.FallbackReason,
+		&i.RestrictionReason,
+		&i.LiabilityShares,
+		&i.ScoreBreakdown,
+		&i.GraphHits,
+		&i.FactSnapshot,
+		&i.SupersedesDecisionID,
+		&i.OverturnedByDecisionID,
+		&i.ProfileEffectApplied,
 	)
 	return i, err
 }
@@ -1090,6 +1134,46 @@ func (q *Queries) UpdateBehaviorActionExecution(ctx context.Context, arg UpdateB
 		arg.ExecutedAt,
 	)
 	return err
+}
+
+const updateBehaviorActionExecutionIfCurrent = `-- name: UpdateBehaviorActionExecutionIfCurrent :one
+UPDATE behavior_actions
+SET status = $3,
+        detail = COALESCE($4, detail),
+        executed_at = COALESCE($5, executed_at)
+WHERE id = $1
+    AND status = $2
+RETURNING id, decision_id, action_type, target_entity, status, detail, executed_at, created_at
+`
+
+type UpdateBehaviorActionExecutionIfCurrentParams struct {
+	ID         int64              `json:"id"`
+	Status     string             `json:"status"`
+	Status_2   string             `json:"status_2"`
+	Detail     []byte             `json:"detail"`
+	ExecutedAt pgtype.Timestamptz `json:"executed_at"`
+}
+
+func (q *Queries) UpdateBehaviorActionExecutionIfCurrent(ctx context.Context, arg UpdateBehaviorActionExecutionIfCurrentParams) (BehaviorAction, error) {
+	row := q.db.QueryRow(ctx, updateBehaviorActionExecutionIfCurrent,
+		arg.ID,
+		arg.Status,
+		arg.Status_2,
+		arg.Detail,
+		arg.ExecutedAt,
+	)
+	var i BehaviorAction
+	err := row.Scan(
+		&i.ID,
+		&i.DecisionID,
+		&i.ActionType,
+		&i.TargetEntity,
+		&i.Status,
+		&i.Detail,
+		&i.ExecutedAt,
+		&i.CreatedAt,
+	)
+	return i, err
 }
 
 const updateBehaviorActionStatus = `-- name: UpdateBehaviorActionStatus :exec

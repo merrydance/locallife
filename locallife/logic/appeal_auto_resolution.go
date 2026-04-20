@@ -92,7 +92,7 @@ func DeriveAutomaticAppealResolution(appeal db.Appeal, decisions []db.BehaviorDe
 		return resolution
 	}
 
-	if latest.DecisionMode.Valid && (latest.DecisionMode.String == db.BehaviorDecisionModePlatformFallback || latest.DecisionMode.String == db.BehaviorDecisionModeUserRestricted) {
+	if latest.DecisionMode.Valid && latest.DecisionMode.String == db.BehaviorDecisionModeUserRestricted {
 		resolution.Status = "approved"
 		resolution.ReviewNotes = "系统复核发现当前行为判责已转为平台承担，自动撤销原追偿安排。"
 	}

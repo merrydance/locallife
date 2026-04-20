@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -78,7 +77,7 @@ func TestSubmitClaimAPI_ReturnsUserFacingLifecycleAndWritesAudit(t *testing.T) {
 		Description:    "餐品里发现异物，需要平台介入处理",
 		ClaimAmount:    approvedAmount,
 		ApprovedAmount: pgtype.Int8{Int64: approvedAmount, Valid: true},
-		Status:         "auto-approved",
+		Status:         db.ClaimStatusWaitingCustomerConfirmation,
 		ApprovalType:   pgtype.Text{String: "auto", Valid: true},
 		CreatedAt:      time.Now(),
 	}
@@ -90,13 +89,6 @@ func TestSubmitClaimAPI_ReturnsUserFacingLifecycleAndWritesAudit(t *testing.T) {
 	store.EXPECT().GetOrder(gomock.Any(), order.ID).Return(order, nil)
 	store.EXPECT().GetActiveBehaviorBlocklist(gomock.Any(), gomock.Any()).Return(db.BehaviorBlocklist{}, db.ErrRecordNotFound)
 	store.EXPECT().ListUserClaimsInPeriod(gomock.Any(), gomock.Any()).Return([]db.Claim{}, nil)
-	store.EXPECT().GetUserBehaviorStats(gomock.Any(), user.ID).Return(db.GetUserBehaviorStatsRow{
-		TakeoutOrders90d: 8,
-		Claims90d:        3,
-		WarningCount:     0,
-		PlatformPayCount: 1,
-	}, nil)
-	store.EXPECT().IncrementUserPlatformPayCount(gomock.Any(), gomock.Any()).Return(nil)
 	store.EXPECT().GetDevicesByUserID(gomock.Any(), user.ID).Return([]db.UserDevice{}, nil)
 	store.EXPECT().CreateClaimWithBehaviorTx(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ any, arg db.CreateClaimWithBehaviorTxParams) (db.CreateClaimWithBehaviorTxResult, error) {
@@ -104,11 +96,12 @@ func TestSubmitClaimAPI_ReturnsUserFacingLifecycleAndWritesAudit(t *testing.T) {
 			require.Equal(t, user.ID, arg.UserID)
 			require.Equal(t, "foreign-object", arg.ClaimType)
 			require.Equal(t, approvedAmount, arg.ClaimAmount)
-			require.Equal(t, "auto", arg.ApprovalType)
-			require.Equal(t, "platform", arg.CompensationSource)
+			require.Equal(t, "instant", arg.ApprovalType)
+			require.Equal(t, "merchant", arg.CompensationSource)
 			require.NotNil(t, arg.ApprovedAmount)
 			require.Equal(t, approvedAmount, *arg.ApprovedAmount)
-			require.False(t, arg.CreateRecovery)
+			require.True(t, arg.CreateRecovery)
+			require.Equal(t, "merchant", arg.RecoveryTarget)
 			return db.CreateClaimWithBehaviorTxResult{
 				Claim: claim,
 				PayoutAction: &db.BehaviorAction{
@@ -121,9 +114,10 @@ func TestSubmitClaimAPI_ReturnsUserFacingLifecycleAndWritesAudit(t *testing.T) {
 				BehaviorDecision: db.BehaviorDecision{
 					ID:                   901,
 					OrderID:              pgtype.Int8{Int64: order.ID, Valid: true},
-					DecisionMode:         pgtype.Text{String: db.BehaviorDecisionModePlatformFallback, Valid: true},
+					DecisionMode:         pgtype.Text{String: db.BehaviorDecisionModeMerchantRecovery, Valid: true},
 					ResponsibilityDomain: pgtype.Text{String: db.BehaviorResponsibilityDomainMerchant, Valid: true},
-					CompensationSource:   "platform",
+					CompensationSource:   "merchant",
+					TraceSummary:         pgtype.Text{String: "销售侧异常索赔默认由商户承担责任", Valid: true},
 				},
 			}, nil
 		},
@@ -155,17 +149,17 @@ func TestSubmitClaimAPI_ReturnsUserFacingLifecycleAndWritesAudit(t *testing.T) {
 	var resp SubmitClaimResponse
 	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 	require.Equal(t, claim.ID, resp.ClaimID)
-	require.Equal(t, submitClaimStatusAccepted, resp.Status)
+	require.Equal(t, submitClaimStatusWaitingCustomerConfirm, resp.Status)
 	require.Equal(t, submitClaimDecisionStatusAutoAdjudicated, resp.DecisionStatus)
-	require.Equal(t, submitClaimPayoutStatusProcessing, resp.PayoutStatus)
+	require.Equal(t, submitClaimCompensationStatusAwaiting, resp.CompensationStatus)
+	require.Empty(t, resp.PayoutStatus)
+	require.True(t, resp.CustomerActionRequired)
+	require.Equal(t, claimCustomerActionConfirmContinue, resp.CustomerAction)
 	require.NotNil(t, resp.ApprovedAmount)
 	require.Equal(t, approvedAmount, *resp.ApprovedAmount)
-	require.Equal(t, "platform", resp.CompensationSource)
-	require.Equal(t, "用户风险较高，本次由平台兜底处理", resp.Reason)
-	require.NotNil(t, resp.PayoutETA)
-	require.Equal(t, "1-3个工作日", *resp.PayoutETA)
-	require.NotNil(t, resp.Warning)
-	require.Contains(t, *resp.Warning, "平台兜底")
+	require.Equal(t, "merchant", resp.CompensationSource)
+	require.Equal(t, "销售侧异常索赔默认由商户承担责任", resp.Reason)
+	require.Nil(t, resp.Warning)
 
 	entries := auditWriter.Entries()
 	require.Len(t, entries, 1)
@@ -177,14 +171,14 @@ func TestSubmitClaimAPI_ReturnsUserFacingLifecycleAndWritesAudit(t *testing.T) {
 	require.Equal(t, claim.ID, *entries[0].TargetID)
 	require.Equal(t, resp.Status, entries[0].Metadata["status"])
 	require.Equal(t, resp.DecisionStatus, entries[0].Metadata["decision_status"])
-	require.Equal(t, resp.PayoutStatus, entries[0].Metadata["payout_status"])
+	require.Equal(t, resp.CompensationStatus, entries[0].Metadata["compensation_status"])
 	require.Equal(t, order.ID, entries[0].Metadata["order_id"])
 	require.Equal(t, "foreign-object", entries[0].Metadata["claim_type"])
 	require.Equal(t, approvedAmount, entries[0].Metadata["requested_amount"])
 	require.Equal(t, approvedAmount, entries[0].Metadata["approved_amount"])
-	require.Equal(t, "platform", entries[0].Metadata["compensation_source"])
-	require.Equal(t, "1-3个工作日", entries[0].Metadata["payout_eta"])
-	require.Equal(t, *resp.Warning, entries[0].Metadata["warning"])
+	require.Equal(t, "merchant", entries[0].Metadata["compensation_source"])
+	_, warningExists := entries[0].Metadata["warning"]
+	require.False(t, warningExists)
 	require.Equal(t, true, entries[0].Metadata["auto_adjudicated"])
 }
 
@@ -205,7 +199,7 @@ func TestSubmitClaimAPI_PayoutDispatchUsesTxActionWithoutBehaviorReload(t *testi
 		Description:    "餐品里发现异物，需要平台介入处理",
 		ClaimAmount:    approvedAmount,
 		ApprovedAmount: pgtype.Int8{Int64: approvedAmount, Valid: true},
-		Status:         "auto-approved",
+		Status:         db.ClaimStatusWaitingCustomerConfirmation,
 		ApprovalType:   pgtype.Text{String: "auto", Valid: true},
 		CreatedAt:      time.Now(),
 	}
@@ -217,12 +211,6 @@ func TestSubmitClaimAPI_PayoutDispatchUsesTxActionWithoutBehaviorReload(t *testi
 	store.EXPECT().GetOrder(gomock.Any(), order.ID).Return(order, nil)
 	store.EXPECT().GetActiveBehaviorBlocklist(gomock.Any(), gomock.Any()).Return(db.BehaviorBlocklist{}, db.ErrRecordNotFound)
 	store.EXPECT().ListUserClaimsInPeriod(gomock.Any(), gomock.Any()).Return([]db.Claim{}, nil)
-	store.EXPECT().GetUserBehaviorStats(gomock.Any(), user.ID).Return(db.GetUserBehaviorStatsRow{
-		TakeoutOrders90d: 6,
-		Claims90d:        2,
-		WarningCount:     0,
-		PlatformPayCount: 0,
-	}, nil)
 	store.EXPECT().GetDevicesByUserID(gomock.Any(), user.ID).Return([]db.UserDevice{}, nil)
 	store.EXPECT().CreateClaimWithBehaviorTx(gomock.Any(), gomock.Any()).Return(db.CreateClaimWithBehaviorTxResult{
 		Claim: claim,
@@ -271,11 +259,15 @@ func TestSubmitClaimAPI_PayoutDispatchUsesTxActionWithoutBehaviorReload(t *testi
 	var resp SubmitClaimResponse
 	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 	require.Equal(t, claim.ID, resp.ClaimID)
-	require.Equal(t, submitClaimPayoutStatusProcessing, resp.PayoutStatus)
+	require.Equal(t, submitClaimStatusWaitingCustomerConfirm, resp.Status)
+	require.Equal(t, submitClaimCompensationStatusAwaiting, resp.CompensationStatus)
+	require.Empty(t, resp.PayoutStatus)
+	require.True(t, resp.CustomerActionRequired)
+	require.Equal(t, claimCustomerActionConfirmContinue, resp.CustomerAction)
 	require.Equal(t, "merchant", resp.CompensationSource)
 }
 
-func TestSubmitClaimAPI_UsesPersistedPlatformFallbackOutcome(t *testing.T) {
+func TestSubmitClaimAPI_UsesPersistedRiderRecoveryOutcome(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchant(user.ID)
 	order := randomOrder(user.ID, merchant.ID)
@@ -292,9 +284,9 @@ func TestSubmitClaimAPI_UsesPersistedPlatformFallbackOutcome(t *testing.T) {
 		Description:        "配送中餐品破损，需要平台介入处理",
 		ClaimAmount:        approvedAmount,
 		ApprovedAmount:     pgtype.Int8{Int64: approvedAmount, Valid: true},
-		Status:             "auto-approved",
+		Status:             db.ClaimStatusWaitingCustomerConfirmation,
 		ApprovalType:       pgtype.Text{String: "auto", Valid: true},
-		AutoApprovalReason: pgtype.Text{String: "当前订单缺少取餐确认等关键责任事实，本次不向服务方追责，已由平台兜底处理", Valid: true},
+		AutoApprovalReason: pgtype.Text{String: "服务侧异常索赔默认由骑手承担责任", Valid: true},
 		CreatedAt:          time.Now(),
 	}
 
@@ -305,13 +297,6 @@ func TestSubmitClaimAPI_UsesPersistedPlatformFallbackOutcome(t *testing.T) {
 	store.EXPECT().GetOrder(gomock.Any(), order.ID).Return(order, nil)
 	store.EXPECT().GetActiveBehaviorBlocklist(gomock.Any(), gomock.Any()).Return(db.BehaviorBlocklist{}, db.ErrRecordNotFound)
 	store.EXPECT().ListUserClaimsInPeriod(gomock.Any(), gomock.Any()).Return([]db.Claim{}, nil)
-	store.EXPECT().GetUserBehaviorStats(gomock.Any(), user.ID).Return(db.GetUserBehaviorStatsRow{
-		TakeoutOrders90d: 6,
-		Claims90d:        1,
-		WarningCount:     0,
-		PlatformPayCount: 0,
-	}, nil)
-	store.EXPECT().IncrementUserPlatformPayCount(gomock.Any(), gomock.Any()).Return(nil)
 	store.EXPECT().GetDevicesByUserID(gomock.Any(), user.ID).Return([]db.UserDevice{}, nil)
 	store.EXPECT().CreateClaimWithBehaviorTx(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ any, arg db.CreateClaimWithBehaviorTxParams) (db.CreateClaimWithBehaviorTxResult, error) {
@@ -334,11 +319,10 @@ func TestSubmitClaimAPI_UsesPersistedPlatformFallbackOutcome(t *testing.T) {
 				BehaviorDecision: db.BehaviorDecision{
 					ID:                   911,
 					OrderID:              pgtype.Int8{Int64: order.ID, Valid: true},
-					DecisionMode:         pgtype.Text{String: db.BehaviorDecisionModePlatformFallback, Valid: true},
-					ResponsibilityDomain: pgtype.Text{String: db.BehaviorResponsibilityDomainUnknown, Valid: true},
-					CompensationSource:   "platform",
-					FallbackReason:       pgtype.Text{String: "missing_pickup_confirmation", Valid: true},
-					TraceSummary:         pgtype.Text{String: "当前订单缺少取餐确认等关键责任事实，本次不向服务方追责，已由平台兜底处理", Valid: true},
+					DecisionMode:         pgtype.Text{String: db.BehaviorDecisionModeRiderRecovery, Valid: true},
+					ResponsibilityDomain: pgtype.Text{String: db.BehaviorResponsibilityDomainRider, Valid: true},
+					CompensationSource:   "rider",
+					TraceSummary:         pgtype.Text{String: "服务侧异常索赔默认由骑手承担责任", Valid: true},
 				},
 			}, nil
 		},
@@ -380,25 +364,25 @@ func TestSubmitClaimAPI_UsesPersistedPlatformFallbackOutcome(t *testing.T) {
 	var resp SubmitClaimResponse
 	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 	require.Equal(t, claim.ID, resp.ClaimID)
-	require.Equal(t, submitClaimStatusAccepted, resp.Status)
+	require.Equal(t, submitClaimStatusWaitingCustomerConfirm, resp.Status)
 	require.Equal(t, submitClaimDecisionStatusAutoAdjudicated, resp.DecisionStatus)
-	require.Equal(t, submitClaimPayoutStatusProcessing, resp.PayoutStatus)
+	require.Equal(t, submitClaimCompensationStatusAwaiting, resp.CompensationStatus)
+	require.Empty(t, resp.PayoutStatus)
+	require.True(t, resp.CustomerActionRequired)
+	require.Equal(t, claimCustomerActionConfirmContinue, resp.CustomerAction)
 	require.NotNil(t, resp.ApprovedAmount)
 	require.Equal(t, approvedAmount, *resp.ApprovedAmount)
-	require.Equal(t, "platform", resp.CompensationSource)
-	require.Equal(t, "当前订单缺少取餐确认等关键责任事实，本次不向服务方追责，已由平台兜底处理", resp.Reason)
-	require.NotNil(t, resp.Warning)
-	require.Equal(t, resp.Reason, *resp.Warning)
-	require.NotNil(t, resp.PayoutETA)
-	require.Equal(t, "1-3个工作日", *resp.PayoutETA)
+	require.Equal(t, "rider", resp.CompensationSource)
+	require.Equal(t, "服务侧异常索赔默认由骑手承担责任", resp.Reason)
+	require.Nil(t, resp.Warning)
 }
 
-func TestSubmitClaimAPI_RuleOverridePlatformFallbackDoesNotCreateRecovery(t *testing.T) {
+func TestSubmitClaimAPI_LegacyPlatformRuleDoesNotOverrideDeterministicRecovery(t *testing.T) {
 	user, _ := randomUser(t)
 	riderUser, _ := randomUser(t)
 	merchant := randomMerchant(user.ID)
 	merchant.RegionID = 66
-	rider := randomRider(riderUser.ID)
+	_ = riderUser
 	order := randomOrder(user.ID, merchant.ID)
 	order.Status = OrderStatusCompleted
 	order.OrderType = "takeout"
@@ -410,12 +394,12 @@ func TestSubmitClaimAPI_RuleOverridePlatformFallbackDoesNotCreateRecovery(t *tes
 		OrderID:            order.ID,
 		UserID:             user.ID,
 		ClaimType:          "damage",
-		Description:        "规则覆盖为平台兜底，不应再创建服务方追偿",
+		Description:        "遗留规则输出 platform-fallback 时，仍应保持服务侧追偿",
 		ClaimAmount:        approvedAmount,
 		ApprovedAmount:     pgtype.Int8{Int64: approvedAmount, Valid: true},
-		Status:             "auto-approved",
+		Status:             db.ClaimStatusWaitingCustomerConfirmation,
 		ApprovalType:       pgtype.Text{String: "auto", Valid: true},
-		AutoApprovalReason: pgtype.Text{String: "规则覆盖为平台兜底，不应再创建服务方追偿", Valid: true},
+		AutoApprovalReason: pgtype.Text{String: "服务侧异常索赔默认由骑手承担责任", Valid: true},
 		CreatedAt:          time.Now(),
 	}
 
@@ -428,28 +412,21 @@ func TestSubmitClaimAPI_RuleOverridePlatformFallbackDoesNotCreateRecovery(t *tes
 	store.EXPECT().ListUserClaimsInPeriod(gomock.Any(), gomock.Any()).Return([]db.Claim{}, nil)
 	store.EXPECT().GetMerchant(gomock.Any(), order.MerchantID).Return(merchant, nil)
 	store.EXPECT().GetPlatformConfig(gomock.Any(), gomock.Any()).Return(db.PlatformConfig{}, db.ErrRecordNotFound).Times(2)
-	store.EXPECT().GetAbnormalStatsSummary(gomock.Any(), gomock.Any()).Return(db.GetAbnormalStatsSummaryRow{}, nil).Times(6)
+	store.EXPECT().GetAbnormalStatsSummary(gomock.Any(), gomock.Any()).Return(db.GetAbnormalStatsSummaryRow{}, nil).Times(4)
 	store.EXPECT().GetDeliveryByOrderID(gomock.Any(), order.ID).Return(db.Delivery{
 		OrderID: order.ID,
-		RiderID: pgtype.Int8{Int64: rider.ID, Valid: true},
+		RiderID: pgtype.Int8{Int64: 0, Valid: false},
 	}, nil).Times(2)
-	store.EXPECT().GetUserBehaviorStats(gomock.Any(), user.ID).Return(db.GetUserBehaviorStatsRow{
-		TakeoutOrders90d: 6,
-		Claims90d:        1,
-		WarningCount:     0,
-		PlatformPayCount: 0,
-	}, nil)
-	store.EXPECT().IncrementUserPlatformPayCount(gomock.Any(), gomock.Any()).Return(nil)
 	store.EXPECT().GetDevicesByUserID(gomock.Any(), user.ID).Return([]db.UserDevice{}, nil)
 	store.EXPECT().CreateClaimWithBehaviorTx(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ any, arg db.CreateClaimWithBehaviorTxParams) (db.CreateClaimWithBehaviorTxResult, error) {
 			require.Equal(t, order.ID, arg.OrderID)
 			require.Equal(t, user.ID, arg.UserID)
 			require.Equal(t, "damage", arg.ClaimType)
-			require.Equal(t, "auto", arg.ApprovalType)
-			require.Equal(t, "platform", arg.CompensationSource)
-			require.False(t, arg.CreateRecovery)
-			require.Equal(t, "", arg.RecoveryTarget)
+			require.Equal(t, "instant", arg.ApprovalType)
+			require.Equal(t, "rider", arg.CompensationSource)
+			require.True(t, arg.CreateRecovery)
+			require.Equal(t, "rider", arg.RecoveryTarget)
 			return db.CreateClaimWithBehaviorTxResult{
 				Claim: claim,
 				PayoutAction: &db.BehaviorAction{
@@ -462,26 +439,22 @@ func TestSubmitClaimAPI_RuleOverridePlatformFallbackDoesNotCreateRecovery(t *tes
 				BehaviorDecision: db.BehaviorDecision{
 					ID:                   917,
 					OrderID:              pgtype.Int8{Int64: order.ID, Valid: true},
-					DecisionMode:         pgtype.Text{String: db.BehaviorDecisionModePlatformFallback, Valid: true},
-					ResponsibilityDomain: pgtype.Text{String: db.BehaviorResponsibilityDomainUnknown, Valid: true},
-					CompensationSource:   "platform",
-					FallbackReason:       pgtype.Text{String: "rule_platform_fallback", Valid: true},
-					TraceSummary:         pgtype.Text{String: "规则覆盖为平台兜底，不应再创建服务方追偿", Valid: true},
+					DecisionMode:         pgtype.Text{String: db.BehaviorDecisionModeRiderRecovery, Valid: true},
+					ResponsibilityDomain: pgtype.Text{String: db.BehaviorResponsibilityDomainRider, Valid: true},
+					CompensationSource:   "rider",
+					TraceSummary:         pgtype.Text{String: "服务侧异常索赔默认由骑手承担责任", Valid: true},
 				},
 			}, nil
 		},
 	)
-
 	taskDistributor := mockworker.NewMockTaskDistributor(ctrl)
 	taskDistributor.EXPECT().DistributeTaskSendNotification(gomock.Any(), gomock.Any()).Times(0)
-	taskDistributor.EXPECT().DistributeTaskCheckRiderDamage(gomock.Any(), rider.ID, gomock.Any(), gomock.Any()).Return(nil)
-
 	server := newTestServerWithTaskDistributor(t, store, taskDistributor)
 	server.config.RulesEngineEnabled = true
 	server.rulesEngine = stubRulesEngine{decision: rules.Decision{
 		Allow:  true,
 		Action: "platform-fallback",
-		Reason: "规则覆盖为平台兜底，不应再创建服务方追偿",
+		Reason: "遗留规则输出 platform-fallback",
 	}}
 	server.SetTransferClientForTest(mockwechat.NewMockTransferClientInterface(ctrl))
 
@@ -489,7 +462,7 @@ func TestSubmitClaimAPI_RuleOverridePlatformFallbackDoesNotCreateRecovery(t *tes
 		OrderID:     order.ID,
 		ClaimType:   "damage",
 		ClaimAmount: approvedAmount,
-		ClaimReason: "规则覆盖为平台兜底，不应再创建服务方追偿",
+		ClaimReason: "遗留规则输出 platform-fallback",
 	})
 	require.NoError(t, err)
 
@@ -506,10 +479,14 @@ func TestSubmitClaimAPI_RuleOverridePlatformFallbackDoesNotCreateRecovery(t *tes
 	var resp SubmitClaimResponse
 	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 	require.Equal(t, claim.ID, resp.ClaimID)
-	require.Equal(t, submitClaimPayoutStatusProcessing, resp.PayoutStatus)
-	require.Equal(t, "platform", resp.CompensationSource)
-	require.NotNil(t, resp.Warning)
-	require.Equal(t, "规则覆盖为平台兜底，不应再创建服务方追偿", *resp.Warning)
+	require.Equal(t, submitClaimStatusWaitingCustomerConfirm, resp.Status)
+	require.Equal(t, submitClaimCompensationStatusAwaiting, resp.CompensationStatus)
+	require.Empty(t, resp.PayoutStatus)
+	require.True(t, resp.CustomerActionRequired)
+	require.Equal(t, claimCustomerActionConfirmContinue, resp.CustomerAction)
+	require.Equal(t, "rider", resp.CompensationSource)
+	require.Equal(t, "服务侧异常索赔默认由骑手承担责任", resp.Reason)
+	require.Nil(t, resp.Warning)
 }
 
 func TestSubmitClaimAPI_UsesPersistedUserRestrictedOutcome(t *testing.T) {
@@ -529,9 +506,9 @@ func TestSubmitClaimAPI_UsesPersistedUserRestrictedOutcome(t *testing.T) {
 		Description:        "用户索赔行为异常但本次仍赔付",
 		ClaimAmount:        approvedAmount,
 		ApprovedAmount:     pgtype.Int8{Int64: approvedAmount, Valid: true},
-		Status:             "auto-approved",
+		Status:             db.ClaimStatusWaitingCustomerConfirmation,
 		ApprovalType:       pgtype.Text{String: "auto", Valid: true},
-		AutoApprovalReason: pgtype.Text{String: "您的账号因索赔行为异常已被限制服务，本次索赔由平台兜底处理。", Valid: true},
+		AutoApprovalReason: pgtype.Text{String: "您的账号因索赔行为异常已被限制服务；若确认继续索赔，平台将先行赔付并停止后续服务。", Valid: true},
 		CreatedAt:          time.Now(),
 	}
 
@@ -540,25 +517,20 @@ func TestSubmitClaimAPI_UsesPersistedUserRestrictedOutcome(t *testing.T) {
 
 	store := mockdb.NewMockStore(ctrl)
 	store.EXPECT().GetOrder(gomock.Any(), order.ID).Return(order, nil)
-	store.EXPECT().GetActiveBehaviorBlocklist(gomock.Any(), gomock.Any()).Return(db.BehaviorBlocklist{}, db.ErrRecordNotFound).Times(2)
+	store.EXPECT().GetActiveBehaviorBlocklist(gomock.Any(), gomock.Any()).Return(db.BehaviorBlocklist{}, db.ErrRecordNotFound)
 	store.EXPECT().ListUserClaimsInPeriod(gomock.Any(), gomock.Any()).Return([]db.Claim{}, nil)
-	store.EXPECT().GetUserBehaviorStats(gomock.Any(), user.ID).Return(db.GetUserBehaviorStatsRow{
-		TakeoutOrders90d: 6,
-		Claims90d:        4,
-		WarningCount:     2,
-		PlatformPayCount: 2,
-	}, nil)
-	store.EXPECT().GetPlatformConfig(gomock.Any(), gomock.Any()).Return(db.PlatformConfig{}, db.ErrRecordNotFound)
-	store.EXPECT().CreateBehaviorBlocklist(gomock.Any(), gomock.Any()).Return(db.BehaviorBlocklist{}, nil)
+	store.EXPECT().GetPlatformConfig(gomock.Any(), gomock.Any()).Times(0)
+	store.EXPECT().CreateBehaviorBlocklist(gomock.Any(), gomock.Any()).Times(0)
 	store.EXPECT().GetDevicesByUserID(gomock.Any(), user.ID).Return([]db.UserDevice{}, nil)
 	store.EXPECT().CreateClaimWithBehaviorTx(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ any, arg db.CreateClaimWithBehaviorTxParams) (db.CreateClaimWithBehaviorTxResult, error) {
 			require.Equal(t, order.ID, arg.OrderID)
 			require.Equal(t, user.ID, arg.UserID)
 			require.Equal(t, "damage", arg.ClaimType)
-			require.Equal(t, "auto", arg.ApprovalType)
-			require.Equal(t, "platform", arg.CompensationSource)
-			require.False(t, arg.CreateRecovery)
+			require.Equal(t, "instant", arg.ApprovalType)
+			require.Equal(t, "rider", arg.CompensationSource)
+			require.True(t, arg.CreateRecovery)
+			require.Equal(t, "rider", arg.RecoveryTarget)
 			return db.CreateClaimWithBehaviorTxResult{
 				Claim: claim,
 				PayoutAction: &db.BehaviorAction{
@@ -575,7 +547,7 @@ func TestSubmitClaimAPI_UsesPersistedUserRestrictedOutcome(t *testing.T) {
 					ResponsibilityDomain: pgtype.Text{String: db.BehaviorResponsibilityDomainUser, Valid: true},
 					CompensationSource:   "platform",
 					RestrictionReason:    pgtype.Text{String: "confirmed_high_user_risk", Valid: true},
-					TraceSummary:         pgtype.Text{String: "您的账号因索赔行为异常已被限制服务，本次索赔由平台兜底处理。", Valid: true},
+					TraceSummary:         pgtype.Text{String: "您的账号因索赔行为异常已被限制服务；若确认继续索赔，平台将先行赔付并停止后续服务。", Valid: true},
 				},
 				RestrictionAction: &db.BehaviorAction{
 					ID:           923,
@@ -617,15 +589,7 @@ func TestSubmitClaimAPI_UsesPersistedUserRestrictedOutcome(t *testing.T) {
 	)
 
 	taskDistributor := mockworker.NewMockTaskDistributor(ctrl)
-	taskDistributor.EXPECT().DistributeTaskSendNotification(
-		gomock.Any(),
-		gomock.Any(),
-	).DoAndReturn(func(_ any, payload *worker.SendNotificationPayload, _ ...asynq.Option) error {
-		notifyPayload := payload
-		require.Equal(t, user.ID, notifyPayload.UserID)
-		require.Contains(t, notifyPayload.Content, "服务已受到限制")
-		return nil
-	})
+	taskDistributor.EXPECT().DistributeTaskSendNotification(gomock.Any(), gomock.Any()).Times(0)
 
 	server := newTestServerWithTaskDistributor(t, store, taskDistributor)
 	server.SetTransferClientForTest(mockwechat.NewMockTransferClientInterface(ctrl))
@@ -651,17 +615,18 @@ func TestSubmitClaimAPI_UsesPersistedUserRestrictedOutcome(t *testing.T) {
 	var resp SubmitClaimResponse
 	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 	require.Equal(t, claim.ID, resp.ClaimID)
-	require.Equal(t, submitClaimStatusAccepted, resp.Status)
+	require.Equal(t, submitClaimStatusWaitingCustomerConfirm, resp.Status)
 	require.Equal(t, submitClaimDecisionStatusAutoAdjudicated, resp.DecisionStatus)
-	require.Equal(t, submitClaimPayoutStatusProcessing, resp.PayoutStatus)
+	require.Equal(t, submitClaimCompensationStatusAwaiting, resp.CompensationStatus)
+	require.Empty(t, resp.PayoutStatus)
+	require.True(t, resp.CustomerActionRequired)
+	require.Equal(t, claimCustomerActionConfirmContinue, resp.CustomerAction)
 	require.NotNil(t, resp.ApprovedAmount)
 	require.Equal(t, approvedAmount, *resp.ApprovedAmount)
 	require.Equal(t, "platform", resp.CompensationSource)
-	require.Equal(t, "您的账号因索赔行为异常已被限制服务，本次索赔由平台兜底处理。", resp.Reason)
+	require.Equal(t, "您的账号因索赔行为异常已被限制服务；若确认继续索赔，平台将先行赔付并停止后续服务。", resp.Reason)
 	require.NotNil(t, resp.Warning)
 	require.Equal(t, resp.Reason, *resp.Warning)
-	require.NotNil(t, resp.PayoutETA)
-	require.Equal(t, "1-3个工作日", *resp.PayoutETA)
 }
 
 func TestSubmitClaimAPI_RuleActionMerchantRecoveryUsesFormalMode(t *testing.T) {
@@ -682,7 +647,7 @@ func TestSubmitClaimAPI_RuleActionMerchantRecoveryUsesFormalMode(t *testing.T) {
 		Description:        "规则判定商户责任明确",
 		ClaimAmount:        approvedAmount,
 		ApprovedAmount:     pgtype.Int8{Int64: approvedAmount, Valid: true},
-		Status:             "auto-approved",
+		Status:             db.ClaimStatusWaitingCustomerConfirmation,
 		ApprovalType:       pgtype.Text{String: "auto", Valid: true},
 		AutoApprovalReason: pgtype.Text{String: "规则判定商户责任明确", Valid: true},
 		CreatedAt:          time.Now(),
@@ -699,12 +664,6 @@ func TestSubmitClaimAPI_RuleActionMerchantRecoveryUsesFormalMode(t *testing.T) {
 	store.EXPECT().GetPlatformConfig(gomock.Any(), gomock.Any()).Return(db.PlatformConfig{}, db.ErrRecordNotFound).Times(2)
 	store.EXPECT().GetAbnormalStatsSummary(gomock.Any(), gomock.Any()).Return(db.GetAbnormalStatsSummaryRow{}, nil).Times(4)
 	store.EXPECT().GetDeliveryByOrderID(gomock.Any(), order.ID).Return(db.Delivery{}, db.ErrRecordNotFound)
-	store.EXPECT().GetUserBehaviorStats(gomock.Any(), user.ID).Return(db.GetUserBehaviorStatsRow{
-		TakeoutOrders90d: 12,
-		Claims90d:        0,
-		WarningCount:     0,
-		PlatformPayCount: 0,
-	}, nil)
 	store.EXPECT().GetDevicesByUserID(gomock.Any(), user.ID).Return([]db.UserDevice{}, nil)
 	store.EXPECT().CreateClaimWithBehaviorTx(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ any, arg db.CreateClaimWithBehaviorTxParams) (db.CreateClaimWithBehaviorTxResult, error) {
@@ -768,15 +727,16 @@ func TestSubmitClaimAPI_RuleActionMerchantRecoveryUsesFormalMode(t *testing.T) {
 	var resp SubmitClaimResponse
 	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 	require.Equal(t, claim.ID, resp.ClaimID)
-	require.Equal(t, submitClaimStatusAccepted, resp.Status)
+	require.Equal(t, submitClaimStatusWaitingCustomerConfirm, resp.Status)
 	require.Equal(t, submitClaimDecisionStatusAutoAdjudicated, resp.DecisionStatus)
-	require.Equal(t, submitClaimPayoutStatusProcessing, resp.PayoutStatus)
+	require.Equal(t, submitClaimCompensationStatusAwaiting, resp.CompensationStatus)
+	require.Empty(t, resp.PayoutStatus)
+	require.True(t, resp.CustomerActionRequired)
+	require.Equal(t, claimCustomerActionConfirmContinue, resp.CustomerAction)
 	require.NotNil(t, resp.ApprovedAmount)
 	require.Equal(t, approvedAmount, *resp.ApprovedAmount)
 	require.Equal(t, "merchant", resp.CompensationSource)
 	require.Equal(t, "规则判定商户责任明确", resp.Reason)
-	require.NotNil(t, resp.PayoutETA)
-	require.Equal(t, "1-3个工作日", *resp.PayoutETA)
 	require.Nil(t, resp.Warning)
 }
 
@@ -800,7 +760,7 @@ func TestSubmitClaimAPI_RuleActionRiderRecoveryUsesFormalMode(t *testing.T) {
 		Description:        "规则判定骑手责任明确",
 		ClaimAmount:        approvedAmount,
 		ApprovedAmount:     pgtype.Int8{Int64: approvedAmount, Valid: true},
-		Status:             "auto-approved",
+		Status:             db.ClaimStatusWaitingCustomerConfirmation,
 		ApprovalType:       pgtype.Text{String: "auto", Valid: true},
 		AutoApprovalReason: pgtype.Text{String: "规则判定骑手责任明确", Valid: true},
 		CreatedAt:          time.Now(),
@@ -820,12 +780,6 @@ func TestSubmitClaimAPI_RuleActionRiderRecoveryUsesFormalMode(t *testing.T) {
 		OrderID: order.ID,
 		RiderID: pgtype.Int8{Int64: rider.ID, Valid: true},
 	}, nil).Times(2)
-	store.EXPECT().GetUserBehaviorStats(gomock.Any(), user.ID).Return(db.GetUserBehaviorStatsRow{
-		TakeoutOrders90d: 10,
-		Claims90d:        1,
-		WarningCount:     0,
-		PlatformPayCount: 0,
-	}, nil)
 	store.EXPECT().GetDevicesByUserID(gomock.Any(), user.ID).Return([]db.UserDevice{}, nil)
 	store.EXPECT().CreateClaimWithBehaviorTx(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ any, arg db.CreateClaimWithBehaviorTxParams) (db.CreateClaimWithBehaviorTxResult, error) {
@@ -879,15 +833,7 @@ func TestSubmitClaimAPI_RuleActionRiderRecoveryUsesFormalMode(t *testing.T) {
 	)
 
 	taskDistributor := mockworker.NewMockTaskDistributor(ctrl)
-	taskDistributor.EXPECT().DistributeTaskSendNotification(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(_ context.Context, payload *worker.SendNotificationPayload, _ ...asynq.Option) error {
-			require.Equal(t, rider.UserID, payload.UserID)
-			require.Equal(t, "异常订单判责通知", payload.Title)
-			require.Contains(t, payload.Content, "已判定由您承担")
-			require.Contains(t, payload.Content, "规则判定骑手责任明确")
-			return nil
-		},
-	)
+	taskDistributor.EXPECT().DistributeTaskSendNotification(gomock.Any(), gomock.Any()).Times(0)
 	taskDistributor.EXPECT().DistributeTaskCheckRiderDamage(gomock.Any(), rider.ID, gomock.Any(), gomock.Any()).Return(nil)
 
 	server := newTestServerWithTaskDistributor(t, store, taskDistributor)
@@ -920,15 +866,16 @@ func TestSubmitClaimAPI_RuleActionRiderRecoveryUsesFormalMode(t *testing.T) {
 	var resp SubmitClaimResponse
 	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 	require.Equal(t, claim.ID, resp.ClaimID)
-	require.Equal(t, submitClaimStatusAccepted, resp.Status)
+	require.Equal(t, submitClaimStatusWaitingCustomerConfirm, resp.Status)
 	require.Equal(t, submitClaimDecisionStatusAutoAdjudicated, resp.DecisionStatus)
-	require.Equal(t, submitClaimPayoutStatusProcessing, resp.PayoutStatus)
+	require.Equal(t, submitClaimCompensationStatusAwaiting, resp.CompensationStatus)
+	require.Empty(t, resp.PayoutStatus)
+	require.True(t, resp.CustomerActionRequired)
+	require.Equal(t, claimCustomerActionConfirmContinue, resp.CustomerAction)
 	require.NotNil(t, resp.ApprovedAmount)
 	require.Equal(t, approvedAmount, *resp.ApprovedAmount)
 	require.Equal(t, "rider", resp.CompensationSource)
 	require.Equal(t, "规则判定骑手责任明确", resp.Reason)
-	require.NotNil(t, resp.PayoutETA)
-	require.Equal(t, "1-3个工作日", *resp.PayoutETA)
 	require.Nil(t, resp.Warning)
 }
 
@@ -952,7 +899,7 @@ func TestSubmitClaimAPI_RuleOverrideDoesNotDispatchNotificationWithoutPersistedA
 		Description:        "规则判定骑手责任明确，但通知必须依赖 persisted action",
 		ClaimAmount:        approvedAmount,
 		ApprovedAmount:     pgtype.Int8{Int64: approvedAmount, Valid: true},
-		Status:             "auto-approved",
+		Status:             db.ClaimStatusWaitingCustomerConfirmation,
 		ApprovalType:       pgtype.Text{String: "auto", Valid: true},
 		AutoApprovalReason: pgtype.Text{String: "规则判定骑手责任明确，但通知必须依赖 persisted action", Valid: true},
 		CreatedAt:          time.Now(),
@@ -972,12 +919,6 @@ func TestSubmitClaimAPI_RuleOverrideDoesNotDispatchNotificationWithoutPersistedA
 		OrderID: order.ID,
 		RiderID: pgtype.Int8{Int64: rider.ID, Valid: true},
 	}, nil).Times(2)
-	store.EXPECT().GetUserBehaviorStats(gomock.Any(), user.ID).Return(db.GetUserBehaviorStatsRow{
-		TakeoutOrders90d: 10,
-		Claims90d:        1,
-		WarningCount:     0,
-		PlatformPayCount: 0,
-	}, nil)
 	store.EXPECT().GetDevicesByUserID(gomock.Any(), user.ID).Return([]db.UserDevice{}, nil)
 	store.EXPECT().CreateClaimWithBehaviorTx(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ any, arg db.CreateClaimWithBehaviorTxParams) (db.CreateClaimWithBehaviorTxResult, error) {
@@ -1046,7 +987,8 @@ func TestSubmitClaimAPI_RuleOverrideDoesNotDispatchNotificationWithoutPersistedA
 	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 	require.Equal(t, claim.ID, resp.ClaimID)
 	require.Equal(t, "rider", resp.CompensationSource)
-	require.Equal(t, submitClaimPayoutStatusProcessing, resp.PayoutStatus)
+	require.Equal(t, submitClaimCompensationStatusAwaiting, resp.CompensationStatus)
+	require.Empty(t, resp.PayoutStatus)
 	require.Nil(t, resp.Warning)
 }
 
@@ -1065,12 +1007,12 @@ func TestSubmitClaimAPI_RuleActionUserRestrictedUsesFormalMode(t *testing.T) {
 		OrderID:            order.ID,
 		UserID:             user.ID,
 		ClaimType:          "foreign-object",
-		Description:        "规则命中高风险用户，本次已限制服务并由平台兜底",
+		Description:        "规则命中高风险用户，进入限制服务与平台先行赔付流程",
 		ClaimAmount:        approvedAmount,
 		ApprovedAmount:     pgtype.Int8{Int64: approvedAmount, Valid: true},
-		Status:             "auto-approved",
+		Status:             db.ClaimStatusWaitingCustomerConfirmation,
 		ApprovalType:       pgtype.Text{String: "auto", Valid: true},
-		AutoApprovalReason: pgtype.Text{String: "规则命中高风险用户，本次已限制服务并由平台兜底", Valid: true},
+		AutoApprovalReason: pgtype.Text{String: "规则命中高风险用户；若确认继续索赔，平台将先行赔付并停止后续服务", Valid: true},
 		CreatedAt:          time.Now(),
 	}
 
@@ -1079,19 +1021,32 @@ func TestSubmitClaimAPI_RuleActionUserRestrictedUsesFormalMode(t *testing.T) {
 
 	store := mockdb.NewMockStore(ctrl)
 	store.EXPECT().GetOrder(gomock.Any(), order.ID).Return(order, nil)
-	store.EXPECT().GetActiveBehaviorBlocklist(gomock.Any(), gomock.Any()).Return(db.BehaviorBlocklist{}, db.ErrRecordNotFound).Times(2)
+	store.EXPECT().GetActiveBehaviorBlocklist(gomock.Any(), gomock.Any()).Return(db.BehaviorBlocklist{}, db.ErrRecordNotFound)
 	store.EXPECT().ListUserClaimsInPeriod(gomock.Any(), gomock.Any()).Return([]db.Claim{}, nil)
 	store.EXPECT().GetMerchant(gomock.Any(), order.MerchantID).Return(merchant, nil)
-	store.EXPECT().GetPlatformConfig(gomock.Any(), gomock.Any()).Return(db.PlatformConfig{}, db.ErrRecordNotFound).Times(3)
+	store.EXPECT().GetPlatformConfig(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ any, arg db.GetPlatformConfigParams) (db.PlatformConfig, error) {
+			switch arg.ConfigKey {
+			case "behavior_trace.window_days":
+				return db.PlatformConfig{
+					ConfigKey:   arg.ConfigKey,
+					ConfigValue: []byte(`{"window_7d":7,"window_30d":30}`),
+					ScopeType:   arg.ScopeType,
+				}, nil
+			case "behavior_trace.abnormal_thresholds":
+				return db.PlatformConfig{
+					ConfigKey:   arg.ConfigKey,
+					ConfigValue: []byte(`{"user_claim_rate_7d":0.3,"user_claim_rate_30d":0.2,"user_claims_7d":3,"user_claims_30d":5,"merchant_abnormal_rate":0.08,"rider_abnormal_rate":0.06}`),
+					ScopeType:   arg.ScopeType,
+				}, nil
+			default:
+				return db.PlatformConfig{}, db.ErrRecordNotFound
+			}
+		},
+	).Times(2)
 	store.EXPECT().GetAbnormalStatsSummary(gomock.Any(), gomock.Any()).Return(db.GetAbnormalStatsSummaryRow{}, nil).Times(4)
 	store.EXPECT().GetDeliveryByOrderID(gomock.Any(), order.ID).Return(db.Delivery{}, db.ErrRecordNotFound)
-	store.EXPECT().GetUserBehaviorStats(gomock.Any(), user.ID).Return(db.GetUserBehaviorStatsRow{
-		TakeoutOrders90d: 12,
-		Claims90d:        0,
-		WarningCount:     0,
-		PlatformPayCount: 0,
-	}, nil)
-	store.EXPECT().CreateBehaviorBlocklist(gomock.Any(), gomock.Any()).Return(db.BehaviorBlocklist{}, nil)
+	store.EXPECT().CreateBehaviorBlocklist(gomock.Any(), gomock.Any()).Times(0)
 	store.EXPECT().GetDevicesByUserID(gomock.Any(), user.ID).Return([]db.UserDevice{}, nil)
 	store.EXPECT().CreateClaimWithBehaviorTx(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ any, arg db.CreateClaimWithBehaviorTxParams) (db.CreateClaimWithBehaviorTxResult, error) {
@@ -1118,7 +1073,7 @@ func TestSubmitClaimAPI_RuleActionUserRestrictedUsesFormalMode(t *testing.T) {
 					ResponsibilityDomain: pgtype.Text{String: db.BehaviorResponsibilityDomainUser, Valid: true},
 					CompensationSource:   "platform",
 					RestrictionReason:    pgtype.Text{String: "confirmed_high_user_risk", Valid: true},
-					TraceSummary:         pgtype.Text{String: "规则命中高风险用户，本次已限制服务并由平台兜底", Valid: true},
+					TraceSummary:         pgtype.Text{String: "规则命中高风险用户；若确认继续索赔，平台将先行赔付并停止后续服务", Valid: true},
 				},
 				RestrictionAction: &db.BehaviorAction{
 					ID:           943,
@@ -1160,13 +1115,7 @@ func TestSubmitClaimAPI_RuleActionUserRestrictedUsesFormalMode(t *testing.T) {
 	)
 
 	taskDistributor := mockworker.NewMockTaskDistributor(ctrl)
-	taskDistributor.EXPECT().DistributeTaskSendNotification(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(_ context.Context, payload *worker.SendNotificationPayload, _ ...asynq.Option) error {
-			require.Equal(t, user.ID, payload.UserID)
-			require.Contains(t, payload.Content, "服务已受到限制")
-			return nil
-		},
-	)
+	taskDistributor.EXPECT().DistributeTaskSendNotification(gomock.Any(), gomock.Any()).Times(0)
 	taskDistributor.EXPECT().DistributeTaskCheckMerchantForeignObject(gomock.Any(), order.MerchantID, gomock.Any(), gomock.Any()).Return(nil)
 
 	server := newTestServerWithTaskDistributor(t, store, taskDistributor)
@@ -1174,7 +1123,7 @@ func TestSubmitClaimAPI_RuleActionUserRestrictedUsesFormalMode(t *testing.T) {
 	server.rulesEngine = stubRulesEngine{decision: rules.Decision{
 		Allow:  true,
 		Action: "user-restricted",
-		Reason: "规则命中高风险用户，本次已限制服务并由平台兜底",
+		Reason: "规则命中高风险用户；若确认继续索赔，平台将先行赔付并停止后续服务",
 	}}
 	server.SetTransferClientForTest(mockwechat.NewMockTransferClientInterface(ctrl))
 
@@ -1182,7 +1131,7 @@ func TestSubmitClaimAPI_RuleActionUserRestrictedUsesFormalMode(t *testing.T) {
 		OrderID:     order.ID,
 		ClaimType:   "foreign-object",
 		ClaimAmount: approvedAmount,
-		ClaimReason: "规则命中高风险用户，本次已限制服务并由平台兜底",
+		ClaimReason: "规则命中高风险用户；若确认继续索赔，平台将先行赔付并停止后续服务",
 	})
 	require.NoError(t, err)
 
@@ -1199,17 +1148,18 @@ func TestSubmitClaimAPI_RuleActionUserRestrictedUsesFormalMode(t *testing.T) {
 	var resp SubmitClaimResponse
 	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 	require.Equal(t, claim.ID, resp.ClaimID)
-	require.Equal(t, submitClaimStatusAccepted, resp.Status)
+	require.Equal(t, submitClaimStatusWaitingCustomerConfirm, resp.Status)
 	require.Equal(t, submitClaimDecisionStatusAutoAdjudicated, resp.DecisionStatus)
-	require.Equal(t, submitClaimPayoutStatusProcessing, resp.PayoutStatus)
+	require.Equal(t, submitClaimCompensationStatusAwaiting, resp.CompensationStatus)
+	require.Empty(t, resp.PayoutStatus)
+	require.True(t, resp.CustomerActionRequired)
+	require.Equal(t, claimCustomerActionConfirmContinue, resp.CustomerAction)
 	require.NotNil(t, resp.ApprovedAmount)
 	require.Equal(t, approvedAmount, *resp.ApprovedAmount)
 	require.Equal(t, "platform", resp.CompensationSource)
-	require.Equal(t, "规则命中高风险用户，本次已限制服务并由平台兜底", resp.Reason)
+	require.Equal(t, "规则命中高风险用户；若确认继续索赔，平台将先行赔付并停止后续服务", resp.Reason)
 	require.NotNil(t, resp.Warning)
 	require.Equal(t, resp.Reason, *resp.Warning)
-	require.NotNil(t, resp.PayoutETA)
-	require.Equal(t, "1-3个工作日", *resp.PayoutETA)
 }
 
 func TestSubmitClaimAPI_RuleOverrideDoesNotApplyRestrictionWithoutPersistedAction(t *testing.T) {
@@ -1230,7 +1180,7 @@ func TestSubmitClaimAPI_RuleOverrideDoesNotApplyRestrictionWithoutPersistedActio
 		Description:        "规则命中高风险用户，但限制动作必须依赖 persisted action",
 		ClaimAmount:        approvedAmount,
 		ApprovedAmount:     pgtype.Int8{Int64: approvedAmount, Valid: true},
-		Status:             "auto-approved",
+		Status:             db.ClaimStatusWaitingCustomerConfirmation,
 		ApprovalType:       pgtype.Text{String: "auto", Valid: true},
 		AutoApprovalReason: pgtype.Text{String: "规则命中高风险用户，但限制动作必须依赖 persisted action", Valid: true},
 		CreatedAt:          time.Now(),
@@ -1247,12 +1197,6 @@ func TestSubmitClaimAPI_RuleOverrideDoesNotApplyRestrictionWithoutPersistedActio
 	store.EXPECT().GetPlatformConfig(gomock.Any(), gomock.Any()).Return(db.PlatformConfig{}, db.ErrRecordNotFound).Times(2)
 	store.EXPECT().GetAbnormalStatsSummary(gomock.Any(), gomock.Any()).Return(db.GetAbnormalStatsSummaryRow{}, nil).Times(4)
 	store.EXPECT().GetDeliveryByOrderID(gomock.Any(), order.ID).Return(db.Delivery{}, db.ErrRecordNotFound)
-	store.EXPECT().GetUserBehaviorStats(gomock.Any(), user.ID).Return(db.GetUserBehaviorStatsRow{
-		TakeoutOrders90d: 12,
-		Claims90d:        0,
-		WarningCount:     0,
-		PlatformPayCount: 0,
-	}, nil)
 	store.EXPECT().GetDevicesByUserID(gomock.Any(), user.ID).Return([]db.UserDevice{}, nil)
 	store.EXPECT().CreateBehaviorBlocklist(gomock.Any(), gomock.Any()).Times(0)
 	store.EXPECT().CreateClaimWithBehaviorTx(gomock.Any(), gomock.Any()).DoAndReturn(
@@ -1322,7 +1266,8 @@ func TestSubmitClaimAPI_RuleOverrideDoesNotApplyRestrictionWithoutPersistedActio
 	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 	require.Equal(t, claim.ID, resp.ClaimID)
 	require.Equal(t, "platform", resp.CompensationSource)
-	require.Equal(t, submitClaimPayoutStatusProcessing, resp.PayoutStatus)
+	require.Equal(t, submitClaimCompensationStatusAwaiting, resp.CompensationStatus)
+	require.Empty(t, resp.PayoutStatus)
 	require.NotNil(t, resp.Warning)
 	require.Equal(t, "规则命中高风险用户，但限制动作必须依赖 persisted action", *resp.Warning)
 }
@@ -1343,13 +1288,29 @@ func TestSubmitClaimAPI_ApprovedPayoutRequiresTransferClient(t *testing.T) {
 	store.EXPECT().GetOrder(gomock.Any(), order.ID).Return(order, nil)
 	store.EXPECT().GetActiveBehaviorBlocklist(gomock.Any(), gomock.Any()).Return(db.BehaviorBlocklist{}, db.ErrRecordNotFound)
 	store.EXPECT().ListUserClaimsInPeriod(gomock.Any(), gomock.Any()).Return([]db.Claim{}, nil)
-	store.EXPECT().GetUserBehaviorStats(gomock.Any(), user.ID).Return(db.GetUserBehaviorStatsRow{
-		TakeoutOrders90d: 8,
-		Claims90d:        3,
-		WarningCount:     0,
-		PlatformPayCount: 1,
-	}, nil)
 	store.EXPECT().GetDevicesByUserID(gomock.Any(), user.ID).Return([]db.UserDevice{}, nil)
+	store.EXPECT().CreateClaimWithBehaviorTx(gomock.Any(), gomock.Any()).Return(db.CreateClaimWithBehaviorTxResult{
+		Claim: db.Claim{
+			ID:             851,
+			OrderID:        order.ID,
+			UserID:         user.ID,
+			ClaimType:      "foreign-object",
+			Description:    "餐品里发现异物，需要平台介入处理",
+			ClaimAmount:    approvedAmount,
+			ApprovedAmount: pgtype.Int8{Int64: approvedAmount, Valid: true},
+			Status:         db.ClaimStatusWaitingCustomerConfirmation,
+			ApprovalType:   pgtype.Text{String: "auto", Valid: true},
+			CreatedAt:      time.Now(),
+		},
+		BehaviorDecision: db.BehaviorDecision{
+			ID:                   852,
+			OrderID:              pgtype.Int8{Int64: order.ID, Valid: true},
+			DecisionMode:         pgtype.Text{String: db.BehaviorDecisionModeMerchantRecovery, Valid: true},
+			ResponsibilityDomain: pgtype.Text{String: db.BehaviorResponsibilityDomainMerchant, Valid: true},
+			CompensationSource:   "merchant",
+			TraceSummary:         pgtype.Text{String: "销售侧异常索赔默认由商户承担责任", Valid: true},
+		},
+	}, nil)
 
 	server := newTestServer(t, store)
 
@@ -1369,12 +1330,12 @@ func TestSubmitClaimAPI_ApprovedPayoutRequiresTransferClient(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	server.router.ServeHTTP(recorder, request)
 
-	require.Equal(t, http.StatusServiceUnavailable, recorder.Code)
+	require.Equal(t, http.StatusOK, recorder.Code)
 
-	var resp ErrorResponse
-	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
-	require.Equal(t, ErrClaimPayoutServiceUnavailable.Code, resp.Code)
-	require.Equal(t, ErrClaimPayoutServiceUnavailable.Message, resp.Error)
+	var resp SubmitClaimResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Equal(t, submitClaimCompensationStatusAwaiting, resp.CompensationStatus)
+	require.Empty(t, resp.PayoutStatus)
 }
 
 func TestListUserClaimsAPI_ReturnsUserFacingLifecycle(t *testing.T) {
@@ -1439,13 +1400,14 @@ func TestListUserClaimsAPI_ReturnsUserFacingLifecycle(t *testing.T) {
 
 	require.Equal(t, submitClaimStatusAccepted, resp.Claims[0].Status)
 	require.Equal(t, submitClaimDecisionStatusAutoAdjudicated, resp.Claims[0].DecisionStatus)
+	require.Equal(t, submitClaimCompensationStatusCompensated, resp.Claims[0].CompensationStatus)
 	require.Equal(t, submitClaimPayoutStatusPaid, resp.Claims[0].PayoutStatus)
 	require.Equal(t, "平台已核验并完成赔付", resp.Claims[0].Reason)
-	require.Nil(t, resp.Claims[0].PayoutETA)
 	require.NotNil(t, resp.Claims[0].ProcessedAt)
 
 	require.Equal(t, submitClaimStatusRejected, resp.Claims[1].Status)
 	require.Equal(t, submitClaimDecisionStatusRejected, resp.Claims[1].DecisionStatus)
+	require.Empty(t, resp.Claims[1].CompensationStatus)
 	require.Equal(t, "", resp.Claims[1].PayoutStatus)
 	require.Equal(t, "经核验，本次问题不在赔付范围内", resp.Claims[1].Reason)
 	require.Nil(t, resp.Claims[1].ApprovedAmount)
@@ -1491,11 +1453,387 @@ func TestGetClaimDetailAPI_ReturnsUserFacingLifecycle(t *testing.T) {
 	require.Equal(t, claim.ID, resp.ID)
 	require.Equal(t, submitClaimStatusAccepted, resp.Status)
 	require.Equal(t, submitClaimDecisionStatusAutoAdjudicated, resp.DecisionStatus)
+	require.Equal(t, submitClaimCompensationStatusCompensating, resp.CompensationStatus)
 	require.Equal(t, submitClaimPayoutStatusProcessing, resp.PayoutStatus)
-	require.NotNil(t, resp.PayoutETA)
-	require.Equal(t, "1-3个工作日", *resp.PayoutETA)
+	require.False(t, resp.CustomerActionRequired)
+	require.Empty(t, resp.CustomerAction)
 	require.Equal(t, "平台已完成自动裁定，赔付正在处理中", resp.Reason)
 	require.NotNil(t, resp.ApprovedAmount)
 	require.Equal(t, int64(1500), *resp.ApprovedAmount)
 	require.Nil(t, resp.ProcessedAt)
+}
+
+func TestConfirmContinueClaimAPI_TriggersDeferredCompensation(t *testing.T) {
+	user, _ := randomUser(t)
+	now := time.Now()
+	claim := db.Claim{
+		ID:                 904,
+		OrderID:            3004,
+		UserID:             user.ID,
+		ClaimType:          "foreign-object",
+		Description:        "餐品中发现异物",
+		ClaimAmount:        1800,
+		ApprovedAmount:     pgtype.Int8{Int64: 1500, Valid: true},
+		Status:             db.ClaimStatusWaitingCustomerConfirmation,
+		ApprovalType:       pgtype.Text{String: "auto", Valid: true},
+		AutoApprovalReason: pgtype.Text{String: "平台已完成自动裁定，等待用户确认继续", Valid: true},
+		CreatedAt:          now.Add(-30 * time.Minute),
+	}
+	processingClaim := claim
+	processingClaim.Status = "approved"
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().GetClaim(gomock.Any(), claim.ID).Return(claim, nil)
+	store.EXPECT().CreateClaimCompensationTx(gomock.Any(), db.CreateClaimCompensationTxParams{ClaimID: claim.ID}).Return(db.CreateClaimCompensationTxResult{
+		Claim: processingClaim,
+		PayoutAction: &db.BehaviorAction{
+			ID:           1001,
+			DecisionID:   901,
+			ActionType:   "payout",
+			TargetEntity: "user",
+			Status:       "created",
+		},
+	}, nil)
+	taskDistributor := mockworker.NewMockTaskDistributor(ctrl)
+	taskDistributor.EXPECT().DistributeTaskClaimPayout(
+		gomock.Any(),
+		&worker.ClaimPayoutPayload{ActionID: 1001},
+		gomock.Any(),
+		gomock.Any(),
+	).Return(nil)
+
+	server := newTestServerWithTaskDistributor(t, store, taskDistributor)
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodPost, "/v1/claims/904/confirm-continue", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp userClaimResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Equal(t, claim.ID, resp.ID)
+	require.Equal(t, submitClaimStatusAccepted, resp.Status)
+	require.Equal(t, submitClaimDecisionStatusAutoAdjudicated, resp.DecisionStatus)
+	require.Equal(t, submitClaimCompensationStatusCompensating, resp.CompensationStatus)
+	require.Equal(t, submitClaimPayoutStatusProcessing, resp.PayoutStatus)
+	require.False(t, resp.CustomerActionRequired)
+	require.Empty(t, resp.CustomerAction)
+	require.Nil(t, resp.ProcessedAt)
+	require.NotNil(t, resp.ApprovedAmount)
+	require.Equal(t, int64(1500), *resp.ApprovedAmount)
+}
+
+func TestConfirmContinueClaimAPI_IsIdempotentWhenAlreadyProcessing(t *testing.T) {
+	user, _ := randomUser(t)
+	now := time.Now()
+	claim := db.Claim{
+		ID:             905,
+		OrderID:        3005,
+		UserID:         user.ID,
+		ClaimType:      "damage",
+		Description:    "餐品洒漏",
+		ClaimAmount:    2200,
+		ApprovedAmount: pgtype.Int8{Int64: 1800, Valid: true},
+		Status:         "approved",
+		ApprovalType:   pgtype.Text{String: "auto", Valid: true},
+		DecisionReason: pgtype.Text{String: "平台已受理，补偿处理中", Valid: true},
+		CreatedAt:      now.Add(-20 * time.Minute),
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().GetClaim(gomock.Any(), claim.ID).Return(claim, nil)
+	store.EXPECT().CreateClaimCompensationTx(gomock.Any(), db.CreateClaimCompensationTxParams{ClaimID: claim.ID}).Return(db.CreateClaimCompensationTxResult{
+		Claim: claim,
+		PayoutAction: &db.BehaviorAction{
+			ID:           1002,
+			DecisionID:   902,
+			ActionType:   "payout",
+			TargetEntity: "user",
+			Status:       "created",
+		},
+	}, nil)
+	taskDistributor := mockworker.NewMockTaskDistributor(ctrl)
+	taskDistributor.EXPECT().DistributeTaskClaimPayout(
+		gomock.Any(),
+		&worker.ClaimPayoutPayload{ActionID: 1002},
+		gomock.Any(),
+		gomock.Any(),
+	).Return(nil)
+
+	server := newTestServerWithTaskDistributor(t, store, taskDistributor)
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodPost, "/v1/claims/905/confirm-continue", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp userClaimResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Equal(t, submitClaimCompensationStatusCompensating, resp.CompensationStatus)
+	require.Equal(t, submitClaimPayoutStatusProcessing, resp.PayoutStatus)
+	require.False(t, resp.CustomerActionRequired)
+	require.Empty(t, resp.CustomerAction)
+	require.Equal(t, "平台已受理，补偿处理中", resp.Reason)
+}
+
+func TestWithdrawClaimAPI_ClosesAwaitingCompensationClaim(t *testing.T) {
+	user, _ := randomUser(t)
+	now := time.Now()
+	claim := db.Claim{
+		ID:                 909,
+		OrderID:            3009,
+		UserID:             user.ID,
+		ClaimType:          "foreign-object",
+		Description:        "餐品中发现异物",
+		ClaimAmount:        2000,
+		ApprovedAmount:     pgtype.Int8{Int64: 1500, Valid: true},
+		Status:             db.ClaimStatusWaitingCustomerConfirmation,
+		ApprovalType:       pgtype.Text{String: "auto", Valid: true},
+		AutoApprovalReason: pgtype.Text{String: "平台已完成自动裁定，等待用户确认继续", Valid: true},
+		CreatedAt:          now.Add(-30 * time.Minute),
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().GetClaim(gomock.Any(), claim.ID).Return(claim, nil)
+	store.EXPECT().UpdateClaimStatusIfCurrent(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ any, arg db.UpdateClaimStatusIfCurrentParams) (db.Claim, error) {
+			require.Equal(t, claim.ID, arg.ID)
+			require.Equal(t, db.ClaimStatusWaitingCustomerConfirmation, arg.CurrentStatus)
+			require.Equal(t, db.ClaimStatusWithdrawn, arg.Status)
+			require.True(t, arg.ReviewNotes.Valid)
+			require.Equal(t, claimReviewNoteCustomerWithdrawn, arg.ReviewNotes.String)
+			require.True(t, arg.ReviewedAt.Valid)
+			updated := claim
+			updated.Status = db.ClaimStatusWithdrawn
+			updated.ReviewNotes = arg.ReviewNotes
+			updated.ReviewedAt = arg.ReviewedAt
+			return updated, nil
+		},
+	)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodPost, "/v1/claims/909/withdraw", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp userClaimResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Equal(t, claim.ID, resp.ID)
+	require.Equal(t, submitClaimStatusClosed, resp.Status)
+	require.Equal(t, submitClaimDecisionStatusAutoAdjudicated, resp.DecisionStatus)
+	require.Empty(t, resp.CompensationStatus)
+	require.Empty(t, resp.PayoutStatus)
+	require.False(t, resp.CustomerActionRequired)
+	require.Empty(t, resp.CustomerAction)
+	require.Equal(t, claimReasonCustomerWithdrawn, resp.Reason)
+	require.NotNil(t, resp.ProcessedAt)
+	require.NotNil(t, resp.ApprovedAmount)
+	require.Equal(t, int64(1500), *resp.ApprovedAmount)
+}
+
+func TestWithdrawClaimAPI_IsIdempotentWhenAlreadyWithdrawn(t *testing.T) {
+	user, _ := randomUser(t)
+	now := time.Now()
+	claim := db.Claim{
+		ID:             910,
+		OrderID:        3010,
+		UserID:         user.ID,
+		ClaimType:      "damage",
+		Description:    "餐品破损",
+		ClaimAmount:    1800,
+		ApprovedAmount: pgtype.Int8{Int64: 1200, Valid: true},
+		Status:         db.ClaimStatusWithdrawn,
+		ReviewNotes:    pgtype.Text{String: claimReviewNoteCustomerWithdrawn, Valid: true},
+		ReviewedAt:     pgtype.Timestamptz{Time: now.Add(-5 * time.Minute), Valid: true},
+		CreatedAt:      now.Add(-30 * time.Minute),
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().GetClaim(gomock.Any(), claim.ID).Return(claim, nil)
+	store.EXPECT().UpdateClaimStatus(gomock.Any(), gomock.Any()).Times(0)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodPost, "/v1/claims/910/withdraw", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp userClaimResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Equal(t, submitClaimStatusClosed, resp.Status)
+	require.Equal(t, claimReasonCustomerWithdrawn, resp.Reason)
+	require.False(t, resp.CustomerActionRequired)
+	require.NotNil(t, resp.ProcessedAt)
+}
+
+func TestWithdrawClaimAPI_RejectsClaimAlreadyProcessing(t *testing.T) {
+	user, _ := randomUser(t)
+	now := time.Now()
+	claim := db.Claim{
+		ID:             911,
+		OrderID:        3011,
+		UserID:         user.ID,
+		ClaimType:      "timeout",
+		Description:    "订单超时送达",
+		ClaimAmount:    1600,
+		ApprovedAmount: pgtype.Int8{Int64: 1200, Valid: true},
+		Status:         "approved",
+		CreatedAt:      now.Add(-20 * time.Minute),
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().GetClaim(gomock.Any(), claim.ID).Return(claim, nil)
+	store.EXPECT().UpdateClaimStatus(gomock.Any(), gomock.Any()).Times(0)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodPost, "/v1/claims/911/withdraw", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusConflict, recorder.Code)
+
+	var resp ErrorResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, ErrClaimCannotBeWithdrawn.Message, resp.Error)
+}
+
+func TestConfirmContinueClaimAPI_RejectsIneligibleClaim(t *testing.T) {
+	user, _ := randomUser(t)
+	now := time.Now()
+	claim := db.Claim{
+		ID:          906,
+		OrderID:     3006,
+		UserID:      user.ID,
+		ClaimType:   "timeout",
+		Description: "订单超时送达",
+		ClaimAmount: 1200,
+		Status:      db.ClaimStatusWithdrawn,
+		ReviewNotes: pgtype.Text{String: claimReviewNoteCustomerWithdrawn, Valid: true},
+		ReviewedAt:  pgtype.Timestamptz{Time: now.Add(-5 * time.Minute), Valid: true},
+		CreatedAt:   now.Add(-45 * time.Minute),
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().GetClaim(gomock.Any(), claim.ID).Return(claim, nil)
+	store.EXPECT().CreateClaimCompensationTx(gomock.Any(), gomock.Any()).Times(0)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodPost, "/v1/claims/906/confirm-continue", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusConflict, recorder.Code)
+
+	var resp ErrorResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	errMsg := resp.Error
+	if errMsg == "" {
+		var envelope APIResponse
+		require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &envelope))
+		errMsg = envelope.Message
+	}
+	require.Equal(t, ErrClaimCannotContinue.Message, errMsg)
+}
+
+func TestConfirmContinueClaimAPI_RejectsClaimNotOwned(t *testing.T) {
+	user, _ := randomUser(t)
+	otherUser, _ := randomUser(t)
+	now := time.Now()
+	claim := db.Claim{
+		ID:             907,
+		OrderID:        3007,
+		UserID:         otherUser.ID,
+		ClaimType:      "foreign-object",
+		Description:    "餐品中发现异物",
+		ClaimAmount:    1600,
+		ApprovedAmount: pgtype.Int8{Int64: 1200, Valid: true},
+		Status:         db.ClaimStatusWaitingCustomerConfirmation,
+		ApprovalType:   pgtype.Text{String: "auto", Valid: true},
+		CreatedAt:      now.Add(-10 * time.Minute),
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().GetClaim(gomock.Any(), claim.ID).Return(claim, nil)
+	store.EXPECT().CreateClaimCompensationTx(gomock.Any(), gomock.Any()).Times(0)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodPost, "/v1/claims/907/confirm-continue", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusForbidden, recorder.Code)
+
+	var resp ErrorResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, ErrClaimNotOwned.Message, resp.Error)
+}
+
+func TestConfirmContinueClaimAPI_RejectsClaimNotFound(t *testing.T) {
+	user, _ := randomUser(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().GetClaim(gomock.Any(), int64(908)).Return(db.Claim{}, db.ErrRecordNotFound)
+	store.EXPECT().CreateClaimCompensationTx(gomock.Any(), gomock.Any()).Times(0)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodPost, "/v1/claims/908/confirm-continue", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusNotFound, recorder.Code)
+
+	var resp ErrorResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, ErrClaimNotFound.Message, resp.Error)
 }

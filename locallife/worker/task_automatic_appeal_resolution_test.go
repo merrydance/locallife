@@ -86,6 +86,9 @@ func (d *automaticAppealResolutionTestDistributor) DistributeTaskAutomaticAppeal
 func (d *automaticAppealResolutionTestDistributor) DistributeTaskClaimPayout(context.Context, *ClaimPayoutPayload, ...asynq.Option) error {
 	return nil
 }
+func (d *automaticAppealResolutionTestDistributor) DistributeTaskClaimBehaviorAction(context.Context, *ClaimBehaviorActionPayload, ...asynq.Option) error {
+	return nil
+}
 func (d *automaticAppealResolutionTestDistributor) DistributeTaskMerchantApplicationBusinessLicenseOCR(context.Context, int64, int64, int64, ...asynq.Option) error {
 	return nil
 }

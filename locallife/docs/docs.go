@@ -2205,6 +2205,152 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/claims/{id}/confirm-continue": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "用户确认继续已完成判责的索赔，系统进入补偿执行阶段",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "索赔管理"
+                ],
+                "summary": "确认继续索赔",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "索赔ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "索赔状态",
+                        "schema": {
+                            "$ref": "#/definitions/api.userClaimResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "无效的索赔ID",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "该索赔不属于当前用户",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "索赔不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "当前索赔状态不允许继续",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/claims/{id}/withdraw": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "用户撤回已完成判责但尚未进入补偿执行的索赔",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "索赔管理"
+                ],
+                "summary": "撤回索赔",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "索赔ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "索赔状态",
+                        "schema": {
+                            "$ref": "#/definitions/api.userClaimResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "无效的索赔ID",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "该索赔不属于当前用户",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "索赔不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "当前索赔状态不允许撤回",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/combos": {
             "get": {
                 "security": [
@@ -31795,12 +31941,17 @@ const docTemplate = `{
                     "description": "merchant, rider, platform",
                     "type": "string"
                 },
-                "decision_status": {
-                    "description": "auto-adjudicated",
+                "compensation_status": {
                     "type": "string"
                 },
-                "payout_eta": {
-                    "description": "预计赔付时间",
+                "customer_action": {
+                    "type": "string"
+                },
+                "customer_action_required": {
+                    "type": "boolean"
+                },
+                "decision_status": {
+                    "description": "auto-adjudicated",
                     "type": "string"
                 },
                 "payout_status": {
@@ -31811,7 +31962,6 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "status": {
-                    "description": "accepted",
                     "type": "string"
                 },
                 "warning": {
@@ -45004,8 +45154,17 @@ const docTemplate = `{
                 "claim_type": {
                     "type": "string"
                 },
+                "compensation_status": {
+                    "type": "string"
+                },
                 "created_at": {
                     "type": "string"
+                },
+                "customer_action": {
+                    "type": "string"
+                },
+                "customer_action_required": {
+                    "type": "boolean"
                 },
                 "decision_status": {
                     "description": "auto-adjudicated, rejected",
@@ -45020,9 +45179,6 @@ const docTemplate = `{
                 "order_id": {
                     "type": "integer"
                 },
-                "payout_eta": {
-                    "type": "string"
-                },
                 "payout_status": {
                     "description": "processing, paid",
                     "type": "string"
@@ -45034,7 +45190,6 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "status": {
-                    "description": "accepted, rejected",
                     "type": "string"
                 }
             }

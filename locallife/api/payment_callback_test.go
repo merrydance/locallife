@@ -2592,7 +2592,15 @@ func TestHandleMerchantTransferNotify_SuccessMarksClaimPaid(t *testing.T) {
 
 	store.EXPECT().
 		MarkClaimPaid(gomock.Any(), gomock.Any()).
-		Return(nil)
+		DoAndReturn(func(_ context.Context, arg db.MarkClaimPaidParams) error {
+			require.Equal(t, int64(88), arg.ID)
+			require.True(t, arg.PaidAt.Valid)
+			return nil
+		})
+
+	store.EXPECT().
+		FinalizeClaimCompensationAfterPayoutTx(gomock.Any(), db.FinalizeClaimCompensationAfterPayoutTxParams{ClaimID: 88}).
+		Return(db.FinalizeClaimCompensationAfterPayoutTxResult{Claim: db.Claim{ID: 88}}, nil)
 
 	store.EXPECT().
 		UpdateBehaviorActionExecution(gomock.Any(), gomock.Any()).
