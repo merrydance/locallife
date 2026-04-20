@@ -213,15 +213,6 @@ func decodeScoreBreakdown(t *testing.T, raw []byte) behaviorDecisionScoreBreakdo
 	return payload
 }
 
-func scoreSignalByCode(detail behaviorDecisionScoreDetail, code string) (behaviorDecisionSignal, bool) {
-	for _, signal := range detail.Signals {
-		if signal.Code == code {
-			return signal, true
-		}
-	}
-	return behaviorDecisionSignal{}, false
-}
-
 func snapshotKey(snapshot BehaviorTraceSnapshot) string {
 	return snapshot.ActorType.String + ":" + snapshot.WindowKey.String + ":" + snapshot.StatsScope.String
 }

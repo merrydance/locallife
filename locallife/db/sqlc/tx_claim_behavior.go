@@ -1699,7 +1699,7 @@ func deriveBehaviorPayoutMode(status string, approvalType string, approvedAmount
 	return BehaviorPayoutModeLimitedPaid
 }
 
-func deriveBehaviorFallbackReason(decisionMode string) string {
+func deriveBehaviorFallbackReason(_ string) string {
 	return ""
 }
 

@@ -61,29 +61,6 @@ type ClaimRecoveryPlan struct {
 	DecisionSnapshot []byte
 }
 
-type behaviorRestrictionActionPayload struct {
-	Action            string `json:"action"`
-	ClaimID           int64  `json:"claim_id"`
-	UserID            int64  `json:"user_id"`
-	DecisionMode      string `json:"decision_mode"`
-	RestrictionReason string `json:"restriction_reason,omitempty"`
-	Remark            string `json:"remark"`
-}
-
-type behaviorNotifyActionPayload struct {
-	Action           string `json:"action"`
-	ClaimID          int64  `json:"claim_id"`
-	TargetEntity     string `json:"target_entity"`
-	TargetID         int64  `json:"target_id,omitempty"`
-	RecipientUserID  int64  `json:"recipient_user_id,omitempty"`
-	NotificationType string `json:"notification_type"`
-	Title            string `json:"title"`
-	Content          string `json:"content"`
-	RelatedType      string `json:"related_type"`
-	RelatedID        int64  `json:"related_id"`
-	Remark           string `json:"remark"`
-}
-
 // WebSocketHub WebSocket通知接口
 type WebSocketHub interface {
 	SendToMerchant(merchantID int64, msg websocket.Message)
