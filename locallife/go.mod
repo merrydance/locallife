@@ -1,6 +1,6 @@
 module github.com/merrydance/locallife
 
-go 1.25.8
+go 1.26.2
 
 require (
 	github.com/aead/chacha20poly1305 v0.0.0-20201124145622-1a5aba2a8b29
