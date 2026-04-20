@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -1508,6 +1509,72 @@ func TestConfirmContinueClaimAPI_TriggersDeferredCompensation(t *testing.T) {
 	server := newTestServerWithTaskDistributor(t, store, taskDistributor)
 	recorder := httptest.NewRecorder()
 	request, err := http.NewRequest(http.MethodPost, "/v1/claims/904/confirm-continue", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp userClaimResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Equal(t, claim.ID, resp.ID)
+	require.Equal(t, submitClaimStatusAccepted, resp.Status)
+	require.Equal(t, submitClaimDecisionStatusAutoAdjudicated, resp.DecisionStatus)
+	require.Equal(t, submitClaimCompensationStatusCompensating, resp.CompensationStatus)
+	require.Equal(t, submitClaimPayoutStatusProcessing, resp.PayoutStatus)
+	require.False(t, resp.CustomerActionRequired)
+	require.Empty(t, resp.CustomerAction)
+	require.Nil(t, resp.ProcessedAt)
+	require.NotNil(t, resp.ApprovedAmount)
+	require.Equal(t, int64(1500), *resp.ApprovedAmount)
+}
+
+func TestConfirmContinueClaimAPI_ReturnsProcessingWhenEnqueueFailsAfterPersistence(t *testing.T) {
+	user, _ := randomUser(t)
+	now := time.Now()
+	claim := db.Claim{
+		ID:                 9041,
+		OrderID:            30041,
+		UserID:             user.ID,
+		ClaimType:          "foreign-object",
+		Description:        "餐品中发现异物",
+		ClaimAmount:        1800,
+		ApprovedAmount:     pgtype.Int8{Int64: 1500, Valid: true},
+		Status:             db.ClaimStatusWaitingCustomerConfirmation,
+		ApprovalType:       pgtype.Text{String: "auto", Valid: true},
+		AutoApprovalReason: pgtype.Text{String: "平台已完成自动裁定，等待用户确认继续", Valid: true},
+		CreatedAt:          now.Add(-30 * time.Minute),
+	}
+	processingClaim := claim
+	processingClaim.Status = db.ClaimStatusApproved
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().GetClaim(gomock.Any(), claim.ID).Return(claim, nil)
+	store.EXPECT().CreateClaimCompensationTx(gomock.Any(), db.CreateClaimCompensationTxParams{ClaimID: claim.ID}).Return(db.CreateClaimCompensationTxResult{
+		Claim: processingClaim,
+		PayoutAction: &db.BehaviorAction{
+			ID:           10011,
+			DecisionID:   9011,
+			ActionType:   "payout",
+			TargetEntity: "user",
+			Status:       "created",
+		},
+	}, nil)
+	taskDistributor := mockworker.NewMockTaskDistributor(ctrl)
+	taskDistributor.EXPECT().DistributeTaskClaimPayout(
+		gomock.Any(),
+		&worker.ClaimPayoutPayload{ActionID: 10011},
+		gomock.Any(),
+		gomock.Any(),
+	).Return(errors.New("queue unavailable"))
+
+	server := newTestServerWithTaskDistributor(t, store, taskDistributor)
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodPost, "/v1/claims/9041/confirm-continue", nil)
 	require.NoError(t, err)
 	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 

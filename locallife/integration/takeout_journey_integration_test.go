@@ -73,6 +73,18 @@ type claimSubmitResponse struct {
 	Reason                 string `json:"reason"`
 }
 
+type claimContinueResponse struct {
+	ID                     int64  `json:"id"`
+	Status                 string `json:"status"`
+	DecisionStatus         string `json:"decision_status"`
+	CompensationStatus     string `json:"compensation_status"`
+	PayoutStatus           string `json:"payout_status"`
+	CustomerActionRequired bool   `json:"customer_action_required"`
+	CustomerAction         string `json:"customer_action"`
+	ApprovedAmount         *int64 `json:"approved_amount"`
+	Reason                 string `json:"reason"`
+}
+
 func requireAcceptedClaimSubmission(t *testing.T, claimResp claimSubmitResponse, approvedAmount int64) {
 	t.Helper()
 
@@ -87,6 +99,34 @@ func requireAcceptedClaimSubmission(t *testing.T, claimResp claimSubmitResponse,
 	require.Equal(t, approvedAmount, *claimResp.ApprovedAmount)
 	require.NotEmpty(t, claimResp.CompensationSource)
 	require.NotEmpty(t, claimResp.Reason)
+}
+
+func requireAcceptedClaimContinue(t *testing.T, claimResp claimContinueResponse, claimID, approvedAmount int64) {
+	t.Helper()
+
+	require.Equal(t, claimID, claimResp.ID)
+	require.Equal(t, "accepted", claimResp.Status)
+	require.Equal(t, "auto-adjudicated", claimResp.DecisionStatus)
+	require.Equal(t, "compensating", claimResp.CompensationStatus)
+	require.Equal(t, "processing", claimResp.PayoutStatus)
+	require.False(t, claimResp.CustomerActionRequired)
+	require.Empty(t, claimResp.CustomerAction)
+	require.NotNil(t, claimResp.ApprovedAmount)
+	require.Equal(t, approvedAmount, *claimResp.ApprovedAmount)
+	require.NotEmpty(t, claimResp.Reason)
+}
+
+func confirmClaimContinueIntegration(t *testing.T, server *api.Server, claimID, customerID, approvedAmount int64) claimContinueResponse {
+	t.Helper()
+
+	url := fmt.Sprintf("/v1/claims/%d/confirm-continue", claimID)
+	rec := doJSON(t, server, http.MethodPost, url, nil, customerID)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var continueResp claimContinueResponse
+	requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &continueResp)
+	requireAcceptedClaimContinue(t, continueResp, claimID, approvedAmount)
+	return continueResp
 }
 
 type claimPayoutActionDetailSnapshot struct {
@@ -182,33 +222,55 @@ func newClaimRecoveryPaymentClient(t *testing.T, store *db.SQLStore, userID, amo
 	return mockPaymentClient
 }
 
-func findPayoutActionForClaimOrAppeal(t *testing.T, store *db.SQLStore, orderID, claimID, appealID int64) (db.BehaviorAction, claimPayoutActionDetailSnapshot) {
-	t.Helper()
-
+func lookupPayoutActionForClaimOrAppeal(store *db.SQLStore, orderID, claimID, appealID int64) (db.BehaviorAction, claimPayoutActionDetailSnapshot, bool, error) {
 	decisions, err := store.ListBehaviorDecisionsByOrder(context.Background(), pgtype.Int8{Int64: orderID, Valid: true})
-	require.NoError(t, err)
-	require.NotEmpty(t, decisions)
+	if err != nil {
+		return db.BehaviorAction{}, claimPayoutActionDetailSnapshot{}, false, err
+	}
+	if len(decisions) == 0 {
+		return db.BehaviorAction{}, claimPayoutActionDetailSnapshot{}, false, nil
+	}
 
 	for _, decision := range decisions {
 		actions, actionErr := store.ListBehaviorActionsByDecision(context.Background(), decision.ID)
-		require.NoError(t, actionErr)
+		if actionErr != nil {
+			return db.BehaviorAction{}, claimPayoutActionDetailSnapshot{}, false, actionErr
+		}
 		for _, action := range actions {
 			if action.ActionType != "payout" || action.TargetEntity != "user" {
 				continue
 			}
 			var detail claimPayoutActionDetailSnapshot
-			require.NoError(t, json.Unmarshal(action.Detail, &detail))
+			if err := json.Unmarshal(action.Detail, &detail); err != nil {
+				return db.BehaviorAction{}, claimPayoutActionDetailSnapshot{}, false, err
+			}
 			if appealID > 0 && detail.AppealID == appealID {
-				return action, detail
+				return action, detail, true, nil
 			}
 			if appealID == 0 && detail.ClaimID == claimID {
-				return action, detail
+				return action, detail, true, nil
 			}
 		}
 	}
 
-	t.Fatalf("payout action not found for order=%d claim=%d appeal=%d", orderID, claimID, appealID)
-	return db.BehaviorAction{}, claimPayoutActionDetailSnapshot{}
+	return db.BehaviorAction{}, claimPayoutActionDetailSnapshot{}, false, nil
+}
+
+func findPayoutActionForClaimOrAppeal(t *testing.T, store *db.SQLStore, orderID, claimID, appealID int64) (db.BehaviorAction, claimPayoutActionDetailSnapshot) {
+	t.Helper()
+
+	action, detail, found, err := lookupPayoutActionForClaimOrAppeal(store, orderID, claimID, appealID)
+	require.NoError(t, err)
+	require.Truef(t, found, "payout action not found for order=%d claim=%d appeal=%d", orderID, claimID, appealID)
+	return action, detail
+}
+
+func requireNoPayoutActionForClaimOrAppeal(t *testing.T, store *db.SQLStore, orderID, claimID, appealID int64) {
+	t.Helper()
+
+	_, _, found, err := lookupPayoutActionForClaimOrAppeal(store, orderID, claimID, appealID)
+	require.NoError(t, err)
+	require.Falsef(t, found, "unexpected payout action found for order=%d claim=%d appeal=%d", orderID, claimID, appealID)
 }
 
 type appealSubmitResponse struct {
@@ -262,37 +324,6 @@ func markClaimRecoveryPaymentPaid(t *testing.T, store *db.SQLStore, paymentOrder
 	})
 	require.NoError(t, err)
 	require.True(t, result.Processed)
-}
-
-func ensureIntegrationMerchantRecovery(t *testing.T, store *db.SQLStore, orderID, claimID, amount int64) db.ClaimRecovery {
-	t.Helper()
-
-	ctx := context.Background()
-	recovery, err := store.GetClaimRecoveryByClaimID(ctx, claimID)
-	if err == nil {
-		return recovery
-	}
-	require.ErrorIs(t, err, db.ErrRecordNotFound)
-
-	decisions, err := store.ListBehaviorDecisionsByOrder(ctx, pgtype.Int8{Int64: orderID, Valid: true})
-	require.NoError(t, err)
-	require.NotEmpty(t, decisions)
-
-	recovery, err = store.CreateClaimRecovery(ctx, db.CreateClaimRecoveryParams{
-		ClaimID:          claimID,
-		OrderID:          orderID,
-		DecisionID:       pgtype.Int8{Int64: decisions[len(decisions)-1].ID, Valid: true},
-		ResponsibleParty: "merchant",
-		RecoveryTarget:   pgtype.Text{String: "merchant", Valid: true},
-		RecoveryAmount:   amount,
-		Status:           "pending",
-		DueAt:            time.Now().Add(24 * time.Hour),
-		DecisionSnapshot: []byte(`{"source":"integration_manual_recovery_seed"}`),
-		RecoveryBasis:    pgtype.Text{String: db.ClaimRecoveryBasisMerchantRecovery, Valid: true},
-	})
-	require.NoError(t, err)
-
-	return recovery
 }
 
 func createTakeoutCombinedPaymentFixture(t *testing.T, server *api.Server, store *db.SQLStore) takeoutCombinedPaymentFixture {
@@ -3517,7 +3548,7 @@ func TestRiderDepositRefundCallbackAccountingIntegration(t *testing.T) {
 }
 
 // TestClaimJourneyD1Integration
-// 索赔旅程（D1）端到端验收：完成订单后提交索赔并落库。
+// 索赔旅程（D1）端到端验收：完成订单后提交索赔、顾客确认继续、平台完成赔付。
 func TestClaimJourneyD1Integration(t *testing.T) {
 	server, store := initIntegrationServer(t)
 	resetIntegrationData(t)
@@ -3588,17 +3619,29 @@ func TestClaimJourneyD1Integration(t *testing.T) {
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &claimResp)
 		requireAcceptedClaimSubmission(t, claimResp, order.TotalAmount)
 	}
-	_ = ensureIntegrationMerchantRecovery(t, store, orderID, claimResp.ClaimID, order.TotalAmount)
 
 	claim, err := store.GetClaim(ctx, claimResp.ClaimID)
 	require.NoError(t, err)
 	require.Equal(t, orderID, claim.OrderID)
+	require.False(t, claim.PaidAt.Valid)
+	require.Equal(t, db.ClaimStatusWaitingCustomerConfirmation, claim.Status)
+	requireNoPayoutActionForClaimOrAppeal(t, store, orderID, claim.ID, 0)
+
+	confirmClaimContinueIntegration(t, server, claimResp.ClaimID, customer.ID, order.TotalAmount)
+
+	claim, err = store.GetClaim(ctx, claimResp.ClaimID)
+	require.NoError(t, err)
+	require.Equal(t, db.ClaimStatusApproved, claim.Status)
 	require.False(t, claim.PaidAt.Valid)
 
 	payoutAction, payoutDetail := findPayoutActionForClaimOrAppeal(t, store, orderID, claim.ID, 0)
 	require.Equal(t, "created", payoutAction.Status)
 	require.Equal(t, customer.ID, payoutDetail.UserID)
 	require.Equal(t, order.TotalAmount, payoutDetail.Amount)
+
+	recovery, err := store.GetClaimRecoveryByClaimID(ctx, claim.ID)
+	require.NoError(t, err)
+	require.Equal(t, "pending", recovery.Status)
 
 	mockPaymentClient := newFinishedClaimPayoutPaymentClient(t, store, customer.ID, order.TotalAmount, "platform payout", "claim payout")
 	processor := worker.NewTestTaskProcessor(store, worker.NewNoopTaskDistributor(), nil, nil)
@@ -3619,13 +3662,13 @@ func TestClaimJourneyD1Integration(t *testing.T) {
 	require.False(t, payoutDetail.TerminalFailure)
 	require.Empty(t, payoutDetail.LastError)
 
-	recovery, err := store.GetClaimRecoveryByClaimID(ctx, claim.ID)
+	recovery, err = store.GetClaimRecoveryByClaimID(ctx, claim.ID)
 	require.NoError(t, err)
 	require.Equal(t, "pending", recovery.Status)
 }
 
 // TestClaimJourneyD2MerchantAppealIntegration
-// 索赔旅程（D2）端到端验收：商户申诉提交后系统自动复核并撤销原追偿安排。
+// 索赔旅程（D2）端到端验收：顾客确认继续后商户发起申诉，系统自动复核维持原判并恢复追偿。
 func TestClaimJourneyD2MerchantAppealIntegration(t *testing.T) {
 	server, store := initIntegrationServer(t)
 	resetIntegrationData(t)
@@ -3696,7 +3739,7 @@ func TestClaimJourneyD2MerchantAppealIntegration(t *testing.T) {
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &claimResp)
 		requireAcceptedClaimSubmission(t, claimResp, order.TotalAmount)
 	}
-	_ = ensureIntegrationMerchantRecovery(t, store, orderID, claimResp.ClaimID, order.TotalAmount)
+	confirmClaimContinueIntegration(t, server, claimResp.ClaimID, customer.ID, order.TotalAmount)
 
 	// 4) 商户申诉
 	var appealResp appealSubmitResponse
@@ -3712,7 +3755,7 @@ func TestClaimJourneyD2MerchantAppealIntegration(t *testing.T) {
 		require.Equal(t, claimResp.ClaimID, appealResp.ClaimID)
 		require.Equal(t, "merchant", appealResp.AppellantType)
 		require.Equal(t, merchant.ID, appealResp.AppellantID)
-		require.Equal(t, "approved", appealResp.Status)
+		require.Equal(t, "rejected", appealResp.Status)
 	}
 
 	appeal, err := store.GetAppealByClaim(ctx, db.GetAppealByClaimParams{
@@ -3721,12 +3764,12 @@ func TestClaimJourneyD2MerchantAppealIntegration(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, appealResp.ID, appeal.ID)
-	require.Equal(t, "approved", appeal.Status)
+	require.Equal(t, "rejected", appeal.Status)
 	require.True(t, appeal.ReviewedAt.Valid)
 
 	recovery, err := store.GetClaimRecoveryByClaimID(ctx, claimResp.ClaimID)
 	require.NoError(t, err)
-	require.Equal(t, "waived", recovery.Status)
+	require.Equal(t, "pending", recovery.Status)
 }
 
 // TestClaimJourneyD3RiderAppealIntegration
@@ -3860,6 +3903,7 @@ func TestClaimJourneyD3RiderAppealIntegration(t *testing.T) {
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &claimResp)
 		requireAcceptedClaimSubmission(t, claimResp, order.TotalAmount)
 	}
+	confirmClaimContinueIntegration(t, server, claimResp.ClaimID, customer.ID, order.TotalAmount)
 
 	// 7) 骑手申诉
 	var appealResp appealSubmitResponse
@@ -3961,7 +4005,9 @@ func TestClaimJourneyD10MerchantRecoveryPayIntegration(t *testing.T) {
 		requireAcceptedClaimSubmission(t, claimResp, order.TotalAmount)
 	}
 
-	recovery := ensureIntegrationMerchantRecovery(t, store, orderID, claimResp.ClaimID, order.TotalAmount)
+	confirmClaimContinueIntegration(t, server, claimResp.ClaimID, customer.ID, order.TotalAmount)
+	recovery, err := store.GetClaimRecoveryByClaimID(ctx, claimResp.ClaimID)
+	require.NoError(t, err)
 	require.Equal(t, "pending", recovery.Status)
 	require.True(t, recovery.RecoveryTarget.Valid)
 	require.Equal(t, "merchant", recovery.RecoveryTarget.String)
@@ -4119,6 +4165,7 @@ func TestClaimJourneyD12RiderRecoveryPayIntegration(t *testing.T) {
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &claimResp)
 		require.NotZero(t, claimResp.ClaimID)
 	}
+	confirmClaimContinueIntegration(t, server, claimResp.ClaimID, customer.ID, order.TotalAmount)
 
 	recovery, err := store.GetClaimRecoveryByClaimID(ctx, claimResp.ClaimID)
 	require.NoError(t, err)
@@ -4243,7 +4290,7 @@ func TestClaimJourneyD13OperatorRecoveryViewIntegration(t *testing.T) {
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &claimResp)
 		requireAcceptedClaimSubmission(t, claimResp, order.TotalAmount)
 	}
-	_ = ensureIntegrationMerchantRecovery(t, store, orderID, claimResp.ClaimID, order.TotalAmount)
+	confirmClaimContinueIntegration(t, server, claimResp.ClaimID, customer.ID, order.TotalAmount)
 
 	// 4) 运营商查看追偿单
 	var recoveryResp claimRecoveryStatusResponse
@@ -4330,7 +4377,7 @@ func TestClaimJourneyD14MerchantRecoveryViewIntegration(t *testing.T) {
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &claimResp)
 		requireAcceptedClaimSubmission(t, claimResp, order.TotalAmount)
 	}
-	_ = ensureIntegrationMerchantRecovery(t, store, orderID, claimResp.ClaimID, order.TotalAmount)
+	confirmClaimContinueIntegration(t, server, claimResp.ClaimID, customer.ID, order.TotalAmount)
 
 	// 4) 商户查看追偿单
 	var recoveryResp claimRecoveryStatusResponse
@@ -4476,6 +4523,7 @@ func TestClaimJourneyD15RiderRecoveryViewIntegration(t *testing.T) {
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &claimResp)
 		require.NotZero(t, claimResp.ClaimID)
 	}
+	confirmClaimContinueIntegration(t, server, claimResp.ClaimID, customer.ID, order.TotalAmount)
 
 	// 7) 骑手查看追偿单
 	var recoveryResp claimRecoveryStatusResponse
@@ -4582,6 +4630,7 @@ func TestClaimJourneyD16MerchantRecoveryForbiddenIntegration(t *testing.T) {
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &claimResp)
 		requireAcceptedClaimSubmission(t, claimResp, order.TotalAmount)
 	}
+	confirmClaimContinueIntegration(t, server, claimResp.ClaimID, customer.ID, order.TotalAmount)
 
 	// 4) 非所属商户查看追偿单应被拒绝
 	url := fmt.Sprintf("/v1/merchant/claims/%d/recovery", claimResp.ClaimID)
@@ -4738,6 +4787,7 @@ func TestClaimJourneyD17RiderRecoveryForbiddenIntegration(t *testing.T) {
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &claimResp)
 		require.NotZero(t, claimResp.ClaimID)
 	}
+	confirmClaimContinueIntegration(t, server, claimResp.ClaimID, customer.ID, order.TotalAmount)
 
 	// 7) 非所属骑手查看追偿单应被拒绝
 	url := fmt.Sprintf("/v1/rider/claims/%d/recovery", claimResp.ClaimID)
@@ -4841,6 +4891,7 @@ func TestClaimJourneyD18OperatorRecoveryCrossRegionForbiddenIntegration(t *testi
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &claimResp)
 		requireAcceptedClaimSubmission(t, claimResp, order.TotalAmount)
 	}
+	confirmClaimContinueIntegration(t, server, claimResp.ClaimID, customer.ID, order.TotalAmount)
 
 	// 4) 跨区域运营商查看追偿单应被拒绝
 	url := fmt.Sprintf("/v1/operator/claims/%d/recovery", claimResp.ClaimID)
@@ -5009,7 +5060,9 @@ func TestClaimJourneyD22MerchantRecoveryViewAfterPayIntegration(t *testing.T) {
 
 	// 4) 商户支付追偿单
 	{
-		recovery := ensureIntegrationMerchantRecovery(t, store, orderID, claimResp.ClaimID, order.TotalAmount)
+		confirmClaimContinueIntegration(t, server, claimResp.ClaimID, customer.ID, order.TotalAmount)
+		recovery, err := store.GetClaimRecoveryByClaimID(ctx, claimResp.ClaimID)
+		require.NoError(t, err)
 		server.SetDirectPaymentClientForTest(newClaimRecoveryPaymentClient(t, store, merchantOwner.ID, recovery.RecoveryAmount, "商户索赔追偿支付"))
 		defer server.SetDirectPaymentClientForTest(nil)
 
@@ -5163,6 +5216,7 @@ func TestClaimJourneyD23RiderRecoveryViewAfterPayIntegration(t *testing.T) {
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &claimResp)
 		require.NotZero(t, claimResp.ClaimID)
 	}
+	confirmClaimContinueIntegration(t, server, claimResp.ClaimID, customer.ID, order.TotalAmount)
 
 	// 7) 骑手支付追偿单
 	{
@@ -5285,7 +5339,7 @@ func TestClaimJourneyD24OperatorRecoveryViewAfterWaiveIntegration(t *testing.T) 
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &claimResp)
 		requireAcceptedClaimSubmission(t, claimResp, order.TotalAmount)
 	}
-	_ = ensureIntegrationMerchantRecovery(t, store, orderID, claimResp.ClaimID, order.TotalAmount)
+	confirmClaimContinueIntegration(t, server, claimResp.ClaimID, customer.ID, order.TotalAmount)
 
 	decisions, err := store.ListBehaviorDecisionsByOrder(ctx, pgtype.Int8{Int64: orderID, Valid: true})
 	require.NoError(t, err)
@@ -5409,6 +5463,7 @@ func TestClaimJourneyD25MerchantAppealDetailNotFoundIntegration(t *testing.T) {
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &claimResp)
 		requireAcceptedClaimSubmission(t, claimResp, order.TotalAmount)
 	}
+	confirmClaimContinueIntegration(t, server, claimResp.ClaimID, customer.ID, order.TotalAmount)
 
 	// 4) 商户申诉
 	var appealResp appealSubmitResponse
@@ -5578,6 +5633,7 @@ func TestClaimJourneyD26RiderAppealDetailNotFoundIntegration(t *testing.T) {
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &claimResp)
 		requireAcceptedClaimSubmission(t, claimResp, order.TotalAmount)
 	}
+	confirmClaimContinueIntegration(t, server, claimResp.ClaimID, customer.ID, order.TotalAmount)
 
 	// 7) 骑手申诉
 	var appealResp appealSubmitResponse
@@ -5695,6 +5751,7 @@ func TestClaimJourneyD27OperatorAppealDetailNotFoundIntegration(t *testing.T) {
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &claimResp)
 		requireAcceptedClaimSubmission(t, claimResp, order.TotalAmount)
 	}
+	confirmClaimContinueIntegration(t, server, claimResp.ClaimID, customer.ID, order.TotalAmount)
 
 	// 4) 商户申诉
 	var appealResp appealSubmitResponse
@@ -5787,6 +5844,7 @@ func TestClaimJourneyD30MerchantAppealDuplicateIntegration(t *testing.T) {
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &claimResp)
 		requireAcceptedClaimSubmission(t, claimResp, order.TotalAmount)
 	}
+	confirmClaimContinueIntegration(t, server, claimResp.ClaimID, customer.ID, order.TotalAmount)
 
 	// 4) 商户首次申诉
 	appealBody := map[string]any{
@@ -5985,6 +6043,7 @@ func TestClaimJourneyD31RiderAppealDuplicateIntegration(t *testing.T) {
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &claimResp)
 		requireAcceptedClaimSubmission(t, claimResp, order.TotalAmount)
 	}
+	confirmClaimContinueIntegration(t, server, claimResp.ClaimID, customer.ID, order.TotalAmount)
 
 	// 7) 骑手首次申诉
 	appealBody := map[string]any{
@@ -6152,6 +6211,7 @@ func TestClaimJourneyD32RiderAppealDuplicateConflictIntegration(t *testing.T) {
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &claimResp)
 		requireAcceptedClaimSubmission(t, claimResp, order.TotalAmount)
 	}
+	confirmClaimContinueIntegration(t, server, claimResp.ClaimID, customer.ID, order.TotalAmount)
 
 	// 7) 骑手首次申诉
 	appealBody := map[string]any{
@@ -6255,6 +6315,7 @@ func TestClaimJourneyD33OperatorAppealListByStatusIntegration(t *testing.T) {
 		require.Equal(t, http.StatusOK, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &claimResp)
 		requireAcceptedClaimSubmission(t, claimResp, order.TotalAmount)
+		confirmClaimContinueIntegration(t, server, claimResp.ClaimID, customer.ID, order.TotalAmount)
 
 		return created.ID, claimResp.ClaimID, customer.ID
 	}
@@ -6569,6 +6630,7 @@ func TestClaimJourneyD37OperatorAppealListPaginationIntegration(t *testing.T) {
 			requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &claimResp)
 			require.NotZero(t, claimResp.ClaimID)
 		}
+		confirmClaimContinueIntegration(t, server, claimResp.ClaimID, customerID, int64(1000))
 
 		var appealResp appealSubmitResponse
 		{
@@ -6723,6 +6785,7 @@ func TestClaimJourneyD38MerchantAppealListPaginationIntegration(t *testing.T) {
 			requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &claimResp)
 			require.NotZero(t, claimResp.ClaimID)
 		}
+		confirmClaimContinueIntegration(t, server, claimResp.ClaimID, customerID, int64(1000))
 
 		var appealResp appealSubmitResponse
 		{
@@ -6903,6 +6966,7 @@ func TestClaimJourneyD39RiderAppealListPaginationIntegration(t *testing.T) {
 			requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &claimResp)
 			requireAcceptedClaimSubmission(t, claimResp, int64(1000))
 		}
+		confirmClaimContinueIntegration(t, server, claimResp.ClaimID, customerID, int64(1000))
 
 		var appealResp appealSubmitResponse
 		{

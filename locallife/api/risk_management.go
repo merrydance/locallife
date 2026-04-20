@@ -1495,6 +1495,10 @@ func newUserClaimResponse(claim db.Claim) userClaimResponse {
 }
 
 func (server *Server) enqueueClaimCompensationActions(ctx context.Context, result db.CreateClaimCompensationTxResult) error {
+	if server.taskDistributor == nil {
+		return fmt.Errorf("task distributor unavailable")
+	}
+
 	if result.RestrictionAction != nil {
 		if err := server.taskDistributor.DistributeTaskClaimBehaviorAction(
 			ctx,
@@ -1784,9 +1788,16 @@ func (server *Server) ConfirmContinueClaim(ctx *gin.Context) {
 		return
 	}
 
+	enqueueDeferred := false
 	if err := server.enqueueClaimCompensationActions(ctx, result); err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("enqueue claim compensation actions: %w", err)))
-		return
+		enqueueDeferred = true
+		log.Warn().Err(err).
+			Int64("claim_id", claim.ID).
+			Bool("payout_action_created", result.PayoutAction != nil).
+			Bool("recovery_action_created", result.RecoveryAction != nil).
+			Bool("restriction_action_created", result.RestrictionAction != nil).
+			Bool("notification_action_created", result.NotificationAction != nil).
+			Msg("failed to enqueue claim compensation actions after compensation state was persisted")
 	}
 
 	server.writeAuditLog(ctx, AuditLogInput{
@@ -1800,6 +1811,7 @@ func (server *Server) ConfirmContinueClaim(ctx *gin.Context) {
 			"compensation_triggered": result.PayoutAction != nil,
 			"recovery_created":       result.RecoveryAction != nil,
 			"restriction_created":    result.RestrictionAction != nil,
+			"dispatch_deferred":      enqueueDeferred,
 		},
 	})
 
