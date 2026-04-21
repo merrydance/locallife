@@ -147,7 +147,7 @@ Prompt 库必须接受和代码同等级的基础门禁。
 
 | Area | Implementation Must Push | Implementation Must Not | Review Must Check |
 | --- | --- | --- | --- |
-| Backend | 闭环打通 handler / logic / store / route / DTO / tests；状态常量复用 `db/sqlc/constants.go`；识别并执行 `make sqlc` / `make mock` / `make swagger`；对仓库级高风险链路参考 `backend/README.md` 与匹配的 domain README；说明验证范围与残余风险 | 不要把业务逻辑塞进 handler；不要新增魔法状态字符串；不要只改 SQL、DTO 或 handler 而不做全链路传播；不要跳过生成步骤判断；不要把生产 bugfix 当成表层补丁而不追真实写边界或恢复路径 | 传播是否断层；新增逻辑是否真正可达；生成物是否提交；回调、异步、支付、上传、OCR、鉴权等高风险路径是否真实验证；正式 review 是否形成 durable closeout |
+| Backend | 闭环打通 handler / logic / store / route / DTO / tests；先说明能力归属哪个模块、关键状态由谁唯一写入；状态常量复用 `db/sqlc/constants.go`；识别并执行 `make sqlc` / `make mock` / `make swagger`；对仓库级高风险链路参考 `backend/README.md` 与匹配的 domain README；说明事务边界、副作用边界、验证范围与残余风险 | 不要把业务逻辑塞进 handler；不要新增魔法状态字符串；不要只改 SQL、DTO 或 handler 而不做全链路传播；不要让多个包同时写同一关键状态；不要为了“以后可能复用”提前抽共享层；不要跳过生成步骤判断；不要把生产 bugfix 当成表层补丁而不追真实写边界或恢复路径 | 传播是否断层；模块所有权是否清楚；关键状态是否存在多头写入；事务与副作用边界是否分离；新增逻辑是否真正可达；生成物是否提交；回调、异步、支付、上传、OCR、鉴权等高风险路径是否真实验证；正式 review 是否形成 durable closeout |
 
 ### 3.2 Web
 

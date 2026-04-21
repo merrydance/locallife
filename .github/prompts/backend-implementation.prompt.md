@@ -16,8 +16,10 @@ Use `.github/standards/backend/BACKEND_CHANGE_SAFETY_CHECKLIST.md` before claimi
 Request:
 
 - Implement <feature or fix>
+- Start by stating which module owns this capability and whether the change introduces or modifies any single-writer state transition
 - Keep the change complete across handler, logic, store, route, DTO, and tests when those layers are affected
 - Reuse nearby patterns before introducing a new abstraction
+- If the change both persists state and triggers external effects, explain the durable-state boundary and the post-commit side-effect boundary
 - Use constants from `db/sqlc/constants.go` instead of new magic strings
 - Tell me whether the change requires `make sqlc`, `make mock`, or `make swagger`
 - Run the smallest relevant validation command and report what was executed
@@ -37,6 +39,7 @@ Acceptance checklist:
 
 - Request binding, auth extraction, and error mapping remain in handler only
 - Business rules live in logic or a service, not in handler
+- Module ownership is explicit and important state is not written from multiple side paths
 - Persistence changes are wired through sqlc/store and actually used by logic
 - Required generation steps were identified and run if source files changed
 - Tests cover the new branch, failure path, or contract edge case

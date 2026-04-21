@@ -42,7 +42,10 @@ Prompt routing defaults for this area:
 - Keep the HTTP three-layer split: `api/` for transport, `logic/` for business rules, `db/sqlc/` for persistence.
 - Do not put business logic in handlers.
 - Inject dependencies through constructors or service structs. Do not add package-level runtime globals.
+- Keep modules cohesive around business capabilities. If a change needs multiple unrelated packages to mutate the same core status, stop and re-check ownership before coding.
+- Prefer a single writer for important state transitions. Other modules should call the owning capability instead of writing the same status directly through side paths.
 - Prefer small, caller-shaped interfaces over broad implementation-shaped interfaces when introducing a new abstraction boundary.
+- Do not create new `common`, `shared`, or helper-style abstractions just for speculative reuse; wait for stable demand from multiple real callers.
 - Core functions should accept `context.Context` as the first argument.
 - Do not store `context.Context` in struct fields or replace upstream context with `context.Background()` in ordinary request or task flows.
 - Use `db/sqlc/constants.go` as the single source of truth for business status constants.

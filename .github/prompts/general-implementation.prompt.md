@@ -18,7 +18,9 @@ Request:
 
 - Implement <feature or fix>
 - Keep the affected execution path complete across every touched layer or surface
+- Start by stating which area or module owns the capability and whether the change affects any single-writer state transition
 - Reuse nearby patterns before introducing a new abstraction
+- Prefer existing single sources of truth for states, enums, permissions, and error semantics instead of introducing local duplicates
 - Tell me which target areas are involved: <backend, web, weapp, mixed>
 - Classify the risk level (`G0`/`G1`/`G2`/`G3`) and explain why when the task is not obviously routine
 - Tell me whether any regeneration or derived-artifact steps are required
@@ -38,6 +40,6 @@ Optional context:
 
 Area-specific reminders:
 
-- Backend-heavy work: name the handler/logic/store or worker path that should close the loop, and call out whether `make sqlc`, `make mock`, or `make swagger` may be needed.
+- Backend-heavy work: name the handler/logic/store or worker path that should close the loop, call out whether `make sqlc`, `make mock`, or `make swagger` may be needed, and separate durable-state changes from external side effects.
 - Web-heavy work: name the page or component path, expected loading or error behavior, and any sensitive fields or dangerous actions involved.
 - Mini Program-heavy work: name the page or component path, expected weak-network or re-entry behavior, and any state-recovery expectations.

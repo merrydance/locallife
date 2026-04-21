@@ -67,6 +67,7 @@ Backend conventions:
 - Keep the HTTP three-layer split: `api/` handles transport, `logic/` holds business logic, `db/sqlc/` owns persistence.
 - Do not put business logic in handlers.
 - Inject dependencies explicitly through constructors or service structs. Do not introduce package-level runtime globals.
+- Keep business capabilities cohesive. When a change affects a core state transition, make the owning module explicit and avoid creating multiple write paths for the same state.
 - Core functions should accept `context.Context` as the first argument.
 - Use `db/sqlc/constants.go` as the single source of truth for business status constants. Do not add magic strings in handlers, logic, or tests.
 - Use structured logging. Do not add `fmt.Println` or unstructured logging in request paths.

@@ -23,7 +23,9 @@ Request:
 Review must prioritize:
 
 - Wrong capability grouping, such as one-interface-one-page mapping or oversized all-in-one pages with no single primary task
+- Missing or ambiguous task-domain ownership, such as a flow spread across pages, components, and service files with no clear owner
 - Missing domain-component extraction when dense local workflows are left inline in a page shell
+- Scattered view-model, error-mapping, recovery, or async-result logic that should belong to one task-domain owner instead of being repeated across pages
 - Explanatory-card creep, stacked guidance copy, or first-screen instruction blocks that crowd out the actual task
 - Text-action drift where local add/edit/delete/test/status actions stay as text buttons instead of icon buttons or icon-led small buttons without justification
 - Wrapper bloat where TDesign content is rewrapped in local cards, notice shells, or decorative containers that do not own real state or structure
@@ -63,6 +65,8 @@ Baseline review must check:
 - Backend-supported capabilities were grouped into sensible user tasks before page and component boundaries were chosen, instead of being mirrored mechanically from interface count
 - The changed surface still has a clear page boundary: one page when the task stays singular and first-screen-readable, a page group when task continuity, density, or local-state complexity requires separation
 - Regions with independent local state, repeated edit flows, or dense composition were extracted into domain components when needed instead of being left as one oversized page block
+- Service ownership is coherent: new capabilities were not simply appended to a nearby super-service file once they already formed a distinct task domain
+- Continuous business chains that span multiple API calls, polling, payment, async confirmation, or cross-page recovery have an explicit workflow/controller owner instead of being scattered across page handlers
 - New fields and actions propagate through service layer, state, handlers, and visible UI
 - Request parameters, response fields, enums, and types stay aligned with the real backend contract instead of drifting from page-local assumptions
 - Backend semantics are treated as the only source of truth; if the code is guessing around missing or ambiguous backend meaning, call that out as a finding or residual risk
@@ -94,6 +98,7 @@ Payment / high-risk review add-on:
 Output rules:
 
 - When present, report capability-grouping, page-boundary, and component-boundary defects before lower-level implementation defects, because they usually invalidate the rest of the page decision.
+- When ownership is unclear, report task-domain ownership and super-service drift early, because local implementation details are often secondary once the owning boundary is wrong.
 - Separate proven code defects from interaction defects when both exist
 - In overall upgrade audit mode, also separate baseline violations from upgrade opportunities so the review can distinguish “must fix” from “should redesign”
 - If a high-risk flow was changed but not actually validated, call it out as residual risk even when no direct bug is proven

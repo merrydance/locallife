@@ -42,6 +42,8 @@ Use `.github/prompts/weapp-implementation.prompt.md` for all Mini Program implem
 - Non-consumer surfaces should not import `styles/customer.wxss` or borrow customer-side brand tokens unless the governing standard explicitly allows that boundary exception.
 - Keep page shell rhythm consistent: stable top spacing below navbar, stable horizontal gutter, and explicit bottom safe-area handling.
 - Shared components must remain reusable and explicit. Do not hide page-level API calls, route jumps, or role-specific state machines inside shared components.
+- Do not keep expanding known super service files such as `services/operator-console.ts`. New capability work must first choose a task-domain owner, dedicated service module, or workflow owner before touching a protected aggregator.
+- If a protected super service must change, update its ownership note in the same change so the page-group owner, temporary scope, and non-extraction reason stay explicit.
 - User-facing copy must be product copy. Do not leak raw backend, provider, SQL, or English diagnostic text.
 - Use the implementation or review prompt to carry detailed delivery structure; keep this instruction as the always-on execution baseline.
 
@@ -67,6 +69,6 @@ Use `.github/prompts/weapp-implementation.prompt.md` for all Mini Program implem
 
 - Run commands from `weapp/`.
 - Common commands: `npm run compile`, `npm run lint`, `npm run lint:fix`, `npm run quality:check`.
-- `npm run gate:weapp` runs the configured gate set for page-shell, WXML expression safety, component policy, tdesign-component-declarations, tdesign-boundary, non-consumer-ui-patterns, page-responsibility, page-complexity, request-boundary, role-contract, and business-status-boundary; note that `gate:non-consumer-ui-patterns` is currently changed-only so new drift is blocked while historical cleanup continues.
+- `npm run gate:weapp` runs the configured gate set for page-shell, WXML expression safety, component policy, tdesign-component-declarations, tdesign-boundary, non-consumer-ui-patterns, page-responsibility, page-complexity, super-service-boundary, request-boundary, role-contract, and business-status-boundary; note that `gate:non-consumer-ui-patterns` is currently changed-only so new drift is blocked while historical cleanup continues.
 - Prefer `npm run quality:check` before handing off changes that touch multiple Mini Program files or shared components.
 - In hand-off, follow the engineering governance wording for risk and residual risk, and still call out any remaining weak-network, re-entry, duplicate-tap, or state-recovery risk using concrete paths.

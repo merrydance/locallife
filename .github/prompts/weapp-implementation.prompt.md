@@ -28,8 +28,12 @@ Implementation must push:
 - Start from backend-supported capabilities and the user task before coding or styling
 - Treat the real backend contract as the only source of truth for fields, statuses, permissions, pagination, and metric meaning
 - First inventory backend entities, fields, states, actions, permissions, and async outcomes; then group them into task domains before deciding any view structure
+- Name the task-domain owner explicitly when the capability set is non-trivial, and decide whether that owner is one page, a page group, a domain component, or a workflow/controller before coding
 - Decide component boundaries before page polish: if a region owns local state, repeated add/remove/edit flows, dense editing UI, or reusable task-specific interaction, extract a dedicated domain component first
 - Decide page boundaries after capability grouping and component boundaries: choose one page vs a page group by task continuity, first-screen clarity, information density, local-state complexity, and failure/recovery behavior
+- Keep the same task domain's view model assembly, error mapping, recovery path, and async-result handling under one owner instead of duplicating them across multiple pages
+- Organize service modules by task domain ownership rather than extending a nearby super-service file because it already exists
+- If a continuous flow spans multiple API calls, async confirmation, polling, payment, or complex submission, assign a workflow/controller owner explicitly instead of scattering the business chain across page handlers
 - Keep information architecture and page boundary decisions ahead of TDesign and styling choices, following the role-matched weapp standards instead of local page guesswork
 - For TDesign-first refactor or style-reset requests, default to full-page information architecture and layout redesign rather than patching the legacy page shell unless the user explicitly asks for a local adjustment only
 - Use TDesign MCP and the role-matched design standard to justify major component choices and any user-visible non-TDesign exception
@@ -57,7 +61,10 @@ Implementation must not do:
 - Do not invent backend fields, states, permissions, metric semantics, or pagination conclusions
 - Do not map one backend interface to one page by default
 - Do not decide page count, section layout, or component choice before capability grouping and page-boundary reasoning are explicit
+- Do not leave task-domain ownership ambiguous once a capability set already spans multiple pages, local flows, or async result handling
 - Do not keep adding capabilities to one page once it no longer has a single clear primary task
+- Do not duplicate the same task domain's view model, error mapping, recovery logic, or async-result interpretation across multiple pages instead of naming one owner
+- Do not keep adding new capability branches into an existing super-service file when the work now deserves a task-domain module of its own
 - Do not preserve the legacy page layout by default when the request is a refactor, redesign, style unification, or TDesign rewrite
 - Do not jump from the old WXML structure straight to component selection without first inventorying the backend-supported capabilities and actions
 - Do not force unfinished, future, unsupported, or cross-role capabilities into the current page just to make it look complete
@@ -96,6 +103,7 @@ Acceptance focus:
 
 - The hand-off names the task risk level, the role-side design document used, and the validation depth chosen for that risk
 - The implementation is closed across service, state, handlers, render branches, feedback, and any affected payment or recovery path
+- The delivery names the task-domain owner and, when relevant, the page-group owner, service owner, and workflow/controller owner
 - The first screen enters the task directly instead of opening with explanatory cards or stacked guidance copy
 - Non-consumer local actions default to icon buttons or icon-led small buttons, and any text-only exception is called out explicitly
 - If backend semantics are ambiguous or required fields are missing, the request states whether backend clarification or backend changes are needed instead of guessing in the page layer

@@ -21,8 +21,10 @@ Request:
 
 - Review this backend change with findings first, ordered by severity
 - Prioritize bugs, regressions, contract violations, broken propagation, and missing validation
+- Check whether the capability owner is clear and whether any important state transition now has multiple writers
 - Check for logic that appears unused, unreachable, or computed without affecting behavior
 - Check for SQL, store, logic, handler, route, worker, or scheduler changes that were added in one layer but not connected through the remaining layers
+- Check whether durable state changes and external side effects remain separated by a defensible boundary
 - Flag debug leftovers such as temporary prints, panic probes, hardcoded values, placeholder branches, or short-circuit returns
 - Check whether `make sqlc`, `make mock`, `make swagger`, `make test-unit`, or `make test-integration` should have been run
 - Check whether repo-specific closeout actions such as `make check-generated`, safety regressions, or standards/workflow feedback should have been triggered

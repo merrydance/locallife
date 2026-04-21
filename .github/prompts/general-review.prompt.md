@@ -20,6 +20,7 @@ Request:
 - Infer the likely risk level (`G0`/`G1`/`G2`/`G3`) and call out if the implementation or validation evidence treated a clearly higher-risk path as routine
 - Prioritize bugs, behavioral regressions, contract violations, broken change propagation, and missing validation
 - Check whether the change forms a complete end-to-end path instead of stopping at one layer
+- Check whether the capability owner and single source of truth remain clear, or whether the change introduced duplicate state semantics or multiple writers
 - Call out missing tests, missing regeneration steps, and residual risk
 - For `G2` and `G3` paths, call out missing failure-mode coverage, duplicate-trigger handling, rollback or recovery story, and user-visible degradation handling
 - If a high-risk path changed but was not actually validated, say exactly which path remains unverified
