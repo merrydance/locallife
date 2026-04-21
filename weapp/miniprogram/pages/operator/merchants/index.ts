@@ -28,8 +28,6 @@ interface MerchantView extends OperatorMerchantItem {
   commission_amount_display: string
   region_name_display: string
   category_display: string
-  can_suspend: boolean
-  can_resume: boolean
 }
 
 function adaptMerchantItem(item: OperatorMerchantItem): MerchantView {
@@ -44,9 +42,7 @@ function adaptMerchantItem(item: OperatorMerchantItem): MerchantView {
     total_gmv_display: `¥${(Number(item.total_gmv || 0) / 100).toFixed(2)}`,
     commission_amount_display: `¥${(Number(item.commission_amount || 0) / 100).toFixed(2)}`,
     region_name_display: item.region_name || `区域 ${item.region_id}`,
-    category_display: item.category || '未分类',
-    can_suspend: statusDisplay.canSuspend,
-    can_resume: statusDisplay.canResume
+    category_display: item.category || '未分类'
   }
 }
 
@@ -70,11 +66,6 @@ Page({
     regionId: 0,
     searchKeyword: '',
     statusFilter: '' as MerchantStatus | '',
-
-    suspendDialogVisible: false,
-    resumeDialogVisible: false,
-    selectedMerchant: { id: 0, name: '' },
-    suspendReason: '',
 
     searchTimer: null as number | null
   },
@@ -207,88 +198,5 @@ Page({
     const { id } = e.currentTarget.dataset as MerchantListPageDataset
     if (!id) return
     wx.navigateTo({ url: `/pages/operator/merchants/detail/index?id=${id}` })
-  },
-
-  onSuspendTap(e: WechatMiniprogram.TouchEvent) {
-    const { id, name } = e.currentTarget.dataset as MerchantListPageDataset
-    if (!id || !name) return
-
-    this.setData({
-      selectedMerchant: { id, name },
-      suspendDialogVisible: true,
-      suspendReason: ''
-    })
-  },
-
-  async onSuspendConfirm() {
-    const { selectedMerchant, suspendReason } = this.data
-    if (!suspendReason.trim()) {
-      wx.showToast({ title: '请输入暂停原因', icon: 'none' })
-      return
-    }
-
-    try {
-      wx.showLoading({ title: '处理中...' })
-      await operatorMerchantManagementService.suspendMerchant(selectedMerchant.id, {
-        reason: suspendReason
-      })
-      this.setData({
-        suspendDialogVisible: false,
-        page: 1
-      })
-      this.loadMerchants(true)
-    } catch (error) {
-      console.error('暂停商户失败:', error)
-      wx.showToast({ title: getErrorUserMessage(error, '暂停失败，请稍后重试'), icon: 'none' })
-    } finally {
-      wx.hideLoading()
-    }
-  },
-
-  onSuspendCancel() {
-    this.setData({ suspendDialogVisible: false })
-  },
-
-  onSuspendReasonChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
-    this.setData({ suspendReason: e.detail.value || '' })
-  },
-
-  onResumeTap(e: WechatMiniprogram.TouchEvent) {
-    const { id, name } = e.currentTarget.dataset as MerchantListPageDataset
-    if (!id || !name) return
-
-    this.setData({
-      selectedMerchant: { id, name },
-      resumeDialogVisible: true
-    })
-  },
-
-  async onResumeConfirm() {
-    const { selectedMerchant } = this.data
-
-    try {
-      wx.showLoading({ title: '处理中...' })
-      await operatorMerchantManagementService.resumeMerchant(selectedMerchant.id, {
-        reason: '运营商恢复'
-      })
-      this.setData({
-        resumeDialogVisible: false,
-        page: 1
-      })
-      this.loadMerchants(true)
-    } catch (error) {
-      console.error('恢复商户失败:', error)
-      wx.showToast({ title: getErrorUserMessage(error, '恢复失败，请稍后重试'), icon: 'none' })
-    } finally {
-      wx.hideLoading()
-    }
-  },
-
-  onResumeCancel() {
-    this.setData({ resumeDialogVisible: false })
-  },
-
-  stopPropagation() {
-    // 阻止事件冒泡
   }
 })

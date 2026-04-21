@@ -397,17 +397,6 @@ export class OperatorBasicManagementService {
             data
         })
     }
-
-    /**
-     * 手动恢复商户上线
-     */
-    async resumeMerchant(merchantId: number, reason: string): Promise<{ message: string }> {
-        return request({
-            url: `/v1/operator/merchants/${merchantId}/resume`,
-            method: 'POST',
-            data: { reason }
-        })
-    }
 }
 
 // ==================== 区域统计分析服务类 ====================

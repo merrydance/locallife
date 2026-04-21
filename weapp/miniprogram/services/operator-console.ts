@@ -1,10 +1,8 @@
-import { getOperatorDashboard, operatorBasicManagementService, type RegionResponse, type RegionStatsResponse } from '../api/operator-basic-management'
-import { getOperatorAnalyticsDashboard, operatorAnalyticsService, OperatorAppealService } from '../api/operator-analytics'
-import { getMerchantManagementDashboard, operatorMerchantManagementService } from '../api/operator-merchant-management'
-import { getRiderManagementDashboard, operatorRiderManagementService } from '../api/operator-rider-management'
-import { platformAlertsService } from '../api/platform-alerts'
+import { operatorBasicManagementService, type RegionResponse } from '../api/operator-basic-management'
+import { operatorAnalyticsService } from '../api/operator-analytics'
+import { operatorMerchantManagementService } from '../api/operator-merchant-management'
+import { operatorRiderManagementService } from '../api/operator-rider-management'
 import { formatPriceNoSymbol } from '../utils/util'
-import { formatPlatformAlertTime, toActionableAbnormalRefundAlert, type ActionableAbnormalRefundAlert } from '../utils/platform-alerts'
 
 export type OperatorTimeDimension = 'day' | 'week' | 'month'
 
@@ -68,12 +66,11 @@ export interface OperatorAnalyticsPageData {
 export interface OperatorPendingSummary {
   merchants: number
   riders: number
-  appeals: number
 }
 
 export interface OperatorPendingApprovalItem {
   id: number
-  type: 'MERCHANT' | 'RIDER' | 'APPEAL'
+  type: 'MERCHANT' | 'RIDER'
   name: string
   time: string
 }
@@ -108,76 +105,12 @@ export interface OperatorCenterPageData {
   pendingSummary: OperatorPendingSummary
 }
 
-export interface OperatorAlertFeedItem extends ActionableAbnormalRefundAlert {
-  timeDisplay: string
-}
-
-export interface LegacyOperatorInfo {
-  name: string
-  status: string
-  region_ids: number[]
-  commission_rate: number
-}
-
-export interface LegacyOperatorFinanceOverview {
-  today_commission: number
-  month_commission: number
-  pending_settlement: number
-  settled_amount: number
-  order_count: number
-  gmv: number
-  active_merchant_count: number
-  commission_rate: number
-}
-
-export interface LegacyMerchantSummary {
-  total: number
-  active: number
-  suspended: number
-  pending: number
-}
-
-export interface LegacyRiderSummary {
-  total: number
-  active: number
-  online: number
-  suspended: number
-}
-
-export interface LegacyAppealSummary {
-  totalAppeals: number
-  pendingAppeals: number
-  avgResolutionTime: number
-  satisfactionRate: number
-}
-
-export interface LegacyRegionStatsItem {
-  region_id: number
-  region_name: string
-}
-
-export interface LegacyOperatorWorkbenchData {
-  operatorInfo: LegacyOperatorInfo | null
-  financeOverview: LegacyOperatorFinanceOverview | null
-  regionStats: LegacyRegionStatsItem[]
-  regionPickerOptions: ConsolePickerOption[]
-  regionPickerVisible: boolean
-  selectedRegionIdx: number
-  selectedRegionId: number
-  selectedRegionValue: string
-  merchantSummary: LegacyMerchantSummary
-  riderSummary: LegacyRiderSummary
-  appealSummary: LegacyAppealSummary
-}
-
 interface TrendLike {
   date?: string
   total_gmv?: number
   order_count?: number
   operator_income?: number
 }
-
-const appealService = new OperatorAppealService()
 
 function formatCurrencyFen(amount: number): string {
   return `¥${(Number(amount || 0) / 100).toFixed(2)}`
@@ -405,13 +338,11 @@ export async function loadOperatorCenterPageData(params: {
     realtimeStats,
     merchantSummary,
     riderSummary,
-    appealSummary,
     merchantsPending,
     ridersPending,
     merchantRanking,
     riderRanking,
-    dailyTrends,
-    appeals
+    dailyTrends
   ] = await Promise.all([
     operatorBasicManagementService.getFinanceOverview(undefined, undefined, regionId).catch(() => null),
     operatorAnalyticsService.getRealtimeStats(regionId),
@@ -419,8 +350,6 @@ export async function loadOperatorCenterPageData(params: {
       .catch(() => ({ total: 0, pending: 0, approved: 0, rejected: 0, suspended: 0 })),
     operatorRiderManagementService.getRiderSummary(regionId)
       .catch(() => ({ total: 0, pending_approval: 0, active: 0, rejected: 0, suspended: 0, online: 0 })),
-    appealService.getAppealSummary(regionId)
-      .catch(() => ({ total: 0, pending: 0, approved: 0, rejected: 0 })),
     operatorMerchantManagementService.getMerchantList({ page: 1, limit: 5, status: 'pending', region_id: regionId })
       .catch(() => ({ merchants: [] as Array<{ id: number, name: string, created_at: string }>, total: 0 })),
     operatorRiderManagementService.getRiderList({ page: 1, limit: 5, status: 'pending_approval', region_id: regionId })
@@ -430,9 +359,7 @@ export async function loadOperatorCenterPageData(params: {
     operatorRiderManagementService.getRiderRanking({ start_date: startDate, end_date: endDate, limit: 5, region_id: regionId })
       .catch(() => ({ rankings: [] })),
     operatorAnalyticsService.getDailyTrend(regionId, startDate, endDate)
-      .catch(() => []),
-    appealService.getAppealList({ page: 1, limit: 5, status: 'pending', region_id: regionId })
-      .catch(() => ({ appeals: [] as Array<{ id: number, reason: string, created_at: string }>, total: 0 }))
+      .catch(() => [])
   ])
 
   const trends = Array.isArray(dailyTrends) ? dailyTrends as TrendLike[] : []
@@ -445,14 +372,12 @@ export async function loadOperatorCenterPageData(params: {
 
   const pendingSummary: OperatorPendingSummary = {
     merchants: Number(merchantSummary.pending || 0),
-    riders: Number((riderSummary as { pending_approval?: number }).pending_approval || 0),
-    appeals: Number(appealSummary.pending || 0)
+    riders: Number((riderSummary as { pending_approval?: number }).pending_approval || 0)
   }
 
   const pendingItems: OperatorPendingApprovalItem[] = [
     ...(merchantsPending.merchants || []).map((item: { id: number, name: string, created_at: string }) => ({ id: item.id, type: 'MERCHANT' as const, name: item.name, time: item.created_at })),
-    ...(ridersPending.riders || []).map((item: { id: number, name: string, created_at: string }) => ({ id: item.id, type: 'RIDER' as const, name: item.name, time: item.created_at })),
-    ...(appeals.appeals || []).map((item: { id: number, reason?: string, created_at: string }) => ({ id: item.id, type: 'APPEAL' as const, name: `客诉: ${item.reason || ('#' + item.id)}`, time: item.created_at }))
+    ...(ridersPending.riders || []).map((item: { id: number, name: string, created_at: string }) => ({ id: item.id, type: 'RIDER' as const, name: item.name, time: item.created_at }))
   ]
 
   pendingItems.sort((left, right) => new Date(right.time).getTime() - new Date(left.time).getTime())
@@ -475,59 +400,7 @@ export async function loadOperatorCenterPageData(params: {
     merchantRankings,
     riderRankings,
     pending_approvals: pendingItems.slice(0, 5),
-    pending_count: pendingSummary.merchants + pendingSummary.riders + pendingSummary.appeals,
+    pending_count: pendingSummary.merchants + pendingSummary.riders,
     pendingSummary
-  }
-}
-
-export async function loadOperatorAlertFeed(): Promise<OperatorAlertFeedItem[]> {
-  const response = await platformAlertsService.listPlatformAlerts({ page_id: 1, page_size: 10 })
-  return (response.alerts || [])
-    .map((item) => toActionableAbnormalRefundAlert(item))
-    .filter((item): item is ActionableAbnormalRefundAlert => !!item)
-    .map((item) => ({
-      ...item,
-      timeDisplay: formatPlatformAlertTime(item.timestamp)
-    }))
-    .slice(0, 5)
-}
-
-export async function loadLegacyOperatorWorkbenchData(): Promise<LegacyOperatorWorkbenchData> {
-  const [dashboardData, merchantData, riderData, analyticsData] = await Promise.all([
-    getOperatorDashboard(),
-    getMerchantManagementDashboard(),
-    getRiderManagementDashboard(),
-    getOperatorAnalyticsDashboard()
-  ])
-
-  const regionStats = ((dashboardData.regionStats || []) as RegionStatsResponse[]).map((item) => ({
-    region_id: item.region_id,
-    region_name: item.region_name
-  }))
-
-  return {
-    operatorInfo: dashboardData.operatorInfo as unknown as LegacyOperatorInfo,
-    financeOverview: dashboardData.financeOverview as unknown as LegacyOperatorFinanceOverview,
-    regionStats,
-    regionPickerOptions: regionStats.map((item) => ({ label: item.region_name, value: String(item.region_id) })),
-    regionPickerVisible: false,
-    selectedRegionIdx: 0,
-    selectedRegionId: regionStats[0]?.region_id || 0,
-    selectedRegionValue: String(regionStats[0]?.region_id || ''),
-    merchantSummary: merchantData.merchantSummary as unknown as LegacyMerchantSummary,
-    riderSummary: riderData.riderSummary as unknown as LegacyRiderSummary,
-    appealSummary: analyticsData.appealSummary as unknown as LegacyAppealSummary
-  }
-}
-
-export async function loadLegacyOperatorWorkbenchRegionData(regionId: number): Promise<Pick<LegacyOperatorWorkbenchData, 'merchantSummary' | 'riderSummary'>> {
-  const [merchantData, riderData] = await Promise.all([
-    getMerchantManagementDashboard(regionId),
-    getRiderManagementDashboard(regionId)
-  ])
-
-  return {
-    merchantSummary: merchantData.merchantSummary as unknown as LegacyMerchantSummary,
-    riderSummary: riderData.riderSummary as unknown as LegacyRiderSummary
   }
 }

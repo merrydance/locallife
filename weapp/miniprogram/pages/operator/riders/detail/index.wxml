@@ -34,11 +34,6 @@
         </view>
       </view>
 
-      <view class="action-row">
-        <t-button wx:if="{{detail.can_suspend}}" theme="warning" size="small" bindtap="onOpenSuspendDialog">暂停接单</t-button>
-        <t-button wx:elif="{{detail.can_resume}}" theme="success" size="small" bindtap="onOpenResumeDialog">恢复接单</t-button>
-      </view>
-
       <view class="section-title">基本资料</view>
       <view class="row"><text class="label">手机号</text><text class="value">{{detail.phone}}</text></view>
       <view class="row"><text class="label">身份证(脱敏)</text><text class="value">{{detail.id_card_no || '-'}}</text></view>
@@ -111,41 +106,4 @@
     </view>
   </block>
 
-  <t-dialog
-    visible="{{suspendDialogVisible}}"
-    title="暂停骑手"
-    confirm-btn="确认暂停"
-    cancel-btn="取消"
-    bind:confirm="onSuspendConfirm"
-    bind:cancel="onSuspendCancel"
-  >
-    <view class="dialog-content">
-      <text>确定要暂停骑手 "{{detail.real_name}}" 吗？</text>
-      <t-textarea
-        placeholder="请输入暂停原因"
-        value="{{actionReason}}"
-        bind:change="onReasonChange"
-        maxlength="200"
-      />
-    </view>
-  </t-dialog>
-
-  <t-dialog
-    visible="{{resumeDialogVisible}}"
-    title="恢复骑手"
-    confirm-btn="确认恢复"
-    cancel-btn="取消"
-    bind:confirm="onResumeConfirm"
-    bind:cancel="onResumeCancel"
-  >
-    <view class="dialog-content">
-      <text>确定要恢复骑手 "{{detail.real_name}}" 吗？</text>
-      <t-textarea
-        placeholder="可选：输入恢复说明"
-        value="{{actionReason}}"
-        bind:change="onReasonChange"
-        maxlength="200"
-      />
-    </view>
-  </t-dialog>
 </view>

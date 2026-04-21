@@ -1,5 +1,10 @@
 import type { OperatorApplicationResponse } from '../api/operator-application'
 
+export type ProvinceOption = {
+  label: string
+  value: number
+}
+
 export type CityOption = {
   label: string
   value: number
@@ -176,6 +181,30 @@ export function buildCityOptionsPatch(cities: CityOption[], currentSelectedCityI
     selectedCityId,
     selectedCityName: cities[selectedCityIndex]?.label || ''
   }
+}
+
+export function buildProvinceOptionsPatch(provinces: ProvinceOption[], currentSelectedProvinceId: number) {
+  const selectedProvinceId = currentSelectedProvinceId || (provinces[0]?.value || 0)
+  const selectedProvinceIndex = Math.max(0, provinces.findIndex((item) => item.value === selectedProvinceId))
+  return {
+    provinceOptions: provinces,
+    provincePickerVisible: false,
+    selectedProvinceIndex,
+    selectedProvinceId,
+    selectedProvinceName: provinces[selectedProvinceIndex]?.label || ''
+  }
+}
+
+export function findMatchedProvinceOption(provinceOptions: ProvinceOption[], provinceName: string): ProvinceOption | null {
+  if (!provinceName || !provinceOptions.length) {
+    return null
+  }
+
+  const target = normalizeRegionText(provinceName)
+  return provinceOptions.find((province) => {
+    const current = normalizeRegionText(province.label)
+    return current === target || current.includes(target) || target.includes(current)
+  }) || null
 }
 
 export function findMatchedCityOption(cityOptions: CityOption[], cityName: string): CityOption | null {
@@ -394,6 +423,26 @@ export function buildCityChangePatch(city: CityOption) {
     regionSearchTimer: null,
     lastRegionSearchKeyword: '',
     lastRegionSearchCityId: city.value,
+    regionOptions: [],
+    filteredRegions: [],
+    'formData.regionId': 0,
+    'formData.regionName': ''
+  }
+}
+
+export function buildProvinceChangePatch(province: ProvinceOption) {
+  return {
+    selectedProvinceId: province.value,
+    selectedProvinceName: province.label,
+    cityOptions: [],
+    cityPickerVisible: false,
+    selectedCityIndex: 0,
+    selectedCityId: 0,
+    selectedCityName: '',
+    regionKeyword: '',
+    regionSearchTimer: null,
+    lastRegionSearchKeyword: '',
+    lastRegionSearchCityId: 0,
     regionOptions: [],
     filteredRegions: [],
     'formData.regionId': 0,

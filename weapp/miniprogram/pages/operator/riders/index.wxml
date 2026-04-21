@@ -79,32 +79,6 @@
               <text class="stat-label">累计收入</text>
             </view>
           </view>
-
-          <view class="action-row">
-            <t-button
-              wx:if="{{item.can_suspend}}"
-              theme="warning"
-              size="small"
-              bindtap="onSuspendTap"
-              data-id="{{item.id}}"
-              data-name="{{item.name}}"
-              catchtap="stopPropagation"
-            >
-              暂停接单
-            </t-button>
-            <t-button
-              wx:elif="{{item.can_resume}}"
-              theme="success"
-              size="small"
-              bindtap="onResumeTap"
-              data-id="{{item.id}}"
-              data-name="{{item.name}}"
-              catchtap="stopPropagation"
-            >
-              恢复接单
-            </t-button>
-            <t-button theme="primary" size="small" bindtap="onTapRider" data-id="{{item.id}}" catchtap="stopPropagation">查看详情</t-button>
-          </view>
         </view>
 
         <view class="loading-wrap">
@@ -115,41 +89,4 @@
     </scroll-view>
   </view>
 
-  <t-dialog
-    visible="{{suspendDialogVisible}}"
-    title="暂停骑手"
-    confirm-btn="确认暂停"
-    cancel-btn="取消"
-    bind:confirm="onSuspendConfirm"
-    bind:cancel="onSuspendCancel"
-  >
-    <view class="dialog-content">
-      <text>确定要暂停骑手 "{{selectedRider.name}}" 吗？</text>
-      <t-textarea
-        placeholder="请输入暂停原因"
-        value="{{actionReason}}"
-        bind:change="onReasonChange"
-        maxlength="200"
-      />
-    </view>
-  </t-dialog>
-
-  <t-dialog
-    visible="{{resumeDialogVisible}}"
-    title="恢复骑手"
-    confirm-btn="确认恢复"
-    cancel-btn="取消"
-    bind:confirm="onResumeConfirm"
-    bind:cancel="onResumeCancel"
-  >
-    <view class="dialog-content">
-      <text>确定要恢复骑手 "{{selectedRider.name}}" 吗？</text>
-      <t-textarea
-        placeholder="可选：输入恢复说明"
-        value="{{actionReason}}"
-        bind:change="onReasonChange"
-        maxlength="200"
-      />
-    </view>
-  </t-dialog>
 </view>

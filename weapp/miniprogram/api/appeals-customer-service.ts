@@ -66,40 +66,6 @@ export interface AppealResponse {
     user_phone?: string
 }
 
-export interface OperatorAppealDetailResponse extends AppealResponse {
-    claim_type?: ClaimType
-    claim_description?: string
-    claim_status?: ClaimStatus
-    claim_created_at?: string
-    claim_approved_amount?: number
-    lookback_result?: Record<string, unknown>
-    order_no?: string
-    order_amount?: number
-    order_status?: string
-    order_created_at?: string
-    merchant_id?: number
-    merchant_name?: string
-    merchant_phone?: string
-    user_name?: string
-    rider_id?: number
-    evidence_files?: string[]
-    related_order?: {
-        id?: number
-        order_number?: string
-        merchant_name?: string
-        rider_name?: string
-        order_amount?: number
-        status?: string
-        created_at?: string
-    }
-    timeline?: Array<{
-        action?: string
-        operator?: string
-        timestamp?: string
-        notes?: string
-    }>
-}
-
 /** 创建申诉请求 */
 export interface CreateAppealRequest extends Record<string, unknown> {
     claim_id: number
@@ -519,26 +485,6 @@ export class ClaimManagementService {
     }
 
     /**
-     * 运营商获取追偿单详情
-     */
-    async getOperatorClaimRecovery(claimId: number): Promise<ClaimRecoveryResponse> {
-        return request({
-            url: `/v1/operator/claims/${claimId}/recovery`,
-            method: 'GET'
-        })
-    }
-
-    /**
-     * 运营商核销追偿单
-     */
-    async waiveOperatorClaimRecovery(claimId: number): Promise<ClaimRecoveryResponse> {
-        return request({
-            url: `/v1/operator/claims/${claimId}/recovery/waive`,
-            method: 'POST'
-        })
-    }
-
-    /**
      * 获取索赔详情
      * @param claimId 索赔ID
      */
@@ -723,60 +669,6 @@ export class ReviewReplyService {
     }
 }
 
-// ==================== 运营商申诉审核服务类 ====================
-
-/**
- * 运营商申诉审核服务
- * 提供申诉审核功能（仅运营商使用）
- */
-export class OperatorAppealReviewService {
-    /**
-     * 获取待审核申诉列表
-     * @param params 查询参数
-     */
-    async getPendingAppeals(params: AppealsQueryParams): Promise<{
-        appeals: AppealResponse[]
-        total: number
-        page_id: number
-        page_size: number
-        has_more: boolean
-    }> {
-        return request({
-            url: '/v1/operator/appeals',
-            method: 'GET',
-            data: params
-        })
-    }
-
-    /**
-     * 获取申诉详情
-     * @param appealId 申诉ID
-     */
-    async getAppealDetailForReview(appealId: number): Promise<OperatorAppealDetailResponse> {
-        return request({
-            url: `/v1/operator/appeals/${appealId}`,
-            method: 'GET'
-        })
-    }
-
-    /**
-     * 审核申诉
-     * @param appealId 申诉ID
-     * @param reviewData 审核数据
-     */
-    async reviewAppeal(appealId: number, reviewData: {
-        status: 'approved' | 'rejected'
-        review_notes?: string
-        compensation_amount?: number
-    }): Promise<AppealResponse> {
-        return request({
-            url: `/v1/operator/appeals/${appealId}/review`,
-            method: 'POST',
-            data: reviewData
-        })
-    }
-}
-
 // ==================== 数据适配器 ====================
 
 /**
@@ -904,7 +796,6 @@ export class AppealsCustomerServiceAdapter {
 export const appealManagementService = new AppealManagementService()
 export const claimManagementService = new ClaimManagementService()
 export const reviewReplyService = new ReviewReplyService()
-export const operatorAppealReviewService = new OperatorAppealReviewService()
 
 // ==================== 便捷函数 ====================
 

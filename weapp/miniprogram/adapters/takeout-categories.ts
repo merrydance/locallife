@@ -41,7 +41,7 @@ const CATEGORY_EMOJI_MAP: [string, string][] = [
   ['河北', '🍚'],
   ['家常', '🥘'],
   ['快餐', '🍟'],
-  ['中餐', '🥡'],
+  ['中餐', '🥡']
 ]
 
 function formatMerchantCount(merchantCount: number, isAll: boolean): string {

@@ -40,8 +40,6 @@
         "safety/report/index",
         "safety/detail/index",
         "finance/withdraw/index",
-        "appeal/list/index",
-        "appeal/detail/index",
         "region-expansion/index"
       ],
       "independent": false

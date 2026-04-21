@@ -32,8 +32,6 @@ type MerchantDetailView = {
   updated_at: string
   last_active_at?: string
   status_label: string
-  can_suspend: boolean
-  can_resume: boolean
 }
 
 type StatsView = MerchantStatsResponse & {
@@ -77,9 +75,7 @@ function adaptMerchantDetail(detail: OperatorMerchantDetailResponse & Record<str
     created_at: String(detail.created_at || ''),
     updated_at: String(detail.updated_at || ''),
     last_active_at: detail.last_active_at ? String(detail.last_active_at) : '',
-    status_label: statusDisplay.label,
-    can_suspend: statusDisplay.canSuspend,
-    can_resume: statusDisplay.canResume
+    status_label: statusDisplay.label
   }
 }
 
@@ -91,10 +87,7 @@ Page({
     error: '',
     navBarHeight: 88,
     detail: null as MerchantDetailView | null,
-    stats: null as StatsView | null,
-    suspendDialogVisible: false,
-    resumeDialogVisible: false,
-    actionReason: ''
+    stats: null as StatsView | null
   },
 
   onLoad(options: Record<string, string>) {
@@ -150,64 +143,5 @@ Page({
 
   onRetry() {
     this.loadAll()
-  },
-
-  onActionReasonChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
-    this.setData({ actionReason: e.detail.value || '' })
-  },
-
-  onOpenSuspendDialog() {
-    this.setData({ suspendDialogVisible: true, actionReason: '' })
-  },
-
-  onOpenResumeDialog() {
-    this.setData({ resumeDialogVisible: true, actionReason: '' })
-  },
-
-  onSuspendCancel() {
-    this.setData({ suspendDialogVisible: false })
-  },
-
-  onResumeCancel() {
-    this.setData({ resumeDialogVisible: false })
-  },
-
-  async onSuspendConfirm() {
-    if (!this.data.actionReason.trim()) {
-      wx.showToast({ title: '请输入暂停原因', icon: 'none' })
-      return
-    }
-
-    try {
-      wx.showLoading({ title: '处理中...' })
-      await operatorMerchantManagementService.suspendMerchant(this.data.id, {
-        reason: this.data.actionReason
-      })
-      this.setData({ suspendDialogVisible: false })
-      this.loadAll()
-    } catch (error) {
-      console.error('暂停商户失败:', error)
-      wx.showToast({ title: getErrorUserMessage(error, '暂停失败，请稍后重试'), icon: 'none' })
-    } finally {
-      wx.hideLoading()
-    }
-  },
-
-  async onResumeConfirm() {
-    const reason = this.data.actionReason.trim() || '运营恢复商户营业'
-
-    try {
-      wx.showLoading({ title: '处理中...' })
-      await operatorMerchantManagementService.resumeMerchant(this.data.id, {
-        reason
-      })
-      this.setData({ resumeDialogVisible: false })
-      this.loadAll()
-    } catch (error) {
-      console.error('恢复商户失败:', error)
-      wx.showToast({ title: getErrorUserMessage(error, '恢复失败，请稍后重试'), icon: 'none' })
-    } finally {
-      wx.hideLoading()
-    }
   }
 })

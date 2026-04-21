@@ -1,12 +1,6 @@
 <custom-navbar title="运营中心" showBack="{{true}}" bind:navheight="onNavHeight" />
 
 <view class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px;">
-  <view wx:if="{{error && !initialLoading}}" class="console-error-banner">
-    <t-notice-bar theme="warning" visible="{{true}}" content="{{error}}">
-      <text wx:if="{{errorCanRetry}}" slot="operation" class="notice-banner-operation" bindtap="onRetry">重新加载</text>
-    </t-notice-bar>
-  </view>
-
   <!-- Loading (Skeleton) -->
   <view wx:if="{{initialLoading}}" class="skeleton-container animate-fade-in">
     <view class="skeleton-header-card"></view>
@@ -16,14 +10,21 @@
     <list-skeleton row="3" t-class="section-skeleton" />
   </view>
 
+  <view wx:elif="{{error}}" class="content animate-fade-in">
+      <view class="error-container">
+        <t-empty icon="info-circle" description="{{error}}">
+          <t-button wx:if="{{errorCanRetry}}" slot="action" theme="primary" bindtap="onRetry">重新加载</t-button>
+        </t-empty>
+      </view>
+  </view>
+
   <view wx:else class="content animate-fade-in">
       
-      <!-- 1. 资产/收入概览卡片 (Premium Glassmorphism Style) -->
+      <!-- 1. 收入概览 -->
       <view class="finance-section">
         <view class="finance-card">
           <view class="finance-header">
-            <view class="balance-title">可提现余额 (元)</view>
-            <!-- 多区域时显示区域切换器 -->
+            <view class="balance-title">收入概览</view>
             <view wx:if="{{regions.length > 1}}" class="region-pill" bind:tap="onOpenRegionPicker">
               <t-icon name="map" size="26rpx" color="rgba(255,255,255,0.85)" />
               <text class="region-pill-name">{{regions[selectedRegionIdx].name}}</text>
@@ -34,7 +35,7 @@
               <text class="region-pill-name">{{regions[0].name}}</text>
             </view>
           </view>
-          <view class="balance-value">{{finance.balance_display}}</view>
+          <view class="balance-value">{{finance.total_income_display}}</view>
           <view class="income-row">
             <view class="income-item">
               <text class="income-label">今日收入</text>
@@ -47,7 +48,7 @@
             </view>
           </view>
           <view class="finance-actions">
-            <navigator url="/pages/operator/finance/withdraw/index" class="finance-link-pill">佣金明细</navigator>
+            <navigator url="/pages/operator/finance/withdraw/index" class="finance-link-pill">查看财务概览</navigator>
           </view>
         </view>
       </view>
@@ -55,7 +56,7 @@
       <!-- 2. 数据维度切换与核心指标 -->
       <view class="data-section">
         <view class="section-header">
-          <view class="section-title">核心体检</view>
+          <view class="section-title">运营概览</view>
           <navigator url="/pages/operator/analytics/index" class="section-link">查看分析</navigator>
           <t-tabs t-class="dimension-tabs" value="{{timeDimension}}" bindchange="onTimeDimensionChange" theme="tag" space-evenly="{{false}}">
             <t-tab-panel label="今日" value="day" />
@@ -87,52 +88,19 @@
       <!-- 3. 待办事项 (Critical Actions) -->
       <view class="todo-section" wx:if="{{pending_count > 0}}">
         <view class="section-header">
-          <view class="section-title">待办审批 <t-badge count="{{pending_count}}" t-class="badge-custom" /></view>
+          <view class="section-title">待办审批 {{pending_count}}</view>
           <view class="view-all" bindtap="onPendingViewAll">查看全部</view>
         </view>
         <view class="approval-list">
           <view wx:for="{{pending_approvals}}" wx:key="id" class="approval-item" bindtap="onPendingTap" data-id="{{item.id}}" data-type="{{item.type}}">
             <view class="item-icon-box type-{{item.type}}">
-              <t-icon name="{{item.type === 'MERCHANT' ? 'shop' : (item.type === 'RIDER' ? 'user-circle' : 'chat')}}" size="32rpx" color="#fff" />
+              <t-icon name="{{item.type === 'MERCHANT' ? 'shop' : 'user-circle'}}" size="32rpx" color="#fff" />
             </view>
             <view class="item-content">
               <view class="item-name">{{item.name}}</view>
               <view class="item-time">申请时间: {{item.time}}</view>
             </view>
             <t-icon name="chevron-right" size="32rpx" color="#BBBBBB" />
-          </view>
-        </view>
-      </view>
-
-      <view class="alert-section">
-        <view class="section-header">
-          <view class="section-title">异常退款人工处理</view>
-          <view class="alert-section-note">实时告警</view>
-        </view>
-
-        <view class="alert-panel">
-          <t-empty wx:if="{{alertFeedReady && abnormalRefundAlerts.length === 0}}" description="当前没有待人工介入的异常退款" />
-          <view
-            wx:for="{{abnormalRefundAlerts}}"
-            wx:key="refundOrderId"
-            class="alert-item"
-            bindtap="onAbnormalRefundAlertTap"
-            data-index="{{index}}"
-          >
-            <view class="alert-item__head">
-              <view class="alert-item__title-wrap">
-                <text class="alert-item__title">{{item.title}}</text>
-                <t-tag theme="danger" variant="dark">需平台管理员</t-tag>
-              </view>
-              <text class="alert-item__time">{{item.timeDisplay}}</text>
-            </view>
-            <view class="alert-item__message">{{item.message}}</view>
-            <view class="alert-item__meta">
-              <text class="alert-item__meta-text">退款单 #{{item.refundOrderId}}</text>
-              <text class="alert-item__meta-text">微信退款ID {{item.refundId}}</text>
-              <text class="alert-item__meta-text">默认 {{item.defaultType}}</text>
-            </view>
-            <view class="alert-item__footer">点按查看说明或复制处理参数</view>
           </view>
         </view>
       </view>
@@ -161,11 +129,11 @@
             </view>
             <text>骑手管理</text>
           </navigator>
-          <navigator url="/pages/operator/appeal/list/index?region_id={{selectedRegionId}}" class="menu-item">
+          <navigator url="/pages/operator/region/index" class="menu-item">
             <view class="menu-icon-bg color-error">
-              <t-icon name="chat" size="48rpx" />
+              <t-icon name="location" size="48rpx" />
             </view>
-            <text>客诉处理</text>
+            <text>区域配置</text>
           </navigator>
           <navigator url="/pages/operator/safety/report/index" class="menu-item">
             <view class="menu-icon-bg color-danger">
@@ -177,7 +145,7 @@
             <view class="menu-icon-bg color-success">
               <t-icon name="chart-bar" size="48rpx" />
             </view>
-            <text>提现管理</text>
+            <text>财务概览</text>
           </navigator>
           <navigator url="/pages/operator/rules/index?region_id={{selectedRegionId}}&region_name={{regions[selectedRegionIdx].name}}" class="menu-item">
             <view class="menu-icon-bg color-default">

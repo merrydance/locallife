@@ -18,12 +18,6 @@
       </view>
 
       <view wx:else class="animate-fade-in">
-        <!-- 头部说明 -->
-        <view class="header-section">
-          <view class="title">{{pageTitle}}</view>
-          <view class="subtitle">{{subtitle}}</view>
-        </view>
-
         <!-- 区域列表 -->
         <view class="region-list" wx:if="{{regions.length > 0}}">
           <t-cell-group theme="card">
@@ -43,17 +37,11 @@
               </view>
             </t-cell>
           </t-cell-group>
-          
-          <!-- 加载更多 -->
-          <view class="load-more" wx:if="{{hasMore || loadingMore}}">
-            <t-loading theme="circular" size="40rpx" text="加载中..." wx:if="{{loadingMore}}" />
-            <text class="no-more" wx:elif="{{!hasMore && regions.length > 0}}">没有更多区域了</text>
-          </view>
         </view>
 
         <!-- 空状态 -->
         <view wx:else class="empty-container">
-          <t-empty icon="info-circle" description="暂无负责区域" />
+          <t-empty icon="info-circle" description="{{target === 'rules' ? '暂无可配置区县' : '暂无负责区域'}}" />
         </view>
       </view>
     </block>

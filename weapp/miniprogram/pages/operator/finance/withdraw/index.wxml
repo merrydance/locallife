@@ -1,4 +1,4 @@
-<custom-navbar title="提现申请" show-back="{{true}}" bind:navheight="onNavHeight" />
+<custom-navbar title="财务概览" show-back="{{true}}" bind:navheight="onNavHeight" />
 
 <view class="page page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px;">
   <scroll-view
@@ -8,7 +8,7 @@
     bindrefresherrefresh="onPullDownRefresh"
   >
     <view class="card summary-card">
-      <view class="card-title">资金概览</view>
+      <view class="card-title">收入概览</view>
 
       <view wx:if="{{loadingOverview}}" class="skeleton-wrap">
         <view class="skeleton-line skeleton-lg skeleton-shimmer"></view>
@@ -25,71 +25,31 @@
       </view>
 
       <view wx:else>
-        <view class="balance-label">可提现余额（元）</view>
-        <view class="balance-value">¥{{formatFen(availableAmountFen)}}</view>
+        <view class="balance-label">累计收入（元）</view>
+        <view class="balance-value">¥{{formatFen(totalIncomeFen)}}</view>
         <view class="metrics-row">
           <view class="metric-item">
-            <text class="metric-label">累计可得</text>
-            <text class="metric-value">¥{{formatFen(totalIncomeFen)}}</text>
+            <text class="metric-label">本月收入</text>
+            <text class="metric-value">¥{{formatFen(currentMonthIncomeFen)}}</text>
           </view>
           <view class="metric-divider"></view>
           <view class="metric-item">
-            <text class="metric-label">本月可得</text>
-            <text class="metric-value">¥{{formatFen(currentMonthIncomeFen)}}</text>
+            <text class="metric-label">分成比例</text>
+            <text class="metric-value">{{formatShareRatio(operatorShareRatio)}}</text>
           </view>
         </view>
-        <view class="share-ratio">运营商分成比例：{{formatShareRatio(operatorShareRatio)}}</view>
-      </view>
-    </view>
-
-    <view class="card form-card">
-      <view class="card-title">发起提现</view>
-
-      <view wx:if="{{loadingOverview}}" class="skeleton-wrap">
-        <view class="skeleton-line skeleton-input skeleton-shimmer"></view>
-        <view class="skeleton-line skeleton-btn skeleton-shimmer"></view>
-      </view>
-
-      <view wx:elif="{{loadError}}" class="state-wrap">
-        <t-empty description="资金数据异常，暂不可提现">
-          <t-button slot="action" theme="primary" bindtap="onRetryLoad">重试</t-button>
-        </t-empty>
-      </view>
-
-      <view wx:elif="{{availableAmountFen <= 0}}" class="state-wrap">
-        <t-empty description="暂无可提现金额">
-          <t-button slot="action" theme="primary" shape="round" size="small" bindtap="onBack">返回</t-button>
-        </t-empty>
-      </view>
-
-      <view wx:else>
-        <t-input
-          label="提现金额"
-          placeholder="请输入金额（元）"
-          type="number"
-          value="{{amountInput}}"
-          bindchange="onAmountChange"
-          suffix="元"
-        />
-
-        <view class="hint-row">
-          <text>最低提现 ¥1.00</text>
-          <text>最多可提 ¥{{formatFen(availableAmountFen)}}</text>
+        <view class="metrics-row metrics-row--secondary">
+          <view class="metric-item">
+            <text class="metric-label">本月 GMV</text>
+            <text class="metric-value">¥{{formatFen(currentMonthGmvFen)}}</text>
+          </view>
+          <view class="metric-divider"></view>
+          <view class="metric-item">
+            <text class="metric-label">本月订单</text>
+            <text class="metric-value">{{currentMonthOrders}}</text>
+          </view>
         </view>
-        <view wx:if="{{amountError}}" class="error-text">{{amountError}}</view>
-
-        <t-button
-          theme="primary"
-          variant="base"
-          shape="round"
-          block
-          size="large"
-          loading="{{submitting}}"
-          disabled="{{submitDisabled}}"
-          bindtap="onSubmit"
-        >
-          提交提现申请
-        </t-button>
+        <view class="share-ratio">本月平台佣金：¥{{formatFen(currentMonthCommissionFen)}}</view>
       </view>
     </view>
 

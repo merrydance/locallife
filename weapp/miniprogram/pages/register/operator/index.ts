@@ -14,10 +14,12 @@ import Navigation from '../../../utils/navigation'
 import { buildAgreementConsentPayload } from '../../../api/agreement-consent'
 import {
   buildCityChangePatch,
+  buildProvinceChangePatch,
   buildOperatorApplicationPatch,
   buildOperatorBasicPayload,
   buildSelectedRegionPatch,
   CityOption,
+  ProvinceOption,
   createUploadFeedback,
   DEFAULT_OPERATOR_OCR_DISPLAY_STATE,
   DEFAULT_OPERATOR_UPLOAD_FEEDBACK,
@@ -42,6 +44,7 @@ import {
   collectOperatorUploadPreviewPatch,
   fetchOperatorAvailableRegionsByCity,
   fetchOperatorCityOptions,
+  fetchOperatorProvinceOptions,
   handleExistingOperatorApplication,
   resolveOperatorDefaultRegionPatch
 } from '../../../utils/operator-registration-support'
@@ -63,6 +66,11 @@ Page({
       years: 3
     },
     regionPopupVisible: false,
+    provinceOptions: [] as ProvinceOption[],
+    provincePickerVisible: false,
+    selectedProvinceIndex: 0,
+    selectedProvinceId: 0,
+    selectedProvinceName: '',
     cityOptions: [] as CityOption[],
     cityPickerVisible: false,
     selectedCityIndex: 0,
@@ -134,9 +142,10 @@ Page({
     }
   },
 
-  async fetchCityOptions(withRegions: boolean = true) {
+  async fetchCityOptions(provinceId?: number, withRegions: boolean = true) {
+    const targetProvinceId = Number(provinceId || this.data.selectedProvinceId || 0)
     try {
-      const result = await fetchOperatorCityOptions(this.data.selectedCityId)
+      const result = await fetchOperatorCityOptions(targetProvinceId, this.data.selectedCityId)
       this.setData(result.patch)
       if (withRegions && result.selectedCityId > 0) {
         await this.fetchAvailableRegionsByCity(result.selectedCityId)
@@ -146,12 +155,26 @@ Page({
     }
   },
 
+  async fetchProvinceOptions(withCities: boolean = true) {
+    try {
+      const result = await fetchOperatorProvinceOptions(this.data.selectedProvinceId)
+      this.setData(result.patch)
+      if (withCities && result.selectedProvinceId > 0) {
+        await this.fetchCityOptions(result.selectedProvinceId, true)
+      }
+    } catch (e: unknown) {
+      logger.error('Fetch province regions failed', e)
+    }
+  },
+
   async initDefaultRegionFromLocation() {
     try {
       const patch = await resolveOperatorDefaultRegionPatch({
+        getProvinceOptions: () => this.data.provinceOptions,
         getCityOptions: () => this.data.cityOptions,
         getRegionOptions: () => this.data.regionOptions,
-        fetchCityOptions: (withRegions?: boolean) => this.fetchCityOptions(withRegions),
+        fetchProvinceOptions: (withCities?: boolean) => this.fetchProvinceOptions(withCities),
+        fetchCityOptions: (provinceId: number, withRegions?: boolean) => this.fetchCityOptions(provinceId, withRegions),
         fetchAvailableRegionsByCity: (cityId: number, keyword?: string) => this.fetchAvailableRegionsByCity(cityId, keyword)
       })
       if (patch) {
@@ -226,8 +249,13 @@ Page({
   async onOpenRegionPopup() {
     this.setData({ regionPopupVisible: true })
 
+    if (!this.data.provinceOptions.length) {
+      await this.fetchProvinceOptions()
+      return
+    }
+
     if (!this.data.cityOptions.length) {
-      await this.fetchCityOptions()
+      await this.fetchCityOptions(this.data.selectedProvinceId)
       return
     }
 
@@ -286,6 +314,45 @@ Page({
     if (this.data.selectedCityId) {
       this.fetchAvailableRegionsByCity(this.data.selectedCityId, '')
     }
+  },
+
+  async onProvinceChange(e: WechatMiniprogram.CustomEvent<{ value?: string | number }>) {
+    const rawIndex = e.detail.value
+    const index = Number(rawIndex)
+    if (!Number.isFinite(index)) return
+
+    const province = this.data.provinceOptions[index]
+    if (!province) return
+
+    this.setData({
+      selectedProvinceIndex: index,
+      ...buildProvinceChangePatch(province)
+    })
+
+    await this.fetchCityOptions(province.value, true)
+  },
+
+  onOpenProvincePicker() {
+    if (!this.data.provinceOptions.length) return
+    this.setData({ provincePickerVisible: true })
+  },
+
+  onCloseProvincePicker() {
+    this.setData({ provincePickerVisible: false })
+  },
+
+  async onProvincePickerConfirm(e: WechatMiniprogram.CustomEvent<{ value: Array<string | number> | null }>) {
+    const values = Array.isArray(e.detail?.value) ? e.detail.value : []
+    const selectedValue = Number(values[0] || 0)
+    const index = this.data.provinceOptions.findIndex((item) => item.value === selectedValue)
+    const province = index >= 0 ? this.data.provinceOptions[index] : null
+    if (!province) {
+      this.setData({ provincePickerVisible: false })
+      return
+    }
+
+    this.setData({ provincePickerVisible: false })
+    await this.onProvinceChange({ detail: { value: index } } as WechatMiniprogram.CustomEvent<{ value?: string | number }>)
   },
 
   async onCityChange(e: WechatMiniprogram.CustomEvent<{ value?: string | number }>) {

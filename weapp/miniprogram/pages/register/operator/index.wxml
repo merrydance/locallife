@@ -237,6 +237,12 @@
       <t-icon name="close" size="48rpx" bindtap="onCloseRegionPopup" />
     </view>
     <view class="search-bar">
+      <view class="city-picker" bind:tap="onOpenProvincePicker">
+        <text class="city-picker-label">所属省份</text>
+        <text class="city-picker-value {{selectedProvinceName ? '' : 'placeholder'}}">
+          {{selectedProvinceName || '请选择省份'}}
+        </text>
+      </view>
       <view class="city-picker" bind:tap="onOpenCityPicker">
         <text class="city-picker-label">所属城市</text>
         <text class="city-picker-value {{selectedCityName ? '' : 'placeholder'}}">
@@ -251,6 +257,18 @@
         bind:clear="onRegionSearchClear"
       />
     </view>
+
+    <t-picker
+      visible="{{provincePickerVisible}}"
+      value="{{[selectedProvinceId]}}"
+      title="选择运营省份"
+      cancelBtn="取消"
+      confirmBtn="确认"
+      bind:confirm="onProvincePickerConfirm"
+      bind:cancel="onCloseProvincePicker"
+    >
+      <t-picker-item options="{{provinceOptions}}" />
+    </t-picker>
 
     <t-picker
       visible="{{cityPickerVisible}}"

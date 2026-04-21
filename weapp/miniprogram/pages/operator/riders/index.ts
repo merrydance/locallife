@@ -34,8 +34,6 @@ type RiderView = {
   delivery_count: number
   rating_display: string
   total_earnings_display: string
-  can_suspend: boolean
-  can_resume: boolean
 }
 
 function adaptRider(item: Partial<OperatorRiderItem> & Record<string, unknown>): RiderView {
@@ -58,9 +56,7 @@ function adaptRider(item: Partial<OperatorRiderItem> & Record<string, unknown>):
     region_name: String(item.region_name || `区域 ${Number(item.region_id || 0)}`),
     delivery_count: deliveryCount,
     rating_display: Number(item.rating || 0).toFixed(1),
-    total_earnings_display: `¥${(Number(item.total_earnings || 0) / 100).toFixed(2)}`,
-    can_suspend: statusDisplay.canSuspend,
-    can_resume: statusDisplay.canResume
+    total_earnings_display: `¥${(Number(item.total_earnings || 0) / 100).toFixed(2)}`
   }
 }
 
@@ -81,11 +77,7 @@ Page({
     regionId: 0,
     statusFilter: '' as RiderStatus | '',
     searchKeyword: '',
-    searchTimer: null as number | null,
-    suspendDialogVisible: false,
-    resumeDialogVisible: false,
-    selectedRider: { id: 0, name: '' },
-    actionReason: ''
+    searchTimer: null as number | null
   },
 
   onLoad(options: RiderListPageOptions) {
@@ -196,79 +188,5 @@ Page({
     const { id } = e.currentTarget.dataset as RiderListDataset
     if (!id) return
     wx.navigateTo({ url: `/pages/operator/riders/detail/index?id=${id}` })
-  },
-
-  onSuspendTap(e: WechatMiniprogram.TouchEvent) {
-    const { id, name } = e.currentTarget.dataset as RiderListDataset
-    if (!id || !name) return
-    this.setData({
-      selectedRider: { id, name },
-      suspendDialogVisible: true,
-      actionReason: ''
-    })
-  },
-
-  onResumeTap(e: WechatMiniprogram.TouchEvent) {
-    const { id, name } = e.currentTarget.dataset as RiderListDataset
-    if (!id || !name) return
-    this.setData({
-      selectedRider: { id, name },
-      resumeDialogVisible: true,
-      actionReason: ''
-    })
-  },
-
-  onReasonChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
-    this.setData({ actionReason: e.detail.value || '' })
-  },
-
-  async onSuspendConfirm() {
-    if (!this.data.actionReason.trim()) {
-      wx.showToast({ title: '请输入暂停原因', icon: 'none' })
-      return
-    }
-
-    try {
-      wx.showLoading({ title: '处理中...' })
-      await operatorRiderManagementService.suspendRider(this.data.selectedRider.id, {
-        reason: this.data.actionReason
-      })
-      this.setData({ suspendDialogVisible: false })
-      this.loadRiders(true)
-    } catch (error) {
-      console.error('暂停骑手失败:', error)
-      wx.showToast({ title: getErrorUserMessage(error, '暂停失败，请稍后重试'), icon: 'none' })
-    } finally {
-      wx.hideLoading()
-    }
-  },
-
-  async onResumeConfirm() {
-    const reason = this.data.actionReason.trim() || '运营恢复骑手接单'
-    try {
-      wx.showLoading({ title: '处理中...' })
-      await operatorRiderManagementService.resumeRider(this.data.selectedRider.id, {
-        reason
-      })
-      this.setData({ resumeDialogVisible: false })
-      this.loadRiders(true)
-    } catch (error) {
-      console.error('恢复骑手失败:', error)
-      wx.showToast({ title: getErrorUserMessage(error, '恢复失败，请稍后重试'), icon: 'none' })
-    } finally {
-      wx.hideLoading()
-    }
-  },
-
-  onSuspendCancel() {
-    this.setData({ suspendDialogVisible: false })
-  },
-
-  onResumeCancel() {
-    this.setData({ resumeDialogVisible: false })
-  },
-
-  stopPropagation() {
-    // 阻止事件冒泡
   }
 })

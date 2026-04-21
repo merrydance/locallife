@@ -285,6 +285,8 @@ export function buildSections(params: {
   canManageDeviceSettings: boolean
   canManageMerchantApplyment: boolean
 }): DashboardSectionView[] {
+  const badgeOffset: [number, string] = [0, '8rpx']
+
   return DASHBOARD_SECTIONS.map((section) => ({
     id: section.id,
     title: section.title,
@@ -304,7 +306,7 @@ export function buildSections(params: {
       return {
         ...item,
         badgeText,
-        badgeProps: badgeText ? { count: badgeText, maxCount: 99, offset: [0, '8rpx'] } : null
+        badgeProps: badgeText ? { count: badgeText, maxCount: 99, offset: badgeOffset } : null
       }
     })
   })).filter((section) => section.items.length > 0)
