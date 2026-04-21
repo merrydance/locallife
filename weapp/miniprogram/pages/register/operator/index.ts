@@ -13,8 +13,6 @@ import { logger } from '../../../utils/logger'
 import Navigation from '../../../utils/navigation'
 import { buildAgreementConsentPayload } from '../../../api/agreement-consent'
 import {
-  buildCityChangePatch,
-  buildProvinceChangePatch,
   buildOperatorApplicationPatch,
   buildOperatorBasicPayload,
   buildSelectedRegionPatch,
@@ -23,7 +21,6 @@ import {
   createUploadFeedback,
   DEFAULT_OPERATOR_OCR_DISPLAY_STATE,
   DEFAULT_OPERATOR_UPLOAD_FEEDBACK,
-  extractRegionSearchKeyword,
   FormDataValue,
   getErrorText,
   getOperatorDocumentRemovalData,
@@ -67,21 +64,16 @@ Page({
     },
     regionPopupVisible: false,
     provinceOptions: [] as ProvinceOption[],
-    provincePickerVisible: false,
     selectedProvinceIndex: 0,
     selectedProvinceId: 0,
     selectedProvinceName: '',
     cityOptions: [] as CityOption[],
-    cityPickerVisible: false,
     selectedCityIndex: 0,
     selectedCityId: 0,
     selectedCityName: '',
-    regionKeyword: '',
-    regionSearchTimer: null as number | null,
-    lastRegionSearchKeyword: '',
-    lastRegionSearchCityId: 0,
-    regionOptions: [] as RegionOption[],     // 原始列表
-    filteredRegions: [] as RegionOption[],   // 搜索过滤后的列表
+    selectedDistrictName: '',
+    regionPickerValue: [] as number[],
+    regionOptions: [] as RegionOption[],
     ocrDisplayState: DEFAULT_OPERATOR_OCR_DISPLAY_STATE,
     uploadFeedback: DEFAULT_OPERATOR_UPLOAD_FEEDBACK,
     phoneError: '',
@@ -90,6 +82,18 @@ Page({
   },
 
   previewRefreshVersion: 0,
+  regionPickerSnapshot: null as null | {
+    selectedProvinceIndex: number
+    selectedProvinceId: number
+    selectedProvinceName: string
+    selectedCityIndex: number
+    selectedCityId: number
+    selectedCityName: string
+    selectedDistrictName: string
+    regionPickerValue: number[]
+    cityOptions: CityOption[]
+    regionOptions: RegionOption[]
+  },
 
   async onLoad() {
     await this.initApplication()
@@ -175,7 +179,7 @@ Page({
         getRegionOptions: () => this.data.regionOptions,
         fetchProvinceOptions: (withCities?: boolean) => this.fetchProvinceOptions(withCities),
         fetchCityOptions: (provinceId: number, withRegions?: boolean) => this.fetchCityOptions(provinceId, withRegions),
-        fetchAvailableRegionsByCity: (cityId: number, keyword?: string) => this.fetchAvailableRegionsByCity(cityId, keyword)
+        fetchAvailableRegionsByCity: (cityId: number) => this.fetchAvailableRegionsByCity(cityId)
       })
       if (patch) {
         this.setData(patch)
@@ -185,9 +189,9 @@ Page({
     }
   },
 
-  async fetchAvailableRegionsByCity(cityID: number, keyword: string = '') {
+  async fetchAvailableRegionsByCity(cityID: number) {
     try {
-      this.setData(await fetchOperatorAvailableRegionsByCity(cityID, keyword), () => {
+      this.setData(await fetchOperatorAvailableRegionsByCity(cityID), () => {
         const currentRegionName = (this.data.formData.regionName || '').trim()
         if (this.data.formData.regionId && (!currentRegionName || !currentRegionName.includes(' - '))) {
           this.syncRegionName(this.data.formData.regionId)
@@ -247,164 +251,148 @@ Page({
   },
 
   async onOpenRegionPopup() {
-    this.setData({ regionPopupVisible: true })
-
     if (!this.data.provinceOptions.length) {
       await this.fetchProvinceOptions()
-      return
     }
 
     if (!this.data.cityOptions.length) {
       await this.fetchCityOptions(this.data.selectedProvinceId)
-      return
     }
 
     if (this.data.selectedCityId > 0) {
-      await this.fetchAvailableRegionsByCity(this.data.selectedCityId, this.data.regionKeyword)
+      await this.fetchAvailableRegionsByCity(this.data.selectedCityId)
     }
+
+    this.regionPickerSnapshot = {
+      selectedProvinceIndex: this.data.selectedProvinceIndex,
+      selectedProvinceId: this.data.selectedProvinceId,
+      selectedProvinceName: this.data.selectedProvinceName,
+      selectedCityIndex: this.data.selectedCityIndex,
+      selectedCityId: this.data.selectedCityId,
+      selectedCityName: this.data.selectedCityName,
+      selectedDistrictName: this.data.selectedDistrictName,
+      regionPickerValue: [this.data.selectedProvinceId, this.data.selectedCityId, this.data.formData.regionId],
+      cityOptions: [...this.data.cityOptions],
+      regionOptions: [...this.data.regionOptions]
+    }
+
+    this.setData({
+      regionPopupVisible: true,
+      regionPickerValue: [this.data.selectedProvinceId, this.data.selectedCityId, this.data.formData.regionId]
+    })
   },
 
   onCloseRegionPopup() {
-    if (this.data.regionSearchTimer) {
-      clearTimeout(this.data.regionSearchTimer)
+    if (this.regionPickerSnapshot) {
+      this.setData({
+        regionPopupVisible: false,
+        selectedProvinceIndex: this.regionPickerSnapshot.selectedProvinceIndex,
+        selectedProvinceId: this.regionPickerSnapshot.selectedProvinceId,
+        selectedProvinceName: this.regionPickerSnapshot.selectedProvinceName,
+        selectedCityIndex: this.regionPickerSnapshot.selectedCityIndex,
+        selectedCityId: this.regionPickerSnapshot.selectedCityId,
+        selectedCityName: this.regionPickerSnapshot.selectedCityName,
+        selectedDistrictName: this.regionPickerSnapshot.selectedDistrictName,
+        regionPickerValue: this.regionPickerSnapshot.regionPickerValue,
+        cityOptions: this.regionPickerSnapshot.cityOptions,
+        regionOptions: this.regionPickerSnapshot.regionOptions
+      })
+      this.regionPickerSnapshot = null
+      return
     }
+
     this.setData({ regionPopupVisible: false })
   },
 
-  onRegionSearch(e: WechatMiniprogram.CustomEvent<{ value?: string }>) {
-    const keyword = extractRegionSearchKeyword(e.detail as unknown)
-    if (this.data.regionSearchTimer) {
-      clearTimeout(this.data.regionSearchTimer)
-    }
+  async onRegionPickerPick(e: WechatMiniprogram.CustomEvent<{
+    value?: Array<string | number>
+    column?: number
+  }>) {
+    const values = Array.isArray(e.detail?.value) ? e.detail.value.map((value) => Number(value)) : []
+    const column = Number(e.detail?.column ?? -1)
 
-    this.setData({ regionKeyword: keyword })
+    this.setData({ regionPickerValue: values })
 
-    if (!this.data.selectedCityId) return
+    if (column === 0) {
+      const provinceId = Number(values[0] || 0)
+      const index = this.data.provinceOptions.findIndex((item) => item.value === provinceId)
+      const province = index >= 0 ? this.data.provinceOptions[index] : null
+      if (!province || province.value === this.data.selectedProvinceId) {
+        return
+      }
 
-    if (
-      keyword === this.data.lastRegionSearchKeyword &&
-      this.data.selectedCityId === this.data.lastRegionSearchCityId
-    ) {
-      return
-    }
-
-    const timer = setTimeout(() => {
       this.setData({
-        lastRegionSearchKeyword: keyword,
-        lastRegionSearchCityId: this.data.selectedCityId
+        selectedProvinceIndex: index,
+        selectedProvinceId: province.value,
+        selectedProvinceName: province.label,
+        cityOptions: [],
+        selectedCityIndex: 0,
+        selectedCityId: 0,
+        selectedCityName: '',
+        selectedDistrictName: '',
+        regionOptions: []
       })
-      this.fetchAvailableRegionsByCity(this.data.selectedCityId, keyword)
-    }, 300)
 
-    this.setData({ regionSearchTimer: timer })
-  },
-
-  onRegionSearchClear() {
-    if (this.data.regionSearchTimer) {
-      clearTimeout(this.data.regionSearchTimer)
-    }
-    this.setData({
-      regionKeyword: '',
-      filteredRegions: this.data.regionOptions,
-      regionSearchTimer: null,
-      lastRegionSearchKeyword: '',
-      lastRegionSearchCityId: this.data.selectedCityId
-    })
-
-    if (this.data.selectedCityId) {
-      this.fetchAvailableRegionsByCity(this.data.selectedCityId, '')
-    }
-  },
-
-  async onProvinceChange(e: WechatMiniprogram.CustomEvent<{ value?: string | number }>) {
-    const rawIndex = e.detail.value
-    const index = Number(rawIndex)
-    if (!Number.isFinite(index)) return
-
-    const province = this.data.provinceOptions[index]
-    if (!province) return
-
-    this.setData({
-      selectedProvinceIndex: index,
-      ...buildProvinceChangePatch(province)
-    })
-
-    await this.fetchCityOptions(province.value, true)
-  },
-
-  onOpenProvincePicker() {
-    if (!this.data.provinceOptions.length) return
-    this.setData({ provincePickerVisible: true })
-  },
-
-  onCloseProvincePicker() {
-    this.setData({ provincePickerVisible: false })
-  },
-
-  async onProvincePickerConfirm(e: WechatMiniprogram.CustomEvent<{ value: Array<string | number> | null }>) {
-    const values = Array.isArray(e.detail?.value) ? e.detail.value : []
-    const selectedValue = Number(values[0] || 0)
-    const index = this.data.provinceOptions.findIndex((item) => item.value === selectedValue)
-    const province = index >= 0 ? this.data.provinceOptions[index] : null
-    if (!province) {
-      this.setData({ provincePickerVisible: false })
+      await this.fetchCityOptions(province.value, true)
+      this.setData({
+        regionPickerValue: [province.value, this.data.selectedCityId, this.data.regionOptions[0]?.value || 0],
+        selectedDistrictName: this.data.regionOptions[0]?.label || ''
+      })
       return
     }
 
-    this.setData({ provincePickerVisible: false })
-    await this.onProvinceChange({ detail: { value: index } } as WechatMiniprogram.CustomEvent<{ value?: string | number }>)
-  },
+    if (column === 1) {
+      const cityId = Number(values[1] || 0)
+      const index = this.data.cityOptions.findIndex((item) => item.value === cityId)
+      const city = index >= 0 ? this.data.cityOptions[index] : null
+      if (!city || city.value === this.data.selectedCityId) {
+        return
+      }
 
-  async onCityChange(e: WechatMiniprogram.CustomEvent<{ value?: string | number }>) {
-    const rawIndex = e.detail.value
-    const index = Number(rawIndex)
-    if (!Number.isFinite(index)) return
+      this.setData({
+        selectedCityIndex: index,
+        selectedCityId: city.value,
+        selectedCityName: city.label,
+        selectedDistrictName: '',
+        regionOptions: []
+      })
 
-    const city = this.data.cityOptions[index]
-    if (!city) return
-
-    this.setData({
-      selectedCityIndex: index,
-      ...buildCityChangePatch(city)
-    })
-
-    await this.fetchAvailableRegionsByCity(city.value)
-  },
-
-  onOpenCityPicker() {
-    if (!this.data.cityOptions.length) return
-    this.setData({ cityPickerVisible: true })
-  },
-
-  onCloseCityPicker() {
-    this.setData({ cityPickerVisible: false })
-  },
-
-  async onCityPickerConfirm(e: WechatMiniprogram.CustomEvent<{ value: Array<string | number> | null }>) {
-    const values = Array.isArray(e.detail?.value) ? e.detail.value : []
-    const selectedValue = Number(values[0] || 0)
-    const index = this.data.cityOptions.findIndex((item) => item.value === selectedValue)
-    const city = index >= 0 ? this.data.cityOptions[index] : null
-    if (!city) {
-      this.setData({ cityPickerVisible: false })
+      await this.fetchAvailableRegionsByCity(city.value)
+      this.setData({
+        regionPickerValue: [this.data.selectedProvinceId, city.value, this.data.regionOptions[0]?.value || 0],
+        selectedDistrictName: this.data.regionOptions[0]?.label || ''
+      })
       return
     }
 
-    this.setData({ cityPickerVisible: false })
-    await this.onCityChange({ detail: { value: index } } as WechatMiniprogram.CustomEvent<{ value?: string | number }>)
+    if (column === 2) {
+      const regionId = Number(values[2] || 0)
+      const region = this.data.regionOptions.find((item) => Number(item.value) === regionId)
+      if (region) {
+        this.setData({
+          selectedDistrictName: region.label,
+          regionPickerValue: [this.data.selectedProvinceId, this.data.selectedCityId, region.value]
+        })
+      }
+    }
   },
 
-  onSelectRegion(e: WechatMiniprogram.CustomEvent<{ value?: number | string }>) {
-    const regionId = Number(e.detail.value)
+  onRegionPickerConfirm(e: WechatMiniprogram.CustomEvent<{ value: Array<string | number> | null }>) {
+    const values = Array.isArray(e.detail?.value) ? e.detail.value : []
+    const regionId = Number(values[2] || 0)
     const region = this.data.regionOptions.find((r) => Number(r.value) === regionId)
-    
+
     if (region) {
       this.setData(buildSelectedRegionPatch({
         region,
         cityOptions: this.data.cityOptions,
         selectedCityName: this.data.selectedCityName
       }))
+      this.regionPickerSnapshot = null
+      return
     }
+
+    this.onCloseRegionPopup()
   },
 
   onInput(e: WechatMiniprogram.CustomEvent<{ value?: string }>) {

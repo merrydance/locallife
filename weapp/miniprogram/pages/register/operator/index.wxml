@@ -60,7 +60,7 @@
       <view class="card-group">
         <t-cell title="目标运营区" arrow hover bindtap="onOpenRegionPopup">
           <view slot="note" class="cell-value {{formData.regionName ? '' : 'placeholder'}}">
-            {{formData.regionName || '点击搜索意向区域'}}
+            {{formData.regionName || '点击选择省市县'}}
           </view>
         </t-cell>
       </view>
@@ -76,7 +76,7 @@
         />
         <t-input 
           label="联系人姓名" 
-          placeholder="负责人真實姓名" 
+          placeholder="负责人真实姓名" 
           value="{{formData.contactName}}" 
           bindchange="onInput" 
           data-field="contactName" 
@@ -230,71 +230,19 @@
     <t-button block variant="text" bindtap="closeConsentPopup">暂不继续</t-button>
   </view>
 </t-popup>
-<t-popup visible="{{regionPopupVisible}}" placement="bottom" bind:visible-change="onCloseRegionPopup">
-  <view class="popup-container">
-    <view class="popup-header">
-      <text class="popup-title">选择运营区域</text>
-      <t-icon name="close" size="48rpx" bindtap="onCloseRegionPopup" />
-    </view>
-    <view class="search-bar">
-      <view class="city-picker" bind:tap="onOpenProvincePicker">
-        <text class="city-picker-label">所属省份</text>
-        <text class="city-picker-value {{selectedProvinceName ? '' : 'placeholder'}}">
-          {{selectedProvinceName || '请选择省份'}}
-        </text>
-      </view>
-      <view class="city-picker" bind:tap="onOpenCityPicker">
-        <text class="city-picker-label">所属城市</text>
-        <text class="city-picker-value {{selectedCityName ? '' : 'placeholder'}}">
-          {{selectedCityName || '请选择城市'}}
-        </text>
-      </view>
-      <t-search
-        model:value="{{regionKeyword}}"
-        placeholder="搜索当前城市下的区县"
-        bind:input="onRegionSearch"
-        bind:change="onRegionSearch"
-        bind:clear="onRegionSearchClear"
-      />
-    </view>
-
-    <t-picker
-      visible="{{provincePickerVisible}}"
-      value="{{[selectedProvinceId]}}"
-      title="选择运营省份"
-      cancelBtn="取消"
-      confirmBtn="确认"
-      bind:confirm="onProvincePickerConfirm"
-      bind:cancel="onCloseProvincePicker"
-    >
-      <t-picker-item options="{{provinceOptions}}" />
-    </t-picker>
-
-    <t-picker
-      visible="{{cityPickerVisible}}"
-      value="{{[selectedCityId]}}"
-      title="选择运营城市"
-      cancelBtn="取消"
-      confirmBtn="确认"
-      bind:confirm="onCityPickerConfirm"
-      bind:cancel="onCloseCityPicker"
-    >
-      <t-picker-item options="{{cityOptions}}" />
-    </t-picker>
-    <scroll-view scroll-y class="region-list-scroll">
-      <t-radio-group value="{{formData.regionId}}" bind:change="onSelectRegion">
-        <block wx:for="{{filteredRegions}}" wx:key="value">
-          <t-radio value="{{item.value}}" align="right">
-            <view class="region-item-content">
-              <text class="r-name">{{item.label}}</text>
-              <text class="r-parent">{{item.secondary}}</text>
-            </view>
-          </t-radio>
-        </block>
-      </t-radio-group>
-      <view class="empty-hint" wx:if="{{filteredRegions.length === 0}}">
-        未找到相关的可用区域
-      </view>
-    </scroll-view>
-  </view>
-</t-popup>
+<t-picker
+  visible="{{regionPopupVisible}}"
+  value="{{regionPickerValue}}"
+  title="选择运营区域"
+  cancelBtn="取消"
+  confirmBtn="确认"
+  auto-close="{{false}}"
+  bind:pick="onRegionPickerPick"
+  bind:confirm="onRegionPickerConfirm"
+  bind:cancel="onCloseRegionPopup"
+>
+  <t-picker-item options="{{provinceOptions}}" />
+  <t-picker-item options="{{cityOptions}}" />
+  <t-picker-item options="{{regionOptions}}" />
+  <view slot="footer" class="picker-safe-area"></view>
+</t-picker>

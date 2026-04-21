@@ -240,17 +240,9 @@ export function findMatchedDistrictOption(regionOptions: RegionOption[], distric
   }) || null
 }
 
-export function buildAvailableRegionsPatch(districts: RegionOption[], keyword: string) {
-  const normalizedKeyword = keyword.trim()
+export function buildAvailableRegionsPatch(districts: RegionOption[]) {
   return {
-    regionOptions: districts,
-    filteredRegions: normalizedKeyword
-      ? districts.filter((item) =>
-          item.label.toLowerCase().includes(normalizedKeyword.toLowerCase())
-          || item.secondary.toLowerCase().includes(normalizedKeyword.toLowerCase())
-        )
-      : districts,
-    regionKeyword: normalizedKeyword
+    regionOptions: districts
   }
 }
 
@@ -359,6 +351,7 @@ export function buildOperatorApplicationPatch(params: {
     'formData.contactName': String(params.res.contact_name || ''),
     'formData.contactPhone': String(params.res.contact_phone || ''),
     'formData.years': Number(params.res.requested_contract_years || 3),
+    selectedDistrictName: '',
     phoneError: String(params.res.contact_phone || '').trim() ? '' : params.phoneError,
     idFront: { url: '', assetId: params.res.id_card_front_asset_id },
     idBack: { url: '', assetId: params.res.id_card_back_asset_id },
@@ -369,6 +362,9 @@ export function buildOperatorApplicationPatch(params: {
 
   if (regionName) {
     patch['formData.regionName'] = regionName
+    patch.selectedDistrictName = regionName.includes(' - ')
+      ? regionName.split(' - ').pop() || ''
+      : regionName
   }
 
   return patch
@@ -405,51 +401,6 @@ export function getOperatorDocumentRemovalData(field: OperatorUploadField) {
   return documentMap[field]
 }
 
-export function extractRegionSearchKeyword(detail: unknown): string {
-  const rawValue = typeof detail === 'string'
-    ? detail
-    : detail && typeof detail === 'object' && 'value' in detail
-      ? String((detail as { value?: string }).value || '')
-      : ''
-  const normalizedValue = rawValue === 'undefined' ? '' : rawValue
-  return normalizedValue.trim()
-}
-
-export function buildCityChangePatch(city: CityOption) {
-  return {
-    selectedCityId: city.value,
-    selectedCityName: city.label,
-    regionKeyword: '',
-    regionSearchTimer: null,
-    lastRegionSearchKeyword: '',
-    lastRegionSearchCityId: city.value,
-    regionOptions: [],
-    filteredRegions: [],
-    'formData.regionId': 0,
-    'formData.regionName': ''
-  }
-}
-
-export function buildProvinceChangePatch(province: ProvinceOption) {
-  return {
-    selectedProvinceId: province.value,
-    selectedProvinceName: province.label,
-    cityOptions: [],
-    cityPickerVisible: false,
-    selectedCityIndex: 0,
-    selectedCityId: 0,
-    selectedCityName: '',
-    regionKeyword: '',
-    regionSearchTimer: null,
-    lastRegionSearchKeyword: '',
-    lastRegionSearchCityId: 0,
-    regionOptions: [],
-    filteredRegions: [],
-    'formData.regionId': 0,
-    'formData.regionName': ''
-  }
-}
-
 export function buildSelectedRegionPatch(params: {
   region: RegionOption
   cityOptions: CityOption[]
@@ -474,9 +425,11 @@ export function buildSelectedRegionPatch(params: {
 
   return {
     ...cityState,
+    selectedDistrictName: params.region.label,
     'formData.regionId': params.region.value,
     'formData.regionName': fullName,
-    regionPopupVisible: false
+    regionPopupVisible: false,
+    districtPickerVisible: false
   }
 }
 

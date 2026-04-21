@@ -141,10 +141,9 @@ export async function fetchOperatorCityOptions(provinceId: number, selectedCityI
   }
 }
 
-export async function fetchOperatorAvailableRegionsByCity(cityID: number, keyword: string = '') {
+export async function fetchOperatorAvailableRegionsByCity(cityID: number) {
   const districts: RegionOption[] = []
   let pageID = 1
-  const normalizedKeyword = keyword.trim()
 
   for (;;) {
     const query: {
@@ -152,16 +151,11 @@ export async function fetchOperatorAvailableRegionsByCity(cityID: number, keywor
       page_size: number
       level: number
       parent_id: number
-      keyword?: string
     } = {
       page_id: pageID,
       page_size: 100,
       level: 3,
       parent_id: cityID
-    }
-
-    if (normalizedKeyword) {
-      query.keyword = normalizedKeyword
     }
 
     const res = await listAvailableRegions(query)
@@ -185,7 +179,7 @@ export async function fetchOperatorAvailableRegionsByCity(cityID: number, keywor
     pageID += 1
   }
 
-  return buildAvailableRegionsPatch(districts, normalizedKeyword)
+  return buildAvailableRegionsPatch(districts)
 }
 
 export async function getOperatorCurrentLocation(): Promise<LocationInfo | null> {
@@ -222,7 +216,7 @@ export async function resolveOperatorDefaultRegionPatch(params: {
   getRegionOptions: () => RegionOption[]
   fetchProvinceOptions: (withCities?: boolean) => Promise<void>
   fetchCityOptions: (provinceId: number, withRegions?: boolean) => Promise<void>
-  fetchAvailableRegionsByCity: (cityId: number, keyword?: string) => Promise<void>
+  fetchAvailableRegionsByCity: (cityId: number) => Promise<void>
 }) {
   const location = await getOperatorCurrentLocation()
   if (!location) {
@@ -291,6 +285,7 @@ export async function resolveOperatorDefaultRegionPatch(params: {
 
   return {
     ...getPickerPatch(matchedProvince, matchedCity),
+    selectedDistrictName: matchedDistrict.label,
     'formData.regionId': matchedDistrict.value,
     'formData.regionName': `${matchedCity.label} - ${matchedDistrict.label}`
   }
@@ -349,5 +344,8 @@ export function buildRegionNamePatch(regionOptions: RegionOption[], regionId: nu
     return null
   }
 
-  return { 'formData.regionName': buildRegionFullName(matched) }
+  return {
+    selectedDistrictName: matched.label,
+    'formData.regionName': buildRegionFullName(matched)
+  }
 }

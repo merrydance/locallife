@@ -1,6 +1,6 @@
 import { type MerchantApplymentStatusView } from '../api/merchant-applyment'
 import { getErrorUserMessage } from './user-facing'
-import type { MerchantConsoleProfile } from '../services/merchant-console'
+import type { MerchantStorefrontProfile } from '../services/merchant-open-status'
 
 export interface MerchantBusinessStateView {
   title: string
@@ -55,7 +55,7 @@ export type DashboardRequestResult<T> =
   | { ok: true, value: T }
   | { ok: false, error: unknown }
 
-export const EMPTY_MERCHANT: MerchantConsoleProfile = {
+export const EMPTY_MERCHANT: MerchantStorefrontProfile = {
   id: 0,
   owner_user_id: 0,
   region_id: 0,

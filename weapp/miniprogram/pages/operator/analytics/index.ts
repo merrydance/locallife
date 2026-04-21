@@ -1,12 +1,14 @@
 import { isLargeScreen } from '@/utils/responsive'
 import {
-  loadOperatorAnalyticsPageData,
   loadOperatorRegions,
-  type ConsoleRegionOption,
+  type ConsoleRegionOption
+} from '../../../services/operator-regions'
+import {
+  loadOperatorAnalyticsPageData,
   type OperatorAnalyticsRegionSummary,
   type OperatorMerchantRankingView,
   type OperatorRiderRankingView
-} from '../../../services/operator-console'
+} from '../../../services/operator-analytics-dashboard'
 
 type TimeDimension = 'day' | 'week' | 'month'
 type RankingType = 'merchant' | 'rider'

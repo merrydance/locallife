@@ -1,10 +1,12 @@
 import { responsiveBehavior } from '@/utils/responsive'
 import { getConsoleDashboardErrorState } from '../../../utils/console-dashboard'
 import {
-  loadOperatorCenterPageData,
   loadOperatorRegions,
   type ConsoleRegionOption
-} from '../../../services/operator-console'
+} from '../../../services/operator-regions'
+import {
+  loadOperatorCenterPageData
+} from '../../../services/operator-workbench'
 
 type TimeDimension = 'day' | 'week' | 'month'
 
