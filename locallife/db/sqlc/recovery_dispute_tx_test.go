@@ -9,6 +9,49 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func createClaimRecoveryDecisionForTest(t *testing.T, claimID, orderID int64) BehaviorDecision {
+	t.Helper()
+
+	ctx := context.Background()
+	claim, err := testStore.GetClaim(ctx, claimID)
+	require.NoError(t, err)
+	order, err := testStore.GetOrder(ctx, orderID)
+	require.NoError(t, err)
+
+	decision, err := testStore.CreateBehaviorDecision(ctx, CreateBehaviorDecisionParams{
+		UserID:                 pgtype.Int8{Int64: claim.UserID, Valid: true},
+		MerchantID:             pgtype.Int8{Int64: order.MerchantID, Valid: true},
+		RiderID:                pgtype.Int8{},
+		DecisionVersion:        "claim-recovery-test",
+		ReasonCodes:            []string{"test_claim_recovery"},
+		ResponsibleParty:       "merchant",
+		CompensationSource:     "merchant",
+		DecisionStatus:         "decided",
+		TraceSummary:           pgtype.Text{String: "claim recovery test decision", Valid: true},
+		OrderID:                pgtype.Int8{Int64: orderID, Valid: true},
+		ReservationID:          pgtype.Int8{},
+		ClaimID:                pgtype.Int8{Int64: claimID, Valid: true},
+		DecisionMode:           pgtype.Text{String: BehaviorDecisionModeMerchantRecovery, Valid: true},
+		ResponsibilityDomain:   pgtype.Text{String: BehaviorResponsibilityDomainMerchant, Valid: true},
+		PayoutMode:             pgtype.Text{String: BehaviorPayoutModeInstantPaid, Valid: true},
+		ConfidenceScore:        pgtype.Int4{},
+		UserRiskScore:          pgtype.Int4{},
+		MerchantLiabilityScore: pgtype.Int4{},
+		RiderLiabilityScore:    pgtype.Int4{},
+		FallbackReason:         pgtype.Text{},
+		RestrictionReason:      pgtype.Text{},
+		LiabilityShares:        []byte(`{}`),
+		ScoreBreakdown:         []byte(`{}`),
+		GraphHits:              []byte(`{}`),
+		FactSnapshot:           []byte(`{}`),
+		SupersedesDecisionID:   pgtype.Int8{},
+		OverturnedByDecisionID: pgtype.Int8{},
+	})
+	require.NoError(t, err)
+
+	return decision
+}
+
 // ==================== Helper Functions ====================
 
 // createRandomClaim 创建一个随机的索赔记录
@@ -27,7 +70,7 @@ func createRandomClaim(t *testing.T, userID, orderID int64) Claim {
 	require.NoError(t, err)
 	require.NotZero(t, claim.ID)
 
-	// 更新状态为已批准以便测试申诉
+	// 更新状态为已批准以便测试追偿争议
 	_, err = testStore.(*SQLStore).connPool.Exec(context.Background(),
 		"UPDATE claims SET status = 'approved', approved_amount = $1 WHERE id = $2",
 		claim.ClaimAmount, claim.ID)
@@ -36,9 +79,9 @@ func createRandomClaim(t *testing.T, userID, orderID int64) Claim {
 	return claim
 }
 
-// createRandomAppeal 创建一个随机的申诉记录
-func createRandomAppeal(t *testing.T, claimID, appellantID int64, appellantType string, regionID int64) Appeal {
-	arg := CreateAppealParams{
+// createRandomRecoveryDispute 创建一个随机的追偿争议记录
+func createRandomRecoveryDispute(t *testing.T, claimID, appellantID int64, appellantType string, regionID int64) RecoveryDispute {
+	arg := CreateRecoveryDisputeParams{
 		ClaimID:       claimID,
 		AppellantType: appellantType,
 		AppellantID:   appellantID,
@@ -46,18 +89,20 @@ func createRandomAppeal(t *testing.T, claimID, appellantID int64, appellantType 
 		RegionID:      regionID,
 	}
 
-	appeal, err := testStore.CreateAppeal(context.Background(), arg)
+	recoveryDispute, err := testStore.CreateRecoveryDispute(context.Background(), arg)
 	require.NoError(t, err)
-	require.NotZero(t, appeal.ID)
+	require.NotZero(t, recoveryDispute.ID)
 
-	return appeal
+	return recoveryDispute
 }
 
 func createRandomClaimRecovery(t *testing.T, claimID, orderID int64, status string) ClaimRecovery {
+	decision := createClaimRecoveryDecisionForTest(t, claimID, orderID)
+
 	arg := CreateClaimRecoveryParams{
 		ClaimID:          claimID,
 		OrderID:          orderID,
-		DecisionID:       pgtype.Int8{},
+		DecisionID:       pgtype.Int8{Int64: decision.ID, Valid: true},
 		ResponsibleParty: "merchant",
 		RecoveryTarget:   pgtype.Text{String: "merchant", Valid: true},
 		RecoveryAmount:   3000,
@@ -74,25 +119,25 @@ func createRandomClaimRecovery(t *testing.T, claimID, orderID int64, status stri
 	return recovery
 }
 
-// ==================== CreateAppeal Tests ====================
+// ==================== CreateRecoveryDispute Tests ====================
 
-func TestCreateAppeal(t *testing.T) {
+func TestCreateRecoveryDispute(t *testing.T) {
 	owner := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, owner.ID)
 	user := createRandomUser(t)
 
 	order := createCompletedOrderForStats(t, user.ID, merchant.ID, 10000, "takeout", time.Now())
 	claim := createRandomClaim(t, user.ID, order.ID)
-	appeal := createRandomAppeal(t, claim.ID, merchant.ID, "merchant", merchant.RegionID)
+	recoveryDispute := createRandomRecoveryDispute(t, claim.ID, merchant.ID, "merchant", merchant.RegionID)
 
-	require.Equal(t, claim.ID, appeal.ClaimID)
-	require.Equal(t, "merchant", appeal.AppellantType)
-	require.Equal(t, merchant.ID, appeal.AppellantID)
-	require.Equal(t, "pending", appeal.Status)
-	require.NotEmpty(t, appeal.Reason)
+	require.Equal(t, claim.ID, recoveryDispute.ClaimID)
+	require.Equal(t, "merchant", recoveryDispute.AppellantType)
+	require.Equal(t, merchant.ID, recoveryDispute.AppellantID)
+	require.Equal(t, "submitted", recoveryDispute.Status)
+	require.NotEmpty(t, recoveryDispute.Reason)
 }
 
-func TestCreateAppeal_DuplicateClaimShouldFail(t *testing.T) {
+func TestCreateRecoveryDispute_DuplicateClaimShouldFail(t *testing.T) {
 	owner := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, owner.ID)
 	user := createRandomUser(t)
@@ -101,52 +146,52 @@ func TestCreateAppeal_DuplicateClaimShouldFail(t *testing.T) {
 	claim := createRandomClaim(t, user.ID, order.ID)
 
 	// 第一次创建
-	createRandomAppeal(t, claim.ID, merchant.ID, "merchant", merchant.RegionID)
+	createRandomRecoveryDispute(t, claim.ID, merchant.ID, "merchant", merchant.RegionID)
 
 	// 重复创建应该失败（唯一约束）
-	_, err := testStore.CreateAppeal(context.Background(), CreateAppealParams{
+	_, err := testStore.CreateRecoveryDispute(context.Background(), CreateRecoveryDisputeParams{
 		ClaimID:       claim.ID,
 		AppellantType: "merchant",
 		AppellantID:   merchant.ID,
-		Reason:        "再次申诉",
+		Reason:        "再次发起追偿争议",
 		RegionID:      merchant.RegionID,
 	})
 	require.Error(t, err)
 }
 
-// ==================== GetAppeal Tests ====================
+// ==================== GetRecoveryDispute Tests ====================
 
-func TestGetAppeal(t *testing.T) {
+func TestGetRecoveryDispute(t *testing.T) {
 	owner := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, owner.ID)
 	user := createRandomUser(t)
 
 	order := createCompletedOrderForStats(t, user.ID, merchant.ID, 10000, "takeout", time.Now())
 	claim := createRandomClaim(t, user.ID, order.ID)
-	created := createRandomAppeal(t, claim.ID, merchant.ID, "merchant", merchant.RegionID)
+	created := createRandomRecoveryDispute(t, claim.ID, merchant.ID, "merchant", merchant.RegionID)
 
-	got, err := testStore.GetAppeal(context.Background(), created.ID)
+	got, err := testStore.GetRecoveryDispute(context.Background(), created.ID)
 	require.NoError(t, err)
 	require.Equal(t, created.ID, got.ID)
 	require.Equal(t, created.ClaimID, got.ClaimID)
 	require.Equal(t, created.Reason, got.Reason)
 }
 
-func TestGetAppeal_NotFound(t *testing.T) {
-	_, err := testStore.GetAppeal(context.Background(), 99999999)
+func TestGetRecoveryDispute_NotFound(t *testing.T) {
+	_, err := testStore.GetRecoveryDispute(context.Background(), 99999999)
 	require.Error(t, err)
 }
 
-func TestGetAppealByClaim(t *testing.T) {
+func TestGetRecoveryDisputeByClaim(t *testing.T) {
 	owner := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, owner.ID)
 	user := createRandomUser(t)
 
 	order := createCompletedOrderForStats(t, user.ID, merchant.ID, 10000, "takeout", time.Now())
 	claim := createRandomClaim(t, user.ID, order.ID)
-	created := createRandomAppeal(t, claim.ID, merchant.ID, "merchant", merchant.RegionID)
+	created := createRandomRecoveryDispute(t, claim.ID, merchant.ID, "merchant", merchant.RegionID)
 
-	got, err := testStore.GetAppealByClaim(context.Background(), GetAppealByClaimParams{
+	got, err := testStore.GetRecoveryDisputeByClaim(context.Background(), GetRecoveryDisputeByClaimParams{
 		ClaimID:       claim.ID,
 		AppellantType: "merchant",
 	})
@@ -154,9 +199,9 @@ func TestGetAppealByClaim(t *testing.T) {
 	require.Equal(t, created.ID, got.ID)
 }
 
-// ==================== CheckAppealExists Tests ====================
+// ==================== CheckRecoveryDisputeExists Tests ====================
 
-func TestCheckAppealExists(t *testing.T) {
+func TestCheckRecoveryDisputeExists(t *testing.T) {
 	owner := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, owner.ID)
 	user := createRandomUser(t)
@@ -164,18 +209,18 @@ func TestCheckAppealExists(t *testing.T) {
 	order := createCompletedOrderForStats(t, user.ID, merchant.ID, 10000, "takeout", time.Now())
 	claim := createRandomClaim(t, user.ID, order.ID)
 
-	// 未申诉前
-	exists, err := testStore.CheckAppealExists(context.Background(), CheckAppealExistsParams{
+	// 未发起追偿争议前
+	exists, err := testStore.CheckRecoveryDisputeExists(context.Background(), CheckRecoveryDisputeExistsParams{
 		ClaimID:       claim.ID,
 		AppellantType: "merchant",
 	})
 	require.NoError(t, err)
 	require.False(t, exists)
 
-	// 申诉后
-	createRandomAppeal(t, claim.ID, merchant.ID, "merchant", merchant.RegionID)
+	// 发起追偿争议后
+	createRandomRecoveryDispute(t, claim.ID, merchant.ID, "merchant", merchant.RegionID)
 
-	exists, err = testStore.CheckAppealExists(context.Background(), CheckAppealExistsParams{
+	exists, err = testStore.CheckRecoveryDisputeExists(context.Background(), CheckRecoveryDisputeExistsParams{
 		ClaimID:       claim.ID,
 		AppellantType: "merchant",
 	})
@@ -183,56 +228,92 @@ func TestCheckAppealExists(t *testing.T) {
 	require.True(t, exists)
 }
 
-func TestReviewAppealWithCompensationTx_ApprovedWaivesClaimRecovery(t *testing.T) {
+func TestCreateRecoveryDisputeWithRecoveryTx_WritesDisputedRecoveryEvent(t *testing.T) {
 	owner := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, owner.ID)
 	user := createRandomUser(t)
 
 	order := createCompletedOrderForStats(t, user.ID, merchant.ID, 10000, "takeout", time.Now())
 	claim := createRandomClaim(t, user.ID, order.ID)
-	appeal := createRandomAppeal(t, claim.ID, merchant.ID, "merchant", merchant.RegionID)
-	createRandomClaimRecovery(t, claim.ID, order.ID, "appealed")
+	recovery := createRandomClaimRecovery(t, claim.ID, order.ID, "pending")
 
-	result, err := testStore.ReviewAppealWithCompensationTx(context.Background(), ReviewAppealWithCompensationTxParams{
-		ID:                 appeal.ID,
+	result, err := testStore.CreateRecoveryDisputeWithRecoveryTx(context.Background(), CreateRecoveryDisputeWithRecoveryTxParams{
+		ClaimID:       claim.ID,
+		AppellantType: "merchant",
+		AppellantID:   merchant.ID,
+		Reason:        "商户发起追偿争议",
+		RegionID:      merchant.RegionID,
+	})
+	require.NoError(t, err)
+	require.NotZero(t, result.RecoveryDispute.ID)
+
+	updatedRecovery, err := testStore.GetClaimRecoveryByClaimID(context.Background(), claim.ID)
+	require.NoError(t, err)
+	require.Equal(t, "disputed", updatedRecovery.Status)
+
+	recoveryEvents, err := testStore.ListClaimRecoveryEventsByRecovery(context.Background(), recovery.ID)
+	require.NoError(t, err)
+	require.Len(t, recoveryEvents, 1)
+	require.Equal(t, ClaimRecoveryEventTypeDisputed, recoveryEvents[0].EventType)
+}
+
+func TestReviewRecoveryDisputeWithCompensationTx_ApprovedWaivesClaimRecovery(t *testing.T) {
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	user := createRandomUser(t)
+
+	order := createCompletedOrderForStats(t, user.ID, merchant.ID, 10000, "takeout", time.Now())
+	claim := createRandomClaim(t, user.ID, order.ID)
+	recoveryDispute := createRandomRecoveryDispute(t, claim.ID, merchant.ID, "merchant", merchant.RegionID)
+	createRandomClaimRecovery(t, claim.ID, order.ID, "disputed")
+
+	result, err := testStore.ReviewRecoveryDisputeWithCompensationTx(context.Background(), ReviewRecoveryDisputeWithCompensationTxParams{
+		ID:                 recoveryDispute.ID,
 		Status:             "approved",
 		ReviewerID:         pgtype.Int8{},
 		ReviewNotes:        pgtype.Text{String: "系统自动复核通过", Valid: true},
 		CompensationAmount: pgtype.Int8{},
 	})
 	require.NoError(t, err)
-	require.Equal(t, "approved", result.Appeal.Status)
+	require.Equal(t, "approved", result.RecoveryDispute.Status)
+	require.NotNil(t, result.ReleaseAction)
+	require.Equal(t, "release", result.ReleaseAction.ActionType)
+	require.Equal(t, "merchant", result.ReleaseAction.TargetEntity)
 
 	updatedRecovery, err := testStore.GetClaimRecoveryByClaimID(context.Background(), claim.ID)
 	require.NoError(t, err)
 	require.Equal(t, "waived", updatedRecovery.Status)
+	recoveryEvents, err := testStore.ListClaimRecoveryEventsByRecovery(context.Background(), updatedRecovery.ID)
+	require.NoError(t, err)
+	require.Len(t, recoveryEvents, 1)
+	require.Equal(t, ClaimRecoveryEventTypeWaived, recoveryEvents[0].EventType)
 }
 
-// ==================== ListMerchantAppeals Tests ====================
+// ==================== ListMerchantRecoveryDisputes Tests ====================
 
-func TestListMerchantAppealsForMerchant(t *testing.T) {
+func TestListMerchantRecoveryDisputesForMerchant(t *testing.T) {
 	owner := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, owner.ID)
 
-	// 创建5个申诉
+	// 创建5个追偿争议
 	for i := 0; i < 5; i++ {
 		user := createRandomUser(t)
 		order := createCompletedOrderForStats(t, user.ID, merchant.ID, 10000, "takeout", time.Now())
 		claim := createRandomClaim(t, user.ID, order.ID)
-		createRandomAppeal(t, claim.ID, merchant.ID, "merchant", merchant.RegionID)
+		createRandomRecoveryDispute(t, claim.ID, merchant.ID, "merchant", merchant.RegionID)
 	}
 
-	appeals, err := testStore.ListMerchantAppealsForMerchant(context.Background(), ListMerchantAppealsForMerchantParams{
+	recoveryDisputes, err := testStore.ListMerchantRecoveryDisputesForMerchant(context.Background(), ListMerchantRecoveryDisputesForMerchantParams{
 		AppellantID: merchant.ID,
 		Status:      pgtype.Text{},
 		Limit:       10,
 		Offset:      0,
 	})
 	require.NoError(t, err)
-	require.Len(t, appeals, 5)
+	require.Len(t, recoveryDisputes, 5)
 }
 
-func TestListMerchantAppealsForMerchant_FilterByStatus(t *testing.T) {
+func TestListMerchantRecoveryDisputesForMerchant_FilterByStatus(t *testing.T) {
 	owner := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, owner.ID)
 
@@ -240,10 +321,10 @@ func TestListMerchantAppealsForMerchant_FilterByStatus(t *testing.T) {
 		user := createRandomUser(t)
 		order := createCompletedOrderForStats(t, user.ID, merchant.ID, 10000, "takeout", time.Now())
 		claim := createRandomClaim(t, user.ID, order.ID)
-		appeal := createRandomAppeal(t, claim.ID, merchant.ID, "merchant", merchant.RegionID)
+		recoveryDispute := createRandomRecoveryDispute(t, claim.ID, merchant.ID, "merchant", merchant.RegionID)
 		_, err := testStore.(*SQLStore).connPool.Exec(context.Background(),
-			"UPDATE appeals SET status = 'approved' WHERE id = $1",
-			appeal.ID,
+			"UPDATE recovery_disputes SET status = 'approved' WHERE id = $1",
+			recoveryDispute.ID,
 		)
 		require.NoError(t, err)
 	}
@@ -251,65 +332,65 @@ func TestListMerchantAppealsForMerchant_FilterByStatus(t *testing.T) {
 	pendingUser := createRandomUser(t)
 	pendingOrder := createCompletedOrderForStats(t, pendingUser.ID, merchant.ID, 10000, "takeout", time.Now())
 	pendingClaim := createRandomClaim(t, pendingUser.ID, pendingOrder.ID)
-	createRandomAppeal(t, pendingClaim.ID, merchant.ID, "merchant", merchant.RegionID)
+	createRandomRecoveryDispute(t, pendingClaim.ID, merchant.ID, "merchant", merchant.RegionID)
 
-	appeals, err := testStore.ListMerchantAppealsForMerchant(context.Background(), ListMerchantAppealsForMerchantParams{
+	recoveryDisputes, err := testStore.ListMerchantRecoveryDisputesForMerchant(context.Background(), ListMerchantRecoveryDisputesForMerchantParams{
 		AppellantID: merchant.ID,
-		Status:      pgtype.Text{String: "pending", Valid: true},
+		Status:      pgtype.Text{String: "submitted", Valid: true},
 		Limit:       10,
 		Offset:      0,
 	})
 	require.NoError(t, err)
-	require.Len(t, appeals, 1)
-	require.Equal(t, "pending", appeals[0].Status)
+	require.Len(t, recoveryDisputes, 1)
+	require.Equal(t, "submitted", recoveryDisputes[0].Status)
 }
 
-func TestListMerchantAppealsForMerchant_UsesIDTieBreaker(t *testing.T) {
+func TestListMerchantRecoveryDisputesForMerchant_UsesIDTieBreaker(t *testing.T) {
 	owner := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, owner.ID)
 	tiedCreatedAt := time.Now().UTC().Truncate(time.Microsecond)
-	var appealIDs []int64
+	var recoveryDisputeIDs []int64
 
 	for i := 0; i < 2; i++ {
 		user := createRandomUser(t)
 		order := createCompletedOrderForStats(t, user.ID, merchant.ID, 10000, "takeout", time.Now())
 		claim := createRandomClaim(t, user.ID, order.ID)
-		appeal := createRandomAppeal(t, claim.ID, merchant.ID, "merchant", merchant.RegionID)
-		appealIDs = append(appealIDs, appeal.ID)
+		recoveryDispute := createRandomRecoveryDispute(t, claim.ID, merchant.ID, "merchant", merchant.RegionID)
+		recoveryDisputeIDs = append(recoveryDisputeIDs, recoveryDispute.ID)
 	}
 
 	_, err := testStore.(*SQLStore).connPool.Exec(context.Background(),
-		"UPDATE appeals SET created_at = $1 WHERE id = ANY($2)",
+		"UPDATE recovery_disputes SET created_at = $1 WHERE id = ANY($2)",
 		tiedCreatedAt,
-		appealIDs,
+		recoveryDisputeIDs,
 	)
 	require.NoError(t, err)
 
-	appeals, err := testStore.ListMerchantAppealsForMerchant(context.Background(), ListMerchantAppealsForMerchantParams{
+	recoveryDisputes, err := testStore.ListMerchantRecoveryDisputesForMerchant(context.Background(), ListMerchantRecoveryDisputesForMerchantParams{
 		AppellantID: merchant.ID,
 		Status:      pgtype.Text{},
 		Limit:       2,
 		Offset:      0,
 	})
 	require.NoError(t, err)
-	require.Len(t, appeals, 2)
-	require.Equal(t, appealIDs[1], appeals[0].ID)
-	require.Equal(t, appealIDs[0], appeals[1].ID)
+	require.Len(t, recoveryDisputes, 2)
+	require.Equal(t, recoveryDisputeIDs[1], recoveryDisputes[0].ID)
+	require.Equal(t, recoveryDisputeIDs[0], recoveryDisputes[1].ID)
 }
 
-func TestCountMerchantAppealsForMerchant(t *testing.T) {
+func TestCountMerchantRecoveryDisputesForMerchant(t *testing.T) {
 	owner := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, owner.ID)
 
-	// 创建3个申诉
+	// 创建3个追偿争议
 	for i := 0; i < 3; i++ {
 		user := createRandomUser(t)
 		order := createCompletedOrderForStats(t, user.ID, merchant.ID, 10000, "takeout", time.Now())
 		claim := createRandomClaim(t, user.ID, order.ID)
-		createRandomAppeal(t, claim.ID, merchant.ID, "merchant", merchant.RegionID)
+		createRandomRecoveryDispute(t, claim.ID, merchant.ID, "merchant", merchant.RegionID)
 	}
 
-	count, err := testStore.CountMerchantAppealsForMerchant(context.Background(), CountMerchantAppealsForMerchantParams{
+	count, err := testStore.CountMerchantRecoveryDisputesForMerchant(context.Background(), CountMerchantRecoveryDisputesForMerchantParams{
 		AppellantID: merchant.ID,
 		Status:      pgtype.Text{},
 	})
@@ -317,7 +398,7 @@ func TestCountMerchantAppealsForMerchant(t *testing.T) {
 	require.Equal(t, int64(3), count)
 }
 
-func TestCountMerchantAppealsForMerchant_FilterByStatus(t *testing.T) {
+func TestCountMerchantRecoveryDisputesForMerchant_FilterByStatus(t *testing.T) {
 	owner := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, owner.ID)
 
@@ -325,10 +406,10 @@ func TestCountMerchantAppealsForMerchant_FilterByStatus(t *testing.T) {
 		user := createRandomUser(t)
 		order := createCompletedOrderForStats(t, user.ID, merchant.ID, 10000, "takeout", time.Now())
 		claim := createRandomClaim(t, user.ID, order.ID)
-		appeal := createRandomAppeal(t, claim.ID, merchant.ID, "merchant", merchant.RegionID)
+		recoveryDispute := createRandomRecoveryDispute(t, claim.ID, merchant.ID, "merchant", merchant.RegionID)
 		_, err := testStore.(*SQLStore).connPool.Exec(context.Background(),
-			"UPDATE appeals SET status = 'rejected' WHERE id = $1",
-			appeal.ID,
+			"UPDATE recovery_disputes SET status = 'rejected' WHERE id = $1",
+			recoveryDispute.ID,
 		)
 		require.NoError(t, err)
 	}
@@ -336,9 +417,9 @@ func TestCountMerchantAppealsForMerchant_FilterByStatus(t *testing.T) {
 	pendingUser := createRandomUser(t)
 	pendingOrder := createCompletedOrderForStats(t, pendingUser.ID, merchant.ID, 10000, "takeout", time.Now())
 	pendingClaim := createRandomClaim(t, pendingUser.ID, pendingOrder.ID)
-	createRandomAppeal(t, pendingClaim.ID, merchant.ID, "merchant", merchant.RegionID)
+	createRandomRecoveryDispute(t, pendingClaim.ID, merchant.ID, "merchant", merchant.RegionID)
 
-	count, err := testStore.CountMerchantAppealsForMerchant(context.Background(), CountMerchantAppealsForMerchantParams{
+	count, err := testStore.CountMerchantRecoveryDisputesForMerchant(context.Background(), CountMerchantRecoveryDisputesForMerchantParams{
 		AppellantID: merchant.ID,
 		Status:      pgtype.Text{String: "rejected", Valid: true},
 	})
@@ -355,11 +436,11 @@ func TestListMerchantClaimsForMerchant_FilterByBucket(t *testing.T) {
 	pendingClaim := createRandomClaim(t, pendingUser.ID, pendingOrder.ID)
 	createRandomClaimRecovery(t, pendingClaim.ID, pendingOrder.ID, "pending")
 
-	appealedUser := createRandomUser(t)
-	appealedOrder := createCompletedOrderForStats(t, appealedUser.ID, merchant.ID, 10000, "takeout", time.Now())
-	appealedClaim := createRandomClaim(t, appealedUser.ID, appealedOrder.ID)
-	createRandomAppeal(t, appealedClaim.ID, merchant.ID, "merchant", merchant.RegionID)
-	createRandomClaimRecovery(t, appealedClaim.ID, appealedOrder.ID, "appealed")
+	disputedUser := createRandomUser(t)
+	disputedOrder := createCompletedOrderForStats(t, disputedUser.ID, merchant.ID, 10000, "takeout", time.Now())
+	disputedClaim := createRandomClaim(t, disputedUser.ID, disputedOrder.ID)
+	createRandomRecoveryDispute(t, disputedClaim.ID, merchant.ID, "merchant", merchant.RegionID)
+	createRandomClaimRecovery(t, disputedClaim.ID, disputedOrder.ID, "disputed")
 
 	closedUser := createRandomUser(t)
 	closedOrder := createCompletedOrderForStats(t, closedUser.ID, merchant.ID, 10000, "takeout", time.Now())
@@ -368,14 +449,14 @@ func TestListMerchantClaimsForMerchant_FilterByBucket(t *testing.T) {
 
 	claims, err := testStore.ListMerchantClaimsForMerchant(context.Background(), ListMerchantClaimsForMerchantParams{
 		MerchantID: merchant.ID,
-		Bucket:     pgtype.Text{String: "appealed", Valid: true},
+		Bucket:     pgtype.Text{String: "disputed", Valid: true},
 		Limit:      10,
 		Offset:     0,
 	})
 	require.NoError(t, err)
 	require.Len(t, claims, 1)
-	require.Equal(t, appealedClaim.ID, claims[0].ID)
-	require.Equal(t, "appealed", claims[0].RecoveryStatus)
+	require.Equal(t, disputedClaim.ID, claims[0].ID)
+	require.Equal(t, "disputed", claims[0].RecoveryStatus)
 }
 
 func TestListMerchantClaimsForMerchant_UsesIDTieBreaker(t *testing.T) {
@@ -435,9 +516,9 @@ func TestCountMerchantClaimsForMerchant_FilterByBucket(t *testing.T) {
 	require.Equal(t, int64(2), count)
 }
 
-// ==================== ReviewAppeal Tests ====================
+// ==================== ReviewRecoveryDispute Tests ====================
 
-func TestReviewAppeal_Approve(t *testing.T) {
+func TestReviewRecoveryDispute_Approve(t *testing.T) {
 	owner := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, owner.ID)
 	user := createRandomUser(t)
@@ -445,14 +526,14 @@ func TestReviewAppeal_Approve(t *testing.T) {
 
 	order := createCompletedOrderForStats(t, user.ID, merchant.ID, 10000, "takeout", time.Now())
 	claim := createRandomClaim(t, user.ID, order.ID)
-	appeal := createRandomAppeal(t, claim.ID, merchant.ID, "merchant", merchant.RegionID)
+	recoveryDispute := createRandomRecoveryDispute(t, claim.ID, merchant.ID, "merchant", merchant.RegionID)
 
 	// 审核通过
-	reviewed, err := testStore.ReviewAppeal(context.Background(), ReviewAppealParams{
-		ID:                 appeal.ID,
+	reviewed, err := testStore.ReviewRecoveryDispute(context.Background(), ReviewRecoveryDisputeParams{
+		ID:                 recoveryDispute.ID,
 		Status:             "approved",
 		ReviewerID:         pgtype.Int8{Int64: operator.ID, Valid: true},
-		ReviewNotes:        pgtype.Text{String: "证据充分，准予申诉", Valid: true},
+		ReviewNotes:        pgtype.Text{String: "证据充分，准予追偿争议", Valid: true},
 		CompensationAmount: pgtype.Int8{Int64: 3000, Valid: true},
 	})
 	require.NoError(t, err)
@@ -465,7 +546,7 @@ func TestReviewAppeal_Approve(t *testing.T) {
 	require.False(t, reviewed.CompensatedAt.Valid)
 }
 
-func TestReviewAppeal_Reject(t *testing.T) {
+func TestReviewRecoveryDispute_Reject(t *testing.T) {
 	owner := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, owner.ID)
 	user := createRandomUser(t)
@@ -473,11 +554,11 @@ func TestReviewAppeal_Reject(t *testing.T) {
 
 	order := createCompletedOrderForStats(t, user.ID, merchant.ID, 10000, "takeout", time.Now())
 	claim := createRandomClaim(t, user.ID, order.ID)
-	appeal := createRandomAppeal(t, claim.ID, merchant.ID, "merchant", merchant.RegionID)
+	recoveryDispute := createRandomRecoveryDispute(t, claim.ID, merchant.ID, "merchant", merchant.RegionID)
 
 	// 审核拒绝
-	reviewed, err := testStore.ReviewAppeal(context.Background(), ReviewAppealParams{
-		ID:          appeal.ID,
+	reviewed, err := testStore.ReviewRecoveryDispute(context.Background(), ReviewRecoveryDisputeParams{
+		ID:          recoveryDispute.ID,
 		Status:      "rejected",
 		ReviewerID:  pgtype.Int8{Int64: operator.ID, Valid: true},
 		ReviewNotes: pgtype.Text{String: "证据不足", Valid: true},
@@ -488,7 +569,7 @@ func TestReviewAppeal_Reject(t *testing.T) {
 	require.False(t, reviewed.CompensatedAt.Valid)
 }
 
-func TestReviewAppeal_AlreadyReviewed(t *testing.T) {
+func TestReviewRecoveryDispute_AlreadyReviewed(t *testing.T) {
 	owner := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, owner.ID)
 	user := createRandomUser(t)
@@ -496,51 +577,51 @@ func TestReviewAppeal_AlreadyReviewed(t *testing.T) {
 
 	order := createCompletedOrderForStats(t, user.ID, merchant.ID, 10000, "takeout", time.Now())
 	claim := createRandomClaim(t, user.ID, order.ID)
-	appeal := createRandomAppeal(t, claim.ID, merchant.ID, "merchant", merchant.RegionID)
+	recoveryDispute := createRandomRecoveryDispute(t, claim.ID, merchant.ID, "merchant", merchant.RegionID)
 
 	// 第一次审核
-	_, err := testStore.ReviewAppeal(context.Background(), ReviewAppealParams{
-		ID:         appeal.ID,
+	_, err := testStore.ReviewRecoveryDispute(context.Background(), ReviewRecoveryDisputeParams{
+		ID:         recoveryDispute.ID,
 		Status:     "approved",
 		ReviewerID: pgtype.Int8{Int64: operator.ID, Valid: true},
 	})
 	require.NoError(t, err)
 
-	// 再次审核应该失败（只有 pending 状态才能审核）
-	_, err = testStore.ReviewAppeal(context.Background(), ReviewAppealParams{
-		ID:         appeal.ID,
+	// 再次审核应该失败（只有 submitted 状态才能审核）
+	_, err = testStore.ReviewRecoveryDispute(context.Background(), ReviewRecoveryDisputeParams{
+		ID:         recoveryDispute.ID,
 		Status:     "rejected",
 		ReviewerID: pgtype.Int8{Int64: operator.ID, Valid: true},
 	})
 	require.Error(t, err)
 }
 
-// ==================== Operator Appeal Tests ====================
+// ==================== Operator Recovery Dispute Tests ====================
 
-func TestListOperatorAppeals(t *testing.T) {
+func TestListOperatorRecoveryDisputes(t *testing.T) {
 	owner := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, owner.ID)
 
-	// 创建3个申诉
+	// 创建3个追偿争议
 	for i := 0; i < 3; i++ {
 		user := createRandomUser(t)
 		order := createCompletedOrderForStats(t, user.ID, merchant.ID, 10000, "takeout", time.Now())
 		claim := createRandomClaim(t, user.ID, order.ID)
-		createRandomAppeal(t, claim.ID, merchant.ID, "merchant", merchant.RegionID)
+		createRandomRecoveryDispute(t, claim.ID, merchant.ID, "merchant", merchant.RegionID)
 	}
 
 	// 按区域查询
-	appeals, err := testStore.ListOperatorAppeals(context.Background(), ListOperatorAppealsParams{
+	recoveryDisputes, err := testStore.ListOperatorRecoveryDisputes(context.Background(), ListOperatorRecoveryDisputesParams{
 		RegionID: merchant.RegionID,
 		Column2:  "", // 不筛选状态
 		Limit:    10,
 		Offset:   0,
 	})
 	require.NoError(t, err)
-	require.GreaterOrEqual(t, len(appeals), 3)
+	require.GreaterOrEqual(t, len(recoveryDisputes), 3)
 }
 
-func TestListOperatorAppeals_FilterByStatus(t *testing.T) {
+func TestListOperatorRecoveryDisputes_FilterByStatus(t *testing.T) {
 	owner := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, owner.ID)
 	user := createRandomUser(t)
@@ -548,11 +629,11 @@ func TestListOperatorAppeals_FilterByStatus(t *testing.T) {
 
 	order := createCompletedOrderForStats(t, user.ID, merchant.ID, 10000, "takeout", time.Now())
 	claim := createRandomClaim(t, user.ID, order.ID)
-	appeal := createRandomAppeal(t, claim.ID, merchant.ID, "merchant", merchant.RegionID)
+	recoveryDispute := createRandomRecoveryDispute(t, claim.ID, merchant.ID, "merchant", merchant.RegionID)
 
 	// 审核通过
-	_, err := testStore.ReviewAppeal(context.Background(), ReviewAppealParams{
-		ID:                 appeal.ID,
+	_, err := testStore.ReviewRecoveryDispute(context.Background(), ReviewRecoveryDisputeParams{
+		ID:                 recoveryDispute.ID,
 		Status:             "approved",
 		ReviewerID:         pgtype.Int8{Int64: operator.ID, Valid: true},
 		ReviewNotes:        pgtype.Text{String: "测试通过", Valid: true},
@@ -560,72 +641,72 @@ func TestListOperatorAppeals_FilterByStatus(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// 筛选 pending 状态（应该不包含刚审核的申诉）
-	appeals, err := testStore.ListOperatorAppeals(context.Background(), ListOperatorAppealsParams{
+	// 筛选 submitted 状态（应该不包含刚审核的追偿争议）
+	recoveryDisputes, err := testStore.ListOperatorRecoveryDisputes(context.Background(), ListOperatorRecoveryDisputesParams{
 		RegionID: merchant.RegionID,
-		Column2:  "pending",
+		Column2:  "submitted",
 		Limit:    100,
 		Offset:   0,
 	})
 	require.NoError(t, err)
-	for _, a := range appeals {
-		require.NotEqual(t, appeal.ID, a.ID)
+	for _, a := range recoveryDisputes {
+		require.NotEqual(t, recoveryDispute.ID, a.ID)
 	}
 }
 
-func TestListOperatorAppeals_UsesIDTieBreaker(t *testing.T) {
+func TestListOperatorRecoveryDisputes_UsesIDTieBreaker(t *testing.T) {
 	owner := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, owner.ID)
 	tiedCreatedAt := time.Now().UTC().Truncate(time.Microsecond)
-	var appealIDs []int64
+	var recoveryDisputeIDs []int64
 
 	for i := 0; i < 2; i++ {
 		user := createRandomUser(t)
 		order := createCompletedOrderForStats(t, user.ID, merchant.ID, 10000, "takeout", time.Now())
 		claim := createRandomClaim(t, user.ID, order.ID)
-		appeal := createRandomAppeal(t, claim.ID, merchant.ID, "merchant", merchant.RegionID)
-		appealIDs = append(appealIDs, appeal.ID)
+		recoveryDispute := createRandomRecoveryDispute(t, claim.ID, merchant.ID, "merchant", merchant.RegionID)
+		recoveryDisputeIDs = append(recoveryDisputeIDs, recoveryDispute.ID)
 	}
 
 	_, err := testStore.(*SQLStore).connPool.Exec(context.Background(),
-		"UPDATE appeals SET created_at = $1 WHERE id = ANY($2)",
+		"UPDATE recovery_disputes SET created_at = $1 WHERE id = ANY($2)",
 		tiedCreatedAt,
-		appealIDs,
+		recoveryDisputeIDs,
 	)
 	require.NoError(t, err)
 
-	appeals, err := testStore.ListOperatorAppeals(context.Background(), ListOperatorAppealsParams{
+	recoveryDisputes, err := testStore.ListOperatorRecoveryDisputes(context.Background(), ListOperatorRecoveryDisputesParams{
 		RegionID: merchant.RegionID,
-		Column2:  "pending",
+		Column2:  "submitted",
 		Limit:    2,
 		Offset:   0,
 	})
 	require.NoError(t, err)
-	require.Len(t, appeals, 2)
-	require.Equal(t, appealIDs[1], appeals[0].ID)
-	require.Equal(t, appealIDs[0], appeals[1].ID)
+	require.Len(t, recoveryDisputes, 2)
+	require.Equal(t, recoveryDisputeIDs[1], recoveryDisputes[0].ID)
+	require.Equal(t, recoveryDisputeIDs[0], recoveryDisputes[1].ID)
 }
 
-func TestCountOperatorAppeals(t *testing.T) {
+func TestCountOperatorRecoveryDisputes(t *testing.T) {
 	owner := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, owner.ID)
 
 	// 记录初始数量
-	initialCount, err := testStore.CountOperatorAppeals(context.Background(), CountOperatorAppealsParams{
+	initialCount, err := testStore.CountOperatorRecoveryDisputes(context.Background(), CountOperatorRecoveryDisputesParams{
 		RegionID: merchant.RegionID,
 		Column2:  "",
 	})
 	require.NoError(t, err)
 
-	// 创建2个申诉
+	// 创建2个追偿争议
 	for i := 0; i < 2; i++ {
 		user := createRandomUser(t)
 		order := createCompletedOrderForStats(t, user.ID, merchant.ID, 10000, "takeout", time.Now())
 		claim := createRandomClaim(t, user.ID, order.ID)
-		createRandomAppeal(t, claim.ID, merchant.ID, "merchant", merchant.RegionID)
+		createRandomRecoveryDispute(t, claim.ID, merchant.ID, "merchant", merchant.RegionID)
 	}
 
-	count, err := testStore.CountOperatorAppeals(context.Background(), CountOperatorAppealsParams{
+	count, err := testStore.CountOperatorRecoveryDisputes(context.Background(), CountOperatorRecoveryDisputesParams{
 		RegionID: merchant.RegionID,
 		Column2:  "",
 	})
@@ -633,85 +714,88 @@ func TestCountOperatorAppeals(t *testing.T) {
 	require.Equal(t, initialCount+2, count)
 }
 
-// ==================== Rider Appeal Tests ====================
+// ==================== Rider Recovery Dispute Tests ====================
 
-func TestListRiderAppeals(t *testing.T) {
+func TestListRiderRecoveryDisputes(t *testing.T) {
 	owner := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, owner.ID)
 	riderUser := createRandomUser(t)
 	rider := createRandomRiderWithUser(t, riderUser.ID)
 
-	// 创建骑手申诉
+	// 创建骑手追偿争议
 	for i := 0; i < 2; i++ {
 		user := createRandomUser(t)
 		order := createCompletedOrderForStats(t, user.ID, merchant.ID, 10000, "takeout", time.Now())
 		claim := createRandomClaim(t, user.ID, order.ID)
-		createRandomAppeal(t, claim.ID, rider.ID, "rider", merchant.RegionID)
+		createRandomRecoveryDispute(t, claim.ID, rider.ID, "rider", merchant.RegionID)
 	}
 
-	appeals, err := testStore.ListRiderAppeals(context.Background(), ListRiderAppealsParams{
+	recoveryDisputes, err := testStore.ListRiderRecoveryDisputes(context.Background(), ListRiderRecoveryDisputesParams{
 		AppellantID: rider.ID,
 		Limit:       10,
 		Offset:      0,
 	})
 	require.NoError(t, err)
-	require.Len(t, appeals, 2)
+	require.Len(t, recoveryDisputes, 2)
 
-	for _, a := range appeals {
+	for _, a := range recoveryDisputes {
 		require.Equal(t, "rider", a.AppellantType)
 		require.Equal(t, rider.ID, a.AppellantID)
 	}
 }
 
-func TestListRiderAppeals_UsesIDTieBreaker(t *testing.T) {
+func TestListRiderRecoveryDisputes_UsesIDTieBreaker(t *testing.T) {
 	owner := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, owner.ID)
 	riderUser := createRandomUser(t)
 	rider := createRandomRiderWithUser(t, riderUser.ID)
 	tiedCreatedAt := time.Now().UTC().Truncate(time.Microsecond)
-	var appealIDs []int64
+	var recoveryDisputeIDs []int64
 
 	for i := 0; i < 2; i++ {
 		user := createRandomUser(t)
 		order := createCompletedOrderForStats(t, user.ID, merchant.ID, 10000, "takeout", time.Now())
 		claim := createRandomClaim(t, user.ID, order.ID)
-		appeal := createRandomAppeal(t, claim.ID, rider.ID, "rider", merchant.RegionID)
-		appealIDs = append(appealIDs, appeal.ID)
+		recoveryDispute := createRandomRecoveryDispute(t, claim.ID, rider.ID, "rider", merchant.RegionID)
+		recoveryDisputeIDs = append(recoveryDisputeIDs, recoveryDispute.ID)
 	}
 
 	_, err := testStore.(*SQLStore).connPool.Exec(context.Background(),
-		"UPDATE appeals SET created_at = $1 WHERE id = ANY($2)",
+		"UPDATE recovery_disputes SET created_at = $1 WHERE id = ANY($2)",
 		tiedCreatedAt,
-		appealIDs,
+		recoveryDisputeIDs,
 	)
 	require.NoError(t, err)
 
-	appeals, err := testStore.ListRiderAppeals(context.Background(), ListRiderAppealsParams{
+	recoveryDisputes, err := testStore.ListRiderRecoveryDisputes(context.Background(), ListRiderRecoveryDisputesParams{
 		AppellantID: rider.ID,
 		Limit:       2,
 		Offset:      0,
 	})
 	require.NoError(t, err)
-	require.Len(t, appeals, 2)
-	require.Equal(t, appealIDs[1], appeals[0].ID)
-	require.Equal(t, appealIDs[0], appeals[1].ID)
+	require.Len(t, recoveryDisputes, 2)
+	require.Equal(t, recoveryDisputeIDs[1], recoveryDisputes[0].ID)
+	require.Equal(t, recoveryDisputeIDs[0], recoveryDisputes[1].ID)
 }
 
-func TestCountRiderAppeals(t *testing.T) {
+func TestCountRiderRecoveryDisputes(t *testing.T) {
 	owner := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, owner.ID)
 	riderUser := createRandomUser(t)
 	rider := createRandomRiderWithUser(t, riderUser.ID)
 
-	// 创建3个骑手申诉
+	// 创建3个骑手追偿争议
 	for i := 0; i < 3; i++ {
 		user := createRandomUser(t)
 		order := createCompletedOrderForStats(t, user.ID, merchant.ID, 10000, "takeout", time.Now())
 		claim := createRandomClaim(t, user.ID, order.ID)
-		createRandomAppeal(t, claim.ID, rider.ID, "rider", merchant.RegionID)
+		createRandomRecoveryDispute(t, claim.ID, rider.ID, "rider", merchant.RegionID)
 	}
 
-	count, err := testStore.CountRiderAppeals(context.Background(), rider.ID)
+	count, err := testStore.CountRiderRecoveryDisputes(context.Background(), CountRiderRecoveryDisputesParams{
+		AppellantID: rider.ID,
+		Status:      pgtype.Text{},
+	})
 	require.NoError(t, err)
 	require.Equal(t, int64(3), count)
 }
@@ -758,90 +842,48 @@ func TestListRiderClaimsForRider_UsesIDTieBreaker(t *testing.T) {
 	require.Equal(t, claimIDs[0], claims[1].ID)
 }
 
-// ==================== GetClaimForAppeal Tests ====================
+// ==================== GetMerchantRecoveryDisputeDetail Tests ====================
 
-func TestGetClaimForAppeal(t *testing.T) {
+func TestGetMerchantRecoveryDisputeDetail(t *testing.T) {
 	owner := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, owner.ID)
 	user := createRandomUser(t)
 
 	order := createCompletedOrderForStats(t, user.ID, merchant.ID, 10000, "takeout", time.Now())
 	claim := createRandomClaim(t, user.ID, order.ID)
+	recoveryDispute := createRandomRecoveryDispute(t, claim.ID, merchant.ID, "merchant", merchant.RegionID)
 
-	// 获取用于申诉的索赔信息
-	claimInfo, err := testStore.GetClaimForAppeal(context.Background(), claim.ID)
-	require.NoError(t, err)
-	require.Equal(t, claim.ID, claimInfo.ID)
-	require.Equal(t, merchant.ID, claimInfo.MerchantID)
-	require.Equal(t, merchant.RegionID, claimInfo.RegionID)
-}
-
-func TestGetClaimForAppeal_NotApproved(t *testing.T) {
-	owner := createRandomUser(t)
-	merchant := createRandomMerchantWithOwner(t, owner.ID)
-	user := createRandomUser(t)
-
-	order := createCompletedOrderForStats(t, user.ID, merchant.ID, 10000, "takeout", time.Now())
-
-	// 创建未审核的索赔
-	arg := CreateClaimParams{
-		OrderID:     order.ID,
-		UserID:      user.ID,
-		ClaimType:   "quality",
-		ClaimAmount: 5000,
-		Description: "测试",
-		Status:      "pending", // 未审核
-	}
-	claim, err := testStore.CreateClaim(context.Background(), arg)
-	require.NoError(t, err)
-
-	// 未审核的索赔应该查不到
-	_, err = testStore.GetClaimForAppeal(context.Background(), claim.ID)
-	require.Error(t, err) // 应该返回ErrNoRows
-}
-
-// ==================== GetMerchantAppealDetail Tests ====================
-
-func TestGetMerchantAppealDetail(t *testing.T) {
-	owner := createRandomUser(t)
-	merchant := createRandomMerchantWithOwner(t, owner.ID)
-	user := createRandomUser(t)
-
-	order := createCompletedOrderForStats(t, user.ID, merchant.ID, 10000, "takeout", time.Now())
-	claim := createRandomClaim(t, user.ID, order.ID)
-	appeal := createRandomAppeal(t, claim.ID, merchant.ID, "merchant", merchant.RegionID)
-
-	// 获取商户申诉详情
-	detail, err := testStore.GetMerchantAppealDetail(context.Background(), GetMerchantAppealDetailParams{
-		ID:          appeal.ID,
+	// 获取商户追偿争议详情
+	detail, err := testStore.GetMerchantRecoveryDisputeDetail(context.Background(), GetMerchantRecoveryDisputeDetailParams{
+		ID:          recoveryDispute.ID,
 		AppellantID: merchant.ID,
 	})
 	require.NoError(t, err)
-	require.Equal(t, appeal.ID, detail.ID)
+	require.Equal(t, recoveryDispute.ID, detail.ID)
 	require.Equal(t, claim.ID, detail.ClaimID)
 	require.Equal(t, order.OrderNo, detail.OrderNo)
 }
 
-func TestGetMerchantAppealDetail_NotOwned(t *testing.T) {
+func TestGetMerchantRecoveryDisputeDetail_NotOwned(t *testing.T) {
 	owner := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, owner.ID)
 	user := createRandomUser(t)
 
 	order := createCompletedOrderForStats(t, user.ID, merchant.ID, 10000, "takeout", time.Now())
 	claim := createRandomClaim(t, user.ID, order.ID)
-	appeal := createRandomAppeal(t, claim.ID, merchant.ID, "merchant", merchant.RegionID)
+	recoveryDispute := createRandomRecoveryDispute(t, claim.ID, merchant.ID, "merchant", merchant.RegionID)
 
 	// 用其他商户ID查询，应该查不到
-	_, err := testStore.GetMerchantAppealDetail(context.Background(), GetMerchantAppealDetailParams{
-		ID:          appeal.ID,
+	_, err := testStore.GetMerchantRecoveryDisputeDetail(context.Background(), GetMerchantRecoveryDisputeDetailParams{
+		ID:          recoveryDispute.ID,
 		AppellantID: merchant.ID + 999, // 不存在的商户
 	})
 	require.Error(t, err)
 }
 
-// ==================== GetRiderAppealDetail Tests ====================
+// ==================== GetRiderRecoveryDisputeDetail Tests ====================
 
-func TestGetRiderAppealDetail(t *testing.T) {
+func TestGetRiderRecoveryDisputeDetail(t *testing.T) {
 	owner := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, owner.ID)
 	riderUser := createRandomUser(t)
@@ -850,52 +892,52 @@ func TestGetRiderAppealDetail(t *testing.T) {
 
 	order := createCompletedOrderForStats(t, user.ID, merchant.ID, 10000, "takeout", time.Now())
 	claim := createRandomClaim(t, user.ID, order.ID)
-	appeal := createRandomAppeal(t, claim.ID, rider.ID, "rider", merchant.RegionID)
+	recoveryDispute := createRandomRecoveryDispute(t, claim.ID, rider.ID, "rider", merchant.RegionID)
 
-	// 获取骑手申诉详情
-	detail, err := testStore.GetRiderAppealDetail(context.Background(), GetRiderAppealDetailParams{
-		ID:          appeal.ID,
+	// 获取骑手追偿争议详情
+	detail, err := testStore.GetRiderRecoveryDisputeDetail(context.Background(), GetRiderRecoveryDisputeDetailParams{
+		ID:          recoveryDispute.ID,
 		AppellantID: rider.ID,
 	})
 	require.NoError(t, err)
-	require.Equal(t, appeal.ID, detail.ID)
+	require.Equal(t, recoveryDispute.ID, detail.ID)
 	require.Equal(t, "rider", detail.AppellantType)
 }
 
-// ==================== GetOperatorAppealDetail Tests ====================
+// ==================== GetOperatorRecoveryDisputeDetail Tests ====================
 
-func TestGetOperatorAppealDetail(t *testing.T) {
+func TestGetOperatorRecoveryDisputeDetail(t *testing.T) {
 	owner := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, owner.ID)
 	user := createRandomUser(t)
 
 	order := createCompletedOrderForStats(t, user.ID, merchant.ID, 10000, "takeout", time.Now())
 	claim := createRandomClaim(t, user.ID, order.ID)
-	appeal := createRandomAppeal(t, claim.ID, merchant.ID, "merchant", merchant.RegionID)
+	recoveryDispute := createRandomRecoveryDispute(t, claim.ID, merchant.ID, "merchant", merchant.RegionID)
 
-	// 获取运营商视角的申诉详情
-	detail, err := testStore.GetOperatorAppealDetail(context.Background(), GetOperatorAppealDetailParams{
-		ID:       appeal.ID,
+	// 获取运营商视角的追偿争议详情
+	detail, err := testStore.GetOperatorRecoveryDisputeDetail(context.Background(), GetOperatorRecoveryDisputeDetailParams{
+		ID:       recoveryDispute.ID,
 		RegionID: merchant.RegionID,
 	})
 	require.NoError(t, err)
-	require.Equal(t, appeal.ID, detail.ID)
+	require.Equal(t, recoveryDispute.ID, detail.ID)
 	require.Equal(t, merchant.ID, detail.MerchantID)
 	require.NotEmpty(t, detail.MerchantName)
 }
 
-func TestGetOperatorAppealDetail_WrongRegion(t *testing.T) {
+func TestGetOperatorRecoveryDisputeDetail_WrongRegion(t *testing.T) {
 	owner := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, owner.ID)
 	user := createRandomUser(t)
 
 	order := createCompletedOrderForStats(t, user.ID, merchant.ID, 10000, "takeout", time.Now())
 	claim := createRandomClaim(t, user.ID, order.ID)
-	appeal := createRandomAppeal(t, claim.ID, merchant.ID, "merchant", merchant.RegionID)
+	recoveryDispute := createRandomRecoveryDispute(t, claim.ID, merchant.ID, "merchant", merchant.RegionID)
 
 	// 用错误的区域ID查询，应该查不到
-	_, err := testStore.GetOperatorAppealDetail(context.Background(), GetOperatorAppealDetailParams{
-		ID:       appeal.ID,
+	_, err := testStore.GetOperatorRecoveryDisputeDetail(context.Background(), GetOperatorRecoveryDisputeDetailParams{
+		ID:       recoveryDispute.ID,
 		RegionID: merchant.RegionID + 999,
 	})
 	require.Error(t, err)

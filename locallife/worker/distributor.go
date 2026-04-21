@@ -135,17 +135,17 @@ type TaskDistributor interface {
 		opts ...asynq.Option,
 	) error
 
-	// DistributeTaskProcessAppealResult 分发申诉审核结果处理任务
-	DistributeTaskProcessAppealResult(
+	// DistributeTaskProcessRecoveryDisputeResult 分发追偿争议审核结果处理任务
+	DistributeTaskProcessRecoveryDisputeResult(
 		ctx context.Context,
-		payload *ProcessAppealResultPayload,
+		payload *ProcessRecoveryDisputeResultPayload,
 		opts ...asynq.Option,
 	) error
 
-	// DistributeTaskAutomaticAppealResolution 分发申诉自动复核重试任务
-	DistributeTaskAutomaticAppealResolution(
+	// DistributeTaskAutomaticRecoveryDisputeResolution 分发追偿争议自动复核重试任务
+	DistributeTaskAutomaticRecoveryDisputeResolution(
 		ctx context.Context,
-		payload *AutomaticAppealResolutionPayload,
+		payload *AutomaticRecoveryDisputeResolutionPayload,
 		opts ...asynq.Option,
 	) error
 

@@ -1,12 +1,12 @@
 -- =====================================================================
--- Appeal Queries - 申诉相关查询
+-- Recovery Dispute Queries - 追偿争议相关查询
 -- =====================================================================
 
--- =========================== 商户申诉 ===========================
+-- =========================== 追偿争议基础查询 ===========================
 
--- name: CreateAppeal :one
--- 创建申诉
-INSERT INTO appeals (
+-- name: CreateRecoveryDispute :one
+-- 创建追偿争议
+INSERT INTO recovery_disputes (
     claim_id,
     appellant_type,
     appellant_id,
@@ -16,21 +16,21 @@ INSERT INTO appeals (
   $1, $2, $3, $4, $5
 ) RETURNING *;
 
--- name: GetAppeal :one
--- 获取申诉详情
-SELECT id, claim_id, appellant_type, appellant_id, reason, status, reviewer_id, review_notes, reviewed_at, compensation_amount, compensated_at, region_id, created_at FROM appeals
+-- name: GetRecoveryDispute :one
+-- 获取追偿争议详情
+SELECT id, claim_id, appellant_type, appellant_id, reason, status, reviewer_id, review_notes, reviewed_at, compensation_amount, compensated_at, region_id, created_at FROM recovery_disputes
 WHERE id = $1
 LIMIT 1;
 
--- name: GetAppealByClaim :one
--- 根据索赔ID与申诉方类型获取申诉
-SELECT id, claim_id, appellant_type, appellant_id, reason, status, reviewer_id, review_notes, reviewed_at, compensation_amount, compensated_at, region_id, created_at FROM appeals
+-- name: GetRecoveryDisputeByClaim :one
+-- 根据索赔ID与争议方类型获取追偿争议
+SELECT id, claim_id, appellant_type, appellant_id, reason, status, reviewer_id, review_notes, reviewed_at, compensation_amount, compensated_at, region_id, created_at FROM recovery_disputes
 WHERE claim_id = $1
   AND appellant_type = $2
 LIMIT 1;
 
--- name: GetAppealWithDetails :one
--- 获取申诉详情（包含索赔和订单信息）
+-- name: GetRecoveryDisputeWithDetails :one
+-- 获取追偿争议详情（包含索赔和订单信息）
 SELECT 
   a.id, a.claim_id, a.appellant_type, a.appellant_id, a.reason, a.status, a.reviewer_id, a.review_notes, a.reviewed_at, a.compensation_amount, a.compensated_at, a.region_id, a.created_at,
     c.claim_type,
@@ -45,7 +45,7 @@ SELECT
     o.created_at AS order_created_at,
     u.phone AS user_phone,
     u.full_name AS user_name
-FROM appeals a
+FROM recovery_disputes a
 JOIN claims c ON a.claim_id = c.id
 JOIN orders o ON c.order_id = o.id
 JOIN users u ON c.user_id = u.id
@@ -54,15 +54,15 @@ LIMIT 1;
 
 -- =========================== 商户视角 ===========================
 
--- name: ListMerchantAppealsForMerchant :many
--- 商户查询自己的申诉列表
+-- name: ListMerchantRecoveryDisputesForMerchant :many
+-- 商户查询自己的追偿争议列表
 SELECT 
   a.id, a.claim_id, a.appellant_type, a.appellant_id, a.reason, a.status, a.reviewer_id, a.review_notes, a.reviewed_at, a.compensation_amount, a.compensated_at, a.region_id, a.created_at,
     c.claim_type,
     c.claim_amount,
     c.description AS claim_description,
     o.order_no
-FROM appeals a
+FROM recovery_disputes a
 JOIN claims c ON a.claim_id = c.id
 JOIN orders o ON c.order_id = o.id
 WHERE a.appellant_type = 'merchant'
@@ -71,15 +71,15 @@ WHERE a.appellant_type = 'merchant'
 ORDER BY a.created_at DESC, a.id DESC
 LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
--- name: CountMerchantAppealsForMerchant :one
--- 商户申诉计数
-SELECT COUNT(*) FROM appeals
+-- name: CountMerchantRecoveryDisputesForMerchant :one
+-- 商户追偿争议计数
+SELECT COUNT(*) FROM recovery_disputes
 WHERE appellant_type = 'merchant'
   AND appellant_id = sqlc.arg('appellant_id')
   AND (sqlc.narg('status')::text IS NULL OR status = sqlc.narg('status')::text);
 
--- name: GetMerchantAppealDetail :one
--- 商户查看自己的申诉详情
+-- name: GetMerchantRecoveryDisputeDetail :one
+-- 商户查看自己的追偿争议详情
 SELECT 
   a.id, a.claim_id, a.appellant_type, a.appellant_id, a.reason, a.status, a.reviewer_id, a.review_notes, a.reviewed_at, a.compensation_amount, a.compensated_at, a.region_id, a.created_at,
     c.claim_type,
@@ -89,7 +89,7 @@ SELECT
     o.order_no,
     o.total_amount AS order_amount,
     u.phone AS user_phone
-FROM appeals a
+FROM recovery_disputes a
 JOIN claims c ON a.claim_id = c.id
 JOIN orders o ON c.order_id = o.id
 JOIN users u ON c.user_id = u.id
@@ -106,13 +106,13 @@ SELECT
     o.total_amount AS order_amount,
     u.phone AS user_phone,
     u.full_name AS user_name,
-    a.id AS appeal_id,
-    a.status AS appeal_status,
+    a.id AS recovery_dispute_id,
+    a.status AS recovery_dispute_status,
     cr.status AS recovery_status
 FROM claims c
 JOIN orders o ON c.order_id = o.id
 JOIN users u ON c.user_id = u.id
-LEFT JOIN appeals a ON a.claim_id = c.id AND a.appellant_type = 'merchant'
+LEFT JOIN recovery_disputes a ON a.claim_id = c.id AND a.appellant_type = 'merchant'
 LEFT JOIN LATERAL (
     SELECT status
     FROM claim_recoveries
@@ -132,12 +132,12 @@ WHERE o.merchant_id = sqlc.arg('merchant_id')
       )
     )
     OR (
-      sqlc.narg('bucket')::text = 'appealed'
-      AND (a.status = 'pending' OR cr.status = 'appealed')
+      sqlc.narg('bucket')::text = 'disputed'
+      AND (a.status = 'submitted' OR cr.status = 'disputed')
     )
     OR (
       sqlc.narg('bucket')::text = 'closed'
-      AND (cr.status IN ('paid', 'waived') OR a.status IN ('approved', 'compensated'))
+      AND (cr.status IN ('paid', 'waived') OR a.status = 'approved')
     )
   )
 ORDER BY c.created_at DESC, c.id DESC
@@ -148,7 +148,7 @@ LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 SELECT COUNT(*) 
 FROM claims c
 JOIN orders o ON c.order_id = o.id
-LEFT JOIN appeals a ON a.claim_id = c.id AND a.appellant_type = 'merchant'
+LEFT JOIN recovery_disputes a ON a.claim_id = c.id AND a.appellant_type = 'merchant'
 LEFT JOIN LATERAL (
     SELECT status
     FROM claim_recoveries
@@ -168,12 +168,12 @@ WHERE o.merchant_id = sqlc.arg('merchant_id')
       )
     )
     OR (
-      sqlc.narg('bucket')::text = 'appealed'
-      AND (a.status = 'pending' OR cr.status = 'appealed')
+      sqlc.narg('bucket')::text = 'disputed'
+      AND (a.status = 'submitted' OR cr.status = 'disputed')
     )
     OR (
       sqlc.narg('bucket')::text = 'closed'
-      AND (cr.status IN ('paid', 'waived') OR a.status IN ('approved', 'compensated'))
+      AND (cr.status IN ('paid', 'waived') OR a.status = 'approved')
     )
   );
 
@@ -186,44 +186,46 @@ SELECT
     o.created_at AS order_created_at,
     u.phone AS user_phone,
     u.full_name AS user_name,
-    a.id AS appeal_id,
-    a.status AS appeal_status,
-    a.reason AS appeal_reason,
-    a.review_notes AS appeal_review_notes
+    a.id AS recovery_dispute_id,
+    a.status AS recovery_dispute_status,
+    a.reason AS recovery_dispute_reason,
+    a.review_notes AS recovery_dispute_review_notes
 FROM claims c
 JOIN orders o ON c.order_id = o.id
 JOIN users u ON c.user_id = u.id
-LEFT JOIN appeals a ON a.claim_id = c.id AND a.appellant_type = 'merchant'
+LEFT JOIN recovery_disputes a ON a.claim_id = c.id AND a.appellant_type = 'merchant'
 WHERE c.id = $1
   AND o.merchant_id = $2
 LIMIT 1;
 
 -- =========================== 骑手视角 ===========================
 
--- name: ListRiderAppeals :many
--- 骑手查询自己的申诉列表
+-- name: ListRiderRecoveryDisputes :many
+-- 骑手查询自己的追偿争议列表
 SELECT 
   a.id, a.claim_id, a.appellant_type, a.appellant_id, a.reason, a.status, a.reviewer_id, a.review_notes, a.reviewed_at, a.compensation_amount, a.compensated_at, a.region_id, a.created_at,
     c.claim_type,
     c.claim_amount,
     c.description AS claim_description,
     o.order_no
-FROM appeals a
+FROM recovery_disputes a
 JOIN claims c ON a.claim_id = c.id
 JOIN orders o ON c.order_id = o.id
 WHERE a.appellant_type = 'rider'
-  AND a.appellant_id = $1
+  AND a.appellant_id = sqlc.arg('appellant_id')
+  AND (sqlc.narg('status')::text IS NULL OR a.status = sqlc.narg('status')::text)
 ORDER BY a.created_at DESC, a.id DESC
-LIMIT $2 OFFSET $3;
+LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
--- name: CountRiderAppeals :one
--- 骑手申诉计数
-SELECT COUNT(*) FROM appeals
+-- name: CountRiderRecoveryDisputes :one
+-- 骑手追偿争议计数
+SELECT COUNT(*) FROM recovery_disputes
 WHERE appellant_type = 'rider'
-  AND appellant_id = $1;
+  AND appellant_id = sqlc.arg('appellant_id')
+  AND (sqlc.narg('status')::text IS NULL OR status = sqlc.narg('status')::text);
 
--- name: GetRiderAppealDetail :one
--- 骑手查看自己的申诉详情
+-- name: GetRiderRecoveryDisputeDetail :one
+-- 骑手查看自己的追偿争议详情
 SELECT 
   a.id, a.claim_id, a.appellant_type, a.appellant_id, a.reason, a.status, a.reviewer_id, a.review_notes, a.reviewed_at, a.compensation_amount, a.compensated_at, a.region_id, a.created_at,
     c.claim_type,
@@ -233,7 +235,7 @@ SELECT
     o.order_no,
     o.total_amount AS order_amount,
     u.phone AS user_phone
-FROM appeals a
+FROM recovery_disputes a
 JOIN claims c ON a.claim_id = c.id
 JOIN orders o ON c.order_id = o.id
 JOIN users u ON c.user_id = u.id
@@ -250,14 +252,14 @@ SELECT
     o.total_amount AS order_amount,
     u.phone AS user_phone,
     u.full_name AS user_name,
-    a.id AS appeal_id,
-  a.status AS appeal_status,
+    a.id AS recovery_dispute_id,
+  a.status AS recovery_dispute_status,
   cr.status AS recovery_status
 FROM claims c
 JOIN orders o ON c.order_id = o.id
 JOIN deliveries d ON d.order_id = o.id
 JOIN users u ON c.user_id = u.id
-LEFT JOIN appeals a ON a.claim_id = c.id AND a.appellant_type = 'rider'
+LEFT JOIN recovery_disputes a ON a.claim_id = c.id AND a.appellant_type = 'rider'
 LEFT JOIN LATERAL (
   SELECT status
   FROM claim_recoveries
@@ -277,12 +279,12 @@ WHERE d.rider_id = $1
       )
     )
     OR (
-      sqlc.narg('bucket')::text = 'appealed'
-      AND (a.status = 'pending' OR cr.status = 'appealed')
+      sqlc.narg('bucket')::text = 'disputed'
+      AND (a.status = 'submitted' OR cr.status = 'disputed')
     )
     OR (
       sqlc.narg('bucket')::text = 'closed'
-      AND (cr.status IN ('paid', 'waived') OR a.status IN ('approved', 'compensated'))
+      AND (cr.status IN ('paid', 'waived') OR a.status = 'approved')
     )
   )
 ORDER BY c.created_at DESC, c.id DESC
@@ -294,7 +296,7 @@ SELECT COUNT(*)
 FROM claims c
 JOIN orders o ON c.order_id = o.id
 JOIN deliveries d ON d.order_id = o.id
-LEFT JOIN appeals a ON a.claim_id = c.id AND a.appellant_type = 'rider'
+LEFT JOIN recovery_disputes a ON a.claim_id = c.id AND a.appellant_type = 'rider'
 LEFT JOIN LATERAL (
   SELECT status
   FROM claim_recoveries
@@ -314,12 +316,12 @@ WHERE d.rider_id = $1
       )
     )
     OR (
-      sqlc.narg('bucket')::text = 'appealed'
-      AND (a.status = 'pending' OR cr.status = 'appealed')
+      sqlc.narg('bucket')::text = 'disputed'
+      AND (a.status = 'submitted' OR cr.status = 'disputed')
     )
     OR (
       sqlc.narg('bucket')::text = 'closed'
-      AND (cr.status IN ('paid', 'waived') OR a.status IN ('approved', 'compensated'))
+      AND (cr.status IN ('paid', 'waived') OR a.status = 'approved')
     )
   );
 
@@ -332,16 +334,16 @@ SELECT
     o.created_at AS order_created_at,
     u.phone AS user_phone,
     u.full_name AS user_name,
-    a.id AS appeal_id,
-    a.status AS appeal_status,
-    a.reason AS appeal_reason,
-  a.review_notes AS appeal_review_notes,
+    a.id AS recovery_dispute_id,
+    a.status AS recovery_dispute_status,
+    a.reason AS recovery_dispute_reason,
+  a.review_notes AS recovery_dispute_review_notes,
   cr.status AS recovery_status
 FROM claims c
 JOIN orders o ON c.order_id = o.id
 JOIN deliveries d ON d.order_id = o.id
 JOIN users u ON c.user_id = u.id
-LEFT JOIN appeals a ON a.claim_id = c.id AND a.appellant_type = 'rider'
+LEFT JOIN recovery_disputes a ON a.claim_id = c.id AND a.appellant_type = 'rider'
 LEFT JOIN LATERAL (
   SELECT status
   FROM claim_recoveries
@@ -355,8 +357,8 @@ LIMIT 1;
 
 -- =========================== 运营商视角 ===========================
 
--- name: ListOperatorAppeals :many
--- 运营商查询区域内的申诉列表
+-- name: ListOperatorRecoveryDisputes :many
+-- 运营商查询区域内的追偿争议列表
 SELECT 
   a.id, a.claim_id, a.appellant_type, a.appellant_id, a.reason, a.status, a.reviewer_id, a.review_notes, a.reviewed_at, a.compensation_amount, a.compensated_at, a.region_id, a.created_at,
     c.claim_type,
@@ -369,26 +371,26 @@ SELECT
         WHEN a.appellant_type = 'merchant' THEN m.name
         ELSE (SELECT phone FROM riders WHERE id = a.appellant_id)
     END AS appellant_name
-FROM appeals a
+FROM recovery_disputes a
 JOIN claims c ON a.claim_id = c.id
 JOIN orders o ON c.order_id = o.id
 JOIN merchants m ON o.merchant_id = m.id
 WHERE a.region_id = $1
   AND (NULLIF($2::TEXT, '') IS NULL OR a.status = $2)
 ORDER BY 
-    CASE WHEN a.status = 'pending' THEN 0 ELSE 1 END,
+    CASE WHEN a.status = 'submitted' THEN 0 ELSE 1 END,
     a.created_at DESC,
     a.id DESC
 LIMIT $3 OFFSET $4;
 
--- name: CountOperatorAppeals :one
--- 运营商申诉计数
-SELECT COUNT(*) FROM appeals
+-- name: CountOperatorRecoveryDisputes :one
+-- 运营商追偿争议计数
+SELECT COUNT(*) FROM recovery_disputes
 WHERE region_id = $1
   AND (NULLIF($2::TEXT, '') IS NULL OR status = $2);
 
--- name: GetOperatorAppealDetail :one
--- 运营商查看申诉详情
+-- name: GetOperatorRecoveryDisputeDetail :one
+-- 运营商查看追偿争议详情
 SELECT 
   a.id, a.claim_id, a.appellant_type, a.appellant_id, a.reason, a.status, a.reviewer_id, a.review_notes, a.reviewed_at, a.compensation_amount, a.compensated_at, a.region_id, a.created_at,
     c.claim_type,
@@ -408,7 +410,7 @@ SELECT
     u.phone AS user_phone,
     u.full_name AS user_name,
     d.rider_id
-FROM appeals a
+FROM recovery_disputes a
 JOIN claims c ON a.claim_id = c.id
 JOIN orders o ON c.order_id = o.id
 JOIN merchants m ON o.merchant_id = m.id
@@ -418,9 +420,9 @@ WHERE a.id = $1
   AND a.region_id = $2
 LIMIT 1;
 
--- name: ReviewAppeal :one
--- 审核申诉
-UPDATE appeals
+-- name: ReviewRecoveryDispute :one
+-- 审核追偿争议
+UPDATE recovery_disputes
 SET status = @status,
     reviewer_id = @reviewer_id,
     review_notes = @review_notes,
@@ -428,30 +430,30 @@ SET status = @status,
     compensation_amount = CASE WHEN @status = 'approved' THEN sqlc.narg(compensation_amount)::bigint ELSE NULL END,
     compensated_at = NULL
 WHERE id = @id
-  AND status = 'pending'
+  AND status = 'submitted'
 RETURNING *;
 
--- name: MarkAppealCompensated :exec
-UPDATE appeals
+-- name: MarkRecoveryDisputeCompensated :exec
+UPDATE recovery_disputes
 SET compensated_at = COALESCE(compensated_at, $2)
 WHERE id = $1;
 
 -- =========================== 通用查询 ===========================
 
--- name: CheckAppealExists :one
--- 检查索赔是否已有指定申诉方类型的申诉
+-- name: CheckRecoveryDisputeExists :one
+-- 检查索赔是否已有指定争议方类型的追偿争议
 SELECT EXISTS (
-  SELECT 1 FROM appeals WHERE claim_id = $1 AND appellant_type = $2
+  SELECT 1 FROM recovery_disputes WHERE claim_id = $1 AND appellant_type = $2
 ) AS exists;
 
--- name: GetAppealForPostProcess :one
--- 获取申诉审核后处理所需信息
+-- name: GetRecoveryDisputeForPostProcess :one
+-- 获取追偿争议审核后处理所需信息
 SELECT 
-    a.id AS appeal_id,
+    a.id AS recovery_dispute_id,
     a.claim_id,
     a.appellant_type,
     a.appellant_id,
-    a.status AS appeal_status,
+    a.status AS recovery_dispute_status,
     a.compensation_amount,
     c.user_id AS claimant_user_id,
     c.claim_type,
@@ -461,23 +463,8 @@ SELECT
     o.order_no,
     o.merchant_id,
     d.rider_id
-FROM appeals a
+FROM recovery_disputes a
 JOIN claims c ON a.claim_id = c.id
 JOIN orders o ON c.order_id = o.id
 LEFT JOIN deliveries d ON d.order_id = o.id
 WHERE a.id = $1;
-
--- name: GetClaimForAppeal :one
--- 获取索赔信息（用于创建申诉时验证）
-SELECT 
-  c.id, c.order_id, c.user_id, c.claim_type, c.description, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at, c.decision_version, c.decision_reason,
-    o.merchant_id,
-    m.region_id,
-    d.rider_id
-FROM claims c
-JOIN orders o ON c.order_id = o.id
-JOIN merchants m ON o.merchant_id = m.id
-LEFT JOIN deliveries d ON d.order_id = o.id
-WHERE c.id = $1
-  AND c.status IN ('approved', 'auto-approved')
-LIMIT 1;

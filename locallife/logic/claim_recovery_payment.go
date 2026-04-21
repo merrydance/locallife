@@ -25,14 +25,14 @@ type ClaimRecoveryPaymentResult struct {
 }
 
 type CreateMerchantClaimRecoveryPaymentInput struct {
-	ClaimID     int64
+	RecoveryID  int64
 	MerchantID  int64
 	PayerUserID int64
 	ClientIP    string
 }
 
 type CreateRiderClaimRecoveryPaymentInput struct {
-	ClaimID     int64
+	RecoveryID  int64
 	RiderID     int64
 	PayerUserID int64
 	ClientIP    string
@@ -45,60 +45,43 @@ type claimRecoveryPaymentAttach struct {
 }
 
 func CreateMerchantClaimRecoveryPayment(ctx context.Context, store db.Store, paymentClient wechat.DirectPaymentClientInterface, input CreateMerchantClaimRecoveryPaymentInput) (ClaimRecoveryPaymentResult, error) {
-	claimInfo, err := store.GetClaimForAppeal(ctx, input.ClaimID)
+	recoveryCtx, err := getClaimRecoveryContextByID(ctx, store, input.RecoveryID)
 	if err != nil {
-		if errors.Is(err, db.ErrRecordNotFound) {
-			return ClaimRecoveryPaymentResult{}, NewRequestError(http.StatusNotFound, errors.New("claim not found or not eligible for recovery"))
-		}
 		return ClaimRecoveryPaymentResult{}, err
 	}
-	if claimInfo.MerchantID != input.MerchantID {
+	if recoveryCtx.MerchantID != input.MerchantID {
 		return ClaimRecoveryPaymentResult{}, NewRequestError(http.StatusForbidden, errors.New("this claim does not belong to your merchant"))
 	}
-
-	recovery, err := store.GetClaimRecoveryByClaimID(ctx, input.ClaimID)
-	if err != nil {
-		if errors.Is(err, db.ErrRecordNotFound) {
-			return ClaimRecoveryPaymentResult{}, NewRequestError(http.StatusNotFound, errors.New("claim recovery not found"))
-		}
-		return ClaimRecoveryPaymentResult{}, err
-	}
+	recovery := claimRecoveryFromContextByID(recoveryCtx)
 	if !recovery.RecoveryTarget.Valid || recovery.RecoveryTarget.String != "merchant" {
 		return ClaimRecoveryPaymentResult{}, NewRequestError(http.StatusBadRequest, errors.New("recovery target mismatch"))
 	}
 
-	return createClaimRecoveryPayment(ctx, store, paymentClient, recovery, input.PayerUserID, input.ClientIP, "merchant")
+	return createClaimRecoveryPayment(ctx, store, paymentClient, recoveryCtx, recovery, input.PayerUserID, input.ClientIP, "merchant")
 }
 
 func CreateRiderClaimRecoveryPayment(ctx context.Context, store db.Store, paymentClient wechat.DirectPaymentClientInterface, input CreateRiderClaimRecoveryPaymentInput) (ClaimRecoveryPaymentResult, error) {
-	claimInfo, err := store.GetClaimForAppeal(ctx, input.ClaimID)
+	recoveryCtx, err := getClaimRecoveryContextByID(ctx, store, input.RecoveryID)
 	if err != nil {
-		if errors.Is(err, db.ErrRecordNotFound) {
-			return ClaimRecoveryPaymentResult{}, NewRequestError(http.StatusNotFound, errors.New("claim not found or not eligible for recovery"))
-		}
 		return ClaimRecoveryPaymentResult{}, err
 	}
-	if !claimInfo.RiderID.Valid || claimInfo.RiderID.Int64 != input.RiderID {
+	if !recoveryCtx.RiderID.Valid || recoveryCtx.RiderID.Int64 != input.RiderID {
 		return ClaimRecoveryPaymentResult{}, NewRequestError(http.StatusForbidden, errors.New("this claim does not belong to your rider"))
 	}
-
-	recovery, err := store.GetClaimRecoveryByClaimID(ctx, input.ClaimID)
-	if err != nil {
-		if errors.Is(err, db.ErrRecordNotFound) {
-			return ClaimRecoveryPaymentResult{}, NewRequestError(http.StatusNotFound, errors.New("claim recovery not found"))
-		}
-		return ClaimRecoveryPaymentResult{}, err
-	}
+	recovery := claimRecoveryFromContextByID(recoveryCtx)
 	if !recovery.RecoveryTarget.Valid || recovery.RecoveryTarget.String != "rider" {
 		return ClaimRecoveryPaymentResult{}, NewRequestError(http.StatusBadRequest, errors.New("recovery target mismatch"))
 	}
 
-	return createClaimRecoveryPayment(ctx, store, paymentClient, recovery, input.PayerUserID, input.ClientIP, "rider")
+	return createClaimRecoveryPayment(ctx, store, paymentClient, recoveryCtx, recovery, input.PayerUserID, input.ClientIP, "rider")
 }
 
-func createClaimRecoveryPayment(ctx context.Context, store db.Store, paymentClient wechat.DirectPaymentClientInterface, recovery db.ClaimRecovery, payerUserID int64, clientIP string, recoveryTarget string) (ClaimRecoveryPaymentResult, error) {
+func createClaimRecoveryPayment(ctx context.Context, store db.Store, paymentClient wechat.DirectPaymentClientInterface, recoveryCtx db.GetClaimRecoveryContextByIDRow, recovery db.ClaimRecovery, payerUserID int64, clientIP string, recoveryTarget string) (ClaimRecoveryPaymentResult, error) {
 	if paymentClient == nil {
 		return ClaimRecoveryPaymentResult{}, fmt.Errorf("payment client: not configured")
+	}
+	if !recoveryCtx.PaidAt.Valid {
+		return ClaimRecoveryPaymentResult{}, NewRequestError(http.StatusBadRequest, errors.New("claim recovery cannot be paid before platform payout completes"))
 	}
 	if recovery.Status == "paid" {
 		return ClaimRecoveryPaymentResult{}, NewRequestError(http.StatusBadRequest, errors.New("claim recovery already paid"))
@@ -201,6 +184,15 @@ func createClaimRecoveryPayment(ctx context.Context, store db.Store, paymentClie
 			log.Warn().Err(closeErr).Str("out_trade_no", outTradeNo).Msg("close claim recovery wechat order after prepay update failure")
 		}
 		return ClaimRecoveryPaymentResult{}, fmt.Errorf("update claim recovery prepay id: %w", err)
+	}
+	if err := db.WriteClaimRecoveryEvent(ctx, store, recovery, db.ClaimRecoveryEventTypePaymentStarted, map[string]any{
+		"claim_id":         recovery.ClaimID,
+		"payment_order_id": updatedPaymentOrder.ID,
+		"recovery_target":  recovery.RecoveryTarget.String,
+		"recovery_amount":  recovery.RecoveryAmount,
+		"status":           recovery.Status,
+	}); err != nil {
+		return ClaimRecoveryPaymentResult{}, fmt.Errorf("write claim recovery payment_started event: %w", err)
 	}
 
 	return ClaimRecoveryPaymentResult{Recovery: recovery, PaymentOrder: updatedPaymentOrder, PayParams: payParams}, nil

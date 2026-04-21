@@ -1713,6 +1713,27 @@ type ReconciliationReport struct {
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 }
 
+// 追偿争议表 - 商户/骑手对平台追偿发起的争议
+type RecoveryDispute struct {
+	ID      int64 `json:"id"`
+	ClaimID int64 `json:"claim_id"`
+	// 争议发起人类型：merchant=商户, rider=骑手
+	AppellantType string `json:"appellant_type"`
+	// 争议发起人ID（商户ID或骑手ID）
+	AppellantID int64              `json:"appellant_id"`
+	Reason      string             `json:"reason"`
+	Status      string             `json:"status"`
+	ReviewerID  pgtype.Int8        `json:"reviewer_id"`
+	ReviewNotes pgtype.Text        `json:"review_notes"`
+	ReviewedAt  pgtype.Timestamptz `json:"reviewed_at"`
+	// 补偿金额（追偿争议审核通过时平台赔付给争议发起方）
+	CompensationAmount pgtype.Int8        `json:"compensation_amount"`
+	CompensatedAt      pgtype.Timestamptz `json:"compensated_at"`
+	// 关联区域（用于运营商按区域过滤）
+	RegionID  int64     `json:"region_id"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 type RefundOrder struct {
 	ID             int64              `json:"id"`
 	PaymentOrderID int64              `json:"payment_order_id"`

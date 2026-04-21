@@ -68,6 +68,7 @@ type behaviorDecisionFactSnapshot struct {
 	PayoutMode           string                      `json:"payout_mode"`
 	RecoveryTarget       string                      `json:"recovery_target,omitempty"`
 	RecoveryAmount       int64                       `json:"recovery_amount,omitempty"`
+	RecoveryDueAt        *time.Time                  `json:"recovery_due_at,omitempty"`
 	ApprovedAmount       int64                       `json:"approved_amount,omitempty"`
 	Associations         behaviorAssociationPayload  `json:"associations"`
 	ResponsibilityFacts  behaviorResponsibilityFacts `json:"responsibility_facts"`
@@ -165,6 +166,7 @@ type behaviorDecisionResolution struct {
 	CreateRecovery       bool
 	RecoveryTarget       string
 	RecoveryAmount       int64
+	RecoveryDueAt        *time.Time
 }
 
 type CreateClaimWithBehaviorTxParams struct {
@@ -329,6 +331,7 @@ func (store *SQLStore) CreateClaimWithBehaviorTx(ctx context.Context, arg Create
 			PayoutMode:           decisionResolution.PayoutMode,
 			RecoveryTarget:       decisionResolution.RecoveryTarget,
 			RecoveryAmount:       decisionResolution.RecoveryAmount,
+			RecoveryDueAt:        decisionResolution.RecoveryDueAt,
 			ApprovedAmount:       approvedAmountValue(arg.ApprovedAmount),
 			Associations:         associationPayload,
 			ResponsibilityFacts:  responsibilityFacts,
@@ -432,7 +435,7 @@ func (store *SQLStore) CreateClaimWithBehaviorTx(ctx context.Context, arg Create
 		result.BehaviorDecision = decision
 
 		if !arg.SkipActionCreation {
-			artifacts, err := ensureClaimCompensationArtifacts(ctx, q, claimCompensationArtifactParams{
+			artifacts, err := ensureClaimCompensationStartArtifacts(ctx, q, claimCompensationArtifactParams{
 				Claim:              claim,
 				BehaviorDecision:   decision,
 				Order:              order,
@@ -605,6 +608,7 @@ func (store *SQLStore) FinalizeClaimCompensationAfterPayoutTx(ctx context.Contex
 			RiderID:            riderID,
 			ApprovedAmount:     approvedClaimAmountPointer(claim),
 			DecisionResolution: persistedBehaviorDecisionResolution(claim, decision, recovery),
+			DecisionSnapshot:   decisionSnapshotForCompensation(decision),
 			ExistingActions:    actions,
 			ExistingRecovery:   recovery,
 		})
@@ -647,7 +651,7 @@ type claimCompensationArtifacts struct {
 	NotificationAction *BehaviorAction
 }
 
-func ensureClaimCompensationArtifacts(ctx context.Context, q *Queries, arg claimCompensationArtifactParams) (claimCompensationArtifacts, error) {
+func ensureClaimCompensationStartArtifacts(ctx context.Context, q *Queries, arg claimCompensationArtifactParams) (claimCompensationArtifacts, error) {
 	artifacts := claimCompensationArtifacts{
 		PayoutAction:       findBehaviorAction(arg.ExistingActions, "payout", "user"),
 		RecoveryAction:     findBehaviorAction(arg.ExistingActions, "recovery", arg.DecisionResolution.RecoveryTarget),
@@ -685,84 +689,7 @@ func ensureClaimCompensationArtifacts(ctx context.Context, q *Queries, arg claim
 		artifacts.PayoutAction = &createdAction
 	}
 
-	if arg.DecisionResolution.CreateRecovery {
-		recovery := arg.ExistingRecovery
-		if recovery == nil {
-			dueAt := time.Now().Add(24 * time.Hour)
-			if arg.RecoveryDueAt != nil {
-				dueAt = *arg.RecoveryDueAt
-			}
-			createdRecovery, err := q.CreateClaimRecovery(ctx, CreateClaimRecoveryParams{
-				ClaimID:          arg.Claim.ID,
-				OrderID:          arg.Claim.OrderID,
-				DecisionID:       pgtype.Int8{Int64: arg.BehaviorDecision.ID, Valid: true},
-				ResponsibleParty: arg.DecisionResolution.ResponsibleParty,
-				RecoveryTarget:   pgtype.Text{String: arg.DecisionResolution.RecoveryTarget, Valid: arg.DecisionResolution.RecoveryTarget != ""},
-				RecoveryAmount:   arg.DecisionResolution.RecoveryAmount,
-				Status:           "pending",
-				DueAt:            dueAt,
-				DecisionSnapshot: arg.DecisionSnapshot,
-				RecoveryBasis:    pgtype.Text{String: recoveryBasisFromDecisionMode(arg.DecisionResolution.DecisionMode), Valid: recoveryBasisFromDecisionMode(arg.DecisionResolution.DecisionMode) != ""},
-			})
-			if err != nil {
-				return artifacts, err
-			}
-			recovery = &createdRecovery
-			recoveryEventPayload, err := json.Marshal(claimRecoveryEventPayload{
-				RecoveryTarget: arg.DecisionResolution.RecoveryTarget,
-				RecoveryBasis:  recoveryBasisFromDecisionMode(arg.DecisionResolution.DecisionMode),
-				RecoveryAmount: arg.DecisionResolution.RecoveryAmount,
-			})
-			if err != nil {
-				return artifacts, err
-			}
-			if _, err := q.CreateClaimRecoveryEvent(ctx, CreateClaimRecoveryEventParams{
-				RecoveryID: recovery.ID,
-				DecisionID: pgtype.Int8{Int64: arg.BehaviorDecision.ID, Valid: true},
-				EventType:  ClaimRecoveryEventTypeCreated,
-				Payload:    recoveryEventPayload,
-			}); err != nil {
-				return artifacts, err
-			}
-		}
-
-		if artifacts.RecoveryAction == nil && recovery != nil {
-			targetID := int64(0)
-			if arg.DecisionResolution.RecoveryTarget == "merchant" {
-				targetID = arg.Order.MerchantID
-			}
-			if arg.DecisionResolution.RecoveryTarget == "rider" && arg.RiderID.Valid {
-				targetID = arg.RiderID.Int64
-			}
-			recoveryActionDetail, err := json.Marshal(behaviorRecoveryActionDetail{
-				Action:         "claim_recovery",
-				ClaimID:        arg.Claim.ID,
-				RecoveryID:     recovery.ID,
-				TargetEntity:   arg.DecisionResolution.RecoveryTarget,
-				TargetID:       targetID,
-				RecoveryBasis:  recoveryBasisFromDecisionMode(arg.DecisionResolution.DecisionMode),
-				RecoveryAmount: recovery.RecoveryAmount,
-				DueAt:          recovery.DueAt,
-				Remark:         "claim recovery created",
-			})
-			if err != nil {
-				return artifacts, err
-			}
-			createdAction, err := q.CreateBehaviorAction(ctx, CreateBehaviorActionParams{
-				DecisionID:   arg.BehaviorDecision.ID,
-				ActionType:   "recovery",
-				TargetEntity: arg.DecisionResolution.RecoveryTarget,
-				Status:       "created",
-				Detail:       recoveryActionDetail,
-			})
-			if err != nil {
-				return artifacts, err
-			}
-			artifacts.RecoveryAction = &createdAction
-		}
-	}
-
-	if artifacts.RestrictionAction == nil && arg.DecisionResolution.DecisionMode == BehaviorDecisionModeUserRestricted {
+	if artifacts.RestrictionAction == nil && arg.DecisionResolution.DecisionMode == BehaviorDecisionModeUserRestricted && arg.Claim.Status != ClaimStatusWaitingCustomerConfirmation {
 		restrictionDetail, err := json.Marshal(behaviorRestrictionActionDetail{
 			Action:            "apply_user_restriction",
 			ClaimID:           arg.Claim.ID,
@@ -787,7 +714,7 @@ func ensureClaimCompensationArtifacts(ctx context.Context, q *Queries, arg claim
 		artifacts.RestrictionAction = &createdAction
 	}
 
-	if artifacts.NotificationAction == nil {
+	if artifacts.NotificationAction == nil && arg.DecisionResolution.DecisionMode == BehaviorDecisionModeUserRestricted && arg.Claim.Status != ClaimStatusWaitingCustomerConfirmation {
 		notificationAction, err := createBehaviorNotificationAction(ctx, q, arg.BehaviorDecision.ID, arg.Claim, arg.Claim.UserID, arg.Order, arg.RiderID, arg.DecisionResolution)
 		if err != nil {
 			return artifacts, err
@@ -798,49 +725,20 @@ func ensureClaimCompensationArtifacts(ctx context.Context, q *Queries, arg claim
 	return artifacts, nil
 }
 
-func ensureClaimCompensationStartArtifacts(ctx context.Context, q *Queries, arg claimCompensationArtifactParams) (claimCompensationArtifacts, error) {
+func ensureClaimCompensationPostPayoutArtifacts(ctx context.Context, q *Queries, arg claimCompensationArtifactParams) (claimCompensationArtifacts, error) {
 	artifacts := claimCompensationArtifacts{
-		PayoutAction:   findBehaviorAction(arg.ExistingActions, "payout", "user"),
-		RecoveryAction: findBehaviorAction(arg.ExistingActions, "recovery", arg.DecisionResolution.RecoveryTarget),
+		RecoveryAction:     findBehaviorAction(arg.ExistingActions, "recovery", arg.DecisionResolution.RecoveryTarget),
+		RestrictionAction:  findBehaviorAction(arg.ExistingActions, "block", "user"),
+		NotificationAction: findBehaviorAction(arg.ExistingActions, "notify", notificationTargetEntity(arg.DecisionResolution)),
 	}
 
 	if err := validateClaimCompensationTargets(arg.DecisionResolution, arg.RiderID); err != nil {
 		return artifacts, err
 	}
 
-	if artifacts.PayoutAction == nil && arg.ApprovedAmount != nil && *arg.ApprovedAmount > 0 {
-		detail, err := json.Marshal(behaviorPayoutActionDetail{
-			Action:     "platform_payout",
-			ClaimID:    arg.Claim.ID,
-			UserID:     arg.Claim.UserID,
-			Amount:     *arg.ApprovedAmount,
-			SourceType: "platform",
-			SourceID:   0,
-			Remark:     "platform payout",
-		})
-		if err != nil {
-			return artifacts, err
-		}
-		createdAction, err := q.CreateBehaviorAction(ctx, CreateBehaviorActionParams{
-			DecisionID:   arg.BehaviorDecision.ID,
-			ActionType:   "payout",
-			TargetEntity: "user",
-			Status:       "created",
-			Detail:       detail,
-		})
-		if err != nil {
-			return artifacts, err
-		}
-		artifacts.PayoutAction = &createdAction
-	}
-
 	if arg.DecisionResolution.CreateRecovery {
 		recovery := arg.ExistingRecovery
 		if recovery == nil {
-			dueAt := time.Now().Add(24 * time.Hour)
-			if arg.RecoveryDueAt != nil {
-				dueAt = *arg.RecoveryDueAt
-			}
 			createdRecovery, err := q.CreateClaimRecovery(ctx, CreateClaimRecoveryParams{
 				ClaimID:          arg.Claim.ID,
 				OrderID:          arg.Claim.OrderID,
@@ -849,7 +747,7 @@ func ensureClaimCompensationStartArtifacts(ctx context.Context, q *Queries, arg 
 				RecoveryTarget:   pgtype.Text{String: arg.DecisionResolution.RecoveryTarget, Valid: arg.DecisionResolution.RecoveryTarget != ""},
 				RecoveryAmount:   arg.DecisionResolution.RecoveryAmount,
 				Status:           "pending",
-				DueAt:            dueAt,
+				DueAt:            resolveClaimRecoveryDueAt(arg),
 				DecisionSnapshot: arg.DecisionSnapshot,
 				RecoveryBasis:    pgtype.Text{String: recoveryBasisFromDecisionMode(arg.DecisionResolution.DecisionMode), Valid: recoveryBasisFromDecisionMode(arg.DecisionResolution.DecisionMode) != ""},
 			})
@@ -857,19 +755,17 @@ func ensureClaimCompensationStartArtifacts(ctx context.Context, q *Queries, arg 
 				return artifacts, err
 			}
 			recovery = &createdRecovery
-			recoveryEventPayload, err := json.Marshal(claimRecoveryEventPayload{
+			if err := WriteClaimRecoveryEvent(ctx, q, *recovery, ClaimRecoveryEventTypeCreated, claimRecoveryEventPayload{
 				RecoveryTarget: arg.DecisionResolution.RecoveryTarget,
 				RecoveryBasis:  recoveryBasisFromDecisionMode(arg.DecisionResolution.DecisionMode),
 				RecoveryAmount: arg.DecisionResolution.RecoveryAmount,
-			})
-			if err != nil {
+			}); err != nil {
 				return artifacts, err
 			}
-			if _, err := q.CreateClaimRecoveryEvent(ctx, CreateClaimRecoveryEventParams{
-				RecoveryID: recovery.ID,
-				DecisionID: pgtype.Int8{Int64: arg.BehaviorDecision.ID, Valid: true},
-				EventType:  ClaimRecoveryEventTypeCreated,
-				Payload:    recoveryEventPayload,
+			if err := WriteClaimRecoveryEvent(ctx, q, *recovery, ClaimRecoveryEventTypePayable, claimRecoveryEventPayload{
+				RecoveryTarget: arg.DecisionResolution.RecoveryTarget,
+				RecoveryBasis:  recoveryBasisFromDecisionMode(arg.DecisionResolution.DecisionMode),
+				RecoveryAmount: arg.DecisionResolution.RecoveryAmount,
 			}); err != nil {
 				return artifacts, err
 			}
@@ -892,7 +788,7 @@ func ensureClaimCompensationStartArtifacts(ctx context.Context, q *Queries, arg 
 				RecoveryBasis:  recoveryBasisFromDecisionMode(arg.DecisionResolution.DecisionMode),
 				RecoveryAmount: recovery.RecoveryAmount,
 				DueAt:          recovery.DueAt,
-				Remark:         "claim recovery created",
+				Remark:         "claim recovery created after payout",
 			})
 			if err != nil {
 				return artifacts, err
@@ -909,19 +805,6 @@ func ensureClaimCompensationStartArtifacts(ctx context.Context, q *Queries, arg 
 			}
 			artifacts.RecoveryAction = &createdAction
 		}
-	}
-
-	return artifacts, nil
-}
-
-func ensureClaimCompensationPostPayoutArtifacts(ctx context.Context, q *Queries, arg claimCompensationArtifactParams) (claimCompensationArtifacts, error) {
-	artifacts := claimCompensationArtifacts{
-		RestrictionAction:  findBehaviorAction(arg.ExistingActions, "block", "user"),
-		NotificationAction: findBehaviorAction(arg.ExistingActions, "notify", notificationTargetEntity(arg.DecisionResolution)),
-	}
-
-	if err := validateClaimCompensationTargets(arg.DecisionResolution, arg.RiderID); err != nil {
-		return artifacts, err
 	}
 
 	if artifacts.RestrictionAction == nil && arg.DecisionResolution.DecisionMode == BehaviorDecisionModeUserRestricted {
@@ -993,6 +876,8 @@ func persistedBehaviorDecisionResolution(claim Claim, decision BehaviorDecision,
 		resolution.CreateRecovery = true
 		resolution.RecoveryTarget = existingRecovery.RecoveryTarget.String
 		resolution.RecoveryAmount = existingRecovery.RecoveryAmount
+		recoveryDueAt := existingRecovery.DueAt
+		resolution.RecoveryDueAt = &recoveryDueAt
 		return resolution
 	}
 
@@ -1013,6 +898,10 @@ func persistedBehaviorDecisionResolution(claim Claim, decision BehaviorDecision,
 			}
 			if factSnapshot.RecoveryAmount > 0 {
 				resolution.RecoveryAmount = factSnapshot.RecoveryAmount
+			}
+			if factSnapshot.RecoveryDueAt != nil {
+				recoveryDueAt := *factSnapshot.RecoveryDueAt
+				resolution.RecoveryDueAt = &recoveryDueAt
 			}
 		}
 	}
@@ -1045,6 +934,16 @@ func approvedClaimAmountPointer(claim Claim) *int64 {
 	}
 	amount := claim.ApprovedAmount.Int64
 	return &amount
+}
+
+func resolveClaimRecoveryDueAt(arg claimCompensationArtifactParams) time.Time {
+	if arg.RecoveryDueAt != nil {
+		return *arg.RecoveryDueAt
+	}
+	if arg.DecisionResolution.RecoveryDueAt != nil {
+		return *arg.DecisionResolution.RecoveryDueAt
+	}
+	return time.Now().Add(24 * time.Hour)
 }
 
 func decisionSnapshotForCompensation(decision BehaviorDecision) []byte {
@@ -1588,6 +1487,7 @@ func deriveBehaviorDecisionResolution(arg CreateClaimWithBehaviorTxParams) behav
 		CreateRecovery:       arg.CreateRecovery,
 		RecoveryTarget:       arg.RecoveryTarget,
 		RecoveryAmount:       arg.RecoveryAmount,
+		RecoveryDueAt:        arg.RecoveryDueAt,
 	}
 }
 

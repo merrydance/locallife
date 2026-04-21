@@ -83,16 +83,16 @@ func newClaimRecoveryPaymentResponse(result logic.ClaimRecoveryPaymentResult) cl
 // @Accept json
 // @Produce json
 // @Security Bearer
-// @Param id path int true "索赔ID"
+// @Param id path int true "追偿单ID"
 // @Success 200 {object} claimRecoveryResponse "追偿单详情"
 // @Failure 400 {object} map[string]interface{} "参数错误"
 // @Failure 401 {object} map[string]interface{} "未授权"
 // @Failure 403 {object} map[string]interface{} "非商户用户或索赔不属于该商户"
 // @Failure 404 {object} map[string]interface{} "追偿单不存在"
 // @Failure 500 {object} map[string]interface{} "服务器错误"
-// @Router /v1/merchant/claims/{id}/recovery [get]
+// @Router /v1/merchant/recoveries/{id} [get]
 func (server *Server) getMerchantClaimRecovery(ctx *gin.Context) {
-	claimID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
+	recoveryID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
@@ -105,7 +105,7 @@ func (server *Server) getMerchantClaimRecovery(ctx *gin.Context) {
 	}
 
 	recovery, err := logic.GetClaimRecoveryForMerchant(ctx, server.store, logic.MerchantClaimRecoveryInput{
-		ClaimID:    claimID,
+		RecoveryID: recoveryID,
 		MerchantID: merchant.ID,
 	})
 	if err != nil {
@@ -126,16 +126,16 @@ func (server *Server) getMerchantClaimRecovery(ctx *gin.Context) {
 // @Accept json
 // @Produce json
 // @Security Bearer
-// @Param id path int true "索赔ID"
+// @Param id path int true "追偿单ID"
 // @Success 200 {object} claimRecoveryResponse "追偿单详情"
 // @Failure 400 {object} map[string]interface{} "参数错误"
 // @Failure 401 {object} map[string]interface{} "未授权"
 // @Failure 403 {object} map[string]interface{} "非骑手用户或索赔不属于该骑手"
 // @Failure 404 {object} map[string]interface{} "追偿单不存在"
 // @Failure 500 {object} map[string]interface{} "服务器错误"
-// @Router /v1/rider/claims/{id}/recovery [get]
+// @Router /v1/rider/recoveries/{id} [get]
 func (server *Server) getRiderClaimRecovery(ctx *gin.Context) {
-	claimID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
+	recoveryID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
@@ -148,8 +148,8 @@ func (server *Server) getRiderClaimRecovery(ctx *gin.Context) {
 	}
 
 	recovery, err := logic.GetClaimRecoveryForRider(ctx, server.store, logic.RiderClaimRecoveryInput{
-		ClaimID: claimID,
-		RiderID: rider.ID,
+		RecoveryID: recoveryID,
+		RiderID:    rider.ID,
 	})
 	if err != nil {
 		if writeLogicRequestError(ctx, err) {
@@ -165,20 +165,20 @@ func (server *Server) getRiderClaimRecovery(ctx *gin.Context) {
 // getOperatorClaimRecovery 运营商查看追偿单
 // @Summary 运营商查看追偿单
 // @Description 运营商查看索赔对应的追偿单状态
-// @Tags 运营商申诉管理
+// @Tags 运营商索赔管理
 // @Accept json
 // @Produce json
 // @Security Bearer
-// @Param id path int true "索赔ID"
+// @Param id path int true "追偿单ID"
 // @Success 200 {object} claimRecoveryResponse "追偿单详情"
 // @Failure 400 {object} map[string]interface{} "参数错误"
 // @Failure 401 {object} map[string]interface{} "未授权"
 // @Failure 403 {object} map[string]interface{} "无权限处理该区域"
 // @Failure 404 {object} map[string]interface{} "追偿单不存在"
 // @Failure 500 {object} map[string]interface{} "服务器错误"
-// @Router /v1/operator/claims/{id}/recovery [get]
+// @Router /v1/operator/recoveries/{id} [get]
 func (server *Server) getOperatorClaimRecovery(ctx *gin.Context) {
-	claimID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
+	recoveryID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
@@ -191,8 +191,8 @@ func (server *Server) getOperatorClaimRecovery(ctx *gin.Context) {
 	}
 
 	recovery, err := logic.GetClaimRecoveryForOperator(ctx, server.store, logic.OperatorClaimRecoveryInput{
-		ClaimID:   claimID,
-		RegionIDs: regionIDs,
+		RecoveryID: recoveryID,
+		RegionIDs:  regionIDs,
 	})
 	if err != nil {
 		if writeLogicRequestError(ctx, err) {
@@ -212,16 +212,16 @@ func (server *Server) getOperatorClaimRecovery(ctx *gin.Context) {
 // @Accept json
 // @Produce json
 // @Security Bearer
-// @Param id path int true "索赔ID"
+// @Param id path int true "追偿单ID"
 // @Success 200 {object} claimRecoveryPaymentResponse "支付单创建成功"
 // @Failure 400 {object} map[string]interface{} "参数错误"
 // @Failure 401 {object} map[string]interface{} "未授权"
 // @Failure 403 {object} map[string]interface{} "非商户用户或索赔不属于该商户"
 // @Failure 404 {object} map[string]interface{} "追偿单不存在"
 // @Failure 500 {object} map[string]interface{} "服务器错误"
-// @Router /v1/merchant/claims/{id}/recovery/pay [post]
+// @Router /v1/merchant/recoveries/{id}/pay [post]
 func (server *Server) payMerchantClaimRecovery(ctx *gin.Context) {
-	claimID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
+	recoveryID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
@@ -234,7 +234,7 @@ func (server *Server) payMerchantClaimRecovery(ctx *gin.Context) {
 	}
 
 	result, err := logic.CreateMerchantClaimRecoveryPayment(ctx, server.store, server.directPaymentClient, logic.CreateMerchantClaimRecoveryPaymentInput{
-		ClaimID:     claimID,
+		RecoveryID:  recoveryID,
 		MerchantID:  merchant.ID,
 		PayerUserID: authPayload.UserID,
 		ClientIP:    ctx.ClientIP(),
@@ -257,16 +257,16 @@ func (server *Server) payMerchantClaimRecovery(ctx *gin.Context) {
 // @Accept json
 // @Produce json
 // @Security Bearer
-// @Param id path int true "索赔ID"
+// @Param id path int true "追偿单ID"
 // @Success 200 {object} claimRecoveryPaymentResponse "支付单创建成功"
 // @Failure 400 {object} map[string]interface{} "参数错误"
 // @Failure 401 {object} map[string]interface{} "未授权"
 // @Failure 403 {object} map[string]interface{} "非骑手用户或索赔不属于该骑手"
 // @Failure 404 {object} map[string]interface{} "追偿单不存在"
 // @Failure 500 {object} map[string]interface{} "服务器错误"
-// @Router /v1/rider/claims/{id}/recovery/pay [post]
+// @Router /v1/rider/recoveries/{id}/pay [post]
 func (server *Server) payRiderClaimRecovery(ctx *gin.Context) {
-	claimID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
+	recoveryID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
@@ -279,7 +279,7 @@ func (server *Server) payRiderClaimRecovery(ctx *gin.Context) {
 	}
 
 	result, err := logic.CreateRiderClaimRecoveryPayment(ctx, server.store, server.directPaymentClient, logic.CreateRiderClaimRecoveryPaymentInput{
-		ClaimID:     claimID,
+		RecoveryID:  recoveryID,
 		RiderID:     rider.ID,
 		PayerUserID: authPayload.UserID,
 		ClientIP:    ctx.ClientIP(),

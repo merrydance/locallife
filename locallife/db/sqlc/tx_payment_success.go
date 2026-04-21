@@ -27,9 +27,10 @@ type ProcessPaymentSuccessTxParams struct {
 
 // ProcessPaymentSuccessTxResult contains the result of payment success processing
 type ProcessPaymentSuccessTxResult struct {
-	PaymentOrder PaymentOrder
-	Processed    bool
-	OrderResult  *ProcessOrderPaymentTxResult
+	PaymentOrder  PaymentOrder
+	Processed     bool
+	OrderResult   *ProcessOrderPaymentTxResult
+	ReleaseAction *BehaviorAction
 }
 
 // ProcessPaymentSuccessTx handles payment success in a single transaction with idempotency guard.
@@ -260,30 +261,25 @@ func (store *SQLStore) ProcessPaymentSuccessTx(ctx context.Context, arg ProcessP
 				break
 			}
 
-			if _, err := q.MarkClaimRecoveryPaid(ctx, recovery.ID); err != nil {
+			updatedRecovery, err := q.MarkClaimRecoveryPaid(ctx, recovery.ID)
+			if err != nil {
 				return fmt.Errorf("mark claim recovery paid: %w", err)
 			}
-
-			switch attach.RecoveryTarget {
-			case "merchant":
-				order, err := q.GetOrder(ctx, recovery.OrderID)
-				if err != nil {
-					return fmt.Errorf("get order for merchant recovery: %w", err)
-				}
-				if err := q.UnsuspendMerchantTakeout(ctx, order.MerchantID); err != nil {
-					return fmt.Errorf("unsuspend merchant takeout: %w", err)
-				}
-			case "rider":
-				delivery, err := q.GetDeliveryByOrderID(ctx, recovery.OrderID)
-				if err != nil {
-					return fmt.Errorf("get delivery for rider recovery: %w", err)
-				}
-				if delivery.RiderID.Valid {
-					if err := q.UnsuspendRider(ctx, delivery.RiderID.Int64); err != nil {
-						return fmt.Errorf("unsuspend rider: %w", err)
-					}
-				}
+			if err := WriteClaimRecoveryEvent(ctx, q, updatedRecovery, ClaimRecoveryEventTypePaid, map[string]any{
+				"claim_id":         updatedRecovery.ClaimID,
+				"payment_order_id": paymentOrder.ID,
+				"recovery_target":  updatedRecovery.RecoveryTarget.String,
+				"recovery_amount":  updatedRecovery.RecoveryAmount,
+				"status":           updatedRecovery.Status,
+			}); err != nil {
+				return fmt.Errorf("write claim recovery paid event: %w", err)
 			}
+
+			releaseAction, err := CreateClaimRecoveryReleaseAction(ctx, q, updatedRecovery, "claim recovery paid release action created")
+			if err != nil {
+				return fmt.Errorf("create claim recovery release action: %w", err)
+			}
+			result.ReleaseAction = releaseAction
 
 		default:
 			return fmt.Errorf("unknown business type: %s", paymentOrder.BusinessType)

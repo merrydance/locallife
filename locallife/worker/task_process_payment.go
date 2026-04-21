@@ -604,6 +604,18 @@ func (processor *RedisTaskProcessor) ProcessTaskPaymentSuccess(ctx context.Conte
 		return nil
 	}
 
+	if result.ReleaseAction != nil {
+		if err := ExecuteClaimReleaseAction(ctx, processor.store, result.ReleaseAction.ID); err != nil {
+			log.Error().Err(err).
+				Int64("payment_order_id", payload.PaymentOrderID).
+				Int64("behavior_action_id", result.ReleaseAction.ID).
+				Msg("failed to execute claim recovery release action after payment success")
+			if enqueueErr := processor.distributor.DistributeTaskClaimBehaviorAction(ctx, &ClaimBehaviorActionPayload{ActionID: result.ReleaseAction.ID}); enqueueErr != nil {
+				return fmt.Errorf("requeue claim recovery release action after payment success: %w", enqueueErr)
+			}
+		}
+	}
+
 	paymentOrder := result.PaymentOrder
 
 	// 订单支付成功后，需要触发分账与通知

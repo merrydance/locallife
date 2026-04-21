@@ -144,6 +144,227 @@ func (q *Queries) GetClaimRecoveryByClaimID(ctx context.Context, claimID int64) 
 	return i, err
 }
 
+const getClaimRecoveryByID = `-- name: GetClaimRecoveryByID :one
+SELECT id, claim_id, order_id, responsible_party, recovery_target, recovery_amount, status, due_at, decision_snapshot, created_at, updated_at, decision_id, recovery_basis
+FROM claim_recoveries
+WHERE id = $1
+LIMIT 1
+`
+
+func (q *Queries) GetClaimRecoveryByID(ctx context.Context, id int64) (ClaimRecovery, error) {
+	row := q.db.QueryRow(ctx, getClaimRecoveryByID, id)
+	var i ClaimRecovery
+	err := row.Scan(
+		&i.ID,
+		&i.ClaimID,
+		&i.OrderID,
+		&i.ResponsibleParty,
+		&i.RecoveryTarget,
+		&i.RecoveryAmount,
+		&i.Status,
+		&i.DueAt,
+		&i.DecisionSnapshot,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DecisionID,
+		&i.RecoveryBasis,
+	)
+	return i, err
+}
+
+const getClaimRecoveryContextByClaimID = `-- name: GetClaimRecoveryContextByClaimID :one
+SELECT
+  cr.id,
+  cr.claim_id,
+  cr.order_id,
+  cr.responsible_party,
+  cr.recovery_target,
+  cr.recovery_amount,
+  cr.status,
+  cr.due_at,
+  cr.decision_snapshot,
+  cr.created_at,
+  cr.updated_at,
+  cr.decision_id,
+  cr.recovery_basis,
+  o.merchant_id,
+  m.region_id,
+  d.rider_id,
+  c.paid_at,
+  c.created_at AS claim_created_at
+FROM claim_recoveries cr
+JOIN claims c ON c.id = cr.claim_id
+JOIN orders o ON o.id = cr.order_id
+JOIN merchants m ON m.id = o.merchant_id
+LEFT JOIN deliveries d ON d.order_id = cr.order_id
+WHERE cr.claim_id = $1
+ORDER BY cr.id DESC
+LIMIT 1
+`
+
+type GetClaimRecoveryContextByClaimIDRow struct {
+	ID               int64              `json:"id"`
+	ClaimID          int64              `json:"claim_id"`
+	OrderID          int64              `json:"order_id"`
+	ResponsibleParty string             `json:"responsible_party"`
+	RecoveryTarget   pgtype.Text        `json:"recovery_target"`
+	RecoveryAmount   int64              `json:"recovery_amount"`
+	Status           string             `json:"status"`
+	DueAt            time.Time          `json:"due_at"`
+	DecisionSnapshot []byte             `json:"decision_snapshot"`
+	CreatedAt        time.Time          `json:"created_at"`
+	UpdatedAt        time.Time          `json:"updated_at"`
+	DecisionID       pgtype.Int8        `json:"decision_id"`
+	RecoveryBasis    pgtype.Text        `json:"recovery_basis"`
+	MerchantID       int64              `json:"merchant_id"`
+	RegionID         int64              `json:"region_id"`
+	RiderID          pgtype.Int8        `json:"rider_id"`
+	PaidAt           pgtype.Timestamptz `json:"paid_at"`
+	ClaimCreatedAt   time.Time          `json:"claim_created_at"`
+}
+
+func (q *Queries) GetClaimRecoveryContextByClaimID(ctx context.Context, claimID int64) (GetClaimRecoveryContextByClaimIDRow, error) {
+	row := q.db.QueryRow(ctx, getClaimRecoveryContextByClaimID, claimID)
+	var i GetClaimRecoveryContextByClaimIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.ClaimID,
+		&i.OrderID,
+		&i.ResponsibleParty,
+		&i.RecoveryTarget,
+		&i.RecoveryAmount,
+		&i.Status,
+		&i.DueAt,
+		&i.DecisionSnapshot,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DecisionID,
+		&i.RecoveryBasis,
+		&i.MerchantID,
+		&i.RegionID,
+		&i.RiderID,
+		&i.PaidAt,
+		&i.ClaimCreatedAt,
+	)
+	return i, err
+}
+
+const getClaimRecoveryContextByID = `-- name: GetClaimRecoveryContextByID :one
+SELECT
+  cr.id,
+  cr.claim_id,
+  cr.order_id,
+  cr.responsible_party,
+  cr.recovery_target,
+  cr.recovery_amount,
+  cr.status,
+  cr.due_at,
+  cr.decision_snapshot,
+  cr.created_at,
+  cr.updated_at,
+  cr.decision_id,
+  cr.recovery_basis,
+  o.merchant_id,
+  m.region_id,
+  d.rider_id,
+  c.paid_at,
+  c.created_at AS claim_created_at
+FROM claim_recoveries cr
+JOIN claims c ON c.id = cr.claim_id
+JOIN orders o ON o.id = cr.order_id
+JOIN merchants m ON m.id = o.merchant_id
+LEFT JOIN deliveries d ON d.order_id = cr.order_id
+WHERE cr.id = $1
+LIMIT 1
+`
+
+type GetClaimRecoveryContextByIDRow struct {
+	ID               int64              `json:"id"`
+	ClaimID          int64              `json:"claim_id"`
+	OrderID          int64              `json:"order_id"`
+	ResponsibleParty string             `json:"responsible_party"`
+	RecoveryTarget   pgtype.Text        `json:"recovery_target"`
+	RecoveryAmount   int64              `json:"recovery_amount"`
+	Status           string             `json:"status"`
+	DueAt            time.Time          `json:"due_at"`
+	DecisionSnapshot []byte             `json:"decision_snapshot"`
+	CreatedAt        time.Time          `json:"created_at"`
+	UpdatedAt        time.Time          `json:"updated_at"`
+	DecisionID       pgtype.Int8        `json:"decision_id"`
+	RecoveryBasis    pgtype.Text        `json:"recovery_basis"`
+	MerchantID       int64              `json:"merchant_id"`
+	RegionID         int64              `json:"region_id"`
+	RiderID          pgtype.Int8        `json:"rider_id"`
+	PaidAt           pgtype.Timestamptz `json:"paid_at"`
+	ClaimCreatedAt   time.Time          `json:"claim_created_at"`
+}
+
+func (q *Queries) GetClaimRecoveryContextByID(ctx context.Context, id int64) (GetClaimRecoveryContextByIDRow, error) {
+	row := q.db.QueryRow(ctx, getClaimRecoveryContextByID, id)
+	var i GetClaimRecoveryContextByIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.ClaimID,
+		&i.OrderID,
+		&i.ResponsibleParty,
+		&i.RecoveryTarget,
+		&i.RecoveryAmount,
+		&i.Status,
+		&i.DueAt,
+		&i.DecisionSnapshot,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DecisionID,
+		&i.RecoveryBasis,
+		&i.MerchantID,
+		&i.RegionID,
+		&i.RiderID,
+		&i.PaidAt,
+		&i.ClaimCreatedAt,
+	)
+	return i, err
+}
+
+const hasBlockingClaimRecoveryForMerchant = `-- name: HasBlockingClaimRecoveryForMerchant :one
+SELECT EXISTS (
+  SELECT 1
+  FROM claim_recoveries cr
+  JOIN orders o ON o.id = cr.order_id
+  WHERE o.merchant_id = $1
+    AND (
+      cr.status = 'overdue'
+      OR (cr.status = 'disputed' AND cr.due_at <= NOW())
+    )
+) AS exists
+`
+
+func (q *Queries) HasBlockingClaimRecoveryForMerchant(ctx context.Context, merchantID int64) (bool, error) {
+	row := q.db.QueryRow(ctx, hasBlockingClaimRecoveryForMerchant, merchantID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const hasBlockingClaimRecoveryForRider = `-- name: HasBlockingClaimRecoveryForRider :one
+SELECT EXISTS (
+  SELECT 1
+  FROM claim_recoveries cr
+  JOIN deliveries d ON d.order_id = cr.order_id
+  WHERE d.rider_id = $1
+    AND (
+      cr.status = 'overdue'
+      OR (cr.status = 'disputed' AND cr.due_at <= NOW())
+    )
+) AS exists
+`
+
+func (q *Queries) HasBlockingClaimRecoveryForRider(ctx context.Context, riderID pgtype.Int8) (bool, error) {
+	row := q.db.QueryRow(ctx, hasBlockingClaimRecoveryForRider, riderID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const listClaimRecoveryEventsByRecovery = `-- name: ListClaimRecoveryEventsByRecovery :many
 SELECT id, recovery_id, decision_id, event_type, payload, created_at
 FROM claim_recovery_events
@@ -226,17 +447,17 @@ func (q *Queries) ListDueClaimRecoveries(ctx context.Context, arg ListDueClaimRe
 	return items, nil
 }
 
-const markClaimRecoveryAppealed = `-- name: MarkClaimRecoveryAppealed :one
+const markClaimRecoveryDisputed = `-- name: MarkClaimRecoveryDisputed :one
 UPDATE claim_recoveries
-SET status = 'appealed',
+SET status = 'disputed',
     updated_at = NOW()
 WHERE id = $1
   AND status IN ('pending', 'overdue')
 RETURNING id, claim_id, order_id, responsible_party, recovery_target, recovery_amount, status, due_at, decision_snapshot, created_at, updated_at, decision_id, recovery_basis
 `
 
-func (q *Queries) MarkClaimRecoveryAppealed(ctx context.Context, id int64) (ClaimRecovery, error) {
-	row := q.db.QueryRow(ctx, markClaimRecoveryAppealed, id)
+func (q *Queries) MarkClaimRecoveryDisputed(ctx context.Context, id int64) (ClaimRecovery, error) {
+	row := q.db.QueryRow(ctx, markClaimRecoveryDisputed, id)
 	var i ClaimRecovery
 	err := row.Scan(
 		&i.ID,
@@ -321,7 +542,7 @@ UPDATE claim_recoveries
 SET status = 'pending',
     updated_at = NOW()
 WHERE id = $1
-  AND status = 'appealed'
+  AND status = 'disputed'
 RETURNING id, claim_id, order_id, responsible_party, recovery_target, recovery_amount, status, due_at, decision_snapshot, created_at, updated_at, decision_id, recovery_basis
 `
 
@@ -351,7 +572,7 @@ UPDATE claim_recoveries
 SET status = 'waived',
     updated_at = NOW()
 WHERE id = $1
-  AND status IN ('pending', 'overdue', 'appealed')
+  AND status IN ('pending', 'overdue', 'disputed')
 RETURNING id, claim_id, order_id, responsible_party, recovery_target, recovery_amount, status, due_at, decision_snapshot, created_at, updated_at, decision_id, recovery_basis
 `
 
@@ -376,17 +597,17 @@ func (q *Queries) MarkClaimRecoveryWaived(ctx context.Context, id int64) (ClaimR
 	return i, err
 }
 
-const resumeClaimRecoveryAfterAppeal = `-- name: ResumeClaimRecoveryAfterAppeal :one
+const resumeClaimRecoveryAfterDispute = `-- name: ResumeClaimRecoveryAfterDispute :one
 UPDATE claim_recoveries
 SET status = CASE WHEN due_at <= NOW() THEN 'overdue' ELSE 'pending' END,
     updated_at = NOW()
 WHERE id = $1
-  AND status = 'appealed'
+  AND status = 'disputed'
 RETURNING id, claim_id, order_id, responsible_party, recovery_target, recovery_amount, status, due_at, decision_snapshot, created_at, updated_at, decision_id, recovery_basis
 `
 
-func (q *Queries) ResumeClaimRecoveryAfterAppeal(ctx context.Context, id int64) (ClaimRecovery, error) {
-	row := q.db.QueryRow(ctx, resumeClaimRecoveryAfterAppeal, id)
+func (q *Queries) ResumeClaimRecoveryAfterDispute(ctx context.Context, id int64) (ClaimRecovery, error) {
+	row := q.db.QueryRow(ctx, resumeClaimRecoveryAfterDispute, id)
 	var i ClaimRecovery
 	err := row.Scan(
 		&i.ID,

@@ -27,23 +27,23 @@ type ClaimPayoutPayload struct {
 }
 
 type claimPayoutActionDetail struct {
-	ClaimID          int64      `json:"claim_id"`
-	AppealID         int64      `json:"appeal_id"`
-	UserID           int64      `json:"user_id"`
-	Amount           int64      `json:"amount"`
-	SourceType       string     `json:"source_type"`
-	SourceID         int64      `json:"source_id"`
-	Remark           string     `json:"remark"`
-	OutBillNo        string     `json:"out_bill_no,omitempty"`
-	TransferBillNo   string     `json:"transfer_bill_no,omitempty"`
-	TransferState    string     `json:"transfer_state,omitempty"`
-	TransferCreateAt string     `json:"transfer_create_at,omitempty"`
-	TransferUpdateAt string     `json:"transfer_update_at,omitempty"`
-	FailReason       string     `json:"fail_reason,omitempty"`
-	PackageInfo      string     `json:"package_info,omitempty"`
-	LastError        string     `json:"last_error,omitempty"`
-	LastQueriedAt    *time.Time `json:"last_queried_at,omitempty"`
-	TerminalFailure  bool       `json:"terminal_failure,omitempty"`
+	ClaimID           int64      `json:"claim_id"`
+	RecoveryDisputeID int64      `json:"recovery_dispute_id"`
+	UserID            int64      `json:"user_id"`
+	Amount            int64      `json:"amount"`
+	SourceType        string     `json:"source_type"`
+	SourceID          int64      `json:"source_id"`
+	Remark            string     `json:"remark"`
+	OutBillNo         string     `json:"out_bill_no,omitempty"`
+	TransferBillNo    string     `json:"transfer_bill_no,omitempty"`
+	TransferState     string     `json:"transfer_state,omitempty"`
+	TransferCreateAt  string     `json:"transfer_create_at,omitempty"`
+	TransferUpdateAt  string     `json:"transfer_update_at,omitempty"`
+	FailReason        string     `json:"fail_reason,omitempty"`
+	PackageInfo       string     `json:"package_info,omitempty"`
+	LastError         string     `json:"last_error,omitempty"`
+	LastQueriedAt     *time.Time `json:"last_queried_at,omitempty"`
+	TerminalFailure   bool       `json:"terminal_failure,omitempty"`
 }
 
 const claimPayoutTransferTimeout = 30 * time.Second
@@ -90,7 +90,7 @@ func ExecuteClaimPayoutAction(ctx context.Context, store db.Store, distributor T
 		_ = markClaimPayoutActionFailure(ctx, store, action.ID, claimPayoutActionDetail{TerminalFailure: true, LastError: err.Error()}, true)
 		return fmt.Errorf("unmarshal behavior action detail: %w", err)
 	}
-	if detail.UserID <= 0 || detail.Amount <= 0 || (detail.ClaimID <= 0 && detail.AppealID <= 0) {
+	if detail.UserID <= 0 || detail.Amount <= 0 || (detail.ClaimID <= 0 && detail.RecoveryDisputeID <= 0) {
 		detail.LastError = "invalid behavior action detail for claim payout"
 		detail.TerminalFailure = true
 		_ = markClaimPayoutActionFailure(ctx, store, action.ID, detail, true)
@@ -250,7 +250,7 @@ func markClaimPayoutActionFailure(ctx context.Context, store db.Store, actionID 
 func buildClaimPayoutTransferRequest(actionID int64, detail claimPayoutActionDetail, user db.User, transferClient wechat.TransferClientInterface) *wechatcontracts.DirectMerchantTransferCreateRequest {
 	reason := "异常索赔平台赔付"
 	transferRemark := detail.Remark
-	if detail.AppealID > 0 {
+	if detail.RecoveryDisputeID > 0 {
 		reason = "异常索赔申诉补偿"
 	}
 	if strings.TrimSpace(transferRemark) == "" {
@@ -380,9 +380,9 @@ func reconcileClaimPayoutTransfer(ctx context.Context, store db.Store, distribut
 
 func markClaimPayoutOutcome(ctx context.Context, store db.Store, distributor TaskDistributor, detail claimPayoutActionDetail) error {
 	switch {
-	case detail.AppealID > 0:
-		return store.MarkAppealCompensated(ctx, db.MarkAppealCompensatedParams{
-			ID:            detail.AppealID,
+	case detail.RecoveryDisputeID > 0:
+		return store.MarkRecoveryDisputeCompensated(ctx, db.MarkRecoveryDisputeCompensatedParams{
+			ID:            detail.RecoveryDisputeID,
 			CompensatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
 		})
 	case detail.ClaimID > 0:
@@ -409,6 +409,16 @@ func markClaimPayoutOutcome(ctx context.Context, store db.Store, distributor Tas
 func enqueueClaimPostPayoutActions(ctx context.Context, distributor TaskDistributor, result db.FinalizeClaimCompensationAfterPayoutTxResult) error {
 	if distributor == nil {
 		return nil
+	}
+	if result.RecoveryAction != nil {
+		if err := distributor.DistributeTaskClaimBehaviorAction(
+			ctx,
+			&ClaimBehaviorActionPayload{ActionID: result.RecoveryAction.ID},
+			asynq.Queue(QueueCritical),
+			asynq.MaxRetry(10),
+		); err != nil {
+			return fmt.Errorf("enqueue claim recovery action %d: %w", result.RecoveryAction.ID, err)
+		}
 	}
 	if result.RestrictionAction != nil {
 		if err := distributor.DistributeTaskClaimBehaviorAction(

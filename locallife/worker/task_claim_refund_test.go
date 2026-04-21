@@ -16,6 +16,16 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
+type claimPostPayoutTestDistributor struct {
+	NoopTaskDistributor
+	actionIDs []int64
+}
+
+func (d *claimPostPayoutTestDistributor) DistributeTaskClaimBehaviorAction(ctx context.Context, payload *ClaimBehaviorActionPayload, opts ...asynq.Option) error {
+	d.actionIDs = append(d.actionIDs, payload.ActionID)
+	return nil
+}
+
 func expectClaimPayoutClaimLookup(store *mockdb.MockStore, claimID int64, status string) {
 	store.EXPECT().GetClaim(gomock.Any(), claimID).Return(db.Claim{ID: claimID, Status: status}, nil)
 }
@@ -107,6 +117,19 @@ func TestProcessTaskClaimPayout_Success(t *testing.T) {
 
 	err = processor.ProcessTaskClaimPayout(context.Background(), asynq.NewTask(TaskClaimPayout, payloadBytes))
 	require.NoError(t, err)
+}
+
+func TestEnqueueClaimPostPayoutActions_EnqueuesRecoveryBeforeNotification(t *testing.T) {
+	distributor := &claimPostPayoutTestDistributor{}
+	result := db.FinalizeClaimCompensationAfterPayoutTxResult{
+		RecoveryAction:     &db.BehaviorAction{ID: 211},
+		RestrictionAction:  &db.BehaviorAction{ID: 212},
+		NotificationAction: &db.BehaviorAction{ID: 213},
+	}
+
+	err := enqueueClaimPostPayoutActions(context.Background(), distributor, result)
+	require.NoError(t, err)
+	require.Equal(t, []int64{211, 212, 213}, distributor.actionIDs)
 }
 
 func TestProcessTaskClaimPayout_FailureMarksActionFailed(t *testing.T) {
@@ -422,7 +445,7 @@ func TestProcessTaskClaimPayout_WithdrawnClaimMarksTerminalFailure(t *testing.T)
 	require.NoError(t, err)
 }
 
-func TestProcessTaskClaimPayout_AppealCompensationSuccess(t *testing.T) {
+func TestProcessTaskClaimPayout_RecoveryDisputeCompensationSuccess(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -432,11 +455,11 @@ func TestProcessTaskClaimPayout_AppealCompensationSuccess(t *testing.T) {
 	processor.SetTransferClient(transferClient)
 
 	detailBytes, err := json.Marshal(claimPayoutActionDetail{
-		AppealID:   21,
-		UserID:     22,
-		Amount:     1800,
-		SourceType: "platform",
-		Remark:     "appeal compensation",
+		RecoveryDisputeID: 21,
+		UserID:            22,
+		Amount:            1800,
+		SourceType:        "platform",
+		Remark:            "appeal compensation",
 	})
 	require.NoError(t, err)
 
@@ -471,8 +494,8 @@ func TestProcessTaskClaimPayout_AppealCompensationSuccess(t *testing.T) {
 		TransferBillNo: "wx-bill-109",
 		State:          wechatcontracts.DirectMerchantTransferStateSuccess,
 	}, nil)
-	store.EXPECT().MarkAppealCompensated(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(ctx context.Context, arg db.MarkAppealCompensatedParams) error {
+	store.EXPECT().MarkRecoveryDisputeCompensated(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, arg db.MarkRecoveryDisputeCompensatedParams) error {
 			require.Equal(t, int64(21), arg.ID)
 			require.True(t, arg.CompensatedAt.Valid)
 			return nil

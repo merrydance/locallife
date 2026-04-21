@@ -202,3 +202,78 @@ func TestProcessPaymentSuccessTx_OrderSetsPaidFields(t *testing.T) {
 	_, err = testStore.GetDeliveryPoolByOrderID(context.Background(), order.ID)
 	require.ErrorIs(t, err, ErrRecordNotFound)
 }
+
+func TestProcessPaymentSuccessTx_ClaimRecoveryKeepsMerchantSuspendedWhenAnotherBlockingRecoveryExists(t *testing.T) {
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	user1 := createRandomUser(t)
+	user2 := createRandomUser(t)
+
+	order1 := createCompletedOrderForStats(t, user1.ID, merchant.ID, 10000, OrderTypeTakeout, time.Now())
+	claim1 := createRandomClaim(t, user1.ID, order1.ID)
+	recovery1 := createRandomClaimRecovery(t, claim1.ID, order1.ID, "pending")
+
+	order2 := createCompletedOrderForStats(t, user2.ID, merchant.ID, 12000, OrderTypeTakeout, time.Now())
+	claim2 := createRandomClaim(t, user2.ID, order2.ID)
+	_ = createRandomClaimRecovery(t, claim2.ID, order2.ID, "overdue")
+
+	_, err := testStore.CreateMerchantProfile(context.Background(), merchant.ID)
+	require.NoError(t, err)
+
+	err = testStore.SuspendMerchantTakeout(context.Background(), SuspendMerchantTakeoutParams{
+		MerchantID:           merchant.ID,
+		TakeoutSuspendReason: pgtype.Text{String: "claim recovery overdue", Valid: true},
+		TakeoutSuspendUntil:  pgtype.Timestamptz{Time: time.Now().Add(24 * time.Hour), Valid: true},
+	})
+	require.NoError(t, err)
+
+	attach, err := json.Marshal(map[string]any{
+		"claim_id":        claim1.ID,
+		"recovery_id":     recovery1.ID,
+		"recovery_target": "merchant",
+	})
+	require.NoError(t, err)
+
+	paymentOrder, err := testStore.CreatePaymentOrder(context.Background(), CreatePaymentOrderParams{
+		OrderID:               pgtype.Int8{Int64: order1.ID, Valid: true},
+		UserID:                owner.ID,
+		PaymentType:           "miniprogram",
+		PaymentChannel:        PaymentChannelDirect,
+		RequiresProfitSharing: false,
+		BusinessType:          "claim_recovery",
+		Amount:                recovery1.RecoveryAmount,
+		OutTradeNo:            "CR" + util.RandomString(30),
+		ExpiresAt:             pgtype.Timestamptz{Time: time.Now().Add(15 * time.Minute), Valid: true},
+		Attach:                pgtype.Text{String: string(attach), Valid: true},
+	})
+	require.NoError(t, err)
+
+	paymentOrder, err = testStore.UpdatePaymentOrderToPaid(context.Background(), UpdatePaymentOrderToPaidParams{
+		ID:            paymentOrder.ID,
+		TransactionID: pgtype.Text{String: "TX" + util.RandomString(28), Valid: true},
+	})
+	require.NoError(t, err)
+
+	result, err := testStore.(*SQLStore).ProcessPaymentSuccessTx(context.Background(), ProcessPaymentSuccessTxParams{
+		PaymentOrderID: paymentOrder.ID,
+	})
+	require.NoError(t, err)
+	require.True(t, result.Processed)
+	require.NotNil(t, result.ReleaseAction)
+	require.Equal(t, "release", result.ReleaseAction.ActionType)
+	require.Equal(t, "merchant", result.ReleaseAction.TargetEntity)
+
+	updatedRecovery, err := testStore.GetClaimRecoveryByClaimID(context.Background(), claim1.ID)
+	require.NoError(t, err)
+	require.Equal(t, "paid", updatedRecovery.Status)
+	recoveryEvents, err := testStore.ListClaimRecoveryEventsByRecovery(context.Background(), updatedRecovery.ID)
+	require.NoError(t, err)
+	require.Len(t, recoveryEvents, 1)
+	require.Equal(t, ClaimRecoveryEventTypePaid, recoveryEvents[0].EventType)
+
+	updatedMerchant, err := testStore.GetMerchantProfile(context.Background(), merchant.ID)
+	require.NoError(t, err)
+	require.True(t, updatedMerchant.IsTakeoutSuspended)
+	require.True(t, updatedMerchant.TakeoutSuspendReason.Valid)
+	require.Equal(t, "claim recovery overdue", updatedMerchant.TakeoutSuspendReason.String)
+}

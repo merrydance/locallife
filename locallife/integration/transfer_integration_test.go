@@ -60,9 +60,9 @@ g, admin, admin
 p, customer, /v1/dining-sessions/*, POST
 
 # Operator policies
-p, operator, /v1/operator/appeals, GET
-p, operator, /v1/operator/appeals/*, GET
-p, operator, /v1/operator/claims/*/recovery, GET
+p, operator, /v1/operator/recovery-disputes, GET
+p, operator, /v1/operator/recovery-disputes/*, GET
+p, operator, /v1/operator/recoveries/*, GET
 p, operator, /v1/operator/food-safety/cases, GET
 p, operator, /v1/operator/food-safety/cases/*, GET
 p, operator, /v1/operator/food-safety/cases/*/investigate, POST

@@ -2,67 +2,67 @@ package logic
 
 import (
 	"context"
-	"strconv"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 )
 
-type AutomaticAppealResolution struct {
+type AutomaticRecoveryDisputeResolution struct {
 	Status      string
 	ReviewNotes string
 	DecisionID  pgtype.Int8
 }
 
-type AutomaticAppealResolutionResult struct {
-	Resolution   AutomaticAppealResolution
-	ReviewResult db.ReviewAppealWithCompensationTxResult
+type AutomaticRecoveryDisputeResolutionResult struct {
+	Resolution   AutomaticRecoveryDisputeResolution
+	ReviewResult db.ReviewRecoveryDisputeWithCompensationTxResult
 }
 
-func EvaluateAutomaticAppealResolution(ctx context.Context, store db.Store, appeal db.Appeal) (AutomaticAppealResolution, error) {
-	claimInfo, err := store.GetClaimForAppeal(ctx, appeal.ClaimID)
+func EvaluateAutomaticRecoveryDisputeResolution(ctx context.Context, store db.Store, recoveryDispute db.RecoveryDispute) (AutomaticRecoveryDisputeResolution, error) {
+	disputeCtx, err := getRecoveryDisputeContext(ctx, store, recoveryDispute.ClaimID)
 	if err != nil {
-		return AutomaticAppealResolution{}, err
+		return AutomaticRecoveryDisputeResolution{}, err
 	}
 
-	decisions, err := store.ListBehaviorDecisionsByOrder(ctx, pgtype.Int8{Int64: claimInfo.OrderID, Valid: true})
+	decisions, err := store.ListBehaviorDecisionsByOrder(ctx, pgtype.Int8{Int64: disputeCtx.OrderID, Valid: true})
 	if err != nil {
-		return AutomaticAppealResolution{}, err
+		return AutomaticRecoveryDisputeResolution{}, err
 	}
 
-	return DeriveAutomaticAppealResolution(appeal, decisions), nil
+	return DeriveAutomaticRecoveryDisputeResolution(recoveryDispute, decisions), nil
 }
 
-func ResolveAppealAutomatically(ctx context.Context, store db.Store, appeal db.Appeal) (AutomaticAppealResolutionResult, error) {
-	resolution, err := EvaluateAutomaticAppealResolution(ctx, store, appeal)
+func ResolveRecoveryDisputeAutomatically(ctx context.Context, store db.Store, recoveryDispute db.RecoveryDispute) (AutomaticRecoveryDisputeResolutionResult, error) {
+	resolution, err := EvaluateAutomaticRecoveryDisputeResolution(ctx, store, recoveryDispute)
 	if err != nil {
-		return AutomaticAppealResolutionResult{}, err
+		return AutomaticRecoveryDisputeResolutionResult{}, err
 	}
 
-	reviewResult, err := store.ReviewAppealWithCompensationTx(ctx, db.ReviewAppealWithCompensationTxParams{
-		ID:                 appeal.ID,
+	reviewResult, err := store.ReviewRecoveryDisputeWithCompensationTx(ctx, db.ReviewRecoveryDisputeWithCompensationTxParams{
+		ID:                 recoveryDispute.ID,
 		Status:             resolution.Status,
+		DecisionID:         resolution.DecisionID,
 		ReviewerID:         pgtype.Int8{},
 		ReviewNotes:        pgtype.Text{String: resolution.ReviewNotes, Valid: true},
 		CompensationAmount: pgtype.Int8{},
 	})
 	if err != nil {
-		return AutomaticAppealResolutionResult{}, err
+		return AutomaticRecoveryDisputeResolutionResult{}, err
 	}
 
-	return AutomaticAppealResolutionResult{
+	return AutomaticRecoveryDisputeResolutionResult{
 		Resolution:   resolution,
 		ReviewResult: reviewResult,
 	}, nil
 }
 
-func DeriveAutomaticAppealResolution(appeal db.Appeal, decisions []db.BehaviorDecision) AutomaticAppealResolution {
-	resolution := AutomaticAppealResolution{
+func DeriveAutomaticRecoveryDisputeResolution(recoveryDispute db.RecoveryDispute, decisions []db.BehaviorDecision) AutomaticRecoveryDisputeResolution {
+	resolution := AutomaticRecoveryDisputeResolution{
 		Status:      "rejected",
 		ReviewNotes: "系统复核确认最新行为判责仍指向当前申诉方，维持原判。",
 	}
 
-	latest, ok := findDecisionForAppeal(appeal, decisions)
+	latest, ok := findDecisionForRecoveryDispute(recoveryDispute, decisions)
 	if !ok {
 		resolution.ReviewNotes = "系统未找到当前索赔对应的行为判责快照，维持原判。"
 		return resolution
@@ -80,7 +80,7 @@ func DeriveAutomaticAppealResolution(appeal db.Appeal, decisions []db.BehaviorDe
 		return resolution
 	}
 
-	if latest.ResponsibleParty != appeal.AppellantType {
+	if latest.ResponsibleParty != recoveryDispute.AppellantType {
 		resolution.Status = "approved"
 		resolution.ReviewNotes = "系统复核发现最新行为判责已不再指向当前申诉方，自动撤销原追偿安排。"
 		return resolution
@@ -100,13 +100,9 @@ func DeriveAutomaticAppealResolution(appeal db.Appeal, decisions []db.BehaviorDe
 	return resolution
 }
 
-func BuildBehaviorAppealEvidence(appeal db.Appeal) string {
-	return "appeal_id=" + strconv.FormatInt(appeal.ID, 10) + ",claim_id=" + strconv.FormatInt(appeal.ClaimID, 10)
-}
-
-func findDecisionForAppeal(appeal db.Appeal, decisions []db.BehaviorDecision) (db.BehaviorDecision, bool) {
+func findDecisionForRecoveryDispute(recoveryDispute db.RecoveryDispute, decisions []db.BehaviorDecision) (db.BehaviorDecision, bool) {
 	for _, decision := range decisions {
-		if decision.ClaimID.Valid && decision.ClaimID.Int64 == appeal.ClaimID {
+		if decision.ClaimID.Valid && decision.ClaimID.Int64 == recoveryDispute.ClaimID {
 			return decision, true
 		}
 	}

@@ -12,17 +12,28 @@ import (
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	mockwechat "github.com/merrydance/locallife/wechat/mock"
 	"github.com/merrydance/locallife/worker"
-	mockwk "github.com/merrydance/locallife/worker/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
+
+type applymentSettlementVerificationTestDistributor struct {
+	worker.NoopTaskDistributor
+	sendNotification func(ctx context.Context, payload *worker.SendNotificationPayload, opts ...asynq.Option) error
+}
+
+func (d applymentSettlementVerificationTestDistributor) DistributeTaskSendNotification(ctx context.Context, payload *worker.SendNotificationPayload, opts ...asynq.Option) error {
+	if d.sendNotification != nil {
+		return d.sendNotification(ctx, payload, opts...)
+	}
+	return nil
+}
 
 func TestApplymentSettlementVerificationSchedulerMarksVerifyingCandidate(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	distributor := mockwk.NewMockTaskDistributor(ctrl)
+	distributor := applymentSettlementVerificationTestDistributor{}
 	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
 
 	store.EXPECT().
@@ -59,7 +70,19 @@ func TestApplymentSettlementVerificationSchedulerNotifiesOperatorOnFailure(t *te
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	distributor := mockwk.NewMockTaskDistributor(ctrl)
+	distributor := applymentSettlementVerificationTestDistributor{
+		sendNotification: func(_ context.Context, payload *worker.SendNotificationPayload, _ ...asynq.Option) error {
+			require.Equal(t, int64(71), payload.UserID)
+			require.Equal(t, "system", payload.Type)
+			require.Equal(t, "商户结算卡校验失败", payload.Title)
+			require.Contains(t, payload.Content, "南山店")
+			require.Contains(t, payload.Content, "银行卡户名不一致")
+			require.Equal(t, "merchant", payload.RelatedType)
+			require.Equal(t, int64(41), payload.RelatedID)
+			require.True(t, payload.IgnorePreferences)
+			return nil
+		},
+	}
 	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
 
 	store.EXPECT().
@@ -95,20 +118,6 @@ func TestApplymentSettlementVerificationSchedulerNotifiesOperatorOnFailure(t *te
 		GetActiveOperatorByRegion(gomock.Any(), int64(51)).
 		Return(db.Operator{ID: 61, UserID: 71, Name: "南山区运营商", Status: "active"}, nil)
 
-	distributor.EXPECT().
-		DistributeTaskSendNotification(gomock.Any(), gomock.AssignableToTypeOf(&worker.SendNotificationPayload{}), gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, payload *worker.SendNotificationPayload, _ ...asynq.Option) error {
-			require.Equal(t, int64(71), payload.UserID)
-			require.Equal(t, "system", payload.Type)
-			require.Equal(t, "商户结算卡校验失败", payload.Title)
-			require.Contains(t, payload.Content, "南山店")
-			require.Contains(t, payload.Content, "银行卡户名不一致")
-			require.Equal(t, "merchant", payload.RelatedType)
-			require.Equal(t, int64(41), payload.RelatedID)
-			require.True(t, payload.IgnorePreferences)
-			return nil
-		})
-
 	store.EXPECT().
 		MarkEcommerceApplymentSettlementVerifyFailedNotified(gomock.Any(), int64(31)).
 		Return(db.EcommerceApplyment{ID: 31}, nil)
@@ -122,7 +131,7 @@ func TestApplymentSettlementVerificationSchedulerMarksTerminalFailureOnInvalidSe
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	distributor := mockwk.NewMockTaskDistributor(ctrl)
+	distributor := applymentSettlementVerificationTestDistributor{}
 	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
 
 	store.EXPECT().
@@ -158,7 +167,7 @@ func TestApplymentSettlementVerificationSchedulerMarksTerminalFailureOnSettlemen
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	distributor := mockwk.NewMockTaskDistributor(ctrl)
+	distributor := applymentSettlementVerificationTestDistributor{}
 	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
 
 	store.EXPECT().
@@ -194,7 +203,7 @@ func TestApplymentSettlementVerificationSchedulerRunOnceSkipsWithoutEcommerceCli
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	distributor := mockwk.NewMockTaskDistributor(ctrl)
+	distributor := applymentSettlementVerificationTestDistributor{}
 
 	scheduler := worker.NewApplymentSettlementVerificationScheduler(store, distributor, nil)
 	scheduler.RunOnce()

@@ -24,21 +24,39 @@ import (
 
 // ====================== Helper Functions ======================
 
-func randomAppeal(claimID, appellantID, regionID int64, appellantType string) db.Appeal {
-	return db.Appeal{
+func randomRecoveryDispute(claimID, appellantID, regionID int64, appellantType string) db.RecoveryDispute {
+	return db.RecoveryDispute{
 		ID:            util.RandomInt(1, 1000),
 		ClaimID:       claimID,
 		AppellantType: appellantType,
 		AppellantID:   appellantID,
 		Reason:        "订单包装完好，顾客收货时已当面核对",
-		Status:        "pending",
+		Status:        "submitted",
 		RegionID:      regionID,
 		CreatedAt:     time.Now(),
 	}
 }
 
-// randomAppealRider 生成随机骑手（带区域ID）用于申诉测试
-func randomAppealRider(userID, regionID int64) db.Rider {
+func reviewedRecoveryDispute(base db.RecoveryDispute, status, notes string) db.RecoveryDispute {
+	return db.RecoveryDispute{
+		ID:                 base.ID,
+		ClaimID:            base.ClaimID,
+		AppellantType:      base.AppellantType,
+		AppellantID:        base.AppellantID,
+		Reason:             base.Reason,
+		Status:             status,
+		ReviewerID:         base.ReviewerID,
+		ReviewNotes:        pgtype.Text{String: notes, Valid: true},
+		ReviewedAt:         pgtype.Timestamptz{Time: time.Now(), Valid: true},
+		CompensationAmount: base.CompensationAmount,
+		CompensatedAt:      base.CompensatedAt,
+		RegionID:           base.RegionID,
+		CreatedAt:          base.CreatedAt,
+	}
+}
+
+// randomRecoveryDisputeRider 生成随机骑手（带区域ID）用于申诉测试
+func randomRecoveryDisputeRider(userID, regionID int64) db.Rider {
 	return db.Rider{
 		ID:            util.RandomInt(1, 1000),
 		UserID:        userID,
@@ -53,8 +71,8 @@ func randomAppealRider(userID, regionID int64) db.Rider {
 	}
 }
 
-// randomAppealOperator 生成随机运营商（带区域ID）用于申诉测试
-func randomAppealOperator(userID, regionID int64) db.Operator {
+// randomRecoveryDisputeOperator 生成随机运营商（带区域ID）用于申诉测试
+func randomRecoveryDisputeOperator(userID, regionID int64) db.Operator {
 	return db.Operator{
 		ID:           util.RandomInt(1, 1000),
 		UserID:       userID,
@@ -237,30 +255,34 @@ func TestListMerchantClaimsAPI(t *testing.T) {
 	}
 }
 
-// ====================== Create Appeal Tests ======================
+// ====================== Create Recovery Dispute Tests ======================
 
-func TestCreateMerchantAppealAPI(t *testing.T) {
+func TestCreateMerchantRecoveryDisputeAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchant(user.ID)
 	region := randomRegion()
 	merchant.RegionID = region.ID
 
-	claim := db.GetClaimForAppealRow{
+	claim := struct {
+		ID          int64
+		OrderID     int64
+		ClaimType   string
+		ClaimAmount int64
+		MerchantID  int64
+		RegionID    int64
+		CreatedAt   time.Time
+	}{
 		ID:          1,
 		OrderID:     100,
 		ClaimType:   "missing-item",
 		ClaimAmount: 500,
-		Status:      "approved",
 		MerchantID:  merchant.ID,
 		RegionID:    region.ID,
 		CreatedAt:   time.Now(),
 	}
 
-	appeal := randomAppeal(claim.ID, merchant.ID, region.ID, "merchant")
-	autoApprovedAppeal := appeal
-	autoApprovedAppeal.Status = "approved"
-	autoApprovedAppeal.ReviewNotes = pgtype.Text{String: "系统复核发现最新行为判责已不再指向当前申诉方，自动撤销原追偿安排。", Valid: true}
-	autoApprovedAppeal.ReviewedAt = pgtype.Timestamptz{Time: time.Now(), Valid: true}
+	recoveryDispute := randomRecoveryDispute(claim.ID, merchant.ID, region.ID, "merchant")
+	autoApprovedRecoveryDispute := reviewedRecoveryDispute(recoveryDispute, "approved", "系统复核发现最新行为判责已不再指向当前申诉方，自动撤销原追偿安排。")
 	decision := db.BehaviorDecision{
 		ID:                 91,
 		ClaimID:            pgtype.Int8{Int64: claim.ID, Valid: true},
@@ -269,6 +291,13 @@ func TestCreateMerchantAppealAPI(t *testing.T) {
 		DecisionStatus:     "decided",
 		CreatedAt:          time.Now(),
 		UpdatedAt:          time.Now(),
+	}
+	recoveryContext := db.GetClaimRecoveryContextByClaimIDRow{
+		ClaimID:        claim.ID,
+		OrderID:        claim.OrderID,
+		MerchantID:     claim.MerchantID,
+		RegionID:       claim.RegionID,
+		ClaimCreatedAt: claim.CreatedAt,
 	}
 
 	testCases := []struct {
@@ -291,12 +320,12 @@ func TestCreateMerchantAppealAPI(t *testing.T) {
 				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
-					GetClaimForAppeal(gomock.Any(), claim.ID).
+					GetClaimRecoveryContextByClaimID(gomock.Any(), claim.ID).
 					Times(2).
-					Return(claim, nil)
+					Return(recoveryContext, nil)
 
 				store.EXPECT().
-					CheckAppealExists(gomock.Any(), db.CheckAppealExistsParams{
+					CheckRecoveryDisputeExists(gomock.Any(), db.CheckRecoveryDisputeExistsParams{
 						ClaimID:       claim.ID,
 						AppellantType: "merchant",
 					}).
@@ -304,9 +333,9 @@ func TestCreateMerchantAppealAPI(t *testing.T) {
 					Return(false, nil)
 
 				store.EXPECT().
-					CreateAppealWithRecoveryTx(gomock.Any(), gomock.Any()).
+					CreateRecoveryDisputeWithRecoveryTx(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.CreateAppealWithRecoveryTxResult{Appeal: appeal}, nil)
+					Return(db.CreateRecoveryDisputeWithRecoveryTxResult{RecoveryDispute: recoveryDispute}, nil)
 
 				store.EXPECT().
 					ListBehaviorDecisionsByOrder(gomock.Any(), pgtype.Int8{Int64: claim.OrderID, Valid: true}).
@@ -314,44 +343,40 @@ func TestCreateMerchantAppealAPI(t *testing.T) {
 					Return([]db.BehaviorDecision{decision}, nil)
 
 				store.EXPECT().
-					ReviewAppealWithCompensationTx(gomock.Any(), db.ReviewAppealWithCompensationTxParams{
-						ID:                 appeal.ID,
+					ReviewRecoveryDisputeWithCompensationTx(gomock.Any(), db.ReviewRecoveryDisputeWithCompensationTxParams{
+						ID:                 recoveryDispute.ID,
 						Status:             "approved",
+						DecisionID:         pgtype.Int8{Int64: decision.ID, Valid: true},
 						ReviewerID:         pgtype.Int8{},
 						ReviewNotes:        pgtype.Text{String: "系统复核发现最新行为判责已不再指向当前申诉方，自动撤销原追偿安排。", Valid: true},
 						CompensationAmount: pgtype.Int8{},
 					}).
 					Times(1).
-					Return(db.ReviewAppealWithCompensationTxResult{
-						Appeal: autoApprovedAppeal,
-						PostProcess: db.GetAppealForPostProcessRow{
-							AppealID:       appeal.ID,
-							ClaimID:        appeal.ClaimID,
-							AppellantType:  "merchant",
-							AppellantID:    merchant.ID,
-							ClaimantUserID: 300,
-							ClaimType:      claim.ClaimType,
-							ClaimAmount:    claim.ClaimAmount,
-							OrderNo:        "20240101120000123456",
+					Return(db.ReviewRecoveryDisputeWithCompensationTxResult{
+						RecoveryDispute: autoApprovedRecoveryDispute,
+						PostProcess: db.GetRecoveryDisputeForPostProcessRow{
+							RecoveryDisputeID: recoveryDispute.ID,
+							ClaimID:           recoveryDispute.ClaimID,
+							AppellantType:     "merchant",
+							AppellantID:       merchant.ID,
+							ClaimantUserID:    300,
+							ClaimType:         claim.ClaimType,
+							ClaimAmount:       claim.ClaimAmount,
+							OrderNo:           "20240101120000123456",
 						},
 					}, nil)
 
-				store.EXPECT().
-					CreateBehaviorAppeal(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.BehaviorAppeal{}, nil)
-
 				taskDistributor.EXPECT().
-					DistributeTaskProcessAppealResult(gomock.Any(), gomock.Any()).
+					DistributeTaskProcessRecoveryDisputeResult(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(nil)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusCreated, recorder.Code)
 
-				var response appealResponse
+				var response recoveryDisputeResponse
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
-				require.Equal(t, appeal.ID, response.ID)
+				require.Equal(t, recoveryDispute.ID, response.ID)
 				require.Equal(t, "approved", response.Status)
 			},
 		},
@@ -368,12 +393,12 @@ func TestCreateMerchantAppealAPI(t *testing.T) {
 				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
-					GetClaimForAppeal(gomock.Any(), claim.ID).
+					GetClaimRecoveryContextByClaimID(gomock.Any(), claim.ID).
 					Times(1).
-					Return(claim, nil)
+					Return(recoveryContext, nil)
 
 				store.EXPECT().
-					CheckAppealExists(gomock.Any(), db.CheckAppealExistsParams{
+					CheckRecoveryDisputeExists(gomock.Any(), db.CheckRecoveryDisputeExistsParams{
 						ClaimID:       claim.ID,
 						AppellantType: "merchant",
 					}).
@@ -381,9 +406,9 @@ func TestCreateMerchantAppealAPI(t *testing.T) {
 					Return(false, nil)
 
 				store.EXPECT().
-					CreateAppealWithRecoveryTx(gomock.Any(), gomock.Any()).
+					CreateRecoveryDisputeWithRecoveryTx(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.CreateAppealWithRecoveryTxResult{}, assertAnError("mark claim recovery appealed: update failed"))
+					Return(db.CreateRecoveryDisputeWithRecoveryTxResult{}, assertAnError("mark claim recovery disputed: update failed"))
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusInternalServerError, recorder.Code)
@@ -402,12 +427,12 @@ func TestCreateMerchantAppealAPI(t *testing.T) {
 				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
-					GetClaimForAppeal(gomock.Any(), claim.ID).
+					GetClaimRecoveryContextByClaimID(gomock.Any(), claim.ID).
 					Times(2).
-					Return(claim, nil)
+					Return(recoveryContext, nil)
 
 				store.EXPECT().
-					CheckAppealExists(gomock.Any(), db.CheckAppealExistsParams{
+					CheckRecoveryDisputeExists(gomock.Any(), db.CheckRecoveryDisputeExistsParams{
 						ClaimID:       claim.ID,
 						AppellantType: "merchant",
 					}).
@@ -415,9 +440,9 @@ func TestCreateMerchantAppealAPI(t *testing.T) {
 					Return(false, nil)
 
 				store.EXPECT().
-					CreateAppealWithRecoveryTx(gomock.Any(), gomock.Any()).
+					CreateRecoveryDisputeWithRecoveryTx(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.CreateAppealWithRecoveryTxResult{Appeal: appeal}, nil)
+					Return(db.CreateRecoveryDisputeWithRecoveryTxResult{RecoveryDispute: recoveryDispute}, nil)
 
 				store.EXPECT().
 					ListBehaviorDecisionsByOrder(gomock.Any(), pgtype.Int8{Int64: claim.OrderID, Valid: true}).
@@ -425,32 +450,28 @@ func TestCreateMerchantAppealAPI(t *testing.T) {
 					Return([]db.BehaviorDecision{decision}, nil)
 
 				store.EXPECT().
-					ReviewAppealWithCompensationTx(gomock.Any(), db.ReviewAppealWithCompensationTxParams{
-						ID:                 appeal.ID,
+					ReviewRecoveryDisputeWithCompensationTx(gomock.Any(), db.ReviewRecoveryDisputeWithCompensationTxParams{
+						ID:                 recoveryDispute.ID,
 						Status:             "approved",
+						DecisionID:         pgtype.Int8{Int64: decision.ID, Valid: true},
 						ReviewerID:         pgtype.Int8{},
 						ReviewNotes:        pgtype.Text{String: "系统复核发现最新行为判责已不再指向当前申诉方，自动撤销原追偿安排。", Valid: true},
 						CompensationAmount: pgtype.Int8{},
 					}).
 					Times(1).
-					Return(db.ReviewAppealWithCompensationTxResult{
-						Appeal: autoApprovedAppeal,
-						PostProcess: db.GetAppealForPostProcessRow{
-							AppealID:       appeal.ID,
-							ClaimID:        appeal.ClaimID,
-							AppellantType:  "merchant",
-							AppellantID:    merchant.ID,
-							ClaimantUserID: 300,
-							ClaimType:      claim.ClaimType,
-							ClaimAmount:    claim.ClaimAmount,
-							OrderNo:        "20240101120000123456",
+					Return(db.ReviewRecoveryDisputeWithCompensationTxResult{
+						RecoveryDispute: autoApprovedRecoveryDispute,
+						PostProcess: db.GetRecoveryDisputeForPostProcessRow{
+							RecoveryDisputeID: recoveryDispute.ID,
+							ClaimID:           recoveryDispute.ClaimID,
+							AppellantType:     "merchant",
+							AppellantID:       merchant.ID,
+							ClaimantUserID:    300,
+							ClaimType:         claim.ClaimType,
+							ClaimAmount:       claim.ClaimAmount,
+							OrderNo:           "20240101120000123456",
 						},
 					}, nil)
-
-				store.EXPECT().
-					CreateBehaviorAppeal(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.BehaviorAppeal{}, nil)
 
 				store.EXPECT().
 					GetClaimRecoveryByClaimID(gomock.Any(), claim.ID).
@@ -483,9 +504,9 @@ func TestCreateMerchantAppealAPI(t *testing.T) {
 					Return(db.UserClaimWarning{ID: 1, UserID: 300}, nil)
 
 				taskDistributor.EXPECT().
-					DistributeTaskProcessAppealResult(gomock.Any(), gomock.Any()).
+					DistributeTaskProcessRecoveryDisputeResult(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(assertAnError("appeal queue unavailable"))
+					Return(assertAnError("recovery dispute queue unavailable"))
 
 				store.EXPECT().
 					GetMerchant(gomock.Any(), merchant.ID).
@@ -500,14 +521,14 @@ func TestCreateMerchantAppealAPI(t *testing.T) {
 				store.EXPECT().
 					CreateNotification(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.Notification{ID: 1, UserID: 300, Type: "appeal", Title: "索赔申诉结果通知", Content: "test", CreatedAt: time.Now()}, nil)
+					Return(db.Notification{ID: 1, UserID: 300, Type: "recovery_dispute", Title: "索赔申诉结果通知", Content: "test", CreatedAt: time.Now()}, nil)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusCreated, recorder.Code)
 
-				var response appealResponse
+				var response recoveryDisputeResponse
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
-				require.Equal(t, appeal.ID, response.ID)
+				require.Equal(t, recoveryDispute.ID, response.ID)
 				require.Equal(t, "approved", response.Status)
 			},
 		},
@@ -524,9 +545,9 @@ func TestCreateMerchantAppealAPI(t *testing.T) {
 				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
-					GetClaimForAppeal(gomock.Any(), int64(99999)).
+					GetClaimRecoveryContextByClaimID(gomock.Any(), int64(99999)).
 					Times(1).
-					Return(db.GetClaimForAppealRow{}, db.ErrRecordNotFound)
+					Return(db.GetClaimRecoveryContextByClaimIDRow{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -545,12 +566,12 @@ func TestCreateMerchantAppealAPI(t *testing.T) {
 				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
-					GetClaimForAppeal(gomock.Any(), claim.ID).
+					GetClaimRecoveryContextByClaimID(gomock.Any(), claim.ID).
 					Times(1).
-					Return(claim, nil)
+					Return(recoveryContext, nil)
 
 				store.EXPECT().
-					CheckAppealExists(gomock.Any(), db.CheckAppealExistsParams{
+					CheckRecoveryDisputeExists(gomock.Any(), db.CheckRecoveryDisputeExistsParams{
 						ClaimID:       claim.ID,
 						AppellantType: "merchant",
 					}).
@@ -574,12 +595,12 @@ func TestCreateMerchantAppealAPI(t *testing.T) {
 				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				// 返回属于其他商户的索赔
-				otherClaim := claim
-				otherClaim.MerchantID = merchant.ID + 1
+				otherContext := recoveryContext
+				otherContext.MerchantID = merchant.ID + 1
 				store.EXPECT().
-					GetClaimForAppeal(gomock.Any(), claim.ID).
+					GetClaimRecoveryContextByClaimID(gomock.Any(), claim.ID).
 					Times(1).
-					Return(otherClaim, nil)
+					Return(otherContext, nil)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -618,7 +639,7 @@ func TestCreateMerchantAppealAPI(t *testing.T) {
 			data, err := json.Marshal(tc.body)
 			require.NoError(t, err)
 
-			url := "/v1/merchant/appeals"
+			url := "/v1/merchant/recovery-disputes"
 			request, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(data))
 			require.NoError(t, err)
 			request.Header.Set("Content-Type", "application/json")
@@ -630,21 +651,21 @@ func TestCreateMerchantAppealAPI(t *testing.T) {
 	}
 }
 
-// ====================== List Merchant Appeals Tests ======================
+// ====================== List Merchant Recovery Disputes Tests ======================
 
-func TestListMerchantAppealsAPI(t *testing.T) {
+func TestListMerchantRecoveryDisputesAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchant(user.ID)
 	region := randomRegion()
 	merchant.RegionID = region.ID
 
-	appeal := db.ListMerchantAppealsForMerchantRow{
+	recoveryDispute := db.ListMerchantRecoveryDisputesForMerchantRow{
 		ID:               1,
 		ClaimID:          100,
 		AppellantType:    "merchant",
 		AppellantID:      merchant.ID,
 		Reason:           "测试申诉理由",
-		Status:           "pending",
+		Status:           "submitted",
 		RegionID:         region.ID,
 		ClaimType:        "missing-item",
 		ClaimAmount:      500,
@@ -670,16 +691,16 @@ func TestListMerchantAppealsAPI(t *testing.T) {
 				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
-					ListMerchantAppealsForMerchant(gomock.Any(), db.ListMerchantAppealsForMerchantParams{
+					ListMerchantRecoveryDisputesForMerchant(gomock.Any(), db.ListMerchantRecoveryDisputesForMerchantParams{
 						AppellantID: merchant.ID,
 						Limit:       10,
 						Offset:      0,
 					}).
 					Times(1).
-					Return([]db.ListMerchantAppealsForMerchantRow{appeal}, nil)
+					Return([]db.ListMerchantRecoveryDisputesForMerchantRow{recoveryDispute}, nil)
 
 				store.EXPECT().
-					CountMerchantAppealsForMerchant(gomock.Any(), db.CountMerchantAppealsForMerchantParams{
+					CountMerchantRecoveryDisputesForMerchant(gomock.Any(), db.CountMerchantRecoveryDisputesForMerchantParams{
 						AppellantID: merchant.ID,
 						Status:      pgtype.Text{},
 					}).
@@ -692,14 +713,14 @@ func TestListMerchantAppealsAPI(t *testing.T) {
 				var response map[string]interface{}
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 
-				appeals := response["appeals"].([]interface{})
-				require.Len(t, appeals, 1)
+				disputes := response["disputes"].([]interface{})
+				require.Len(t, disputes, 1)
 				require.Equal(t, false, response["has_more"])
 			},
 		},
 		{
 			name:  "OKWithStatusFilter",
-			query: "?page_id=1&page_size=10&status=pending",
+			query: "?page_id=1&page_size=10&status=submitted",
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
@@ -707,22 +728,22 @@ func TestListMerchantAppealsAPI(t *testing.T) {
 				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
-					ListMerchantAppealsForMerchant(gomock.Any(), gomock.Any()).
-					DoAndReturn(func(_ context.Context, arg db.ListMerchantAppealsForMerchantParams) ([]db.ListMerchantAppealsForMerchantRow, error) {
+					ListMerchantRecoveryDisputesForMerchant(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ context.Context, arg db.ListMerchantRecoveryDisputesForMerchantParams) ([]db.ListMerchantRecoveryDisputesForMerchantRow, error) {
 						require.Equal(t, merchant.ID, arg.AppellantID)
 						require.True(t, arg.Status.Valid)
-						require.Equal(t, "pending", arg.Status.String)
+						require.Equal(t, "submitted", arg.Status.String)
 						require.Equal(t, int32(10), arg.Limit)
 						require.Equal(t, int32(0), arg.Offset)
-						return []db.ListMerchantAppealsForMerchantRow{appeal}, nil
+						return []db.ListMerchantRecoveryDisputesForMerchantRow{recoveryDispute}, nil
 					})
 
 				store.EXPECT().
-					CountMerchantAppealsForMerchant(gomock.Any(), gomock.Any()).
-					DoAndReturn(func(_ context.Context, arg db.CountMerchantAppealsForMerchantParams) (int64, error) {
+					CountMerchantRecoveryDisputesForMerchant(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ context.Context, arg db.CountMerchantRecoveryDisputesForMerchantParams) (int64, error) {
 						require.Equal(t, merchant.ID, arg.AppellantID)
 						require.True(t, arg.Status.Valid)
-						require.Equal(t, "pending", arg.Status.String)
+						require.Equal(t, "submitted", arg.Status.String)
 						return int64(1), nil
 					})
 			},
@@ -732,8 +753,8 @@ func TestListMerchantAppealsAPI(t *testing.T) {
 				var response map[string]interface{}
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 
-				appeals := response["appeals"].([]interface{})
-				require.Len(t, appeals, 1)
+				disputes := response["disputes"].([]interface{})
+				require.Len(t, disputes, 1)
 			},
 		},
 	}
@@ -751,7 +772,7 @@ func TestListMerchantAppealsAPI(t *testing.T) {
 			server := newTestServer(t, store)
 			recorder := httptest.NewRecorder()
 
-			url := "/v1/merchant/appeals" + tc.query
+			url := "/v1/merchant/recovery-disputes" + tc.query
 			request, err := http.NewRequest(http.MethodGet, url, nil)
 			require.NoError(t, err)
 
@@ -762,30 +783,35 @@ func TestListMerchantAppealsAPI(t *testing.T) {
 	}
 }
 
-// ====================== Rider Appeals Tests ======================
+// ====================== Rider Recovery Dispute Tests ======================
 
-func TestCreateRiderAppealAPI(t *testing.T) {
+func TestCreateRiderRecoveryDisputeAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	region := randomRegion()
-	rider := randomAppealRider(user.ID, region.ID)
+	rider := randomRecoveryDisputeRider(user.ID, region.ID)
 
-	claim := db.GetClaimForAppealRow{
+	claim := struct {
+		ID          int64
+		OrderID     int64
+		ClaimType   string
+		ClaimAmount int64
+		MerchantID  int64
+		RegionID    int64
+		RiderID     pgtype.Int8
+		CreatedAt   time.Time
+	}{
 		ID:          1,
 		OrderID:     100,
 		ClaimType:   "delay",
 		ClaimAmount: 300,
-		Status:      "approved",
 		MerchantID:  200,
 		RegionID:    region.ID,
 		RiderID:     pgtype.Int8{Int64: rider.ID, Valid: true},
 		CreatedAt:   time.Now(),
 	}
 
-	appeal := randomAppeal(claim.ID, rider.ID, region.ID, "rider")
-	autoRejectedAppeal := appeal
-	autoRejectedAppeal.Status = "rejected"
-	autoRejectedAppeal.ReviewNotes = pgtype.Text{String: "系统复核确认最新行为判责仍指向当前申诉方，维持原判。", Valid: true}
-	autoRejectedAppeal.ReviewedAt = pgtype.Timestamptz{Time: time.Now(), Valid: true}
+	recoveryDispute := randomRecoveryDispute(claim.ID, rider.ID, region.ID, "rider")
+	autoRejectedRecoveryDispute := reviewedRecoveryDispute(recoveryDispute, "rejected", "系统复核确认最新行为判责仍指向当前申诉方，维持原判。")
 	decision := db.BehaviorDecision{
 		ID:                 92,
 		ClaimID:            pgtype.Int8{Int64: claim.ID, Valid: true},
@@ -794,6 +820,14 @@ func TestCreateRiderAppealAPI(t *testing.T) {
 		DecisionStatus:     "decided",
 		CreatedAt:          time.Now(),
 		UpdatedAt:          time.Now(),
+	}
+	recoveryContext := db.GetClaimRecoveryContextByClaimIDRow{
+		ClaimID:        claim.ID,
+		OrderID:        claim.OrderID,
+		MerchantID:     claim.MerchantID,
+		RegionID:       claim.RegionID,
+		RiderID:        claim.RiderID,
+		ClaimCreatedAt: claim.CreatedAt,
 	}
 
 	testCases := []struct {
@@ -819,12 +853,12 @@ func TestCreateRiderAppealAPI(t *testing.T) {
 					Return(rider, nil)
 
 				store.EXPECT().
-					GetClaimForAppeal(gomock.Any(), claim.ID).
+					GetClaimRecoveryContextByClaimID(gomock.Any(), claim.ID).
 					Times(2).
-					Return(claim, nil)
+					Return(recoveryContext, nil)
 
 				store.EXPECT().
-					CheckAppealExists(gomock.Any(), db.CheckAppealExistsParams{
+					CheckRecoveryDisputeExists(gomock.Any(), db.CheckRecoveryDisputeExistsParams{
 						ClaimID:       claim.ID,
 						AppellantType: "rider",
 					}).
@@ -832,9 +866,9 @@ func TestCreateRiderAppealAPI(t *testing.T) {
 					Return(false, nil)
 
 				store.EXPECT().
-					CreateAppealWithRecoveryTx(gomock.Any(), gomock.Any()).
+					CreateRecoveryDisputeWithRecoveryTx(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.CreateAppealWithRecoveryTxResult{Appeal: appeal}, nil)
+					Return(db.CreateRecoveryDisputeWithRecoveryTxResult{RecoveryDispute: recoveryDispute}, nil)
 
 				store.EXPECT().
 					ListBehaviorDecisionsByOrder(gomock.Any(), pgtype.Int8{Int64: claim.OrderID, Valid: true}).
@@ -842,42 +876,38 @@ func TestCreateRiderAppealAPI(t *testing.T) {
 					Return([]db.BehaviorDecision{decision}, nil)
 
 				store.EXPECT().
-					ReviewAppealWithCompensationTx(gomock.Any(), db.ReviewAppealWithCompensationTxParams{
-						ID:                 appeal.ID,
+					ReviewRecoveryDisputeWithCompensationTx(gomock.Any(), db.ReviewRecoveryDisputeWithCompensationTxParams{
+						ID:                 recoveryDispute.ID,
 						Status:             "rejected",
+						DecisionID:         pgtype.Int8{Int64: decision.ID, Valid: true},
 						ReviewerID:         pgtype.Int8{},
 						ReviewNotes:        pgtype.Text{String: "系统复核确认最新行为判责仍指向当前申诉方，维持原判。", Valid: true},
 						CompensationAmount: pgtype.Int8{},
 					}).
 					Times(1).
-					Return(db.ReviewAppealWithCompensationTxResult{
-						Appeal: autoRejectedAppeal,
-						PostProcess: db.GetAppealForPostProcessRow{
-							AppealID:       appeal.ID,
-							ClaimID:        appeal.ClaimID,
-							AppellantType:  "rider",
-							AppellantID:    rider.ID,
-							ClaimantUserID: 300,
-							ClaimType:      claim.ClaimType,
-							ClaimAmount:    claim.ClaimAmount,
-							OrderNo:        "20240101120000123456",
+					Return(db.ReviewRecoveryDisputeWithCompensationTxResult{
+						RecoveryDispute: autoRejectedRecoveryDispute,
+						PostProcess: db.GetRecoveryDisputeForPostProcessRow{
+							RecoveryDisputeID: recoveryDispute.ID,
+							ClaimID:           recoveryDispute.ClaimID,
+							AppellantType:     "rider",
+							AppellantID:       rider.ID,
+							ClaimantUserID:    300,
+							ClaimType:         claim.ClaimType,
+							ClaimAmount:       claim.ClaimAmount,
+							OrderNo:           "20240101120000123456",
 						},
 					}, nil)
 
-				store.EXPECT().
-					CreateBehaviorAppeal(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.BehaviorAppeal{}, nil)
-
 				taskDistributor.EXPECT().
-					DistributeTaskProcessAppealResult(gomock.Any(), gomock.Any()).
+					DistributeTaskProcessRecoveryDisputeResult(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(nil)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusCreated, recorder.Code)
 
-				var response appealResponse
+				var response recoveryDisputeResponse
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, "rejected", response.Status)
 			},
@@ -917,12 +947,12 @@ func TestCreateRiderAppealAPI(t *testing.T) {
 					Return(rider, nil)
 
 				// 返回属于其他骑手的索赔
-				otherClaim := claim
-				otherClaim.RiderID = pgtype.Int8{Int64: rider.ID + 1, Valid: true}
+				otherContext := recoveryContext
+				otherContext.RiderID = pgtype.Int8{Int64: rider.ID + 1, Valid: true}
 				store.EXPECT().
-					GetClaimForAppeal(gomock.Any(), claim.ID).
+					GetClaimRecoveryContextByClaimID(gomock.Any(), claim.ID).
 					Times(1).
-					Return(otherClaim, nil)
+					Return(otherContext, nil)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -947,7 +977,7 @@ func TestCreateRiderAppealAPI(t *testing.T) {
 			data, err := json.Marshal(tc.body)
 			require.NoError(t, err)
 
-			url := "/v1/rider/appeals"
+			url := "/v1/rider/recovery-disputes"
 			request, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(data))
 			require.NoError(t, err)
 			request.Header.Set("Content-Type", "application/json")
@@ -959,26 +989,30 @@ func TestCreateRiderAppealAPI(t *testing.T) {
 	}
 }
 
-func TestCreateMerchantAppealAPI_AutoResolveFailureWithoutTaskDistributorDoesNotPanic(t *testing.T) {
+func TestCreateMerchantRecoveryDisputeAPI_AutoResolveFailureWithoutTaskDistributorDoesNotPanic(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchant(user.ID)
 	region := randomRegion()
 	merchant.RegionID = region.ID
-	claim := db.GetClaimForAppealRow{
+	claim := struct {
+		ID          int64
+		OrderID     int64
+		ClaimType   string
+		ClaimAmount int64
+		MerchantID  int64
+		RegionID    int64
+		CreatedAt   time.Time
+	}{
 		ID:          util.RandomInt(1, 1000),
 		MerchantID:  merchant.ID,
 		RegionID:    region.ID,
 		OrderID:     util.RandomInt(1, 1000),
 		ClaimType:   "missing-item",
 		ClaimAmount: 500,
-		Status:      "approved",
 		CreatedAt:   time.Now(),
 	}
-	appeal := randomAppeal(claim.ID, merchant.ID, region.ID, "merchant")
-	autoApprovedAppeal := appeal
-	autoApprovedAppeal.Status = "approved"
-	autoApprovedAppeal.ReviewNotes = pgtype.Text{String: "系统复核发现最新行为判责已不再指向当前申诉方，自动撤销原追偿安排。", Valid: true}
-	autoApprovedAppeal.ReviewedAt = pgtype.Timestamptz{Time: time.Now(), Valid: true}
+	recoveryDispute := randomRecoveryDispute(claim.ID, merchant.ID, region.ID, "merchant")
+	autoApprovedRecoveryDispute := reviewedRecoveryDispute(recoveryDispute, "approved", "系统复核发现最新行为判责已不再指向当前申诉方，自动撤销原追偿安排。")
 	decision := db.BehaviorDecision{
 		ID:                 91,
 		ClaimID:            pgtype.Int8{Int64: claim.ID, Valid: true},
@@ -994,14 +1028,21 @@ func TestCreateMerchantAppealAPI_AutoResolveFailureWithoutTaskDistributorDoesNot
 
 	store := mockdb.NewMockStore(ctrl)
 	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+	recoveryContext := db.GetClaimRecoveryContextByClaimIDRow{
+		ClaimID:        claim.ID,
+		OrderID:        claim.OrderID,
+		MerchantID:     claim.MerchantID,
+		RegionID:       claim.RegionID,
+		ClaimCreatedAt: claim.CreatedAt,
+	}
 
 	store.EXPECT().
-		GetClaimForAppeal(gomock.Any(), claim.ID).
+		GetClaimRecoveryContextByClaimID(gomock.Any(), claim.ID).
 		Times(2).
-		Return(claim, nil)
+		Return(recoveryContext, nil)
 
 	store.EXPECT().
-		CheckAppealExists(gomock.Any(), db.CheckAppealExistsParams{
+		CheckRecoveryDisputeExists(gomock.Any(), db.CheckRecoveryDisputeExistsParams{
 			ClaimID:       claim.ID,
 			AppellantType: "merchant",
 		}).
@@ -1009,9 +1050,9 @@ func TestCreateMerchantAppealAPI_AutoResolveFailureWithoutTaskDistributorDoesNot
 		Return(false, nil)
 
 	store.EXPECT().
-		CreateAppealWithRecoveryTx(gomock.Any(), gomock.Any()).
+		CreateRecoveryDisputeWithRecoveryTx(gomock.Any(), gomock.Any()).
 		Times(1).
-		Return(db.CreateAppealWithRecoveryTxResult{Appeal: appeal}, nil)
+		Return(db.CreateRecoveryDisputeWithRecoveryTxResult{RecoveryDispute: recoveryDispute}, nil)
 
 	store.EXPECT().
 		ListBehaviorDecisionsByOrder(gomock.Any(), pgtype.Int8{Int64: claim.OrderID, Valid: true}).
@@ -1019,32 +1060,28 @@ func TestCreateMerchantAppealAPI_AutoResolveFailureWithoutTaskDistributorDoesNot
 		Return([]db.BehaviorDecision{decision}, nil)
 
 	store.EXPECT().
-		ReviewAppealWithCompensationTx(gomock.Any(), db.ReviewAppealWithCompensationTxParams{
-			ID:                 appeal.ID,
+		ReviewRecoveryDisputeWithCompensationTx(gomock.Any(), db.ReviewRecoveryDisputeWithCompensationTxParams{
+			ID:                 recoveryDispute.ID,
 			Status:             "approved",
+			DecisionID:         pgtype.Int8{Int64: decision.ID, Valid: true},
 			ReviewerID:         pgtype.Int8{},
 			ReviewNotes:        pgtype.Text{String: "系统复核发现最新行为判责已不再指向当前申诉方，自动撤销原追偿安排。", Valid: true},
 			CompensationAmount: pgtype.Int8{},
 		}).
 		Times(1).
-		Return(db.ReviewAppealWithCompensationTxResult{
-			Appeal: autoApprovedAppeal,
-			PostProcess: db.GetAppealForPostProcessRow{
-				AppealID:       appeal.ID,
-				ClaimID:        appeal.ClaimID,
-				AppellantType:  "merchant",
-				AppellantID:    merchant.ID,
-				ClaimantUserID: 300,
-				ClaimType:      claim.ClaimType,
-				ClaimAmount:    claim.ClaimAmount,
-				OrderNo:        "20240101120000123456",
+		Return(db.ReviewRecoveryDisputeWithCompensationTxResult{
+			RecoveryDispute: autoApprovedRecoveryDispute,
+			PostProcess: db.GetRecoveryDisputeForPostProcessRow{
+				RecoveryDisputeID: recoveryDispute.ID,
+				ClaimID:           recoveryDispute.ClaimID,
+				AppellantType:     "merchant",
+				AppellantID:       merchant.ID,
+				ClaimantUserID:    300,
+				ClaimType:         claim.ClaimType,
+				ClaimAmount:       claim.ClaimAmount,
+				OrderNo:           "20240101120000123456",
 			},
 		}, nil)
-
-	store.EXPECT().
-		CreateBehaviorAppeal(gomock.Any(), gomock.Any()).
-		Times(1).
-		Return(db.BehaviorAppeal{}, nil)
 
 	store.EXPECT().
 		GetClaimRecoveryByClaimID(gomock.Any(), claim.ID).
@@ -1089,7 +1126,7 @@ func TestCreateMerchantAppealAPI_AutoResolveFailureWithoutTaskDistributorDoesNot
 	store.EXPECT().
 		CreateNotification(gomock.Any(), gomock.Any()).
 		Times(1).
-		Return(db.Notification{ID: 1, UserID: 300, Type: "appeal", Title: "索赔申诉结果通知", Content: "test", CreatedAt: time.Now()}, nil)
+		Return(db.Notification{ID: 1, UserID: 300, Type: "recovery_dispute", Title: "索赔申诉结果通知", Content: "test", CreatedAt: time.Now()}, nil)
 
 	server := newTestServer(t, store)
 	server.SetTaskDistributorForTest(nil)
@@ -1102,7 +1139,7 @@ func TestCreateMerchantAppealAPI_AutoResolveFailureWithoutTaskDistributorDoesNot
 	})
 	require.NoError(t, err)
 
-	request, err := http.NewRequest(http.MethodPost, "/v1/merchant/appeals", bytes.NewReader(body))
+	request, err := http.NewRequest(http.MethodPost, "/v1/merchant/recovery-disputes", bytes.NewReader(body))
 	require.NoError(t, err)
 	request.Header.Set("Content-Type", "application/json")
 	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
@@ -1110,15 +1147,15 @@ func TestCreateMerchantAppealAPI_AutoResolveFailureWithoutTaskDistributorDoesNot
 	server.router.ServeHTTP(recorder, request)
 
 	require.Equal(t, http.StatusCreated, recorder.Code)
-	var response appealResponse
+	var response recoveryDisputeResponse
 	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
-	require.Equal(t, appeal.ID, response.ID)
+	require.Equal(t, recoveryDispute.ID, response.ID)
 	require.Equal(t, "approved", response.Status)
 }
 
 // ====================== Operator Write Routes Removed Tests ======================
 
-func TestOperatorAppealWriteRoutesRemoved(t *testing.T) {
+func TestOperatorRecoveryDisputeWriteRoutesRemoved(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -1129,7 +1166,7 @@ func TestOperatorAppealWriteRoutesRemoved(t *testing.T) {
 		name string
 		path string
 	}{
-		{name: "ReviewRouteRemoved", path: "/v1/operator/appeals/1/review"},
+		{name: "ReviewRouteRemoved", path: "/v1/operator/recovery-disputes/1/review"},
 		{name: "WaiveRouteRemoved", path: "/v1/operator/claims/1/recovery/waive"},
 	}
 
@@ -1148,14 +1185,14 @@ func TestOperatorAppealWriteRoutesRemoved(t *testing.T) {
 	}
 }
 
-func TestDeriveAutomaticAppealResolution_UsesClaimScopedDecision(t *testing.T) {
-	appeal := db.Appeal{
+func TestDeriveAutomaticRecoveryDisputeResolution_UsesClaimScopedDecision(t *testing.T) {
+	recoveryDispute := db.RecoveryDispute{
 		ID:            1,
 		ClaimID:       100,
 		AppellantType: "merchant",
 	}
 
-	resolution := deriveAutomaticAppealResolution(appeal, []db.BehaviorDecision{
+	resolution := deriveAutomaticRecoveryDisputeResolution(recoveryDispute, []db.BehaviorDecision{
 		{
 			ID:                 201,
 			ClaimID:            pgtype.Int8{Int64: 999, Valid: true},
@@ -1176,14 +1213,14 @@ func TestDeriveAutomaticAppealResolution_UsesClaimScopedDecision(t *testing.T) {
 	require.Equal(t, "系统复核确认最新行为判责仍指向当前申诉方，维持原判。", resolution.reviewNotes)
 }
 
-func TestDeriveAutomaticAppealResolution_ApprovesInactiveDecision(t *testing.T) {
-	appeal := db.Appeal{
+func TestDeriveAutomaticRecoveryDisputeResolution_ApprovesInactiveDecision(t *testing.T) {
+	recoveryDispute := db.RecoveryDispute{
 		ID:            2,
 		ClaimID:       101,
 		AppellantType: "rider",
 	}
 
-	resolution := deriveAutomaticAppealResolution(appeal, []db.BehaviorDecision{
+	resolution := deriveAutomaticRecoveryDisputeResolution(recoveryDispute, []db.BehaviorDecision{
 		{
 			ID:               301,
 			ClaimID:          pgtype.Int8{Int64: 101, Valid: true},
@@ -1201,20 +1238,20 @@ func assertAnError(message string) error {
 	return fmt.Errorf("%s", message)
 }
 
-// ====================== List Operator Appeals Tests ======================
+// ====================== List Operator Recovery Disputes Tests ======================
 
-func TestListOperatorAppealsAPI(t *testing.T) {
+func TestListOperatorRecoveryDisputesAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	region := randomRegion()
-	operator := randomAppealOperator(user.ID, region.ID)
+	operator := randomRecoveryDisputeOperator(user.ID, region.ID)
 
-	appeal := db.ListOperatorAppealsRow{
+	recoveryDispute := db.ListOperatorRecoveryDisputesRow{
 		ID:               1,
 		ClaimID:          100,
 		AppellantType:    "merchant",
 		AppellantID:      200,
 		Reason:           "测试申诉理由",
-		Status:           "pending",
+		Status:           "submitted",
 		RegionID:         region.ID,
 		ClaimType:        "missing-item",
 		ClaimAmount:      500,
@@ -1244,17 +1281,17 @@ func TestListOperatorAppealsAPI(t *testing.T) {
 				expectOperatorManagedRegions(store, operator, region.ID)
 
 				store.EXPECT().
-					ListOperatorAppeals(gomock.Any(), db.ListOperatorAppealsParams{
+					ListOperatorRecoveryDisputes(gomock.Any(), db.ListOperatorRecoveryDisputesParams{
 						RegionID: region.ID,
 						Column2:  "",
 						Limit:    10,
 						Offset:   0,
 					}).
 					Times(1).
-					Return([]db.ListOperatorAppealsRow{appeal}, nil)
+					Return([]db.ListOperatorRecoveryDisputesRow{recoveryDispute}, nil)
 
 				store.EXPECT().
-					CountOperatorAppeals(gomock.Any(), db.CountOperatorAppealsParams{
+					CountOperatorRecoveryDisputes(gomock.Any(), db.CountOperatorRecoveryDisputesParams{
 						RegionID: region.ID,
 						Column2:  "",
 					}).
@@ -1267,8 +1304,8 @@ func TestListOperatorAppealsAPI(t *testing.T) {
 				var response map[string]interface{}
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 
-				appeals := response["appeals"].([]interface{})
-				require.Len(t, appeals, 1)
+				disputes := response["disputes"].([]interface{})
+				require.Len(t, disputes, 1)
 			},
 		},
 		{
@@ -1279,26 +1316,26 @@ func TestListOperatorAppealsAPI(t *testing.T) {
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				secondRegion := randomRegion()
-				secondAppeal := appeal
-				secondAppeal.ID = 2
-				secondAppeal.RegionID = secondRegion.ID
-				secondAppeal.CreatedAt = appeal.CreatedAt.Add(-time.Minute)
+				secondRecoveryDispute := recoveryDispute
+				secondRecoveryDispute.ID = 2
+				secondRecoveryDispute.RegionID = secondRegion.ID
+				secondRecoveryDispute.CreatedAt = recoveryDispute.CreatedAt.Add(-time.Minute)
 
 				expectActiveOperatorAuth(store, user.ID, operator)
 				expectOperatorManagedRegions(store, operator, region.ID, secondRegion.ID)
 
 				store.EXPECT().
-					ListOperatorAppeals(gomock.Any(), db.ListOperatorAppealsParams{
+					ListOperatorRecoveryDisputes(gomock.Any(), db.ListOperatorRecoveryDisputesParams{
 						RegionID: region.ID,
 						Column2:  "",
 						Limit:    10,
 						Offset:   0,
 					}).
 					Times(1).
-					Return([]db.ListOperatorAppealsRow{appeal}, nil)
+					Return([]db.ListOperatorRecoveryDisputesRow{recoveryDispute}, nil)
 
 				store.EXPECT().
-					CountOperatorAppeals(gomock.Any(), db.CountOperatorAppealsParams{
+					CountOperatorRecoveryDisputes(gomock.Any(), db.CountOperatorRecoveryDisputesParams{
 						RegionID: region.ID,
 						Column2:  "",
 					}).
@@ -1306,17 +1343,17 @@ func TestListOperatorAppealsAPI(t *testing.T) {
 					Return(int64(1), nil)
 
 				store.EXPECT().
-					ListOperatorAppeals(gomock.Any(), db.ListOperatorAppealsParams{
+					ListOperatorRecoveryDisputes(gomock.Any(), db.ListOperatorRecoveryDisputesParams{
 						RegionID: secondRegion.ID,
 						Column2:  "",
 						Limit:    10,
 						Offset:   0,
 					}).
 					Times(1).
-					Return([]db.ListOperatorAppealsRow{secondAppeal}, nil)
+					Return([]db.ListOperatorRecoveryDisputesRow{secondRecoveryDispute}, nil)
 
 				store.EXPECT().
-					CountOperatorAppeals(gomock.Any(), db.CountOperatorAppealsParams{
+					CountOperatorRecoveryDisputes(gomock.Any(), db.CountOperatorRecoveryDisputesParams{
 						RegionID: secondRegion.ID,
 						Column2:  "",
 					}).
@@ -1326,17 +1363,17 @@ func TestListOperatorAppealsAPI(t *testing.T) {
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
-				var response operatorAppealsListResponse
+				var response operatorRecoveryDisputesListResponse
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
-				require.Len(t, response.Appeals, 2)
+				require.Len(t, response.Disputes, 2)
 				require.Equal(t, int64(2), response.Total)
-				require.Equal(t, appeal.ID, response.Appeals[0].ID)
-				require.Equal(t, int64(2), response.Appeals[1].ID)
+				require.Equal(t, recoveryDispute.ID, response.Disputes[0].ID)
+				require.Equal(t, int64(2), response.Disputes[1].ID)
 			},
 		},
 		{
 			name:  "FilterByStatus",
-			query: "?page_id=1&page_size=10&status=pending",
+			query: "?page_id=1&page_size=10&status=submitted",
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
@@ -1345,19 +1382,19 @@ func TestListOperatorAppealsAPI(t *testing.T) {
 				expectOperatorManagedRegions(store, operator, region.ID)
 
 				store.EXPECT().
-					ListOperatorAppeals(gomock.Any(), db.ListOperatorAppealsParams{
+					ListOperatorRecoveryDisputes(gomock.Any(), db.ListOperatorRecoveryDisputesParams{
 						RegionID: region.ID,
-						Column2:  "pending",
+						Column2:  "submitted",
 						Limit:    10,
 						Offset:   0,
 					}).
 					Times(1).
-					Return([]db.ListOperatorAppealsRow{appeal}, nil)
+					Return([]db.ListOperatorRecoveryDisputesRow{recoveryDispute}, nil)
 
 				store.EXPECT().
-					CountOperatorAppeals(gomock.Any(), db.CountOperatorAppealsParams{
+					CountOperatorRecoveryDisputes(gomock.Any(), db.CountOperatorRecoveryDisputesParams{
 						RegionID: region.ID,
-						Column2:  "pending",
+						Column2:  "submitted",
 					}).
 					Times(1).
 					Return(int64(1), nil)
@@ -1394,7 +1431,7 @@ func TestListOperatorAppealsAPI(t *testing.T) {
 			server := newTestServer(t, store)
 			recorder := httptest.NewRecorder()
 
-			url := "/v1/operator/appeals" + tc.query
+			url := "/v1/operator/recovery-disputes" + tc.query
 			request, err := http.NewRequest(http.MethodGet, url, nil)
 			require.NoError(t, err)
 
@@ -1405,9 +1442,9 @@ func TestListOperatorAppealsAPI(t *testing.T) {
 	}
 }
 
-func TestListOperatorAppealsSummaryAPI(t *testing.T) {
+func TestListOperatorRecoveryDisputesSummaryAPI(t *testing.T) {
 	user, _ := randomUser(t)
-	operator := randomAppealOperator(user.ID, randomRegion().ID)
+	operator := randomRecoveryDisputeOperator(user.ID, randomRegion().ID)
 	secondRegion := randomRegion()
 
 	ctrl := gomock.NewController(t)
@@ -1424,8 +1461,8 @@ func TestListOperatorAppealsSummaryAPI(t *testing.T) {
 	}{
 		{regionID: operator.RegionID, status: "", count: 2},
 		{regionID: secondRegion.ID, status: "", count: 3},
-		{regionID: operator.RegionID, status: "pending", count: 1},
-		{regionID: secondRegion.ID, status: "pending", count: 2},
+		{regionID: operator.RegionID, status: "submitted", count: 1},
+		{regionID: secondRegion.ID, status: "submitted", count: 2},
 		{regionID: operator.RegionID, status: "approved", count: 1},
 		{regionID: secondRegion.ID, status: "approved", count: 0},
 		{regionID: operator.RegionID, status: "rejected", count: 0},
@@ -1434,7 +1471,7 @@ func TestListOperatorAppealsSummaryAPI(t *testing.T) {
 
 	for _, item := range countMatrix {
 		store.EXPECT().
-			CountOperatorAppeals(gomock.Any(), db.CountOperatorAppealsParams{
+			CountOperatorRecoveryDisputes(gomock.Any(), db.CountOperatorRecoveryDisputesParams{
 				RegionID: item.regionID,
 				Column2:  item.status,
 			}).
@@ -1445,17 +1482,17 @@ func TestListOperatorAppealsSummaryAPI(t *testing.T) {
 	server := newTestServer(t, store)
 	recorder := httptest.NewRecorder()
 
-	request, err := http.NewRequest(http.MethodGet, "/v1/operator/appeals/summary", nil)
+	request, err := http.NewRequest(http.MethodGet, "/v1/operator/recovery-disputes/summary", nil)
 	require.NoError(t, err)
 	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 
 	server.router.ServeHTTP(recorder, request)
 	require.Equal(t, http.StatusOK, recorder.Code)
 
-	var response appealSummaryResponse
+	var response recoveryDisputeSummaryResponse
 	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 	require.Equal(t, int64(5), response.Total)
-	require.Equal(t, int64(3), response.Pending)
+	require.Equal(t, int64(3), response.Submitted)
 	require.Equal(t, int64(1), response.Approved)
 	require.Equal(t, int64(1), response.Rejected)
 }
@@ -1568,21 +1605,21 @@ func TestGetMerchantClaimDetailAPI(t *testing.T) {
 	}
 }
 
-// ====================== Get Merchant Appeal Detail Tests ======================
+// ====================== Get Merchant Recovery Dispute Detail Tests ======================
 
-func TestGetMerchantAppealDetailAPI(t *testing.T) {
+func TestGetMerchantRecoveryDisputeDetailAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchant(user.ID)
 	region := randomRegion()
 	merchant.RegionID = region.ID
 
-	appeal := db.GetMerchantAppealDetailRow{
+	recoveryDispute := db.GetMerchantRecoveryDisputeDetailRow{
 		ID:               1,
 		ClaimID:          100,
 		AppellantType:    "merchant",
 		AppellantID:      merchant.ID,
 		Reason:           "订单包装完好",
-		Status:           "pending",
+		Status:           "submitted",
 		RegionID:         region.ID,
 		ClaimType:        "missing-item",
 		ClaimAmount:      500,
@@ -1594,15 +1631,15 @@ func TestGetMerchantAppealDetailAPI(t *testing.T) {
 	}
 
 	testCases := []struct {
-		name          string
-		appealID      int64
-		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
-		buildStubs    func(store *mockdb.MockStore)
-		checkResponse func(recorder *httptest.ResponseRecorder)
+		name              string
+		recoveryDisputeID int64
+		setupAuth         func(t *testing.T, request *http.Request, tokenMaker token.Maker)
+		buildStubs        func(store *mockdb.MockStore)
+		checkResponse     func(recorder *httptest.ResponseRecorder)
 	}{
 		{
-			name:     "OK",
-			appealID: appeal.ID,
+			name:              "OK",
+			recoveryDisputeID: recoveryDispute.ID,
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
@@ -1610,20 +1647,20 @@ func TestGetMerchantAppealDetailAPI(t *testing.T) {
 				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
-					GetMerchantAppealDetail(gomock.Any(), db.GetMerchantAppealDetailParams{
-						ID:          appeal.ID,
+					GetMerchantRecoveryDisputeDetail(gomock.Any(), db.GetMerchantRecoveryDisputeDetailParams{
+						ID:          recoveryDispute.ID,
 						AppellantID: merchant.ID,
 					}).
 					Times(1).
-					Return(appeal, nil)
+					Return(recoveryDispute, nil)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 			},
 		},
 		{
-			name:     "AppealNotFound",
-			appealID: 99999,
+			name:              "RecoveryDisputeNotFound",
+			recoveryDisputeID: 99999,
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
@@ -1631,9 +1668,9 @@ func TestGetMerchantAppealDetailAPI(t *testing.T) {
 				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
-					GetMerchantAppealDetail(gomock.Any(), gomock.Any()).
+					GetMerchantRecoveryDisputeDetail(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.GetMerchantAppealDetailRow{}, db.ErrRecordNotFound)
+					Return(db.GetMerchantRecoveryDisputeDetailRow{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -1654,7 +1691,7 @@ func TestGetMerchantAppealDetailAPI(t *testing.T) {
 			server := newTestServer(t, store)
 			recorder := httptest.NewRecorder()
 
-			url := fmt.Sprintf("/v1/merchant/appeals/%d", tc.appealID)
+			url := fmt.Sprintf("/v1/merchant/recovery-disputes/%d", tc.recoveryDisputeID)
 			request, err := http.NewRequest(http.MethodGet, url, nil)
 			require.NoError(t, err)
 
@@ -1670,7 +1707,7 @@ func TestGetMerchantAppealDetailAPI(t *testing.T) {
 func TestListRiderClaimsAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	region := randomRegion()
-	rider := randomAppealRider(user.ID, region.ID)
+	rider := randomRecoveryDisputeRider(user.ID, region.ID)
 
 	claim := db.ListRiderClaimsForRiderRow{
 		ID:             1,
@@ -1803,20 +1840,20 @@ func TestListRiderClaimsAPI(t *testing.T) {
 	}
 }
 
-// ====================== List Rider Appeals Tests ======================
+// ====================== List Rider Recovery Disputes Tests ======================
 
-func TestListRiderAppealsAPI(t *testing.T) {
+func TestListRiderRecoveryDisputesAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	region := randomRegion()
-	rider := randomAppealRider(user.ID, region.ID)
+	rider := randomRecoveryDisputeRider(user.ID, region.ID)
 
-	appeal := db.ListRiderAppealsRow{
+	recoveryDispute := db.ListRiderRecoveryDisputesRow{
 		ID:               1,
 		ClaimID:          100,
 		AppellantType:    "rider",
 		AppellantID:      rider.ID,
 		Reason:           "恶劣天气导致延迟",
-		Status:           "pending",
+		Status:           "submitted",
 		RegionID:         region.ID,
 		ClaimType:        "delay",
 		ClaimAmount:      300,
@@ -1845,21 +1882,69 @@ func TestListRiderAppealsAPI(t *testing.T) {
 					Return(rider, nil)
 
 				store.EXPECT().
-					ListRiderAppeals(gomock.Any(), db.ListRiderAppealsParams{
+					ListRiderRecoveryDisputes(gomock.Any(), db.ListRiderRecoveryDisputesParams{
 						AppellantID: rider.ID,
+						Status:      pgtype.Text{},
 						Limit:       10,
 						Offset:      0,
 					}).
 					Times(1).
-					Return([]db.ListRiderAppealsRow{appeal}, nil)
+					Return([]db.ListRiderRecoveryDisputesRow{recoveryDispute}, nil)
 
 				store.EXPECT().
-					CountRiderAppeals(gomock.Any(), rider.ID).
+					CountRiderRecoveryDisputes(gomock.Any(), db.CountRiderRecoveryDisputesParams{
+						AppellantID: rider.ID,
+						Status:      pgtype.Text{},
+					}).
 					Times(1).
 					Return(int64(1), nil)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var response recoveryDisputesListResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Len(t, response.Disputes, 1)
+				require.False(t, response.HasMore)
+			},
+		},
+		{
+			name:  "OKWithStatusFilterAndHasMore",
+			query: "?page_id=2&page_size=1&status=submitted",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetRiderByUserID(gomock.Any(), user.ID).
+					Times(1).
+					Return(rider, nil)
+
+				store.EXPECT().
+					ListRiderRecoveryDisputes(gomock.Any(), db.ListRiderRecoveryDisputesParams{
+						AppellantID: rider.ID,
+						Status:      pgtype.Text{String: "submitted", Valid: true},
+						Limit:       1,
+						Offset:      1,
+					}).
+					Times(1).
+					Return([]db.ListRiderRecoveryDisputesRow{recoveryDispute}, nil)
+
+				store.EXPECT().
+					CountRiderRecoveryDisputes(gomock.Any(), db.CountRiderRecoveryDisputesParams{
+						AppellantID: rider.ID,
+						Status:      pgtype.Text{String: "submitted", Valid: true},
+					}).
+					Times(1).
+					Return(int64(3), nil)
+			},
+			checkResponse: func(recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var response recoveryDisputesListResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Len(t, response.Disputes, 1)
+				require.True(t, response.HasMore)
 			},
 		},
 	}
@@ -1877,7 +1962,7 @@ func TestListRiderAppealsAPI(t *testing.T) {
 			server := newTestServer(t, store)
 			recorder := httptest.NewRecorder()
 
-			url := "/v1/rider/appeals" + tc.query
+			url := "/v1/rider/recovery-disputes" + tc.query
 			request, err := http.NewRequest(http.MethodGet, url, nil)
 			require.NoError(t, err)
 
@@ -1888,20 +1973,20 @@ func TestListRiderAppealsAPI(t *testing.T) {
 	}
 }
 
-// ====================== Get Operator Appeal Detail Tests ======================
+// ====================== Get Operator Recovery Dispute Detail Tests ======================
 
-func TestGetOperatorAppealDetailAPI(t *testing.T) {
+func TestGetOperatorRecoveryDisputeDetailAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	region := randomRegion()
-	operator := randomAppealOperator(user.ID, region.ID)
+	operator := randomRecoveryDisputeOperator(user.ID, region.ID)
 
-	appeal := db.GetOperatorAppealDetailRow{
+	recoveryDispute := db.GetOperatorRecoveryDisputeDetailRow{
 		ID:               1,
 		ClaimID:          100,
 		AppellantType:    "merchant",
 		AppellantID:      200,
 		Reason:           "订单包装完好",
-		Status:           "pending",
+		Status:           "submitted",
 		RegionID:         region.ID,
 		ClaimType:        "missing-item",
 		ClaimAmount:      500,
@@ -1918,49 +2003,49 @@ func TestGetOperatorAppealDetailAPI(t *testing.T) {
 	}
 
 	testCases := []struct {
-		name          string
-		appealID      int64
-		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
-		buildStubs    func(store *mockdb.MockStore)
-		checkResponse func(recorder *httptest.ResponseRecorder)
+		name              string
+		recoveryDisputeID int64
+		setupAuth         func(t *testing.T, request *http.Request, tokenMaker token.Maker)
+		buildStubs        func(store *mockdb.MockStore)
+		checkResponse     func(recorder *httptest.ResponseRecorder)
 	}{
 		{
-			name:     "OK",
-			appealID: appeal.ID,
+			name:              "OK",
+			recoveryDisputeID: recoveryDispute.ID,
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				expectActiveOperatorAuth(store, user.ID, operator)
 				store.EXPECT().
-					GetAppeal(gomock.Any(), appeal.ID).
+					GetRecoveryDispute(gomock.Any(), recoveryDispute.ID).
 					Times(1).
-					Return(db.Appeal{ID: appeal.ID, RegionID: operator.RegionID}, nil)
+					Return(db.RecoveryDispute{ID: recoveryDispute.ID, RegionID: operator.RegionID}, nil)
 				expectOperatorManagesRegion(store, operator, operator.RegionID, true)
 				store.EXPECT().
-					GetOperatorAppealDetail(gomock.Any(), db.GetOperatorAppealDetailParams{
-						ID:       appeal.ID,
+					GetOperatorRecoveryDisputeDetail(gomock.Any(), db.GetOperatorRecoveryDisputeDetailParams{
+						ID:       recoveryDispute.ID,
 						RegionID: operator.RegionID,
 					}).
 					Times(1).
-					Return(appeal, nil)
+					Return(recoveryDispute, nil)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 			},
 		},
 		{
-			name:     "AppealNotFound",
-			appealID: 99999,
+			name:              "RecoveryDisputeNotFound",
+			recoveryDisputeID: 99999,
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				expectActiveOperatorAuth(store, user.ID, operator)
 				store.EXPECT().
-					GetAppeal(gomock.Any(), int64(99999)).
+					GetRecoveryDispute(gomock.Any(), int64(99999)).
 					Times(1).
-					Return(db.Appeal{}, db.ErrRecordNotFound)
+					Return(db.RecoveryDispute{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -1981,7 +2066,7 @@ func TestGetOperatorAppealDetailAPI(t *testing.T) {
 			server := newTestServer(t, store)
 			recorder := httptest.NewRecorder()
 
-			url := fmt.Sprintf("/v1/operator/appeals/%d", tc.appealID)
+			url := fmt.Sprintf("/v1/operator/recovery-disputes/%d", tc.recoveryDisputeID)
 			request, err := http.NewRequest(http.MethodGet, url, nil)
 			require.NoError(t, err)
 
@@ -1997,7 +2082,7 @@ func TestGetOperatorAppealDetailAPI(t *testing.T) {
 func TestGetRiderClaimDetailAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	region := randomRegion()
-	rider := randomAppealRider(user.ID, region.ID)
+	rider := randomRecoveryDisputeRider(user.ID, region.ID)
 
 	claim := db.GetRiderClaimDetailForRiderRow{
 		ID:          1,
@@ -2134,7 +2219,7 @@ func TestGetRiderClaimDetailAPI(t *testing.T) {
 func TestGetRiderClaimDecisionAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	region := randomRegion()
-	rider := randomAppealRider(user.ID, region.ID)
+	rider := randomRecoveryDisputeRider(user.ID, region.ID)
 
 	claim := db.GetRiderClaimDetailForRiderRow{
 		ID:          1,
@@ -2267,7 +2352,7 @@ func TestGetRiderClaimDecisionAPI(t *testing.T) {
 func TestGetRiderClaimDecisionAPI_ReadOnlyConsumerDoesNotCreateBehaviorAction(t *testing.T) {
 	user, _ := randomUser(t)
 	region := randomRegion()
-	rider := randomAppealRider(user.ID, region.ID)
+	rider := randomRecoveryDisputeRider(user.ID, region.ID)
 
 	claim := db.GetRiderClaimDetailForRiderRow{
 		ID:          1,
@@ -2380,20 +2465,20 @@ func TestGetMerchantClaimDecisionAPI_ReadOnlyConsumerDoesNotCreateBehaviorAction
 	require.Equal(t, decision.ID, response.Decision.DecisionID)
 }
 
-// ====================== Get Rider Appeal Detail Tests ======================
+// ====================== Get Rider Recovery Dispute Detail Tests ======================
 
-func TestGetRiderAppealDetailAPI(t *testing.T) {
+func TestGetRiderRecoveryDisputeDetailAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	region := randomRegion()
-	rider := randomAppealRider(user.ID, region.ID)
+	rider := randomRecoveryDisputeRider(user.ID, region.ID)
 
-	appeal := db.GetRiderAppealDetailRow{
+	recoveryDispute := db.GetRiderRecoveryDisputeDetailRow{
 		ID:               1,
 		ClaimID:          100,
 		AppellantType:    "rider",
 		AppellantID:      rider.ID,
 		Reason:           "恶劣天气导致延迟",
-		Status:           "pending",
+		Status:           "submitted",
 		RegionID:         region.ID,
 		ClaimType:        "delay",
 		ClaimAmount:      300,
@@ -2405,15 +2490,15 @@ func TestGetRiderAppealDetailAPI(t *testing.T) {
 	}
 
 	testCases := []struct {
-		name          string
-		appealID      int64
-		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
-		buildStubs    func(store *mockdb.MockStore)
-		checkResponse func(recorder *httptest.ResponseRecorder)
+		name              string
+		recoveryDisputeID int64
+		setupAuth         func(t *testing.T, request *http.Request, tokenMaker token.Maker)
+		buildStubs        func(store *mockdb.MockStore)
+		checkResponse     func(recorder *httptest.ResponseRecorder)
 	}{
 		{
-			name:     "OK",
-			appealID: appeal.ID,
+			name:              "OK",
+			recoveryDisputeID: recoveryDispute.ID,
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
@@ -2424,25 +2509,25 @@ func TestGetRiderAppealDetailAPI(t *testing.T) {
 					Return(rider, nil)
 
 				store.EXPECT().
-					GetRiderAppealDetail(gomock.Any(), db.GetRiderAppealDetailParams{
-						ID:          appeal.ID,
+					GetRiderRecoveryDisputeDetail(gomock.Any(), db.GetRiderRecoveryDisputeDetailParams{
+						ID:          recoveryDispute.ID,
 						AppellantID: rider.ID,
 					}).
 					Times(1).
-					Return(appeal, nil)
+					Return(recoveryDispute, nil)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response map[string]interface{}
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
-				require.Equal(t, float64(appeal.ID), response["id"])
+				require.Equal(t, float64(recoveryDispute.ID), response["id"])
 				require.Equal(t, "rider", response["appellant_type"])
 			},
 		},
 		{
-			name:     "AppealNotFound",
-			appealID: 99999,
+			name:              "RecoveryDisputeNotFound",
+			recoveryDisputeID: 99999,
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
@@ -2453,17 +2538,17 @@ func TestGetRiderAppealDetailAPI(t *testing.T) {
 					Return(rider, nil)
 
 				store.EXPECT().
-					GetRiderAppealDetail(gomock.Any(), gomock.Any()).
+					GetRiderRecoveryDisputeDetail(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.GetRiderAppealDetailRow{}, db.ErrRecordNotFound)
+					Return(db.GetRiderRecoveryDisputeDetailRow{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
 			},
 		},
 		{
-			name:     "NotRider",
-			appealID: appeal.ID,
+			name:              "NotRider",
+			recoveryDisputeID: recoveryDispute.ID,
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
@@ -2478,8 +2563,8 @@ func TestGetRiderAppealDetailAPI(t *testing.T) {
 			},
 		},
 		{
-			name:     "InvalidAppealID",
-			appealID: -1, // negative ID
+			name:              "InvalidRecoveryDisputeID",
+			recoveryDisputeID: -1, // negative ID
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
@@ -2490,9 +2575,9 @@ func TestGetRiderAppealDetailAPI(t *testing.T) {
 					Return(rider, nil)
 
 				store.EXPECT().
-					GetRiderAppealDetail(gomock.Any(), gomock.Any()).
+					GetRiderRecoveryDisputeDetail(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.GetRiderAppealDetailRow{}, db.ErrRecordNotFound)
+					Return(db.GetRiderRecoveryDisputeDetailRow{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -2513,7 +2598,7 @@ func TestGetRiderAppealDetailAPI(t *testing.T) {
 			server := newTestServer(t, store)
 			recorder := httptest.NewRecorder()
 
-			url := fmt.Sprintf("/v1/rider/appeals/%d", tc.appealID)
+			url := fmt.Sprintf("/v1/rider/recovery-disputes/%d", tc.recoveryDisputeID)
 			request, err := http.NewRequest(http.MethodGet, url, nil)
 			require.NoError(t, err)
 
@@ -2524,8 +2609,8 @@ func TestGetRiderAppealDetailAPI(t *testing.T) {
 	}
 }
 
-func TestBuildAppealNotificationContent_ApprovedClaimantKeepsExistingPayout(t *testing.T) {
-	title, content := buildAppealNotificationContent(&worker.ProcessAppealResultPayload{
+func TestBuildRecoveryDisputeNotificationContent_ApprovedClaimantKeepsExistingPayout(t *testing.T) {
+	title, content := buildRecoveryDisputeNotificationContent(&worker.ProcessRecoveryDisputeResultPayload{
 		Status:    "approved",
 		OrderNo:   "20240101120000123456",
 		ClaimType: "damage",

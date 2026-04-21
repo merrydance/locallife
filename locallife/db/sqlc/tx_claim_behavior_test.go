@@ -181,14 +181,6 @@ func decodeTraceMetricPayload(t *testing.T, raw []byte) behaviorTraceMetricPaylo
 	return payload
 }
 
-func decodeRecoveryEventPayload(t *testing.T, raw []byte) claimRecoveryEventPayload {
-	t.Helper()
-
-	var payload claimRecoveryEventPayload
-	require.NoError(t, json.Unmarshal(raw, &payload))
-	return payload
-}
-
 func decodeAssociationPayload(t *testing.T, raw []byte) behaviorAssociationPayload {
 	t.Helper()
 
@@ -325,17 +317,17 @@ func TestCreateClaimWithBehaviorTx_MerchantRecoveryWritesV2Artifacts(t *testing.
 
 	actions, err := testStore.ListBehaviorActionsByDecision(ctx, decision.ID)
 	require.NoError(t, err)
-	require.Len(t, actions, 3)
+	require.Len(t, actions, 1)
 	require.NotNil(t, result.PayoutAction)
-	require.NotNil(t, result.RecoveryAction)
-	require.NotNil(t, result.NotificationAction)
+	require.Nil(t, result.RecoveryAction)
+	require.Nil(t, result.NotificationAction)
 	actionByKey := make(map[string]BehaviorAction, len(actions))
 	for _, action := range actions {
 		actionByKey[actionKey(action)] = action
 	}
 	require.Equal(t, result.PayoutAction.ID, actionByKey["payout:user"].ID)
-	require.Equal(t, result.RecoveryAction.ID, actionByKey["recovery:merchant"].ID)
-	require.Equal(t, result.NotificationAction.ID, actionByKey["notify:merchant"].ID)
+	require.NotContains(t, actionByKey, "recovery:merchant")
+	require.NotContains(t, actionByKey, "notify:merchant")
 
 	var payoutDetail behaviorPayoutActionDetail
 	require.NoError(t, json.Unmarshal(actionByKey["payout:user"].Detail, &payoutDetail))
@@ -343,26 +335,6 @@ func TestCreateClaimWithBehaviorTx_MerchantRecoveryWritesV2Artifacts(t *testing.
 	require.Equal(t, approvedAmount, payoutDetail.Amount)
 	require.Equal(t, result.Claim.ID, payoutDetail.ClaimID)
 	require.Equal(t, user.ID, payoutDetail.UserID)
-
-	var recoveryActionDetail behaviorRecoveryActionDetail
-	require.NoError(t, json.Unmarshal(actionByKey["recovery:merchant"].Detail, &recoveryActionDetail))
-	require.Equal(t, "claim_recovery", recoveryActionDetail.Action)
-	require.Equal(t, result.Claim.ID, recoveryActionDetail.ClaimID)
-	require.Equal(t, approvedAmount, recoveryActionDetail.RecoveryAmount)
-	require.Equal(t, "merchant", recoveryActionDetail.TargetEntity)
-	require.Equal(t, merchant.ID, recoveryActionDetail.TargetID)
-	require.Equal(t, ClaimRecoveryBasisMerchantRecovery, recoveryActionDetail.RecoveryBasis)
-
-	var merchantNotifyDetail behaviorNotifyActionDetail
-	require.NoError(t, json.Unmarshal(actionByKey["notify:merchant"].Detail, &merchantNotifyDetail))
-	require.Equal(t, "notify_responsible_party", merchantNotifyDetail.Action)
-	require.Equal(t, result.Claim.ID, merchantNotifyDetail.ClaimID)
-	require.Equal(t, "merchant", merchantNotifyDetail.TargetEntity)
-	require.Equal(t, merchant.ID, merchantNotifyDetail.TargetID)
-	require.Equal(t, merchant.OwnerUserID, merchantNotifyDetail.RecipientUserID)
-	require.Equal(t, "system", merchantNotifyDetail.NotificationType)
-	require.Equal(t, "异常订单判责通知", merchantNotifyDetail.Title)
-	require.Contains(t, merchantNotifyDetail.Content, order.OrderNo)
 
 	snapshots, err := testStore.ListBehaviorTraceSnapshotsByDecision(ctx, decision.ID)
 	require.NoError(t, err)
@@ -442,25 +414,8 @@ func TestCreateClaimWithBehaviorTx_MerchantRecoveryWritesV2Artifacts(t *testing.
 	require.Equal(t, int64(1), effectByKey["merchant:effective_liability_claims"].DeltaValue)
 
 	recovery, err := testStore.GetClaimRecoveryByClaimID(ctx, result.Claim.ID)
-	require.NoError(t, err)
-	require.True(t, recovery.DecisionID.Valid)
-	require.Equal(t, decision.ID, recovery.DecisionID.Int64)
-	require.Equal(t, "merchant", recovery.RecoveryTarget.String)
-	require.Equal(t, ClaimRecoveryBasisMerchantRecovery, recovery.RecoveryBasis.String)
-	require.WithinDuration(t, recoveryDueAt, recovery.DueAt, time.Second)
-	require.JSONEq(t, string(decisionSnapshot), string(recovery.DecisionSnapshot))
-
-	recoveryEvents, err := testStore.ListClaimRecoveryEventsByRecovery(ctx, recovery.ID)
-	require.NoError(t, err)
-	require.Len(t, recoveryEvents, 1)
-	require.Equal(t, ClaimRecoveryEventTypeCreated, recoveryEvents[0].EventType)
-	require.True(t, recoveryEvents[0].DecisionID.Valid)
-	require.Equal(t, decision.ID, recoveryEvents[0].DecisionID.Int64)
-
-	recoveryEventPayload := decodeRecoveryEventPayload(t, recoveryEvents[0].Payload)
-	require.Equal(t, "merchant", recoveryEventPayload.RecoveryTarget)
-	require.Equal(t, ClaimRecoveryBasisMerchantRecovery, recoveryEventPayload.RecoveryBasis)
-	require.Equal(t, approvedAmount, recoveryEventPayload.RecoveryAmount)
+	require.ErrorIs(t, err, ErrRecordNotFound)
+	require.Zero(t, recovery.ID)
 }
 
 func TestCreateClaimWithBehaviorTx_MerchantRecoveryPersistsDeterministicResponsibility(t *testing.T) {
@@ -535,8 +490,8 @@ func TestCreateClaimWithBehaviorTx_MerchantRecoveryPersistsDeterministicResponsi
 	require.Equal(t, int64(1), effectByKey["merchant:effective_liability_claims"].DeltaValue)
 
 	recovery, err := testStore.GetClaimRecoveryByClaimID(ctx, result.Claim.ID)
-	require.NoError(t, err)
-	require.Equal(t, "merchant", recovery.RecoveryTarget.String)
+	require.ErrorIs(t, err, ErrRecordNotFound)
+	require.Zero(t, recovery.ID)
 
 	require.Equal(t, "销售侧异常索赔默认由商户承担责任", decision.TraceSummary.String)
 }
@@ -656,8 +611,8 @@ func TestCreateClaimWithBehaviorTx_RiderRecoveryPersistsWithoutPickupConfirmatio
 	require.Equal(t, int64(1), effectByKey["rider:effective_liability_claims"].DeltaValue)
 
 	recovery, err := testStore.GetClaimRecoveryByClaimID(ctx, result.Claim.ID)
-	require.NoError(t, err)
-	require.Equal(t, "rider", recovery.RecoveryTarget.String)
+	require.ErrorIs(t, err, ErrRecordNotFound)
+	require.Zero(t, recovery.ID)
 
 	require.Equal(t, "rider recovery dual write", decision.TraceSummary.String)
 }
@@ -770,49 +725,26 @@ func TestCreateClaimWithBehaviorTx_RiderRecoveryWritesRiderArtifacts(t *testing.
 	require.Equal(t, int64(1), effectByKey["rider:effective_liability_claims"].DeltaValue)
 
 	recovery, err := testStore.GetClaimRecoveryByClaimID(ctx, result.Claim.ID)
-	require.NoError(t, err)
-	require.True(t, recovery.DecisionID.Valid)
-	require.Equal(t, decision.ID, recovery.DecisionID.Int64)
-	require.Equal(t, "rider", recovery.RecoveryTarget.String)
-	require.Equal(t, ClaimRecoveryBasisRiderRecovery, recovery.RecoveryBasis.String)
-	require.WithinDuration(t, recoveryDueAt, recovery.DueAt, time.Second)
-
-	recoveryEvents, err := testStore.ListClaimRecoveryEventsByRecovery(ctx, recovery.ID)
-	require.NoError(t, err)
-	require.Len(t, recoveryEvents, 1)
-	require.Equal(t, ClaimRecoveryEventTypeCreated, recoveryEvents[0].EventType)
-
-	recoveryEventPayload := decodeRecoveryEventPayload(t, recoveryEvents[0].Payload)
-	require.Equal(t, "rider", recoveryEventPayload.RecoveryTarget)
-	require.Equal(t, ClaimRecoveryBasisRiderRecovery, recoveryEventPayload.RecoveryBasis)
-	require.Equal(t, approvedAmount, recoveryEventPayload.RecoveryAmount)
+	require.ErrorIs(t, err, ErrRecordNotFound)
+	require.Zero(t, recovery.ID)
 
 	actions, err := testStore.ListBehaviorActionsByDecision(ctx, decision.ID)
 	require.NoError(t, err)
-	require.Len(t, actions, 3)
+	require.Len(t, actions, 1)
 	require.NotNil(t, result.PayoutAction)
-	require.NotNil(t, result.RecoveryAction)
-	require.NotNil(t, result.NotificationAction)
+	require.Nil(t, result.RecoveryAction)
+	require.Nil(t, result.NotificationAction)
 	actionByKey := make(map[string]BehaviorAction, len(actions))
 	for _, action := range actions {
 		actionByKey[actionKey(action)] = action
 	}
-	require.Equal(t, result.NotificationAction.ID, actionByKey["notify:rider"].ID)
-	var riderRecoveryActionDetail behaviorRecoveryActionDetail
-	require.NoError(t, json.Unmarshal(actionByKey["recovery:rider"].Detail, &riderRecoveryActionDetail))
-	require.Equal(t, "claim_recovery", riderRecoveryActionDetail.Action)
-	require.Equal(t, result.Claim.ID, riderRecoveryActionDetail.ClaimID)
-	require.Equal(t, recovery.ID, riderRecoveryActionDetail.RecoveryID)
-	require.Equal(t, rider.ID, riderRecoveryActionDetail.TargetID)
-	require.Equal(t, ClaimRecoveryBasisRiderRecovery, riderRecoveryActionDetail.RecoveryBasis)
+	require.Equal(t, result.PayoutAction.ID, actionByKey["payout:user"].ID)
+	require.NotContains(t, actionByKey, "recovery:rider")
+	require.NotContains(t, actionByKey, "notify:rider")
 
-	var riderNotifyDetail behaviorNotifyActionDetail
-	require.NoError(t, json.Unmarshal(actionByKey["notify:rider"].Detail, &riderNotifyDetail))
-	require.Equal(t, "notify_responsible_party", riderNotifyDetail.Action)
-	require.Equal(t, result.Claim.ID, riderNotifyDetail.ClaimID)
-	require.Equal(t, rider.ID, riderNotifyDetail.TargetID)
-	require.Equal(t, rider.UserID, riderNotifyDetail.RecipientUserID)
-	require.Contains(t, riderNotifyDetail.Content, "餐损")
+	recovery, err = testStore.GetClaimRecoveryByClaimID(ctx, result.Claim.ID)
+	require.ErrorIs(t, err, ErrRecordNotFound)
+	require.Zero(t, recovery.ID)
 }
 
 func TestCreateClaimWithBehaviorTx_PromotesUserRestrictedFromHighRiskSignals(t *testing.T) {
@@ -987,11 +919,11 @@ func TestCreateClaimWithBehaviorTx_DoesNotPromoteUserRestrictedWithoutStrongConf
 	require.False(t, decision.UserRiskScore.Valid)
 	require.Contains(t, decision.ReasonCodes, BehaviorDecisionModeMerchantRecovery)
 	require.NotContains(t, decision.ReasonCodes, BehaviorDecisionModeUserRestricted)
-	require.NotNil(t, result.RecoveryAction)
+	require.Nil(t, result.RecoveryAction)
 
 	recovery, err := testStore.GetClaimRecoveryByClaimID(ctx, result.Claim.ID)
-	require.NoError(t, err)
-	require.Equal(t, "merchant", recovery.RecoveryTarget.String)
+	require.ErrorIs(t, err, ErrRecordNotFound)
+	require.Zero(t, recovery.ID)
 }
 
 func TestCreateClaimWithBehaviorTx_UserRestrictedPersistsFormalDecision(t *testing.T) {
@@ -1105,7 +1037,7 @@ func TestCreateClaimWithBehaviorTx_UserRestrictedPersistsFormalDecision(t *testi
 	require.Zero(t, recovery.ID)
 }
 
-func TestCreateClaimCompensationTx_CreatesDeferredMerchantRecoveryArtifacts(t *testing.T) {
+func TestCreateClaimCompensationTx_DefersMerchantRecoveryArtifactsUntilPayoutComplete(t *testing.T) {
 	ctx := context.Background()
 	owner := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, owner.ID)
@@ -1125,6 +1057,7 @@ func TestCreateClaimCompensationTx_CreatesDeferredMerchantRecoveryArtifacts(t *t
 	seedMerchantLiabilityHistoryForClaimBehavior(t, merchant.ID, 2)
 
 	approvedAmount := int64(2600)
+	recoveryDueAt := time.Now().Add(36 * time.Hour).UTC().Truncate(time.Second)
 	submitResult, err := testStore.CreateClaimWithBehaviorTx(ctx, CreateClaimWithBehaviorTxParams{
 		OrderID:            order.ID,
 		UserID:             user.ID,
@@ -1147,6 +1080,7 @@ func TestCreateClaimCompensationTx_CreatesDeferredMerchantRecoveryArtifacts(t *t
 		CreateRecovery:     true,
 		RecoveryTarget:     "merchant",
 		RecoveryAmount:     approvedAmount,
+		RecoveryDueAt:      &recoveryDueAt,
 		DecisionSnapshot:   []byte(`{"phase":"submit"}`),
 		SkipActionCreation: true,
 	})
@@ -1161,26 +1095,23 @@ func TestCreateClaimCompensationTx_CreatesDeferredMerchantRecoveryArtifacts(t *t
 	compensationResult, err := testStore.CreateClaimCompensationTx(ctx, CreateClaimCompensationTxParams{ClaimID: submitResult.Claim.ID})
 	require.NoError(t, err)
 	require.NotNil(t, compensationResult.PayoutAction)
-	require.NotNil(t, compensationResult.RecoveryAction)
+	require.Nil(t, compensationResult.RecoveryAction)
 	require.Nil(t, compensationResult.NotificationAction)
 	require.Nil(t, compensationResult.RestrictionAction)
 
-	recovery, err := testStore.GetClaimRecoveryByClaimID(ctx, submitResult.Claim.ID)
-	require.NoError(t, err)
-	require.Equal(t, "merchant", recovery.RecoveryTarget.String)
-	require.Equal(t, approvedAmount, recovery.RecoveryAmount)
-	require.Equal(t, submitResult.BehaviorDecision.ID, recovery.DecisionID.Int64)
+	_, err = testStore.GetClaimRecoveryByClaimID(ctx, submitResult.Claim.ID)
+	require.ErrorIs(t, err, ErrRecordNotFound)
 
 	actions, err := testStore.ListBehaviorActionsByDecision(ctx, submitResult.BehaviorDecision.ID)
 	require.NoError(t, err)
-	require.Len(t, actions, 2)
+	require.Len(t, actions, 1)
 
 	actionByKey := make(map[string]BehaviorAction, len(actions))
 	for _, action := range actions {
 		actionByKey[actionKey(action)] = action
 	}
 	require.Contains(t, actionByKey, "payout:user")
-	require.Contains(t, actionByKey, "recovery:merchant")
+	require.NotContains(t, actionByKey, "recovery:merchant")
 	require.NotContains(t, actionByKey, "notify:merchant")
 
 	err = testStore.MarkClaimPaid(ctx, MarkClaimPaidParams{
@@ -1194,13 +1125,27 @@ func TestCreateClaimCompensationTx_CreatesDeferredMerchantRecoveryArtifacts(t *t
 
 	finalizeResult, err := testStore.FinalizeClaimCompensationAfterPayoutTx(ctx, FinalizeClaimCompensationAfterPayoutTxParams{ClaimID: submitResult.Claim.ID})
 	require.NoError(t, err)
+	require.NotNil(t, finalizeResult.RecoveryAction)
 	require.NotNil(t, finalizeResult.NotificationAction)
 	require.Nil(t, finalizeResult.RestrictionAction)
+
+	recovery, err := testStore.GetClaimRecoveryByClaimID(ctx, submitResult.Claim.ID)
+	require.NoError(t, err)
+	require.Equal(t, "merchant", recovery.RecoveryTarget.String)
+	require.Equal(t, approvedAmount, recovery.RecoveryAmount)
+	require.Equal(t, submitResult.BehaviorDecision.ID, recovery.DecisionID.Int64)
+	require.WithinDuration(t, recoveryDueAt, recovery.DueAt, time.Second)
+	recoveryEvents, err := testStore.ListClaimRecoveryEventsByRecovery(ctx, recovery.ID)
+	require.NoError(t, err)
+	require.Len(t, recoveryEvents, 2)
+	require.Equal(t, ClaimRecoveryEventTypeCreated, recoveryEvents[0].EventType)
+	require.Equal(t, ClaimRecoveryEventTypePayable, recoveryEvents[1].EventType)
 
 	secondResult, err := testStore.CreateClaimCompensationTx(ctx, CreateClaimCompensationTxParams{ClaimID: submitResult.Claim.ID})
 	require.NoError(t, err)
 	require.Equal(t, compensationResult.PayoutAction.ID, secondResult.PayoutAction.ID)
-	require.Equal(t, compensationResult.RecoveryAction.ID, secondResult.RecoveryAction.ID)
+	require.NotNil(t, secondResult.RecoveryAction)
+	require.Equal(t, finalizeResult.RecoveryAction.ID, secondResult.RecoveryAction.ID)
 	require.Nil(t, secondResult.NotificationAction)
 
 	actions, err = testStore.ListBehaviorActionsByDecision(ctx, submitResult.BehaviorDecision.ID)
@@ -1210,6 +1155,7 @@ func TestCreateClaimCompensationTx_CreatesDeferredMerchantRecoveryArtifacts(t *t
 	for _, action := range actions {
 		actionByKey[actionKey(action)] = action
 	}
+	require.Equal(t, finalizeResult.RecoveryAction.ID, actionByKey["recovery:merchant"].ID)
 	require.Equal(t, finalizeResult.NotificationAction.ID, actionByKey["notify:merchant"].ID)
 }
 

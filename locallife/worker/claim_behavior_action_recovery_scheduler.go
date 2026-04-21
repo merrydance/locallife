@@ -116,6 +116,12 @@ func (s *ClaimBehaviorActionRecoveryScheduler) runOnce(ctx context.Context) {
 	}
 
 	recoverActionType("block", "user", QueueCritical, 10)
+	recoverActionType("block", "merchant", QueueCritical, 10)
+	recoverActionType("block", "rider", QueueCritical, 10)
+	recoverActionType("recovery", "merchant", QueueCritical, 10)
+	recoverActionType("recovery", "rider", QueueCritical, 10)
+	recoverActionType("release", "merchant", QueueCritical, 10)
+	recoverActionType("release", "rider", QueueCritical, 10)
 	recoverActionType("notify", "user", QueueDefault, 5)
 	recoverActionType("notify", "merchant", QueueDefault, 5)
 	recoverActionType("notify", "rider", QueueDefault, 5)
@@ -128,6 +134,18 @@ func isClaimBehaviorActionTerminalFailure(detailBytes []byte, actionType string)
 	switch actionType {
 	case "block":
 		var detail claimRestrictionActionDetail
+		if err := json.Unmarshal(detailBytes, &detail); err != nil {
+			return false
+		}
+		return detail.TerminalFailure
+	case "recovery":
+		var detail claimRecoveryOpenActionDetail
+		if err := json.Unmarshal(detailBytes, &detail); err != nil {
+			return false
+		}
+		return detail.TerminalFailure
+	case "release":
+		var detail claimRecoveryReleaseActionDetail
 		if err := json.Unmarshal(detailBytes, &detail); err != nil {
 			return false
 		}

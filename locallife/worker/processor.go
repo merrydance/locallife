@@ -241,9 +241,9 @@ func (processor *RedisTaskProcessor) Start() error {
 	mux.HandleFunc(TypeCheckMerchantForeignObject, processor.HandleCheckMerchantForeignObject)
 	mux.HandleFunc(TypeCheckRiderDamage, processor.HandleCheckRiderDamage)
 
-	// 申诉处理任务
-	mux.HandleFunc(TaskAutomaticAppealResolution, processor.ProcessTaskAutomaticAppealResolution)
-	mux.HandleFunc(TaskProcessAppealResult, processor.ProcessTaskProcessAppealResult)
+	// 追偿争议处理任务
+	mux.HandleFunc(TaskAutomaticRecoveryDisputeResolution, processor.ProcessTaskAutomaticRecoveryDisputeResolution)
+	mux.HandleFunc(TaskProcessRecoveryDisputeResult, processor.ProcessTaskRecoveryDisputeResult)
 
 	// 索赔退款任务
 	mux.HandleFunc(TaskClaimBehaviorAction, processor.ProcessTaskClaimBehaviorAction)

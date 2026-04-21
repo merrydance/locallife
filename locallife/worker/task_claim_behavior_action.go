@@ -34,6 +34,44 @@ type claimRestrictionActionDetail struct {
 	TerminalFailure   bool   `json:"terminal_failure,omitempty"`
 }
 
+type claimRecoveryBlockActionDetail struct {
+	Action          string    `json:"action"`
+	ClaimID         int64     `json:"claim_id"`
+	RecoveryID      int64     `json:"recovery_id"`
+	TargetEntity    string    `json:"target_entity"`
+	TargetID        int64     `json:"target_id"`
+	SuspendReason   string    `json:"suspend_reason,omitempty"`
+	SuspendUntil    time.Time `json:"suspend_until"`
+	Remark          string    `json:"remark"`
+	LastError       string    `json:"last_error,omitempty"`
+	TerminalFailure bool      `json:"terminal_failure,omitempty"`
+}
+
+type claimRecoveryOpenActionDetail struct {
+	Action          string    `json:"action"`
+	ClaimID         int64     `json:"claim_id"`
+	RecoveryID      int64     `json:"recovery_id"`
+	TargetEntity    string    `json:"target_entity"`
+	TargetID        int64     `json:"target_id,omitempty"`
+	RecoveryBasis   string    `json:"recovery_basis,omitempty"`
+	RecoveryAmount  int64     `json:"recovery_amount"`
+	DueAt           time.Time `json:"due_at"`
+	Remark          string    `json:"remark"`
+	LastError       string    `json:"last_error,omitempty"`
+	TerminalFailure bool      `json:"terminal_failure,omitempty"`
+}
+
+type claimRecoveryReleaseActionDetail struct {
+	Action          string `json:"action"`
+	ClaimID         int64  `json:"claim_id"`
+	RecoveryID      int64  `json:"recovery_id"`
+	OrderID         int64  `json:"order_id"`
+	TargetEntity    string `json:"target_entity"`
+	Remark          string `json:"remark"`
+	LastError       string `json:"last_error,omitempty"`
+	TerminalFailure bool   `json:"terminal_failure,omitempty"`
+}
+
 type claimNotifyActionDetail struct {
 	Action           string `json:"action"`
 	ClaimID          int64  `json:"claim_id"`
@@ -81,12 +119,45 @@ func (processor *RedisTaskProcessor) executeClaimBehaviorAction(ctx context.Cont
 
 	switch action.ActionType {
 	case "block":
-		return processor.executeClaimRestrictionAction(ctx, action)
+		switch action.TargetEntity {
+		case "user":
+			return processor.executeClaimRestrictionAction(ctx, action)
+		case "merchant", "rider":
+			return processor.executeClaimRecoveryBlockAction(ctx, action)
+		default:
+			return nil
+		}
+	case "recovery":
+		switch action.TargetEntity {
+		case "merchant", "rider":
+			return processor.executeClaimRecoveryOpenAction(ctx, action)
+		default:
+			return nil
+		}
+	case "release":
+		switch action.TargetEntity {
+		case "merchant", "rider":
+			return executeClaimRecoveryReleaseAction(ctx, processor.store, action)
+		default:
+			return nil
+		}
 	case "notify":
 		return processor.executeClaimNotificationAction(ctx, action)
 	default:
 		return nil
 	}
+}
+
+func ExecuteClaimReleaseAction(ctx context.Context, store db.Store, actionID int64) error {
+	action, err := store.GetBehaviorAction(ctx, actionID)
+	if err != nil {
+		return fmt.Errorf("get behavior action: %w", err)
+	}
+	return executeClaimRecoveryReleaseActionStrict(ctx, store, action)
+}
+
+func executeClaimRecoveryReleaseActionStrict(ctx context.Context, store db.Store, action db.BehaviorAction) error {
+	return executeClaimRecoveryReleaseActionWithMode(ctx, store, action, true)
 }
 
 func (processor *RedisTaskProcessor) executeClaimRestrictionAction(ctx context.Context, action db.BehaviorAction) error {
@@ -149,7 +220,7 @@ func (processor *RedisTaskProcessor) executeClaimRestrictionAction(ctx context.C
 	}
 
 	blockDays := int64(14)
-	if days := processor.getRejectServiceCooldownDays(ctx); days > 0 {
+	if days := getRejectServiceCooldownDays(ctx, processor.store); days > 0 {
 		blockDays = days
 	}
 	blockUntil := time.Now().AddDate(0, 0, int(blockDays))
@@ -167,6 +238,281 @@ func (processor *RedisTaskProcessor) executeClaimRestrictionAction(ctx context.C
 	}
 
 	return markClaimBehaviorActionSuccess(ctx, processor.store, action.ID, detail)
+}
+
+func (processor *RedisTaskProcessor) executeClaimRecoveryBlockAction(ctx context.Context, action db.BehaviorAction) error {
+	var detail claimRecoveryBlockActionDetail
+	if err := json.Unmarshal(action.Detail, &detail); err != nil {
+		_ = markClaimBehaviorActionFailure(ctx, processor.store, action.ID, claimRecoveryBlockActionDetail{LastError: err.Error(), TerminalFailure: true})
+		return nil
+	}
+	if action.ActionType != "block" {
+		detail.LastError = "invalid claim recovery block action type"
+		detail.TerminalFailure = true
+		_ = markClaimBehaviorActionFailure(ctx, processor.store, action.ID, detail)
+		return nil
+	}
+	if detail.RecoveryID <= 0 || detail.TargetID <= 0 || detail.TargetEntity == "" {
+		detail.LastError = "invalid claim recovery block action detail"
+		detail.TerminalFailure = true
+		_ = markClaimBehaviorActionFailure(ctx, processor.store, action.ID, detail)
+		return nil
+	}
+	if action.Status == "success" || (action.Status == "failed" && detail.TerminalFailure) {
+		return nil
+	}
+
+	if action.Status != "running" {
+		claimed, err := claimBehaviorActionMarkRunning(ctx, processor.store, action, detail)
+		if err != nil {
+			return err
+		}
+		if !claimed {
+			return nil
+		}
+	}
+
+	suspendUntil := pgtype.Timestamptz{Time: detail.SuspendUntil, Valid: !detail.SuspendUntil.IsZero()}
+	switch action.TargetEntity {
+	case "merchant":
+		if err := processor.store.SuspendMerchantTakeout(ctx, db.SuspendMerchantTakeoutParams{
+			MerchantID:           detail.TargetID,
+			TakeoutSuspendReason: pgtype.Text{String: detail.SuspendReason, Valid: detail.SuspendReason != ""},
+			TakeoutSuspendUntil:  suspendUntil,
+		}); err != nil {
+			detail.LastError = err.Error()
+			_ = markClaimBehaviorActionFailure(ctx, processor.store, action.ID, detail)
+			return fmt.Errorf("suspend merchant for claim recovery: %w", err)
+		}
+	case "rider":
+		if err := processor.store.SuspendRider(ctx, db.SuspendRiderParams{
+			RiderID:       detail.TargetID,
+			SuspendReason: pgtype.Text{String: detail.SuspendReason, Valid: detail.SuspendReason != ""},
+			SuspendUntil:  suspendUntil,
+		}); err != nil {
+			detail.LastError = err.Error()
+			_ = markClaimBehaviorActionFailure(ctx, processor.store, action.ID, detail)
+			return fmt.Errorf("suspend rider for claim recovery: %w", err)
+		}
+	default:
+		detail.LastError = "invalid claim recovery block target"
+		detail.TerminalFailure = true
+		_ = markClaimBehaviorActionFailure(ctx, processor.store, action.ID, detail)
+		return nil
+	}
+
+	return markClaimBehaviorActionSuccess(ctx, processor.store, action.ID, detail)
+}
+
+func (processor *RedisTaskProcessor) executeClaimRecoveryOpenAction(ctx context.Context, action db.BehaviorAction) error {
+	var detail claimRecoveryOpenActionDetail
+	if err := json.Unmarshal(action.Detail, &detail); err != nil {
+		_ = markClaimBehaviorActionFailure(ctx, processor.store, action.ID, claimRecoveryOpenActionDetail{LastError: err.Error(), TerminalFailure: true})
+		return nil
+	}
+	if action.ActionType != "recovery" {
+		detail.LastError = "invalid claim recovery open action type"
+		detail.TerminalFailure = true
+		_ = markClaimBehaviorActionFailure(ctx, processor.store, action.ID, detail)
+		return nil
+	}
+	if detail.ClaimID <= 0 || detail.RecoveryID <= 0 || detail.TargetEntity == "" || action.TargetEntity != detail.TargetEntity || detail.RecoveryAmount <= 0 {
+		detail.LastError = "invalid claim recovery open action detail"
+		detail.TerminalFailure = true
+		_ = markClaimBehaviorActionFailure(ctx, processor.store, action.ID, detail)
+		return nil
+	}
+	if action.Status == "success" || (action.Status == "failed" && detail.TerminalFailure) {
+		return nil
+	}
+
+	if action.Status != "running" {
+		claimed, err := claimBehaviorActionMarkRunning(ctx, processor.store, action, detail)
+		if err != nil {
+			return err
+		}
+		if !claimed {
+			return nil
+		}
+	}
+
+	recovery, err := processor.store.GetClaimRecoveryByClaimID(ctx, detail.ClaimID)
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			detail.LastError = fmt.Sprintf("claim recovery for claim %d not found", detail.ClaimID)
+			detail.TerminalFailure = true
+			_ = markClaimBehaviorActionFailure(ctx, processor.store, action.ID, detail)
+			return nil
+		}
+		detail.LastError = err.Error()
+		_ = markClaimBehaviorActionFailure(ctx, processor.store, action.ID, detail)
+		return fmt.Errorf("get claim recovery for open action: %w", err)
+	}
+	if err := validateClaimRecoveryOpenAction(detail, recovery); err != nil {
+		detail.LastError = err.Error()
+		detail.TerminalFailure = true
+		_ = markClaimBehaviorActionFailure(ctx, processor.store, action.ID, detail)
+		return nil
+	}
+	if err := ensureClaimRecoveryOpenEvents(ctx, processor.store, recovery, detail); err != nil {
+		detail.LastError = err.Error()
+		_ = markClaimBehaviorActionFailure(ctx, processor.store, action.ID, detail)
+		return fmt.Errorf("ensure claim recovery open events: %w", err)
+	}
+
+	return markClaimBehaviorActionSuccess(ctx, processor.store, action.ID, detail)
+}
+
+func validateClaimRecoveryOpenAction(detail claimRecoveryOpenActionDetail, recovery db.ClaimRecovery) error {
+	if recovery.ID != detail.RecoveryID {
+		return fmt.Errorf("claim recovery %d does not match open action recovery %d", recovery.ID, detail.RecoveryID)
+	}
+	if !recovery.RecoveryTarget.Valid || recovery.RecoveryTarget.String != detail.TargetEntity {
+		return fmt.Errorf("claim recovery %d target %q does not match open action target %q", recovery.ID, recovery.RecoveryTarget.String, detail.TargetEntity)
+	}
+	if recovery.RecoveryAmount != detail.RecoveryAmount {
+		return fmt.Errorf("claim recovery %d amount %d does not match open action amount %d", recovery.ID, recovery.RecoveryAmount, detail.RecoveryAmount)
+	}
+	if detail.RecoveryBasis != "" && (!recovery.RecoveryBasis.Valid || recovery.RecoveryBasis.String != detail.RecoveryBasis) {
+		return fmt.Errorf("claim recovery %d basis %q does not match open action basis %q", recovery.ID, recovery.RecoveryBasis.String, detail.RecoveryBasis)
+	}
+	if !detail.DueAt.IsZero() && !recovery.DueAt.UTC().Truncate(time.Second).Equal(detail.DueAt.UTC().Truncate(time.Second)) {
+		return fmt.Errorf("claim recovery %d due_at %s does not match open action due_at %s", recovery.ID, recovery.DueAt.UTC().Format(time.RFC3339), detail.DueAt.UTC().Format(time.RFC3339))
+	}
+	return nil
+}
+
+func ensureClaimRecoveryOpenEvents(ctx context.Context, store db.Store, recovery db.ClaimRecovery, detail claimRecoveryOpenActionDetail) error {
+	events, err := store.ListClaimRecoveryEventsByRecovery(ctx, recovery.ID)
+	if err != nil {
+		return fmt.Errorf("list claim recovery events: %w", err)
+	}
+
+	hasCreated := false
+	hasPayable := false
+	for _, event := range events {
+		switch event.EventType {
+		case db.ClaimRecoveryEventTypeCreated:
+			hasCreated = true
+		case db.ClaimRecoveryEventTypePayable:
+			hasPayable = true
+		}
+	}
+
+	payload := map[string]any{
+		"recovery_target": detail.TargetEntity,
+		"recovery_basis":  detail.RecoveryBasis,
+		"recovery_amount": detail.RecoveryAmount,
+	}
+	if !hasCreated {
+		if err := db.WriteClaimRecoveryEvent(ctx, store, recovery, db.ClaimRecoveryEventTypeCreated, payload); err != nil {
+			return err
+		}
+	}
+	if !hasPayable {
+		if err := db.WriteClaimRecoveryEvent(ctx, store, recovery, db.ClaimRecoveryEventTypePayable, payload); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func executeClaimRecoveryReleaseAction(ctx context.Context, store db.Store, action db.BehaviorAction) error {
+	return executeClaimRecoveryReleaseActionWithMode(ctx, store, action, false)
+}
+
+func executeClaimRecoveryReleaseActionWithMode(ctx context.Context, store db.Store, action db.BehaviorAction, strict bool) error {
+	var detail claimRecoveryReleaseActionDetail
+	if err := json.Unmarshal(action.Detail, &detail); err != nil {
+		_ = markClaimBehaviorActionFailure(ctx, store, action.ID, claimRecoveryReleaseActionDetail{LastError: err.Error(), TerminalFailure: true})
+		if strict {
+			return fmt.Errorf("unmarshal claim recovery release action detail: %w", err)
+		}
+		return nil
+	}
+	if action.ActionType != "release" {
+		detail.LastError = "invalid claim recovery release action type"
+		detail.TerminalFailure = true
+		_ = markClaimBehaviorActionFailure(ctx, store, action.ID, detail)
+		if strict {
+			return errors.New(detail.LastError)
+		}
+		return nil
+	}
+	if detail.RecoveryID <= 0 || detail.OrderID <= 0 || detail.TargetEntity == "" || action.TargetEntity != detail.TargetEntity {
+		detail.LastError = "invalid claim recovery release action detail"
+		detail.TerminalFailure = true
+		_ = markClaimBehaviorActionFailure(ctx, store, action.ID, detail)
+		if strict {
+			return errors.New(detail.LastError)
+		}
+		return nil
+	}
+	if action.Status == "success" {
+		return nil
+	}
+	if action.Status == "failed" && detail.TerminalFailure {
+		if strict {
+			if detail.LastError != "" {
+				return fmt.Errorf("claim recovery release action %d already failed terminally: %s", action.ID, detail.LastError)
+			}
+			return fmt.Errorf("claim recovery release action %d already failed terminally", action.ID)
+		}
+		return nil
+	}
+
+	if action.Status != "running" {
+		claimed, err := claimBehaviorActionMarkRunning(ctx, store, action, detail)
+		if err != nil {
+			return err
+		}
+		if !claimed {
+			return nil
+		}
+	}
+
+	if err := db.ReleaseClaimRecoverySuspensionIfClear(ctx, store, db.ClaimRecovery{
+		ID:      detail.RecoveryID,
+		ClaimID: detail.ClaimID,
+		OrderID: detail.OrderID,
+		RecoveryTarget: pgtype.Text{
+			String: detail.TargetEntity,
+			Valid:  true,
+		},
+	}); err != nil {
+		detail.LastError = err.Error()
+		_ = markClaimBehaviorActionFailure(ctx, store, action.ID, detail)
+		return fmt.Errorf("release claim recovery suspension: %w", err)
+	}
+
+	recovery, err := store.GetClaimRecoveryByClaimID(ctx, detail.ClaimID)
+	if err != nil {
+		detail.LastError = err.Error()
+		_ = markClaimBehaviorActionFailure(ctx, store, action.ID, detail)
+		return fmt.Errorf("get claim recovery for release action: %w", err)
+	}
+	if recovery.ID != detail.RecoveryID {
+		detail.LastError = fmt.Sprintf("claim recovery %d does not match release action recovery %d", recovery.ID, detail.RecoveryID)
+		_ = markClaimBehaviorActionFailure(ctx, store, action.ID, detail)
+		if strict {
+			return errors.New(detail.LastError)
+		}
+		return nil
+	}
+	if err := db.WriteClaimRecoveryClosedEventIfAbsent(ctx, store, recovery, map[string]any{
+		"claim_id":          recovery.ClaimID,
+		"recovery_target":   recovery.RecoveryTarget.String,
+		"recovery_amount":   recovery.RecoveryAmount,
+		"status":            recovery.Status,
+		"release_action_id": action.ID,
+	}); err != nil {
+		detail.LastError = err.Error()
+		_ = markClaimBehaviorActionFailure(ctx, store, action.ID, detail)
+		return fmt.Errorf("write claim recovery closed event: %w", err)
+	}
+
+	return markClaimBehaviorActionSuccess(ctx, store, action.ID, detail)
 }
 
 func (processor *RedisTaskProcessor) executeClaimNotificationAction(ctx context.Context, action db.BehaviorAction) error {

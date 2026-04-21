@@ -1274,66 +1274,6 @@ func (server *Server) SuspendMerchant(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, successMessage(fmt.Sprintf("商户 %d 已熔断 %d 小时", merchantID, req.DurationHours)))
 }
 
-// ResumeMerchantRequest 恢复商户请求
-type ResumeMerchantRequest struct {
-	Reason string `json:"reason" binding:"required,min=5,max=500"`
-}
-
-// ResumeMerchant 恢复商户上线（运营商）
-func (server *Server) ResumeMerchant(ctx *gin.Context) {
-	merchantIDStr := ctx.Param("id")
-	merchantID, err := strconv.ParseInt(merchantIDStr, 10, 64)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
-		return
-	}
-
-	var req ResumeMerchantRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
-		return
-	}
-
-	// 获取商户信息以验证区域
-	merchant, err := server.store.GetMerchant(ctx, merchantID)
-	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get merchant %d: %w", merchantID, err)))
-		return
-	}
-
-	// 验证 operator 是否管理该商户的区域
-	if _, err := server.checkOperatorManagesRegion(ctx, merchant.RegionID); err != nil {
-		ctx.JSON(http.StatusForbidden, errorResponse(err))
-		return
-	}
-
-	if err = server.store.UnsuspendMerchant(ctx, merchantID); err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("unsuspend merchant %d: %w", merchantID, err)))
-		return
-	}
-
-	if err = server.store.UnsuspendMerchantTakeout(ctx, merchantID); err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("unsuspend merchant takeout %d: %w", merchantID, err)))
-		return
-	}
-
-	// 更新商户状态为正常
-	_, err = server.store.UpdateMerchantStatus(ctx, db.UpdateMerchantStatusParams{
-		ID:     merchantID,
-		Status: "active",
-	})
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("resume merchant %d: %w", merchantID, err)))
-		return
-	}
-
-	ctx.JSON(http.StatusOK, successMessage(fmt.Sprintf("商户 %d 已恢复上线", merchantID)))
-}
-
 // SuspendRiderRequest 暂停骑手请求
 type SuspendRiderRequest struct {
 	Reason        string `json:"reason" binding:"required,min=5,max=500"`
@@ -1391,64 +1331,6 @@ func (server *Server) SuspendRider(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, riderSuspendResponse{Message: fmt.Sprintf("骑手 %d 已暂停 %d 小时", riderID, req.DurationHours), Reason: req.Reason, DurationHours: req.DurationHours})
-}
-
-// ResumeRiderRequest 恢复骑手请求
-type ResumeRiderRequest struct {
-	Reason string `json:"reason" binding:"required,min=5,max=500"`
-}
-
-// ResumeRider 恢复骑手上线（运营商）
-func (server *Server) ResumeRider(ctx *gin.Context) {
-	riderIDStr := ctx.Param("id")
-	riderID, err := strconv.ParseInt(riderIDStr, 10, 64)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
-		return
-	}
-
-	var req ResumeRiderRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
-		return
-	}
-
-	// 获取骑手信息以验证区域
-	rider, err := server.store.GetRider(ctx, riderID)
-	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("rider not found")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get rider %d: %w", riderID, err)))
-		return
-	}
-
-	// 验证骑手有区域且 operator 管理该区域
-	if !rider.RegionID.Valid {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("rider has no assigned region")))
-		return
-	}
-	if _, err := server.checkOperatorManagesRegion(ctx, rider.RegionID.Int64); err != nil {
-		ctx.JSON(http.StatusForbidden, errorResponse(err))
-		return
-	}
-
-	// 恢复后先回到 approved，再按押金阈值统一收敛为 approved/active。
-	restoredRider, err := server.store.UpdateRiderStatus(ctx, db.UpdateRiderStatusParams{
-		ID:     riderID,
-		Status: db.RiderStatusApproved,
-	})
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("resume rider %d: %w", riderID, err)))
-		return
-	}
-	if _, err = db.ReconcileRiderOperationalStatus(ctx, server.store, restoredRider); err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("reconcile resumed rider %d: %w", riderID, err)))
-		return
-	}
-
-	ctx.JSON(http.StatusOK, successMessage(fmt.Sprintf("骑手 %d 已恢复上线", riderID)))
 }
 
 // ==================== 用户索赔查询 API ====================
@@ -1523,6 +1405,17 @@ func (server *Server) enqueueClaimCompensationActions(ctx context.Context, resul
 			asynq.MaxRetry(10),
 		); err != nil {
 			return fmt.Errorf("enqueue claim restriction action %d: %w", result.RestrictionAction.ID, err)
+		}
+	}
+
+	if result.RecoveryAction != nil {
+		if err := server.taskDistributor.DistributeTaskClaimBehaviorAction(
+			ctx,
+			&worker.ClaimBehaviorActionPayload{ActionID: result.RecoveryAction.ID},
+			asynq.Queue(worker.QueueCritical),
+			asynq.MaxRetry(10),
+		); err != nil {
+			return fmt.Errorf("enqueue claim recovery action %d: %w", result.RecoveryAction.ID, err)
 		}
 	}
 

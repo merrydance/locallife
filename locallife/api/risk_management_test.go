@@ -1578,6 +1578,29 @@ func TestConfirmContinueClaimAPI_TriggersDeferredCompensation(t *testing.T) {
 	require.Equal(t, int64(1500), *resp.ApprovedAmount)
 }
 
+func TestEnqueueClaimCompensationActions_EnqueuesRecoveryBeforeNotificationAndPayout(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	taskDistributor := mockworker.NewMockTaskDistributor(ctrl)
+	server := newTestServerWithTaskDistributor(t, store, taskDistributor)
+	result := db.CreateClaimCompensationTxResult{
+		RecoveryAction:     &db.BehaviorAction{ID: 3101},
+		NotificationAction: &db.BehaviorAction{ID: 3102},
+		PayoutAction:       &db.BehaviorAction{ID: 3103},
+	}
+
+	gomock.InOrder(
+		taskDistributor.EXPECT().DistributeTaskClaimBehaviorAction(gomock.Any(), &worker.ClaimBehaviorActionPayload{ActionID: 3101}, gomock.Any(), gomock.Any()).Return(nil),
+		taskDistributor.EXPECT().DistributeTaskClaimBehaviorAction(gomock.Any(), &worker.ClaimBehaviorActionPayload{ActionID: 3102}, gomock.Any(), gomock.Any()).Return(nil),
+		taskDistributor.EXPECT().DistributeTaskClaimPayout(gomock.Any(), &worker.ClaimPayoutPayload{ActionID: 3103}, gomock.Any(), gomock.Any()).Return(nil),
+	)
+
+	err := server.enqueueClaimCompensationActions(context.Background(), result)
+	require.NoError(t, err)
+}
+
 func TestConfirmContinueClaimAPI_ReturnsProcessingWhenEnqueueFailsAfterPersistence(t *testing.T) {
 	user, _ := randomUser(t)
 	now := time.Now()

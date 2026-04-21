@@ -102,6 +102,39 @@ func TestProcessTaskRefundResult_RiderDepositDeleteReceiverWhenBalanceZero(t *te
 	require.NoError(t, err)
 }
 
+func TestProcessTaskPaymentSuccess_ClaimRecoveryReleaseFailureEnqueuesBehaviorActionRetry(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	distributor := mockwk.NewMockTaskDistributor(ctrl)
+	processor := worker.NewTestTaskProcessor(store, distributor, nil, nil)
+
+	releaseAction := &db.BehaviorAction{ID: 81}
+	paymentOrder := db.PaymentOrder{
+		ID:           551,
+		UserID:       77,
+		BusinessType: "claim_recovery",
+	}
+
+	store.EXPECT().
+		ProcessPaymentSuccessTx(gomock.Any(), gomock.Any()).
+		Return(db.ProcessPaymentSuccessTxResult{Processed: true, PaymentOrder: paymentOrder, ReleaseAction: releaseAction}, nil)
+	store.EXPECT().GetBehaviorAction(gomock.Any(), releaseAction.ID).Return(db.BehaviorAction{}, errors.New("release unavailable"))
+	distributor.EXPECT().
+		DistributeTaskClaimBehaviorAction(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, payload *worker.ClaimBehaviorActionPayload, _ ...asynq.Option) error {
+			require.Equal(t, releaseAction.ID, payload.ActionID)
+			return nil
+		})
+
+	payload, err := json.Marshal(worker.PaymentSuccessPayload{PaymentOrderID: paymentOrder.ID, BusinessType: paymentOrder.BusinessType})
+	require.NoError(t, err)
+
+	err = processor.ProcessTaskPaymentSuccess(context.Background(), asynq.NewTask(worker.TaskProcessPaymentSuccess, payload))
+	require.NoError(t, err)
+}
+
 // ==================== ProcessTaskApplymentResult Tests ====================
 
 func TestProcessTaskApplymentResult_Success(t *testing.T) {

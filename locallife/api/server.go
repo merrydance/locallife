@@ -1017,7 +1017,7 @@ func (server *Server) setupRouter() {
 		kitchenGroup.POST("/orders/:id/ready", server.markKitchenOrderReady)
 	}
 
-	// 商户索赔与申诉路由
+	// 商户索赔与追偿争议路由
 	merchantClaimsGroup := authGroup.Group("/merchant")
 	{
 		merchantClaimsGroup.GET("/claims", server.listMerchantClaims)
@@ -1025,12 +1025,12 @@ func (server *Server) setupRouter() {
 		merchantClaimsGroup.GET("/claims/:id", server.getMerchantClaimDetail)
 		merchantClaimsGroup.GET("/claims/:id/decision", server.getMerchantClaimDecision)
 		merchantClaimsGroup.GET("/claims/behavior-summary", server.getMerchantClaimBehaviorSummary)
-		merchantClaimsGroup.GET("/claims/:id/recovery", server.getMerchantClaimRecovery)
-		merchantClaimsGroup.POST("/claims/:id/recovery/pay", server.payMerchantClaimRecovery)
-		merchantClaimsGroup.POST("/appeals", server.createMerchantAppeal)
-		merchantClaimsGroup.GET("/appeals", server.listMerchantAppeals)
-		merchantClaimsGroup.GET("/appeals/summary", server.listMerchantAppealsSummary)
-		merchantClaimsGroup.GET("/appeals/:id", server.getMerchantAppealDetail)
+		merchantClaimsGroup.GET("/recoveries/:id", server.getMerchantClaimRecovery)
+		merchantClaimsGroup.POST("/recoveries/:id/pay", server.payMerchantClaimRecovery)
+		merchantClaimsGroup.POST("/recovery-disputes", server.createMerchantRecoveryDispute)
+		merchantClaimsGroup.GET("/recovery-disputes", server.listMerchantRecoveryDisputes)
+		merchantClaimsGroup.GET("/recovery-disputes/summary", server.listMerchantRecoveryDisputesSummary)
+		merchantClaimsGroup.GET("/recovery-disputes/:id", server.getMerchantRecoveryDisputeDetail)
 	}
 
 	merchantRiskGroup := authGroup.Group("/merchant/risk")
@@ -1088,17 +1088,17 @@ func (server *Server) setupRouter() {
 		// 位置上报
 		riderGroup.POST("/location", server.updateRiderLocation)
 
-		// 骑手索赔与申诉
+		// 骑手索赔与追偿争议
 		riderGroup.GET("/claims", server.listRiderClaims)
 		riderGroup.GET("/claims/summary", server.listRiderClaimsSummary)
 		riderGroup.GET("/claims/:id", server.getRiderClaimDetail)
 		riderGroup.GET("/claims/:id/decision", server.getRiderClaimDecision)
 		riderGroup.GET("/claims/behavior-summary", server.getRiderClaimBehaviorSummary)
-		riderGroup.GET("/claims/:id/recovery", server.getRiderClaimRecovery)
-		riderGroup.POST("/claims/:id/recovery/pay", server.payRiderClaimRecovery)
-		riderGroup.POST("/appeals", server.createRiderAppeal)
-		riderGroup.GET("/appeals", server.listRiderAppeals)
-		riderGroup.GET("/appeals/:id", server.getRiderAppealDetail)
+		riderGroup.GET("/recoveries/:id", server.getRiderClaimRecovery)
+		riderGroup.POST("/recoveries/:id/pay", server.payRiderClaimRecovery)
+		riderGroup.POST("/recovery-disputes", server.createRiderRecoveryDispute)
+		riderGroup.GET("/recovery-disputes", server.listRiderRecoveryDisputes)
+		riderGroup.GET("/recovery-disputes/:id", server.getRiderRecoveryDisputeDetail)
 	}
 
 	// M8: 配送管理路由
@@ -1286,40 +1286,32 @@ func (server *Server) setupRouter() {
 		// 高峰时段删除（handler 内部验证区域）
 		operatorStatsGroup.DELETE("/peak-hours/:id", server.deletePeakHourConfig)
 
-		// 商户管理（完整CRUD + 暂停/恢复）
+		// 商户管理（只读与能力配置；恢复由追偿/食安链路收口）
 		operatorStatsGroup.GET("/merchants", server.listOperatorMerchants)
 		operatorStatsGroup.GET("/merchants/summary", server.getOperatorMerchantSummary)
 		operatorStatsGroup.GET("/merchants/:id", server.getOperatorMerchant)
 		operatorStatsGroup.GET("/merchants/:id/capabilities", server.getOperatorMerchantCapabilities)
 		operatorStatsGroup.PATCH("/merchants/:id/capabilities", server.updateOperatorMerchantCapabilities)
 		operatorStatsGroup.GET("/merchants/:id/stats", server.getOperatorMerchantStats)
-		operatorStatsGroup.POST("/merchants/:id/resume", server.ResumeMerchant)
 
-		// 骑手管理（完整CRUD + 暂停/恢复）
+		// 骑手管理（规则驱动：运营商不提供暂停/恢复入口）
 		operatorStatsGroup.GET("/riders", server.listOperatorRiders)
 		operatorStatsGroup.GET("/riders/summary", server.getOperatorRiderSummary)
 		operatorStatsGroup.GET("/riders/:id", server.getOperatorRider)
 		operatorStatsGroup.GET("/riders/:id/stats", server.getOperatorRiderStats)
 		// 规则驱动：运营商不提供暂停/恢复入口
 
-		// 申诉处理（运营商审核商户/骑手申诉）
-		// operatorStatsGroup.GET("/appeals", server.listOperatorAppeals) // Already exists or covered by our new file
-		// If collision, we will use our new one or check grep result.
-		// Assuming we simply add our new specific ones or keep existing if same name.
-		// Actually, let's wait for grep result in next turn to decide on 'listOperatorAppeals'.
-		// But I need to output something here.
-		// I will just add the safe ones for now: realtime and safety report.
-		// And withdraw.
+		// 追偿争议处理（运营商查看区域内商户/骑手追偿争议）
 
 		operatorStatsGroup.GET("/food-safety/cases", server.listOperatorFoodSafetyCases)
 		operatorStatsGroup.GET("/food-safety/cases/:id", server.getOperatorFoodSafetyCase)
 		operatorStatsGroup.POST("/food-safety/cases/:id/investigate", server.investigateOperatorFoodSafetyCase)
 		operatorStatsGroup.POST("/food-safety/cases/:id/resolve", server.resolveOperatorFoodSafetyCase)
 
-		operatorStatsGroup.GET("/appeals", server.listOperatorAppeals)
-		operatorStatsGroup.GET("/appeals/summary", server.listOperatorAppealsSummary)
-		operatorStatsGroup.GET("/appeals/:id", server.getOperatorAppealDetail)
-		operatorStatsGroup.GET("/claims/:id/recovery", server.getOperatorClaimRecovery)
+		operatorStatsGroup.GET("/recovery-disputes", server.listOperatorRecoveryDisputes)
+		operatorStatsGroup.GET("/recovery-disputes/summary", server.listOperatorRecoveryDisputesSummary)
+		operatorStatsGroup.GET("/recovery-disputes/:id", server.getOperatorRecoveryDisputeDetail)
+		operatorStatsGroup.GET("/recoveries/:id", server.getOperatorClaimRecovery)
 
 		// 规则管理
 		operatorStatsGroup.GET("/rules", server.listOperatorRules)

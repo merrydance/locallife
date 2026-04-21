@@ -53,9 +53,9 @@ const (
 	// P1-005 修复：配送确认定位最大时效（秒）
 	DeliveryConfirmLocationMaxAgeSec = 120 // 2分钟
 
-	// Appeal Constants (申诉相关常量)
-	// P1-010 修复：申诉有效期窗口
-	AppealWindowDays = 7 // 索赔后7天内可申诉
+	// Recovery dispute constants (追偿争议相关常量)
+	// P1-010 修复：追偿争议有效期窗口
+	RecoveryDisputeWindowDays = 7 // 索赔后7天内可发起追偿争议
 
 	// Reservation Constants (预订相关常量)
 	// P1-023 修复：签到时间窗口

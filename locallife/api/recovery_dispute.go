@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 	"sort"
@@ -18,8 +17,8 @@ import (
 )
 
 // =============================================================================
-// Appeal API Handlers
-// 申诉功能 - 商户/骑手对索赔的申诉
+// Recovery Dispute API Handlers
+// 追偿争议功能 - 商户/骑手对平台追偿提出争议
 // =============================================================================
 
 // ========================= Helper Functions ============================
@@ -54,7 +53,7 @@ func (server *Server) getRiderFromUserID(ctx *gin.Context, userID int64) (db.Rid
 
 // ========================= Common Types ============================
 
-type appealResponse struct {
+type recoveryDisputeResponse struct {
 	ID                 int64      `json:"id"`
 	ClaimID            int64      `json:"claim_id"`
 	AppellantType      string     `json:"appellant_type"`
@@ -70,68 +69,68 @@ type appealResponse struct {
 	CreatedAt          time.Time  `json:"created_at"`
 }
 
-func newAppealResponse(a db.Appeal) appealResponse {
-	resp := appealResponse{
-		ID:            a.ID,
-		ClaimID:       a.ClaimID,
-		AppellantType: a.AppellantType,
-		AppellantID:   a.AppellantID,
-		Reason:        a.Reason,
-		Status:        a.Status,
-		RegionID:      a.RegionID,
-		CreatedAt:     a.CreatedAt,
+func newRecoveryDisputeResponse(recoveryDispute db.RecoveryDispute) recoveryDisputeResponse {
+	resp := recoveryDisputeResponse{
+		ID:            recoveryDispute.ID,
+		ClaimID:       recoveryDispute.ClaimID,
+		AppellantType: recoveryDispute.AppellantType,
+		AppellantID:   recoveryDispute.AppellantID,
+		Reason:        recoveryDispute.Reason,
+		Status:        recoveryDispute.Status,
+		RegionID:      recoveryDispute.RegionID,
+		CreatedAt:     recoveryDispute.CreatedAt,
 	}
-	if a.ReviewerID.Valid {
-		resp.ReviewerID = &a.ReviewerID.Int64
+	if recoveryDispute.ReviewerID.Valid {
+		resp.ReviewerID = &recoveryDispute.ReviewerID.Int64
 	}
-	if a.ReviewNotes.Valid {
-		resp.ReviewNotes = &a.ReviewNotes.String
+	if recoveryDispute.ReviewNotes.Valid {
+		resp.ReviewNotes = &recoveryDispute.ReviewNotes.String
 	}
-	if a.ReviewedAt.Valid {
-		resp.ReviewedAt = &a.ReviewedAt.Time
+	if recoveryDispute.ReviewedAt.Valid {
+		resp.ReviewedAt = &recoveryDispute.ReviewedAt.Time
 	}
-	if a.CompensationAmount.Valid {
-		resp.CompensationAmount = &a.CompensationAmount.Int64
+	if recoveryDispute.CompensationAmount.Valid {
+		resp.CompensationAmount = &recoveryDispute.CompensationAmount.Int64
 	}
-	if a.CompensatedAt.Valid {
-		resp.CompensatedAt = &a.CompensatedAt.Time
+	if recoveryDispute.CompensatedAt.Valid {
+		resp.CompensatedAt = &recoveryDispute.CompensatedAt.Time
 	}
 	return resp
 }
 
-// ========================= Merchant Claims/Appeals ============================
+// ========================= Merchant Claims/Recovery Disputes ============================
 
 type listMerchantClaimsRequest struct {
 	PageID   int32  `form:"page_id" binding:"required,min=1"`
 	PageSize int32  `form:"page_size" binding:"required,min=1,max=50"`
-	Bucket   string `form:"bucket" binding:"omitempty,oneof=pending_action appealed closed"`
+	Bucket   string `form:"bucket" binding:"omitempty,oneof=pending_action disputed closed"`
 }
 
-type listMerchantAppealsRequest struct {
+type listRecoveryDisputesRequest struct {
 	PageID   int32  `form:"page_id" binding:"required,min=1"`
 	PageSize int32  `form:"page_size" binding:"required,min=1,max=50"`
-	Status   string `form:"status" binding:"omitempty,oneof=pending approved compensated rejected"`
+	Status   string `form:"status" binding:"omitempty,oneof=submitted approved rejected"`
 }
 
 type merchantClaimResponse struct {
-	ID                int64      `json:"id"`
-	OrderID           int64      `json:"order_id"`
-	OrderNo           string     `json:"order_no"`
-	OrderAmount       int64      `json:"order_amount"`
-	UserPhone         string     `json:"user_phone"`
-	UserName          string     `json:"user_name"`
-	ClaimType         string     `json:"claim_type"`
-	ClaimAmount       int64      `json:"claim_amount"`
-	ApprovedAmount    *int64     `json:"approved_amount,omitempty"`
-	Description       string     `json:"description"`
-	Status            string     `json:"status"`
-	CreatedAt         time.Time  `json:"created_at"`
-	ReviewedAt        *time.Time `json:"reviewed_at,omitempty"`
-	AppealID          *int64     `json:"appeal_id,omitempty"`
-	AppealStatus      *string    `json:"appeal_status,omitempty"`
-	RecoveryStatus    *string    `json:"recovery_status,omitempty"`
-	AppealReason      *string    `json:"appeal_reason,omitempty"`
-	AppealReviewNotes *string    `json:"appeal_review_notes,omitempty"`
+	ID                         int64      `json:"id"`
+	OrderID                    int64      `json:"order_id"`
+	OrderNo                    string     `json:"order_no"`
+	OrderAmount                int64      `json:"order_amount"`
+	UserPhone                  string     `json:"user_phone"`
+	UserName                   string     `json:"user_name"`
+	ClaimType                  string     `json:"claim_type"`
+	ClaimAmount                int64      `json:"claim_amount"`
+	ApprovedAmount             *int64     `json:"approved_amount,omitempty"`
+	Description                string     `json:"description"`
+	Status                     string     `json:"status"`
+	CreatedAt                  time.Time  `json:"created_at"`
+	ReviewedAt                 *time.Time `json:"reviewed_at,omitempty"`
+	RecoveryDisputeID          *int64     `json:"recovery_dispute_id,omitempty"`
+	RecoveryDisputeStatus      *string    `json:"recovery_dispute_status,omitempty"`
+	RecoveryStatus             *string    `json:"recovery_status,omitempty"`
+	RecoveryDisputeReason      *string    `json:"recovery_dispute_reason,omitempty"`
+	RecoveryDisputeReviewNotes *string    `json:"recovery_dispute_review_notes,omitempty"`
 }
 
 type merchantClaimDecisionResponse struct {
@@ -145,7 +144,7 @@ type merchantClaimDecisionResponse struct {
 	UpdatedAt          string   `json:"updated_at"`
 }
 
-type appealDetailResponse struct {
+type recoveryDisputeDetailResponse struct {
 	ID                  int64      `json:"id"`
 	ClaimID             int64      `json:"claim_id"`
 	ClaimType           string     `json:"claim_type"`
@@ -166,7 +165,7 @@ type appealDetailResponse struct {
 	CompensatedAt       *time.Time `json:"compensated_at,omitempty"`
 }
 
-type appealListItem struct {
+type recoveryDisputeListItem struct {
 	ID                 int64      `json:"id"`
 	ClaimID            int64      `json:"claim_id"`
 	ClaimType          string     `json:"claim_type"`
@@ -182,7 +181,7 @@ type appealListItem struct {
 	CompensationAmount *int64     `json:"compensation_amount,omitempty"`
 }
 
-type operatorAppealListItem struct {
+type operatorRecoveryDisputeListItem struct {
 	ID               int64       `json:"id"`
 	ClaimID          int64       `json:"claim_id"`
 	ClaimType        string      `json:"claim_type"`
@@ -208,41 +207,40 @@ type merchantClaimsListResponse struct {
 	HasMore  bool                    `json:"has_more"`
 }
 
-type merchantAppealsListResponse struct {
-	Appeals  []appealListItem `json:"appeals"`
-	Total    int64            `json:"total"`
-	PageID   int32            `json:"page_id"`
-	PageSize int32            `json:"page_size"`
-	HasMore  bool             `json:"has_more"`
+type recoveryDisputesListResponse struct {
+	Disputes []recoveryDisputeListItem `json:"disputes"`
+	Total    int64                     `json:"total"`
+	PageID   int32                     `json:"page_id"`
+	PageSize int32                     `json:"page_size"`
+	HasMore  bool                      `json:"has_more"`
 }
 
 type claimSummaryResponse struct {
 	Total         int64 `json:"total"`
 	PendingAction int64 `json:"pending_action"`
-	Appealed      int64 `json:"appealed"`
+	Disputed      int64 `json:"disputed"`
 	Closed        int64 `json:"closed"`
 }
 
-type appealSummaryResponse struct {
-	Total       int64 `json:"total"`
-	Pending     int64 `json:"pending"`
-	Approved    int64 `json:"approved"`
-	Compensated int64 `json:"compensated,omitempty"`
-	Rejected    int64 `json:"rejected"`
+type recoveryDisputeSummaryResponse struct {
+	Total     int64 `json:"total"`
+	Submitted int64 `json:"submitted"`
+	Approved  int64 `json:"approved"`
+	Rejected  int64 `json:"rejected"`
 }
 
-type operatorAppealsListResponse struct {
-	Appeals []operatorAppealListItem `json:"appeals"`
-	Total   int64                    `json:"total"`
-	Page    int32                    `json:"page"`
-	Limit   int32                    `json:"limit"`
+type operatorRecoveryDisputesListResponse struct {
+	Disputes []operatorRecoveryDisputeListItem `json:"disputes"`
+	Total    int64                             `json:"total"`
+	Page     int32                             `json:"page"`
+	Limit    int32                             `json:"limit"`
 }
 
 type merchantClaimDecisionResult struct {
 	Decision *merchantClaimDecisionResponse `json:"decision"`
 }
 
-type operatorAppealDetailResponse struct {
+type operatorRecoveryDisputeDetailResponse struct {
 	ID                  int64      `json:"id"`
 	ClaimID             int64      `json:"claim_id"`
 	ClaimType           string     `json:"claim_type"`
@@ -277,14 +275,14 @@ type operatorAppealDetailResponse struct {
 
 // listMerchantClaims 商户查看收到的索赔列表
 // @Summary 获取商户收到的索赔列表
-// @Description 商户查看已批准的索赔列表，包含订单信息和申诉状态
-// @Tags 商户申诉管理
+// @Description 商户查看已批准的索赔列表，包含订单信息和追偿争议状态
+// @Tags 商户索赔管理
 // @Accept json
 // @Produce json
 // @Security Bearer
 // @Param page_id query int true "页码" minimum(1)
 // @Param page_size query int true "每页数量" minimum(1) maximum(50)
-// @Param bucket query string false "运营视图筛选" Enums(pending_action,appealed,closed)
+// @Param bucket query string false "运营视图筛选" Enums(pending_action,disputed,closed)
 // @Success 200 {object} map[string]interface{} "成功返回索赔列表"
 // @Failure 400 {object} map[string]interface{} "参数错误"
 // @Failure 401 {object} map[string]interface{} "未授权"
@@ -352,11 +350,11 @@ func (server *Server) listMerchantClaims(ctx *gin.Context) {
 		if c.ReviewedAt.Valid {
 			response[i].ReviewedAt = &c.ReviewedAt.Time
 		}
-		if c.AppealID.Valid {
-			response[i].AppealID = &c.AppealID.Int64
+		if c.RecoveryDisputeID.Valid {
+			response[i].RecoveryDisputeID = &c.RecoveryDisputeID.Int64
 		}
-		if c.AppealStatus.Valid {
-			response[i].AppealStatus = &c.AppealStatus.String
+		if c.RecoveryDisputeStatus.Valid {
+			response[i].RecoveryDisputeStatus = &c.RecoveryDisputeStatus.String
 		}
 		if c.RecoveryStatus != "" {
 			response[i].RecoveryStatus = &c.RecoveryStatus
@@ -370,7 +368,7 @@ func (server *Server) listMerchantClaims(ctx *gin.Context) {
 // listMerchantClaimsSummary 商户索赔汇总
 // @Summary 获取商户索赔汇总
 // @Description 返回商户索赔总数及各 bucket 汇总，供工作台和筛选条使用
-// @Tags 商户申诉管理
+// @Tags 商户索赔管理
 // @Accept json
 // @Produce json
 // @Security Bearer
@@ -403,7 +401,7 @@ func (server *Server) listMerchantClaimsSummary(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
-	appealed, err := countBucket("appealed")
+	disputed, err := countBucket("disputed")
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
@@ -417,15 +415,15 @@ func (server *Server) listMerchantClaimsSummary(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, claimSummaryResponse{
 		Total:         total,
 		PendingAction: pendingAction,
-		Appealed:      appealed,
+		Disputed:      disputed,
 		Closed:        closed,
 	})
 }
 
 // getMerchantClaimDetail 商户查看索赔详情
 // @Summary 获取索赔详情
-// @Description 商户查看单个索赔的详细信息，包含申诉信息
-// @Tags 商户申诉管理
+// @Description 商户查看单个索赔的详细信息，包含追偿争议信息
+// @Tags 商户索赔管理
 // @Accept json
 // @Produce json
 // @Security Bearer
@@ -483,17 +481,17 @@ func (server *Server) getMerchantClaimDetail(ctx *gin.Context) {
 		v := claim.ReviewedAt.Time
 		response.ReviewedAt = &v
 	}
-	if claim.AppealID.Valid {
-		response.AppealID = &claim.AppealID.Int64
-		s := claim.AppealStatus.String
-		response.AppealStatus = &s
-		if claim.AppealReason.Valid {
-			r := claim.AppealReason.String
-			response.AppealReason = &r
+	if claim.RecoveryDisputeID.Valid {
+		response.RecoveryDisputeID = &claim.RecoveryDisputeID.Int64
+		s := claim.RecoveryDisputeStatus.String
+		response.RecoveryDisputeStatus = &s
+		if claim.RecoveryDisputeReason.Valid {
+			r := claim.RecoveryDisputeReason.String
+			response.RecoveryDisputeReason = &r
 		}
-		if claim.AppealReviewNotes.Valid {
-			n := claim.AppealReviewNotes.String
-			response.AppealReviewNotes = &n
+		if claim.RecoveryDisputeReviewNotes.Valid {
+			n := claim.RecoveryDisputeReviewNotes.String
+			response.RecoveryDisputeReviewNotes = &n
 		}
 	}
 
@@ -503,7 +501,7 @@ func (server *Server) getMerchantClaimDetail(ctx *gin.Context) {
 // getMerchantClaimDecision 商户查看索赔判定依据
 // @Summary 获取索赔判定依据
 // @Description 商户查看该索赔对应订单的最新行为判定信息（责任方、赔付来源、原因码、判定摘要）
-// @Tags 商户申诉管理
+// @Tags 商户索赔管理
 // @Accept json
 // @Produce json
 // @Security Bearer
@@ -577,7 +575,7 @@ func (server *Server) getMerchantClaimDecision(ctx *gin.Context) {
 // getRiderClaimDecision 骑手查看索赔判定依据
 // @Summary 获取索赔判定依据
 // @Description 骑手查看该索赔对应订单的最新行为判定信息（责任方、赔付来源、原因码、判定摘要）
-// @Tags 骑手申诉管理
+// @Tags 骑手索赔管理
 // @Accept json
 // @Produce json
 // @Security Bearer
@@ -648,29 +646,29 @@ func (server *Server) getRiderClaimDecision(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, merchantClaimDecisionResult{Decision: &decisionValue})
 }
 
-type createMerchantAppealRequest struct {
+type createMerchantRecoveryDisputeRequest struct {
 	ClaimID int64  `json:"claim_id" binding:"required,min=1"`
 	Reason  string `json:"reason" binding:"required,min=10,max=1000"`
 }
 
-// createMerchantAppeal 商户提交申诉
-// @Summary 提交申诉
-// @Description 商户对已批准的索赔提交申诉，提交后由系统自动复核并写回最终结果
-// @Tags 商户申诉管理
+// createMerchantRecoveryDispute 商户提交追偿争议
+// @Summary 提交追偿争议
+// @Description 商户对平台向自身发起的追偿提交争议，提交后由系统自动复核并写回最终结果
+// @Tags 商户追偿争议管理
 // @Accept json
 // @Produce json
 // @Security Bearer
-// @Param request body createMerchantAppealRequest true "申诉请求"
-// @Success 201 {object} appealResponse "成功创建申诉"
+// @Param request body createMerchantRecoveryDisputeRequest true "追偿争议请求"
+// @Success 201 {object} recoveryDisputeResponse "成功创建追偿争议"
 // @Failure 400 {object} map[string]interface{} "参数错误"
 // @Failure 401 {object} map[string]interface{} "未授权"
-// @Failure 403 {object} map[string]interface{} "非商户用户或索赔不属于该商户"
-// @Failure 404 {object} map[string]interface{} "索赔不存在"
-// @Failure 409 {object} map[string]interface{} "已存在申诉"
+// @Failure 403 {object} map[string]interface{} "非商户用户或追偿不属于该商户"
+// @Failure 404 {object} map[string]interface{} "追偿不存在"
+// @Failure 409 {object} map[string]interface{} "已存在追偿争议"
 // @Failure 500 {object} map[string]interface{} "服务器错误"
-// @Router /v1/merchant/appeals [post]
-func (server *Server) createMerchantAppeal(ctx *gin.Context) {
-	var req createMerchantAppealRequest
+// @Router /v1/merchant/recovery-disputes [post]
+func (server *Server) createMerchantRecoveryDispute(ctx *gin.Context) {
+	var req createMerchantRecoveryDisputeRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
@@ -682,12 +680,12 @@ func (server *Server) createMerchantAppeal(ctx *gin.Context) {
 		return
 	}
 
-	appeal, err := logic.CreateMerchantAppeal(ctx, server.store, logic.CreateMerchantAppealInput{
-		MerchantID:       merchant.ID,
-		ClaimID:          req.ClaimID,
-		Reason:           req.Reason,
-		AppealWindowDays: AppealWindowDays,
-		Now:              time.Now(),
+	recoveryDispute, err := logic.CreateMerchantRecoveryDispute(ctx, server.store, logic.CreateMerchantRecoveryDisputeInput{
+		MerchantID:        merchant.ID,
+		ClaimID:           req.ClaimID,
+		Reason:            req.Reason,
+		DisputeWindowDays: RecoveryDisputeWindowDays,
+		Now:               time.Now(),
 	})
 	if err != nil {
 		if writeLogicRequestError(ctx, err) {
@@ -697,31 +695,31 @@ func (server *Server) createMerchantAppeal(ctx *gin.Context) {
 		return
 	}
 
-	if appeal.Status == "pending" {
-		appeal = server.autoResolveAppealBestEffort(ctx, appeal)
+	if recoveryDispute.Status == "submitted" {
+		recoveryDispute = server.autoResolveRecoveryDisputeBestEffort(ctx, recoveryDispute)
 	}
 
-	ctx.JSON(http.StatusCreated, newAppealResponse(appeal))
+	ctx.JSON(http.StatusCreated, newRecoveryDisputeResponse(recoveryDispute))
 }
 
-// listMerchantAppeals 商户查看申诉列表
-// @Summary 获取申诉列表
-// @Description 商户查看自己提交的申诉列表
-// @Tags 商户申诉管理
+// listMerchantRecoveryDisputes 商户查看追偿争议列表
+// @Summary 获取追偿争议列表
+// @Description 商户查看自己提交的追偿争议列表
+// @Tags 商户追偿争议管理
 // @Accept json
 // @Produce json
 // @Security Bearer
 // @Param page_id query int true "页码" minimum(1)
 // @Param page_size query int true "每页数量" minimum(1) maximum(50)
-// @Param status query string false "状态筛选" Enums(pending,approved,compensated,rejected)
-// @Success 200 {object} map[string]interface{} "成功返回申诉列表"
+// @Param status query string false "状态筛选" Enums(submitted,approved,rejected)
+// @Success 200 {object} map[string]interface{} "成功返回追偿争议列表"
 // @Failure 400 {object} map[string]interface{} "参数错误"
 // @Failure 401 {object} map[string]interface{} "未授权"
 // @Failure 403 {object} map[string]interface{} "非商户用户"
 // @Failure 500 {object} map[string]interface{} "服务器错误"
-// @Router /v1/merchant/appeals [get]
-func (server *Server) listMerchantAppeals(ctx *gin.Context) {
-	var req listMerchantAppealsRequest
+// @Router /v1/merchant/recovery-disputes [get]
+func (server *Server) listMerchantRecoveryDisputes(ctx *gin.Context) {
+	var req listRecoveryDisputesRequest
 	if err := ctx.ShouldBindQuery(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
@@ -735,7 +733,7 @@ func (server *Server) listMerchantAppeals(ctx *gin.Context) {
 
 	offset := pageOffset(req.PageID, req.PageSize)
 
-	result, err := logic.ListMerchantAppeals(ctx, server.store, logic.ListMerchantAppealsInput{
+	result, err := logic.ListMerchantRecoveryDisputes(ctx, server.store, logic.ListMerchantRecoveryDisputesInput{
 		MerchantID: merchant.ID,
 		Status:     req.Status,
 		Limit:      req.PageSize,
@@ -746,9 +744,9 @@ func (server *Server) listMerchantAppeals(ctx *gin.Context) {
 		return
 	}
 
-	response := make([]appealListItem, len(result.Appeals))
-	for i, a := range result.Appeals {
-		response[i] = appealListItem{
+	response := make([]recoveryDisputeListItem, len(result.Disputes))
+	for i, a := range result.Disputes {
+		response[i] = recoveryDisputeListItem{
 			ID:               a.ID,
 			ClaimID:          a.ClaimID,
 			ClaimType:        a.ClaimType,
@@ -776,22 +774,22 @@ func (server *Server) listMerchantAppeals(ctx *gin.Context) {
 	}
 
 	hasMore := int64(offset)+int64(len(response)) < result.Total
-	ctx.JSON(http.StatusOK, merchantAppealsListResponse{Appeals: response, Total: result.Total, PageID: req.PageID, PageSize: req.PageSize, HasMore: hasMore})
+	ctx.JSON(http.StatusOK, recoveryDisputesListResponse{Disputes: response, Total: result.Total, PageID: req.PageID, PageSize: req.PageSize, HasMore: hasMore})
 }
 
-// listMerchantAppealsSummary 商户申诉汇总
-// @Summary 获取商户申诉汇总
-// @Description 返回商户申诉总数及各状态汇总，供工作台和筛选条使用
-// @Tags 商户申诉管理
+// listMerchantRecoveryDisputesSummary 商户追偿争议汇总
+// @Summary 获取商户追偿争议汇总
+// @Description 返回商户追偿争议总数及各状态汇总，供工作台和筛选条使用
+// @Tags 商户追偿争议管理
 // @Accept json
 // @Produce json
 // @Security Bearer
-// @Success 200 {object} appealSummaryResponse "成功返回申诉汇总"
+// @Success 200 {object} recoveryDisputeSummaryResponse "成功返回追偿争议汇总"
 // @Failure 401 {object} map[string]interface{} "未授权"
 // @Failure 403 {object} map[string]interface{} "非商户用户"
 // @Failure 500 {object} map[string]interface{} "服务器错误"
-// @Router /v1/merchant/appeals/summary [get]
-func (server *Server) listMerchantAppealsSummary(ctx *gin.Context) {
+// @Router /v1/merchant/recovery-disputes/summary [get]
+func (server *Server) listMerchantRecoveryDisputesSummary(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 	merchant, err := server.getMerchantFromUserID(ctx, authPayload.UserID)
 	if err != nil {
@@ -799,7 +797,7 @@ func (server *Server) listMerchantAppealsSummary(ctx *gin.Context) {
 	}
 
 	countStatus := func(status string) (int64, error) {
-		return server.store.CountMerchantAppealsForMerchant(ctx, db.CountMerchantAppealsForMerchantParams{
+		return server.store.CountMerchantRecoveryDisputesForMerchant(ctx, db.CountMerchantRecoveryDisputesForMerchantParams{
 			AppellantID: merchant.ID,
 			Status:      pgtype.Text{String: status, Valid: status != ""},
 		})
@@ -810,17 +808,12 @@ func (server *Server) listMerchantAppealsSummary(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
-	pending, err := countStatus("pending")
+	submitted, err := countStatus("submitted")
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 	approved, err := countStatus("approved")
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-	compensated, err := countStatus("compensated")
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
@@ -831,34 +824,33 @@ func (server *Server) listMerchantAppealsSummary(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, appealSummaryResponse{
-		Total:       total,
-		Pending:     pending,
-		Approved:    approved,
-		Compensated: compensated,
-		Rejected:    rejected,
+	ctx.JSON(http.StatusOK, recoveryDisputeSummaryResponse{
+		Total:     total,
+		Submitted: submitted,
+		Approved:  approved,
+		Rejected:  rejected,
 	})
 }
 
-// getMerchantAppealDetail 商户查看申诉详情
-// @Summary 获取申诉详情
-// @Description 商户查看自己提交的申诉详细信息
-// @Tags 商户申诉管理
+// getMerchantRecoveryDisputeDetail 商户查看追偿争议详情
+// @Summary 获取追偿争议详情
+// @Description 商户查看自己提交的追偿争议详细信息
+// @Tags 商户追偿争议管理
 // @Accept json
 // @Produce json
 // @Security Bearer
-// @Param id path int true "申诉ID"
-// @Success 200 {object} map[string]interface{} "成功返回申诉详情"
+// @Param id path int true "追偿争议ID"
+// @Success 200 {object} map[string]interface{} "成功返回追偿争议详情"
 // @Failure 400 {object} map[string]interface{} "参数错误"
 // @Failure 401 {object} map[string]interface{} "未授权"
 // @Failure 403 {object} map[string]interface{} "非商户用户"
-// @Failure 404 {object} map[string]interface{} "申诉不存在"
+// @Failure 404 {object} map[string]interface{} "追偿争议不存在"
 // @Failure 500 {object} map[string]interface{} "服务器错误"
-// @Router /v1/merchant/appeals/{id} [get]
-func (server *Server) getMerchantAppealDetail(ctx *gin.Context) {
-	appealID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
+// @Router /v1/merchant/recovery-disputes/{id} [get]
+func (server *Server) getMerchantRecoveryDisputeDetail(ctx *gin.Context) {
+	recoveryDisputeID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid appeal id")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid recovery dispute id")))
 		return
 	}
 
@@ -868,8 +860,8 @@ func (server *Server) getMerchantAppealDetail(ctx *gin.Context) {
 		return
 	}
 
-	appeal, err := logic.GetMerchantAppealDetail(ctx, server.store, logic.GetMerchantAppealDetailInput{
-		AppealID:   appealID,
+	recoveryDispute, err := logic.GetMerchantRecoveryDisputeDetail(ctx, server.store, logic.GetMerchantRecoveryDisputeDetailInput{
+		DisputeID:  recoveryDisputeID,
 		MerchantID: merchant.ID,
 	})
 	if err != nil {
@@ -880,51 +872,51 @@ func (server *Server) getMerchantAppealDetail(ctx *gin.Context) {
 		return
 	}
 
-	resp := appealDetailResponse{
-		ID:               appeal.ID,
-		ClaimID:          appeal.ClaimID,
-		ClaimType:        appeal.ClaimType,
-		ClaimAmount:      appeal.ClaimAmount,
-		ClaimDescription: appeal.ClaimDescription,
-		OrderNo:          appeal.OrderNo,
-		OrderAmount:      appeal.OrderAmount,
-		UserPhone:        appeal.UserPhone.String,
-		AppellantType:    appeal.AppellantType,
-		Reason:           appeal.Reason,
-		Status:           appeal.Status,
-		CreatedAt:        appeal.CreatedAt,
+	resp := recoveryDisputeDetailResponse{
+		ID:               recoveryDispute.ID,
+		ClaimID:          recoveryDispute.ClaimID,
+		ClaimType:        recoveryDispute.ClaimType,
+		ClaimAmount:      recoveryDispute.ClaimAmount,
+		ClaimDescription: recoveryDispute.ClaimDescription,
+		OrderNo:          recoveryDispute.OrderNo,
+		OrderAmount:      recoveryDispute.OrderAmount,
+		UserPhone:        recoveryDispute.UserPhone.String,
+		AppellantType:    recoveryDispute.AppellantType,
+		Reason:           recoveryDispute.Reason,
+		Status:           recoveryDispute.Status,
+		CreatedAt:        recoveryDispute.CreatedAt,
 	}
-	if appeal.ClaimApprovedAmount.Valid {
-		resp.ClaimApprovedAmount = &appeal.ClaimApprovedAmount.Int64
+	if recoveryDispute.ClaimApprovedAmount.Valid {
+		resp.ClaimApprovedAmount = &recoveryDispute.ClaimApprovedAmount.Int64
 	}
-	if appeal.ReviewerID.Valid {
-		resp.ReviewerID = &appeal.ReviewerID.Int64
+	if recoveryDispute.ReviewerID.Valid {
+		resp.ReviewerID = &recoveryDispute.ReviewerID.Int64
 	}
-	if appeal.ReviewNotes.Valid {
-		s := appeal.ReviewNotes.String
+	if recoveryDispute.ReviewNotes.Valid {
+		s := recoveryDispute.ReviewNotes.String
 		resp.ReviewNotes = &s
 	}
-	if appeal.ReviewedAt.Valid {
-		t := appeal.ReviewedAt.Time
+	if recoveryDispute.ReviewedAt.Valid {
+		t := recoveryDispute.ReviewedAt.Time
 		resp.ReviewedAt = &t
 	}
-	if appeal.CompensationAmount.Valid {
-		resp.CompensationAmount = &appeal.CompensationAmount.Int64
+	if recoveryDispute.CompensationAmount.Valid {
+		resp.CompensationAmount = &recoveryDispute.CompensationAmount.Int64
 	}
-	if appeal.CompensatedAt.Valid {
-		t := appeal.CompensatedAt.Time
+	if recoveryDispute.CompensatedAt.Valid {
+		t := recoveryDispute.CompensatedAt.Time
 		resp.CompensatedAt = &t
 	}
 
 	ctx.JSON(http.StatusOK, resp)
 }
 
-// ========================= Rider Claims/Appeals ============================
+// ========================= Rider Claims/Recovery Disputes ============================
 
 // listRiderClaims 骑手查看收到的索赔列表
 // @Summary 获取骑手收到的索赔列表
 // @Description 骑手查看与自己配送订单相关的已批准索赔列表
-// @Tags 骑手申诉管理
+// @Tags 骑手索赔管理
 // @Accept json
 // @Produce json
 // @Security Bearer
@@ -997,11 +989,11 @@ func (server *Server) listRiderClaims(ctx *gin.Context) {
 		if c.ReviewedAt.Valid {
 			response[i].ReviewedAt = &c.ReviewedAt.Time
 		}
-		if c.AppealID.Valid {
-			response[i].AppealID = &c.AppealID.Int64
+		if c.RecoveryDisputeID.Valid {
+			response[i].RecoveryDisputeID = &c.RecoveryDisputeID.Int64
 		}
-		if c.AppealStatus.Valid {
-			response[i].AppealStatus = &c.AppealStatus.String
+		if c.RecoveryDisputeStatus.Valid {
+			response[i].RecoveryDisputeStatus = &c.RecoveryDisputeStatus.String
 		}
 		if c.RecoveryStatus != "" {
 			response[i].RecoveryStatus = &c.RecoveryStatus
@@ -1014,7 +1006,7 @@ func (server *Server) listRiderClaims(ctx *gin.Context) {
 // listRiderClaimsSummary 骑手索赔汇总
 // @Summary 获取骑手索赔汇总
 // @Description 返回骑手索赔总数及各 bucket 汇总，供工作台和筛选条使用
-// @Tags 骑手申诉管理
+// @Tags 骑手索赔管理
 // @Accept json
 // @Produce json
 // @Security Bearer
@@ -1047,7 +1039,7 @@ func (server *Server) listRiderClaimsSummary(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
-	appealed, err := countBucket("appealed")
+	disputed, err := countBucket("disputed")
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
@@ -1061,7 +1053,7 @@ func (server *Server) listRiderClaimsSummary(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, claimSummaryResponse{
 		Total:         total,
 		PendingAction: pendingAction,
-		Appealed:      appealed,
+		Disputed:      disputed,
 		Closed:        closed,
 	})
 }
@@ -1069,7 +1061,7 @@ func (server *Server) listRiderClaimsSummary(ctx *gin.Context) {
 // getRiderClaimDetail 骑手查看索赔详情
 // @Summary 获取索赔详情
 // @Description 骑手查看单个索赔的详细信息
-// @Tags 骑手申诉管理
+// @Tags 骑手索赔管理
 // @Accept json
 // @Produce json
 // @Security Bearer
@@ -1127,17 +1119,17 @@ func (server *Server) getRiderClaimDetail(ctx *gin.Context) {
 		v := claim.ReviewedAt.Time
 		rsp.ReviewedAt = &v
 	}
-	if claim.AppealID.Valid {
-		rsp.AppealID = &claim.AppealID.Int64
-		s := claim.AppealStatus.String
-		rsp.AppealStatus = &s
-		if claim.AppealReason.Valid {
-			r := claim.AppealReason.String
-			rsp.AppealReason = &r
+	if claim.RecoveryDisputeID.Valid {
+		rsp.RecoveryDisputeID = &claim.RecoveryDisputeID.Int64
+		s := claim.RecoveryDisputeStatus.String
+		rsp.RecoveryDisputeStatus = &s
+		if claim.RecoveryDisputeReason.Valid {
+			r := claim.RecoveryDisputeReason.String
+			rsp.RecoveryDisputeReason = &r
 		}
-		if claim.AppealReviewNotes.Valid {
-			n := claim.AppealReviewNotes.String
-			rsp.AppealReviewNotes = &n
+		if claim.RecoveryDisputeReviewNotes.Valid {
+			n := claim.RecoveryDisputeReviewNotes.String
+			rsp.RecoveryDisputeReviewNotes = &n
 		}
 	}
 	if claim.RecoveryStatus != "" {
@@ -1147,29 +1139,29 @@ func (server *Server) getRiderClaimDetail(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, rsp)
 }
 
-type createRiderAppealRequest struct {
+type createRiderRecoveryDisputeRequest struct {
 	ClaimID int64  `json:"claim_id" binding:"required,min=1"`
 	Reason  string `json:"reason" binding:"required,min=10,max=1000"`
 }
 
-// createRiderAppeal 骑手提交申诉
-// @Summary 提交申诉
-// @Description 骑手对与自己配送订单相关的索赔提交申诉，提交后由系统自动复核并写回最终结果
-// @Tags 骑手申诉管理
+// createRiderRecoveryDispute 骑手提交追偿争议
+// @Summary 提交追偿争议
+// @Description 骑手对平台向自身发起的追偿提交争议，提交后由系统自动复核并写回最终结果
+// @Tags 骑手追偿争议管理
 // @Accept json
 // @Produce json
 // @Security Bearer
-// @Param request body createRiderAppealRequest true "申诉请求"
-// @Success 201 {object} appealResponse "成功创建申诉"
+// @Param request body createRiderRecoveryDisputeRequest true "追偿争议请求"
+// @Success 201 {object} recoveryDisputeResponse "成功创建追偿争议"
 // @Failure 400 {object} map[string]interface{} "参数错误"
 // @Failure 401 {object} map[string]interface{} "未授权"
-// @Failure 403 {object} map[string]interface{} "非骑手用户或索赔与骑手无关"
-// @Failure 404 {object} map[string]interface{} "索赔不存在"
-// @Failure 409 {object} map[string]interface{} "已存在申诉"
+// @Failure 403 {object} map[string]interface{} "非骑手用户或追偿与骑手无关"
+// @Failure 404 {object} map[string]interface{} "追偿不存在"
+// @Failure 409 {object} map[string]interface{} "已存在追偿争议"
 // @Failure 500 {object} map[string]interface{} "服务器错误"
-// @Router /v1/rider/appeals [post]
-func (server *Server) createRiderAppeal(ctx *gin.Context) {
-	var req createRiderAppealRequest
+// @Router /v1/rider/recovery-disputes [post]
+func (server *Server) createRiderRecoveryDispute(ctx *gin.Context) {
+	var req createRiderRecoveryDisputeRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
@@ -1181,12 +1173,12 @@ func (server *Server) createRiderAppeal(ctx *gin.Context) {
 		return
 	}
 
-	result, err := logic.CreateRiderAppeal(ctx, server.store, logic.CreateRiderAppealInput{
-		RiderID:          rider.ID,
-		ClaimID:          req.ClaimID,
-		Reason:           req.Reason,
-		AppealWindowDays: AppealWindowDays,
-		Now:              time.Now(),
+	result, err := logic.CreateRiderRecoveryDispute(ctx, server.store, logic.CreateRiderRecoveryDisputeInput{
+		RiderID:           rider.ID,
+		ClaimID:           req.ClaimID,
+		Reason:            req.Reason,
+		DisputeWindowDays: RecoveryDisputeWindowDays,
+		Now:               time.Now(),
 	})
 	if err != nil {
 		if writeLogicRequestError(ctx, err) {
@@ -1201,31 +1193,32 @@ func (server *Server) createRiderAppeal(ctx *gin.Context) {
 		status = http.StatusOK
 	}
 
-	appeal := result.Appeal
-	if appeal.Status == "pending" {
-		appeal = server.autoResolveAppealBestEffort(ctx, appeal)
+	recoveryDispute := result.RecoveryDispute
+	if recoveryDispute.Status == "submitted" {
+		recoveryDispute = server.autoResolveRecoveryDisputeBestEffort(ctx, recoveryDispute)
 	}
 
-	ctx.JSON(status, newAppealResponse(appeal))
+	ctx.JSON(status, newRecoveryDisputeResponse(recoveryDispute))
 }
 
-// listRiderAppeals 骑手查看申诉列表
-// @Summary 获取申诉列表
-// @Description 骑手查看自己提交的申诉列表
-// @Tags 骑手申诉管理
+// listRiderRecoveryDisputes 骑手查看追偿争议列表
+// @Summary 获取追偿争议列表
+// @Description 骑手查看自己提交的追偿争议列表
+// @Tags 骑手追偿争议管理
 // @Accept json
 // @Produce json
 // @Security Bearer
 // @Param page_id query int true "页码" minimum(1)
 // @Param page_size query int true "每页数量" minimum(1) maximum(50)
-// @Success 200 {object} map[string]interface{} "成功返回申诉列表"
+// @Param status query string false "状态筛选" Enums(submitted,approved,rejected)
+// @Success 200 {object} map[string]interface{} "成功返回追偿争议列表"
 // @Failure 400 {object} map[string]interface{} "参数错误"
 // @Failure 401 {object} map[string]interface{} "未授权"
 // @Failure 403 {object} map[string]interface{} "非骑手用户"
 // @Failure 500 {object} map[string]interface{} "服务器错误"
-// @Router /v1/rider/appeals [get]
-func (server *Server) listRiderAppeals(ctx *gin.Context) {
-	var req listMerchantAppealsRequest
+// @Router /v1/rider/recovery-disputes [get]
+func (server *Server) listRiderRecoveryDisputes(ctx *gin.Context) {
+	var req listRecoveryDisputesRequest
 	if err := ctx.ShouldBindQuery(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
@@ -1239,8 +1232,9 @@ func (server *Server) listRiderAppeals(ctx *gin.Context) {
 
 	offset := pageOffset(req.PageID, req.PageSize)
 
-	result, err := logic.ListRiderAppeals(ctx, server.store, logic.ListRiderAppealsInput{
+	result, err := logic.ListRiderRecoveryDisputes(ctx, server.store, logic.ListRiderRecoveryDisputesInput{
 		RiderID: rider.ID,
+		Status:  req.Status,
 		Limit:   req.PageSize,
 		Offset:  offset,
 	})
@@ -1249,9 +1243,9 @@ func (server *Server) listRiderAppeals(ctx *gin.Context) {
 		return
 	}
 
-	response := make([]appealListItem, len(result.Appeals))
-	for i, a := range result.Appeals {
-		response[i] = appealListItem{
+	response := make([]recoveryDisputeListItem, len(result.Disputes))
+	for i, a := range result.Disputes {
+		response[i] = recoveryDisputeListItem{
 			ID:               a.ID,
 			ClaimID:          a.ClaimID,
 			ClaimType:        a.ClaimType,
@@ -1278,28 +1272,29 @@ func (server *Server) listRiderAppeals(ctx *gin.Context) {
 		}
 	}
 
-	ctx.JSON(http.StatusOK, merchantAppealsListResponse{Appeals: response, Total: result.Total, PageID: req.PageID, PageSize: req.PageSize})
+	hasMore := int64(offset)+int64(len(response)) < result.Total
+	ctx.JSON(http.StatusOK, recoveryDisputesListResponse{Disputes: response, Total: result.Total, PageID: req.PageID, PageSize: req.PageSize, HasMore: hasMore})
 }
 
-// getRiderAppealDetail 骑手查看申诉详情
-// @Summary 获取申诉详情
-// @Description 骑手查看自己提交的申诉详细信息
-// @Tags 骑手申诉管理
+// getRiderRecoveryDisputeDetail 骑手查看追偿争议详情
+// @Summary 获取追偿争议详情
+// @Description 骑手查看自己提交的追偿争议详细信息
+// @Tags 骑手追偿争议管理
 // @Accept json
 // @Produce json
 // @Security Bearer
-// @Param id path int true "申诉ID"
-// @Success 200 {object} map[string]interface{} "成功返回申诉详情"
+// @Param id path int true "追偿争议ID"
+// @Success 200 {object} map[string]interface{} "成功返回追偿争议详情"
 // @Failure 400 {object} map[string]interface{} "参数错误"
 // @Failure 401 {object} map[string]interface{} "未授权"
 // @Failure 403 {object} map[string]interface{} "非骑手用户"
-// @Failure 404 {object} map[string]interface{} "申诉不存在"
+// @Failure 404 {object} map[string]interface{} "追偿争议不存在"
 // @Failure 500 {object} map[string]interface{} "服务器错误"
-// @Router /v1/rider/appeals/{id} [get]
-func (server *Server) getRiderAppealDetail(ctx *gin.Context) {
-	appealID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
+// @Router /v1/rider/recovery-disputes/{id} [get]
+func (server *Server) getRiderRecoveryDisputeDetail(ctx *gin.Context) {
+	recoveryDisputeID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid appeal id")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid recovery dispute id")))
 		return
 	}
 
@@ -1309,9 +1304,9 @@ func (server *Server) getRiderAppealDetail(ctx *gin.Context) {
 		return
 	}
 
-	result, err := logic.GetRiderAppealDetail(ctx, server.store, logic.GetRiderAppealDetailInput{
-		AppealID: appealID,
-		RiderID:  rider.ID,
+	result, err := logic.GetRiderRecoveryDisputeDetail(ctx, server.store, logic.GetRiderRecoveryDisputeDetailInput{
+		DisputeID: recoveryDisputeID,
+		RiderID:   rider.ID,
 	})
 	if err != nil {
 		if writeLogicRequestError(ctx, err) {
@@ -1321,7 +1316,7 @@ func (server *Server) getRiderAppealDetail(ctx *gin.Context) {
 		return
 	}
 
-	resp := appealDetailResponse{
+	resp := recoveryDisputeDetailResponse{
 		ID:               result.ID,
 		ClaimID:          result.ClaimID,
 		ClaimType:        result.ClaimType,
@@ -1360,33 +1355,33 @@ func (server *Server) getRiderAppealDetail(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, resp)
 }
 
-// ========================= Operator Appeals ============================
+// ========================= Operator Recovery Disputes ============================
 
-type listOperatorAppealsRequest struct {
+type listOperatorRecoveryDisputesRequest struct {
 	RegionID *int64  `form:"region_id" binding:"omitempty,min=1"`
-	Status   *string `form:"status" binding:"omitempty,oneof=pending approved rejected"`
+	Status   *string `form:"status" binding:"omitempty,oneof=submitted approved rejected"`
 	Page     int32   `form:"page" binding:"omitempty,min=1"`
 	Limit    int32   `form:"limit" binding:"omitempty,min=1,max=100"`
 }
 
-// listOperatorAppeals 运营商查看区域内申诉列表
-// @Summary 获取区域内申诉列表
-// @Description 运营商查看自己管辖区域内的申诉列表，可按状态筛选
-// @Tags 运营商申诉管理
+// listOperatorRecoveryDisputes 运营商查看区域内追偿争议列表
+// @Summary 获取区域内追偿争议列表
+// @Description 运营商查看自己管辖区域内的追偿争议列表，可按状态筛选
+// @Tags 运营商追偿争议管理
 // @Accept json
 // @Produce json
 // @Security Bearer
-// @Param status query string false "状态筛选" Enums(pending, approved, rejected)
+// @Param status query string false "状态筛选" Enums(submitted, approved, rejected)
 // @Param page_id query int true "页码" minimum(1)
 // @Param page_size query int true "每页数量" minimum(1) maximum(50)
-// @Success 200 {object} map[string]interface{} "成功返回申诉列表"
+// @Success 200 {object} map[string]interface{} "成功返回追偿争议列表"
 // @Failure 400 {object} map[string]interface{} "参数错误"
 // @Failure 401 {object} map[string]interface{} "未授权"
 // @Failure 403 {object} map[string]interface{} "非运营商用户"
 // @Failure 500 {object} map[string]interface{} "服务器错误"
-// @Router /v1/operator/appeals [get]
-func (server *Server) listOperatorAppeals(ctx *gin.Context) {
-	var req listOperatorAppealsRequest
+// @Router /v1/operator/recovery-disputes [get]
+func (server *Server) listOperatorRecoveryDisputes(ctx *gin.Context) {
+	var req listOperatorRecoveryDisputesRequest
 	if err := ctx.ShouldBindQuery(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
@@ -1412,12 +1407,12 @@ func (server *Server) listOperatorAppeals(ctx *gin.Context) {
 		status = *req.Status
 	}
 
-	appeals := make([]db.ListOperatorAppealsRow, 0)
+	recoveryDisputes := make([]db.ListOperatorRecoveryDisputesRow, 0)
 	var total int64
 	if selection.IsAllRegions {
 		fetchLimit := req.Page * req.Limit
 		for _, regionID := range selection.RegionIDs {
-			regionAppeals, queryErr := server.store.ListOperatorAppeals(ctx, db.ListOperatorAppealsParams{
+			regionDisputes, queryErr := server.store.ListOperatorRecoveryDisputes(ctx, db.ListOperatorRecoveryDisputesParams{
 				RegionID: regionID,
 				Column2:  status,
 				Limit:    fetchLimit,
@@ -1427,9 +1422,9 @@ func (server *Server) listOperatorAppeals(ctx *gin.Context) {
 				ctx.JSON(http.StatusInternalServerError, internalError(ctx, queryErr))
 				return
 			}
-			appeals = append(appeals, regionAppeals...)
+			recoveryDisputes = append(recoveryDisputes, regionDisputes...)
 
-			regionTotal, countErr := server.store.CountOperatorAppeals(ctx, db.CountOperatorAppealsParams{
+			regionTotal, countErr := server.store.CountOperatorRecoveryDisputes(ctx, db.CountOperatorRecoveryDisputesParams{
 				RegionID: regionID,
 				Column2:  status,
 			})
@@ -1440,25 +1435,25 @@ func (server *Server) listOperatorAppeals(ctx *gin.Context) {
 			total += regionTotal
 		}
 
-		sort.Slice(appeals, func(i, j int) bool {
-			if !appeals[i].CreatedAt.Equal(appeals[j].CreatedAt) {
-				return appeals[i].CreatedAt.After(appeals[j].CreatedAt)
+		sort.Slice(recoveryDisputes, func(i, j int) bool {
+			if !recoveryDisputes[i].CreatedAt.Equal(recoveryDisputes[j].CreatedAt) {
+				return recoveryDisputes[i].CreatedAt.After(recoveryDisputes[j].CreatedAt)
 			}
-			return appeals[i].ID > appeals[j].ID
+			return recoveryDisputes[i].ID > recoveryDisputes[j].ID
 		})
 
 		start := int(offset)
-		if start >= len(appeals) {
-			appeals = []db.ListOperatorAppealsRow{}
+		if start >= len(recoveryDisputes) {
+			recoveryDisputes = []db.ListOperatorRecoveryDisputesRow{}
 		} else {
 			end := start + int(req.Limit)
-			if end > len(appeals) {
-				end = len(appeals)
+			if end > len(recoveryDisputes) {
+				end = len(recoveryDisputes)
 			}
-			appeals = appeals[start:end]
+			recoveryDisputes = recoveryDisputes[start:end]
 		}
 	} else {
-		appeals, err = server.store.ListOperatorAppeals(ctx, db.ListOperatorAppealsParams{
+		recoveryDisputes, err = server.store.ListOperatorRecoveryDisputes(ctx, db.ListOperatorRecoveryDisputesParams{
 			RegionID: selection.RegionID,
 			Column2:  status,
 			Limit:    req.Limit,
@@ -1469,7 +1464,7 @@ func (server *Server) listOperatorAppeals(ctx *gin.Context) {
 			return
 		}
 
-		total, err = server.store.CountOperatorAppeals(ctx, db.CountOperatorAppealsParams{
+		total, err = server.store.CountOperatorRecoveryDisputes(ctx, db.CountOperatorRecoveryDisputesParams{
 			RegionID: selection.RegionID,
 			Column2:  status,
 		})
@@ -1479,9 +1474,9 @@ func (server *Server) listOperatorAppeals(ctx *gin.Context) {
 		}
 	}
 
-	response := make([]operatorAppealListItem, len(appeals))
-	for i, a := range appeals {
-		response[i] = operatorAppealListItem{
+	response := make([]operatorRecoveryDisputeListItem, len(recoveryDisputes))
+	for i, a := range recoveryDisputes {
+		response[i] = operatorRecoveryDisputeListItem{
 			ID:               a.ID,
 			ClaimID:          a.ClaimID,
 			ClaimType:        a.ClaimType,
@@ -1503,25 +1498,25 @@ func (server *Server) listOperatorAppeals(ctx *gin.Context) {
 		}
 	}
 
-	ctx.JSON(http.StatusOK, operatorAppealsListResponse{Appeals: response, Total: total, Page: req.Page, Limit: req.Limit})
+	ctx.JSON(http.StatusOK, operatorRecoveryDisputesListResponse{Disputes: response, Total: total, Page: req.Page, Limit: req.Limit})
 }
 
-// listOperatorAppealsSummary 运营商申诉汇总
-// @Summary 获取区域申诉汇总
-// @Description 返回运营商可管理区域内申诉总数及各状态汇总，供工作台和审批入口使用
-// @Tags 运营商申诉管理
+// listOperatorRecoveryDisputesSummary 运营商追偿争议汇总
+// @Summary 获取区域追偿争议汇总
+// @Description 返回运营商可管理区域内追偿争议总数及各状态汇总，供工作台和审批入口使用
+// @Tags 运营商追偿争议管理
 // @Accept json
 // @Produce json
 // @Security BearerAuth
 // @Param region_id query int false "区域ID"
-// @Success 200 {object} appealSummaryResponse "成功返回申诉汇总"
+// @Success 200 {object} recoveryDisputeSummaryResponse "成功返回追偿争议汇总"
 // @Failure 400 {object} errorMessage "请求参数错误"
 // @Failure 401 {object} errorMessage "未授权"
 // @Failure 403 {object} errorMessage "无权限"
 // @Failure 500 {object} errorMessage "服务器错误"
-// @Router /v1/operator/appeals/summary [get]
-func (server *Server) listOperatorAppealsSummary(ctx *gin.Context) {
-	var req listOperatorAppealsRequest
+// @Router /v1/operator/recovery-disputes/summary [get]
+func (server *Server) listOperatorRecoveryDisputesSummary(ctx *gin.Context) {
+	var req listOperatorRecoveryDisputesRequest
 	if err := ctx.ShouldBindQuery(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
@@ -1536,7 +1531,7 @@ func (server *Server) listOperatorAppealsSummary(ctx *gin.Context) {
 	countStatus := func(status string) (int64, error) {
 		var total int64
 		for _, regionID := range selection.RegionIDs {
-			count, err := server.store.CountOperatorAppeals(ctx, db.CountOperatorAppealsParams{
+			count, err := server.store.CountOperatorRecoveryDisputes(ctx, db.CountOperatorRecoveryDisputesParams{
 				RegionID: regionID,
 				Column2:  status,
 			})
@@ -1553,7 +1548,7 @@ func (server *Server) listOperatorAppealsSummary(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
-	pending, err := countStatus("pending")
+	submitted, err := countStatus("submitted")
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
@@ -1569,64 +1564,64 @@ func (server *Server) listOperatorAppealsSummary(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, appealSummaryResponse{
-		Total:    total,
-		Pending:  pending,
-		Approved: approved,
-		Rejected: rejected,
+	ctx.JSON(http.StatusOK, recoveryDisputeSummaryResponse{
+		Total:     total,
+		Submitted: submitted,
+		Approved:  approved,
+		Rejected:  rejected,
 	})
 }
 
-// getOperatorAppealDetail 运营商查看申诉详情
-// @Summary 获取申诉详情
-// @Description 运营商查看区域内申诉的详细信息，包含索赔、订单、用户信用分等信息
-// @Tags 运营商申诉管理
+// getOperatorRecoveryDisputeDetail 运营商查看追偿争议详情
+// @Summary 获取追偿争议详情
+// @Description 运营商查看区域内追偿争议的详细信息，包含索赔、订单、用户信用分等信息
+// @Tags 运营商追偿争议管理
 // @Accept json
 // @Produce json
 // @Security Bearer
-// @Param id path int true "申诉ID"
-// @Success 200 {object} map[string]interface{} "成功返回申诉详情"
+// @Param id path int true "追偿争议ID"
+// @Success 200 {object} map[string]interface{} "成功返回追偿争议详情"
 // @Failure 400 {object} map[string]interface{} "参数错误"
 // @Failure 401 {object} map[string]interface{} "未授权"
 // @Failure 403 {object} map[string]interface{} "非运营商用户"
-// @Failure 404 {object} map[string]interface{} "申诉不存在"
+// @Failure 404 {object} map[string]interface{} "追偿争议不存在"
 // @Failure 500 {object} map[string]interface{} "服务器错误"
-// @Router /v1/operator/appeals/{id} [get]
-func (server *Server) getOperatorAppealDetail(ctx *gin.Context) {
-	appealID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
+// @Router /v1/operator/recovery-disputes/{id} [get]
+func (server *Server) getOperatorRecoveryDisputeDetail(ctx *gin.Context) {
+	recoveryDisputeID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid appeal id")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid recovery dispute id")))
 		return
 	}
 
-	appeal, err := server.store.GetAppeal(ctx, appealID)
+	recoveryDispute, err := server.store.GetRecoveryDispute(ctx, recoveryDisputeID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("appeal not found")))
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("recovery dispute not found")))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
-	if _, err := server.checkOperatorManagesRegion(ctx, appeal.RegionID); err != nil {
+	if _, err := server.checkOperatorManagesRegion(ctx, recoveryDispute.RegionID); err != nil {
 		ctx.JSON(http.StatusForbidden, errorResponse(err))
 		return
 	}
 
-	detail, err := server.store.GetOperatorAppealDetail(ctx, db.GetOperatorAppealDetailParams{
-		ID:       appealID,
-		RegionID: appeal.RegionID,
+	detail, err := server.store.GetOperatorRecoveryDisputeDetail(ctx, db.GetOperatorRecoveryDisputeDetailParams{
+		ID:       recoveryDisputeID,
+		RegionID: recoveryDispute.RegionID,
 	})
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("appeal not found")))
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("recovery dispute not found")))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	resp := operatorAppealDetailResponse{
+	resp := operatorRecoveryDisputeDetailResponse{
 		ID:               detail.ID,
 		ClaimID:          detail.ClaimID,
 		ClaimType:        detail.ClaimType,
@@ -1682,38 +1677,23 @@ func (server *Server) getOperatorAppealDetail(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, resp)
 }
 
-type automaticAppealResolution struct {
+type automaticRecoveryDisputeResolution struct {
 	status      string
 	reviewNotes string
 	decisionID  pgtype.Int8
 }
 
-func (server *Server) autoResolveAppeal(ctx *gin.Context, appeal db.Appeal) (db.Appeal, error) {
-	resolutionResult, err := logic.ResolveAppealAutomatically(ctx, server.store, appeal)
+func (server *Server) autoResolveRecoveryDispute(ctx *gin.Context, recoveryDispute db.RecoveryDispute) (db.RecoveryDispute, error) {
+	resolutionResult, err := logic.ResolveRecoveryDisputeAutomatically(ctx, server.store, recoveryDispute)
 	if err != nil {
-		return db.Appeal{}, err
+		return db.RecoveryDispute{}, err
 	}
-	resolution := automaticAppealResolution{
+	resolution := automaticRecoveryDisputeResolution{
 		status:      resolutionResult.Resolution.Status,
 		reviewNotes: resolutionResult.Resolution.ReviewNotes,
 		decisionID:  resolutionResult.Resolution.DecisionID,
 	}
 	reviewResult := resolutionResult.ReviewResult
-
-	if _, err := server.store.CreateBehaviorAppeal(ctx, db.CreateBehaviorAppealParams{
-		EntityType: appeal.AppellantType,
-		EntityID:   appeal.AppellantID,
-		DecisionID: resolution.decisionID,
-		Reason:     appeal.Reason,
-		Evidence: pgtype.Text{
-			String: logic.BuildBehaviorAppealEvidence(appeal),
-			Valid:  true,
-		},
-		Status:   "resolved",
-		ReevalAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
-	}); err != nil {
-		log.Error().Err(err).Int64("appeal_id", appeal.ID).Int64("claim_id", appeal.ClaimID).Str("appellant_type", appeal.AppellantType).Msg("failed to persist resolved behavior appeal record")
-	}
 
 	metadata := map[string]any{
 		"status":              resolution.status,
@@ -1724,218 +1704,142 @@ func (server *Server) autoResolveAppeal(ctx *gin.Context, appeal db.Appeal) (db.
 	if resolution.decisionID.Valid {
 		metadata["decision_id"] = resolution.decisionID.Int64
 	}
-	regionID := appeal.RegionID
-	appealID := appeal.ID
+	regionID := recoveryDispute.RegionID
+	recoveryDisputeID := recoveryDispute.ID
 	server.writeAuditLog(ctx, AuditLogInput{
 		ActorUserID: 0,
 		ActorRole:   "system",
-		Action:      "system_appeal_resolved",
-		TargetType:  "appeal",
-		TargetID:    &appealID,
+		Action:      "system_recovery_dispute_resolved",
+		TargetType:  "recovery_dispute",
+		TargetID:    &recoveryDisputeID,
 		RegionID:    &regionID,
 		Metadata:    metadata,
 	})
 
-	taskPayload := &worker.ProcessAppealResultPayload{
-		AppealID:             appeal.ID,
+	taskPayload := &worker.ProcessRecoveryDisputeResultPayload{
+		RecoveryDisputeID:    recoveryDispute.ID,
 		ClaimID:              reviewResult.PostProcess.ClaimID,
 		CompensationActionID: 0,
-		Status:               resolution.status,
-		AppellantType:        reviewResult.PostProcess.AppellantType,
-		AppellantID:          reviewResult.PostProcess.AppellantID,
-		ClaimantUserID:       reviewResult.PostProcess.ClaimantUserID,
-		ClaimType:            reviewResult.PostProcess.ClaimType,
-		ClaimAmount:          reviewResult.PostProcess.ClaimAmount,
-		CompensationAmount:   0,
-		OrderNo:              reviewResult.PostProcess.OrderNo,
+		ReleaseActionID: func() int64 {
+			if reviewResult.ReleaseAction != nil {
+				return reviewResult.ReleaseAction.ID
+			}
+			return 0
+		}(),
+		Status:             resolution.status,
+		AppellantType:      reviewResult.PostProcess.AppellantType,
+		AppellantID:        reviewResult.PostProcess.AppellantID,
+		ClaimantUserID:     reviewResult.PostProcess.ClaimantUserID,
+		ClaimType:          reviewResult.PostProcess.ClaimType,
+		ClaimAmount:        reviewResult.PostProcess.ClaimAmount,
+		CompensationAmount: 0,
+		OrderNo:            reviewResult.PostProcess.OrderNo,
 	}
-	if err := server.dispatchAppealResult(ctx, taskPayload); err != nil {
-		return db.Appeal{}, err
+	if err := server.dispatchRecoveryDisputeResult(ctx, taskPayload); err != nil {
+		return db.RecoveryDispute{}, err
 	}
 
-	return reviewResult.Appeal, nil
+	return reviewResult.RecoveryDispute, nil
 }
 
-func (server *Server) autoResolveAppealBestEffort(ctx *gin.Context, appeal db.Appeal) db.Appeal {
-	resolvedAppeal, err := server.autoResolveAppeal(ctx, appeal)
+func (server *Server) autoResolveRecoveryDisputeBestEffort(ctx *gin.Context, recoveryDispute db.RecoveryDispute) db.RecoveryDispute {
+	resolvedRecoveryDispute, err := server.autoResolveRecoveryDispute(ctx, recoveryDispute)
 	if err == nil {
-		return resolvedAppeal
+		return resolvedRecoveryDispute
 	}
 
 	log.Error().Err(logic.LoggableError(err)).
-		Int64("appeal_id", appeal.ID).
-		Int64("claim_id", appeal.ClaimID).
-		Str("appellant_type", appeal.AppellantType).
-		Int64("appellant_id", appeal.AppellantID).
-		Msg("appeal was created but automatic resolution did not fully complete")
+		Int64("recovery_dispute_id", recoveryDispute.ID).
+		Int64("claim_id", recoveryDispute.ClaimID).
+		Str("appellant_type", recoveryDispute.AppellantType).
+		Int64("appellant_id", recoveryDispute.AppellantID).
+		Msg("recovery dispute was created but automatic resolution did not fully complete")
 
 	if server.taskDistributor == nil {
 		log.Warn().
-			Int64("appeal_id", appeal.ID).
-			Int64("claim_id", appeal.ClaimID).
-			Msg("skip automatic appeal resolution retry enqueue because task distributor is unavailable")
-	} else if retryErr := server.taskDistributor.DistributeTaskAutomaticAppealResolution(ctx, &worker.AutomaticAppealResolutionPayload{AppealID: appeal.ID}); retryErr != nil {
+			Int64("recovery_dispute_id", recoveryDispute.ID).
+			Int64("claim_id", recoveryDispute.ClaimID).
+			Msg("skip automatic recovery dispute resolution retry enqueue because task distributor is unavailable")
+	} else if retryErr := server.taskDistributor.DistributeTaskAutomaticRecoveryDisputeResolution(ctx, &worker.AutomaticRecoveryDisputeResolutionPayload{RecoveryDisputeID: recoveryDispute.ID}); retryErr != nil {
 		log.Error().Err(retryErr).
-			Int64("appeal_id", appeal.ID).
-			Int64("claim_id", appeal.ClaimID).
-			Msg("failed to enqueue automatic appeal resolution retry task")
+			Int64("recovery_dispute_id", recoveryDispute.ID).
+			Int64("claim_id", recoveryDispute.ClaimID).
+			Msg("failed to enqueue automatic recovery dispute resolution retry task")
 	}
 
-	persistedAppeal, persistedErr := server.store.GetAppeal(ctx, appeal.ID)
+	persistedRecoveryDispute, persistedErr := server.store.GetRecoveryDispute(ctx, recoveryDispute.ID)
 	if persistedErr == nil {
-		return persistedAppeal
+		return persistedRecoveryDispute
 	}
 
 	log.Error().Err(persistedErr).
-		Int64("appeal_id", appeal.ID).
-		Int64("claim_id", appeal.ClaimID).
-		Msg("failed to reload persisted appeal after automatic resolution error")
+		Int64("recovery_dispute_id", recoveryDispute.ID).
+		Int64("claim_id", recoveryDispute.ClaimID).
+		Msg("failed to reload persisted recovery dispute after automatic resolution error")
 
-	return appeal
+	return recoveryDispute
 }
 
-func deriveAutomaticAppealResolution(appeal db.Appeal, decisions []db.BehaviorDecision) automaticAppealResolution {
-	resolution := logic.DeriveAutomaticAppealResolution(appeal, decisions)
-	return automaticAppealResolution{
+func deriveAutomaticRecoveryDisputeResolution(recoveryDispute db.RecoveryDispute, decisions []db.BehaviorDecision) automaticRecoveryDisputeResolution {
+	resolution := logic.DeriveAutomaticRecoveryDisputeResolution(recoveryDispute, decisions)
+	return automaticRecoveryDisputeResolution{
 		status:      resolution.Status,
 		reviewNotes: resolution.ReviewNotes,
 		decisionID:  resolution.DecisionID,
 	}
 }
 
-func (server *Server) dispatchAppealResult(ctx *gin.Context, payload *worker.ProcessAppealResultPayload) error {
+func (server *Server) dispatchRecoveryDisputeResult(ctx *gin.Context, payload *worker.ProcessRecoveryDisputeResultPayload) error {
 	if server.taskDistributor == nil {
-		return server.processAppealResultInline(ctx, payload)
+		return server.processRecoveryDisputeResultInline(ctx, payload)
 	}
 
-	if err := server.taskDistributor.DistributeTaskProcessAppealResult(ctx, payload); err != nil {
-		return server.processAppealResultInline(ctx, payload)
+	if err := server.taskDistributor.DistributeTaskProcessRecoveryDisputeResult(ctx, payload); err != nil {
+		return server.processRecoveryDisputeResultInline(ctx, payload)
 	}
 
 	return nil
 }
 
-func (server *Server) processAppealResultInline(ctx *gin.Context, payload *worker.ProcessAppealResultPayload) error {
-	switch payload.Status {
-	case "approved":
-		if err := server.waiveClaimRecoveryInline(ctx, payload); err != nil {
-			log.Error().Err(logic.LoggableError(err)).Int64("appeal_id", payload.AppealID).Int64("claim_id", payload.ClaimID).Msg("failed to rollback claim recovery inline after automatic appeal resolution")
-		}
-		if err := server.penalizeClaimantInline(ctx, payload); err != nil {
-			log.Error().Err(logic.LoggableError(err)).Int64("appeal_id", payload.AppealID).Int64("claimant_user_id", payload.ClaimantUserID).Msg("failed to penalize claimant inline after automatic appeal resolution")
-		}
-		if payload.CompensationActionID > 0 {
-			if err := worker.ExecuteClaimPayoutAction(ctx, server.store, server.taskDistributor, server.transferClient, payload.CompensationActionID); err != nil {
-				mappedErr := logic.MapClaimPayoutTransferExecutionError(err)
-				log.Error().Err(logic.LoggableError(mappedErr)).Int64("appeal_id", payload.AppealID).Int64("behavior_action_id", payload.CompensationActionID).Msg("failed to execute appeal compensation action inline")
-				return mappedErr
-			}
-		}
-	case "rejected":
-		if err := server.resumeClaimRecoveryInline(ctx, payload); err != nil {
-			log.Error().Err(logic.LoggableError(err)).Int64("appeal_id", payload.AppealID).Int64("claim_id", payload.ClaimID).Msg("failed to resume claim recovery inline after automatic appeal resolution")
-		}
+func (server *Server) processRecoveryDisputeResultInline(ctx *gin.Context, payload *worker.ProcessRecoveryDisputeResultPayload) error {
+	if err := worker.ExecuteRecoveryDisputeResultEffects(ctx, server.store, server.taskDistributor, server.transferClient, *payload); err != nil {
+		return err
 	}
 
 	appellantUserID, err := server.getAppellantUserID(ctx, payload.AppellantType, payload.AppellantID)
 	if err != nil {
-		log.Error().Err(logic.LoggableError(err)).Int64("appeal_id", payload.AppealID).Str("appellant_type", payload.AppellantType).Int64("appellant_id", payload.AppellantID).Msg("failed to resolve appellant user id for appeal notification")
+		log.Error().Err(logic.LoggableError(err)).Int64("recovery_dispute_id", payload.RecoveryDisputeID).Str("appellant_type", payload.AppellantType).Int64("appellant_id", payload.AppellantID).Msg("failed to resolve appellant user id for recovery dispute notification")
 	} else {
-		appellantTitle, appellantContent := buildAppealNotificationContent(payload, true)
+		appellantTitle, appellantContent := buildRecoveryDisputeNotificationContent(payload, true)
 		server.SendNotificationSync(ctx, SendNotificationParams{
 			UserID:      appellantUserID,
-			Type:        "appeal",
+			Type:        "recovery_dispute",
 			Title:       appellantTitle,
 			Content:     appellantContent,
-			RelatedType: "appeal",
-			RelatedID:   payload.AppealID,
+			RelatedType: "recovery_dispute",
+			RelatedID:   payload.RecoveryDisputeID,
 			ExtraData: map[string]any{
-				"appeal_id":      payload.AppealID,
-				"status":         payload.Status,
-				"appellant_type": payload.AppellantType,
+				"recovery_dispute_id": payload.RecoveryDisputeID,
+				"status":              payload.Status,
+				"appellant_type":      payload.AppellantType,
 			},
 		})
 	}
 
-	claimantTitle, claimantContent := buildAppealNotificationContent(payload, false)
+	claimantTitle, claimantContent := buildRecoveryDisputeNotificationContent(payload, false)
 	server.SendNotificationSync(ctx, SendNotificationParams{
 		UserID:      payload.ClaimantUserID,
-		Type:        "appeal",
+		Type:        "recovery_dispute",
 		Title:       claimantTitle,
 		Content:     claimantContent,
-		RelatedType: "appeal",
-		RelatedID:   payload.AppealID,
+		RelatedType: "recovery_dispute",
+		RelatedID:   payload.RecoveryDisputeID,
 		ExtraData: map[string]any{
-			"appeal_id": payload.AppealID,
-			"status":    payload.Status,
+			"recovery_dispute_id": payload.RecoveryDisputeID,
+			"status":              payload.Status,
 		},
 	})
 
-	return nil
-}
-
-func (server *Server) waiveClaimRecoveryInline(ctx *gin.Context, payload *worker.ProcessAppealResultPayload) error {
-	if payload.ClaimID == 0 {
-		return nil
-	}
-
-	recovery, err := server.store.GetClaimRecoveryByClaimID(ctx, payload.ClaimID)
-	if err != nil {
-		return nil
-	}
-	if recovery.Status != "appealed" {
-		return nil
-	}
-
-	if _, err := server.store.MarkClaimRecoveryWaived(ctx, recovery.ID); err != nil {
-		if errors.Is(err, db.ErrRecordNotFound) {
-			return nil
-		}
-		return err
-	}
-
-	if recovery.RecoveryTarget.Valid && recovery.RecoveryTarget.String == "merchant" {
-		order, orderErr := server.store.GetOrder(ctx, recovery.OrderID)
-		if orderErr != nil {
-			return orderErr
-		}
-		if err := server.store.UnsuspendMerchantTakeout(ctx, order.MerchantID); err != nil {
-			return err
-		}
-	}
-
-	if recovery.RecoveryTarget.Valid && recovery.RecoveryTarget.String == "rider" {
-		delivery, deliveryErr := server.store.GetDeliveryByOrderID(ctx, recovery.OrderID)
-		if deliveryErr != nil {
-			return deliveryErr
-		}
-		if delivery.RiderID.Valid {
-			if err := server.store.UnsuspendRider(ctx, delivery.RiderID.Int64); err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
-}
-
-func (server *Server) resumeClaimRecoveryInline(ctx *gin.Context, payload *worker.ProcessAppealResultPayload) error {
-	if payload.ClaimID == 0 {
-		return nil
-	}
-
-	recovery, err := server.store.GetClaimRecoveryByClaimID(ctx, payload.ClaimID)
-	if err != nil {
-		return nil
-	}
-	if recovery.Status != "appealed" {
-		return nil
-	}
-
-	_, err = server.store.ResumeClaimRecoveryAfterAppeal(ctx, recovery.ID)
-	if err != nil && !errors.Is(err, db.ErrRecordNotFound) {
-		return err
-	}
 	return nil
 }
 
@@ -1955,82 +1859,7 @@ func (server *Server) getAppellantUserID(ctx *gin.Context, appellantType string,
 	return rider.UserID, nil
 }
 
-func (server *Server) penalizeClaimantInline(ctx *gin.Context, payload *worker.ProcessAppealResultPayload) error {
-	userID := payload.ClaimantUserID
-	if userID == 0 && payload.ClaimID != 0 {
-		claim, err := server.store.GetClaim(ctx, payload.ClaimID)
-		if err == nil {
-			userID = claim.UserID
-		}
-	}
-	if userID == 0 {
-		return nil
-	}
-
-	if _, err := server.store.GetActiveBehaviorBlocklist(ctx, db.GetActiveBehaviorBlocklistParams{
-		EntityType: "user",
-		EntityID:   userID,
-	}); err == nil {
-		return nil
-	} else if !errors.Is(err, db.ErrRecordNotFound) {
-		return err
-	}
-
-	blockDays := int64(14)
-	if days := server.getRejectServiceCooldownDays(ctx); days > 0 {
-		blockDays = days
-	}
-	blockUntil := time.Now().AddDate(0, 0, int(blockDays))
-
-	if _, err := server.store.CreateBehaviorBlocklist(ctx, db.CreateBehaviorBlocklistParams{
-		EntityType: "user",
-		EntityID:   userID,
-		ReasonCode: "malicious-claim",
-		BlockUntil: pgtype.Timestamptz{Time: blockUntil, Valid: true},
-		Status:     "active",
-	}); err != nil {
-		return err
-	}
-
-	if _, err := server.store.GetUserClaimWarningStatus(ctx, userID); err != nil {
-		if errors.Is(err, db.ErrRecordNotFound) {
-			_, createErr := server.store.CreateUserClaimWarning(ctx, db.CreateUserClaimWarningParams{
-				UserID:            userID,
-				LastWarningReason: pgtype.Text{String: "appeal approved: malicious claim", Valid: true},
-				RequiresEvidence:  false,
-			})
-			return createErr
-		}
-		return err
-	}
-
-	return server.store.IncrementUserClaimWarning(ctx, db.IncrementUserClaimWarningParams{
-		UserID:            userID,
-		LastWarningReason: pgtype.Text{String: "appeal approved: malicious claim", Valid: true},
-		RequiresEvidence:  false,
-	})
-}
-
-func (server *Server) getRejectServiceCooldownDays(ctx *gin.Context) int64 {
-	config, err := server.store.GetPlatformConfig(ctx, db.GetPlatformConfigParams{
-		ConfigKey: "behavior_trace.reject_service_cooldown_days",
-		ScopeType: "global",
-		ScopeID:   pgtype.Int8{Valid: false},
-	})
-	if err != nil {
-		return 0
-	}
-
-	var payload struct {
-		Days int64 `json:"days"`
-	}
-	if jsonErr := json.Unmarshal(config.ConfigValue, &payload); jsonErr == nil && payload.Days > 0 {
-		return payload.Days
-	}
-	return 0
-}
-
-func buildAppealNotificationContent(payload *worker.ProcessAppealResultPayload, isAppellant bool) (string, string) {
+func buildRecoveryDisputeNotificationContent(payload *worker.ProcessRecoveryDisputeResultPayload, isAppellant bool) (string, string) {
 	if isAppellant {
 		if payload.Status == "approved" {
 			content := "您针对订单" + payload.OrderNo + "的申诉已通过审核，平台已撤销本次判责与追偿。"

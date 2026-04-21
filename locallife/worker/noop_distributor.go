@@ -92,12 +92,12 @@ func (NoopTaskDistributor) DistributeTaskCheckRiderDamage(ctx context.Context, r
 	return nil
 }
 
-func (NoopTaskDistributor) DistributeTaskProcessAppealResult(ctx context.Context, payload *ProcessAppealResultPayload, opts ...asynq.Option) error {
-	return errors.New("appeal result task distributor unavailable without redis")
+func (NoopTaskDistributor) DistributeTaskProcessRecoveryDisputeResult(ctx context.Context, payload *ProcessRecoveryDisputeResultPayload, opts ...asynq.Option) error {
+	return errors.New("recovery dispute result task distributor unavailable without redis")
 }
 
-func (NoopTaskDistributor) DistributeTaskAutomaticAppealResolution(ctx context.Context, payload *AutomaticAppealResolutionPayload, opts ...asynq.Option) error {
-	return errors.New("automatic appeal resolution task distributor unavailable without redis")
+func (NoopTaskDistributor) DistributeTaskAutomaticRecoveryDisputeResolution(ctx context.Context, payload *AutomaticRecoveryDisputeResolutionPayload, opts ...asynq.Option) error {
+	return errors.New("automatic recovery dispute resolution task distributor unavailable without redis")
 }
 
 func (NoopTaskDistributor) DistributeTaskClaimPayout(ctx context.Context, payload *ClaimPayoutPayload, opts ...asynq.Option) error {
