@@ -22,6 +22,14 @@ interface PendingApprovalItem {
   time: string
 }
 
+interface NotificationSummary {
+  unreadCount: number
+  latestTitle: string
+  latestSummary: string
+  latestCreatedAt: string
+  empty: boolean
+}
+
 interface RiderRankingDisplayItem {
   completion_rate: string
   [key: string]: unknown
@@ -58,6 +66,13 @@ Page({
       merchants: 0,
       riders: 0
     } as PendingSummary,
+    notificationSummary: {
+      unreadCount: 0,
+      latestTitle: '暂无待接单提醒',
+      latestSummary: '当前没有新的待接单提醒。',
+      latestCreatedAt: '',
+      empty: true
+    } as NotificationSummary,
     
     // 排行榜
     merchantRankings: [] as Array<Record<string, unknown>>,
@@ -94,11 +109,22 @@ Page({
   },
 
   async initDashboard() {
-    this.setData({ initialLoading: true, error: null })
-    const regionState = await loadOperatorRegions()
-    this.setData(regionState)
-    await this.loadDashboardData()
-    this.setData({ initialLoading: false })
+    this.setData({ initialLoading: true, error: null, errorCanRetry: true })
+
+    try {
+      const regionState = await loadOperatorRegions()
+      this.setData(regionState)
+      await this.loadDashboardData()
+      this.setData({ initialLoading: false })
+    } catch (error: unknown) {
+      const errorState = getConsoleDashboardErrorState('operator', error, '运营中心加载失败，请稍后重试。')
+      this.setData({
+        initialLoading: false,
+        loading: false,
+        error: errorState.message,
+        errorCanRetry: errorState.canRetry
+      })
+    }
   },
 
   async refreshData() {
@@ -262,5 +288,9 @@ Page({
         wx.navigateTo({ url: target.url })
       }
     })
+  },
+
+  onOpenNotifications() {
+    wx.navigateTo({ url: '/pages/operator/notifications/index' })
   }
 })

@@ -1,47 +1,29 @@
 import {
-  applyRegionExpansion,
-  getRegionExpansionStatusDisplay,
-  listAvailableRegions,
-  listRegionExpansionApplications,
-  listRegions,
-  type RegionExpansionApplication,
-  type RegionExpansionStatusTheme
-} from '../../../api/operator-application'
+  loadOperatorRegionExpansionApplications,
+  loadOperatorRegionExpansionCityState,
+  loadOperatorRegionExpansionRegionsByCity,
+  submitOperatorRegionExpansion,
+  type OperatorRegionExpansionApplicationView,
+  type OperatorRegionExpansionCityOption,
+  type OperatorRegionExpansionRegionOption
+} from '../../../services/operator-region-expansion'
 import { logger } from '../../../utils/logger'
 import { getErrorUserMessage } from '../../../utils/user-facing'
-
-type CityOption = { label: string, value: number }
-type RegionOption = { label: string, secondary: string, value: number }
-type RegionExpansionApplicationView = RegionExpansionApplication & {
-  status_label: string
-  status_theme: RegionExpansionStatusTheme
-  is_rejected: boolean
-}
-
-function formatDate(iso: string): string {
-  try {
-    const d = new Date(iso)
-    const pad = (n: number) => String(n).padStart(2, '0')
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
-  } catch {
-    return iso
-  }
-}
 
 Page({
   data: {
     navBarHeight: 88,
 
     // 申请列表
-    applications: [] as RegionExpansionApplicationView[],
+    applications: [] as OperatorRegionExpansionApplicationView[],
     listLoading: true,
     listError: '',
 
     // 选区状态
-    cityOptions:         [] as CityOption[],
+  cityOptions:         [] as OperatorRegionExpansionCityOption[],
     cityPickerVisible:   false,
-    regionOptions:       [] as RegionOption[],
-    filteredRegions:     [] as RegionOption[],
+  regionOptions:       [] as OperatorRegionExpansionRegionOption[],
+  filteredRegions:     [] as OperatorRegionExpansionRegionOption[],
     selectedCityIndex:   0,
     selectedCityId:      0,
     selectedCityName:    '',
@@ -67,18 +49,7 @@ Page({
   async loadApplications() {
     this.setData({ listLoading: true, listError: '' })
     try {
-      const res = await listRegionExpansionApplications()
-      const apps = (res.applications || []).map((a) => {
-        const statusDisplay = getRegionExpansionStatusDisplay(a.status)
-        return {
-          ...a,
-          created_at: formatDate(a.created_at),
-          status_label: statusDisplay.label,
-          status_theme: statusDisplay.theme,
-          is_rejected: statusDisplay.isRejected
-        }
-      })
-      this.setData({ applications: apps })
+      this.setData({ applications: await loadOperatorRegionExpansionApplications() })
     } catch (e: unknown) {
       const msg = getErrorUserMessage(e, '加载申请记录失败，请稍后重试')
       this.setData({ listError: msg })
@@ -96,17 +67,14 @@ Page({
 
   async fetchCityOptions() {
     try {
-      const cities: CityOption[] = []
-      let pageID = 1
-      for (;;) {
-        const items = await listRegions({ page_id: pageID, page_size: 100, level: 2 })
-        if (!items || items.length === 0) break
-        items.forEach((item) => cities.push({ label: item.name, value: item.id }))
-        if (items.length < 100) break
-        pageID++
-      }
-      const selectedCityId = cities[0]?.value || 0
-      this.setData({ cityOptions: cities, cityPickerVisible: false, selectedCityId, selectedCityName: cities[0]?.label || '' })
+      const cityState = await loadOperatorRegionExpansionCityState()
+      const selectedCityId = cityState.selectedCityId
+      this.setData({
+        cityOptions: cityState.cityOptions,
+        cityPickerVisible: false,
+        selectedCityId,
+        selectedCityName: cityState.selectedCityName
+      })
       if (selectedCityId) await this.fetchRegionsByCity(selectedCityId)
     } catch (e: unknown) {
       logger.error('Fetch cities failed', e)
@@ -115,32 +83,17 @@ Page({
 
   async fetchRegionsByCity(cityID: number, keyword = '') {
     try {
-      const districts: RegionOption[] = []
-      let pageID = 1
-      for (;;) {
-        const response = await listAvailableRegions({
-          page_id: pageID,
-          page_size: 100,
-          level: 3,
-          parent_id: cityID,
-          keyword: keyword || undefined
-        })
-        const items = response.regions || []
-        if (!items || items.length === 0) break
-        items.forEach((r) => districts.push({
-          label: r.name,
-          secondary: r.parent_name || this.data.selectedCityName,
-          value: r.id
-        }))
-        if (items.length < 100) break
-        pageID++
-      }
+      const regionState = await loadOperatorRegionExpansionRegionsByCity({
+        cityId: cityID,
+        cityName: this.data.selectedCityName,
+        keyword
+      })
       this.setData({
-        regionOptions:   districts,
-        filteredRegions: districts,
+        regionOptions:   regionState.regionOptions,
+        filteredRegions: regionState.filteredRegions,
         selectedRegionId:   0,
         selectedRegionName: '',
-        regionKeyword:   keyword
+        regionKeyword:   regionState.regionKeyword
       })
     } catch (e: unknown) {
       logger.error('Fetch districts failed', e)
@@ -222,7 +175,7 @@ Page({
 
     this.setData({ submitting: true })
     try {
-      await applyRegionExpansion(selectedRegionId)
+      await submitOperatorRegionExpansion(selectedRegionId)
       this.setData({ showForm: false, selectedRegionId: 0, selectedRegionName: '' })
       await this.loadApplications()
     } catch (e: unknown) {

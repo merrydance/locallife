@@ -2,6 +2,10 @@ import { operatorBasicManagementService } from '../api/operator-basic-management
 import { operatorAnalyticsService } from '../api/operator-analytics'
 import { operatorMerchantManagementService } from '../api/operator-merchant-management'
 import { operatorRiderManagementService } from '../api/operator-rider-management'
+import {
+  loadOperatorNotificationSummaryCard,
+  type OperatorNotificationSummaryCard
+} from './operator-notification-center'
 import { formatPriceNoSymbol } from '../utils/util'
 
 type OperatorTimeDimension = 'day' | 'week' | 'month'
@@ -46,6 +50,7 @@ export interface OperatorCenterPageData {
   pending_approvals: OperatorPendingApprovalItem[]
   pending_count: number
   pendingSummary: OperatorPendingSummary
+  notificationSummary: OperatorNotificationSummaryCard
 }
 
 interface TrendLike {
@@ -111,7 +116,8 @@ export async function loadOperatorCenterPageData(params: {
     ridersPending,
     merchantRanking,
     riderRanking,
-    dailyTrends
+    dailyTrends,
+    notificationSummary
   ] = await Promise.all([
     operatorBasicManagementService.getFinanceOverview(undefined, undefined, regionId).catch(() => null),
     operatorAnalyticsService.getRealtimeStats(regionId),
@@ -128,7 +134,14 @@ export async function loadOperatorCenterPageData(params: {
     operatorRiderManagementService.getRiderRanking({ start_date: startDate, end_date: endDate, limit: 5, region_id: regionId })
       .catch(() => ({ rankings: [] })),
     operatorAnalyticsService.getDailyTrend(regionId, startDate, endDate)
-      .catch(() => [])
+      .catch(() => []),
+    loadOperatorNotificationSummaryCard().catch(() => ({
+      unreadCount: 0,
+      latestTitle: '暂无待接单提醒',
+      latestSummary: '当前没有新的待接单提醒。',
+      latestCreatedAt: '',
+      empty: true
+    }))
   ])
 
   const trends = Array.isArray(dailyTrends) ? dailyTrends as TrendLike[] : []
@@ -170,6 +183,7 @@ export async function loadOperatorCenterPageData(params: {
     riderRankings,
     pending_approvals: pendingItems.slice(0, 5),
     pending_count: pendingSummary.merchants + pendingSummary.riders,
-    pendingSummary
+    pendingSummary,
+    notificationSummary
   }
 }

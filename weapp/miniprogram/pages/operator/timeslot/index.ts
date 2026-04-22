@@ -1,10 +1,13 @@
-import { deliveryFeeService } from '../../../api/delivery-fee'
-import type { PeakHourConfigResponse, CreatePeakHourConfigRequest } from '../../../api/delivery-fee'
+import {
+  createOperatorPeakHour,
+  deleteOperatorPeakHour,
+  formatOperatorPeakDays,
+  hasOperatorPeakConflict,
+  loadOperatorPeakHourViews,
+  type OperatorCreatePeakHourConfigRequest,
+  type OperatorPeakHourViewItem
+} from '../../../services/operator-region-config'
 import { getErrorUserMessage } from '../../../utils/user-facing'
-
-interface PeakHourViewItem extends PeakHourConfigResponse {
-  daysText: string
-}
 
 interface TimeslotPageOptions {
   region_id?: string
@@ -20,11 +23,6 @@ interface DaysChangeEvent {
   detail: { value: Array<string | number> }
 }
 
-function timeToMinutes(value: string): number {
-  const [hours, minutes] = value.split(':').map((item) => parseInt(item, 10))
-  return (hours * 60) + minutes
-}
-
 Page({
   data: {
     selectedRegionId: 0,
@@ -36,7 +34,7 @@ Page({
     error: '',
     navBarHeight: 0,
 
-    peakConfigs: [] as PeakHourViewItem[],
+    peakConfigs: [] as OperatorPeakHourViewItem[],
 
     showPeakModal: false,
     peakStartTimePickerVisible: false,
@@ -73,24 +71,11 @@ Page({
   },
 
   formatDays(days: number[]) {
-    const map = ['日', '一', '二', '三', '四', '五', '六']
-    return (days || []).map((d) => map[d] || '').filter(Boolean).join('、')
+    return formatOperatorPeakDays(days)
   },
 
   hasPeakConflict(startTime: string, endTime: string, days: number[]) {
-    const nextStart = timeToMinutes(startTime)
-    const nextEnd = timeToMinutes(endTime)
-
-    return this.data.peakConfigs.find((item) => {
-      const overlapDay = (item.days_of_week || []).some((day) => days.includes(day))
-      if (!overlapDay) {
-        return false
-      }
-
-      const currentStart = timeToMinutes(item.start_time)
-      const currentEnd = timeToMinutes(item.end_time)
-      return nextStart < currentEnd && nextEnd > currentStart
-    })
+    return hasOperatorPeakConflict(this.data.peakConfigs, startTime, endTime, days)
   },
 
   onNavHeight(e: WechatMiniprogram.CustomEvent<{ navBarHeight: number }>) {
@@ -100,12 +85,7 @@ Page({
   async loadPeakConfigs(regionId: number) {
     this.setData({ loading: true, error: '' })
     try {
-      const peakConfigs = await deliveryFeeService.getPeakConfigs(regionId)
-      const mapped = peakConfigs.map((item) => ({
-        ...item,
-        daysText: this.formatDays(item.days_of_week)
-      }))
-      this.setData({ peakConfigs: mapped, loading: false, initialLoading: false })
+      this.setData({ peakConfigs: await loadOperatorPeakHourViews(regionId), loading: false, initialLoading: false })
     } catch (err: unknown) {
       const message = getErrorUserMessage(err, '加载时段配置失败，请稍后重试')
       this.setData({ loading: false, initialLoading: false, error: message })
@@ -219,7 +199,7 @@ Page({
       return
     }
 
-    const data: CreatePeakHourConfigRequest = {
+    const data: OperatorCreatePeakHourConfigRequest = {
       region_id: selectedRegionId,
       start_time: peakForm.startTime,
       end_time: peakForm.endTime,
@@ -229,7 +209,7 @@ Page({
 
     try {
       this.setData({ saving: true })
-      await deliveryFeeService.createPeakConfig(selectedRegionId, data)
+      await createOperatorPeakHour(selectedRegionId, data)
       this.setData({ showPeakModal: false })
       await this.loadPeakConfigs(selectedRegionId)
     } catch (err) {
@@ -250,7 +230,7 @@ Page({
         if (!res.confirm) return
 
         try {
-          await deliveryFeeService.deletePeakConfig(id)
+          await deleteOperatorPeakHour(id)
           await this.loadPeakConfigs(this.data.selectedRegionId)
         } catch (err) {
           wx.showToast({ title: getErrorUserMessage(err, '删除失败，请稍后重试'), icon: 'none' })

@@ -1,7 +1,6 @@
-import { operatorBasicManagementService, OperatorBasicManagementAdapter } from '../../../api/operator-basic-management'
+import { loadOperatorRegionListItems, type OperatorRegionListItem } from '../../../services/operator-regions'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 
-type RegionListItem = ReturnType<typeof OperatorBasicManagementAdapter.adaptRegionResponse>
 type RegionPageTarget = 'delivery' | 'rules'
 
 interface RegionPageOptions {
@@ -10,7 +9,7 @@ interface RegionPageOptions {
 
 Page({
     data: {
-        regions: [] as RegionListItem[],
+        regions: [] as OperatorRegionListItem[],
         initialLoading: true,
         error: '',
         navBarHeight: 0,
@@ -44,15 +43,8 @@ Page({
     async loadRegions() {
         this.setData({ initialLoading: true, error: '', regions: [] })
         try {
-            const res = await operatorBasicManagementService.getOperatorRegions({
-                page: 1,
-                limit: 100
-            })
-
-            const newRegions = (res.regions || []).map((r) => OperatorBasicManagementAdapter.adaptRegionResponse(r))
-
             this.setData({
-                regions: newRegions,
+                regions: await loadOperatorRegionListItems(),
                 initialLoading: false
             })
 

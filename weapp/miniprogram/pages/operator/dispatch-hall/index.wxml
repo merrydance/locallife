@@ -1,0 +1,113 @@
+<custom-navbar title="待接单大厅" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view class="page page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px">
+  <view wx:if="{{initialLoading}}" class="state-card center">
+    <t-loading theme="circular" size="40rpx" text="加载待接单大厅中" />
+  </view>
+
+  <view wx:elif="{{emptyRegion}}" class="state-card center">
+    <t-empty description="当前还没有可管理区域" />
+  </view>
+
+  <view wx:elif="{{error}}" class="state-card center">
+    <t-empty icon="error-circle" description="{{error}}">
+      <t-button slot="action" theme="primary" bind:tap="onRetry">重试</t-button>
+    </t-empty>
+  </view>
+
+  <view wx:else class="monitor-page">
+    <view class="overview-card">
+      <view class="overview-card__head">
+        <view>
+          <view class="overview-card__label">监控区域</view>
+          <view class="overview-card__region">{{summary.regionName || (regions[selectedRegionIdx] && regions[selectedRegionIdx].name) || '当前区域'}}</view>
+        </view>
+        <view wx:if="{{regions.length > 1}}" class="overview-card__switch" bind:tap="onOpenRegionPicker">切换区域</view>
+      </view>
+
+      <view class="overview-card__meta">
+        <text>最近刷新 {{summary.latestRefreshText}}</text>
+        <text class="overview-card__link" bind:tap="onOpenNotifications">查看提醒</text>
+      </view>
+    </view>
+
+    <view class="summary-grid">
+      <view class="summary-tile summary-tile--primary">
+        <view class="summary-tile__label">待接单</view>
+        <view class="summary-tile__value">{{summary.pendingTotal}}</view>
+      </view>
+      <view class="summary-tile summary-tile--warning">
+        <view class="summary-tile__label">超 3 分钟</view>
+        <view class="summary-tile__value">{{summary.timeoutOver3mTotal}}</view>
+      </view>
+      <view class="summary-tile summary-tile--plain">
+        <view class="summary-tile__label">最长等待</view>
+        <view class="summary-tile__value summary-tile__value--small">{{summary.oldestWaitText}}</view>
+      </view>
+    </view>
+
+    <scroll-view
+      scroll-y
+      class="monitor-scroll"
+      bindscrolltolower="onLoadMore"
+      lower-threshold="100"
+      enable-back-to-top
+      refresher-enabled="{{true}}"
+      bindrefresherrefresh="onPullDownRefresh"
+      refresher-triggered="{{refreshing}}"
+    >
+      <view class="list-header">
+        <view class="list-header__title">待接单配送单</view>
+        <view class="list-header__total">共 {{total}} 单</view>
+      </view>
+
+      <view wx:if="{{dispatches.length === 0 && !loading}}" class="state-card center">
+        <t-empty description="当前区域没有待接单配送单" />
+      </view>
+
+      <view wx:else class="dispatch-list">
+        <view wx:for="{{dispatches}}" wx:key="delivery_id" class="dispatch-card">
+          <view class="dispatch-card__head">
+            <view class="dispatch-card__title-wrap">
+              <view class="dispatch-card__merchant">{{item.merchant_name}}</view>
+              <t-tag wx:if="{{item.is_timeout_over_3m}}" theme="warning" variant="light" size="small">超 3 分钟</t-tag>
+            </view>
+            <view class="dispatch-card__wait">{{item.waitText}}</view>
+          </view>
+
+          <view class="dispatch-card__row">
+            <text class="dispatch-card__label">订单号</text>
+            <text class="dispatch-card__value">{{item.order_no}}</text>
+          </view>
+
+          <view class="dispatch-card__row">
+            <text class="dispatch-card__label">配送费</text>
+            <text class="dispatch-card__value">{{item.deliveryFeeText}}</text>
+          </view>
+
+          <view class="dispatch-card__row">
+            <text class="dispatch-card__label">预计取餐</text>
+            <text class="dispatch-card__value">{{item.expectedPickupText}}</text>
+          </view>
+        </view>
+
+        <view class="loading-wrap">
+          <t-loading wx:if="{{loadingMore}}" theme="circular" size="32rpx" />
+          <text wx:elif="{{!hasMore && dispatches.length > 0}}" class="no-more-text">没有更多待接单配送单了</text>
+        </view>
+      </view>
+    </scroll-view>
+  </view>
+
+  <t-picker
+    visible="{{regionPickerVisible}}"
+    value="{{[selectedRegionValue]}}"
+    title="选择区域"
+    cancelBtn="取消"
+    confirmBtn="确认"
+    bind:confirm="onRegionConfirm"
+    bind:cancel="onCloseRegionPicker"
+  >
+    <t-picker-item options="{{regionPickerOptions}}" />
+  </t-picker>
+</view>

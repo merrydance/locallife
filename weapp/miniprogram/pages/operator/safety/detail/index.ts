@@ -1,24 +1,11 @@
 import {
-  operatorBasicManagementService,
-  getFoodSafetyCaseStatusDisplay,
-  type OperatorFoodSafetyCaseItem,
-  type OperatorFoodSafetyCaseStatus,
-  type OperatorFoodSafetyCaseStatusTheme,
-  type OperatorFoodSafetyIncidentItem
-} from '../../../../api/operator-basic-management'
+  loadOperatorFoodSafetyDetailPageData,
+  saveOperatorFoodSafetyInvestigation,
+  saveOperatorFoodSafetyResolution,
+  type OperatorFoodSafetyCaseDetailView,
+  type OperatorFoodSafetyIncidentView
+} from '../../../../services/operator-safety'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
-
-type FoodSafetyCaseDetailView = OperatorFoodSafetyCaseItem & {
-  status_label: string
-  status_theme: OperatorFoodSafetyCaseStatusTheme
-  is_active: boolean
-  is_resolved: boolean
-}
-
-type FoodSafetyIncidentView = OperatorFoodSafetyIncidentItem & {
-  status_label: string
-  status_theme: OperatorFoodSafetyCaseStatusTheme
-}
 
 interface InputDetail {
   value: string
@@ -33,8 +20,8 @@ Page({
     investigateSubmitting: false,
     resolveSubmitting: false,
     error: '',
-    caseDetail: null as FoodSafetyCaseDetailView | null,
-    incidents: [] as FoodSafetyIncidentView[],
+    caseDetail: null as OperatorFoodSafetyCaseDetailView | null,
+    incidents: [] as OperatorFoodSafetyIncidentView[],
     investigationReport: '',
     merchantRectificationReport: '',
     resolution: ''
@@ -57,27 +44,9 @@ Page({
   async loadDetail() {
     this.setData({ loading: true, error: '' })
     try {
-      const response = await operatorBasicManagementService.getFoodSafetyCaseDetail(this.data.id)
-      const statusDisplay = getFoodSafetyCaseStatusDisplay(response.case.status)
+      const nextView = await loadOperatorFoodSafetyDetailPageData(this.data.id)
       this.setData({
-        caseDetail: {
-          ...response.case,
-          status_label: statusDisplay.label,
-          status_theme: statusDisplay.theme,
-          is_active: statusDisplay.isActive,
-          is_resolved: statusDisplay.isResolved
-        },
-        incidents: (response.incidents || []).map((item) => {
-          const incidentStatus = getFoodSafetyCaseStatusDisplay(item.status as OperatorFoodSafetyCaseStatus)
-          return {
-            ...item,
-            status_label: incidentStatus.label,
-            status_theme: incidentStatus.theme
-          }
-        }),
-        investigationReport: response.case.investigation_report || '',
-        merchantRectificationReport: response.case.merchant_rectification_report || '',
-        resolution: response.case.resolution || '',
+        ...nextView,
         loading: false,
         initialLoading: false
       })
@@ -118,9 +87,7 @@ Page({
     try {
       this.setData({ investigateSubmitting: true })
       wx.showLoading({ title: '保存中' })
-      await operatorBasicManagementService.investigateFoodSafetyCase(this.data.id, {
-        investigation_report: investigationReport
-      })
+      await saveOperatorFoodSafetyInvestigation(this.data.id, investigationReport)
       await this.loadDetail()
       wx.showToast({ title: '调查报告已保存', icon: 'success' })
     } catch (error: unknown) {
@@ -154,9 +121,10 @@ Page({
     try {
       this.setData({ resolveSubmitting: true })
       wx.showLoading({ title: '提交中' })
-      await operatorBasicManagementService.resolveFoodSafetyCase(this.data.id, {
-        investigation_report: investigationReport,
-        merchant_rectification_report: merchantRectificationReport,
+      await saveOperatorFoodSafetyResolution({
+        id: this.data.id,
+        investigationReport,
+        merchantRectificationReport,
         resolution
       })
       await this.loadDetail()

@@ -1,4 +1,8 @@
-import { operatorBasicManagementService, type RegionResponse } from '../api/operator-basic-management'
+import {
+  operatorBasicManagementService,
+  OperatorBasicManagementAdapter,
+  type RegionResponse
+} from '../api/operator-basic-management'
 
 export interface ConsolePickerOption {
   label: string
@@ -9,6 +13,8 @@ export interface ConsoleRegionOption {
   id: number
   name: string
 }
+
+export type OperatorRegionListItem = ReturnType<typeof OperatorBasicManagementAdapter.adaptRegionResponse>
 
 export interface ConsoleRegionPickerState {
   regions: ConsoleRegionOption[]
@@ -35,10 +41,11 @@ function mapRegions(source: RegionResponse[]): ConsoleRegionOption[] {
 }
 
 export async function loadOperatorRegions(): Promise<ConsoleRegionPickerState> {
-  try {
-    const response = await operatorBasicManagementService.getOperatorRegions({ page: 1, limit: 100 })
-    return buildRegionPickerState(mapRegions(response.regions || []))
-  } catch (_error) {
-    return buildRegionPickerState([])
-  }
+  const response = await operatorBasicManagementService.getOperatorRegions({ page: 1, limit: 100 })
+  return buildRegionPickerState(mapRegions(response.regions || []))
+}
+
+export async function loadOperatorRegionListItems(): Promise<OperatorRegionListItem[]> {
+  const response = await operatorBasicManagementService.getOperatorRegions({ page: 1, limit: 100 })
+  return (response.regions || []).map((item) => OperatorBasicManagementAdapter.adaptRegionResponse(item))
 }

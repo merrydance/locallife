@@ -1,6 +1,7 @@
 import { operatorAnalyticsService } from '../api/operator-analytics'
 import { operatorMerchantManagementService } from '../api/operator-merchant-management'
 import { operatorRiderManagementService } from '../api/operator-rider-management'
+import { formatPrice, formatPriceNoSymbol } from '../utils/util'
 
 type OperatorTimeDimension = 'day' | 'week' | 'month'
 
@@ -47,10 +48,6 @@ interface TrendLike {
   total_gmv?: number
   order_count?: number
   operator_income?: number
-}
-
-function formatCurrencyFen(amount: number): string {
-  return `¥${(Number(amount || 0) / 100).toFixed(2)}`
 }
 
 function getPeriodDays(dimension: OperatorTimeDimension): number {
@@ -154,7 +151,7 @@ export async function loadOperatorAnalyticsPageData(params: {
   const metrics: OperatorAnalyticsMetric[] = [
     {
       label: `${periodLabel}GMV`,
-      value: formatCurrencyFen(currentSummary.totalGmv),
+      value: formatPrice(currentSummary.totalGmv),
       change: gmvChange,
       trend: gmvChange.startsWith('-') ? 'down' : 'up'
     },
@@ -184,9 +181,9 @@ export async function loadOperatorAnalyticsPageData(params: {
   const topMerchants = merchantRankingList.slice(0, 5).map((item, index) => ({
     rank: index + 1,
     name: String(item.merchant_name || '-'),
-    gmv: (Number(item.total_sales || item.total_gmv || 0) / 100).toFixed(2),
+    gmv: formatPriceNoSymbol(Number(item.total_sales || item.total_gmv || 0)),
     orders: Number(item.order_count || 0),
-    commission: (Number(item.total_commission || 0) / 100).toFixed(2)
+    commission: formatPriceNoSymbol(Number(item.total_commission || 0))
   }))
 
   const topRiders = riderRankingList.slice(0, 5).map((item, index) => ({
@@ -194,7 +191,7 @@ export async function loadOperatorAnalyticsPageData(params: {
     name: String(item.rider_name || '-'),
     deliveries: Number(item.delivery_count || 0),
     completionRate: `${Number(item.completion_rate || 0).toFixed(1)}%`,
-    earnings: (Number(item.total_earnings || 0) / 100).toFixed(2)
+    earnings: formatPriceNoSymbol(Number(item.total_earnings || 0))
   }))
 
   const regionSummary: OperatorAnalyticsRegionSummary = regionStats
@@ -203,7 +200,7 @@ export async function loadOperatorAnalyticsPageData(params: {
         merchantText: `${regionStats.merchant_stats.active_merchants}/${regionStats.merchant_stats.total_merchants}`,
         riderText: `${regionStats.rider_stats.online_riders}/${regionStats.rider_stats.active_riders}`,
         completionRate: `${Number(regionStats.order_stats.completion_rate || 0).toFixed(1)}%`,
-        commission: formatCurrencyFen(regionStats.financial_stats.total_commission || 0)
+        commission: formatPrice(regionStats.financial_stats.total_commission || 0)
       }
     : {
         regionName: params.selectedRegionName || '全部区域',

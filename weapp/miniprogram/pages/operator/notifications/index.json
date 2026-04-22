@@ -1,0 +1,12 @@
+{
+  "navigationBarTitleText": "待接单提醒",
+  "usingComponents": {
+    "custom-navbar": "/components/custom-navbar/index",
+    "t-tag": "tdesign-miniprogram/tag/tag",
+    "t-empty": "tdesign-miniprogram/empty/empty",
+    "t-button": "tdesign-miniprogram/button/button",
+    "t-loading": "tdesign-miniprogram/loading/loading",
+    "t-tab-panel": "tdesign-miniprogram/tab-panel/tab-panel",
+    "t-tabs": "tdesign-miniprogram/tabs/tabs"
+  }
+}

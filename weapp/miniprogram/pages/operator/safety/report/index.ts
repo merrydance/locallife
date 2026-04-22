@@ -1,50 +1,23 @@
 import {
-  operatorBasicManagementService,
-  getFoodSafetyCaseStatusDisplay,
-  type OperatorFoodSafetyCaseItem,
-  type OperatorFoodSafetyCaseStatus,
-  type OperatorFoodSafetyCaseStatusTheme
-} from '../../../../api/operator-basic-management'
+  loadOperatorFoodSafetyCaseListPageData,
+  type OperatorFoodSafetyCaseView,
+  type OperatorSafetyStatusFilter
+} from '../../../../services/operator-safety'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
 
-type SafetyStatusFilter = '' | OperatorFoodSafetyCaseStatus
-
 interface TabChangeDetail {
-  value: SafetyStatusFilter
-}
-
-type FoodSafetyCaseView = {
-  id: number
-  merchant_id: number
-  primary_product_key: string
-  primary_product_label: string
-  trigger_reason: string
-  status: OperatorFoodSafetyCaseStatus
-  status_label: string
-  status_theme: OperatorFoodSafetyCaseStatusTheme
-  suspended_at: string
-  created_at: string
-}
-
-function formatProductLabel(item: OperatorFoodSafetyCaseItem): string {
-  if (item.primary_product_label?.trim()) {
-    return item.primary_product_label.trim()
-  }
-  if (item.primary_product_key?.trim()) {
-    return item.primary_product_key.trim()
-  }
-  return '未识别问题商品'
+  value: OperatorSafetyStatusFilter
 }
 
 Page({
   data: {
-    cases: [] as FoodSafetyCaseView[],
+    cases: [] as OperatorFoodSafetyCaseView[],
     loading: false,
     loadingMore: false,
     initialLoading: true,
     error: '',
     navBarHeight: 88,
-    status: '' as SafetyStatusFilter,
+    status: '' as OperatorSafetyStatusFilter,
     page: 1,
     limit: 20,
     hasMore: false
@@ -70,22 +43,6 @@ Page({
     })
   },
 
-  adaptCase(item: OperatorFoodSafetyCaseItem): FoodSafetyCaseView {
-    const statusDisplay = getFoodSafetyCaseStatusDisplay(item.status)
-    return {
-      id: item.id,
-      merchant_id: item.merchant_id,
-      primary_product_key: item.primary_product_key,
-      primary_product_label: formatProductLabel(item),
-      trigger_reason: item.trigger_reason,
-      status: item.status,
-      status_label: statusDisplay.label,
-      status_theme: statusDisplay.theme,
-      suspended_at: item.suspended_at,
-      created_at: item.created_at
-    }
-  },
-
   async loadCases(reset = false) {
     if (this.data.loading || (this.data.loadingMore && !reset)) return
     const nextPage = reset ? 1 : this.data.page
@@ -96,16 +53,16 @@ Page({
     }
 
     try {
-      const res = await operatorBasicManagementService.getFoodSafetyCases({
-        page: nextPage,
-        limit: this.data.limit,
-        status: this.data.status || undefined
+      const result = await loadOperatorFoodSafetyCaseListPageData({
+        pageId: nextPage,
+        pageSize: this.data.limit,
+        status: this.data.status
       })
       const current = reset ? [] : this.data.cases
       this.setData({
-        cases: [...current, ...(res.items || []).map((item) => this.adaptCase(item))],
-        page: nextPage + 1,
-        hasMore: Boolean(res.has_more),
+        cases: [...current, ...result.cases],
+        page: result.nextPage,
+        hasMore: result.hasMore,
         loading: false,
         loadingMore: false,
         initialLoading: false

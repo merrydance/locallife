@@ -1,15 +1,10 @@
-import { deliveryFeeService } from '../../../api/delivery-fee'
+import {
+    createEmptyOperatorDeliveryFeeConfigView,
+    loadOperatorDeliveryFeeConfigView,
+    saveOperatorDeliveryFeeConfig,
+    type OperatorDeliveryFeeConfigView
+} from '../../../services/operator-region-config'
 import { getErrorUserMessage } from '../../../utils/user-facing'
-
-interface DeliveryFeeConfigView {
-    base_fee: string
-    base_distance: string
-    extra_fee_per_km: string
-    value_ratio: string
-    min_fee: string
-    max_fee: string
-    is_active: boolean
-}
 
 interface DeliveryFeePageOptions {
     region_id?: string
@@ -21,15 +16,7 @@ interface ConfigInputEventDetail {
 
 Page({
     data: {
-        config: {
-            base_fee: '',
-            base_distance: '',
-            extra_fee_per_km: '',
-            value_ratio: '0',
-            min_fee: '',
-            max_fee: '',
-            is_active: true
-        } as DeliveryFeeConfigView,
+        config: createEmptyOperatorDeliveryFeeConfigView() as OperatorDeliveryFeeConfigView,
         regionId: 0,
         initialLoading: true,
         loading: false,
@@ -66,17 +53,8 @@ Page({
 
         this.setData({ initialLoading: true, error: '' })
         try {
-            const config = await deliveryFeeService.getRegionConfig(this.data.regionId)
             this.setData({
-                config: {
-                    base_fee: (config.base_fee / 100).toFixed(2),
-                    base_distance: String(config.base_distance),
-                    extra_fee_per_km: (config.extra_fee_per_km / 100).toFixed(2),
-                    value_ratio: String(config.value_ratio),
-                    min_fee: (config.min_fee / 100).toFixed(2),
-                    max_fee: typeof config.max_fee === 'number' ? (config.max_fee / 100).toFixed(2) : '',
-                    is_active: config.is_active
-                },
+                config: await loadOperatorDeliveryFeeConfigView(this.data.regionId),
                 initialLoading: false
             })
         } catch (error: unknown) {
@@ -113,18 +91,7 @@ Page({
 
         try {
             wx.showLoading({ title: '保存中' })
-
-            const submitData = {
-                region_id: regionId,
-                base_fee: Math.round(Number(config.base_fee) * 100),
-                base_distance: Number(config.base_distance),
-                extra_fee_per_km: Math.round(Number(config.extra_fee_per_km) * 100),
-                value_ratio: Number(config.value_ratio),
-                min_fee: Math.round(Number(config.min_fee) * 100),
-                max_fee: config.max_fee ? Math.round(Number(config.max_fee) * 100) : undefined
-            }
-
-            await deliveryFeeService.updateRegionConfig(regionId, submitData)
+            await saveOperatorDeliveryFeeConfig(regionId, config)
         } catch (error: unknown) {
             const message = getErrorUserMessage(error, '保存失败，请稍后重试')
             wx.showToast({ title: message, icon: 'none' })

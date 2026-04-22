@@ -28,6 +28,9 @@
       "pages": [
         "analytics/index",
         "dashboard/index",
+        "dispatch-hall/index",
+        "notifications/index",
+        "notifications/detail/index",
         "merchants/index",
         "merchants/detail/index",
         "riders/index",

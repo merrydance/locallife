@@ -105,6 +105,21 @@
         </view>
       </view>
 
+      <view class="notification-section">
+        <view class="section-header">
+          <view class="section-title">待接单提醒</view>
+          <view class="view-all" bindtap="onOpenNotifications">查看全部</view>
+        </view>
+        <view class="notification-card" bindtap="onOpenNotifications">
+          <view class="notification-card__head">
+            <view class="notification-card__badge">未读 {{notificationSummary.unreadCount}}</view>
+            <text wx:if="{{notificationSummary.latestCreatedAt}}" class="notification-card__time">{{notificationSummary.latestCreatedAt}}</text>
+          </view>
+          <view class="notification-card__title">{{notificationSummary.latestTitle}}</view>
+          <view class="notification-card__summary">{{notificationSummary.latestSummary}}</view>
+        </view>
+      </view>
+
       <!-- 4. 快捷功能矩阵 (Premium Icons) -->
       <view class="menu-section">
         <view class="section-header">
@@ -146,6 +161,12 @@
               <t-icon name="chart-bar" size="48rpx" />
             </view>
             <text>财务概览</text>
+          </navigator>
+          <navigator url="/pages/operator/notifications/index" class="menu-item">
+            <view class="menu-icon-bg color-warning">
+              <t-icon name="notification" size="48rpx" />
+            </view>
+            <text>待接单提醒</text>
           </navigator>
           <navigator url="/pages/operator/rules/index?region_id={{selectedRegionId}}&region_name={{regions[selectedRegionIdx].name}}" class="menu-item">
             <view class="menu-icon-bg color-default">

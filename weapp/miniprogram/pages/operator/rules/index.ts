@@ -1,25 +1,18 @@
 import { isLargeScreen, getStableBarHeights } from '../../../utils/responsive'
 import {
-  operatorRulesService,
-  OperatorRulesAdapter,
-  type OperatorRuleCategory,
-  type OperatorRuleItem
-} from '../../../api/operator-rules'
+  getOperatorRuleCategoryItems,
+  loadOperatorRulesPageData,
+  updateOperatorRuleValue,
+  validateOperatorRuleValue,
+  type OperatorRuleCategoryViewItem,
+  type OperatorRuleFilterCategory,
+  type OperatorRuleValidationResult,
+  type OperatorRuleView
+} from '../../../services/operator-rules-management'
 import { logger } from '../../../utils/logger'
 
-interface RuleItem extends Omit<OperatorRuleItem, 'category'> {
-  category: OperatorRuleCategory
-  icon?: string
-}
-
-interface RuleCategoryItem {
-  label: string
-  value: RuleItem['category']
-  icon: string
-}
-
 interface RuleCategoryDataset {
-  val?: RuleItem['category']
+  val?: OperatorRuleView['category']
 }
 
 interface RulesPageOptions {
@@ -35,13 +28,6 @@ interface ValueChangeDetail {
   value?: string
 }
 
-type RuleCategory = OperatorRuleCategory
-
-interface RuleValidationResult {
-  valid: boolean
-  message: string
-}
-
 Page({
   data: {
     isLargeScreen: false,
@@ -53,23 +39,19 @@ Page({
     selectedRegionId: 0,
     selectedRegionName: '',
     
-    activeCategory: 'delivery' as RuleCategory,
-    categories: [
-      { label: '运费参数', value: 'delivery', icon: 'chart' },
-      { label: '时段系数', value: 'timeslot', icon: 'time' },
-      { label: '天气系数', value: 'weather', icon: 'cloud' }
-    ] as RuleCategoryItem[],
+    activeCategory: 'delivery' as OperatorRuleFilterCategory,
+    categories: getOperatorRuleCategoryItems() as OperatorRuleCategoryViewItem[],
     
-    rules: [] as RuleItem[],
+    rules: [] as OperatorRuleView[],
     categorizedRules: {
-      delivery: [] as RuleItem[],
-      timeslot: [] as RuleItem[],
-      weather: [] as RuleItem[]
+      delivery: [] as OperatorRuleView[],
+      timeslot: [] as OperatorRuleView[],
+      weather: [] as OperatorRuleView[]
     },
 
     // 编辑弹窗
     showEdit: false,
-    editingRule: null as RuleItem | null,
+    editingRule: null as OperatorRuleView | null,
     newValue: '',
     valueError: '',
     saving: false
@@ -96,26 +78,10 @@ Page({
   async loadRules() {
     this.setData({ loading: true, error: null })
     try {
-      const params = this.data.selectedRegionId > 0 ? { region_id: this.data.selectedRegionId } : undefined
-      const res = await operatorRulesService.listRules(params)
-      
-      // 按后端返回的 category/editable 渲染，避免前端猜测 key 造成漂移
-      const enhancedRules = res.rules.map((rule) => {
-        const category = OperatorRulesAdapter.normalizeCategory(rule.category)
-        const icon = OperatorRulesAdapter.getCategoryIcon(category)
-
-        return { ...rule, category, icon }
-      })
-
-      const categorized = {
-        delivery: enhancedRules.filter((r) => r.category === 'delivery'),
-        timeslot: enhancedRules.filter((r) => r.category === 'timeslot'),
-        weather: enhancedRules.filter((r) => r.category === 'weather')
-      }
+      const nextView = await loadOperatorRulesPageData(this.data.selectedRegionId)
 
       this.setData({
-        rules: enhancedRules,
-        categorizedRules: categorized,
+        ...nextView,
         loading: false,
         initialLoading: false
       })
@@ -163,7 +129,7 @@ Page({
 
   onValueChange(e: WechatMiniprogram.CustomEvent<ValueChangeDetail>) {
     const value = typeof e.detail?.value === 'string' ? e.detail.value : ''
-    const validation = this.validateRuleValue(this.data.editingRule, value)
+    const validation = validateOperatorRuleValue(this.data.editingRule, value)
     this.setData({ newValue: value, valueError: validation.valid ? '' : validation.message })
   },
 
@@ -193,11 +159,11 @@ Page({
     try {
       this.setData({ saving: true })
       wx.showLoading({ title: '保存中...', mask: true })
-      await operatorRulesService.updateRule(
-        editingRule.key,
-        { value: trimmedValue },
-        this.data.selectedRegionId > 0 ? this.data.selectedRegionId : undefined
-      )
+      await updateOperatorRuleValue({
+        key: editingRule.key,
+        value: trimmedValue,
+        regionId: this.data.selectedRegionId > 0 ? this.data.selectedRegionId : undefined
+      })
       
       wx.hideLoading()
       this.setData({ showEdit: false, editingRule: null, newValue: '', valueError: '', saving: false })
@@ -210,35 +176,7 @@ Page({
     }
   },
 
-  validateRuleValue(rule: RuleItem | null, value: string): RuleValidationResult {
-    if (!rule) {
-      return { valid: false, message: '缺少规则信息' }
-    }
-
-    const trimmedValue = value.trim()
-    if (!trimmedValue) {
-      return { valid: false, message: '规则值不能为空' }
-    }
-
-    const numericValue = Number(trimmedValue)
-    if (!Number.isFinite(numericValue)) {
-      return { valid: false, message: '规则值必须是数字' }
-    }
-
-    if (numericValue < 0) {
-      return { valid: false, message: '规则值不能为负数' }
-    }
-
-    if (rule.category === 'weather' || rule.category === 'timeslot') {
-      if (numericValue < 0.1 || numericValue > 10) {
-        return { valid: false, message: '系数范围需在 0.1 到 10 之间' }
-      }
-    }
-
-    if (rule.unit.includes('%') && numericValue > 100) {
-      return { valid: false, message: '百分比规则不能超过 100' }
-    }
-
-    return { valid: true, message: '' }
+  validateRuleValue(_rule: OperatorRuleView | null, _value: string): OperatorRuleValidationResult {
+    return validateOperatorRuleValue(_rule, _value)
   }
 })

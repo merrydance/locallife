@@ -1,13 +1,10 @@
 import { isLargeScreen } from '@/utils/responsive'
 import {
-  formatOnlineStatus,
-  getRiderStatusDisplay,
-  operatorRiderManagementService,
-  parseRiderStatusFilter,
-  RiderQueryParams,
-  RiderStatus,
-  OperatorRiderItem
-} from '../../../api/operator-rider-management'
+  loadOperatorRiderListPageData,
+  parseOperatorRiderStatusFilter,
+  type OperatorRiderFilterStatus,
+  type OperatorRiderListView
+} from '../../../services/operator-rider-management'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 
 type RiderListPageOptions = {
@@ -18,46 +15,6 @@ type RiderListPageOptions = {
 type RiderListDataset = {
   id?: number
   name?: string
-}
-
-type RiderView = {
-  id: number
-  name: string
-  phone: string
-  status: string
-  status_label: string
-  status_theme: 'success' | 'warning' | 'danger' | 'default'
-  is_online: boolean
-  online_status_label: string
-  region_id: number
-  region_name: string
-  delivery_count: number
-  rating_display: string
-  total_earnings_display: string
-}
-
-function adaptRider(item: Partial<OperatorRiderItem> & Record<string, unknown>): RiderView {
-  const name = String(item.name || item.real_name || '未命名骑手')
-  const onlineStatus = String(item.online_status || ((item.is_online as boolean) ? 'online' : 'offline'))
-  const isOnline = onlineStatus === 'online' || Boolean(item.is_online)
-  const deliveryCount = Number(item.delivery_count || item.total_orders || 0)
-  const statusDisplay = getRiderStatusDisplay(String(item.status || 'pending') as RiderStatus)
-
-  return {
-    id: Number(item.id || 0),
-    name,
-    phone: String(item.phone || '-'),
-    status: statusDisplay.normalizedStatus,
-    status_label: statusDisplay.label,
-    status_theme: statusDisplay.theme,
-    is_online: isOnline,
-    online_status_label: formatOnlineStatus(isOnline ? 'online' : 'offline'),
-    region_id: Number(item.region_id || 0),
-    region_name: String(item.region_name || `区域 ${Number(item.region_id || 0)}`),
-    delivery_count: deliveryCount,
-    rating_display: Number(item.rating || 0).toFixed(1),
-    total_earnings_display: `¥${(Number(item.total_earnings || 0) / 100).toFixed(2)}`
-  }
 }
 
 Page({
@@ -73,16 +30,16 @@ Page({
     limit: 20,
     total: 0,
     hasMore: true,
-    riders: [] as RiderView[],
+    riders: [] as OperatorRiderListView[],
     regionId: 0,
-    statusFilter: '' as RiderStatus | '',
+    statusFilter: '' as OperatorRiderFilterStatus,
     searchKeyword: '',
     searchTimer: null as number | null
   },
 
   onLoad(options: RiderListPageOptions) {
     const regionId = options.region_id ? parseInt(options.region_id) : 0
-    const statusFilter = parseRiderStatusFilter(options.status)
+    const statusFilter = parseOperatorRiderStatusFilter(options.status)
     this.setData({
       isLargeScreen: isLargeScreen(),
       regionId,
@@ -119,24 +76,20 @@ Page({
         this.setData({ loadingMore: true })
       }
 
-      const params: RiderQueryParams = {
-        page: refresh ? 1 : this.data.page,
-        limit: this.data.limit,
-        keyword: this.data.searchKeyword || undefined,
-        status: this.data.statusFilter || undefined,
-        sort_by: 'created_at',
-        sort_order: 'desc',
-        ...(this.data.regionId ? { region_id: this.data.regionId } : {})
-      }
+      const result = await loadOperatorRiderListPageData({
+        pageId: refresh ? 1 : this.data.page,
+        pageSize: this.data.limit,
+        regionId: this.data.regionId,
+        statusFilter: this.data.statusFilter,
+        searchKeyword: this.data.searchKeyword
+      })
 
-      const res = await operatorRiderManagementService.getRiderList(params)
-      const incoming = (res.riders || []).map((item) => adaptRider(item as Partial<OperatorRiderItem> & Record<string, unknown>))
-      const riders = refresh ? incoming : [...this.data.riders, ...incoming]
-      const total = Number(res.total || riders.length)
+      const riders = refresh ? result.riders : [...this.data.riders, ...result.riders]
+      const total = refresh ? result.total : Number(result.total || riders.length)
 
       this.setData({
         riders,
-        page: refresh ? 2 : this.data.page + 1,
+        page: refresh ? result.nextPage : this.data.page + 1,
         total,
         hasMore: riders.length < total,
         loading: false,
@@ -179,7 +132,7 @@ Page({
     this.loadRiders(true)
   },
 
-  onStatusFilterChange(e: WechatMiniprogram.CustomEvent<{ value: RiderStatus | '' }>) {
+  onStatusFilterChange(e: WechatMiniprogram.CustomEvent<{ value: OperatorRiderFilterStatus }>) {
     this.setData({ statusFilter: e.detail.value })
     this.loadRiders(true)
   },
