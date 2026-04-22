@@ -76,6 +76,7 @@
         />
         <t-input 
           label="联系人姓名" 
+          maxlength="{{20}}"
           placeholder="负责人真实姓名" 
           value="{{formData.contactName}}" 
           bindchange="onInput" 
@@ -111,24 +112,7 @@
     </view>
 
     <view class="step-view animate-fade-in" wx:if="{{currentStep === 2}}">
-      <view class="section-title">资质上传（身份证必填，营业执照可选）</view>
-      <view class="upload-section">
-        <view class="label-row">
-          <text class="label">企业营业执照（可选）</text>
-        </view>
-        <document-uploader 
-          type="license" 
-          title="点击上传企业营业执照" 
-          value="{{license.url}}" 
-          rawUrl="{{license.rawUrl}}"
-          feedbackState="{{uploadFeedback.license.state}}"
-          feedbackTitle="{{uploadFeedback.license.title}}"
-          feedbackDescription="{{uploadFeedback.license.description}}"
-          bind:change="onLicenseUpload"
-          bind:remove="onLicenseRemove" 
-        />
-      </view>
-
+      <view class="section-title">资质上传（仅需身份证）</view>
       <view class="upload-section">
         <view class="label-row">
           <text class="label required">法人身份证正反面</text>
@@ -162,8 +146,8 @@
     </view>
 
     <view class="step-view animate-fade-in" wx:if="{{currentStep === 3}}">
-      <view class="ocr-status-banner" wx:if="{{ocrDisplayState.idCard === 'processing' || ocrDisplayState.businessLicense === 'processing'}}">
-        系统仍在核验资质图片，本页不再展示字段级占位，避免把不同证照的进度混在一起。
+      <view class="ocr-status-banner" wx:if="{{ocrDisplayState.idCard === 'processing'}}">
+        系统仍在核验身份证图片，本页不再展示字段级占位，避免把进度提示和确认信息混在一起。
       </view>
       <view class="final-check">
         <t-icon name="check-circle-filled" size="120rpx" color="var(--td-brand-color)" />
@@ -237,6 +221,9 @@
   cancelBtn="取消"
   confirmBtn="确认"
   auto-close="{{false}}"
+  visible-item-count="{{7}}"
+  item-height="{{64}}"
+  popup-props="{{regionPickerPopupProps}}"
   bind:pick="onRegionPickerPick"
   bind:confirm="onRegionPickerConfirm"
   bind:cancel="onCloseRegionPopup"

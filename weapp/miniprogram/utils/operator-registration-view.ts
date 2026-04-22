@@ -328,10 +328,15 @@ export function buildOperatorApplicationPatch(params: {
   res: OperatorApplicationResponse
   regionOptions: RegionOption[]
   phoneError: string
+  currentFormData: FormDataValue
   uploads: { license: UploadFieldValue, idFront: UploadFieldValue, idBack: UploadFieldValue }
 }) {
   let regionName = String(params.res.region_name || '')
   const regionId = Number(params.res.region_id || 0)
+  const preservedContactName = String(params.currentFormData.contactName || '')
+  const preservedContactPhone = String(params.currentFormData.contactPhone || '')
+  const nextContactName = preservedContactName.trim() || String(params.res.contact_name || '')
+  const nextContactPhone = preservedContactPhone.trim() || String(params.res.contact_phone || '')
   if (!regionName && regionId && params.regionOptions.length > 0) {
     const matched = params.regionOptions.find((region) => Number(region.value) === regionId)
     if (matched) {
@@ -348,11 +353,11 @@ export function buildOperatorApplicationPatch(params: {
   const patch: Record<string, unknown> = {
     'formData.regionId': regionId,
     'formData.name': String(params.res.name || ''),
-    'formData.contactName': String(params.res.contact_name || ''),
-    'formData.contactPhone': String(params.res.contact_phone || ''),
+    'formData.contactName': nextContactName,
+    'formData.contactPhone': nextContactPhone,
     'formData.years': Number(params.res.requested_contract_years || 3),
     selectedDistrictName: '',
-    phoneError: String(params.res.contact_phone || '').trim() ? '' : params.phoneError,
+    phoneError: nextContactPhone.trim() ? '' : params.phoneError,
     idFront: { url: '', assetId: params.res.id_card_front_asset_id },
     idBack: { url: '', assetId: params.res.id_card_back_asset_id },
     license: { url: '', assetId: params.res.business_license_asset_id },

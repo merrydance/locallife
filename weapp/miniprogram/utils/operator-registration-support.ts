@@ -146,19 +146,12 @@ export async function fetchOperatorAvailableRegionsByCity(cityID: number) {
   let pageID = 1
 
   for (;;) {
-    const query: {
-      page_id: number
-      page_size: number
-      level: number
-      parent_id: number
-    } = {
+    const res = await listAvailableRegions({
       page_id: pageID,
       page_size: 100,
       level: 3,
       parent_id: cityID
-    }
-
-    const res = await listAvailableRegions(query)
+    })
     const regions = res?.regions || []
     if (regions.length === 0) {
       break

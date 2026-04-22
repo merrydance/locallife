@@ -2,6 +2,7 @@ import {
   getOrCreateOperatorApplication, 
   getOperatorApplication,
   resetOperatorApplication,
+  updateOperatorRegion,
   updateOperatorBasic, 
   deleteOperatorApplicationDocument,
   ocrOperatorBusinessLicense, 
@@ -74,6 +75,12 @@ Page({
     selectedDistrictName: '',
     regionPickerValue: [] as number[],
     regionOptions: [] as RegionOption[],
+    regionPickerPopupProps: {
+      preventScrollThrough: true,
+      overlayProps: {
+        preventScrollThrough: true
+      }
+    },
     ocrDisplayState: DEFAULT_OPERATOR_OCR_DISPLAY_STATE,
     uploadFeedback: DEFAULT_OPERATOR_UPLOAD_FEEDBACK,
     phoneError: '',
@@ -226,6 +233,7 @@ Page({
       res,
       regionOptions: this.data.regionOptions,
       phoneError: this.data.phoneError,
+      currentFormData: this.data.formData,
       uploads: {
         license: this.data.license,
         idFront: this.data.idFront,
@@ -526,6 +534,23 @@ Page({
     this.setData({ currentStep: this.data.currentStep - 1 })
   },
 
+  async syncDraftBeforeStepTwo() {
+    const existing = await getOperatorApplication()
+    if (existing?.id) {
+      if (existing.status && existing.status !== 'draft') {
+        throw new Error('当前申请状态不支持继续编辑，请刷新页面后重试')
+      }
+
+      if (Number(existing.region_id || 0) !== Number(this.data.formData.regionId || 0)) {
+        return updateOperatorRegion({ region_id: this.data.formData.regionId })
+      }
+
+      return existing
+    }
+
+    return getOrCreateOperatorApplication({ region_id: this.data.formData.regionId })
+  },
+
   async onNext() {
     const { currentStep, formData, idFront, idBack } = this.data
     if (currentStep === 0) {
@@ -546,7 +571,7 @@ Page({
       
       wx.showLoading({ title: '锁定区域中...', mask: true })
       try {
-        const res = await getOrCreateOperatorApplication({ region_id: formData.regionId })
+        const res = await this.syncDraftBeforeStepTwo()
         this.mapResponseToData(res)
         const updated = await updateOperatorBasic(buildOperatorBasicPayload(formData))
         this.mapResponseToData(updated)
