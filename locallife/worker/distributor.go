@@ -238,6 +238,13 @@ type TaskDistributor interface {
 		opts ...asynq.Option,
 	) error
 
+	// DistributeTaskOnboardingReview 分发入驻审核任务
+	DistributeTaskOnboardingReview(
+		ctx context.Context,
+		payload *OnboardingReviewPayload,
+		opts ...asynq.Option,
+	) error
+
 	// DistributeTaskGroupApplicationBusinessLicenseOCR 分发集团营业执照 OCR 任务
 	DistributeTaskGroupApplicationBusinessLicenseOCR(
 		ctx context.Context,

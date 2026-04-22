@@ -144,6 +144,12 @@ const (
 	MerchantSystemLabelSourceManualOverride = "manual_override"
 	MerchantSystemLabelSourceMigration      = "migration_backfill"
 
+	CredentialDocumentTypeBusinessLicense = "business_license"
+	CredentialDocumentTypeFoodPermit      = "food_permit"
+	CredentialDocumentTypeHealthCert      = "health_cert"
+
+	CredentialSuspensionReasonDocumentExpired = "document_expired"
+
 	SystemTagHasOpenKitchen = "有明厨亮灶"
 	SystemTagNoOpenKitchen  = "无明厨亮灶"
 	SystemTagNoDineIn       = "无堂食"

@@ -23,6 +23,9 @@ import (
 const (
 	riderDepositCreditReminderBatchLimit = int32(200)
 	riderDepositCreditExpireBatchLimit   = int32(200)
+	credentialReminderBatchLimit         = int32(200)
+	credentialExpireBatchLimit           = int32(200)
+	credentialReminderDays               = 7
 	expiredCombinedPaymentBatchLimit     = int32(200)
 	timedOutPrintAnomalyBatchLimit       = int32(200)
 	timedOutPrintAnomalyThreshold        = 15 * time.Minute
@@ -153,6 +156,18 @@ func (s *DataCleanupScheduler) Start() error {
 
 	// 每天凌晨3点10分标记已过期的骑手押金退款凭证
 	_, err = s.cron.AddFunc("0 10 3 * * *", s.markExpiredRiderDepositCredits)
+	if err != nil {
+		return err
+	}
+
+	// 每天早上9点05分发送证照到期前7天提醒
+	_, err = s.cron.AddFunc("0 5 9 * * *", s.remindExpiringCredentials)
+	if err != nil {
+		return err
+	}
+
+	// 每天凌晨3点15分执行证照过期暂停治理
+	_, err = s.cron.AddFunc("0 15 3 * * *", s.enforceExpiredCredentials)
 	if err != nil {
 		return err
 	}
@@ -335,6 +350,180 @@ func (s *DataCleanupScheduler) sendRiderDepositReminderNotification(
 	})
 	if err != nil {
 		return fmt.Errorf("create rider deposit reminder notification: %w", err)
+	}
+
+	return nil
+}
+
+func credentialDocumentLabel(subjectType, documentType string) string {
+	switch documentType {
+	case db.CredentialDocumentTypeBusinessLicense:
+		return "营业执照"
+	case db.CredentialDocumentTypeFoodPermit:
+		return "食品经营许可证"
+	case db.CredentialDocumentTypeHealthCert:
+		if subjectType == "rider" {
+			return "健康证"
+		}
+		return "健康证明"
+	default:
+		return documentType
+	}
+}
+
+func credentialReminderText(ledger db.CredentialLedger) (string, string) {
+	documentLabel := credentialDocumentLabel(ledger.SubjectType, ledger.DocumentType)
+	if ledger.SubjectType == "merchant" {
+		return fmt.Sprintf("%s将在 %d 天后到期", documentLabel, credentialReminderDays),
+			fmt.Sprintf("您当前生效的%s将在 %d 天后到期，请尽快完成换证并重新提交审核，避免外卖经营被自动暂停。", documentLabel, credentialReminderDays)
+	}
+
+	return fmt.Sprintf("%s将在 %d 天后到期", documentLabel, credentialReminderDays),
+		fmt.Sprintf("您当前生效的%s将在 %d 天后到期，请尽快完成换证并重新提交审核，避免接单资格被自动暂停。", documentLabel, credentialReminderDays)
+}
+
+func credentialSuspensionText(ledger db.CredentialLedger) (string, string) {
+	documentLabel := credentialDocumentLabel(ledger.SubjectType, ledger.DocumentType)
+	if ledger.SubjectType == "merchant" {
+		return fmt.Sprintf("%s已过期，外卖经营已暂停", documentLabel),
+			fmt.Sprintf("您当前生效的%s已过期，系统已自动暂停外卖经营。请上传新证照并通过复审后恢复。", documentLabel)
+	}
+
+	return fmt.Sprintf("%s已过期，接单资格已暂停", documentLabel),
+		fmt.Sprintf("您当前生效的%s已过期，系统已自动暂停接单资格。请上传新证照并通过复审后恢复。", documentLabel)
+}
+
+func credentialNotificationSource(action string) string {
+	return fmt.Sprintf("credential_governance_%s", action)
+}
+
+func credentialReminderWindowStart(expiresAt time.Time) time.Time {
+	return startOfDay(expiresAt).AddDate(0, 0, -credentialReminderDays)
+}
+
+type credentialLedgerCursor struct {
+	ExpiresAt pgtype.Timestamptz
+	ID        int64
+}
+
+func shouldSkipCredentialReminder(ledger db.CredentialLedger) bool {
+	if !ledger.LastRemindedAt.Valid || !ledger.ExpiresAt.Valid {
+		return false
+	}
+
+	return !ledger.LastRemindedAt.Time.Before(credentialReminderWindowStart(ledger.ExpiresAt.Time))
+}
+
+func credentialNotificationExtraData(ledger db.CredentialLedger, source string, now time.Time) map[string]any {
+	extraData := map[string]any{
+		"credential_ledger_id":   ledger.ID,
+		"subject_type":           ledger.SubjectType,
+		"document_type":          ledger.DocumentType,
+		"notification_source":    source,
+		"suspension_reason_code": db.CredentialSuspensionReasonDocumentExpired,
+	}
+
+	if ledger.MerchantID.Valid {
+		extraData["merchant_id"] = ledger.MerchantID.Int64
+	}
+	if ledger.RiderID.Valid {
+		extraData["rider_id"] = ledger.RiderID.Int64
+	}
+	if ledger.ExpiresAt.Valid {
+		extraData["expires_at"] = ledger.ExpiresAt.Time
+		extraData["days_remaining"] = int(startOfDay(ledger.ExpiresAt.Time).Sub(startOfDay(now)).Hours() / 24)
+	}
+
+	return extraData
+}
+
+func credentialNotificationTarget(ledger db.CredentialLedger) (relatedType string, relatedID int64) {
+	if ledger.SubjectType == "merchant" && ledger.MerchantID.Valid {
+		return "merchant", ledger.MerchantID.Int64
+	}
+	if ledger.SubjectType == "rider" && ledger.RiderID.Valid {
+		return "rider", ledger.RiderID.Int64
+	}
+	return "", 0
+}
+
+func (s *DataCleanupScheduler) credentialNotificationUserID(ctx context.Context, ledger db.CredentialLedger) (int64, error) {
+	switch ledger.SubjectType {
+	case "merchant":
+		if !ledger.MerchantID.Valid {
+			return 0, fmt.Errorf("missing merchant id for ledger %d", ledger.ID)
+		}
+		merchant, err := s.store.GetMerchant(ctx, ledger.MerchantID.Int64)
+		if err != nil {
+			return 0, err
+		}
+		return merchant.OwnerUserID, nil
+	case "rider":
+		if !ledger.RiderID.Valid {
+			return 0, fmt.Errorf("missing rider id for ledger %d", ledger.ID)
+		}
+		rider, err := s.store.GetRider(ctx, ledger.RiderID.Int64)
+		if err != nil {
+			return 0, err
+		}
+		return rider.UserID, nil
+	default:
+		return 0, fmt.Errorf("unsupported credential subject type: %s", ledger.SubjectType)
+	}
+}
+
+func (s *DataCleanupScheduler) sendCredentialGovernanceNotification(
+	ctx context.Context,
+	userID int64,
+	ledger db.CredentialLedger,
+	now time.Time,
+	source string,
+	title string,
+	content string,
+) error {
+	extraData := credentialNotificationExtraData(ledger, source, now)
+	relatedType, relatedID := credentialNotificationTarget(ledger)
+
+	if s.shouldUseNotificationTask() {
+		err := s.taskDistributor.DistributeTaskSendNotification(ctx, &worker.SendNotificationPayload{
+			UserID:            userID,
+			Type:              "system",
+			Title:             title,
+			Content:           content,
+			RelatedType:       relatedType,
+			RelatedID:         relatedID,
+			ExtraData:         extraData,
+			IgnorePreferences: true,
+		})
+		if err == nil {
+			return nil
+		}
+
+		log.Error().Err(err).Int64("credential_ledger_id", ledger.ID).Int64("user_id", userID).Str("source", source).Msg("failed to enqueue credential governance notification task, fallback to direct notification")
+	}
+
+	extraDataJSON, err := json.Marshal(extraData)
+	if err != nil {
+		return fmt.Errorf("marshal credential governance extra data: %w", err)
+	}
+
+	params := db.CreateNotificationParams{
+		UserID:    userID,
+		Type:      "system",
+		Title:     title,
+		Content:   content,
+		ExtraData: extraDataJSON,
+	}
+	if relatedType != "" {
+		params.RelatedType = pgtype.Text{String: relatedType, Valid: true}
+	}
+	if relatedID > 0 {
+		params.RelatedID = pgtype.Int8{Int64: relatedID, Valid: true}
+	}
+
+	_, err = s.store.CreateNotification(ctx, params)
+	if err != nil {
+		return fmt.Errorf("create credential governance notification: %w", err)
 	}
 
 	return nil
@@ -645,6 +834,242 @@ func (s *DataCleanupScheduler) markExpiredRiderDepositCredits() {
 			},
 		})
 	}
+}
+
+func (s *DataCleanupScheduler) remindExpiringCredentials() {
+	s.remindExpiringCredentialsAt(time.Now())
+}
+
+func (s *DataCleanupScheduler) RemindExpiringCredentialsAt(now time.Time) {
+	s.remindExpiringCredentialsAt(now)
+}
+
+func (s *DataCleanupScheduler) remindExpiringCredentialsAt(now time.Time) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	windowStart := pgtype.Timestamptz{Time: startOfDay(now).AddDate(0, 0, credentialReminderDays), Valid: true}
+	windowEnd := pgtype.Timestamptz{Time: windowStart.Time.Add(24 * time.Hour), Valid: true}
+	var cursor credentialLedgerCursor
+	reminded := 0
+	merchantCount := 0
+	riderCount := 0
+
+	for {
+		ledgers, err := s.store.ListCredentialsForReminderWindow(ctx, db.ListCredentialsForReminderWindowParams{
+			WindowStart:   windowStart,
+			WindowEnd:     windowEnd,
+			LastExpiresAt: cursor.ExpiresAt,
+			LastID:        cursor.ID,
+			PageLimit:     credentialReminderBatchLimit,
+		})
+		if err != nil {
+			log.Error().Err(err).Msg("failed to list expiring credentials for reminder window")
+			return
+		}
+		if len(ledgers) == 0 {
+			break
+		}
+
+		for _, ledger := range ledgers {
+			if shouldSkipCredentialReminder(ledger) {
+				continue
+			}
+
+			userID, err := s.credentialNotificationUserID(ctx, ledger)
+			if err != nil {
+				log.Error().Err(err).Int64("credential_ledger_id", ledger.ID).Msg("failed to resolve credential reminder target user")
+				continue
+			}
+
+			title, content := credentialReminderText(ledger)
+			if err := s.sendCredentialGovernanceNotification(ctx, userID, ledger, now, credentialNotificationSource("reminder"), title, content); err != nil {
+				log.Error().Err(err).Int64("credential_ledger_id", ledger.ID).Int64("user_id", userID).Msg("failed to send credential reminder notification")
+				continue
+			}
+
+			if _, err := s.store.MarkCredentialLedgerReminderSent(ctx, db.MarkCredentialLedgerReminderSentParams{
+				ID:             ledger.ID,
+				LastRemindedAt: pgtype.Timestamptz{Time: now, Valid: true},
+			}); err != nil {
+				log.Error().Err(err).Int64("credential_ledger_id", ledger.ID).Msg("failed to mark credential reminder sent")
+				continue
+			}
+
+			reminded++
+			switch ledger.SubjectType {
+			case "merchant":
+				merchantCount++
+			case "rider":
+				riderCount++
+			}
+		}
+
+		lastLedger := ledgers[len(ledgers)-1]
+		cursor = credentialLedgerCursor{
+			ExpiresAt: lastLedger.ExpiresAt,
+			ID:        lastLedger.ID,
+		}
+		if len(ledgers) < int(credentialReminderBatchLimit) {
+			break
+		}
+	}
+
+	if reminded == 0 {
+		return
+	}
+
+	log.Info().Int("count", reminded).Msg("sent credential expiry reminders")
+	s.publishPlatformAlert(ctx, worker.AlertData{
+		AlertType:   worker.AlertTypeCredentialExpiry,
+		Level:       worker.AlertLevelWarning,
+		Title:       "入驻资质到期提醒已发送",
+		Message:     fmt.Sprintf("本次扫描共发送 %d 条入驻资质到期提醒，其中商户 %d 条，骑手 %d 条。", reminded, merchantCount, riderCount),
+		RelatedType: "credential",
+		Extra: map[string]any{
+			"window_days":      credentialReminderDays,
+			"credential_count": reminded,
+			"merchant_count":   merchantCount,
+			"rider_count":      riderCount,
+		},
+	})
+}
+
+func (s *DataCleanupScheduler) enforceExpiredCredentials() {
+	s.enforceExpiredCredentialsAt(time.Now())
+}
+
+func (s *DataCleanupScheduler) EnforceExpiredCredentialsAt(now time.Time) {
+	s.enforceExpiredCredentialsAt(now)
+}
+
+func (s *DataCleanupScheduler) enforceExpiredCredentialsAt(now time.Time) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	var cursor credentialLedgerCursor
+	suspended := 0
+	merchantCount := 0
+	riderCount := 0
+
+	for {
+		ledgers, err := s.store.ListExpiredActiveCredentialLedgers(ctx, db.ListExpiredActiveCredentialLedgersParams{
+			ExpiredBefore: pgtype.Timestamptz{Time: now, Valid: true},
+			LastExpiresAt: cursor.ExpiresAt,
+			LastID:        cursor.ID,
+			PageLimit:     credentialExpireBatchLimit,
+		})
+		if err != nil {
+			log.Error().Err(err).Msg("failed to list expired active credential ledgers")
+			return
+		}
+		if len(ledgers) == 0 {
+			break
+		}
+
+		for _, ledger := range ledgers {
+			if ledger.SuspendedAt.Valid && ledger.SuspensionReasonCode.Valid && ledger.SuspensionReasonCode.String == db.CredentialSuspensionReasonDocumentExpired {
+				continue
+			}
+
+			claimed := false
+			switch ledger.SubjectType {
+			case "merchant":
+				if !ledger.MerchantID.Valid {
+					log.Error().Int64("credential_ledger_id", ledger.ID).Msg("skip expired merchant credential without merchant id")
+					continue
+				}
+				rows, err := s.store.ClaimMerchantTakeoutSuspensionIfAvailable(ctx, db.ClaimMerchantTakeoutSuspensionIfAvailableParams{
+					MerchantID:           ledger.MerchantID.Int64,
+					TakeoutSuspendReason: pgtype.Text{String: db.CredentialSuspensionReasonDocumentExpired, Valid: true},
+					TakeoutSuspendUntil:  pgtype.Timestamptz{},
+				})
+				if err != nil {
+					log.Error().Err(err).Int64("credential_ledger_id", ledger.ID).Msg("failed to claim merchant credential suspension")
+					continue
+				}
+				claimed = rows > 0
+			case "rider":
+				if !ledger.RiderID.Valid {
+					log.Error().Int64("credential_ledger_id", ledger.ID).Msg("skip expired rider credential without rider id")
+					continue
+				}
+				rows, err := s.store.ClaimRiderSuspensionIfAvailable(ctx, db.ClaimRiderSuspensionIfAvailableParams{
+					RiderID:       ledger.RiderID.Int64,
+					SuspendReason: pgtype.Text{String: db.CredentialSuspensionReasonDocumentExpired, Valid: true},
+					SuspendUntil:  pgtype.Timestamptz{},
+				})
+				if err != nil {
+					log.Error().Err(err).Int64("credential_ledger_id", ledger.ID).Msg("failed to claim rider credential suspension")
+					continue
+				}
+				claimed = rows > 0
+			default:
+				log.Error().Str("subject_type", ledger.SubjectType).Int64("credential_ledger_id", ledger.ID).Msg("skip expired credential with unsupported subject type")
+				continue
+			}
+
+			if !claimed {
+				log.Warn().Int64("credential_ledger_id", ledger.ID).Str("subject_type", ledger.SubjectType).Msg("skip credential expiry suspension because suspension slot is owned by another flow")
+				continue
+			}
+
+			if _, err := s.store.MarkCredentialLedgerSuspended(ctx, db.MarkCredentialLedgerSuspendedParams{
+				ID:                   ledger.ID,
+				SuspendedAt:          pgtype.Timestamptz{Time: now, Valid: true},
+				SuspensionReasonCode: pgtype.Text{String: db.CredentialSuspensionReasonDocumentExpired, Valid: true},
+			}); err != nil {
+				log.Error().Err(err).Int64("credential_ledger_id", ledger.ID).Msg("failed to mark credential ledger suspended")
+				continue
+			}
+
+			userID, err := s.credentialNotificationUserID(ctx, ledger)
+			if err != nil {
+				log.Error().Err(err).Int64("credential_ledger_id", ledger.ID).Msg("failed to resolve expired credential notification target user")
+			} else {
+				title, content := credentialSuspensionText(ledger)
+				if err := s.sendCredentialGovernanceNotification(ctx, userID, ledger, now, credentialNotificationSource("suspension"), title, content); err != nil {
+					log.Error().Err(err).Int64("credential_ledger_id", ledger.ID).Int64("user_id", userID).Msg("failed to send expired credential suspension notification")
+				}
+			}
+
+			suspended++
+			switch ledger.SubjectType {
+			case "merchant":
+				merchantCount++
+			case "rider":
+				riderCount++
+			}
+		}
+
+		lastLedger := ledgers[len(ledgers)-1]
+		cursor = credentialLedgerCursor{
+			ExpiresAt: lastLedger.ExpiresAt,
+			ID:        lastLedger.ID,
+		}
+		if len(ledgers) < int(credentialExpireBatchLimit) {
+			break
+		}
+	}
+
+	if suspended == 0 {
+		return
+	}
+
+	log.Info().Int("count", suspended).Msg("enforced expired credential suspensions")
+	s.publishPlatformAlert(ctx, worker.AlertData{
+		AlertType:   worker.AlertTypeCredentialExpiry,
+		Level:       worker.AlertLevelWarning,
+		Title:       "入驻资质过期已触发自动暂停",
+		Message:     fmt.Sprintf("本次扫描共暂停 %d 个资质过期主体，其中商户 %d 个，骑手 %d 个。", suspended, merchantCount, riderCount),
+		RelatedType: "credential",
+		Extra: map[string]any{
+			"window":           "expired",
+			"credential_count": suspended,
+			"merchant_count":   merchantCount,
+			"rider_count":      riderCount,
+		},
+	})
 }
 
 type abnormalAlertThresholds struct {

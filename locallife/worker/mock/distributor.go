@@ -251,6 +251,25 @@ func (mr *MockTaskDistributorMockRecorder) DistributeTaskMerchantApplicationIDCa
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DistributeTaskMerchantApplicationIDCardOCR", reflect.TypeOf((*MockTaskDistributor)(nil).DistributeTaskMerchantApplicationIDCardOCR), varargs...)
 }
 
+// DistributeTaskOnboardingReview mocks base method.
+func (m *MockTaskDistributor) DistributeTaskOnboardingReview(ctx context.Context, payload *worker.OnboardingReviewPayload, opts ...asynq.Option) error {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, payload}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DistributeTaskOnboardingReview", varargs...)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DistributeTaskOnboardingReview indicates an expected call of DistributeTaskOnboardingReview.
+func (mr *MockTaskDistributorMockRecorder) DistributeTaskOnboardingReview(ctx, payload any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, payload}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DistributeTaskOnboardingReview", reflect.TypeOf((*MockTaskDistributor)(nil).DistributeTaskOnboardingReview), varargs...)
+}
+
 // DistributeTaskOperatorApplicationBusinessLicenseOCR mocks base method.
 func (m *MockTaskDistributor) DistributeTaskOperatorApplicationBusinessLicenseOCR(ctx context.Context, applicationID, mediaAssetID, ocrJobID int64, opts ...asynq.Option) error {
 	m.ctrl.T.Helper()

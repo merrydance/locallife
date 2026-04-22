@@ -12,6 +12,64 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const claimMerchantTakeoutSuspensionIfAvailable = `-- name: ClaimMerchantTakeoutSuspensionIfAvailable :execrows
+UPDATE merchant_profiles
+SET is_takeout_suspended = true,
+    takeout_suspend_reason = $2,
+    takeout_suspended_at = COALESCE(takeout_suspended_at, NOW()),
+    takeout_suspend_until = $3,
+    updated_at = NOW()
+WHERE merchant_id = $1
+  AND (
+      takeout_suspend_reason IS NULL
+      OR takeout_suspend_reason = ''
+      OR takeout_suspend_reason = $2
+  )
+`
+
+type ClaimMerchantTakeoutSuspensionIfAvailableParams struct {
+	MerchantID           int64              `json:"merchant_id"`
+	TakeoutSuspendReason pgtype.Text        `json:"takeout_suspend_reason"`
+	TakeoutSuspendUntil  pgtype.Timestamptz `json:"takeout_suspend_until"`
+}
+
+func (q *Queries) ClaimMerchantTakeoutSuspensionIfAvailable(ctx context.Context, arg ClaimMerchantTakeoutSuspensionIfAvailableParams) (int64, error) {
+	result, err := q.db.Exec(ctx, claimMerchantTakeoutSuspensionIfAvailable, arg.MerchantID, arg.TakeoutSuspendReason, arg.TakeoutSuspendUntil)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const claimRiderSuspensionIfAvailable = `-- name: ClaimRiderSuspensionIfAvailable :execrows
+UPDATE rider_profiles
+SET is_suspended = true,
+    suspend_reason = $2,
+    suspended_at = COALESCE(suspended_at, NOW()),
+    suspend_until = $3,
+    updated_at = NOW()
+WHERE rider_id = $1
+  AND (
+      suspend_reason IS NULL
+      OR suspend_reason = ''
+      OR suspend_reason = $2
+  )
+`
+
+type ClaimRiderSuspensionIfAvailableParams struct {
+	RiderID       int64              `json:"rider_id"`
+	SuspendReason pgtype.Text        `json:"suspend_reason"`
+	SuspendUntil  pgtype.Timestamptz `json:"suspend_until"`
+}
+
+func (q *Queries) ClaimRiderSuspensionIfAvailable(ctx context.Context, arg ClaimRiderSuspensionIfAvailableParams) (int64, error) {
+	result, err := q.db.Exec(ctx, claimRiderSuspensionIfAvailable, arg.RiderID, arg.SuspendReason, arg.SuspendUntil)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const confirmFraudPattern = `-- name: ConfirmFraudPattern :exec
 UPDATE fraud_patterns
 SET is_confirmed = true,
@@ -3116,6 +3174,56 @@ type MarkClaimPaidParams struct {
 func (q *Queries) MarkClaimPaid(ctx context.Context, arg MarkClaimPaidParams) error {
 	_, err := q.db.Exec(ctx, markClaimPaid, arg.ID, arg.PaidAt)
 	return err
+}
+
+const releaseMerchantTakeoutSuspensionIfOwned = `-- name: ReleaseMerchantTakeoutSuspensionIfOwned :execrows
+UPDATE merchant_profiles
+SET is_takeout_suspended = false,
+    takeout_suspend_reason = NULL,
+    takeout_suspended_at = NULL,
+    takeout_suspend_until = NULL,
+    updated_at = NOW()
+WHERE merchant_id = $1
+  AND is_takeout_suspended = true
+  AND takeout_suspend_reason = $2
+`
+
+type ReleaseMerchantTakeoutSuspensionIfOwnedParams struct {
+	MerchantID           int64       `json:"merchant_id"`
+	TakeoutSuspendReason pgtype.Text `json:"takeout_suspend_reason"`
+}
+
+func (q *Queries) ReleaseMerchantTakeoutSuspensionIfOwned(ctx context.Context, arg ReleaseMerchantTakeoutSuspensionIfOwnedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, releaseMerchantTakeoutSuspensionIfOwned, arg.MerchantID, arg.TakeoutSuspendReason)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const releaseRiderSuspensionIfOwned = `-- name: ReleaseRiderSuspensionIfOwned :execrows
+UPDATE rider_profiles
+SET is_suspended = false,
+    suspend_reason = NULL,
+    suspended_at = NULL,
+    suspend_until = NULL,
+    updated_at = NOW()
+WHERE rider_id = $1
+  AND is_suspended = true
+  AND suspend_reason = $2
+`
+
+type ReleaseRiderSuspensionIfOwnedParams struct {
+	RiderID       int64       `json:"rider_id"`
+	SuspendReason pgtype.Text `json:"suspend_reason"`
+}
+
+func (q *Queries) ReleaseRiderSuspensionIfOwned(ctx context.Context, arg ReleaseRiderSuspensionIfOwnedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, releaseRiderSuspensionIfOwned, arg.RiderID, arg.SuspendReason)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const resolveFoodSafetyCase = `-- name: ResolveFoodSafetyCase :one

@@ -580,6 +580,21 @@ func (mr *MockStoreMockRecorder) CancelMerchantFutureReservations(ctx, arg any) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CancelMerchantFutureReservations", reflect.TypeOf((*MockStore)(nil).CancelMerchantFutureReservations), ctx, arg)
 }
 
+// CancelOnboardingReviewRun mocks base method.
+func (m *MockStore) CancelOnboardingReviewRun(ctx context.Context, arg db.CancelOnboardingReviewRunParams) (db.OnboardingReviewRun, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CancelOnboardingReviewRun", ctx, arg)
+	ret0, _ := ret[0].(db.OnboardingReviewRun)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CancelOnboardingReviewRun indicates an expected call of CancelOnboardingReviewRun.
+func (mr *MockStoreMockRecorder) CancelOnboardingReviewRun(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CancelOnboardingReviewRun", reflect.TypeOf((*MockStore)(nil).CancelOnboardingReviewRun), ctx, arg)
+}
+
 // CancelOrderTx mocks base method.
 func (m *MockStore) CancelOrderTx(ctx context.Context, arg db.CancelOrderTxParams) (db.CancelOrderTxResult, error) {
 	m.ctrl.T.Helper()
@@ -773,6 +788,36 @@ func (m *MockStore) CheckUserVoucherExists(ctx context.Context, arg db.CheckUser
 func (mr *MockStoreMockRecorder) CheckUserVoucherExists(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckUserVoucherExists", reflect.TypeOf((*MockStore)(nil).CheckUserVoucherExists), ctx, arg)
+}
+
+// ClaimMerchantTakeoutSuspensionIfAvailable mocks base method.
+func (m *MockStore) ClaimMerchantTakeoutSuspensionIfAvailable(ctx context.Context, arg db.ClaimMerchantTakeoutSuspensionIfAvailableParams) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ClaimMerchantTakeoutSuspensionIfAvailable", ctx, arg)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ClaimMerchantTakeoutSuspensionIfAvailable indicates an expected call of ClaimMerchantTakeoutSuspensionIfAvailable.
+func (mr *MockStoreMockRecorder) ClaimMerchantTakeoutSuspensionIfAvailable(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClaimMerchantTakeoutSuspensionIfAvailable", reflect.TypeOf((*MockStore)(nil).ClaimMerchantTakeoutSuspensionIfAvailable), ctx, arg)
+}
+
+// ClaimRiderSuspensionIfAvailable mocks base method.
+func (m *MockStore) ClaimRiderSuspensionIfAvailable(ctx context.Context, arg db.ClaimRiderSuspensionIfAvailableParams) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ClaimRiderSuspensionIfAvailable", ctx, arg)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ClaimRiderSuspensionIfAvailable indicates an expected call of ClaimRiderSuspensionIfAvailable.
+func (mr *MockStoreMockRecorder) ClaimRiderSuspensionIfAvailable(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClaimRiderSuspensionIfAvailable", reflect.TypeOf((*MockStore)(nil).ClaimRiderSuspensionIfAvailable), ctx, arg)
 }
 
 // ClaimVoucherTx mocks base method.
@@ -1187,6 +1232,21 @@ func (m *MockStore) CompleteOCRJob(ctx context.Context, arg db.CompleteOCRJobPar
 func (mr *MockStoreMockRecorder) CompleteOCRJob(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompleteOCRJob", reflect.TypeOf((*MockStore)(nil).CompleteOCRJob), ctx, arg)
+}
+
+// CompleteOnboardingReviewRun mocks base method.
+func (m *MockStore) CompleteOnboardingReviewRun(ctx context.Context, arg db.CompleteOnboardingReviewRunParams) (db.OnboardingReviewRun, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CompleteOnboardingReviewRun", ctx, arg)
+	ret0, _ := ret[0].(db.OnboardingReviewRun)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CompleteOnboardingReviewRun indicates an expected call of CompleteOnboardingReviewRun.
+func (mr *MockStoreMockRecorder) CompleteOnboardingReviewRun(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompleteOnboardingReviewRun", reflect.TypeOf((*MockStore)(nil).CompleteOnboardingReviewRun), ctx, arg)
 }
 
 // CompleteOrderTx mocks base method.
@@ -3723,6 +3783,21 @@ func (mr *MockStoreMockRecorder) CreateMerchantCancelWithdrawApplication(ctx, ar
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateMerchantCancelWithdrawApplication", reflect.TypeOf((*MockStore)(nil).CreateMerchantCancelWithdrawApplication), ctx, arg)
 }
 
+// CreateMerchantCredentialLedger mocks base method.
+func (m *MockStore) CreateMerchantCredentialLedger(ctx context.Context, arg db.CreateMerchantCredentialLedgerParams) (db.CredentialLedger, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateMerchantCredentialLedger", ctx, arg)
+	ret0, _ := ret[0].(db.CredentialLedger)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateMerchantCredentialLedger indicates an expected call of CreateMerchantCredentialLedger.
+func (mr *MockStoreMockRecorder) CreateMerchantCredentialLedger(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateMerchantCredentialLedger", reflect.TypeOf((*MockStore)(nil).CreateMerchantCredentialLedger), ctx, arg)
+}
+
 // CreateMerchantGroup mocks base method.
 func (m *MockStore) CreateMerchantGroup(ctx context.Context, arg db.CreateMerchantGroupParams) (db.MerchantGroup, error) {
 	m.ctrl.T.Helper()
@@ -3766,6 +3841,21 @@ func (m *MockStore) CreateMerchantMembershipSettings(ctx context.Context, arg db
 func (mr *MockStoreMockRecorder) CreateMerchantMembershipSettings(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateMerchantMembershipSettings", reflect.TypeOf((*MockStore)(nil).CreateMerchantMembershipSettings), ctx, arg)
+}
+
+// CreateMerchantOnboardingReviewRun mocks base method.
+func (m *MockStore) CreateMerchantOnboardingReviewRun(ctx context.Context, arg db.CreateMerchantOnboardingReviewRunParams) (db.OnboardingReviewRun, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateMerchantOnboardingReviewRun", ctx, arg)
+	ret0, _ := ret[0].(db.OnboardingReviewRun)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateMerchantOnboardingReviewRun indicates an expected call of CreateMerchantOnboardingReviewRun.
+func (mr *MockStoreMockRecorder) CreateMerchantOnboardingReviewRun(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateMerchantOnboardingReviewRun", reflect.TypeOf((*MockStore)(nil).CreateMerchantOnboardingReviewRun), ctx, arg)
 }
 
 // CreateMerchantPaymentConfig mocks base method.
@@ -4338,6 +4428,21 @@ func (mr *MockStoreMockRecorder) CreateRiderApplication(ctx, userID any) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateRiderApplication", reflect.TypeOf((*MockStore)(nil).CreateRiderApplication), ctx, userID)
 }
 
+// CreateRiderCredentialLedger mocks base method.
+func (m *MockStore) CreateRiderCredentialLedger(ctx context.Context, arg db.CreateRiderCredentialLedgerParams) (db.CredentialLedger, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateRiderCredentialLedger", ctx, arg)
+	ret0, _ := ret[0].(db.CredentialLedger)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateRiderCredentialLedger indicates an expected call of CreateRiderCredentialLedger.
+func (mr *MockStoreMockRecorder) CreateRiderCredentialLedger(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateRiderCredentialLedger", reflect.TypeOf((*MockStore)(nil).CreateRiderCredentialLedger), ctx, arg)
+}
+
 // CreateRiderDeposit mocks base method.
 func (m *MockStore) CreateRiderDeposit(ctx context.Context, arg db.CreateRiderDepositParams) (db.RiderDeposit, error) {
 	m.ctrl.T.Helper()
@@ -4381,6 +4486,21 @@ func (m *MockStore) CreateRiderLocation(ctx context.Context, arg db.CreateRiderL
 func (mr *MockStoreMockRecorder) CreateRiderLocation(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateRiderLocation", reflect.TypeOf((*MockStore)(nil).CreateRiderLocation), ctx, arg)
+}
+
+// CreateRiderOnboardingReviewRun mocks base method.
+func (m *MockStore) CreateRiderOnboardingReviewRun(ctx context.Context, arg db.CreateRiderOnboardingReviewRunParams) (db.OnboardingReviewRun, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateRiderOnboardingReviewRun", ctx, arg)
+	ret0, _ := ret[0].(db.OnboardingReviewRun)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateRiderOnboardingReviewRun indicates an expected call of CreateRiderOnboardingReviewRun.
+func (mr *MockStoreMockRecorder) CreateRiderOnboardingReviewRun(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateRiderOnboardingReviewRun", reflect.TypeOf((*MockStore)(nil).CreateRiderOnboardingReviewRun), ctx, arg)
 }
 
 // CreateRiderProfile mocks base method.
@@ -4801,6 +4921,36 @@ func (m *MockStore) CreateWithdrawalRecord(ctx context.Context, arg db.CreateWit
 func (mr *MockStoreMockRecorder) CreateWithdrawalRecord(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateWithdrawalRecord", reflect.TypeOf((*MockStore)(nil).CreateWithdrawalRecord), ctx, arg)
+}
+
+// DeactivateMerchantActiveCredentialLedger mocks base method.
+func (m *MockStore) DeactivateMerchantActiveCredentialLedger(ctx context.Context, arg db.DeactivateMerchantActiveCredentialLedgerParams) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeactivateMerchantActiveCredentialLedger", ctx, arg)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DeactivateMerchantActiveCredentialLedger indicates an expected call of DeactivateMerchantActiveCredentialLedger.
+func (mr *MockStoreMockRecorder) DeactivateMerchantActiveCredentialLedger(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeactivateMerchantActiveCredentialLedger", reflect.TypeOf((*MockStore)(nil).DeactivateMerchantActiveCredentialLedger), ctx, arg)
+}
+
+// DeactivateRiderActiveCredentialLedger mocks base method.
+func (m *MockStore) DeactivateRiderActiveCredentialLedger(ctx context.Context, arg db.DeactivateRiderActiveCredentialLedgerParams) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeactivateRiderActiveCredentialLedger", ctx, arg)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DeactivateRiderActiveCredentialLedger indicates an expected call of DeactivateRiderActiveCredentialLedger.
+func (mr *MockStoreMockRecorder) DeactivateRiderActiveCredentialLedger(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeactivateRiderActiveCredentialLedger", reflect.TypeOf((*MockStore)(nil).DeactivateRiderActiveCredentialLedger), ctx, arg)
 }
 
 // DecrementMembershipBalance mocks base method.
@@ -5878,6 +6028,21 @@ func (mr *MockStoreMockRecorder) GetActiveFoodSafetyIncidents(ctx, limit any) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetActiveFoodSafetyIncidents", reflect.TypeOf((*MockStore)(nil).GetActiveFoodSafetyIncidents), ctx, limit)
 }
 
+// GetActiveMerchantCredentialLedgers mocks base method.
+func (m *MockStore) GetActiveMerchantCredentialLedgers(ctx context.Context, merchantID pgtype.Int8) ([]db.CredentialLedger, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetActiveMerchantCredentialLedgers", ctx, merchantID)
+	ret0, _ := ret[0].([]db.CredentialLedger)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetActiveMerchantCredentialLedgers indicates an expected call of GetActiveMerchantCredentialLedgers.
+func (mr *MockStoreMockRecorder) GetActiveMerchantCredentialLedgers(ctx, merchantID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetActiveMerchantCredentialLedgers", reflect.TypeOf((*MockStore)(nil).GetActiveMerchantCredentialLedgers), ctx, merchantID)
+}
+
 // GetActiveOperatorByRegion mocks base method.
 func (m *MockStore) GetActiveOperatorByRegion(ctx context.Context, regionID int64) (db.Operator, error) {
 	m.ctrl.T.Helper()
@@ -5921,6 +6086,21 @@ func (m *MockStore) GetActiveRecommendConfig(ctx context.Context) (db.RecommendC
 func (mr *MockStoreMockRecorder) GetActiveRecommendConfig(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetActiveRecommendConfig", reflect.TypeOf((*MockStore)(nil).GetActiveRecommendConfig), ctx)
+}
+
+// GetActiveRiderCredentialLedgers mocks base method.
+func (m *MockStore) GetActiveRiderCredentialLedgers(ctx context.Context, riderID pgtype.Int8) ([]db.CredentialLedger, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetActiveRiderCredentialLedgers", ctx, riderID)
+	ret0, _ := ret[0].([]db.CredentialLedger)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetActiveRiderCredentialLedgers indicates an expected call of GetActiveRiderCredentialLedgers.
+func (mr *MockStoreMockRecorder) GetActiveRiderCredentialLedgers(ctx, riderID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetActiveRiderCredentialLedgers", reflect.TypeOf((*MockStore)(nil).GetActiveRiderCredentialLedgers), ctx, riderID)
 }
 
 // GetApplicableDiscountRules mocks base method.
@@ -6566,6 +6746,21 @@ func (m *MockStore) GetCombosWithMerchantByIDs(ctx context.Context, dollar_1 []i
 func (mr *MockStoreMockRecorder) GetCombosWithMerchantByIDs(ctx, dollar_1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCombosWithMerchantByIDs", reflect.TypeOf((*MockStore)(nil).GetCombosWithMerchantByIDs), ctx, dollar_1)
+}
+
+// GetCredentialLedger mocks base method.
+func (m *MockStore) GetCredentialLedger(ctx context.Context, id int64) (db.CredentialLedger, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetCredentialLedger", ctx, id)
+	ret0, _ := ret[0].(db.CredentialLedger)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetCredentialLedger indicates an expected call of GetCredentialLedger.
+func (mr *MockStoreMockRecorder) GetCredentialLedger(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCredentialLedger", reflect.TypeOf((*MockStore)(nil).GetCredentialLedger), ctx, id)
 }
 
 // GetCustomerFavoriteDishes mocks base method.
@@ -7393,6 +7588,21 @@ func (mr *MockStoreMockRecorder) GetLatestGroupApplicationByApplicant(ctx, appli
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLatestGroupApplicationByApplicant", reflect.TypeOf((*MockStore)(nil).GetLatestGroupApplicationByApplicant), ctx, applicantUserID)
 }
 
+// GetLatestMerchantOnboardingReviewRun mocks base method.
+func (m *MockStore) GetLatestMerchantOnboardingReviewRun(ctx context.Context, merchantApplicationID pgtype.Int8) (db.OnboardingReviewRun, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetLatestMerchantOnboardingReviewRun", ctx, merchantApplicationID)
+	ret0, _ := ret[0].(db.OnboardingReviewRun)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetLatestMerchantOnboardingReviewRun indicates an expected call of GetLatestMerchantOnboardingReviewRun.
+func (mr *MockStoreMockRecorder) GetLatestMerchantOnboardingReviewRun(ctx, merchantApplicationID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLatestMerchantOnboardingReviewRun", reflect.TypeOf((*MockStore)(nil).GetLatestMerchantOnboardingReviewRun), ctx, merchantApplicationID)
+}
+
 // GetLatestOrderByReservation mocks base method.
 func (m *MockStore) GetLatestOrderByReservation(ctx context.Context, reservationID pgtype.Int8) (db.Order, error) {
 	m.ctrl.T.Helper()
@@ -7466,6 +7676,21 @@ func (m *MockStore) GetLatestPrintLogByOrderAndPrinter(ctx context.Context, arg 
 func (mr *MockStoreMockRecorder) GetLatestPrintLogByOrderAndPrinter(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLatestPrintLogByOrderAndPrinter", reflect.TypeOf((*MockStore)(nil).GetLatestPrintLogByOrderAndPrinter), ctx, arg)
+}
+
+// GetLatestRiderOnboardingReviewRun mocks base method.
+func (m *MockStore) GetLatestRiderOnboardingReviewRun(ctx context.Context, riderApplicationID pgtype.Int8) (db.OnboardingReviewRun, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetLatestRiderOnboardingReviewRun", ctx, riderApplicationID)
+	ret0, _ := ret[0].(db.OnboardingReviewRun)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetLatestRiderOnboardingReviewRun indicates an expected call of GetLatestRiderOnboardingReviewRun.
+func (mr *MockStoreMockRecorder) GetLatestRiderOnboardingReviewRun(ctx, riderApplicationID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLatestRiderOnboardingReviewRun", reflect.TypeOf((*MockStore)(nil).GetLatestRiderOnboardingReviewRun), ctx, riderApplicationID)
 }
 
 // GetLatestWeatherCoefficient mocks base method.
@@ -8486,6 +8711,21 @@ func (m *MockStore) GetOCRJob(ctx context.Context, id int64) (db.OcrJob, error) 
 func (mr *MockStoreMockRecorder) GetOCRJob(ctx, id any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOCRJob", reflect.TypeOf((*MockStore)(nil).GetOCRJob), ctx, id)
+}
+
+// GetOnboardingReviewRun mocks base method.
+func (m *MockStore) GetOnboardingReviewRun(ctx context.Context, id int64) (db.OnboardingReviewRun, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetOnboardingReviewRun", ctx, id)
+	ret0, _ := ret[0].(db.OnboardingReviewRun)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetOnboardingReviewRun indicates an expected call of GetOnboardingReviewRun.
+func (mr *MockStoreMockRecorder) GetOnboardingReviewRun(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOnboardingReviewRun", reflect.TypeOf((*MockStore)(nil).GetOnboardingReviewRun), ctx, id)
 }
 
 // GetOpenFoodSafetyCaseByMerchant mocks base method.
@@ -12263,6 +12503,21 @@ func (mr *MockStoreMockRecorder) ListCompletedOrdersMissingProfitSharing(ctx, li
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListCompletedOrdersMissingProfitSharing", reflect.TypeOf((*MockStore)(nil).ListCompletedOrdersMissingProfitSharing), ctx, limit)
 }
 
+// ListCredentialsForReminderWindow mocks base method.
+func (m *MockStore) ListCredentialsForReminderWindow(ctx context.Context, arg db.ListCredentialsForReminderWindowParams) ([]db.CredentialLedger, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListCredentialsForReminderWindow", ctx, arg)
+	ret0, _ := ret[0].([]db.CredentialLedger)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListCredentialsForReminderWindow indicates an expected call of ListCredentialsForReminderWindow.
+func (mr *MockStoreMockRecorder) ListCredentialsForReminderWindow(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListCredentialsForReminderWindow", reflect.TypeOf((*MockStore)(nil).ListCredentialsForReminderWindow), ctx, arg)
+}
+
 // ListDailyInventoryByDate mocks base method.
 func (m *MockStore) ListDailyInventoryByDate(ctx context.Context, date pgtype.Date) ([]db.DailyInventory, error) {
 	m.ctrl.T.Helper()
@@ -12606,6 +12861,21 @@ func (m *MockStore) ListEcommerceRefundOrdersForReconciliation(ctx context.Conte
 func (mr *MockStoreMockRecorder) ListEcommerceRefundOrdersForReconciliation(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListEcommerceRefundOrdersForReconciliation", reflect.TypeOf((*MockStore)(nil).ListEcommerceRefundOrdersForReconciliation), ctx, arg)
+}
+
+// ListExpiredActiveCredentialLedgers mocks base method.
+func (m *MockStore) ListExpiredActiveCredentialLedgers(ctx context.Context, arg db.ListExpiredActiveCredentialLedgersParams) ([]db.CredentialLedger, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListExpiredActiveCredentialLedgers", ctx, arg)
+	ret0, _ := ret[0].([]db.CredentialLedger)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListExpiredActiveCredentialLedgers indicates an expected call of ListExpiredActiveCredentialLedgers.
+func (mr *MockStoreMockRecorder) ListExpiredActiveCredentialLedgers(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListExpiredActiveCredentialLedgers", reflect.TypeOf((*MockStore)(nil).ListExpiredActiveCredentialLedgers), ctx, arg)
 }
 
 // ListExpiredOperators mocks base method.
@@ -14483,6 +14753,21 @@ func (mr *MockStoreMockRecorder) ListProfitSharingReturnsByRefundOrder(ctx, refu
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListProfitSharingReturnsByRefundOrder", reflect.TypeOf((*MockStore)(nil).ListProfitSharingReturnsByRefundOrder), ctx, refundOrderID)
 }
 
+// ListQueuedOnboardingReviewRuns mocks base method.
+func (m *MockStore) ListQueuedOnboardingReviewRuns(ctx context.Context, arg db.ListQueuedOnboardingReviewRunsParams) ([]db.OnboardingReviewRun, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListQueuedOnboardingReviewRuns", ctx, arg)
+	ret0, _ := ret[0].([]db.OnboardingReviewRun)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListQueuedOnboardingReviewRuns indicates an expected call of ListQueuedOnboardingReviewRuns.
+func (mr *MockStoreMockRecorder) ListQueuedOnboardingReviewRuns(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListQueuedOnboardingReviewRuns", reflect.TypeOf((*MockStore)(nil).ListQueuedOnboardingReviewRuns), ctx, arg)
+}
+
 // ListRecentWeatherCoefficients mocks base method.
 func (m *MockStore) ListRecentWeatherCoefficients(ctx context.Context, arg db.ListRecentWeatherCoefficientsParams) ([]db.WeatherCoefficient, error) {
 	m.ctrl.T.Helper()
@@ -15755,6 +16040,51 @@ func (mr *MockStoreMockRecorder) MarkClaimRecoveryWaived(ctx, id any) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkClaimRecoveryWaived", reflect.TypeOf((*MockStore)(nil).MarkClaimRecoveryWaived), ctx, id)
 }
 
+// MarkCredentialLedgerReminderSent mocks base method.
+func (m *MockStore) MarkCredentialLedgerReminderSent(ctx context.Context, arg db.MarkCredentialLedgerReminderSentParams) (db.CredentialLedger, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MarkCredentialLedgerReminderSent", ctx, arg)
+	ret0, _ := ret[0].(db.CredentialLedger)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MarkCredentialLedgerReminderSent indicates an expected call of MarkCredentialLedgerReminderSent.
+func (mr *MockStoreMockRecorder) MarkCredentialLedgerReminderSent(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkCredentialLedgerReminderSent", reflect.TypeOf((*MockStore)(nil).MarkCredentialLedgerReminderSent), ctx, arg)
+}
+
+// MarkCredentialLedgerResumed mocks base method.
+func (m *MockStore) MarkCredentialLedgerResumed(ctx context.Context, arg db.MarkCredentialLedgerResumedParams) (db.CredentialLedger, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MarkCredentialLedgerResumed", ctx, arg)
+	ret0, _ := ret[0].(db.CredentialLedger)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MarkCredentialLedgerResumed indicates an expected call of MarkCredentialLedgerResumed.
+func (mr *MockStoreMockRecorder) MarkCredentialLedgerResumed(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkCredentialLedgerResumed", reflect.TypeOf((*MockStore)(nil).MarkCredentialLedgerResumed), ctx, arg)
+}
+
+// MarkCredentialLedgerSuspended mocks base method.
+func (m *MockStore) MarkCredentialLedgerSuspended(ctx context.Context, arg db.MarkCredentialLedgerSuspendedParams) (db.CredentialLedger, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MarkCredentialLedgerSuspended", ctx, arg)
+	ret0, _ := ret[0].(db.CredentialLedger)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MarkCredentialLedgerSuspended indicates an expected call of MarkCredentialLedgerSuspended.
+func (mr *MockStoreMockRecorder) MarkCredentialLedgerSuspended(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkCredentialLedgerSuspended", reflect.TypeOf((*MockStore)(nil).MarkCredentialLedgerSuspended), ctx, arg)
+}
+
 // MarkEcommerceApplymentResultProcessed mocks base method.
 func (m *MockStore) MarkEcommerceApplymentResultProcessed(ctx context.Context, arg db.MarkEcommerceApplymentResultProcessedParams) error {
 	m.ctrl.T.Helper()
@@ -15841,6 +16171,21 @@ func (m *MockStore) MarkOCRJobProcessing(ctx context.Context, arg db.MarkOCRJobP
 func (mr *MockStoreMockRecorder) MarkOCRJobProcessing(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkOCRJobProcessing", reflect.TypeOf((*MockStore)(nil).MarkOCRJobProcessing), ctx, arg)
+}
+
+// MarkOnboardingReviewRunProcessing mocks base method.
+func (m *MockStore) MarkOnboardingReviewRunProcessing(ctx context.Context, id int64) (db.OnboardingReviewRun, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MarkOnboardingReviewRunProcessing", ctx, id)
+	ret0, _ := ret[0].(db.OnboardingReviewRun)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MarkOnboardingReviewRunProcessing indicates an expected call of MarkOnboardingReviewRunProcessing.
+func (mr *MockStoreMockRecorder) MarkOnboardingReviewRunProcessing(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkOnboardingReviewRunProcessing", reflect.TypeOf((*MockStore)(nil).MarkOnboardingReviewRunProcessing), ctx, id)
 }
 
 // MarkOperatorNotificationAsRead mocks base method.
@@ -16141,6 +16486,21 @@ func (mr *MockStoreMockRecorder) RejectOperatorRegionApplication(ctx, arg any) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RejectOperatorRegionApplication", reflect.TypeOf((*MockStore)(nil).RejectOperatorRegionApplication), ctx, arg)
 }
 
+// ReleaseMerchantTakeoutSuspensionIfOwned mocks base method.
+func (m *MockStore) ReleaseMerchantTakeoutSuspensionIfOwned(ctx context.Context, arg db.ReleaseMerchantTakeoutSuspensionIfOwnedParams) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReleaseMerchantTakeoutSuspensionIfOwned", ctx, arg)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ReleaseMerchantTakeoutSuspensionIfOwned indicates an expected call of ReleaseMerchantTakeoutSuspensionIfOwned.
+func (mr *MockStoreMockRecorder) ReleaseMerchantTakeoutSuspensionIfOwned(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReleaseMerchantTakeoutSuspensionIfOwned", reflect.TypeOf((*MockStore)(nil).ReleaseMerchantTakeoutSuspensionIfOwned), ctx, arg)
+}
+
 // ReleaseReservationInventoryTx mocks base method.
 func (m *MockStore) ReleaseReservationInventoryTx(ctx context.Context, arg db.ReleaseReservationInventoryTxParams) error {
 	m.ctrl.T.Helper()
@@ -16168,6 +16528,21 @@ func (m *MockStore) ReleaseReservedInventory(ctx context.Context, arg db.Release
 func (mr *MockStoreMockRecorder) ReleaseReservedInventory(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReleaseReservedInventory", reflect.TypeOf((*MockStore)(nil).ReleaseReservedInventory), ctx, arg)
+}
+
+// ReleaseRiderSuspensionIfOwned mocks base method.
+func (m *MockStore) ReleaseRiderSuspensionIfOwned(ctx context.Context, arg db.ReleaseRiderSuspensionIfOwnedParams) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReleaseRiderSuspensionIfOwned", ctx, arg)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ReleaseRiderSuspensionIfOwned indicates an expected call of ReleaseRiderSuspensionIfOwned.
+func (mr *MockStoreMockRecorder) ReleaseRiderSuspensionIfOwned(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReleaseRiderSuspensionIfOwned", reflect.TypeOf((*MockStore)(nil).ReleaseRiderSuspensionIfOwned), ctx, arg)
 }
 
 // ReleaseWechatNotificationClaim mocks base method.
@@ -18535,6 +18910,21 @@ func (mr *MockStoreMockRecorder) UpdateMerchantApplicationImages(ctx, arg any) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateMerchantApplicationImages", reflect.TypeOf((*MockStore)(nil).UpdateMerchantApplicationImages), ctx, arg)
 }
 
+// UpdateMerchantApplicationReviewSummary mocks base method.
+func (m *MockStore) UpdateMerchantApplicationReviewSummary(ctx context.Context, arg db.UpdateMerchantApplicationReviewSummaryParams) (db.MerchantApplication, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateMerchantApplicationReviewSummary", ctx, arg)
+	ret0, _ := ret[0].(db.MerchantApplication)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateMerchantApplicationReviewSummary indicates an expected call of UpdateMerchantApplicationReviewSummary.
+func (mr *MockStoreMockRecorder) UpdateMerchantApplicationReviewSummary(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateMerchantApplicationReviewSummary", reflect.TypeOf((*MockStore)(nil).UpdateMerchantApplicationReviewSummary), ctx, arg)
+}
+
 // UpdateMerchantApplicationShopImages mocks base method.
 func (m *MockStore) UpdateMerchantApplicationShopImages(ctx context.Context, arg db.UpdateMerchantApplicationShopImagesParams) (db.MerchantApplication, error) {
 	m.ctrl.T.Helper()
@@ -19804,6 +20194,21 @@ func (m *MockStore) UpdateRiderApplicationIDCard(ctx context.Context, arg db.Upd
 func (mr *MockStoreMockRecorder) UpdateRiderApplicationIDCard(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateRiderApplicationIDCard", reflect.TypeOf((*MockStore)(nil).UpdateRiderApplicationIDCard), ctx, arg)
+}
+
+// UpdateRiderApplicationReviewSummary mocks base method.
+func (m *MockStore) UpdateRiderApplicationReviewSummary(ctx context.Context, arg db.UpdateRiderApplicationReviewSummaryParams) (db.RiderApplication, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateRiderApplicationReviewSummary", ctx, arg)
+	ret0, _ := ret[0].(db.RiderApplication)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateRiderApplicationReviewSummary indicates an expected call of UpdateRiderApplicationReviewSummary.
+func (mr *MockStoreMockRecorder) UpdateRiderApplicationReviewSummary(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateRiderApplicationReviewSummary", reflect.TypeOf((*MockStore)(nil).UpdateRiderApplicationReviewSummary), ctx, arg)
 }
 
 // UpdateRiderDeposit mocks base method.

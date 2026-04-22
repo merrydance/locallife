@@ -184,6 +184,8 @@ func newTestServer(t *testing.T, store db.Store) *Server {
 	// Disable websocket side effects for unit tests.
 	server.wsHub = nil
 	server.wsPubSub = nil
+	server.onboardingReviewService = nil
+	server.credentialGovernanceService = nil
 
 	return server
 }
@@ -243,6 +245,8 @@ func newTestServerWithWechat(t *testing.T, store db.Store, wechatClient interfac
 	server.wechatClient = wechatClient.(wechat.WechatClient)
 	server.wsHub = nil
 	server.wsPubSub = nil
+	server.onboardingReviewService = nil
+	server.credentialGovernanceService = nil
 	return server
 }
 
@@ -271,6 +275,8 @@ func newTestServerWithPayment(t *testing.T, store db.Store, paymentClient wechat
 	server.setupRouter()
 	server.wsHub = nil
 	server.wsPubSub = nil
+	server.onboardingReviewService = nil
+	server.credentialGovernanceService = nil
 	return server
 }
 
@@ -299,6 +305,8 @@ func newTestServerWithTaskDistributor(t *testing.T, store db.Store, taskDistribu
 	server.setupRouter()
 	server.wsHub = nil
 	server.wsPubSub = nil
+	server.onboardingReviewService = nil
+	server.credentialGovernanceService = nil
 	return server
 }
 
@@ -316,6 +324,8 @@ func newTestServerForMedia(t *testing.T, store db.Store) (*Server, string) {
 	require.NoError(t, err)
 	server.wsHub = nil
 	server.wsPubSub = nil
+	server.onboardingReviewService = nil
+	server.credentialGovernanceService = nil
 
 	tempDir := t.TempDir()
 	ls := media.NewLocalStorage("http://testserver", tempDir)

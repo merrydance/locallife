@@ -34,6 +34,7 @@ const (
 	AlertTypeSystemError         AlertType = "SYSTEM_ERROR"
 	AlertTypeBillMismatch        AlertType = "BILL_MISMATCH"
 	AlertTypeRiderDepositExpiry  AlertType = "RIDER_DEPOSIT_EXPIRY"
+	AlertTypeCredentialExpiry    AlertType = "CREDENTIAL_EXPIRY"
 	AlertTypeOCRJobFailed        AlertType = "OCR_JOB_FAILED"
 	AlertTypeOCRRetryExhausted   AlertType = "OCR_RETRY_EXHAUSTED"
 	AlertTypePrintAnomalyTimeout AlertType = "PRINT_ANOMALY_TIMEOUT"

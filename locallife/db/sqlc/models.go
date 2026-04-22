@@ -409,6 +409,35 @@ type ComboTag struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+// 入驻通过后的线上生效证照台账
+type CredentialLedger struct {
+	ID int64 `json:"id"`
+	// 主体类型：merchant | rider
+	SubjectType string      `json:"subject_type"`
+	MerchantID  pgtype.Int8 `json:"merchant_id"`
+	RiderID     pgtype.Int8 `json:"rider_id"`
+	// 持续治理证照类型：business_license | food_permit | health_cert
+	DocumentType          string      `json:"document_type"`
+	MerchantApplicationID pgtype.Int8 `json:"merchant_application_id"`
+	RiderApplicationID    pgtype.Int8 `json:"rider_application_id"`
+	ReviewRunID           pgtype.Int8 `json:"review_run_id"`
+	MediaAssetID          int64       `json:"media_asset_id"`
+	// 证照归一化摘要 JSON，用于展示与审计
+	NormalizedPayload []byte `json:"normalized_payload"`
+	// 证照到期时间，长期有效证照允许为空
+	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
+	Active         bool               `json:"active"`
+	ActivatedAt    time.Time          `json:"activated_at"`
+	DeactivatedAt  pgtype.Timestamptz `json:"deactivated_at"`
+	LastRemindedAt pgtype.Timestamptz `json:"last_reminded_at"`
+	SuspendedAt    pgtype.Timestamptz `json:"suspended_at"`
+	ResumedAt      pgtype.Timestamptz `json:"resumed_at"`
+	// 当前仅允许 document_expired，用于 owned release
+	SuspensionReasonCode pgtype.Text `json:"suspension_reason_code"`
+	CreatedAt            time.Time   `json:"created_at"`
+	UpdatedAt            time.Time   `json:"updated_at"`
+}
+
 type DailyInventory struct {
 	ID               int64              `json:"id"`
 	MerchantID       int64              `json:"merchant_id"`
@@ -948,6 +977,8 @@ type MerchantApplication struct {
 	IDCardFrontMediaAssetID pgtype.Int8 `json:"id_card_front_media_asset_id"`
 	// 法人身份证背面媒体资产 ID
 	IDCardBackMediaAssetID pgtype.Int8 `json:"id_card_back_media_asset_id"`
+	// 最近一次商户入驻审核摘要 JSON
+	ReviewSummary []byte `json:"review_summary"`
 }
 
 // Boss 店铺认领关系表 - Boss 可以认领多个店铺，只有分析和员工管理权限
@@ -1318,6 +1349,36 @@ type OcrJob struct {
 	StartedAt        pgtype.Timestamptz `json:"started_at"`
 	FinishedAt       pgtype.Timestamptz `json:"finished_at"`
 	UpdatedAt        time.Time          `json:"updated_at"`
+}
+
+// 商户与骑手入驻自动审核运行快照表
+type OnboardingReviewRun struct {
+	ID int64 `json:"id"`
+	// 申请类型：merchant | rider
+	ApplicationType       string      `json:"application_type"`
+	MerchantApplicationID pgtype.Int8 `json:"merchant_application_id"`
+	RiderApplicationID    pgtype.Int8 `json:"rider_application_id"`
+	// queued=待处理, processing=处理中, completed=已完成, cancelled=已取消
+	RunStatus string `json:"run_status"`
+	// 完成或停留阶段：ocr | normalization | review | risk | manual
+	Stage string `json:"stage"`
+	// 审核结果：approved | rejected | needs_resubmit | needs_manual
+	Outcome       pgtype.Text `json:"outcome"`
+	ReasonCode    pgtype.Text `json:"reason_code"`
+	ReasonMessage pgtype.Text `json:"reason_message"`
+	// 结构化证据摘要 JSON
+	Evidence   []byte   `json:"evidence"`
+	RuleHits   []string `json:"rule_hits"`
+	OcrJobRefs []int64  `json:"ocr_job_refs"`
+	// 执行审核时使用的业务快照 JSON
+	Snapshot    []byte             `json:"snapshot"`
+	RequestedBy pgtype.Int8        `json:"requested_by"`
+	ReviewedBy  pgtype.Int8        `json:"reviewed_by"`
+	QueuedAt    time.Time          `json:"queued_at"`
+	StartedAt   pgtype.Timestamptz `json:"started_at"`
+	FinishedAt  pgtype.Timestamptz `json:"finished_at"`
+	CreatedAt   time.Time          `json:"created_at"`
+	UpdatedAt   time.Time          `json:"updated_at"`
 }
 
 type Operator struct {
@@ -1915,6 +1976,8 @@ type RiderApplication struct {
 	IDCardBackMediaAssetID pgtype.Int8 `json:"id_card_back_media_asset_id"`
 	// 骑手健康证媒体资产 ID
 	HealthCertMediaAssetID pgtype.Int8 `json:"health_cert_media_asset_id"`
+	// 最近一次骑手入驻审核摘要 JSON
+	ReviewSummary []byte `json:"review_summary"`
 }
 
 // 骑手押金流水

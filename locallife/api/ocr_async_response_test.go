@@ -195,7 +195,8 @@ func TestNewRiderApplicationResponse_PreservesAsyncOCRFields(t *testing.T) {
 		CreatedAt:               time.Now(),
 	}
 
-	resp := newRiderApplicationResponse(app)
+	server := &Server{}
+	resp := server.newRiderApplicationResponse(context.Background(), app)
 
 	require.NotNil(t, resp.IDCardOCR)
 	require.Equal(t, "2026-03-25T16:20:00Z", resp.IDCardOCR.QueuedAt)
@@ -230,7 +231,8 @@ func TestNewRiderApplicationResponse_DecodesStringifiedHealthCertOCR(t *testing.
 		CreatedAt:     time.Now(),
 	}
 
-	resp := newRiderApplicationResponse(app)
+	server := &Server{}
+	resp := server.newRiderApplicationResponse(context.Background(), app)
 
 	require.NotNil(t, resp.HealthCertOCR)
 	require.Equal(t, "done", resp.HealthCertOCR.Status)

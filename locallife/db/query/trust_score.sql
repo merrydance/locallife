@@ -81,6 +81,20 @@ SET is_takeout_suspended = true,
     updated_at = NOW()
 WHERE merchant_id = $1;
 
+-- name: ClaimMerchantTakeoutSuspensionIfAvailable :execrows
+UPDATE merchant_profiles
+SET is_takeout_suspended = true,
+    takeout_suspend_reason = $2,
+    takeout_suspended_at = COALESCE(takeout_suspended_at, NOW()),
+    takeout_suspend_until = $3,
+    updated_at = NOW()
+WHERE merchant_id = $1
+  AND (
+      takeout_suspend_reason IS NULL
+      OR takeout_suspend_reason = ''
+      OR takeout_suspend_reason = $2
+  );
+
 -- name: UnsuspendMerchant :exec
 UPDATE merchant_profiles
 SET is_suspended = false,
@@ -98,6 +112,17 @@ SET is_takeout_suspended = false,
     takeout_suspend_until = NULL,
     updated_at = NOW()
 WHERE merchant_id = $1;
+
+-- name: ReleaseMerchantTakeoutSuspensionIfOwned :execrows
+UPDATE merchant_profiles
+SET is_takeout_suspended = false,
+    takeout_suspend_reason = NULL,
+    takeout_suspended_at = NULL,
+    takeout_suspend_until = NULL,
+    updated_at = NOW()
+WHERE merchant_id = $1
+  AND is_takeout_suspended = true
+  AND takeout_suspend_reason = $2;
 
 -- ==========================================
 -- rider_profiles（骑手信任画像）
@@ -164,6 +189,20 @@ SET is_suspended = true,
     updated_at = NOW()
 WHERE rider_id = $1;
 
+-- name: ClaimRiderSuspensionIfAvailable :execrows
+UPDATE rider_profiles
+SET is_suspended = true,
+    suspend_reason = $2,
+    suspended_at = COALESCE(suspended_at, NOW()),
+    suspend_until = $3,
+    updated_at = NOW()
+WHERE rider_id = $1
+  AND (
+      suspend_reason IS NULL
+      OR suspend_reason = ''
+      OR suspend_reason = $2
+  );
+
 -- name: UnsuspendRider :exec
 UPDATE rider_profiles
 SET is_suspended = false,
@@ -172,6 +211,17 @@ SET is_suspended = false,
     suspend_until = NULL,
     updated_at = NOW()
 WHERE rider_id = $1;
+
+-- name: ReleaseRiderSuspensionIfOwned :execrows
+UPDATE rider_profiles
+SET is_suspended = false,
+    suspend_reason = NULL,
+    suspended_at = NULL,
+    suspend_until = NULL,
+    updated_at = NOW()
+WHERE rider_id = $1
+  AND is_suspended = true
+  AND suspend_reason = $2;
 
 -- ==========================================
 -- claims（索赔记录）

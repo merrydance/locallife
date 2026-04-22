@@ -28,37 +28,39 @@ type riderApplicationOCRPayload struct {
 }
 
 type riderIDCardOCRData struct {
-	Status         string `json:"status,omitempty"`
-	Error          string `json:"error,omitempty"`
-	ErrorCode      string `json:"error_code,omitempty"`
-	AlertEmittedAt string `json:"alert_emitted_at,omitempty"`
-	QueuedAt       string `json:"queued_at,omitempty"`
-	StartedAt      string `json:"started_at,omitempty"`
-	OCRJobID       *int64 `json:"ocr_job_id,omitempty"`
-	Name           string `json:"name,omitempty"`
-	IDNumber       string `json:"id_number,omitempty"`
-	Gender         string `json:"gender,omitempty"`
-	Nation         string `json:"nation,omitempty"`
-	Address        string `json:"address,omitempty"`
-	ValidStart     string `json:"valid_start,omitempty"`
-	ValidEnd       string `json:"valid_end,omitempty"`
-	OCRAt          string `json:"ocr_at,omitempty"`
+	Status         string        `json:"status,omitempty"`
+	Error          string        `json:"error,omitempty"`
+	ErrorCode      string        `json:"error_code,omitempty"`
+	AlertEmittedAt string        `json:"alert_emitted_at,omitempty"`
+	Readiness      *ocrReadiness `json:"readiness,omitempty"`
+	QueuedAt       string        `json:"queued_at,omitempty"`
+	StartedAt      string        `json:"started_at,omitempty"`
+	OCRJobID       *int64        `json:"ocr_job_id,omitempty"`
+	Name           string        `json:"name,omitempty"`
+	IDNumber       string        `json:"id_number,omitempty"`
+	Gender         string        `json:"gender,omitempty"`
+	Nation         string        `json:"nation,omitempty"`
+	Address        string        `json:"address,omitempty"`
+	ValidStart     string        `json:"valid_start,omitempty"`
+	ValidEnd       string        `json:"valid_end,omitempty"`
+	OCRAt          string        `json:"ocr_at,omitempty"`
 }
 
 type riderHealthCertOCRData struct {
-	Status         string `json:"status,omitempty"`
-	Error          string `json:"error,omitempty"`
-	ErrorCode      string `json:"error_code,omitempty"`
-	AlertEmittedAt string `json:"alert_emitted_at,omitempty"`
-	QueuedAt       string `json:"queued_at,omitempty"`
-	StartedAt      string `json:"started_at,omitempty"`
-	OCRJobID       *int64 `json:"ocr_job_id,omitempty"`
-	Name           string `json:"name,omitempty"`
-	IDNumber       string `json:"id_number,omitempty"`
-	CertNumber     string `json:"cert_number,omitempty"`
-	ValidStart     string `json:"valid_start,omitempty"`
-	ValidEnd       string `json:"valid_end,omitempty"`
-	OCRAt          string `json:"ocr_at,omitempty"`
+	Status         string        `json:"status,omitempty"`
+	Error          string        `json:"error,omitempty"`
+	ErrorCode      string        `json:"error_code,omitempty"`
+	AlertEmittedAt string        `json:"alert_emitted_at,omitempty"`
+	Readiness      *ocrReadiness `json:"readiness,omitempty"`
+	QueuedAt       string        `json:"queued_at,omitempty"`
+	StartedAt      string        `json:"started_at,omitempty"`
+	OCRJobID       *int64        `json:"ocr_job_id,omitempty"`
+	Name           string        `json:"name,omitempty"`
+	IDNumber       string        `json:"id_number,omitempty"`
+	CertNumber     string        `json:"cert_number,omitempty"`
+	ValidStart     string        `json:"valid_start,omitempty"`
+	ValidEnd       string        `json:"valid_end,omitempty"`
+	OCRAt          string        `json:"ocr_at,omitempty"`
 }
 
 func decodeWorkerOCRPayload(data []byte, target any) error {
@@ -97,18 +99,18 @@ func readRiderHealthCertOCR(data []byte) riderHealthCertOCRData {
 	return result
 }
 
-func riderIDCardAssetStillBound(app db.RiderApplication, side string, mediaAssetID int64) bool {
+func riderIDCardAssetStillBound(frontAssetID pgtype.Int8, backAssetID pgtype.Int8, side string, mediaAssetID int64) bool {
 	if mediaAssetID <= 0 {
 		return false
 	}
 	if strings.EqualFold(side, string(ocr.DocumentSideBack)) {
-		return app.IDCardBackMediaAssetID.Valid && app.IDCardBackMediaAssetID.Int64 == mediaAssetID
+		return backAssetID.Valid && backAssetID.Int64 == mediaAssetID
 	}
-	return app.IDCardFrontMediaAssetID.Valid && app.IDCardFrontMediaAssetID.Int64 == mediaAssetID
+	return frontAssetID.Valid && frontAssetID.Int64 == mediaAssetID
 }
 
-func riderHealthCertAssetStillBound(app db.RiderApplication, mediaAssetID int64) bool {
-	return mediaAssetID > 0 && app.HealthCertMediaAssetID.Valid && app.HealthCertMediaAssetID.Int64 == mediaAssetID
+func riderHealthCertAssetStillBound(healthCertAssetID pgtype.Int8, mediaAssetID int64) bool {
+	return mediaAssetID > 0 && healthCertAssetID.Valid && healthCertAssetID.Int64 == mediaAssetID
 }
 
 func normalizeRiderOCRDateText(value string) string {
@@ -276,7 +278,7 @@ func (processor *RedisTaskProcessor) ProcessTaskRiderApplicationIDCardOCR(ctx co
 		alertEmittedAt := processor.publishOCRFailureAlert(ctx, job, err)
 		app, getErr := processor.store.GetRiderApplication(ctx, payload.ApplicationID)
 		if getErr == nil {
-			if !riderIDCardAssetStillBound(app, payload.Side, payload.MediaAssetID) {
+			if !riderIDCardAssetStillBound(app.IDCardFrontMediaAssetID, app.IDCardBackMediaAssetID, payload.Side, payload.MediaAssetID) {
 				log.Info().
 					Int64("application_id", payload.ApplicationID).
 					Int64("ocr_job_id", payload.OCRJobID).
@@ -298,6 +300,7 @@ func (processor *RedisTaskProcessor) ProcessTaskRiderApplicationIDCardOCR(ctx co
 			ocrData.QueuedAt = job.CreatedAt.Format(time.RFC3339)
 			ocrData.StartedAt = formatPgTimestamp(job.StartedAt)
 			ocrData.OCRJobID = int64Ptr(payload.OCRJobID)
+			ocrData.Readiness = failedOCRReadiness(ocrData.ErrorCode)
 			failedJSON, _ := json.Marshal(ocrData)
 			_, _ = processor.store.UpdateRiderApplicationIDCard(ctx, db.UpdateRiderApplicationIDCardParams{
 				ID:        payload.ApplicationID,
@@ -318,7 +321,7 @@ func (processor *RedisTaskProcessor) ProcessTaskRiderApplicationIDCardOCR(ctx co
 	if err != nil {
 		return fmt.Errorf("get rider application: %w", err)
 	}
-	if !riderIDCardAssetStillBound(app, payload.Side, payload.MediaAssetID) {
+	if !riderIDCardAssetStillBound(app.IDCardFrontMediaAssetID, app.IDCardBackMediaAssetID, payload.Side, payload.MediaAssetID) {
 		log.Info().
 			Int64("application_id", payload.ApplicationID).
 			Int64("ocr_job_id", job.ID).
@@ -338,6 +341,8 @@ func (processor *RedisTaskProcessor) ProcessTaskRiderApplicationIDCardOCR(ctx co
 	existingNamePreview := maskRiderOCRPreview(ocrData.Name)
 	ocrData.Status = "done"
 	ocrData.Error = ""
+	ocrData.ErrorCode = ""
+	ocrData.AlertEmittedAt = ""
 	ocrData.QueuedAt = job.CreatedAt.Format(time.RFC3339)
 	ocrData.StartedAt = formatPgTimestamp(job.StartedAt)
 	ocrData.OCRJobID = int64Ptr(job.ID)
@@ -358,6 +363,7 @@ func (processor *RedisTaskProcessor) ProcessTaskRiderApplicationIDCardOCR(ctx co
 			ocrData.ValidEnd = normalized.IDCard.ValidPeriod
 		}
 	}
+	ocrData.Readiness = buildRiderIDCardReadiness(ocrData.Name, ocrData.IDNumber, ocrData.ValidEnd)
 
 	validPeriodRaw := ""
 	if normalized.IDCard != nil {
@@ -443,7 +449,7 @@ func (processor *RedisTaskProcessor) ProcessTaskRiderApplicationHealthCertOCR(ct
 		alertEmittedAt := processor.publishOCRFailureAlert(ctx, job, err)
 		app, getErr := processor.store.GetRiderApplication(ctx, payload.ApplicationID)
 		if getErr == nil {
-			if !riderHealthCertAssetStillBound(app, payload.MediaAssetID) {
+			if !riderHealthCertAssetStillBound(app.HealthCertMediaAssetID, payload.MediaAssetID) {
 				log.Info().Int64("application_id", payload.ApplicationID).Int64("ocr_job_id", payload.OCRJobID).Int64("media_asset_id", payload.MediaAssetID).Msg("skip stale rider health cert OCR failure writeback")
 				return nil
 			}
@@ -455,6 +461,7 @@ func (processor *RedisTaskProcessor) ProcessTaskRiderApplicationHealthCertOCR(ct
 			ocrData.QueuedAt = job.CreatedAt.Format(time.RFC3339)
 			ocrData.StartedAt = formatPgTimestamp(job.StartedAt)
 			ocrData.OCRJobID = int64Ptr(payload.OCRJobID)
+			ocrData.Readiness = failedOCRReadiness(ocrData.ErrorCode)
 			failedJSON, _ := json.Marshal(ocrData)
 			_, _ = processor.store.UpdateRiderApplicationHealthCert(ctx, db.UpdateRiderApplicationHealthCertParams{ID: payload.ApplicationID, HealthCertOcr: failedJSON})
 		}
@@ -471,13 +478,15 @@ func (processor *RedisTaskProcessor) ProcessTaskRiderApplicationHealthCertOCR(ct
 	if err != nil {
 		return fmt.Errorf("get rider application: %w", err)
 	}
-	if !riderHealthCertAssetStillBound(app, payload.MediaAssetID) {
+	if !riderHealthCertAssetStillBound(app.HealthCertMediaAssetID, payload.MediaAssetID) {
 		log.Info().Int64("application_id", payload.ApplicationID).Int64("ocr_job_id", job.ID).Int64("media_asset_id", payload.MediaAssetID).Msg("skip stale rider health cert OCR success writeback")
 		return nil
 	}
 	ocrData := readRiderHealthCertOCR(app.HealthCertOcr)
 	ocrData.Status = "done"
 	ocrData.Error = ""
+	ocrData.ErrorCode = ""
+	ocrData.AlertEmittedAt = ""
 	ocrData.QueuedAt = job.CreatedAt.Format(time.RFC3339)
 	ocrData.StartedAt = formatPgTimestamp(job.StartedAt)
 	ocrData.OCRJobID = int64Ptr(job.ID)
@@ -498,6 +507,7 @@ func (processor *RedisTaskProcessor) ProcessTaskRiderApplicationHealthCertOCR(ct
 	} else if normalized.FoodPermit != nil && normalized.FoodPermit.RawText != "" {
 		parseRiderHealthCertOCRText(&ocrData, normalized.FoodPermit.RawText)
 	}
+	ocrData.Readiness = buildRiderHealthCertReadiness(ocrData.Name, ocrData.ValidEnd)
 	validPeriodRaw := ""
 	if normalized.HealthCert != nil {
 		validPeriodRaw = normalized.HealthCert.ValidPeriod

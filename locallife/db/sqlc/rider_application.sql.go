@@ -19,7 +19,7 @@ SET
     reviewed_at = now(),
     updated_at = now()
 WHERE id = $1 AND status = 'submitted'
-RETURNING id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id
+RETURNING id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id, review_summary
 `
 
 type ApproveRiderApplicationParams struct {
@@ -48,6 +48,7 @@ func (q *Queries) ApproveRiderApplication(ctx context.Context, arg ApproveRiderA
 		&i.IDCardFrontMediaAssetID,
 		&i.IDCardBackMediaAssetID,
 		&i.HealthCertMediaAssetID,
+		&i.ReviewSummary,
 	)
 	return i, err
 }
@@ -59,7 +60,7 @@ SET
     health_cert_ocr = NULL,
     updated_at = now()
 WHERE id = $1 AND status = 'draft'
-RETURNING id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id
+RETURNING id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id, review_summary
 `
 
 // 清空健康证媒体与 OCR 结果
@@ -83,6 +84,7 @@ func (q *Queries) ClearRiderApplicationHealthCert(ctx context.Context, id int64)
 		&i.IDCardFrontMediaAssetID,
 		&i.IDCardBackMediaAssetID,
 		&i.HealthCertMediaAssetID,
+		&i.ReviewSummary,
 	)
 	return i, err
 }
@@ -110,7 +112,7 @@ SET
     END,
     updated_at = now()
 WHERE id = $1 AND status = 'draft'
-RETURNING id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id
+RETURNING id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id, review_summary
 `
 
 // 清空身份证背面媒体与对应 OCR 字段，保留正面实名信息
@@ -134,6 +136,7 @@ func (q *Queries) ClearRiderApplicationIDCardBack(ctx context.Context, id int64)
 		&i.IDCardFrontMediaAssetID,
 		&i.IDCardBackMediaAssetID,
 		&i.HealthCertMediaAssetID,
+		&i.ReviewSummary,
 	)
 	return i, err
 }
@@ -164,7 +167,7 @@ SET
     END,
     updated_at = now()
 WHERE id = $1 AND status = 'draft'
-RETURNING id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id
+RETURNING id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id, review_summary
 `
 
 // 清空身份证正面媒体与对应 OCR 字段，保留背面有效期信息
@@ -188,6 +191,7 @@ func (q *Queries) ClearRiderApplicationIDCardFront(ctx context.Context, id int64
 		&i.IDCardFrontMediaAssetID,
 		&i.IDCardBackMediaAssetID,
 		&i.HealthCertMediaAssetID,
+		&i.ReviewSummary,
 	)
 	return i, err
 }
@@ -212,7 +216,7 @@ INSERT INTO rider_applications (
 ) VALUES (
     $1,
     'draft'
-) RETURNING id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id
+) RETURNING id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id, review_summary
 `
 
 // 创建骑手申请草稿
@@ -236,12 +240,13 @@ func (q *Queries) CreateRiderApplication(ctx context.Context, userID int64) (Rid
 		&i.IDCardFrontMediaAssetID,
 		&i.IDCardBackMediaAssetID,
 		&i.HealthCertMediaAssetID,
+		&i.ReviewSummary,
 	)
 	return i, err
 }
 
 const getRiderApplication = `-- name: GetRiderApplication :one
-SELECT id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id FROM rider_applications
+SELECT id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id, review_summary FROM rider_applications
 WHERE id = $1
 `
 
@@ -266,12 +271,13 @@ func (q *Queries) GetRiderApplication(ctx context.Context, id int64) (RiderAppli
 		&i.IDCardFrontMediaAssetID,
 		&i.IDCardBackMediaAssetID,
 		&i.HealthCertMediaAssetID,
+		&i.ReviewSummary,
 	)
 	return i, err
 }
 
 const getRiderApplicationByUserID = `-- name: GetRiderApplicationByUserID :one
-SELECT id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id FROM rider_applications
+SELECT id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id, review_summary FROM rider_applications
 WHERE user_id = $1
 `
 
@@ -296,12 +302,13 @@ func (q *Queries) GetRiderApplicationByUserID(ctx context.Context, userID int64)
 		&i.IDCardFrontMediaAssetID,
 		&i.IDCardBackMediaAssetID,
 		&i.HealthCertMediaAssetID,
+		&i.ReviewSummary,
 	)
 	return i, err
 }
 
 const listRiderApplications = `-- name: ListRiderApplications :many
-SELECT id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id FROM rider_applications
+SELECT id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id, review_summary FROM rider_applications
 WHERE 
     ($3::text IS NULL OR status = $3)
 ORDER BY 
@@ -344,6 +351,7 @@ func (q *Queries) ListRiderApplications(ctx context.Context, arg ListRiderApplic
 			&i.IDCardFrontMediaAssetID,
 			&i.IDCardBackMediaAssetID,
 			&i.HealthCertMediaAssetID,
+			&i.ReviewSummary,
 		); err != nil {
 			return nil, err
 		}
@@ -365,7 +373,7 @@ SET
     submitted_at = NULL,
     updated_at = now()
 WHERE id = $1 AND status = 'submitted'
-RETURNING id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id
+RETURNING id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id, review_summary
 `
 
 // 手动重置申请为草稿状态，并清空审核痕迹
@@ -389,6 +397,7 @@ func (q *Queries) ResetRiderApplicationToDraft(ctx context.Context, id int64) (R
 		&i.IDCardFrontMediaAssetID,
 		&i.IDCardBackMediaAssetID,
 		&i.HealthCertMediaAssetID,
+		&i.ReviewSummary,
 	)
 	return i, err
 }
@@ -403,7 +412,7 @@ SET
     submitted_at = NULL,
     updated_at = now()
 WHERE id = $1 AND status = 'submitted'
-RETURNING id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id
+RETURNING id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id, review_summary
 `
 
 type ReturnRiderApplicationToDraftParams struct {
@@ -433,6 +442,7 @@ func (q *Queries) ReturnRiderApplicationToDraft(ctx context.Context, arg ReturnR
 		&i.IDCardFrontMediaAssetID,
 		&i.IDCardBackMediaAssetID,
 		&i.HealthCertMediaAssetID,
+		&i.ReviewSummary,
 	)
 	return i, err
 }
@@ -444,7 +454,7 @@ SET
     submitted_at = now(),
     updated_at = now()
 WHERE id = $1 AND status = 'draft'
-RETURNING id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id
+RETURNING id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id, review_summary
 `
 
 // 提交骑手申请
@@ -468,6 +478,7 @@ func (q *Queries) SubmitRiderApplication(ctx context.Context, id int64) (RiderAp
 		&i.IDCardFrontMediaAssetID,
 		&i.IDCardBackMediaAssetID,
 		&i.HealthCertMediaAssetID,
+		&i.ReviewSummary,
 	)
 	return i, err
 }
@@ -479,7 +490,7 @@ SET
     phone = COALESCE($3, phone),
     updated_at = now()
 WHERE id = $1 AND status = 'draft'
-RETURNING id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id
+RETURNING id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id, review_summary
 `
 
 type UpdateRiderApplicationBasicInfoParams struct {
@@ -509,6 +520,7 @@ func (q *Queries) UpdateRiderApplicationBasicInfo(ctx context.Context, arg Updat
 		&i.IDCardFrontMediaAssetID,
 		&i.IDCardBackMediaAssetID,
 		&i.HealthCertMediaAssetID,
+		&i.ReviewSummary,
 	)
 	return i, err
 }
@@ -520,7 +532,7 @@ SET
     health_cert_ocr = COALESCE($3, health_cert_ocr),
     updated_at = now()
 WHERE id = $1 AND status = 'draft'
-RETURNING id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id
+RETURNING id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id, review_summary
 `
 
 type UpdateRiderApplicationHealthCertParams struct {
@@ -550,6 +562,7 @@ func (q *Queries) UpdateRiderApplicationHealthCert(ctx context.Context, arg Upda
 		&i.IDCardFrontMediaAssetID,
 		&i.IDCardBackMediaAssetID,
 		&i.HealthCertMediaAssetID,
+		&i.ReviewSummary,
 	)
 	return i, err
 }
@@ -568,7 +581,7 @@ SET
     real_name = COALESCE($5, real_name),
     updated_at = now()
 WHERE id = $1 AND status = 'draft'
-RETURNING id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id
+RETURNING id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id, review_summary
 `
 
 type UpdateRiderApplicationIDCardParams struct {
@@ -606,6 +619,45 @@ func (q *Queries) UpdateRiderApplicationIDCard(ctx context.Context, arg UpdateRi
 		&i.IDCardFrontMediaAssetID,
 		&i.IDCardBackMediaAssetID,
 		&i.HealthCertMediaAssetID,
+		&i.ReviewSummary,
+	)
+	return i, err
+}
+
+const updateRiderApplicationReviewSummary = `-- name: UpdateRiderApplicationReviewSummary :one
+UPDATE rider_applications
+SET review_summary = $2,
+    updated_at = now()
+WHERE id = $1
+RETURNING id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id, review_summary
+`
+
+type UpdateRiderApplicationReviewSummaryParams struct {
+	ID            int64  `json:"id"`
+	ReviewSummary []byte `json:"review_summary"`
+}
+
+func (q *Queries) UpdateRiderApplicationReviewSummary(ctx context.Context, arg UpdateRiderApplicationReviewSummaryParams) (RiderApplication, error) {
+	row := q.db.QueryRow(ctx, updateRiderApplicationReviewSummary, arg.ID, arg.ReviewSummary)
+	var i RiderApplication
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.RealName,
+		&i.Phone,
+		&i.IDCardOcr,
+		&i.HealthCertOcr,
+		&i.Status,
+		&i.RejectReason,
+		&i.ReviewedBy,
+		&i.ReviewedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.SubmittedAt,
+		&i.IDCardFrontMediaAssetID,
+		&i.IDCardBackMediaAssetID,
+		&i.HealthCertMediaAssetID,
+		&i.ReviewSummary,
 	)
 	return i, err
 }

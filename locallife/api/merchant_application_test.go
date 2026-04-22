@@ -4,18 +4,23 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
+	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/maps"
 	"github.com/merrydance/locallife/ocr"
 	"github.com/merrydance/locallife/token"
+	"github.com/merrydance/locallife/worker"
+	mockworker "github.com/merrydance/locallife/worker/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
@@ -123,6 +128,34 @@ func expectMerchantApplicationPublicDocumentLookups(store *mockdb.MockStore, use
 			}
 			return asset, nil
 		})
+}
+
+func TestCheckMerchantApplicationApproval_UsesBusinessLicenseReadiness(t *testing.T) {
+	server := &Server{}
+	app := randomMerchantAppDraftWithData(1)
+	app.BusinessLicenseOcr = []byte(`{"enterprise_name":"测试餐饮有限公司","readiness":{"state":"partial","reason_code":"required_field_missing","missing_fields":["valid_period"]}}`)
+
+	err := server.checkMerchantApplicationApproval(nil, app)
+
+	require.Error(t, err)
+	apiErr, ok := err.(*APIError)
+	require.True(t, ok)
+	require.Equal(t, ErrBusinessLicenseRequired.Code, apiErr.Code)
+	require.Equal(t, "营业执照有效期未识别，请重新上传清晰完整的营业执照照片", apiErr.Message)
+}
+
+func TestCheckMerchantApplicationApproval_UsesFoodPermitProviderFailure(t *testing.T) {
+	server := &Server{}
+	app := randomMerchantAppDraftWithData(1)
+	app.FoodPermitOcr = []byte(`{"company_name":"测试餐饮有限公司","valid_to":"2030年12月31日","readiness":{"state":"provider_failed","reason_code":"provider_error"}}`)
+
+	err := server.checkMerchantApplicationApproval(nil, app)
+
+	require.Error(t, err)
+	apiErr, ok := err.(*APIError)
+	require.True(t, ok)
+	require.Equal(t, ErrFoodLicenseRequired.Code, apiErr.Code)
+	require.Equal(t, "食品经营许可证OCR处理失败，请重新上传清晰完整的食品经营许可证照片", apiErr.Message)
 }
 
 // ==================== 获取或创建草稿测试 ====================
@@ -522,7 +555,6 @@ func TestDeleteMerchantApplicationDocument(t *testing.T) {
 
 func TestSubmitMerchantApplication(t *testing.T) {
 	user, _ := randomUser(t)
-
 	testCases := []struct {
 		name            string
 		setupAuth       func(t *testing.T, request *http.Request, tokenMaker token.Maker)
@@ -1325,6 +1357,223 @@ func TestSubmitMerchantApplication(t *testing.T) {
 }
 
 // ==================== 重置申请测试 ====================
+
+func TestSubmitMerchantApplication_QueuesOnboardingReviewWhenAsyncAvailable(t *testing.T) {
+	user, _ := randomUser(t)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	distributor := mockworker.NewMockTaskDistributor(ctrl)
+
+	app := randomMerchantAppDraftWithData(user.ID)
+	store.EXPECT().
+		GetMerchantApplicationDraft(gomock.Any(), user.ID).
+		Return(app, nil)
+
+	submittedApp := app
+	submittedApp.Status = "submitted"
+	store.EXPECT().
+		SubmitMerchantApplication(gomock.Any(), app.ID).
+		Return(submittedApp, nil)
+
+	store.EXPECT().
+		ListMerchantLocationsInRegion(gomock.Any(), submittedApp.RegionID.Int64).
+		Return([]db.ListMerchantLocationsInRegionRow{}, nil)
+
+	store.EXPECT().
+		CheckBusinessLicenseExists(gomock.Any(), db.CheckBusinessLicenseExistsParams{
+			BusinessLicenseNumber: submittedApp.BusinessLicenseNumber,
+			ID:                    submittedApp.ID,
+		}).
+		Return(int64(0), nil)
+
+	store.EXPECT().
+		CheckLegalPersonIDExists(gomock.Any(), db.CheckLegalPersonIDExistsParams{
+			LegalPersonIDNumber: submittedApp.LegalPersonIDNumber,
+			ID:                  submittedApp.ID,
+		}).
+		Return(int64(0), nil)
+
+	store.EXPECT().
+		CreateMerchantOnboardingReviewRun(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.CreateMerchantOnboardingReviewRunParams) (db.OnboardingReviewRun, error) {
+			require.Equal(t, submittedApp.ID, arg.MerchantApplicationID.Int64)
+			require.Equal(t, "queued", arg.RunStatus)
+			return db.OnboardingReviewRun{ID: 1201, ApplicationType: "merchant", RunStatus: "queued", Stage: "review", CreatedAt: time.Now()}, nil
+		})
+
+	store.EXPECT().
+		UpdateMerchantApplicationReviewSummary(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.UpdateMerchantApplicationReviewSummaryParams) (db.MerchantApplication, error) {
+			require.Equal(t, submittedApp.ID, arg.ID)
+			return db.MerchantApplication{ID: submittedApp.ID, ReviewSummary: arg.ReviewSummary}, nil
+		})
+
+	distributor.EXPECT().
+		DistributeTaskOnboardingReview(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, payload *worker.OnboardingReviewPayload, _ ...asynq.Option) error {
+			require.Equal(t, int64(1201), payload.ReviewRunID)
+			require.Equal(t, submittedApp.ID, payload.ApplicationID)
+			require.Equal(t, "merchant", payload.ApplicationType)
+			require.Equal(t, user.ID, payload.RequestedBy)
+			return nil
+		})
+
+	server := newTestServerWithTaskDistributor(t, store, distributor)
+	server.onboardingReviewService = logic.NewOnboardingReviewService(store)
+
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodPost, "/v1/merchant/application/submit", bytes.NewReader([]byte(`{"consented":true}`)))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp merchantApplicationDraftResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Equal(t, "submitted", resp.Status)
+	if resp.ReviewSummary == nil {
+		t.Fatal("expected queued review summary in async merchant submit response")
+	}
+	require.Equal(t, int64(1201), resp.ReviewSummary.RunID)
+}
+
+func TestSubmitMerchantApplication_FallsBackToSyncReviewWhenEnqueueFails(t *testing.T) {
+	user, _ := randomUser(t)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	distributor := mockworker.NewMockTaskDistributor(ctrl)
+
+	app := randomMerchantAppDraftWithData(user.ID)
+	store.EXPECT().
+		GetMerchantApplicationDraft(gomock.Any(), user.ID).
+		Return(app, nil)
+
+	submittedApp := app
+	submittedApp.Status = "submitted"
+	store.EXPECT().
+		SubmitMerchantApplication(gomock.Any(), app.ID).
+		Return(submittedApp, nil)
+
+	store.EXPECT().
+		ListMerchantLocationsInRegion(gomock.Any(), submittedApp.RegionID.Int64).
+		Return([]db.ListMerchantLocationsInRegionRow{}, nil)
+
+	store.EXPECT().
+		CheckBusinessLicenseExists(gomock.Any(), db.CheckBusinessLicenseExistsParams{
+			BusinessLicenseNumber: submittedApp.BusinessLicenseNumber,
+			ID:                    submittedApp.ID,
+		}).
+		Return(int64(0), nil)
+
+	store.EXPECT().
+		CheckLegalPersonIDExists(gomock.Any(), db.CheckLegalPersonIDExistsParams{
+			LegalPersonIDNumber: submittedApp.LegalPersonIDNumber,
+			ID:                  submittedApp.ID,
+		}).
+		Return(int64(0), nil)
+
+	queuedAt := time.Now()
+	store.EXPECT().
+		CreateMerchantOnboardingReviewRun(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.CreateMerchantOnboardingReviewRunParams) (db.OnboardingReviewRun, error) {
+			require.Equal(t, submittedApp.ID, arg.MerchantApplicationID.Int64)
+			require.Equal(t, "queued", arg.RunStatus)
+			return db.OnboardingReviewRun{ID: 1301, ApplicationType: "merchant", RunStatus: "queued", Stage: "review", CreatedAt: queuedAt}, nil
+		})
+
+	store.EXPECT().
+		UpdateMerchantApplicationReviewSummary(gomock.Any(), gomock.Any()).
+		Times(2).
+		DoAndReturn(func() func(context.Context, db.UpdateMerchantApplicationReviewSummaryParams) (db.MerchantApplication, error) {
+			callCount := 0
+			return func(_ context.Context, arg db.UpdateMerchantApplicationReviewSummaryParams) (db.MerchantApplication, error) {
+				callCount++
+				var summary map[string]any
+				require.NoError(t, json.Unmarshal(arg.ReviewSummary, &summary))
+				require.Equal(t, submittedApp.ID, arg.ID)
+				switch callCount {
+				case 1:
+					require.Equal(t, float64(1301), summary["run_id"])
+					require.Equal(t, "", summary["outcome"])
+				case 2:
+					require.Equal(t, float64(1301), summary["run_id"])
+					require.Equal(t, "approved", summary["outcome"])
+					require.Equal(t, "auto_approved", summary["reason_code"])
+				default:
+					t.Fatalf("unexpected merchant review summary update call %d", callCount)
+				}
+				return db.MerchantApplication{ID: submittedApp.ID, ReviewSummary: arg.ReviewSummary}, nil
+			}
+		}())
+
+	distributor.EXPECT().
+		DistributeTaskOnboardingReview(gomock.Any(), gomock.Any()).
+		Return(errors.New("redis unavailable"))
+
+	approvedApp := submittedApp
+	approvedApp.Status = "approved"
+	store.EXPECT().
+		ApproveMerchantApplicationTx(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.ApproveMerchantApplicationTxParams) (db.ApproveMerchantApplicationTxResult, error) {
+			require.Equal(t, submittedApp.ID, arg.ApplicationID)
+			return db.ApproveMerchantApplicationTxResult{
+				Application: approvedApp,
+				Merchant: db.Merchant{
+					ID:          88,
+					OwnerUserID: user.ID,
+				},
+			}, nil
+		})
+
+	store.EXPECT().
+		MarkOnboardingReviewRunProcessing(gomock.Any(), int64(1301)).
+		Return(db.OnboardingReviewRun{ID: 1301, ApplicationType: "merchant", RunStatus: "processing", Stage: "review", CreatedAt: queuedAt}, nil)
+
+	store.EXPECT().
+		CompleteOnboardingReviewRun(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.CompleteOnboardingReviewRunParams) (db.OnboardingReviewRun, error) {
+			require.Equal(t, int64(1301), arg.ID)
+			require.Equal(t, "approved", arg.Outcome.String)
+			require.Equal(t, "auto_approved", arg.ReasonCode.String)
+			return db.OnboardingReviewRun{
+				ID:         1301,
+				Stage:      "review",
+				RunStatus:  "completed",
+				Outcome:    pgtype.Text{String: "approved", Valid: true},
+				ReasonCode: pgtype.Text{String: "auto_approved", Valid: true},
+				CreatedAt:  queuedAt,
+				UpdatedAt:  queuedAt,
+			}, nil
+		})
+
+	server := newTestServerWithTaskDistributor(t, store, distributor)
+	server.onboardingReviewService = logic.NewOnboardingReviewService(store)
+
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodPost, "/v1/merchant/application/submit", bytes.NewReader([]byte(`{"consented":true}`)))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp merchantApplicationDraftResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Equal(t, "approved", resp.Status)
+	if resp.ReviewSummary == nil {
+		t.Fatal("expected review summary after merchant sync fallback completion")
+	}
+	require.Equal(t, int64(1301), resp.ReviewSummary.RunID)
+	require.Equal(t, "approved", resp.ReviewSummary.Outcome)
+	require.Equal(t, "auto_approved", resp.ReviewSummary.ReasonCode)
+}
 
 func TestResetMerchantApplication(t *testing.T) {
 	user, _ := randomUser(t)

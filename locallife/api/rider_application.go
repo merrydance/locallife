@@ -1,19 +1,21 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
-	"regexp"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/rules"
 	"github.com/merrydance/locallife/token"
+	"github.com/merrydance/locallife/worker"
 	"github.com/rs/zerolog/log"
 )
 
@@ -21,38 +23,40 @@ import (
 
 // IDCardOCRData 身份证OCR识别数据
 type IDCardOCRData struct {
-	Status         string `json:"status,omitempty"`
-	Error          string `json:"error,omitempty"`
-	ErrorCode      string `json:"error_code,omitempty"`
-	AlertEmittedAt string `json:"alert_emitted_at,omitempty"`
-	QueuedAt       string `json:"queued_at,omitempty"`
-	StartedAt      string `json:"started_at,omitempty"`
-	OCRJobID       *int64 `json:"ocr_job_id,omitempty"`
-	Name           string `json:"name,omitempty"`        // 姓名
-	IDNumber       string `json:"id_number,omitempty"`   // 身份证号
-	Gender         string `json:"gender,omitempty"`      // 性别
-	Nation         string `json:"nation,omitempty"`      // 民族
-	Address        string `json:"address,omitempty"`     // 地址
-	ValidStart     string `json:"valid_start,omitempty"` // 有效期起始
-	ValidEnd       string `json:"valid_end,omitempty"`   // 有效期截止（"长期" 或日期）
-	OCRAt          string `json:"ocr_at,omitempty"`      // OCR识别时间
+	Status         string        `json:"status,omitempty"`
+	Error          string        `json:"error,omitempty"`
+	ErrorCode      string        `json:"error_code,omitempty"`
+	AlertEmittedAt string        `json:"alert_emitted_at,omitempty"`
+	Readiness      *OCRReadiness `json:"readiness,omitempty"`
+	QueuedAt       string        `json:"queued_at,omitempty"`
+	StartedAt      string        `json:"started_at,omitempty"`
+	OCRJobID       *int64        `json:"ocr_job_id,omitempty"`
+	Name           string        `json:"name,omitempty"`        // 姓名
+	IDNumber       string        `json:"id_number,omitempty"`   // 身份证号
+	Gender         string        `json:"gender,omitempty"`      // 性别
+	Nation         string        `json:"nation,omitempty"`      // 民族
+	Address        string        `json:"address,omitempty"`     // 地址
+	ValidStart     string        `json:"valid_start,omitempty"` // 有效期起始
+	ValidEnd       string        `json:"valid_end,omitempty"`   // 有效期截止（"长期" 或日期）
+	OCRAt          string        `json:"ocr_at,omitempty"`      // OCR识别时间
 }
 
 // HealthCertOCRData 健康证OCR识别数据
 type HealthCertOCRData struct {
-	Status         string `json:"status,omitempty"`
-	Error          string `json:"error,omitempty"`
-	ErrorCode      string `json:"error_code,omitempty"`
-	AlertEmittedAt string `json:"alert_emitted_at,omitempty"`
-	QueuedAt       string `json:"queued_at,omitempty"`
-	StartedAt      string `json:"started_at,omitempty"`
-	OCRJobID       *int64 `json:"ocr_job_id,omitempty"`
-	Name           string `json:"name,omitempty"`        // 姓名
-	IDNumber       string `json:"id_number,omitempty"`   // 身份证号
-	CertNumber     string `json:"cert_number,omitempty"` // 证书编号
-	ValidStart     string `json:"valid_start,omitempty"` // 有效期起始
-	ValidEnd       string `json:"valid_end,omitempty"`   // 有效期截止
-	OCRAt          string `json:"ocr_at,omitempty"`      // OCR识别时间
+	Status         string        `json:"status,omitempty"`
+	Error          string        `json:"error,omitempty"`
+	ErrorCode      string        `json:"error_code,omitempty"`
+	AlertEmittedAt string        `json:"alert_emitted_at,omitempty"`
+	Readiness      *OCRReadiness `json:"readiness,omitempty"`
+	QueuedAt       string        `json:"queued_at,omitempty"`
+	StartedAt      string        `json:"started_at,omitempty"`
+	OCRJobID       *int64        `json:"ocr_job_id,omitempty"`
+	Name           string        `json:"name,omitempty"`        // 姓名
+	IDNumber       string        `json:"id_number,omitempty"`   // 身份证号
+	CertNumber     string        `json:"cert_number,omitempty"` // 证书编号
+	ValidStart     string        `json:"valid_start,omitempty"` // 有效期起始
+	ValidEnd       string        `json:"valid_end,omitempty"`   // 有效期截止
+	OCRAt          string        `json:"ocr_at,omitempty"`      // OCR识别时间
 }
 
 func decodeOCRPayload(data []byte, target any) error {
@@ -109,57 +113,24 @@ func normalizePersonName(name string) string {
 	return name
 }
 
-func parseFlexibleDocumentEndDate(dateStr string) (time.Time, error) {
-	trimmed := strings.TrimSpace(dateStr)
-	if trimmed == "" {
-		return time.Time{}, fmt.Errorf("empty date")
-	}
-
-	eightDigitRegex := regexp.MustCompile(`\d{8}`)
-	if match := eightDigitRegex.FindAllString(trimmed, -1); len(match) > 0 {
-		return time.Parse("20060102", match[len(match)-1])
-	}
-
-	dateRegex := regexp.MustCompile(`\d{4}\s*(?:年|[./-])\s*\d{1,2}\s*(?:月|[./-])\s*\d{1,2}\s*日?`)
-	matches := dateRegex.FindAllString(trimmed, -1)
-	if len(matches) == 0 {
-		return time.Time{}, fmt.Errorf("no date found in %q", dateStr)
-	}
-
-	last := matches[len(matches)-1]
-	normalized := strings.TrimSpace(last)
-	normalized = strings.ReplaceAll(normalized, " 年", "年")
-	normalized = strings.ReplaceAll(normalized, "年 ", "年")
-	normalized = strings.ReplaceAll(normalized, " 月", "月")
-	normalized = strings.ReplaceAll(normalized, "月 ", "月")
-	normalized = strings.ReplaceAll(normalized, " 日", "日")
-	normalized = strings.ReplaceAll(normalized, "日 ", "日")
-	normalized = strings.ReplaceAll(normalized, ".", "-")
-	normalized = strings.ReplaceAll(normalized, "/", "-")
-	normalized = strings.ReplaceAll(normalized, "年", "-")
-	normalized = strings.ReplaceAll(normalized, "月", "-")
-	normalized = strings.ReplaceAll(normalized, "日", "")
-	normalized = strings.ReplaceAll(normalized, " ", "")
-
-	return parseISODate(normalized, "")
-}
-
 // riderApplicationResponse 骑手申请响应
 type riderApplicationResponse struct {
-	ID                 int64              `json:"id"`
-	UserID             int64              `json:"user_id"`
-	RealName           *string            `json:"real_name,omitempty"`
-	Phone              *string            `json:"phone,omitempty"`
-	IDCardFrontAssetID *int64             `json:"id_card_front_asset_id,omitempty"`
-	IDCardBackAssetID  *int64             `json:"id_card_back_asset_id,omitempty"`
-	IDCardOCR          *IDCardOCRData     `json:"id_card_ocr,omitempty"`
-	HealthCertAssetID  *int64             `json:"health_cert_asset_id,omitempty"`
-	HealthCertOCR      *HealthCertOCRData `json:"health_cert_ocr,omitempty"`
-	Status             string             `json:"status"`
-	RejectReason       *string            `json:"reject_reason,omitempty"`
-	CreatedAt          time.Time          `json:"created_at"`
-	UpdatedAt          *time.Time         `json:"updated_at,omitempty"`
-	SubmittedAt        *time.Time         `json:"submitted_at,omitempty"`
+	ID                 int64                             `json:"id"`
+	UserID             int64                             `json:"user_id"`
+	RealName           *string                           `json:"real_name,omitempty"`
+	Phone              *string                           `json:"phone,omitempty"`
+	IDCardFrontAssetID *int64                            `json:"id_card_front_asset_id,omitempty"`
+	IDCardBackAssetID  *int64                            `json:"id_card_back_asset_id,omitempty"`
+	IDCardOCR          *IDCardOCRData                    `json:"id_card_ocr,omitempty"`
+	HealthCertAssetID  *int64                            `json:"health_cert_asset_id,omitempty"`
+	HealthCertOCR      *HealthCertOCRData                `json:"health_cert_ocr,omitempty"`
+	Status             string                            `json:"status"`
+	RejectReason       *string                           `json:"reject_reason,omitempty"`
+	ReviewSummary      *onboardingReviewSummaryResponse  `json:"review_summary,omitempty"`
+	ActiveCredentials  []activeCredentialSummaryResponse `json:"active_credentials,omitempty"`
+	CreatedAt          time.Time                         `json:"created_at"`
+	UpdatedAt          *time.Time                        `json:"updated_at,omitempty"`
+	SubmittedAt        *time.Time                        `json:"submitted_at,omitempty"`
 }
 
 type riderApplicationDocumentType string
@@ -170,12 +141,14 @@ const (
 	riderApplicationDocumentHealthCert  riderApplicationDocumentType = "health_cert"
 )
 
-func newRiderApplicationResponse(app db.RiderApplication) riderApplicationResponse {
+func (server *Server) newRiderApplicationResponse(ctx context.Context, app db.RiderApplication) riderApplicationResponse {
 	resp := riderApplicationResponse{
-		ID:        app.ID,
-		UserID:    app.UserID,
-		Status:    app.Status,
-		CreatedAt: app.CreatedAt,
+		ID:                app.ID,
+		UserID:            app.UserID,
+		Status:            app.Status,
+		CreatedAt:         app.CreatedAt,
+		ReviewSummary:     decodeOnboardingReviewSummary(app.ReviewSummary),
+		ActiveCredentials: server.loadRiderActiveCredentialSummaries(ctx, app.UserID),
 	}
 
 	if app.RealName.Valid {
@@ -244,7 +217,7 @@ func (server *Server) createOrGetRiderApplicationDraft(ctx *gin.Context) {
 	// 检查是否已有申请
 	app, err := server.store.GetRiderApplicationByUserID(ctx, authPayload.UserID)
 	if err == nil {
-		ctx.JSON(http.StatusOK, newRiderApplicationResponse(app))
+		ctx.JSON(http.StatusOK, server.newRiderApplicationResponse(ctx, app))
 		return
 	}
 	if !isNotFoundError(err) {
@@ -259,7 +232,7 @@ func (server *Server) createOrGetRiderApplicationDraft(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusCreated, newRiderApplicationResponse(app))
+	ctx.JSON(http.StatusCreated, server.newRiderApplicationResponse(ctx, app))
 }
 
 // ==================== 更新基础信息 ====================
@@ -333,7 +306,7 @@ func (server *Server) updateRiderApplicationBasic(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, newRiderApplicationResponse(updated))
+	ctx.JSON(http.StatusOK, server.newRiderApplicationResponse(ctx, updated))
 }
 
 func (server *Server) deleteRiderApplicationDocumentByType(ctx *gin.Context, documentType riderApplicationDocumentType) {
@@ -441,7 +414,7 @@ func (server *Server) deleteRiderApplicationDocumentByType(ctx *gin.Context, doc
 		}
 	}
 
-	ctx.JSON(http.StatusOK, newRiderApplicationResponse(updated))
+	ctx.JSON(http.StatusOK, server.newRiderApplicationResponse(ctx, updated))
 }
 
 // deleteRiderApplicationDocument godoc
@@ -548,8 +521,53 @@ func (server *Server) submitRiderApplication(ctx *gin.Context) {
 		return
 	}
 
-	// 自动审核：检查是否符合条件
-	approved, rejectReason := server.checkRiderApplicationApproval(app)
+	submitted, err := server.store.SubmitRiderApplication(ctx, app.ID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("submit rider application: %w", err)))
+		return
+	}
+
+	reviewExecutor := logic.NewRiderOnboardingReviewService(server.store, server.onboardingReviewService, server.credentialGovernanceService)
+	var queuedRun *db.OnboardingReviewRun
+	if server.onboardingReviewService != nil && server.taskDistributor != nil {
+		run, err := server.onboardingReviewService.CreateRiderReviewRun(ctx, submitted.ID, logic.OnboardingReviewDecision{
+			RequestedBy: &authPayload.UserID,
+			OCRJobRefs:  riderApplicationOCRJobRefs(submitted, idCardOCR),
+			Snapshot: map[string]any{
+				"application_id":   submitted.ID,
+				"application_type": "rider",
+				"status":           submitted.Status,
+				"user_id":          submitted.UserID,
+			},
+		})
+		if err != nil {
+			log.Error().Err(err).Int64("application_id", submitted.ID).Msg("create rider onboarding review run failed, fallback to sync review")
+		} else {
+			queuedRun = &run
+			err = server.taskDistributor.DistributeTaskOnboardingReview(ctx, &worker.OnboardingReviewPayload{
+				ReviewRunID:     run.ID,
+				ApplicationID:   submitted.ID,
+				ApplicationType: "rider",
+				RequestedBy:     authPayload.UserID,
+			})
+			if err == nil {
+				attachRiderReviewSummary(&submitted, queuedRun)
+				ctx.JSON(http.StatusOK, server.newRiderApplicationResponse(ctx, submitted))
+				return
+			}
+			log.Error().Err(err).Int64("application_id", submitted.ID).Int64("review_run_id", run.ID).Msg("enqueue rider onboarding review failed, fallback to sync review")
+		}
+	}
+
+	result, err := reviewExecutor.ProcessSubmittedApplication(ctx, submitted, authPayload.UserID, onboardingReviewRunID(queuedRun))
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	if result.RestoreReleased && result.Rider != nil {
+		server.notifyCredentialGovernanceRestored(ctx, "rider", result.Rider.ID, result.Application.ID, result.ReviewRun, result.CredentialEntries)
+	}
+
 	if server.config.RulesEngineEnabled && server.rulesEngine != nil {
 		ruleInput := rules.Context{
 			Domain: rules.DomainClaim,
@@ -559,8 +577,8 @@ func (server *Server) submitRiderApplication(ctx *gin.Context) {
 				"health_cert_uploaded": app.HealthCertMediaAssetID.Valid,
 				"idcard_ocr_valid":     len(app.IDCardOcr) > 0,
 				"health_ocr_valid":     len(app.HealthCertOcr) > 0,
-				"idcard_not_expired":   approved || rejectReason != "身份证已过期，请更换有效身份证后重新申请",
-				"name_match":           approved || rejectReason != "健康证姓名与身份证姓名不一致",
+				"idcard_not_expired":   result.Approved || result.RejectReason != "身份证已过期，请更换有效身份证后重新申请",
+				"name_match":           result.Approved || result.RejectReason != "健康证姓名与身份证姓名不一致",
 			},
 		}
 		decision, err := server.rulesEngine.Evaluate(ctx, ruleInput)
@@ -569,42 +587,7 @@ func (server *Server) submitRiderApplication(ctx *gin.Context) {
 		}
 	}
 
-	submitted, err := server.store.SubmitRiderApplication(ctx, app.ID)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("submit rider application: %w", err)))
-		return
-	}
-
-	if approved {
-		approvedResult, err := server.store.ApproveRiderApplicationTx(ctx, db.ApproveRiderApplicationTxParams{
-			ApplicationID: submitted.ID,
-			ReviewedBy:    pgtype.Int8{},
-			RiderRealName: submitted.RealName.String,
-			RiderIDCardNo: idCardOCR.IDNumber,
-			RiderPhone:    submitted.Phone.String,
-			RegionID:      pgtype.Int8{},
-		})
-		if err != nil {
-			log.Error().Err(err).Msg("审核骑手申请并创建骑手失败")
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("approve rider application tx: %w", err)))
-			return
-		}
-
-		ctx.JSON(http.StatusOK, newRiderApplicationResponse(approvedResult.Application))
-		return
-	}
-
-	returned, err := server.store.ReturnRiderApplicationToDraft(ctx, db.ReturnRiderApplicationToDraftParams{
-		ID:           submitted.ID,
-		RejectReason: pgtype.Text{String: rejectReason, Valid: rejectReason != ""},
-		ReviewedBy:   pgtype.Int8{},
-	})
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("return rider application to draft: %w", err)))
-		return
-	}
-
-	ctx.JSON(http.StatusOK, newRiderApplicationResponse(returned))
+	ctx.JSON(http.StatusOK, server.newRiderApplicationResponse(ctx, result.Application))
 }
 
 func validateRiderApplicationSubmissionReadiness(app db.RiderApplication) (*IDCardOCRData, error) {
@@ -615,6 +598,19 @@ func validateRiderApplicationSubmissionReadiness(app db.RiderApplication) (*IDCa
 	decodedIDCardOCR, err := decodeIDCardOCRData(app.IDCardOcr)
 	if err != nil || decodedIDCardOCR == nil {
 		return nil, errors.New("身份证信息解析失败，请重新上传")
+	}
+	if err := submissionReadinessError(
+		decodedIDCardOCR.Readiness,
+		map[string]string{
+			"name":      "身份证姓名未识别，请重新上传清晰的身份证正面照片",
+			"id_number": "身份证号未识别，请重新上传清晰的身份证正面照片",
+			"valid_end": "身份证有效期未识别，请上传身份证背面照片",
+		},
+		"身份证信息未识别，请重新上传清晰的身份证照片",
+		"身份证信息解析失败，请重新上传",
+		"身份证OCR处理失败，请重新上传清晰的身份证照片",
+	); err != nil {
+		return nil, err
 	}
 
 	idName := normalizePersonName(decodedIDCardOCR.Name)
@@ -639,6 +635,18 @@ func validateRiderApplicationSubmissionReadiness(app db.RiderApplication) (*IDCa
 	if err != nil || decodedHealthOCR == nil {
 		return nil, errors.New("健康证信息解析失败，请重新上传")
 	}
+	if err := submissionReadinessError(
+		decodedHealthOCR.Readiness,
+		map[string]string{
+			"name":      "健康证姓名未识别，请重新上传清晰的健康证照片",
+			"valid_end": "健康证有效期未识别，请重新上传清晰的健康证照片",
+		},
+		"健康证信息未识别，请重新上传清晰的健康证照片",
+		"健康证信息解析失败，请重新上传",
+		"健康证OCR处理失败，请重新上传清晰的健康证照片",
+	); err != nil {
+		return nil, err
+	}
 	if normalizePersonName(decodedHealthOCR.Name) == "" {
 		return nil, errors.New("健康证姓名未识别，请重新上传清晰的健康证照片")
 	}
@@ -647,92 +655,6 @@ func validateRiderApplicationSubmissionReadiness(app db.RiderApplication) (*IDCa
 	}
 
 	return decodedIDCardOCR, nil
-}
-
-// checkRiderApplicationApproval 检查申请是否符合通过条件
-// 返回：是否通过，拒绝原因（如果不通过）
-func (server *Server) checkRiderApplicationApproval(app db.RiderApplication) (bool, string) {
-	// 1. 健康证必须已上传
-	if !app.HealthCertMediaAssetID.Valid {
-		return false, "健康证未上传"
-	}
-
-	// 2. 身份证OCR数据必须存在
-	if len(app.IDCardOcr) == 0 {
-		return false, "身份证信息未识别，请重新上传清晰的身份证照片"
-	}
-
-	decodedIDCardOCR, err := decodeIDCardOCRData(app.IDCardOcr)
-	if err != nil || decodedIDCardOCR == nil {
-		return false, "身份证信息解析失败，请重新上传"
-	}
-	ocrData := *decodedIDCardOCR
-	if strings.TrimSpace(ocrData.IDNumber) == "" {
-		return false, "身份证号未识别，请重新上传清晰的身份证正面照片"
-	}
-
-	// 3. 身份证必须在有效期内
-	if ocrData.ValidEnd == "" {
-		return false, "身份证有效期未识别，请上传身份证背面照片"
-	}
-
-	// "长期"/"永久"有效，但不能绕过后续健康证校验
-	if !strings.Contains(ocrData.ValidEnd, "长期") && !strings.Contains(ocrData.ValidEnd, "永久") {
-		endDate, err := parseFlexibleDocumentEndDate(ocrData.ValidEnd)
-		if err != nil {
-			log.Error().Err(err).Str("valid_end", ocrData.ValidEnd).Msg("解析身份证有效期失败")
-			return false, "身份证有效期格式无法识别，请联系客服"
-		}
-
-		if time.Now().After(endDate) {
-			return false, "身份证已过期，请更换有效身份证后重新申请"
-		}
-	}
-
-	// 4. 健康证OCR数据必须存在（通用印刷体OCR解析）
-	if len(app.HealthCertOcr) == 0 {
-		return false, "健康证信息未识别，请重新上传清晰的健康证照片"
-	}
-
-	decodedHealthOCR, err := decodeHealthCertOCRData(app.HealthCertOcr)
-	if err != nil || decodedHealthOCR == nil {
-		return false, "健康证信息解析失败，请重新上传"
-	}
-	healthOCR := *decodedHealthOCR
-
-	// 5. 健康证姓名必须与身份证一致
-	idName := normalizePersonName(ocrData.Name)
-	if idName == "" && app.RealName.Valid {
-		idName = normalizePersonName(app.RealName.String)
-	}
-	healthName := normalizePersonName(healthOCR.Name)
-	if idName == "" {
-		return false, "身份证姓名未识别，请重新上传清晰的身份证正面照片"
-	}
-	if healthName == "" {
-		return false, "健康证姓名未识别，请重新上传清晰的健康证照片"
-	}
-	if idName != healthName {
-		return false, "健康证姓名与身份证姓名不一致"
-	}
-
-	// 6. 健康证有效期需超过当日7天
-	if healthOCR.ValidEnd == "" {
-		return false, "健康证有效期未识别，请重新上传清晰的健康证照片"
-	}
-	if strings.Contains(healthOCR.ValidEnd, "长期") || strings.Contains(healthOCR.ValidEnd, "永久") {
-		return true, ""
-	}
-	validEndDate, err := parseFlexibleDocumentEndDate(healthOCR.ValidEnd)
-	if err != nil {
-		log.Error().Err(err).Str("valid_end", healthOCR.ValidEnd).Msg("解析健康证有效期失败")
-		return false, "健康证有效期格式无法识别，请重新上传"
-	}
-	if !validEndDate.After(time.Now().AddDate(0, 0, 7)) {
-		return false, "健康证有效期需超过当日7天"
-	}
-
-	return true, ""
 }
 
 // ==================== 重置申请（处理中） ====================
@@ -774,7 +696,7 @@ func (server *Server) resetRiderApplication(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, newRiderApplicationResponse(reset))
+	ctx.JSON(http.StatusOK, server.newRiderApplicationResponse(ctx, reset))
 }
 
 // ==================== 辅助函数 ====================

@@ -133,6 +133,9 @@ func (d *automaticRecoveryDisputeResolutionTestDistributor) DistributeTaskRiderA
 func (d *automaticRecoveryDisputeResolutionTestDistributor) DistributeTaskRiderApplicationHealthCertOCR(context.Context, int64, int64, int64, ...asynq.Option) error {
 	return nil
 }
+func (d *automaticRecoveryDisputeResolutionTestDistributor) DistributeTaskOnboardingReview(context.Context, *OnboardingReviewPayload, ...asynq.Option) error {
+	return nil
+}
 func (d *automaticRecoveryDisputeResolutionTestDistributor) DistributeTaskGroupApplicationBusinessLicenseOCR(context.Context, int64, int64, int64, ...asynq.Option) error {
 	return nil
 }

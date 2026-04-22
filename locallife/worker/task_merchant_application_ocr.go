@@ -129,6 +129,7 @@ func (processor *RedisTaskProcessor) processMerchantApplicationBusinessLicenseOC
 			"error_code":       ocr.ErrorCode(err),
 			"alert_emitted_at": formatOCRAlertEmittedAt(alertEmittedAt),
 			"error":            err.Error(),
+			"readiness":        failedOCRReadiness(ocr.ErrorCode(err)),
 		}
 		failedJSON, _ := json.Marshal(failed)
 		_, _ = processor.store.UpdateMerchantApplicationBusinessLicense(ctx, db.UpdateMerchantApplicationBusinessLicenseParams{
@@ -169,6 +170,13 @@ func (processor *RedisTaskProcessor) processMerchantApplicationBusinessLicenseOC
 			arg.BusinessScope = pgtype.Text{String: normalized.BusinessLicense.BusinessScope, Valid: true}
 		}
 	}
+	ocrData["readiness"] = buildMerchantBusinessLicenseReadiness(map[string]string{
+		"enterprise_name":      merchantOCRMapString(ocrData, "enterprise_name"),
+		"legal_representative": merchantOCRMapString(ocrData, "legal_representative"),
+		"address":              merchantOCRMapString(ocrData, "address"),
+		"business_scope":       merchantOCRMapString(ocrData, "business_scope"),
+		"valid_period":         merchantOCRMapString(ocrData, "valid_period"),
+	})
 	ocrJSON, _ := json.Marshal(ocrData)
 	arg.BusinessLicenseOcr = ocrJSON
 	_, err = processor.store.UpdateMerchantApplicationBusinessLicense(ctx, arg)
@@ -178,6 +186,17 @@ func (processor *RedisTaskProcessor) processMerchantApplicationBusinessLicenseOC
 	processor.writeOCRJobAudit(ctx, job, "ocr_job_succeeded", map[string]any{"status": job.Status})
 	log.Info().Int64("application_id", payload.ApplicationID).Int64("ocr_job_id", job.ID).Msg("✅ business license OCR updated from ocr job")
 	return nil
+}
+
+func merchantOCRMapString(data map[string]any, key string) string {
+	if data == nil {
+		return ""
+	}
+	raw, ok := data[key]
+	if !ok || raw == nil {
+		return ""
+	}
+	return strings.TrimSpace(fmt.Sprint(raw))
 }
 
 func (processor *RedisTaskProcessor) ProcessTaskMerchantApplicationFoodPermitOCR(ctx context.Context, task *asynq.Task) error {
@@ -210,6 +229,7 @@ func (processor *RedisTaskProcessor) processMerchantApplicationFoodPermitOCRJob(
 			Error:          err.Error(),
 			ErrorCode:      ocr.ErrorCode(err),
 			AlertEmittedAt: formatOCRAlertEmittedAt(alertEmittedAt),
+			Readiness:      failedOCRReadiness(ocr.ErrorCode(err)),
 		}
 		failedJSON, _ := json.Marshal(failed)
 		_, _ = processor.store.UpdateMerchantApplicationFoodPermit(ctx, db.UpdateMerchantApplicationFoodPermitParams{
@@ -231,12 +251,16 @@ func (processor *RedisTaskProcessor) processMerchantApplicationFoodPermitOCRJob(
 		OCRJobID:  int64Ptr(job.ID),
 		OCRAt:     normalized.RecognizedAt.Format(time.RFC3339),
 	}
+	ocrData.Error = ""
+	ocrData.ErrorCode = ""
+	ocrData.AlertEmittedAt = ""
 	if normalized.FoodPermit != nil {
 		populateFoodPermitOCRDataFromNormalized(&ocrData, normalized.FoodPermit)
 		if ocrData.RawText != "" {
 			parseFoodPermitOCRTextFallback(&ocrData, ocrData.RawText)
 		}
 	}
+	ocrData.Readiness = buildMerchantFoodPermitReadiness(ocrData.CompanyName, ocrData.OperatorName, ocrData.RawText, ocrData.ValidTo)
 	ocrJSON, _ := json.Marshal(ocrData)
 	_, err = processor.store.UpdateMerchantApplicationFoodPermit(ctx, db.UpdateMerchantApplicationFoodPermitParams{
 		ID:            payload.ApplicationID,
@@ -282,6 +306,7 @@ func (processor *RedisTaskProcessor) processMerchantApplicationIDCardOCRJob(ctx 
 			Error:          err.Error(),
 			ErrorCode:      ocr.ErrorCode(err),
 			AlertEmittedAt: formatOCRAlertEmittedAt(alertEmittedAt),
+			Readiness:      failedOCRReadiness(ocr.ErrorCode(err)),
 		}
 		failedJSON, _ := json.Marshal(failed)
 		if payload.Side == "Front" {
@@ -304,6 +329,9 @@ func (processor *RedisTaskProcessor) processMerchantApplicationIDCardOCRJob(ctx 
 		OCRJobID:  int64Ptr(job.ID),
 		OCRAt:     normalized.RecognizedAt.Format(time.RFC3339),
 	}
+	ocrData.Error = ""
+	ocrData.ErrorCode = ""
+	ocrData.AlertEmittedAt = ""
 	if normalized.IDCard != nil {
 		ocrData.Name = normalized.IDCard.Name
 		ocrData.IDNumber = normalized.IDCard.IDNumber
@@ -312,6 +340,7 @@ func (processor *RedisTaskProcessor) processMerchantApplicationIDCardOCRJob(ctx 
 		ocrData.Address = normalized.IDCard.Address
 		ocrData.ValidDate = normalized.IDCard.ValidPeriod
 	}
+	ocrData.Readiness = buildMerchantIDCardReadiness(ocrData.Name, ocrData.IDNumber, ocrData.ValidDate, payload.Side)
 	ocrJSON, _ := json.Marshal(ocrData)
 	if payload.Side == "Front" {
 		arg := db.UpdateMerchantApplicationIDCardFrontParams{ID: payload.ApplicationID, IDCardFrontOcr: ocrJSON}
@@ -350,37 +379,39 @@ func (processor *RedisTaskProcessor) parseMerchantApplicationOCRPayload(task *as
 // foodPermitOCRData is a minimal copy of the API response struct for storage.
 // Kept in worker package to avoid import cycles.
 type foodPermitOCRData struct {
-	Status         string `json:"status,omitempty"`
-	Error          string `json:"error,omitempty"`
-	ErrorCode      string `json:"error_code,omitempty"`
-	AlertEmittedAt string `json:"alert_emitted_at,omitempty"`
-	QueuedAt       string `json:"queued_at,omitempty"`
-	StartedAt      string `json:"started_at,omitempty"`
-	OCRJobID       *int64 `json:"ocr_job_id,omitempty"`
-	RawText        string `json:"raw_text,omitempty"`
-	PermitNo       string `json:"permit_no,omitempty"`
-	CompanyName    string `json:"company_name,omitempty"`
-	OperatorName   string `json:"operator_name,omitempty"` // 经营者/法定代表人姓名
-	ValidFrom      string `json:"valid_from,omitempty"`
-	ValidTo        string `json:"valid_to,omitempty"`
-	OCRAt          string `json:"ocr_at,omitempty"`
+	Status         string        `json:"status,omitempty"`
+	Error          string        `json:"error,omitempty"`
+	ErrorCode      string        `json:"error_code,omitempty"`
+	AlertEmittedAt string        `json:"alert_emitted_at,omitempty"`
+	Readiness      *ocrReadiness `json:"readiness,omitempty"`
+	QueuedAt       string        `json:"queued_at,omitempty"`
+	StartedAt      string        `json:"started_at,omitempty"`
+	OCRJobID       *int64        `json:"ocr_job_id,omitempty"`
+	RawText        string        `json:"raw_text,omitempty"`
+	PermitNo       string        `json:"permit_no,omitempty"`
+	CompanyName    string        `json:"company_name,omitempty"`
+	OperatorName   string        `json:"operator_name,omitempty"` // 经营者/法定代表人姓名
+	ValidFrom      string        `json:"valid_from,omitempty"`
+	ValidTo        string        `json:"valid_to,omitempty"`
+	OCRAt          string        `json:"ocr_at,omitempty"`
 }
 
 type merchantIDCardOCRData struct {
-	Status         string `json:"status,omitempty"`
-	Error          string `json:"error,omitempty"`
-	ErrorCode      string `json:"error_code,omitempty"`
-	AlertEmittedAt string `json:"alert_emitted_at,omitempty"`
-	QueuedAt       string `json:"queued_at,omitempty"`
-	StartedAt      string `json:"started_at,omitempty"`
-	OCRJobID       *int64 `json:"ocr_job_id,omitempty"`
-	Name           string `json:"name,omitempty"`
-	IDNumber       string `json:"id_number,omitempty"`
-	Gender         string `json:"gender,omitempty"`
-	Nation         string `json:"nation,omitempty"`
-	Address        string `json:"address,omitempty"`
-	ValidDate      string `json:"valid_date,omitempty"`
-	OCRAt          string `json:"ocr_at,omitempty"`
+	Status         string        `json:"status,omitempty"`
+	Error          string        `json:"error,omitempty"`
+	ErrorCode      string        `json:"error_code,omitempty"`
+	AlertEmittedAt string        `json:"alert_emitted_at,omitempty"`
+	Readiness      *ocrReadiness `json:"readiness,omitempty"`
+	QueuedAt       string        `json:"queued_at,omitempty"`
+	StartedAt      string        `json:"started_at,omitempty"`
+	OCRJobID       *int64        `json:"ocr_job_id,omitempty"`
+	Name           string        `json:"name,omitempty"`
+	IDNumber       string        `json:"id_number,omitempty"`
+	Gender         string        `json:"gender,omitempty"`
+	Nation         string        `json:"nation,omitempty"`
+	Address        string        `json:"address,omitempty"`
+	ValidDate      string        `json:"valid_date,omitempty"`
+	OCRAt          string        `json:"ocr_at,omitempty"`
 }
 
 func int64Ptr(value int64) *int64 {
@@ -663,7 +694,7 @@ func isLikelyFoodPermitCompanyName(name string) bool {
 func normalizeValidPeriod(raw string) string {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
-		return "长期"
+		return ""
 	}
 	// 已明确包含长期/永久关键字，直接返回
 	if strings.Contains(raw, "长期") || strings.Contains(raw, "永久") {
