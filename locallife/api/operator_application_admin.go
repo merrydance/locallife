@@ -227,7 +227,11 @@ func (server *Server) getOperatorApplicationDetailAdmin(ctx *gin.Context) {
 	}
 
 	regionName := server.getRegionName(ctx, app.RegionID)
-	resp := newOperatorApplicationResponse(app, regionName)
+	resp, err := newOperatorApplicationResponse(app, regionName)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
 	applicantName, applicantPhone := server.loadOperatorApplicationApplicant(ctx, app.UserID)
 
 	type adminOperatorApplicationDetailResponse struct {
@@ -570,7 +574,7 @@ func (server *Server) approveOperatorApplicationAdmin(ctx *gin.Context) {
 				ctx.JSON(http.StatusBadRequest, errorResponse(err))
 				return
 			}
-			ctx.JSON(http.StatusBadGateway, errorResponse(err))
+			ctx.JSON(http.StatusBadGateway, loggedServerError(ctx, err, "operator receiver sync unavailable", "ensure operator profit sharing receiver failed before approval transaction"))
 			return
 		}
 
@@ -598,7 +602,7 @@ func (server *Server) approveOperatorApplicationAdmin(ctx *gin.Context) {
 		}
 
 		regionName := server.getRegionName(ctx, result.Application.RegionID)
-		ctx.JSON(http.StatusOK, newOperatorApplicationResponse(result.Application, regionName))
+		server.writeOperatorApplicationResponse(ctx, http.StatusOK, result.Application, regionName)
 		return
 	}
 
@@ -676,12 +680,12 @@ func (server *Server) approveOperatorApplicationAdmin(ctx *gin.Context) {
 			ctx.JSON(http.StatusBadRequest, errorResponse(err))
 			return
 		}
-		ctx.JSON(http.StatusBadGateway, errorResponse(err))
+		ctx.JSON(http.StatusBadGateway, loggedServerError(ctx, err, "operator receiver sync unavailable", "ensure operator profit sharing receiver failed after approval"))
 		return
 	}
 
 	regionName := server.getRegionName(ctx, approved.RegionID)
-	ctx.JSON(http.StatusOK, newOperatorApplicationResponse(approved, regionName))
+	server.writeOperatorApplicationResponse(ctx, http.StatusOK, approved, regionName)
 }
 
 func (server *Server) rejectOperatorApplicationAdmin(ctx *gin.Context) {
@@ -720,5 +724,5 @@ func (server *Server) rejectOperatorApplicationAdmin(ctx *gin.Context) {
 	}
 
 	regionName := server.getRegionName(ctx, rejected.RegionID)
-	ctx.JSON(http.StatusOK, newOperatorApplicationResponse(rejected, regionName))
+	server.writeOperatorApplicationResponse(ctx, http.StatusOK, rejected, regionName)
 }

@@ -530,6 +530,80 @@ func TestDepositRiderAPI(t *testing.T) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
 			},
 		},
+		{
+			name: "PaymentClientNotConfigured",
+			body: map[string]interface{}{
+				"amount": 100 * fenPerYuan,
+				"remark": "充值押金",
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockDirectPaymentClientInterface) {
+				store.EXPECT().
+					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(rider, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusServiceUnavailable, recorder.Code)
+				var resp APIResponse
+				require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+				require.Equal(t, CodeServiceUnavail, resp.Code)
+				require.Equal(t, "支付服务暂不可用，请稍后重试", resp.Message)
+			},
+		},
+		{
+			name: "ClosePendingPaymentOrderFailureReturnsInternalServerError",
+			body: map[string]interface{}{
+				"amount": 10000,
+				"remark": "充值押金",
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockDirectPaymentClientInterface) {
+				store.EXPECT().
+					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(rider, nil)
+				store.EXPECT().
+					GetPendingPaymentOrderByUserAndBusinessType(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.PaymentOrder{}, db.ErrRecordNotFound)
+				store.EXPECT().
+					CreatePaymentOrder(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.PaymentOrder{
+						ID:           2,
+						UserID:       user.ID,
+						PaymentType:  "miniprogram",
+						BusinessType: "rider_deposit",
+						Amount:       10000,
+						Status:       "pending",
+						OutTradeNo:   "test_order_456",
+					}, nil)
+				store.EXPECT().
+					GetUser(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(db.User{ID: user.ID, WechatOpenid: "openid_rider_001"}, nil)
+				paymentClient.EXPECT().
+					CreateJSAPIOrder(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(nil, nil, errors.New("wechat unavailable"))
+				store.EXPECT().
+					UpdatePaymentOrderToClosed(gomock.Any(), int64(2)).
+					Times(1).
+					Return(db.PaymentOrder{}, errors.New("close failed"))
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusInternalServerError, recorder.Code)
+				var resp APIResponse
+				require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+				require.Equal(t, CodeInternalError, resp.Code)
+				require.Equal(t, "internal server error", resp.Message)
+			},
+		},
 	}
 
 	for i := range testCases {

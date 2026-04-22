@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -62,6 +63,28 @@ func TestGetMerchantSettlementAccountNotConfigured(t *testing.T) {
 	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 	require.Equal(t, "not_configured", resp.AccountStatus)
 	require.Nil(t, resp.Account)
+}
+
+func TestGetMerchantSettlementAccountEcommerceClientUnavailable(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	server := newTestServer(t, store)
+	server.SetEcommerceClientForTest(nil)
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	req, err := http.NewRequest(http.MethodGet, "/v1/merchant/finance/account/settlement-account", nil)
+	require.NoError(t, err)
+	ctx.Request = req
+
+	server.getMerchantSettlementAccount(ctx)
+
+	require.Equal(t, http.StatusServiceUnavailable, recorder.Code)
+	var resp ErrorResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, "ecommerce client not configured", resp.Error)
 }
 
 func TestGetMerchantSettlementAccountInactive(t *testing.T) {

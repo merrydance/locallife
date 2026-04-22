@@ -46,13 +46,12 @@ var merchantCancelWithdrawAllowedIDDocTypes = map[string]struct{}{
 }
 
 var (
-	errMerchantCancelWithdrawWechatParamError         = errors.New("WeChat rejected the cancel-withdraw request: check sub_mchid, out_request_no, payee info, proof materials, and additional materials before retrying")
-	errMerchantCancelWithdrawWechatInvalidRequest     = errors.New("WeChat rejected the cancel-withdraw request in the current state: verify merchant configuration, current cancel-withdraw state, and signed request inputs before retrying")
-	errMerchantCancelWithdrawWechatNoAuth             = ErrMerchantCancelWithdrawWechatNoAuth
-	errMerchantCancelWithdrawWechatSignError          = ErrMerchantCancelWithdrawSignError
-	errMerchantCancelWithdrawWechatServiceUnavailable = ErrMerchantCancelWithdrawWechatServiceUnavailable
-	errMerchantCancelWithdrawWechatRetryLater         = ErrMerchantCancelWithdrawWechatRetryLater
-	errMerchantCancelWithdrawWechatInvalidResponse    = ErrMerchantCancelWithdrawWechatInvalidResponse
+	errMerchantCancelWithdrawWechatParamError      = errors.New("WeChat rejected the cancel-withdraw request: check sub_mchid, out_request_no, payee info, proof materials, and additional materials before retrying")
+	errMerchantCancelWithdrawWechatInvalidRequest  = errors.New("WeChat rejected the cancel-withdraw request in the current state: verify merchant configuration, current cancel-withdraw state, and signed request inputs before retrying")
+	errMerchantCancelWithdrawWechatNoAuth          = ErrMerchantCancelWithdrawWechatNoAuth
+	errMerchantCancelWithdrawWechatSignError       = ErrMerchantCancelWithdrawSignError
+	errMerchantCancelWithdrawWechatRetryLater      = ErrMerchantCancelWithdrawWechatRetryLater
+	errMerchantCancelWithdrawWechatInvalidResponse = ErrMerchantCancelWithdrawWechatInvalidResponse
 )
 
 type merchantCancelWithdrawRequestPreparationValidationError struct {
@@ -215,7 +214,8 @@ func merchantCancelWithdrawConflictResponse(err error) ErrorResponse {
 // @Router /v1/merchant/finance/account/cancel-withdraw/eligibility [get]
 func (server *Server) getMerchantCancelWithdrawEligibility(ctx *gin.Context) {
 	if server.ecommerceClient == nil {
-		ctx.JSON(http.StatusServiceUnavailable, errorResponse(ErrMerchantCancelWithdrawServiceUnavailable))
+		err := errors.New(ErrMerchantCancelWithdrawServiceUnavailable.Message)
+		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, ErrMerchantCancelWithdrawServiceUnavailable.Message, "merchant cancel withdraw eligibility ecommerce client not configured"))
 		return
 	}
 
@@ -244,7 +244,7 @@ func (server *Server) getMerchantCancelWithdrawEligibility(ctx *gin.Context) {
 		if respondMerchantCancelWithdrawWechatError(ctx, "validate_cancel_withdraw", 0, paymentConfig.SubMchID, "", err) {
 			return
 		}
-		ctx.JSON(http.StatusServiceUnavailable, errorResponse(ErrMerchantCancelWithdrawServiceUnavailable))
+		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, ErrMerchantCancelWithdrawServiceUnavailable.Message, "merchant cancel withdraw eligibility validate cancel withdraw failed"))
 		return
 	}
 
@@ -320,7 +320,12 @@ func (server *Server) listMerchantCancelWithdrawApplications(ctx *gin.Context) {
 
 	items := make([]merchantCancelWithdrawItem, 0, len(rows))
 	for _, row := range rows {
-		items = append(items, toMerchantCancelWithdrawItem(row))
+		item, err := toMerchantCancelWithdrawItem(row)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("decode merchant cancel withdraw application %d: %w", row.ID, err)))
+			return
+		}
+		items = append(items, item)
 	}
 
 	ctx.JSON(http.StatusOK, merchantCancelWithdrawListResponse{
@@ -352,7 +357,8 @@ func (server *Server) listMerchantCancelWithdrawApplications(ctx *gin.Context) {
 // @Router /v1/merchant/finance/account/cancel-withdraw/applications/{id} [get]
 func (server *Server) getMerchantCancelWithdrawApplication(ctx *gin.Context) {
 	if server.ecommerceClient == nil {
-		ctx.JSON(http.StatusServiceUnavailable, errorResponse(ErrMerchantCancelWithdrawServiceUnavailable))
+		err := errors.New(ErrMerchantCancelWithdrawServiceUnavailable.Message)
+		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, ErrMerchantCancelWithdrawServiceUnavailable.Message, "merchant cancel withdraw application ecommerce client not configured"))
 		return
 	}
 
@@ -389,7 +395,12 @@ func (server *Server) getMerchantCancelWithdrawApplication(ctx *gin.Context) {
 	}
 
 	record = server.syncMerchantCancelWithdrawApplicationIfNeeded(ctx, record)
-	ctx.JSON(http.StatusOK, toMerchantCancelWithdrawItem(record))
+	item, err := toMerchantCancelWithdrawItem(record)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("decode merchant cancel withdraw application %d: %w", record.ID, err)))
+		return
+	}
+	ctx.JSON(http.StatusOK, item)
 }
 
 // @Summary 创建商户注销提现申请
@@ -414,11 +425,13 @@ func (server *Server) getMerchantCancelWithdrawApplication(ctx *gin.Context) {
 // @Router /v1/merchant/finance/account/cancel-withdraw/applications [post]
 func (server *Server) createMerchantCancelWithdrawApplication(ctx *gin.Context) {
 	if server.ecommerceClient == nil {
-		ctx.JSON(http.StatusServiceUnavailable, errorResponse(ErrMerchantCancelWithdrawServiceUnavailable))
+		err := errors.New(ErrMerchantCancelWithdrawServiceUnavailable.Message)
+		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, ErrMerchantCancelWithdrawServiceUnavailable.Message, "merchant cancel withdraw create ecommerce client not configured"))
 		return
 	}
 	if server.mediaStorage == nil {
-		ctx.JSON(http.StatusServiceUnavailable, errorResponse(ErrMerchantCancelWithdrawServiceUnavailable))
+		err := errors.New(ErrMerchantCancelWithdrawServiceUnavailable.Message)
+		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, ErrMerchantCancelWithdrawServiceUnavailable.Message, "merchant cancel withdraw create media storage not configured"))
 		return
 	}
 
@@ -478,7 +491,7 @@ func (server *Server) createMerchantCancelWithdrawApplication(ctx *gin.Context) 
 		if respondMerchantCancelWithdrawWechatError(ctx, "validate_cancel_withdraw", merchant.ID, paymentConfig.SubMchID, "", err) {
 			return
 		}
-		ctx.JSON(http.StatusServiceUnavailable, errorResponse(ErrMerchantCancelWithdrawServiceUnavailable))
+		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, ErrMerchantCancelWithdrawServiceUnavailable.Message, "merchant cancel withdraw create validate cancel withdraw failed"))
 		return
 	}
 	if strings.TrimSpace(eligibility.ValidateResult) != "ALLOW_CANCEL_WITHDRAW" {
@@ -503,7 +516,12 @@ func (server *Server) createMerchantCancelWithdrawApplication(ctx *gin.Context) 
 			return
 		}
 		existing = server.syncMerchantCancelWithdrawApplicationIfNeeded(ctx, existing)
-		ctx.JSON(http.StatusOK, merchantCancelWithdrawCreateResponse{Application: toMerchantCancelWithdrawItem(existing)})
+		item, err := toMerchantCancelWithdrawItem(existing)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("decode merchant cancel withdraw application %d: %w", existing.ID, err)))
+			return
+		}
+		ctx.JSON(http.StatusOK, merchantCancelWithdrawCreateResponse{Application: item})
 		return
 	}
 	if !isNotFoundError(err) {
@@ -569,7 +587,7 @@ func (server *Server) createMerchantCancelWithdrawApplication(ctx *gin.Context) 
 			if respondMerchantCancelWithdrawWechatError(ctx, "query_cancel_withdraw_after_submit", merchant.ID, paymentConfig.SubMchID, outRequestNo, queryErr) {
 				return
 			}
-			ctx.JSON(http.StatusServiceUnavailable, errorResponse(ErrMerchantCancelWithdrawServiceUnavailable))
+			ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, queryErr, ErrMerchantCancelWithdrawServiceUnavailable.Message, "merchant cancel withdraw create query after submit failed"))
 			return
 		}
 		createResp = &wechatcontracts.CancelWithdrawCreateResponse{ApplymentID: queryResp.ApplymentID, OutRequestNo: queryResp.OutRequestNo}
@@ -600,7 +618,12 @@ func (server *Server) createMerchantCancelWithdrawApplication(ctx *gin.Context) 
 	}
 
 	server.enqueueMerchantCancelWithdrawPolling(ctx, record)
-	ctx.JSON(http.StatusCreated, merchantCancelWithdrawCreateResponse{Application: toMerchantCancelWithdrawItem(record)})
+	item, err := toMerchantCancelWithdrawItem(record)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("decode merchant cancel withdraw application %d: %w", record.ID, err)))
+		return
+	}
+	ctx.JSON(http.StatusCreated, merchantCancelWithdrawCreateResponse{Application: item})
 }
 
 func (server *Server) syncMerchantCancelWithdrawApplicationIfNeeded(ctx *gin.Context, record db.MerchantCancelWithdrawApplication) db.MerchantCancelWithdrawApplication {
@@ -907,7 +930,7 @@ func merchantCancelWithdrawEligibilityBlockedError(resp *wechatcontracts.CancelW
 	return fmt.Errorf("%s: %s", baseMessage, strings.Join(reasons, "; "))
 }
 
-func toMerchantCancelWithdrawItem(record db.MerchantCancelWithdrawApplication) merchantCancelWithdrawItem {
+func toMerchantCancelWithdrawItem(record db.MerchantCancelWithdrawApplication) (merchantCancelWithdrawItem, error) {
 	item := merchantCancelWithdrawItem{
 		ID:                               record.ID,
 		OutRequestNo:                     record.OutRequestNo,
@@ -929,11 +952,27 @@ func toMerchantCancelWithdrawItem(record db.MerchantCancelWithdrawApplication) m
 		CreatedAt:                        record.CreatedAt,
 		UpdatedAt:                        record.UpdatedAt,
 	}
-	_ = json.Unmarshal(record.ProofMediaAssetIds, &item.ProofMediaAssetIDs)
-	_ = json.Unmarshal(record.AdditionalMaterialAssetIds, &item.AdditionalMaterialAssetIDs)
-	_ = json.Unmarshal(record.AccountInfo, &item.AccountInfo)
-	_ = json.Unmarshal(record.AccountWithdrawResult, &item.AccountWithdrawResult)
-	return item
+	if len(record.ProofMediaAssetIds) > 0 {
+		if err := json.Unmarshal(record.ProofMediaAssetIds, &item.ProofMediaAssetIDs); err != nil {
+			return merchantCancelWithdrawItem{}, fmt.Errorf("unmarshal proof_media_asset_ids: %w", err)
+		}
+	}
+	if len(record.AdditionalMaterialAssetIds) > 0 {
+		if err := json.Unmarshal(record.AdditionalMaterialAssetIds, &item.AdditionalMaterialAssetIDs); err != nil {
+			return merchantCancelWithdrawItem{}, fmt.Errorf("unmarshal additional_material_asset_ids: %w", err)
+		}
+	}
+	if len(record.AccountInfo) > 0 {
+		if err := json.Unmarshal(record.AccountInfo, &item.AccountInfo); err != nil {
+			return merchantCancelWithdrawItem{}, fmt.Errorf("unmarshal account_info: %w", err)
+		}
+	}
+	if len(record.AccountWithdrawResult) > 0 {
+		if err := json.Unmarshal(record.AccountWithdrawResult, &item.AccountWithdrawResult); err != nil {
+			return merchantCancelWithdrawItem{}, fmt.Errorf("unmarshal account_withdraw_result: %w", err)
+		}
+	}
+	return item, nil
 }
 
 func formatPgTimestamptz(ts pgtype.Timestamptz) string {
@@ -1019,8 +1058,7 @@ func respondMerchantCancelWithdrawRequestPreparationError(ctx *gin.Context, merc
 			Str("sub_mchid", strings.TrimSpace(subMchID)).
 			Str("out_request_no", strings.TrimSpace(outRequestNo)).
 			Msg("merchant cancel withdraw request preparation failed before upstream create call")
-		_ = ctx.Error(err)
-		ctx.JSON(http.StatusServiceUnavailable, errorResponse(ErrMerchantCancelWithdrawServiceUnavailable))
+		ctx.JSON(http.StatusServiceUnavailable, attachedServerError(ctx, err, ErrMerchantCancelWithdrawServiceUnavailable.Message))
 		return true
 	}
 
@@ -1085,7 +1123,11 @@ func respondMerchantCancelWithdrawWechatError(ctx *gin.Context, operation string
 			Str("wechat_error_detail", strings.TrimSpace(wxErr.Detail)).
 			Msg("wechat merchant cancel withdraw request failed")
 
-		_ = ctx.Error(err)
+		writeClientError := func(status int, responseErr error) {
+			_ = ctx.Error(err)
+			ctx.JSON(status, errorResponse(responseErr))
+		}
+
 		if !merchantCancelWithdrawWechatCodeIsAccepted(operation, canonicalCode) {
 			log.Error().
 				Err(err).
@@ -1096,35 +1138,35 @@ func respondMerchantCancelWithdrawWechatError(ctx *gin.Context, operation string
 				Str("out_request_no", strings.TrimSpace(outRequestNo)).
 				Str("wechat_error_code", canonicalCode).
 				Msg("wechat merchant cancel withdraw returned undocumented error code")
-			ctx.JSON(http.StatusBadGateway, errorResponse(errMerchantCancelWithdrawWechatInvalidResponse))
+			writeClientError(http.StatusBadGateway, errMerchantCancelWithdrawWechatInvalidResponse)
 			return true
 		}
 
 		switch canonicalCode {
 		case errorcodes.CancelWithdrawCodeParamError:
-			ctx.JSON(http.StatusBadRequest, errorResponse(errMerchantCancelWithdrawWechatParamError))
+			writeClientError(http.StatusBadRequest, errMerchantCancelWithdrawWechatParamError)
 		case errorcodes.CancelWithdrawCodeInvalidRequest:
-			ctx.JSON(http.StatusBadRequest, errorResponse(errMerchantCancelWithdrawWechatInvalidRequest))
+			writeClientError(http.StatusBadRequest, errMerchantCancelWithdrawWechatInvalidRequest)
 		case errorcodes.CancelWithdrawCodeNoAuth:
-			ctx.JSON(http.StatusForbidden, errorResponse(errMerchantCancelWithdrawWechatNoAuth))
+			writeClientError(http.StatusForbidden, errMerchantCancelWithdrawWechatNoAuth)
 		case errorcodes.CancelWithdrawCodeSignError:
-			ctx.JSON(http.StatusUnauthorized, errorResponse(errMerchantCancelWithdrawWechatSignError))
+			writeClientError(http.StatusUnauthorized, errMerchantCancelWithdrawWechatSignError)
 		case errorcodes.CancelWithdrawCodeAlreadyExists:
-			ctx.JSON(http.StatusConflict, errorResponse(ErrMerchantCancelWithdrawApplicationExists))
+			writeClientError(http.StatusConflict, ErrMerchantCancelWithdrawApplicationExists)
 		case errorcodes.CancelWithdrawCodeBizErrNeedRetry:
-			ctx.JSON(http.StatusServiceUnavailable, errorResponse(errMerchantCancelWithdrawWechatRetryLater))
+			writeClientError(http.StatusServiceUnavailable, errMerchantCancelWithdrawWechatRetryLater)
 		case errorcodes.CancelWithdrawCodeRateLimitExceeded,
 			errorcodes.CancelWithdrawCodeFrequencyLimited,
 			errorcodes.CancelWithdrawCodeFrequencyLimit,
 			errorcodes.ApplymentCodeFrequencyLimitExceed:
-			ctx.JSON(http.StatusTooManyRequests, errorResponse(ErrMerchantCancelWithdrawWechatFrequencyLimit))
+			writeClientError(http.StatusTooManyRequests, ErrMerchantCancelWithdrawWechatFrequencyLimit)
 		case errorcodes.CancelWithdrawCodeSystemError:
-			ctx.JSON(http.StatusInternalServerError, errorResponse(errMerchantCancelWithdrawWechatServiceUnavailable))
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		default:
 			if wxErr.StatusCode >= http.StatusInternalServerError {
-				ctx.JSON(http.StatusInternalServerError, errorResponse(errMerchantCancelWithdrawWechatServiceUnavailable))
+				ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			} else {
-				ctx.JSON(http.StatusBadGateway, errorResponse(errMerchantCancelWithdrawWechatInvalidResponse))
+				writeClientError(http.StatusBadGateway, errMerchantCancelWithdrawWechatInvalidResponse)
 			}
 		}
 		return true
@@ -1140,8 +1182,7 @@ func respondMerchantCancelWithdrawWechatError(ctx *gin.Context, operation string
 			Str("sub_mchid", strings.TrimSpace(subMchID)).
 			Str("out_request_no", strings.TrimSpace(outRequestNo)).
 			Msg("wechat merchant cancel withdraw response contract validation failed")
-		_ = ctx.Error(err)
-		ctx.JSON(http.StatusBadGateway, errorResponse(errMerchantCancelWithdrawWechatInvalidResponse))
+		ctx.JSON(http.StatusBadGateway, attachedServerError(ctx, err, errMerchantCancelWithdrawWechatInvalidResponse.Message))
 		return true
 	}
 
@@ -1155,8 +1196,7 @@ func respondMerchantCancelWithdrawWechatError(ctx *gin.Context, operation string
 			Str("sub_mchid", strings.TrimSpace(subMchID)).
 			Str("out_request_no", strings.TrimSpace(outRequestNo)).
 			Msg("merchant cancel withdraw request failed local contract validation before upstream call")
-		_ = ctx.Error(err)
-		ctx.JSON(http.StatusInternalServerError, ErrorResponse{Error: "internal server error"})
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return true
 	}
 

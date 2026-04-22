@@ -63,7 +63,8 @@ func TestNewMerchantApplicationDraftResponse_PreservesAsyncOCRFields(t *testing.
 	}
 
 	server := &Server{}
-	resp := server.newMerchantApplicationDraftResponse(context.Background(), app)
+	resp, err := server.newMerchantApplicationDraftResponse(context.Background(), app)
+	require.NoError(t, err)
 
 	require.NotNil(t, resp.BusinessLicenseOCR)
 	require.Equal(t, "processing", resp.BusinessLicenseOCR.Status)
@@ -135,7 +136,8 @@ func TestNewOperatorApplicationResponse_PreservesAsyncOCRFields(t *testing.T) {
 		UpdatedAt:                   time.Now(),
 	}
 
-	resp := newOperatorApplicationResponse(app, "测试区域")
+	resp, err := newOperatorApplicationResponse(app, "测试区域")
+	require.NoError(t, err)
 
 	require.NotNil(t, resp.BusinessLicenseOCR)
 	require.Equal(t, "2026-03-25T16:10:00Z", resp.BusinessLicenseOCR.QueuedAt)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -16,7 +17,6 @@ import (
 	"github.com/merrydance/locallife/worker"
 
 	"github.com/gin-gonic/gin"
-	"github.com/rs/zerolog/log"
 )
 
 // ==================== 订单管理 ====================
@@ -243,7 +243,7 @@ func newOrderPaymentContext(combinedPaymentID pgtype.Int8, combineOutTradeNo str
 	}
 }
 
-func newOrderResponse(o db.Order) orderResponse {
+func newOrderResponse(o db.Order) (orderResponse, error) {
 	resp := orderResponse{
 		ID:                  o.ID,
 		OrderNo:             o.OrderNo,
@@ -261,7 +261,7 @@ func newOrderResponse(o db.Order) orderResponse {
 		Overtime:            o.Overtime,
 	}
 
-	orderNullableFields{
+	nullableFields := orderNullableFields{
 		AddressID: o.AddressID, DeliveryDistance: o.DeliveryDistance,
 		TableID: o.TableID, ReservationID: o.ReservationID,
 		PaymentMethod: o.PaymentMethod, Notes: o.Notes,
@@ -276,11 +276,14 @@ func newOrderResponse(o db.Order) orderResponse {
 		RiderDeliveredAt: o.RiderDeliveredAt, UserDeliveredAt: o.UserDeliveredAt,
 		AutoUserDeliveredAt: o.AutoUserDeliveredAt, DeliveryDuration: o.DeliveryDuration,
 		Badges: o.Badges,
-	}.applyTo(&resp)
+	}
+	if err := nullableFields.applyTo(&resp); err != nil {
+		return orderResponse{}, fmt.Errorf("decode order %d badges: %w", o.ID, err)
+	}
 
 	resp.Actions = orderActions(o)
 
-	return resp
+	return resp, nil
 }
 
 func (server *Server) requireMerchantForOrder(ctx *gin.Context, userID int64) (db.Merchant, bool) {
@@ -302,7 +305,7 @@ func (server *Server) requireMerchantForOrder(ctx *gin.Context, userID int64) (d
 }
 
 // newOrderWithDetailsResponse 用于订单详情，包含商户信息和配送地址
-func newOrderWithDetailsResponse(o db.GetOrderWithDetailsRow) orderResponse {
+func newOrderWithDetailsResponse(o db.GetOrderWithDetailsRow) (orderResponse, error) {
 	resp := orderResponse{
 		ID:                  o.ID,
 		OrderNo:             o.OrderNo,
@@ -321,7 +324,7 @@ func newOrderWithDetailsResponse(o db.GetOrderWithDetailsRow) orderResponse {
 		Overtime:            o.Overtime,
 	}
 
-	orderNullableFields{
+	nullableFields := orderNullableFields{
 		AddressID: o.AddressID, DeliveryDistance: o.DeliveryDistance,
 		TableID: o.TableID, ReservationID: o.ReservationID,
 		PaymentMethod: o.PaymentMethod, Notes: o.Notes,
@@ -336,7 +339,10 @@ func newOrderWithDetailsResponse(o db.GetOrderWithDetailsRow) orderResponse {
 		RiderDeliveredAt: o.RiderDeliveredAt, UserDeliveredAt: o.UserDeliveredAt,
 		AutoUserDeliveredAt: o.AutoUserDeliveredAt, DeliveryDuration: o.DeliveryDuration,
 		Badges: o.Badges,
-	}.applyTo(&resp)
+	}
+	if err := nullableFields.applyTo(&resp); err != nil {
+		return orderResponse{}, fmt.Errorf("decode order %d badges: %w", o.ID, err)
+	}
 
 	// 订单详情独有：商户电话和配送地址
 	if o.MerchantPhone != "" {
@@ -359,21 +365,20 @@ func newOrderWithDetailsResponse(o db.GetOrderWithDetailsRow) orderResponse {
 		FulfillmentStatus: o.FulfillmentStatus,
 	})
 
-	return resp
+	return resp, nil
 }
 
-func decodeOrderBadges(raw []byte) []orderBadge {
+func decodeOrderBadges(raw []byte) ([]orderBadge, error) {
 	if len(raw) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	var badges []orderBadge
 	if err := json.Unmarshal(raw, &badges); err != nil {
-		log.Warn().Err(err).Msg("failed to decode order badges")
-		return nil
+		return nil, err
 	}
 
-	return badges
+	return badges, nil
 }
 
 func maskPickupCode(code string) *string {
@@ -427,7 +432,7 @@ type replaceOrderResponse struct {
 var _ = replaceOrderResponse{}
 
 // newOrderWithMerchantFromFilterResponse converts filtered list rows to API response
-func newOrderWithMerchantFromFilterResponse(o db.ListOrdersByUserWithFiltersRow) orderResponse {
+func newOrderWithMerchantFromFilterResponse(o db.ListOrdersByUserWithFiltersRow) (orderResponse, error) {
 	resp := orderResponse{
 		ID:                  o.ID,
 		OrderNo:             o.OrderNo,
@@ -446,7 +451,7 @@ func newOrderWithMerchantFromFilterResponse(o db.ListOrdersByUserWithFiltersRow)
 		Overtime:            o.Overtime,
 	}
 
-	orderNullableFields{
+	nullableFields := orderNullableFields{
 		AddressID: o.AddressID, DeliveryDistance: o.DeliveryDistance,
 		TableID: o.TableID, ReservationID: o.ReservationID,
 		PaymentMethod: o.PaymentMethod, Notes: o.Notes,
@@ -461,10 +466,13 @@ func newOrderWithMerchantFromFilterResponse(o db.ListOrdersByUserWithFiltersRow)
 		RiderDeliveredAt: o.RiderDeliveredAt, UserDeliveredAt: o.UserDeliveredAt,
 		AutoUserDeliveredAt: o.AutoUserDeliveredAt, DeliveryDuration: o.DeliveryDuration,
 		Badges: o.Badges,
-	}.applyTo(&resp)
+	}
+	if err := nullableFields.applyTo(&resp); err != nil {
+		return orderResponse{}, fmt.Errorf("decode order %d badges: %w", o.ID, err)
+	}
 	resp.PaymentContext = newOrderPaymentContext(o.CombinedPaymentID, o.CombineOutTradeNo)
 
-	return resp
+	return resp, nil
 }
 
 // ==================== 订单API ====================
@@ -556,7 +564,12 @@ func (server *Server) createOrder(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusCreated, newOrderResponse(result.Order))
+	resp, err := newOrderResponse(result.Order)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	ctx.JSON(http.StatusCreated, resp)
 }
 
 // validateOrderTypeFields 验证订单类型与关联字段
@@ -651,7 +664,11 @@ func (server *Server) getOrder(ctx *gin.Context) {
 
 	order := result.Order
 
-	resp := newOrderWithDetailsResponse(order)
+	resp, err := newOrderWithDetailsResponse(order)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
 	items := result.Items
 	resp.Items = make([]orderItemResponse, len(items))
 	for i, item := range items {
@@ -673,7 +690,10 @@ func (server *Server) getOrder(ctx *gin.Context) {
 			resp.Items[i].ImageAssetID = &v
 		}
 		if item.Customizations != nil {
-			_ = json.Unmarshal(item.Customizations, &resp.Items[i].Customizations)
+			if err := json.Unmarshal(item.Customizations, &resp.Items[i].Customizations); err != nil {
+				ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("decode order item customizations for item %d: %w", item.ID, err)))
+				return
+			}
 		}
 	}
 	resp.DeliveryEtaMinutes = result.DeliveryEtaMinutes
@@ -787,7 +807,12 @@ func (server *Server) listOrders(ctx *gin.Context) {
 	orders := result.Orders
 	resp := make([]orderResponse, len(orders))
 	for i, o := range orders {
-		resp[i] = newOrderWithMerchantFromFilterResponse(o)
+		orderResp, err := newOrderWithMerchantFromFilterResponse(o)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		resp[i] = orderResp
 	}
 
 	ctx.JSON(http.StatusOK, listOrdersResponse{
@@ -850,7 +875,12 @@ func (server *Server) cancelOrder(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, newOrderResponse(result.Order))
+	resp, err := newOrderResponse(result.Order)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	ctx.JSON(http.StatusOK, resp)
 }
 
 // urgeOrder godoc
@@ -946,8 +976,13 @@ func (server *Server) replaceOrder(ctx *gin.Context) {
 		return
 	}
 
+	orderResp, err := newOrderResponse(result.NewOrder)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
 	ctx.JSON(http.StatusOK, replaceOrderResponse{
-		Order:           newOrderResponse(result.NewOrder),
+		Order:           orderResp,
 		Delta:           result.Delta,
 		PaymentOrderID:  result.PaymentOrderID,
 		RefundInitiated: result.RefundInitiated,
@@ -997,11 +1032,21 @@ func (server *Server) confirmOrder(ctx *gin.Context) {
 
 	order := result.Order
 	if result.AlreadyCompleted {
-		ctx.JSON(http.StatusOK, newOrderResponse(order))
+		resp, err := newOrderResponse(order)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		ctx.JSON(http.StatusOK, resp)
 		return
 	}
 
-	ctx.JSON(http.StatusOK, newOrderResponse(order))
+	resp, err := newOrderResponse(order)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	ctx.JSON(http.StatusOK, resp)
 }
 
 // ==================== 商户端订单API ====================
@@ -1102,7 +1147,12 @@ func (server *Server) listMerchantOrders(ctx *gin.Context) {
 	orders := result.Orders
 	resp := make([]orderResponse, len(orders))
 	for i, o := range orders {
-		resp[i] = newOrderResponse(o)
+		orderResp, err := newOrderResponse(o)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		resp[i] = orderResp
 	}
 
 	ctx.JSON(http.StatusOK, listMerchantOrdersResponse{
@@ -1184,7 +1234,11 @@ func (server *Server) getMerchantOrder(ctx *gin.Context) {
 
 	order := result.Order
 
-	resp := newOrderResponse(order)
+	resp, err := newOrderResponse(order)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
 	items := result.Items
 	resp.Items = make([]orderItemResponse, len(items))
 	for i, item := range items {
@@ -1206,7 +1260,10 @@ func (server *Server) getMerchantOrder(ctx *gin.Context) {
 			resp.Items[i].ImageAssetID = &v
 		}
 		if item.Customizations != nil {
-			_ = json.Unmarshal(item.Customizations, &resp.Items[i].Customizations)
+			if err := json.Unmarshal(item.Customizations, &resp.Items[i].Customizations); err != nil {
+				ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("decode order item customizations for item %d: %w", item.ID, err)))
+				return
+			}
 		}
 	}
 
@@ -1305,7 +1362,12 @@ func (server *Server) acceptOrder(ctx *gin.Context) {
 		},
 	})
 
-	ctx.JSON(http.StatusOK, newOrderResponse(updatedOrder))
+	resp, err := newOrderResponse(updatedOrder)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	ctx.JSON(http.StatusOK, resp)
 }
 
 // rejectOrder 商户拒单
@@ -1408,7 +1470,12 @@ func (server *Server) rejectOrder(ctx *gin.Context) {
 		},
 	})
 
-	ctx.JSON(http.StatusOK, newOrderResponse(updatedOrder))
+	resp, err := newOrderResponse(updatedOrder)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	ctx.JSON(http.StatusOK, resp)
 }
 
 // markOrderReady 标记订单出餐完成
@@ -1497,7 +1564,12 @@ func (server *Server) markOrderReady(ctx *gin.Context) {
 		},
 	})
 
-	ctx.JSON(http.StatusOK, newOrderResponse(updatedOrder))
+	resp, err := newOrderResponse(updatedOrder)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	ctx.JSON(http.StatusOK, resp)
 }
 
 // completeOrder 完成订单（堂食/打包自取）
@@ -1710,7 +1782,12 @@ func (server *Server) completeOrder(ctx *gin.Context) {
 		},
 	})
 
-	ctx.JSON(http.StatusOK, newOrderResponse(completedOrder))
+	resp, err := newOrderResponse(completedOrder)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	ctx.JSON(http.StatusOK, resp)
 }
 
 // listMerchantOrderPrintJobs godoc

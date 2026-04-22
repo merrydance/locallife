@@ -223,7 +223,8 @@ func (server *Server) depositRider(ctx *gin.Context) {
 		return
 	}
 	if server.directPaymentClient == nil {
-		ctx.JSON(http.StatusServiceUnavailable, errorResponse(errors.New("payment service not configured")))
+		err := errors.New("payment service not configured")
+		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "payment service not configured", "rider deposit payment service not configured"))
 		return
 	}
 
@@ -302,7 +303,10 @@ func (server *Server) depositRider(ctx *gin.Context) {
 		PayerClientIP: ctx.ClientIP(),
 	})
 	if err != nil {
-		_, _ = server.store.UpdatePaymentOrderToClosed(ctx, paymentOrder.ID)
+		if _, closeErr := server.store.UpdatePaymentOrderToClosed(ctx, paymentOrder.ID); closeErr != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("close rider deposit payment order after jsapi create failure: %w", closeErr)))
+			return
+		}
 		if writeLogicRequestError(ctx, logic.MapDirectJSAPIOrderCreateError(err)) {
 			return
 		}

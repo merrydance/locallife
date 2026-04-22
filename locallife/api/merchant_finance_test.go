@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
@@ -21,6 +22,28 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
+
+func TestGetMerchantAccountBalanceAPIEcommerceClientUnavailable(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	server := newTestServer(t, store)
+	server.SetEcommerceClientForTest(nil)
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	req, err := http.NewRequest(http.MethodGet, "/v1/merchant/finance/account/balance", nil)
+	require.NoError(t, err)
+	ctx.Request = req
+
+	server.getMerchantAccountBalance(ctx)
+
+	require.Equal(t, http.StatusServiceUnavailable, recorder.Code)
+	var resp ErrorResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, "ecommerce client not configured", resp.Error)
+}
 
 func TestGetMerchantAccountBalanceAPINotConfigured(t *testing.T) {
 	user, _ := randomUser(t)

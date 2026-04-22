@@ -9,11 +9,37 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgtype"
+	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/wechat"
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
+	mockwechat "github.com/merrydance/locallife/wechat/mock"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 )
+
+func TestGetMerchantCancelWithdrawEligibility_EcommerceClientUnavailable(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	server := newTestServer(t, store)
+	server.SetEcommerceClientForTest(nil)
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	request, err := http.NewRequest(http.MethodGet, "/v1/merchant/finance/account/cancel-withdraw/eligibility", nil)
+	require.NoError(t, err)
+	ctx.Request = request
+
+	server.getMerchantCancelWithdrawEligibility(ctx)
+
+	require.Equal(t, http.StatusServiceUnavailable, recorder.Code)
+	resp := decodeMerchantCancelWithdrawErrorResponse(t, recorder)
+	require.Equal(t, ErrMerchantCancelWithdrawServiceUnavailable.Message, resp.Error)
+}
 
 func TestValidateCreateMerchantCancelWithdrawRequestRejectsInvalidProofMaterialCounts(t *testing.T) {
 	err := validateCreateMerchantCancelWithdrawRequest(createMerchantCancelWithdrawRequest{
@@ -201,8 +227,8 @@ func TestRespondMerchantCancelWithdrawWechatError(t *testing.T) {
 			operation:      "create_cancel_withdraw",
 			wxErr:          &wechat.WechatPayError{StatusCode: http.StatusInternalServerError, Code: "SYSTEM_ERROR", Message: "系统异常"},
 			expectedStatus: http.StatusInternalServerError,
-			expectedCode:   ErrMerchantCancelWithdrawWechatServiceUnavailable.Code,
-			expectedError:  ErrMerchantCancelWithdrawWechatServiceUnavailable.Message,
+			expectedCode:   0,
+			expectedError:  "internal server error",
 		},
 		{
 			name:           "UndocumentedCodeMapsToBadGateway",
@@ -228,6 +254,67 @@ func TestRespondMerchantCancelWithdrawWechatError(t *testing.T) {
 			require.Equal(t, tc.expectedError, resp.Error)
 		})
 	}
+}
+
+func TestToMerchantCancelWithdrawItem_InvalidProofMediaJSONReturnsError(t *testing.T) {
+	_, err := toMerchantCancelWithdrawItem(db.MerchantCancelWithdrawApplication{
+		ID:                 301,
+		OutRequestNo:       "MCW301",
+		SubMchID:           "1900000109",
+		ProofMediaAssetIds: []byte("{"),
+	})
+	require.Error(t, err)
+	require.ErrorContains(t, err, "unmarshal proof_media_asset_ids")
+}
+
+func TestGetMerchantCancelWithdrawApplication_InvalidStoredJSONReturnsInternalServerError(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := db.Merchant{
+		ID:          11,
+		RegionID:    1,
+		OwnerUserID: user.ID,
+		Name:        "测试商户",
+		Status:      "approved",
+		IsOpen:      true,
+	}
+	record := db.MerchantCancelWithdrawApplication{
+		ID:                 21,
+		MerchantID:         merchant.ID,
+		SubMchID:           "1900000109",
+		OutRequestNo:       "MCW202604220001",
+		CancelState:        pgtype.Text{String: db.MerchantCancelStateFinish, Valid: true},
+		ProofMediaAssetIds: []byte("{"),
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ecommerce := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	server := newTestServer(t, store)
+	server.SetEcommerceClientForTest(ecommerce)
+
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+	store.EXPECT().
+		GetMerchantPaymentConfig(gomock.Any(), merchant.ID).
+		Return(db.MerchantPaymentConfig{MerchantID: merchant.ID, SubMchID: "1900000109", Status: "active"}, nil)
+	store.EXPECT().
+		GetMerchantCancelWithdrawApplication(gomock.Any(), record.ID).
+		Return(record, nil)
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	req, err := http.NewRequest(http.MethodGet, "/v1/merchant/finance/account/cancel-withdraw/applications/21", nil)
+	require.NoError(t, err)
+	ctx.Request = req
+	ctx.Params = gin.Params{{Key: "id", Value: "21"}}
+	ctx.Set(authorizationPayloadKey, &token.Payload{UserID: user.ID})
+
+	server.getMerchantCancelWithdrawApplication(ctx)
+
+	require.Equal(t, http.StatusInternalServerError, recorder.Code)
+	resp := decodeMerchantCancelWithdrawErrorResponse(t, recorder)
+	require.Equal(t, "internal server error", resp.Error)
 }
 
 func newMerchantCancelWithdrawTestContext(t *testing.T) (*gin.Context, *httptest.ResponseRecorder) {

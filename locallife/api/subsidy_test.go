@@ -1,6 +1,8 @@
 package api
 
 import (
+	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -203,4 +205,193 @@ func TestCancelSubsidy_NilResponseDoesNotPanic(t *testing.T) {
 	server.cancelSubsidy(ctx)
 
 	require.Equal(t, http.StatusConflict, recorder.Code)
+}
+
+func TestCreateSubsidy_WechatFailureReturnsBadGatewayMessage(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ecommerce := mockwechat.NewMockEcommerceClientInterface(ctrl)
+
+	paymentOrder := db.PaymentOrder{
+		ID:            104,
+		Status:        PaymentStatusPaid,
+		TransactionID: pgtype.Text{String: "wx_tx_104", Valid: true},
+	}
+	created := db.SubsidyOrder{
+		ID:             204,
+		PaymentOrderID: paymentOrder.ID,
+		SubMchID:       "sub_mch_104",
+		TransactionID:  paymentOrder.TransactionID,
+		OutSubsidyNo:   "S-104-304",
+		PayerAmount:    1200,
+		Amount:         200,
+		Description:    "平台补差",
+		Status:         "pending",
+	}
+
+	store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil)
+	store.EXPECT().GetMerchantPaymentConfig(gomock.Any(), int64(304)).Return(db.MerchantPaymentConfig{MerchantID: 304, SubMchID: "sub_mch_104"}, nil)
+	store.EXPECT().GetSubsidyOrderByOutSubsidyNo(gomock.Any(), "S-104-304").Return(db.SubsidyOrder{}, db.ErrRecordNotFound)
+	store.EXPECT().CreateSubsidyOrder(gomock.Any(), db.CreateSubsidyOrderParams{
+		PaymentOrderID: paymentOrder.ID,
+		SubMchID:       "sub_mch_104",
+		TransactionID:  paymentOrder.TransactionID,
+		OutSubsidyNo:   "S-104-304",
+		PayerAmount:    1200,
+		Amount:         200,
+		Description:    "平台补差",
+	}).Return(created, nil)
+	ecommerce.EXPECT().CreateSubsidy(gomock.Any(), wechatcontracts.SubsidyRequest{
+		SubMchID:      "sub_mch_104",
+		TransactionID: "wx_tx_104",
+		Amount:        200,
+		Description:   "平台补差",
+		OutSubsidyNo:  "S-104-304",
+	}).Return(nil, errors.New("wechat unavailable"))
+	store.EXPECT().UpdateSubsidyOrderToFailed(gomock.Any(), db.UpdateSubsidyOrderToFailedParams{
+		ID:         created.ID,
+		FailReason: pgtype.Text{String: "wechat unavailable", Valid: true},
+	}).Return(created, nil)
+
+	server := newTestServer(t, store)
+	server.SetEcommerceClientForTest(ecommerce)
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	request, err := http.NewRequest(http.MethodPost, "/v1/operators/me/payment-orders/104/subsidies", strings.NewReader(`{"merchant_id":304,"payer_amount":1200,"amount":200,"description":"平台补差"}`))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	ctx.Request = request
+	ctx.Params = gin.Params{{Key: "id", Value: "104"}}
+
+	server.createSubsidy(ctx)
+
+	require.Equal(t, http.StatusBadGateway, recorder.Code)
+	var response ErrorResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
+	require.Equal(t, "subsidy api unavailable", response.Error)
+}
+
+func TestCreateSubsidy_MarkFailedErrorReturnsInternalServerError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ecommerce := mockwechat.NewMockEcommerceClientInterface(ctrl)
+
+	paymentOrder := db.PaymentOrder{
+		ID:            105,
+		Status:        PaymentStatusPaid,
+		TransactionID: pgtype.Text{String: "wx_tx_105", Valid: true},
+	}
+	created := db.SubsidyOrder{
+		ID:             205,
+		PaymentOrderID: paymentOrder.ID,
+		SubMchID:       "sub_mch_105",
+		TransactionID:  paymentOrder.TransactionID,
+		OutSubsidyNo:   "S-105-305",
+		PayerAmount:    1200,
+		Amount:         200,
+		Description:    "平台补差",
+		Status:         "pending",
+	}
+
+	store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil)
+	store.EXPECT().GetMerchantPaymentConfig(gomock.Any(), int64(305)).Return(db.MerchantPaymentConfig{MerchantID: 305, SubMchID: "sub_mch_105"}, nil)
+	store.EXPECT().GetSubsidyOrderByOutSubsidyNo(gomock.Any(), "S-105-305").Return(db.SubsidyOrder{}, db.ErrRecordNotFound)
+	store.EXPECT().CreateSubsidyOrder(gomock.Any(), db.CreateSubsidyOrderParams{
+		PaymentOrderID: paymentOrder.ID,
+		SubMchID:       "sub_mch_105",
+		TransactionID:  paymentOrder.TransactionID,
+		OutSubsidyNo:   "S-105-305",
+		PayerAmount:    1200,
+		Amount:         200,
+		Description:    "平台补差",
+	}).Return(created, nil)
+	ecommerce.EXPECT().CreateSubsidy(gomock.Any(), wechatcontracts.SubsidyRequest{
+		SubMchID:      "sub_mch_105",
+		TransactionID: "wx_tx_105",
+		Amount:        200,
+		Description:   "平台补差",
+		OutSubsidyNo:  "S-105-305",
+	}).Return(nil, errors.New("wechat unavailable"))
+	store.EXPECT().UpdateSubsidyOrderToFailed(gomock.Any(), db.UpdateSubsidyOrderToFailedParams{
+		ID:         created.ID,
+		FailReason: pgtype.Text{String: "wechat unavailable", Valid: true},
+	}).Return(db.SubsidyOrder{}, errors.New("write failed"))
+
+	server := newTestServer(t, store)
+	server.SetEcommerceClientForTest(ecommerce)
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	request, err := http.NewRequest(http.MethodPost, "/v1/operators/me/payment-orders/105/subsidies", strings.NewReader(`{"merchant_id":305,"payer_amount":1200,"amount":200,"description":"平台补差"}`))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	ctx.Request = request
+	ctx.Params = gin.Params{{Key: "id", Value: "105"}}
+
+	server.createSubsidy(ctx)
+
+	require.Equal(t, http.StatusInternalServerError, recorder.Code)
+	var response ErrorResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
+	require.Equal(t, "internal server error", response.Error)
+}
+
+func TestReturnSubsidy_MarkFailedErrorReturnsInternalServerError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ecommerce := mockwechat.NewMockEcommerceClientInterface(ctrl)
+
+	subsidyOrder := db.SubsidyOrder{
+		ID:             206,
+		PaymentOrderID: 106,
+		SubMchID:       "sub_mch_106",
+		TransactionID:  pgtype.Text{String: "wx_tx_106", Valid: true},
+		OutSubsidyNo:   "S-106-306",
+		Amount:         300,
+		Status:         "success",
+		WxpaySubsidyID: pgtype.Text{String: "wx_subsidy_206", Valid: true},
+		OutReturnNo:    pgtype.Text{String: "SR-106", Valid: true},
+		ReturnAmount:   pgtype.Int8{Int64: 100, Valid: true},
+		ReturnStatus:   pgtype.Text{String: "return_failed", Valid: true},
+	}
+
+	store.EXPECT().GetSubsidyOrderByPaymentOrderID(gomock.Any(), int64(106)).Return(subsidyOrder, nil)
+	ecommerce.EXPECT().ReturnSubsidy(gomock.Any(), wechatcontracts.SubsidyReturnRequest{
+		SubMchID:      "sub_mch_106",
+		OutOrderNo:    "SR-106",
+		TransactionID: "wx_tx_106",
+		RefundID:      "wx_refund_106",
+		Amount:        100,
+		Description:   "退款退回补差",
+		SubsidyID:     "wx_subsidy_206",
+	}).Return(nil, errors.New("wechat unavailable"))
+	store.EXPECT().UpdateSubsidyReturnToFailed(gomock.Any(), db.UpdateSubsidyReturnToFailedParams{
+		OutReturnNo:      pgtype.Text{String: "SR-106", Valid: true},
+		ReturnFailReason: pgtype.Text{String: "wechat unavailable", Valid: true},
+	}).Return(db.SubsidyOrder{}, errors.New("write failed"))
+
+	server := newTestServer(t, store)
+	server.SetEcommerceClientForTest(ecommerce)
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	request, err := http.NewRequest(http.MethodPost, "/v1/operators/me/payment-orders/106/subsidies/return", strings.NewReader(`{"refund_id":"wx_refund_106","amount":100,"description":"退款退回补差"}`))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	ctx.Request = request
+	ctx.Params = gin.Params{{Key: "id", Value: "106"}}
+
+	server.returnSubsidy(ctx)
+
+	require.Equal(t, http.StatusInternalServerError, recorder.Code)
+	var response ErrorResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
+	require.Equal(t, "internal server error", response.Error)
 }

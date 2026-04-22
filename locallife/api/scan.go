@@ -263,10 +263,14 @@ func (server *Server) buildScanTableResponse(ctx context.Context, merchant db.Me
 			dishInfo.MemberPrice = &dish.MemberPrice.Int64
 		}
 		if dish.Tags != nil {
-			_ = parseJSON(dish.Tags, &dishInfo.Tags)
+			if err := parseJSON(dish.Tags, &dishInfo.Tags); err != nil {
+				return scanTableResponse{}, fmt.Errorf("decode scan table dish %d tags: %w", dish.ID, err)
+			}
 		}
 		if dish.CustomizationGroups != nil {
-			_ = parseJSON(dish.CustomizationGroups, &dishInfo.CustomizationGroups)
+			if err := parseJSON(dish.CustomizationGroups, &dishInfo.CustomizationGroups); err != nil {
+				return scanTableResponse{}, fmt.Errorf("decode scan table dish %d customization_groups: %w", dish.ID, err)
+			}
 		}
 
 		if categoryName, ok := categoryNameMap[categoryID]; ok {
@@ -298,7 +302,9 @@ func (server *Server) buildScanTableResponse(ctx context.Context, merchant db.Me
 			IsAvailable: combo.IsOnline,
 		}
 		if combo.Tags != nil {
-			_ = parseJSON(combo.Tags, &comboInfo.Tags)
+			if err := parseJSON(combo.Tags, &comboInfo.Tags); err != nil {
+				return scanTableResponse{}, fmt.Errorf("decode scan table combo %d tags: %w", combo.ID, err)
+			}
 		}
 		if combo.Description.Valid {
 			comboInfo.Description = &combo.Description.String

@@ -416,6 +416,47 @@ func TestCreateOCRJob_MarksGroupIDCardPending(t *testing.T) {
 	require.Equal(t, http.StatusOK, recorder.Code)
 }
 
+func TestCreateOCRJob_GroupPendingRejectsInvalidExistingApplicationData(t *testing.T) {
+	user, _ := randomUser(t)
+	app := randomGroupApplication(user.ID)
+	app.ApplicationData = []byte(`not-json`)
+	job := db.OcrJob{ID: 333, Status: "pending", DocumentType: string(ocr.DocumentTypeBusinessLicense), Provider: string(ocr.ProviderNameAliyun), MediaAssetID: 803, OwnerType: string(ocr.OwnerTypeGroupApplication), OwnerID: app.ID, CreatedAt: time.Now()}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	store := mockdb.NewMockStore(ctrl)
+	distributor := mockworker.NewMockTaskDistributor(ctrl)
+
+	gomock.InOrder(
+		store.EXPECT().GetGroupApplication(gomock.Any(), app.ID).Return(app, nil),
+		store.EXPECT().GetMediaAssetByID(gomock.Any(), int64(803)).Return(db.MediaAsset{ID: 803, ModerationStatus: "approved"}, nil),
+		store.EXPECT().UpsertOCRJob(gomock.Any(), gomock.Any()).DoAndReturn(func(_ any, arg db.UpsertOCRJobParams) (db.OcrJob, error) {
+			require.Equal(t, string(ocr.DocumentTypeBusinessLicense), arg.DocumentType)
+			require.Equal(t, string(ocr.OwnerTypeGroupApplication), arg.OwnerType)
+			return job, nil
+		}),
+		distributor.EXPECT().DistributeTaskGroupApplicationBusinessLicenseOCR(gomock.Any(), app.ID, int64(803), int64(333)).Return(nil),
+		store.EXPECT().GetGroupApplication(gomock.Any(), app.ID).Return(app, nil),
+	)
+
+	server := newTestServer(t, store)
+	server.SetTaskDistributorForTest(distributor)
+
+	body, err := json.Marshal(createOCRJobRequest{DocumentType: "business_license", MediaAssetID: 803, OwnerType: "group_application", OwnerID: app.ID})
+	require.NoError(t, err)
+	request, err := http.NewRequest(http.MethodPost, "/v1/ocr/jobs", bytes.NewReader(body))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusInternalServerError, recorder.Code)
+	var resp APIResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, "internal server error", resp.Message)
+}
+
 func TestCreateOCRJob_AllowsOwnerOnlyPrivateIDCardDespiteModerationStatus(t *testing.T) {
 	user, _ := randomUser(t)
 	app := randomMerchantAppDraft(user.ID)

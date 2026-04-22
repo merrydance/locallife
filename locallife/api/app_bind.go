@@ -51,7 +51,8 @@ func isAppBindSessionUserAgent(userAgent string) bool {
 // @Router /v1/auth/app-bind/code [post]
 func (server *Server) generateAppBindCode(ctx *gin.Context) {
 	if server.redisClient == nil {
-		ctx.JSON(http.StatusServiceUnavailable, errorResponse(fmt.Errorf("绑定码服务暂不可用")))
+		err := fmt.Errorf("绑定码服务暂不可用")
+		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "绑定码服务暂不可用", "app bind code redis client not configured"))
 		return
 	}
 
@@ -162,7 +163,8 @@ type generateAppBindCodeResponse struct {
 // @Router /v1/auth/app-bind/verify [post]
 func (server *Server) verifyAppBindCode(ctx *gin.Context) {
 	if server.redisClient == nil {
-		ctx.JSON(http.StatusServiceUnavailable, errorResponse(fmt.Errorf("绑定码服务暂不可用")))
+		err := fmt.Errorf("绑定码服务暂不可用")
+		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "绑定码服务暂不可用", "app bind verify redis client not configured"))
 		return
 	}
 

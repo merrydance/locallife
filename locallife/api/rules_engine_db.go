@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -28,14 +29,22 @@ func (e *DBRulesEngine) Evaluate(ctx context.Context, input rules.Context) (rule
 	}
 
 	for _, version := range versions {
-		scope := map[string]interface{}{}
-		condition := map[string]interface{}{}
-		action := map[string]interface{}{}
-		grayConfig := map[string]interface{}{}
-		_ = json.Unmarshal(version.Scope, &scope)
-		_ = json.Unmarshal(version.Condition, &condition)
-		_ = json.Unmarshal(version.Action, &action)
-		_ = json.Unmarshal(version.GrayConfig, &grayConfig)
+		scope, err := decodeRuleVersionObject(version, "scope", version.Scope)
+		if err != nil {
+			return rules.Decision{}, err
+		}
+		condition, err := decodeRuleVersionObject(version, "condition", version.Condition)
+		if err != nil {
+			return rules.Decision{}, err
+		}
+		action, err := decodeRuleVersionObject(version, "action", version.Action)
+		if err != nil {
+			return rules.Decision{}, err
+		}
+		grayConfig, err := decodeRuleVersionObject(version, "gray_config", version.GrayConfig)
+		if err != nil {
+			return rules.Decision{}, err
+		}
 
 		if !matchRuleScope(scope, input) {
 			continue
@@ -60,6 +69,17 @@ func (e *DBRulesEngine) Evaluate(ctx context.Context, input rules.Context) (rule
 	}
 
 	return rules.Decision{Allow: true, Action: "allow"}, nil
+}
+
+func decodeRuleVersionObject(version db.RuleVersion, field string, payload []byte) (map[string]interface{}, error) {
+	decoded := map[string]interface{}{}
+	if len(payload) == 0 {
+		return decoded, nil
+	}
+	if err := json.Unmarshal(payload, &decoded); err != nil {
+		return nil, fmt.Errorf("decode active rule version %d field %s: %w", version.ID, field, err)
+	}
+	return decoded, nil
 }
 
 func matchRuleScope(scope map[string]interface{}, input rules.Context) bool {

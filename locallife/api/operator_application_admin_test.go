@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -203,6 +204,95 @@ func TestApproveOperatorApplicationAdmin_EnsuresProfitSharingReceiver(t *testing
 	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 	require.Equal(t, approved.ID, resp.ID)
 	require.Equal(t, "approved", resp.Status)
+}
+
+func TestApproveOperatorApplicationAdmin_ReceiverSyncFailureReturnsStableBadGateway(t *testing.T) {
+	admin, _ := randomUser(t)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	server := newTestServerWithEcommerce(t, store, ecommerceClient)
+
+	application := db.OperatorApplication{
+		ID:                     12,
+		UserID:                 89,
+		RegionID:               67,
+		Name:                   pgtype.Text{String: "华东运营商", Valid: true},
+		ContactName:            pgtype.Text{String: "李运营", Valid: true},
+		ContactPhone:           pgtype.Text{String: "13800138111", Valid: true},
+		RequestedContractYears: 2,
+		Status:                 "submitted",
+	}
+	approved := application
+	approved.Status = "approved"
+	operator := db.Operator{
+		ID:           100,
+		UserID:       application.UserID,
+		RegionID:     application.RegionID,
+		Name:         "华东运营商",
+		ContactName:  "李运营",
+		ContactPhone: "13800138111",
+		Status:       "active",
+	}
+	user := db.User{ID: application.UserID, WechatOpenid: "operator-openid-89"}
+
+	store.EXPECT().
+		ListUserRoles(gomock.Any(), admin.ID).
+		Return([]db.UserRole{{UserID: admin.ID, Role: RoleAdmin, Status: "active"}}, nil)
+	store.EXPECT().
+		GetOperatorApplicationByID(gomock.Any(), application.ID).
+		Return(application, nil)
+	store.EXPECT().
+		GetOperatorByUser(gomock.Any(), application.UserID).
+		Return(db.Operator{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		GetActiveOperatorByRegion(gomock.Any(), application.RegionID).
+		Return(db.Operator{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		GetUser(gomock.Any(), application.UserID).
+		Return(user, nil)
+	store.EXPECT().
+		ApproveOperatorApplication(gomock.Any(), gomock.Any()).
+		Return(approved, nil)
+	store.EXPECT().
+		CreateOperator(gomock.Any(), gomock.Any()).
+		Return(operator, nil)
+	store.EXPECT().
+		AddOperatorRegion(gomock.Any(), db.AddOperatorRegionParams{OperatorID: operator.ID, RegionID: application.RegionID}).
+		Return(db.OperatorRegion{OperatorID: operator.ID, RegionID: application.RegionID}, nil)
+	store.EXPECT().
+		GetUserRoleByType(gomock.Any(), db.GetUserRoleByTypeParams{UserID: application.UserID, Role: RoleOperator}).
+		Return(db.UserRole{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		CreateUserRole(gomock.Any(), gomock.Any()).
+		Return(db.UserRole{UserID: application.UserID, Role: RoleOperator, Status: "active"}, nil)
+	store.EXPECT().GetUser(gomock.Any(), application.UserID).Return(user, nil)
+	ecommerceClient.EXPECT().GetSpAppID().Return("wx_sp_app_123")
+	ecommerceClient.EXPECT().EncryptSensitiveData("李运营").Return("enc-name", nil)
+	ecommerceClient.EXPECT().
+		AddProfitSharingReceiver(gomock.Any(), &wechatcontracts.AddReceiverRequest{
+			AppID:         "wx_sp_app_123",
+			Type:          wechatcontracts.ReceiverTypePersonal,
+			Account:       user.WechatOpenid,
+			EncryptedName: "enc-name",
+			RelationType:  wechatcontracts.RelationOthers,
+		}).
+		Return(nil, errors.New("wechat unavailable"))
+
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodPost, "/v1/admin/operators/applications/12/approve", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, admin.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusBadGateway, recorder.Code)
+
+	var resp APIResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, CodeBadGateway, resp.Code)
+	require.Equal(t, "operator receiver sync unavailable", resp.Message)
 }
 
 func TestUpdateOperatorStatusAdmin_SuspendDeletesProfitSharingReceiver(t *testing.T) {

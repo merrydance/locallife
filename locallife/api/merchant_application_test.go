@@ -1668,3 +1668,65 @@ func TestGetOrCreateMerchantApplicationDraft_RewritesPublicImageArraysInLocalMod
 	require.Equal(t, []string{"/dev/uploads/merchants/12/storefront/cover.jpg"}, resp.StorefrontImages)
 	require.Equal(t, []string{"/dev/uploads/merchants/12/environment/room.jpg"}, resp.EnvironmentImages)
 }
+
+func TestGetOrCreateMerchantApplicationDraft_ReturnsInternalServerErrorOnInvalidStorefrontImages(t *testing.T) {
+	user, _ := randomUser(t)
+	app := randomMerchantAppDraft(user.ID)
+	app.StorefrontImages = []byte(`not-json`)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetMerchantApplicationDraft(gomock.Any(), user.ID).
+		Times(1).
+		Return(app, nil)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	request, err := http.NewRequest(http.MethodGet, "/v1/merchant/application", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusInternalServerError, recorder.Code)
+	var resp APIResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, "internal server error", resp.Message)
+}
+
+func TestUpdateMerchantApplicationImages_ReturnsInternalServerErrorOnInvalidStoredStorefrontImages(t *testing.T) {
+	user, _ := randomUser(t)
+	app := randomMerchantAppDraft(user.ID)
+	app.StorefrontImages = []byte(`not-json`)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetMerchantApplicationDraft(gomock.Any(), user.ID).
+		Times(1).
+		Return(app, nil)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	body, err := json.Marshal(updateMerchantImagesRequest{
+		StorefrontImages: []string{"uploads/merchants/12/storefront/new.jpg"},
+	})
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPut, "/v1/merchant/application/images", bytes.NewReader(body))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusInternalServerError, recorder.Code)
+	var resp APIResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, "internal server error", resp.Message)
+}

@@ -180,7 +180,7 @@ func (server *Server) applicantVisiblePublicMediaURL(ctx context.Context, assetI
 	return &url
 }
 
-func (server *Server) newMerchantApplicationDraftResponse(ctx context.Context, app db.MerchantApplication) merchantApplicationDraftResponse {
+func (server *Server) newMerchantApplicationDraftResponse(ctx context.Context, app db.MerchantApplication) (merchantApplicationDraftResponse, error) {
 	resp := merchantApplicationDraftResponse{
 		ID:                          app.ID,
 		UserID:                      app.UserID,
@@ -248,62 +248,88 @@ func (server *Server) newMerchantApplicationDraftResponse(ctx context.Context, a
 	// 解析OCR数据
 	if len(app.BusinessLicenseOcr) > 0 {
 		var ocr BusinessLicenseOCRData
-		if json.Unmarshal(app.BusinessLicenseOcr, &ocr) == nil {
-			if ocr.Status == "" {
-				ocr.Status = "done"
-			}
-			resp.BusinessLicenseOCR = &ocr
+		if err := decodeMerchantApplicationJSONField(app.ID, "business_license_ocr", app.BusinessLicenseOcr, &ocr); err != nil {
+			return merchantApplicationDraftResponse{}, err
 		}
+		if ocr.Status == "" {
+			ocr.Status = "done"
+		}
+		resp.BusinessLicenseOCR = &ocr
 	}
 	if len(app.FoodPermitOcr) > 0 {
 		var ocr FoodPermitOCRData
-		if json.Unmarshal(app.FoodPermitOcr, &ocr) == nil {
-			if ocr.Status == "" {
-				ocr.Status = "done"
-			}
-			resp.FoodPermitOCR = &ocr
+		if err := decodeMerchantApplicationJSONField(app.ID, "food_permit_ocr", app.FoodPermitOcr, &ocr); err != nil {
+			return merchantApplicationDraftResponse{}, err
 		}
+		if ocr.Status == "" {
+			ocr.Status = "done"
+		}
+		resp.FoodPermitOCR = &ocr
 	}
 	if len(app.IDCardFrontOcr) > 0 {
 		var ocr MerchantIDCardOCRData
-		if json.Unmarshal(app.IDCardFrontOcr, &ocr) == nil {
-			if ocr.Status == "" {
-				ocr.Status = "done"
-			}
-			resp.IDCardFrontOCR = &ocr
+		if err := decodeMerchantApplicationJSONField(app.ID, "id_card_front_ocr", app.IDCardFrontOcr, &ocr); err != nil {
+			return merchantApplicationDraftResponse{}, err
 		}
+		if ocr.Status == "" {
+			ocr.Status = "done"
+		}
+		resp.IDCardFrontOCR = &ocr
 	}
 	if len(app.IDCardBackOcr) > 0 {
 		var ocr MerchantIDCardOCRData
-		if json.Unmarshal(app.IDCardBackOcr, &ocr) == nil {
-			if ocr.Status == "" {
-				ocr.Status = "done"
-			}
-			resp.IDCardBackOCR = &ocr
+		if err := decodeMerchantApplicationJSONField(app.ID, "id_card_back_ocr", app.IDCardBackOcr, &ocr); err != nil {
+			return merchantApplicationDraftResponse{}, err
 		}
+		if ocr.Status == "" {
+			ocr.Status = "done"
+		}
+		resp.IDCardBackOCR = &ocr
 	}
 
 	// 解析门头照和环境照（jsonb数组）
 	if len(app.StorefrontImages) > 0 {
 		var images []string
-		if json.Unmarshal(app.StorefrontImages, &images) == nil {
-			for i, img := range images {
-				images[i] = server.resolvePublicUploadURLForClient(img)
-			}
-			resp.StorefrontImages = images
+		if err := decodeMerchantApplicationJSONField(app.ID, "storefront_images", app.StorefrontImages, &images); err != nil {
+			return merchantApplicationDraftResponse{}, err
 		}
+		for i, img := range images {
+			images[i] = server.resolvePublicUploadURLForClient(img)
+		}
+		resp.StorefrontImages = images
 	}
 	if len(app.EnvironmentImages) > 0 {
 		var images []string
-		if json.Unmarshal(app.EnvironmentImages, &images) == nil {
-			for i, img := range images {
-				images[i] = server.resolvePublicUploadURLForClient(img)
-			}
-			resp.EnvironmentImages = images
+		if err := decodeMerchantApplicationJSONField(app.ID, "environment_images", app.EnvironmentImages, &images); err != nil {
+			return merchantApplicationDraftResponse{}, err
 		}
+		for i, img := range images {
+			images[i] = server.resolvePublicUploadURLForClient(img)
+		}
+		resp.EnvironmentImages = images
 	}
 
-	return resp
+	return resp, nil
+}
+
+func decodeMerchantApplicationJSONField(applicationID int64, field string, payload []byte, target interface{}) error {
+	if len(payload) == 0 {
+		return nil
+	}
+	if err := json.Unmarshal(payload, target); err != nil {
+		return fmt.Errorf("decode merchant application %d %s: %w", applicationID, field, err)
+	}
+	return nil
+}
+
+func (server *Server) writeMerchantApplicationDraftResponse(ctx *gin.Context, status int, app db.MerchantApplication) bool {
+	resp, err := server.newMerchantApplicationDraftResponse(ctx.Request.Context(), app)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return false
+	}
+	ctx.JSON(status, resp)
+	return true
 }
 
 // ==================== 获取或创建草稿 ====================
@@ -334,7 +360,7 @@ func (server *Server) getOrCreateMerchantApplicationDraft(ctx *gin.Context) {
 				ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 				return
 			}
-			ctx.JSON(http.StatusCreated, server.newMerchantApplicationDraftResponse(ctx.Request.Context(), newApp))
+			server.writeMerchantApplicationDraftResponse(ctx, http.StatusCreated, newApp)
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -353,7 +379,7 @@ func (server *Server) getOrCreateMerchantApplicationDraft(ctx *gin.Context) {
 		app = resetResult.Application
 	}
 
-	ctx.JSON(http.StatusOK, server.newMerchantApplicationDraftResponse(ctx.Request.Context(), app))
+	server.writeMerchantApplicationDraftResponse(ctx, http.StatusOK, app)
 }
 
 // ==================== 更新基础信息 ====================
@@ -517,7 +543,7 @@ func (server *Server) updateMerchantApplicationBasicInfo(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, server.newMerchantApplicationDraftResponse(ctx.Request.Context(), updatedApp))
+	server.writeMerchantApplicationDraftResponse(ctx, http.StatusOK, updatedApp)
 }
 
 // ==================== 更新门头照和环境照 ====================
@@ -606,8 +632,20 @@ func (server *Server) updateMerchantApplicationImages(ctx *gin.Context) {
 
 	// 记录更新前的旧图片列表，用于稍后删除被移除的图片
 	var oldStorefront, oldEnvironment []string
-	_ = json.Unmarshal(app.StorefrontImages, &oldStorefront)
-	_ = json.Unmarshal(app.EnvironmentImages, &oldEnvironment)
+	if req.StorefrontImages != nil {
+		oldStorefront, err = decodeStoredMerchantApplicationImageList(app.ID, "storefront_images", app.StorefrontImages)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+	}
+	if req.EnvironmentImages != nil {
+		oldEnvironment, err = decodeStoredMerchantApplicationImageList(app.ID, "environment_images", app.EnvironmentImages)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+	}
 
 	// 注意：用 != nil 而非 len > 0，使得前端传空数组 [] 时能正确清空图片
 	if req.StorefrontImages != nil {
@@ -661,7 +699,18 @@ func (server *Server) updateMerchantApplicationImages(ctx *gin.Context) {
 		}
 	}
 
-	ctx.JSON(http.StatusOK, server.newMerchantApplicationDraftResponse(ctx.Request.Context(), updatedApp))
+	server.writeMerchantApplicationDraftResponse(ctx, http.StatusOK, updatedApp)
+}
+
+func decodeStoredMerchantApplicationImageList(applicationID int64, field string, payload []byte) ([]string, error) {
+	if len(payload) == 0 {
+		return nil, nil
+	}
+	var images []string
+	if err := json.Unmarshal(payload, &images); err != nil {
+		return nil, fmt.Errorf("decode merchant application %d %s: %w", applicationID, field, err)
+	}
+	return images, nil
 }
 
 // deleteMerchantApplicationDocument godoc
@@ -747,7 +796,7 @@ func (server *Server) deleteMerchantApplicationDocument(ctx *gin.Context) {
 		}
 	}
 
-	ctx.JSON(http.StatusOK, server.newMerchantApplicationDraftResponse(ctx.Request.Context(), updatedApp))
+	server.writeMerchantApplicationDraftResponse(ctx, http.StatusOK, updatedApp)
 }
 
 // ==================== 上传营业执照并OCR识别 ====================
@@ -937,7 +986,7 @@ func (server *Server) submitMerchantApplication(ctx *gin.Context) {
 		Int64("user_role_id", txResult.UserRole.ID).
 		Msg("商户审核通过事务完成")
 
-	ctx.JSON(http.StatusOK, server.newMerchantApplicationDraftResponse(ctx.Request.Context(), txResult.Application))
+	server.writeMerchantApplicationDraftResponse(ctx, http.StatusOK, txResult.Application)
 }
 
 // validateMerchantApplicationRequired 验证必填字段
@@ -2179,5 +2228,5 @@ func (server *Server) resetMerchantApplication(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, server.newMerchantApplicationDraftResponse(ctx.Request.Context(), resetResult.Application))
+	server.writeMerchantApplicationDraftResponse(ctx, http.StatusOK, resetResult.Application)
 }

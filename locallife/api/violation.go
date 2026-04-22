@@ -305,7 +305,8 @@ func bindOptionalViolationNotificationConfigRequest(ctx *gin.Context) (platformV
 // @Router /v1/platform/finance/wechat-ecommerce/violation-notification [get]
 func (server *Server) getPlatformViolationNotificationConfig(ctx *gin.Context) {
 	if server.ecommerceClient == nil {
-		ctx.JSON(http.StatusServiceUnavailable, errorResponse(errors.New("ecommerce client not configured")))
+		err := errors.New("ecommerce client not configured")
+		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "ecommerce client not configured", "platform violation notification query ecommerce client not configured"))
 		return
 	}
 
@@ -372,7 +373,8 @@ func (server *Server) updatePlatformViolationNotificationConfig(ctx *gin.Context
 
 func (server *Server) upsertPlatformViolationNotificationConfig(ctx *gin.Context, method string) {
 	if server.ecommerceClient == nil {
-		ctx.JSON(http.StatusServiceUnavailable, errorResponse(errors.New("ecommerce client not configured")))
+		err := errors.New("ecommerce client not configured")
+		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "ecommerce client not configured", "platform violation notification upsert ecommerce client not configured"))
 		return
 	}
 
@@ -420,7 +422,8 @@ func (server *Server) upsertPlatformViolationNotificationConfig(ctx *gin.Context
 // @Router /v1/platform/finance/wechat-ecommerce/violation-notification [delete]
 func (server *Server) deletePlatformViolationNotificationConfig(ctx *gin.Context) {
 	if server.ecommerceClient == nil {
-		ctx.JSON(http.StatusServiceUnavailable, errorResponse(errors.New("ecommerce client not configured")))
+		err := errors.New("ecommerce client not configured")
+		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "ecommerce client not configured", "platform violation notification delete ecommerce client not configured"))
 		return
 	}
 

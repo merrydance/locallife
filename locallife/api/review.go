@@ -161,11 +161,14 @@ func (server *Server) createReview(ctx *gin.Context) {
 
 	// 6. 写入评价图片
 	for i, assetID := range req.MediaAssetIDs {
-		_, _ = server.store.AddReviewImage(ctx, db.AddReviewImageParams{
+		if _, err := server.store.AddReviewImage(ctx, db.AddReviewImageParams{
 			ReviewID:     review.ID,
 			MediaAssetID: assetID,
 			SortOrder:    int32(i),
-		})
+		}); err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
 	}
 
 	resp := newReviewResponse(review)

@@ -174,14 +174,7 @@ type modifySettlementAccountApplicationResponse struct {
 func (server *Server) getMerchantSettlementAccount(ctx *gin.Context) {
 	if server.ecommerceClient == nil {
 		err := errors.New("ecommerce client not configured")
-		_ = ctx.Error(err)
-		log.Error().
-			Err(err).
-			Str("request_id", GetRequestID(ctx)).
-			Str("path", ctx.Request.URL.Path).
-			Str("method", ctx.Request.Method).
-			Msg("merchant settlement account query rejected because ecommerce client is not configured")
-		ctx.JSON(http.StatusServiceUnavailable, errorResponse(errors.New("ecommerce client not configured")))
+		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "ecommerce client not configured", "merchant settlement account query rejected because ecommerce client is not configured"))
 		return
 	}
 

@@ -1182,6 +1182,29 @@ func TestGetMerchantApplymentStatusAPI(t *testing.T) {
 			},
 		},
 		{
+			name: "InvalidStoredAccountValidationReturnsInternalServerError",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				applyment := randomEcommerceApplymentForTest("merchant", merchant.ID)
+				applyment.Status = "pending"
+				applyment.AccountValidation = []byte("{")
+				store.EXPECT().
+					GetLatestEcommerceApplymentBySubject(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(applyment, nil)
+			},
+			checkResponse: func(recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusInternalServerError, recorder.Code)
+				var response apiTestEnvelope
+				require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
+				require.Equal(t, "internal server error", response.Message)
+			},
+		},
+		{
 			name: "NoApplyment",
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
@@ -1761,8 +1784,8 @@ func TestRespondApplymentWechatError(t *testing.T) {
 			name:           "SystemErrorMapsToBadGateway",
 			wxErr:          &wechat.WechatPayError{StatusCode: http.StatusInternalServerError, Code: "SYSTEM_ERROR", Message: "系统异常"},
 			expectedStatus: http.StatusInternalServerError,
-			expectedCode:   ErrApplymentWechatServiceUnavailable.Code,
-			expectedError:  ErrApplymentWechatServiceUnavailable.Message,
+			expectedCode:   0,
+			expectedError:  "internal server error",
 		},
 		{
 			name:           "ResourceNotExistsMapsToNotFound",

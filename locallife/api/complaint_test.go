@@ -193,6 +193,34 @@ func TestCompleteComplaintAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 			},
 		},
+		{
+			name:   "OperatorComplaintWechatFailureReturnsStableBadGateway",
+			path:   "/v1/operators/me/complaints/" + complaint.ComplaintID + "/complete",
+			userID: operatorUser.ID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, operatorUser.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore, ecommerce *mockwechat.MockEcommerceClientInterface) {
+				expectActiveOperatorAuth(store, operatorUser.ID, operator)
+
+				store.EXPECT().
+					GetWechatComplaintByComplaintIDForUpdate(gomock.Any(), gomock.Eq(complaint.ComplaintID)).
+					Times(1).
+					Return(complaint, nil)
+
+				ecommerce.EXPECT().
+					CompleteComplaint(gomock.Any(), gomock.Eq(complaint.ComplaintID)).
+					Times(1).
+					Return(assertAnError("wechat unavailable"))
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadGateway, recorder.Code)
+				var resp APIResponse
+				require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+				require.Equal(t, CodeBadGateway, resp.Code)
+				require.Equal(t, "failed to complete complaint via WeChat", resp.Message)
+			},
+		},
 	}
 
 	for _, tc := range testCases {

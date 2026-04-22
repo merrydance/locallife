@@ -98,7 +98,8 @@ type createSubsidyRequest struct {
 // 商户只能发起一次补差；失败后仅允许用相同参数和原补差单号重入。
 func (server *Server) createSubsidy(ctx *gin.Context) {
 	if server.ecommerceClient == nil {
-		ctx.JSON(http.StatusServiceUnavailable, errorResponse(errors.New("payment service not configured")))
+		err := errors.New("payment service not configured")
+		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "payment service not configured", "create subsidy payment service not configured"))
 		return
 	}
 
@@ -200,13 +201,15 @@ func (server *Server) createSubsidy(ctx *gin.Context) {
 	})
 
 	if wxErr != nil {
-		log.Error().Err(wxErr).Str("out_subsidy_no", outSubsidyNo).Msg("create subsidy: wxpay api failed")
 		// 标记失败，让运营商知晓
-		_, _ = server.store.UpdateSubsidyOrderToFailed(ctx, db.UpdateSubsidyOrderToFailedParams{
+		if _, err := server.store.UpdateSubsidyOrderToFailed(ctx, db.UpdateSubsidyOrderToFailedParams{
 			ID:         subsidyOrder.ID,
 			FailReason: pgtype.Text{String: wxErr.Error(), Valid: true},
-		})
-		ctx.JSON(http.StatusBadGateway, errorResponse(errors.New("subsidy api unavailable")))
+		}); err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("mark subsidy order failed after wxpay error: %w", err)))
+			return
+		}
+		ctx.JSON(http.StatusBadGateway, loggedServerError(ctx, wxErr, "subsidy api unavailable", "create subsidy: wxpay api failed"))
 		return
 	}
 
@@ -220,10 +223,13 @@ func (server *Server) createSubsidy(ctx *gin.Context) {
 			failReason = fmt.Sprintf("subsidy result is %s", result)
 		}
 		log.Error().Str("out_subsidy_no", outSubsidyNo).Str("result", result).Msg("create subsidy: wxpay returned non-success result")
-		_, _ = server.store.UpdateSubsidyOrderToFailed(ctx, db.UpdateSubsidyOrderToFailedParams{
+		if _, err := server.store.UpdateSubsidyOrderToFailed(ctx, db.UpdateSubsidyOrderToFailedParams{
 			ID:         subsidyOrder.ID,
 			FailReason: pgtype.Text{String: failReason, Valid: true},
-		})
+		}); err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("mark subsidy order failed after non-success wxpay result: %w", err)))
+			return
+		}
 		ctx.JSON(http.StatusConflict, errorResponse(errors.New("subsidy request did not succeed")))
 		return
 	}
@@ -259,7 +265,8 @@ type returnSubsidyRequest struct {
 // POST /v1/operator/payment-orders/:id/subsidies/return
 func (server *Server) returnSubsidy(ctx *gin.Context) {
 	if server.ecommerceClient == nil {
-		ctx.JSON(http.StatusServiceUnavailable, errorResponse(errors.New("payment service not configured")))
+		err := errors.New("payment service not configured")
+		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "payment service not configured", "return subsidy payment service not configured"))
 		return
 	}
 
@@ -352,12 +359,14 @@ func (server *Server) returnSubsidy(ctx *gin.Context) {
 	})
 
 	if wxErr != nil {
-		log.Error().Err(wxErr).Str("out_return_no", outReturnNo).Msg("return subsidy: wxpay api failed")
-		_, _ = server.store.UpdateSubsidyReturnToFailed(ctx, db.UpdateSubsidyReturnToFailedParams{
+		if _, err := server.store.UpdateSubsidyReturnToFailed(ctx, db.UpdateSubsidyReturnToFailedParams{
 			OutReturnNo:      pgtype.Text{String: outReturnNo, Valid: true},
 			ReturnFailReason: pgtype.Text{String: wxErr.Error(), Valid: true},
-		})
-		ctx.JSON(http.StatusBadGateway, errorResponse(errors.New("subsidy return api unavailable")))
+		}); err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("mark subsidy return failed after wxpay error: %w", err)))
+			return
+		}
+		ctx.JSON(http.StatusBadGateway, loggedServerError(ctx, wxErr, "subsidy return api unavailable", "return subsidy: wxpay api failed"))
 		return
 	}
 
@@ -371,10 +380,13 @@ func (server *Server) returnSubsidy(ctx *gin.Context) {
 			failReason = fmt.Sprintf("subsidy return result is %s", result)
 		}
 		log.Error().Str("out_return_no", outReturnNo).Str("result", result).Msg("return subsidy: wxpay returned non-success result")
-		_, _ = server.store.UpdateSubsidyReturnToFailed(ctx, db.UpdateSubsidyReturnToFailedParams{
+		if _, err := server.store.UpdateSubsidyReturnToFailed(ctx, db.UpdateSubsidyReturnToFailedParams{
 			OutReturnNo:      pgtype.Text{String: outReturnNo, Valid: true},
 			ReturnFailReason: pgtype.Text{String: failReason, Valid: true},
-		})
+		}); err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("mark subsidy return failed after non-success wxpay result: %w", err)))
+			return
+		}
 		ctx.JSON(http.StatusConflict, errorResponse(errors.New("subsidy return did not succeed")))
 		return
 	}
@@ -403,7 +415,8 @@ func (server *Server) returnSubsidy(ctx *gin.Context) {
 // POST /v1/operator/payment-orders/:id/subsidies/cancel
 func (server *Server) cancelSubsidy(ctx *gin.Context) {
 	if server.ecommerceClient == nil {
-		ctx.JSON(http.StatusServiceUnavailable, errorResponse(errors.New("payment service not configured")))
+		err := errors.New("payment service not configured")
+		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "payment service not configured", "cancel subsidy payment service not configured"))
 		return
 	}
 
@@ -444,8 +457,7 @@ func (server *Server) cancelSubsidy(ctx *gin.Context) {
 		Description:   "operator cancel",
 	})
 	if wxErr != nil {
-		log.Error().Err(wxErr).Str("out_subsidy_no", subsidyOrder.OutSubsidyNo).Msg("cancel subsidy: wxpay api failed")
-		ctx.JSON(http.StatusBadGateway, errorResponse(errors.New("cancel subsidy api unavailable")))
+		ctx.JSON(http.StatusBadGateway, loggedServerError(ctx, wxErr, "cancel subsidy api unavailable", "cancel subsidy: wxpay api failed"))
 		return
 	}
 	result := ""

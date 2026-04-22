@@ -179,6 +179,47 @@ func TestScanTableAPI(t *testing.T) {
 			},
 		},
 		{
+			name:       "InvalidDishTags",
+			merchantID: merchant.ID,
+			tableNo:    table.TableNo,
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetMerchant(gomock.Any(), gomock.Eq(merchant.ID)).
+					Times(1).
+					Return(merchant, nil)
+
+				store.EXPECT().
+					GetTableByMerchantAndNo(gomock.Any(), gomock.Eq(db.GetTableByMerchantAndNoParams{
+						MerchantID: merchant.ID,
+						TableNo:    table.TableNo,
+					})).
+					Times(1).
+					Return(table, nil)
+
+				store.EXPECT().
+					ListDishCategories(gomock.Any(), gomock.Eq(merchant.ID)).
+					Times(1).
+					Return([]db.ListDishCategoriesRow{listCategory}, nil)
+
+				brokenDish := dish
+				brokenDish.Tags = []byte(`not-json`)
+				store.EXPECT().
+					ListDishesForMenu(gomock.Any(), gomock.Eq(merchant.ID)).
+					Times(1).
+					Return([]db.ListDishesForMenuRow{brokenDish}, nil)
+
+				store.EXPECT().
+					ListOnlineCombosByMerchant(gomock.Any(), gomock.Eq(merchant.ID)).
+					Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusInternalServerError, recorder.Code)
+				var resp APIResponse
+				require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+				require.Equal(t, "internal server error", resp.Message)
+			},
+		},
+		{
 			name:       "MultiCategories_DishInFirstCategory",
 			merchantID: merchant.ID,
 			tableNo:    table.TableNo,

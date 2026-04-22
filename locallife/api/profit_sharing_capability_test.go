@@ -1,6 +1,8 @@
 package api
 
 import (
+	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -161,4 +163,63 @@ func TestDeleteProfitSharingReceiver_ValidationErrorReturnsBadRequest(t *testing
 	server.deleteProfitSharingReceiver(ctx)
 
 	require.Equal(t, http.StatusBadRequest, recorder.Code)
+}
+
+func TestGetProfitSharingAmounts_PaymentServiceUnavailable(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	server := newTestServer(t, store)
+	server.SetEcommerceClientForTest(nil)
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	request, err := http.NewRequest(http.MethodGet, "/v1/operators/me/payment-orders/305/profit-sharing/amounts", nil)
+	require.NoError(t, err)
+	ctx.Request = request
+	ctx.Params = gin.Params{{Key: "id", Value: "305"}}
+
+	server.getProfitSharingAmounts(ctx)
+
+	require.Equal(t, http.StatusServiceUnavailable, recorder.Code)
+	var response ErrorResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
+	require.Equal(t, "payment service not configured", response.Error)
+}
+
+func TestGetProfitSharingAmounts_UpstreamFailureReturnsBadGatewayMessage(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ecommerce := mockwechat.NewMockEcommerceClientInterface(ctrl)
+
+	paymentOrder := db.PaymentOrder{
+		ID:                    306,
+		PaymentType:           PaymentTypeProfitShare,
+		PaymentChannel:        db.PaymentChannelEcommerce,
+		RequiresProfitSharing: true,
+		TransactionID:         pgtype.Text{String: "wx_tx_306", Valid: true},
+	}
+
+	store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil)
+	ecommerce.EXPECT().QueryProfitSharingAmounts(gomock.Any(), "wx_tx_306").Return(nil, errors.New("wechat unavailable"))
+
+	server := newTestServer(t, store)
+	server.SetEcommerceClientForTest(ecommerce)
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	request, err := http.NewRequest(http.MethodGet, "/v1/operators/me/payment-orders/306/profit-sharing/amounts", nil)
+	require.NoError(t, err)
+	ctx.Request = request
+	ctx.Params = gin.Params{{Key: "id", Value: "306"}}
+
+	server.getProfitSharingAmounts(ctx)
+
+	require.Equal(t, http.StatusBadGateway, recorder.Code)
+	var response ErrorResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
+	require.Equal(t, "query profit sharing amounts api unavailable", response.Error)
 }

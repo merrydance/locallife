@@ -544,12 +544,14 @@ func (server *Server) markRiderApplicationOCRPending(ctx *gin.Context, job db.Oc
 	}
 }
 
-func mergeGroupApplicationData(data []byte) map[string]json.RawMessage {
+func mergeGroupApplicationData(data []byte) (map[string]json.RawMessage, error) {
 	result := map[string]json.RawMessage{}
 	if len(data) > 0 {
-		_ = json.Unmarshal(data, &result)
+		if err := json.Unmarshal(data, &result); err != nil {
+			return nil, err
+		}
 	}
-	return result
+	return result, nil
 }
 
 func (server *Server) markGroupApplicationOCRPending(ctx *gin.Context, job db.OcrJob) error {
@@ -563,7 +565,10 @@ func (server *Server) markGroupApplicationOCRPending(ctx *gin.Context, job db.Oc
 
 	queuedAt := job.CreatedAt.Format(time.RFC3339)
 	ocrJobID := job.ID
-	applicationData := mergeGroupApplicationData(app.ApplicationData)
+	applicationData, err := mergeGroupApplicationData(app.ApplicationData)
+	if err != nil {
+		return fmt.Errorf("decode group application data for OCR pending: %w", err)
+	}
 
 	switch ocr.DocumentType(job.DocumentType) {
 	case ocr.DocumentTypeBusinessLicense:
@@ -824,7 +829,10 @@ func (server *Server) markOCRFailed(ctx *gin.Context, job db.OcrJob, errorCode, 
 		if err != nil {
 			return err
 		}
-		applicationData := mergeGroupApplicationData(app.ApplicationData)
+		applicationData, err := mergeGroupApplicationData(app.ApplicationData)
+		if err != nil {
+			return fmt.Errorf("decode group application data for OCR failure: %w", err)
+		}
 		switch ocr.DocumentType(job.DocumentType) {
 		case ocr.DocumentTypeBusinessLicense:
 			payload, err := json.Marshal(BusinessLicenseOCRData{
@@ -1035,7 +1043,9 @@ func (server *Server) createOCRJob(ctx *gin.Context) {
 	}
 	if job.Status == string(ocr.JobStatusPending) {
 		if err := server.markOCRPending(ctx, job); err != nil {
-			log.Warn().Int64("ocr_job_id", job.ID).Err(err).Msg("mark unified ocr owner pending failed")
+			log.Error().Int64("ocr_job_id", job.ID).Err(err).Msg("mark unified ocr owner pending failed")
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
 		}
 	}
 	server.writeAuditLog(ctx, AuditLogInput{
@@ -1312,7 +1322,9 @@ func (server *Server) retryOCRJob(ctx *gin.Context) {
 		}
 	}
 	if err := server.markOCRPending(ctx, retried); err != nil {
-		log.Warn().Int64("ocr_job_id", retried.ID).Err(err).Msg("mark retried ocr owner pending failed")
+		log.Error().Int64("ocr_job_id", retried.ID).Err(err).Msg("mark retried ocr owner pending failed")
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
 	}
 	ctx.JSON(http.StatusOK, newOCRJobResponse(retried))
 }

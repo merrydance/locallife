@@ -1310,7 +1310,8 @@ func (server *Server) getFinanceViewerPaymentConfigState(ctx *gin.Context, userI
 // getMerchantAccountBalance 查询商户收付通账户余额
 func (server *Server) getMerchantAccountBalance(ctx *gin.Context) {
 	if server.ecommerceClient == nil {
-		ctx.JSON(http.StatusServiceUnavailable, errorResponse(errors.New("ecommerce client not configured")))
+		err := errors.New("ecommerce client not configured")
+		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "ecommerce client not configured", "merchant account balance ecommerce client not configured"))
 		return
 	}
 
@@ -1365,7 +1366,8 @@ func (server *Server) getMerchantAccountBalance(ctx *gin.Context) {
 // createMerchantAccountWithdraw 发起商户收付通提现
 func (server *Server) createMerchantAccountWithdraw(ctx *gin.Context) {
 	if server.ecommerceClient == nil {
-		ctx.JSON(http.StatusServiceUnavailable, errorResponse(errors.New("ecommerce client not configured")))
+		err := errors.New("ecommerce client not configured")
+		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "ecommerce client not configured", "merchant account withdraw ecommerce client not configured"))
 		return
 	}
 
@@ -1592,7 +1594,8 @@ type getMerchantWithdrawalRequest struct {
 // getMerchantAccountWithdrawal 查询单笔提现并同步微信状态
 func (server *Server) getMerchantAccountWithdrawal(ctx *gin.Context) {
 	if server.ecommerceClient == nil {
-		ctx.JSON(http.StatusServiceUnavailable, errorResponse(errors.New("ecommerce client not configured")))
+		err := errors.New("ecommerce client not configured")
+		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "ecommerce client not configured", "merchant account withdrawal detail ecommerce client not configured"))
 		return
 	}
 

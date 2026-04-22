@@ -161,7 +161,8 @@ func (server *Server) getApplymentCatalogCache() *applymentCatalogCache {
 // @Security BearerAuth
 func (server *Server) listApplymentBanks(ctx *gin.Context) {
 	if server.ecommerceClient == nil {
-		ctx.JSON(http.StatusServiceUnavailable, errorResponse(fmt.Errorf("wechat ecommerce client is not configured")))
+		err := fmt.Errorf("wechat ecommerce client is not configured")
+		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "wechat ecommerce client is not configured", "list applyment banks ecommerce client not configured"))
 		return
 	}
 
@@ -199,7 +200,8 @@ func (server *Server) listApplymentBanks(ctx *gin.Context) {
 // @Security BearerAuth
 func (server *Server) searchApplymentBanksByAccount(ctx *gin.Context) {
 	if server.ecommerceClient == nil {
-		ctx.JSON(http.StatusServiceUnavailable, errorResponse(fmt.Errorf("wechat ecommerce client is not configured")))
+		err := fmt.Errorf("wechat ecommerce client is not configured")
+		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "wechat ecommerce client is not configured", "search applyment banks by account ecommerce client not configured"))
 		return
 	}
 
@@ -249,7 +251,8 @@ func (server *Server) searchApplymentBanksByAccount(ctx *gin.Context) {
 // @Security BearerAuth
 func (server *Server) listApplymentProvinces(ctx *gin.Context) {
 	if server.ecommerceClient == nil {
-		ctx.JSON(http.StatusServiceUnavailable, errorResponse(fmt.Errorf("wechat ecommerce client is not configured")))
+		err := fmt.Errorf("wechat ecommerce client is not configured")
+		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "wechat ecommerce client is not configured", "list applyment provinces ecommerce client not configured"))
 		return
 	}
 
@@ -280,7 +283,8 @@ func (server *Server) listApplymentProvinces(ctx *gin.Context) {
 // @Security BearerAuth
 func (server *Server) listApplymentCities(ctx *gin.Context) {
 	if server.ecommerceClient == nil {
-		ctx.JSON(http.StatusServiceUnavailable, errorResponse(fmt.Errorf("wechat ecommerce client is not configured")))
+		err := fmt.Errorf("wechat ecommerce client is not configured")
+		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "wechat ecommerce client is not configured", "list applyment cities ecommerce client not configured"))
 		return
 	}
 
@@ -318,7 +322,8 @@ func (server *Server) listApplymentCities(ctx *gin.Context) {
 // @Security BearerAuth
 func (server *Server) listApplymentBankBranches(ctx *gin.Context) {
 	if server.ecommerceClient == nil {
-		ctx.JSON(http.StatusServiceUnavailable, errorResponse(fmt.Errorf("wechat ecommerce client is not configured")))
+		err := fmt.Errorf("wechat ecommerce client is not configured")
+		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "wechat ecommerce client is not configured", "list applyment bank branches ecommerce client not configured"))
 		return
 	}
 
