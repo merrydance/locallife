@@ -7,8 +7,7 @@
     "t-empty": "tdesign-miniprogram/empty/empty",
     "t-loading": "tdesign-miniprogram/loading/loading",
     "t-notice-bar": "tdesign-miniprogram/notice-bar/notice-bar",
-    "t-step-item": "tdesign-miniprogram/step-item/step-item",
-    "t-steps": "tdesign-miniprogram/steps/steps",
+    "t-qrcode": "tdesign-miniprogram/qrcode/qrcode",
     "t-tag": "tdesign-miniprogram/tag/tag"
   },
   "navigationStyle": "custom",

@@ -1,10 +1,17 @@
 import {
-  buildMerchantApplymentStatusView,
-  getMerchantApplymentStatus,
   merchantBindBank,
   type MerchantBindBankRequest
 } from '../../../../../api/merchant-applyment'
+import {
+  getMerchantApplication,
+  getMyApplication,
+  type MerchantApplicationDraftResponse
+} from '../../../../../api/onboarding'
 import type { ApplymentBindBankDraftPayload, ApplymentBindBankPayload } from '../../../../../api/applyment-bank'
+import {
+  buildMerchantApplymentWorkflowView,
+  fetchMerchantApplymentWorkflowView
+} from '../../../../../services/merchant-applyment-workflow'
 import {
   ensureMerchantApplymentAccess,
   getMerchantConsoleAccessErrorMessage,
@@ -14,8 +21,24 @@ import {
 import { logger } from '../../../../../utils/logger'
 import { getStableBarHeights } from '../../../../../utils/responsive'
 import { getErrorUserMessage } from '../../../../../utils/user-facing'
+import { shouldFallbackToLatestApplication } from '../../../../../utils/merchant-application-view'
 
 const APPLYMENT_FORCE_REFRESH_STORAGE_KEY = 'merchantApplymentShouldRefresh'
+const EMPTY_WORKFLOW_VIEW = buildMerchantApplymentWorkflowView(null)
+
+interface SubjectSummary {
+  merchantName: string
+  businessLicenseNumber: string
+  legalPersonName: string
+  contactPhone: string
+}
+
+const EMPTY_SUBJECT_SUMMARY: SubjectSummary = {
+  merchantName: '-',
+  businessLicenseNumber: '-',
+  legalPersonName: '-',
+  contactPhone: '-'
+}
 
 function goBackToApplymentStatus() {
   const pages = getCurrentPages()
@@ -24,6 +47,10 @@ function goBackToApplymentStatus() {
     return
   }
 
+  wx.redirectTo({ url: '/pages/merchant/settings/applyment/index' })
+}
+
+function redirectToApplymentEntry() {
   wx.redirectTo({ url: '/pages/merchant/settings/applyment/index' })
 }
 
@@ -39,6 +66,8 @@ Page({
     initialErrorMessage: '',
     canSubmit: false,
     blockMessage: '',
+    workflowView: { ...EMPTY_WORKFLOW_VIEW },
+    subjectSummary: { ...EMPTY_SUBJECT_SUMMARY } as SubjectSummary,
     bindBankDraft: null as ApplymentBindBankDraftPayload | null,
     submitting: false
   },
@@ -47,6 +76,10 @@ Page({
     const { navBarHeight } = getStableBarHeights()
     this.setData({ navBarHeight })
     await this.bootstrapPage()
+  },
+
+  onNavHeight(e: WechatMiniprogram.CustomEvent<{ navBarHeight?: number }>) {
+    this.setData({ navBarHeight: e.detail.navBarHeight || 88 })
   },
 
   async bootstrapPage() {
@@ -60,6 +93,8 @@ Page({
       initialErrorMessage: '',
       canSubmit: false,
       blockMessage: '',
+      workflowView: { ...EMPTY_WORKFLOW_VIEW },
+      subjectSummary: { ...EMPTY_SUBJECT_SUMMARY },
       bindBankDraft: null,
       submitting: false
     })
@@ -84,17 +119,25 @@ Page({
     })
 
     try {
-      const applymentStatus = await getMerchantApplymentStatus()
-      const applymentView = buildMerchantApplymentStatusView(applymentStatus)
+      const [workflowView, application] = await Promise.all([
+        fetchMerchantApplymentWorkflowView(),
+        this.fetchCurrentApplication()
+      ])
+      const canSubmit = workflowView.currentTask.type === 'submit_material' || workflowView.currentTask.type === 'resubmit_after_reject'
+
+      if (!canSubmit) {
+        redirectToApplymentEntry()
+        return
+      }
 
       this.setData({
         initialLoading: false,
         initialError: false,
         initialErrorMessage: '',
-        canSubmit: applymentView.canSubmitOpenInfo,
-        blockMessage: applymentView.canSubmitOpenInfo
-          ? ''
-          : (applymentView.blockReason || applymentView.guideDescription || '当前状态暂不支持重新提交进件资料。')
+        workflowView,
+        subjectSummary: this.buildSubjectSummary(application),
+        canSubmit: true,
+        blockMessage: ''
       })
     } catch (error: unknown) {
       logger.error('Load merchant applyment submit page failed', error, 'merchant-applyment-submit-page')
@@ -116,6 +159,26 @@ Page({
 
   onBackToStatus() {
     goBackToApplymentStatus()
+  },
+
+  async fetchCurrentApplication() {
+    try {
+      return await getMerchantApplication()
+    } catch (error: unknown) {
+      if (shouldFallbackToLatestApplication(error)) {
+        return await getMyApplication()
+      }
+      throw error
+    }
+  },
+
+  buildSubjectSummary(application: MerchantApplicationDraftResponse): SubjectSummary {
+    return {
+      merchantName: application.merchant_name || '-',
+      businessLicenseNumber: application.business_license_number || '-',
+      legalPersonName: application.legal_person_name || '-',
+      contactPhone: application.contact_phone || '-'
+    }
   },
 
   onBindDraftChange(e: WechatMiniprogram.CustomEvent<ApplymentBindBankDraftPayload>) {
@@ -153,10 +216,10 @@ Page({
       contact_id_doc_period_end: e.detail.contact_id_doc_period_end
     }
 
-    await merchantBindBank(requestPayload)
+      await merchantBindBank(requestPayload)
       wx.setStorageSync(APPLYMENT_FORCE_REFRESH_STORAGE_KEY, '1')
       wx.showToast({ title: '进件资料已提交', icon: 'success' })
-      goBackToApplymentStatus()
+      redirectToApplymentEntry()
     } catch (error: unknown) {
       logger.error('Submit merchant applyment bind bank failed', error, 'merchant-applyment-submit-page')
       wx.showToast({ title: getErrorUserMessage(error, '提交进件资料失败，请稍后重试'), icon: 'none' })

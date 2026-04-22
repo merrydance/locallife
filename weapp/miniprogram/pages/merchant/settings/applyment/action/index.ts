@@ -2,27 +2,38 @@ import {
   buildMerchantApplymentWorkflowView,
   fetchMerchantApplymentWorkflowView,
   type MerchantApplymentTaskIntent,
+  type MerchantApplymentTaskType,
   type MerchantApplymentWorkflowSecondaryTask
-} from '../../../../services/merchant-applyment-workflow'
+} from '../../../../../services/merchant-applyment-workflow'
 import {
   ensureMerchantApplymentAccess,
   getMerchantConsoleAccessErrorMessage,
   isMerchantConsoleAccessDenied,
   isMerchantConsoleAccessGranted
-} from '../../../../utils/console-access'
-import { logger } from '../../../../utils/logger'
-import { getStableBarHeights } from '../../../../utils/responsive'
-import { getErrorUserMessage } from '../../../../utils/user-facing'
+} from '../../../../../utils/console-access'
+import { saveApplymentQRCodePosterToAlbum } from '../../../../../utils/applyment-qrcode'
+import { logger } from '../../../../../utils/logger'
+import { getStableBarHeights } from '../../../../../utils/responsive'
+import { getErrorUserMessage } from '../../../../../utils/user-facing'
 
-const APPLYMENT_AUTO_REFRESH_WINDOW_MS = 60 * 1000
-const APPLYMENT_FORCE_REFRESH_STORAGE_KEY = 'merchantApplymentShouldRefresh'
-const SUBMIT_PAGE_PATH = '/pages/merchant/settings/applyment/submit/index'
+const HOME_PAGE_PATH = '/pages/merchant/settings/applyment/index'
 const EMPTY_WORKFLOW_VIEW = buildMerchantApplymentWorkflowView(null)
-const EMPTY_DISPLAY_STATUS_ITEMS: Array<{ label: string, value: string }> = []
 
 const getErrorMessage = getErrorUserMessage
 
-let applymentRequestPending = false
+let workflowRequestPending = false
+
+function normalizePreferredTaskType(task?: string): MerchantApplymentTaskType | '' {
+  switch (String(task || '').trim()) {
+    case 'sign_agreement':
+    case 'merchant_confirmation':
+    case 'legal_validation':
+    case 'bank_transfer_validation':
+      return String(task) as MerchantApplymentTaskType
+    default:
+      return ''
+  }
+}
 
 function copyText(data: string, successTitle: string) {
   const trimmed = String(data || '').trim()
@@ -38,8 +49,22 @@ function copyText(data: string, successTitle: string) {
   })
 }
 
-function shouldAutoRefresh(lastLoadedAt: number, freshnessWindowMs: number) {
-  return !lastLoadedAt || Date.now() - lastLoadedAt >= freshnessWindowMs
+function getMiniProgramErrorMessage(error: unknown): string {
+  if (typeof error === 'string') {
+    return error
+  }
+  if (error && typeof error === 'object' && 'errMsg' in error && typeof error.errMsg === 'string') {
+    return error.errMsg
+  }
+  if (error instanceof Error) {
+    return error.message
+  }
+  return ''
+}
+
+function isPermissionDeniedError(error: unknown): boolean {
+  const message = getMiniProgramErrorMessage(error)
+  return message.includes('auth deny') || message.includes('auth denied')
 }
 
 function resolveCopySuccessTitle(taskType: string) {
@@ -53,20 +78,8 @@ function resolveCopySuccessTitle(taskType: string) {
   }
 }
 
-function buildDisplayStatusItems(workflowView: typeof EMPTY_WORKFLOW_VIEW) {
-  return workflowView.statusItems.filter((item) => item.label !== '当前阶段' && item.label !== '状态说明')
-}
-
-function resolveWorkflowStagePath(workflowView: typeof EMPTY_WORKFLOW_VIEW) {
-  if (workflowView.currentTask.type === 'submit_material' || workflowView.currentTask.type === 'resubmit_after_reject') {
-    return SUBMIT_PAGE_PATH
-  }
-
-  if (workflowView.currentStage === 'action_required' && workflowView.primaryActionIntent === 'navigate' && workflowView.primaryActionPath) {
-    return workflowView.primaryActionPath
-  }
-
-  return ''
+function goBackHome() {
+  wx.redirectTo({ url: HOME_PAGE_PATH })
 }
 
 Page({
@@ -80,17 +93,20 @@ Page({
     initialError: false,
     initialErrorMessage: '',
     refreshErrorMessage: '',
-    loadingApplyment: false,
-    lastLoadedAt: 0,
-    statusLoaded: false,
+    loadingWorkflow: false,
+    workflowLoaded: false,
+    preferredTaskType: '',
     workflowView: { ...EMPTY_WORKFLOW_VIEW },
-    displayStatusItems: EMPTY_DISPLAY_STATUS_ITEMS,
-    refreshingStatus: false
+    refreshingStatus: false,
+    savingQRCode: false
   },
 
-  async onLoad() {
+  async onLoad(query: Record<string, string>) {
     const { navBarHeight } = getStableBarHeights()
-    this.setData({ navBarHeight })
+    this.setData({
+      navBarHeight,
+      preferredTaskType: normalizePreferredTaskType(query.task)
+    })
     await this.bootstrapPage()
   },
 
@@ -104,28 +120,15 @@ Page({
       this.data.accessDenied ||
       this.data.accessErrorMessage ||
       this.data.initialLoading ||
-      this.data.loadingApplyment
+      this.data.loadingWorkflow ||
+      !this.data.workflowLoaded
     ) {
       return
     }
 
-    const shouldForceRefresh = wx.getStorageSync(APPLYMENT_FORCE_REFRESH_STORAGE_KEY) === '1'
-    if (shouldForceRefresh) {
-      wx.removeStorageSync(APPLYMENT_FORCE_REFRESH_STORAGE_KEY)
-      void this.loadApplyment({ silent: this.data.statusLoaded, force: true })
-      return
-    }
-
     if (this.data.workflowView.reentryPolicy === 'force_refresh_on_show') {
-      void this.loadApplyment({ silent: this.data.statusLoaded, force: true })
-      return
+      void this.loadWorkflow({ silent: true, force: true })
     }
-
-    if (!shouldAutoRefresh(this.data.lastLoadedAt, APPLYMENT_AUTO_REFRESH_WINDOW_MS)) {
-      return
-    }
-
-    void this.loadApplyment({ silent: this.data.statusLoaded })
   },
 
   onPullDownRefresh() {
@@ -134,10 +137,7 @@ Page({
       return
     }
 
-    void this.loadApplyment({
-      silent: this.data.statusLoaded,
-      force: true
-    })
+    void this.loadWorkflow({ silent: this.data.workflowLoaded, force: true })
   },
 
   async bootstrapPage() {
@@ -150,12 +150,11 @@ Page({
       initialError: false,
       initialErrorMessage: '',
       refreshErrorMessage: '',
-      loadingApplyment: false,
-      lastLoadedAt: 0,
-      statusLoaded: false,
+      loadingWorkflow: false,
+      workflowLoaded: false,
       workflowView: { ...EMPTY_WORKFLOW_VIEW },
-      displayStatusItems: EMPTY_DISPLAY_STATUS_ITEMS,
-      refreshingStatus: false
+      refreshingStatus: false,
+      savingQRCode: false
     })
 
     const accessResult = await ensureMerchantApplymentAccess()
@@ -166,7 +165,7 @@ Page({
         accessDeniedMessage: accessResult.status === 'denied' ? accessResult.message : '',
         accessErrorMessage: getMerchantConsoleAccessErrorMessage(accessResult),
         initialLoading: false,
-        loadingApplyment: false
+        loadingWorkflow: false
       })
       return
     }
@@ -178,36 +177,30 @@ Page({
       accessErrorMessage: ''
     })
 
-    await this.loadApplyment({ force: true })
+    await this.loadWorkflow({ force: true })
   },
 
   hasApplymentAccess() {
     return this.data.accessReady && !this.data.accessDenied && !this.data.accessErrorMessage
   },
 
-  async loadApplyment(options?: { silent?: boolean, force?: boolean }) {
-    const { silent = false, force = false } = options || {}
+  async loadWorkflow(options?: { silent?: boolean, force?: boolean }) {
+    const { silent = false } = options || {}
     if (!this.hasApplymentAccess()) {
       wx.stopPullDownRefresh()
       return
     }
 
-    if (applymentRequestPending) {
+    if (workflowRequestPending) {
       wx.stopPullDownRefresh()
       return
     }
 
-    const hasTrustedData = this.data.statusLoaded
-    if (!force && hasTrustedData && !shouldAutoRefresh(this.data.lastLoadedAt, APPLYMENT_AUTO_REFRESH_WINDOW_MS)) {
-      wx.stopPullDownRefresh()
-      return
-    }
-
-    applymentRequestPending = true
+    workflowRequestPending = true
 
     this.setData({
-      loadingApplyment: true,
-      ...(hasTrustedData || silent
+      loadingWorkflow: true,
+      ...(this.data.workflowLoaded || silent
         ? { refreshErrorMessage: '' }
         : {
             initialLoading: true,
@@ -218,46 +211,44 @@ Page({
     })
 
     try {
-      const workflowView = await fetchMerchantApplymentWorkflowView()
-      const stagePath = resolveWorkflowStagePath(workflowView)
+      const preferredTaskType = normalizePreferredTaskType(this.data.preferredTaskType)
+      const workflowView = await fetchMerchantApplymentWorkflowView(preferredTaskType || undefined)
 
-      if (stagePath) {
-        wx.redirectTo({ url: stagePath })
+      if (workflowView.currentStage !== 'action_required') {
+        goBackHome()
         return
       }
 
       this.setData({
         workflowView,
-        displayStatusItems: buildDisplayStatusItems(workflowView),
-        statusLoaded: true,
-        loadingApplyment: false,
+        workflowLoaded: true,
+        loadingWorkflow: false,
         initialLoading: false,
         initialError: false,
         initialErrorMessage: '',
-        refreshErrorMessage: '',
-        lastLoadedAt: Date.now()
+        refreshErrorMessage: ''
       })
     } catch (error: unknown) {
-      logger.error('Load merchant applyment page failed', error, 'merchant-applyment-page')
-      const message = getErrorMessage(error, '进件状态加载失败，请稍后重试')
+      logger.error('Load merchant applyment action page failed', error, 'merchant-applyment-action-page')
+      const message = getErrorMessage(error, '开户待办加载失败，请稍后重试')
 
-      if (!hasTrustedData) {
+      if (!this.data.workflowLoaded) {
         this.setData({
-          loadingApplyment: false,
+          loadingWorkflow: false,
           initialLoading: false,
           initialError: true,
           initialErrorMessage: message,
           refreshErrorMessage: '',
-          statusLoaded: false
+          workflowLoaded: false
         })
       } else {
         this.setData({
-          loadingApplyment: false,
+          loadingWorkflow: false,
           refreshErrorMessage: `${message}，当前已保留上次同步结果`
         })
       }
     } finally {
-      applymentRequestPending = false
+      workflowRequestPending = false
       wx.stopPullDownRefresh()
     }
   },
@@ -267,29 +258,11 @@ Page({
   },
 
   onRetry() {
-    if (!this.hasApplymentAccess()) {
-      void this.bootstrapPage()
-      return
-    }
-
-    void this.loadApplyment({ force: true })
+    void this.bootstrapPage()
   },
 
-  navigateByIntent(intent: MerchantApplymentTaskIntent, path: string) {
-    if (intent === 'refresh') {
-      void this.onRefreshStatus()
-      return
-    }
-
-    if (intent !== 'navigate' || !path) {
-      return
-    }
-
-    wx.navigateTo({ url: path })
-  },
-
-  onOpenPrimaryAction() {
-    this.navigateByIntent(this.data.workflowView.primaryActionIntent, this.data.workflowView.primaryActionPath)
+  onBackHome() {
+    goBackHome()
   },
 
   onTapSecondaryTask(e: WechatMiniprogram.TouchEvent) {
@@ -304,22 +277,59 @@ Page({
       return
     }
 
-    this.navigateByIntent(intent, path)
+    if (intent === 'navigate' && path) {
+      wx.redirectTo({ url: path })
+    }
   },
 
   async onRefreshStatus() {
-    if (this.data.refreshingStatus || this.data.loadingApplyment) {
+    if (this.data.refreshingStatus || this.data.loadingWorkflow) {
       return
     }
 
     this.setData({ refreshingStatus: true })
     try {
-      await this.loadApplyment({
-        silent: true,
-        force: true
-      })
+      await this.loadWorkflow({ silent: true, force: true })
     } finally {
       this.setData({ refreshingStatus: false })
+    }
+  },
+
+  async onSaveQRCodeToAlbum() {
+    if (this.data.savingQRCode || !this.data.workflowView.currentTaskQRCodeValue) {
+      return
+    }
+
+    this.setData({ savingQRCode: true })
+    wx.showLoading({ title: '保存中...' })
+
+    try {
+      await saveApplymentQRCodePosterToAlbum({
+        page: this,
+        canvasSelector: '#applymentActionPosterCanvas',
+        value: this.data.workflowView.currentTaskQRCodeValue,
+        title: this.data.workflowView.currentTask.title,
+        subtitle: this.data.workflowView.currentTask.description
+      })
+      wx.showToast({ title: '二维码已保存到相册', icon: 'success' })
+    } catch (error: unknown) {
+      if (isPermissionDeniedError(error)) {
+        wx.showModal({
+          title: '需要相册权限',
+          content: '请在设置中开启“保存到相册”权限后重试。',
+          confirmText: '去设置',
+          success: (result) => {
+            if (result.confirm) {
+              wx.openSetting()
+            }
+          }
+        })
+      } else {
+        wx.showToast({ title: getErrorMessage(error, '保存二维码失败，请稍后重试'), icon: 'none' })
+      }
+    } finally {
+      wx.hideLoading()
+      this.setData({ savingQRCode: false })
     }
   }
 })

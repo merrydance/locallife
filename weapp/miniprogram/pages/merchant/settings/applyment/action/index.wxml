@@ -1,0 +1,92 @@
+<custom-navbar title="处理微信待办" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view
+  class="page-container page-shell page-shell--with-nav page-shell--bottom-safe"
+  style="--page-shell-nav-height: {{navBarHeight}}px;"
+>
+  <view wx:if="{{!accessReady}}" class="state-block">
+    <t-loading theme="circular" size="40rpx" text="校验权限中..." vertical />
+  </view>
+
+  <view wx:elif="{{accessDenied}}" class="state-block">
+    <t-empty icon="lock-on" description="{{accessDeniedMessage}}" />
+  </view>
+
+  <view wx:elif="{{accessErrorMessage}}" class="state-block">
+    <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
+    <t-button theme="primary" bind:tap="onRetryAccess">重新校验</t-button>
+  </view>
+
+  <view wx:elif="{{initialLoading}}" class="state-block">
+    <t-loading theme="circular" size="40rpx" text="加载待办中..." vertical />
+  </view>
+
+  <view wx:elif="{{initialError}}" class="state-block">
+    <t-empty description="{{initialErrorMessage || '开户待办加载失败，请重试'}}" />
+    <t-button theme="primary" bind:tap="onRetry">重新加载</t-button>
+  </view>
+
+  <view wx:else class="page-content">
+    <t-notice-bar wx:if="{{refreshErrorMessage}}" theme="error" visible="{{true}}" content="{{refreshErrorMessage}}">
+      <text slot="operation" bind:tap="onRefreshStatus">刷新</text>
+    </t-notice-bar>
+
+    <t-cell-group theme="card">
+      <t-cell title="当前待办" note="{{workflowView.currentTask.title}}">
+        <view slot="right-icon">
+          <t-tag theme="{{workflowView.statusView.tagTheme}}" size="small">{{workflowView.statusView.tagText}}</t-tag>
+        </view>
+      </t-cell>
+    </t-cell-group>
+
+    <view wx:if="{{workflowView.currentTaskQRCodeValue}}" class="qrcode-block">
+      <t-qrcode value="{{workflowView.currentTaskQRCodeValue}}" size="220" level="M" borderless="{{true}}" />
+    </view>
+
+    <t-cell-group wx:if="{{workflowView.currentTask.type === 'bank_transfer_validation' && workflowView.accountValidation}}" theme="card">
+      <t-cell title="汇款金额" note="{{workflowView.accountValidation.payAmountText}}" />
+      <t-cell title="付款户名" note="{{workflowView.accountValidation.accountName}}" />
+      <t-cell title="付款卡号" note="{{workflowView.accountValidation.accountNo}}" />
+      <t-cell title="收款卡号" note="{{workflowView.accountValidation.destinationAccountNumber}}" />
+      <t-cell title="收款户名" note="{{workflowView.accountValidation.destinationAccountName}}" />
+      <t-cell title="开户银行" note="{{workflowView.accountValidation.destinationAccountBank}}" />
+      <t-cell title="省市信息" note="{{workflowView.accountValidation.city}}" />
+      <t-cell title="汇款备注" note="{{workflowView.accountValidation.remark}}" />
+      <t-cell title="汇款截止时间" note="{{workflowView.accountValidation.deadline}}" />
+    </t-cell-group>
+
+    <t-cell-group wx:elif="{{workflowView.statusItems.length}}" theme="card">
+      <t-cell
+        wx:for="{{workflowView.statusItems}}"
+        wx:key="label"
+        title="{{item.label}}"
+        note="{{item.value}}"
+      />
+    </t-cell-group>
+
+    <t-cell-group wx:if="{{workflowView.secondaryTasks.length > 0}}" theme="card">
+      <t-cell
+        wx:for="{{workflowView.secondaryTasks}}"
+        wx:key="label"
+        title="{{item.label}}"
+        note="{{item.value || ''}}"
+        hover
+        arrow="{{item.actionIntent !== 'none'}}"
+        data-type="{{item.type}}"
+        data-action-intent="{{item.actionIntent}}"
+        data-action-path="{{item.actionPath}}"
+        data-value="{{item.value}}"
+        bind:click="onTapSecondaryTask"
+      />
+    </t-cell-group>
+
+    <view class="action-buttons">
+      <t-button wx:if="{{workflowView.currentTaskQRCodeValue}}" theme="default" variant="outline" bind:tap="onSaveQRCodeToAlbum" loading="{{savingQRCode}}">保存二维码</t-button>
+      <t-button theme="primary" bind:tap="onRefreshStatus" loading="{{refreshingStatus}}">刷新状态</t-button>
+    </view>
+
+    <view class="qr-poster-canvas-shell" aria-hidden="true">
+      <canvas id="applymentActionPosterCanvas" type="2d" class="qr-poster-canvas" disable-scroll="true" />
+    </view>
+  </view>
+</view>

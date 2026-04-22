@@ -1,0 +1,46 @@
+.page-container {
+  min-height: 100vh;
+  background: var(--td-bg-color-page);
+}
+
+.state-block {
+  min-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacer-md);
+  padding: 0 var(--spacer-lg);
+}
+
+.page-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-sm);
+}
+
+.qrcode-block {
+  display: flex;
+  justify-content: center;
+}
+
+.action-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacer-sm);
+}
+
+.qr-poster-canvas-shell {
+  position: fixed;
+  left: -9999px;
+  top: -9999px;
+  width: 720px;
+  height: 960px;
+  pointer-events: none;
+  opacity: 0;
+}
+
+.qr-poster-canvas {
+  width: 720px;
+  height: 960px;
+}

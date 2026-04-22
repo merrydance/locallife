@@ -1,8 +1,8 @@
-<custom-navbar title="提交进件资料" showBack="{{true}}" />
+<custom-navbar title="提交进件资料" showBack="{{true}}" bind:navheight="onNavHeight" />
 
 <view
-  class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
-  style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: 32rpx;"
+  class="page-container page-shell page-shell--with-nav page-shell--bottom-safe"
+  style="--page-shell-nav-height: {{navBarHeight}}px;"
 >
   <view wx:if="{{!accessReady}}" class="state-block">
     <t-loading theme="circular" size="40rpx" text="校验权限中..." vertical />
@@ -26,30 +26,25 @@
     <t-button theme="primary" bind:tap="onRetry">重新加载</t-button>
   </view>
 
-  <view wx:elif="{{!canSubmit}}" class="state-block">
-    <t-empty description="{{blockMessage || '当前状态暂不支持重新提交进件资料'}}" />
-    <t-button theme="primary" bind:tap="onBackToStatus">返回状态页</t-button>
-  </view>
-
   <view wx:else class="page-content">
-    <view class="section-panel">
-      <view class="section-top">
-        <text class="section-title">填写结算账户</text>
-        <text class="section-subtitle">填写结算账户资料后提交；仅当联系人不是法人时，再补充超级管理员资料。</text>
-      </view>
+    <t-cell-group theme="card">
+      <t-cell title="商户名称" note="{{subjectSummary.merchantName}}" />
+      <t-cell title="营业执照号" note="{{subjectSummary.businessLicenseNumber}}" />
+      <t-cell title="法人姓名" note="{{subjectSummary.legalPersonName}}" />
+      <t-cell title="联系电话" note="{{subjectSummary.contactPhone}}" />
+    </t-cell-group>
 
-      <applyment-bank-form
-        apiBasePath="/v1/merchant/applyment"
-        uploadBusinessType="merchant"
-        initialDraft="{{bindBankDraft}}"
-        defaultAccountType="ACCOUNT_TYPE_BUSINESS"
-        showContactFields="{{true}}"
-        submitLabel="提交银行账户信息"
-        submitting="{{submitting}}"
-        bind:submit="onSubmitBindBank"
-        bind:cancel="onBackToStatus"
-        bind:draftchange="onBindDraftChange"
-      />
-    </view>
+    <applyment-bank-form
+      apiBasePath="/v1/merchant/applyment"
+      uploadBusinessType="merchant"
+      initialDraft="{{bindBankDraft}}"
+      defaultAccountType="ACCOUNT_TYPE_BUSINESS"
+      showContactFields="{{false}}"
+      submitLabel="提交银行账户信息"
+      submitting="{{submitting}}"
+      bind:submit="onSubmitBindBank"
+      bind:cancel="onBackToStatus"
+      bind:draftchange="onBindDraftChange"
+    />
   </view>
 </view>

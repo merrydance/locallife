@@ -70,8 +70,7 @@ const CONFIG_SECTIONS: ConfigSection[] = [
     desc: '处理主体申请、进件签约与资金账户相关设置。',
     items: [
       { id: 'application', title: '主体申请', desc: '维护主体申请草稿、上传证照并提交审核', path: '/pages/merchant/settings/application/index' },
-      { id: 'applyment', title: '收付通进件', desc: '查看进件状态、复制签约链接并重提银行结算资料', path: '/pages/merchant/settings/applyment/index' },
-      { id: 'finance', title: '资金账户', desc: '查看账户开通状态、余额、提现与结算洞察', path: '/pages/merchant/finance/index' }
+      { id: 'applyment', title: '收付通进件', desc: '查看进件状态、复制签约链接并处理微信待办', path: '/pages/merchant/settings/applyment/index' }
     ]
   },
   {
