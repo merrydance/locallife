@@ -89,10 +89,12 @@
 ### 6.1 当前轻量 Go Guard 范围
 
 - 当前 changed-file Go guard 只检查本次 diff 新增的非测试 Go 代码，不重扫历史债务。
-- 当前 guard 只拦截三类高信噪比问题：
+- 当前 guard 只拦截高信噪比、低误报的增量问题：
   - 新增 `fmt.Print*` 或 `log.Print*` 非结构化输出。
   - 新增 `context.Background()`。
   - 新增 `panic(...)`。
+  - 在 `logic/` 新增 `NewRequestError(5xx, ...)`。
+  - 在 `api/` 新增 `ctx.JSON(5xx, errorResponse(...))`。
 - 如果确有合理例外，允许在同一行内显式说明：
   - `goguard: allow-unstructured-log`
   - `goguard: allow-background-context`
@@ -100,7 +102,7 @@
 - `goguard:` 例外注释必须在同一行内写出具体理由，至少说明：为什么默认规则在这里不适用、为什么当前边界仍然安全、以及为什么这不是可以复制到普通业务路径的通用模式。
 - 禁止只写裸标记，例如 `// goguard: allow-panic` 却没有任何解释；这种写法应视为门禁绕过尝试。
 - 在支付、退款、分账、callback、worker/recovery、订单/履约/预订/库存状态机等高风险路径里，`goguard:` 例外默认按高风险 review hotspot 处理。
-- `context` 存 struct、无管理 goroutine、字符串判断错误等仍主要依赖实现和 review 依据本标准收口，因为它们更依赖上下文、误报成本更高。
+- `context` 存 struct、无管理 goroutine、字符串判断错误、nil-as-success 和 silent fallback 等问题仍主要依赖实现和 review 依据本标准收口，因为它们更依赖上下文、误报成本更高。
 
 ## 7. 测试实践
 

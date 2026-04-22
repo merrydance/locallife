@@ -45,6 +45,8 @@ Use `.github/prompts/weapp-implementation.prompt.md` for all Mini Program implem
 - Do not keep expanding known super service files such as `services/operator-console.ts`. New capability work must first choose a task-domain owner, dedicated service module, or workflow owner before touching a protected aggregator.
 - If a protected super service must change, update its ownership note in the same change so the page-group owner, temporary scope, and non-extraction reason stay explicit.
 - User-facing copy must be product copy. Do not leak raw backend, provider, SQL, or English diagnostic text.
+- Default to no explanatory copy. First make the page understandable through information architecture, labels, state, and actions; only add a sentence when omitting it would hide risk, state meaning, field constraints, or the next required action.
+- Do not repeat the same explanation across title, subtitle, note, notice bar, and card body, and do not add page-boundary copy such as “this page is mainly for...” unless the explanation itself is the task.
 - Use the implementation or review prompt to carry detailed delivery structure; keep this instruction as the always-on execution baseline.
 
 ## High-Risk Anti-Patterns

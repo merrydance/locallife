@@ -37,7 +37,9 @@ Implementation must push:
 - Keep information architecture and page boundary decisions ahead of TDesign and styling choices, following the role-matched weapp standards instead of local page guesswork
 - For TDesign-first refactor or style-reset requests, default to full-page information architecture and layout redesign rather than patching the legacy page shell unless the user explicitly asks for a local adjustment only
 - Use TDesign MCP and the role-matched design standard to justify major component choices and any user-visible non-TDesign exception
-- Keep first-screen copy structural and brief: push guidance down into labels, field notes, state strips, and action-adjacent copy instead of explanatory hero cards or standalone guide blocks unless the explanation itself is the task
+- Default to zero new explanatory copy: first make the page understandable through structure, labels, status, and action hierarchy, and only add a sentence when omitting it would hide risk, state meaning, field constraints, or the next required action
+- If explanation text is truly unavoidable, keep exactly one shortest necessary sentence in the closest place that affects action instead of distributing guidance across the page
+- Avoid duplicate explanation across title, subtitle, note, notice, helper text, and card body; one fact should usually be stated once in the closest place that affects action
 - Keep non-consumer pages restrained: prefer page shell + content container + TDesign components, and make every extra local wrapper earn its keep through layout, state ownership, summary, or danger containment
 - Default section-level and row-level local actions to TDesign icon buttons or icon-led small buttons; if a text-only local action remains, name the exception and why icon-led affordance would be misleading or insufficient
 - Check TDesign MCP against the installed Mini Program component set before introducing any user-visible local control or wrapper exception, and state the exact component or supported composition chosen
@@ -69,6 +71,10 @@ Implementation must not do:
 - Do not jump from the old WXML structure straight to component selection without first inventorying the backend-supported capabilities and actions
 - Do not force unfinished, future, unsupported, or cross-role capabilities into the current page just to make it look complete
 - Do not spend first-screen budget on explanatory hero cards, guide cards, or stacked instruction blocks for single-task non-consumer pages
+- Do not add explanation text just to make the page feel more complete when it does not change the user's current decision, state understanding, or next step
+- Do not add page-boundary filler such as “这里主要用于…”, “你可以在这里…”, or equivalent helper copy unless that explanation is itself the primary task content
+- Do not proactively add helper text, subtitles, note blocks, or notice copy when labels, values, status, and actions already express the task clearly
+- Do not repeat the same meaning in title, subtitle, note, notice bar, helper block, and card description layers
 - Do not default to text-only local edit/delete/add/test/status buttons when an icon button or icon-led small button would communicate the action
 - Do not wrap TDesign regions in extra local notice/card/panel shells unless the wrapper owns real layout, state, summary, warning, or danger responsibility
 - Do not build non-consumer pages by skinning TDesign with customer-side token imports or extra decorative wrapper layers when the task can be expressed by page shell plus native TDesign composition
@@ -105,6 +111,7 @@ Acceptance focus:
 - The implementation is closed across service, state, handlers, render branches, feedback, and any affected payment or recovery path
 - The delivery names the task-domain owner and, when relevant, the page-group owner, service owner, and workflow/controller owner
 - The first screen enters the task directly instead of opening with explanatory cards or stacked guidance copy
+- New explanatory copy was avoided by default; any retained sentence is explicitly necessary for risk, state meaning, field constraint, or next-action clarity
 - Non-consumer local actions default to icon buttons or icon-led small buttons, and any text-only exception is called out explicitly
 - If backend semantics are ambiguous or required fields are missing, the request states whether backend clarification or backend changes are needed instead of guessing in the page layer
 - Any visual-system exception, non-TDesign exception, or remaining weak-network / re-entry / duplicate-tap / unknown-result risk is stated explicitly
@@ -115,7 +122,7 @@ TDesign-first refactor mode:
 - Before coding, explicitly map backend-supported capabilities, states, and actions into page sections and first-screen priority rather than treating the existing DOM tree as the page architecture
 - Use TDesign MCP to justify each major component choice by task fit; only fall back to native or local custom user-visible controls after recording why TDesign and supported outer composition do not satisfy the need
 - Complex business areas should be split into dedicated components with explicit input, output, and page-owned orchestration boundaries rather than staying as one oversized page file
-- Delivery notes for this mode must name the page sections that were relaid out, the TDesign components chosen for each major area, every deliberate exception from TDesign-first usage, and which explanatory copy or text-action patterns were removed, demoted, or retained with justification
+- Delivery notes for this mode must name the page sections that were relaid out, the TDesign components chosen for each major area, every deliberate exception from TDesign-first usage, and which explanatory copy or text-action patterns were removed, demoted, or retained with explicit necessity
 
 Diagnosis-first mode:
 

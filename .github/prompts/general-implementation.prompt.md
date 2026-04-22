@@ -12,17 +12,23 @@ If the task is cross-area, high-risk, or touches security, money movement, statu
 
 When the task spans multiple stacks, use the shared implementation and review matrix in `.github/standards/engineering/AI_PROMPT_GOVERNANCE.md` to keep push items, prohibited shortcuts, and review expectations aligned across backend, web, and Mini Program work.
 
+The protocol goal of this template is to reduce silent assumption drift, overbuilt implementations, and unverifiable completion claims. Keep the request focused on the smallest complete behavior change.
+
 ## General Change Request
 
 Request:
 
 - Implement <feature or fix>
+- Start by stating any assumption or ambiguity that could materially change behavior, scope, or validation; if multiple interpretations remain plausible, ask or say which one you are taking and why
 - Keep the affected execution path complete across every touched layer or surface
 - Start by stating which area or module owns the capability and whether the change affects any single-writer state transition
-- Reuse nearby patterns before introducing a new abstraction
+- Prefer the simplest implementation that solves the request and reuse nearby patterns before introducing a new abstraction
+- Do not add speculative abstractions, extra configurability, or future-proofing that the request did not ask for
+- Keep the diff surgical; every changed line should trace back to the request, and unrelated cleanup should be called out rather than folded into the same change
 - Prefer existing single sources of truth for states, enums, permissions, and error semantics instead of introducing local duplicates
 - Tell me which target areas are involved: <backend, web, weapp, mixed>
 - Classify the risk level (`G0`/`G1`/`G2`/`G3`) and explain why when the task is not obviously routine
+- For bugfixes, refactors, or multi-step requests, provide a short numbered plan where each step names its verification check
 - Tell me whether any regeneration or derived-artifact steps are required
 - Run the smallest relevant validation command and report what was executed
 - State which relevant paths were not verified and what residual risk remains

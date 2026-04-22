@@ -21,6 +21,7 @@ Request:
 
 - Review this backend change with findings first, ordered by severity
 - Prioritize bugs, regressions, contract violations, broken propagation, and missing validation
+- Flag silent error swallowing, nil-as-success or empty-success fallbacks, missing structured logging for unexpected failures, and caller-facing error messages that are vague, unstable, or leak internal details
 - Check whether the capability owner is clear and whether any important state transition now has multiple writers
 - Check for logic that appears unused, unreachable, or computed without affecting behavior
 - Check for SQL, store, logic, handler, route, worker, or scheduler changes that were added in one layer but not connected through the remaining layers

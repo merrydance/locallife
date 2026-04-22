@@ -26,6 +26,13 @@ Reusable prompt templates live in `.github/prompts/`.
 
 Use this file as a workspace routing summary. Detailed execution rules should live in `.github/instructions/`, and long-lived norms should live in `.github/standards/`.
 
+## Default Execution Baseline
+
+- Surface any assumption or ambiguity that materially changes behavior, scope, or validation before implementing; do not silently choose among meaningfully different interpretations.
+- Prefer the smallest change that solves the request. Do not add speculative abstractions, extra configurability, or future-facing flexibility that was not requested.
+- Keep edits surgical and traceable to the request. Do not opportunistically refactor adjacent code or clean unrelated debt. Remove only the unused imports, variables, or helpers that your own change creates.
+- For bugfixes, refactors, or multi-step work, define short success criteria or a step plan with a concrete verification check for each step, then execute the narrowest relevant validation instead of reporting completion without evidence.
+
 ## Prompt Artifact Hygiene
 
 - Do not create a new prompt file for one-off analysis, planning notes, scratch implementation steps, or temporary task decomposition.

@@ -17,6 +17,7 @@ Request:
 - Trace the real production path: entrypoint, transaction boundary, callback, worker, scheduler, recovery, and compensating paths as relevant
 - State which module should own the invariant and whether the current bug came from a missing owner, multiple writers, or a broken side-effect boundary
 - Prefer the smallest root-cause fix over a surface patch that only hides the symptom
+- If the fix touches response assembly, persisted JSON, or embedded upstream payloads, state whether malformed stored data should fail fast or degrade, and justify any downgrade contract explicitly
 - Tell me whether the fix requires `make sqlc`, `make mock`, `make swagger`, or `make check-generated`
 - Run the smallest relevant regression validation and report what was executed
 - Explain why the chosen fix layer is the lowest defensible layer that can truly enforce the invariant
@@ -40,6 +41,7 @@ Acceptance checklist:
 - Transaction, callback, worker, scheduler, and recovery paths were checked where the bug can cross those boundaries
 - The invariant has a clear owner and the fix does not leave multiple side paths able to violate it again
 - The chosen fix layer can actually prevent recurrence instead of masking the issue in one caller
+- When the bug involved error handling, response assembly, or persisted-data decoding, at least one focused failure-path or malformed-data regression was run instead of validating only the happy path
 - The narrowest useful regression test or safety validation was run
 - The hand-off clearly states what was verified, what remains unverified, and whether the issue should feed back into standards, prompts, workflows, or tests
 

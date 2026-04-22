@@ -147,7 +147,7 @@ Prompt 库必须接受和代码同等级的基础门禁。
 
 | Area | Implementation Must Push | Implementation Must Not | Review Must Check |
 | --- | --- | --- | --- |
-| Backend | 闭环打通 handler / logic / store / route / DTO / tests；先说明能力归属哪个模块、关键状态由谁唯一写入；状态常量复用 `db/sqlc/constants.go`；识别并执行 `make sqlc` / `make mock` / `make swagger`；对仓库级高风险链路参考 `backend/README.md` 与匹配的 domain README；说明事务边界、副作用边界、验证范围与残余风险 | 不要把业务逻辑塞进 handler；不要新增魔法状态字符串；不要只改 SQL、DTO 或 handler 而不做全链路传播；不要让多个包同时写同一关键状态；不要为了“以后可能复用”提前抽共享层；不要跳过生成步骤判断；不要把生产 bugfix 当成表层补丁而不追真实写边界或恢复路径 | 传播是否断层；模块所有权是否清楚；关键状态是否存在多头写入；事务与副作用边界是否分离；新增逻辑是否真正可达；生成物是否提交；回调、异步、支付、上传、OCR、鉴权等高风险路径是否真实验证；正式 review 是否形成 durable closeout |
+| Backend | 闭环打通 handler / logic / store / route / DTO / tests；先说明能力归属哪个模块、关键状态由谁唯一写入；状态常量复用 `db/sqlc/constants.go`；识别并执行 `make sqlc` / `make mock` / `make swagger`；说明 unexpected error 在哪里被记录、业务错误与基础设施错误如何分流、以及前端或调用方会收到什么稳定语义；对仓库级高风险链路参考 `backend/README.md` 与匹配的 domain README；说明事务边界、副作用边界、验证范围与残余风险 | 不要把业务逻辑塞进 handler；不要新增魔法状态字符串；不要只改 SQL、DTO 或 handler 而不做全链路传播；不要让多个包同时写同一关键状态；不要为了“以后可能复用”提前抽共享层；不要跳过生成步骤判断；不要把生产 bugfix 当成表层补丁而不追真实写边界或恢复路径；不要静默吞掉 unexpected error、把 nil 或 0-row/no-op 当成功、或把内部错误细节直接透给前端 | 传播是否断层；模块所有权是否清楚；关键状态是否存在多头写入；事务与副作用边界是否分离；新增逻辑是否真正可达；生成物是否提交；是否存在静默吞错、nil-as-success、缺失结构化日志边界、或对前端语义含糊/泄漏内部细节的错误映射；回调、异步、支付、上传、OCR、鉴权等高风险路径是否真实验证；正式 review 是否形成 durable closeout |
 
 ### 3.2 Web
 
@@ -159,13 +159,24 @@ Prompt 库必须接受和代码同等级的基础门禁。
 
 | Area | Implementation Must Push | Implementation Must Not | Review Must Check |
 | --- | --- | --- | --- |
-| Weapp | 以后端契约为唯一真相；先盘点后端能力并组合成任务域，再决定组件边界和一页还是一组页面；service / state / handlers / WXML / WXSS / feedback 一起改；显式处理 loading / success / empty / error / retry / re-entry；说明弱网、重复点击与冷启动恢复；必要说明默认下沉到标题、note、状态或动作附近；非顾客侧局部动作默认用 TDesign 图标按钮或 icon-led small button；优先用 page shell + 内容容器 + TDesign 组件表达，而不是再包本地视觉壳 | 不要猜后端字段、状态、权限或统计语义；不要按接口数量机械拆页面；不要把所有能力堆进同一页面；不要只改 WXML / WXSS；不要把金额语义、角色边界或结果语义混掉；不要把重写 TDesign 内部样式当常规方案；不要在单任务页首屏堆解释卡或说明块；不要默认保留文本型局部编辑/删除/测试/状态按钮；不要为了“更完整”再叠局部卡片壳和说明壳 | 能力组合是否合理；组件与页面边界是否清楚；setData 粒度、状态恢复、弱网与重入、支付结果、角色边界、页面壳一致性、反馈通道是否正确；是否出现解释卡漂移、文本动作漂移和本地视觉壳膨胀 |
+| Weapp | 以后端契约为唯一真相；先盘点后端能力并组合成任务域，再决定组件边界和一页还是一组页面；service / state / handlers / WXML / WXSS / feedback 一起改；显式处理 loading / success / empty / error / retry / re-entry；说明弱网、重复点击与冷启动恢复；默认不要主动生成说明性文案，先用结构、状态、标签、字段名和动作层级把任务讲清；只有风险告知、状态承接、字段约束或下一步动作规则在不写出来会造成理解错误时，才允许补一条最短必要说明；同一信息不要在标题、副标题、note、notice、卡片说明里重复解释；非顾客侧局部动作默认用 TDesign 图标按钮或 icon-led small button；优先用 page shell + 内容容器 + TDesign 组件表达，而不是再包本地视觉壳 | 不要猜后端字段、状态、权限或统计语义；不要按接口数量机械拆页面；不要把所有能力堆进同一页面；不要只改 WXML / WXSS；不要把金额语义、角色边界或结果语义混掉；不要把重写 TDesign 内部样式当常规方案；不要在单任务页首屏堆解释卡或说明块；不要为了“显得完整”补充不改变用户决策的说明文字；不要把“这里主要用于…/你可以在这里…”一类边界解释写成默认页面文案；不要默认保留文本型局部编辑/删除/测试/状态按钮；不要为了“更完整”再叠局部卡片壳和说明壳 | 能力组合是否合理；组件与页面边界是否清楚；setData 粒度、状态恢复、弱网与重入、支付结果、角色边界、页面壳一致性、反馈通道是否正确；是否出现解释卡漂移、说明文案堆叠、重复解释、文本动作漂移和本地视觉壳膨胀 |
 
 ### 3.4 Cross-Stack Rules
 
 | Area | Implementation Must Push | Implementation Must Not | Review Must Check |
 | --- | --- | --- | --- |
 | Cross-stack | 风险分级；最小充分验证；未验证路径与残余风险；必要时说明发布与回滚口径 | 不要把高风险改动当 routine patch；不要只报“已完成”不报验证边界；不要只修表层症状不修根因 | 端到端路径是否完整；失败路径与恢复路径是否被验证；文档、门禁与生成物是否需要同步 |
+
+### 3.5 Cross-Task Execution Baseline
+
+以下规则适用于 implementation prompt、instructions 与相关执行门禁，是跨技术栈的默认行为基线：
+
+- 先显式说明会影响行为、范围或验证口径的关键假设与歧义；如果存在多个会导致不同实现的合理解释，不要静默选一个。
+- 默认选择最简单、最小的可交付实现；不要为了未来可能复用而提前加抽象、配置层或扩展点。
+- 默认做外科式改动；不要顺手重构相邻代码、重写无关注释或清理与当前请求无关的历史问题。若本次改动引入了新的 unused import、unused variable 或 orphan，再由实现方一并清理。
+- 对 bugfix、refactor 或多步骤任务，prompt 应要求把工作转成可验证的短计划或成功标准，并在每一步之后执行最小相关验证，而不是只报告“已完成”。
+- 当实现方无法确定需求边界时，应先暴露不确定性与取舍，再决定是否需要向上游提问；不要靠隐式猜测推进高影响改动。
+- Instructions 层只镜像这些规则的高频执行版本；prompt 层只保留协议化输入输出要求，避免把同一段长文本复制到多个模板中。
 
 ## 4. Prompt Addition Rules
 
