@@ -1,0 +1,10 @@
+{
+  "purpose": "Display-only finance overview card for the operator dashboard header.",
+  "tdesignGroup": "data",
+  "tdesignCandidates": [
+    "icon",
+    "layout"
+  ],
+  "decision": "local-component",
+  "rationale": "The operator dashboard header needs a role-specific summary surface and region affordance. This component stays display-only and emits user intent back to the page owner."
+}

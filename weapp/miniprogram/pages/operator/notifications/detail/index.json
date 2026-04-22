@@ -2,9 +2,8 @@
   "navigationBarTitleText": "提醒详情",
   "usingComponents": {
     "custom-navbar": "/components/custom-navbar/index",
+    "page-state": "/components/page-state/index",
     "t-tag": "tdesign-miniprogram/tag/tag",
-    "t-empty": "tdesign-miniprogram/empty/empty",
-    "t-button": "tdesign-miniprogram/button/button",
-    "t-loading": "tdesign-miniprogram/loading/loading"
+    "t-button": "tdesign-miniprogram/button/button"
   }
 }

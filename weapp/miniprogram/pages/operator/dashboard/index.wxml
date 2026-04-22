@@ -11,47 +11,19 @@
   </view>
 
   <view wx:elif="{{error}}" class="content animate-fade-in">
-      <view class="error-container">
-        <t-empty icon="info-circle" description="{{error}}">
-          <t-button wx:if="{{errorCanRetry}}" slot="action" theme="primary" bindtap="onRetry">重新加载</t-button>
-        </t-empty>
-      </view>
+      <page-state icon="info-circle" description="{{error}}" actionText="{{errorCanRetry ? '重新加载' : ''}}" bind:action="onRetry" />
   </view>
 
   <view wx:else class="content animate-fade-in">
-      
-      <!-- 1. 收入概览 -->
-      <view class="finance-section">
-        <view class="finance-card">
-          <view class="finance-header">
-            <view class="balance-title">收入概览</view>
-            <view wx:if="{{regions.length > 1}}" class="region-pill" bind:tap="onOpenRegionPicker">
-              <t-icon name="map" size="26rpx" color="rgba(255,255,255,0.85)" />
-              <text class="region-pill-name">{{regions[selectedRegionIdx].name}}</text>
-              <t-icon name="chevron-down" size="22rpx" color="rgba(255,255,255,0.85)" />
-            </view>
-            <view wx:elif="{{regions.length === 1}}" class="region-pill region-pill--static">
-              <t-icon name="map" size="26rpx" color="rgba(255,255,255,0.8)" />
-              <text class="region-pill-name">{{regions[0].name}}</text>
-            </view>
-          </view>
-          <view class="balance-value">{{finance.total_income_display}}</view>
-          <view class="income-row">
-            <view class="income-item">
-              <text class="income-label">今日收入</text>
-              <text class="income-value">+{{stats.today_income_display}}</text>
-            </view>
-            <view class="divider-v"></view>
-            <view class="income-item">
-              <text class="income-label">本月收入</text>
-              <text class="income-value">{{finance.current_month_income_display}}</text>
-            </view>
-          </view>
-          <view class="finance-actions">
-            <navigator url="/pages/operator/finance/withdraw/index" class="finance-link-pill">查看财务概览</navigator>
-          </view>
-        </view>
-      </view>
+      <operator-finance-overview
+        regions="{{regions}}"
+        selectedRegionIdx="{{selectedRegionIdx}}"
+        totalIncomeDisplay="{{finance.total_income_display}}"
+        todayIncomeDisplay="{{stats.today_income_display}}"
+        currentMonthIncomeDisplay="{{finance.current_month_income_display}}"
+        bind:regiontap="onOpenRegionPicker"
+        bind:financetap="onOpenFinanceOverview"
+      />
 
       <!-- 2. 数据维度切换与核心指标 -->
       <view class="data-section">
@@ -105,20 +77,13 @@
         </view>
       </view>
 
-      <view class="notification-section">
-        <view class="section-header">
-          <view class="section-title">待接单提醒</view>
-          <view class="view-all" bindtap="onOpenNotifications">查看全部</view>
-        </view>
-        <view class="notification-card" bindtap="onOpenNotifications">
-          <view class="notification-card__head">
-            <view class="notification-card__badge">未读 {{notificationSummary.unreadCount}}</view>
-            <text wx:if="{{notificationSummary.latestCreatedAt}}" class="notification-card__time">{{notificationSummary.latestCreatedAt}}</text>
-          </view>
-          <view class="notification-card__title">{{notificationSummary.latestTitle}}</view>
-          <view class="notification-card__summary">{{notificationSummary.latestSummary}}</view>
-        </view>
-      </view>
+      <operator-notification-summary
+        unreadCount="{{notificationSummary.unreadCount}}"
+        latestTitle="{{notificationSummary.latestTitle}}"
+        latestSummary="{{notificationSummary.latestSummary}}"
+        latestCreatedAt="{{notificationSummary.latestCreatedAt}}"
+        bind:tap="onOpenNotifications"
+      />
 
       <!-- 4. 快捷功能矩阵 (Premium Icons) -->
       <view class="menu-section">
@@ -184,41 +149,13 @@
       </view>
       
       <!-- 5. 榜单统计 (Comparison) -->
-      <view class="ranking-section">
-        <view class="section-header">
-          <t-tabs value="{{rankingType}}" bindchange="onRankingTypeChange" theme="tag" t-class="ranking-tabs">
-            <t-tab-panel label="商家榜" value="merchant" />
-            <t-tab-panel label="骑手榜" value="rider" />
-          </t-tabs>
-          <view class="ranking-label">{{timeDimension === 'day' ? '今日' : (timeDimension === 'week' ? '本周' : '本月')}}排行</view>
-        </view>
-
-        <!-- Merchant Rankings -->
-        <view wx:if="{{rankingType === 'merchant'}}" class="ranking-list">
-          <t-empty wx:if="{{merchantRankings.length === 0}}" description="暂无排行数据" />
-          <view wx:for="{{merchantRankings}}" wx:key="merchant_id" class="ranking-item">
-            <view class="rank-num {{index < 3 ? 'top-' + (index + 1) : ''}}">{{index + 1}}</view>
-            <view class="rank-main">
-              <view class="rank-name">{{item.merchant_name}}</view>
-              <view class="rank-sub">订单 {{item.order_count}} | 佣金 ¥{{item.total_commission / 100}}</view>
-            </view>
-            <view class="rank-val">¥{{item.total_sales / 100}}</view>
-          </view>
-        </view>
-
-        <!-- Rider Rankings -->
-        <view wx:if="{{rankingType === 'rider'}}" class="ranking-list">
-          <t-empty wx:if="{{riderRankings.length === 0}}" description="暂无排行数据" />
-          <view wx:for="{{riderRankings}}" wx:key="rider_id" class="ranking-item">
-            <view class="rank-num {{index < 3 ? 'top-' + (index + 1) : ''}}">{{index + 1}}</view>
-            <view class="rank-main">
-              <view class="rank-name">{{item.rider_name}}</view>
-              <view class="rank-sub">配送 {{item.delivery_count}}单 | 准时率 {{item.completion_rate}}%</view>
-            </view>
-            <view class="rank-val">¥{{item.total_earnings / 100}}</view>
-          </view>
-        </view>
-      </view>
+      <operator-ranking-panel
+        rankingType="{{rankingType}}"
+        timeLabel="{{timeDimension === 'day' ? '今日排行' : (timeDimension === 'week' ? '本周排行' : '本月排行')}}"
+        merchantRankings="{{merchantRankings}}"
+        riderRankings="{{riderRankings}}"
+        bind:typechange="onRankingTypeChange"
+      />
 
       <view class="safe-bottom"></view>
   </view>

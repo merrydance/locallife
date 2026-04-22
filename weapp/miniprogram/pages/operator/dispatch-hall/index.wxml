@@ -1,19 +1,11 @@
 <custom-navbar title="待接单大厅" showBack="{{true}}" bind:navheight="onNavHeight" />
 
 <view class="page page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px">
-  <view wx:if="{{initialLoading}}" class="state-card center">
-    <t-loading theme="circular" size="40rpx" text="加载待接单大厅中" />
-  </view>
+  <page-state wx:if="{{initialLoading}}" type="loading" loadingText="加载待接单大厅中" />
 
-  <view wx:elif="{{emptyRegion}}" class="state-card center">
-    <t-empty description="当前还没有可管理区域" />
-  </view>
+  <page-state wx:elif="{{emptyRegion}}" description="当前还没有可管理区域" />
 
-  <view wx:elif="{{error}}" class="state-card center">
-    <t-empty icon="error-circle" description="{{error}}">
-      <t-button slot="action" theme="primary" bind:tap="onRetry">重试</t-button>
-    </t-empty>
-  </view>
+  <page-state wx:elif="{{error}}" icon="error-circle" description="{{error}}" actionText="重试" bind:action="onRetry" />
 
   <view wx:else class="monitor-page">
     <view class="overview-card">
@@ -61,9 +53,7 @@
         <view class="list-header__total">共 {{total}} 单</view>
       </view>
 
-      <view wx:if="{{dispatches.length === 0 && !loading}}" class="state-card center">
-        <t-empty description="当前区域没有待接单配送单" />
-      </view>
+      <page-state wx:if="{{dispatches.length === 0 && !loading}}" description="当前区域没有待接单配送单" />
 
       <view wx:else class="dispatch-list">
         <view wx:for="{{dispatches}}" wx:key="delivery_id" class="dispatch-card">

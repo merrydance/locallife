@@ -1,0 +1,11 @@
+{
+  "purpose": "Display-only operator dashboard ranking panel for merchant and rider lists.",
+  "tdesignGroup": "data",
+  "tdesignCandidates": [
+    "tabs",
+    "empty",
+    "layout"
+  ],
+  "decision": "local-component",
+  "rationale": "The dashboard ranking area has a stable operator-specific list layout that TDesign does not provide as a single primitive. The component stays presentation-only and emits tab changes to the page owner."
+}

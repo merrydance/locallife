@@ -15,15 +15,9 @@
   </view>
 
   <view class="content">
-    <view wx:if="{{initialLoading}}" class="state-card center">
-      <t-loading theme="circular" size="40rpx" text="加载提醒中" />
-    </view>
+    <page-state wx:if="{{initialLoading}}" type="loading" loadingText="加载提醒中" />
 
-    <view wx:elif="{{error}}" class="state-card center">
-      <t-empty icon="error-circle" description="{{error}}">
-        <t-button slot="action" theme="primary" bind:tap="onRetry">重试</t-button>
-      </t-empty>
-    </view>
+    <page-state wx:elif="{{error}}" icon="error-circle" description="{{error}}" actionText="重试" bind:action="onRetry" />
 
     <scroll-view
       wx:else
@@ -38,9 +32,7 @@
     >
       <view class="summary-strip">未读提醒 {{unreadCount}}</view>
 
-      <view wx:if="{{notifications.length === 0}}" class="state-card center">
-        <t-empty description="当前没有待接单提醒" />
-      </view>
+      <page-state wx:if="{{notifications.length === 0}}" description="当前没有待接单提醒" />
 
       <view wx:else class="notification-list">
         <view wx:for="{{notifications}}" wx:key="id" class="notification-card {{item.is_read ? 'is-read' : 'is-unread'}}" bind:tap="onTapNotification" data-id="{{item.id}}">

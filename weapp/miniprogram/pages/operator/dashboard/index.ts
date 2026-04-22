@@ -292,5 +292,9 @@ Page({
 
   onOpenNotifications() {
     wx.navigateTo({ url: '/pages/operator/notifications/index' })
+  },
+
+  onOpenFinanceOverview() {
+    wx.navigateTo({ url: '/pages/operator/finance/withdraw/index' })
   }
 })

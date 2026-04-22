@@ -5,19 +5,6 @@
   min-height: 0;
 }
 
-.state-card {
-  background: #ffffff;
-  border-radius: 28rpx;
-  padding: 48rpx 32rpx;
-  box-shadow: 0 10rpx 28rpx rgba(15, 23, 42, 0.06);
-}
-
-.center {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
 .overview-card {
   background: linear-gradient(135deg, #fff7e6 0%, #ffffff 100%);
   border: 1px solid rgba(237, 108, 2, 0.12);
