@@ -1968,6 +1968,36 @@ func (mr *MockStoreMockRecorder) CountOnlineRidersByRegion(ctx, regionID any) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountOnlineRidersByRegion", reflect.TypeOf((*MockStore)(nil).CountOnlineRidersByRegion), ctx, regionID)
 }
 
+// CountOperatorNotifications mocks base method.
+func (m *MockStore) CountOperatorNotifications(ctx context.Context, arg db.CountOperatorNotificationsParams) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountOperatorNotifications", ctx, arg)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountOperatorNotifications indicates an expected call of CountOperatorNotifications.
+func (mr *MockStoreMockRecorder) CountOperatorNotifications(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountOperatorNotifications", reflect.TypeOf((*MockStore)(nil).CountOperatorNotifications), ctx, arg)
+}
+
+// CountOperatorPendingDispatches mocks base method.
+func (m *MockStore) CountOperatorPendingDispatches(ctx context.Context, arg db.CountOperatorPendingDispatchesParams) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountOperatorPendingDispatches", ctx, arg)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountOperatorPendingDispatches indicates an expected call of CountOperatorPendingDispatches.
+func (mr *MockStoreMockRecorder) CountOperatorPendingDispatches(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountOperatorPendingDispatches", reflect.TypeOf((*MockStore)(nil).CountOperatorPendingDispatches), ctx, arg)
+}
+
 // CountOperatorRecoveryDisputes mocks base method.
 func (m *MockStore) CountOperatorRecoveryDisputes(ctx context.Context, arg db.CountOperatorRecoveryDisputesParams) (int64, error) {
 	m.ctrl.T.Helper()
@@ -3256,6 +3286,21 @@ func (m *MockStore) CreateDeliveryPromotion(ctx context.Context, arg db.CreateDe
 func (mr *MockStoreMockRecorder) CreateDeliveryPromotion(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateDeliveryPromotion", reflect.TypeOf((*MockStore)(nil).CreateDeliveryPromotion), ctx, arg)
+}
+
+// CreateDeliveryTimeoutAlert mocks base method.
+func (m *MockStore) CreateDeliveryTimeoutAlert(ctx context.Context, arg db.CreateDeliveryTimeoutAlertParams) (db.DeliveryTimeoutAlert, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateDeliveryTimeoutAlert", ctx, arg)
+	ret0, _ := ret[0].(db.DeliveryTimeoutAlert)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateDeliveryTimeoutAlert indicates an expected call of CreateDeliveryTimeoutAlert.
+func (mr *MockStoreMockRecorder) CreateDeliveryTimeoutAlert(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateDeliveryTimeoutAlert", reflect.TypeOf((*MockStore)(nil).CreateDeliveryTimeoutAlert), ctx, arg)
 }
 
 // CreateDiningSession mocks base method.
@@ -4984,6 +5029,20 @@ func (m *MockStore) DeleteDeliveryPromotionsByMerchant(ctx context.Context, merc
 func (mr *MockStoreMockRecorder) DeleteDeliveryPromotionsByMerchant(ctx, merchantID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteDeliveryPromotionsByMerchant", reflect.TypeOf((*MockStore)(nil).DeleteDeliveryPromotionsByMerchant), ctx, merchantID)
+}
+
+// DeleteDeliveryTimeoutAlert mocks base method.
+func (m *MockStore) DeleteDeliveryTimeoutAlert(ctx context.Context, arg db.DeleteDeliveryTimeoutAlertParams) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteDeliveryTimeoutAlert", ctx, arg)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteDeliveryTimeoutAlert indicates an expected call of DeleteDeliveryTimeoutAlert.
+func (mr *MockStoreMockRecorder) DeleteDeliveryTimeoutAlert(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteDeliveryTimeoutAlert", reflect.TypeOf((*MockStore)(nil).DeleteDeliveryTimeoutAlert), ctx, arg)
 }
 
 // DeleteDiscountRule mocks base method.
@@ -8564,6 +8623,36 @@ func (mr *MockStoreMockRecorder) GetOperatorMerchantRanking(ctx, arg any) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOperatorMerchantRanking", reflect.TypeOf((*MockStore)(nil).GetOperatorMerchantRanking), ctx, arg)
 }
 
+// GetOperatorNotification mocks base method.
+func (m *MockStore) GetOperatorNotification(ctx context.Context, arg db.GetOperatorNotificationParams) (db.Notification, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetOperatorNotification", ctx, arg)
+	ret0, _ := ret[0].(db.Notification)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetOperatorNotification indicates an expected call of GetOperatorNotification.
+func (mr *MockStoreMockRecorder) GetOperatorNotification(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOperatorNotification", reflect.TypeOf((*MockStore)(nil).GetOperatorNotification), ctx, arg)
+}
+
+// GetOperatorPendingDispatchSummary mocks base method.
+func (m *MockStore) GetOperatorPendingDispatchSummary(ctx context.Context, arg db.GetOperatorPendingDispatchSummaryParams) (db.GetOperatorPendingDispatchSummaryRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetOperatorPendingDispatchSummary", ctx, arg)
+	ret0, _ := ret[0].(db.GetOperatorPendingDispatchSummaryRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetOperatorPendingDispatchSummary indicates an expected call of GetOperatorPendingDispatchSummary.
+func (mr *MockStoreMockRecorder) GetOperatorPendingDispatchSummary(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOperatorPendingDispatchSummary", reflect.TypeOf((*MockStore)(nil).GetOperatorPendingDispatchSummary), ctx, arg)
+}
+
 // GetOperatorProfitSharingStats mocks base method.
 func (m *MockStore) GetOperatorProfitSharingStats(ctx context.Context, arg db.GetOperatorProfitSharingStatsParams) (db.GetOperatorProfitSharingStatsRow, error) {
 	m.ctrl.T.Helper()
@@ -11574,6 +11663,21 @@ func (mr *MockStoreMockRecorder) ListActiveDiscountRules(ctx, merchantID any) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListActiveDiscountRules", reflect.TypeOf((*MockStore)(nil).ListActiveDiscountRules), ctx, merchantID)
 }
 
+// ListActiveOperatorNotificationRecipientsByRegion mocks base method.
+func (m *MockStore) ListActiveOperatorNotificationRecipientsByRegion(ctx context.Context, regionID int64) ([]db.ListActiveOperatorNotificationRecipientsByRegionRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListActiveOperatorNotificationRecipientsByRegion", ctx, regionID)
+	ret0, _ := ret[0].([]db.ListActiveOperatorNotificationRecipientsByRegionRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListActiveOperatorNotificationRecipientsByRegion indicates an expected call of ListActiveOperatorNotificationRecipientsByRegion.
+func (mr *MockStoreMockRecorder) ListActiveOperatorNotificationRecipientsByRegion(ctx, regionID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListActiveOperatorNotificationRecipientsByRegion", reflect.TypeOf((*MockStore)(nil).ListActiveOperatorNotificationRecipientsByRegion), ctx, regionID)
+}
+
 // ListActivePeakHourConfigsByRegion mocks base method.
 func (m *MockStore) ListActivePeakHourConfigsByRegion(ctx context.Context, regionID int64) ([]db.PeakHourConfig, error) {
 	m.ctrl.T.Helper()
@@ -13629,6 +13733,36 @@ func (mr *MockStoreMockRecorder) ListOperatorApplications(ctx, arg any) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListOperatorApplications", reflect.TypeOf((*MockStore)(nil).ListOperatorApplications), ctx, arg)
 }
 
+// ListOperatorNotifications mocks base method.
+func (m *MockStore) ListOperatorNotifications(ctx context.Context, arg db.ListOperatorNotificationsParams) ([]db.Notification, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListOperatorNotifications", ctx, arg)
+	ret0, _ := ret[0].([]db.Notification)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListOperatorNotifications indicates an expected call of ListOperatorNotifications.
+func (mr *MockStoreMockRecorder) ListOperatorNotifications(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListOperatorNotifications", reflect.TypeOf((*MockStore)(nil).ListOperatorNotifications), ctx, arg)
+}
+
+// ListOperatorPendingDispatches mocks base method.
+func (m *MockStore) ListOperatorPendingDispatches(ctx context.Context, arg db.ListOperatorPendingDispatchesParams) ([]db.ListOperatorPendingDispatchesRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListOperatorPendingDispatches", ctx, arg)
+	ret0, _ := ret[0].([]db.ListOperatorPendingDispatchesRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListOperatorPendingDispatches indicates an expected call of ListOperatorPendingDispatches.
+func (mr *MockStoreMockRecorder) ListOperatorPendingDispatches(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListOperatorPendingDispatches", reflect.TypeOf((*MockStore)(nil).ListOperatorPendingDispatches), ctx, arg)
+}
+
 // ListOperatorRecoveryDisputes mocks base method.
 func (m *MockStore) ListOperatorRecoveryDisputes(ctx context.Context, arg db.ListOperatorRecoveryDisputesParams) ([]db.ListOperatorRecoveryDisputesRow, error) {
 	m.ctrl.T.Helper()
@@ -14002,6 +14136,21 @@ func (m *MockStore) ListPendingDeliveriesBefore(ctx context.Context, arg db.List
 func (mr *MockStoreMockRecorder) ListPendingDeliveriesBefore(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPendingDeliveriesBefore", reflect.TypeOf((*MockStore)(nil).ListPendingDeliveriesBefore), ctx, arg)
+}
+
+// ListPendingDeliveriesBeforeWithoutAlert mocks base method.
+func (m *MockStore) ListPendingDeliveriesBeforeWithoutAlert(ctx context.Context, arg db.ListPendingDeliveriesBeforeWithoutAlertParams) ([]db.Delivery, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListPendingDeliveriesBeforeWithoutAlert", ctx, arg)
+	ret0, _ := ret[0].([]db.Delivery)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListPendingDeliveriesBeforeWithoutAlert indicates an expected call of ListPendingDeliveriesBeforeWithoutAlert.
+func (mr *MockStoreMockRecorder) ListPendingDeliveriesBeforeWithoutAlert(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPendingDeliveriesBeforeWithoutAlert", reflect.TypeOf((*MockStore)(nil).ListPendingDeliveriesBeforeWithoutAlert), ctx, arg)
 }
 
 // ListPendingEcommerceApplyments mocks base method.
@@ -15488,6 +15637,20 @@ func (mr *MockStoreMockRecorder) MarkAllNotificationsAsRead(ctx, userID any) *go
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkAllNotificationsAsRead", reflect.TypeOf((*MockStore)(nil).MarkAllNotificationsAsRead), ctx, userID)
 }
 
+// MarkAllOperatorNotificationsAsRead mocks base method.
+func (m *MockStore) MarkAllOperatorNotificationsAsRead(ctx context.Context, userID int64) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MarkAllOperatorNotificationsAsRead", ctx, userID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// MarkAllOperatorNotificationsAsRead indicates an expected call of MarkAllOperatorNotificationsAsRead.
+func (mr *MockStoreMockRecorder) MarkAllOperatorNotificationsAsRead(ctx, userID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkAllOperatorNotificationsAsRead", reflect.TypeOf((*MockStore)(nil).MarkAllOperatorNotificationsAsRead), ctx, userID)
+}
+
 // MarkClaimPaid mocks base method.
 func (m *MockStore) MarkClaimPaid(ctx context.Context, arg db.MarkClaimPaidParams) error {
 	m.ctrl.T.Helper()
@@ -15678,6 +15841,21 @@ func (m *MockStore) MarkOCRJobProcessing(ctx context.Context, arg db.MarkOCRJobP
 func (mr *MockStoreMockRecorder) MarkOCRJobProcessing(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkOCRJobProcessing", reflect.TypeOf((*MockStore)(nil).MarkOCRJobProcessing), ctx, arg)
+}
+
+// MarkOperatorNotificationAsRead mocks base method.
+func (m *MockStore) MarkOperatorNotificationAsRead(ctx context.Context, arg db.MarkOperatorNotificationAsReadParams) (db.Notification, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MarkOperatorNotificationAsRead", ctx, arg)
+	ret0, _ := ret[0].(db.Notification)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MarkOperatorNotificationAsRead indicates an expected call of MarkOperatorNotificationAsRead.
+func (mr *MockStoreMockRecorder) MarkOperatorNotificationAsRead(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkOperatorNotificationAsRead", reflect.TypeOf((*MockStore)(nil).MarkOperatorNotificationAsRead), ctx, arg)
 }
 
 // MarkOrderReplaced mocks base method.

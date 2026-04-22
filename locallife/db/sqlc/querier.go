@@ -190,6 +190,8 @@ type Querier interface {
 	CountOnlineRiders(ctx context.Context) (int64, error)
 	// 统计区域内当前在线骑手数量
 	CountOnlineRidersByRegion(ctx context.Context, regionID pgtype.Int8) (int64, error)
+	CountOperatorNotifications(ctx context.Context, arg CountOperatorNotificationsParams) (int64, error)
+	CountOperatorPendingDispatches(ctx context.Context, arg CountOperatorPendingDispatchesParams) (int64, error)
 	// 运营商追偿争议计数
 	CountOperatorRecoveryDisputes(ctx context.Context, arg CountOperatorRecoveryDisputesParams) (int64, error)
 	// 统计运营商管理的区域数量
@@ -331,6 +333,7 @@ type Querier interface {
 	CreateDeliveryFeeConfig(ctx context.Context, arg CreateDeliveryFeeConfigParams) (DeliveryFeeConfig, error)
 	CreateDeliveryLocationEvent(ctx context.Context, arg CreateDeliveryLocationEventParams) (DeliveryLocationEvent, error)
 	CreateDeliveryPromotion(ctx context.Context, arg CreateDeliveryPromotionParams) (MerchantDeliveryPromotion, error)
+	CreateDeliveryTimeoutAlert(ctx context.Context, arg CreateDeliveryTimeoutAlertParams) (DeliveryTimeoutAlert, error)
 	CreateDiningSession(ctx context.Context, arg CreateDiningSessionParams) (DiningSession, error)
 	// Discount Rules (满减规则)
 	CreateDiscountRule(ctx context.Context, arg CreateDiscountRuleParams) (DiscountRule, error)
@@ -510,6 +513,7 @@ type Querier interface {
 	DeleteDeliveryFeeConfig(ctx context.Context, id int64) error
 	DeleteDeliveryPromotion(ctx context.Context, id int64) error
 	DeleteDeliveryPromotionsByMerchant(ctx context.Context, merchantID int64) error
+	DeleteDeliveryTimeoutAlert(ctx context.Context, arg DeleteDeliveryTimeoutAlertParams) error
 	// 软删除满减规则
 	DeleteDiscountRule(ctx context.Context, id int64) error
 	// 软删除菜品
@@ -837,6 +841,8 @@ type Querier interface {
 	GetOperatorForUpdate(ctx context.Context, id int64) (Operator, error)
 	// 运营商区域内商户排行（基于实际分账数据）
 	GetOperatorMerchantRanking(ctx context.Context, arg GetOperatorMerchantRankingParams) ([]GetOperatorMerchantRankingRow, error)
+	GetOperatorNotification(ctx context.Context, arg GetOperatorNotificationParams) (Notification, error)
+	GetOperatorPendingDispatchSummary(ctx context.Context, arg GetOperatorPendingDispatchSummaryParams) (GetOperatorPendingDispatchSummaryRow, error)
 	GetOperatorProfitSharingStats(ctx context.Context, arg GetOperatorProfitSharingStatsParams) (GetOperatorProfitSharingStatsRow, error)
 	// 按区域过滤的运营商分账统计（多区域运营商区域维度财务概览）
 	GetOperatorProfitSharingStatsByRegion(ctx context.Context, arg GetOperatorProfitSharingStatsByRegionParams) (GetOperatorProfitSharingStatsByRegionRow, error)
@@ -1123,6 +1129,8 @@ type Querier interface {
 	ListActiveDeliveryFeeConfigs(ctx context.Context) ([]DeliveryFeeConfig, error)
 	ListActiveDeliveryPromotionsByMerchant(ctx context.Context, merchantID int64) ([]MerchantDeliveryPromotion, error)
 	ListActiveDiscountRules(ctx context.Context, merchantID int64) ([]DiscountRule, error)
+	// 列出区域内可接收提醒的运营商用户
+	ListActiveOperatorNotificationRecipientsByRegion(ctx context.Context, regionID int64) ([]ListActiveOperatorNotificationRecipientsByRegionRow, error)
 	ListActivePeakHourConfigsByRegion(ctx context.Context, regionID int64) ([]PeakHourConfig, error)
 	ListActiveRechargeRules(ctx context.Context, merchantID int64) ([]RechargeRule, error)
 	ListActiveRiderDepositCreditsByRiderID(ctx context.Context, riderID int64) ([]RiderDepositCredit, error)
@@ -1309,6 +1317,8 @@ type Querier interface {
 	ListOpenMerchants(ctx context.Context, arg ListOpenMerchantsParams) ([]Merchant, error)
 	// 列出所有申请（支持状态筛选）
 	ListOperatorApplications(ctx context.Context, arg ListOperatorApplicationsParams) ([]ListOperatorApplicationsRow, error)
+	ListOperatorNotifications(ctx context.Context, arg ListOperatorNotificationsParams) ([]Notification, error)
+	ListOperatorPendingDispatches(ctx context.Context, arg ListOperatorPendingDispatchesParams) ([]ListOperatorPendingDispatchesRow, error)
 	// =========================== 运营商视角 ===========================
 	// 运营商查询区域内的追偿争议列表
 	ListOperatorRecoveryDisputes(ctx context.Context, arg ListOperatorRecoveryDisputesParams) ([]ListOperatorRecoveryDisputesRow, error)
@@ -1340,6 +1350,7 @@ type Querier interface {
 	ListPendingDeliveries(ctx context.Context, limit int32) ([]Delivery, error)
 	// 获取超时未接单的配送单
 	ListPendingDeliveriesBefore(ctx context.Context, arg ListPendingDeliveriesBeforeParams) ([]Delivery, error)
+	ListPendingDeliveriesBeforeWithoutAlert(ctx context.Context, arg ListPendingDeliveriesBeforeWithoutAlertParams) ([]Delivery, error)
 	ListPendingEcommerceApplyments(ctx context.Context, arg ListPendingEcommerceApplymentsParams) ([]EcommerceApplyment, error)
 	ListPendingMerchantCancelWithdrawApplications(ctx context.Context, limit int32) ([]MerchantCancelWithdrawApplication, error)
 	ListPendingOCRJobsByMediaAsset(ctx context.Context, mediaAssetID int64) ([]OcrJob, error)
@@ -1468,6 +1479,7 @@ type Querier interface {
 	ListWechatNotificationsByOutTradeNo(ctx context.Context, outTradeNo pgtype.Text) ([]WechatNotification, error)
 	ListWithdrawalRecords(ctx context.Context, arg ListWithdrawalRecordsParams) ([]WithdrawalRecord, error)
 	MarkAllNotificationsAsRead(ctx context.Context, userID int64) error
+	MarkAllOperatorNotificationsAsRead(ctx context.Context, userID int64) error
 	MarkClaimPaid(ctx context.Context, arg MarkClaimPaidParams) error
 	MarkClaimRecoveryDisputed(ctx context.Context, id int64) (ClaimRecovery, error)
 	MarkClaimRecoveryOverdue(ctx context.Context, id int64) (ClaimRecovery, error)
@@ -1478,6 +1490,7 @@ type Querier interface {
 	MarkNotificationAsPushed(ctx context.Context, id int64) error
 	MarkNotificationAsRead(ctx context.Context, arg MarkNotificationAsReadParams) (Notification, error)
 	MarkOCRJobProcessing(ctx context.Context, arg MarkOCRJobProcessingParams) (OcrJob, error)
+	MarkOperatorNotificationAsRead(ctx context.Context, arg MarkOperatorNotificationAsReadParams) (Notification, error)
 	MarkOrderReplaced(ctx context.Context, arg MarkOrderReplacedParams) (Order, error)
 	MarkRecoveryDisputeCompensated(ctx context.Context, arg MarkRecoveryDisputeCompensatedParams) error
 	MarkRiderDepositCreditExpired(ctx context.Context, arg MarkRiderDepositCreditExpiredParams) (RiderDepositCredit, error)

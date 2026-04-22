@@ -65,6 +65,7 @@ p, operator, /v1/operator/*, PATCH
 p, operator, /v1/operator/*, DELETE
 p, operator, /v1/operators/me/*, GET
 p, operator, /v1/operators/me/*, POST
+p, operator, /v1/operators/me/*, PUT
 p, operator, /v1/delivery-fee/regions/:region_id/config, POST
 p, operator, /v1/delivery-fee/regions/:region_id/config, PATCH
 p, operator, /v1/reviews/:id, DELETE

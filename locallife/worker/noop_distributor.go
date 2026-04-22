@@ -84,6 +84,10 @@ func (NoopTaskDistributor) DistributeTaskSendNotification(ctx context.Context, p
 	return nil
 }
 
+func (NoopTaskDistributor) DistributeTaskOperatorPendingDispatchAlert(ctx context.Context, payload *OperatorPendingDispatchAlertPayload, opts ...asynq.Option) error {
+	return nil
+}
+
 func (NoopTaskDistributor) DistributeTaskCheckMerchantForeignObject(ctx context.Context, merchantID int64, opts ...asynq.Option) error {
 	return nil
 }

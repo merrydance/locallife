@@ -289,6 +289,25 @@ func (mr *MockTaskDistributorMockRecorder) DistributeTaskOperatorApplicationIDCa
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DistributeTaskOperatorApplicationIDCardOCR", reflect.TypeOf((*MockTaskDistributor)(nil).DistributeTaskOperatorApplicationIDCardOCR), varargs...)
 }
 
+// DistributeTaskOperatorPendingDispatchAlert mocks base method.
+func (m *MockTaskDistributor) DistributeTaskOperatorPendingDispatchAlert(ctx context.Context, payload *worker.OperatorPendingDispatchAlertPayload, opts ...asynq.Option) error {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, payload}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DistributeTaskOperatorPendingDispatchAlert", varargs...)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DistributeTaskOperatorPendingDispatchAlert indicates an expected call of DistributeTaskOperatorPendingDispatchAlert.
+func (mr *MockTaskDistributorMockRecorder) DistributeTaskOperatorPendingDispatchAlert(ctx, payload any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, payload}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DistributeTaskOperatorPendingDispatchAlert", reflect.TypeOf((*MockTaskDistributor)(nil).DistributeTaskOperatorPendingDispatchAlert), varargs...)
+}
+
 // DistributeTaskOrderPaymentTimeout mocks base method.
 func (m *MockTaskDistributor) DistributeTaskOrderPaymentTimeout(ctx context.Context, payload *worker.PayloadOrderPaymentTimeout, opts ...asynq.Option) error {
 	m.ctrl.T.Helper()

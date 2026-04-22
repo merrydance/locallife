@@ -121,6 +121,13 @@ type TaskDistributor interface {
 		opts ...asynq.Option,
 	) error
 
+	// DistributeTaskOperatorPendingDispatchAlert 分发运营商待接单超时提醒任务
+	DistributeTaskOperatorPendingDispatchAlert(
+		ctx context.Context,
+		payload *OperatorPendingDispatchAlertPayload,
+		opts ...asynq.Option,
+	) error
+
 	// DistributeTaskCheckMerchantForeignObject 分发商户异物索赔检查任务
 	DistributeTaskCheckMerchantForeignObject(
 		ctx context.Context,

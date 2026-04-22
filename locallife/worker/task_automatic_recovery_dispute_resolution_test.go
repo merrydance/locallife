@@ -45,6 +45,10 @@ func (d *automaticRecoveryDisputeResolutionTestDistributor) DistributeTaskSendNo
 	return nil
 }
 
+func (d *automaticRecoveryDisputeResolutionTestDistributor) DistributeTaskOperatorPendingDispatchAlert(context.Context, *OperatorPendingDispatchAlertPayload, ...asynq.Option) error {
+	return nil
+}
+
 func (d *automaticRecoveryDisputeResolutionTestDistributor) DistributeTaskPaymentOrderTimeout(context.Context, *PayloadPaymentOrderTimeout, ...asynq.Option) error {
 	return nil
 }

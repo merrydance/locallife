@@ -128,6 +128,11 @@ p, operator, /v1/operator/food-safety/cases/:id/resolve, POST
 p, operator, /v1/operators/me/finance/overview, GET
 p, operator, /v1/operators/me/commission, GET
 p, operator, /v1/operators/me/profit-sharing/configs, GET
+p, operator, /v1/operators/me/notifications, GET
+p, operator, /v1/operators/me/notifications/summary, GET
+p, operator, /v1/operators/me/notifications/:id, GET
+p, operator, /v1/operators/me/notifications/:id/read, PUT
+p, operator, /v1/operators/me/notifications/read-all, PUT
 
 # Delivery Fee Config Management
 p, operator, /v1/delivery-fee/regions/:region_id/config, POST

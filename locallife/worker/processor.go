@@ -231,6 +231,7 @@ func (processor *RedisTaskProcessor) Start() error {
 	mux.HandleFunc(TaskProcessRefundResult, processor.ProcessTaskRefundResult)
 	mux.HandleFunc(TaskProcessProfitSharing, processor.ProcessTaskProfitSharing)
 	mux.HandleFunc(TaskSendNotification, processor.ProcessTaskSendNotification)
+	mux.HandleFunc(TaskOperatorPendingDispatchAlert, processor.ProcessTaskOperatorPendingDispatchAlert)
 	mux.HandleFunc(TaskProcessProfitSharingReturnResult, processor.ProcessTaskProfitSharingReturnResult)
 	mux.HandleFunc(TaskProcessMerchantWithdrawResult, processor.ProcessTaskMerchantWithdrawResult)
 	mux.HandleFunc(TaskProcessMerchantCancelWithdrawResult, processor.ProcessTaskMerchantCancelWithdrawResult)

@@ -27,6 +27,24 @@ FROM operator_regions or_t
 JOIN operators o ON or_t.operator_id = o.id
 WHERE or_t.region_id = $1 AND or_t.status = 'active' AND o.status = 'active';
 
+-- name: ListActiveOperatorNotificationRecipientsByRegion :many
+-- 列出区域内可接收提醒的运营商用户
+SELECT
+        o.id AS operator_id,
+        o.user_id,
+        or_t.region_id,
+        r.name AS region_name,
+        o.name AS operator_name,
+        o.contact_name,
+        o.contact_phone
+FROM operator_regions or_t
+JOIN operators o ON or_t.operator_id = o.id
+JOIN regions r ON r.id = or_t.region_id
+WHERE or_t.region_id = $1
+    AND or_t.status = 'active'
+    AND o.status = 'active'
+ORDER BY o.id ASC;
+
 -- name: RemoveOperatorRegion :exec
 -- 移除运营商的管理区域
 DELETE FROM operator_regions

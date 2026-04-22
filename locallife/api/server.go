@@ -1272,6 +1272,8 @@ func (server *Server) setupRouter() {
 		// 区域相关路由（需要额外验证区域管理权限）
 		operatorStatsGroup.GET("/regions", server.listOperatorRegions) // 获取管理的区域列表
 		operatorStatsGroup.GET("/regions/:region_id/stats", server.getRegionStats)
+		operatorStatsGroup.GET("/regions/:region_id/delivery-pool/summary", server.getOperatorPendingDispatchSummary)
+		operatorStatsGroup.GET("/regions/:region_id/delivery-pool", server.listOperatorPendingDispatches)
 		operatorStatsGroup.POST("/regions/:region_id/peak-hours", server.createPeakHourConfig)
 		operatorStatsGroup.GET("/regions/:region_id/peak-hours", server.listPeakHourConfigs)
 
@@ -1325,6 +1327,11 @@ func (server *Server) setupRouter() {
 		operatorsGroup.GET("/finance/overview", server.getOperatorFinanceOverview)
 		operatorsGroup.GET("/commission", server.getOperatorCommission)
 		operatorsGroup.GET("/profit-sharing/configs", server.listOperatorProfitSharingConfigs)
+		operatorsGroup.GET("/notifications", server.listOperatorNotifications)
+		operatorsGroup.GET("/notifications/summary", server.getOperatorNotificationSummary)
+		operatorsGroup.GET("/notifications/:id", server.getOperatorNotification)
+		operatorsGroup.PUT("/notifications/:id/read", server.markOperatorNotificationAsRead)
+		operatorsGroup.PUT("/notifications/read-all", server.markAllOperatorNotificationsAsRead)
 
 		// 用户投诉管理（运营商视角：查看所有待处理投诉，可完结投诉）
 		operatorsGroup.GET("/complaints", server.listPendingComplaints)

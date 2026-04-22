@@ -11,6 +11,27 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countOperatorNotifications = `-- name: CountOperatorNotifications :one
+SELECT COUNT(*) FROM notifications
+WHERE user_id = $1
+  AND COALESCE(extra_data->>'audience', '') = 'operator'
+  AND ($2::boolean IS NULL OR is_read = $2)
+  AND ($3::text IS NULL OR extra_data->>'category' = $3)
+`
+
+type CountOperatorNotificationsParams struct {
+	UserID   int64       `json:"user_id"`
+	IsRead   pgtype.Bool `json:"is_read"`
+	Category pgtype.Text `json:"category"`
+}
+
+func (q *Queries) CountOperatorNotifications(ctx context.Context, arg CountOperatorNotificationsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countOperatorNotifications, arg.UserID, arg.IsRead, arg.Category)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countUnreadNotifications = `-- name: CountUnreadNotifications :one
 SELECT COUNT(*) FROM notifications
 WHERE user_id = $1
@@ -266,6 +287,40 @@ func (q *Queries) GetNotificationsByRelated(ctx context.Context, arg GetNotifica
 	return items, nil
 }
 
+const getOperatorNotification = `-- name: GetOperatorNotification :one
+SELECT id, user_id, type, title, content, related_type, related_id, extra_data, is_read, read_at, is_pushed, pushed_at, created_at, expires_at FROM notifications
+WHERE id = $1
+  AND user_id = $2
+  AND COALESCE(extra_data->>'audience', '') = 'operator'
+`
+
+type GetOperatorNotificationParams struct {
+	ID     int64 `json:"id"`
+	UserID int64 `json:"user_id"`
+}
+
+func (q *Queries) GetOperatorNotification(ctx context.Context, arg GetOperatorNotificationParams) (Notification, error) {
+	row := q.db.QueryRow(ctx, getOperatorNotification, arg.ID, arg.UserID)
+	var i Notification
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Type,
+		&i.Title,
+		&i.Content,
+		&i.RelatedType,
+		&i.RelatedID,
+		&i.ExtraData,
+		&i.IsRead,
+		&i.ReadAt,
+		&i.IsPushed,
+		&i.PushedAt,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+	)
+	return i, err
+}
+
 const getOrCreateUserNotificationPreferences = `-- name: GetOrCreateUserNotificationPreferences :one
 INSERT INTO user_notification_preferences (
   user_id,
@@ -325,6 +380,65 @@ func (q *Queries) GetUserNotificationPreferences(ctx context.Context, userID int
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const listOperatorNotifications = `-- name: ListOperatorNotifications :many
+SELECT id, user_id, type, title, content, related_type, related_id, extra_data, is_read, read_at, is_pushed, pushed_at, created_at, expires_at FROM notifications
+WHERE user_id = $1
+  AND COALESCE(extra_data->>'audience', '') = 'operator'
+  AND ($2::boolean IS NULL OR is_read = $2)
+  AND ($3::text IS NULL OR extra_data->>'category' = $3)
+ORDER BY created_at DESC, id DESC
+LIMIT $5 OFFSET $4
+`
+
+type ListOperatorNotificationsParams struct {
+	UserID   int64       `json:"user_id"`
+	IsRead   pgtype.Bool `json:"is_read"`
+	Category pgtype.Text `json:"category"`
+	Offset   int32       `json:"offset"`
+	Limit    int32       `json:"limit"`
+}
+
+func (q *Queries) ListOperatorNotifications(ctx context.Context, arg ListOperatorNotificationsParams) ([]Notification, error) {
+	rows, err := q.db.Query(ctx, listOperatorNotifications,
+		arg.UserID,
+		arg.IsRead,
+		arg.Category,
+		arg.Offset,
+		arg.Limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Notification{}
+	for rows.Next() {
+		var i Notification
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Type,
+			&i.Title,
+			&i.Content,
+			&i.RelatedType,
+			&i.RelatedID,
+			&i.ExtraData,
+			&i.IsRead,
+			&i.ReadAt,
+			&i.IsPushed,
+			&i.PushedAt,
+			&i.CreatedAt,
+			&i.ExpiresAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listUserNotifications = `-- name: ListUserNotifications :many
@@ -399,6 +513,21 @@ func (q *Queries) MarkAllNotificationsAsRead(ctx context.Context, userID int64) 
 	return err
 }
 
+const markAllOperatorNotificationsAsRead = `-- name: MarkAllOperatorNotificationsAsRead :exec
+UPDATE notifications
+SET
+  is_read = true,
+  read_at = now()
+WHERE user_id = $1
+  AND COALESCE(extra_data->>'audience', '') = 'operator'
+  AND is_read = false
+`
+
+func (q *Queries) MarkAllOperatorNotificationsAsRead(ctx context.Context, userID int64) error {
+	_, err := q.db.Exec(ctx, markAllOperatorNotificationsAsRead, userID)
+	return err
+}
+
 const markNotificationAsPushed = `-- name: MarkNotificationAsPushed :exec
 UPDATE notifications
 SET 
@@ -430,6 +559,45 @@ type MarkNotificationAsReadParams struct {
 
 func (q *Queries) MarkNotificationAsRead(ctx context.Context, arg MarkNotificationAsReadParams) (Notification, error) {
 	row := q.db.QueryRow(ctx, markNotificationAsRead, arg.ID, arg.UserID)
+	var i Notification
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Type,
+		&i.Title,
+		&i.Content,
+		&i.RelatedType,
+		&i.RelatedID,
+		&i.ExtraData,
+		&i.IsRead,
+		&i.ReadAt,
+		&i.IsPushed,
+		&i.PushedAt,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+	)
+	return i, err
+}
+
+const markOperatorNotificationAsRead = `-- name: MarkOperatorNotificationAsRead :one
+UPDATE notifications
+SET
+  is_read = true,
+  read_at = now()
+WHERE id = $1
+  AND user_id = $2
+  AND COALESCE(extra_data->>'audience', '') = 'operator'
+  AND is_read = false
+RETURNING id, user_id, type, title, content, related_type, related_id, extra_data, is_read, read_at, is_pushed, pushed_at, created_at, expires_at
+`
+
+type MarkOperatorNotificationAsReadParams struct {
+	ID     int64 `json:"id"`
+	UserID int64 `json:"user_id"`
+}
+
+func (q *Queries) MarkOperatorNotificationAsRead(ctx context.Context, arg MarkOperatorNotificationAsReadParams) (Notification, error) {
+	row := q.db.QueryRow(ctx, markOperatorNotificationAsRead, arg.ID, arg.UserID)
 	var i Notification
 	err := row.Scan(
 		&i.ID,

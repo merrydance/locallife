@@ -518,6 +518,15 @@ type DeliveryPool struct {
 	ExpectedDeliveryAt pgtype.Timestamptz `json:"expected_delivery_at"`
 }
 
+// 配送超时提醒去重真值，避免调度器重复下发同一配送单的同一阈值提醒
+type DeliveryTimeoutAlert struct {
+	ID         int64 `json:"id"`
+	DeliveryID int64 `json:"delivery_id"`
+	// 提醒类型键，例如 pending_dispatch_3m
+	AlertKey  string    `json:"alert_key"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 type DiningSession struct {
 	ID            int64              `json:"id"`
 	MerchantID    int64              `json:"merchant_id"`

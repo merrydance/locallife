@@ -91,6 +91,12 @@ func (s *DataCleanupScheduler) Start() error {
 		return err
 	}
 
+	// 每分钟检查 3 分钟无人接单的配送单，并触发运营商提醒
+	_, err = s.cron.AddFunc("0 * * * * *", s.enqueueOperatorPendingDispatchAlerts)
+	if err != nil {
+		return err
+	}
+
 	// 每小时执行用餐会话超时清理
 	_, err = s.cron.AddFunc("0 0 * * * *", s.cleanupStaleDiningSessions)
 	if err != nil {

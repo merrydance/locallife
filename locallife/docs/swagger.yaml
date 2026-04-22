@@ -3918,6 +3918,32 @@ definitions:
       total:
         type: integer
     type: object
+  api.listOperatorNotificationsResponse:
+    properties:
+      notifications:
+        items:
+          $ref: '#/definitions/api.operatorNotificationResponse'
+        type: array
+      page_id:
+        type: integer
+      page_size:
+        type: integer
+      total:
+        type: integer
+    type: object
+  api.listOperatorPendingDispatchesResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/api.operatorPendingDispatchItemResponse'
+        type: array
+      limit:
+        type: integer
+      page:
+        type: integer
+      total:
+        type: integer
+    type: object
   api.listOperatorProfitSharingConfigsResponse:
     properties:
       items:
@@ -5809,6 +5835,88 @@ definitions:
       suspended:
         type: integer
       total:
+        type: integer
+    type: object
+  api.operatorNotificationResponse:
+    properties:
+      category:
+        type: string
+      content:
+        type: string
+      created_at:
+        type: string
+      expires_at:
+        type: string
+      id:
+        type: integer
+      is_read:
+        type: boolean
+      level:
+        type: string
+      read_at:
+        type: string
+      region_id:
+        type: integer
+      region_name:
+        type: string
+      related_id:
+        type: integer
+      related_type:
+        type: string
+      summary:
+        type: string
+      title:
+        type: string
+      type:
+        type: string
+      wait_minutes:
+        type: integer
+    type: object
+  api.operatorNotificationSummaryResponse:
+    properties:
+      latest_notification:
+        $ref: '#/definitions/api.operatorNotificationResponse'
+      unread_count:
+        type: integer
+    type: object
+  api.operatorPendingDispatchItemResponse:
+    properties:
+      delivery_fee:
+        type: integer
+      delivery_id:
+        type: integer
+      expected_pickup_at:
+        type: string
+      is_timeout_over_3m:
+        type: boolean
+      merchant_id:
+        type: integer
+      merchant_name:
+        type: string
+      order_id:
+        type: integer
+      order_no:
+        type: string
+      region_id:
+        type: integer
+      region_name:
+        type: string
+      wait_seconds:
+        type: integer
+    type: object
+  api.operatorPendingDispatchSummaryResponse:
+    properties:
+      latest_refresh_at:
+        type: string
+      oldest_wait_seconds:
+        type: integer
+      pending_total:
+        type: integer
+      region_id:
+        type: integer
+      region_name:
+        type: string
+      timeout_over_3m_total:
         type: integer
     type: object
   api.operatorRealtimeStatsResponse:
@@ -22588,6 +22696,84 @@ paths:
       summary: 获取管理的区域
       tags:
       - 运营商数据统计
+  /v1/operator/regions/{region_id}/delivery-pool:
+    get:
+      consumes:
+      - application/json
+      description: 获取指定运营区域当前待接单列表，支持分页
+      parameters:
+      - description: 区域ID
+        in: path
+        name: region_id
+        required: true
+        type: integer
+      - description: 页码
+        in: query
+        name: page
+        type: integer
+      - description: 每页数量
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.listOperatorPendingDispatchesResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 无权限访问该区域
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取运营区域待接单列表
+      tags:
+      - 运营商数据统计
+  /v1/operator/regions/{region_id}/delivery-pool/summary:
+    get:
+      consumes:
+      - application/json
+      description: 获取指定运营区域当前待接单总数、超时数量和最长等待时长
+      parameters:
+      - description: 区域ID
+        in: path
+        name: region_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.operatorPendingDispatchSummaryResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 无权限访问该区域
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取运营区域待接单摘要
+      tags:
+      - 运营商数据统计
   /v1/operator/regions/{region_id}/peak-hours:
     get:
       consumes:
@@ -23186,6 +23372,180 @@ paths:
       summary: 获取财务概览
       tags:
       - 运营商数据统计
+  /v1/operators/me/notifications:
+    get:
+      consumes:
+      - application/json
+      description: 获取当前运营商的提醒列表，支持按已读状态和分类筛选，支持分页
+      parameters:
+      - description: '筛选读取状态: true-已读, false-未读'
+        in: query
+        name: is_read
+        type: boolean
+      - description: '筛选分类: dispatch_timeout/system'
+        in: query
+        name: category
+        type: string
+      - description: 每页数量(默认20, 最大100)
+        in: query
+        name: limit
+        type: integer
+      - description: 分页偏移量(默认0)
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.listOperatorNotificationsResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取运营商通知列表
+      tags:
+      - 运营商通知
+  /v1/operators/me/notifications/{id}:
+    get:
+      consumes:
+      - application/json
+      description: 获取当前运营商的一条提醒详情
+      parameters:
+      - description: 通知ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.operatorNotificationResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 通知不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取运营商通知详情
+      tags:
+      - 运营商通知
+  /v1/operators/me/notifications/{id}/read:
+    put:
+      consumes:
+      - application/json
+      description: 将指定运营商提醒标记为已读，仅能操作自己的提醒
+      parameters:
+      - description: 通知ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.operatorNotificationResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 通知不存在或已读
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 标记运营商通知已读
+      tags:
+      - 运营商通知
+  /v1/operators/me/notifications/read-all:
+    put:
+      consumes:
+      - application/json
+      description: 将当前运营商的所有未读提醒标记为已读
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.markAllAsReadResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 全部标记运营商通知已读
+      tags:
+      - 运营商通知
+  /v1/operators/me/notifications/summary:
+    get:
+      consumes:
+      - application/json
+      description: 获取当前运营商未读数和最近一条提醒
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.operatorNotificationSummaryResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取运营商通知摘要
+      tags:
+      - 运营商通知
   /v1/operators/me/payment-orders/{id}/profit-sharing/amounts:
     get:
       consumes:
