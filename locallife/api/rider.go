@@ -446,12 +446,17 @@ func (server *Server) getRiderDepositBalance(ctx *gin.Context) {
 		deliveryFrozenDeposit = 0
 	}
 
+	availableDeposit := rider.DepositAmount - deliveryFrozenDeposit - withdrawalProcessingAmount
+	if availableDeposit < 0 {
+		availableDeposit = 0
+	}
+
 	response := depositBalanceResponse{
 		TotalDeposit:               rider.DepositAmount,
 		FrozenDeposit:              rider.FrozenDeposit,
 		DeliveryFrozenDeposit:      deliveryFrozenDeposit,
 		WithdrawalProcessingAmount: withdrawalProcessingAmount,
-		AvailableDeposit:           rider.DepositAmount - rider.FrozenDeposit,
+		AvailableDeposit:           availableDeposit,
 	}
 
 	ctx.JSON(http.StatusOK, response)

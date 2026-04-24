@@ -647,12 +647,16 @@ func TestGetRiderDepositBalanceAPI(t *testing.T) {
 
 	testCases := []struct {
 		name          string
+		rider         db.Rider
+		pendingAmount int64
 		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
 		buildStubs    func(store *mockdb.MockStore)
 		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
 	}{
 		{
-			name: "OK",
+			name:          "OK",
+			rider:         rider,
+			pendingAmount: int64(20 * fenPerYuan),
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
@@ -678,7 +682,43 @@ func TestGetRiderDepositBalanceAPI(t *testing.T) {
 			},
 		},
 		{
-			name: "PendingRefundAmountError",
+			name: "PendingWithdrawalStillReducesAvailableWhenFrozenNotUpdated",
+			rider: func() db.Rider {
+				legacyRider := rider
+				legacyRider.FrozenDeposit = 0
+				return legacyRider
+			}(),
+			pendingAmount: int64(100 * fenPerYuan),
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				legacyRider := rider
+				legacyRider.FrozenDeposit = 0
+				store.EXPECT().
+					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(legacyRider, nil)
+				store.EXPECT().
+					GetPendingRiderDepositRefundAmountByUserID(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(int64(100*fenPerYuan), nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var resp depositBalanceResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Equal(t, int64(500*fenPerYuan), resp.TotalDeposit)
+				require.Equal(t, int64(0), resp.FrozenDeposit)
+				require.Equal(t, int64(0), resp.DeliveryFrozenDeposit)
+				require.Equal(t, int64(100*fenPerYuan), resp.WithdrawalProcessingAmount)
+				require.Equal(t, int64(400*fenPerYuan), resp.AvailableDeposit)
+			},
+		},
+		{
+			name:          "PendingRefundAmountError",
+			rider:         rider,
+			pendingAmount: 0,
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
@@ -697,7 +737,9 @@ func TestGetRiderDepositBalanceAPI(t *testing.T) {
 			},
 		},
 		{
-			name: "RiderNotFound",
+			name:          "RiderNotFound",
+			rider:         rider,
+			pendingAmount: 0,
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
@@ -715,7 +757,9 @@ func TestGetRiderDepositBalanceAPI(t *testing.T) {
 			},
 		},
 		{
-			name: "Unauthorized",
+			name:          "Unauthorized",
+			rider:         rider,
+			pendingAmount: 0,
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				// 不添加授权
 			},
