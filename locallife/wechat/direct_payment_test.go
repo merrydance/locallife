@@ -510,6 +510,52 @@ func TestCreateRefund_UsesLatestDocumentedFields(t *testing.T) {
 	require.Len(t, resp.PromotionDetail, 1)
 }
 
+func TestCreateRefund_AcceptsProcessingResponseWithoutOptionalFields(t *testing.T) {
+	merchantPrivateKey, _ := generateTestKeyPair(t)
+	platformPrivateKey, platformPublicKey := generateTestKeyPair(t)
+
+	tempDir := t.TempDir()
+	privateKeyPath := createTestPrivateKeyFile(t, tempDir, merchantPrivateKey)
+	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
+
+	client, err := NewDirectPaymentClient(DirectPaymentClientConfig{
+		MchID:                 "test_mch_id",
+		AppID:                 "test_app_id",
+		SerialNumber:          "test_serial",
+		APIV3Key:              testAPIV3Key(),
+		PrivateKeyPath:        privateKeyPath,
+		PlatformPublicKeyPath: publicKeyPath,
+		PlatformPublicKeyID:   "PUB_KEY_ID_0123456789",
+		NotifyURL:             "https://example.com/notify",
+	})
+	require.NoError(t, err)
+
+	client.httpClient = &http.Client{
+		Transport: signedDirectPaymentTransport(t, platformPrivateKey, "PUB_KEY_ID_0123456789", func(req *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader(`{"refund_id":"refund-id-accepted-001","out_refund_no":"refund-accepted-001","transaction_id":"wx-transaction-accepted-001","out_trade_no":"order-accepted-001","create_time":"2026-04-24T18:50:03+08:00","status":"PROCESSING","amount":{"refund":100,"currency":"CNY"}}`)),
+			}, nil
+		}),
+	}
+
+	resp, err := client.CreateRefund(context.Background(), &RefundRequest{
+		OutTradeNo:   "order-accepted-001",
+		OutRefundNo:  "refund-accepted-001",
+		Reason:       "退款原因",
+		RefundAmount: 100,
+		TotalAmount:  100,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "refund-id-accepted-001", resp.RefundID)
+	require.Equal(t, RefundStatusProcessing, resp.Status)
+	require.Equal(t, int64(100), resp.Amount.Refund)
+	require.Empty(t, resp.UserReceivedAccount)
+	require.Empty(t, resp.FundsAccount)
+	require.Empty(t, resp.Channel)
+}
+
 func TestQueryRefund_MissingDocumentedFieldsFails(t *testing.T) {
 	merchantPrivateKey, _ := generateTestKeyPair(t)
 	platformPrivateKey, platformPublicKey := generateTestKeyPair(t)

@@ -821,8 +821,15 @@ func TestWithdrawRiderAPI(t *testing.T) {
 				require.Equal(t, http.StatusAccepted, recorder.Code)
 				var resp riderWithdrawResponse
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Equal(t, int64(100*fenPerYuan), resp.RequestedAmount)
 				require.Equal(t, int64(100*fenPerYuan), resp.AcceptedAmount)
 				require.Equal(t, riderWithdrawProcessingStatus, resp.Status)
+				require.Len(t, resp.Refunds, 1)
+				require.Equal(t, int64(1), resp.Refunds[0].RefundOrderID)
+				require.Equal(t, int64(91), resp.Refunds[0].PaymentOrderID)
+				require.Equal(t, "RTEST123", resp.Refunds[0].OutRefundNo)
+				require.Equal(t, int64(100*fenPerYuan), resp.Refunds[0].Amount)
+				require.Equal(t, riderWithdrawProcessingStatus, resp.Refunds[0].Status)
 			},
 		},
 		{
