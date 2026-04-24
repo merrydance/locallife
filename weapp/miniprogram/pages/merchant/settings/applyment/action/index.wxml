@@ -1,5 +1,7 @@
 <custom-navbar title="处理微信待办" showBack="{{true}}" bind:navheight="onNavHeight" />
 
+<t-toast id="t-toast" />
+
 <view
   class="page-container page-shell page-shell--with-nav page-shell--bottom-safe"
   style="--page-shell-nav-height: {{navBarHeight}}px;"
@@ -89,4 +91,16 @@
       <canvas id="applymentActionPosterCanvas" type="2d" class="qr-poster-canvas" disable-scroll="true" />
     </view>
   </view>
+
+  <t-dialog
+    visible="{{albumPermissionDialogVisible}}"
+    title="需要相册权限"
+    content="请在设置中开启“保存到相册”权限后重试。"
+    using-custom-navbar="{{true}}"
+    cancel-btn="取消"
+    confirm-btn="去设置"
+    bind:confirm="onConfirmAlbumPermissionDialog"
+    bind:cancel="onCloseAlbumPermissionDialog"
+    bind:close="onCloseAlbumPermissionDialog"
+  />
 </view>

@@ -10,6 +10,7 @@ import {
   isMerchantConsoleAccessDenied,
   isMerchantConsoleAccessGranted
 } from '../../../../utils/console-access'
+import Toast from 'tdesign-miniprogram/toast/index'
 import { logger } from '../../../../utils/logger'
 import { getStableBarHeights } from '../../../../utils/responsive'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
@@ -19,12 +20,24 @@ const APPLYMENT_FORCE_REFRESH_STORAGE_KEY = 'merchantApplymentShouldRefresh'
 const SUBMIT_PAGE_PATH = '/pages/merchant/settings/applyment/submit/index'
 const EMPTY_WORKFLOW_VIEW = buildMerchantApplymentWorkflowView(null)
 const EMPTY_DISPLAY_STATUS_ITEMS: Array<{ label: string, value: string }> = []
+const TOAST_SELECTOR = '#t-toast'
 
 const getErrorMessage = getErrorUserMessage
 
 let applymentRequestPending = false
 
-function copyText(data: string, successTitle: string) {
+function showResultToast(context: WechatMiniprogram.Page.TrivialInstance, message: string, theme: 'success' | 'warning' | 'error') {
+  Toast({
+    context,
+    selector: TOAST_SELECTOR,
+    message,
+    theme,
+    direction: 'column',
+    duration: 1800
+  })
+}
+
+function copyText(context: WechatMiniprogram.Page.TrivialInstance, data: string, successTitle: string) {
   const trimmed = String(data || '').trim()
   if (!trimmed) {
     return
@@ -33,7 +46,7 @@ function copyText(data: string, successTitle: string) {
   wx.setClipboardData({
     data: trimmed,
     success: () => {
-      wx.showToast({ title: successTitle, icon: 'success' })
+      showResultToast(context, successTitle, 'success')
     }
   })
 }
@@ -300,7 +313,7 @@ Page({
     const path = String(dataset.actionPath || '')
 
     if (intent === 'inline' && value) {
-      copyText(value, resolveCopySuccessTitle(taskType))
+      copyText(this, value, resolveCopySuccessTitle(taskType))
       return
     }
 

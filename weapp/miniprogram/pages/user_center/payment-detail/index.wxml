@@ -46,8 +46,8 @@
             </view>
             <t-divider dashed />
             <view class="info-row">
-              <text class="label">订单编号</text>
-              <text class="value copyable">{{payment.order_id}}</text>
+              <text class="label">{{referenceLabel}}</text>
+              <text class="value copyable">{{referenceValue}}</text>
             </view>
             <t-divider dashed />
             <view class="info-row" wx:if="{{payment.transaction_id}}">

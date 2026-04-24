@@ -1,5 +1,7 @@
 <custom-navbar title="提交进件资料" showBack="{{true}}" bind:navheight="onNavHeight" />
 
+<t-toast id="t-toast" />
+
 <view
   class="page-container page-shell page-shell--with-nav page-shell--bottom-safe"
   style="--page-shell-nav-height: {{navBarHeight}}px;"

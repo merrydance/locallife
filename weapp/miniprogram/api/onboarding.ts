@@ -62,6 +62,27 @@ export interface IDCardOCRData extends BaseOCRData {
 
 export type ApplicationStatus = 'draft' | 'submitted' | 'approved' | 'rejected'
 
+export interface OnboardingReviewSummary {
+  run_id: number
+  stage: string
+  outcome: string
+  reason_code: string
+  reason_message?: string
+  rule_hits?: string[]
+  ocr_job_refs?: number[]
+  created_at: string
+}
+
+export interface ActiveCredentialSummary {
+  document_type: string
+  expires_at?: string
+  days_until_expiry?: number
+  last_reminded_at?: string
+  suspended: boolean
+  suspended_at?: string
+  resumed_at?: string
+}
+
 export interface MerchantApplicationStatusView {
   statusCode: string
   isDraft: boolean
@@ -256,6 +277,8 @@ export interface MerchantApplicationDraftResponse {
   id_card_back_ocr: IDCardOCRData | null
   storefront_images?: string[] | null  // 门头照 URL 数组，最多3张
   environment_images?: string[] | null // 环境照 URL 数组，最多5张
+  review_summary?: OnboardingReviewSummary | null
+  active_credentials?: ActiveCredentialSummary[] | null
   status: ApplicationStatus
   reject_reason: string | null
   created_at: string

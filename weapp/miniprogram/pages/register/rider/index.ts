@@ -74,6 +74,12 @@ Page({
     await this.initApplication()
   },
 
+  onShow() {
+    if (this.data.riderStatusView.isSubmitted) {
+      void this.initApplication()
+    }
+  },
+
   onNavHeight(e: WechatMiniprogram.CustomEvent<{ navBarHeight?: number }>) {
     this.setData({ navBarHeight: e.detail.navBarHeight })
   },
@@ -87,7 +93,7 @@ Page({
         const statusView = buildRiderApplicationStatusView(res.status)
         
         if (statusView.isSubmitted) {
-          this.setData({ currentStep: 4, isSubmitting: true })
+          this.setData({ currentStep: 4, isSubmitting: false })
         } else if (statusView.isApproved) {
           wx.showModal({
             title: '审核通过',
@@ -124,7 +130,7 @@ Page({
       currentStep: statusView.isSubmitted ? 4 : this.data.currentStep,
       applicationStatus: res.status,
       riderStatusView: statusView,
-      isSubmitting: statusView.isSubmitted,
+      isSubmitting: false,
       idFront: { url: '', assetId: res.id_card_front_asset_id },
       idBack: { url: '', assetId: res.id_card_back_asset_id },
       healthCert: { url: '', assetId: res.health_cert_asset_id },
@@ -230,7 +236,7 @@ Page({
     let message = '当前申请状态暂不支持修改资料'
     if (this.data.riderStatusView.isSubmitted) {
       message = '申请已提交，暂时不能修改资料'
-      this.setData({ currentStep: 4, isSubmitting: true })
+      this.setData({ currentStep: 4, isSubmitting: false })
     } else if (this.data.riderStatusView.isApproved) {
       message = '入驻已通过，无需重复上传资料'
     } else if (this.data.riderStatusView.isRejected) {
@@ -512,24 +518,31 @@ Page({
     this.setData({ isSubmitting: true, currentStep: 4 })
     try {
       const res = await submitRiderApplication(consentPayload)
-      
-      // 模拟审核轮询或等待
-      setTimeout(() => {
-        const statusView = buildRiderApplicationStatusView(res.status)
-        if (statusView.isApproved) {
-          wx.showModal({
-            title: '审核通过',
-            content: '恭喜！您已正式成为 LocalLife 骑手。',
-            showCancel: false,
-            success: () => wx.reLaunch({ url: '/pages/rider/dashboard/index' })
-          })
-        } else if (isRejectedRiderApplication(res)) {
-          this.mapResponseToData(res)
-          this.showRejectedApplicationModal(res)
-        } else if (statusView.isSubmitted) {
-          this.setData({ isSubmitting: true, currentStep: 4 })
-        }
-      }, 1500)
+
+      this.mapResponseToData(res)
+
+      const statusView = buildRiderApplicationStatusView(res.status)
+      if (statusView.isApproved) {
+        wx.showModal({
+          title: '审核通过',
+          content: '恭喜！您已正式成为 LocalLife 骑手。',
+          showCancel: false,
+          success: () => wx.reLaunch({ url: '/pages/rider/dashboard/index' })
+        })
+        return
+      }
+
+      if (isRejectedRiderApplication(res)) {
+        this.showRejectedApplicationModal(res)
+        return
+      }
+
+      if (statusView.isSubmitted) {
+        wx.showToast({
+          title: '已提交审核，可稍后回来查看',
+          icon: 'none'
+        })
+      }
     } catch (e: unknown) {
       const message = getErrorMessage(e, '提交失败')
       const debugMessage = getErrorDebugMessage(e)

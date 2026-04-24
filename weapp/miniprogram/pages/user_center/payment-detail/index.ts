@@ -1,4 +1,8 @@
 import { BusinessType, closePayment, createPayment as createPaymentOrder, getPaymentById, getPaymentRefunds, getPayments, getPaymentStatusView, getRefundStatusView, invokeWechatPay, isPaymentStatusSuccessful, PaymentOrder, RefundOrder } from '../../../api/payment'
+import {
+    getRiderDepositRechargeWorkflowStatusView,
+    submitRiderDepositRecharge
+} from '../../../services/rider-deposit-payment'
 import { logger } from '../../../utils/logger'
 import Navigation from '../../../utils/navigation'
 
@@ -44,6 +48,8 @@ Page({
         statusClass: '',
         statusIcon: 'info-circle-filled',
         paymentMethodText: '',
+        referenceLabel: '订单编号',
+        referenceValue: '-',
         showCloseButton: false,
         showPayButton: false,
         paying: false,
@@ -126,8 +132,14 @@ Page({
         const statusClass = statusView.className
         const paymentMethodText = this.getPaymentMethodText(payment.payment_type)
         const showCloseButton = statusView.isPending
-        const showPayButton = statusView.isPending && !!payment.order_id && payment.payment_type === 'miniprogram'
+        const showPayButton = statusView.isPending
+            && payment.payment_type === 'miniprogram'
+            && (!!payment.order_id || payment.business_type === 'rider_deposit')
         const showRefundList = false
+        const referenceLabel = payment.order_id ? '订单编号' : '支付单号'
+        const referenceValue = payment.order_id
+            ? String(payment.order_id)
+            : (payment.out_trade_no || String(payment.id))
 
         this.setData({
             payment,
@@ -136,6 +148,8 @@ Page({
             statusClass,
             statusIcon: statusView.icon,
             paymentMethodText,
+            referenceLabel,
+            referenceValue,
             showCloseButton,
             showPayButton,
             showRefundList,
@@ -147,7 +161,7 @@ Page({
         if (this.data.paying) return
 
         const payment = this.data.payment
-        if (!payment || !payment.order_id) {
+        if (!payment) {
             wx.showToast({ title: '订单信息缺失', icon: 'none' })
             return
         }
@@ -155,6 +169,38 @@ Page({
         this.setData({ paying: true })
         wx.showLoading({ title: '拉起支付...' })
         try {
+            if (payment.business_type === 'rider_deposit') {
+                const rechargeResult = await submitRiderDepositRecharge(payment.amount)
+                const rechargeStatusView = getRiderDepositRechargeWorkflowStatusView(rechargeResult.status)
+
+                if (rechargeStatusView.isCancelled) {
+                    wx.showToast({ title: '已取消支付', icon: 'none' })
+                    await this.loadPaymentDetail()
+                    return
+                }
+
+                if (rechargeStatusView.isPaid) {
+                    wx.showToast({ title: '充值已完成', icon: 'success' })
+                    await this.loadPaymentDetail()
+                    return
+                }
+
+                if (rechargeStatusView.isPendingConfirmation) {
+                    wx.showToast({ title: '支付已提交，请稍后确认', icon: 'none' })
+                    await this.loadPaymentDetail()
+                    return
+                }
+
+                wx.showToast({ title: '支付未完成', icon: 'none' })
+                await this.loadPaymentDetail()
+                return
+            }
+
+            if (!payment.order_id) {
+                wx.showToast({ title: '订单信息缺失', icon: 'none' })
+                return
+            }
+
             const latestPayment = await createPaymentOrder({
                 order_id: payment.order_id,
                 payment_type: 'miniprogram',

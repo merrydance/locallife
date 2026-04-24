@@ -18,6 +18,7 @@ import {
   isMerchantConsoleAccessDenied,
   isMerchantConsoleAccessGranted
 } from '../../../../../utils/console-access'
+import Toast, { hideToast } from 'tdesign-miniprogram/toast/index'
 import { logger } from '../../../../../utils/logger'
 import { getStableBarHeights } from '../../../../../utils/responsive'
 import { getErrorUserMessage } from '../../../../../utils/user-facing'
@@ -25,6 +26,7 @@ import { shouldFallbackToLatestApplication } from '../../../../../utils/merchant
 
 const APPLYMENT_FORCE_REFRESH_STORAGE_KEY = 'merchantApplymentShouldRefresh'
 const EMPTY_WORKFLOW_VIEW = buildMerchantApplymentWorkflowView(null)
+const TOAST_SELECTOR = '#t-toast'
 
 interface SubjectSummary {
   merchantName: string
@@ -52,6 +54,39 @@ function goBackToApplymentStatus() {
 
 function redirectToApplymentEntry() {
   wx.redirectTo({ url: '/pages/merchant/settings/applyment/index' })
+}
+
+function showSubmitLoadingToast(context: WechatMiniprogram.Page.TrivialInstance) {
+  Toast({
+    context,
+    selector: TOAST_SELECTOR,
+    message: '提交中...',
+    theme: 'loading',
+    direction: 'column',
+    duration: 0,
+    preventScrollThrough: true
+  })
+}
+
+function hideSubmitToast(context: WechatMiniprogram.Page.TrivialInstance) {
+  hideToast({ context, selector: TOAST_SELECTOR })
+}
+
+function showSubmitResultToast(
+  context: WechatMiniprogram.Page.TrivialInstance,
+  message: string,
+  theme: 'success' | 'warning' | 'error',
+  close?: () => void
+) {
+  Toast({
+    context,
+    selector: TOAST_SELECTOR,
+    message,
+    theme,
+    direction: 'column',
+    duration: 1800,
+    close
+  })
 }
 
 Page({
@@ -191,7 +226,7 @@ Page({
     }
 
     this.setData({ submitting: true })
-    wx.showLoading({ title: '提交中...' })
+    showSubmitLoadingToast(this)
 
     try {
     const requestPayload: MerchantBindBankRequest = {
@@ -217,14 +252,14 @@ Page({
     }
 
       await merchantBindBank(requestPayload)
+      hideSubmitToast(this)
       wx.setStorageSync(APPLYMENT_FORCE_REFRESH_STORAGE_KEY, '1')
-      wx.showToast({ title: '进件资料已提交', icon: 'success' })
-      redirectToApplymentEntry()
+      showSubmitResultToast(this, '进件资料已提交', 'success', redirectToApplymentEntry)
     } catch (error: unknown) {
       logger.error('Submit merchant applyment bind bank failed', error, 'merchant-applyment-submit-page')
-      wx.showToast({ title: getErrorUserMessage(error, '提交进件资料失败，请稍后重试'), icon: 'none' })
+      hideSubmitToast(this)
+      showSubmitResultToast(this, getErrorUserMessage(error, '提交进件资料失败，请稍后重试'), 'warning')
     } finally {
-      wx.hideLoading()
       this.setData({ submitting: false })
     }
   }

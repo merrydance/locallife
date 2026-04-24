@@ -12,12 +12,14 @@ import {
   isMerchantConsoleAccessGranted
 } from '../../../../../utils/console-access'
 import { saveApplymentQRCodePosterToAlbum } from '../../../../../utils/applyment-qrcode'
+import Toast, { hideToast } from 'tdesign-miniprogram/toast/index'
 import { logger } from '../../../../../utils/logger'
 import { getStableBarHeights } from '../../../../../utils/responsive'
 import { getErrorUserMessage } from '../../../../../utils/user-facing'
 
 const HOME_PAGE_PATH = '/pages/merchant/settings/applyment/index'
 const EMPTY_WORKFLOW_VIEW = buildMerchantApplymentWorkflowView(null)
+const TOAST_SELECTOR = '#t-toast'
 
 const getErrorMessage = getErrorUserMessage
 
@@ -35,7 +37,28 @@ function normalizePreferredTaskType(task?: string): MerchantApplymentTaskType | 
   }
 }
 
-function copyText(data: string, successTitle: string) {
+function showActionToast(
+  context: WechatMiniprogram.Page.TrivialInstance,
+  message: string,
+  theme: 'loading' | 'success' | 'warning' | 'error',
+  options?: { duration?: number, preventScrollThrough?: boolean }
+) {
+  Toast({
+    context,
+    selector: TOAST_SELECTOR,
+    message,
+    theme,
+    direction: 'column',
+    duration: options?.duration,
+    preventScrollThrough: options?.preventScrollThrough
+  })
+}
+
+function hideActionToast(context: WechatMiniprogram.Page.TrivialInstance) {
+  hideToast({ context, selector: TOAST_SELECTOR })
+}
+
+function copyText(context: WechatMiniprogram.Page.TrivialInstance, data: string, successTitle: string) {
   const trimmed = String(data || '').trim()
   if (!trimmed) {
     return
@@ -44,7 +67,7 @@ function copyText(data: string, successTitle: string) {
   wx.setClipboardData({
     data: trimmed,
     success: () => {
-      wx.showToast({ title: successTitle, icon: 'success' })
+      showActionToast(context, successTitle, 'success', { duration: 1800 })
     }
   })
 }
@@ -98,7 +121,8 @@ Page({
     preferredTaskType: '',
     workflowView: { ...EMPTY_WORKFLOW_VIEW },
     refreshingStatus: false,
-    savingQRCode: false
+    savingQRCode: false,
+    albumPermissionDialogVisible: false
   },
 
   async onLoad(query: Record<string, string>) {
@@ -154,7 +178,8 @@ Page({
       workflowLoaded: false,
       workflowView: { ...EMPTY_WORKFLOW_VIEW },
       refreshingStatus: false,
-      savingQRCode: false
+      savingQRCode: false,
+      albumPermissionDialogVisible: false
     })
 
     const accessResult = await ensureMerchantApplymentAccess()
@@ -265,6 +290,15 @@ Page({
     goBackHome()
   },
 
+  onCloseAlbumPermissionDialog() {
+    this.setData({ albumPermissionDialogVisible: false })
+  },
+
+  onConfirmAlbumPermissionDialog() {
+    this.setData({ albumPermissionDialogVisible: false })
+    wx.openSetting()
+  },
+
   onTapSecondaryTask(e: WechatMiniprogram.TouchEvent) {
     const dataset = e.currentTarget.dataset as Partial<MerchantApplymentWorkflowSecondaryTask>
     const intent = String(dataset.actionIntent || 'none') as MerchantApplymentTaskIntent
@@ -273,7 +307,7 @@ Page({
     const path = String(dataset.actionPath || '')
 
     if (intent === 'inline' && value) {
-      copyText(value, resolveCopySuccessTitle(taskType))
+      copyText(this, value, resolveCopySuccessTitle(taskType))
       return
     }
 
@@ -301,7 +335,7 @@ Page({
     }
 
     this.setData({ savingQRCode: true })
-    wx.showLoading({ title: '保存中...' })
+    showActionToast(this, '保存中...', 'loading', { duration: 0, preventScrollThrough: true })
 
     try {
       await saveApplymentQRCodePosterToAlbum({
@@ -311,24 +345,16 @@ Page({
         title: this.data.workflowView.currentTask.title,
         subtitle: this.data.workflowView.currentTask.description
       })
-      wx.showToast({ title: '二维码已保存到相册', icon: 'success' })
+      hideActionToast(this)
+      showActionToast(this, '二维码已保存到相册', 'success', { duration: 1800 })
     } catch (error: unknown) {
+      hideActionToast(this)
       if (isPermissionDeniedError(error)) {
-        wx.showModal({
-          title: '需要相册权限',
-          content: '请在设置中开启“保存到相册”权限后重试。',
-          confirmText: '去设置',
-          success: (result) => {
-            if (result.confirm) {
-              wx.openSetting()
-            }
-          }
-        })
+        this.setData({ albumPermissionDialogVisible: true })
       } else {
-        wx.showToast({ title: getErrorMessage(error, '保存二维码失败，请稍后重试'), icon: 'none' })
+        showActionToast(this, getErrorMessage(error, '保存二维码失败，请稍后重试'), 'warning', { duration: 2000 })
       }
     } finally {
-      wx.hideLoading()
       this.setData({ savingQRCode: false })
     }
   }
