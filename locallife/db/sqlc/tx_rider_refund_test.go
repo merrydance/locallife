@@ -188,3 +188,77 @@ func TestResolveRiderDepositRefundTx_ClosedRestoresCreditAndUnfreezesBalance(t *
 	require.Equal(t, int64(0), persistedCredit.RefundedAmount)
 	require.Equal(t, riderDepositCreditStatusActive, persistedCredit.Status)
 }
+
+func TestResolveRiderDepositRefundTx_SuccessWithDrainRemainingCreditReconcilesStaleBalance(t *testing.T) {
+	setRiderDepositThresholdForTest(t, DefaultRiderDepositThresholdFen)
+
+	rider := createRandomRider(t)
+	paymentOrder := createRefundableRiderDepositCredit(t, rider, 30000)
+
+	prepareResult, err := testStore.(*SQLStore).PrepareRiderDepositRefundTx(context.Background(), PrepareRiderDepositRefundTxParams{
+		RiderID: rider.ID,
+		Amount:  10000,
+		Remark:  "押金提现对账",
+	})
+	require.NoError(t, err)
+	require.Len(t, prepareResult.RefundPlans, 1)
+
+	refundOrder := prepareResult.RefundPlans[0].RefundOrder
+	result, err := testStore.(*SQLStore).ResolveRiderDepositRefundTx(context.Background(), ResolveRiderDepositRefundTxParams{
+		RefundOrderID:        refundOrder.ID,
+		RefundStatus:         riderDepositRefundSucceeded,
+		RefundID:             "",
+		DrainRemainingCredit: true,
+	})
+	require.NoError(t, err)
+	require.True(t, result.Applied)
+	require.Equal(t, int64(20000), result.ReconciledAmount)
+	require.Equal(t, "success", result.RefundOrder.Status)
+	require.Equal(t, "withdraw", result.DepositLog.Type)
+	require.Equal(t, int64(20000), result.DepositLog.BalanceAfter)
+	require.Equal(t, int64(0), result.Rider.DepositAmount)
+	require.Equal(t, int64(0), result.Rider.FrozenDeposit)
+	require.Equal(t, RiderStatusApproved, result.Rider.Status)
+	require.Equal(t, "fully_refunded", result.Credit.Status)
+	require.Equal(t, int64(0), result.Credit.RefundableAmount)
+	require.Equal(t, int64(30000), result.Credit.RefundedAmount)
+
+	persistedCredit, err := testStore.GetRiderDepositCreditByPaymentOrderID(context.Background(), paymentOrder.ID)
+	require.NoError(t, err)
+	require.Equal(t, int64(0), persistedCredit.RefundableAmount)
+	require.Equal(t, int64(30000), persistedCredit.RefundedAmount)
+	require.Equal(t, "fully_refunded", persistedCredit.Status)
+
+	updatedRider, err := testStore.GetRider(context.Background(), rider.ID)
+	require.NoError(t, err)
+	require.Equal(t, int64(0), updatedRider.DepositAmount)
+	require.Equal(t, int64(0), updatedRider.FrozenDeposit)
+	require.Equal(t, RiderStatusApproved, updatedRider.Status)
+
+	logs, err := testStore.ListRiderDeposits(context.Background(), ListRiderDepositsParams{
+		RiderID: rider.ID,
+		Limit:   20,
+		Offset:  0,
+	})
+	require.NoError(t, err)
+
+	var foundWithdraw bool
+	var foundDeduct bool
+	for _, log := range logs {
+		if !log.PaymentOrderID.Valid || log.PaymentOrderID.Int64 != paymentOrder.ID {
+			continue
+		}
+		if log.Type == "withdraw" {
+			foundWithdraw = true
+			require.Equal(t, int64(10000), log.Amount)
+			require.Equal(t, int64(20000), log.BalanceAfter)
+		}
+		if log.Type == "deduct" {
+			foundDeduct = true
+			require.Equal(t, int64(20000), log.Amount)
+			require.Equal(t, int64(0), log.BalanceAfter)
+		}
+	}
+	require.True(t, foundWithdraw)
+	require.True(t, foundDeduct)
+}

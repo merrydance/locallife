@@ -166,6 +166,80 @@ func TestRiderDepositRefundService_SubmitWithdrawal_RefundRequestFailureCompensa
 	require.Empty(t, result.Refunds)
 }
 
+func TestRiderDepositRefundService_SubmitWithdrawal_AlreadyFullyRefundedErrorReconcilesStaleCredit(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	paymentClient := mockwechat.NewMockDirectPaymentClientInterface(ctrl)
+	service := NewRiderDepositRefundService(store, paymentClient)
+
+	rider := db.Rider{
+		ID:            122,
+		UserID:        189,
+		Status:        "active",
+		DepositAmount: 30000,
+		FrozenDeposit: 0,
+	}
+	paymentOrder := db.PaymentOrder{
+		ID:         1502,
+		UserID:     rider.UserID,
+		OutTradeNo: "OTN_STALE_001",
+		Amount:     30000,
+	}
+	refundOrder := db.RefundOrder{
+		ID:           1702,
+		OutRefundNo:  "ORN_STALE_001",
+		RefundAmount: 10000,
+	}
+	plan := db.RiderDepositRefundPlan{
+		RefundOrder:        refundOrder,
+		SourcePaymentOrder: paymentOrder,
+	}
+	wxErr := &wechat.WechatPayError{StatusCode: http.StatusBadRequest, Code: wechaterrorcodes.DirectPaymentCodeInvalidRequest, Message: "订单已全额退款"}
+
+	gomock.InOrder(
+		store.EXPECT().GetRiderByUserID(gomock.Any(), rider.UserID).Return(rider, nil),
+		store.EXPECT().ListRiderActiveDeliveries(gomock.Any(), pgtype.Int8{Int64: rider.ID, Valid: true}).Return([]db.Delivery{}, nil),
+		store.EXPECT().PrepareRiderDepositRefundTx(gomock.Any(), db.PrepareRiderDepositRefundTxParams{
+			RiderID: rider.ID,
+			Amount:  10000,
+			Remark:  "押金提现",
+		}).Return(db.PrepareRiderDepositRefundTxResult{
+			Rider:        db.Rider{ID: rider.ID, UserID: rider.UserID, DepositAmount: 30000, FrozenDeposit: 10000},
+			RefundPlans:  []db.RiderDepositRefundPlan{plan},
+			FrozenAmount: 10000,
+		}, nil),
+		paymentClient.EXPECT().CreateRefund(gomock.Any(), &wechat.RefundRequest{
+			OutTradeNo:   paymentOrder.OutTradeNo,
+			OutRefundNo:  refundOrder.OutRefundNo,
+			Reason:       "押金提现",
+			RefundAmount: refundOrder.RefundAmount,
+			TotalAmount:  paymentOrder.Amount,
+		}).Return(nil, wxErr),
+		store.EXPECT().ResolveRiderDepositRefundTx(gomock.Any(), db.ResolveRiderDepositRefundTxParams{
+			RefundOrderID:        refundOrder.ID,
+			RefundStatus:         riderDepositRefundStatusSuccess,
+			RefundID:             "",
+			DrainRemainingCredit: true,
+		}).Return(db.ResolveRiderDepositRefundTxResult{ReconciledAmount: 20000}, nil),
+		store.EXPECT().UpdatePaymentOrderToRefunded(gomock.Any(), paymentOrder.ID).Return(db.PaymentOrder{ID: paymentOrder.ID, Status: "refunded"}, nil),
+	)
+
+	result, err := service.SubmitWithdrawal(context.Background(), SubmitRiderDepositWithdrawalInput{
+		UserID: rider.UserID,
+		Amount: 10000,
+		Remark: "押金提现",
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(10000), result.RequestedAmount)
+	require.Equal(t, int64(10000), result.AcceptedAmount)
+	require.Equal(t, riderDepositWithdrawStatusSuccess, result.Status)
+	require.Len(t, result.Refunds, 1)
+	require.Equal(t, riderDepositWithdrawStatusSuccess, result.Refunds[0].Status)
+	require.Equal(t, refundOrder.ID, result.Refunds[0].RefundOrder.ID)
+}
+
 func TestRiderDepositRefundService_SubmitWithdrawal_ReturnsBusinessErrorWhenRefundBalanceNotEnough(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

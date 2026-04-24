@@ -141,6 +141,23 @@ func (s *RiderDepositRefundService) SubmitWithdrawal(ctx context.Context, input 
 			},
 		})
 		if refundErr != nil {
+			if isDirectRefundAlreadyFullyRefundedError(refundErr) {
+				resolveErr := s.resolveRefund(ctx, plan.RefundOrder.ID, plan.SourcePaymentOrder, riderDepositRefundStatusSuccess, "", true)
+				if resolveErr != nil {
+					return result, fmt.Errorf("reconcile already refunded rider deposit credit: %w; original error: %v", resolveErr, LoggableError(refundErr))
+				}
+
+				result.AcceptedAmount += plan.RefundOrder.RefundAmount
+				result.Refunds = append(result.Refunds, RiderDepositWithdrawalRefundItem{
+					RefundOrder:  plan.RefundOrder,
+					PaymentOrder: plan.SourcePaymentOrder,
+					Status:       riderDepositWithdrawStatusSuccess,
+				})
+
+				log.Warn().Err(LoggableError(refundErr)).Int64("refund_order_id", plan.RefundOrder.ID).Int64("payment_order_id", plan.SourcePaymentOrder.ID).Msg("rider deposit source payment already fully refunded upstream, reconciled stale local credit")
+				continue
+			}
+
 			resolveErr := s.ResolveRefund(ctx, plan.RefundOrder.ID, plan.SourcePaymentOrder, riderDepositRefundStatusFailed, "")
 			if resolveErr != nil {
 				return result, fmt.Errorf("request rider deposit refund failed: %w; compensation failed: %v", LoggableError(refundErr), resolveErr)
@@ -212,6 +229,39 @@ func (s *RiderDepositRefundService) SubmitWithdrawal(ctx context.Context, input 
 	return result, nil
 }
 
+func (s *RiderDepositRefundService) resolveRefund(ctx context.Context, refundOrderID int64, paymentOrder db.PaymentOrder, refundStatus string, refundID string, drainRemainingCredit bool) error {
+	switch refundStatus {
+	case riderDepositRefundStatusSuccess, riderDepositRefundStatusFailed, riderDepositRefundStatusAbnormal, riderDepositRefundStatusClosed:
+	default:
+		return fmt.Errorf("unsupported rider deposit refund status: %s", refundStatus)
+	}
+
+	result, err := s.store.ResolveRiderDepositRefundTx(ctx, db.ResolveRiderDepositRefundTxParams{
+		RefundOrderID:        refundOrderID,
+		RefundStatus:         refundStatus,
+		RefundID:             refundID,
+		DrainRemainingCredit: drainRemainingCredit,
+	})
+	if err != nil {
+		return fmt.Errorf("resolve rider deposit refund tx: %w", err)
+	}
+
+	if refundStatus == riderDepositRefundStatusSuccess {
+		if result.ReconciledAmount > 0 {
+			if _, err := s.store.UpdatePaymentOrderToRefunded(ctx, paymentOrder.ID); err != nil {
+				return fmt.Errorf("mark payment order refunded after stale credit reconciliation: %w", err)
+			}
+		} else {
+			s.maybeMarkPaymentOrderRefunded(ctx, paymentOrder.ID, paymentOrder.Amount)
+		}
+		if err := s.maybeDeleteRiderReceiver(ctx, paymentOrder.UserID); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func (s *RiderDepositRefundService) MarkRefundProcessing(ctx context.Context, refundOrderID int64, refundID string) error {
 	_, err := s.store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
 		ID:       refundOrderID,
@@ -224,29 +274,7 @@ func (s *RiderDepositRefundService) MarkRefundProcessing(ctx context.Context, re
 }
 
 func (s *RiderDepositRefundService) ResolveRefund(ctx context.Context, refundOrderID int64, paymentOrder db.PaymentOrder, refundStatus string, refundID string) error {
-	switch refundStatus {
-	case riderDepositRefundStatusSuccess, riderDepositRefundStatusFailed, riderDepositRefundStatusAbnormal, riderDepositRefundStatusClosed:
-	default:
-		return fmt.Errorf("unsupported rider deposit refund status: %s", refundStatus)
-	}
-
-	_, err := s.store.ResolveRiderDepositRefundTx(ctx, db.ResolveRiderDepositRefundTxParams{
-		RefundOrderID: refundOrderID,
-		RefundStatus:  refundStatus,
-		RefundID:      refundID,
-	})
-	if err != nil {
-		return fmt.Errorf("resolve rider deposit refund tx: %w", err)
-	}
-
-	if refundStatus == riderDepositRefundStatusSuccess {
-		s.maybeMarkPaymentOrderRefunded(ctx, paymentOrder.ID, paymentOrder.Amount)
-		if err := s.maybeDeleteRiderReceiver(ctx, paymentOrder.UserID); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return s.resolveRefund(ctx, refundOrderID, paymentOrder, refundStatus, refundID, false)
 }
 
 func (s *RiderDepositRefundService) maybeDeleteRiderReceiver(ctx context.Context, userID int64) error {

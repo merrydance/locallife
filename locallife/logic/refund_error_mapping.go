@@ -3,11 +3,26 @@ package logic
 import (
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/merrydance/locallife/wechat"
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	wechaterrorcodes "github.com/merrydance/locallife/wechat/errorcodes"
 )
+
+func isDirectRefundAlreadyFullyRefundedError(err error) bool {
+	var wxErr *wechat.WechatPayError
+	if !errors.As(err, &wxErr) {
+		return false
+	}
+
+	if wechaterrorcodes.CanonicalDirectPaymentCode(wxErr.Code) != wechaterrorcodes.DirectPaymentCodeInvalidRequest {
+		return false
+	}
+
+	message := strings.TrimSpace(wxErr.Message + " " + wxErr.Detail)
+	return strings.Contains(message, "订单已全额退款") || strings.Contains(message, "已全额退款")
+}
 
 func mapDirectRefundCreateError(err error) error {
 	if err == nil {
