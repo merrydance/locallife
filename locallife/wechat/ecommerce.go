@@ -3254,39 +3254,77 @@ func validateMerchantMediaUploadImage(filename string, fileData []byte) (string,
 	}
 
 	ext := strings.ToLower(filepath.Ext(normalizedFilename))
-	switch ext {
-	case ".jpg", ".jpeg":
-		if err := validateDecodedImageFormat(fileData, "jpeg"); err != nil {
+	actualFormat, actualExt, contentType, err := detectMerchantMediaUploadImageFormat(fileData)
+	if err != nil {
+		switch ext {
+		case ".jpg", ".jpeg":
 			return "", "", newUploadImageValidationError("file content does not match %s; provide a real JPEG image", ext)
-		}
-		return normalizedFilename, "image/jpeg", nil
-	case ".png":
-		if err := validateDecodedImageFormat(fileData, "png"); err != nil {
+		case ".png":
 			return "", "", newUploadImageValidationError("file content does not match .png; provide a real PNG image")
-		}
-		return normalizedFilename, "image/png", nil
-	case ".bmp":
-		if err := validateBMPImage(fileData); err != nil {
+		case ".bmp":
 			return "", "", newUploadImageValidationError("file content does not match .bmp; provide a real BMP image")
+		default:
+			return "", "", newUploadImageValidationError("file content is not a supported JPG, JPEG, PNG, or BMP image")
 		}
-		return normalizedFilename, "image/bmp", nil
-	default:
-		return "", "", newUploadImageValidationError("unsupported file extension %q; only .jpg, .jpeg, .png, and .bmp are allowed", ext)
 	}
+
+	switch actualFormat {
+	case "jpeg":
+		if ext == ".jpg" || ext == ".jpeg" {
+			return normalizedFilename, contentType, nil
+		}
+	case "png":
+		if ext == ".png" {
+			return normalizedFilename, contentType, nil
+		}
+	case "bmp":
+		if ext == ".bmp" {
+			return normalizedFilename, contentType, nil
+		}
+	}
+
+	normalizedFilename, err = replaceMerchantMediaUploadFilenameExtension(normalizedFilename, actualExt)
+	if err != nil {
+		return "", "", newUploadImageValidationError("filename is required and must end with .jpg, .jpeg, .png, or .bmp")
+	}
+
+	return normalizedFilename, contentType, nil
 }
 
-func validateDecodedImageFormat(fileData []byte, expectedFormat string) error {
+func detectMerchantMediaUploadImageFormat(fileData []byte) (string, string, string, error) {
 	config, format, err := image.DecodeConfig(bytes.NewReader(fileData))
-	if err != nil {
-		return err
+	if err == nil {
+		if config.Width <= 0 || config.Height <= 0 {
+			return "", "", "", errors.New("image has invalid dimensions")
+		}
+		switch format {
+		case "jpeg":
+			return "jpeg", ".jpg", "image/jpeg", nil
+		case "png":
+			return "png", ".png", "image/png", nil
+		default:
+			return "", "", "", fmt.Errorf("unsupported decoded image format %q", format)
+		}
 	}
-	if config.Width <= 0 || config.Height <= 0 {
-		return errors.New("image has invalid dimensions")
+
+	if bmpErr := validateBMPImage(fileData); bmpErr == nil {
+		return "bmp", ".bmp", "image/bmp", nil
 	}
-	if format != expectedFormat {
-		return fmt.Errorf("decoded image format %q does not match expected %q", format, expectedFormat)
+
+	return "", "", "", err
+}
+
+func replaceMerchantMediaUploadFilenameExtension(filename, targetExt string) (string, error) {
+	trimmed := strings.TrimSpace(filename)
+	if trimmed == "" || trimmed == "." {
+		return "", errors.New("filename is empty")
 	}
-	return nil
+	currentExt := filepath.Ext(trimmed)
+	baseName := strings.TrimSpace(strings.TrimSuffix(trimmed, currentExt))
+	if baseName == "" || baseName == "." {
+		return "", errors.New("filename base is empty")
+	}
+	return baseName + targetExt, nil
 }
 
 func validateBMPImage(fileData []byte) error {
