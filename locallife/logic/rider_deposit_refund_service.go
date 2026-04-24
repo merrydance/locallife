@@ -127,6 +127,7 @@ func (s *RiderDepositRefundService) SubmitWithdrawal(ctx context.Context, input 
 		Status:          riderDepositWithdrawStatusProcessing,
 		Refunds:         make([]RiderDepositWithdrawalRefundItem, 0, len(prepareResult.RefundPlans)),
 	}
+	var firstRefundSubmissionErr error
 
 	for _, plan := range prepareResult.RefundPlans {
 		wxRefund, refundErr := createDirectRefundContract(ctx, s.paymentClient, &wechatcontracts.DirectRefundRequest{
@@ -143,6 +144,9 @@ func (s *RiderDepositRefundService) SubmitWithdrawal(ctx context.Context, input 
 			resolveErr := s.ResolveRefund(ctx, plan.RefundOrder.ID, plan.SourcePaymentOrder, riderDepositRefundStatusFailed, "")
 			if resolveErr != nil {
 				return result, fmt.Errorf("request rider deposit refund failed: %w; compensation failed: %v", LoggableError(refundErr), resolveErr)
+			}
+			if firstRefundSubmissionErr == nil {
+				firstRefundSubmissionErr = mapDirectRefundCreateError(refundErr)
 			}
 			log.Warn().Err(LoggableError(refundErr)).Int64("refund_order_id", plan.RefundOrder.ID).Msg("rider deposit refund request failed, compensation applied")
 			continue
@@ -186,6 +190,9 @@ func (s *RiderDepositRefundService) SubmitWithdrawal(ctx context.Context, input 
 	}
 
 	if result.AcceptedAmount == 0 {
+		if firstRefundSubmissionErr != nil {
+			return result, firstRefundSubmissionErr
+		}
 		return result, fmt.Errorf("rider withdrawal refund submission failed")
 	}
 

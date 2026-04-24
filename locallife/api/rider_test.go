@@ -16,6 +16,7 @@ import (
 	"github.com/merrydance/locallife/util"
 	"github.com/merrydance/locallife/wechat"
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
+	wechaterrorcodes "github.com/merrydance/locallife/wechat/errorcodes"
 	wechatmock "github.com/merrydance/locallife/wechat/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -951,6 +952,59 @@ func TestWithdrawRiderAPI(t *testing.T) {
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
+			name: "RefundChannelNotEnough",
+			body: map[string]interface{}{
+				"amount": 100 * fenPerYuan,
+				"remark": "提现押金",
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockDirectPaymentClientInterface) {
+				store.EXPECT().
+					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(rider, nil)
+
+				store.EXPECT().
+					ListRiderActiveDeliveries(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return([]db.Delivery{}, nil)
+
+				store.EXPECT().
+					PrepareRiderDepositRefundTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.PrepareRiderDepositRefundTxResult{
+						Rider: db.Rider{
+							ID:            rider.ID,
+							DepositAmount: 500 * fenPerYuan,
+							FrozenDeposit: 100 * fenPerYuan,
+						},
+						RefundPlans: []db.RiderDepositRefundPlan{{
+							RefundOrder:        db.RefundOrder{ID: 2, PaymentOrderID: 92, RefundAmount: 100 * fenPerYuan, OutRefundNo: "RTEST124"},
+							SourcePaymentOrder: db.PaymentOrder{ID: 92, OutTradeNo: "PTEST124", Amount: 100 * fenPerYuan},
+						}},
+					}, nil)
+
+				paymentClient.EXPECT().
+					CreateRefund(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(nil, &wechat.WechatPayError{StatusCode: http.StatusForbidden, Code: wechaterrorcodes.DirectPaymentCodeNotEnough, Message: "基本账户余额不足，请充值后重新发起"})
+
+				store.EXPECT().
+					ResolveRiderDepositRefundTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.ResolveRiderDepositRefundTxResult{}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusConflict, recorder.Code)
+				var resp APIResponse
+				require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+				require.Equal(t, CodeConflict, resp.Code)
+				require.Equal(t, "商户退款余额不足，暂时无法原路退款，请联系平台处理", resp.Message)
 			},
 		},
 	}
