@@ -21,6 +21,7 @@ import (
 const (
 	currentTableQRCodeFilenameSuffix      = "_qrcode_v2.png"
 	currentStorefrontQRCodeFilenameSuffix = "_storefront_qrcode_v1.png"
+	merchantStorefrontQRCodePage          = "pages/takeout/restaurant-detail/index"
 )
 
 // =============================================================================
@@ -476,6 +477,10 @@ func buildMerchantStorefrontQRCodeObjectKey(merchantID int64) string {
 	return fmt.Sprintf("merchant/storefront/%d/qrcodes/%s", merchantID, filename)
 }
 
+func buildMerchantStorefrontQRCodeScene(merchantID int64) string {
+	return "m_" + strconv.FormatInt(merchantID, 10)
+}
+
 func wxaCodeEnvVersion(environment string) string {
 	switch strings.ToLower(strings.TrimSpace(environment)) {
 	case "prod", "production":
@@ -512,8 +517,8 @@ func (server *Server) ensureMerchantStorefrontQRCode(ctx context.Context, upload
 
 	checkPath := false
 	wxaReq := &wechat.WXACodeRequest{
-		Scene:      "m_" + strconv.FormatInt(merchantID, 10),
-		Page:       "pages/takeout/restaurant-detail/index",
+		Scene:      buildMerchantStorefrontQRCodeScene(merchantID),
+		Page:       merchantStorefrontQRCodePage,
 		CheckPath:  &checkPath,
 		EnvVersion: wxaCodeEnvVersion(server.config.Environment),
 		Width:      430,

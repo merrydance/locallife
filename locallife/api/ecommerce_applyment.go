@@ -540,6 +540,13 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 		writeApplymentMediaUploadServerError(ctx, err, "店铺首页二维码", "上传店铺首页二维码失败")
 		return
 	}
+	log.Info().
+		Int64("merchant_id", merchant.ID).
+		Str("store_qr_code_media_id", storeQRCodeUploadResp.MediaID).
+		Str("storefront_qr_object_key", storeQRCodeObjectKey).
+		Str("storefront_qr_page", merchantStorefrontQRCodePage).
+		Str("storefront_qr_scene", buildMerchantStorefrontQRCodeScene(merchant.ID)).
+		Msg("merchant applyment storefront qrcode uploaded as wechat media id")
 
 	contactInfo := logic.BuildWechatApplymentContactInfo(logic.ApplymentWechatContactInput{
 		ContactType:             resolvedContact.ContactType,
