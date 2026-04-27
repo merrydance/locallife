@@ -152,7 +152,7 @@ export class Navigation {
   }
 
   static toDineInPaymentSuccess(params: { orderId: string, amount: string, merchantName?: string, tableNumber?: string }) {
-    let url = `/pages/dine-in/payment-success/payment-success?order_id=${params.orderId}&amount=${params.amount}`
+    let url = `/pages/dine-in/payment-success/payment-success?order_id=${params.orderId}&amount=${params.amount}&confirmed=1`
     if (params.merchantName) {
       url += `&merchant_name=${encodeURIComponent(params.merchantName)}`
     }

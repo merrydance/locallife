@@ -9,7 +9,6 @@ Page({
         paymentAmount: 0,
         merchantInfo: null as { name: string } | null,
         tableInfo: null as { table_number: string } | null,
-        countdown: 5,
         navBarHeight: 88
     },
 
@@ -17,35 +16,23 @@ Page({
         this.setData({ navBarHeight: e.detail.navBarHeight })
     },
 
-    onLoad(options: { order_id?: string, amount?: string, merchant_name?: string, table_number?: string }) {
-        const { order_id, amount, merchant_name, table_number } = options
+    onLoad(options: { order_id?: string, amount?: string, merchant_name?: string, table_number?: string, confirmed?: string }) {
+        const { order_id, amount, merchant_name, table_number, confirmed } = options
+        const orderId = parseInt(order_id || '0', 10) || 0
+
+        if (confirmed !== '1') {
+            wx.redirectTo({
+                url: `/pages/payment/result/index?status=pending_confirmation&businessId=${orderId}&businessType=order&amount=${encodeURIComponent(amount || '')}`
+            })
+            return
+        }
 
         this.setData({
-            orderId: parseInt(order_id || '0', 10) || 0,
+            orderId,
             paymentAmount: parseFloat(amount || '0') || 0,
             merchantInfo: merchant_name ? { name: merchant_name } : null,
             tableInfo: table_number ? { table_number } : null
         })
-
-        // 开始倒计时
-        this.startCountdown()
-    },
-
-    /**
-     * 开始倒计时
-     */
-    startCountdown() {
-        const timer = setInterval(() => {
-            const { countdown } = this.data
-            if (countdown <= 1) {
-                clearInterval(timer)
-                this.goToOrderDetail()
-            } else {
-                this.setData({
-                    countdown: countdown - 1
-                })
-            }
-        }, 1000)
     },
 
     /**

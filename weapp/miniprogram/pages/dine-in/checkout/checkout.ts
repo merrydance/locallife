@@ -2,11 +2,12 @@ import { formatPriceNoSymbol } from '../../../utils/util'
 import Navigation from '../../../utils/navigation'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 import { getDineInSessionContext, saveDineInSessionFromMenu } from '../../../services/dine-in-session'
+import { isPaymentWorkflowPaid } from '../../../services/payment-workflow'
 import {
     calculateCheckoutCart,
+    completeCheckoutPayment,
     createCheckoutOrderFromCart,
     createCheckoutOrderPayment,
-    invokeCheckoutWechatPay,
     loadCheckoutCart,
     loadCheckoutMemberships,
     loadCheckoutMerchantDetail,
@@ -263,20 +264,38 @@ Page({
     },
 
     async handlePayment(orderId: number) {
+        const amount = formatPriceNoSymbol(this.data.calculation.total_amount || 0)
         try {
             const payment = await createCheckoutOrderPayment(orderId)
-            if (payment.pay_params) {
-                await invokeCheckoutWechatPay(payment.pay_params)
+            const result = await completeCheckoutPayment(payment)
+            const paymentAmount = formatPriceNoSymbol(result.amountFen || payment.amount || this.data.calculation.total_amount || 0)
+
+            if (!isPaymentWorkflowPaid(result.status)) {
+                Navigation.toPaymentResult({
+                    status: result.status,
+                    paymentOrderId: result.paymentOrderId || payment.id,
+                    businessId: orderId,
+                    businessType: String(result.businessType || payment.business_type || 'order'),
+                    orderNo: result.outTradeNo || payment.out_trade_no,
+                    amount: paymentAmount
+                })
+                return
             }
+
             Navigation.toDineInPaymentSuccess({
                 orderId: String(orderId),
-                amount: formatPriceNoSymbol(payment.amount || this.data.calculation.total_amount || 0),
+                amount: paymentAmount,
                 merchantName: this.data.merchantInfo?.name,
                 tableNumber: String((this.data.tableInfo?.table_no as string | undefined) || '')
             })
         } catch (error) {
             console.error('支付失败', error)
-            wx.redirectTo({ url: `/pages/orders/detail/index?id=${orderId}` })
+            Navigation.toPaymentResult({
+                status: 'create_failed',
+                businessId: orderId,
+                businessType: 'order',
+                amount
+            })
         }
     }
 })

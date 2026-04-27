@@ -7,9 +7,10 @@ import {
 import { getDiningSessionMenu } from '../api/dining-session'
 import { getPublicMerchantDetail, type PublicMerchantDetail } from '../api/merchant'
 import { createOrderFromCart } from '../api/order'
-import { createOrderPayment, invokeWechatPay } from '../api/payment'
+import { createOrderPayment } from '../api/payment'
 import { getMyMemberships } from '../api/personal'
 import type { ScanTableTableInfo } from '../api/table'
+import { completePaymentWorkflow } from './payment-workflow'
 
 export type CheckoutCartResponse = CartResponse
 export type CheckoutCalculationResponse = CalculateCartResponse
@@ -48,6 +49,6 @@ export function createCheckoutOrderPayment(orderId: number) {
   return createOrderPayment(orderId)
 }
 
-export function invokeCheckoutWechatPay(payParams: Parameters<typeof invokeWechatPay>[0]) {
-  return invokeWechatPay(payParams)
+export function completeCheckoutPayment(payment: Parameters<typeof completePaymentWorkflow>[0]) {
+  return completePaymentWorkflow(payment)
 }

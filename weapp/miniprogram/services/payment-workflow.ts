@@ -79,6 +79,10 @@ export function mapPaymentStatusToWorkflowStatus(status?: PaymentStatus | string
   return 'pending_confirmation'
 }
 
+export function isPaymentWorkflowPaid(status?: PaymentWorkflowStatus | string): boolean {
+  return status === 'paid'
+}
+
 export function buildPaymentWorkflowResultFromPayment(
   payment: PaymentOrderResponse,
   status: PaymentWorkflowStatus = mapPaymentStatusToWorkflowStatus(payment.status)

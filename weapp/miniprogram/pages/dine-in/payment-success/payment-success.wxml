@@ -41,7 +41,7 @@
       <view class="tips-content">
         <text class="tips-text">• 请保持手机畅通，商家会及时为您制作美食</text>
         <text class="tips-text">• 如有疑问可联系商家工作人员</text>
-        <text class="tips-text">• {{countdown}}秒后自动跳转到订单详情</text>
+        <text class="tips-text">• 支付已确认，可在订单详情查看后续状态</text>
       </view>
     </view>
   </view>
