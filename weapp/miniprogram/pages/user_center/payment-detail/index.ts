@@ -74,7 +74,7 @@ Page({
         this.setData({ loading: true, error: null })
         try {
             const payment = await getPaymentById(this.data.paymentId)
-            this.processPayment(payment)
+            this.applyPaymentDetail(payment)
 
             await this.loadRefunds()
             this.setData({ initialLoading: false, loading: false })
@@ -96,7 +96,7 @@ Page({
             if (result.payment_orders && result.payment_orders.length > 0) {
                 const payment = result.payment_orders[0]
                 this.setData({ paymentId: payment.id })
-                this.processPayment(payment)
+                this.applyPaymentDetail(payment)
                 await this.loadRefunds()
                 this.setData({ initialLoading: false, loading: false })
             } else {
@@ -127,7 +127,7 @@ Page({
         }
     },
 
-    processPayment(payment: PaymentOrder) {
+    applyPaymentDetail(payment: PaymentOrder) {
         const statusView = getPaymentStatusView(payment.status)
         const amountDisplay = (payment.amount / 100).toFixed(2)
         const statusText = statusView.text

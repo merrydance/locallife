@@ -3,12 +3,14 @@ import { logger } from '../../../utils/logger'
 import { createOrder, OrderType } from '../../../api/order'
 import {
   createCombinedPaymentOrder,
-  createOrderPayment,
-  isCombinedPaymentSuccessful,
-  recoverCombinedPaymentOrder,
-  invokeWechatPay
+  createOrderPayment
 } from '../../../api/payment'
-import { completePaymentWorkflow } from '../../../services/payment-workflow'
+import {
+  completeCombinedPaymentWorkflow,
+  completePaymentWorkflow,
+  isCombinedPaymentWorkflowCancelled,
+  isCombinedPaymentWorkflowPaid
+} from '../../../services/payment-workflow'
 import Navigation from '../../../utils/navigation'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 import {
@@ -27,7 +29,6 @@ import {
   buildTodaySlots,
   CheckoutSnapshotPayload,
   getCombinedPaymentPageMessage,
-  isWechatPayCancelled,
   mapWithConcurrency,
   MerchantCartView,
   navigateToCombinedPaymentSuccess,
@@ -496,43 +497,22 @@ Page({
 
   async handleCombinedPayment(orderIds: number[]) {
     try {
-      let combinedPayment = await createCombinedPaymentOrder({ order_ids: orderIds })
+      const paymentResult = await completeCombinedPaymentWorkflow(await createCombinedPaymentOrder({ order_ids: orderIds }))
+      const combinedPayment = paymentResult.combinedPayment
 
-      if (combinedPayment.pay_params) {
-        try {
-          await invokeWechatPay(combinedPayment.pay_params)
-          combinedPayment = await recoverCombinedPaymentOrder(combinedPayment.id)
-        } catch (error: unknown) {
-          if (isWechatPayCancelled(error)) {
-            wx.showModal({
-              title: '支付未完成',
-              content: '订单已创建，可在订单列表继续完成合单支付。',
-              showCancel: false,
-              confirmText: '查看订单',
-              success: () => Navigation.redirectToOrderList({ orderType: 'takeout' })
-            })
-            return
-          }
-
-          combinedPayment = await recoverCombinedPaymentOrder(combinedPayment.id)
-          if (isCombinedPaymentSuccessful(combinedPayment)) {
-            navigateToCombinedPaymentSuccess(combinedPayment, orderIds)
-            return
-          }
-
-          wx.showModal({
-            title: '订单已创建',
-            content: getCombinedPaymentPageMessage(combinedPayment),
-            showCancel: false,
-            confirmText: '查看订单',
-            success: () => Navigation.redirectToOrderList({ orderType: 'takeout' })
-          })
-          return
-        }
+      if (isCombinedPaymentWorkflowPaid(paymentResult.status)) {
+        navigateToCombinedPaymentSuccess(combinedPayment, orderIds)
+        return
       }
 
-      if (isCombinedPaymentSuccessful(combinedPayment)) {
-        navigateToCombinedPaymentSuccess(combinedPayment, orderIds)
+      if (isCombinedPaymentWorkflowCancelled(paymentResult.status)) {
+        wx.showModal({
+          title: '支付未完成',
+          content: '订单已创建，可在订单列表继续完成合单支付。',
+          showCancel: false,
+          confirmText: '查看订单',
+          success: () => Navigation.redirectToOrderList({ orderType: 'takeout' })
+        })
         return
       }
 

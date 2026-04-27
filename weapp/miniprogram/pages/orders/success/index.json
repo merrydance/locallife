@@ -1,8 +1,0 @@
-{
-  "usingComponents": {
-    "t-icon": "tdesign-miniprogram/icon/icon",
-    "t-button": "tdesign-miniprogram/button/button",
-    "t-result": "tdesign-miniprogram/result/result"
-  },
-  "navigationBarTitleText": "支付成功"
-}

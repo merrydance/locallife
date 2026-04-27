@@ -93,35 +93,6 @@ export class Navigation {
     })
   }
 
-  /**
-   * 跳转到支付成功页
-   */
-  static toPaymentSuccess(params: { orderId: string, orderNo: string, amount: string, isCombined?: boolean, orderCount?: number }) {
-    const combinedQuery = params.isCombined ? `&combined=1&orderCount=${params.orderCount || 0}` : ''
-    wx.redirectTo({
-      url: `/pages/orders/success/index?orderId=${params.orderId}&orderNo=${params.orderNo}&amount=${params.amount}${combinedQuery}`
-    })
-  }
-
-  static toReservationPaymentResult(params: {
-    reservationId: string
-    amount: string
-    result: 'success' | 'failed' | 'cancelled' | 'unknown'
-    source?: 'confirm' | 'detail' | 'list'
-    returnStatus?: string
-  }) {
-    const sourceQuery = params.source ? `&source=${params.source}` : ''
-    const returnStatusQuery = params.returnStatus !== undefined ? `&returnStatus=${encodeURIComponent(params.returnStatus)}` : ''
-    const url = `/pages/orders/success/index?businessType=reservation&orderId=${params.reservationId}&orderNo=${params.reservationId}&amount=${params.amount}&result=${params.result}${sourceQuery}${returnStatusQuery}`
-
-    if (params.source === 'list') {
-      wx.navigateTo({ url })
-      return
-    }
-
-    wx.redirectTo({ url })
-  }
-
   static toPaymentResult(params: {
     status: string
     paymentOrderId?: string | number

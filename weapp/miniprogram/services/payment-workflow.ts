@@ -1,8 +1,10 @@
 import {
   BusinessType,
+  CombinedPaymentOrderResponse,
   createPayment,
   getPaymentDetail,
   invokeWechatPay,
+  isCombinedPaymentSuccessful,
   isPaymentStatusFailed,
   isPaymentStatusSuccessful,
   PaymentCancelledError,
@@ -11,6 +13,8 @@ import {
   PAYMENT_STATUS_POLL_MAX_ATTEMPTS,
   PaymentStatus,
   PaymentType,
+  recoverCombinedPaymentOrder,
+  shouldRecreateCombinedPayment,
   pollPaymentStatus
 } from '../api/payment'
 
@@ -40,6 +44,22 @@ export interface PaymentWorkflowResult {
   amountFen?: number
   outTradeNo?: string
   payment?: PaymentOrderResponse
+}
+
+export type CombinedPaymentWorkflowStatus =
+  | 'paid'
+  | 'cancelled'
+  | 'pending_confirmation'
+  | 'recreate_required'
+  | 'pay_params_missing'
+
+export interface CombinedPaymentWorkflowResult {
+  kind: 'combined_order'
+  status: CombinedPaymentWorkflowStatus
+  combinedPaymentId: number
+  amountFen: number
+  outTradeNo: string
+  combinedPayment: CombinedPaymentOrderResponse
 }
 
 export interface StartPaymentOrderWorkflowParams {
@@ -83,6 +103,18 @@ export function mapPaymentStatusToWorkflowStatus(status?: PaymentStatus | string
 
 export function isPaymentWorkflowPaid(status?: PaymentWorkflowStatus | string): boolean {
   return status === 'paid'
+}
+
+export function isCombinedPaymentWorkflowPaid(status?: CombinedPaymentWorkflowStatus | string): boolean {
+  return status === 'paid'
+}
+
+export function isCombinedPaymentWorkflowCancelled(status?: CombinedPaymentWorkflowStatus | string): boolean {
+  return status === 'cancelled'
+}
+
+export function shouldRecreateCombinedPaymentWorkflow(status?: CombinedPaymentWorkflowStatus | string): boolean {
+  return status === 'recreate_required'
 }
 
 export function buildPaymentWorkflowResultFromPayment(
@@ -166,4 +198,61 @@ export async function startPaymentOrderWorkflow(params: StartPaymentOrderWorkflo
       businessType: params.businessType
     }
   }
+}
+
+function buildCombinedPaymentWorkflowResult(
+  combinedPayment: CombinedPaymentOrderResponse,
+  status?: CombinedPaymentWorkflowStatus
+): CombinedPaymentWorkflowResult {
+  const resolvedStatus: CombinedPaymentWorkflowStatus = status || (
+    isCombinedPaymentSuccessful(combinedPayment)
+      ? 'paid'
+      : shouldRecreateCombinedPayment(combinedPayment)
+        ? 'recreate_required'
+        : 'pending_confirmation'
+  )
+
+  return {
+    kind: 'combined_order',
+    status: resolvedStatus,
+    combinedPaymentId: combinedPayment.id,
+    amountFen: combinedPayment.total_amount,
+    outTradeNo: combinedPayment.combine_out_trade_no,
+    combinedPayment
+  }
+}
+
+function isWechatPaymentCancelled(error: unknown): boolean {
+  if (error instanceof PaymentCancelledError) {
+    return true
+  }
+
+  const wxError = error as { errMsg?: string }
+  return !!wxError?.errMsg?.includes('cancel')
+}
+
+export async function completeCombinedPaymentWorkflow(
+  combinedPayment: CombinedPaymentOrderResponse
+): Promise<CombinedPaymentWorkflowResult> {
+  if (!combinedPayment.pay_params) {
+    if (isCombinedPaymentSuccessful(combinedPayment) || shouldRecreateCombinedPayment(combinedPayment)) {
+      return buildCombinedPaymentWorkflowResult(combinedPayment)
+    }
+
+    return buildCombinedPaymentWorkflowResult(combinedPayment, 'pay_params_missing')
+  }
+
+  try {
+    await invokeWechatPay(combinedPayment.pay_params)
+  } catch (error: unknown) {
+    if (isWechatPaymentCancelled(error)) {
+      return buildCombinedPaymentWorkflowResult(combinedPayment, 'cancelled')
+    }
+
+    const recoveredPayment = await recoverCombinedPaymentOrder(combinedPayment.id)
+    return buildCombinedPaymentWorkflowResult(recoveredPayment)
+  }
+
+  const recoveredPayment = await recoverCombinedPaymentOrder(combinedPayment.id)
+  return buildCombinedPaymentWorkflowResult(recoveredPayment)
 }

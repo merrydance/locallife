@@ -9,7 +9,6 @@ export type RefundStatus = 'pending' | 'processing' | 'success' | 'failed' | 'cl
 export type PaymentType = 'native' | 'miniprogram'
 export type BusinessType = 'order' | 'reservation' | 'reservation_addon' | 'membership_recharge' | 'rider_deposit' | 'claim_recovery'
 export type PaymentLedgerEntryType = 'payment' | 'refund'
-export type PaymentProcessStatus = 'paid' | 'failed' | 'unknown'
 export type CombinedPaymentResolution = 'success' | 'recreate' | 'syncing'
 export type PaymentViewTheme = 'success' | 'warning' | 'danger' | 'primary' | 'default'
 
@@ -19,12 +18,6 @@ const SYNCING_COMBINED_PAYMENT_STATES = new Set(['partial', 'mixed', 'unknown'])
 
 export const PAYMENT_STATUS_POLL_MAX_ATTEMPTS = 30
 export const PAYMENT_STATUS_POLL_INTERVAL_MS = 2000
-
-export interface PaymentProcessResult {
-  paymentId: number
-  status: PaymentProcessStatus
-  payment?: PaymentOrderResponse
-}
 
 export interface MiniProgramPayParams {
   timeStamp: string
@@ -445,25 +438,6 @@ export function buildRefundProgress(refund: RefundOrder, formatTime: (timeStr: s
   ]
 }
 
-export function isPaymentProcessSuccessful(resultOrStatus: PaymentProcessResult | PaymentProcessStatus): boolean {
-  const status = typeof resultOrStatus === 'string' ? resultOrStatus : resultOrStatus.status
-  return status === 'paid'
-}
-
-export function isPaymentProcessFailed(resultOrStatus: PaymentProcessResult | PaymentProcessStatus): boolean {
-  const status = typeof resultOrStatus === 'string' ? resultOrStatus : resultOrStatus.status
-  return status === 'failed'
-}
-
-export function getPaymentProcessOutcomeMessage(
-  resultOrStatus: PaymentProcessResult | PaymentProcessStatus,
-  messages?: { failed?: string, unknown?: string }
-): string {
-  return isPaymentProcessFailed(resultOrStatus)
-    ? (messages?.failed || '支付未完成，请稍后重试')
-    : (messages?.unknown || '支付结果确认中，请稍后刷新')
-}
-
 export function getCombinedPaymentResolution(paymentOrState: CombinedPaymentOrderResponse | string): CombinedPaymentResolution {
   const effectiveState = typeof paymentOrState === 'string'
     ? paymentOrState
@@ -680,85 +654,6 @@ export async function invokeWechatPay(paymentParams: MiniProgramPayParams): Prom
       fail: (error) => reject(error)
     })
   })
-}
-
-function resolveCreatedPaymentStatus(payment: PaymentOrderResponse): PaymentProcessStatus {
-  if (isPaymentStatusSuccessful(payment.status)) {
-    return 'paid'
-  }
-
-  if (isPaymentStatusFailed(payment.status)) {
-    return 'failed'
-  }
-
-  console.warn('[payment] 支付参数缺失', {
-    paymentId: payment.id,
-    paymentStatus: payment.status,
-    businessType: payment.business_type
-  })
-  return 'failed'
-}
-
-export async function processCreatedPayment(payment: PaymentOrderResponse): Promise<PaymentProcessResult> {
-  if (!payment.pay_params) {
-    return {
-      paymentId: payment.id,
-      status: resolveCreatedPaymentStatus(payment),
-      payment
-    }
-  }
-
-  try {
-    await invokeWechatPay(payment.pay_params)
-  } catch (error: unknown) {
-    const wxError = error as { errMsg?: string }
-    if (wxError?.errMsg?.includes('cancel')) {
-      throw new PaymentCancelledError()
-    }
-
-    console.warn('[payment] 拉起支付失败', error)
-    return {
-      paymentId: payment.id,
-      status: 'failed',
-      payment
-    }
-  }
-
-  try {
-    const finalStatus = await pollPaymentStatus(payment.id)
-
-    return {
-      paymentId: payment.id,
-      status: isPaymentStatusSuccessful(finalStatus) ? 'paid' : 'failed',
-      payment
-    }
-  } catch (error: unknown) {
-    console.warn('[payment] 支付结果暂未同步，按 unknown 承接', error)
-    return {
-      paymentId: payment.id,
-      status: 'unknown',
-      payment
-    }
-  }
-}
-
-export async function processPayment(orderId: number, businessType: BusinessType = 'order'): Promise<PaymentProcessResult> {
-  let payment: PaymentOrderResponse
-
-  try {
-    payment = await createPayment({
-      order_id: orderId,
-      business_type: businessType
-    })
-  } catch (error: unknown) {
-    console.warn('[payment] 创建支付单异常，按 failed 承接', error)
-    return {
-      paymentId: 0,
-      status: 'failed'
-    }
-  }
-
-  return processCreatedPayment(payment)
 }
 
 export function mapWechatTradeStateToPaymentStatus(tradeState?: string): PaymentStatus | undefined {

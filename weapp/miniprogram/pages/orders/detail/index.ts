@@ -17,13 +17,16 @@ import {
 import {
   createOrderPayment,
   getCombinedPaymentFollowupMessage,
-  isCombinedPaymentSuccessful,
-  PaymentCancelledError,
-  recoverCombinedPaymentOrder,
-  shouldRecreateCombinedPayment,
-  invokeWechatPay
+  recoverCombinedPaymentOrder
 } from '../../../api/payment'
-import { completePaymentWorkflow, startPaymentOrderWorkflow } from '../../../services/payment-workflow'
+import {
+  completeCombinedPaymentWorkflow,
+  completePaymentWorkflow,
+  isCombinedPaymentWorkflowCancelled,
+  isCombinedPaymentWorkflowPaid,
+  shouldRecreateCombinedPaymentWorkflow,
+  startPaymentOrderWorkflow
+} from '../../../services/payment-workflow'
 import { OrderAdapter } from '../../../adapters/order'
 import { OrderDetail } from '../../../models/order'
 import { generateOrderTimeline } from '../../../utils/timeline'
@@ -375,57 +378,10 @@ Page({
     try {
       const combinedPaymentID = orderDTO?.payment_context?.combined_payment_id
       if (combinedPaymentID) {
-        let combinedPayment = await recoverCombinedPaymentOrder(combinedPaymentID)
+        const combinedResult = await completeCombinedPaymentWorkflow(await recoverCombinedPaymentOrder(combinedPaymentID))
+        const combinedPayment = combinedResult.combinedPayment
 
-        if (combinedPayment.pay_params) {
-          try {
-            await invokeWechatPay(combinedPayment.pay_params)
-            combinedPayment = await recoverCombinedPaymentOrder(combinedPayment.id)
-            if (isCombinedPaymentSuccessful(combinedPayment)) {
-              Navigation.toPaymentResult({
-                status: 'paid',
-                businessId: orderId,
-                businessType: 'order',
-                orderNo: combinedPayment.combine_out_trade_no || this.data.order?.orderNo || orderId,
-                amount: (combinedPayment.total_amount / 100).toFixed(2)
-              })
-              return
-            }
-
-            if (!shouldRecreateCombinedPayment(combinedPayment)) {
-              wx.showToast({ title: `${getCombinedPaymentFollowupMessage(combinedPayment)}，订单详情稍后会自动同步。`, icon: 'none' })
-              return
-            }
-          } catch (error) {
-            if (error instanceof PaymentCancelledError) {
-              wx.showToast({ title: '已取消支付，可继续完成原合单支付', icon: 'none' })
-              return
-            }
-
-            const wxError = error as { errMsg?: string }
-            if (wxError?.errMsg?.includes('cancel')) {
-              wx.showToast({ title: '已取消支付，可继续完成原合单支付', icon: 'none' })
-              return
-            }
-
-            combinedPayment = await recoverCombinedPaymentOrder(combinedPayment.id)
-            if (isCombinedPaymentSuccessful(combinedPayment)) {
-              Navigation.toPaymentResult({
-                status: 'paid',
-                businessId: orderId,
-                businessType: 'order',
-                orderNo: combinedPayment.combine_out_trade_no || this.data.order?.orderNo || orderId,
-                amount: (combinedPayment.total_amount / 100).toFixed(2)
-              })
-              return
-            }
-
-            if (!shouldRecreateCombinedPayment(combinedPayment)) {
-              wx.showToast({ title: `${getCombinedPaymentFollowupMessage(combinedPayment)}，订单详情稍后会自动同步。`, icon: 'none' })
-              return
-            }
-          }
-        } else if (isCombinedPaymentSuccessful(combinedPayment)) {
+        if (isCombinedPaymentWorkflowPaid(combinedResult.status)) {
           Navigation.toPaymentResult({
             status: 'paid',
             businessId: orderId,
@@ -434,11 +390,16 @@ Page({
             amount: (combinedPayment.total_amount / 100).toFixed(2)
           })
           return
-        } else {
-          if (!shouldRecreateCombinedPayment(combinedPayment)) {
-            wx.showToast({ title: `${getCombinedPaymentFollowupMessage(combinedPayment)}，订单详情稍后会自动同步。`, icon: 'none' })
-            return
-          }
+        }
+
+        if (isCombinedPaymentWorkflowCancelled(combinedResult.status)) {
+          wx.showToast({ title: '已取消支付，可继续完成原合单支付', icon: 'none' })
+          return
+        }
+
+        if (!shouldRecreateCombinedPaymentWorkflow(combinedResult.status)) {
+          wx.showToast({ title: `${getCombinedPaymentFollowupMessage(combinedPayment)}，订单详情稍后会自动同步。`, icon: 'none' })
+          return
         }
 
         const fallbackResult = await completePaymentWorkflow(await createOrderPayment(parseInt(orderId, 10)))
@@ -473,13 +434,9 @@ Page({
         await this.loadOrderDetail()
       }
     } catch (error) {
-      if (error instanceof PaymentCancelledError) {
-        wx.showToast({ title: '已取消支付', icon: 'none' })
-      } else {
-        logger.error('支付失败', error, 'Detail.onPayOrder')
-        await this.loadOrderDetail()
-        wx.showToast({ title: '支付结果确认中，请稍后刷新', icon: 'none' })
-      }
+      logger.error('支付失败', error, 'Detail.onPayOrder')
+      await this.loadOrderDetail()
+      wx.showToast({ title: '支付结果确认中，请稍后刷新', icon: 'none' })
     } finally {
       this.setData({ paying: false })
     }
