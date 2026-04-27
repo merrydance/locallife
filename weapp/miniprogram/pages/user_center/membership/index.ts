@@ -1,17 +1,8 @@
 import MembershipService, { Membership } from '../../../api/membership'
 import ConsumerProfileAdapter from '../../../adapters/consumer-profile'
-import { getPublicRechargeRules, rechargeMembership, RechargeRuleResponse } from '../../../api/personal'
-import { invokeWechatPay, PaymentCancelledError } from '../../../api/payment'
-import { formatPriceNoSymbol } from '../../../utils/util'
 import { ErrorHandler } from '../../../utils/error-handler'
 import Navigation from '../../../utils/navigation'
-
-const DEFAULT_RECHARGE_AMOUNTS = [5000, 10000, 20000]
-
-type RechargeOption = {
-  label: string
-  amount: number
-}
+import { showMembershipRechargePausedMessage } from '../../../utils/membership-recharge-pause'
 
 interface MembershipDisplay {
   id: number
@@ -23,31 +14,6 @@ interface MembershipDisplay {
   totalConsumedDisplay: string
 }
 
-function buildRechargeOptions(rules: RechargeRuleResponse[]): RechargeOption[] {
-  if (rules.length > 0) {
-    return rules
-      .slice()
-      .sort((left, right) => left.recharge_amount - right.recharge_amount)
-      .slice(0, 6)
-      .map((rule) => {
-        const rechargeDisplay = formatPriceNoSymbol(rule.recharge_amount)
-        const bonusDisplay = formatPriceNoSymbol(rule.bonus_amount)
-        const totalDisplay = formatPriceNoSymbol(rule.recharge_amount + rule.bonus_amount)
-        return {
-          label: rule.bonus_amount > 0
-            ? `充¥${rechargeDisplay}送¥${bonusDisplay} 到账¥${totalDisplay}`
-            : `充值 ¥${rechargeDisplay}`,
-          amount: rule.recharge_amount
-        }
-      })
-  }
-
-  return DEFAULT_RECHARGE_AMOUNTS.map((amount) => ({
-    label: `充值 ¥${formatPriceNoSymbol(amount)}`,
-    amount
-  }))
-}
-
 Page({
   data: {
     memberships: [] as MembershipDisplay[],
@@ -57,8 +23,7 @@ Page({
     error: null as string | null,
     page: 1,
     pageSize: 10,
-    hasMore: true,
-    rechargingMembershipId: 0
+    hasMore: true
   },
 
   _pendingAutoRechargeMembershipId: 0,
@@ -138,21 +103,7 @@ Page({
     }
   },
 
-  async chooseRechargeAmount(options: RechargeOption[]): Promise<RechargeOption | null> {
-    return new Promise((resolve) => {
-      wx.showActionSheet({
-        itemList: options.map((item) => item.label),
-        success: ({ tapIndex }) => {
-          resolve(options[tapIndex] || null)
-        },
-        fail: () => {
-          resolve(null)
-        }
-      })
-    })
-  },
-
-  async tryAutoRecharge(memberships: MembershipDisplay[]) {
+  tryAutoRecharge(memberships: MembershipDisplay[]) {
     if (!this._pendingAutoRechargeMembershipId) {
       return
     }
@@ -166,54 +117,17 @@ Page({
       return
     }
 
-    await this.startRecharge(item)
+    this.showRechargePaused(item)
   },
 
-  async startRecharge(item: MembershipDisplay) {
-    this.setData({ rechargingMembershipId: item.id })
-    wx.showLoading({ title: '加载方案...' })
-
-    try {
-      const rules = await getPublicRechargeRules(item.merchantId).catch(() => [] as RechargeRuleResponse[])
-      wx.hideLoading()
-
-      const selectedOption = await this.chooseRechargeAmount(buildRechargeOptions(rules))
-      if (!selectedOption) {
-        return
-      }
-
-      wx.showLoading({ title: '发起支付...' })
-      const rechargeResult = await rechargeMembership({
-        membership_id: item.id,
-        payment_method: 'wechat',
-        recharge_amount: selectedOption.amount
-      })
-
-      if (!rechargeResult.pay_params) {
-        throw new Error('支付参数缺失')
-      }
-
-      wx.hideLoading()
-      await invokeWechatPay(rechargeResult.pay_params)
-      await new Promise((resolve) => setTimeout(resolve, 1200))
-      await this.loadMemberships(true)
-    } catch (error) {
-      wx.hideLoading()
-      if (error instanceof PaymentCancelledError) {
-        wx.showToast({ title: '已取消支付', icon: 'none' })
-        return
-      }
-
-      ErrorHandler.handle(error, 'Membership.recharge')
-    } finally {
-      this.setData({ rechargingMembershipId: 0 })
-    }
+  showRechargePaused(_item: MembershipDisplay) {
+    showMembershipRechargePausedMessage()
   },
 
-  async onRechargeTap(e: WechatMiniprogram.BaseEvent) {
+  onRechargeTap(e: WechatMiniprogram.BaseEvent) {
     const item = e.currentTarget.dataset.item as MembershipDisplay | undefined
     if (!item) return
-    await this.startRecharge(item)
+    this.showRechargePaused(item)
   },
 
   onGoHome() {

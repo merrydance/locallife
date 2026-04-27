@@ -17,26 +17,13 @@
   </view>
 
 
-  <!-- 充值入口 (唯一复杂交互) -->
-  <view class="recharge-section" wx:if="{{rechargeRules && rechargeRules.length > 0}}">
+  <!-- 线上充值暂停提示 -->
+  <view class="recharge-section" wx:if="{{showRechargePaused}}">
     <view class="recharge-header">
-      <text class="r-title">会员充值奖励</text>
+      <text class="r-title">会员充值</text>
       <t-tag wx:if="{{currentBalance < orderTotal}}" size="extra-small" theme="danger" variant="dark">当前余额 ¥{{balanceDisplay}}，不足以支付</t-tag>
     </view>
-    <view class="recharge-grid">
-      <view 
-        wx:for="{{rechargeRules || []}}" 
-        wx:key="rule_id"
-        class="recharge-box {{selectedRechargeId === item.rule_id ? 'active' : ''}}"
-        bindtap="onSelectRecharge"
-        data-rule="{{item}}"
-      >
-        <text class="rb-main">充{{item.rechargeDisplay}}</text>
-        <text class="rb-sub">送{{item.bonusDisplay}}</text>
-      </view>
-    </view>
-    <t-button block theme="primary" size="medium" shape="round" class="pay-btn" bindtap="onRecharge" loading="{{recharging}}">
-      {{selectedRechargeId ? '立即充值 ¥' + selectedRechargeDisplay : '选择充值金额'}}
-    </t-button>
+    <view class="recharge-paused">{{rechargePausedMessage}}</view>
+    <t-button block theme="primary" variant="outline" size="medium" shape="round" class="pay-btn" bindtap="onRecharge">我知道了</t-button>
   </view>
 </view>
