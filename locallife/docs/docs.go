@@ -23899,6 +23899,326 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/platform/profit-sharing/receiver-lifecycle/repair": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "平台按 owner 维度重放分账接收方同步，不使用 payment_order 上下文，也不在 API 请求内直接调用微信",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Platform"
+                ],
+                "summary": "手工修复分账接收方生命周期",
+                "parameters": [
+                    {
+                        "description": "接收方生命周期修复请求",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.repairProfitSharingReceiverLifecycleRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "已写入修复意图并入队",
+                        "schema": {
+                            "$ref": "#/definitions/api.repairProfitSharingReceiverLifecycleResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "权限不足",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "404": {
+                        "description": "owner不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/platform/profit-sharing/receiver-lifecycle/targets": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "平台只读查询 receiver lifecycle target，用于排查 pending/failed/synced 状态；响应不返回 openid、receiver name、account hash、display name hash 或微信原始 payload",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Platform"
+                ],
+                "summary": "获取分账接收方生命周期 target 列表",
+                "parameters": [
+                    {
+                        "enum": [
+                            "operator",
+                            "rider"
+                        ],
+                        "type": "string",
+                        "description": "owner 类型",
+                        "name": "owner_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "owner ID",
+                        "name": "owner_id",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "pending",
+                            "processing",
+                            "synced",
+                            "failed",
+                            "skipped"
+                        ],
+                        "type": "string",
+                        "description": "同步状态",
+                        "name": "sync_status",
+                        "in": "query"
+                    },
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 1,
+                        "description": "页码",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "maximum": 100,
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 20,
+                        "description": "每页数量",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "target 列表",
+                        "schema": {
+                            "$ref": "#/definitions/api.listProfitSharingReceiverLifecycleTargetsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "权限不足",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/platform/profit-sharing/receiver-lifecycle/targets/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "平台只读查询单个 receiver lifecycle target；响应不返回 openid、receiver name、account hash、display name hash 或微信原始 payload",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Platform"
+                ],
+                "summary": "获取分账接收方生命周期 target 详情",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "target ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "target 详情",
+                        "schema": {
+                            "$ref": "#/definitions/api.getProfitSharingReceiverLifecycleTargetResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "权限不足",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "404": {
+                        "description": "target不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/platform/profit-sharing/receiver-lifecycle/targets/{id}/attempts": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "平台只读查询单个 receiver lifecycle target 的 attempts；错误字段为服务端脱敏摘要，不包含微信原始 payload",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Platform"
+                ],
+                "summary": "获取分账接收方生命周期 target 执行记录",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "target ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 1,
+                        "description": "页码",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "maximum": 100,
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 20,
+                        "description": "每页数量",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "attempt 列表",
+                        "schema": {
+                            "$ref": "#/definitions/api.listProfitSharingReceiverLifecycleAttemptsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "权限不足",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "404": {
+                        "description": "target不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/platform/refunds/{id}/apply-abnormal-refund": {
             "post": {
                 "security": [
@@ -29368,7 +29688,13 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "提现已提交或完成",
+                        "description": "提现已完成对账",
+                        "schema": {
+                            "$ref": "#/definitions/api.riderWithdrawResponse"
+                        }
+                    },
+                    "202": {
+                        "description": "提现请求已受理，等待异步终态",
                         "schema": {
                             "$ref": "#/definitions/api.riderWithdrawResponse"
                         }
@@ -31751,6 +32077,9 @@ const docTemplate = `{
                     "description": "task enqueued time",
                     "type": "string"
                 },
+                "readiness": {
+                    "$ref": "#/definitions/api.OCRReadiness"
+                },
                 "reg_num": {
                     "description": "注册号",
                     "type": "string"
@@ -31878,6 +32207,9 @@ const docTemplate = `{
                     "description": "原始OCR文本",
                     "type": "string"
                 },
+                "readiness": {
+                    "$ref": "#/definitions/api.OCRReadiness"
+                },
                 "started_at": {
                     "description": "task started processing time",
                     "type": "string"
@@ -31929,6 +32261,9 @@ const docTemplate = `{
                 },
                 "queued_at": {
                     "type": "string"
+                },
+                "readiness": {
+                    "$ref": "#/definitions/api.OCRReadiness"
                 },
                 "started_at": {
                     "type": "string"
@@ -31987,6 +32322,9 @@ const docTemplate = `{
                 },
                 "queued_at": {
                     "type": "string"
+                },
+                "readiness": {
+                    "$ref": "#/definitions/api.OCRReadiness"
                 },
                 "started_at": {
                     "type": "string"
@@ -32062,6 +32400,9 @@ const docTemplate = `{
                     "description": "task enqueued time",
                     "type": "string"
                 },
+                "readiness": {
+                    "$ref": "#/definitions/api.OCRReadiness"
+                },
                 "started_at": {
                     "description": "task started processing time",
                     "type": "string"
@@ -32082,6 +32423,35 @@ const docTemplate = `{
                 "message": {
                     "type": "string",
                     "example": "ok"
+                }
+            }
+        },
+        "api.OCRReadiness": {
+            "type": "object",
+            "properties": {
+                "missing_fields": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "reason_code": {
+                    "type": "string"
+                },
+                "required_fields": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "state": {
+                    "type": "string"
+                },
+                "unparseable_fields": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },
@@ -32427,6 +32797,32 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.activeCredentialSummaryResponse": {
+            "type": "object",
+            "properties": {
+                "days_until_expiry": {
+                    "type": "integer"
+                },
+                "document_type": {
+                    "type": "string"
+                },
+                "expires_at": {
+                    "type": "string"
+                },
+                "last_reminded_at": {
+                    "type": "string"
+                },
+                "resumed_at": {
+                    "type": "string"
+                },
+                "suspended": {
+                    "type": "boolean"
+                },
+                "suspended_at": {
                     "type": "string"
                 }
             }
@@ -36541,6 +36937,14 @@ const docTemplate = `{
                 }
             }
         },
+        "api.getProfitSharingReceiverLifecycleTargetResponse": {
+            "type": "object",
+            "properties": {
+                "target": {
+                    "$ref": "#/definitions/api.profitSharingReceiverLifecycleTargetItem"
+                }
+            }
+        },
         "api.groupApplicationResponse": {
             "type": "object",
             "properties": {
@@ -37584,6 +37988,61 @@ const docTemplate = `{
                 }
             }
         },
+        "api.listProfitSharingReceiverLifecycleAttemptsResponse": {
+            "type": "object",
+            "properties": {
+                "has_more": {
+                    "type": "boolean"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.profitSharingReceiverLifecycleAttemptItem"
+                    }
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "target": {
+                    "$ref": "#/definitions/api.profitSharingReceiverLifecycleTargetItem"
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "total_pages": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.listProfitSharingReceiverLifecycleTargetsResponse": {
+            "type": "object",
+            "properties": {
+                "has_more": {
+                    "type": "boolean"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.profitSharingReceiverLifecycleTargetItem"
+                    }
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "total_pages": {
+                    "type": "integer"
+                }
+            }
+        },
         "api.listRefundOrdersByPaymentResponse": {
             "type": "object",
             "properties": {
@@ -37918,6 +38377,12 @@ const docTemplate = `{
         "api.merchantApplicationDraftResponse": {
             "type": "object",
             "properties": {
+                "active_credentials": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.activeCredentialSummaryResponse"
+                    }
+                },
                 "business_address": {
                     "type": "string"
                 },
@@ -37992,6 +38457,9 @@ const docTemplate = `{
                 },
                 "reject_reason": {
                     "type": "string"
+                },
+                "review_summary": {
+                    "$ref": "#/definitions/api.onboardingReviewSummaryResponse"
                 },
                 "status": {
                     "type": "string"
@@ -39831,6 +40299,41 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.onboardingReviewSummaryResponse": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "ocr_job_refs": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "outcome": {
+                    "type": "string"
+                },
+                "reason_code": {
+                    "type": "string"
+                },
+                "reason_message": {
+                    "type": "string"
+                },
+                "rule_hits": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "run_id": {
+                    "type": "integer"
+                },
+                "stage": {
                     "type": "string"
                 }
             }
@@ -41780,6 +42283,129 @@ const docTemplate = `{
                 }
             }
         },
+        "api.profitSharingReceiverLifecycleAttemptItem": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "error_code": {
+                    "type": "string"
+                },
+                "error_message": {
+                    "type": "string"
+                },
+                "finished_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "idempotent_success": {
+                    "type": "boolean"
+                },
+                "started_at": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "target_id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.profitSharingReceiverLifecycleTargetItem": {
+            "type": "object",
+            "properties": {
+                "appid": {
+                    "type": "string"
+                },
+                "attempt_count": {
+                    "type": "integer"
+                },
+                "channel": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "desired_state": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "last_attempt_at": {
+                    "type": "string"
+                },
+                "last_error_code": {
+                    "type": "string"
+                },
+                "last_error_message": {
+                    "type": "string"
+                },
+                "next_retry_at": {
+                    "type": "string"
+                },
+                "owner_id": {
+                    "type": "integer"
+                },
+                "owner_type": {
+                    "type": "string"
+                },
+                "provider": {
+                    "type": "string"
+                },
+                "receiver_type": {
+                    "type": "string"
+                },
+                "skipped_at": {
+                    "type": "string"
+                },
+                "sync_status": {
+                    "type": "string"
+                },
+                "synced_at": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.profitSharingReceiverLifecycleTargetResponse": {
+            "type": "object",
+            "properties": {
+                "attempt_count": {
+                    "type": "integer"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "desired_state": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "owner_id": {
+                    "type": "integer"
+                },
+                "owner_type": {
+                    "type": "string"
+                },
+                "sync_status": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
         "api.profitSharingReturnResponse": {
             "type": "object",
             "properties": {
@@ -42705,6 +43331,45 @@ const docTemplate = `{
                 }
             }
         },
+        "api.repairProfitSharingReceiverLifecycleRequest": {
+            "type": "object",
+            "required": [
+                "desired_state",
+                "owner_id",
+                "owner_type"
+            ],
+            "properties": {
+                "desired_state": {
+                    "type": "string",
+                    "enum": [
+                        "present",
+                        "absent"
+                    ]
+                },
+                "owner_id": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "owner_type": {
+                    "type": "string",
+                    "enum": [
+                        "operator",
+                        "rider"
+                    ]
+                }
+            }
+        },
+        "api.repairProfitSharingReceiverLifecycleResponse": {
+            "type": "object",
+            "properties": {
+                "enqueued": {
+                    "type": "boolean"
+                },
+                "target": {
+                    "$ref": "#/definitions/api.profitSharingReceiverLifecycleTargetResponse"
+                }
+            }
+        },
         "api.replaceOrderRequest": {
             "type": "object",
             "required": [
@@ -43167,6 +43832,12 @@ const docTemplate = `{
         "api.riderApplicationResponse": {
             "type": "object",
             "properties": {
+                "active_credentials": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.activeCredentialSummaryResponse"
+                    }
+                },
                 "created_at": {
                     "type": "string"
                 },
@@ -43196,6 +43867,9 @@ const docTemplate = `{
                 },
                 "reject_reason": {
                     "type": "string"
+                },
+                "review_summary": {
+                    "$ref": "#/definitions/api.onboardingReviewSummaryResponse"
                 },
                 "status": {
                     "type": "string"

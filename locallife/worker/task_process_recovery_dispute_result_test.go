@@ -60,6 +60,7 @@ func TestExecuteRecoveryDisputeCompensation_ApprovedExecutesPayoutAction(t *test
 			return &wechatcontracts.DirectMerchantTransferCreateResponse{OutBillNo: req.OutBillNo, TransferBillNo: "wx-bill-109", State: wechatcontracts.DirectMerchantTransferStateAccepted}, nil
 		},
 	)
+	expectClaimPayoutTransferCommandAccepted(t, store, action.ID, claimPayoutOutBillNo(action.ID), "wx-bill-109", false)
 	transferClient.EXPECT().QueryTransferByOutBillNo(gomock.Any(), claimPayoutOutBillNo(action.ID)).Return(&wechatcontracts.DirectMerchantTransferQueryResponse{
 		OutBillNo:      claimPayoutOutBillNo(action.ID),
 		TransferBillNo: "wx-bill-109",

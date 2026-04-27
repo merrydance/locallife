@@ -60,6 +60,8 @@ definitions:
       queued_at:
         description: task enqueued time
         type: string
+      readiness:
+        $ref: '#/definitions/api.OCRReadiness'
       reg_num:
         description: 注册号
         type: string
@@ -153,6 +155,8 @@ definitions:
       raw_text:
         description: 原始OCR文本
         type: string
+      readiness:
+        $ref: '#/definitions/api.OCRReadiness'
       started_at:
         description: task started processing time
         type: string
@@ -190,6 +194,8 @@ definitions:
         type: integer
       queued_at:
         type: string
+      readiness:
+        $ref: '#/definitions/api.OCRReadiness'
       started_at:
         type: string
       status:
@@ -231,6 +237,8 @@ definitions:
         type: integer
       queued_at:
         type: string
+      readiness:
+        $ref: '#/definitions/api.OCRReadiness'
       started_at:
         type: string
       status:
@@ -284,6 +292,8 @@ definitions:
       queued_at:
         description: task enqueued time
         type: string
+      readiness:
+        $ref: '#/definitions/api.OCRReadiness'
       started_at:
         description: task started processing time
         type: string
@@ -299,6 +309,25 @@ definitions:
       message:
         example: ok
         type: string
+    type: object
+  api.OCRReadiness:
+    properties:
+      missing_fields:
+        items:
+          type: string
+        type: array
+      reason_code:
+        type: string
+      required_fields:
+        items:
+          type: string
+        type: array
+      state:
+        type: string
+      unparseable_fields:
+        items:
+          type: string
+        type: array
     type: object
   api.OperatorIDCardBackOCR:
     properties:
@@ -539,6 +568,23 @@ definitions:
       refund_id:
         type: string
       status:
+        type: string
+    type: object
+  api.activeCredentialSummaryResponse:
+    properties:
+      days_until_expiry:
+        type: integer
+      document_type:
+        type: string
+      expires_at:
+        type: string
+      last_reminded_at:
+        type: string
+      resumed_at:
+        type: string
+      suspended:
+        type: boolean
+      suspended_at:
         type: string
     type: object
   api.addCartItemRequest:
@@ -3378,6 +3424,11 @@ definitions:
       voice_takeout:
         type: boolean
     type: object
+  api.getProfitSharingReceiverLifecycleTargetResponse:
+    properties:
+      target:
+        $ref: '#/definitions/api.profitSharingReceiverLifecycleTargetItem'
+    type: object
   api.groupApplicationResponse:
     properties:
       address:
@@ -4068,6 +4119,42 @@ definitions:
       page:
         type: integer
     type: object
+  api.listProfitSharingReceiverLifecycleAttemptsResponse:
+    properties:
+      has_more:
+        type: boolean
+      items:
+        items:
+          $ref: '#/definitions/api.profitSharingReceiverLifecycleAttemptItem'
+        type: array
+      limit:
+        type: integer
+      page:
+        type: integer
+      target:
+        $ref: '#/definitions/api.profitSharingReceiverLifecycleTargetItem'
+      total:
+        type: integer
+      total_pages:
+        type: integer
+    type: object
+  api.listProfitSharingReceiverLifecycleTargetsResponse:
+    properties:
+      has_more:
+        type: boolean
+      items:
+        items:
+          $ref: '#/definitions/api.profitSharingReceiverLifecycleTargetItem'
+        type: array
+      limit:
+        type: integer
+      page:
+        type: integer
+      total:
+        type: integer
+      total_pages:
+        type: integer
+    type: object
   api.listRefundOrdersByPaymentResponse:
     properties:
       refund_orders:
@@ -4291,6 +4378,10 @@ definitions:
     type: object
   api.merchantApplicationDraftResponse:
     properties:
+      active_credentials:
+        items:
+          $ref: '#/definitions/api.activeCredentialSummaryResponse'
+        type: array
       business_address:
         type: string
       business_license_media_asset_id:
@@ -4341,6 +4432,8 @@ definitions:
         type: integer
       reject_reason:
         type: string
+      review_summary:
+        $ref: '#/definitions/api.onboardingReviewSummaryResponse'
       status:
         type: string
       storefront_images:
@@ -5583,6 +5676,29 @@ definitions:
       result_version:
         type: integer
       status:
+        type: string
+    type: object
+  api.onboardingReviewSummaryResponse:
+    properties:
+      created_at:
+        type: string
+      ocr_job_refs:
+        items:
+          type: integer
+        type: array
+      outcome:
+        type: string
+      reason_code:
+        type: string
+      reason_message:
+        type: string
+      rule_hits:
+        items:
+          type: string
+        type: array
+      run_id:
+        type: integer
+      stage:
         type: string
     type: object
   api.openDiningSessionRequest:
@@ -6910,6 +7026,87 @@ definitions:
       updated_at:
         type: string
     type: object
+  api.profitSharingReceiverLifecycleAttemptItem:
+    properties:
+      action:
+        type: string
+      created_at:
+        type: string
+      error_code:
+        type: string
+      error_message:
+        type: string
+      finished_at:
+        type: string
+      id:
+        type: integer
+      idempotent_success:
+        type: boolean
+      started_at:
+        type: string
+      status:
+        type: string
+      target_id:
+        type: integer
+    type: object
+  api.profitSharingReceiverLifecycleTargetItem:
+    properties:
+      appid:
+        type: string
+      attempt_count:
+        type: integer
+      channel:
+        type: string
+      created_at:
+        type: string
+      desired_state:
+        type: string
+      id:
+        type: integer
+      last_attempt_at:
+        type: string
+      last_error_code:
+        type: string
+      last_error_message:
+        type: string
+      next_retry_at:
+        type: string
+      owner_id:
+        type: integer
+      owner_type:
+        type: string
+      provider:
+        type: string
+      receiver_type:
+        type: string
+      skipped_at:
+        type: string
+      sync_status:
+        type: string
+      synced_at:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  api.profitSharingReceiverLifecycleTargetResponse:
+    properties:
+      attempt_count:
+        type: integer
+      created_at:
+        type: string
+      desired_state:
+        type: string
+      id:
+        type: integer
+      owner_id:
+        type: integer
+      owner_type:
+        type: string
+      sync_status:
+        type: string
+      updated_at:
+        type: string
+    type: object
   api.profitSharingReturnResponse:
     properties:
       amount:
@@ -7536,6 +7733,33 @@ definitions:
       refresh_token_expires_at:
         type: string
     type: object
+  api.repairProfitSharingReceiverLifecycleRequest:
+    properties:
+      desired_state:
+        enum:
+        - present
+        - absent
+        type: string
+      owner_id:
+        minimum: 1
+        type: integer
+      owner_type:
+        enum:
+        - operator
+        - rider
+        type: string
+    required:
+    - desired_state
+    - owner_id
+    - owner_type
+    type: object
+  api.repairProfitSharingReceiverLifecycleResponse:
+    properties:
+      enqueued:
+        type: boolean
+      target:
+        $ref: '#/definitions/api.profitSharingReceiverLifecycleTargetResponse'
+    type: object
   api.replaceOrderRequest:
     properties:
       items:
@@ -7845,6 +8069,10 @@ definitions:
     type: object
   api.riderApplicationResponse:
     properties:
+      active_credentials:
+        items:
+          $ref: '#/definitions/api.activeCredentialSummaryResponse'
+        type: array
       created_at:
         type: string
       health_cert_asset_id:
@@ -7865,6 +8093,8 @@ definitions:
         type: string
       reject_reason:
         type: string
+      review_summary:
+        $ref: '#/definitions/api.onboardingReviewSummaryResponse'
       status:
         type: string
       submitted_at:
@@ -25655,6 +25885,220 @@ paths:
       summary: 禁用分账规则配置
       tags:
       - Platform
+  /v1/platform/profit-sharing/receiver-lifecycle/repair:
+    post:
+      consumes:
+      - application/json
+      description: 平台按 owner 维度重放分账接收方同步，不使用 payment_order 上下文，也不在 API 请求内直接调用微信
+      parameters:
+      - description: 接收方生命周期修复请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.repairProfitSharingReceiverLifecycleRequest'
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: 已写入修复意图并入队
+          schema:
+            $ref: '#/definitions/api.repairProfitSharingReceiverLifecycleResponse'
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "403":
+          description: 权限不足
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "404":
+          description: owner不存在
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+      security:
+      - BearerAuth: []
+      summary: 手工修复分账接收方生命周期
+      tags:
+      - Platform
+  /v1/platform/profit-sharing/receiver-lifecycle/targets:
+    get:
+      consumes:
+      - application/json
+      description: 平台只读查询 receiver lifecycle target，用于排查 pending/failed/synced 状态；响应不返回
+        openid、receiver name、account hash、display name hash 或微信原始 payload
+      parameters:
+      - description: owner 类型
+        enum:
+        - operator
+        - rider
+        in: query
+        name: owner_type
+        type: string
+      - description: owner ID
+        in: query
+        name: owner_id
+        type: integer
+      - description: 同步状态
+        enum:
+        - pending
+        - processing
+        - synced
+        - failed
+        - skipped
+        in: query
+        name: sync_status
+        type: string
+      - default: 1
+        description: 页码
+        in: query
+        minimum: 1
+        name: page
+        type: integer
+      - default: 20
+        description: 每页数量
+        in: query
+        maximum: 100
+        minimum: 1
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: target 列表
+          schema:
+            $ref: '#/definitions/api.listProfitSharingReceiverLifecycleTargetsResponse'
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "403":
+          description: 权限不足
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+      security:
+      - BearerAuth: []
+      summary: 获取分账接收方生命周期 target 列表
+      tags:
+      - Platform
+  /v1/platform/profit-sharing/receiver-lifecycle/targets/{id}:
+    get:
+      consumes:
+      - application/json
+      description: 平台只读查询单个 receiver lifecycle target；响应不返回 openid、receiver name、account
+        hash、display name hash 或微信原始 payload
+      parameters:
+      - description: target ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: target 详情
+          schema:
+            $ref: '#/definitions/api.getProfitSharingReceiverLifecycleTargetResponse'
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "403":
+          description: 权限不足
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "404":
+          description: target不存在
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+      security:
+      - BearerAuth: []
+      summary: 获取分账接收方生命周期 target 详情
+      tags:
+      - Platform
+  /v1/platform/profit-sharing/receiver-lifecycle/targets/{id}/attempts:
+    get:
+      consumes:
+      - application/json
+      description: 平台只读查询单个 receiver lifecycle target 的 attempts；错误字段为服务端脱敏摘要，不包含微信原始
+        payload
+      parameters:
+      - description: target ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - default: 1
+        description: 页码
+        in: query
+        minimum: 1
+        name: page
+        type: integer
+      - default: 20
+        description: 每页数量
+        in: query
+        maximum: 100
+        minimum: 1
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: attempt 列表
+          schema:
+            $ref: '#/definitions/api.listProfitSharingReceiverLifecycleAttemptsResponse'
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "403":
+          description: 权限不足
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "404":
+          description: target不存在
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+      security:
+      - BearerAuth: []
+      summary: 获取分账接收方生命周期 target 执行记录
+      tags:
+      - Platform
   /v1/platform/refunds/{id}/apply-abnormal-refund:
     post:
       consumes:
@@ -29209,7 +29653,11 @@ paths:
       - application/json
       responses:
         "200":
-          description: 提现已提交或完成
+          description: 提现已完成对账
+          schema:
+            $ref: '#/definitions/api.riderWithdrawResponse'
+        "202":
+          description: 提现请求已受理，等待异步终态
           schema:
             $ref: '#/definitions/api.riderWithdrawResponse'
         "400":

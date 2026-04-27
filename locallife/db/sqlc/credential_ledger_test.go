@@ -131,8 +131,11 @@ func TestCredentialLedgerScans_FilterByWindowAndActiveStatus(t *testing.T) {
 		PageLimit:     20,
 	})
 	require.NoError(t, err)
-	require.Len(t, reminderWindowRows, 1)
-	require.Equal(t, expiringLedger.ID, reminderWindowRows[0].ID)
+	reminderWindowIDs := credentialLedgerIDSet(reminderWindowRows)
+	require.Contains(t, reminderWindowIDs, expiringLedger.ID)
+	require.NotContains(t, reminderWindowIDs, remindedLedger.ID)
+	require.NotContains(t, reminderWindowIDs, expiredLedger.ID)
+	require.NotContains(t, reminderWindowIDs, inactiveLedger.ID)
 
 	expiredRows, err := testStore.ListExpiredActiveCredentialLedgers(context.Background(), ListExpiredActiveCredentialLedgersParams{
 		ExpiredBefore: pgtype.Timestamptz{Time: now, Valid: true},
@@ -141,9 +144,19 @@ func TestCredentialLedgerScans_FilterByWindowAndActiveStatus(t *testing.T) {
 		PageLimit:     20,
 	})
 	require.NoError(t, err)
-	require.Len(t, expiredRows, 1)
-	require.Equal(t, expiredLedger.ID, expiredRows[0].ID)
-	require.NotEqual(t, inactiveLedger.ID, expiredRows[0].ID)
+	expiredIDs := credentialLedgerIDSet(expiredRows)
+	require.Contains(t, expiredIDs, expiredLedger.ID)
+	require.NotContains(t, expiredIDs, expiringLedger.ID)
+	require.NotContains(t, expiredIDs, remindedLedger.ID)
+	require.NotContains(t, expiredIDs, inactiveLedger.ID)
+}
+
+func credentialLedgerIDSet(rows []CredentialLedger) map[int64]struct{} {
+	ids := make(map[int64]struct{}, len(rows))
+	for _, row := range rows {
+		ids[row.ID] = struct{}{}
+	}
+	return ids
 }
 
 func TestReleaseMerchantTakeoutSuspensionIfOwned(t *testing.T) {

@@ -51,13 +51,6 @@ type TaskDistributor interface {
 		opts ...asynq.Option,
 	) error
 
-	// DistributeTaskProcessPaymentSuccess 分发支付成功处理任务
-	DistributeTaskProcessPaymentSuccess(
-		ctx context.Context,
-		payload *PaymentSuccessPayload,
-		opts ...asynq.Option,
-	) error
-
 	// DistributeTaskProcessRefund 分发发起退款任务
 	DistributeTaskProcessRefund(
 		ctx context.Context,
@@ -79,17 +72,17 @@ type TaskDistributor interface {
 		opts ...asynq.Option,
 	) error
 
+	// DistributeTaskProcessProfitSharingReceiverTarget 分发分账接收方生命周期同步任务
+	DistributeTaskProcessProfitSharingReceiverTarget(
+		ctx context.Context,
+		payload *ProfitSharingReceiverTargetPayload,
+		opts ...asynq.Option,
+	) error
+
 	// DistributeTaskProcessApplymentResult 分发进件结果处理任务
 	DistributeTaskProcessApplymentResult(
 		ctx context.Context,
 		payload *ApplymentResultPayload,
-		opts ...asynq.Option,
-	) error
-
-	// DistributeTaskProcessProfitSharingResult 分发分账结果处理任务
-	DistributeTaskProcessProfitSharingResult(
-		ctx context.Context,
-		payload *ProfitSharingResultPayload,
 		opts ...asynq.Option,
 	) error
 

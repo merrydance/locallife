@@ -44,10 +44,6 @@ func (NoopTaskDistributor) DistributeTaskReservationFoodSafetyAlert(ctx context.
 	return nil
 }
 
-func (NoopTaskDistributor) DistributeTaskProcessPaymentSuccess(ctx context.Context, payload *PaymentSuccessPayload, opts ...asynq.Option) error {
-	return financialTaskDistributorUnavailable("payment success")
-}
-
 func (NoopTaskDistributor) DistributeTaskProcessRefund(ctx context.Context, payload *PayloadProcessRefund, opts ...asynq.Option) error {
 	return financialTaskDistributorUnavailable("refund")
 }
@@ -60,12 +56,12 @@ func (NoopTaskDistributor) DistributeTaskProcessProfitSharing(ctx context.Contex
 	return financialTaskDistributorUnavailable("profit sharing")
 }
 
-func (NoopTaskDistributor) DistributeTaskProcessApplymentResult(ctx context.Context, payload *ApplymentResultPayload, opts ...asynq.Option) error {
-	return nil
+func (NoopTaskDistributor) DistributeTaskProcessProfitSharingReceiverTarget(ctx context.Context, payload *ProfitSharingReceiverTargetPayload, opts ...asynq.Option) error {
+	return financialTaskDistributorUnavailable("profit sharing receiver target")
 }
 
-func (NoopTaskDistributor) DistributeTaskProcessProfitSharingResult(ctx context.Context, payload *ProfitSharingResultPayload, opts ...asynq.Option) error {
-	return financialTaskDistributorUnavailable("profit sharing result")
+func (NoopTaskDistributor) DistributeTaskProcessApplymentResult(ctx context.Context, payload *ApplymentResultPayload, opts ...asynq.Option) error {
+	return nil
 }
 
 func (NoopTaskDistributor) DistributeTaskProcessProfitSharingReturnResult(ctx context.Context, payload *ProfitSharingReturnResultPayload, opts ...asynq.Option) error {

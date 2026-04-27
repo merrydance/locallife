@@ -255,3 +255,14 @@ func normalizedSettlementStatus(status int) int {
 		return http.StatusBadRequest
 	}
 }
+
+func settlementCommandErrorFields(err error) (*string, *string) {
+	if err == nil {
+		return nil, nil
+	}
+	var wxErr *wechat.WechatPayError
+	if errors.As(err, &wxErr) {
+		return stringPtrIfNotEmpty(strings.TrimSpace(wxErr.Code)), stringPtrIfNotEmpty(strings.TrimSpace(wxErr.Message))
+	}
+	return nil, stringPtrIfNotEmpty(strings.TrimSpace(err.Error()))
+}

@@ -18,121 +18,36 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-func TestProcessTaskPaymentSuccess_RiderDepositEnsuresProfitSharingReceiver(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	store := mockdb.NewMockStore(ctrl)
-	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
-	processor := worker.NewTestTaskProcessor(store, nil, nil, ecommerceClient)
-
-	paymentOrder := db.PaymentOrder{
-		ID:           551,
-		UserID:       77,
-		BusinessType: "rider_deposit",
-	}
-	rider := db.Rider{
-		ID:       31,
-		UserID:   paymentOrder.UserID,
-		RealName: "骑手王",
-	}
-	user := db.User{ID: paymentOrder.UserID, WechatOpenid: "rider-openid-77"}
-
-	store.EXPECT().
-		ProcessPaymentSuccessTx(gomock.Any(), gomock.Any()).
-		Return(db.ProcessPaymentSuccessTxResult{Processed: true, PaymentOrder: paymentOrder}, nil)
-	store.EXPECT().GetRiderByUserID(gomock.Any(), paymentOrder.UserID).Return(rider, nil)
-	store.EXPECT().GetUser(gomock.Any(), paymentOrder.UserID).Return(user, nil)
-	ecommerceClient.EXPECT().GetSpAppID().Return("wx_sp_app_123")
-	ecommerceClient.EXPECT().EncryptSensitiveData("骑手王").Return("enc-rider-name", nil)
-	ecommerceClient.EXPECT().
-		AddProfitSharingReceiver(gomock.Any(), &wechatcontracts.AddReceiverRequest{
-			AppID:         "wx_sp_app_123",
-			Type:          wechatcontracts.ReceiverTypePersonal,
-			Account:       user.WechatOpenid,
-			EncryptedName: "enc-rider-name",
-			RelationType:  wechatcontracts.RelationOthers,
-		}).
-		Return(&wechatcontracts.AddReceiverResponse{Type: wechatcontracts.ReceiverTypePersonal, Account: user.WechatOpenid}, nil)
-
-	payload, err := json.Marshal(worker.PaymentSuccessPayload{PaymentOrderID: paymentOrder.ID, BusinessType: paymentOrder.BusinessType})
-	require.NoError(t, err)
-
-	err = processor.ProcessTaskPaymentSuccess(context.Background(), asynq.NewTask(worker.TaskProcessPaymentSuccess, payload))
-	require.NoError(t, err)
+type profitSharingFactApplicationEnqueueRecorder struct {
+	worker.NoopTaskDistributor
+	applicationIDs []int64
 }
 
-func TestProcessTaskRefundResult_RiderDepositDeleteReceiverWhenBalanceZero(t *testing.T) {
+func (r *profitSharingFactApplicationEnqueueRecorder) DistributeTaskProcessPaymentFactApplication(_ context.Context, payload *worker.PaymentFactApplicationPayload, _ ...asynq.Option) error {
+	r.applicationIDs = append(r.applicationIDs, payload.ApplicationID)
+	return nil
+}
+
+func TestProcessTaskRefundResult_RiderDepositReturnsSkipRetryBecauseMovedToFactApplication(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
-	processor := worker.NewTestTaskProcessor(store, nil, nil, ecommerceClient)
+	processor := worker.NewTestTaskProcessor(store, nil, nil, nil)
 
 	refundOrder := db.RefundOrder{ID: 702, PaymentOrderID: 551, OutRefundNo: "REFUND_702", RefundAmount: 30000}
 	paymentOrder := db.PaymentOrder{ID: 551, UserID: 77, Amount: 30000, BusinessType: "rider_deposit"}
-	rider := db.Rider{ID: 31, UserID: paymentOrder.UserID, DepositAmount: 0, FrozenDeposit: 0}
-	user := db.User{ID: paymentOrder.UserID, WechatOpenid: "rider-openid-77"}
 
-	gomock.InOrder(
-		store.EXPECT().GetRefundOrderByOutRefundNo(gomock.Any(), refundOrder.OutRefundNo).Return(refundOrder, nil),
-		store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil),
-		store.EXPECT().ResolveRiderDepositRefundTx(gomock.Any(), db.ResolveRiderDepositRefundTxParams{
-			RefundOrderID: refundOrder.ID,
-			RefundStatus:  "SUCCESS",
-			RefundID:      "WX_REFUND_702",
-		}).Return(db.ResolveRiderDepositRefundTxResult{}, nil),
-		store.EXPECT().GetTotalRefundedByPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder.Amount, nil),
-		store.EXPECT().UpdatePaymentOrderToRefunded(gomock.Any(), paymentOrder.ID).Return(db.PaymentOrder{ID: paymentOrder.ID, Status: "refunded"}, nil),
-		store.EXPECT().GetRiderByUserID(gomock.Any(), paymentOrder.UserID).Return(rider, nil),
-		store.EXPECT().GetUser(gomock.Any(), paymentOrder.UserID).Return(user, nil),
-		ecommerceClient.EXPECT().GetSpAppID().Return("wx_sp_app_123"),
-		ecommerceClient.EXPECT().DeleteProfitSharingReceiver(gomock.Any(), &wechatcontracts.DeleteReceiverRequest{
-			AppID:   "wx_sp_app_123",
-			Type:    wechatcontracts.ReceiverTypePersonal,
-			Account: user.WechatOpenid,
-		}).Return(&wechatcontracts.DeleteReceiverResponse{Type: wechatcontracts.ReceiverTypePersonal, Account: user.WechatOpenid}, nil),
-	)
+	store.EXPECT().GetRefundOrderByOutRefundNo(gomock.Any(), refundOrder.OutRefundNo).Return(refundOrder, nil)
+	store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil)
 
 	payload, err := json.Marshal(worker.RefundResultPayload{OutRefundNo: refundOrder.OutRefundNo, RefundStatus: "SUCCESS", RefundID: "WX_REFUND_702"})
 	require.NoError(t, err)
 
 	err = processor.ProcessTaskRefundResult(context.Background(), asynq.NewTask(worker.TaskProcessRefundResult, payload))
-	require.NoError(t, err)
-}
-
-func TestProcessTaskPaymentSuccess_ClaimRecoveryReleaseFailureEnqueuesBehaviorActionRetry(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	store := mockdb.NewMockStore(ctrl)
-	distributor := mockwk.NewMockTaskDistributor(ctrl)
-	processor := worker.NewTestTaskProcessor(store, distributor, nil, nil)
-
-	releaseAction := &db.BehaviorAction{ID: 81}
-	paymentOrder := db.PaymentOrder{
-		ID:           551,
-		UserID:       77,
-		BusinessType: "claim_recovery",
-	}
-
-	store.EXPECT().
-		ProcessPaymentSuccessTx(gomock.Any(), gomock.Any()).
-		Return(db.ProcessPaymentSuccessTxResult{Processed: true, PaymentOrder: paymentOrder, ReleaseAction: releaseAction}, nil)
-	store.EXPECT().GetBehaviorAction(gomock.Any(), releaseAction.ID).Return(db.BehaviorAction{}, errors.New("release unavailable"))
-	distributor.EXPECT().
-		DistributeTaskClaimBehaviorAction(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, payload *worker.ClaimBehaviorActionPayload, _ ...asynq.Option) error {
-			require.Equal(t, releaseAction.ID, payload.ActionID)
-			return nil
-		})
-
-	payload, err := json.Marshal(worker.PaymentSuccessPayload{PaymentOrderID: paymentOrder.ID, BusinessType: paymentOrder.BusinessType})
-	require.NoError(t, err)
-
-	err = processor.ProcessTaskPaymentSuccess(context.Background(), asynq.NewTask(worker.TaskProcessPaymentSuccess, payload))
-	require.NoError(t, err)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "rider deposit refund results must be applied via payment fact application")
+	require.True(t, errors.Is(err, asynq.SkipRetry))
 }
 
 // ==================== ProcessTaskApplymentResult Tests ====================
@@ -767,6 +682,7 @@ func TestProcessTaskProfitSharing_UsesMerchantRegionActiveOperator(t *testing.T)
 			SharingOrderID: pgtype.Text{String: "ps_wx_3001", Valid: true},
 		}).
 		Return(db.ProfitSharingOrder{ID: 3001, Status: "processing"}, nil)
+	expectProfitSharingCommand(t, store, 3001, "PS90177", db.ExternalPaymentCommandTypeCreateProfitSharing, "ps_wx_3001", wechatcontracts.ProfitSharingStatusProcessing, 9921)
 
 	processor := worker.NewTestTaskProcessor(store, nil, nil, ecommerceClient)
 	payloadBytes, err := json.Marshal(worker.ProfitSharingPayload{
@@ -876,6 +792,7 @@ func TestProcessTaskProfitSharing_UsesPersonalOperatorOpenID(t *testing.T) {
 			SharingOrderID: pgtype.Text{String: "ps_wx_3004", Valid: true},
 		}).
 		Return(db.ProfitSharingOrder{ID: 3004, Status: "processing"}, nil)
+	expectProfitSharingCommand(t, store, 3004, "PS90480", db.ExternalPaymentCommandTypeCreateProfitSharing, "ps_wx_3004", wechatcontracts.ProfitSharingStatusProcessing, 9922)
 
 	processor := worker.NewTestTaskProcessor(store, nil, nil, ecommerceClient)
 	payloadBytes, err := json.Marshal(worker.ProfitSharingPayload{
@@ -1061,6 +978,7 @@ func TestProcessTaskProfitSharing_UsesPaymentOrderAmountAsProfitSharingBase(t *t
 			SharingOrderID: pgtype.Text{String: "ps_wx_3002", Valid: true},
 		}).
 		Return(db.ProfitSharingOrder{ID: 3002, Status: "processing"}, nil)
+	expectProfitSharingCommand(t, store, 3002, "PS90278", db.ExternalPaymentCommandTypeCreateProfitSharing, "ps_wx_3002", wechatcontracts.ProfitSharingStatusProcessing, 9923)
 
 	processor := worker.NewTestTaskProcessor(store, nil, nil, ecommerceClient)
 	payloadBytes, err := json.Marshal(worker.ProfitSharingPayload{
@@ -1125,6 +1043,7 @@ func TestProcessTaskProfitSharing_UsesServiceProviderNameForPlatformReceiver(t *
 		ID:             3003,
 		SharingOrderID: pgtype.Text{String: "ps_wx_3003", Valid: true},
 	}).Return(db.ProfitSharingOrder{ID: 3003, Status: "processing"}, nil)
+	expectProfitSharingCommand(t, store, 3003, "PS90379", db.ExternalPaymentCommandTypeCreateProfitSharing, "ps_wx_3003", wechatcontracts.ProfitSharingStatusProcessing, 9924)
 
 	processor := worker.NewTestTaskProcessor(store, nil, nil, ecommerceClient)
 	payloadBytes, err := json.Marshal(worker.ProfitSharingPayload{
@@ -1191,6 +1110,7 @@ func TestProcessTaskProfitSharing_RedirectsOperatorCommissionToPlatformWhenNoAct
 		ID:             3006,
 		SharingOrderID: pgtype.Text{String: "ps_wx_3006", Valid: true},
 	}).Return(db.ProfitSharingOrder{ID: 3006, Status: "processing"}, nil)
+	expectProfitSharingCommand(t, store, 3006, "PS90682", db.ExternalPaymentCommandTypeCreateProfitSharing, "ps_wx_3006", wechatcontracts.ProfitSharingStatusProcessing, 9925)
 
 	processor := worker.NewTestTaskProcessor(store, nil, nil, ecommerceClient)
 	payloadBytes, err := json.Marshal(worker.ProfitSharingPayload{
@@ -1204,7 +1124,7 @@ func TestProcessTaskProfitSharing_RedirectsOperatorCommissionToPlatformWhenNoAct
 	require.NoError(t, err)
 }
 
-func TestProcessTaskProfitSharing_DineInMarksFinishedLocallyWithoutSharing(t *testing.T) {
+func TestProcessTaskProfitSharing_DineInRequestsFinishOrderWithoutSharing(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -1262,9 +1182,16 @@ func TestProcessTaskProfitSharing_DineInMarksFinishedLocallyWithoutSharing(t *te
 			require.Equal(t, paymentOrder.Amount, arg.MerchantAmount)
 			return db.ProfitSharingOrder{ID: 3003, OutOrderNo: arg.OutOrderNo}, nil
 		})
+	ecommerceClient.EXPECT().
+		FinishProfitSharing(gomock.Any(), "sub_mch_17", paymentOrder.TransactionID.String, "PS90379", "无需分账，解冻剩余资金").
+		Return(&wechatcontracts.ProfitSharingResponse{OrderID: "ps_finish_3003", Status: wechatcontracts.ProfitSharingStatusProcessing}, nil)
 	store.EXPECT().
-		UpdateProfitSharingOrderToFinished(gomock.Any(), int64(3003)).
-		Return(db.ProfitSharingOrder{ID: 3003, Status: "finished"}, nil)
+		UpdateProfitSharingOrderToProcessing(gomock.Any(), db.UpdateProfitSharingOrderToProcessingParams{
+			ID:             3003,
+			SharingOrderID: pgtype.Text{String: "ps_finish_3003", Valid: true},
+		}).
+		Return(db.ProfitSharingOrder{ID: 3003, Status: "processing"}, nil)
+	expectProfitSharingCommand(t, store, 3003, "PS90379", db.ExternalPaymentCommandTypeFinishProfitSharing, "ps_finish_3003", wechatcontracts.ProfitSharingStatusProcessing, 9928)
 
 	processor := worker.NewTestTaskProcessor(store, nil, nil, ecommerceClient)
 	payloadBytes, err := json.Marshal(worker.ProfitSharingPayload{
@@ -1331,6 +1258,7 @@ func TestProcessTaskProfitSharing_ReservationLinkedDineInUsesReservationSource(t
 		ID:             3005,
 		SharingOrderID: pgtype.Text{String: "ps_wx_3005", Valid: true},
 	}).Return(db.ProfitSharingOrder{ID: 3005, Status: "processing"}, nil)
+	expectProfitSharingCommand(t, store, 3005, "PS90588", db.ExternalPaymentCommandTypeCreateProfitSharing, "ps_wx_3005", wechatcontracts.ProfitSharingStatusProcessing, 9926)
 
 	processor := worker.NewTestTaskProcessor(store, nil, nil, ecommerceClient)
 	payloadBytes, err := json.Marshal(worker.ProfitSharingPayload{PaymentOrderID: paymentOrder.ID, OrderID: order.ID})
@@ -1341,12 +1269,74 @@ func TestProcessTaskProfitSharing_ReservationLinkedDineInUsesReservationSource(t
 	require.NoError(t, err)
 }
 
+func TestProcessTaskProfitSharing_SubmitFinishedResponseRecordsCommandFactOnly(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	distributor := &profitSharingFactApplicationEnqueueRecorder{}
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+
+	paymentOrder := db.PaymentOrder{
+		ID:            911,
+		Amount:        10000,
+		TransactionID: pgtype.Text{String: "wx_txn_911", Valid: true},
+	}
+	order := db.Order{
+		ID:          89,
+		MerchantID:  25,
+		TotalAmount: 10000,
+		DeliveryFee: 0,
+		OrderType:   "takeout",
+	}
+	merchant := db.Merchant{ID: 25, RegionID: 19, Name: "同步完成分账商户"}
+
+	store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil)
+	store.EXPECT().GetOrder(gomock.Any(), order.ID).Return(order, nil)
+	store.EXPECT().GetMerchant(gomock.Any(), merchant.ID).Return(merchant, nil)
+	store.EXPECT().GetMerchantPaymentConfig(gomock.Any(), merchant.ID).Return(db.MerchantPaymentConfig{MerchantID: merchant.ID, SubMchID: "sub_mch_25"}, nil)
+	store.EXPECT().GetActiveProfitSharingConfig(gomock.Any(), db.GetActiveProfitSharingConfigParams{
+		OrderSource: order.OrderType,
+		MerchantID:  pgtype.Int8{Int64: merchant.ID, Valid: true},
+		RegionID:    pgtype.Int8{Int64: merchant.RegionID, Valid: true},
+	}).Return(db.ProfitSharingConfig{PlatformRate: 10, OperatorRate: 0, RiderEnabled: false}, nil)
+	store.EXPECT().GetActiveOperatorByRegion(gomock.Any(), merchant.RegionID).Return(db.Operator{}, db.ErrRecordNotFound)
+	store.EXPECT().GetProfitSharingOrderByPaymentOrder(gomock.Any(), paymentOrder.ID).Return(db.ProfitSharingOrder{}, db.ErrRecordNotFound)
+	store.EXPECT().CreateProfitSharingOrder(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreateProfitSharingOrderParams) (db.ProfitSharingOrder, error) {
+		require.Equal(t, int64(1000), arg.PlatformCommission)
+		require.Equal(t, int64(9000), arg.MerchantAmount)
+		return db.ProfitSharingOrder{ID: 3011, OutOrderNo: arg.OutOrderNo, PlatformCommission: 1000}, nil
+	})
+	ecommerceClient.EXPECT().GetSpMchID().Return("sp_mch_1")
+	ecommerceClient.EXPECT().GetSpMchName().Return("平台服务商")
+	ecommerceClient.EXPECT().CreateProfitSharing(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, req *wechatcontracts.ProfitSharingRequest) (*wechatcontracts.ProfitSharingResponse, error) {
+		require.Len(t, req.Receivers, 1)
+		require.Equal(t, int64(1000), req.Receivers[0].Amount)
+		return &wechatcontracts.ProfitSharingResponse{OrderID: "ps_wx_3011", Status: wechatcontracts.ProfitSharingStatusFinished}, nil
+	})
+	store.EXPECT().UpdateProfitSharingOrderToProcessing(gomock.Any(), db.UpdateProfitSharingOrderToProcessingParams{
+		ID:             3011,
+		SharingOrderID: pgtype.Text{String: "ps_wx_3011", Valid: true},
+	}).Return(db.ProfitSharingOrder{ID: 3011, Status: "processing"}, nil)
+	expectProfitSharingCommand(t, store, 3011, "PS91189", db.ExternalPaymentCommandTypeCreateProfitSharing, "ps_wx_3011", wechatcontracts.ProfitSharingStatusFinished, 9929)
+	expectProfitSharingCommandResponseFact(t, store, 3011, "PS91189", db.ExternalPaymentCommandTypeCreateProfitSharing, "ps_wx_3011", 1000, wechatcontracts.ProfitSharingStatusFinished, db.ExternalPaymentTerminalStatusUnknown, false, nil)
+
+	processor := worker.NewTestTaskProcessor(store, distributor, nil, ecommerceClient)
+	payloadBytes, err := json.Marshal(worker.ProfitSharingPayload{PaymentOrderID: paymentOrder.ID, OrderID: order.ID})
+	require.NoError(t, err)
+
+	task := asynq.NewTask(worker.TaskProcessProfitSharing, payloadBytes)
+	err = processor.ProcessTaskProfitSharing(context.Background(), task)
+	require.NoError(t, err)
+	require.Empty(t, distributor.applicationIDs)
+}
+
 func TestProcessTaskProfitSharing_ProcessingOrderQueriesAndFinishes(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	distributor := mockwk.NewMockTaskDistributor(ctrl)
+	distributor := &profitSharingFactApplicationEnqueueRecorder{}
 	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
 
 	paymentOrder := db.PaymentOrder{
@@ -1372,18 +1362,12 @@ func TestProcessTaskProfitSharing_ProcessingOrderQueriesAndFinishes(t *testing.T
 	store.EXPECT().GetProfitSharingOrderByPaymentOrder(gomock.Any(), paymentOrder.ID).Return(existingOrder, nil)
 	ecommerceClient.EXPECT().QueryProfitSharing(gomock.Any(), "sub_mch_18", "wx_txn_904", existingOrder.OutOrderNo).
 		Return(&wechatcontracts.ProfitSharingQueryResponse{
+			SubMchID:  "sub_mch_18",
+			OrderID:   "wx_profit_sharing_3004",
 			Status:    wechatcontracts.ProfitSharingStatusFinished,
-			Receivers: []wechatcontracts.ProfitSharingReceiverResult{{Result: wechatcontracts.ProfitSharingResultSuccess}},
+			Receivers: []wechatcontracts.ProfitSharingReceiverResult{{Type: wechatcontracts.ReceiverTypeMerchant, Result: wechatcontracts.ProfitSharingResultSuccess, Amount: 100, DetailID: "detail_3004"}},
 		}, nil)
-	store.EXPECT().UpdateProfitSharingOrderToFinished(gomock.Any(), existingOrder.ID).Return(db.ProfitSharingOrder{ID: existingOrder.ID, Status: "finished"}, nil)
-	distributor.EXPECT().DistributeTaskProcessProfitSharingResult(gomock.Any(), gomock.AssignableToTypeOf(&worker.ProfitSharingResultPayload{}), gomock.Any()).
-		DoAndReturn(func(_ context.Context, payload *worker.ProfitSharingResultPayload, _ ...asynq.Option) error {
-			require.Equal(t, existingOrder.ID, payload.ProfitSharingOrderID)
-			require.Equal(t, existingOrder.OutOrderNo, payload.OutOrderNo)
-			require.Equal(t, "SUCCESS", payload.Result)
-			require.Equal(t, merchant.ID, payload.MerchantID)
-			return nil
-		})
+	expectProfitSharingQueryFact(t, store, existingOrder.ID, existingOrder.OutOrderNo, "wx_profit_sharing_3004", 100, "SUCCESS", db.ExternalPaymentTerminalStatusSuccess, true, nil)
 
 	processor := worker.NewTestTaskProcessor(store, distributor, nil, ecommerceClient)
 	payloadBytes, err := json.Marshal(worker.ProfitSharingPayload{PaymentOrderID: paymentOrder.ID, OrderID: 80})
@@ -1392,328 +1376,392 @@ func TestProcessTaskProfitSharing_ProcessingOrderQueriesAndFinishes(t *testing.T
 	task := asynq.NewTask(worker.TaskProcessProfitSharing, payloadBytes)
 	err = processor.ProcessTaskProfitSharing(context.Background(), task)
 	require.NoError(t, err)
+	require.Equal(t, []int64{12304}, distributor.applicationIDs)
 }
 
-// ==================== ProcessTaskProfitSharingResult Tests ====================
-
-func TestProcessTaskProfitSharingResult_Success(t *testing.T) {
-	testCases := []struct {
-		name        string
-		payload     worker.ProfitSharingResultPayload
-		buildStubs  func(store *mockdb.MockStore, distributor *mockwk.MockTaskDistributor)
-		checkResult func(t *testing.T, err error)
-	}{
-		{
-			name: "分账成功_通知商户收入到账",
-			payload: worker.ProfitSharingResultPayload{
-				ProfitSharingOrderID: 1,
-				OutOrderNo:           "PS123456",
-				Result:               "SUCCESS",
-				MerchantID:           100,
-			},
-			buildStubs: func(store *mockdb.MockStore, distributor *mockwk.MockTaskDistributor) {
-				// 获取商户信息
-				store.EXPECT().
-					GetMerchant(gomock.Any(), int64(100)).
-					Return(db.Merchant{
-						ID:          100,
-						OwnerUserID: 1001,
-						Name:        "测试商户",
-					}, nil)
-
-				// 获取分账订单
-				store.EXPECT().
-					GetProfitSharingOrderByOutOrderNo(gomock.Any(), "PS123456").
-					Return(db.ProfitSharingOrder{
-						ID:                 1,
-						MerchantID:         100,
-						MerchantAmount:     9500, // 95元
-						PlatformCommission: 200,  // 2元
-						OperatorCommission: 300,  // 3元
-						TotalAmount:        10000,
-					}, nil)
-
-				// 发送通知
-				distributor.EXPECT().
-					DistributeTaskSendNotification(gomock.Any(), gomock.Any()).
-					DoAndReturn(func(ctx context.Context, payload *worker.SendNotificationPayload, opts ...asynq.Option) error {
-						require.Equal(t, int64(1001), payload.UserID)
-						require.Equal(t, "finance", payload.Type)
-						require.Equal(t, "订单收入已到账", payload.Title)
-						require.Contains(t, payload.Content, "95.00")
-						return nil
-					})
-			},
-			checkResult: func(t *testing.T, err error) {
-				require.NoError(t, err)
-			},
-		},
-		{
-			name: "分账成功_小额订单",
-			payload: worker.ProfitSharingResultPayload{
-				ProfitSharingOrderID: 2,
-				OutOrderNo:           "PS789012",
-				Result:               "SUCCESS",
-				MerchantID:           200,
-			},
-			buildStubs: func(store *mockdb.MockStore, distributor *mockwk.MockTaskDistributor) {
-				// 获取商户信息
-				store.EXPECT().
-					GetMerchant(gomock.Any(), int64(200)).
-					Return(db.Merchant{
-						ID:          200,
-						OwnerUserID: 2001,
-						Name:        "小商户",
-					}, nil)
-
-				// 获取分账订单
-				store.EXPECT().
-					GetProfitSharingOrderByOutOrderNo(gomock.Any(), "PS789012").
-					Return(db.ProfitSharingOrder{
-						ID:                 2,
-						MerchantID:         200,
-						MerchantAmount:     950, // 9.5元
-						PlatformCommission: 20,
-						OperatorCommission: 30,
-						TotalAmount:        1000,
-					}, nil)
-
-				// 发送通知
-				distributor.EXPECT().
-					DistributeTaskSendNotification(gomock.Any(), gomock.Any()).
-					DoAndReturn(func(ctx context.Context, payload *worker.SendNotificationPayload, opts ...asynq.Option) error {
-						require.Contains(t, payload.Content, "9.50")
-						return nil
-					})
-			},
-			checkResult: func(t *testing.T, err error) {
-				require.NoError(t, err)
-			},
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
-
-			store := mockdb.NewMockStore(ctrl)
-			distributor := mockwk.NewMockTaskDistributor(ctrl)
-
-			tc.buildStubs(store, distributor)
-
-			processor := worker.NewTestTaskProcessor(store, distributor, nil, nil)
-
-			payload, err := json.Marshal(tc.payload)
-			require.NoError(t, err)
-
-			task := asynq.NewTask(worker.TaskProcessProfitSharingResult, payload)
-			err = processor.ProcessTaskProfitSharingResult(context.Background(), task)
-			tc.checkResult(t, err)
-		})
-	}
-}
-
-func TestProcessTaskProfitSharingResult_Failed(t *testing.T) {
-	testCases := []struct {
-		name        string
-		payload     worker.ProfitSharingResultPayload
-		buildStubs  func(store *mockdb.MockStore)
-		checkResult func(t *testing.T, err error)
-	}{
-		{
-			name: "分账失败_记录告警日志",
-			payload: worker.ProfitSharingResultPayload{
-				ProfitSharingOrderID: 3,
-				OutOrderNo:           "PS345678",
-				Result:               "FAILED",
-				FailReason:           "余额不足",
-				MerchantID:           100,
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				// 获取商户信息
-				store.EXPECT().
-					GetMerchant(gomock.Any(), int64(100)).
-					Return(db.Merchant{
-						ID:          100,
-						OwnerUserID: 1001,
-						Name:        "测试商户",
-					}, nil)
-
-				// 获取分账订单
-				store.EXPECT().
-					GetProfitSharingOrderByOutOrderNo(gomock.Any(), "PS345678").
-					Return(db.ProfitSharingOrder{
-						ID:             3,
-						MerchantID:     100,
-						MerchantAmount: 9500,
-						TotalAmount:    10000,
-					}, nil)
-			},
-			checkResult: func(t *testing.T, err error) {
-				require.NoError(t, err) // 分账失败只记日志，不返回错误
-			},
-		},
-		{
-			name: "分账关闭_记录告警日志",
-			payload: worker.ProfitSharingResultPayload{
-				ProfitSharingOrderID: 4,
-				OutOrderNo:           "PS901234",
-				Result:               "CLOSED",
-				MerchantID:           200,
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				// 获取商户信息
-				store.EXPECT().
-					GetMerchant(gomock.Any(), int64(200)).
-					Return(db.Merchant{
-						ID:          200,
-						OwnerUserID: 2001,
-						Name:        "测试商户2",
-					}, nil)
-
-				// 获取分账订单
-				store.EXPECT().
-					GetProfitSharingOrderByOutOrderNo(gomock.Any(), "PS901234").
-					Return(db.ProfitSharingOrder{
-						ID:             4,
-						MerchantID:     200,
-						MerchantAmount: 8000,
-						TotalAmount:    10000,
-					}, nil)
-			},
-			checkResult: func(t *testing.T, err error) {
-				require.NoError(t, err)
-			},
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
-
-			store := mockdb.NewMockStore(ctrl)
-			tc.buildStubs(store)
-
-			processor := worker.NewTestTaskProcessor(store, nil, nil, nil)
-
-			payload, err := json.Marshal(tc.payload)
-			require.NoError(t, err)
-
-			task := asynq.NewTask(worker.TaskProcessProfitSharingResult, payload)
-			err = processor.ProcessTaskProfitSharingResult(context.Background(), task)
-			tc.checkResult(t, err)
-		})
-	}
-}
-
-func TestProcessTaskProfitSharingResult_FailedReenqueuesReservationPayload(t *testing.T) {
+func TestProcessTaskProfitSharing_ProcessingOrderFactFailureDoesNotFinish(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
 	distributor := mockwk.NewMockTaskDistributor(ctrl)
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
 
-	store.EXPECT().
-		GetMerchant(gomock.Any(), int64(300)).
-		Return(db.Merchant{ID: 300, OwnerUserID: 3001, Name: "预订商户"}, nil)
-	store.EXPECT().
-		GetProfitSharingOrderByOutOrderNo(gomock.Any(), "PSR300").
-		Return(db.ProfitSharingOrder{ID: 31, MerchantID: 300, PaymentOrderID: 701, MerchantAmount: 9000, TotalAmount: 10000}, nil)
-	store.EXPECT().
-		GetPaymentOrder(gomock.Any(), int64(701)).
-		Return(db.PaymentOrder{ID: 701, ReservationID: pgtype.Int8{Int64: 801, Valid: true}}, nil)
-	distributor.EXPECT().
-		DistributeTaskProcessProfitSharing(gomock.Any(), gomock.AssignableToTypeOf(&worker.ProfitSharingPayload{}), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, payload *worker.ProfitSharingPayload, _ ...asynq.Option) error {
-			require.Equal(t, int64(701), payload.PaymentOrderID)
-			require.Equal(t, int64(801), payload.ReservationID)
-			require.Zero(t, payload.OrderID)
-			return nil
-		})
-
-	processor := worker.NewTestTaskProcessor(store, distributor, nil, nil)
-	payloadBytes, err := json.Marshal(worker.ProfitSharingResultPayload{
-		ProfitSharingOrderID: 31,
-		OutOrderNo:           "PSR300",
-		Result:               "FAILED",
-		FailReason:           "system busy",
-		MerchantID:           300,
-	})
-	require.NoError(t, err)
-
-	task := asynq.NewTask(worker.TaskProcessProfitSharingResult, payloadBytes)
-	err = processor.ProcessTaskProfitSharingResult(context.Background(), task)
-	require.NoError(t, err)
-}
-
-func TestProcessTaskProfitSharingResult_MerchantNotFound(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	store := mockdb.NewMockStore(ctrl)
-
-	// 商户不存在
-	store.EXPECT().
-		GetMerchant(gomock.Any(), int64(999)).
-		Return(db.Merchant{}, db.ErrRecordNotFound)
-
-	processor := worker.NewTestTaskProcessor(store, nil, nil, nil)
-
-	payload := worker.ProfitSharingResultPayload{
-		ProfitSharingOrderID: 5,
-		OutOrderNo:           "PS567890",
-		Result:               "SUCCESS",
-		MerchantID:           999,
+	paymentOrder := db.PaymentOrder{
+		ID:            908,
+		Amount:        10000,
+		TransactionID: pgtype.Text{String: "wx_txn_908", Valid: true},
+		OrderID:       pgtype.Int8{Int64: 84, Valid: true},
+	}
+	order := db.Order{ID: 84, MerchantID: 22, TotalAmount: 10000, DeliveryFee: 0, OrderType: "takeout"}
+	merchant := db.Merchant{ID: 22, RegionID: 16, Name: "商户D"}
+	existingOrder := db.ProfitSharingOrder{
+		ID:         3008,
+		MerchantID: merchant.ID,
+		OutOrderNo: "PS90884",
+		Status:     "processing",
 	}
 
-	payloadBytes, err := json.Marshal(payload)
+	store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil)
+	store.EXPECT().GetOrder(gomock.Any(), int64(84)).Return(order, nil)
+	store.EXPECT().GetMerchant(gomock.Any(), merchant.ID).Return(merchant, nil)
+	store.EXPECT().GetMerchantPaymentConfig(gomock.Any(), merchant.ID).Return(db.MerchantPaymentConfig{MerchantID: merchant.ID, SubMchID: "sub_mch_22"}, nil)
+	store.EXPECT().GetActiveProfitSharingConfig(gomock.Any(), gomock.Any()).Return(db.ProfitSharingConfig{PlatformRate: 0, OperatorRate: 10, RiderEnabled: false}, nil)
+	store.EXPECT().GetActiveOperatorByRegion(gomock.Any(), merchant.RegionID).Return(db.Operator{}, db.ErrRecordNotFound)
+	store.EXPECT().GetProfitSharingOrderByPaymentOrder(gomock.Any(), paymentOrder.ID).Return(existingOrder, nil)
+	ecommerceClient.EXPECT().QueryProfitSharing(gomock.Any(), "sub_mch_22", "wx_txn_908", existingOrder.OutOrderNo).
+		Return(&wechatcontracts.ProfitSharingQueryResponse{
+			SubMchID:  "sub_mch_22",
+			OrderID:   "wx_profit_sharing_3008",
+			Status:    wechatcontracts.ProfitSharingStatusFinished,
+			Receivers: []wechatcontracts.ProfitSharingReceiverResult{{Type: wechatcontracts.ReceiverTypeMerchant, Result: wechatcontracts.ProfitSharingResultSuccess, Amount: 100, DetailID: "detail_3008"}},
+		}, nil)
+	expectProfitSharingQueryFact(t, store, existingOrder.ID, existingOrder.OutOrderNo, "wx_profit_sharing_3008", 100, "SUCCESS", db.ExternalPaymentTerminalStatusSuccess, true, errors.New("fact store unavailable"))
+
+	processor := worker.NewTestTaskProcessor(store, distributor, nil, ecommerceClient)
+	payloadBytes, err := json.Marshal(worker.ProfitSharingPayload{PaymentOrderID: paymentOrder.ID, OrderID: 84})
 	require.NoError(t, err)
 
-	task := asynq.NewTask(worker.TaskProcessProfitSharingResult, payloadBytes)
-	err = processor.ProcessTaskProfitSharingResult(context.Background(), task)
-	require.NoError(t, err) // 商户不存在不返回错误，只记日志
-}
-
-func TestProcessTaskProfitSharingResult_InvalidPayload(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	processor := worker.NewTestTaskProcessor(nil, nil, nil, nil)
-
-	// 无效的 JSON payload
-	task := asynq.NewTask(worker.TaskProcessProfitSharingResult, []byte("invalid json"))
-	err := processor.ProcessTaskProfitSharingResult(context.Background(), task)
+	task := asynq.NewTask(worker.TaskProcessProfitSharing, payloadBytes)
+	err = processor.ProcessTaskProfitSharing(context.Background(), task)
 	require.Error(t, err)
-	require.ErrorIs(t, err, asynq.SkipRetry)
+	require.Contains(t, err.Error(), "record profit sharing query fact")
 }
 
-func TestProcessTaskProfitSharingResult_DBError(t *testing.T) {
+func TestProcessTaskProfitSharing_ProcessingOrderQueryStillProcessingRecordsFactOnly(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
+	distributor := mockwk.NewMockTaskDistributor(ctrl)
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
 
-	// 数据库错误（非 NotFound）
-	store.EXPECT().
-		GetMerchant(gomock.Any(), int64(100)).
-		Return(db.Merchant{}, errors.New("database connection error"))
-
-	processor := worker.NewTestTaskProcessor(store, nil, nil, nil)
-
-	payload := worker.ProfitSharingResultPayload{
-		ProfitSharingOrderID: 6,
-		OutOrderNo:           "PS111222",
-		Result:               "SUCCESS",
-		MerchantID:           100,
+	paymentOrder := db.PaymentOrder{
+		ID:            909,
+		Amount:        10000,
+		TransactionID: pgtype.Text{String: "wx_txn_909", Valid: true},
+		OrderID:       pgtype.Int8{Int64: 85, Valid: true},
+	}
+	order := db.Order{ID: 85, MerchantID: 23, TotalAmount: 10000, DeliveryFee: 0, OrderType: "takeout"}
+	merchant := db.Merchant{ID: 23, RegionID: 17, Name: "商户E"}
+	existingOrder := db.ProfitSharingOrder{
+		ID:             3009,
+		MerchantID:     merchant.ID,
+		OutOrderNo:     "PS90985",
+		Status:         "processing",
+		SharingOrderID: pgtype.Text{String: "wx_profit_sharing_3009", Valid: true},
 	}
 
-	payloadBytes, err := json.Marshal(payload)
+	store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil)
+	store.EXPECT().GetOrder(gomock.Any(), int64(85)).Return(order, nil)
+	store.EXPECT().GetMerchant(gomock.Any(), merchant.ID).Return(merchant, nil)
+	store.EXPECT().GetMerchantPaymentConfig(gomock.Any(), merchant.ID).Return(db.MerchantPaymentConfig{MerchantID: merchant.ID, SubMchID: "sub_mch_23"}, nil)
+	store.EXPECT().GetActiveProfitSharingConfig(gomock.Any(), gomock.Any()).Return(db.ProfitSharingConfig{PlatformRate: 0, OperatorRate: 10, RiderEnabled: false}, nil)
+	store.EXPECT().GetActiveOperatorByRegion(gomock.Any(), merchant.RegionID).Return(db.Operator{}, db.ErrRecordNotFound)
+	store.EXPECT().GetProfitSharingOrderByPaymentOrder(gomock.Any(), paymentOrder.ID).Return(existingOrder, nil)
+	ecommerceClient.EXPECT().QueryProfitSharing(gomock.Any(), "sub_mch_23", "wx_txn_909", existingOrder.OutOrderNo).
+		Return(&wechatcontracts.ProfitSharingQueryResponse{
+			SubMchID: "sub_mch_23",
+			Status:   "PROCESSING",
+		}, nil)
+	expectProfitSharingQueryFact(t, store, existingOrder.ID, existingOrder.OutOrderNo, "wx_profit_sharing_3009", 0, "PROCESSING", db.ExternalPaymentTerminalStatusProcessing, false, nil)
+
+	processor := worker.NewTestTaskProcessor(store, distributor, nil, ecommerceClient)
+	payloadBytes, err := json.Marshal(worker.ProfitSharingPayload{PaymentOrderID: paymentOrder.ID, OrderID: 85})
 	require.NoError(t, err)
 
-	task := asynq.NewTask(worker.TaskProcessProfitSharingResult, payloadBytes)
-	err = processor.ProcessTaskProfitSharingResult(context.Background(), task)
-	require.Error(t, err) // 数据库连接错误应该重试
-	require.Contains(t, err.Error(), "get merchant")
+	task := asynq.NewTask(worker.TaskProcessProfitSharing, payloadBytes)
+	err = processor.ProcessTaskProfitSharing(context.Background(), task)
+	require.NoError(t, err)
+}
+
+func TestProcessTaskProfitSharing_ProcessingOrderUnsupportedReceiverResultFallsBackToProcessingFactOnly(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	distributor := mockwk.NewMockTaskDistributor(ctrl)
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+
+	paymentOrder := db.PaymentOrder{
+		ID:            910,
+		Amount:        10000,
+		TransactionID: pgtype.Text{String: "wx_txn_910", Valid: true},
+		OrderID:       pgtype.Int8{Int64: 86, Valid: true},
+	}
+	order := db.Order{ID: 86, MerchantID: 24, TotalAmount: 10000, DeliveryFee: 0, OrderType: "takeout"}
+	merchant := db.Merchant{ID: 24, RegionID: 18, Name: "商户F"}
+	existingOrder := db.ProfitSharingOrder{
+		ID:             3010,
+		MerchantID:     merchant.ID,
+		OutOrderNo:     "PS91086",
+		Status:         "processing",
+		SharingOrderID: pgtype.Text{String: "wx_profit_sharing_3010", Valid: true},
+	}
+
+	store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil)
+	store.EXPECT().GetOrder(gomock.Any(), int64(86)).Return(order, nil)
+	store.EXPECT().GetMerchant(gomock.Any(), merchant.ID).Return(merchant, nil)
+	store.EXPECT().GetMerchantPaymentConfig(gomock.Any(), merchant.ID).Return(db.MerchantPaymentConfig{MerchantID: merchant.ID, SubMchID: "sub_mch_24"}, nil)
+	store.EXPECT().GetActiveProfitSharingConfig(gomock.Any(), gomock.Any()).Return(db.ProfitSharingConfig{PlatformRate: 0, OperatorRate: 10, RiderEnabled: false}, nil)
+	store.EXPECT().GetActiveOperatorByRegion(gomock.Any(), merchant.RegionID).Return(db.Operator{}, db.ErrRecordNotFound)
+	store.EXPECT().GetProfitSharingOrderByPaymentOrder(gomock.Any(), paymentOrder.ID).Return(existingOrder, nil)
+	ecommerceClient.EXPECT().QueryProfitSharing(gomock.Any(), "sub_mch_24", "wx_txn_910", existingOrder.OutOrderNo).
+		Return(&wechatcontracts.ProfitSharingQueryResponse{
+			SubMchID:  "sub_mch_24",
+			OrderID:   "wx_profit_sharing_3010",
+			Status:    wechatcontracts.ProfitSharingStatusFinished,
+			Receivers: []wechatcontracts.ProfitSharingReceiverResult{{Type: wechatcontracts.ReceiverTypeMerchant, Result: "UNSUPPORTED_RESULT", Amount: 100, DetailID: "detail_3010"}},
+		}, nil)
+	expectProfitSharingQueryFact(t, store, existingOrder.ID, existingOrder.OutOrderNo, "wx_profit_sharing_3010", 100, "PROCESSING", db.ExternalPaymentTerminalStatusProcessing, false, nil)
+
+	processor := worker.NewTestTaskProcessor(store, distributor, nil, ecommerceClient)
+	payloadBytes, err := json.Marshal(worker.ProfitSharingPayload{PaymentOrderID: paymentOrder.ID, OrderID: 86})
+	require.NoError(t, err)
+
+	task := asynq.NewTask(worker.TaskProcessProfitSharing, payloadBytes)
+	err = processor.ProcessTaskProfitSharing(context.Background(), task)
+	require.NoError(t, err)
+}
+
+func TestProcessTaskProfitSharing_FinishOrderRecordsAcceptedCommand(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+
+	paymentOrder := db.PaymentOrder{
+		ID:            907,
+		Amount:        10000,
+		TransactionID: pgtype.Text{String: "wx_txn_907", Valid: true},
+		OrderID:       pgtype.Int8{Int64: 83, Valid: true},
+	}
+	order := db.Order{ID: 83, MerchantID: 21, TotalAmount: 10000, DeliveryFee: 1000, OrderType: "takeout"}
+	merchant := db.Merchant{ID: 21, RegionID: 18, Name: "待解冻商户"}
+	existingOrder := db.ProfitSharingOrder{
+		ID:             3007,
+		MerchantID:     merchant.ID,
+		OutOrderNo:     "PS90783",
+		Status:         "pending",
+		RiderID:        pgtype.Int8{Int64: 701, Valid: true},
+		RiderAmount:    1000,
+		MerchantAmount: 9000,
+	}
+	rider := db.Rider{ID: 701, UserID: 1701, RealName: "骑手待补实名"}
+
+	store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil)
+	store.EXPECT().GetOrder(gomock.Any(), order.ID).Return(order, nil)
+	store.EXPECT().GetMerchant(gomock.Any(), merchant.ID).Return(merchant, nil)
+	store.EXPECT().GetMerchantPaymentConfig(gomock.Any(), merchant.ID).Return(db.MerchantPaymentConfig{MerchantID: merchant.ID, SubMchID: "sub_mch_21"}, nil)
+	store.EXPECT().GetActiveProfitSharingConfig(gomock.Any(), db.GetActiveProfitSharingConfigParams{
+		OrderSource: order.OrderType,
+		MerchantID:  pgtype.Int8{Int64: merchant.ID, Valid: true},
+		RegionID:    pgtype.Int8{Int64: merchant.RegionID, Valid: true},
+	}).Return(db.ProfitSharingConfig{PlatformRate: 0, OperatorRate: 0, RiderEnabled: false}, nil)
+	store.EXPECT().GetActiveOperatorByRegion(gomock.Any(), merchant.RegionID).Return(db.Operator{}, db.ErrRecordNotFound)
+	store.EXPECT().GetProfitSharingOrderByPaymentOrder(gomock.Any(), paymentOrder.ID).Return(existingOrder, nil)
+	store.EXPECT().GetRider(gomock.Any(), existingOrder.RiderID.Int64).Return(rider, nil)
+	store.EXPECT().GetUser(gomock.Any(), rider.UserID).Return(db.User{ID: rider.UserID}, nil)
+	ecommerceClient.EXPECT().FinishProfitSharing(gomock.Any(), "sub_mch_21", paymentOrder.TransactionID.String, existingOrder.OutOrderNo, "无可用分账接收方，解冻剩余资金").Return(&wechatcontracts.ProfitSharingResponse{OrderID: "ps_finish_3007", Status: wechatcontracts.ProfitSharingStatusProcessing}, nil)
+	store.EXPECT().UpdateProfitSharingOrderToProcessing(gomock.Any(), db.UpdateProfitSharingOrderToProcessingParams{
+		ID:             existingOrder.ID,
+		SharingOrderID: pgtype.Text{String: "ps_finish_3007", Valid: true},
+	}).Return(db.ProfitSharingOrder{ID: existingOrder.ID, Status: "processing"}, nil)
+	expectProfitSharingCommand(t, store, existingOrder.ID, existingOrder.OutOrderNo, db.ExternalPaymentCommandTypeFinishProfitSharing, "ps_finish_3007", wechatcontracts.ProfitSharingStatusProcessing, 9927)
+
+	processor := worker.NewTestTaskProcessor(store, nil, nil, ecommerceClient)
+	payloadBytes, err := json.Marshal(worker.ProfitSharingPayload{PaymentOrderID: paymentOrder.ID, OrderID: order.ID})
+	require.NoError(t, err)
+
+	task := asynq.NewTask(worker.TaskProcessProfitSharing, payloadBytes)
+	err = processor.ProcessTaskProfitSharing(context.Background(), task)
+	require.NoError(t, err)
+}
+
+func TestProcessTaskProfitSharing_FinishOrderFinishedResponseRecordsCommandFactOnly(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	distributor := &profitSharingFactApplicationEnqueueRecorder{}
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+
+	paymentOrder := db.PaymentOrder{
+		ID:            912,
+		Amount:        10000,
+		TransactionID: pgtype.Text{String: "wx_txn_912", Valid: true},
+	}
+	order := db.Order{ID: 84, MerchantID: 26, TotalAmount: 10000, DeliveryFee: 1000, OrderType: "takeout"}
+	merchant := db.Merchant{ID: 26, RegionID: 20, Name: "finish同步完成商户"}
+	existingOrder := db.ProfitSharingOrder{
+		ID:             3012,
+		MerchantID:     merchant.ID,
+		OutOrderNo:     "PS91284",
+		Status:         "pending",
+		MerchantAmount: 10000,
+	}
+
+	store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil)
+	store.EXPECT().GetOrder(gomock.Any(), order.ID).Return(order, nil)
+	store.EXPECT().GetMerchant(gomock.Any(), merchant.ID).Return(merchant, nil)
+	store.EXPECT().GetMerchantPaymentConfig(gomock.Any(), merchant.ID).Return(db.MerchantPaymentConfig{MerchantID: merchant.ID, SubMchID: "sub_mch_26"}, nil)
+	store.EXPECT().GetActiveProfitSharingConfig(gomock.Any(), db.GetActiveProfitSharingConfigParams{
+		OrderSource: order.OrderType,
+		MerchantID:  pgtype.Int8{Int64: merchant.ID, Valid: true},
+		RegionID:    pgtype.Int8{Int64: merchant.RegionID, Valid: true},
+	}).Return(db.ProfitSharingConfig{PlatformRate: 0, OperatorRate: 0, RiderEnabled: false}, nil)
+	store.EXPECT().GetActiveOperatorByRegion(gomock.Any(), merchant.RegionID).Return(db.Operator{}, db.ErrRecordNotFound)
+	store.EXPECT().GetProfitSharingOrderByPaymentOrder(gomock.Any(), paymentOrder.ID).Return(existingOrder, nil)
+	ecommerceClient.EXPECT().FinishProfitSharing(gomock.Any(), "sub_mch_26", paymentOrder.TransactionID.String, existingOrder.OutOrderNo, "无需分账，解冻剩余资金").Return(&wechatcontracts.ProfitSharingResponse{OrderID: "ps_finish_3012", Status: wechatcontracts.ProfitSharingStatusFinished}, nil)
+	store.EXPECT().UpdateProfitSharingOrderToProcessing(gomock.Any(), db.UpdateProfitSharingOrderToProcessingParams{
+		ID:             existingOrder.ID,
+		SharingOrderID: pgtype.Text{String: "ps_finish_3012", Valid: true},
+	}).Return(db.ProfitSharingOrder{ID: existingOrder.ID, Status: "processing"}, nil)
+	expectProfitSharingCommand(t, store, existingOrder.ID, existingOrder.OutOrderNo, db.ExternalPaymentCommandTypeFinishProfitSharing, "ps_finish_3012", wechatcontracts.ProfitSharingStatusFinished, 9930)
+	expectProfitSharingCommandResponseFact(t, store, existingOrder.ID, existingOrder.OutOrderNo, db.ExternalPaymentCommandTypeFinishProfitSharing, "ps_finish_3012", 0, wechatcontracts.ProfitSharingStatusFinished, db.ExternalPaymentTerminalStatusUnknown, false, nil)
+
+	processor := worker.NewTestTaskProcessor(store, distributor, nil, ecommerceClient)
+	payloadBytes, err := json.Marshal(worker.ProfitSharingPayload{PaymentOrderID: paymentOrder.ID, OrderID: order.ID})
+	require.NoError(t, err)
+
+	task := asynq.NewTask(worker.TaskProcessProfitSharing, payloadBytes)
+	err = processor.ProcessTaskProfitSharing(context.Background(), task)
+	require.NoError(t, err)
+	require.Empty(t, distributor.applicationIDs)
+}
+
+func expectProfitSharingCommand(t *testing.T, store *mockdb.MockStore, profitSharingOrderID int64, outOrderNo string, commandType string, sharingOrderID string, status string, commandID int64) {
+	t.Helper()
+
+	store.EXPECT().CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {
+		require.Equal(t, db.ExternalPaymentProviderWechat, arg.Provider)
+		require.Equal(t, db.PaymentChannelEcommerce, arg.Channel)
+		require.Equal(t, db.ExternalPaymentCapabilityProfitSharing, arg.Capability)
+		require.Equal(t, commandType, arg.CommandType)
+		require.Equal(t, db.ExternalPaymentBusinessOwnerProfitSharing, arg.BusinessOwner)
+		require.True(t, arg.BusinessObjectType.Valid)
+		require.Equal(t, "profit_sharing_order", arg.BusinessObjectType.String)
+		require.True(t, arg.BusinessObjectID.Valid)
+		require.Equal(t, profitSharingOrderID, arg.BusinessObjectID.Int64)
+		require.Equal(t, db.ExternalPaymentObjectProfitSharing, arg.ExternalObjectType)
+		require.Equal(t, outOrderNo, arg.ExternalObjectKey)
+		require.Equal(t, db.ExternalPaymentCommandStatusAccepted, arg.CommandStatus)
+		require.True(t, arg.ExternalSecondaryKey.Valid)
+		require.Equal(t, sharingOrderID, arg.ExternalSecondaryKey.String)
+		require.False(t, arg.LastErrorCode.Valid)
+		require.False(t, arg.LastErrorMessage.Valid)
+		snapshot := string(arg.ResponseSnapshot)
+		require.Contains(t, snapshot, outOrderNo)
+		require.Contains(t, snapshot, sharingOrderID)
+		if status != "" {
+			require.Contains(t, snapshot, status)
+		}
+		require.NotContains(t, snapshot, "ReceiverAccount")
+		require.NotContains(t, snapshot, "receiver_account")
+		require.NotContains(t, snapshot, "ReceiverName")
+		require.NotContains(t, snapshot, "receiver_name")
+		require.NotContains(t, snapshot, "encrypted")
+		return db.ExternalPaymentCommand{ID: commandID}, nil
+	})
+}
+
+func expectProfitSharingQueryFact(t *testing.T, store *mockdb.MockStore, profitSharingOrderID int64, outOrderNo string, sharingOrderID string, amount int64, upstreamState string, terminalStatus string, isTerminal bool, factErr error) {
+	t.Helper()
+
+	factID := int64(8300) + profitSharingOrderID
+	store.EXPECT().CreateExternalPaymentFact(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentFactParams) (db.ExternalPaymentFact, error) {
+		require.Equal(t, db.ExternalPaymentProviderWechat, arg.Provider)
+		require.Equal(t, db.PaymentChannelEcommerce, arg.Channel)
+		require.Equal(t, db.ExternalPaymentCapabilityProfitSharing, arg.Capability)
+		require.Equal(t, db.ExternalPaymentFactSourceQuery, arg.FactSource)
+		require.Equal(t, db.ExternalPaymentObjectProfitSharing, arg.ExternalObjectType)
+		require.Equal(t, outOrderNo, arg.ExternalObjectKey)
+		require.True(t, arg.ExternalSecondaryKey.Valid)
+		require.Equal(t, sharingOrderID, arg.ExternalSecondaryKey.String)
+		require.Equal(t, db.ExternalPaymentBusinessOwnerProfitSharing, arg.BusinessOwner.String)
+		require.Equal(t, "profit_sharing_order", arg.BusinessObjectType.String)
+		require.Equal(t, profitSharingOrderID, arg.BusinessObjectID.Int64)
+		require.Equal(t, upstreamState, arg.UpstreamState)
+		require.Equal(t, terminalStatus, arg.TerminalStatus)
+		if amount > 0 {
+			require.True(t, arg.Amount.Valid)
+			require.Equal(t, amount, arg.Amount.Int64)
+		} else {
+			require.False(t, arg.Amount.Valid)
+		}
+		require.Equal(t, "CNY", arg.Currency)
+		require.Equal(t, "wechat:query:ecommerce:profit_sharing:"+outOrderNo+":"+terminalStatus, arg.DedupeKey)
+		raw := string(arg.RawResource)
+		require.Contains(t, raw, sharingOrderID)
+		require.Contains(t, raw, "receiver_results")
+		if amount > 0 {
+			require.Contains(t, raw, "detail_3")
+		}
+		require.NotContains(t, raw, "receiver_account")
+		require.NotContains(t, raw, "ReceiverAccount")
+		require.NotContains(t, raw, "receiver_name")
+		require.NotContains(t, raw, "ReceiverName")
+		if factErr != nil {
+			return db.ExternalPaymentFact{}, factErr
+		}
+		return db.ExternalPaymentFact{ID: factID, DedupeKey: arg.DedupeKey, IsTerminal: isTerminal}, nil
+	})
+
+	if factErr != nil || !isTerminal {
+		return
+	}
+
+	store.EXPECT().CreateExternalPaymentFactApplication(gomock.Any(), db.CreateExternalPaymentFactApplicationParams{
+		FactID:             factID,
+		Consumer:           "profit_sharing_domain",
+		BusinessObjectType: "profit_sharing_order",
+		BusinessObjectID:   profitSharingOrderID,
+		Status:             db.ExternalPaymentFactApplicationStatusPending,
+	}).Return(db.ExternalPaymentFactApplication{
+		ID:                 factID + 1000,
+		FactID:             factID,
+		Consumer:           "profit_sharing_domain",
+		BusinessObjectType: "profit_sharing_order",
+		BusinessObjectID:   profitSharingOrderID,
+		Status:             db.ExternalPaymentFactApplicationStatusPending,
+	}, nil)
+}
+
+func expectProfitSharingCommandResponseFact(t *testing.T, store *mockdb.MockStore, profitSharingOrderID int64, outOrderNo string, commandType string, sharingOrderID string, amount int64, upstreamState string, terminalStatus string, isTerminal bool, factErr error) {
+	t.Helper()
+
+	factID := int64(8300) + profitSharingOrderID
+	store.EXPECT().CreateExternalPaymentFact(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentFactParams) (db.ExternalPaymentFact, error) {
+		require.Equal(t, db.ExternalPaymentProviderWechat, arg.Provider)
+		require.Equal(t, db.PaymentChannelEcommerce, arg.Channel)
+		require.Equal(t, db.ExternalPaymentCapabilityProfitSharing, arg.Capability)
+		require.Equal(t, db.ExternalPaymentFactSourceCommandResponse, arg.FactSource)
+		require.Equal(t, db.ExternalPaymentObjectProfitSharing, arg.ExternalObjectType)
+		require.Equal(t, outOrderNo, arg.ExternalObjectKey)
+		require.True(t, arg.ExternalSecondaryKey.Valid)
+		require.Equal(t, sharingOrderID, arg.ExternalSecondaryKey.String)
+		require.Equal(t, db.ExternalPaymentBusinessOwnerProfitSharing, arg.BusinessOwner.String)
+		require.Equal(t, "profit_sharing_order", arg.BusinessObjectType.String)
+		require.Equal(t, profitSharingOrderID, arg.BusinessObjectID.Int64)
+		require.Equal(t, upstreamState, arg.UpstreamState)
+		require.Equal(t, terminalStatus, arg.TerminalStatus)
+		if amount > 0 {
+			require.True(t, arg.Amount.Valid)
+			require.Equal(t, amount, arg.Amount.Int64)
+		} else {
+			require.False(t, arg.Amount.Valid)
+		}
+		require.Equal(t, "CNY", arg.Currency)
+		require.Equal(t, "wechat:command_response:ecommerce:profit_sharing:"+commandType+":"+outOrderNo+":"+upstreamState, arg.DedupeKey)
+		raw := string(arg.RawResource)
+		require.Contains(t, raw, sharingOrderID)
+		require.Contains(t, raw, commandType)
+		require.Contains(t, raw, upstreamState)
+		if factErr != nil {
+			return db.ExternalPaymentFact{}, factErr
+		}
+		return db.ExternalPaymentFact{ID: factID, DedupeKey: arg.DedupeKey, IsTerminal: isTerminal}, nil
+	})
+
 }

@@ -60,10 +60,11 @@ func (store *SQLStore) MarkWechatNotificationProcessed(ctx context.Context, id, 
 
 // ApplymentSubMchActivationTxParams 进件开通二级商户号事务参数
 type ApplymentSubMchActivationTxParams struct {
-	ApplymentID int64
-	SubjectType string
-	SubjectID   int64
-	SubMchID    string
+	ApplymentID       int64
+	WechatApplymentID pgtype.Int8
+	SubjectType       string
+	SubjectID         int64
+	SubMchID          string
 }
 
 // ApplymentSubMchActivationTx 在单个事务中完成进件开通后的三步 DB 更新。
@@ -73,12 +74,29 @@ type ApplymentSubMchActivationTxParams struct {
 // 会导致数据不一致。此事务确保三步要么全部成功，要么全部回滚。
 func (store *SQLStore) ApplymentSubMchActivationTx(ctx context.Context, arg ApplymentSubMchActivationTxParams) error {
 	return store.execTx(ctx, func(q *Queries) error {
-		// step 1: 更新进件记录的 sub_mch_id
-		if _, err := q.UpdateEcommerceApplymentSubMchID(ctx, UpdateEcommerceApplymentSubMchIDParams{
-			ID:       arg.ApplymentID,
-			SubMchID: pgtype.Text{String: arg.SubMchID, Valid: true},
+		applyment, err := q.GetEcommerceApplyment(ctx, arg.ApplymentID)
+		if err != nil {
+			return fmt.Errorf("get applyment: %w", err)
+		}
+
+		resolvedWechatApplymentID := applyment.ApplymentID
+		if !resolvedWechatApplymentID.Valid && arg.WechatApplymentID.Valid {
+			resolvedWechatApplymentID = arg.WechatApplymentID
+		}
+
+		// step 1: 在激活事务内同步进件完成状态与 sub_mch_id，避免 finish owner path 漏写终态。
+		if _, err := q.UpdateEcommerceApplymentStatus(ctx, UpdateEcommerceApplymentStatusParams{
+			ID:                 arg.ApplymentID,
+			ApplymentID:        resolvedWechatApplymentID,
+			Status:             "finish",
+			RejectReason:       applyment.RejectReason,
+			SignUrl:            applyment.SignUrl,
+			SignState:          applyment.SignState,
+			LegalValidationUrl: applyment.LegalValidationUrl,
+			AccountValidation:  applyment.AccountValidation,
+			SubMchID:           pgtype.Text{String: arg.SubMchID, Valid: true},
 		}); err != nil {
-			return fmt.Errorf("update applyment sub_mch_id: %w", err)
+			return fmt.Errorf("update applyment status to finish: %w", err)
 		}
 
 		if arg.SubjectType != "merchant" {

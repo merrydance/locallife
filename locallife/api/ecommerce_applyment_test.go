@@ -57,6 +57,31 @@ func newTestServerWithEcommerce(t *testing.T, store db.Store, ecommerceClient we
 	return server
 }
 
+func expectMerchantApplymentCommandAccepted(t *testing.T, store *mockdb.MockStore, upstreamApplymentID string) {
+	t.Helper()
+
+	store.EXPECT().
+		CreateExternalPaymentCommand(gomock.Any(), gomock.AssignableToTypeOf(db.CreateExternalPaymentCommandParams{})).
+		Times(1).
+		DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {
+			require.Equal(t, db.ExternalPaymentProviderWechat, arg.Provider)
+			require.Equal(t, db.PaymentChannelEcommerce, arg.Channel)
+			require.Equal(t, db.ExternalPaymentCapabilityApplyment, arg.Capability)
+			require.Equal(t, db.ExternalPaymentCommandTypeCreateApplyment, arg.CommandType)
+			require.Equal(t, db.ExternalPaymentBusinessOwnerApplyment, arg.BusinessOwner)
+			require.True(t, arg.BusinessObjectType.Valid)
+			require.Equal(t, "ecommerce_applyment", arg.BusinessObjectType.String)
+			require.True(t, arg.BusinessObjectID.Valid)
+			require.Equal(t, db.ExternalPaymentObjectApplyment, arg.ExternalObjectType)
+			require.NotEmpty(t, arg.ExternalObjectKey)
+			require.True(t, arg.ExternalSecondaryKey.Valid)
+			require.Equal(t, upstreamApplymentID, arg.ExternalSecondaryKey.String)
+			require.Equal(t, db.ExternalPaymentCommandStatusAccepted, arg.CommandStatus)
+			require.Contains(t, string(arg.ResponseSnapshot), upstreamApplymentID)
+			return db.ExternalPaymentCommand{ID: util.RandomInt(1, 1000), CommandStatus: arg.CommandStatus}, nil
+		})
+}
+
 func seedPrivateContactDocumentAsset(t *testing.T, server *Server, objectKey string, content []byte) {
 	t.Helper()
 	err := server.mediaStorage.PutObject(
@@ -227,6 +252,8 @@ func TestMerchantBindBankAPI(t *testing.T) {
 					UpdateEcommerceApplymentToSubmitted(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(db.EcommerceApplyment{}, nil)
+
+				expectMerchantApplymentCommandAccepted(t, store, "123456789")
 
 				// 更新商户状态
 				store.EXPECT().
@@ -421,6 +448,8 @@ func TestMerchantBindBankAPI(t *testing.T) {
 					UpdateEcommerceApplymentToSubmitted(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(db.EcommerceApplyment{}, nil)
+
+				expectMerchantApplymentCommandAccepted(t, store, "22334455")
 
 				store.EXPECT().
 					UpdateMerchantStatus(gomock.Any(), gomock.Any()).

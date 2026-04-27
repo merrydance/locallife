@@ -3,6 +3,7 @@ package worker_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/hibiken/asynq"
 	mockdb "github.com/merrydance/locallife/db/mock"
@@ -32,11 +33,13 @@ func TestMerchantWithdrawRecoverySchedulerRunOnceEnqueuesPendingMerchantRecords(
 	merchantRecord := db.WithdrawalRecord{ID: 301, Channel: "wechat_ecommerce_fund", Status: "pending"}
 
 	store.EXPECT().
-		ListPendingWithdrawalRecordsByChannel(gomock.Any(), db.ListPendingWithdrawalRecordsByChannelParams{
-			Channel: "wechat_ecommerce_fund",
-			Limit:   int32(200),
-		}).
-		Return([]db.WithdrawalRecord{merchantRecord}, nil)
+		ListPendingWithdrawalRecordsByChannel(gomock.Any(), gomock.AssignableToTypeOf(db.ListPendingWithdrawalRecordsByChannelParams{})).
+		DoAndReturn(func(_ context.Context, arg db.ListPendingWithdrawalRecordsByChannelParams) ([]db.WithdrawalRecord, error) {
+			require.Equal(t, "wechat_ecommerce_fund", arg.Channel)
+			require.Equal(t, int32(200), arg.LimitCount)
+			require.WithinDuration(t, time.Now().Add(-5*time.Minute), arg.UpdatedBefore, 5*time.Second)
+			return []db.WithdrawalRecord{merchantRecord}, nil
+		})
 
 	scheduler := worker.NewMerchantWithdrawRecoveryScheduler(store, distributor)
 	scheduler.RunOnce()
@@ -53,11 +56,13 @@ func TestMerchantWithdrawRecoverySchedulerRunOnceReturnsAfterMerchantChannelFail
 	distributor := &merchantWithdrawRecoverySchedulerTestDistributor{}
 
 	store.EXPECT().
-		ListPendingWithdrawalRecordsByChannel(gomock.Any(), db.ListPendingWithdrawalRecordsByChannelParams{
-			Channel: "wechat_ecommerce_fund",
-			Limit:   int32(200),
-		}).
-		Return(nil, assertAnError("merchant channel unavailable"))
+		ListPendingWithdrawalRecordsByChannel(gomock.Any(), gomock.AssignableToTypeOf(db.ListPendingWithdrawalRecordsByChannelParams{})).
+		DoAndReturn(func(_ context.Context, arg db.ListPendingWithdrawalRecordsByChannelParams) ([]db.WithdrawalRecord, error) {
+			require.Equal(t, "wechat_ecommerce_fund", arg.Channel)
+			require.Equal(t, int32(200), arg.LimitCount)
+			require.WithinDuration(t, time.Now().Add(-5*time.Minute), arg.UpdatedBefore, 5*time.Second)
+			return nil, assertAnError("merchant channel unavailable")
+		})
 
 	scheduler := worker.NewMerchantWithdrawRecoveryScheduler(store, distributor)
 	scheduler.RunOnce()

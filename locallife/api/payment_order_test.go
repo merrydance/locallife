@@ -101,6 +101,34 @@ func (s stubRefundOrchestrator) ApplyAbnormalRefund(context.Context, logic.Apply
 	return logic.ApplyAbnormalRefundResult{}, nil
 }
 
+func expectOrderPaymentCommandAccepted(t *testing.T, store *mockdb.MockStore, paymentOrder db.PaymentOrder, prepayID string) {
+	t.Helper()
+
+	store.EXPECT().
+		CreateExternalPaymentCommand(gomock.Any(), gomock.AssignableToTypeOf(db.CreateExternalPaymentCommandParams{})).
+		Times(1).
+		DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {
+			require.Equal(t, db.ExternalPaymentProviderWechat, arg.Provider)
+			require.Equal(t, db.PaymentChannelEcommerce, arg.Channel)
+			require.Equal(t, db.ExternalPaymentCapabilityPartnerJSAPIPayment, arg.Capability)
+			require.Equal(t, db.ExternalPaymentCommandTypeCreatePayment, arg.CommandType)
+			require.Equal(t, db.ExternalPaymentBusinessOwnerOrder, arg.BusinessOwner)
+			require.True(t, arg.BusinessObjectType.Valid)
+			require.Equal(t, "payment_order", arg.BusinessObjectType.String)
+			require.True(t, arg.BusinessObjectID.Valid)
+			require.Equal(t, paymentOrder.ID, arg.BusinessObjectID.Int64)
+			require.Equal(t, db.ExternalPaymentObjectPayment, arg.ExternalObjectType)
+			require.Equal(t, paymentOrder.OutTradeNo, arg.ExternalObjectKey)
+			require.True(t, arg.ExternalSecondaryKey.Valid)
+			require.Equal(t, prepayID, arg.ExternalSecondaryKey.String)
+			require.Equal(t, db.ExternalPaymentCommandStatusAccepted, arg.CommandStatus)
+			require.Contains(t, string(arg.ResponseSnapshot), paymentOrder.OutTradeNo)
+			require.Contains(t, string(arg.ResponseSnapshot), prepayID)
+			require.NotContains(t, string(arg.ResponseSnapshot), "paySign")
+			return db.ExternalPaymentCommand{ID: util.RandomInt(1, 1000), CommandStatus: arg.CommandStatus}, nil
+		})
+}
+
 // ==================== CreatePaymentOrder Tests ====================
 
 func TestCreatePaymentOrderAPI(t *testing.T) {
@@ -179,6 +207,8 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 						updated.PrepayID = arg.PrepayID
 						return updated, nil
 					})
+
+				expectOrderPaymentCommandAccepted(t, store, paymentOrder, "wx123")
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusCreated, recorder.Code)

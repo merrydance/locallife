@@ -2,12 +2,15 @@ package worker
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
-	"github.com/hibiken/asynq"
+	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/wechat"
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	"github.com/robfig/cron/v3"
@@ -38,6 +41,7 @@ type RefundRecoveryScheduler struct {
 	distributor     TaskDistributor
 	paymentClient   wechat.DirectPaymentClientInterface
 	ecommerceClient wechat.EcommerceClientInterface
+	paymentFactSvc  *logic.PaymentFactService
 }
 
 // NewRefundRecoveryScheduler 创建新的退款恢复调度器
@@ -59,6 +63,7 @@ func NewRefundRecoveryScheduler(
 		distributor:     distributor,
 		paymentClient:   paymentClient,
 		ecommerceClient: ecommerceClient,
+		paymentFactSvc:  logic.NewPaymentFactService(store),
 	}
 }
 
@@ -330,30 +335,108 @@ func (s *RefundRecoveryScheduler) recoverStuckProcessingRefunds(ctx context.Cont
 			continue
 		}
 
-		err = s.distributor.DistributeTaskProcessRefundResult(
-			ctx,
-			&RefundResultPayload{
-				OutRefundNo:  refundOrder.OutRefundNo,
-				RefundStatus: refundStatus,
-				RefundID:     refundID,
-			},
-			asynq.MaxRetry(5),
-			asynq.Queue(QueueCritical),
-		)
+		application, err := s.recordRiderDepositDirectRefundQueryFact(ctx, paymentOrder, refundOrder, refundStatus, refundID)
 		if err != nil {
 			log.Error().Err(err).
 				Int64("refund_order_id", refundOrder.ID).
 				Str("out_refund_no", refundOrder.OutRefundNo).
 				Str("refund_status", refundStatus).
-				Msg("enqueue stuck refund result recovery task failed")
+				Msg("record rider deposit direct refund query fact failed")
+			continue
+		}
+		if application != nil {
+			enqueueRiderDepositRefundPaymentFactApplication(ctx, s.distributor, application)
+			log.Info().
+				Int64("refund_order_id", refundOrder.ID).
+				Str("out_refund_no", refundOrder.OutRefundNo).
+				Str("refund_status", refundStatus).
+				Int64("payment_fact_application_id", application.ID).
+				Msg("stuck rider deposit refund fact application enqueued")
 			continue
 		}
 
+		application, err = s.recordReservationEcommerceRefundQueryFact(ctx, paymentOrder, refundOrder, refundStatus, refundID)
+		if err != nil {
+			log.Error().Err(err).
+				Int64("refund_order_id", refundOrder.ID).
+				Str("out_refund_no", refundOrder.OutRefundNo).
+				Str("refund_status", refundStatus).
+				Msg("record reservation ecommerce refund query fact failed")
+			continue
+		}
+		if application != nil {
+			enqueueReservationRefundPaymentFactApplication(ctx, s.distributor, application)
+			log.Info().
+				Int64("refund_order_id", refundOrder.ID).
+				Str("out_refund_no", refundOrder.OutRefundNo).
+				Str("refund_status", refundStatus).
+				Int64("payment_fact_application_id", application.ID).
+				Msg("stuck reservation refund fact application enqueued")
+			continue
+		}
+
+		application, err = s.recordOrderEcommerceRefundQueryFact(ctx, paymentOrder, refundOrder, refundStatus, refundID)
+		if err != nil {
+			log.Error().Err(err).
+				Int64("refund_order_id", refundOrder.ID).
+				Str("out_refund_no", refundOrder.OutRefundNo).
+				Str("refund_status", refundStatus).
+				Msg("record order ecommerce refund query fact failed")
+			continue
+		}
+		if application != nil {
+			enqueueOrderRefundPaymentFactApplication(ctx, s.distributor, application)
+			log.Info().
+				Int64("refund_order_id", refundOrder.ID).
+				Str("out_refund_no", refundOrder.OutRefundNo).
+				Str("refund_status", refundStatus).
+				Int64("payment_fact_application_id", application.ID).
+				Msg("stuck order refund fact application enqueued")
+			continue
+		}
+
+		s.persistUnsupportedRefundRecoveryFactAlert(ctx, paymentOrder, refundOrder, refundStatus, refundID)
 		log.Info().
 			Int64("refund_order_id", refundOrder.ID).
+			Int64("payment_order_id", paymentOrder.ID).
 			Str("out_refund_no", refundOrder.OutRefundNo).
 			Str("refund_status", refundStatus).
-			Msg("stuck refund result recovery task enqueued")
+			Str("payment_channel", paymentOrder.PaymentChannel).
+			Str("business_type", paymentOrder.BusinessType).
+			Msg("stuck refund query reached terminal status but no fact application target is modeled")
+	}
+}
+
+func (s *RefundRecoveryScheduler) persistUnsupportedRefundRecoveryFactAlert(ctx context.Context, paymentOrder db.PaymentOrder, refundOrder db.RefundOrder, refundStatus, refundID string) {
+	err := SavePlatformAlertEvent(
+		ctx,
+		s.store,
+		string(AlertTypeRefundFailed),
+		string(AlertLevelCritical),
+		"退款恢复查询缺少事实应用目标",
+		fmt.Sprintf("退款单 %s 查询微信侧已进入 %s，但当前业务类型 %s/%s 没有可用的退款 fact application target，系统已停止 legacy result worker fallback，请人工核对并补建 owner terminalizer。", refundOrder.OutRefundNo, refundStatus, paymentOrder.PaymentChannel, paymentOrder.BusinessType),
+		refundOrder.ID,
+		"refund_order",
+		map[string]any{
+			"refund_order_id":   refundOrder.ID,
+			"payment_order_id":  paymentOrder.ID,
+			"out_refund_no":     refundOrder.OutRefundNo,
+			"refund_id":         refundID,
+			"refund_status":     refundStatus,
+			"payment_channel":   paymentOrder.PaymentChannel,
+			"payment_type":      paymentOrder.PaymentType,
+			"business_type":     paymentOrder.BusinessType,
+			"order_id":          paymentOrderInt8ForAlert(paymentOrder.OrderID),
+			"reservation_id":    paymentOrderInt8ForAlert(paymentOrder.ReservationID),
+			"requires_modeling": true,
+		},
+		time.Now(),
+	)
+	if err != nil {
+		log.Error().Err(err).
+			Int64("refund_order_id", refundOrder.ID).
+			Str("out_refund_no", refundOrder.OutRefundNo).
+			Msg("persist unsupported refund recovery fact alert failed")
 	}
 }
 
@@ -396,6 +479,157 @@ func (s *RefundRecoveryScheduler) queryRefundStatus(ctx context.Context, payment
 		return "", "", err
 	}
 	return resp.Status, resp.RefundID, nil
+}
+
+func (s *RefundRecoveryScheduler) recordRiderDepositDirectRefundQueryFact(ctx context.Context, paymentOrder db.PaymentOrder, refundOrder db.RefundOrder, refundStatus, refundID string) (*db.ExternalPaymentFactApplication, error) {
+	if s.paymentFactSvc == nil || paymentOrder.BusinessType != db.ExternalPaymentBusinessOwnerRiderDeposit || paymentOrderUsesEcommerceChannel(paymentOrder) {
+		return nil, nil
+	}
+	amount := refundOrder.RefundAmount
+	result, err := s.paymentFactSvc.RecordExternalPaymentFact(ctx, logic.RecordExternalPaymentFactInput{
+		Provider:             db.ExternalPaymentProviderWechat,
+		Channel:              db.PaymentChannelDirect,
+		Capability:           db.ExternalPaymentCapabilityDirectRefund,
+		FactSource:           db.ExternalPaymentFactSourceQuery,
+		ExternalObjectType:   db.ExternalPaymentObjectRefund,
+		ExternalObjectKey:    refundOrder.OutRefundNo,
+		ExternalSecondaryKey: paymentFactStringPtr(refundID),
+		BusinessOwner:        paymentFactStringPtr(db.ExternalPaymentBusinessOwnerRiderDeposit),
+		BusinessObjectType:   paymentFactStringPtr("refund_order"),
+		BusinessObjectID:     paymentFactInt64Ptr(refundOrder.ID),
+		UpstreamState:        refundStatus,
+		TerminalStatus:       logic.NormalizeDirectRefundTerminalStatus(refundStatus),
+		Amount:               &amount,
+		Currency:             "CNY",
+		RawResource:          directRefundQueryFactResource(refundOrder.OutRefundNo, refundID, refundStatus),
+		DedupeKey:            directRefundQueryFactDedupeKey(refundOrder.OutRefundNo, refundStatus),
+		Application: &logic.ExternalPaymentFactApplicationTarget{
+			Consumer:           riderDepositRefundFactConsumerDomain,
+			BusinessObjectType: riderDepositRefundFactBusinessObjectOrder,
+			BusinessObjectID:   refundOrder.ID,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result.Application, nil
+}
+
+func (s *RefundRecoveryScheduler) recordReservationEcommerceRefundQueryFact(ctx context.Context, paymentOrder db.PaymentOrder, refundOrder db.RefundOrder, refundStatus, refundID string) (*db.ExternalPaymentFactApplication, error) {
+	if s.paymentFactSvc == nil || !paymentOrderUsesEcommerceChannel(paymentOrder) || !isReservationRefundPayment(paymentOrder) {
+		return nil, nil
+	}
+	amount := refundOrder.RefundAmount
+	result, err := s.paymentFactSvc.RecordExternalPaymentFact(ctx, logic.RecordExternalPaymentFactInput{
+		Provider:             db.ExternalPaymentProviderWechat,
+		Channel:              db.PaymentChannelEcommerce,
+		Capability:           db.ExternalPaymentCapabilityEcommerceRefund,
+		FactSource:           db.ExternalPaymentFactSourceQuery,
+		ExternalObjectType:   db.ExternalPaymentObjectRefund,
+		ExternalObjectKey:    refundOrder.OutRefundNo,
+		ExternalSecondaryKey: paymentFactStringPtr(refundID),
+		BusinessOwner:        paymentFactStringPtr(db.ExternalPaymentBusinessOwnerReservation),
+		BusinessObjectType:   paymentFactStringPtr(reservationRefundFactBusinessObjectOrder),
+		BusinessObjectID:     paymentFactInt64Ptr(refundOrder.ID),
+		UpstreamState:        refundStatus,
+		TerminalStatus:       logic.NormalizeEcommerceRefundTerminalStatus(refundStatus),
+		Amount:               &amount,
+		Currency:             "CNY",
+		RawResource:          ecommerceRefundQueryFactResource(refundOrder.OutRefundNo, refundID, refundStatus),
+		DedupeKey:            ecommerceRefundQueryFactDedupeKey(refundOrder.OutRefundNo, refundStatus),
+		Application: &logic.ExternalPaymentFactApplicationTarget{
+			Consumer:           reservationRefundFactConsumerDomain,
+			BusinessObjectType: reservationRefundFactBusinessObjectOrder,
+			BusinessObjectID:   refundOrder.ID,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result.Application, nil
+}
+
+func (s *RefundRecoveryScheduler) recordOrderEcommerceRefundQueryFact(ctx context.Context, paymentOrder db.PaymentOrder, refundOrder db.RefundOrder, refundStatus, refundID string) (*db.ExternalPaymentFactApplication, error) {
+	if s.paymentFactSvc == nil || !paymentOrderUsesEcommerceChannel(paymentOrder) || !paymentOrder.OrderID.Valid || paymentOrder.ReservationID.Valid || paymentOrder.BusinessType != db.ExternalPaymentBusinessOwnerOrder {
+		return nil, nil
+	}
+	amount := refundOrder.RefundAmount
+	result, err := s.paymentFactSvc.RecordExternalPaymentFact(ctx, logic.RecordExternalPaymentFactInput{
+		Provider:             db.ExternalPaymentProviderWechat,
+		Channel:              db.PaymentChannelEcommerce,
+		Capability:           db.ExternalPaymentCapabilityEcommerceRefund,
+		FactSource:           db.ExternalPaymentFactSourceQuery,
+		ExternalObjectType:   db.ExternalPaymentObjectRefund,
+		ExternalObjectKey:    refundOrder.OutRefundNo,
+		ExternalSecondaryKey: paymentFactStringPtr(refundID),
+		BusinessOwner:        paymentFactStringPtr(db.ExternalPaymentBusinessOwnerOrder),
+		BusinessObjectType:   paymentFactStringPtr(orderRefundFactBusinessObjectOrder),
+		BusinessObjectID:     paymentFactInt64Ptr(refundOrder.ID),
+		UpstreamState:        refundStatus,
+		TerminalStatus:       logic.NormalizeEcommerceRefundTerminalStatus(refundStatus),
+		Amount:               &amount,
+		Currency:             "CNY",
+		RawResource:          ecommerceRefundQueryFactResource(refundOrder.OutRefundNo, refundID, refundStatus),
+		DedupeKey:            ecommerceRefundQueryFactDedupeKey(refundOrder.OutRefundNo, refundStatus),
+		Application: &logic.ExternalPaymentFactApplicationTarget{
+			Consumer:           orderRefundFactConsumerDomain,
+			BusinessObjectType: orderRefundFactBusinessObjectOrder,
+			BusinessObjectID:   refundOrder.ID,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result.Application, nil
+}
+
+func directRefundQueryFactDedupeKey(outRefundNo, refundStatus string) string {
+	return "wechat:query:direct:refund:" + outRefundNo + ":" + logic.NormalizeDirectRefundTerminalStatus(refundStatus)
+}
+
+func ecommerceRefundQueryFactDedupeKey(outRefundNo, refundStatus string) string {
+	return "wechat:query:ecommerce:refund:" + outRefundNo + ":" + logic.NormalizeEcommerceRefundTerminalStatus(refundStatus)
+}
+
+func directRefundQueryFactResource(outRefundNo, refundID, refundStatus string) []byte {
+	raw, err := json.Marshal(map[string]any{
+		"out_refund_no": outRefundNo,
+		"refund_id":     refundID,
+		"refund_status": refundStatus,
+	})
+	if err != nil {
+		log.Warn().Err(err).Str("out_refund_no", outRefundNo).Msg("marshal direct refund query fact resource failed")
+		return nil
+	}
+	return raw
+}
+
+func ecommerceRefundQueryFactResource(outRefundNo, refundID, refundStatus string) []byte {
+	raw, err := json.Marshal(map[string]any{
+		"out_refund_no": outRefundNo,
+		"refund_id":     refundID,
+		"refund_status": refundStatus,
+	})
+	if err != nil {
+		log.Warn().Err(err).Str("out_refund_no", outRefundNo).Msg("marshal ecommerce refund query fact resource failed")
+		return nil
+	}
+	return raw
+}
+
+func paymentFactStringPtr(value string) *string {
+	return &value
+}
+
+func paymentFactInt64Ptr(value int64) *int64 {
+	return &value
+}
+
+func paymentOrderInt8ForAlert(value pgtype.Int8) any {
+	if !value.Valid {
+		return nil
+	}
+	return value.Int64
 }
 
 func (s *RefundRecoveryScheduler) resolveSubMchID(ctx context.Context, paymentOrder db.PaymentOrder) (string, error) {

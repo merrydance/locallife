@@ -205,6 +205,21 @@ func TestCreateMerchantClaimRecoveryPaymentSuccess(t *testing.T) {
 			return updatedPayment, nil
 		})
 	store.EXPECT().
+		CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).
+		Times(1).
+		DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {
+			require.Equal(t, db.ExternalPaymentCapabilityDirectJSAPIPayment, arg.Capability)
+			require.Equal(t, db.ExternalPaymentCommandTypeCreatePayment, arg.CommandType)
+			require.Equal(t, db.ExternalPaymentBusinessOwnerClaimRecovery, arg.BusinessOwner)
+			require.Equal(t, db.ExternalPaymentObjectPayment, arg.ExternalObjectType)
+			require.Equal(t, createdPayment.OutTradeNo, arg.ExternalObjectKey)
+			require.Equal(t, "prepay_claim_recovery_001", arg.ExternalSecondaryKey.String)
+			require.Equal(t, db.ExternalPaymentCommandStatusAccepted, arg.CommandStatus)
+			require.Contains(t, string(arg.ResponseSnapshot), "prepay_claim_recovery_001")
+			require.NotContains(t, string(arg.ResponseSnapshot), "paySign")
+			return db.ExternalPaymentCommand{ID: 9101}, nil
+		})
+	store.EXPECT().
 		CreateClaimRecoveryEvent(gomock.Any(), gomock.Any()).
 		Times(1).
 		DoAndReturn(func(_ context.Context, arg db.CreateClaimRecoveryEventParams) (db.ClaimRecoveryEvent, error) {
@@ -225,6 +240,147 @@ func TestCreateMerchantClaimRecoveryPaymentSuccess(t *testing.T) {
 	require.Equal(t, updatedPayment.ID, result.PaymentOrder.ID)
 	require.NotNil(t, result.PayParams)
 	require.Equal(t, "prepay_id=prepay_claim_recovery_001", result.PayParams.Package)
+}
+
+func TestCreateMerchantClaimRecoveryPaymentWechatRejectedRecordsCommand(t *testing.T) {
+	claimID := int64(10)
+	merchantID := int64(20)
+	payerUserID := int64(21)
+	recovery := db.ClaimRecovery{
+		ID:             30,
+		ClaimID:        claimID,
+		OrderID:        40,
+		RecoveryAmount: 500,
+		Status:         "pending",
+		RecoveryTarget: pgtype.Text{String: "merchant", Valid: true},
+	}
+	createdPayment := db.PaymentOrder{
+		ID:           101,
+		UserID:       payerUserID,
+		Amount:       recovery.RecoveryAmount,
+		BusinessType: businessTypeClaimRecovery,
+		Status:       "pending",
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	store := mockdb.NewMockStore(ctrl)
+	paymentClient := mockwechat.NewMockDirectPaymentClientInterface(ctrl)
+
+	store.EXPECT().
+		GetClaimRecoveryContextByID(gomock.Any(), claimID).
+		Times(1).
+		Return(claimRecoveryContextFor(recovery, merchantID, 99, nil), nil)
+	store.EXPECT().
+		GetLatestPaymentOrderByBusinessTypeAndAttach(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(db.PaymentOrder{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		GetUser(gomock.Any(), payerUserID).
+		Times(1).
+		Return(db.User{ID: payerUserID, WechatOpenid: "openid_merchant_payer"}, nil)
+	store.EXPECT().
+		CreatePaymentOrder(gomock.Any(), gomock.Any()).
+		Times(1).
+		DoAndReturn(func(_ context.Context, arg db.CreatePaymentOrderParams) (db.PaymentOrder, error) {
+			createdPayment.OutTradeNo = arg.OutTradeNo
+			return createdPayment, nil
+		})
+	paymentClient.EXPECT().
+		CreateJSAPIOrder(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(nil, nil, &wechat.WechatPayError{StatusCode: 503, Code: "SYSTEM_ERROR", Message: "system busy"})
+	store.EXPECT().
+		UpdatePaymentOrderToClosed(gomock.Any(), createdPayment.ID).
+		Times(1).
+		Return(db.PaymentOrder{ID: createdPayment.ID, Status: "closed"}, nil)
+	store.EXPECT().
+		CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).
+		Times(1).
+		DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {
+			require.Equal(t, db.ExternalPaymentCapabilityDirectJSAPIPayment, arg.Capability)
+			require.Equal(t, db.ExternalPaymentCommandTypeCreatePayment, arg.CommandType)
+			require.Equal(t, db.ExternalPaymentBusinessOwnerClaimRecovery, arg.BusinessOwner)
+			require.Equal(t, db.ExternalPaymentCommandStatusRejected, arg.CommandStatus)
+			require.Equal(t, createdPayment.OutTradeNo, arg.ExternalObjectKey)
+			require.Equal(t, "SYSTEM_ERROR", arg.LastErrorCode.String)
+			require.Contains(t, string(arg.ResponseSnapshot), "SYSTEM_ERROR")
+			return db.ExternalPaymentCommand{ID: 9103}, nil
+		})
+
+	_, err := CreateMerchantClaimRecoveryPayment(context.Background(), store, paymentClient, CreateMerchantClaimRecoveryPaymentInput{
+		RecoveryID:  claimID,
+		MerchantID:  merchantID,
+		PayerUserID: payerUserID,
+		ClientIP:    "127.0.0.1",
+	})
+
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, 503, reqErr.Status)
+}
+
+func TestCreateMerchantClaimRecoveryPaymentWechatRejectedSkipsCommandWhenCloseFails(t *testing.T) {
+	claimID := int64(11)
+	merchantID := int64(21)
+	payerUserID := int64(22)
+	recovery := db.ClaimRecovery{
+		ID:             31,
+		ClaimID:        claimID,
+		OrderID:        41,
+		RecoveryAmount: 600,
+		Status:         "pending",
+		RecoveryTarget: pgtype.Text{String: "merchant", Valid: true},
+	}
+	createdPayment := db.PaymentOrder{
+		ID:           102,
+		UserID:       payerUserID,
+		Amount:       recovery.RecoveryAmount,
+		BusinessType: businessTypeClaimRecovery,
+		Status:       "pending",
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	store := mockdb.NewMockStore(ctrl)
+	paymentClient := mockwechat.NewMockDirectPaymentClientInterface(ctrl)
+
+	store.EXPECT().
+		GetClaimRecoveryContextByID(gomock.Any(), claimID).
+		Times(1).
+		Return(claimRecoveryContextFor(recovery, merchantID, 99, nil), nil)
+	store.EXPECT().
+		GetLatestPaymentOrderByBusinessTypeAndAttach(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(db.PaymentOrder{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		GetUser(gomock.Any(), payerUserID).
+		Times(1).
+		Return(db.User{ID: payerUserID, WechatOpenid: "openid_merchant_payer"}, nil)
+	store.EXPECT().
+		CreatePaymentOrder(gomock.Any(), gomock.Any()).
+		Times(1).
+		DoAndReturn(func(_ context.Context, arg db.CreatePaymentOrderParams) (db.PaymentOrder, error) {
+			createdPayment.OutTradeNo = arg.OutTradeNo
+			return createdPayment, nil
+		})
+	paymentClient.EXPECT().
+		CreateJSAPIOrder(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(nil, nil, &wechat.WechatPayError{StatusCode: 503, Code: "SYSTEM_ERROR", Message: "system busy"})
+	store.EXPECT().
+		UpdatePaymentOrderToClosed(gomock.Any(), createdPayment.ID).
+		Times(1).
+		Return(db.PaymentOrder{}, errors.New("close unavailable"))
+
+	_, err := CreateMerchantClaimRecoveryPayment(context.Background(), store, paymentClient, CreateMerchantClaimRecoveryPaymentInput{
+		RecoveryID:  claimID,
+		MerchantID:  merchantID,
+		PayerUserID: payerUserID,
+		ClientIP:    "127.0.0.1",
+	})
+
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, 503, reqErr.Status)
 }
 
 func TestCreateMerchantClaimRecoveryPaymentLookupFailureReturnsError(t *testing.T) {
@@ -448,6 +604,16 @@ func TestCreateMerchantClaimRecoveryPaymentExpiredPendingCreatesFreshPayment(t *
 		UpdatePaymentOrderPrepayId(gomock.Any(), gomock.Any()).
 		Times(1).
 		Return(updatedPayment, nil)
+	store.EXPECT().
+		CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).
+		Times(1).
+		DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {
+			require.Equal(t, db.ExternalPaymentBusinessOwnerClaimRecovery, arg.BusinessOwner)
+			require.Equal(t, db.ExternalPaymentCommandStatusAccepted, arg.CommandStatus)
+			require.Equal(t, createdPayment.OutTradeNo, arg.ExternalObjectKey)
+			require.Equal(t, "prepay_claim_recovery_fresh", arg.ExternalSecondaryKey.String)
+			return db.ExternalPaymentCommand{ID: 9102}, nil
+		})
 	store.EXPECT().
 		CreateClaimRecoveryEvent(gomock.Any(), gomock.Any()).
 		Times(1).

@@ -90,6 +90,28 @@ func TestClaimPayoutRecoverySchedulerRunOnceRecoversCreatedPayoutAction(t *testi
 			}, nil
 		},
 	)
+	store.EXPECT().CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ any, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {
+			require.Equal(t, db.ExternalPaymentProviderWechat, arg.Provider)
+			require.Equal(t, db.PaymentChannelDirect, arg.Channel)
+			require.Equal(t, db.ExternalPaymentCapabilityMerchantTransfer, arg.Capability)
+			require.Equal(t, db.ExternalPaymentCommandTypeCreateTransfer, arg.CommandType)
+			require.Equal(t, db.ExternalPaymentBusinessOwnerClaimRecovery, arg.BusinessOwner)
+			require.Equal(t, "behavior_action", arg.BusinessObjectType.String)
+			require.Equal(t, createdAction.ID, arg.BusinessObjectID.Int64)
+			require.Equal(t, db.ExternalPaymentObjectMerchantTransfer, arg.ExternalObjectType)
+			require.Equal(t, "claimpayout99", arg.ExternalObjectKey)
+			require.Equal(t, "wx-bill-99", arg.ExternalSecondaryKey.String)
+			require.Equal(t, db.ExternalPaymentCommandStatusAccepted, arg.CommandStatus)
+			snapshot := string(arg.ResponseSnapshot)
+			require.Contains(t, snapshot, "claimpayout99")
+			require.Contains(t, snapshot, "wx-bill-99")
+			require.NotContains(t, snapshot, "openid-22")
+			require.NotContains(t, snapshot, "张三")
+			require.NotContains(t, snapshot, "platform payout")
+			return db.ExternalPaymentCommand{ID: 9902}, nil
+		},
+	)
 	transferClient.EXPECT().QueryTransferByOutBillNo(gomock.Any(), "claimpayout99").Return(&contracts.DirectMerchantTransferQueryResponse{
 		OutBillNo:      "claimpayout99",
 		TransferBillNo: "wx-bill-99",

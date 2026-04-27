@@ -16,7 +16,10 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-const businessTypeClaimRecovery = "claim_recovery"
+const (
+	businessTypeClaimRecovery           = "claim_recovery"
+	claimRecoveryPaymentOrderObjectType = "payment_order"
+)
 
 type ClaimRecoveryPaymentResult struct {
 	Recovery     db.ClaimRecovery
@@ -167,7 +170,11 @@ func createClaimRecoveryPayment(ctx context.Context, store db.Store, paymentClie
 		PayerClientIP: clientIP,
 	})
 	if err != nil {
-		_, _ = store.UpdatePaymentOrderToClosed(ctx, paymentOrder.ID)
+		if _, closeErr := store.UpdatePaymentOrderToClosed(ctx, paymentOrder.ID); closeErr != nil {
+			log.Error().Err(closeErr).Int64("payment_order_id", paymentOrder.ID).Msg("failed to close claim recovery payment order after create rejection")
+		} else {
+			recordClaimRecoveryPaymentCommandRejected(ctx, store, paymentOrder, err)
+		}
 		if mapped := mapDirectJSAPIOrderCreateError(err); mapped != nil {
 			return ClaimRecoveryPaymentResult{}, mapped
 		}
@@ -185,6 +192,7 @@ func createClaimRecoveryPayment(ctx context.Context, store db.Store, paymentClie
 		}
 		return ClaimRecoveryPaymentResult{}, fmt.Errorf("update claim recovery prepay id: %w", err)
 	}
+	recordClaimRecoveryPaymentCommandAccepted(ctx, store, paymentOrder, wxResp.PrepayID)
 	if err := db.WriteClaimRecoveryEvent(ctx, store, recovery, db.ClaimRecoveryEventTypePaymentStarted, map[string]any{
 		"claim_id":         recovery.ClaimID,
 		"payment_order_id": updatedPaymentOrder.ID,
@@ -196,6 +204,107 @@ func createClaimRecoveryPayment(ctx context.Context, store db.Store, paymentClie
 	}
 
 	return ClaimRecoveryPaymentResult{Recovery: recovery, PaymentOrder: updatedPaymentOrder, PayParams: payParams}, nil
+}
+
+func recordClaimRecoveryPaymentCommandAccepted(ctx context.Context, store db.Store, paymentOrder db.PaymentOrder, prepayID string) {
+	paymentCommandSvc := NewPaymentCommandService(store)
+	_, err := paymentCommandSvc.RecordExternalPaymentCommand(ctx, dbClaimRecoveryPaymentCommandInput(
+		paymentOrder,
+		db.ExternalPaymentCommandStatusAccepted,
+		stringPtrIfNotEmpty(prepayID),
+		nil,
+		nil,
+		claimRecoveryPaymentCommandSnapshot(map[string]string{
+			"out_trade_no": paymentOrder.OutTradeNo,
+			"prepay_id":    prepayID,
+		}),
+	))
+	if err != nil {
+		log.Error().Err(err).
+			Int64("payment_order_id", paymentOrder.ID).
+			Str("out_trade_no", paymentOrder.OutTradeNo).
+			Msg("record claim recovery payment command accepted failed")
+	}
+}
+
+func recordClaimRecoveryPaymentCommandRejected(ctx context.Context, store db.Store, paymentOrder db.PaymentOrder, paymentErr error) {
+	paymentCommandSvc := NewPaymentCommandService(store)
+	errorCode, errorMessage := directPaymentCommandErrorFields(paymentErr)
+	_, err := paymentCommandSvc.RecordExternalPaymentCommand(ctx, dbClaimRecoveryPaymentCommandInput(
+		paymentOrder,
+		db.ExternalPaymentCommandStatusRejected,
+		nil,
+		errorCode,
+		errorMessage,
+		claimRecoveryPaymentCommandSnapshot(map[string]string{
+			"out_trade_no":  paymentOrder.OutTradeNo,
+			"error_code":    stringValue(errorCode),
+			"error_message": stringValue(errorMessage),
+		}),
+	))
+	if err != nil {
+		log.Error().Err(err).
+			Int64("payment_order_id", paymentOrder.ID).
+			Str("out_trade_no", paymentOrder.OutTradeNo).
+			Msg("record claim recovery payment command rejected failed")
+	}
+}
+
+func dbClaimRecoveryPaymentCommandInput(
+	paymentOrder db.PaymentOrder,
+	commandStatus string,
+	externalSecondaryKey *string,
+	lastErrorCode *string,
+	lastErrorMessage *string,
+	responseSnapshot []byte,
+) RecordExternalPaymentCommandInput {
+	businessObjectType := claimRecoveryPaymentOrderObjectType
+	businessObjectID := paymentOrder.ID
+	return RecordExternalPaymentCommandInput{
+		Provider:             db.ExternalPaymentProviderWechat,
+		Channel:              db.PaymentChannelDirect,
+		Capability:           db.ExternalPaymentCapabilityDirectJSAPIPayment,
+		CommandType:          db.ExternalPaymentCommandTypeCreatePayment,
+		BusinessOwner:        db.ExternalPaymentBusinessOwnerClaimRecovery,
+		BusinessObjectType:   &businessObjectType,
+		BusinessObjectID:     &businessObjectID,
+		ExternalObjectType:   db.ExternalPaymentObjectPayment,
+		ExternalObjectKey:    paymentOrder.OutTradeNo,
+		ExternalSecondaryKey: externalSecondaryKey,
+		CommandStatus:        commandStatus,
+		LastErrorCode:        lastErrorCode,
+		LastErrorMessage:     lastErrorMessage,
+		ResponseSnapshot:     responseSnapshot,
+	}
+}
+
+func directPaymentCommandErrorFields(err error) (*string, *string) {
+	loggableErr := LoggableError(err)
+	var wxErr *wechat.WechatPayError
+	if errors.As(loggableErr, &wxErr) {
+		return stringPtrIfNotEmpty(wxErr.Code), stringPtrIfNotEmpty(wxErr.Message)
+	}
+	if loggableErr == nil {
+		return nil, nil
+	}
+	return nil, stringPtrIfNotEmpty(loggableErr.Error())
+}
+
+func claimRecoveryPaymentCommandSnapshot(values map[string]string) []byte {
+	filtered := make(map[string]string, len(values))
+	for key, value := range values {
+		if value != "" {
+			filtered[key] = value
+		}
+	}
+	if len(filtered) == 0 {
+		return []byte(`{}`)
+	}
+	data, err := json.Marshal(filtered)
+	if err != nil {
+		return []byte(`{}`)
+	}
+	return data
 }
 
 func getExistingClaimRecoveryPayment(ctx context.Context, store db.Store, attachText string, payerUserID int64) (*db.PaymentOrder, error) {

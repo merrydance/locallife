@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -462,6 +463,22 @@ func TestDepositRiderAPI(t *testing.T) {
 					UpdatePaymentOrderPrepayId(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(db.PaymentOrder{}, nil)
+
+				store.EXPECT().
+					CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).
+					Times(1).
+					DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {
+						require.Equal(t, db.ExternalPaymentCapabilityDirectJSAPIPayment, arg.Capability)
+						require.Equal(t, db.ExternalPaymentCommandTypeCreatePayment, arg.CommandType)
+						require.Equal(t, db.ExternalPaymentBusinessOwnerRiderDeposit, arg.BusinessOwner)
+						require.Equal(t, db.ExternalPaymentObjectPayment, arg.ExternalObjectType)
+						require.Equal(t, "test_order_123", arg.ExternalObjectKey)
+						require.Equal(t, "prepay_rider_deposit_001", arg.ExternalSecondaryKey.String)
+						require.Equal(t, db.ExternalPaymentCommandStatusAccepted, arg.CommandStatus)
+						require.Contains(t, string(arg.ResponseSnapshot), "prepay_rider_deposit_001")
+						require.NotContains(t, string(arg.ResponseSnapshot), "sign-001")
+						return db.ExternalPaymentCommand{ID: 7301}, nil
+					})
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -552,6 +569,64 @@ func TestDepositRiderAPI(t *testing.T) {
 				require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
 				require.Equal(t, CodeServiceUnavail, resp.Code)
 				require.Equal(t, "支付服务暂不可用，请稍后重试", resp.Message)
+			},
+		},
+		{
+			name: "WechatCreateRejectedRecordsCommand",
+			body: map[string]interface{}{
+				"amount": 10000,
+				"remark": "充值押金",
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockDirectPaymentClientInterface) {
+				store.EXPECT().
+					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(rider, nil)
+				store.EXPECT().
+					GetPendingPaymentOrderByUserAndBusinessType(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.PaymentOrder{}, db.ErrRecordNotFound)
+				store.EXPECT().
+					CreatePaymentOrder(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.PaymentOrder{
+						ID:           3,
+						UserID:       user.ID,
+						PaymentType:  "miniprogram",
+						BusinessType: "rider_deposit",
+						Amount:       10000,
+						Status:       "pending",
+						OutTradeNo:   "test_order_rejected",
+					}, nil)
+				store.EXPECT().
+					GetUser(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(db.User{ID: user.ID, WechatOpenid: "openid_rider_001"}, nil)
+				paymentClient.EXPECT().
+					CreateJSAPIOrder(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(nil, nil, &wechat.WechatPayError{StatusCode: http.StatusServiceUnavailable, Code: wechaterrorcodes.DirectPaymentCodeSystemError, Message: "system busy"})
+				store.EXPECT().
+					UpdatePaymentOrderToClosed(gomock.Any(), int64(3)).
+					Times(1).
+					Return(db.PaymentOrder{ID: 3, Status: "closed"}, nil)
+				store.EXPECT().
+					CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).
+					Times(1).
+					DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {
+						require.Equal(t, db.ExternalPaymentCapabilityDirectJSAPIPayment, arg.Capability)
+						require.Equal(t, db.ExternalPaymentCommandStatusRejected, arg.CommandStatus)
+						require.Equal(t, "test_order_rejected", arg.ExternalObjectKey)
+						require.Equal(t, wechaterrorcodes.DirectPaymentCodeSystemError, arg.LastErrorCode.String)
+						require.Contains(t, string(arg.ResponseSnapshot), wechaterrorcodes.DirectPaymentCodeSystemError)
+						return db.ExternalPaymentCommand{ID: 7302}, nil
+					})
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusServiceUnavailable, recorder.Code)
 			},
 		},
 		{
@@ -860,6 +935,11 @@ func TestWithdrawRiderAPI(t *testing.T) {
 					UpdateRefundOrderToProcessing(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(db.RefundOrder{ID: 1, RefundAmount: 100 * fenPerYuan, OutRefundNo: "RTEST123", Status: "processing"}, nil)
+
+				store.EXPECT().
+					CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.ExternalPaymentCommand{ID: 8201}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusAccepted, recorder.Code)
@@ -874,6 +954,71 @@ func TestWithdrawRiderAPI(t *testing.T) {
 				require.Equal(t, "RTEST123", resp.Refunds[0].OutRefundNo)
 				require.Equal(t, int64(100*fenPerYuan), resp.Refunds[0].Amount)
 				require.Equal(t, riderWithdrawProcessingStatus, resp.Refunds[0].Status)
+			},
+		},
+		{
+			name: "CreateRefundSuccessStillAccepted",
+			body: map[string]interface{}{
+				"amount": 100 * fenPerYuan,
+				"remark": "提现押金",
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockDirectPaymentClientInterface) {
+				store.EXPECT().
+					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(rider, nil)
+
+				store.EXPECT().
+					ListRiderActiveDeliveries(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return([]db.Delivery{}, nil)
+
+				store.EXPECT().
+					PrepareRiderDepositRefundTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.PrepareRiderDepositRefundTxResult{
+						Rider: db.Rider{
+							ID:            rider.ID,
+							DepositAmount: 500 * fenPerYuan,
+							FrozenDeposit: 150 * fenPerYuan,
+						},
+						RefundPlans: []db.RiderDepositRefundPlan{{
+							RefundOrder:        db.RefundOrder{ID: 2, PaymentOrderID: 92, RefundAmount: 100 * fenPerYuan, OutRefundNo: "RTEST124"},
+							SourcePaymentOrder: db.PaymentOrder{ID: 92, OutTradeNo: "PTEST124", Amount: 100 * fenPerYuan},
+						}},
+					}, nil)
+
+				paymentClient.EXPECT().
+					CreateRefund(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(&wechat.RefundResponse{RefundID: "wx_refund_2", Status: wechat.RefundStatusSuccess}, nil)
+
+				store.EXPECT().
+					UpdateRefundOrderToProcessing(gomock.Any(), db.UpdateRefundOrderToProcessingParams{
+						ID:       2,
+						RefundID: pgtype.Text{String: "wx_refund_2", Valid: true},
+					}).
+					Times(1).
+					Return(db.RefundOrder{ID: 2, RefundAmount: 100 * fenPerYuan, OutRefundNo: "RTEST124", Status: "processing"}, nil)
+
+				store.EXPECT().
+					CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.ExternalPaymentCommand{ID: 8202}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusAccepted, recorder.Code)
+				var resp riderWithdrawResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Equal(t, int64(100*fenPerYuan), resp.RequestedAmount)
+				require.Equal(t, int64(100*fenPerYuan), resp.AcceptedAmount)
+				require.Equal(t, riderWithdrawProcessingStatus, resp.Status)
+				require.Len(t, resp.Refunds, 1)
+				require.Equal(t, riderWithdrawProcessingStatus, resp.Refunds[0].Status)
+				require.Equal(t, "RTEST124", resp.Refunds[0].OutRefundNo)
 			},
 		},
 		{
@@ -1049,6 +1194,11 @@ func TestWithdrawRiderAPI(t *testing.T) {
 					ResolveRiderDepositRefundTx(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(db.ResolveRiderDepositRefundTxResult{}, nil)
+
+				store.EXPECT().
+					CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.ExternalPaymentCommand{ID: 8203}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusConflict, recorder.Code)

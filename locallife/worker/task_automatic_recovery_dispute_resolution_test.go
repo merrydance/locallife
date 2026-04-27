@@ -67,9 +67,6 @@ func (d *automaticRecoveryDisputeResolutionTestDistributor) DistributeTaskReserv
 func (d *automaticRecoveryDisputeResolutionTestDistributor) DistributeTaskReservationFoodSafetyAlert(context.Context, *PayloadReservationFoodSafetyAlert, ...asynq.Option) error {
 	return nil
 }
-func (d *automaticRecoveryDisputeResolutionTestDistributor) DistributeTaskProcessPaymentSuccess(context.Context, *PaymentSuccessPayload, ...asynq.Option) error {
-	return nil
-}
 func (d *automaticRecoveryDisputeResolutionTestDistributor) DistributeTaskProcessRefund(context.Context, *PayloadProcessRefund, ...asynq.Option) error {
 	return nil
 }
@@ -79,10 +76,10 @@ func (d *automaticRecoveryDisputeResolutionTestDistributor) DistributeTaskProces
 func (d *automaticRecoveryDisputeResolutionTestDistributor) DistributeTaskProcessProfitSharing(context.Context, *ProfitSharingPayload, ...asynq.Option) error {
 	return nil
 }
-func (d *automaticRecoveryDisputeResolutionTestDistributor) DistributeTaskProcessApplymentResult(context.Context, *ApplymentResultPayload, ...asynq.Option) error {
+func (d *automaticRecoveryDisputeResolutionTestDistributor) DistributeTaskProcessProfitSharingReceiverTarget(context.Context, *ProfitSharingReceiverTargetPayload, ...asynq.Option) error {
 	return nil
 }
-func (d *automaticRecoveryDisputeResolutionTestDistributor) DistributeTaskProcessProfitSharingResult(context.Context, *ProfitSharingResultPayload, ...asynq.Option) error {
+func (d *automaticRecoveryDisputeResolutionTestDistributor) DistributeTaskProcessApplymentResult(context.Context, *ApplymentResultPayload, ...asynq.Option) error {
 	return nil
 }
 func (d *automaticRecoveryDisputeResolutionTestDistributor) DistributeTaskProcessProfitSharingReturnResult(context.Context, *ProfitSharingReturnResultPayload, ...asynq.Option) error {

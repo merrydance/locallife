@@ -790,6 +790,21 @@ func (mr *MockStoreMockRecorder) CheckUserVoucherExists(ctx, arg any) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckUserVoucherExists", reflect.TypeOf((*MockStore)(nil).CheckUserVoucherExists), ctx, arg)
 }
 
+// ClaimExternalPaymentFactApplication mocks base method.
+func (m *MockStore) ClaimExternalPaymentFactApplication(ctx context.Context, id int64) (db.ExternalPaymentFactApplication, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ClaimExternalPaymentFactApplication", ctx, id)
+	ret0, _ := ret[0].(db.ExternalPaymentFactApplication)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ClaimExternalPaymentFactApplication indicates an expected call of ClaimExternalPaymentFactApplication.
+func (mr *MockStoreMockRecorder) ClaimExternalPaymentFactApplication(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClaimExternalPaymentFactApplication", reflect.TypeOf((*MockStore)(nil).ClaimExternalPaymentFactApplication), ctx, id)
+}
+
 // ClaimMerchantTakeoutSuspensionIfAvailable mocks base method.
 func (m *MockStore) ClaimMerchantTakeoutSuspensionIfAvailable(ctx context.Context, arg db.ClaimMerchantTakeoutSuspensionIfAvailableParams) (int64, error) {
 	m.ctrl.T.Helper()
@@ -803,6 +818,51 @@ func (m *MockStore) ClaimMerchantTakeoutSuspensionIfAvailable(ctx context.Contex
 func (mr *MockStoreMockRecorder) ClaimMerchantTakeoutSuspensionIfAvailable(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClaimMerchantTakeoutSuspensionIfAvailable", reflect.TypeOf((*MockStore)(nil).ClaimMerchantTakeoutSuspensionIfAvailable), ctx, arg)
+}
+
+// ClaimPaymentDomainOutbox mocks base method.
+func (m *MockStore) ClaimPaymentDomainOutbox(ctx context.Context, arg db.ClaimPaymentDomainOutboxParams) (db.PaymentDomainOutbox, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ClaimPaymentDomainOutbox", ctx, arg)
+	ret0, _ := ret[0].(db.PaymentDomainOutbox)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ClaimPaymentDomainOutbox indicates an expected call of ClaimPaymentDomainOutbox.
+func (mr *MockStoreMockRecorder) ClaimPaymentDomainOutbox(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClaimPaymentDomainOutbox", reflect.TypeOf((*MockStore)(nil).ClaimPaymentDomainOutbox), ctx, arg)
+}
+
+// ClaimPendingProfitSharingReceiverTargets mocks base method.
+func (m *MockStore) ClaimPendingProfitSharingReceiverTargets(ctx context.Context, arg db.ClaimPendingProfitSharingReceiverTargetsParams) ([]db.ClaimPendingProfitSharingReceiverTargetsRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ClaimPendingProfitSharingReceiverTargets", ctx, arg)
+	ret0, _ := ret[0].([]db.ClaimPendingProfitSharingReceiverTargetsRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ClaimPendingProfitSharingReceiverTargets indicates an expected call of ClaimPendingProfitSharingReceiverTargets.
+func (mr *MockStoreMockRecorder) ClaimPendingProfitSharingReceiverTargets(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClaimPendingProfitSharingReceiverTargets", reflect.TypeOf((*MockStore)(nil).ClaimPendingProfitSharingReceiverTargets), ctx, arg)
+}
+
+// ClaimProfitSharingReceiverTarget mocks base method.
+func (m *MockStore) ClaimProfitSharingReceiverTarget(ctx context.Context, arg db.ClaimProfitSharingReceiverTargetParams) (db.ProfitSharingReceiverTarget, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ClaimProfitSharingReceiverTarget", ctx, arg)
+	ret0, _ := ret[0].(db.ProfitSharingReceiverTarget)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ClaimProfitSharingReceiverTarget indicates an expected call of ClaimProfitSharingReceiverTarget.
+func (mr *MockStoreMockRecorder) ClaimProfitSharingReceiverTarget(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClaimProfitSharingReceiverTarget", reflect.TypeOf((*MockStore)(nil).ClaimProfitSharingReceiverTarget), ctx, arg)
 }
 
 // ClaimRiderSuspensionIfAvailable mocks base method.
@@ -2268,6 +2328,36 @@ func (mr *MockStoreMockRecorder) CountPlatformAlertEvents(ctx any) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountPlatformAlertEvents", reflect.TypeOf((*MockStore)(nil).CountPlatformAlertEvents), ctx)
 }
 
+// CountProfitSharingReceiverAttemptsByTarget mocks base method.
+func (m *MockStore) CountProfitSharingReceiverAttemptsByTarget(ctx context.Context, targetID int64) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountProfitSharingReceiverAttemptsByTarget", ctx, targetID)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountProfitSharingReceiverAttemptsByTarget indicates an expected call of CountProfitSharingReceiverAttemptsByTarget.
+func (mr *MockStoreMockRecorder) CountProfitSharingReceiverAttemptsByTarget(ctx, targetID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountProfitSharingReceiverAttemptsByTarget", reflect.TypeOf((*MockStore)(nil).CountProfitSharingReceiverAttemptsByTarget), ctx, targetID)
+}
+
+// CountProfitSharingReceiverTargets mocks base method.
+func (m *MockStore) CountProfitSharingReceiverTargets(ctx context.Context, arg db.CountProfitSharingReceiverTargetsParams) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountProfitSharingReceiverTargets", ctx, arg)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountProfitSharingReceiverTargets indicates an expected call of CountProfitSharingReceiverTargets.
+func (mr *MockStoreMockRecorder) CountProfitSharingReceiverTargets(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountProfitSharingReceiverTargets", reflect.TypeOf((*MockStore)(nil).CountProfitSharingReceiverTargets), ctx, arg)
+}
+
 // CountProfitSharingReturnsByRefundOrder mocks base method.
 func (m *MockStore) CountProfitSharingReturnsByRefundOrder(ctx context.Context, refundOrderID int64) (int32, error) {
 	m.ctrl.T.Helper()
@@ -3498,6 +3588,51 @@ func (mr *MockStoreMockRecorder) CreateEcommercePaymentTx(ctx, arg any) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateEcommercePaymentTx", reflect.TypeOf((*MockStore)(nil).CreateEcommercePaymentTx), ctx, arg)
 }
 
+// CreateExternalPaymentCommand mocks base method.
+func (m *MockStore) CreateExternalPaymentCommand(ctx context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateExternalPaymentCommand", ctx, arg)
+	ret0, _ := ret[0].(db.ExternalPaymentCommand)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateExternalPaymentCommand indicates an expected call of CreateExternalPaymentCommand.
+func (mr *MockStoreMockRecorder) CreateExternalPaymentCommand(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateExternalPaymentCommand", reflect.TypeOf((*MockStore)(nil).CreateExternalPaymentCommand), ctx, arg)
+}
+
+// CreateExternalPaymentFact mocks base method.
+func (m *MockStore) CreateExternalPaymentFact(ctx context.Context, arg db.CreateExternalPaymentFactParams) (db.ExternalPaymentFact, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateExternalPaymentFact", ctx, arg)
+	ret0, _ := ret[0].(db.ExternalPaymentFact)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateExternalPaymentFact indicates an expected call of CreateExternalPaymentFact.
+func (mr *MockStoreMockRecorder) CreateExternalPaymentFact(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateExternalPaymentFact", reflect.TypeOf((*MockStore)(nil).CreateExternalPaymentFact), ctx, arg)
+}
+
+// CreateExternalPaymentFactApplication mocks base method.
+func (m *MockStore) CreateExternalPaymentFactApplication(ctx context.Context, arg db.CreateExternalPaymentFactApplicationParams) (db.ExternalPaymentFactApplication, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateExternalPaymentFactApplication", ctx, arg)
+	ret0, _ := ret[0].(db.ExternalPaymentFactApplication)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateExternalPaymentFactApplication indicates an expected call of CreateExternalPaymentFactApplication.
+func (mr *MockStoreMockRecorder) CreateExternalPaymentFactApplication(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateExternalPaymentFactApplication", reflect.TypeOf((*MockStore)(nil).CreateExternalPaymentFactApplication), ctx, arg)
+}
+
 // CreateFoodSafetyCase mocks base method.
 func (m *MockStore) CreateFoodSafetyCase(ctx context.Context, arg db.CreateFoodSafetyCaseParams) (db.FoodSafetyCase, error) {
 	m.ctrl.T.Helper()
@@ -4068,6 +4203,36 @@ func (mr *MockStoreMockRecorder) CreatePartnerPaymentTx(ctx, arg any) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreatePartnerPaymentTx", reflect.TypeOf((*MockStore)(nil).CreatePartnerPaymentTx), ctx, arg)
 }
 
+// CreatePaymentDomainOutbox mocks base method.
+func (m *MockStore) CreatePaymentDomainOutbox(ctx context.Context, arg db.CreatePaymentDomainOutboxParams) (db.PaymentDomainOutbox, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreatePaymentDomainOutbox", ctx, arg)
+	ret0, _ := ret[0].(db.PaymentDomainOutbox)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreatePaymentDomainOutbox indicates an expected call of CreatePaymentDomainOutbox.
+func (mr *MockStoreMockRecorder) CreatePaymentDomainOutbox(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreatePaymentDomainOutbox", reflect.TypeOf((*MockStore)(nil).CreatePaymentDomainOutbox), ctx, arg)
+}
+
+// CreatePaymentDomainOutboxOnce mocks base method.
+func (m *MockStore) CreatePaymentDomainOutboxOnce(ctx context.Context, arg db.CreatePaymentDomainOutboxOnceParams) (db.PaymentDomainOutbox, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreatePaymentDomainOutboxOnce", ctx, arg)
+	ret0, _ := ret[0].(db.PaymentDomainOutbox)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreatePaymentDomainOutboxOnce indicates an expected call of CreatePaymentDomainOutboxOnce.
+func (mr *MockStoreMockRecorder) CreatePaymentDomainOutboxOnce(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreatePaymentDomainOutboxOnce", reflect.TypeOf((*MockStore)(nil).CreatePaymentDomainOutboxOnce), ctx, arg)
+}
+
 // CreatePaymentOrder mocks base method.
 func (m *MockStore) CreatePaymentOrder(ctx context.Context, arg db.CreatePaymentOrderParams) (db.PaymentOrder, error) {
 	m.ctrl.T.Helper()
@@ -4201,6 +4366,21 @@ func (m *MockStore) CreateProfitSharingOrderSimple(ctx context.Context, arg db.C
 func (mr *MockStoreMockRecorder) CreateProfitSharingOrderSimple(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateProfitSharingOrderSimple", reflect.TypeOf((*MockStore)(nil).CreateProfitSharingOrderSimple), ctx, arg)
+}
+
+// CreateProfitSharingReceiverAttempt mocks base method.
+func (m *MockStore) CreateProfitSharingReceiverAttempt(ctx context.Context, arg db.CreateProfitSharingReceiverAttemptParams) (db.ProfitSharingReceiverAttempt, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateProfitSharingReceiverAttempt", ctx, arg)
+	ret0, _ := ret[0].(db.ProfitSharingReceiverAttempt)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateProfitSharingReceiverAttempt indicates an expected call of CreateProfitSharingReceiverAttempt.
+func (mr *MockStoreMockRecorder) CreateProfitSharingReceiverAttempt(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateProfitSharingReceiverAttempt", reflect.TypeOf((*MockStore)(nil).CreateProfitSharingReceiverAttempt), ctx, arg)
 }
 
 // CreateProfitSharingReturn mocks base method.
@@ -7348,6 +7528,66 @@ func (mr *MockStoreMockRecorder) GetExploreDishes(ctx, arg any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetExploreDishes", reflect.TypeOf((*MockStore)(nil).GetExploreDishes), ctx, arg)
 }
 
+// GetExternalPaymentCommandByExternalObject mocks base method.
+func (m *MockStore) GetExternalPaymentCommandByExternalObject(ctx context.Context, arg db.GetExternalPaymentCommandByExternalObjectParams) (db.ExternalPaymentCommand, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetExternalPaymentCommandByExternalObject", ctx, arg)
+	ret0, _ := ret[0].(db.ExternalPaymentCommand)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetExternalPaymentCommandByExternalObject indicates an expected call of GetExternalPaymentCommandByExternalObject.
+func (mr *MockStoreMockRecorder) GetExternalPaymentCommandByExternalObject(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetExternalPaymentCommandByExternalObject", reflect.TypeOf((*MockStore)(nil).GetExternalPaymentCommandByExternalObject), ctx, arg)
+}
+
+// GetExternalPaymentFact mocks base method.
+func (m *MockStore) GetExternalPaymentFact(ctx context.Context, id int64) (db.ExternalPaymentFact, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetExternalPaymentFact", ctx, id)
+	ret0, _ := ret[0].(db.ExternalPaymentFact)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetExternalPaymentFact indicates an expected call of GetExternalPaymentFact.
+func (mr *MockStoreMockRecorder) GetExternalPaymentFact(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetExternalPaymentFact", reflect.TypeOf((*MockStore)(nil).GetExternalPaymentFact), ctx, id)
+}
+
+// GetExternalPaymentFactApplication mocks base method.
+func (m *MockStore) GetExternalPaymentFactApplication(ctx context.Context, id int64) (db.ExternalPaymentFactApplication, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetExternalPaymentFactApplication", ctx, id)
+	ret0, _ := ret[0].(db.ExternalPaymentFactApplication)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetExternalPaymentFactApplication indicates an expected call of GetExternalPaymentFactApplication.
+func (mr *MockStoreMockRecorder) GetExternalPaymentFactApplication(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetExternalPaymentFactApplication", reflect.TypeOf((*MockStore)(nil).GetExternalPaymentFactApplication), ctx, id)
+}
+
+// GetExternalPaymentFactByDedupeKey mocks base method.
+func (m *MockStore) GetExternalPaymentFactByDedupeKey(ctx context.Context, dedupeKey string) (db.ExternalPaymentFact, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetExternalPaymentFactByDedupeKey", ctx, dedupeKey)
+	ret0, _ := ret[0].(db.ExternalPaymentFact)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetExternalPaymentFactByDedupeKey indicates an expected call of GetExternalPaymentFactByDedupeKey.
+func (mr *MockStoreMockRecorder) GetExternalPaymentFactByDedupeKey(ctx, dedupeKey any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetExternalPaymentFactByDedupeKey", reflect.TypeOf((*MockStore)(nil).GetExternalPaymentFactByDedupeKey), ctx, dedupeKey)
+}
+
 // GetFoodSafetyCase mocks base method.
 func (m *MockStore) GetFoodSafetyCase(ctx context.Context, id int64) (db.FoodSafetyCase, error) {
 	m.ctrl.T.Helper()
@@ -9566,6 +9806,36 @@ func (m *MockStore) GetProfitSharingOrderForUpdate(ctx context.Context, id int64
 func (mr *MockStoreMockRecorder) GetProfitSharingOrderForUpdate(ctx, id any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetProfitSharingOrderForUpdate", reflect.TypeOf((*MockStore)(nil).GetProfitSharingOrderForUpdate), ctx, id)
+}
+
+// GetProfitSharingReceiverTarget mocks base method.
+func (m *MockStore) GetProfitSharingReceiverTarget(ctx context.Context, id int64) (db.ProfitSharingReceiverTarget, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetProfitSharingReceiverTarget", ctx, id)
+	ret0, _ := ret[0].(db.ProfitSharingReceiverTarget)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetProfitSharingReceiverTarget indicates an expected call of GetProfitSharingReceiverTarget.
+func (mr *MockStoreMockRecorder) GetProfitSharingReceiverTarget(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetProfitSharingReceiverTarget", reflect.TypeOf((*MockStore)(nil).GetProfitSharingReceiverTarget), ctx, id)
+}
+
+// GetProfitSharingReceiverTargetByKey mocks base method.
+func (m *MockStore) GetProfitSharingReceiverTargetByKey(ctx context.Context, arg db.GetProfitSharingReceiverTargetByKeyParams) (db.ProfitSharingReceiverTarget, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetProfitSharingReceiverTargetByKey", ctx, arg)
+	ret0, _ := ret[0].(db.ProfitSharingReceiverTarget)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetProfitSharingReceiverTargetByKey indicates an expected call of GetProfitSharingReceiverTargetByKey.
+func (mr *MockStoreMockRecorder) GetProfitSharingReceiverTargetByKey(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetProfitSharingReceiverTargetByKey", reflect.TypeOf((*MockStore)(nil).GetProfitSharingReceiverTargetByKey), ctx, arg)
 }
 
 // GetProfitSharingReconciliationSummary mocks base method.
@@ -12953,6 +13223,36 @@ func (mr *MockStoreMockRecorder) ListExpiringOperators(ctx, dollar_1 any) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListExpiringOperators", reflect.TypeOf((*MockStore)(nil).ListExpiringOperators), ctx, dollar_1)
 }
 
+// ListExternalPaymentFactApplicationsByFact mocks base method.
+func (m *MockStore) ListExternalPaymentFactApplicationsByFact(ctx context.Context, factID int64) ([]db.ExternalPaymentFactApplication, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListExternalPaymentFactApplicationsByFact", ctx, factID)
+	ret0, _ := ret[0].([]db.ExternalPaymentFactApplication)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListExternalPaymentFactApplicationsByFact indicates an expected call of ListExternalPaymentFactApplicationsByFact.
+func (mr *MockStoreMockRecorder) ListExternalPaymentFactApplicationsByFact(ctx, factID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListExternalPaymentFactApplicationsByFact", reflect.TypeOf((*MockStore)(nil).ListExternalPaymentFactApplicationsByFact), ctx, factID)
+}
+
+// ListExternalPaymentFactsByExternalObject mocks base method.
+func (m *MockStore) ListExternalPaymentFactsByExternalObject(ctx context.Context, arg db.ListExternalPaymentFactsByExternalObjectParams) ([]db.ExternalPaymentFact, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListExternalPaymentFactsByExternalObject", ctx, arg)
+	ret0, _ := ret[0].([]db.ExternalPaymentFact)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListExternalPaymentFactsByExternalObject indicates an expected call of ListExternalPaymentFactsByExternalObject.
+func (mr *MockStoreMockRecorder) ListExternalPaymentFactsByExternalObject(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListExternalPaymentFactsByExternalObject", reflect.TypeOf((*MockStore)(nil).ListExternalPaymentFactsByExternalObject), ctx, arg)
+}
+
 // ListFavoriteDishes mocks base method.
 func (m *MockStore) ListFavoriteDishes(ctx context.Context, arg db.ListFavoriteDishesParams) ([]db.ListFavoriteDishesRow, error) {
 	m.ctrl.T.Helper()
@@ -14439,18 +14739,18 @@ func (mr *MockStoreMockRecorder) ListPendingEcommerceApplyments(ctx, arg any) *g
 }
 
 // ListPendingMerchantCancelWithdrawApplications mocks base method.
-func (m *MockStore) ListPendingMerchantCancelWithdrawApplications(ctx context.Context, limit int32) ([]db.MerchantCancelWithdrawApplication, error) {
+func (m *MockStore) ListPendingMerchantCancelWithdrawApplications(ctx context.Context, arg db.ListPendingMerchantCancelWithdrawApplicationsParams) ([]db.MerchantCancelWithdrawApplication, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ListPendingMerchantCancelWithdrawApplications", ctx, limit)
+	ret := m.ctrl.Call(m, "ListPendingMerchantCancelWithdrawApplications", ctx, arg)
 	ret0, _ := ret[0].([]db.MerchantCancelWithdrawApplication)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ListPendingMerchantCancelWithdrawApplications indicates an expected call of ListPendingMerchantCancelWithdrawApplications.
-func (mr *MockStoreMockRecorder) ListPendingMerchantCancelWithdrawApplications(ctx, limit any) *gomock.Call {
+func (mr *MockStoreMockRecorder) ListPendingMerchantCancelWithdrawApplications(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPendingMerchantCancelWithdrawApplications", reflect.TypeOf((*MockStore)(nil).ListPendingMerchantCancelWithdrawApplications), ctx, limit)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPendingMerchantCancelWithdrawApplications", reflect.TypeOf((*MockStore)(nil).ListPendingMerchantCancelWithdrawApplications), ctx, arg)
 }
 
 // ListPendingOCRJobsByMediaAsset mocks base method.
@@ -14496,6 +14796,36 @@ func (m *MockStore) ListPendingOrdersBefore(ctx context.Context, arg db.ListPend
 func (mr *MockStoreMockRecorder) ListPendingOrdersBefore(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPendingOrdersBefore", reflect.TypeOf((*MockStore)(nil).ListPendingOrdersBefore), ctx, arg)
+}
+
+// ListPendingPaymentDomainOutbox mocks base method.
+func (m *MockStore) ListPendingPaymentDomainOutbox(ctx context.Context, arg db.ListPendingPaymentDomainOutboxParams) ([]db.PaymentDomainOutbox, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListPendingPaymentDomainOutbox", ctx, arg)
+	ret0, _ := ret[0].([]db.PaymentDomainOutbox)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListPendingPaymentDomainOutbox indicates an expected call of ListPendingPaymentDomainOutbox.
+func (mr *MockStoreMockRecorder) ListPendingPaymentDomainOutbox(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPendingPaymentDomainOutbox", reflect.TypeOf((*MockStore)(nil).ListPendingPaymentDomainOutbox), ctx, arg)
+}
+
+// ListPendingPaymentDomainOutboxByEventType mocks base method.
+func (m *MockStore) ListPendingPaymentDomainOutboxByEventType(ctx context.Context, arg db.ListPendingPaymentDomainOutboxByEventTypeParams) ([]db.PaymentDomainOutbox, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListPendingPaymentDomainOutboxByEventType", ctx, arg)
+	ret0, _ := ret[0].([]db.PaymentDomainOutbox)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListPendingPaymentDomainOutboxByEventType indicates an expected call of ListPendingPaymentDomainOutboxByEventType.
+func (mr *MockStoreMockRecorder) ListPendingPaymentDomainOutboxByEventType(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPendingPaymentDomainOutboxByEventType", reflect.TypeOf((*MockStore)(nil).ListPendingPaymentDomainOutboxByEventType), ctx, arg)
 }
 
 // ListPendingRegionApplications mocks base method.
@@ -14736,6 +15066,66 @@ func (m *MockStore) ListProfitSharingOrdersForRetry(ctx context.Context, arg db.
 func (mr *MockStoreMockRecorder) ListProfitSharingOrdersForRetry(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListProfitSharingOrdersForRetry", reflect.TypeOf((*MockStore)(nil).ListProfitSharingOrdersForRetry), ctx, arg)
+}
+
+// ListProfitSharingReceiverAttemptsByTarget mocks base method.
+func (m *MockStore) ListProfitSharingReceiverAttemptsByTarget(ctx context.Context, targetID int64) ([]db.ProfitSharingReceiverAttempt, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListProfitSharingReceiverAttemptsByTarget", ctx, targetID)
+	ret0, _ := ret[0].([]db.ProfitSharingReceiverAttempt)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListProfitSharingReceiverAttemptsByTarget indicates an expected call of ListProfitSharingReceiverAttemptsByTarget.
+func (mr *MockStoreMockRecorder) ListProfitSharingReceiverAttemptsByTarget(ctx, targetID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListProfitSharingReceiverAttemptsByTarget", reflect.TypeOf((*MockStore)(nil).ListProfitSharingReceiverAttemptsByTarget), ctx, targetID)
+}
+
+// ListProfitSharingReceiverAttemptsByTargetPaginated mocks base method.
+func (m *MockStore) ListProfitSharingReceiverAttemptsByTargetPaginated(ctx context.Context, arg db.ListProfitSharingReceiverAttemptsByTargetPaginatedParams) ([]db.ProfitSharingReceiverAttempt, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListProfitSharingReceiverAttemptsByTargetPaginated", ctx, arg)
+	ret0, _ := ret[0].([]db.ProfitSharingReceiverAttempt)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListProfitSharingReceiverAttemptsByTargetPaginated indicates an expected call of ListProfitSharingReceiverAttemptsByTargetPaginated.
+func (mr *MockStoreMockRecorder) ListProfitSharingReceiverAttemptsByTargetPaginated(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListProfitSharingReceiverAttemptsByTargetPaginated", reflect.TypeOf((*MockStore)(nil).ListProfitSharingReceiverAttemptsByTargetPaginated), ctx, arg)
+}
+
+// ListProfitSharingReceiverTargets mocks base method.
+func (m *MockStore) ListProfitSharingReceiverTargets(ctx context.Context, arg db.ListProfitSharingReceiverTargetsParams) ([]db.ProfitSharingReceiverTarget, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListProfitSharingReceiverTargets", ctx, arg)
+	ret0, _ := ret[0].([]db.ProfitSharingReceiverTarget)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListProfitSharingReceiverTargets indicates an expected call of ListProfitSharingReceiverTargets.
+func (mr *MockStoreMockRecorder) ListProfitSharingReceiverTargets(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListProfitSharingReceiverTargets", reflect.TypeOf((*MockStore)(nil).ListProfitSharingReceiverTargets), ctx, arg)
+}
+
+// ListProfitSharingReceiverTargetsByOwner mocks base method.
+func (m *MockStore) ListProfitSharingReceiverTargetsByOwner(ctx context.Context, arg db.ListProfitSharingReceiverTargetsByOwnerParams) ([]db.ProfitSharingReceiverTarget, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListProfitSharingReceiverTargetsByOwner", ctx, arg)
+	ret0, _ := ret[0].([]db.ProfitSharingReceiverTarget)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListProfitSharingReceiverTargetsByOwner indicates an expected call of ListProfitSharingReceiverTargetsByOwner.
+func (mr *MockStoreMockRecorder) ListProfitSharingReceiverTargetsByOwner(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListProfitSharingReceiverTargetsByOwner", reflect.TypeOf((*MockStore)(nil).ListProfitSharingReceiverTargetsByOwner), ctx, arg)
 }
 
 // ListProfitSharingReturnsByRefundOrder mocks base method.
@@ -15051,6 +15441,51 @@ func (m *MockStore) ListReservationsByUserWithStatus(ctx context.Context, arg db
 func (mr *MockStoreMockRecorder) ListReservationsByUserWithStatus(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListReservationsByUserWithStatus", reflect.TypeOf((*MockStore)(nil).ListReservationsByUserWithStatus), ctx, arg)
+}
+
+// ListRetryableExternalPaymentFactApplications mocks base method.
+func (m *MockStore) ListRetryableExternalPaymentFactApplications(ctx context.Context, arg db.ListRetryableExternalPaymentFactApplicationsParams) ([]db.ExternalPaymentFactApplication, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListRetryableExternalPaymentFactApplications", ctx, arg)
+	ret0, _ := ret[0].([]db.ExternalPaymentFactApplication)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListRetryableExternalPaymentFactApplications indicates an expected call of ListRetryableExternalPaymentFactApplications.
+func (mr *MockStoreMockRecorder) ListRetryableExternalPaymentFactApplications(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListRetryableExternalPaymentFactApplications", reflect.TypeOf((*MockStore)(nil).ListRetryableExternalPaymentFactApplications), ctx, arg)
+}
+
+// ListRetryableExternalPaymentFactApplicationsByTarget mocks base method.
+func (m *MockStore) ListRetryableExternalPaymentFactApplicationsByTarget(ctx context.Context, arg db.ListRetryableExternalPaymentFactApplicationsByTargetParams) ([]db.ExternalPaymentFactApplication, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListRetryableExternalPaymentFactApplicationsByTarget", ctx, arg)
+	ret0, _ := ret[0].([]db.ExternalPaymentFactApplication)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListRetryableExternalPaymentFactApplicationsByTarget indicates an expected call of ListRetryableExternalPaymentFactApplicationsByTarget.
+func (mr *MockStoreMockRecorder) ListRetryableExternalPaymentFactApplicationsByTarget(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListRetryableExternalPaymentFactApplicationsByTarget", reflect.TypeOf((*MockStore)(nil).ListRetryableExternalPaymentFactApplicationsByTarget), ctx, arg)
+}
+
+// ListRetryableProfitSharingReceiverTargetsByOwnerType mocks base method.
+func (m *MockStore) ListRetryableProfitSharingReceiverTargetsByOwnerType(ctx context.Context, arg db.ListRetryableProfitSharingReceiverTargetsByOwnerTypeParams) ([]db.ProfitSharingReceiverTarget, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListRetryableProfitSharingReceiverTargetsByOwnerType", ctx, arg)
+	ret0, _ := ret[0].([]db.ProfitSharingReceiverTarget)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListRetryableProfitSharingReceiverTargetsByOwnerType indicates an expected call of ListRetryableProfitSharingReceiverTargetsByOwnerType.
+func (mr *MockStoreMockRecorder) ListRetryableProfitSharingReceiverTargetsByOwnerType(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListRetryableProfitSharingReceiverTargetsByOwnerType", reflect.TypeOf((*MockStore)(nil).ListRetryableProfitSharingReceiverTargetsByOwnerType), ctx, arg)
 }
 
 // ListReviewImages mocks base method.
@@ -16114,6 +16549,36 @@ func (mr *MockStoreMockRecorder) MarkEcommerceApplymentSettlementVerifyFailedNot
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkEcommerceApplymentSettlementVerifyFailedNotified", reflect.TypeOf((*MockStore)(nil).MarkEcommerceApplymentSettlementVerifyFailedNotified), ctx, id)
 }
 
+// MarkExternalPaymentFactApplicationApplied mocks base method.
+func (m *MockStore) MarkExternalPaymentFactApplicationApplied(ctx context.Context, arg db.MarkExternalPaymentFactApplicationAppliedParams) (db.ExternalPaymentFactApplication, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MarkExternalPaymentFactApplicationApplied", ctx, arg)
+	ret0, _ := ret[0].(db.ExternalPaymentFactApplication)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MarkExternalPaymentFactApplicationApplied indicates an expected call of MarkExternalPaymentFactApplicationApplied.
+func (mr *MockStoreMockRecorder) MarkExternalPaymentFactApplicationApplied(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkExternalPaymentFactApplicationApplied", reflect.TypeOf((*MockStore)(nil).MarkExternalPaymentFactApplicationApplied), ctx, arg)
+}
+
+// MarkExternalPaymentFactApplicationFailed mocks base method.
+func (m *MockStore) MarkExternalPaymentFactApplicationFailed(ctx context.Context, arg db.MarkExternalPaymentFactApplicationFailedParams) (db.ExternalPaymentFactApplication, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MarkExternalPaymentFactApplicationFailed", ctx, arg)
+	ret0, _ := ret[0].(db.ExternalPaymentFactApplication)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MarkExternalPaymentFactApplicationFailed indicates an expected call of MarkExternalPaymentFactApplicationFailed.
+func (mr *MockStoreMockRecorder) MarkExternalPaymentFactApplicationFailed(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkExternalPaymentFactApplicationFailed", reflect.TypeOf((*MockStore)(nil).MarkExternalPaymentFactApplicationFailed), ctx, arg)
+}
+
 // MarkNoShowTx mocks base method.
 func (m *MockStore) MarkNoShowTx(ctx context.Context, arg db.MarkNoShowTxParams) (db.MarkNoShowTxResult, error) {
 	m.ctrl.T.Helper()
@@ -16216,6 +16681,126 @@ func (m *MockStore) MarkOrderReplaced(ctx context.Context, arg db.MarkOrderRepla
 func (mr *MockStoreMockRecorder) MarkOrderReplaced(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkOrderReplaced", reflect.TypeOf((*MockStore)(nil).MarkOrderReplaced), ctx, arg)
+}
+
+// MarkPaymentDomainOutboxFailed mocks base method.
+func (m *MockStore) MarkPaymentDomainOutboxFailed(ctx context.Context, arg db.MarkPaymentDomainOutboxFailedParams) (db.PaymentDomainOutbox, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MarkPaymentDomainOutboxFailed", ctx, arg)
+	ret0, _ := ret[0].(db.PaymentDomainOutbox)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MarkPaymentDomainOutboxFailed indicates an expected call of MarkPaymentDomainOutboxFailed.
+func (mr *MockStoreMockRecorder) MarkPaymentDomainOutboxFailed(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkPaymentDomainOutboxFailed", reflect.TypeOf((*MockStore)(nil).MarkPaymentDomainOutboxFailed), ctx, arg)
+}
+
+// MarkPaymentDomainOutboxPublished mocks base method.
+func (m *MockStore) MarkPaymentDomainOutboxPublished(ctx context.Context, id int64) (db.PaymentDomainOutbox, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MarkPaymentDomainOutboxPublished", ctx, id)
+	ret0, _ := ret[0].(db.PaymentDomainOutbox)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MarkPaymentDomainOutboxPublished indicates an expected call of MarkPaymentDomainOutboxPublished.
+func (mr *MockStoreMockRecorder) MarkPaymentDomainOutboxPublished(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkPaymentDomainOutboxPublished", reflect.TypeOf((*MockStore)(nil).MarkPaymentDomainOutboxPublished), ctx, id)
+}
+
+// MarkProfitSharingReceiverAttemptFailed mocks base method.
+func (m *MockStore) MarkProfitSharingReceiverAttemptFailed(ctx context.Context, arg db.MarkProfitSharingReceiverAttemptFailedParams) (db.ProfitSharingReceiverAttempt, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MarkProfitSharingReceiverAttemptFailed", ctx, arg)
+	ret0, _ := ret[0].(db.ProfitSharingReceiverAttempt)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MarkProfitSharingReceiverAttemptFailed indicates an expected call of MarkProfitSharingReceiverAttemptFailed.
+func (mr *MockStoreMockRecorder) MarkProfitSharingReceiverAttemptFailed(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkProfitSharingReceiverAttemptFailed", reflect.TypeOf((*MockStore)(nil).MarkProfitSharingReceiverAttemptFailed), ctx, arg)
+}
+
+// MarkProfitSharingReceiverAttemptSkipped mocks base method.
+func (m *MockStore) MarkProfitSharingReceiverAttemptSkipped(ctx context.Context, arg db.MarkProfitSharingReceiverAttemptSkippedParams) (db.ProfitSharingReceiverAttempt, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MarkProfitSharingReceiverAttemptSkipped", ctx, arg)
+	ret0, _ := ret[0].(db.ProfitSharingReceiverAttempt)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MarkProfitSharingReceiverAttemptSkipped indicates an expected call of MarkProfitSharingReceiverAttemptSkipped.
+func (mr *MockStoreMockRecorder) MarkProfitSharingReceiverAttemptSkipped(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkProfitSharingReceiverAttemptSkipped", reflect.TypeOf((*MockStore)(nil).MarkProfitSharingReceiverAttemptSkipped), ctx, arg)
+}
+
+// MarkProfitSharingReceiverAttemptSucceeded mocks base method.
+func (m *MockStore) MarkProfitSharingReceiverAttemptSucceeded(ctx context.Context, arg db.MarkProfitSharingReceiverAttemptSucceededParams) (db.ProfitSharingReceiverAttempt, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MarkProfitSharingReceiverAttemptSucceeded", ctx, arg)
+	ret0, _ := ret[0].(db.ProfitSharingReceiverAttempt)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MarkProfitSharingReceiverAttemptSucceeded indicates an expected call of MarkProfitSharingReceiverAttemptSucceeded.
+func (mr *MockStoreMockRecorder) MarkProfitSharingReceiverAttemptSucceeded(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkProfitSharingReceiverAttemptSucceeded", reflect.TypeOf((*MockStore)(nil).MarkProfitSharingReceiverAttemptSucceeded), ctx, arg)
+}
+
+// MarkProfitSharingReceiverTargetFailed mocks base method.
+func (m *MockStore) MarkProfitSharingReceiverTargetFailed(ctx context.Context, arg db.MarkProfitSharingReceiverTargetFailedParams) (db.ProfitSharingReceiverTarget, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MarkProfitSharingReceiverTargetFailed", ctx, arg)
+	ret0, _ := ret[0].(db.ProfitSharingReceiverTarget)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MarkProfitSharingReceiverTargetFailed indicates an expected call of MarkProfitSharingReceiverTargetFailed.
+func (mr *MockStoreMockRecorder) MarkProfitSharingReceiverTargetFailed(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkProfitSharingReceiverTargetFailed", reflect.TypeOf((*MockStore)(nil).MarkProfitSharingReceiverTargetFailed), ctx, arg)
+}
+
+// MarkProfitSharingReceiverTargetSkipped mocks base method.
+func (m *MockStore) MarkProfitSharingReceiverTargetSkipped(ctx context.Context, arg db.MarkProfitSharingReceiverTargetSkippedParams) (db.ProfitSharingReceiverTarget, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MarkProfitSharingReceiverTargetSkipped", ctx, arg)
+	ret0, _ := ret[0].(db.ProfitSharingReceiverTarget)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MarkProfitSharingReceiverTargetSkipped indicates an expected call of MarkProfitSharingReceiverTargetSkipped.
+func (mr *MockStoreMockRecorder) MarkProfitSharingReceiverTargetSkipped(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkProfitSharingReceiverTargetSkipped", reflect.TypeOf((*MockStore)(nil).MarkProfitSharingReceiverTargetSkipped), ctx, arg)
+}
+
+// MarkProfitSharingReceiverTargetSynced mocks base method.
+func (m *MockStore) MarkProfitSharingReceiverTargetSynced(ctx context.Context, arg db.MarkProfitSharingReceiverTargetSyncedParams) (db.ProfitSharingReceiverTarget, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MarkProfitSharingReceiverTargetSynced", ctx, arg)
+	ret0, _ := ret[0].(db.ProfitSharingReceiverTarget)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MarkProfitSharingReceiverTargetSynced indicates an expected call of MarkProfitSharingReceiverTargetSynced.
+func (mr *MockStoreMockRecorder) MarkProfitSharingReceiverTargetSynced(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkProfitSharingReceiverTargetSynced", reflect.TypeOf((*MockStore)(nil).MarkProfitSharingReceiverTargetSynced), ctx, arg)
 }
 
 // MarkRecoveryDisputeCompensated mocks base method.
@@ -18687,6 +19272,21 @@ func (mr *MockStoreMockRecorder) UpdateEcommerceApplymentToSubmitted(ctx, arg an
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateEcommerceApplymentToSubmitted", reflect.TypeOf((*MockStore)(nil).UpdateEcommerceApplymentToSubmitted), ctx, arg)
 }
 
+// UpdateExternalPaymentFactProcessingStatus mocks base method.
+func (m *MockStore) UpdateExternalPaymentFactProcessingStatus(ctx context.Context, arg db.UpdateExternalPaymentFactProcessingStatusParams) (db.ExternalPaymentFact, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateExternalPaymentFactProcessingStatus", ctx, arg)
+	ret0, _ := ret[0].(db.ExternalPaymentFact)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateExternalPaymentFactProcessingStatus indicates an expected call of UpdateExternalPaymentFactProcessingStatus.
+func (mr *MockStoreMockRecorder) UpdateExternalPaymentFactProcessingStatus(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateExternalPaymentFactProcessingStatus", reflect.TypeOf((*MockStore)(nil).UpdateExternalPaymentFactProcessingStatus), ctx, arg)
+}
+
 // UpdateFoodSafetyCaseInvestigation mocks base method.
 func (m *MockStore) UpdateFoodSafetyCaseInvestigation(ctx context.Context, arg db.UpdateFoodSafetyCaseInvestigationParams) (db.FoodSafetyCase, error) {
 	m.ctrl.T.Helper()
@@ -20820,6 +21420,21 @@ func (m *MockStore) UpsertPlatformConfig(ctx context.Context, arg db.UpsertPlatf
 func (mr *MockStoreMockRecorder) UpsertPlatformConfig(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertPlatformConfig", reflect.TypeOf((*MockStore)(nil).UpsertPlatformConfig), ctx, arg)
+}
+
+// UpsertProfitSharingReceiverTarget mocks base method.
+func (m *MockStore) UpsertProfitSharingReceiverTarget(ctx context.Context, arg db.UpsertProfitSharingReceiverTargetParams) (db.ProfitSharingReceiverTarget, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpsertProfitSharingReceiverTarget", ctx, arg)
+	ret0, _ := ret[0].(db.ProfitSharingReceiverTarget)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpsertProfitSharingReceiverTarget indicates an expected call of UpsertProfitSharingReceiverTarget.
+func (mr *MockStoreMockRecorder) UpsertProfitSharingReceiverTarget(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertProfitSharingReceiverTarget", reflect.TypeOf((*MockStore)(nil).UpsertProfitSharingReceiverTarget), ctx, arg)
 }
 
 // UpsertRegionExternalMapping mocks base method.

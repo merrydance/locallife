@@ -85,6 +85,7 @@ type Server struct {
 	orderQuerySvc               logic.OrderQueryService
 	paymentFacade               logic.PaymentFacade
 	refundOrchestrator          logic.RefundOrchestrator
+	paymentFactService          *logic.PaymentFactService
 	onboardingReviewService     *logic.OnboardingReviewService
 	credentialGovernanceService *logic.CredentialGovernanceService
 	mediaStorage                media.ObjectStorage
@@ -324,6 +325,7 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 		rulesEngine:                 engine,
 		imageDeleter:                newImageDeleteWorker(),
 		keywordWorker:               newSearchKeywordWorker(store),
+		paymentFactService:          logic.NewPaymentFactService(store).WithPaymentSuccessConfig(config.RiderAverageSpeed, config.DefaultPrepareTime),
 		onboardingReviewService:     logic.NewOnboardingReviewService(store),
 		credentialGovernanceService: logic.NewCredentialGovernanceService(store),
 	}
@@ -1392,6 +1394,10 @@ func (server *Server) setupRouter() {
 		platformProfitSharingGroup.GET("/configs", server.listProfitSharingConfigs)
 		platformProfitSharingGroup.PATCH("/configs/:id", server.updateProfitSharingConfig)
 		platformProfitSharingGroup.POST("/configs/:id/disable", server.disableProfitSharingConfig)
+		platformProfitSharingGroup.GET("/receiver-lifecycle/targets", server.listProfitSharingReceiverLifecycleTargets)
+		platformProfitSharingGroup.GET("/receiver-lifecycle/targets/:id", server.getProfitSharingReceiverLifecycleTarget)
+		platformProfitSharingGroup.GET("/receiver-lifecycle/targets/:id/attempts", server.listProfitSharingReceiverLifecycleAttempts)
+		platformProfitSharingGroup.POST("/receiver-lifecycle/repair", server.repairProfitSharingReceiverLifecycle)
 	}
 
 	platformRulesGroup := authGroup.Group("/platform/rules")

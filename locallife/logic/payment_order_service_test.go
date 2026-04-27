@@ -119,6 +119,7 @@ func TestPaymentOrderServiceCreatePaymentOrder_RecreatesPendingOrderWhenAmountCh
 		}).
 		Times(1).
 		Return(db.PaymentOrder{ID: newPayment.ID, Amount: newPayment.Amount, PrepayID: pgtype.Text{String: "prepay-new", Valid: true}}, nil)
+	expectPartnerJSAPIPaymentCommand(t, store, newPayment.ID, newPayment.OutTradeNo, "prepay-new", db.ExternalPaymentBusinessOwnerOrder, db.ExternalPaymentCommandStatusAccepted, "", 9701)
 
 	svc := NewPaymentOrderService(store, ecommerceClient)
 	result, err := svc.CreatePaymentOrder(context.Background(), input)
@@ -189,6 +190,7 @@ func TestPaymentOrderServiceCreatePaymentOrder_OrderAlwaysUsesEcommerceWhenBothC
 			PrepayID: pgtype.Text{String: "prepay-new", Valid: true},
 		}).
 		Return(db.PaymentOrder{ID: txPayment.ID, Amount: txPayment.Amount, PrepayID: pgtype.Text{String: "prepay-new", Valid: true}}, nil)
+	expectPartnerJSAPIPaymentCommand(t, store, txPayment.ID, txPayment.OutTradeNo, "prepay-new", db.ExternalPaymentBusinessOwnerOrder, db.ExternalPaymentCommandStatusAccepted, "", 9702)
 
 	svc := NewPaymentOrderService(store, ecommerceClient)
 	result, err := svc.CreatePaymentOrder(context.Background(), input)
@@ -316,12 +318,64 @@ func TestPaymentOrderServiceCreatePaymentOrder_WechatOrderClosedReturnsConflict(
 	}, nil)
 	ecommerceClient.EXPECT().CreatePartnerJSAPIOrder(gomock.Any(), gomock.Any()).Return(nil, nil, &wechat.WechatPayError{StatusCode: 400, Code: "ORDER_CLOSED", Message: "订单已关闭"})
 	store.EXPECT().UpdatePaymentOrderToClosed(gomock.Any(), txPayment.ID).Return(db.PaymentOrder{ID: txPayment.ID, Status: "closed"}, nil)
+	expectPartnerJSAPIPaymentCommand(t, store, txPayment.ID, txPayment.OutTradeNo, "", db.ExternalPaymentBusinessOwnerOrder, db.ExternalPaymentCommandStatusRejected, "ORDER_CLOSED", 9703)
 
 	svc := NewPaymentOrderService(store, ecommerceClient)
 	_, err := svc.CreatePaymentOrder(context.Background(), input)
 	reqErr := assertRequestError(t, err)
 	require.Equal(t, http.StatusConflict, reqErr.Status)
 	require.Equal(t, "支付订单已过期或已关闭，请重新发起支付", reqErr.Err.Error())
+}
+
+func TestPaymentOrderServiceCreatePaymentOrder_WechatOrderClosedSkipsCommandWhenCloseFails(t *testing.T) {
+	input := CreatePaymentOrderInput{
+		UserID:       1001,
+		OrderID:      2001,
+		PaymentType:  paymentTypeMiniProgram,
+		BusinessType: businessTypeOrder,
+		ClientIP:     "127.0.0.1",
+	}
+	order := db.Order{
+		ID:          input.OrderID,
+		UserID:      input.UserID,
+		MerchantID:  3001,
+		Status:      "pending",
+		TotalAmount: 1000,
+	}
+	txPayment := db.PaymentOrder{
+		ID:             4002,
+		UserID:         input.UserID,
+		Status:         paymentStatusPending,
+		PaymentType:    "profit_sharing",
+		PaymentChannel: db.PaymentChannelEcommerce,
+		Amount:         1000,
+		OutTradeNo:     "new-out-trade-no",
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+
+	store.EXPECT().GetOrder(gomock.Any(), input.OrderID).Return(order, nil)
+	store.EXPECT().GetLatestPaymentOrderByOrder(gomock.Any(), db.GetLatestPaymentOrderByOrderParams{
+		OrderID:      pgtype.Int8{Int64: input.OrderID, Valid: true},
+		BusinessType: businessTypeOrder,
+	}).Return(db.PaymentOrder{}, db.ErrRecordNotFound)
+	store.EXPECT().GetUser(gomock.Any(), input.UserID).Return(db.User{ID: input.UserID, WechatOpenid: "openid"}, nil)
+	store.EXPECT().GetMerchant(gomock.Any(), order.MerchantID).Return(db.Merchant{ID: order.MerchantID, Name: "Merchant A"}, nil)
+	store.EXPECT().CreatePartnerPaymentTx(gomock.Any(), gomock.Any()).Return(db.CreatePartnerPaymentTxResult{
+		PaymentOrder: txPayment,
+		SubMchID:     "sub-new",
+	}, nil)
+	ecommerceClient.EXPECT().CreatePartnerJSAPIOrder(gomock.Any(), gomock.Any()).Return(nil, nil, &wechat.WechatPayError{StatusCode: 400, Code: "ORDER_CLOSED", Message: "订单已关闭"})
+	store.EXPECT().UpdatePaymentOrderToClosed(gomock.Any(), txPayment.ID).Return(db.PaymentOrder{}, errors.New("close failed"))
+
+	svc := NewPaymentOrderService(store, ecommerceClient)
+	_, err := svc.CreatePaymentOrder(context.Background(), input)
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, http.StatusConflict, reqErr.Status)
 }
 
 func TestMapReservationEcommerceError_ChangedTargetReturnsConflict(t *testing.T) {
@@ -396,6 +450,7 @@ func TestPaymentOrderServiceCreatePaymentOrder_ReservationPendingModeMismatchSup
 		ID:       newPayment.ID,
 		PrepayID: pgtype.Text{String: "prepay-new", Valid: true},
 	}).Return(db.PaymentOrder{ID: newPayment.ID, PrepayID: pgtype.Text{String: "prepay-new", Valid: true}}, nil)
+	expectPartnerJSAPIPaymentCommand(t, store, newPayment.ID, newPayment.OutTradeNo, "prepay-new", db.ExternalPaymentBusinessOwnerReservation, db.ExternalPaymentCommandStatusAccepted, "", 9704)
 
 	svc := NewPaymentOrderService(store, ecommerceClient)
 	result, err := svc.CreatePaymentOrder(context.Background(), input)
@@ -453,6 +508,7 @@ func TestPaymentOrderServiceCreatePaymentOrder_TakeawayUsesPartnerSingleWithoutP
 		ID:       txPayment.ID,
 		PrepayID: pgtype.Text{String: "prepay-new", Valid: true},
 	}).Return(db.PaymentOrder{ID: txPayment.ID, PrepayID: pgtype.Text{String: "prepay-new", Valid: true}}, nil)
+	expectPartnerJSAPIPaymentCommand(t, store, txPayment.ID, txPayment.OutTradeNo, "prepay-new", db.ExternalPaymentBusinessOwnerOrder, db.ExternalPaymentCommandStatusAccepted, "", 9705)
 
 	svc := NewPaymentOrderService(store, ecommerceClient)
 	result, err := svc.CreatePaymentOrder(context.Background(), input)
@@ -512,6 +568,7 @@ func TestPaymentOrderServiceCreatePaymentOrder_ReservationLinkedDineInUsesProfit
 		ID:       txPayment.ID,
 		PrepayID: pgtype.Text{String: "prepay-new", Valid: true},
 	}).Return(db.PaymentOrder{ID: txPayment.ID, PrepayID: pgtype.Text{String: "prepay-new", Valid: true}}, nil)
+	expectPartnerJSAPIPaymentCommand(t, store, txPayment.ID, txPayment.OutTradeNo, "prepay-new", db.ExternalPaymentBusinessOwnerOrder, db.ExternalPaymentCommandStatusAccepted, "", 9706)
 
 	svc := NewPaymentOrderService(store, ecommerceClient)
 	result, err := svc.CreatePaymentOrder(context.Background(), input)
@@ -1397,4 +1454,36 @@ func TestPaymentOrderServiceClosePaymentOrder(t *testing.T) {
 			tc.check(t, result, err)
 		})
 	}
+}
+
+func expectPartnerJSAPIPaymentCommand(t *testing.T, store *mockdb.MockStore, paymentOrderID int64, outTradeNo string, secondaryKey string, businessOwner string, status string, errorCode string, commandID int64) {
+	t.Helper()
+
+	store.EXPECT().CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {
+		require.Equal(t, db.ExternalPaymentProviderWechat, arg.Provider)
+		require.Equal(t, db.PaymentChannelEcommerce, arg.Channel)
+		require.Equal(t, db.ExternalPaymentCapabilityPartnerJSAPIPayment, arg.Capability)
+		require.Equal(t, db.ExternalPaymentCommandTypeCreatePayment, arg.CommandType)
+		require.Equal(t, businessOwner, arg.BusinessOwner)
+		require.True(t, arg.BusinessObjectType.Valid)
+		require.Equal(t, "payment_order", arg.BusinessObjectType.String)
+		require.True(t, arg.BusinessObjectID.Valid)
+		require.Equal(t, paymentOrderID, arg.BusinessObjectID.Int64)
+		require.Equal(t, db.ExternalPaymentObjectPayment, arg.ExternalObjectType)
+		require.Equal(t, outTradeNo, arg.ExternalObjectKey)
+		require.Equal(t, status, arg.CommandStatus)
+		require.Contains(t, string(arg.ResponseSnapshot), outTradeNo)
+		if secondaryKey != "" {
+			require.True(t, arg.ExternalSecondaryKey.Valid)
+			require.Equal(t, secondaryKey, arg.ExternalSecondaryKey.String)
+			require.Contains(t, string(arg.ResponseSnapshot), secondaryKey)
+		}
+		if errorCode != "" {
+			require.True(t, arg.LastErrorCode.Valid)
+			require.Equal(t, errorCode, arg.LastErrorCode.String)
+			require.Contains(t, string(arg.ResponseSnapshot), errorCode)
+		}
+		require.NotContains(t, string(arg.ResponseSnapshot), "paySign")
+		return db.ExternalPaymentCommand{ID: commandID}, nil
+	})
 }

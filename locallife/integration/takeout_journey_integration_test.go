@@ -362,10 +362,8 @@ func markClaimRecoveryPaymentPaid(t *testing.T, store *db.SQLStore, paymentOrder
 		TransactionID: pgtype.Text{String: transactionID, Valid: true},
 	})
 	require.NoError(t, err)
-	processCapturedPaymentSuccessPayload(t, store, worker.PaymentSuccessPayload{
-		PaymentOrderID: paymentOrderID,
-		BusinessType:   updatedPayment.BusinessType,
-	})
+	require.NotEmpty(t, updatedPayment.BusinessType)
+	processPaymentSuccessTxForIntegration(t, store, paymentOrderID)
 }
 
 func claimRecoveryEventTypesForIntegration(t *testing.T, store *db.SQLStore, recoveryID int64) []string {
@@ -597,15 +595,25 @@ func postIntegrationEcommercePaymentNotify(t *testing.T, server *api.Server, not
 	return rec
 }
 
-func processCapturedPaymentSuccessPayload(t *testing.T, store *db.SQLStore, payload worker.PaymentSuccessPayload) {
+func processCapturedPaymentFactApplicationPayload(t *testing.T, store *db.SQLStore, payload worker.PaymentFactApplicationPayload) {
 	t.Helper()
 
 	payloadBytes, err := json.Marshal(payload)
 	require.NoError(t, err)
 
 	processor := worker.NewTestTaskProcessor(store, worker.NewNoopTaskDistributor(), nil, nil)
-	task := asynq.NewTask(worker.TaskProcessPaymentSuccess, payloadBytes)
-	require.NoError(t, processor.ProcessTaskPaymentSuccess(context.Background(), task))
+	task := asynq.NewTask(worker.TaskProcessPaymentFactApplication, payloadBytes)
+	require.NoError(t, processor.ProcessTaskPaymentFactApplication(context.Background(), task))
+}
+
+func processPaymentSuccessTxForIntegration(t *testing.T, store *db.SQLStore, paymentOrderID int64) {
+	t.Helper()
+	_, err := store.ProcessPaymentSuccessTx(context.Background(), db.ProcessPaymentSuccessTxParams{
+		PaymentOrderID:     paymentOrderID,
+		RiderAverageSpeed:  15000,
+		DefaultPrepareTime: 20,
+	})
+	require.NoError(t, err)
 }
 
 type roomAvailabilitySlot struct {
@@ -1151,8 +1159,8 @@ func TestTakeoutJourneyB1WebhookIntegration(t *testing.T) {
 	require.NoError(t, err)
 
 	processor := worker.NewTestTaskProcessor(store, worker.NewNoopTaskDistributor(), nil, nil)
-	task := asynq.NewTask(worker.TaskProcessPaymentSuccess, payloadBytes)
-	require.NoError(t, processor.ProcessTaskPaymentSuccess(ctx, task))
+	task := asynq.NewTask(worker.TaskProcessPaymentFactApplication, payloadBytes)
+	require.NoError(t, processor.ProcessTaskPaymentFactApplication(ctx, task))
 
 	order, err := store.GetOrder(ctx, orderID)
 	require.NoError(t, err)
@@ -1467,7 +1475,7 @@ func TestTakeoutJourneyB0CombinedPaymentDelayedCallbackRecoveryIntegration(t *te
 
 	payloads := distributor.Payloads()
 	require.Len(t, payloads, 1)
-	processCapturedPaymentSuccessPayload(t, store, payloads[0])
+	processCapturedPaymentFactApplicationPayload(t, store, payloads[0])
 
 	order, err := store.GetOrder(ctx, fixture.Order.ID)
 	require.NoError(t, err)
@@ -1552,7 +1560,7 @@ func TestTakeoutJourneyB0DeliveryRecommendIntegration(t *testing.T) {
 		OrderID:        pgtype.Int8{Int64: orderID, Valid: true},
 		UserID:         customer.ID,
 		PaymentType:    "miniprogram",
-		PaymentChannel: db.PaymentChannelDirect,
+		PaymentChannel: db.PaymentChannelEcommerce,
 		BusinessType:   "order",
 		Amount:         orderForPayment.TotalAmount,
 		OutTradeNo:     fmt.Sprintf("b0_recommend_%d_%d", orderID, util.RandomInt(1000, 9999)),
@@ -1972,14 +1980,14 @@ func TestTakeoutJourneyB5PaymentRecoveryIntegration(t *testing.T) {
 	_, err = integrationPool.Exec(ctx, `UPDATE payment_orders SET paid_at = $2 WHERE id = $1`, payment.ID, time.Now().Add(-5*time.Minute))
 	require.NoError(t, err)
 
-	// 3) 触发 recovery scheduler 并断言入队
-	d := &capturePaymentSuccessDistributor{}
+	// 3) 触发 recovery scheduler 并断言 fact application 入队
+	d := &capturePaymentFactApplicationDistributor{}
 	recovery := worker.NewPaymentRecoveryScheduler(store, d)
 	recovery.RunOnce()
 
 	payloads := d.Payloads()
 	require.Len(t, payloads, 1)
-	require.Equal(t, payment.ID, payloads[0].PaymentOrderID)
+	require.NotZero(t, payloads[0].ApplicationID)
 }
 
 // TestTakeoutJourneyB6OrderPaymentTimeoutIntegration
@@ -2215,8 +2223,8 @@ func TestDineInJourneyA1Integration(t *testing.T) {
 	require.NoError(t, err)
 
 	processor := worker.NewTestTaskProcessor(store, worker.NewNoopTaskDistributor(), nil, nil)
-	task := asynq.NewTask(worker.TaskProcessPaymentSuccess, payloadBytes)
-	require.NoError(t, processor.ProcessTaskPaymentSuccess(ctx, task))
+	task := asynq.NewTask(worker.TaskProcessPaymentFactApplication, payloadBytes)
+	require.NoError(t, processor.ProcessTaskPaymentFactApplication(ctx, task))
 
 	paidOrder, err := store.GetOrder(ctx, orderID)
 	require.NoError(t, err)
@@ -2712,8 +2720,8 @@ func TestReservationJourneyC1Integration(t *testing.T) {
 	require.NoError(t, err)
 
 	processor := worker.NewTestTaskProcessor(store, worker.NewNoopTaskDistributor(), nil, nil)
-	task := asynq.NewTask(worker.TaskProcessPaymentSuccess, payloadBytes)
-	require.NoError(t, processor.ProcessTaskPaymentSuccess(ctx, task))
+	task := asynq.NewTask(worker.TaskProcessPaymentFactApplication, payloadBytes)
+	require.NoError(t, processor.ProcessTaskPaymentFactApplication(ctx, task))
 
 	paidReservation, err := store.GetTableReservation(ctx, created.ID)
 	require.NoError(t, err)
@@ -3083,8 +3091,8 @@ func TestReservationJourneyCNoShowIntegration(t *testing.T) {
 	require.NoError(t, err)
 
 	processor := worker.NewTestTaskProcessor(store, worker.NewNoopTaskDistributor(), nil, nil)
-	task := asynq.NewTask(worker.TaskProcessPaymentSuccess, payloadBytes)
-	require.NoError(t, processor.ProcessTaskPaymentSuccess(ctx, task))
+	task := asynq.NewTask(worker.TaskProcessPaymentFactApplication, payloadBytes)
+	require.NoError(t, processor.ProcessTaskPaymentFactApplication(ctx, task))
 
 	// 5) 商户确认预订
 	{
@@ -7989,7 +7997,14 @@ type capturePaymentSuccessDistributor struct {
 	worker.NoopTaskDistributor
 
 	mu       sync.Mutex
-	payloads []worker.PaymentSuccessPayload
+	payloads []worker.PaymentFactApplicationPayload
+}
+
+type capturePaymentFactApplicationDistributor struct {
+	worker.NoopTaskDistributor
+
+	mu       sync.Mutex
+	payloads []worker.PaymentFactApplicationPayload
 }
 
 type captureClaimBehaviorActionDistributor struct {
@@ -8016,7 +8031,7 @@ func (d *captureClaimBehaviorActionDistributor) Payloads() []worker.ClaimBehavio
 	return out
 }
 
-func (d *capturePaymentSuccessDistributor) DistributeTaskProcessPaymentSuccess(ctx context.Context, payload *worker.PaymentSuccessPayload, opts ...asynq.Option) error {
+func (d *capturePaymentSuccessDistributor) DistributeTaskProcessPaymentFactApplication(ctx context.Context, payload *worker.PaymentFactApplicationPayload, opts ...asynq.Option) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if payload != nil {
@@ -8025,10 +8040,27 @@ func (d *capturePaymentSuccessDistributor) DistributeTaskProcessPaymentSuccess(c
 	return nil
 }
 
-func (d *capturePaymentSuccessDistributor) Payloads() []worker.PaymentSuccessPayload {
+func (d *capturePaymentSuccessDistributor) Payloads() []worker.PaymentFactApplicationPayload {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	out := make([]worker.PaymentSuccessPayload, len(d.payloads))
+	out := make([]worker.PaymentFactApplicationPayload, len(d.payloads))
+	copy(out, d.payloads)
+	return out
+}
+
+func (d *capturePaymentFactApplicationDistributor) DistributeTaskProcessPaymentFactApplication(ctx context.Context, payload *worker.PaymentFactApplicationPayload, opts ...asynq.Option) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if payload != nil {
+		d.payloads = append(d.payloads, *payload)
+	}
+	return nil
+}
+
+func (d *capturePaymentFactApplicationDistributor) Payloads() []worker.PaymentFactApplicationPayload {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	out := make([]worker.PaymentFactApplicationPayload, len(d.payloads))
 	copy(out, d.payloads)
 	return out
 }
@@ -8289,7 +8321,7 @@ func TestTakeoutJourneyB3Integration(t *testing.T) {
 	require.NoError(t, err)
 
 	d := &captureTaskDistributor{}
-	recovery := worker.NewProfitSharingRecoveryScheduler(store, d)
+	recovery := worker.NewProfitSharingRecoveryScheduler(store, d, nil)
 	recovery.RunOnce()
 
 	calls := d.Calls()

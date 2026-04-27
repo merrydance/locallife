@@ -460,25 +460,6 @@ func (mr *MockTaskDistributorMockRecorder) DistributeTaskProcessMerchantWithdraw
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DistributeTaskProcessMerchantWithdrawResult", reflect.TypeOf((*MockTaskDistributor)(nil).DistributeTaskProcessMerchantWithdrawResult), varargs...)
 }
 
-// DistributeTaskProcessPaymentSuccess mocks base method.
-func (m *MockTaskDistributor) DistributeTaskProcessPaymentSuccess(ctx context.Context, payload *worker.PaymentSuccessPayload, opts ...asynq.Option) error {
-	m.ctrl.T.Helper()
-	varargs := []any{ctx, payload}
-	for _, a := range opts {
-		varargs = append(varargs, a)
-	}
-	ret := m.ctrl.Call(m, "DistributeTaskProcessPaymentSuccess", varargs...)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// DistributeTaskProcessPaymentSuccess indicates an expected call of DistributeTaskProcessPaymentSuccess.
-func (mr *MockTaskDistributorMockRecorder) DistributeTaskProcessPaymentSuccess(ctx, payload any, opts ...any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{ctx, payload}, opts...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DistributeTaskProcessPaymentSuccess", reflect.TypeOf((*MockTaskDistributor)(nil).DistributeTaskProcessPaymentSuccess), varargs...)
-}
-
 // DistributeTaskProcessProfitSharing mocks base method.
 func (m *MockTaskDistributor) DistributeTaskProcessProfitSharing(ctx context.Context, payload *worker.ProfitSharingPayload, opts ...asynq.Option) error {
 	m.ctrl.T.Helper()
@@ -498,23 +479,23 @@ func (mr *MockTaskDistributorMockRecorder) DistributeTaskProcessProfitSharing(ct
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DistributeTaskProcessProfitSharing", reflect.TypeOf((*MockTaskDistributor)(nil).DistributeTaskProcessProfitSharing), varargs...)
 }
 
-// DistributeTaskProcessProfitSharingResult mocks base method.
-func (m *MockTaskDistributor) DistributeTaskProcessProfitSharingResult(ctx context.Context, payload *worker.ProfitSharingResultPayload, opts ...asynq.Option) error {
+// DistributeTaskProcessProfitSharingReceiverTarget mocks base method.
+func (m *MockTaskDistributor) DistributeTaskProcessProfitSharingReceiverTarget(ctx context.Context, payload *worker.ProfitSharingReceiverTargetPayload, opts ...asynq.Option) error {
 	m.ctrl.T.Helper()
 	varargs := []any{ctx, payload}
 	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
-	ret := m.ctrl.Call(m, "DistributeTaskProcessProfitSharingResult", varargs...)
+	ret := m.ctrl.Call(m, "DistributeTaskProcessProfitSharingReceiverTarget", varargs...)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// DistributeTaskProcessProfitSharingResult indicates an expected call of DistributeTaskProcessProfitSharingResult.
-func (mr *MockTaskDistributorMockRecorder) DistributeTaskProcessProfitSharingResult(ctx, payload any, opts ...any) *gomock.Call {
+// DistributeTaskProcessProfitSharingReceiverTarget indicates an expected call of DistributeTaskProcessProfitSharingReceiverTarget.
+func (mr *MockTaskDistributorMockRecorder) DistributeTaskProcessProfitSharingReceiverTarget(ctx, payload any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{ctx, payload}, opts...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DistributeTaskProcessProfitSharingResult", reflect.TypeOf((*MockTaskDistributor)(nil).DistributeTaskProcessProfitSharingResult), varargs...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DistributeTaskProcessProfitSharingReceiverTarget", reflect.TypeOf((*MockTaskDistributor)(nil).DistributeTaskProcessProfitSharingReceiverTarget), varargs...)
 }
 
 // DistributeTaskProcessProfitSharingReturnResult mocks base method.

@@ -413,12 +413,24 @@ func (p *RedisTaskProcessor) reconcileRemoteSuccessfulCombinedSubOrders(ctx cont
 				if p.distributor == nil {
 					return result, fmt.Errorf("task distributor not configured for remote paid combined payment reconciliation")
 				}
-				if err := p.distributor.DistributeTaskProcessPaymentSuccess(ctx, &PaymentSuccessPayload{
-					PaymentOrderID: paymentOrder.ID,
-					TransactionID:  subOrder.TransactionID,
-					BusinessType:   paymentOrder.BusinessType,
-				}, asynq.MaxRetry(5), asynq.Queue(QueueCritical)); err != nil {
-					return result, fmt.Errorf("enqueue payment success for payment order %d: %w", paymentOrder.ID, err)
+				if paymentOrder.BusinessType == db.ExternalPaymentBusinessOwnerOrder {
+					application, factErr := recordCombinedOrderPaymentQueryFact(ctx, p.store, combined, paymentOrder, subOrder)
+					if factErr != nil {
+						return result, fmt.Errorf("record combined payment fact for payment order %d: %w", paymentOrder.ID, factErr)
+					}
+					if err := enqueueOrderPaymentFactApplication(ctx, p.distributor, application); err != nil {
+						return result, fmt.Errorf("enqueue order payment fact application for payment order %d: %w", paymentOrder.ID, err)
+					}
+				} else if shouldRecordReservationPaymentFactForOrder(paymentOrder) {
+					application, factErr := recordCombinedReservationPaymentQueryFact(ctx, p.store, combined, paymentOrder, subOrder)
+					if factErr != nil {
+						return result, fmt.Errorf("record combined reservation payment fact for payment order %d: %w", paymentOrder.ID, factErr)
+					}
+					if err := enqueueReservationPaymentFactApplication(ctx, p.distributor, application); err != nil {
+						return result, fmt.Errorf("enqueue reservation payment fact application for payment order %d: %w", paymentOrder.ID, err)
+					}
+				} else {
+					return result, fmt.Errorf("payment order %d business type %q has no payment fact application target", paymentOrder.ID, paymentOrder.BusinessType)
 				}
 			}
 			result.successCount++

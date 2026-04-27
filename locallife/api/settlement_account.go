@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/token"
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	"github.com/rs/zerolog/log"
@@ -158,6 +160,105 @@ type modifySettlementAccountApplicationResponse struct {
 	ApplicationNo string `json:"application_no"`
 }
 
+type settlementCommandStore interface {
+	CreateExternalPaymentCommand(ctx context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error)
+}
+
+func recordMerchantSettlementCommandAccepted(ctx context.Context, store settlementCommandStore, paymentConfig *db.MerchantPaymentConfig, req modifySettlementAccountRequest, applicationNo string) {
+	trimmedApplicationNo := strings.TrimSpace(applicationNo)
+	if _, err := logic.NewPaymentCommandService(store).RecordExternalPaymentCommand(ctx, dbMerchantSettlementCommandInput(
+		paymentConfig,
+		db.ExternalPaymentCommandStatusAccepted,
+		stringPtrIfNotEmpty(trimmedApplicationNo),
+		nil,
+		nil,
+		settlementModifyCommandSnapshot(map[string]string{
+			"sub_mch_id":     paymentConfig.SubMchID,
+			"application_no": trimmedApplicationNo,
+			"account_type":   req.AccountType,
+			"account_bank":   req.AccountBank,
+			"bank_name":      req.BankName,
+			"bank_branch_id": req.BankBranchID,
+		}),
+	)); err != nil {
+		log.Warn().Err(err).
+			Int64("merchant_payment_config_id", paymentConfig.ID).
+			Str("sub_mch_id", strings.TrimSpace(paymentConfig.SubMchID)).
+			Str("application_no", trimmedApplicationNo).
+			Msg("record merchant settlement command accepted failed")
+	}
+}
+
+func recordMerchantSettlementCommandRejected(ctx context.Context, store settlementCommandStore, paymentConfig *db.MerchantPaymentConfig, req modifySettlementAccountRequest, lastErrorCode *string, lastErrorMessage *string) {
+	if _, err := logic.NewPaymentCommandService(store).RecordExternalPaymentCommand(ctx, dbMerchantSettlementCommandInput(
+		paymentConfig,
+		db.ExternalPaymentCommandStatusRejected,
+		nil,
+		lastErrorCode,
+		lastErrorMessage,
+		settlementModifyCommandSnapshot(map[string]string{
+			"sub_mch_id":     paymentConfig.SubMchID,
+			"account_type":   req.AccountType,
+			"account_bank":   req.AccountBank,
+			"bank_name":      req.BankName,
+			"bank_branch_id": req.BankBranchID,
+			"error_code":     stringValue(lastErrorCode),
+			"error_message":  stringValue(lastErrorMessage),
+		}),
+	)); err != nil {
+		log.Warn().Err(err).
+			Int64("merchant_payment_config_id", paymentConfig.ID).
+			Str("sub_mch_id", strings.TrimSpace(paymentConfig.SubMchID)).
+			Msg("record merchant settlement command rejected failed")
+	}
+}
+
+func dbMerchantSettlementCommandInput(
+	paymentConfig *db.MerchantPaymentConfig,
+	commandStatus string,
+	externalSecondaryKey *string,
+	lastErrorCode *string,
+	lastErrorMessage *string,
+	responseSnapshot []byte,
+) logic.RecordExternalPaymentCommandInput {
+	businessObjectType := "merchant_payment_config"
+	businessObjectID := paymentConfig.ID
+	return logic.RecordExternalPaymentCommandInput{
+		Provider:             db.ExternalPaymentProviderWechat,
+		Channel:              db.PaymentChannelEcommerce,
+		Capability:           db.ExternalPaymentCapabilitySettlement,
+		CommandType:          db.ExternalPaymentCommandTypeCreateSettlement,
+		BusinessOwner:        db.ExternalPaymentBusinessOwnerMerchantFunds,
+		BusinessObjectType:   &businessObjectType,
+		BusinessObjectID:     &businessObjectID,
+		ExternalObjectType:   db.ExternalPaymentObjectSettlement,
+		ExternalObjectKey:    strings.TrimSpace(paymentConfig.SubMchID),
+		ExternalSecondaryKey: externalSecondaryKey,
+		CommandStatus:        commandStatus,
+		LastErrorCode:        lastErrorCode,
+		LastErrorMessage:     lastErrorMessage,
+		ResponseSnapshot:     responseSnapshot,
+	}
+}
+
+func settlementModifyCommandSnapshot(values map[string]string) []byte {
+	filtered := make(map[string]string, len(values))
+	for key, value := range values {
+		trimmedValue := strings.TrimSpace(value)
+		if trimmedValue != "" {
+			filtered[key] = trimmedValue
+		}
+	}
+	if len(filtered) == 0 {
+		return []byte(`{}`)
+	}
+	payload, err := json.Marshal(filtered)
+	if err != nil {
+		return []byte(`{}`)
+	}
+	return payload
+}
+
 // ========================= 商户侧接口 =========================
 
 // getMerchantSettlementAccount 查询商户结算账户信息
@@ -221,6 +322,22 @@ func (server *Server) getMerchantSettlementAccount(ctx *gin.Context) {
 		status, resp := settlementWechatErrorResponse(ctx, "query_settlement_account", "merchant", merchant.ID, paymentConfig.SubMchID, "", fmt.Errorf("query settlement account: %w", err))
 		ctx.JSON(status, resp)
 		return
+	}
+	application, err := server.recordMerchantSettlementAccountQueryFact(ctx, merchant.ID, *paymentConfig, latestApplicationNo, wxResp)
+	if err != nil {
+		log.Error().Err(err).
+			Int64("merchant_id", merchant.ID).
+			Str("sub_mch_id", paymentConfig.SubMchID).
+			Str("latest_application_no", latestApplicationNo).
+			Msg("record merchant settlement account query fact failed")
+	} else if application != nil {
+		if _, applyErr := server.paymentFactService.ApplyExternalPaymentFactApplication(ctx, application.ID); applyErr != nil {
+			log.Error().Err(applyErr).
+				Int64("merchant_id", merchant.ID).
+				Int64("payment_fact_application_id", application.ID).
+				Str("sub_mch_id", paymentConfig.SubMchID).
+				Msg("apply merchant settlement account query fact failed")
+		}
 	}
 
 	statusDesc = buildSettlementAccountStatusDesc(wxResp.VerifyResult, wxResp.VerifyFailReason)
@@ -347,6 +464,8 @@ func (server *Server) modifyMerchantSettlementAccount(ctx *gin.Context) {
 		AccountName:   encryptedAccountName,
 	})
 	if err != nil {
+		lastErrorCode, lastErrorMessage := settlementCommandErrorFields(err)
+		recordMerchantSettlementCommandRejected(ctx, server.store, paymentConfig, req, lastErrorCode, lastErrorMessage)
 		status, resp := settlementWechatErrorResponse(ctx, "modify_settlement_account", "merchant", merchant.ID, paymentConfig.SubMchID, "", fmt.Errorf("modify settlement account: %w", err))
 		ctx.JSON(status, resp)
 		return
@@ -361,6 +480,7 @@ func (server *Server) modifyMerchantSettlementAccount(ctx *gin.Context) {
 			Msg("persist latest merchant settlement application failed")
 	}
 	logSettlementModifySuccess("merchant", merchant.ID, paymentConfig.SubMchID, wxResp.ApplicationNo)
+	recordMerchantSettlementCommandAccepted(ctx, server.store, paymentConfig, req, wxResp.ApplicationNo)
 
 	ctx.JSON(http.StatusOK, modifySettlementAccountApplicationResponse{
 		ApplicationNo: wxResp.ApplicationNo,
@@ -446,13 +566,22 @@ func (server *Server) getMerchantSettlementApplication(ctx *gin.Context) {
 		ctx.JSON(status, resp)
 		return
 	}
-
-	if err := server.updateMerchantSettlementApplicationTracking(ctx, merchant.ID, applicationNo, nil); err != nil {
+	application, err := server.recordMerchantSettlementApplicationQueryFact(ctx, merchant.ID, *paymentConfig, applicationNo, wxResp)
+	if err != nil {
 		log.Error().Err(err).
 			Int64("merchant_id", merchant.ID).
 			Str("sub_mch_id", paymentConfig.SubMchID).
 			Str("application_no", applicationNo).
-			Msg("persist queried merchant settlement application failed")
+			Msg("record merchant settlement application query fact failed")
+	} else if application != nil {
+		if _, applyErr := server.paymentFactService.ApplyExternalPaymentFactApplication(ctx, application.ID); applyErr != nil {
+			log.Error().Err(applyErr).
+				Int64("merchant_id", merchant.ID).
+				Int64("payment_fact_application_id", application.ID).
+				Str("sub_mch_id", paymentConfig.SubMchID).
+				Str("application_no", applicationNo).
+				Msg("apply merchant settlement application query fact failed")
+		}
 	}
 	logSettlementApplicationQuerySuccess("merchant", merchant.ID, paymentConfig.SubMchID, applicationNo, wxResp.VerifyResult, wxResp.VerifyFailReason != "")
 

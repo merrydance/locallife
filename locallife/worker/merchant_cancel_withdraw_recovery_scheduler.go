@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq"
+	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/robfig/cron/v3"
 	"github.com/rs/zerolog/log"
@@ -14,6 +15,7 @@ import (
 const (
 	merchantCancelWithdrawRecoveryCron       = "*/3 * * * *"
 	merchantCancelWithdrawRecoveryBatchLimit = int32(200)
+	merchantCancelWithdrawRecoveryMinAge     = 5 * time.Minute
 )
 
 type MerchantCancelWithdrawRecoveryScheduler struct {
@@ -85,7 +87,10 @@ func (s *MerchantCancelWithdrawRecoveryScheduler) runOnce(ctx context.Context) {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 
-	records, err := s.store.ListPendingMerchantCancelWithdrawApplications(ctx, merchantCancelWithdrawRecoveryBatchLimit)
+	records, err := s.store.ListPendingMerchantCancelWithdrawApplications(ctx, db.ListPendingMerchantCancelWithdrawApplicationsParams{
+		QueryBefore: pgtype.Timestamptz{Time: time.Now().Add(-merchantCancelWithdrawRecoveryMinAge), Valid: true},
+		LimitCount:  merchantCancelWithdrawRecoveryBatchLimit,
+	})
 	if err != nil {
 		log.Error().Err(err).Msg("list pending merchant cancel withdraw applications failed")
 		return

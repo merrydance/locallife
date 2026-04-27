@@ -37,16 +37,18 @@ type TaskProcessor interface {
 	ProcessTaskReservationNoShowAlert(ctx context.Context, task *asynq.Task) error
 	// ProcessTaskReservationFoodSafetyAlert 处理食安停业预订提醒任务
 	ProcessTaskReservationFoodSafetyAlert(ctx context.Context, task *asynq.Task) error
-	// ProcessTaskPaymentSuccess 处理支付成功任务
-	ProcessTaskPaymentSuccess(ctx context.Context, task *asynq.Task) error
 	// ProcessTaskRefundResult 处理退款结果任务
 	ProcessTaskRefundResult(ctx context.Context, task *asynq.Task) error
 	// ProcessTaskProfitSharing 处理分账任务
 	ProcessTaskProfitSharing(ctx context.Context, task *asynq.Task) error
+	// ProcessTaskProfitSharingReceiverTarget 处理分账接收方生命周期同步任务
+	ProcessTaskProfitSharingReceiverTarget(ctx context.Context, task *asynq.Task) error
 	// ProcessTaskProfitSharingReturnResult 处理分账回退结果任务
 	ProcessTaskProfitSharingReturnResult(ctx context.Context, task *asynq.Task) error
 	// ProcessTaskClaimPayout 处理索赔平台赔付任务
 	ProcessTaskClaimPayout(ctx context.Context, task *asynq.Task) error
+	// ProcessTaskPaymentFactApplication 处理外部支付事实应用任务
+	ProcessTaskPaymentFactApplication(ctx context.Context, task *asynq.Task) error
 }
 
 type RedisTaskProcessor struct {
@@ -242,10 +244,10 @@ func (processor *RedisTaskProcessor) Start() error {
 	mux.HandleFunc(TaskOrderPaymentTimeout, processor.ProcessTaskOrderPaymentTimeout)
 	mux.HandleFunc(TaskReservationNoShowAlert, processor.ProcessTaskReservationNoShowAlert)
 	mux.HandleFunc(TaskReservationFoodSafetyAlert, processor.ProcessTaskReservationFoodSafetyAlert)
-	mux.HandleFunc(TaskProcessPaymentSuccess, processor.ProcessTaskPaymentSuccess)
 	mux.HandleFunc(TaskProcessRefund, processor.ProcessTaskInitiateRefund)
 	mux.HandleFunc(TaskProcessRefundResult, processor.ProcessTaskRefundResult)
 	mux.HandleFunc(TaskProcessProfitSharing, processor.ProcessTaskProfitSharing)
+	mux.HandleFunc(TaskProcessProfitSharingReceiverTarget, processor.ProcessTaskProfitSharingReceiverTarget)
 	mux.HandleFunc(TaskSendNotification, processor.ProcessTaskSendNotification)
 	mux.HandleFunc(TaskOperatorPendingDispatchAlert, processor.ProcessTaskOperatorPendingDispatchAlert)
 	mux.HandleFunc(TaskProcessProfitSharingReturnResult, processor.ProcessTaskProfitSharingReturnResult)
@@ -266,9 +268,10 @@ func (processor *RedisTaskProcessor) Start() error {
 	mux.HandleFunc(TaskClaimBehaviorAction, processor.ProcessTaskClaimBehaviorAction)
 	mux.HandleFunc(TaskClaimPayout, processor.ProcessTaskClaimPayout)
 
-	// 进件/分账结果处理任务
+	// 进件结果和支付事实/outbox 处理任务
 	mux.HandleFunc(TaskProcessApplymentResult, processor.ProcessTaskApplymentResult)
-	mux.HandleFunc(TaskProcessProfitSharingResult, processor.ProcessTaskProfitSharingResult)
+	mux.HandleFunc(TaskProcessPaymentFactApplication, processor.ProcessTaskPaymentFactApplication)
+	mux.HandleFunc(TaskProcessPaymentDomainOutbox, processor.ProcessTaskPaymentDomainOutbox)
 
 	// 商户入驻证照OCR任务
 	mux.HandleFunc(TaskMerchantApplicationBusinessLicenseOCR, processor.ProcessTaskMerchantApplicationBusinessLicenseOCR)

@@ -18,28 +18,6 @@ const (
 
 var ErrUnsupportedOperatorStatus = errors.New("unsupported operator status")
 
-type OperatorReceiverSyncError struct {
-	Action string
-	Err    error
-}
-
-func (e *OperatorReceiverSyncError) Error() string {
-	if e == nil || e.Err == nil {
-		return "operator receiver sync failed"
-	}
-	if e.Action == "" {
-		return e.Err.Error()
-	}
-	return fmt.Sprintf("operator receiver sync %s failed: %v", e.Action, e.Err)
-}
-
-func (e *OperatorReceiverSyncError) Unwrap() error {
-	if e == nil {
-		return nil
-	}
-	return e.Err
-}
-
 type OperatorActiveRegionConflictError struct {
 	RegionID         int64
 	ActiveOperatorID int64
@@ -50,14 +28,14 @@ func (e *OperatorActiveRegionConflictError) Error() string {
 }
 
 type OperatorStatusService struct {
-	store        db.Store
-	receiverSync *ProfitSharingReceiverSyncService
+	store             db.Store
+	receiverLifecycle *ProfitSharingReceiverLifecycleService
 }
 
 func NewOperatorStatusService(store db.Store, ecommerceClient wechat.EcommerceClientInterface) *OperatorStatusService {
 	return &OperatorStatusService{
-		store:        store,
-		receiverSync: NewProfitSharingReceiverService(store, ecommerceClient),
+		store:             store,
+		receiverLifecycle: NewProfitSharingReceiverLifecycleService(store, ecommerceClient),
 	}
 }
 
@@ -70,13 +48,7 @@ func (s *OperatorStatusService) UpdateStatus(ctx context.Context, operator db.Op
 		if err := s.ensureManagedRegionsHaveNoOtherActiveOperator(ctx, operator); err != nil {
 			return db.Operator{}, err
 		}
-		if err := s.receiverSync.EnsureOperatorReceiver(ctx, operator); err != nil {
-			return db.Operator{}, &OperatorReceiverSyncError{Action: "ensure", Err: err}
-		}
 	} else {
-		if err := s.receiverSync.DeleteOperatorReceiver(ctx, operator); err != nil {
-			return db.Operator{}, &OperatorReceiverSyncError{Action: "delete", Err: err}
-		}
 		if err := s.ensureOperatorRoleStatus(ctx, operator, targetStatus); err != nil {
 			return db.Operator{}, err
 		}
@@ -101,7 +73,28 @@ func (s *OperatorStatusService) UpdateStatus(ctx context.Context, operator db.Op
 		}
 	}
 
+	if err := s.recordOperatorReceiverIntent(ctx, updatedOperator, targetStatus); err != nil {
+		return db.Operator{}, err
+	}
+
 	return updatedOperator, nil
+}
+
+func (s *OperatorStatusService) recordOperatorReceiverIntent(ctx context.Context, operator db.Operator, targetStatus string) error {
+	switch targetStatus {
+	case operatorStatusActive:
+		_, err := s.receiverLifecycle.RequestOperatorReceiverPresent(ctx, operator)
+		if err != nil {
+			return fmt.Errorf("record operator receiver present intent: %w", err)
+		}
+	case operatorStatusSuspended:
+		_, err := s.receiverLifecycle.RequestOperatorReceiverAbsent(ctx, operator)
+		if err != nil {
+			return fmt.Errorf("record operator receiver absent intent: %w", err)
+		}
+	}
+
+	return nil
 }
 
 func (s *OperatorStatusService) ensureManagedRegionsHaveNoOtherActiveOperator(ctx context.Context, operator db.Operator) error {

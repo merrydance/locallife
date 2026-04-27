@@ -1082,10 +1082,6 @@ func TestSubmitMerchantApplication(t *testing.T) {
 					Times(2).
 					Return(db.OcrJob{ID: ocrJobID, Provider: "wechat", Status: "succeeded"}, nil)
 
-				store.EXPECT().
-					ListMerchantLocationsInRegion(gomock.Any(), app.RegionID.Int64).
-					Times(1).
-					Return([]db.ListMerchantLocationsInRegionRow{}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -1118,10 +1114,6 @@ func TestSubmitMerchantApplication(t *testing.T) {
 					Times(1).
 					Return(app, nil)
 
-				store.EXPECT().
-					ListMerchantLocationsInRegion(gomock.Any(), app.RegionID.Int64).
-					Times(1).
-					Return([]db.ListMerchantLocationsInRegionRow{}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)

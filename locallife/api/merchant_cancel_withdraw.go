@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -578,8 +579,10 @@ func (server *Server) createMerchantCancelWithdrawApplication(ctx *gin.Context) 
 			if isMerchantCancelWithdrawSubmitAmbiguous(err) {
 				record = server.markMerchantCancelWithdrawSyncState(ctx, record, db.MerchantCancelWithdrawLocalSyncStateSubmitUnknown, logic.MerchantCancelWithdrawSafeErrorMessage(err))
 				server.enqueueMerchantCancelWithdrawPolling(ctx, record)
+				recordMerchantCancelWithdrawCommandUnknown(ctx, server.store, record, err, queryErr)
 			} else {
 				record = server.markMerchantCancelWithdrawSyncState(ctx, record, db.MerchantCancelWithdrawLocalSyncStateSyncFailed, logic.MerchantCancelWithdrawSafeErrorMessage(err))
+				recordMerchantCancelWithdrawCommandRejected(ctx, server.store, record, err)
 			}
 			if respondMerchantCancelWithdrawWechatError(ctx, "create_cancel_withdraw", merchant.ID, paymentConfig.SubMchID, outRequestNo, err) {
 				return
@@ -600,22 +603,54 @@ func (server *Server) createMerchantCancelWithdrawApplication(ctx *gin.Context) 
 	queryResp, queryErr := server.queryMerchantCancelWithdrawStatus(ctx, record)
 	if queryErr != nil {
 		logMerchantCancelWithdrawSyncFailure(ctx, "query_cancel_withdraw_after_submit", record, queryErr)
+	} else {
+		application, err := server.recordMerchantCancelWithdrawQueryFact(ctx, record, queryResp)
+		if err != nil {
+			log.Error().Err(err).
+				Int64("merchant_cancel_withdraw_application_id", record.ID).
+				Str("out_request_no", record.OutRequestNo).
+				Msg("record merchant cancel withdraw query fact after submit failed")
+		} else {
+			preApplyParams, buildErr := logic.BuildMerchantCancelWithdrawSyncParams(record, nil, db.MerchantCancelWithdrawLocalSyncStateSubmitSucceeded, "", true, time.Now())
+			if buildErr != nil {
+				ctx.JSON(http.StatusInternalServerError, internalError(ctx, buildErr))
+				return
+			}
+			if createResp != nil && strings.TrimSpace(createResp.ApplymentID) != "" {
+				preApplyParams.ApplymentID = optionalText(createResp.ApplymentID)
+			} else if queryResp != nil && strings.TrimSpace(queryResp.ApplymentID) != "" {
+				preApplyParams.ApplymentID = optionalText(queryResp.ApplymentID)
+			}
+			record, err = server.store.UpdateMerchantCancelWithdrawApplicationSync(ctx, preApplyParams)
+			if err != nil {
+				ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+				return
+			}
+
+			if updatedRecord, applied, err := server.applyMerchantCancelWithdrawFactApplication(ctx, application); err != nil {
+				ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+				return
+			} else if applied {
+				record = updatedRecord
+			}
+		}
 	}
-	params, buildErr := logic.BuildMerchantCancelWithdrawSyncParams(record, queryResp, db.MerchantCancelWithdrawLocalSyncStateSubmitSucceeded, logic.MerchantCancelWithdrawSafeErrorMessage(queryErr), true, time.Now())
-	if buildErr != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, buildErr))
-		return
+	if queryErr != nil {
+		params, buildErr := logic.BuildMerchantCancelWithdrawSyncParams(record, queryResp, db.MerchantCancelWithdrawLocalSyncStateSubmitSucceeded, logic.MerchantCancelWithdrawSafeErrorMessage(queryErr), true, time.Now())
+		if buildErr != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, buildErr))
+			return
+		}
+		if createResp != nil && strings.TrimSpace(createResp.ApplymentID) != "" {
+			params.ApplymentID = optionalText(createResp.ApplymentID)
+		}
+		record, err = server.store.UpdateMerchantCancelWithdrawApplicationSync(ctx, params)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
 	}
-	if queryErr == nil && queryResp != nil && strings.TrimSpace(queryResp.ApplymentID) != "" {
-		params.ApplymentID = optionalText(queryResp.ApplymentID)
-	} else if createResp != nil && strings.TrimSpace(createResp.ApplymentID) != "" {
-		params.ApplymentID = optionalText(createResp.ApplymentID)
-	}
-	record, err = server.store.UpdateMerchantCancelWithdrawApplicationSync(ctx, params)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
+	recordMerchantCancelWithdrawCommandAccepted(ctx, server.store, record)
 
 	server.enqueueMerchantCancelWithdrawPolling(ctx, record)
 	item, err := toMerchantCancelWithdrawItem(record)
@@ -624,6 +659,142 @@ func (server *Server) createMerchantCancelWithdrawApplication(ctx *gin.Context) 
 		return
 	}
 	ctx.JSON(http.StatusCreated, merchantCancelWithdrawCreateResponse{Application: item})
+}
+
+func recordMerchantCancelWithdrawCommandAccepted(ctx context.Context, store db.Store, record db.MerchantCancelWithdrawApplication) {
+	secondaryKey := stringPtrIfNotEmpty(strings.TrimSpace(record.ApplymentID.String))
+	if _, err := logic.NewPaymentCommandService(store).RecordExternalPaymentCommand(ctx, dbMerchantCancelWithdrawCommandInput(
+		record,
+		db.ExternalPaymentCommandStatusAccepted,
+		secondaryKey,
+		nil,
+		nil,
+		merchantCancelWithdrawCommandSnapshot(map[string]string{
+			"out_request_no": strings.TrimSpace(record.OutRequestNo),
+			"sub_mchid":      strings.TrimSpace(record.SubMchID),
+			"applyment_id":   strings.TrimSpace(record.ApplymentID.String),
+			"cancel_state":   strings.TrimSpace(record.CancelState.String),
+		}),
+	)); err != nil {
+		log.Warn().Err(err).
+			Int64("merchant_cancel_withdraw_application_id", record.ID).
+			Str("out_request_no", strings.TrimSpace(record.OutRequestNo)).
+			Msg("record merchant cancel withdraw command accepted failed")
+	}
+}
+
+func recordMerchantCancelWithdrawCommandUnknown(ctx context.Context, store db.Store, record db.MerchantCancelWithdrawApplication, createErr, queryErr error) {
+	if record.LocalSyncState != db.MerchantCancelWithdrawLocalSyncStateSubmitUnknown {
+		return
+	}
+	lastErrorCode, lastErrorMessage := merchantCancelWithdrawCommandErrorFields(createErr)
+	if _, err := logic.NewPaymentCommandService(store).RecordExternalPaymentCommand(ctx, dbMerchantCancelWithdrawCommandInput(
+		record,
+		db.ExternalPaymentCommandStatusUnknown,
+		nil,
+		lastErrorCode,
+		lastErrorMessage,
+		merchantCancelWithdrawCommandSnapshot(map[string]string{
+			"out_request_no":      strings.TrimSpace(record.OutRequestNo),
+			"sub_mchid":           strings.TrimSpace(record.SubMchID),
+			"error_code":          stringValue(lastErrorCode),
+			"error_message":       stringValue(lastErrorMessage),
+			"query_error_message": strings.TrimSpace(merchantCancelWithdrawErrorString(queryErr)),
+		}),
+	)); err != nil {
+		log.Warn().Err(err).
+			Int64("merchant_cancel_withdraw_application_id", record.ID).
+			Str("out_request_no", strings.TrimSpace(record.OutRequestNo)).
+			Msg("record merchant cancel withdraw command unknown failed")
+	}
+}
+
+func recordMerchantCancelWithdrawCommandRejected(ctx context.Context, store db.Store, record db.MerchantCancelWithdrawApplication, createErr error) {
+	if record.LocalSyncState != db.MerchantCancelWithdrawLocalSyncStateSyncFailed {
+		return
+	}
+	lastErrorCode, lastErrorMessage := merchantCancelWithdrawCommandErrorFields(createErr)
+	if _, err := logic.NewPaymentCommandService(store).RecordExternalPaymentCommand(ctx, dbMerchantCancelWithdrawCommandInput(
+		record,
+		db.ExternalPaymentCommandStatusRejected,
+		nil,
+		lastErrorCode,
+		lastErrorMessage,
+		merchantCancelWithdrawCommandSnapshot(map[string]string{
+			"out_request_no": strings.TrimSpace(record.OutRequestNo),
+			"sub_mchid":      strings.TrimSpace(record.SubMchID),
+			"error_code":     stringValue(lastErrorCode),
+			"error_message":  stringValue(lastErrorMessage),
+		}),
+	)); err != nil {
+		log.Warn().Err(err).
+			Int64("merchant_cancel_withdraw_application_id", record.ID).
+			Str("out_request_no", strings.TrimSpace(record.OutRequestNo)).
+			Msg("record merchant cancel withdraw command rejected failed")
+	}
+}
+
+func dbMerchantCancelWithdrawCommandInput(
+	record db.MerchantCancelWithdrawApplication,
+	commandStatus string,
+	externalSecondaryKey *string,
+	lastErrorCode *string,
+	lastErrorMessage *string,
+	responseSnapshot []byte,
+) logic.RecordExternalPaymentCommandInput {
+	businessObjectType := "merchant_cancel_withdraw_application"
+	businessObjectID := record.ID
+	return logic.RecordExternalPaymentCommandInput{
+		Provider:             db.ExternalPaymentProviderWechat,
+		Channel:              db.PaymentChannelEcommerce,
+		Capability:           db.ExternalPaymentCapabilityCancelWithdraw,
+		CommandType:          db.ExternalPaymentCommandTypeCreateCancelWithdraw,
+		BusinessOwner:        db.ExternalPaymentBusinessOwnerMerchantFunds,
+		BusinessObjectType:   &businessObjectType,
+		BusinessObjectID:     &businessObjectID,
+		ExternalObjectType:   db.ExternalPaymentObjectCancelWithdraw,
+		ExternalObjectKey:    strings.TrimSpace(record.OutRequestNo),
+		ExternalSecondaryKey: externalSecondaryKey,
+		CommandStatus:        commandStatus,
+		LastErrorCode:        lastErrorCode,
+		LastErrorMessage:     lastErrorMessage,
+		ResponseSnapshot:     responseSnapshot,
+	}
+}
+
+func merchantCancelWithdrawCommandErrorFields(err error) (*string, *string) {
+	if err == nil {
+		return nil, nil
+	}
+	var wxErr *wechat.WechatPayError
+	if errors.As(err, &wxErr) {
+		return stringPtrIfNotEmpty(strings.TrimSpace(wxErr.Code)), stringPtrIfNotEmpty(strings.TrimSpace(wxErr.Message))
+	}
+	return nil, stringPtrIfNotEmpty(strings.TrimSpace(err.Error()))
+}
+
+func merchantCancelWithdrawCommandSnapshot(values map[string]string) []byte {
+	filtered := make(map[string]string, len(values))
+	for key, value := range values {
+		if strings.TrimSpace(value) != "" {
+			filtered[key] = strings.TrimSpace(value)
+		}
+	}
+	if len(filtered) == 0 {
+		return []byte(`{}`)
+	}
+	data, err := json.Marshal(filtered)
+	if err != nil {
+		return []byte(`{}`)
+	}
+	return data
+}
+
+func merchantCancelWithdrawErrorString(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
 }
 
 func (server *Server) syncMerchantCancelWithdrawApplicationIfNeeded(ctx *gin.Context, record db.MerchantCancelWithdrawApplication) db.MerchantCancelWithdrawApplication {
@@ -636,15 +807,20 @@ func (server *Server) syncMerchantCancelWithdrawApplicationIfNeeded(ctx *gin.Con
 		logMerchantCancelWithdrawSyncFailure(ctx, "query_cancel_withdraw_for_read", record, err)
 		return record
 	}
-
-	params, err := logic.BuildMerchantCancelWithdrawSyncParams(record, queryResp, db.MerchantCancelWithdrawLocalSyncStateSubmitSucceeded, "", false, time.Now())
+	application, err := server.recordMerchantCancelWithdrawQueryFact(ctx, record, queryResp)
 	if err != nil {
-		logMerchantCancelWithdrawSyncFailure(ctx, "build_cancel_withdraw_sync_params", record, err)
+		log.Error().Err(err).
+			Int64("merchant_cancel_withdraw_application_id", record.ID).
+			Str("out_request_no", record.OutRequestNo).
+			Msg("record merchant cancel withdraw query fact for read failed")
 		return record
 	}
-	updated, err := server.store.UpdateMerchantCancelWithdrawApplicationSync(ctx, params)
+	updated, applied, err := server.applyMerchantCancelWithdrawFactApplication(ctx, application)
 	if err != nil {
-		logMerchantCancelWithdrawSyncFailure(ctx, "update_cancel_withdraw_sync_state", record, err)
+		logMerchantCancelWithdrawSyncFailure(ctx, "apply_cancel_withdraw_query_fact", record, err)
+		return record
+	}
+	if !applied {
 		return record
 	}
 	return updated

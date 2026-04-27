@@ -722,6 +722,76 @@ type EcommerceApplyment struct {
 	AccountValidation []byte `json:"account_validation"`
 }
 
+type ExternalPaymentCommand struct {
+	ID                   int64              `json:"id"`
+	Provider             string             `json:"provider"`
+	Channel              string             `json:"channel"`
+	Capability           string             `json:"capability"`
+	CommandType          string             `json:"command_type"`
+	BusinessOwner        string             `json:"business_owner"`
+	BusinessObjectType   pgtype.Text        `json:"business_object_type"`
+	BusinessObjectID     pgtype.Int8        `json:"business_object_id"`
+	ExternalObjectType   string             `json:"external_object_type"`
+	ExternalObjectKey    string             `json:"external_object_key"`
+	ExternalSecondaryKey pgtype.Text        `json:"external_secondary_key"`
+	CommandStatus        string             `json:"command_status"`
+	SubmittedAt          time.Time          `json:"submitted_at"`
+	AcceptedAt           pgtype.Timestamptz `json:"accepted_at"`
+	RejectedAt           pgtype.Timestamptz `json:"rejected_at"`
+	LastErrorCode        pgtype.Text        `json:"last_error_code"`
+	LastErrorMessage     pgtype.Text        `json:"last_error_message"`
+	RequestFingerprint   pgtype.Text        `json:"request_fingerprint"`
+	ResponseSnapshot     []byte             `json:"response_snapshot"`
+	CreatedAt            time.Time          `json:"created_at"`
+	UpdatedAt            time.Time          `json:"updated_at"`
+}
+
+type ExternalPaymentFact struct {
+	ID                   int64              `json:"id"`
+	Provider             string             `json:"provider"`
+	Channel              string             `json:"channel"`
+	Capability           string             `json:"capability"`
+	FactSource           string             `json:"fact_source"`
+	SourceEventID        pgtype.Text        `json:"source_event_id"`
+	SourceEventType      pgtype.Text        `json:"source_event_type"`
+	ExternalObjectType   string             `json:"external_object_type"`
+	ExternalObjectKey    string             `json:"external_object_key"`
+	ExternalSecondaryKey pgtype.Text        `json:"external_secondary_key"`
+	BusinessOwner        pgtype.Text        `json:"business_owner"`
+	BusinessObjectType   pgtype.Text        `json:"business_object_type"`
+	BusinessObjectID     pgtype.Int8        `json:"business_object_id"`
+	UpstreamState        string             `json:"upstream_state"`
+	TerminalStatus       string             `json:"terminal_status"`
+	IsTerminal           bool               `json:"is_terminal"`
+	Amount               pgtype.Int8        `json:"amount"`
+	Currency             string             `json:"currency"`
+	OccurredAt           pgtype.Timestamptz `json:"occurred_at"`
+	UpstreamUpdatedAt    pgtype.Timestamptz `json:"upstream_updated_at"`
+	ObservedAt           time.Time          `json:"observed_at"`
+	RawResource          []byte             `json:"raw_resource"`
+	DedupeKey            string             `json:"dedupe_key"`
+	ProcessingStatus     string             `json:"processing_status"`
+	ProcessingError      pgtype.Text        `json:"processing_error"`
+	ProcessedAt          pgtype.Timestamptz `json:"processed_at"`
+	CreatedAt            time.Time          `json:"created_at"`
+	UpdatedAt            time.Time          `json:"updated_at"`
+}
+
+type ExternalPaymentFactApplication struct {
+	ID                 int64              `json:"id"`
+	FactID             int64              `json:"fact_id"`
+	Consumer           string             `json:"consumer"`
+	BusinessObjectType string             `json:"business_object_type"`
+	BusinessObjectID   int64              `json:"business_object_id"`
+	Status             string             `json:"status"`
+	AttemptCount       int32              `json:"attempt_count"`
+	LastError          pgtype.Text        `json:"last_error"`
+	NextRetryAt        pgtype.Timestamptz `json:"next_retry_at"`
+	AppliedAt          pgtype.Timestamptz `json:"applied_at"`
+	CreatedAt          time.Time          `json:"created_at"`
+	UpdatedAt          time.Time          `json:"updated_at"`
+}
+
 // 用户收藏表
 type Favorite struct {
 	ID int64 `json:"id"`
@@ -1579,6 +1649,20 @@ type OrderStatusLog struct {
 	CreatedAt    time.Time   `json:"created_at"`
 }
 
+type PaymentDomainOutbox struct {
+	ID            int64              `json:"id"`
+	EventType     string             `json:"event_type"`
+	AggregateType string             `json:"aggregate_type"`
+	AggregateID   int64              `json:"aggregate_id"`
+	Payload       []byte             `json:"payload"`
+	Status        string             `json:"status"`
+	AttemptCount  int32              `json:"attempt_count"`
+	NextRetryAt   pgtype.Timestamptz `json:"next_retry_at"`
+	LastError     pgtype.Text        `json:"last_error"`
+	CreatedAt     time.Time          `json:"created_at"`
+	UpdatedAt     time.Time          `json:"updated_at"`
+}
+
 type PaymentOrder struct {
 	ID            int64              `json:"id"`
 	OrderID       pgtype.Int8        `json:"order_id"`
@@ -1713,6 +1797,42 @@ type ProfitSharingOrder struct {
 	PlatformRate int32 `json:"platform_rate"`
 	// 运营商分账比例（百分比），默认3%
 	OperatorRate int32 `json:"operator_rate"`
+}
+
+type ProfitSharingReceiverAttempt struct {
+	ID                int64              `json:"id"`
+	TargetID          int64              `json:"target_id"`
+	Action            string             `json:"action"`
+	Status            string             `json:"status"`
+	IdempotentSuccess bool               `json:"idempotent_success"`
+	ErrorCode         pgtype.Text        `json:"error_code"`
+	ErrorMessage      pgtype.Text        `json:"error_message"`
+	StartedAt         time.Time          `json:"started_at"`
+	FinishedAt        pgtype.Timestamptz `json:"finished_at"`
+	CreatedAt         time.Time          `json:"created_at"`
+}
+
+type ProfitSharingReceiverTarget struct {
+	ID               int64              `json:"id"`
+	Provider         string             `json:"provider"`
+	Channel          string             `json:"channel"`
+	OwnerType        string             `json:"owner_type"`
+	OwnerID          int64              `json:"owner_id"`
+	ReceiverType     string             `json:"receiver_type"`
+	Appid            string             `json:"appid"`
+	AccountHash      string             `json:"account_hash"`
+	DisplayNameHash  pgtype.Text        `json:"display_name_hash"`
+	DesiredState     string             `json:"desired_state"`
+	SyncStatus       string             `json:"sync_status"`
+	AttemptCount     int32              `json:"attempt_count"`
+	NextRetryAt      pgtype.Timestamptz `json:"next_retry_at"`
+	LastErrorCode    pgtype.Text        `json:"last_error_code"`
+	LastErrorMessage pgtype.Text        `json:"last_error_message"`
+	LastAttemptAt    pgtype.Timestamptz `json:"last_attempt_at"`
+	SyncedAt         pgtype.Timestamptz `json:"synced_at"`
+	SkippedAt        pgtype.Timestamptz `json:"skipped_at"`
+	CreatedAt        time.Time          `json:"created_at"`
+	UpdatedAt        time.Time          `json:"updated_at"`
 }
 
 // 分账回退记录表，退款前的分账回退流水

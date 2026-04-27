@@ -3,6 +3,7 @@ package worker_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/hibiken/asynq"
 	mockdb "github.com/merrydance/locallife/db/mock"
@@ -39,8 +40,13 @@ func TestMerchantCancelWithdrawRecoverySchedulerRunOnceEnqueuesPendingApplicatio
 	}
 
 	store.EXPECT().
-		ListPendingMerchantCancelWithdrawApplications(gomock.Any(), int32(200)).
-		Return([]db.MerchantCancelWithdrawApplication{application}, nil)
+		ListPendingMerchantCancelWithdrawApplications(gomock.Any(), gomock.AssignableToTypeOf(db.ListPendingMerchantCancelWithdrawApplicationsParams{})).
+		DoAndReturn(func(_ context.Context, arg db.ListPendingMerchantCancelWithdrawApplicationsParams) ([]db.MerchantCancelWithdrawApplication, error) {
+			require.True(t, arg.QueryBefore.Valid)
+			require.WithinDuration(t, time.Now().Add(-5*time.Minute), arg.QueryBefore.Time, 5*time.Second)
+			require.Equal(t, int32(200), arg.LimitCount)
+			return []db.MerchantCancelWithdrawApplication{application}, nil
+		})
 
 	scheduler := worker.NewMerchantCancelWithdrawRecoveryScheduler(store, distributor)
 	scheduler.RunOnce()
@@ -54,8 +60,13 @@ func TestMerchantCancelWithdrawRecoverySchedulerRunOnceReturnsAfterQueryFailure(
 	distributor := merchantCancelWithdrawRecoveryTestDistributor{}
 
 	store.EXPECT().
-		ListPendingMerchantCancelWithdrawApplications(gomock.Any(), int32(200)).
-		Return(nil, assertAnError("cancel withdraw list unavailable"))
+		ListPendingMerchantCancelWithdrawApplications(gomock.Any(), gomock.AssignableToTypeOf(db.ListPendingMerchantCancelWithdrawApplicationsParams{})).
+		DoAndReturn(func(_ context.Context, arg db.ListPendingMerchantCancelWithdrawApplicationsParams) ([]db.MerchantCancelWithdrawApplication, error) {
+			require.True(t, arg.QueryBefore.Valid)
+			require.WithinDuration(t, time.Now().Add(-5*time.Minute), arg.QueryBefore.Time, 5*time.Second)
+			require.Equal(t, int32(200), arg.LimitCount)
+			return nil, assertAnError("cancel withdraw list unavailable")
+		})
 
 	scheduler := worker.NewMerchantCancelWithdrawRecoveryScheduler(store, distributor)
 	scheduler.RunOnce()

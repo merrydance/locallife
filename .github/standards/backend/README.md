@@ -20,6 +20,7 @@
 - `SYSTEM_PROMPT.md`: 分层、middleware、DTO、依赖注入等实现细则
 - `GO_PRACTICES.md`: Go 代码组织、并发、context、测试与 Go guard 规则
 - `SQL_STANDARDS.md`: SQL、migration、索引、并发写语义与 SQL guard 规则
+- `IDEMPOTENCY_STANDARDS.md`: 幂等键分类、request-level guard 候选规则与高风险重复执行边界
 - 对应 `domain README`: 支付、media、OCR 等高风险域入口
 - `BACKEND_CHANGE_SAFETY_CHECKLIST.md`: 实现/修复交付前收口
 - `BACKEND_REVIEW_CLOSEOUT_CHECKLIST.md`: review/audit 收口
@@ -37,6 +38,7 @@
 - `API_CONTRACT_STANDARDS.md`: API 契约语义与状态码口径。
 - `GO_PRACTICES.md`: Go 代码组织、接口、context、并发与测试实践。
 - `SQL_STANDARDS.md`: SQL、migration、索引与 sqlc 规则。
+- `IDEMPOTENCY_STANDARDS.md`: 幂等键分类、request-level guard 候选规则、外部契约键边界与重复执行 review gate。
 
 ## 使用规则
 

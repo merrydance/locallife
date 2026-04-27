@@ -87,7 +87,11 @@ type Querier interface {
 	// 检查用户是否是某商户的 Boss
 	CheckUserIsBoss(ctx context.Context, arg CheckUserIsBossParams) (bool, error)
 	CheckUserVoucherExists(ctx context.Context, arg CheckUserVoucherExistsParams) (bool, error)
+	ClaimExternalPaymentFactApplication(ctx context.Context, id int64) (ExternalPaymentFactApplication, error)
 	ClaimMerchantTakeoutSuspensionIfAvailable(ctx context.Context, arg ClaimMerchantTakeoutSuspensionIfAvailableParams) (int64, error)
+	ClaimPaymentDomainOutbox(ctx context.Context, arg ClaimPaymentDomainOutboxParams) (PaymentDomainOutbox, error)
+	ClaimPendingProfitSharingReceiverTargets(ctx context.Context, arg ClaimPendingProfitSharingReceiverTargetsParams) ([]ClaimPendingProfitSharingReceiverTargetsRow, error)
+	ClaimProfitSharingReceiverTarget(ctx context.Context, arg ClaimProfitSharingReceiverTargetParams) (ProfitSharingReceiverTarget, error)
 	ClaimRiderSuspensionIfAvailable(ctx context.Context, arg ClaimRiderSuspensionIfAvailableParams) (int64, error)
 	// P1-026: 清理长期未更新的购物车及其商品（ON DELETE CASCADE）
 	CleanupOldCarts(ctx context.Context, updatedAt time.Time) error
@@ -214,6 +218,8 @@ type Querier interface {
 	CountPendingPrintLogs(ctx context.Context, printerID int64) (int64, error)
 	CountPendingRegionApplications(ctx context.Context) (int64, error)
 	CountPlatformAlertEvents(ctx context.Context) (int64, error)
+	CountProfitSharingReceiverAttemptsByTarget(ctx context.Context, targetID int64) (int64, error)
+	CountProfitSharingReceiverTargets(ctx context.Context, arg CountProfitSharingReceiverTargetsParams) (int64, error)
 	CountProfitSharingReturnsByRefundOrder(ctx context.Context, refundOrderID int64) (int32, error)
 	CountProfitSharingReturnsByRefundOrderStatus(ctx context.Context, arg CountProfitSharingReturnsByRefundOrderStatusParams) (int32, error)
 	// 统计多个用户最近N天的索赔总数
@@ -352,6 +358,9 @@ type Querier interface {
 	CreateDishCustomizationGroup(ctx context.Context, arg CreateDishCustomizationGroupParams) (DishCustomizationGroup, error)
 	CreateDishCustomizationOption(ctx context.Context, arg CreateDishCustomizationOptionParams) (DishCustomizationOption, error)
 	CreateEcommerceApplyment(ctx context.Context, arg CreateEcommerceApplymentParams) (EcommerceApplyment, error)
+	CreateExternalPaymentCommand(ctx context.Context, arg CreateExternalPaymentCommandParams) (ExternalPaymentCommand, error)
+	CreateExternalPaymentFact(ctx context.Context, arg CreateExternalPaymentFactParams) (ExternalPaymentFact, error)
+	CreateExternalPaymentFactApplication(ctx context.Context, arg CreateExternalPaymentFactApplicationParams) (ExternalPaymentFactApplication, error)
 	// ==========================================
 	// food_safety_incidents（食品安全事件）
 	// ==========================================
@@ -422,6 +431,8 @@ type Querier interface {
 	CreateOrderDisplayConfig(ctx context.Context, arg CreateOrderDisplayConfigParams) (OrderDisplayConfig, error)
 	CreateOrderItem(ctx context.Context, arg CreateOrderItemParams) (OrderItem, error)
 	CreateOrderStatusLog(ctx context.Context, arg CreateOrderStatusLogParams) (OrderStatusLog, error)
+	CreatePaymentDomainOutbox(ctx context.Context, arg CreatePaymentDomainOutboxParams) (PaymentDomainOutbox, error)
+	CreatePaymentDomainOutboxOnce(ctx context.Context, arg CreatePaymentDomainOutboxOnceParams) (PaymentDomainOutbox, error)
 	CreatePaymentOrder(ctx context.Context, arg CreatePaymentOrderParams) (PaymentOrder, error)
 	CreatePeakHourConfig(ctx context.Context, arg CreatePeakHourConfigParams) (PeakHourConfig, error)
 	CreatePlatformAlertEvent(ctx context.Context, arg CreatePlatformAlertEventParams) (PlatformAlertEvent, error)
@@ -435,6 +446,7 @@ type Querier interface {
 	CreateProfitSharingOrder(ctx context.Context, arg CreateProfitSharingOrderParams) (ProfitSharingOrder, error)
 	// 简化版创建（不含骑手分账，用于堂食/自提订单）
 	CreateProfitSharingOrderSimple(ctx context.Context, arg CreateProfitSharingOrderSimpleParams) (ProfitSharingOrder, error)
+	CreateProfitSharingReceiverAttempt(ctx context.Context, arg CreateProfitSharingReceiverAttemptParams) (ProfitSharingReceiverAttempt, error)
 	CreateProfitSharingReturn(ctx context.Context, arg CreateProfitSharingReturnParams) (ProfitSharingReturn, error)
 	// Recharge Rules
 	CreateRechargeRule(ctx context.Context, arg CreateRechargeRuleParams) (RechargeRule, error)
@@ -715,6 +727,10 @@ type Querier interface {
 	GetEcommerceApplymentBySubject(ctx context.Context, arg GetEcommerceApplymentBySubjectParams) (EcommerceApplyment, error)
 	// 获取用户未购买过的热门菜品（探索推荐）
 	GetExploreDishes(ctx context.Context, arg GetExploreDishesParams) ([]GetExploreDishesRow, error)
+	GetExternalPaymentCommandByExternalObject(ctx context.Context, arg GetExternalPaymentCommandByExternalObjectParams) (ExternalPaymentCommand, error)
+	GetExternalPaymentFact(ctx context.Context, id int64) (ExternalPaymentFact, error)
+	GetExternalPaymentFactApplication(ctx context.Context, id int64) (ExternalPaymentFactApplication, error)
+	GetExternalPaymentFactByDedupeKey(ctx context.Context, dedupeKey string) (ExternalPaymentFact, error)
 	GetFoodSafetyCase(ctx context.Context, id int64) (FoodSafetyCase, error)
 	GetFoodSafetyCaseForUpdate(ctx context.Context, id int64) (FoodSafetyCase, error)
 	GetFoodSafetyIncident(ctx context.Context, id int64) (GetFoodSafetyIncidentRow, error)
@@ -930,6 +946,8 @@ type Querier interface {
 	GetProfitSharingOrderByOutOrderNo(ctx context.Context, outOrderNo string) (ProfitSharingOrder, error)
 	GetProfitSharingOrderByPaymentOrder(ctx context.Context, paymentOrderID int64) (ProfitSharingOrder, error)
 	GetProfitSharingOrderForUpdate(ctx context.Context, id int64) (ProfitSharingOrder, error)
+	GetProfitSharingReceiverTarget(ctx context.Context, id int64) (ProfitSharingReceiverTarget, error)
+	GetProfitSharingReceiverTargetByKey(ctx context.Context, arg GetProfitSharingReceiverTargetByKeyParams) (ProfitSharingReceiverTarget, error)
 	GetProfitSharingReconciliationSummary(ctx context.Context, arg GetProfitSharingReconciliationSummaryParams) ([]GetProfitSharingReconciliationSummaryRow, error)
 	GetProfitSharingReturn(ctx context.Context, id int64) (ProfitSharingReturn, error)
 	GetProfitSharingReturnByOutReturnNo(ctx context.Context, outReturnNo string) (ProfitSharingReturn, error)
@@ -1238,6 +1256,8 @@ type Querier interface {
 	ListExpiredRiderDepositCredits(ctx context.Context, arg ListExpiredRiderDepositCreditsParams) ([]RiderDepositCredit, error)
 	// 列出即将到期的运营商（用于提前通知续约）
 	ListExpiringOperators(ctx context.Context, dollar_1 int32) ([]ListExpiringOperatorsRow, error)
+	ListExternalPaymentFactApplicationsByFact(ctx context.Context, factID int64) ([]ExternalPaymentFactApplication, error)
+	ListExternalPaymentFactsByExternalObject(ctx context.Context, arg ListExternalPaymentFactsByExternalObjectParams) ([]ExternalPaymentFact, error)
 	ListFavoriteDishes(ctx context.Context, arg ListFavoriteDishesParams) ([]ListFavoriteDishesRow, error)
 	ListFavoriteMerchants(ctx context.Context, arg ListFavoriteMerchantsParams) ([]ListFavoriteMerchantsRow, error)
 	ListFoodSafetyCasesByRegion(ctx context.Context, arg ListFoodSafetyCasesByRegionParams) ([]FoodSafetyCase, error)
@@ -1370,13 +1390,15 @@ type Querier interface {
 	ListPendingDeliveriesBefore(ctx context.Context, arg ListPendingDeliveriesBeforeParams) ([]Delivery, error)
 	ListPendingDeliveriesBeforeWithoutAlert(ctx context.Context, arg ListPendingDeliveriesBeforeWithoutAlertParams) ([]Delivery, error)
 	ListPendingEcommerceApplyments(ctx context.Context, arg ListPendingEcommerceApplymentsParams) ([]EcommerceApplyment, error)
-	ListPendingMerchantCancelWithdrawApplications(ctx context.Context, limit int32) ([]MerchantCancelWithdrawApplication, error)
+	ListPendingMerchantCancelWithdrawApplications(ctx context.Context, arg ListPendingMerchantCancelWithdrawApplicationsParams) ([]MerchantCancelWithdrawApplication, error)
 	ListPendingOCRJobsByMediaAsset(ctx context.Context, mediaAssetID int64) ([]OcrJob, error)
 	// 列出申请（平台管理员用，包含 submitted/approved/rejected）
 	ListPendingOperatorApplications(ctx context.Context, arg ListPendingOperatorApplicationsParams) ([]ListPendingOperatorApplicationsRow, error)
 	// ==================== 订单超时清理 ====================
 	// 获取超时未支付的 pending 订单（创建时间早于指定时间）
 	ListPendingOrdersBefore(ctx context.Context, arg ListPendingOrdersBeforeParams) ([]Order, error)
+	ListPendingPaymentDomainOutbox(ctx context.Context, arg ListPendingPaymentDomainOutboxParams) ([]PaymentDomainOutbox, error)
+	ListPendingPaymentDomainOutboxByEventType(ctx context.Context, arg ListPendingPaymentDomainOutboxByEventTypeParams) ([]PaymentDomainOutbox, error)
 	// 管理后台：列出所有待审核的区域扩展申请
 	ListPendingRegionApplications(ctx context.Context, arg ListPendingRegionApplicationsParams) ([]ListPendingRegionApplicationsRow, error)
 	ListPendingReservationRefundOrdersForRecovery(ctx context.Context, arg ListPendingReservationRefundOrdersForRecoveryParams) ([]ListPendingReservationRefundOrdersForRecoveryRow, error)
@@ -1396,6 +1418,10 @@ type Querier interface {
 	ListProfitSharingOrdersByOperator(ctx context.Context, arg ListProfitSharingOrdersByOperatorParams) ([]ProfitSharingOrder, error)
 	ListProfitSharingOrdersByStatus(ctx context.Context, arg ListProfitSharingOrdersByStatusParams) ([]ProfitSharingOrder, error)
 	ListProfitSharingOrdersForRetry(ctx context.Context, arg ListProfitSharingOrdersForRetryParams) ([]ProfitSharingOrder, error)
+	ListProfitSharingReceiverAttemptsByTarget(ctx context.Context, targetID int64) ([]ProfitSharingReceiverAttempt, error)
+	ListProfitSharingReceiverAttemptsByTargetPaginated(ctx context.Context, arg ListProfitSharingReceiverAttemptsByTargetPaginatedParams) ([]ProfitSharingReceiverAttempt, error)
+	ListProfitSharingReceiverTargets(ctx context.Context, arg ListProfitSharingReceiverTargetsParams) ([]ProfitSharingReceiverTarget, error)
+	ListProfitSharingReceiverTargetsByOwner(ctx context.Context, arg ListProfitSharingReceiverTargetsByOwnerParams) ([]ProfitSharingReceiverTarget, error)
 	ListProfitSharingReturnsByRefundOrder(ctx context.Context, refundOrderID int64) ([]ProfitSharingReturn, error)
 	ListQueuedOnboardingReviewRuns(ctx context.Context, arg ListQueuedOnboardingReviewRunsParams) ([]OnboardingReviewRun, error)
 	ListRecentWeatherCoefficients(ctx context.Context, arg ListRecentWeatherCoefficientsParams) ([]WeatherCoefficient, error)
@@ -1422,6 +1448,9 @@ type Querier interface {
 	ListReservationsByTableAndDate(ctx context.Context, arg ListReservationsByTableAndDateParams) ([]TableReservation, error)
 	// 用户预订列表：只返回在线预订（source = 'online' 或 NULL），不包括商户代客创建的预订
 	ListReservationsByUserWithStatus(ctx context.Context, arg ListReservationsByUserWithStatusParams) ([]ListReservationsByUserWithStatusRow, error)
+	ListRetryableExternalPaymentFactApplications(ctx context.Context, arg ListRetryableExternalPaymentFactApplicationsParams) ([]ExternalPaymentFactApplication, error)
+	ListRetryableExternalPaymentFactApplicationsByTarget(ctx context.Context, arg ListRetryableExternalPaymentFactApplicationsByTargetParams) ([]ExternalPaymentFactApplication, error)
+	ListRetryableProfitSharingReceiverTargetsByOwnerType(ctx context.Context, arg ListRetryableProfitSharingReceiverTargetsByOwnerTypeParams) ([]ProfitSharingReceiverTarget, error)
 	ListReviewImages(ctx context.Context, reviewID int64) ([]ReviewImage, error)
 	ListReviewImagesByReviews(ctx context.Context, dollar_1 []int64) ([]ReviewImage, error)
 	ListReviewsByMerchant(ctx context.Context, arg ListReviewsByMerchantParams) ([]Review, error)
@@ -1509,12 +1538,22 @@ type Querier interface {
 	MarkCredentialLedgerResumed(ctx context.Context, arg MarkCredentialLedgerResumedParams) (CredentialLedger, error)
 	MarkCredentialLedgerSuspended(ctx context.Context, arg MarkCredentialLedgerSuspendedParams) (CredentialLedger, error)
 	MarkEcommerceApplymentSettlementVerifyFailedNotified(ctx context.Context, id int64) (EcommerceApplyment, error)
+	MarkExternalPaymentFactApplicationApplied(ctx context.Context, arg MarkExternalPaymentFactApplicationAppliedParams) (ExternalPaymentFactApplication, error)
+	MarkExternalPaymentFactApplicationFailed(ctx context.Context, arg MarkExternalPaymentFactApplicationFailedParams) (ExternalPaymentFactApplication, error)
 	MarkNotificationAsPushed(ctx context.Context, id int64) error
 	MarkNotificationAsRead(ctx context.Context, arg MarkNotificationAsReadParams) (Notification, error)
 	MarkOCRJobProcessing(ctx context.Context, arg MarkOCRJobProcessingParams) (OcrJob, error)
 	MarkOnboardingReviewRunProcessing(ctx context.Context, id int64) (OnboardingReviewRun, error)
 	MarkOperatorNotificationAsRead(ctx context.Context, arg MarkOperatorNotificationAsReadParams) (Notification, error)
 	MarkOrderReplaced(ctx context.Context, arg MarkOrderReplacedParams) (Order, error)
+	MarkPaymentDomainOutboxFailed(ctx context.Context, arg MarkPaymentDomainOutboxFailedParams) (PaymentDomainOutbox, error)
+	MarkPaymentDomainOutboxPublished(ctx context.Context, id int64) (PaymentDomainOutbox, error)
+	MarkProfitSharingReceiverAttemptFailed(ctx context.Context, arg MarkProfitSharingReceiverAttemptFailedParams) (ProfitSharingReceiverAttempt, error)
+	MarkProfitSharingReceiverAttemptSkipped(ctx context.Context, arg MarkProfitSharingReceiverAttemptSkippedParams) (ProfitSharingReceiverAttempt, error)
+	MarkProfitSharingReceiverAttemptSucceeded(ctx context.Context, arg MarkProfitSharingReceiverAttemptSucceededParams) (ProfitSharingReceiverAttempt, error)
+	MarkProfitSharingReceiverTargetFailed(ctx context.Context, arg MarkProfitSharingReceiverTargetFailedParams) (ProfitSharingReceiverTarget, error)
+	MarkProfitSharingReceiverTargetSkipped(ctx context.Context, arg MarkProfitSharingReceiverTargetSkippedParams) (ProfitSharingReceiverTarget, error)
+	MarkProfitSharingReceiverTargetSynced(ctx context.Context, arg MarkProfitSharingReceiverTargetSyncedParams) (ProfitSharingReceiverTarget, error)
 	MarkRecoveryDisputeCompensated(ctx context.Context, arg MarkRecoveryDisputeCompensatedParams) error
 	MarkRiderDepositCreditExpired(ctx context.Context, arg MarkRiderDepositCreditExpiredParams) (RiderDepositCredit, error)
 	MarkUserVoucherAsExpiredOnRollback(ctx context.Context, arg MarkUserVoucherAsExpiredOnRollbackParams) (UserVoucher, error)
@@ -1690,6 +1729,7 @@ type Querier interface {
 	UpdateEcommerceApplymentStatus(ctx context.Context, arg UpdateEcommerceApplymentStatusParams) (EcommerceApplyment, error)
 	UpdateEcommerceApplymentSubMchID(ctx context.Context, arg UpdateEcommerceApplymentSubMchIDParams) (EcommerceApplyment, error)
 	UpdateEcommerceApplymentToSubmitted(ctx context.Context, arg UpdateEcommerceApplymentToSubmittedParams) (EcommerceApplyment, error)
+	UpdateExternalPaymentFactProcessingStatus(ctx context.Context, arg UpdateExternalPaymentFactProcessingStatusParams) (ExternalPaymentFact, error)
 	UpdateFoodSafetyCaseInvestigation(ctx context.Context, arg UpdateFoodSafetyCaseInvestigationParams) (FoodSafetyCase, error)
 	UpdateFoodSafetyIncidentStatus(ctx context.Context, arg UpdateFoodSafetyIncidentStatusParams) error
 	UpdateFraudPatternReview(ctx context.Context, arg UpdateFraudPatternReviewParams) error
@@ -1864,6 +1904,7 @@ type Querier interface {
 	UpsertOCRJob(ctx context.Context, arg UpsertOCRJobParams) (OcrJob, error)
 	UpsertOrderDisplayConfig(ctx context.Context, arg UpsertOrderDisplayConfigParams) (OrderDisplayConfig, error)
 	UpsertPlatformConfig(ctx context.Context, arg UpsertPlatformConfigParams) (PlatformConfig, error)
+	UpsertProfitSharingReceiverTarget(ctx context.Context, arg UpsertProfitSharingReceiverTargetParams) (ProfitSharingReceiverTarget, error)
 	UpsertRegionExternalMapping(ctx context.Context, arg UpsertRegionExternalMappingParams) (RegionExternalMapping, error)
 	UpsertRegionRuleConfig(ctx context.Context, arg UpsertRegionRuleConfigParams) (RegionRuleConfig, error)
 	UpsertReservationInventory(ctx context.Context, arg UpsertReservationInventoryParams) (ReservationInventory, error)

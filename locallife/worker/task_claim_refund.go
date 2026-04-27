@@ -11,6 +11,7 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/wechat"
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	"github.com/rs/zerolog/log"
@@ -159,7 +160,8 @@ func ExecuteClaimPayoutAction(ctx context.Context, store db.Store, distributor T
 	defer cancel()
 
 	transferResp, err := transferClient.CreateTransfer(transferCtx, transferReq)
-	if err != nil && !isDuplicateClaimTransferError(err) {
+	duplicateTransfer := isDuplicateClaimTransferError(err)
+	if err != nil && !duplicateTransfer {
 		detail.LastError = err.Error()
 		detail.TerminalFailure = false
 		_ = markClaimPayoutActionFailure(ctx, store, action.ID, detail, false)
@@ -167,6 +169,9 @@ func ExecuteClaimPayoutAction(ctx context.Context, store db.Store, distributor T
 	}
 	if transferResp != nil {
 		applyTransferCreateResponse(&detail, transferResp)
+		recordClaimPayoutTransferCommandAccepted(ctx, store, action.ID, detail, false)
+	} else if duplicateTransfer {
+		recordClaimPayoutTransferCommandAccepted(ctx, store, action.ID, detail, true)
 	}
 
 	resolved, err := reconcileClaimPayoutTransfer(ctx, store, distributor, transferClient, action.ID, &detail)
@@ -177,6 +182,71 @@ func ExecuteClaimPayoutAction(ctx context.Context, store db.Store, distributor T
 		return nil
 	}
 	return nil
+}
+
+func recordClaimPayoutTransferCommandAccepted(ctx context.Context, store db.Store, actionID int64, detail claimPayoutActionDetail, duplicate bool) {
+	businessObjectType := "behavior_action"
+	businessObjectID := actionID
+	secondaryKey := claimPayoutTransferStringPtrIfNotEmpty(detail.TransferBillNo)
+	if _, err := logic.NewPaymentCommandService(store).RecordExternalPaymentCommand(ctx, logic.RecordExternalPaymentCommandInput{
+		Provider:             db.ExternalPaymentProviderWechat,
+		Channel:              db.PaymentChannelDirect,
+		Capability:           db.ExternalPaymentCapabilityMerchantTransfer,
+		CommandType:          db.ExternalPaymentCommandTypeCreateTransfer,
+		BusinessOwner:        db.ExternalPaymentBusinessOwnerClaimRecovery,
+		BusinessObjectType:   &businessObjectType,
+		BusinessObjectID:     &businessObjectID,
+		ExternalObjectType:   db.ExternalPaymentObjectMerchantTransfer,
+		ExternalObjectKey:    strings.TrimSpace(detail.OutBillNo),
+		ExternalSecondaryKey: secondaryKey,
+		CommandStatus:        db.ExternalPaymentCommandStatusAccepted,
+		ResponseSnapshot: claimPayoutTransferCommandSnapshot(map[string]string{
+			"out_bill_no":        strings.TrimSpace(detail.OutBillNo),
+			"transfer_bill_no":   strings.TrimSpace(detail.TransferBillNo),
+			"state":              strings.TrimSpace(detail.TransferState),
+			"duplicate":          claimPayoutTransferBoolString(duplicate),
+			"has_package_info":   claimPayoutTransferBoolString(strings.TrimSpace(detail.PackageInfo) != ""),
+			"transfer_create_at": strings.TrimSpace(detail.TransferCreateAt),
+		}),
+	}); err != nil {
+		log.Warn().Err(err).
+			Int64("behavior_action_id", actionID).
+			Str("out_bill_no", strings.TrimSpace(detail.OutBillNo)).
+			Msg("record claim payout transfer command accepted failed")
+	}
+}
+
+func claimPayoutTransferCommandSnapshot(values map[string]string) []byte {
+	filtered := make(map[string]string, len(values))
+	for key, value := range values {
+		trimmedValue := strings.TrimSpace(value)
+		if trimmedValue != "" {
+			filtered[key] = trimmedValue
+		}
+	}
+	if len(filtered) == 0 {
+		return []byte(`{}`)
+	}
+	data, err := json.Marshal(filtered)
+	if err != nil {
+		return []byte(`{}`)
+	}
+	return data
+}
+
+func claimPayoutTransferStringPtrIfNotEmpty(value string) *string {
+	trimmedValue := strings.TrimSpace(value)
+	if trimmedValue == "" {
+		return nil
+	}
+	return &trimmedValue
+}
+
+func claimPayoutTransferBoolString(value bool) string {
+	if value {
+		return "true"
+	}
+	return "false"
 }
 
 // HandleClaimPayoutTransferNotification 根据商家转账终态通知推进平台赔付动作。

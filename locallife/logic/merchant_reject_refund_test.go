@@ -93,6 +93,7 @@ func TestProcessMerchantRejectRefund_ProfitSharing_EcommerceSuccess(t *testing.T
 	ecommerceClient := wechatmock.NewMockEcommerceClientInterface(ctrl)
 
 	paymentOrder := db.PaymentOrder{ID: 10, Status: "paid", OutTradeNo: "combine_1", Amount: 2000, PaymentType: "profit_sharing", PaymentChannel: db.PaymentChannelEcommerce}
+	capturedOutRefundNo := ""
 
 	store.EXPECT().
 		GetLatestPaymentOrderByOrder(gomock.Any(), gomock.Any()).
@@ -103,6 +104,8 @@ func TestProcessMerchantRejectRefund_ProfitSharing_EcommerceSuccess(t *testing.T
 		Times(1).
 		DoAndReturn(func(_ context.Context, arg db.CreateRefundOrderTxParams) (db.CreateRefundOrderTxResult, error) {
 			require.Equal(t, int64(2000), arg.RefundAmount)
+			require.NotEmpty(t, arg.OutRefundNo)
+			capturedOutRefundNo = arg.OutRefundNo
 			return db.CreateRefundOrderTxResult{RefundOrder: db.RefundOrder{ID: 200}}, nil
 		})
 	store.EXPECT().
@@ -125,6 +128,7 @@ func TestProcessMerchantRejectRefund_ProfitSharing_EcommerceSuccess(t *testing.T
 		}).
 		Times(1).
 		Return(db.RefundOrder{}, nil)
+	expectMerchantRejectRefundAcceptedCommand(t, store, 200, &capturedOutRefundNo, "erefund_1", 9201)
 
 	result, err := ProcessMerchantRejectRefund(
 		context.Background(),
@@ -145,6 +149,7 @@ func TestProcessMerchantRejectRefund_ProfitSharing_EcommerceProcessing(t *testin
 	ecommerceClient := wechatmock.NewMockEcommerceClientInterface(ctrl)
 
 	paymentOrder := db.PaymentOrder{ID: 11, Status: "paid", OutTradeNo: "combine_2", Amount: 900, PaymentType: "profit_sharing", PaymentChannel: db.PaymentChannelEcommerce}
+	capturedOutRefundNo := ""
 
 	store.EXPECT().
 		GetLatestPaymentOrderByOrder(gomock.Any(), gomock.Any()).
@@ -153,7 +158,11 @@ func TestProcessMerchantRejectRefund_ProfitSharing_EcommerceProcessing(t *testin
 	store.EXPECT().
 		CreateRefundOrderTx(gomock.Any(), gomock.Any()).
 		Times(1).
-		Return(db.CreateRefundOrderTxResult{RefundOrder: db.RefundOrder{ID: 201}}, nil)
+		DoAndReturn(func(_ context.Context, arg db.CreateRefundOrderTxParams) (db.CreateRefundOrderTxResult, error) {
+			require.NotEmpty(t, arg.OutRefundNo)
+			capturedOutRefundNo = arg.OutRefundNo
+			return db.CreateRefundOrderTxResult{RefundOrder: db.RefundOrder{ID: 201}}, nil
+		})
 	store.EXPECT().
 		GetMerchantPaymentConfig(gomock.Any(), int64(7)).
 		Times(1).
@@ -169,6 +178,7 @@ func TestProcessMerchantRejectRefund_ProfitSharing_EcommerceProcessing(t *testin
 		}).
 		Times(1).
 		Return(db.RefundOrder{}, nil)
+	expectMerchantRejectRefundAcceptedCommand(t, store, 201, &capturedOutRefundNo, "erefund_2", 9202)
 
 	_, err := ProcessMerchantRejectRefund(
 		context.Background(),
@@ -246,4 +256,34 @@ func TestProcessMerchantRejectRefund_ProfitSharing_NoPaymentConfig(t *testing.T)
 	)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "get merchant payment config")
+}
+
+func expectMerchantRejectRefundAcceptedCommand(t *testing.T, store *mockdb.MockStore, refundOrderID int64, outRefundNo *string, refundID string, commandID int64) {
+	t.Helper()
+
+	store.EXPECT().
+		CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).
+		Times(1).
+		DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {
+			require.Equal(t, db.ExternalPaymentProviderWechat, arg.Provider)
+			require.Equal(t, db.PaymentChannelEcommerce, arg.Channel)
+			require.Equal(t, db.ExternalPaymentCapabilityEcommerceRefund, arg.Capability)
+			require.Equal(t, db.ExternalPaymentCommandTypeCreateRefund, arg.CommandType)
+			require.Equal(t, db.ExternalPaymentBusinessOwnerOrder, arg.BusinessOwner)
+			require.True(t, arg.BusinessObjectType.Valid)
+			require.Equal(t, "refund_order", arg.BusinessObjectType.String)
+			require.True(t, arg.BusinessObjectID.Valid)
+			require.Equal(t, refundOrderID, arg.BusinessObjectID.Int64)
+			require.Equal(t, db.ExternalPaymentObjectRefund, arg.ExternalObjectType)
+			require.NotNil(t, outRefundNo)
+			require.NotEmpty(t, *outRefundNo)
+			require.Equal(t, *outRefundNo, arg.ExternalObjectKey)
+			require.True(t, arg.ExternalSecondaryKey.Valid)
+			require.Equal(t, refundID, arg.ExternalSecondaryKey.String)
+			require.Equal(t, db.ExternalPaymentCommandStatusAccepted, arg.CommandStatus)
+			require.Contains(t, string(arg.ResponseSnapshot), *outRefundNo)
+			require.Contains(t, string(arg.ResponseSnapshot), refundID)
+			require.NotContains(t, string(arg.ResponseSnapshot), "paySign")
+			return db.ExternalPaymentCommand{ID: commandID}, nil
+		})
 }

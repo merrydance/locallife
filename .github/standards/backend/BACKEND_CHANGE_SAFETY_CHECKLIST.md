@@ -15,6 +15,7 @@
 - 对象归属、权限和角色边界是否由服务端可信上下文验证，而不是依赖客户端字段？
 - 关键唯一性、互斥性或状态前置条件是否落在事务/数据库边界，而不是只在 handler 或普通 logic 前置检查？
 - 这次改动会不会造成“本地记录成功、外部副作用失败”或相反方向的半成功状态？
+- 如果改动涉及 `Idempotency-Key`、`idempotency_key`、`out_*_no`、callback notification id、worker/scheduler 重复执行或自然去重查询，是否已按 `.github/standards/backend/IDEMPOTENCY_STANDARDS.md` 分类，并说明为什么接入或不接入 request-level guard？
 
 ## 3. Cross-Layer Completeness
 

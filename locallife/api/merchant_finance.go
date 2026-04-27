@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -15,6 +16,7 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/websocket"
 	"github.com/merrydance/locallife/wechat"
@@ -1160,6 +1162,34 @@ func (server *Server) persistWithdrawalRecordStatus(ctx *gin.Context, record db.
 	return updated, nil
 }
 
+func (server *Server) syncMerchantWithdrawFactFromQuery(ctx *gin.Context, record db.WithdrawalRecord, accountInfo merchantWithdrawAccountInfo, resp *wechat.EcommerceWithdrawResponse) db.WithdrawalRecord {
+	application, err := server.recordMerchantWithdrawQueryFact(ctx, record, accountInfo, resp)
+	if err != nil {
+		log.Error().Err(err).
+			Str("request_id", GetRequestID(ctx)).
+			Int64("withdrawal_record_id", record.ID).
+			Str("sub_mchid", accountInfo.SubMchID).
+			Str("out_request_no", accountInfo.OutRequestNo).
+			Msg("record merchant withdraw query fact failed")
+		return record
+	}
+
+	updatedRecord, applied, err := server.applyMerchantWithdrawFactApplication(ctx, application)
+	if err != nil {
+		log.Error().Err(err).
+			Str("request_id", GetRequestID(ctx)).
+			Int64("withdrawal_record_id", record.ID).
+			Str("sub_mchid", accountInfo.SubMchID).
+			Str("out_request_no", accountInfo.OutRequestNo).
+			Msg("apply merchant withdraw query fact failed")
+		return record
+	}
+	if applied {
+		return updatedRecord
+	}
+	return record
+}
+
 func (server *Server) updateWithdrawalRecordAccountInfo(ctx *gin.Context, record db.WithdrawalRecord, accountInfo []byte) db.WithdrawalRecord {
 	updated, err := server.persistWithdrawalRecordAccountInfo(ctx, record, accountInfo)
 	if err == nil {
@@ -1455,7 +1485,7 @@ func (server *Server) createMerchantAccountWithdraw(ctx *gin.Context) {
 	var (
 		wechatPayload interface{}
 		withdrawID    string
-		status        = "pending"
+		wechatStatus  string
 		reason        string
 	)
 	if err != nil {
@@ -1474,6 +1504,7 @@ func (server *Server) createMerchantAccountWithdraw(ctx *gin.Context) {
 				Msg("merchant withdraw submitted but wechat confirmation is pending")
 			record = server.updateWithdrawalRecordStatus(ctx, record, "pending", "withdraw request submitted, awaiting wechat confirmation")
 			server.enqueueWithdrawalResultPolling(ctx, record)
+			recordMerchantWithdrawCommandUnknown(ctx, server.store, record, paymentConfig.SubMchID, err, queryErr)
 			ctx.JSON(http.StatusAccepted, merchantWithdrawCreateResponse{
 				Withdrawal: withMerchantWithdrawSyncState(
 					toMerchantWithdrawItem(record),
@@ -1485,7 +1516,7 @@ func (server *Server) createMerchantAccountWithdraw(ctx *gin.Context) {
 			return
 		}
 		withdrawID = queryResp.WithdrawID
-		status = mapWechatWithdrawStatus(queryResp.Status)
+		wechatStatus = queryResp.Status
 		reason = queryResp.Reason
 		wechatPayload = queryResp
 	} else {
@@ -1501,14 +1532,136 @@ func (server *Server) createMerchantAccountWithdraw(ctx *gin.Context) {
 		Remark:       req.Remark,
 	})
 	record = server.updateWithdrawalRecordAccountInfo(ctx, record, accountInfoBytes)
-
-	record = server.updateWithdrawalRecordStatus(ctx, record, status, reason)
+	if wechatStatus != "" {
+		record = server.syncMerchantWithdrawFactFromQuery(ctx, record, parseMerchantWithdrawAccountInfo(record.AccountInfo), &wechat.EcommerceWithdrawResponse{
+			SubMchID:     paymentConfig.SubMchID,
+			OutRequestNo: outRequestNo,
+			WithdrawID:   withdrawID,
+			Status:       wechatStatus,
+			Reason:       reason,
+			Amount:       req.Amount,
+		})
+	}
 	server.enqueueWithdrawalResultPolling(ctx, record)
+	recordMerchantWithdrawCommandAccepted(ctx, server.store, record, paymentConfig.SubMchID, withdrawID, wechatStatus)
 
 	ctx.JSON(http.StatusCreated, merchantWithdrawCreateResponse{
 		Withdrawal: toMerchantWithdrawItem(record),
 		Wechat:     wechatPayload,
 	})
+}
+
+func recordMerchantWithdrawCommandAccepted(ctx context.Context, store db.Store, record db.WithdrawalRecord, subMchID, withdrawID, wechatStatus string) {
+	paymentCommandSvc := logic.NewPaymentCommandService(store)
+	var secondaryKey *string
+	if strings.TrimSpace(withdrawID) != "" {
+		secondaryKey = stringPtrIfNotEmpty(strings.TrimSpace(withdrawID))
+	}
+	if _, err := paymentCommandSvc.RecordExternalPaymentCommand(ctx, dbMerchantWithdrawCommandInput(
+		record,
+		db.ExternalPaymentCommandStatusAccepted,
+		secondaryKey,
+		nil,
+		nil,
+		merchantWithdrawCommandSnapshot(map[string]string{
+			"out_request_no": strings.TrimSpace(record.OutRequestNo.String),
+			"sub_mchid":      strings.TrimSpace(subMchID),
+			"withdraw_id":    strings.TrimSpace(withdrawID),
+			"wechat_status":  strings.TrimSpace(wechatStatus),
+		}),
+	)); err != nil {
+		log.Warn().Err(err).
+			Int64("withdrawal_record_id", record.ID).
+			Str("out_request_no", strings.TrimSpace(record.OutRequestNo.String)).
+			Msg("record merchant withdraw command accepted failed")
+	}
+}
+
+func recordMerchantWithdrawCommandUnknown(ctx context.Context, store db.Store, record db.WithdrawalRecord, subMchID string, createErr, queryErr error) {
+	paymentCommandSvc := logic.NewPaymentCommandService(store)
+	lastErrorCode, lastErrorMessage := ecommerceWithdrawCommandErrorFields(createErr)
+	if _, err := paymentCommandSvc.RecordExternalPaymentCommand(ctx, dbMerchantWithdrawCommandInput(
+		record,
+		db.ExternalPaymentCommandStatusUnknown,
+		nil,
+		lastErrorCode,
+		lastErrorMessage,
+		merchantWithdrawCommandSnapshot(map[string]string{
+			"out_request_no":      strings.TrimSpace(record.OutRequestNo.String),
+			"sub_mchid":           strings.TrimSpace(subMchID),
+			"error_code":          stringValue(lastErrorCode),
+			"error_message":       stringValue(lastErrorMessage),
+			"query_error_message": strings.TrimSpace(merchantWithdrawErrorString(queryErr)),
+		}),
+	)); err != nil {
+		log.Warn().Err(err).
+			Int64("withdrawal_record_id", record.ID).
+			Str("out_request_no", strings.TrimSpace(record.OutRequestNo.String)).
+			Msg("record merchant withdraw command unknown failed")
+	}
+}
+
+func dbMerchantWithdrawCommandInput(
+	record db.WithdrawalRecord,
+	commandStatus string,
+	externalSecondaryKey *string,
+	lastErrorCode *string,
+	lastErrorMessage *string,
+	responseSnapshot []byte,
+) logic.RecordExternalPaymentCommandInput {
+	businessObjectType := "withdrawal_record"
+	businessObjectID := record.ID
+	return logic.RecordExternalPaymentCommandInput{
+		Provider:             db.ExternalPaymentProviderWechat,
+		Channel:              db.PaymentChannelEcommerce,
+		Capability:           db.ExternalPaymentCapabilityWithdraw,
+		CommandType:          db.ExternalPaymentCommandTypeCreateWithdraw,
+		BusinessOwner:        db.ExternalPaymentBusinessOwnerMerchantFunds,
+		BusinessObjectType:   &businessObjectType,
+		BusinessObjectID:     &businessObjectID,
+		ExternalObjectType:   db.ExternalPaymentObjectWithdraw,
+		ExternalObjectKey:    strings.TrimSpace(record.OutRequestNo.String),
+		ExternalSecondaryKey: externalSecondaryKey,
+		CommandStatus:        commandStatus,
+		LastErrorCode:        lastErrorCode,
+		LastErrorMessage:     lastErrorMessage,
+		ResponseSnapshot:     responseSnapshot,
+	}
+}
+
+func ecommerceWithdrawCommandErrorFields(err error) (*string, *string) {
+	if err == nil {
+		return nil, nil
+	}
+	var wxErr *wechat.WechatPayError
+	if errors.As(err, &wxErr) {
+		return stringPtrIfNotEmpty(strings.TrimSpace(wxErr.Code)), stringPtrIfNotEmpty(strings.TrimSpace(wxErr.Message))
+	}
+	return nil, stringPtrIfNotEmpty(strings.TrimSpace(err.Error()))
+}
+
+func merchantWithdrawCommandSnapshot(values map[string]string) []byte {
+	filtered := make(map[string]string, len(values))
+	for key, value := range values {
+		if strings.TrimSpace(value) != "" {
+			filtered[key] = strings.TrimSpace(value)
+		}
+	}
+	if len(filtered) == 0 {
+		return []byte(`{}`)
+	}
+	data, err := json.Marshal(filtered)
+	if err != nil {
+		return []byte(`{}`)
+	}
+	return data
+}
+
+func merchantWithdrawErrorString(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
 }
 
 // listMerchantAccountWithdrawals 查询商户提现记录
@@ -1644,20 +1797,14 @@ func (server *Server) getMerchantAccountWithdrawal(ctx *gin.Context) {
 	if info.SubMchID != "" && info.OutRequestNo != "" {
 		wxResp, queryErr := server.ecommerceClient.QueryEcommerceWithdrawByOutRequestNo(ctx, info.SubMchID, info.OutRequestNo)
 		if queryErr == nil {
-			newStatus := mapWechatWithdrawStatus(wxResp.Status)
-			reasonText := ""
-			if wxResp.Reason != "" {
-				reasonText = wxResp.Reason
-			}
-
-			record = server.updateWithdrawalRecordStatus(ctx, record, newStatus, reasonText)
-
 			if wxResp.WithdrawID != "" && wxResp.WithdrawID != info.WithdrawID {
 				info.WithdrawID = wxResp.WithdrawID
 				if raw, marshalErr := json.Marshal(info); marshalErr == nil {
 					record = server.updateWithdrawalRecordAccountInfo(ctx, record, raw)
+					info = parseMerchantWithdrawAccountInfo(record.AccountInfo)
 				}
 			}
+			record = server.syncMerchantWithdrawFactFromQuery(ctx, record, info, wxResp)
 			response = toMerchantWithdrawItem(record)
 		} else {
 			_ = ctx.Error(queryErr)

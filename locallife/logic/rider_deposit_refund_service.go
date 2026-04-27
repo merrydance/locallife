@@ -2,6 +2,7 @@ package logic
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -28,12 +29,14 @@ const (
 	riderDepositRefundStatusFailed       = "FAILED"
 	riderDepositRefundStatusAbnormal     = "ABNORMAL"
 	riderDepositRefundStatusClosed       = "CLOSED"
+	riderDepositRefundOrderObjectType    = "refund_order"
 )
 
 type RiderDepositRefundService struct {
-	store         db.Store
-	paymentClient wechat.DirectPaymentClientInterface
-	receiverSync  *ProfitSharingReceiverSyncService
+	store             db.Store
+	paymentClient     wechat.DirectPaymentClientInterface
+	paymentCommandSvc *PaymentCommandService
+	receiverLifecycle *ProfitSharingReceiverLifecycleService
 }
 
 type SubmitRiderDepositWithdrawalInput struct {
@@ -60,15 +63,16 @@ func NewRiderDepositRefundService(
 	paymentClient wechat.DirectPaymentClientInterface,
 	ecommerceClients ...wechat.EcommerceClientInterface,
 ) *RiderDepositRefundService {
-	var receiverSync *ProfitSharingReceiverSyncService
+	var receiverLifecycle *ProfitSharingReceiverLifecycleService
 	if len(ecommerceClients) > 0 && ecommerceClients[0] != nil {
-		receiverSync = NewProfitSharingReceiverService(store, ecommerceClients[0])
+		receiverLifecycle = NewProfitSharingReceiverLifecycleService(store, ecommerceClients[0])
 	}
 
 	return &RiderDepositRefundService{
-		store:         store,
-		paymentClient: paymentClient,
-		receiverSync:  receiverSync,
+		store:             store,
+		paymentClient:     paymentClient,
+		paymentCommandSvc: NewPaymentCommandService(store),
+		receiverLifecycle: receiverLifecycle,
 	}
 }
 
@@ -146,6 +150,7 @@ func (s *RiderDepositRefundService) SubmitWithdrawal(ctx context.Context, input 
 				if resolveErr != nil {
 					return result, fmt.Errorf("reconcile already refunded rider deposit credit: %w; original error: %v", resolveErr, LoggableError(refundErr))
 				}
+				s.recordRiderDepositRefundCommandRejected(ctx, plan, refundErr)
 
 				result.AcceptedAmount += plan.RefundOrder.RefundAmount
 				result.Refunds = append(result.Refunds, RiderDepositWithdrawalRefundItem{
@@ -162,6 +167,7 @@ func (s *RiderDepositRefundService) SubmitWithdrawal(ctx context.Context, input 
 			if resolveErr != nil {
 				return result, fmt.Errorf("request rider deposit refund failed: %w; compensation failed: %v", LoggableError(refundErr), resolveErr)
 			}
+			s.recordRiderDepositRefundCommandRejected(ctx, plan, refundErr)
 			if firstRefundSubmissionErr == nil {
 				firstRefundSubmissionErr = mapDirectRefundCreateError(refundErr)
 			}
@@ -172,28 +178,29 @@ func (s *RiderDepositRefundService) SubmitWithdrawal(ctx context.Context, input 
 		itemStatus := riderDepositWithdrawStatusProcessing
 		switch wxRefund.Status {
 		case wechatcontracts.DirectRefundStatusSuccess:
-			err = s.ResolveRefund(ctx, plan.RefundOrder.ID, plan.SourcePaymentOrder, riderDepositRefundStatusSuccess, wxRefund.RefundID)
+			err = s.MarkRefundProcessing(ctx, plan.RefundOrder.ID, wxRefund.RefundID)
 			if err != nil {
-				return result, fmt.Errorf("settle rider refund success: %w", err)
+				return result, fmt.Errorf("mark rider refund accepted: %w", err)
 			}
-			itemStatus = riderDepositWithdrawStatusSuccess
+			s.recordRiderDepositRefundCommandAccepted(ctx, plan, wxRefund)
 		case wechatcontracts.DirectRefundStatusProcessing:
 			err = s.MarkRefundProcessing(ctx, plan.RefundOrder.ID, wxRefund.RefundID)
 			if err != nil {
 				return result, fmt.Errorf("mark rider refund processing: %w", err)
 			}
+			s.recordRiderDepositRefundCommandAccepted(ctx, plan, wxRefund)
 		case wechatcontracts.DirectRefundStatusClosed:
-			err = s.ResolveRefund(ctx, plan.RefundOrder.ID, plan.SourcePaymentOrder, riderDepositRefundStatusClosed, wxRefund.RefundID)
+			err = s.MarkRefundProcessing(ctx, plan.RefundOrder.ID, wxRefund.RefundID)
 			if err != nil {
-				return result, fmt.Errorf("close rider refund: %w", err)
+				return result, fmt.Errorf("mark rider refund closed response accepted: %w", err)
 			}
-			continue
+			s.recordRiderDepositRefundCommandAccepted(ctx, plan, wxRefund)
 		case wechatcontracts.DirectRefundStatusAbnormal:
-			err = s.ResolveRefund(ctx, plan.RefundOrder.ID, plan.SourcePaymentOrder, riderDepositRefundStatusAbnormal, wxRefund.RefundID)
+			err = s.MarkRefundProcessing(ctx, plan.RefundOrder.ID, wxRefund.RefundID)
 			if err != nil {
-				return result, fmt.Errorf("fail rider refund: %w", err)
+				return result, fmt.Errorf("mark rider refund abnormal response accepted: %w", err)
 			}
-			continue
+			s.recordRiderDepositRefundCommandAccepted(ctx, plan, wxRefund)
 		default:
 			return result, fmt.Errorf("unexpected rider refund status: %s", wxRefund.Status)
 		}
@@ -254,9 +261,7 @@ func (s *RiderDepositRefundService) resolveRefund(ctx context.Context, refundOrd
 		} else {
 			s.maybeMarkPaymentOrderRefunded(ctx, paymentOrder.ID, paymentOrder.Amount)
 		}
-		if err := s.maybeDeleteRiderReceiver(ctx, paymentOrder.UserID); err != nil {
-			return err
-		}
+		s.maybeRequestRiderReceiverAbsent(ctx, paymentOrder.UserID)
 	}
 
 	return nil
@@ -273,28 +278,139 @@ func (s *RiderDepositRefundService) MarkRefundProcessing(ctx context.Context, re
 	return nil
 }
 
+func (s *RiderDepositRefundService) recordRiderDepositRefundCommandAccepted(ctx context.Context, plan db.RiderDepositRefundPlan, wxRefund *wechatcontracts.DirectRefundResponse) {
+	if s.paymentCommandSvc == nil || wxRefund == nil {
+		return
+	}
+
+	refundID := wxRefund.RefundID
+	_, err := s.paymentCommandSvc.RecordExternalPaymentCommand(ctx, dbRiderDepositRefundCommandInput(plan, db.ExternalPaymentCommandStatusAccepted, &refundID, nil, nil, riderDepositRefundCommandSnapshot(map[string]string{
+		"out_refund_no": plan.RefundOrder.OutRefundNo,
+		"refund_id":     wxRefund.RefundID,
+		"status":        wxRefund.Status,
+	})))
+	if err != nil {
+		log.Error().Err(err).
+			Int64("refund_order_id", plan.RefundOrder.ID).
+			Str("out_refund_no", plan.RefundOrder.OutRefundNo).
+			Msg("record rider deposit refund command accepted failed")
+	}
+}
+
+func (s *RiderDepositRefundService) recordRiderDepositRefundCommandRejected(ctx context.Context, plan db.RiderDepositRefundPlan, refundErr error) {
+	if s.paymentCommandSvc == nil {
+		return
+	}
+
+	errorCode, errorMessage := directRefundCommandErrorFields(refundErr)
+	_, err := s.paymentCommandSvc.RecordExternalPaymentCommand(ctx, dbRiderDepositRefundCommandInput(plan, db.ExternalPaymentCommandStatusRejected, nil, errorCode, errorMessage, riderDepositRefundCommandSnapshot(map[string]string{
+		"out_refund_no": plan.RefundOrder.OutRefundNo,
+		"error_code":    stringValue(errorCode),
+		"error_message": stringValue(errorMessage),
+	})))
+	if err != nil {
+		log.Error().Err(err).
+			Int64("refund_order_id", plan.RefundOrder.ID).
+			Str("out_refund_no", plan.RefundOrder.OutRefundNo).
+			Msg("record rider deposit refund command rejected failed")
+	}
+}
+
+func dbRiderDepositRefundCommandInput(
+	plan db.RiderDepositRefundPlan,
+	commandStatus string,
+	externalSecondaryKey *string,
+	lastErrorCode *string,
+	lastErrorMessage *string,
+	responseSnapshot []byte,
+) RecordExternalPaymentCommandInput {
+	businessObjectType := riderDepositRefundOrderObjectType
+	businessObjectID := plan.RefundOrder.ID
+	return RecordExternalPaymentCommandInput{
+		Provider:             db.ExternalPaymentProviderWechat,
+		Channel:              db.PaymentChannelDirect,
+		Capability:           db.ExternalPaymentCapabilityDirectRefund,
+		CommandType:          db.ExternalPaymentCommandTypeCreateRefund,
+		BusinessOwner:        db.ExternalPaymentBusinessOwnerRiderDeposit,
+		BusinessObjectType:   &businessObjectType,
+		BusinessObjectID:     &businessObjectID,
+		ExternalObjectType:   db.ExternalPaymentObjectRefund,
+		ExternalObjectKey:    plan.RefundOrder.OutRefundNo,
+		ExternalSecondaryKey: externalSecondaryKey,
+		CommandStatus:        commandStatus,
+		LastErrorCode:        lastErrorCode,
+		LastErrorMessage:     lastErrorMessage,
+		ResponseSnapshot:     responseSnapshot,
+	}
+}
+
+func directRefundCommandErrorFields(err error) (*string, *string) {
+	loggableErr := LoggableError(err)
+	var wxErr *wechat.WechatPayError
+	if errors.As(loggableErr, &wxErr) {
+		return stringPtrIfNotEmpty(wxErr.Code), stringPtrIfNotEmpty(wxErr.Message)
+	}
+	if loggableErr == nil {
+		return nil, nil
+	}
+	return nil, stringPtrIfNotEmpty(loggableErr.Error())
+}
+
+func riderDepositRefundCommandSnapshot(values map[string]string) []byte {
+	filtered := make(map[string]string, len(values))
+	for key, value := range values {
+		if value != "" {
+			filtered[key] = value
+		}
+	}
+	if len(filtered) == 0 {
+		return []byte(`{}`)
+	}
+	data, err := json.Marshal(filtered)
+	if err != nil {
+		return []byte(`{}`)
+	}
+	return data
+}
+
+func stringPtrIfNotEmpty(value string) *string {
+	if value == "" {
+		return nil
+	}
+	return &value
+}
+
+func stringValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
 func (s *RiderDepositRefundService) ResolveRefund(ctx context.Context, refundOrderID int64, paymentOrder db.PaymentOrder, refundStatus string, refundID string) error {
 	return s.resolveRefund(ctx, refundOrderID, paymentOrder, refundStatus, refundID, false)
 }
 
-func (s *RiderDepositRefundService) maybeDeleteRiderReceiver(ctx context.Context, userID int64) error {
-	if s.receiverSync == nil {
-		return nil
+func (s *RiderDepositRefundService) maybeRequestRiderReceiverAbsent(ctx context.Context, userID int64) {
+	if s.receiverLifecycle == nil {
+		return
 	}
 
 	rider, err := s.store.GetRiderByUserID(ctx, userID)
 	if err != nil {
-		return fmt.Errorf("get rider for receiver cleanup: %w", err)
+		log.Error().Err(err).Int64("user_id", userID).Msg("get rider for receiver absent target failed")
+		return
 	}
 	if rider.DepositAmount > 0 || rider.FrozenDeposit > 0 {
-		return nil
+		return
 	}
 
-	if err := s.receiverSync.DeleteRiderReceiver(ctx, rider); err != nil {
-		return fmt.Errorf("delete rider profit sharing receiver: %w", err)
+	if _, err := s.receiverLifecycle.RequestRiderReceiverAbsent(ctx, rider); err != nil {
+		log.Error().Err(err).
+			Int64("rider_id", rider.ID).
+			Int64("user_id", rider.UserID).
+			Msg("write rider profit sharing receiver absent target failed")
 	}
-
-	return nil
 }
 
 func (s *RiderDepositRefundService) maybeMarkPaymentOrderRefunded(ctx context.Context, paymentOrderID int64, paymentAmount int64) {

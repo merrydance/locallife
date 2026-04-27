@@ -189,15 +189,84 @@ func TestProcessTaskMerchantWithdrawResult_FailedPublishesAlert(t *testing.T) {
 		Status:       "FAIL",
 		Reason:       "balance not enough",
 	}, nil)
+	store.EXPECT().CreateExternalPaymentFact(gomock.Any(), gomock.AssignableToTypeOf(db.CreateExternalPaymentFactParams{})).DoAndReturn(
+		func(_ context.Context, arg db.CreateExternalPaymentFactParams) (db.ExternalPaymentFact, error) {
+			require.Equal(t, db.ExternalPaymentCapabilityWithdraw, arg.Capability)
+			require.Equal(t, db.ExternalPaymentFactSourceQuery, arg.FactSource)
+			require.Equal(t, db.ExternalPaymentObjectWithdraw, arg.ExternalObjectType)
+			require.Equal(t, "req-1", arg.ExternalObjectKey)
+			require.Equal(t, "wd-1", arg.ExternalSecondaryKey.String)
+			require.True(t, arg.ExternalSecondaryKey.Valid)
+			require.Equal(t, db.ExternalPaymentBusinessOwnerMerchantFunds, arg.BusinessOwner.String)
+			require.Equal(t, merchantWithdrawFactBusinessType, arg.BusinessObjectType.String)
+			require.Equal(t, record.ID, arg.BusinessObjectID.Int64)
+			require.Equal(t, "FAIL", arg.UpstreamState)
+			require.Equal(t, db.ExternalPaymentTerminalStatusFailed, arg.TerminalStatus)
+			require.Equal(t, record.Amount, arg.Amount.Int64)
+			require.Equal(t, "wechat:query:ecommerce:withdraw:req-1:FAIL:wd-1", arg.DedupeKey)
+			var payload map[string]any
+			require.NoError(t, json.Unmarshal(arg.RawResource, &payload))
+			require.EqualValues(t, record.ID, payload["withdrawal_record_id"])
+			require.Equal(t, "req-1", payload["out_request_no"])
+			require.Equal(t, "wd-1", payload["withdraw_id"])
+			require.Equal(t, "FAIL", payload["wechat_status"])
+			require.Equal(t, "balance not enough", payload["reason"])
+			return db.ExternalPaymentFact{ID: 8101, DedupeKey: arg.DedupeKey, IsTerminal: true, TerminalStatus: arg.TerminalStatus}, nil
+		},
+	)
+	store.EXPECT().CreateExternalPaymentFactApplication(gomock.Any(), db.CreateExternalPaymentFactApplicationParams{
+		FactID:             8101,
+		Consumer:           merchantWithdrawFactConsumerDomain,
+		BusinessObjectType: merchantWithdrawFactBusinessType,
+		BusinessObjectID:   record.ID,
+		Status:             db.ExternalPaymentFactApplicationStatusPending,
+	}).Return(db.ExternalPaymentFactApplication{
+		ID:                 8102,
+		FactID:             8101,
+		Consumer:           merchantWithdrawFactConsumerDomain,
+		BusinessObjectType: merchantWithdrawFactBusinessType,
+		BusinessObjectID:   record.ID,
+		Status:             db.ExternalPaymentFactApplicationStatusPending,
+	}, nil)
+	store.EXPECT().ClaimExternalPaymentFactApplication(gomock.Any(), int64(8102)).Return(db.ExternalPaymentFactApplication{
+		ID:                 8102,
+		FactID:             8101,
+		Consumer:           merchantWithdrawFactConsumerDomain,
+		BusinessObjectType: merchantWithdrawFactBusinessType,
+		BusinessObjectID:   record.ID,
+		Status:             db.ExternalPaymentFactApplicationStatusPending,
+	}, nil)
+	store.EXPECT().GetExternalPaymentFact(gomock.Any(), int64(8101)).Return(db.ExternalPaymentFact{
+		ID:                   8101,
+		Provider:             db.ExternalPaymentProviderWechat,
+		Channel:              db.PaymentChannelEcommerce,
+		Capability:           db.ExternalPaymentCapabilityWithdraw,
+		ExternalObjectType:   db.ExternalPaymentObjectWithdraw,
+		ExternalObjectKey:    "req-1",
+		ExternalSecondaryKey: pgtype.Text{String: "wd-1", Valid: true},
+		BusinessOwner:        pgtype.Text{String: db.ExternalPaymentBusinessOwnerMerchantFunds, Valid: true},
+		BusinessObjectType:   pgtype.Text{String: merchantWithdrawFactBusinessType, Valid: true},
+		BusinessObjectID:     pgtype.Int8{Int64: record.ID, Valid: true},
+		UpstreamState:        "FAIL",
+		TerminalStatus:       db.ExternalPaymentTerminalStatusFailed,
+		IsTerminal:           true,
+		RawResource:          []byte(`{"withdrawal_record_id":66,"out_request_no":"req-1","withdraw_id":"wd-1","wechat_status":"FAIL","reason":"balance not enough","amount":12345}`),
+	}, nil)
+	store.EXPECT().GetWithdrawalRecord(gomock.Any(), record.ID).Return(record, nil)
 	store.EXPECT().UpdateWithdrawalStatus(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, arg db.UpdateWithdrawalStatusParams) (db.WithdrawalRecord, error) {
 			require.Equal(t, record.ID, arg.ID)
 			require.Equal(t, "failed", arg.Status)
 			require.True(t, arg.Reason.Valid)
 			require.False(t, arg.ClearReason)
-			return record, nil
+			updated := record
+			updated.Status = "failed"
+			updated.Reason = pgtype.Text{String: arg.Reason.String, Valid: true}
+			return updated, nil
 		},
 	)
+	store.EXPECT().UpdateExternalPaymentFactProcessingStatus(gomock.Any(), gomock.AssignableToTypeOf(db.UpdateExternalPaymentFactProcessingStatusParams{})).Return(db.ExternalPaymentFact{ID: 8101, ProcessingStatus: db.ExternalPaymentFactProcessingStatusTerminalized}, nil)
+	store.EXPECT().MarkExternalPaymentFactApplicationApplied(gomock.Any(), gomock.AssignableToTypeOf(db.MarkExternalPaymentFactApplicationAppliedParams{})).Return(db.ExternalPaymentFactApplication{ID: 8102, FactID: 8101, Status: db.ExternalPaymentFactApplicationStatusApplied}, nil)
 
 	payloadBytes, err := json.Marshal(MerchantWithdrawResultPayload{WithdrawalRecordID: record.ID})
 	require.NoError(t, err)
@@ -400,15 +469,83 @@ func TestProcessTaskMerchantWithdrawResult_ClearsStaleReasonOnSuccess(t *testing
 		OutRequestNo: "req-success",
 		Status:       "SUCCESS",
 	}, nil)
+	store.EXPECT().CreateExternalPaymentFact(gomock.Any(), gomock.AssignableToTypeOf(db.CreateExternalPaymentFactParams{})).DoAndReturn(
+		func(_ context.Context, arg db.CreateExternalPaymentFactParams) (db.ExternalPaymentFact, error) {
+			require.Equal(t, db.ExternalPaymentCapabilityWithdraw, arg.Capability)
+			require.Equal(t, db.ExternalPaymentFactSourceQuery, arg.FactSource)
+			require.Equal(t, db.ExternalPaymentObjectWithdraw, arg.ExternalObjectType)
+			require.Equal(t, "req-success", arg.ExternalObjectKey)
+			require.Equal(t, "wd-1", arg.ExternalSecondaryKey.String)
+			require.True(t, arg.ExternalSecondaryKey.Valid)
+			require.Equal(t, db.ExternalPaymentBusinessOwnerMerchantFunds, arg.BusinessOwner.String)
+			require.Equal(t, merchantWithdrawFactBusinessType, arg.BusinessObjectType.String)
+			require.Equal(t, record.ID, arg.BusinessObjectID.Int64)
+			require.Equal(t, "SUCCESS", arg.UpstreamState)
+			require.Equal(t, db.ExternalPaymentTerminalStatusSuccess, arg.TerminalStatus)
+			require.Equal(t, record.Amount, arg.Amount.Int64)
+			require.Equal(t, "wechat:query:ecommerce:withdraw:req-success:SUCCESS:wd-1", arg.DedupeKey)
+			var payload map[string]any
+			require.NoError(t, json.Unmarshal(arg.RawResource, &payload))
+			require.EqualValues(t, record.ID, payload["withdrawal_record_id"])
+			require.Equal(t, "req-success", payload["out_request_no"])
+			require.Equal(t, "wd-1", payload["withdraw_id"])
+			require.Equal(t, "SUCCESS", payload["wechat_status"])
+			return db.ExternalPaymentFact{ID: 8102, DedupeKey: arg.DedupeKey, IsTerminal: true, TerminalStatus: arg.TerminalStatus}, nil
+		},
+	)
+	store.EXPECT().CreateExternalPaymentFactApplication(gomock.Any(), db.CreateExternalPaymentFactApplicationParams{
+		FactID:             8102,
+		Consumer:           merchantWithdrawFactConsumerDomain,
+		BusinessObjectType: merchantWithdrawFactBusinessType,
+		BusinessObjectID:   record.ID,
+		Status:             db.ExternalPaymentFactApplicationStatusPending,
+	}).Return(db.ExternalPaymentFactApplication{
+		ID:                 8103,
+		FactID:             8102,
+		Consumer:           merchantWithdrawFactConsumerDomain,
+		BusinessObjectType: merchantWithdrawFactBusinessType,
+		BusinessObjectID:   record.ID,
+		Status:             db.ExternalPaymentFactApplicationStatusPending,
+	}, nil)
+	store.EXPECT().ClaimExternalPaymentFactApplication(gomock.Any(), int64(8103)).Return(db.ExternalPaymentFactApplication{
+		ID:                 8103,
+		FactID:             8102,
+		Consumer:           merchantWithdrawFactConsumerDomain,
+		BusinessObjectType: merchantWithdrawFactBusinessType,
+		BusinessObjectID:   record.ID,
+		Status:             db.ExternalPaymentFactApplicationStatusPending,
+	}, nil)
+	store.EXPECT().GetExternalPaymentFact(gomock.Any(), int64(8102)).Return(db.ExternalPaymentFact{
+		ID:                   8102,
+		Provider:             db.ExternalPaymentProviderWechat,
+		Channel:              db.PaymentChannelEcommerce,
+		Capability:           db.ExternalPaymentCapabilityWithdraw,
+		ExternalObjectType:   db.ExternalPaymentObjectWithdraw,
+		ExternalObjectKey:    "req-success",
+		ExternalSecondaryKey: pgtype.Text{String: "wd-1", Valid: true},
+		BusinessOwner:        pgtype.Text{String: db.ExternalPaymentBusinessOwnerMerchantFunds, Valid: true},
+		BusinessObjectType:   pgtype.Text{String: merchantWithdrawFactBusinessType, Valid: true},
+		BusinessObjectID:     pgtype.Int8{Int64: record.ID, Valid: true},
+		UpstreamState:        "SUCCESS",
+		TerminalStatus:       db.ExternalPaymentTerminalStatusSuccess,
+		IsTerminal:           true,
+		RawResource:          []byte(`{"withdrawal_record_id":69,"out_request_no":"req-success","withdraw_id":"wd-1","wechat_status":"SUCCESS","reason":"","amount":12345}`),
+	}, nil)
+	store.EXPECT().GetWithdrawalRecord(gomock.Any(), record.ID).Return(record, nil)
 	store.EXPECT().UpdateWithdrawalStatus(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, arg db.UpdateWithdrawalStatusParams) (db.WithdrawalRecord, error) {
 			require.Equal(t, record.ID, arg.ID)
 			require.Equal(t, "success", arg.Status)
 			require.False(t, arg.Reason.Valid)
 			require.True(t, arg.ClearReason)
-			return record, nil
+			updated := record
+			updated.Status = "success"
+			updated.Reason = pgtype.Text{}
+			return updated, nil
 		},
 	)
+	store.EXPECT().UpdateExternalPaymentFactProcessingStatus(gomock.Any(), gomock.AssignableToTypeOf(db.UpdateExternalPaymentFactProcessingStatusParams{})).Return(db.ExternalPaymentFact{ID: 8102, ProcessingStatus: db.ExternalPaymentFactProcessingStatusTerminalized}, nil)
+	store.EXPECT().MarkExternalPaymentFactApplicationApplied(gomock.Any(), gomock.AssignableToTypeOf(db.MarkExternalPaymentFactApplicationAppliedParams{})).Return(db.ExternalPaymentFactApplication{ID: 8103, FactID: 8102, Status: db.ExternalPaymentFactApplicationStatusApplied}, nil)
 
 	payloadBytes, err := json.Marshal(MerchantWithdrawResultPayload{WithdrawalRecordID: record.ID, RetryCount: 1})
 	require.NoError(t, err)

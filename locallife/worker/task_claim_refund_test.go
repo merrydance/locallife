@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/hibiken/asynq"
@@ -28,6 +29,36 @@ func (d *claimPostPayoutTestDistributor) DistributeTaskClaimBehaviorAction(ctx c
 
 func expectClaimPayoutClaimLookup(store *mockdb.MockStore, claimID int64, status string) {
 	store.EXPECT().GetClaim(gomock.Any(), claimID).Return(db.Claim{ID: claimID, Status: status}, nil)
+}
+
+func expectClaimPayoutTransferCommandAccepted(t *testing.T, store *mockdb.MockStore, actionID int64, outBillNo, transferBillNo string, duplicate bool) {
+	t.Helper()
+	store.EXPECT().CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {
+		require.Equal(t, db.ExternalPaymentProviderWechat, arg.Provider)
+		require.Equal(t, db.PaymentChannelDirect, arg.Channel)
+		require.Equal(t, db.ExternalPaymentCapabilityMerchantTransfer, arg.Capability)
+		require.Equal(t, db.ExternalPaymentCommandTypeCreateTransfer, arg.CommandType)
+		require.Equal(t, db.ExternalPaymentBusinessOwnerClaimRecovery, arg.BusinessOwner)
+		require.Equal(t, "behavior_action", arg.BusinessObjectType.String)
+		require.Equal(t, actionID, arg.BusinessObjectID.Int64)
+		require.Equal(t, db.ExternalPaymentObjectMerchantTransfer, arg.ExternalObjectType)
+		require.Equal(t, outBillNo, arg.ExternalObjectKey)
+		require.Equal(t, db.ExternalPaymentCommandStatusAccepted, arg.CommandStatus)
+		if transferBillNo != "" {
+			require.Equal(t, transferBillNo, arg.ExternalSecondaryKey.String)
+		} else {
+			require.False(t, arg.ExternalSecondaryKey.Valid)
+		}
+		snapshot := string(arg.ResponseSnapshot)
+		require.Contains(t, snapshot, outBillNo)
+		require.Contains(t, snapshot, fmt.Sprintf(`"duplicate":"%t"`, duplicate))
+		require.NotContains(t, snapshot, "openid-22")
+		require.NotContains(t, snapshot, "张三")
+		require.NotContains(t, snapshot, "platform payout")
+		require.NotContains(t, snapshot, "appeal compensation")
+		require.NotContains(t, snapshot, "package-info-secret")
+		return db.ExternalPaymentCommand{ID: 9901}, nil
+	})
 }
 
 func TestProcessTaskClaimPayout_Success(t *testing.T) {
@@ -84,6 +115,7 @@ func TestProcessTaskClaimPayout_Success(t *testing.T) {
 			return &wechatcontracts.DirectMerchantTransferCreateResponse{OutBillNo: req.OutBillNo, TransferBillNo: "wx-bill-99", State: wechatcontracts.DirectMerchantTransferStateAccepted, CreateTime: "2026-03-27T10:00:00+08:00"}, nil
 		},
 	)
+	expectClaimPayoutTransferCommandAccepted(t, store, action.ID, claimPayoutOutBillNo(action.ID), "wx-bill-99", false)
 	transferClient.EXPECT().QueryTransferByOutBillNo(gomock.Any(), claimPayoutOutBillNo(action.ID)).Return(&wechatcontracts.DirectMerchantTransferQueryResponse{
 		OutBillNo:      claimPayoutOutBillNo(action.ID),
 		TransferBillNo: "wx-bill-99",
@@ -108,6 +140,68 @@ func TestProcessTaskClaimPayout_Success(t *testing.T) {
 			require.NoError(t, json.Unmarshal(arg.Detail, &persisted))
 			require.Equal(t, wechatcontracts.DirectMerchantTransferStateSuccess, persisted.TransferState)
 			require.Equal(t, "wx-bill-99", persisted.TransferBillNo)
+			return nil
+		},
+	)
+
+	payloadBytes, err := json.Marshal(ClaimPayoutPayload{ActionID: action.ID})
+	require.NoError(t, err)
+
+	err = processor.ProcessTaskClaimPayout(context.Background(), asynq.NewTask(TaskClaimPayout, payloadBytes))
+	require.NoError(t, err)
+}
+
+func TestProcessTaskClaimPayout_CreateTransferRecordsAcceptedCommand(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	transferClient := mockwechat.NewMockTransferClientInterface(ctrl)
+	processor := NewTestTaskProcessor(store, nil, nil, nil)
+	processor.SetTransferClient(transferClient)
+
+	detailBytes, err := json.Marshal(claimPayoutActionDetail{
+		ClaimID:    11,
+		UserID:     22,
+		Amount:     3300,
+		SourceType: "platform",
+		Remark:     "platform payout",
+	})
+	require.NoError(t, err)
+
+	action := db.BehaviorAction{ID: 199, DecisionID: 77, ActionType: "payout", TargetEntity: "user", Status: "created", Detail: detailBytes}
+
+	store.EXPECT().GetBehaviorAction(gomock.Any(), action.ID).Return(action, nil)
+	expectClaimPayoutClaimLookup(store, 11, db.ClaimStatusApproved)
+	store.EXPECT().GetUser(gomock.Any(), int64(22)).Return(db.User{ID: 22, WechatOpenid: "openid-22", FullName: "张三"}, nil)
+	transferClient.EXPECT().GetAppID().Return("wx-mini-app")
+	store.EXPECT().UpdateBehaviorActionExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, arg db.UpdateBehaviorActionExecutionParams) error {
+			require.Equal(t, action.ID, arg.ID)
+			require.Equal(t, "running", arg.Status)
+			return nil
+		},
+	)
+	transferClient.EXPECT().CreateTransfer(gomock.Any(), gomock.Any()).Return(&wechatcontracts.DirectMerchantTransferCreateResponse{
+		OutBillNo:      claimPayoutOutBillNo(action.ID),
+		TransferBillNo: "wx-bill-199",
+		State:          wechatcontracts.DirectMerchantTransferStateWaitUserConfirm,
+		PackageInfo:    "package-info-secret",
+	}, nil)
+	expectClaimPayoutTransferCommandAccepted(t, store, action.ID, claimPayoutOutBillNo(action.ID), "wx-bill-199", false)
+	transferClient.EXPECT().QueryTransferByOutBillNo(gomock.Any(), claimPayoutOutBillNo(action.ID)).Return(&wechatcontracts.DirectMerchantTransferQueryResponse{
+		OutBillNo:      claimPayoutOutBillNo(action.ID),
+		TransferBillNo: "wx-bill-199",
+		State:          wechatcontracts.DirectMerchantTransferStateWaitUserConfirm,
+	}, nil)
+	store.EXPECT().UpdateBehaviorActionExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, arg db.UpdateBehaviorActionExecutionParams) error {
+			require.Equal(t, action.ID, arg.ID)
+			require.Equal(t, "running", arg.Status)
+			require.False(t, arg.ExecutedAt.Valid)
+			var persisted claimPayoutActionDetail
+			require.NoError(t, json.Unmarshal(arg.Detail, &persisted))
+			require.Equal(t, wechatcontracts.DirectMerchantTransferStateWaitUserConfirm, persisted.TransferState)
 			return nil
 		},
 	)
@@ -370,6 +464,7 @@ func TestProcessTaskClaimPayout_DuplicateTransferStillMarksClaimPaid(t *testing.
 		},
 	)
 	transferClient.EXPECT().CreateTransfer(gomock.Any(), gomock.Any()).Return(nil, &wechat.WechatPayError{Code: "ALREADY_EXISTS", Message: "duplicate", StatusCode: 400})
+	expectClaimPayoutTransferCommandAccepted(t, store, action.ID, claimPayoutOutBillNo(action.ID), "", true)
 	transferClient.EXPECT().QueryTransferByOutBillNo(gomock.Any(), claimPayoutOutBillNo(action.ID)).Return(&wechatcontracts.DirectMerchantTransferQueryResponse{
 		OutBillNo:      claimPayoutOutBillNo(action.ID),
 		TransferBillNo: "wx-bill-99",
@@ -489,6 +584,7 @@ func TestProcessTaskClaimPayout_RecoveryDisputeCompensationSuccess(t *testing.T)
 			return &wechatcontracts.DirectMerchantTransferCreateResponse{OutBillNo: req.OutBillNo, TransferBillNo: "wx-bill-109", State: wechatcontracts.DirectMerchantTransferStateAccepted}, nil
 		},
 	)
+	expectClaimPayoutTransferCommandAccepted(t, store, action.ID, claimPayoutOutBillNo(action.ID), "wx-bill-109", false)
 	transferClient.EXPECT().QueryTransferByOutBillNo(gomock.Any(), claimPayoutOutBillNo(action.ID)).Return(&wechatcontracts.DirectMerchantTransferQueryResponse{
 		OutBillNo:      claimPayoutOutBillNo(action.ID),
 		TransferBillNo: "wx-bill-109",

@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS payment_domain_outbox_event_aggregate_uidx;

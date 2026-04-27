@@ -239,6 +239,7 @@ func TestCreateCombinedPaymentOrder(t *testing.T) {
 				return time.Date(2026, 3, 1, 10, 0, 0, 0, time.UTC)
 			},
 			buildStubs: func(store *mockdb.MockStore, client *mockwechat.MockEcommerceClientInterface) {
+				capturedCombineOutTradeNo := ""
 				store.EXPECT().
 					GetUser(gomock.Any(), int64(1001)).
 					Times(1).
@@ -250,6 +251,7 @@ func TestCreateCombinedPaymentOrder(t *testing.T) {
 					DoAndReturn(func(ctx context.Context, arg db.CreateCombinedPaymentTxParams) (db.CreateCombinedPaymentTxResult, error) {
 						require.Equal(t, []int64{11, 22}, arg.OrderIDs)
 						require.True(t, strings.HasPrefix(arg.CombineOutTradeNo, "CP"))
+						capturedCombineOutTradeNo = arg.CombineOutTradeNo
 						return db.CreateCombinedPaymentTxResult{
 							CombinedPaymentOrder: db.CombinedPaymentOrder{ID: 3001, UserID: 1001, CombineOutTradeNo: arg.CombineOutTradeNo, Status: paymentStatusPending},
 							OrderInfos: []db.CombinedPaymentOrderInfo{
@@ -292,6 +294,7 @@ func TestCreateCombinedPaymentOrder(t *testing.T) {
 					UpdateCombinedPaymentOrderToClosed(gomock.Any(), int64(3001)).
 					Times(1).
 					Return(db.CombinedPaymentOrder{}, nil)
+				expectCombinePaymentCommand(t, store, 3001, &capturedCombineOutTradeNo, "", db.ExternalPaymentCommandStatusRejected, "", 9901)
 			},
 			check: func(t *testing.T, _ CreateCombinedPaymentOrderResult, err error) {
 				require.Error(t, err)
@@ -339,6 +342,7 @@ func TestCreateCombinedPaymentOrder(t *testing.T) {
 					UpdateCombinedPaymentOrderToClosed(gomock.Any(), int64(3051)).
 					Times(1).
 					Return(db.CombinedPaymentOrder{}, nil)
+				expectCombinePaymentCommand(t, store, 3051, stringPtrIfNotEmpty("CP20260301121212"), "", db.ExternalPaymentCommandStatusRejected, "", 9902)
 			},
 			check: func(t *testing.T, _ CreateCombinedPaymentOrderResult, err error) {
 				require.Error(t, err)
@@ -388,6 +392,7 @@ func TestCreateCombinedPaymentOrder(t *testing.T) {
 					UpdateCombinedPaymentOrderToClosed(gomock.Any(), int64(3052)).
 					Times(1).
 					Return(db.CombinedPaymentOrder{}, nil)
+				expectCombinePaymentCommand(t, store, 3052, stringPtrIfNotEmpty("CP20260301121213"), "", db.ExternalPaymentCommandStatusRejected, "", 9903)
 			},
 			check: func(t *testing.T, _ CreateCombinedPaymentOrderResult, err error) {
 				require.Error(t, err)
@@ -407,6 +412,7 @@ func TestCreateCombinedPaymentOrder(t *testing.T) {
 				return time.Date(2026, 3, 1, 11, 0, 0, 0, time.UTC)
 			},
 			buildStubs: func(store *mockdb.MockStore, client *mockwechat.MockEcommerceClientInterface) {
+				capturedCombineOutTradeNo := ""
 				store.EXPECT().
 					GetUser(gomock.Any(), int64(1001)).
 					Times(1).
@@ -418,6 +424,7 @@ func TestCreateCombinedPaymentOrder(t *testing.T) {
 					DoAndReturn(func(ctx context.Context, arg db.CreateCombinedPaymentTxParams) (db.CreateCombinedPaymentTxResult, error) {
 						require.Equal(t, []int64{11, 22}, arg.OrderIDs)
 						require.True(t, strings.HasPrefix(arg.CombineOutTradeNo, "CP"))
+						capturedCombineOutTradeNo = arg.CombineOutTradeNo
 						return db.CreateCombinedPaymentTxResult{
 							CombinedPaymentOrder: db.CombinedPaymentOrder{ID: 9001, UserID: 1001, CombineOutTradeNo: arg.CombineOutTradeNo, Status: paymentStatusPending},
 							OrderInfos: []db.CombinedPaymentOrderInfo{
@@ -457,6 +464,7 @@ func TestCreateCombinedPaymentOrder(t *testing.T) {
 					}).
 					Times(1).
 					Return(db.CombinedPaymentOrder{ID: 9001, Status: paymentStatusPending, PrepayID: pgtype.Text{String: "wx-prepay-1", Valid: true}}, nil)
+				expectCombinePaymentCommand(t, store, 9001, &capturedCombineOutTradeNo, "wx-prepay-1", db.ExternalPaymentCommandStatusAccepted, "", 9904)
 			},
 			check: func(t *testing.T, result CreateCombinedPaymentOrderResult, err error) {
 				require.NoError(t, err)
@@ -617,6 +625,82 @@ func TestCreateCombinedPaymentOrder_ReusesConcurrentPendingCombinedPayment(t *te
 	require.Equal(t, "prepay_id=combine-prepay-9001", result.PayParams.Package)
 	require.Len(t, result.SubOrders, 2)
 	require.Equal(t, []int64{11, 22}, []int64{result.SubOrders[0].OrderID, result.SubOrders[1].OrderID})
+}
+
+func TestCreateCombinedPaymentOrder_CreateRejectedSkipsCommandWhenCloseFails(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	client := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	svc := NewCombinedPaymentService(store, client)
+
+	input := CreateCombinedPaymentOrderInput{UserID: 1001, OrderIDs: []int64{11}, ClientIP: "127.0.0.1"}
+	combinedPayment := db.CombinedPaymentOrder{ID: 9301, UserID: 1001, CombineOutTradeNo: "CP20260425101010", Status: paymentStatusPending}
+	paymentOrder := db.PaymentOrder{ID: 7301, Amount: 3200, OutTradeNo: "PO-7301", Attach: pgtype.Text{String: "attach-7301", Valid: true}}
+
+	store.EXPECT().GetUser(gomock.Any(), input.UserID).Return(db.User{ID: input.UserID, WechatOpenid: "openid-1"}, nil)
+	store.EXPECT().CreateCombinedPaymentTx(gomock.Any(), gomock.Any()).Return(db.CreateCombinedPaymentTxResult{
+		CombinedPaymentOrder: combinedPayment,
+		OrderInfos: []db.CombinedPaymentOrderInfo{{
+			Order:         db.Order{ID: 11, MerchantID: 501},
+			PaymentOrder:  paymentOrder,
+			PaymentConfig: db.MerchantPaymentConfig{SubMchID: "190001"},
+			Merchant:      db.Merchant{Name: "m1"},
+		}},
+	}, nil)
+	client.EXPECT().CreateCombineOrder(gomock.Any(), gomock.Any()).Return(nil, nil, errors.New("wechat create combine failed"))
+	store.EXPECT().UpdatePaymentOrderToClosed(gomock.Any(), paymentOrder.ID).Return(db.PaymentOrder{}, nil)
+	store.EXPECT().UpdateCombinedPaymentOrderToClosed(gomock.Any(), combinedPayment.ID).Return(db.CombinedPaymentOrder{}, errors.New("combined close failed"))
+
+	_, err := svc.CreateCombinedPaymentOrder(context.Background(), input)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "create combine order")
+}
+
+func expectCombinePaymentCommand(t *testing.T, store *mockdb.MockStore, combinedPaymentID int64, combineOutTradeNo *string, secondaryKey string, status string, errorCode string, commandID int64) {
+	t.Helper()
+
+	store.EXPECT().CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {
+		require.Equal(t, db.ExternalPaymentProviderWechat, arg.Provider)
+		require.Equal(t, db.PaymentChannelEcommerce, arg.Channel)
+		require.Equal(t, db.ExternalPaymentCapabilityCombinePayment, arg.Capability)
+		require.Equal(t, db.ExternalPaymentCommandTypeCreatePayment, arg.CommandType)
+		require.Equal(t, db.ExternalPaymentBusinessOwnerOrder, arg.BusinessOwner)
+		require.True(t, arg.BusinessObjectType.Valid)
+		require.Equal(t, "combined_payment_order", arg.BusinessObjectType.String)
+		require.True(t, arg.BusinessObjectID.Valid)
+		require.Equal(t, combinedPaymentID, arg.BusinessObjectID.Int64)
+		require.Equal(t, db.ExternalPaymentObjectCombinedPayment, arg.ExternalObjectType)
+		require.NotNil(t, combineOutTradeNo)
+		require.NotEmpty(t, *combineOutTradeNo)
+		require.Equal(t, *combineOutTradeNo, arg.ExternalObjectKey)
+		require.Equal(t, status, arg.CommandStatus)
+		require.Contains(t, string(arg.ResponseSnapshot), *combineOutTradeNo)
+		if secondaryKey != "" {
+			require.True(t, arg.ExternalSecondaryKey.Valid)
+			require.Equal(t, secondaryKey, arg.ExternalSecondaryKey.String)
+			require.Contains(t, string(arg.ResponseSnapshot), secondaryKey)
+		} else {
+			require.False(t, arg.ExternalSecondaryKey.Valid)
+		}
+		if errorCode != "" {
+			require.True(t, arg.LastErrorCode.Valid)
+			require.Equal(t, errorCode, arg.LastErrorCode.String)
+			require.Contains(t, string(arg.ResponseSnapshot), errorCode)
+		} else {
+			require.False(t, arg.LastErrorCode.Valid)
+		}
+		if status == db.ExternalPaymentCommandStatusRejected {
+			require.True(t, arg.LastErrorMessage.Valid)
+			require.NotEmpty(t, arg.LastErrorMessage.String)
+			require.Contains(t, string(arg.ResponseSnapshot), arg.LastErrorMessage.String)
+		} else {
+			require.False(t, arg.LastErrorMessage.Valid)
+		}
+		require.NotContains(t, string(arg.ResponseSnapshot), "paySign")
+		return db.ExternalPaymentCommand{ID: commandID}, nil
+	})
 }
 
 func TestCreateCombinedPaymentOrder_ConcurrentPendingCombinedSigningFailureReturnsError(t *testing.T) {

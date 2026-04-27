@@ -369,6 +369,48 @@ func TestSubmitEcommerceApplymentSubmittedSyncFailure(t *testing.T) {
 	require.Equal(t, ApplymentSubjectStatusBindbankSubmitted, updatedStatus)
 }
 
+func TestSubmitEcommerceApplymentRecordsAcceptedCommand(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	applyment := db.EcommerceApplyment{ID: 7101, OutRequestNo: "OUT_REQ_CMD_001"}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	ecommerceClient.EXPECT().
+		CreateEcommerceApplyment(gomock.Any(), gomock.AssignableToTypeOf(&wechat.EcommerceApplymentRequest{})).
+		Return(&wechatcontracts.EcommerceApplymentResponse{ApplymentID: 66554433, OutRequestNo: "OUT_REQ_CMD_001"}, nil)
+
+	store.EXPECT().
+		UpdateEcommerceApplymentToSubmitted(gomock.Any(), db.UpdateEcommerceApplymentToSubmittedParams{
+			ID:          applyment.ID,
+			ApplymentID: pgtype.Int8{Int64: 66554433, Valid: true},
+		}).
+		Return(db.EcommerceApplyment{}, nil)
+
+	expectEcommerceApplymentAcceptedCommand(t, store, applyment.ID, "OUT_REQ_CMD_001", "66554433")
+
+	result, err := SubmitEcommerceApplyment(ctx, store, ecommerceClient, func(_ context.Context, status string) error {
+		require.Equal(t, ApplymentSubjectStatusBindbankSubmitted, status)
+		cancel()
+		return nil
+	}, SubmitEcommerceApplymentInput{
+		Applyment: applyment,
+		WechatRequest: &wechat.EcommerceApplymentRequest{
+			OutRequestNo:    "OUT_REQ_CMD_001",
+			ContactInfo:     &wechatcontracts.ApplymentContactInfo{ContactIDCardNumber: "110101199001011234"},
+			AccountInfo:     &wechatcontracts.ApplymentBankAccountInfo{AccountNumber: "6222000000000000"},
+			BusinessLicense: &wechatcontracts.ApplymentBusinessLicenseInfo{BusinessLicenseCopy: "https://cdn.test/license.png"},
+		},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, int64(66554433), result.ApplymentID)
+	require.Equal(t, ApplymentSubmissionResultStatus, result.Status)
+}
+
 func TestSubmitEcommerceApplymentReturnsInitialQueryStatus(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -388,6 +430,8 @@ func TestSubmitEcommerceApplymentReturnsInitialQueryStatus(t *testing.T) {
 			ApplymentID: pgtype.Int8{Int64: 22334455, Valid: true},
 		}).
 		Return(db.EcommerceApplyment{}, nil)
+
+	expectEcommerceApplymentAcceptedCommand(t, store, applyment.ID, "OUT_REQ_002", "22334455")
 
 	store.EXPECT().
 		UpdateEcommerceApplymentStatus(gomock.Any(), db.UpdateEcommerceApplymentStatusParams{
@@ -448,6 +492,8 @@ func TestSubmitEcommerceApplymentFallsBackToOutRequestNoForInitialQuery(t *testi
 		}).
 		Return(db.EcommerceApplyment{}, nil)
 
+	expectEcommerceApplymentAcceptedCommand(t, store, applyment.ID, "OUT_REQ_003", "99887766")
+
 	store.EXPECT().
 		UpdateEcommerceApplymentStatus(gomock.Any(), db.UpdateEcommerceApplymentStatusParams{
 			ID:                 applyment.ID,
@@ -484,6 +530,33 @@ func TestSubmitEcommerceApplymentFallsBackToOutRequestNoForInitialQuery(t *testi
 	require.Equal(t, "to_be_signed", result.Status)
 	require.Equal(t, "待签约，请点击签约链接完成签约", result.StatusDesc)
 	require.NotNil(t, result.InitialQueryResponse)
+}
+
+func expectEcommerceApplymentAcceptedCommand(t *testing.T, store *mockdb.MockStore, applymentID int64, outRequestNo string, wechatApplymentID string) {
+	t.Helper()
+	store.EXPECT().
+		CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {
+			require.Equal(t, db.ExternalPaymentProviderWechat, arg.Provider)
+			require.Equal(t, db.PaymentChannelEcommerce, arg.Channel)
+			require.Equal(t, db.ExternalPaymentCapabilityApplyment, arg.Capability)
+			require.Equal(t, db.ExternalPaymentCommandTypeCreateApplyment, arg.CommandType)
+			require.Equal(t, db.ExternalPaymentBusinessOwnerApplyment, arg.BusinessOwner)
+			require.Equal(t, "ecommerce_applyment", arg.BusinessObjectType.String)
+			require.Equal(t, applymentID, arg.BusinessObjectID.Int64)
+			require.Equal(t, db.ExternalPaymentObjectApplyment, arg.ExternalObjectType)
+			require.Equal(t, outRequestNo, arg.ExternalObjectKey)
+			require.Equal(t, wechatApplymentID, arg.ExternalSecondaryKey.String)
+			require.Equal(t, db.ExternalPaymentCommandStatusAccepted, arg.CommandStatus)
+			require.False(t, arg.LastErrorCode.Valid)
+			snapshot := string(arg.ResponseSnapshot)
+			require.Contains(t, snapshot, outRequestNo)
+			require.Contains(t, snapshot, wechatApplymentID)
+			require.NotContains(t, snapshot, "110101199001011234")
+			require.NotContains(t, snapshot, "6222000000000000")
+			require.NotContains(t, snapshot, "license.png")
+			return db.ExternalPaymentCommand{ID: 9901}, nil
+		})
 }
 
 func TestMapWechatApplymentStateToSubmissionStatus(t *testing.T) {
