@@ -383,6 +383,22 @@ Page({
         if (combinedPayment.pay_params) {
           try {
             await invokeWechatPay(combinedPayment.pay_params)
+            combinedPayment = await recoverCombinedPaymentOrder(combinedPayment.id)
+            if (isCombinedPaymentSuccessful(combinedPayment)) {
+              Navigation.toPaymentSuccess({
+                orderId,
+                orderNo: combinedPayment.combine_out_trade_no || this.data.order?.orderNo || orderId,
+                amount: (combinedPayment.total_amount / 100).toFixed(2),
+                isCombined: true,
+                orderCount: combinedPayment.sub_orders.length
+              })
+              return
+            }
+
+            if (!shouldRecreateCombinedPayment(combinedPayment)) {
+              wx.showToast({ title: `${getCombinedPaymentFollowupMessage(combinedPayment)}，订单详情稍后会自动同步。`, icon: 'none' })
+              return
+            }
           } catch (error) {
             if (error instanceof PaymentCancelledError) {
               wx.showToast({ title: '已取消支付，可继续完成原合单支付', icon: 'none' })

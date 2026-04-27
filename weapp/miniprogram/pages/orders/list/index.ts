@@ -427,6 +427,7 @@ Page({
     if (combinedPayment.pay_params) {
       try {
         await invokeWechatPay(combinedPayment.pay_params)
+        combinedPayment = await recoverCombinedPaymentOrder(combinedPayment.id)
       } catch (error: unknown) {
         if (isWechatPayCancelled(error)) {
           wx.showToast({ title: '已取消支付，可继续完成原合单支付', icon: 'none' })
@@ -500,6 +501,7 @@ Page({
       if (combinedPayment.pay_params) {
         try {
           await invokeWechatPay(combinedPayment.pay_params)
+          combinedPayment = await recoverCombinedPaymentOrder(combinedPayment.id)
         } catch (error: unknown) {
           if (isWechatPayCancelled(error)) {
             wx.showToast({ title: '已取消支付，可继续完成合单支付', icon: 'none' })
