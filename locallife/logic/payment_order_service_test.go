@@ -834,13 +834,19 @@ func TestPaymentOrderServiceQueryPaymentOrder(t *testing.T) {
 	input := QueryPaymentOrderInput{UserID: 1001, PaymentOrderID: 2001}
 
 	testCases := []struct {
-		name          string
-		useEcomClient bool
-		buildStubs    func(store *mockdb.MockStore, client *mockwechat.MockEcommerceClientInterface)
-		check         func(t *testing.T, result QueryPaymentOrderResult, err error)
+		name            string
+		useDirectClient bool
+		useEcomClient   bool
+		buildStubs      func(store *mockdb.MockStore, directClient *mockwechat.MockDirectPaymentClientInterface, ecomClient *mockwechat.MockEcommerceClientInterface)
+		check           func(t *testing.T, result QueryPaymentOrderResult, err error)
 	}{
 		{
 			name: "ClientNotConfigured",
+			buildStubs: func(store *mockdb.MockStore, _ *mockwechat.MockDirectPaymentClientInterface, _ *mockwechat.MockEcommerceClientInterface) {
+				store.EXPECT().
+					GetPaymentOrder(gomock.Any(), input.PaymentOrderID).
+					Return(db.PaymentOrder{ID: input.PaymentOrderID, UserID: input.UserID, PaymentType: paymentTypeProfitSharing, PaymentChannel: db.PaymentChannelEcommerce}, nil)
+			},
 			check: func(t *testing.T, _ QueryPaymentOrderResult, err error) {
 				require.EqualError(t, err, "ecommerce client: not configured")
 			},
@@ -848,7 +854,7 @@ func TestPaymentOrderServiceQueryPaymentOrder(t *testing.T) {
 		{
 			name:          "CombinedPaymentRejected",
 			useEcomClient: true,
-			buildStubs: func(store *mockdb.MockStore, client *mockwechat.MockEcommerceClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, _ *mockwechat.MockDirectPaymentClientInterface, _ *mockwechat.MockEcommerceClientInterface) {
 				store.EXPECT().
 					GetPaymentOrder(gomock.Any(), input.PaymentOrderID).
 					Return(db.PaymentOrder{ID: input.PaymentOrderID, UserID: input.UserID, PaymentType: paymentTypeProfitSharing, CombinedPaymentID: pgtype.Int8{Int64: 9, Valid: true}}, nil)
@@ -860,23 +866,145 @@ func TestPaymentOrderServiceQueryPaymentOrder(t *testing.T) {
 			},
 		},
 		{
-			name:          "DirectPaymentRejected",
-			useEcomClient: true,
-			buildStubs: func(store *mockdb.MockStore, client *mockwechat.MockEcommerceClientInterface) {
+			name: "DirectPaymentClientNotConfigured",
+			buildStubs: func(store *mockdb.MockStore, _ *mockwechat.MockDirectPaymentClientInterface, _ *mockwechat.MockEcommerceClientInterface) {
 				store.EXPECT().
 					GetPaymentOrder(gomock.Any(), input.PaymentOrderID).
-					Return(db.PaymentOrder{ID: input.PaymentOrderID, UserID: input.UserID, PaymentType: paymentTypeMiniProgram}, nil)
+					Return(db.PaymentOrder{ID: input.PaymentOrderID, UserID: input.UserID, PaymentType: paymentTypeMiniProgram, PaymentChannel: db.PaymentChannelDirect, BusinessType: db.ExternalPaymentBusinessOwnerRiderDeposit}, nil)
 			},
 			check: func(t *testing.T, _ QueryPaymentOrderResult, err error) {
-				reqErr := assertRequestError(t, err)
-				require.Equal(t, http.StatusBadRequest, reqErr.Status)
-				require.Equal(t, "仅收付通普通支付订单支持微信远端查询", reqErr.Err.Error())
+				require.EqualError(t, err, "direct payment client: not configured")
+			},
+		},
+		{
+			name:            "DirectPaymentRemotePendingExposesPayParams",
+			useDirectClient: true,
+			buildStubs: func(store *mockdb.MockStore, directClient *mockwechat.MockDirectPaymentClientInterface, _ *mockwechat.MockEcommerceClientInterface) {
+				store.EXPECT().
+					GetPaymentOrder(gomock.Any(), input.PaymentOrderID).
+					Return(db.PaymentOrder{
+						ID:             input.PaymentOrderID,
+						UserID:         input.UserID,
+						PaymentType:    paymentTypeMiniProgram,
+						PaymentChannel: db.PaymentChannelDirect,
+						BusinessType:   db.ExternalPaymentBusinessOwnerRiderDeposit,
+						Status:         paymentStatusPending,
+						OutTradeNo:     "DP20260415000001",
+						PrepayID:       pgtype.Text{String: "prepay-direct-123", Valid: true},
+						ExpiresAt:      pgtype.Timestamptz{Time: time.Now().Add(5 * time.Minute), Valid: true},
+					}, nil)
+				directClient.EXPECT().
+					QueryOrderByOutTradeNo(gomock.Any(), "DP20260415000001").
+					Return(&wechatcontracts.DirectOrderQueryResponse{OutTradeNo: "DP20260415000001", TradeState: "NOTPAY", TradeStateDesc: "待支付", Amount: wechatcontracts.DirectOrderQueryAmount{Total: 1000}}, nil)
+				directClient.EXPECT().
+					GenerateJSAPIPayParams("prepay-direct-123").
+					Return(&wechat.JSAPIPayParams{NonceStr: "direct-nonce"}, nil)
+			},
+			check: func(t *testing.T, result QueryPaymentOrderResult, err error) {
+				require.NoError(t, err)
+				require.NotNil(t, result.WechatOrder)
+				require.Equal(t, "NOTPAY", result.WechatOrder.TradeState)
+				require.NotNil(t, result.PayParams)
+			},
+		},
+		{
+			name:            "DirectPaymentRemoteSuccessAppliesFact",
+			useDirectClient: true,
+			buildStubs: func(store *mockdb.MockStore, directClient *mockwechat.MockDirectPaymentClientInterface, _ *mockwechat.MockEcommerceClientInterface) {
+				paymentOrder := db.PaymentOrder{
+					ID:             input.PaymentOrderID,
+					UserID:         input.UserID,
+					PaymentType:    paymentTypeMiniProgram,
+					PaymentChannel: db.PaymentChannelDirect,
+					BusinessType:   db.ExternalPaymentBusinessOwnerRiderDeposit,
+					Status:         paymentStatusPending,
+					OutTradeNo:     "DP20260415000002",
+				}
+				paidOrder := paymentOrder
+				paidOrder.Status = paymentStatusPaid
+				paidOrder.TransactionID = pgtype.Text{String: "wx-direct-transaction-001", Valid: true}
+				fact := db.ExternalPaymentFact{
+					ID:                 9101,
+					Provider:           db.ExternalPaymentProviderWechat,
+					Channel:            db.PaymentChannelDirect,
+					Capability:         db.ExternalPaymentCapabilityDirectJSAPIPayment,
+					FactSource:         db.ExternalPaymentFactSourceQuery,
+					ExternalObjectType: db.ExternalPaymentObjectPayment,
+					ExternalObjectKey:  paymentOrder.OutTradeNo,
+					BusinessOwner:      pgtype.Text{String: db.ExternalPaymentBusinessOwnerRiderDeposit, Valid: true},
+					BusinessObjectType: pgtype.Text{String: paymentFactBusinessObjectPaymentOrder, Valid: true},
+					BusinessObjectID:   pgtype.Int8{Int64: paymentOrder.ID, Valid: true},
+					UpstreamState:      "SUCCESS",
+					TerminalStatus:     db.ExternalPaymentTerminalStatusSuccess,
+					IsTerminal:         true,
+					Amount:             pgtype.Int8{Int64: 1000, Valid: true},
+					Currency:           "CNY",
+					RawResource:        []byte(`{"trade_state":"SUCCESS"}`),
+					DedupeKey:          "wechat:query:direct_payment:DP20260415000002:SUCCESS",
+				}
+				application := db.ExternalPaymentFactApplication{
+					ID:                 9201,
+					FactID:             fact.ID,
+					Consumer:           paymentFactConsumerRiderDepositDomain,
+					BusinessObjectType: paymentFactBusinessObjectPaymentOrder,
+					BusinessObjectID:   paymentOrder.ID,
+					Status:             db.ExternalPaymentFactApplicationStatusPending,
+				}
+
+				store.EXPECT().
+					GetPaymentOrder(gomock.Any(), input.PaymentOrderID).
+					Return(paymentOrder, nil)
+				directClient.EXPECT().
+					QueryOrderByOutTradeNo(gomock.Any(), paymentOrder.OutTradeNo).
+					Return(&wechatcontracts.DirectOrderQueryResponse{
+						OutTradeNo:     paymentOrder.OutTradeNo,
+						TransactionID:  "wx-direct-transaction-001",
+						TradeState:     "SUCCESS",
+						TradeStateDesc: "支付成功",
+						SuccessTime:    "2026-04-27T12:00:00+08:00",
+						Amount:         wechatcontracts.DirectOrderQueryAmount{Total: 1000},
+					}, nil)
+				store.EXPECT().
+					CreateExternalPaymentFact(gomock.Any(), gomock.AssignableToTypeOf(db.CreateExternalPaymentFactParams{})).
+					DoAndReturn(func(_ context.Context, params db.CreateExternalPaymentFactParams) (db.ExternalPaymentFact, error) {
+						require.True(t, params.IsTerminal)
+						require.Equal(t, db.ExternalPaymentTerminalStatusSuccess, params.TerminalStatus)
+						return fact, nil
+					})
+				store.EXPECT().
+					CreateExternalPaymentFactApplication(gomock.Any(), gomock.AssignableToTypeOf(db.CreateExternalPaymentFactApplicationParams{})).
+					Return(application, nil)
+				store.EXPECT().
+					ClaimExternalPaymentFactApplication(gomock.Any(), application.ID).
+					Return(application, nil)
+				store.EXPECT().
+					GetExternalPaymentFact(gomock.Any(), fact.ID).
+					Return(fact, nil)
+				store.EXPECT().
+					ProcessPaymentSuccessTx(gomock.Any(), db.ProcessPaymentSuccessTxParams{PaymentOrderID: paymentOrder.ID}).
+					Return(db.ProcessPaymentSuccessTxResult{PaymentOrder: paidOrder, Processed: true}, nil)
+				store.EXPECT().
+					UpdateExternalPaymentFactProcessingStatus(gomock.Any(), gomock.AssignableToTypeOf(db.UpdateExternalPaymentFactProcessingStatusParams{})).
+					Return(fact, nil)
+				store.EXPECT().
+					MarkExternalPaymentFactApplicationApplied(gomock.Any(), gomock.AssignableToTypeOf(db.MarkExternalPaymentFactApplicationAppliedParams{})).
+					Return(application, nil)
+				store.EXPECT().
+					GetPaymentOrder(gomock.Any(), paymentOrder.ID).
+					Return(paidOrder, nil)
+			},
+			check: func(t *testing.T, result QueryPaymentOrderResult, err error) {
+				require.NoError(t, err)
+				require.Equal(t, paymentStatusPaid, result.PaymentOrder.Status)
+				require.NotNil(t, result.WechatOrder)
+				require.Equal(t, "SUCCESS", result.WechatOrder.TradeState)
+				require.Nil(t, result.PayParams)
 			},
 		},
 		{
 			name:          "Success_RemotePendingExposesPayParams",
 			useEcomClient: true,
-			buildStubs: func(store *mockdb.MockStore, client *mockwechat.MockEcommerceClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, _ *mockwechat.MockDirectPaymentClientInterface, client *mockwechat.MockEcommerceClientInterface) {
 				store.EXPECT().
 					GetPaymentOrder(gomock.Any(), input.PaymentOrderID).
 					Return(db.PaymentOrder{
@@ -913,7 +1041,7 @@ func TestPaymentOrderServiceQueryPaymentOrder(t *testing.T) {
 		{
 			name:          "PaidOrderUsesTransactionIDQuery",
 			useEcomClient: true,
-			buildStubs: func(store *mockdb.MockStore, client *mockwechat.MockEcommerceClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, _ *mockwechat.MockDirectPaymentClientInterface, client *mockwechat.MockEcommerceClientInterface) {
 				store.EXPECT().
 					GetPaymentOrder(gomock.Any(), input.PaymentOrderID).
 					Return(db.PaymentOrder{
@@ -947,7 +1075,7 @@ func TestPaymentOrderServiceQueryPaymentOrder(t *testing.T) {
 		{
 			name:          "RemoteQueryMapsWechatError",
 			useEcomClient: true,
-			buildStubs: func(store *mockdb.MockStore, client *mockwechat.MockEcommerceClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, _ *mockwechat.MockDirectPaymentClientInterface, client *mockwechat.MockEcommerceClientInterface) {
 				store.EXPECT().
 					GetPaymentOrder(gomock.Any(), input.PaymentOrderID).
 					Return(db.PaymentOrder{ID: input.PaymentOrderID, UserID: input.UserID, PaymentType: paymentTypeProfitSharing, PaymentChannel: db.PaymentChannelEcommerce, Status: paymentStatusPending, OutTradeNo: "OC20260415000002", OrderID: pgtype.Int8{Int64: 302, Valid: true}}, nil)
@@ -970,7 +1098,7 @@ func TestPaymentOrderServiceQueryPaymentOrder(t *testing.T) {
 		{
 			name:          "RemoteQueryContractDriftReturnsClearError",
 			useEcomClient: true,
-			buildStubs: func(store *mockdb.MockStore, client *mockwechat.MockEcommerceClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, _ *mockwechat.MockDirectPaymentClientInterface, client *mockwechat.MockEcommerceClientInterface) {
 				store.EXPECT().
 					GetPaymentOrder(gomock.Any(), input.PaymentOrderID).
 					Return(db.PaymentOrder{ID: input.PaymentOrderID, UserID: input.UserID, PaymentType: paymentTypeProfitSharing, PaymentChannel: db.PaymentChannelEcommerce, Status: paymentStatusPending, OutTradeNo: "OC20260415000003", OrderID: pgtype.Int8{Int64: 303, Valid: true}}, nil)
@@ -999,17 +1127,22 @@ func TestPaymentOrderServiceQueryPaymentOrder(t *testing.T) {
 			defer ctrl.Finish()
 
 			store := mockdb.NewMockStore(ctrl)
+			directClient := mockwechat.NewMockDirectPaymentClientInterface(ctrl)
 			ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
 			if tc.buildStubs != nil {
-				tc.buildStubs(store, ecommerceClient)
+				tc.buildStubs(store, directClient, ecommerceClient)
 			}
 
+			var directInterface wechat.DirectPaymentClientInterface
+			if tc.useDirectClient {
+				directInterface = directClient
+			}
 			var ecommerceInterface wechat.EcommerceClientInterface
 			if tc.useEcomClient {
 				ecommerceInterface = ecommerceClient
 			}
 
-			svc := NewPaymentOrderService(store, ecommerceInterface)
+			svc := NewPaymentOrderServiceWithClients(store, directInterface, ecommerceInterface)
 			result, err := svc.QueryPaymentOrder(context.Background(), input)
 			tc.check(t, result, err)
 		})

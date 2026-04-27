@@ -6561,6 +6561,8 @@ definitions:
     type: object
   api.paymentOrderWechatPayerResult:
     properties:
+      openid:
+        type: string
       sp_openid:
         type: string
       sub_openid:
@@ -6610,9 +6612,13 @@ definitions:
     properties:
       amount:
         $ref: '#/definitions/api.paymentOrderWechatAmountResult'
+      appid:
+        type: string
       attach:
         type: string
       bank_type:
+        type: string
+      mchid:
         type: string
       out_trade_no:
         type: string

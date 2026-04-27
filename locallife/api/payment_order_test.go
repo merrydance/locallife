@@ -58,6 +58,31 @@ func randomRefundOrder(paymentOrderID int64, amount int64) db.RefundOrder {
 	}
 }
 
+func TestNewPaymentOrderWechatQueryResultSupportsDirectPayment(t *testing.T) {
+	query := &logic.QueryPaymentOrderWechatOrder{
+		AppID:          "wx-app",
+		MchID:          "direct-mch",
+		OutTradeNo:     "DP202604270001",
+		TransactionID:  "wx-direct-transaction",
+		TradeType:      "JSAPI",
+		TradeState:     "SUCCESS",
+		TradeStateDesc: "支付成功",
+		Payer:          logic.QueryPaymentOrderWechatPayer{OpenID: "direct-openid"},
+		Amount:         logic.QueryPaymentOrderWechatAmount{Total: 1000, PayerTotal: 1000, Currency: "CNY", PayerCurrency: "CNY"},
+	}
+
+	resp := newPaymentOrderWechatQueryResult(query)
+
+	require.NotNil(t, resp)
+	require.Equal(t, "wx-app", resp.AppID)
+	require.Equal(t, "direct-mch", resp.MchID)
+	require.Equal(t, "SUCCESS", resp.TradeState)
+	require.NotNil(t, resp.Payer)
+	require.Equal(t, "direct-openid", resp.Payer.OpenID)
+	require.NotNil(t, resp.Amount)
+	require.Equal(t, int64(1000), resp.Amount.Total)
+}
+
 // randomPaymentTestOrder creates a random order for payment testing
 // Named differently to avoid conflict with randomOrder in order_test.go
 func randomPaymentTestOrder(userID, merchantID int64) db.Order {

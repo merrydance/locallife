@@ -41645,6 +41645,9 @@ const docTemplate = `{
         "api.paymentOrderWechatPayerResult": {
             "type": "object",
             "properties": {
+                "openid": {
+                    "type": "string"
+                },
                 "sp_openid": {
                     "type": "string"
                 },
@@ -41720,10 +41723,16 @@ const docTemplate = `{
                 "amount": {
                     "$ref": "#/definitions/api.paymentOrderWechatAmountResult"
                 },
+                "appid": {
+                    "type": "string"
+                },
                 "attach": {
                     "type": "string"
                 },
                 "bank_type": {
+                    "type": "string"
+                },
+                "mchid": {
                     "type": "string"
                 },
                 "out_trade_no": {

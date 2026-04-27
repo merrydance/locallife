@@ -36,17 +36,24 @@ const (
 
 // PaymentOrderService encapsulates payment order creation logic.
 type PaymentOrderService struct {
-	store           db.Store
-	ecommerceClient wechat.EcommerceClientInterface
-	now             func() time.Time
+	store               db.Store
+	directPaymentClient wechat.DirectPaymentClientInterface
+	ecommerceClient     wechat.EcommerceClientInterface
+	now                 func() time.Time
 }
 
 // NewPaymentOrderService creates a payment order service.
 func NewPaymentOrderService(store db.Store, ecommerceClient wechat.EcommerceClientInterface) *PaymentOrderService {
+	return NewPaymentOrderServiceWithClients(store, nil, ecommerceClient)
+}
+
+// NewPaymentOrderServiceWithClients creates a payment order service with all payment clients.
+func NewPaymentOrderServiceWithClients(store db.Store, directPaymentClient wechat.DirectPaymentClientInterface, ecommerceClient wechat.EcommerceClientInterface) *PaymentOrderService {
 	return &PaymentOrderService{
-		store:           store,
-		ecommerceClient: ecommerceClient,
-		now:             time.Now,
+		store:               store,
+		directPaymentClient: directPaymentClient,
+		ecommerceClient:     ecommerceClient,
+		now:                 time.Now,
 	}
 }
 
@@ -82,7 +89,7 @@ type QueryPaymentOrderInput struct {
 type QueryPaymentOrderResult struct {
 	PaymentOrder db.PaymentOrder
 	PayParams    *wechat.JSAPIPayParams
-	WechatOrder  *wechatcontracts.PartnerOrderQueryResponse
+	WechatOrder  *QueryPaymentOrderWechatOrder
 }
 
 type ListPaymentOrdersInput struct {
@@ -850,52 +857,6 @@ func (svc *PaymentOrderService) GetPaymentOrder(ctx context.Context, input GetPa
 	}
 
 	return GetPaymentOrderResult{PaymentOrder: paymentOrder}, nil
-}
-
-func (svc *PaymentOrderService) QueryPaymentOrder(ctx context.Context, input QueryPaymentOrderInput) (QueryPaymentOrderResult, error) {
-	if svc.ecommerceClient == nil {
-		return QueryPaymentOrderResult{}, fmt.Errorf("ecommerce client: not configured")
-	}
-
-	detail, err := svc.GetPaymentOrder(ctx, GetPaymentOrderInput{
-		UserID:         input.UserID,
-		PaymentOrderID: input.PaymentOrderID,
-	})
-	if err != nil {
-		return QueryPaymentOrderResult{}, err
-	}
-
-	paymentOrder := detail.PaymentOrder
-	if paymentOrder.CombinedPaymentID.Valid {
-		return QueryPaymentOrderResult{}, NewRequestError(http.StatusBadRequest, errors.New("合单支付订单请使用合单查询接口"))
-	}
-	if !paymentOrderUsesEcommerceChannel(paymentOrder) {
-		return QueryPaymentOrderResult{}, NewRequestError(http.StatusBadRequest, errors.New("仅收付通普通支付订单支持微信远端查询"))
-	}
-
-	subMchID, err := svc.resolvePaymentOrderSubMchID(ctx, paymentOrder)
-	if err != nil {
-		return QueryPaymentOrderResult{}, fmt.Errorf("resolve payment order sub_mchid: %w", err)
-	}
-
-	queryResp, err := svc.queryPartnerPaymentOrder(ctx, paymentOrder, subMchID)
-	if err != nil {
-		return QueryPaymentOrderResult{}, mapPartnerOrderQueryError(err)
-	}
-
-	var payParams *wechat.JSAPIPayParams
-	if svc.shouldExposePartnerPaymentPayParams(paymentOrder, queryResp) {
-		payParams, err = svc.signExistingPartnerPaymentOrder(paymentOrder)
-		if err != nil {
-			return QueryPaymentOrderResult{}, fmt.Errorf("sign payment order: %w", err)
-		}
-	}
-
-	return QueryPaymentOrderResult{
-		PaymentOrder: paymentOrder,
-		PayParams:    payParams,
-		WechatOrder:  queryResp,
-	}, nil
 }
 
 func (svc *PaymentOrderService) queryPartnerPaymentOrder(ctx context.Context, paymentOrder db.PaymentOrder, subMchID string) (*wechatcontracts.PartnerOrderQueryResponse, error) {
