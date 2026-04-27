@@ -728,10 +728,10 @@ export async function processPayment(orderId: number, businessType: BusinessType
       business_type: businessType
     })
   } catch (error: unknown) {
-    console.warn('[payment] 创建支付单异常，按 unknown 承接', error)
+    console.warn('[payment] 创建支付单异常，按 failed 承接', error)
     return {
       paymentId: 0,
-      status: 'unknown'
+      status: 'failed'
     }
   }
 
