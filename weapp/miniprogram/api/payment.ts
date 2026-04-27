@@ -761,7 +761,7 @@ export async function processPayment(orderId: number, businessType: BusinessType
   return processCreatedPayment(payment)
 }
 
-function mapWechatTradeStateToPaymentStatus(tradeState?: string): PaymentStatus | undefined {
+export function mapWechatTradeStateToPaymentStatus(tradeState?: string): PaymentStatus | undefined {
   switch (String(tradeState || '').trim().toUpperCase()) {
     case 'SUCCESS':
       return 'paid'
