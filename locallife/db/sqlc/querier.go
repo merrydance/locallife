@@ -1463,6 +1463,7 @@ type Querier interface {
 	ListRiderClaimsForRider(ctx context.Context, arg ListRiderClaimsForRiderParams) ([]ListRiderClaimsForRiderRow, error)
 	ListRiderDepositCreditsForReminderWindow(ctx context.Context, arg ListRiderDepositCreditsForReminderWindowParams) ([]RiderDepositCredit, error)
 	ListRiderDepositLedgerAnomalies(ctx context.Context, arg ListRiderDepositLedgerAnomaliesParams) ([]ListRiderDepositLedgerAnomaliesRow, error)
+	ListRiderDepositWithdrawalRefundOrdersByIDs(ctx context.Context, arg ListRiderDepositWithdrawalRefundOrdersByIDsParams) ([]ListRiderDepositWithdrawalRefundOrdersByIDsRow, error)
 	ListRiderDeposits(ctx context.Context, arg ListRiderDepositsParams) ([]RiderDeposit, error)
 	ListRiderDepositsByType(ctx context.Context, arg ListRiderDepositsByTypeParams) ([]RiderDeposit, error)
 	ListRiderLocations(ctx context.Context, arg ListRiderLocationsParams) ([]RiderLocation, error)

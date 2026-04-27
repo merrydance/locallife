@@ -29726,6 +29726,71 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/rider/withdrawals/status": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "按提现提交返回的 refund_order_ids 查询本次提现处理状态和金额汇总。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "骑手"
+                ],
+                "summary": "查询骑手押金提现状态",
+                "parameters": [
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "integer"
+                        },
+                        "collectionFormat": "multi",
+                        "description": "提现退款单ID，支持逗号或重复参数",
+                        "name": "refund_order_ids",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "提现状态",
+                        "schema": {
+                            "$ref": "#/definitions/api.riderWithdrawalStatusResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未登录",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "未注册骑手或提现记录不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/role-access": {
             "get": {
                 "description": "Machine-readable role matrix to help clients avoid calling merchant/operator/admin endpoints with wrong identities.",
@@ -44169,6 +44234,76 @@ const docTemplate = `{
                 },
                 "status": {
                     "type": "string"
+                }
+            }
+        },
+        "api.riderWithdrawalStatusRefundItemResponse": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "integer"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "out_refund_no": {
+                    "type": "string"
+                },
+                "out_trade_no": {
+                    "type": "string"
+                },
+                "payment_order_id": {
+                    "type": "integer"
+                },
+                "refund_id": {
+                    "type": "string"
+                },
+                "refund_order_id": {
+                    "type": "integer"
+                },
+                "refunded_at": {
+                    "type": "string"
+                },
+                "source_payment_amount": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "status_text": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.riderWithdrawalStatusResponse": {
+            "type": "object",
+            "properties": {
+                "accepted_amount": {
+                    "type": "integer"
+                },
+                "failed_amount": {
+                    "type": "integer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "processing_amount": {
+                    "type": "integer"
+                },
+                "refunds": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.riderWithdrawalStatusRefundItemResponse"
+                    }
+                },
+                "status": {
+                    "type": "string"
+                },
+                "status_text": {
+                    "type": "string"
+                },
+                "success_amount": {
+                    "type": "integer"
                 }
             }
         },

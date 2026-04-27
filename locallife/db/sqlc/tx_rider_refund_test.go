@@ -180,6 +180,69 @@ func TestListRiderDepositLedgerAnomaliesDetectsDrift(t *testing.T) {
 	require.Equal(t, int64(5000), settlementAnomaly.AnomalyAmount)
 }
 
+func TestListRiderDepositWithdrawalRefundOrdersByIDsFiltersUser(t *testing.T) {
+	setRiderDepositThresholdForTest(t, DefaultRiderDepositThresholdFen)
+
+	rider := createRandomRider(t)
+	paymentOrder := createRefundableRiderDepositCredit(t, rider, 30000)
+	prepareResult, err := testStore.(*SQLStore).PrepareRiderDepositRefundTx(context.Background(), PrepareRiderDepositRefundTxParams{
+		RiderID: rider.ID,
+		Amount:  12000,
+		Remark:  "押金提现",
+	})
+	require.NoError(t, err)
+	require.Len(t, prepareResult.RefundPlans, 1)
+	refundOrder := prepareResult.RefundPlans[0].RefundOrder
+
+	otherRider := createRandomRider(t)
+	otherPaymentOrder := createRefundableRiderDepositCredit(t, otherRider, 20000)
+	otherPrepareResult, err := testStore.(*SQLStore).PrepareRiderDepositRefundTx(context.Background(), PrepareRiderDepositRefundTxParams{
+		RiderID: otherRider.ID,
+		Amount:  5000,
+		Remark:  "其他骑手押金提现",
+	})
+	require.NoError(t, err)
+	require.Len(t, otherPrepareResult.RefundPlans, 1)
+	otherRefundOrder := otherPrepareResult.RefundPlans[0].RefundOrder
+
+	rows, err := testStore.ListRiderDepositWithdrawalRefundOrdersByIDs(context.Background(), ListRiderDepositWithdrawalRefundOrdersByIDsParams{
+		UserID:         rider.UserID,
+		RefundOrderIds: []int64{refundOrder.ID, otherRefundOrder.ID},
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, refundOrder.ID, rows[0].RefundOrderID)
+	require.Equal(t, paymentOrder.ID, rows[0].PaymentOrderID)
+	require.Equal(t, int64(12000), rows[0].RefundAmount)
+	require.Equal(t, "pending", rows[0].Status)
+	require.Equal(t, paymentOrder.OutTradeNo, rows[0].OutTradeNo)
+	require.Equal(t, paymentOrder.Amount, rows[0].SourcePaymentAmount)
+
+	_, err = testStore.UpdateRefundOrderToProcessing(context.Background(), UpdateRefundOrderToProcessingParams{
+		ID:       refundOrder.ID,
+		RefundID: pgtype.Text{String: "wx_refund_tracking", Valid: true},
+	})
+	require.NoError(t, err)
+
+	rows, err = testStore.ListRiderDepositWithdrawalRefundOrdersByIDs(context.Background(), ListRiderDepositWithdrawalRefundOrdersByIDsParams{
+		UserID:         rider.UserID,
+		RefundOrderIds: []int64{refundOrder.ID},
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, "processing", rows[0].Status)
+	require.True(t, rows[0].RefundID.Valid)
+	require.Equal(t, "wx_refund_tracking", rows[0].RefundID.String)
+
+	otherRows, err := testStore.ListRiderDepositWithdrawalRefundOrdersByIDs(context.Background(), ListRiderDepositWithdrawalRefundOrdersByIDsParams{
+		UserID:         otherRider.UserID,
+		RefundOrderIds: []int64{refundOrder.ID},
+	})
+	require.NoError(t, err)
+	require.Empty(t, otherRows)
+	require.NotEqual(t, paymentOrder.ID, otherPaymentOrder.ID)
+}
+
 func TestResolveRiderDepositRefundTx_SuccessSettlesFrozenBalance(t *testing.T) {
 	setRiderDepositThresholdForTest(t, DefaultRiderDepositThresholdFen)
 

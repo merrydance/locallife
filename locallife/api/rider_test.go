@@ -1259,6 +1259,159 @@ func TestWithdrawRiderAPI(t *testing.T) {
 	}
 }
 
+func TestGetRiderWithdrawalStatusAPI(t *testing.T) {
+	user, _ := randomUser(t)
+	rider := randomRider(user.ID)
+	now := time.Now()
+
+	testCases := []struct {
+		name          string
+		query         string
+		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
+		buildStubs    func(store *mockdb.MockStore)
+		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
+	}{
+		{
+			name:  "OKMixedStatus",
+			query: "?refund_order_ids=1,2&refund_order_ids=2",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(rider, nil)
+				store.EXPECT().
+					ListRiderDepositWithdrawalRefundOrdersByIDs(gomock.Any(), db.ListRiderDepositWithdrawalRefundOrdersByIDsParams{
+						UserID:         user.ID,
+						RefundOrderIds: []int64{1, 2},
+					}).
+					Times(1).
+					Return([]db.ListRiderDepositWithdrawalRefundOrdersByIDsRow{
+						{
+							RefundOrderID:       1,
+							PaymentOrderID:      91,
+							RefundAmount:        3000,
+							OutRefundNo:         "RF_RIDER_001",
+							Status:              "pending",
+							CreatedAt:           now,
+							OutTradeNo:          "PO_RIDER_001",
+							SourcePaymentAmount: 10000,
+						},
+						{
+							RefundOrderID:       2,
+							PaymentOrderID:      92,
+							RefundAmount:        7000,
+							OutRefundNo:         "RF_RIDER_002",
+							RefundID:            pgtype.Text{String: "wx_refund_2", Valid: true},
+							Status:              "success",
+							RefundedAt:          pgtype.Timestamptz{Time: now.Add(time.Minute), Valid: true},
+							CreatedAt:           now,
+							OutTradeNo:          "PO_RIDER_002",
+							SourcePaymentAmount: 7000,
+						},
+					}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var resp riderWithdrawalStatusResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Equal(t, riderWithdrawProcessingStatus, resp.Status)
+				require.Equal(t, "提现处理中", resp.StatusText)
+				require.Equal(t, int64(10000), resp.AcceptedAmount)
+				require.Equal(t, int64(3000), resp.ProcessingAmount)
+				require.Equal(t, int64(7000), resp.SuccessAmount)
+				require.Equal(t, int64(0), resp.FailedAmount)
+				require.Len(t, resp.Refunds, 2)
+				require.Equal(t, riderWithdrawAcceptedStatus, resp.Refunds[0].Status)
+				require.Equal(t, riderWithdrawSuccessStatus, resp.Refunds[1].Status)
+				require.NotNil(t, resp.Refunds[1].RefundID)
+				require.Equal(t, "wx_refund_2", *resp.Refunds[1].RefundID)
+				require.NotNil(t, resp.Refunds[1].RefundedAt)
+				require.True(t, resp.Refunds[1].RefundedAt.Equal(now.Add(time.Minute)))
+			},
+		},
+		{
+			name:  "NotFound",
+			query: "?refund_order_ids=99",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(rider, nil)
+				store.EXPECT().
+					ListRiderDepositWithdrawalRefundOrdersByIDs(gomock.Any(), db.ListRiderDepositWithdrawalRefundOrdersByIDsParams{
+						UserID:         user.ID,
+						RefundOrderIds: []int64{99},
+					}).
+					Times(1).
+					Return([]db.ListRiderDepositWithdrawalRefundOrdersByIDsRow{}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusNotFound, recorder.Code)
+			},
+		},
+		{
+			name:  "InvalidIDs",
+			query: "?refund_order_ids=bad",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().GetRiderByUserID(gomock.Any(), gomock.Any()).Times(0)
+				store.EXPECT().ListRiderDepositWithdrawalRefundOrdersByIDs(gomock.Any(), gomock.Any()).Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
+			name:  "RiderNotFound",
+			query: "?refund_order_ids=1",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(db.Rider{}, db.ErrRecordNotFound)
+				store.EXPECT().ListRiderDepositWithdrawalRefundOrdersByIDs(gomock.Any(), gomock.Any()).Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusNotFound, recorder.Code)
+			},
+		},
+	}
+
+	for i := range testCases {
+		tc := testCases[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			tc.buildStubs(store)
+
+			server := newTestServer(t, store)
+			recorder := httptest.NewRecorder()
+
+			url := "/v1/rider/withdrawals/status" + tc.query
+			request, err := http.NewRequest(http.MethodGet, url, nil)
+			require.NoError(t, err)
+
+			tc.setupAuth(t, request, server.tokenMaker)
+			server.router.ServeHTTP(recorder, request)
+			tc.checkResponse(t, recorder)
+		})
+	}
+}
+
 func TestListRiderDepositsAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	rider := randomRider(user.ID)

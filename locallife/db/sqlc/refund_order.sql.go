@@ -458,6 +458,76 @@ func (q *Queries) ListRefundOrdersForReconciliation(ctx context.Context, arg Lis
 	return items, nil
 }
 
+const listRiderDepositWithdrawalRefundOrdersByIDs = `-- name: ListRiderDepositWithdrawalRefundOrdersByIDs :many
+SELECT
+    ro.id AS refund_order_id,
+    ro.payment_order_id,
+    ro.refund_amount,
+    ro.out_refund_no,
+    ro.refund_id,
+    ro.status,
+    ro.refunded_at,
+    ro.created_at,
+    po.out_trade_no,
+    po.amount AS source_payment_amount
+FROM refund_orders ro
+JOIN payment_orders po ON po.id = ro.payment_order_id
+WHERE po.user_id = $1::bigint
+    AND po.business_type = 'rider_deposit'
+    AND ro.refund_type = 'rider_deposit'
+    AND ro.id = ANY($2::bigint[])
+ORDER BY ro.created_at ASC, ro.id ASC
+`
+
+type ListRiderDepositWithdrawalRefundOrdersByIDsParams struct {
+	UserID         int64   `json:"user_id"`
+	RefundOrderIds []int64 `json:"refund_order_ids"`
+}
+
+type ListRiderDepositWithdrawalRefundOrdersByIDsRow struct {
+	RefundOrderID       int64              `json:"refund_order_id"`
+	PaymentOrderID      int64              `json:"payment_order_id"`
+	RefundAmount        int64              `json:"refund_amount"`
+	OutRefundNo         string             `json:"out_refund_no"`
+	RefundID            pgtype.Text        `json:"refund_id"`
+	Status              string             `json:"status"`
+	RefundedAt          pgtype.Timestamptz `json:"refunded_at"`
+	CreatedAt           time.Time          `json:"created_at"`
+	OutTradeNo          string             `json:"out_trade_no"`
+	SourcePaymentAmount int64              `json:"source_payment_amount"`
+}
+
+func (q *Queries) ListRiderDepositWithdrawalRefundOrdersByIDs(ctx context.Context, arg ListRiderDepositWithdrawalRefundOrdersByIDsParams) ([]ListRiderDepositWithdrawalRefundOrdersByIDsRow, error) {
+	rows, err := q.db.Query(ctx, listRiderDepositWithdrawalRefundOrdersByIDs, arg.UserID, arg.RefundOrderIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListRiderDepositWithdrawalRefundOrdersByIDsRow{}
+	for rows.Next() {
+		var i ListRiderDepositWithdrawalRefundOrdersByIDsRow
+		if err := rows.Scan(
+			&i.RefundOrderID,
+			&i.PaymentOrderID,
+			&i.RefundAmount,
+			&i.OutRefundNo,
+			&i.RefundID,
+			&i.Status,
+			&i.RefundedAt,
+			&i.CreatedAt,
+			&i.OutTradeNo,
+			&i.SourcePaymentAmount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listStuckProcessingRefundOrders = `-- name: ListStuckProcessingRefundOrders :many
 SELECT ro.id, ro.out_refund_no, ro.refund_id, ro.refund_amount, ro.status, ro.created_at,
        po.payment_type

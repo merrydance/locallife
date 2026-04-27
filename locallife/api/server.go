@@ -1084,6 +1084,7 @@ func (server *Server) setupRouter() {
 		riderGroup.GET("/deposit", server.getRiderDepositBalance)
 		riderGroup.POST("/deposit", server.depositRider)
 		riderGroup.POST("/withdraw", server.withdrawRider)
+		riderGroup.GET("/withdrawals/status", server.getRiderWithdrawalStatus)
 		riderGroup.GET("/deposits", server.listRiderDeposits)
 
 		// 上下线与状态
