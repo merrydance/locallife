@@ -11,6 +11,10 @@ export function getPaymentLedgerStatusView(entry: Pick<PaymentLedgerEntry, 'entr
   if (entry.entry_type === 'refund') {
     const refundStatusView = getRefundStatusView(entry.status)
 
+    if (refundStatusView.normalizedStatus === 'success') {
+      return { statusName: '退款成功', statusTheme: 'primary' }
+    }
+
     if (refundStatusView.isProcessing) {
       return { statusName: '退款中', statusTheme: 'warning' }
     }
@@ -23,10 +27,18 @@ export function getPaymentLedgerStatusView(entry: Pick<PaymentLedgerEntry, 'entr
       return { statusName: '已关闭', statusTheme: 'default' }
     }
 
-    return { statusName: '退款成功', statusTheme: 'primary' }
+    return { statusName: '状态同步中', statusTheme: 'default' }
   }
 
   const paymentStatusView = getPaymentStatusView(entry.status)
+
+  if (paymentStatusView.normalizedStatus === 'paid') {
+    return { statusName: '已支付', statusTheme: 'success' }
+  }
+
+  if (paymentStatusView.normalizedStatus === 'refunded') {
+    return { statusName: '已退款', statusTheme: 'primary' }
+  }
 
   if (paymentStatusView.normalizedStatus === 'pending') {
     return { statusName: '待支付', statusTheme: 'warning' }
@@ -40,5 +52,5 @@ export function getPaymentLedgerStatusView(entry: Pick<PaymentLedgerEntry, 'entr
     return { statusName: '已关闭', statusTheme: 'default' }
   }
 
-  return { statusName: '已支付', statusTheme: 'success' }
+  return { statusName: '状态同步中', statusTheme: 'default' }
 }

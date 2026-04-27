@@ -1,5 +1,34 @@
 import { buildRefundProgress, getRefundById, getRefundReturns, getRefundStatusView, ProfitSharingReturn, RefundOrder, RefundProgressView } from '../../../api/payment'
 import { logger } from '../../../utils/logger'
+import { getProfitSharingReturnStatusView, ProfitSharingReturnStatusTheme } from '../../../utils/profit-sharing-return-view'
+
+type ProfitSharingReturnView = ProfitSharingReturn & {
+    amountDisplay: string
+    statusText: string
+    statusTheme: ProfitSharingReturnStatusTheme
+    createdAtDisplay: string
+    finishedAtDisplay: string
+    displayTime: string
+    failReasonText: string
+}
+
+function formatFen(amount: number): string {
+    return (amount / 100).toFixed(2)
+}
+
+function buildProfitSharingReturnView(item: ProfitSharingReturn, formatTime: (timeStr: string) => string): ProfitSharingReturnView {
+    const statusView = getProfitSharingReturnStatusView(item.status)
+    return {
+        ...item,
+        amountDisplay: formatFen(item.amount),
+        statusText: statusView.statusText,
+        statusTheme: statusView.statusTheme,
+        createdAtDisplay: formatTime(item.created_at),
+        finishedAtDisplay: item.finished_at ? formatTime(item.finished_at) : '',
+        displayTime: item.finished_at ? formatTime(item.finished_at) : formatTime(item.created_at),
+        failReasonText: item.fail_reason || ''
+    }
+}
 
 Page({
     data: {
@@ -16,8 +45,12 @@ Page({
         statusIcon: 'info-circle-filled',
         refundTypeText: '',
         progress: [] as RefundProgressView[],
-        profitSharingReturns: [] as ProfitSharingReturn[],
-        showPendingTip: false
+        profitSharingReturns: [] as ProfitSharingReturnView[],
+        showPendingTip: false,
+        refundReasonText: '',
+        outRefundNoText: '',
+        createdAtDisplay: '',
+        refundedAtDisplay: ''
     },
 
     onLoad(options: { id?: string }) {
@@ -35,7 +68,9 @@ Page({
             this.processRefund(refund)
             try {
                 const returns = await getRefundReturns(this.data.refundId)
-                this.setData({ profitSharingReturns: returns || [] })
+                this.setData({
+                    profitSharingReturns: (returns || []).map((item) => buildProfitSharingReturnView(item, this.formatTime))
+                })
             } catch (returnErr) {
                 logger.warn('加载分账回退记录失败', returnErr, 'refund-detail.loadRefundDetail')
             }
@@ -56,11 +91,15 @@ Page({
 
     processRefund(refund: RefundOrder) {
         const statusView = getRefundStatusView(refund.status)
-        const amountDisplay = `¥${(refund.refund_amount / 100).toFixed(2)}`
+        const amountDisplay = formatFen(refund.refund_amount)
         const statusText = statusView.text
         const statusClass = statusView.className
         const refundTypeText = refund.refund_type === 'full' ? '全额退款' : '部分退款'
         const progress = buildRefundProgress(refund, this.formatTime)
+        const refundReasonText = refund.refund_reason || '无'
+        const outRefundNoText = refund.out_refund_no || '等待生成'
+        const createdAtDisplay = this.formatTime(refund.created_at)
+        const refundedAtDisplay = refund.refunded_at ? this.formatTime(refund.refunded_at) : ''
 
         this.setData({
             refund,
@@ -70,7 +109,11 @@ Page({
             statusIcon: statusView.icon,
             refundTypeText,
             progress,
-            showPendingTip: statusView.showPendingTip
+            showPendingTip: statusView.showPendingTip,
+            refundReasonText,
+            outRefundNoText,
+            createdAtDisplay,
+            refundedAtDisplay
         })
     },
 

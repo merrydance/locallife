@@ -129,6 +129,10 @@
   color: var(--td-text-color-secondary);
 }
 
+.refund-reason.is-error {
+  color: var(--td-error-color);
+}
+
 .refund-time {
   font-size: var(--font-size-xxs);
   color: var(--td-text-color-placeholder);
