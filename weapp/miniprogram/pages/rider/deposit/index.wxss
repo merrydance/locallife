@@ -106,6 +106,10 @@
   border: 1rpx solid var(--td-warning-color-disabled);
 }
 
+.status-card-inline--withdrawal {
+  border: 1rpx solid rgba(237, 108, 2, 0.18);
+}
+
 .status-card-inline--feedback {
   border: 1rpx solid transparent;
 }
@@ -120,11 +124,28 @@
   border-color: rgba(237, 108, 2, 0.18);
 }
 
+.status-card-inline--error {
+  background: var(--td-error-color-1);
+  border-color: rgba(224, 54, 54, 0.18);
+}
+
 .status-card-inline__header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 24rpx;
+}
+
+.status-card-inline__main {
+  flex: 1;
+  min-width: 0;
+}
+
+.status-card-inline__title-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  flex-wrap: wrap;
 }
 
 .status-card-inline__title {

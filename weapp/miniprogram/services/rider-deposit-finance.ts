@@ -107,15 +107,33 @@ export function getRiderDepositWithdrawStatusView(status?: string): RiderDeposit
   if (status === 'success') {
     return {
       isSuccess: true,
-      feedbackMessage: '提现已完成，账单记录已经同步更新。',
+      feedbackMessage: '提现已对账完成，账单记录已经同步更新。',
       feedbackTheme: 'success',
       shouldScheduleRefresh: false
     }
   }
 
+  if (status === 'failed') {
+    return {
+      isSuccess: false,
+      feedbackMessage: '提现未完成，资金会回到可用押金。请刷新账户后再重新申请。',
+      feedbackTheme: 'warning',
+      shouldScheduleRefresh: false
+    }
+  }
+
+  if (status === 'partial_failed') {
+    return {
+      isSuccess: false,
+      feedbackMessage: '部分提现未完成，请以账单明细和可用押金为准。',
+      feedbackTheme: 'warning',
+      shouldScheduleRefresh: true
+    }
+  }
+
   return {
     isSuccess: false,
-    feedbackMessage: '提现申请已提交，到账进度会同步到账单列表。',
+    feedbackMessage: '提现请求已受理，到账结果会在微信退款结果确认后同步到账单列表。',
     feedbackTheme: 'warning',
     shouldScheduleRefresh: true
   }

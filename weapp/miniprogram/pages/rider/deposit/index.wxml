@@ -59,6 +59,22 @@
           </view>
         </view>
 
+        <view wx:if="{{hasPendingWithdrawal}}" class="status-card-inline status-card-inline--withdrawal status-card-inline--{{pendingWithdrawalPanelTheme}}">
+          <view class="status-card-inline__header">
+            <view class="status-card-inline__main">
+              <view class="status-card-inline__title-row">
+                <view class="status-card-inline__title">{{pendingWithdrawalTitle}}</view>
+                <t-tag size="small" theme="{{pendingWithdrawalTagTheme}}" variant="light">{{pendingWithdrawalStatusText}}</t-tag>
+              </view>
+              <view class="status-card-inline__desc">{{pendingWithdrawalDescription}}</view>
+            </view>
+            <view class="status-card-inline__amount">{{pendingWithdrawalAmountDisplay}}</view>
+          </view>
+          <view wx:if="{{pendingWithdrawalCanRefresh}}" class="status-card-inline__actions">
+            <t-button size="small" theme="primary" variant="outline" bindtap="onRefreshPendingWithdrawal" loading="{{syncingPendingWithdrawal}}" disabled="{{syncingPendingWithdrawal}}">刷新状态</t-button>
+          </view>
+        </view>
+
         <view wx:if="{{actionFeedbackMessage}}" class="status-card-inline status-card-inline--feedback status-card-inline--{{actionFeedbackTheme}}">
           <view class="status-card-inline__title">{{actionFeedbackTheme === 'success' ? '状态已更新' : '请继续关注结果'}}</view>
           <view class="status-card-inline__desc">{{actionFeedbackMessage}}</view>

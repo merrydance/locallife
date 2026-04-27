@@ -80,6 +80,32 @@ export interface RiderWithdrawResponse {
     refunds: RiderWithdrawRefundItem[]
 }
 
+export interface RiderWithdrawalStatusRefundItem {
+    refund_order_id: number
+    payment_order_id: number
+    out_refund_no: string
+    refund_id?: string
+    amount: number
+    status: string
+    status_text: string
+    created_at: string
+    refunded_at?: string
+    source_payment_amount: number
+    out_trade_no: string
+}
+
+export interface RiderWithdrawalStatusResponse {
+    status: string
+    status_text: string
+    message: string
+    requested_refund_order_ids: number[]
+    accepted_amount: number
+    processing_amount: number
+    success_amount: number
+    failed_amount: number
+    refunds: RiderWithdrawalStatusRefundItem[]
+}
+
 export class RiderService {
     static async getMe(): Promise<RiderInfo> {
         return await request({ url: '/v1/rider/me', method: 'GET' })
@@ -122,6 +148,14 @@ export class RiderService {
             url: '/v1/rider/withdraw',
             method: 'POST',
             data
+        })
+    }
+
+    static async getWithdrawalStatus(refundOrderIds: number[]): Promise<RiderWithdrawalStatusResponse> {
+        return await request({
+            url: '/v1/rider/withdrawals/status',
+            method: 'GET',
+            data: { refund_order_ids: refundOrderIds.join(',') }
         })
     }
 

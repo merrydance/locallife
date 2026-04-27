@@ -13,6 +13,16 @@ import {
     type RiderDepositPendingRechargeContext,
     type RiderDepositRechargeWorkflowResult
 } from '../../../services/rider-deposit-payment'
+import {
+    buildPendingRiderDepositWithdrawalContext,
+    buildRiderDepositWithdrawalStatusData,
+    buildSubmittedRiderDepositWithdrawalView,
+    clearPendingRiderDepositWithdrawal,
+    buildStoredRiderDepositWithdrawalSyncFailedView,
+    recoverStoredRiderDepositWithdrawalStatus,
+    savePendingRiderDepositWithdrawal,
+    type RiderDepositWithdrawalStatusView
+} from '../../../services/rider-deposit-withdrawal'
 import Toast, { hideToast } from '../../../miniprogram_npm/tdesign-miniprogram/toast/index'
 import { logger } from '../../../utils/logger'
 import { getStableBarHeights } from '../../../utils/responsive'
@@ -33,6 +43,11 @@ interface UserMessageError {
 interface RechargeWorkflowOptions {
     silent?: boolean
     refreshIfNeeded?: boolean
+}
+
+interface WithdrawalStatusOptions {
+    silent?: boolean
+    refreshIfTerminal?: boolean
 }
 
 type ActionFeedbackTheme = 'success' | 'warning'
@@ -106,6 +121,16 @@ Page({
         pendingRechargePaymentId: 0,
         syncingPendingRecharge: false,
 
+        hasPendingWithdrawal: false,
+        pendingWithdrawalTitle: '',
+        pendingWithdrawalDescription: '',
+        pendingWithdrawalAmountDisplay: '',
+        pendingWithdrawalStatusText: '',
+        pendingWithdrawalTagTheme: 'warning',
+        pendingWithdrawalPanelTheme: 'warning',
+        pendingWithdrawalCanRefresh: false,
+        syncingPendingWithdrawal: false,
+
         transactions: [] as DepositRecordView[],
         pageID: 1,
         hasMore: true,
@@ -141,6 +166,7 @@ Page({
 
         void this.refreshAccount()
         void this.syncPendingRechargeState({ silent: false })
+        void this.syncPendingWithdrawalState({ silent: true, refreshIfTerminal: true })
     },
 
     setActionFeedback(message: string, theme: ActionFeedbackTheme = 'success') {
@@ -180,6 +206,10 @@ Page({
         financeRefreshTimerIds = []
     },
 
+    applyWithdrawalStatusView(view: RiderDepositWithdrawalStatusView | null) {
+        this.setData(buildRiderDepositWithdrawalStatusData(view))
+    },
+
     async refreshFinanceSurfaces() {
         if (financeRefreshPromise) {
             return financeRefreshPromise
@@ -192,6 +222,11 @@ Page({
             })
 
         return financeRefreshPromise
+    },
+
+    async refreshFinanceAndPendingWithdrawal() {
+        await this.refreshFinanceSurfaces()
+        await this.syncPendingWithdrawalState({ silent: true, refreshIfTerminal: false })
     },
 
     async reloadPage(showLoading: boolean = false) {
@@ -207,7 +242,8 @@ Page({
             await Promise.all([
                 this.refreshAccount(),
                 this.loadTransactions(1, true),
-                this.syncPendingRechargeState({ silent: true })
+                this.syncPendingRechargeState({ silent: true }),
+                this.syncPendingWithdrawalState({ silent: true, refreshIfTerminal: false })
             ])
             this.setData({ hasLoadedOnce: true })
         } finally {
@@ -275,6 +311,37 @@ Page({
             })
         } finally {
             this.setData({ loadingMore: false })
+        }
+    },
+
+    async syncPendingWithdrawalState(options: WithdrawalStatusOptions = {}) {
+        this.setData({ syncingPendingWithdrawal: true })
+        try {
+            const result = await recoverStoredRiderDepositWithdrawalStatus()
+            if (!result) {
+                this.applyWithdrawalStatusView(null)
+                return
+            }
+
+            this.applyWithdrawalStatusView(result.view)
+            if (!options.silent) {
+                this.setActionFeedback(result.view.feedbackMessage, result.view.feedbackTheme)
+            }
+
+            if (result.isTerminal) {
+                if (options.refreshIfTerminal !== false && result.shouldRefreshFinance) {
+                    await this.refreshFinanceSurfaces()
+                }
+            }
+        } catch (err: unknown) {
+            logger.error('Recover rider deposit withdrawal failed', err)
+            const failedView = buildStoredRiderDepositWithdrawalSyncFailedView()
+            this.applyWithdrawalStatusView(failedView)
+            if (!options.silent) {
+                this.setActionFeedback('提现状态同步失败，请稍后刷新状态或查看账单明细。', 'warning')
+            }
+        } finally {
+            this.setData({ syncingPendingWithdrawal: false })
         }
     },
 
@@ -353,6 +420,15 @@ Page({
         this.reloadPage(false)
     },
 
+    async onRefreshPendingWithdrawal() {
+        if (this.data.syncingPendingWithdrawal) {
+            return
+        }
+
+        this.clearActionFeedback()
+        await this.syncPendingWithdrawalState({ silent: false, refreshIfTerminal: true })
+    },
+
     onShowRecharge() {
         if (this.data.hasPendingRecharge) {
             showDepositResultToast(this, '当前有待确认充值，请先完成该笔支付')
@@ -398,7 +474,7 @@ Page({
     scheduleFinanceRefresh() {
         this.clearScheduledFinanceRefreshes()
         financeRefreshTimerIds = FINANCE_REFRESH_DELAY_MS.map((delayMs) => setTimeout(() => {
-            void this.refreshFinanceSurfaces()
+            void this.refreshFinanceAndPendingWithdrawal()
         }, delayMs) as unknown as number)
     },
 
@@ -509,11 +585,21 @@ Page({
             })
             hideDepositToast(this)
             const withdrawStatusView = getRiderDepositWithdrawStatusView(result.status)
+            const pendingWithdrawal = buildPendingRiderDepositWithdrawalContext(result)
+            const submittedWithdrawalView = buildSubmittedRiderDepositWithdrawalView(result)
+
+            if (pendingWithdrawal && submittedWithdrawalView) {
+                savePendingRiderDepositWithdrawal(pendingWithdrawal)
+                this.applyWithdrawalStatusView(submittedWithdrawalView)
+            } else {
+                clearPendingRiderDepositWithdrawal()
+                this.applyWithdrawalStatusView(null)
+            }
 
             this.setActionFeedback(withdrawStatusView.feedbackMessage, withdrawStatusView.feedbackTheme)
             this.setData({ isWithdrawVisible: false, withdrawAmount: '' })
             await this.refreshFinanceSurfaces()
-            if (withdrawStatusView.shouldScheduleRefresh) {
+            if (withdrawStatusView.shouldScheduleRefresh || pendingWithdrawal) {
                 this.scheduleFinanceRefresh()
             }
         } catch (err: unknown) {
