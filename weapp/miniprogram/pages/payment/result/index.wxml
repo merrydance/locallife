@@ -1,0 +1,29 @@
+<custom-navbar title="{{navTitle}}" showBack="{{false}}" />
+
+<view class="payment-result-page page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px;">
+  <view class="result-content">
+    <t-result theme="{{theme}}" title="{{title}}" description="{{description}}" />
+
+    <view class="result-summary" wx:if="{{showSummary}}">
+      <view class="summary-row" wx:if="{{amount}}">
+        <text class="summary-label">支付金额</text>
+        <text class="summary-value summary-price">¥{{amount}}</text>
+      </view>
+      <view class="summary-row" wx:if="{{orderNo}}">
+        <text class="summary-label">支付单号</text>
+        <text class="summary-value">{{orderNo}}</text>
+      </view>
+      <view class="summary-row" wx:if="{{paymentOrderId}}">
+        <text class="summary-label">本地支付单</text>
+        <text class="summary-value">{{paymentOrderId}}</text>
+      </view>
+    </view>
+
+    <view class="status-note" wx:if="{{statusNote}}">{{statusNote}}</view>
+
+    <view class="result-actions">
+      <t-button theme="primary" block size="large" shape="round" loading="{{refreshing}}" disabled="{{refreshing}}" bindtap="onPrimaryAction">{{primaryButtonText}}</t-button>
+      <t-button theme="default" variant="outline" block size="large" shape="round" disabled="{{refreshing}}" bindtap="onSecondaryAction">{{secondaryButtonText}}</t-button>
+    </view>
+  </view>
+</view>

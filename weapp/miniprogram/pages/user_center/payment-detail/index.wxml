@@ -102,7 +102,7 @@
       <view class="bottom-action-bar animate-slide-up" wx:if="{{showCloseButton || showPayButton}}">
         <view class="action-buttons">
           <t-button wx:if="{{showPayButton}}" theme="primary" shape="round" block size="large" bindtap="onContinuePay" loading="{{paying}}" disabled="{{paying}}">继续支付</t-button>
-          <t-button wx:if="{{showCloseButton}}" theme="primary" shape="round" block size="large" bindtap="onClosePayment" disabled="{{paying}}">关闭支付详情</t-button>
+          <t-button wx:if="{{showCloseButton}}" theme="danger" variant="outline" shape="round" block size="large" bindtap="onClosePayment" disabled="{{paying}}">关闭支付单</t-button>
         </view>
       </view>
     </view>

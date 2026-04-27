@@ -1,0 +1,68 @@
+@import '../../../styles/customer.wxss';
+
+.payment-result-page {
+  min-height: 100vh;
+  background: var(--td-bg-color-page);
+}
+
+.result-content {
+  padding: var(--spacer-xl) 0 var(--spacer-lg);
+}
+
+.result-summary {
+  margin-top: var(--spacer-lg);
+  padding: var(--spacer-md);
+  border-radius: var(--radius-md);
+  background: var(--td-bg-color-container);
+  box-shadow: var(--shadow-sm);
+}
+
+.summary-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacer-md);
+  padding: var(--spacer-sm) 0;
+}
+
+.summary-row + .summary-row {
+  border-top: 1rpx solid var(--td-border-level-1-color);
+}
+
+.summary-label {
+  flex-shrink: 0;
+  font-size: var(--font-size-sm);
+  color: var(--td-text-color-secondary);
+}
+
+.summary-value {
+  min-width: 0;
+  font-size: var(--font-size-sm);
+  color: var(--td-text-color-primary);
+  font-weight: 500;
+  text-align: right;
+  word-break: break-all;
+}
+
+.summary-price {
+  color: var(--td-error-color);
+  font-size: var(--font-size-heading);
+  font-weight: 600;
+}
+
+.status-note {
+  margin-top: var(--spacer-md);
+  padding: var(--spacer-sm) var(--spacer-md);
+  border-radius: var(--radius-md);
+  color: var(--td-text-color-secondary);
+  background: var(--td-bg-color-container);
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+}
+
+.result-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-sm);
+  margin-top: var(--spacer-xl);
+}

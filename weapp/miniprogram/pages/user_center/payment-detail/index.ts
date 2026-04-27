@@ -1,8 +1,9 @@
-import { BusinessType, closePayment, createPayment as createPaymentOrder, getPaymentById, getPaymentRefunds, getPayments, getPaymentStatusView, getRefundStatusView, invokeWechatPay, isPaymentStatusSuccessful, PaymentOrder, RefundOrder } from '../../../api/payment'
+import { BusinessType, closePayment, getPaymentById, getPaymentRefunds, getPayments, getPaymentStatusView, getRefundStatusView, PaymentOrder, RefundOrder } from '../../../api/payment'
 import {
     getRiderDepositRechargeWorkflowStatusView,
     submitRiderDepositRecharge
 } from '../../../services/rider-deposit-payment'
+import { startPaymentOrderWorkflow } from '../../../services/payment-workflow'
 import { logger } from '../../../utils/logger'
 import Navigation from '../../../utils/navigation'
 
@@ -127,7 +128,7 @@ Page({
 
     processPayment(payment: PaymentOrder) {
         const statusView = getPaymentStatusView(payment.status)
-        const amountDisplay = `¥${(payment.amount / 100).toFixed(2)}`
+        const amountDisplay = (payment.amount / 100).toFixed(2)
         const statusText = statusView.text
         const statusClass = statusView.className
         const paymentMethodText = this.getPaymentMethodText(payment.payment_type)
@@ -201,44 +202,29 @@ Page({
                 return
             }
 
-            const latestPayment = await createPaymentOrder({
-                order_id: payment.order_id,
-                payment_type: 'miniprogram',
-                business_type: normalizeBusinessType(payment.business_type)
+            const paymentResult = await startPaymentOrderWorkflow({
+                orderId: payment.order_id,
+                paymentType: 'miniprogram',
+                businessType: normalizeBusinessType(payment.business_type),
+                maxAttempts: 5,
+                interval: 1500
             })
 
-            if (latestPayment.pay_params) {
-                try {
-                    await invokeWechatPay(latestPayment.pay_params)
-                } catch (error: unknown) {
-                    const wxError = error as { errMsg?: string }
-                    if (wxError?.errMsg?.includes('cancel')) {
-                        wx.showToast({ title: '已取消支付', icon: 'none' })
-                        return
-                    }
-                    throw error
-                }
-            } else if (!isPaymentStatusSuccessful(latestPayment.status)) {
-                throw new Error('支付参数缺失')
+            if (paymentResult.paymentOrderId) {
+                this.setData({ paymentId: paymentResult.paymentOrderId })
             }
 
-            if (latestPayment.order_id) {
-                Navigation.toPaymentSuccess({
-                    orderId: String(latestPayment.order_id),
-                    orderNo: latestPayment.out_trade_no || String(latestPayment.order_id),
-                    amount: (latestPayment.amount / 100).toFixed(2)
-                })
-                return
-            }
-
-            if (latestPayment.id) {
-                this.setData({ paymentId: latestPayment.id })
-            }
-            await new Promise((resolve) => setTimeout(resolve, 1200))
-            await this.loadPaymentDetail()
+            Navigation.toPaymentResult({
+                status: paymentResult.status,
+                paymentOrderId: paymentResult.paymentOrderId,
+                businessId: paymentResult.businessId || payment.order_id,
+                businessType: paymentResult.businessType || payment.business_type,
+                orderNo: paymentResult.outTradeNo,
+                amount: paymentResult.amountFen ? (paymentResult.amountFen / 100).toFixed(2) : this.data.amountDisplay
+            })
         } catch (error) {
             logger.error('继续支付失败', error, 'payment-detail.onContinuePay')
-            wx.showToast({ title: '支付失败', icon: 'none' })
+            wx.showToast({ title: '支付未完成，请稍后重试', icon: 'none' })
         } finally {
             wx.hideLoading()
             this.setData({ paying: false })
@@ -253,7 +239,7 @@ Page({
                 const statusView = getRefundStatusView(refund.status)
                 return {
                     ...refund,
-                    _amountDisplay: `¥${(refund.refund_amount / 100).toFixed(2)}`,
+                    _amountDisplay: (refund.refund_amount / 100).toFixed(2),
                     _statusText: statusView.text,
                     _statusClass: statusView.className,
                     _statusTheme: statusView.theme
@@ -290,8 +276,8 @@ Page({
 
     async onClosePayment() {
         wx.showModal({
-            title: '关闭支付',
-            content: '确定要关闭此支付订单吗？关闭后将无法继续支付。',
+            title: '关闭支付单',
+            content: '关闭后该支付单无法继续支付，如仍需付款需要重新发起。',
             success: async (res) => {
                 if (res.confirm) {
                     wx.showLoading({ title: '处理中...' })

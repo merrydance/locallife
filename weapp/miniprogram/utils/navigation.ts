@@ -122,6 +122,35 @@ export class Navigation {
     wx.redirectTo({ url })
   }
 
+  static toPaymentResult(params: {
+    status: string
+    paymentOrderId?: string | number
+    businessId?: string | number
+    businessType?: string
+    orderNo?: string
+    amount?: string
+  }) {
+    const query: string[] = [`status=${encodeURIComponent(params.status)}`]
+
+    if (params.paymentOrderId !== undefined) {
+      query.push(`paymentOrderId=${encodeURIComponent(String(params.paymentOrderId))}`)
+    }
+    if (params.businessId !== undefined) {
+      query.push(`businessId=${encodeURIComponent(String(params.businessId))}`)
+    }
+    if (params.businessType) {
+      query.push(`businessType=${encodeURIComponent(params.businessType)}`)
+    }
+    if (params.orderNo) {
+      query.push(`orderNo=${encodeURIComponent(params.orderNo)}`)
+    }
+    if (params.amount) {
+      query.push(`amount=${encodeURIComponent(params.amount)}`)
+    }
+
+    wx.redirectTo({ url: `/pages/payment/result/index?${query.join('&')}` })
+  }
+
   static toDineInPaymentSuccess(params: { orderId: string, amount: string, merchantName?: string, tableNumber?: string }) {
     let url = `/pages/dine-in/payment-success/payment-success?order_id=${params.orderId}&amount=${params.amount}`
     if (params.merchantName) {

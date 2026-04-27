@@ -1,0 +1,7 @@
+{
+  "usingComponents": {
+    "custom-navbar": "/components/custom-navbar/index",
+    "t-result": "tdesign-miniprogram/result/result",
+    "t-button": "tdesign-miniprogram/button/button"
+  }
+}

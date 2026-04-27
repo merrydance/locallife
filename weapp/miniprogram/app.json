@@ -86,6 +86,11 @@
       ]
     },
     {
+      "root": "pages/payment",
+      "name": "payment",
+      "pages": ["result/index"]
+    },
+    {
       "root": "pages/dine-in",
       "name": "dinein",
       "pages": [
