@@ -404,8 +404,11 @@ Page({
       }
 
       this.setData({ selectedPayMap: {}, selectedPayCount: 0 })
-      Navigation.toPaymentSuccess({
-        orderId: String(orderId),
+      Navigation.toPaymentResult({
+        status: 'paid',
+        paymentOrderId: payment.id,
+        businessId: orderId,
+        businessType: 'order',
         orderNo: payment.out_trade_no || String(orderId),
         amount: (payment.amount / 100).toFixed(2)
       })

@@ -385,12 +385,12 @@ Page({
             await invokeWechatPay(combinedPayment.pay_params)
             combinedPayment = await recoverCombinedPaymentOrder(combinedPayment.id)
             if (isCombinedPaymentSuccessful(combinedPayment)) {
-              Navigation.toPaymentSuccess({
-                orderId,
+              Navigation.toPaymentResult({
+                status: 'paid',
+                businessId: orderId,
+                businessType: 'order',
                 orderNo: combinedPayment.combine_out_trade_no || this.data.order?.orderNo || orderId,
-                amount: (combinedPayment.total_amount / 100).toFixed(2),
-                isCombined: true,
-                orderCount: combinedPayment.sub_orders.length
+                amount: (combinedPayment.total_amount / 100).toFixed(2)
               })
               return
             }
@@ -413,12 +413,12 @@ Page({
 
             combinedPayment = await recoverCombinedPaymentOrder(combinedPayment.id)
             if (isCombinedPaymentSuccessful(combinedPayment)) {
-              Navigation.toPaymentSuccess({
-                orderId,
+              Navigation.toPaymentResult({
+                status: 'paid',
+                businessId: orderId,
+                businessType: 'order',
                 orderNo: combinedPayment.combine_out_trade_no || this.data.order?.orderNo || orderId,
-                amount: (combinedPayment.total_amount / 100).toFixed(2),
-                isCombined: true,
-                orderCount: combinedPayment.sub_orders.length
+                amount: (combinedPayment.total_amount / 100).toFixed(2)
               })
               return
             }
@@ -429,12 +429,12 @@ Page({
             }
           }
         } else if (isCombinedPaymentSuccessful(combinedPayment)) {
-          Navigation.toPaymentSuccess({
-            orderId,
+          Navigation.toPaymentResult({
+            status: 'paid',
+            businessId: orderId,
+            businessType: 'order',
             orderNo: combinedPayment.combine_out_trade_no || this.data.order?.orderNo || orderId,
-            amount: (combinedPayment.total_amount / 100).toFixed(2),
-            isCombined: true,
-            orderCount: combinedPayment.sub_orders.length
+            amount: (combinedPayment.total_amount / 100).toFixed(2)
           })
           return
         } else {
@@ -464,8 +464,11 @@ Page({
           return
         }
 
-        Navigation.toPaymentSuccess({
-          orderId,
+        Navigation.toPaymentResult({
+          status: 'paid',
+          paymentOrderId: fallbackPayment.id,
+          businessId: orderId,
+          businessType: 'order',
           orderNo: fallbackPayment.out_trade_no || this.data.order?.orderNo || orderId,
           amount: (fallbackPayment.amount / 100).toFixed(2)
         })
@@ -488,8 +491,11 @@ Page({
       
       const { order } = this.data
       if (order) {
-        Navigation.toPaymentSuccess({
-          orderId,
+        Navigation.toPaymentResult({
+          status: 'paid',
+          paymentOrderId: paymentResult.paymentId,
+          businessId: orderId,
+          businessType: 'order',
           orderNo: order.orderNo,
           amount: (order.payableAmount / 100).toFixed(2)
         })

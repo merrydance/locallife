@@ -51,12 +51,12 @@ export const isWechatPayCancelled = (error: unknown): boolean => {
 
 export const navigateToCombinedPaymentSuccess = (combinedPayment: CombinedPaymentOrderResponse, orderIds: number[]) => {
   const firstOrderId = combinedPayment.sub_orders?.[0]?.order_id || orderIds[0]
-  Navigation.toPaymentSuccess({
-    orderId: String(firstOrderId),
+  Navigation.toPaymentResult({
+    status: 'paid',
+    businessId: firstOrderId,
+    businessType: 'order',
     orderNo: combinedPayment.combine_out_trade_no || String(firstOrderId),
-    amount: (combinedPayment.total_amount / 100).toFixed(2),
-    isCombined: true,
-    orderCount: orderIds.length
+    amount: (combinedPayment.total_amount / 100).toFixed(2)
   })
 }
 
