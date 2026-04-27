@@ -17,16 +17,13 @@ import {
 import {
   createOrderPayment,
   getCombinedPaymentFollowupMessage,
-  getPaymentProcessOutcomeMessage,
   isCombinedPaymentSuccessful,
-  isPaymentProcessSuccessful,
   PaymentCancelledError,
-  processCreatedPayment,
   recoverCombinedPaymentOrder,
   shouldRecreateCombinedPayment,
-  invokeWechatPay,
-  processPayment
+  invokeWechatPay
 } from '../../../api/payment'
+import { completePaymentWorkflow, startPaymentOrderWorkflow } from '../../../services/payment-workflow'
 import { OrderAdapter } from '../../../adapters/order'
 import { OrderDetail } from '../../../models/order'
 import { generateOrderTimeline } from '../../../utils/timeline'
@@ -444,60 +441,33 @@ Page({
           }
         }
 
-        const fallbackResult = await processCreatedPayment(await createOrderPayment(parseInt(orderId, 10)))
-        if (!isPaymentProcessSuccessful(fallbackResult)) {
-          await this.loadOrderDetail()
-          wx.showToast({
-            title: getPaymentProcessOutcomeMessage(fallbackResult, {
-              failed: '支付未完成，请稍后重试',
-              unknown: '支付结果确认中，请稍后刷新订单详情'
-            }),
-            icon: 'none'
-          })
-          return
-        }
-
-        const fallbackPayment = fallbackResult.payment
-        if (!fallbackPayment) {
-          await this.loadOrderDetail()
-          wx.showToast({ title: '支付结果确认中，请稍后刷新订单详情', icon: 'none' })
-          return
-        }
+        const fallbackResult = await completePaymentWorkflow(await createOrderPayment(parseInt(orderId, 10)))
 
         Navigation.toPaymentResult({
-          status: 'paid',
-          paymentOrderId: fallbackPayment.id,
+          status: fallbackResult.status,
+          paymentOrderId: fallbackResult.paymentOrderId,
           businessId: orderId,
-          businessType: 'order',
-          orderNo: fallbackPayment.out_trade_no || this.data.order?.orderNo || orderId,
-          amount: (fallbackPayment.amount / 100).toFixed(2)
+          businessType: fallbackResult.businessType || 'order',
+          orderNo: fallbackResult.outTradeNo || this.data.order?.orderNo || orderId,
+          amount: fallbackResult.amountFen ? (fallbackResult.amountFen / 100).toFixed(2) : undefined
         })
         return
       }
 
-      const paymentResult = await processPayment(parseInt(orderId, 10), 'order')
-
-      if (!isPaymentProcessSuccessful(paymentResult)) {
-        await this.loadOrderDetail()
-        wx.showToast({
-          title: getPaymentProcessOutcomeMessage(paymentResult, {
-            failed: '支付未完成，请重新发起',
-            unknown: '支付结果确认中，请稍后刷新'
-          }),
-          icon: 'none'
-        })
-        return
-      }
+      const paymentResult = await startPaymentOrderWorkflow({
+        orderId: parseInt(orderId, 10),
+        businessType: 'order'
+      })
       
       const { order } = this.data
       if (order) {
         Navigation.toPaymentResult({
-          status: 'paid',
-          paymentOrderId: paymentResult.paymentId,
+          status: paymentResult.status,
+          paymentOrderId: paymentResult.paymentOrderId,
           businessId: orderId,
-          businessType: 'order',
-          orderNo: order.orderNo,
-          amount: (order.payableAmount / 100).toFixed(2)
+          businessType: paymentResult.businessType || 'order',
+          orderNo: paymentResult.outTradeNo || order.orderNo,
+          amount: paymentResult.amountFen ? (paymentResult.amountFen / 100).toFixed(2) : (order.payableAmount / 100).toFixed(2)
         })
       } else {
         await this.loadOrderDetail()

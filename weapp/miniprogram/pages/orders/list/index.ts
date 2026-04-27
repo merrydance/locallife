@@ -15,14 +15,12 @@ import {
   CombinedPaymentOrderResponse,
   createCombinedPaymentOrder,
   createOrderPayment,
-  getPaymentProcessOutcomeMessage,
   isCombinedPaymentSuccessful,
-  isPaymentProcessSuccessful,
-  processCreatedPayment,
   recoverCombinedPaymentOrder,
   shouldRecreateCombinedPayment,
   invokeWechatPay
 } from '../../../api/payment'
+import { completePaymentWorkflow, isPaymentWorkflowPaid } from '../../../services/payment-workflow'
 import Navigation from '../../../utils/navigation'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 const getErrorMessage = getErrorUserMessage
@@ -383,34 +381,18 @@ Page({
           }
         }
 
-      const paymentResult = await processCreatedPayment(await createOrderPayment(orderId))
-      if (!isPaymentProcessSuccessful(paymentResult)) {
-        await this.loadOrders(true)
-        wx.showToast({
-          title: getPaymentProcessOutcomeMessage(paymentResult, {
-            failed: '支付未完成，请重新发起',
-            unknown: '支付结果确认中，请稍后刷新'
-          }),
-          icon: 'none'
-        })
-        return
-      }
+      const paymentResult = await completePaymentWorkflow(await createOrderPayment(orderId))
 
-      const payment = paymentResult.payment
-      if (!payment) {
-        await this.loadOrders(true)
-        wx.showToast({ title: '支付结果确认中，请稍后刷新', icon: 'none' })
-        return
+      if (isPaymentWorkflowPaid(paymentResult.status)) {
+        this.setData({ selectedPayMap: {}, selectedPayCount: 0 })
       }
-
-      this.setData({ selectedPayMap: {}, selectedPayCount: 0 })
       Navigation.toPaymentResult({
-        status: 'paid',
-        paymentOrderId: payment.id,
+        status: paymentResult.status,
+        paymentOrderId: paymentResult.paymentOrderId,
         businessId: orderId,
-        businessType: 'order',
-        orderNo: payment.out_trade_no || String(orderId),
-        amount: (payment.amount / 100).toFixed(2)
+        businessType: paymentResult.businessType || 'order',
+        orderNo: paymentResult.outTradeNo || String(orderId),
+        amount: paymentResult.amountFen ? (paymentResult.amountFen / 100).toFixed(2) : undefined
       })
     } catch (error) {
       logger.error('单笔支付失败', error, 'List.paySingleOrder')

@@ -5,13 +5,10 @@ import {
   createCombinedPaymentOrder,
   createOrderPayment,
   isCombinedPaymentSuccessful,
-  isPaymentProcessSuccessful,
-  getPaymentProcessOutcomeMessage,
-  PaymentCancelledError,
-  processCreatedPayment,
   recoverCombinedPaymentOrder,
   invokeWechatPay
 } from '../../../api/payment'
+import { completePaymentWorkflow } from '../../../services/payment-workflow'
 import Navigation from '../../../utils/navigation'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 import {
@@ -480,42 +477,16 @@ Page({
 
   async handlePayment(orderId: number) {
     try {
-      const paymentResult = await processCreatedPayment(await createOrderPayment(orderId))
-      if (isPaymentProcessSuccessful(paymentResult) && paymentResult.payment) {
-        const payment = paymentResult.payment
-        Navigation.toPaymentResult({
-          status: 'paid',
-          paymentOrderId: payment.id,
-          businessId: orderId,
-          businessType: 'order',
-          orderNo: payment.out_trade_no || String(orderId),
-          amount: (payment.amount / 100).toFixed(2)
-        })
-        return
-      }
-
-      wx.showModal({
-        title: '支付未完成',
-        content: `${getPaymentProcessOutcomeMessage(paymentResult, {
-          failed: '支付未完成，请在订单详情页重新发起。',
-          unknown: '支付结果确认中，请稍后刷新订单详情。'
-        })}`,
-        showCancel: false,
-        confirmText: '查看订单',
-        success: () => wx.redirectTo({ url: `/pages/orders/detail/index?id=${orderId}` })
+      const paymentResult = await completePaymentWorkflow(await createOrderPayment(orderId))
+      Navigation.toPaymentResult({
+        status: paymentResult.status,
+        paymentOrderId: paymentResult.paymentOrderId,
+        businessId: orderId,
+        businessType: paymentResult.businessType || 'order',
+        orderNo: paymentResult.outTradeNo || String(orderId),
+        amount: paymentResult.amountFen ? (paymentResult.amountFen / 100).toFixed(2) : undefined
       })
     } catch (paymentError) {
-      if (paymentError instanceof PaymentCancelledError) {
-        wx.showModal({
-          title: '支付未完成',
-          content: '订单已创建，可在订单详情页重新发起支付。',
-          showCancel: false,
-          confirmText: '查看订单',
-          success: () => wx.redirectTo({ url: `/pages/orders/detail/index?id=${orderId}` })
-        })
-        return
-      }
-
       logger.error('Payment creation failed', paymentError, 'Order-confirm')
       this.showPaymentCreateFailed(orderId)
     } finally {
