@@ -133,6 +133,86 @@ func TestProcessPaymentSuccessTx_RiderDepositIsIdempotent(t *testing.T) {
 	require.Equal(t, int64(0), credit.RefundedAmount)
 }
 
+func TestProcessPaymentSuccessTx_RiderDepositCompletesMissingCreditWithoutDoubleCrediting(t *testing.T) {
+	setRiderDepositThresholdForTest(t, DefaultRiderDepositThresholdFen)
+
+	rider := createRandomRider(t)
+	paymentOrder := createPaidRiderDepositPaymentOrder(t, rider, 26000)
+
+	updatedRider, err := testStore.UpdateRiderDeposit(context.Background(), UpdateRiderDepositParams{
+		ID:            rider.ID,
+		DepositAmount: paymentOrder.Amount,
+		FrozenDeposit: 0,
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.CreateRiderDeposit(context.Background(), CreateRiderDepositParams{
+		RiderID:        rider.ID,
+		Amount:         paymentOrder.Amount,
+		Type:           "deposit",
+		BalanceAfter:   updatedRider.DepositAmount,
+		PaymentOrderID: pgtype.Int8{Int64: paymentOrder.ID, Valid: true},
+		Remark:         pgtype.Text{String: "partial retry fixture", Valid: true},
+	})
+	require.NoError(t, err)
+
+	result, err := testStore.(*SQLStore).ProcessPaymentSuccessTx(context.Background(), ProcessPaymentSuccessTxParams{
+		PaymentOrderID: paymentOrder.ID,
+	})
+	require.NoError(t, err)
+	require.True(t, result.Processed)
+
+	persistedRider, err := testStore.GetRider(context.Background(), rider.ID)
+	require.NoError(t, err)
+	require.Equal(t, paymentOrder.Amount, persistedRider.DepositAmount)
+
+	credit, err := testStore.GetRiderDepositCreditByPaymentOrderID(context.Background(), paymentOrder.ID)
+	require.NoError(t, err)
+	require.Equal(t, paymentOrder.Amount, credit.RefundableAmount)
+	require.Equal(t, int64(0), credit.RefundedAmount)
+}
+
+func TestProcessPaymentSuccessTx_RiderDepositCompletesMissingDepositLogWithoutDoubleCrediting(t *testing.T) {
+	setRiderDepositThresholdForTest(t, DefaultRiderDepositThresholdFen)
+
+	rider := createRandomRider(t)
+	paymentOrder := createPaidRiderDepositPaymentOrder(t, rider, 27000)
+
+	updatedRider, err := testStore.UpdateRiderDeposit(context.Background(), UpdateRiderDepositParams{
+		ID:            rider.ID,
+		DepositAmount: paymentOrder.Amount,
+		FrozenDeposit: 0,
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.CreateRiderDepositCredit(context.Background(), CreateRiderDepositCreditParams{
+		RiderID:          rider.ID,
+		PaymentOrderID:   paymentOrder.ID,
+		OriginalAmount:   paymentOrder.Amount,
+		RefundableAmount: paymentOrder.Amount,
+		RefundedAmount:   0,
+		Status:           riderDepositCreditStatusActive,
+		PaidAt:           paymentOrder.PaidAt.Time,
+		RefundableUntil:  paymentOrder.PaidAt.Time.Add(riderDepositRefundWindow),
+	})
+	require.NoError(t, err)
+
+	result, err := testStore.(*SQLStore).ProcessPaymentSuccessTx(context.Background(), ProcessPaymentSuccessTxParams{
+		PaymentOrderID: paymentOrder.ID,
+	})
+	require.NoError(t, err)
+	require.True(t, result.Processed)
+
+	persistedRider, err := testStore.GetRider(context.Background(), rider.ID)
+	require.NoError(t, err)
+	require.Equal(t, updatedRider.DepositAmount, persistedRider.DepositAmount)
+
+	depositLog, err := testStore.GetRiderDepositByPaymentOrderID(context.Background(), pgtype.Int8{Int64: paymentOrder.ID, Valid: true})
+	require.NoError(t, err)
+	require.Equal(t, paymentOrder.Amount, depositLog.Amount)
+	require.Equal(t, updatedRider.DepositAmount, depositLog.BalanceAfter)
+}
+
 func TestProcessPaymentSuccessTx_OrderSetsPaidFields(t *testing.T) {
 	user := createRandomUser(t)
 	merchantOwner := createRandomUser(t)

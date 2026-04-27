@@ -1462,6 +1462,7 @@ type Querier interface {
 	// 骑手查看收到的索赔列表（通过配送单关联）
 	ListRiderClaimsForRider(ctx context.Context, arg ListRiderClaimsForRiderParams) ([]ListRiderClaimsForRiderRow, error)
 	ListRiderDepositCreditsForReminderWindow(ctx context.Context, arg ListRiderDepositCreditsForReminderWindowParams) ([]RiderDepositCredit, error)
+	ListRiderDepositLedgerAnomalies(ctx context.Context, arg ListRiderDepositLedgerAnomaliesParams) ([]ListRiderDepositLedgerAnomaliesRow, error)
 	ListRiderDeposits(ctx context.Context, arg ListRiderDepositsParams) ([]RiderDeposit, error)
 	ListRiderDepositsByType(ctx context.Context, arg ListRiderDepositsByTypeParams) ([]RiderDeposit, error)
 	ListRiderLocations(ctx context.Context, arg ListRiderLocationsParams) ([]RiderLocation, error)

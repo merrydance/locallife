@@ -68,8 +68,12 @@ func (store *SQLStore) PrepareRiderDepositRefundTx(ctx context.Context, arg Prep
 			return ErrRiderDepositFrozen
 		}
 
-		availableBalance := rider.DepositAmount - rider.FrozenDeposit
-		if arg.Amount > availableBalance {
+		withdrawalProcessingAmount, err := q.GetPendingRiderDepositRefundAmountByUserID(ctx, rider.UserID)
+		if err != nil {
+			return fmt.Errorf("get pending rider deposit refund amount: %w", err)
+		}
+		availability := CalculateRiderDepositAvailability(rider, withdrawalProcessingAmount)
+		if arg.Amount > availability.AvailableDeposit {
 			return ErrInsufficientDeposit
 		}
 
@@ -79,7 +83,7 @@ func (store *SQLStore) PrepareRiderDepositRefundTx(ctx context.Context, arg Prep
 		}
 
 		remaining := arg.Amount
-		availableAfter := availableBalance
+		availableAfter := availability.AvailableDeposit
 		plans := make([]RiderDepositRefundPlan, 0)
 
 		for _, credit := range credits {

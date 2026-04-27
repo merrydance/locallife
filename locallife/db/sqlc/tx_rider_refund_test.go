@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/merrydance/locallife/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -100,6 +102,82 @@ func TestPrepareRiderDepositRefundTx_SplitsAcrossCredits(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(30000), updatedRider.DepositAmount)
 	require.Equal(t, int64(25000), updatedRider.FrozenDeposit)
+}
+
+func TestPrepareRiderDepositRefundTx_SubtractsPendingRefundWhenFrozenDrifted(t *testing.T) {
+	setRiderDepositThresholdForTest(t, DefaultRiderDepositThresholdFen)
+
+	rider := createRandomRider(t)
+	paymentOrder := createRefundableRiderDepositCredit(t, rider, 30000)
+
+	_, err := testStore.CreateRefundOrder(context.Background(), CreateRefundOrderParams{
+		PaymentOrderID: paymentOrder.ID,
+		RefundType:     riderDepositRefundType,
+		RefundAmount:   25000,
+		RefundReason:   pgtype.Text{String: "legacy pending withdraw without frozen balance", Valid: true},
+		OutRefundNo:    "ORNP" + util.RandomString(28),
+		Status:         "pending",
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.(*SQLStore).PrepareRiderDepositRefundTx(context.Background(), PrepareRiderDepositRefundTxParams{
+		RiderID: rider.ID,
+		Amount:  10000,
+		Remark:  "押金提现",
+	})
+	require.ErrorIs(t, err, ErrInsufficientDeposit)
+}
+
+func TestListRiderDepositLedgerAnomaliesDetectsDrift(t *testing.T) {
+	setRiderDepositThresholdForTest(t, DefaultRiderDepositThresholdFen)
+
+	rider := createRandomRider(t)
+	paymentOrder := createRefundableRiderDepositCredit(t, rider, 30000)
+
+	baseline, err := testStore.ListRiderDepositLedgerAnomalies(context.Background(), ListRiderDepositLedgerAnomaliesParams{
+		RiderID: pgtype.Int8{Int64: rider.ID, Valid: true},
+		Limit:   20,
+	})
+	require.NoError(t, err)
+	require.Empty(t, baseline)
+
+	_, err = testStore.UpdateRiderDeposit(context.Background(), UpdateRiderDepositParams{
+		ID:            rider.ID,
+		DepositAmount: 40000,
+		FrozenDeposit: 0,
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.CreateRefundOrder(context.Background(), CreateRefundOrderParams{
+		PaymentOrderID: paymentOrder.ID,
+		RefundType:     riderDepositRefundType,
+		RefundAmount:   5000,
+		RefundReason:   pgtype.Text{String: "success without local settlement", Valid: true},
+		OutRefundNo:    "ORNS" + util.RandomString(28),
+		Status:         "success",
+	})
+	require.NoError(t, err)
+
+	anomalies, err := testStore.ListRiderDepositLedgerAnomalies(context.Background(), ListRiderDepositLedgerAnomaliesParams{
+		RiderID: pgtype.Int8{Int64: rider.ID, Valid: true},
+		Limit:   20,
+	})
+	require.NoError(t, err)
+
+	byType := make(map[string]ListRiderDepositLedgerAnomaliesRow, len(anomalies))
+	for _, anomaly := range anomalies {
+		byType[anomaly.AnomalyType] = anomaly
+	}
+
+	balanceAnomaly, ok := byType["deposit_amount_gt_refundable_credit"]
+	require.True(t, ok)
+	require.Equal(t, int64(10000), balanceAnomaly.AnomalyAmount)
+
+	settlementAnomaly, ok := byType["success_refund_not_settled"]
+	require.True(t, ok)
+	require.True(t, settlementAnomaly.PaymentOrderID.Valid)
+	require.Equal(t, paymentOrder.ID, settlementAnomaly.PaymentOrderID.Int64)
+	require.Equal(t, int64(5000), settlementAnomaly.AnomalyAmount)
 }
 
 func TestResolveRiderDepositRefundTx_SuccessSettlesFrozenBalance(t *testing.T) {

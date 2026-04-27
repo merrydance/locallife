@@ -49,6 +49,7 @@ func TestRiderDepositRefundService_SubmitWithdrawal_CreateRefundSuccessReturnsAc
 
 	gomock.InOrder(
 		store.EXPECT().GetRiderByUserID(gomock.Any(), rider.UserID).Return(rider, nil),
+		store.EXPECT().GetPendingRiderDepositRefundAmountByUserID(gomock.Any(), rider.UserID).Return(int64(0), nil),
 		store.EXPECT().ListRiderActiveDeliveries(gomock.Any(), pgtype.Int8{Int64: rider.ID, Valid: true}).Return([]db.Delivery{}, nil),
 		store.EXPECT().PrepareRiderDepositRefundTx(gomock.Any(), db.PrepareRiderDepositRefundTxParams{
 			RiderID: rider.ID,
@@ -126,6 +127,7 @@ func TestRiderDepositRefundService_SubmitWithdrawal_RefundRequestFailureCompensa
 
 	gomock.InOrder(
 		store.EXPECT().GetRiderByUserID(gomock.Any(), rider.UserID).Return(rider, nil),
+		store.EXPECT().GetPendingRiderDepositRefundAmountByUserID(gomock.Any(), rider.UserID).Return(int64(0), nil),
 		store.EXPECT().ListRiderActiveDeliveries(gomock.Any(), pgtype.Int8{Int64: rider.ID, Valid: true}).Return([]db.Delivery{}, nil),
 		store.EXPECT().PrepareRiderDepositRefundTx(gomock.Any(), db.PrepareRiderDepositRefundTxParams{
 			RiderID: rider.ID,
@@ -198,6 +200,7 @@ func TestRiderDepositRefundService_SubmitWithdrawal_AlreadyFullyRefundedErrorRec
 
 	gomock.InOrder(
 		store.EXPECT().GetRiderByUserID(gomock.Any(), rider.UserID).Return(rider, nil),
+		store.EXPECT().GetPendingRiderDepositRefundAmountByUserID(gomock.Any(), rider.UserID).Return(int64(0), nil),
 		store.EXPECT().ListRiderActiveDeliveries(gomock.Any(), pgtype.Int8{Int64: rider.ID, Valid: true}).Return([]db.Delivery{}, nil),
 		store.EXPECT().PrepareRiderDepositRefundTx(gomock.Any(), db.PrepareRiderDepositRefundTxParams{
 			RiderID: rider.ID,
@@ -273,6 +276,7 @@ func TestRiderDepositRefundService_SubmitWithdrawal_ReturnsBusinessErrorWhenRefu
 
 	gomock.InOrder(
 		store.EXPECT().GetRiderByUserID(gomock.Any(), rider.UserID).Return(rider, nil),
+		store.EXPECT().GetPendingRiderDepositRefundAmountByUserID(gomock.Any(), rider.UserID).Return(int64(0), nil),
 		store.EXPECT().ListRiderActiveDeliveries(gomock.Any(), pgtype.Int8{Int64: rider.ID, Valid: true}).Return([]db.Delivery{}, nil),
 		store.EXPECT().PrepareRiderDepositRefundTx(gomock.Any(), db.PrepareRiderDepositRefundTxParams{
 			RiderID: rider.ID,
@@ -317,6 +321,37 @@ func TestRiderDepositRefundService_SubmitWithdrawal_ReturnsBusinessErrorWhenRefu
 	require.Same(t, wxErr, unwrapped)
 }
 
+func TestRiderDepositRefundService_SubmitWithdrawal_PendingRefundReducesAvailableBalance(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	paymentClient := mockwechat.NewMockDirectPaymentClientInterface(ctrl)
+	service := NewRiderDepositRefundService(store, paymentClient)
+
+	rider := db.Rider{
+		ID:            26,
+		UserID:        93,
+		Status:        db.RiderStatusActive,
+		DepositAmount: 30000,
+		FrozenDeposit: 0,
+	}
+
+	gomock.InOrder(
+		store.EXPECT().GetRiderByUserID(gomock.Any(), rider.UserID).Return(rider, nil),
+		store.EXPECT().GetPendingRiderDepositRefundAmountByUserID(gomock.Any(), rider.UserID).Return(int64(25000), nil),
+	)
+
+	_, err := service.SubmitWithdrawal(context.Background(), SubmitRiderDepositWithdrawalInput{
+		UserID: rider.UserID,
+		Amount: 10000,
+		Remark: "押金提现",
+	})
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, http.StatusBadRequest, reqErr.Status)
+	require.ErrorIs(t, reqErr.Err, ErrRiderAvailableDepositInsufficient)
+}
+
 func TestRiderDepositRefundService_SubmitWithdrawal_ApprovedRiderAllowed(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -350,6 +385,7 @@ func TestRiderDepositRefundService_SubmitWithdrawal_ApprovedRiderAllowed(t *test
 
 	gomock.InOrder(
 		store.EXPECT().GetRiderByUserID(gomock.Any(), rider.UserID).Return(rider, nil),
+		store.EXPECT().GetPendingRiderDepositRefundAmountByUserID(gomock.Any(), rider.UserID).Return(int64(0), nil),
 		store.EXPECT().ListRiderActiveDeliveries(gomock.Any(), pgtype.Int8{Int64: rider.ID, Valid: true}).Return([]db.Delivery{}, nil),
 		store.EXPECT().PrepareRiderDepositRefundTx(gomock.Any(), db.PrepareRiderDepositRefundTxParams{
 			RiderID: rider.ID,
@@ -424,6 +460,7 @@ func TestRiderDepositRefundService_SubmitWithdrawal_CreateRefundTerminalResponse
 
 			gomock.InOrder(
 				store.EXPECT().GetRiderByUserID(gomock.Any(), rider.UserID).Return(rider, nil),
+				store.EXPECT().GetPendingRiderDepositRefundAmountByUserID(gomock.Any(), rider.UserID).Return(int64(0), nil),
 				store.EXPECT().ListRiderActiveDeliveries(gomock.Any(), pgtype.Int8{Int64: rider.ID, Valid: true}).Return([]db.Delivery{}, nil),
 				store.EXPECT().PrepareRiderDepositRefundTx(gomock.Any(), db.PrepareRiderDepositRefundTxParams{
 					RiderID: rider.ID,

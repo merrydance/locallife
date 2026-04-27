@@ -15623,6 +15623,21 @@ func (mr *MockStoreMockRecorder) ListRiderDepositCreditsForReminderWindow(ctx, a
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListRiderDepositCreditsForReminderWindow", reflect.TypeOf((*MockStore)(nil).ListRiderDepositCreditsForReminderWindow), ctx, arg)
 }
 
+// ListRiderDepositLedgerAnomalies mocks base method.
+func (m *MockStore) ListRiderDepositLedgerAnomalies(ctx context.Context, arg db.ListRiderDepositLedgerAnomaliesParams) ([]db.ListRiderDepositLedgerAnomaliesRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListRiderDepositLedgerAnomalies", ctx, arg)
+	ret0, _ := ret[0].([]db.ListRiderDepositLedgerAnomaliesRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListRiderDepositLedgerAnomalies indicates an expected call of ListRiderDepositLedgerAnomalies.
+func (mr *MockStoreMockRecorder) ListRiderDepositLedgerAnomalies(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListRiderDepositLedgerAnomalies", reflect.TypeOf((*MockStore)(nil).ListRiderDepositLedgerAnomalies), ctx, arg)
+}
+
 // ListRiderDeposits mocks base method.
 func (m *MockStore) ListRiderDeposits(ctx context.Context, arg db.ListRiderDepositsParams) ([]db.RiderDeposit, error) {
 	m.ctrl.T.Helper()

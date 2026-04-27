@@ -98,8 +98,12 @@ func (s *RiderDepositRefundService) SubmitWithdrawal(ctx context.Context, input 
 		return result, NewRequestError(http.StatusConflict, ErrRiderDepositFrozen)
 	}
 
-	availableBalance := rider.DepositAmount - rider.FrozenDeposit
-	if input.Amount > availableBalance {
+	withdrawalProcessingAmount, err := s.store.GetPendingRiderDepositRefundAmountByUserID(ctx, input.UserID)
+	if err != nil {
+		return result, fmt.Errorf("get pending rider deposit refund amount: %w", err)
+	}
+	availability := db.CalculateRiderDepositAvailability(rider, withdrawalProcessingAmount)
+	if input.Amount > availability.AvailableDeposit {
 		return result, NewRequestError(http.StatusBadRequest, ErrRiderAvailableDepositInsufficient)
 	}
 

@@ -82,22 +82,27 @@ func (store *SQLStore) ProcessPaymentSuccessTx(ctx context.Context, arg ProcessP
 					return fmt.Errorf("lock rider: %w", err)
 				}
 
-				newBalance := lockedRider.DepositAmount + paymentOrder.Amount
+				newBalance := lockedRider.DepositAmount
+				if !hasDepositCredit {
+					newBalance = lockedRider.DepositAmount + paymentOrder.Amount
 
-				updatedRider, err := q.UpdateRiderDeposit(ctx, UpdateRiderDepositParams{
-					ID:            lockedRider.ID,
-					DepositAmount: newBalance,
-					FrozenDeposit: lockedRider.FrozenDeposit,
-				})
-				if err != nil {
-					return fmt.Errorf("update rider deposit: %w", err)
-				}
+					updatedRider, err := q.UpdateRiderDeposit(ctx, UpdateRiderDepositParams{
+						ID:            lockedRider.ID,
+						DepositAmount: newBalance,
+						FrozenDeposit: lockedRider.FrozenDeposit,
+					})
+					if err != nil {
+						return fmt.Errorf("update rider deposit: %w", err)
+					}
 
-				updatedRider, err = ReconcileRiderOperationalStatus(ctx, q, updatedRider)
-				if err != nil {
-					return fmt.Errorf("reconcile rider status after deposit: %w", err)
+					updatedRider, err = ReconcileRiderOperationalStatus(ctx, q, updatedRider)
+					if err != nil {
+						return fmt.Errorf("reconcile rider status after deposit: %w", err)
+					}
+					rider = updatedRider
+				} else {
+					rider = lockedRider
 				}
-				rider = updatedRider
 
 				_, err = q.CreateRiderDeposit(ctx, CreateRiderDepositParams{
 					RiderID:        rider.ID,

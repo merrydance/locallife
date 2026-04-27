@@ -904,6 +904,10 @@ func TestWithdrawRiderAPI(t *testing.T) {
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
 					Return(rider, nil)
+				store.EXPECT().
+					GetPendingRiderDepositRefundAmountByUserID(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(int64(0), nil)
 
 				// 检查活跃配送
 				store.EXPECT().
@@ -970,6 +974,10 @@ func TestWithdrawRiderAPI(t *testing.T) {
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
 					Return(rider, nil)
+				store.EXPECT().
+					GetPendingRiderDepositRefundAmountByUserID(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(int64(0), nil)
 
 				store.EXPECT().
 					ListRiderActiveDeliveries(gomock.Any(), gomock.Any()).
@@ -1093,6 +1101,10 @@ func TestWithdrawRiderAPI(t *testing.T) {
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
 					Return(rider, nil)
+				store.EXPECT().
+					GetPendingRiderDepositRefundAmountByUserID(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(int64(0), nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -1140,6 +1152,10 @@ func TestWithdrawRiderAPI(t *testing.T) {
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
 					Return(rider, nil)
+				store.EXPECT().
+					GetPendingRiderDepositRefundAmountByUserID(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(int64(0), nil)
 
 				store.EXPECT().
 					ListRiderActiveDeliveries(gomock.Any(), gomock.Any()).
@@ -1164,6 +1180,10 @@ func TestWithdrawRiderAPI(t *testing.T) {
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
 					Return(rider, nil)
+				store.EXPECT().
+					GetPendingRiderDepositRefundAmountByUserID(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(int64(0), nil)
 
 				store.EXPECT().
 					ListRiderActiveDeliveries(gomock.Any(), gomock.Any()).
