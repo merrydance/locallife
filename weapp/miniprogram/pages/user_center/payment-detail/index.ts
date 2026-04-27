@@ -1,7 +1,8 @@
 import { BusinessType, closePayment, getPaymentById, getPaymentRefunds, getPayments, getPaymentStatusView, getRefundStatusView, PaymentOrder, RefundOrder } from '../../../api/payment'
 import {
+    continuePendingRiderDepositRecharge,
     getRiderDepositRechargeWorkflowStatusView,
-    submitRiderDepositRecharge
+    type RiderDepositPendingRechargeContext
 } from '../../../services/rider-deposit-payment'
 import { startPaymentOrderWorkflow } from '../../../services/payment-workflow'
 import { logger } from '../../../utils/logger'
@@ -171,7 +172,13 @@ Page({
         wx.showLoading({ title: '拉起支付...' })
         try {
             if (payment.business_type === 'rider_deposit') {
-                const rechargeResult = await submitRiderDepositRecharge(payment.amount)
+                const rechargeContext: RiderDepositPendingRechargeContext = {
+                    paymentOrderId: payment.id,
+                    amount: payment.amount,
+                    outTradeNo: payment.out_trade_no,
+                    updatedAt: new Date().toISOString()
+                }
+                const rechargeResult = await continuePendingRiderDepositRecharge(rechargeContext)
                 const rechargeStatusView = getRiderDepositRechargeWorkflowStatusView(rechargeResult.status)
 
                 if (rechargeStatusView.isCancelled) {
