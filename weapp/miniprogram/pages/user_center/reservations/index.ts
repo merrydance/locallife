@@ -6,9 +6,8 @@
 import { ReservationService, ReservationStatus, ReservationListParams } from '../../../api/reservation'
 import { logger } from '../../../utils/logger'
 import { ReservationCardAdapter, ReservationCardViewModel } from '../../../adapters/reservation-card'
-import { processPayment, PaymentCancelledError } from '../../../api/payment'
 import Navigation from '../../../utils/navigation'
-import { mapReservationPaymentStatusToResultKind } from '../../../utils/reservation-payment-result-view'
+import { startPaymentOrderWorkflow } from '../../../services/payment-workflow'
 
 // 状态筛选选项
 const STATUS_TABS = [
@@ -171,24 +170,29 @@ Page({
 
         this.setData({ payingReservationId: id })
         try {
-            const paymentResult = await processPayment(id, 'reservation')
+            const paymentResult = await startPaymentOrderWorkflow({
+                orderId: id,
+                businessType: 'reservation'
+            })
             
             const res = this.data.reservations.find((r) => r.id === id)
-            Navigation.toReservationPaymentResult({
-                reservationId: String(id),
+            Navigation.toPaymentResult({
+                status: paymentResult.status,
+                paymentOrderId: paymentResult.paymentOrderId,
+                businessId: id,
+                businessType: 'reservation',
+                orderNo: paymentResult.outTradeNo,
                 amount: res?.depositDisplay?.replace('¥', '') || '0.00',
-                result: mapReservationPaymentStatusToResultKind(paymentResult.status),
-                source: 'list',
                 returnStatus: this.data.currentStatus || 'all'
             })
         } catch (error) {
             logger.error('支付失败', error, 'Reservations.onPay')
             const res = this.data.reservations.find((r) => r.id === id)
-            Navigation.toReservationPaymentResult({
-                reservationId: String(id),
+            Navigation.toPaymentResult({
+                status: 'pending_confirmation',
+                businessId: id,
+                businessType: 'reservation',
                 amount: res?.depositDisplay?.replace('¥', '') || '0.00',
-                result: error instanceof PaymentCancelledError ? 'cancelled' : 'unknown',
-                source: 'list',
                 returnStatus: this.data.currentStatus || 'all'
             })
         } finally {

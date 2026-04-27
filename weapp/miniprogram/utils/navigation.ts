@@ -129,6 +129,7 @@ export class Navigation {
     businessType?: string
     orderNo?: string
     amount?: string
+    returnStatus?: string
   }) {
     const query: string[] = [`status=${encodeURIComponent(params.status)}`]
 
@@ -146,6 +147,9 @@ export class Navigation {
     }
     if (params.amount) {
       query.push(`amount=${encodeURIComponent(params.amount)}`)
+    }
+    if (params.returnStatus) {
+      query.push(`returnStatus=${encodeURIComponent(params.returnStatus)}`)
     }
 
     wx.redirectTo({ url: `/pages/payment/result/index?${query.join('&')}` })

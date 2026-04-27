@@ -7,6 +7,11 @@ function formatAmount(amountFen?: number): string {
   return typeof amountFen === 'number' ? (amountFen / 100).toFixed(2) : ''
 }
 
+function buildReservationListUrl(returnStatus?: string): string {
+  const status = returnStatus || 'all'
+  return `/pages/user_center/reservations/index?status=${encodeURIComponent(status)}`
+}
+
 Page({
   data: {
     navBarHeight: 88,
@@ -22,6 +27,7 @@ Page({
     paymentOrderId: 0,
     businessId: '',
     businessType: 'order',
+    returnStatus: '',
     orderNo: '',
     amount: '',
     statusNote: '',
@@ -36,6 +42,7 @@ Page({
     businessType?: string
     orderNo?: string
     amount?: string
+    returnStatus?: string
   }) {
     const { navBarHeight } = getStableBarHeights()
     const status = normalizePaymentWorkflowStatus(options.status)
@@ -48,6 +55,7 @@ Page({
       paymentOrderId,
       businessId: options.businessId || '',
       businessType: options.businessType || 'order',
+      returnStatus: options.returnStatus || '',
       orderNo: options.orderNo || '',
       amount: options.amount || '',
       showSummary: Boolean(options.amount || options.orderNo || paymentOrderId),
@@ -106,6 +114,10 @@ Page({
     }
 
     if (action === 'list_page') {
+      if (this.data.businessType === 'reservation') {
+        wx.redirectTo({ url: buildReservationListUrl(this.data.returnStatus) })
+        return
+      }
       wx.redirectTo({ url: '/pages/orders/list/index' })
       return
     }
@@ -116,6 +128,10 @@ Page({
     }
 
     if (this.data.businessId) {
+      if (this.data.businessType === 'reservation') {
+        wx.redirectTo({ url: `/pages/reservation/detail/index?id=${this.data.businessId}` })
+        return
+      }
       wx.redirectTo({ url: `/pages/orders/detail/index?id=${this.data.businessId}` })
       return
     }

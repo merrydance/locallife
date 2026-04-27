@@ -6,9 +6,8 @@
 import { formatPriceNoSymbol } from '@/utils/util'
 import { createReservation, CreateReservationRequest } from '../../../api/reservation'
 import { checkRoomAvailability } from '../../../api/room'
-import { processPayment, PaymentCancelledError } from '../../../api/payment'
 import Navigation from '../../../utils/navigation'
-import { mapReservationPaymentStatusToResultKind } from '../../../utils/reservation-payment-result-view'
+import { startPaymentOrderWorkflow } from '../../../services/payment-workflow'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 
 interface TimeSlot {
@@ -270,20 +269,25 @@ Page({
         const resultAmount = formatPriceNoSymbol(reservation.deposit_amount || this.data.deposit)
 
         try {
-          const paymentResult = await processPayment(reservation.id, 'reservation')
-          Navigation.toReservationPaymentResult({
-            reservationId: String(reservation.id),
-            amount: resultAmount,
-            result: mapReservationPaymentStatusToResultKind(paymentResult.status),
-            source: 'confirm'
+          const paymentResult = await startPaymentOrderWorkflow({
+            orderId: reservation.id,
+            businessType: 'reservation'
+          })
+          Navigation.toPaymentResult({
+            status: paymentResult.status,
+            paymentOrderId: paymentResult.paymentOrderId,
+            businessId: reservation.id,
+            businessType: 'reservation',
+            orderNo: paymentResult.outTradeNo,
+            amount: resultAmount
           })
         } catch (payErr) {
           console.error('[预订支付] 支付失败或取消:', payErr)
-          Navigation.toReservationPaymentResult({
-            reservationId: String(reservation.id),
-            amount: resultAmount,
-            result: payErr instanceof PaymentCancelledError ? 'cancelled' : 'unknown',
-            source: 'confirm'
+          Navigation.toPaymentResult({
+            status: 'pending_confirmation',
+            businessId: reservation.id,
+            businessType: 'reservation',
+            amount: resultAmount
           })
         }
       }
