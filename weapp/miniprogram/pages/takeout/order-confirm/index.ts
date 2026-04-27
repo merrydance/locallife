@@ -483,8 +483,11 @@ Page({
       const paymentResult = await processCreatedPayment(await createOrderPayment(orderId))
       if (isPaymentProcessSuccessful(paymentResult) && paymentResult.payment) {
         const payment = paymentResult.payment
-        Navigation.toPaymentSuccess({
-          orderId: String(orderId),
+        Navigation.toPaymentResult({
+          status: 'paid',
+          paymentOrderId: payment.id,
+          businessId: orderId,
+          businessType: 'order',
           orderNo: payment.out_trade_no || String(orderId),
           amount: (payment.amount / 100).toFixed(2)
         })
