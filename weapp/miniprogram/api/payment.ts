@@ -17,6 +17,9 @@ const SUCCESS_PAYMENT_STATUSES = new Set<PaymentStatus>(['paid', 'refunded'])
 const FAILED_PAYMENT_STATUSES = new Set<PaymentStatus>(['closed', 'failed'])
 const SYNCING_COMBINED_PAYMENT_STATES = new Set(['partial', 'mixed', 'unknown'])
 
+export const PAYMENT_STATUS_POLL_MAX_ATTEMPTS = 30
+export const PAYMENT_STATUS_POLL_INTERVAL_MS = 2000
+
 export interface PaymentProcessResult {
   paymentId: number
   status: PaymentProcessStatus
@@ -48,6 +51,19 @@ export interface PaymentOrder {
 
 export type PaymentOrderResponse = PaymentOrder
 export type PaymentDTO = PaymentOrder
+
+export interface PaymentOrderWechatQueryResponse {
+  out_trade_no: string
+  transaction_id?: string
+  trade_type?: string
+  trade_state: string
+  trade_state_desc?: string
+  success_time?: string
+}
+
+export interface PaymentOrderQueryResponse extends PaymentOrderResponse {
+  wechat_query?: PaymentOrderWechatQueryResponse
+}
 
 export interface CombinedPaymentSubOrderResponse {
   order_id: number
@@ -549,6 +565,13 @@ export async function getPaymentDetail(paymentId: number): Promise<PaymentOrderR
 
 export const getPaymentById = getPaymentDetail
 
+export async function queryPaymentOrder(paymentId: number): Promise<PaymentOrderQueryResponse> {
+  return request({
+    url: `/v1/payments/${paymentId}/query`,
+    method: 'GET'
+  })
+}
+
 export async function createPayment(paymentData: CreatePaymentRequest): Promise<PaymentOrderResponse> {
   return request({
     url: '/v1/payments',
@@ -702,7 +725,7 @@ export async function processCreatedPayment(payment: PaymentOrderResponse): Prom
   }
 
   try {
-    const finalStatus = await pollPaymentStatus(payment.id, 5, 2000)
+    const finalStatus = await pollPaymentStatus(payment.id)
 
     return {
       paymentId: payment.id,
@@ -738,14 +761,85 @@ export async function processPayment(orderId: number, businessType: BusinessType
   return processCreatedPayment(payment)
 }
 
-export async function checkPaymentStatus(paymentId: number): Promise<PaymentStatus> {
-  const payment = await getPaymentDetail(paymentId)
-  return payment.status
+function mapWechatTradeStateToPaymentStatus(tradeState?: string): PaymentStatus | undefined {
+  switch (String(tradeState || '').trim().toUpperCase()) {
+    case 'SUCCESS':
+      return 'paid'
+    case 'REFUND':
+      return 'refunded'
+    case 'CLOSED':
+    case 'REVOKED':
+      return 'closed'
+    case 'PAYERROR':
+      return 'failed'
+    case 'NOTPAY':
+    case 'USERPAYING':
+      return 'pending'
+    default:
+      return undefined
+  }
 }
 
-export async function pollPaymentStatus(paymentId: number, maxAttempts: number = 30, interval: number = 2000): Promise<PaymentStatus> {
+function isRemotePaymentQueryUnsupported(error: unknown): boolean {
+  const maybeError = error as { statusCode?: number, detailMessage?: string, message?: string, userMessage?: string }
+  if (maybeError?.statusCode !== 400) {
+    return false
+  }
+
+  const message = `${maybeError.detailMessage || ''} ${maybeError.message || ''} ${maybeError.userMessage || ''}`
+  return message.includes('合单支付订单请使用合单查询接口') || message.includes('仅收付通普通支付订单支持微信远端查询')
+}
+
+async function checkPaymentStatusWithRemoteFallback(
+  paymentId: number,
+  preferRemote: boolean
+): Promise<{ status: PaymentStatus, remoteQueryUnsupported: boolean }> {
+  if (preferRemote) {
+    try {
+      const payment = await queryPaymentOrder(paymentId)
+      return {
+        status: mapWechatTradeStateToPaymentStatus(payment.wechat_query?.trade_state) || payment.status,
+        remoteQueryUnsupported: false
+      }
+    } catch (error: unknown) {
+      if (!isRemotePaymentQueryUnsupported(error)) {
+        console.warn('[payment] 微信远端支付状态查询失败，回退本地支付单状态', error)
+      }
+
+      const payment = await getPaymentDetail(paymentId)
+      return {
+        status: payment.status,
+        remoteQueryUnsupported: isRemotePaymentQueryUnsupported(error)
+      }
+    }
+  }
+
+  const payment = await getPaymentDetail(paymentId)
+  return {
+    status: payment.status,
+    remoteQueryUnsupported: false
+  }
+}
+
+export async function checkPaymentStatus(paymentId: number): Promise<PaymentStatus> {
+  const result = await checkPaymentStatusWithRemoteFallback(paymentId, true)
+  return result.status
+}
+
+export async function pollPaymentStatus(
+  paymentId: number,
+  maxAttempts: number = PAYMENT_STATUS_POLL_MAX_ATTEMPTS,
+  interval: number = PAYMENT_STATUS_POLL_INTERVAL_MS
+): Promise<PaymentStatus> {
+  let preferRemote = true
+
   for (let i = 0; i < maxAttempts; i++) {
-    const status = await checkPaymentStatus(paymentId)
+    const result = await checkPaymentStatusWithRemoteFallback(paymentId, preferRemote)
+    const status = result.status
+
+    if (result.remoteQueryUnsupported) {
+      preferRemote = false
+    }
 
     if (isPaymentStatusSuccessful(status) || isPaymentStatusFailed(status)) {
       return status

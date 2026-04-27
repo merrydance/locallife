@@ -5,6 +5,8 @@ import {
   invokeWechatPay,
   isPaymentStatusFailed,
   isPaymentStatusSuccessful,
+  PAYMENT_STATUS_POLL_INTERVAL_MS,
+  PAYMENT_STATUS_POLL_MAX_ATTEMPTS,
   pollPaymentStatus,
   type PaymentOrderResponse,
   type PaymentStatus
@@ -221,7 +223,11 @@ async function createRechargePayment(amountFen: number) {
 
 async function finalizeRechargeAfterPay(context: RiderDepositPendingRechargeContext): Promise<RiderDepositRechargeWorkflowResult> {
   try {
-    const finalStatus = await pollPaymentStatus(context.paymentOrderId, 5, 1500)
+    const finalStatus = await pollPaymentStatus(
+      context.paymentOrderId,
+      PAYMENT_STATUS_POLL_MAX_ATTEMPTS,
+      PAYMENT_STATUS_POLL_INTERVAL_MS
+    )
     if (isPaymentStatusSuccessful(finalStatus)) {
       clearPendingRiderDepositRecharge()
       return {

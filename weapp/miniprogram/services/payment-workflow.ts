@@ -7,6 +7,8 @@ import {
   isPaymentStatusSuccessful,
   PaymentCancelledError,
   PaymentOrderResponse,
+  PAYMENT_STATUS_POLL_INTERVAL_MS,
+  PAYMENT_STATUS_POLL_MAX_ATTEMPTS,
   PaymentStatus,
   PaymentType,
   pollPaymentStatus
@@ -133,7 +135,11 @@ export async function completePaymentWorkflow(
   }
 
   try {
-    const finalStatus = await pollPaymentStatus(payment.id, options.maxAttempts || 5, options.interval || 1500)
+    const finalStatus = await pollPaymentStatus(
+      payment.id,
+      options.maxAttempts ?? PAYMENT_STATUS_POLL_MAX_ATTEMPTS,
+      options.interval ?? PAYMENT_STATUS_POLL_INTERVAL_MS
+    )
     return buildPaymentWorkflowResultFromPayment(payment, mapPaymentStatusToWorkflowStatus(finalStatus))
   } catch {
     return buildPaymentWorkflowResultFromPayment(payment, 'pending_confirmation')

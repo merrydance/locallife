@@ -50,14 +50,16 @@ WITH rider_scope AS (
     FROM riders
     WHERE sqlc.narg('rider_id')::bigint IS NULL OR id = sqlc.narg('rider_id')::bigint
 ), credit_totals AS (
-    SELECT rider_id, COALESCE(SUM(refundable_amount), 0)::bigint AS refundable_credit_amount
-    FROM rider_deposit_credits
-    WHERE status IN ('active', 'partially_refunded', 'legacy')
-    GROUP BY rider_id
+    SELECT rdc.rider_id, COALESCE(SUM(rdc.refundable_amount), 0)::bigint AS refundable_credit_amount
+    FROM rider_deposit_credits rdc
+    JOIN rider_scope rs ON rs.id = rdc.rider_id
+    WHERE rdc.status IN ('active', 'partially_refunded', 'legacy')
+    GROUP BY rdc.rider_id
 ), pending_refunds AS (
     SELECT po.user_id, COALESCE(SUM(ro.refund_amount), 0)::bigint AS pending_refund_amount
     FROM refund_orders ro
     JOIN payment_orders po ON po.id = ro.payment_order_id
+    JOIN rider_scope rs ON rs.user_id = po.user_id
     WHERE po.business_type = 'rider_deposit'
       AND ro.refund_type = 'rider_deposit'
       AND ro.status IN ('pending', 'processing')
@@ -66,22 +68,25 @@ WITH rider_scope AS (
     SELECT po.user_id, po.id AS payment_order_id, COALESCE(SUM(ro.refund_amount), 0)::bigint AS success_refund_amount
     FROM refund_orders ro
     JOIN payment_orders po ON po.id = ro.payment_order_id
+        JOIN rider_scope rs ON rs.user_id = po.user_id
     WHERE po.business_type = 'rider_deposit'
       AND ro.refund_type = 'rider_deposit'
       AND ro.status = 'success'
     GROUP BY po.user_id, po.id
 ), withdraw_logs AS (
-    SELECT rider_id, payment_order_id, COALESCE(SUM(amount), 0)::bigint AS withdraw_log_amount
-    FROM rider_deposits
-    WHERE type IN ('withdraw', 'deduct')
-      AND payment_order_id IS NOT NULL
-    GROUP BY rider_id, payment_order_id
+        SELECT rd.rider_id, rd.payment_order_id, COALESCE(SUM(rd.amount), 0)::bigint AS withdraw_log_amount
+        FROM rider_deposits rd
+        JOIN rider_scope rs ON rs.id = rd.rider_id
+        WHERE rd.type IN ('withdraw', 'deduct')
+            AND rd.payment_order_id IS NOT NULL
+        GROUP BY rd.rider_id, rd.payment_order_id
 ), duplicate_deposit_logs AS (
-    SELECT rider_id, payment_order_id, COUNT(*)::bigint AS duplicate_count, COALESCE(SUM(amount), 0)::bigint AS duplicate_amount
-    FROM rider_deposits
-    WHERE type = 'deposit'
-      AND payment_order_id IS NOT NULL
-    GROUP BY rider_id, payment_order_id
+        SELECT rd.rider_id, rd.payment_order_id, COUNT(*)::bigint AS duplicate_count, COALESCE(SUM(rd.amount), 0)::bigint AS duplicate_amount
+        FROM rider_deposits rd
+        JOIN rider_scope rs ON rs.id = rd.rider_id
+        WHERE rd.type = 'deposit'
+            AND rd.payment_order_id IS NOT NULL
+        GROUP BY rd.rider_id, rd.payment_order_id
     HAVING COUNT(*) > 1
 ), anomalies AS (
     SELECT

@@ -1,5 +1,11 @@
 import type { ClaimRecoveryPaymentResponse } from '../api/appeals-customer-service'
-import { invokeWechatPay, isPaymentStatusSuccessful, pollPaymentStatus } from '../api/payment'
+import {
+  invokeWechatPay,
+  isPaymentStatusSuccessful,
+  PAYMENT_STATUS_POLL_INTERVAL_MS,
+  PAYMENT_STATUS_POLL_MAX_ATTEMPTS,
+  pollPaymentStatus
+} from '../api/payment'
 import { logger } from '../utils/logger'
 
 export interface ClaimRecoveryPaymentWorkflowResult {
@@ -29,7 +35,11 @@ export async function completeClaimRecoveryPayment(
     }
 
     try {
-      const finalStatus = await pollPaymentStatus(paymentResult.payment_order_id, 5, 1500)
+      const finalStatus = await pollPaymentStatus(
+        paymentResult.payment_order_id,
+        PAYMENT_STATUS_POLL_MAX_ATTEMPTS,
+        PAYMENT_STATUS_POLL_INTERVAL_MS
+      )
       return {
         shouldSync: true,
         paymentStatus: finalStatus,
