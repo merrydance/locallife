@@ -1376,3 +1376,30 @@ rg "status: 'unknown'" weapp/miniprogram/api weapp/miniprogram/services
 - 定向 grep 复核按钮文案、弹窗文案、`showCloseButton` 和 `disabled="{{paying}}"`。
 
 阶段 7 剩余风险：无新增残留。
+
+### 2026-04-28 阶段 8：骑手押金账务闭环专项
+
+状态：已落地，待阶段复审。
+
+已确认闭环：
+
+1. `/v1/rider/deposit` 已使用 `GetPendingRiderDepositRefundAmountByUserID` 和 `db.CalculateRiderDepositAvailability()`，将配送冻结与提现处理中金额拆开计算，可用押金不会只依赖 `riders.frozen_deposit`。
+2. `SubmitWithdrawal()` 和 `PrepareRiderDepositRefundTx()` 已使用同一押金可用余额口径；事务层会锁 rider、扣减可退款 credit、创建 refund order 和隐藏型 freeze 流水。
+3. `ResolveRiderDepositRefundTx()` 已覆盖提现成功扣减、失败/关闭恢复、重复终态回调幂等和微信已全额退款后的 stale credit drain。
+4. `/v1/rider/withdrawals/status` 已返回本次提现 refund orders、accepted/processing/success/failed 汇总和用户可读状态，小程序能等待终态或展示刷新入口。
+5. `ListRiderDepositLedgerAnomalies` 已作为内部押金账务审计查询，覆盖主余额与 credit 漂移、冻结小于提现处理中、重复押金入账流水、成功退款未落账。
+
+本阶段新增：
+
+1. `db/query/rider_deposit.sql` 的 `ListRiderDepositLedgerAnomalies` 新增 `paid_unprocessed_has_artifacts` 异常，识别 `payment_orders.status='paid' AND processed_at IS NULL` 但已经存在押金流水或 credit 的半处理漂移。
+2. `db/sqlc/tx_rider_refund_test.go` 的 `TestListRiderDepositLedgerAnomaliesDetectsDrift` 新增半处理样例，确保内部审计能看见这类已产生账务痕迹但支付单未标记 processed 的高风险状态。
+
+已验证：
+
+- `make sqlc` 已运行，生成 `db/sqlc/rider_deposit.sql.go`。
+- `go test -run 'TestProcessPaymentSuccessTx_RiderDeposit|TestPrepareRiderDepositRefundTx|TestListRiderDepositLedgerAnomaliesDetectsDrift|TestListRiderDepositWithdrawalRefundOrdersByIDs|TestResolveRiderDepositRefundTx' ./db/sqlc` 通过。
+- `make check-generated` 通过，生成物一致。
+
+阶段 8 剩余风险：
+
+- 本阶段补齐的是内部审计可见性和既有事务链路复核；未连接真实微信退款回调或生产对账任务跑一遍全链路。因此真实设备提现、微信退款回调延迟、重复通知和人工对账执行仍需要集成环境或沙箱环境验证。

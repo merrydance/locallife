@@ -184,6 +184,28 @@ WITH rider_scope AS (
             AND rd.payment_order_id IS NOT NULL
         GROUP BY rd.rider_id, rd.payment_order_id
     HAVING COUNT(*) > 1
+), paid_unprocessed_artifacts AS (
+        SELECT
+            rs.id AS rider_id,
+            po.user_id,
+            po.id AS payment_order_id,
+            COUNT(DISTINCT rd.id)::bigint AS deposit_log_count,
+            COUNT(DISTINCT rdc.id)::bigint AS credit_count,
+            COALESCE((
+                SELECT SUM(rd2.amount)
+                FROM rider_deposits rd2
+                WHERE rd2.payment_order_id = po.id
+                    AND rd2.type = 'deposit'
+            ), 0)::bigint AS deposit_log_amount
+        FROM payment_orders po
+        JOIN rider_scope rs ON rs.user_id = po.user_id
+        LEFT JOIN rider_deposits rd ON rd.payment_order_id = po.id AND rd.type = 'deposit'
+        LEFT JOIN rider_deposit_credits rdc ON rdc.payment_order_id = po.id
+        WHERE po.business_type = 'rider_deposit'
+            AND po.status = 'paid'
+            AND po.processed_at IS NULL
+        GROUP BY rs.id, po.user_id, po.id
+        HAVING COUNT(DISTINCT rd.id) > 0 OR COUNT(DISTINCT rdc.id) > 0
 ), anomalies AS (
     SELECT
         rs.id AS rider_id,
@@ -256,6 +278,25 @@ WITH rider_scope AS (
         ddl.duplicate_count::bigint AS anomaly_amount
     FROM duplicate_deposit_logs ddl
     JOIN rider_scope rs ON rs.id = ddl.rider_id
+    LEFT JOIN credit_totals ct ON ct.rider_id = rs.id
+    LEFT JOIN pending_refunds pr ON pr.user_id = rs.user_id
+
+    UNION ALL
+
+    SELECT
+        rs.id AS rider_id,
+        rs.user_id,
+        'paid_unprocessed_has_artifacts'::text AS anomaly_type,
+        pua.payment_order_id,
+        rs.deposit_amount,
+        rs.frozen_deposit,
+        COALESCE(ct.refundable_credit_amount, 0)::bigint AS refundable_credit_amount,
+        COALESCE(pr.pending_refund_amount, 0)::bigint AS pending_refund_amount,
+        0::bigint AS success_refund_amount,
+        pua.deposit_log_amount::bigint AS ledger_amount,
+        (pua.deposit_log_count + pua.credit_count)::bigint AS anomaly_amount
+    FROM paid_unprocessed_artifacts pua
+    JOIN rider_scope rs ON rs.id = pua.rider_id
     LEFT JOIN credit_totals ct ON ct.rider_id = rs.id
     LEFT JOIN pending_refunds pr ON pr.user_id = rs.user_id
 

@@ -158,6 +158,17 @@ func TestListRiderDepositLedgerAnomaliesDetectsDrift(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	unprocessedPaymentOrder := createPaidRiderDepositPaymentOrder(t, rider, 7000)
+	_, err = testStore.CreateRiderDeposit(context.Background(), CreateRiderDepositParams{
+		RiderID:        rider.ID,
+		Amount:         unprocessedPaymentOrder.Amount,
+		Type:           "deposit",
+		PaymentOrderID: pgtype.Int8{Int64: unprocessedPaymentOrder.ID, Valid: true},
+		BalanceAfter:   40000,
+		Remark:         pgtype.Text{String: "half processed paid payment fixture", Valid: true},
+	})
+	require.NoError(t, err)
+
 	anomalies, err := testStore.ListRiderDepositLedgerAnomalies(context.Background(), ListRiderDepositLedgerAnomaliesParams{
 		RiderID: pgtype.Int8{Int64: rider.ID, Valid: true},
 		Limit:   20,
@@ -178,6 +189,13 @@ func TestListRiderDepositLedgerAnomaliesDetectsDrift(t *testing.T) {
 	require.True(t, settlementAnomaly.PaymentOrderID.Valid)
 	require.Equal(t, paymentOrder.ID, settlementAnomaly.PaymentOrderID.Int64)
 	require.Equal(t, int64(5000), settlementAnomaly.AnomalyAmount)
+
+	unprocessedAnomaly, ok := byType["paid_unprocessed_has_artifacts"]
+	require.True(t, ok)
+	require.True(t, unprocessedAnomaly.PaymentOrderID.Valid)
+	require.Equal(t, unprocessedPaymentOrder.ID, unprocessedAnomaly.PaymentOrderID.Int64)
+	require.Equal(t, int64(7000), unprocessedAnomaly.LedgerAmount)
+	require.Equal(t, int64(1), unprocessedAnomaly.AnomalyAmount)
 }
 
 func TestListRiderDepositWithdrawalRefundOrdersByIDsFiltersUser(t *testing.T) {
