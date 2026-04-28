@@ -1159,3 +1159,50 @@ Residual risk:
 - This stage only completed the missing rider profit-sharing notification producer. Dedicated backend category fields for rider notification filtering remain intentionally out of scope; the mini-program still classifies rider notifications from existing `related_type` and `extra_data` fields.
 
 No BE-03 blockers remain. Stage 3 rider notification recovery is now connected from producer to mini-program entry without adding a new notification boundary.
+
+## 21. Stage 4 QA-01 / QA-02 Validation Review
+
+Date: 2026-04-28
+Status: automated checks pass; manual device scenarios pending
+
+Validated automatically:
+
+- Rider income and workbench backend focused API tests passed.
+- Rider income and workbench backend focused logic tests passed.
+- Payment-domain outbox, rider profit-sharing notifications, claim notification actions, recovery-dispute notification flow, and rider deposit expiry notification focused worker tests passed.
+- Mini Program `quality:check` passed, including TypeScript, ESLint, WXML expression safety, page shell, component policy, TDesign boundary, role contract, business-status boundary, and payment-workflow boundary gates.
+- `git diff --check` passed after Stage 4 validation.
+
+Commands:
+
+- `go test ./api -run 'Test.*Rider(Income|Workbench)' -count=1`
+- `go test ./logic -run 'Test.*Rider(Income|Workbench)' -count=1`
+- `go test ./worker -run 'TestProcessTaskPaymentDomainOutbox|TestProcessTaskClaimBehaviorAction_Notification|TestProcessTaskAutomaticRecoveryDisputeResolution|TestDataCleanupScheduler_RemindExpiringRiderDepositCredits' -count=1`
+- `npm run quality:check`
+- `git diff --check`
+
+Review checklist:
+
+- [x] Backend rider income/workbench read models still pass focused tests.
+- [x] Worker notification producers for rider income, deposit reminders, claim notifications, and recovery dispute results pass focused regression tests.
+- [x] Mini Program gates still pass after rider income, dashboard, delivery recovery, deposit, claim, and notification center changes.
+- [x] No new SQL, Swagger, route, interface, or generated source changed during BE-03 or Stage 4, so regeneration was not required.
+- [x] No rider income withdrawal, rider wallet, platform dispatch, same-city delivery reporting, or customer-service ticket boundary was added.
+
+Manual QA still required before production release:
+
+- Device-level online/offline toggle and rider order-pool refresh.
+- Grab success/failure with real backend state and duplicate-tap checks.
+- Fulfillment status transition under weak network and after background/foreground re-entry.
+- Navigation/location permission recovery in the Mini Program runtime.
+- Income ledger load-more failure recovery.
+- Deposit recharge, deposit refund processing state, and deposit insufficiency blocking in a device session.
+- Claim recovery payment unknown-result recovery and appeal re-entry.
+- Notification unread/read state, category tabs, and business-page jump in a real Mini Program session.
+- WebSocket disconnect/reconnect behavior for rider dashboard notifications and order-pool updates.
+
+Residual risk:
+
+- Current environment validates code, contracts, gates, and focused worker behavior, but it does not replace real Mini Program device testing for weak network, WebSocket reconnect, location permissions, background/foreground re-entry, or WeChat payment UI return behavior.
+
+No automated QA blockers remain. Release readiness still depends on the listed device/manual scenarios being executed in the Mini Program runtime.
