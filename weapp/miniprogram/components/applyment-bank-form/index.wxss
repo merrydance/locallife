@@ -46,14 +46,6 @@
   gap: var(--spacer-sm);
 }
 
-.submit-block-message {
-  margin-top: calc(var(--spacer-xs) * -1);
-  font-size: var(--font-size-sm);
-  line-height: 1.6;
-  color: var(--td-text-color-secondary);
-  text-align: right;
-}
-
 .popup-panel {
   padding: var(--spacer-md);
   padding-bottom: var(--popup-bottom-padding-md);

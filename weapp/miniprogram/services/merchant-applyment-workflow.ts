@@ -16,7 +16,6 @@ export type MerchantApplymentStage =
 export type MerchantApplymentTaskType =
   | 'submit_material'
   | 'sign_agreement'
-  | 'merchant_confirmation'
   | 'legal_validation'
   | 'bank_transfer_validation'
   | 'wait_review'
@@ -100,7 +99,7 @@ function resolveCurrentStage(statusView: MerchantApplymentStatusView): MerchantA
     return 'rejected'
   }
 
-  if (statusView.needsConfirmation || statusView.needsAccountValidation || statusView.needsSign) {
+  if (statusView.needsAccountValidation || statusView.needsSign) {
     return 'action_required'
   }
 
@@ -113,8 +112,6 @@ function resolveCurrentStage(statusView: MerchantApplymentStatusView): MerchantA
 
 function isRequestedActionTaskAvailable(statusView: MerchantApplymentStatusView, taskType?: MerchantApplymentTaskType) {
   switch (taskType) {
-    case 'merchant_confirmation':
-      return statusView.needsConfirmation
     case 'legal_validation':
       return statusView.needsLegalValidation
     case 'bank_transfer_validation':
@@ -132,15 +129,6 @@ function buildRequestedActionTask(statusView: MerchantApplymentStatusView, taskT
   }
 
   switch (taskType) {
-    case 'merchant_confirmation':
-      return {
-        type: 'merchant_confirmation',
-        title: '先完成微信确认',
-        description: '当前申请待确认，请先按微信支付指引完成确认，再回到本页刷新状态。',
-        actionText: '处理当前待办',
-        actionIntent: 'navigate',
-        actionPath: buildActionTaskPath('merchant_confirmation')
-      }
     case 'legal_validation':
       return {
         type: 'legal_validation',
@@ -216,17 +204,6 @@ function buildCurrentTask(
   const requestedTask = buildRequestedActionTask(statusView, preferredTaskType)
   if (requestedTask) {
     return requestedTask
-  }
-
-  if (statusView.needsConfirmation) {
-    return {
-      type: 'merchant_confirmation',
-      title: '先完成微信确认',
-      description: '当前申请待确认，请先按微信支付指引完成确认，再回到本页刷新状态。',
-      actionText: '处理当前待办',
-      actionIntent: 'navigate',
-      actionPath: buildActionTaskPath('merchant_confirmation')
-    }
   }
 
   if (statusView.needsLegalValidation) {
@@ -432,9 +409,9 @@ export function buildMerchantApplymentWorkflowView(
         ? statusView.legalValidationURL
         : '',
     currentTaskQRCodeHint: currentTask.type === 'sign_agreement'
-      ? '如果当前手机就是签约微信，可先保存二维码到相册，再尝试通过微信扫一扫从相册识别。'
+      ? '保存二维码后，请退出小程序，打开微信扫一扫，从相册选择该二维码，并按微信提示完成签约。'
       : currentTask.type === 'legal_validation'
-        ? '如果当前手机就是法人验证微信，可先保存二维码到相册，再尝试通过微信扫一扫从相册识别。'
+        ? '保存二维码后，请退出小程序，打开微信扫一扫，从相册选择该二维码，并按微信提示完成法人验证。'
         : ''
   }
 }

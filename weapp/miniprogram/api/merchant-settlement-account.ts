@@ -1,4 +1,5 @@
 import { request } from '../utils/request'
+import type { StatusTagTheme } from '../utils/status-tag'
 
 export interface MerchantSettlementAccountInfo {
   account_type: string
@@ -20,10 +21,35 @@ export interface MerchantSettlementAccountResponse {
 export interface ModifyMerchantSettlementAccountRequest {
   account_type: 'ACCOUNT_TYPE_BUSINESS' | 'ACCOUNT_TYPE_PRIVATE'
   account_bank: string
+  need_bank_branch?: boolean
   bank_name?: string
   bank_branch_id?: string
   account_number: string
   account_name?: string
+}
+
+export interface SettlementDisplayItem {
+  label: string
+  value: string
+}
+
+export interface MerchantSettlementAccountView {
+  normalizedStatus: string
+  statusText: string
+  statusDesc: string
+  tagTheme: StatusTagTheme
+  latestApplicationNo: string
+  hasAccount: boolean
+  canViewSettlementAccount: boolean
+  canEditSettlementAccount: boolean
+  items: SettlementDisplayItem[]
+}
+
+export interface MerchantSettlementApplicationView {
+  applicationNo: string
+  statusText: string
+  tagTheme: StatusTagTheme
+  items: SettlementDisplayItem[]
 }
 
 export interface ModifyMerchantSettlementAccountResponse {
@@ -106,6 +132,56 @@ export function getSettlementVerifyResultTheme(result?: string) {
   }
 }
 
+export function getSettlementAccountTypeText(type?: string) {
+  switch (String(type || '').trim().toUpperCase()) {
+    case 'ACCOUNT_TYPE_BUSINESS':
+      return '对公账户'
+    case 'ACCOUNT_TYPE_PRIVATE':
+      return '对私账户'
+    default:
+      return '未知账户类型'
+  }
+}
+
+export function getSettlementAccountStatusText(status?: string) {
+  switch (String(status || '').trim().toLowerCase()) {
+    case 'active':
+      return '已开通'
+    case 'not_configured':
+      return '未配置'
+    case 'inactive':
+      return '未激活'
+    default:
+      return '同步中'
+  }
+}
+
+export function getSettlementAccountStatusTheme(status?: string): StatusTagTheme {
+  switch (String(status || '').trim().toLowerCase()) {
+    case 'active':
+      return 'success'
+    case 'not_configured':
+      return 'warning'
+    case 'inactive':
+      return 'danger'
+    default:
+      return 'default'
+  }
+}
+
+function displayText(value?: string | null) {
+  const normalized = String(value || '').trim()
+  return normalized || '-'
+}
+
+function pushDisplayItem(items: SettlementDisplayItem[], label: string, value?: string | null) {
+  const displayValue = displayText(value)
+  if (displayValue === '-') {
+    return
+  }
+  items.push({ label, value: displayValue })
+}
+
 export function getSettlementAccountStatusView(response?: MerchantSettlementAccountResponse | null) {
   const normalizedStatus = String(response?.account_status || '').trim().toLowerCase()
   const normalizedVerifyResult = String(response?.account?.verify_result || '').trim().toUpperCase()
@@ -134,5 +210,68 @@ export function getSettlementAccountStatusView(response?: MerchantSettlementAcco
     canViewSettlementAccount: isActiveAccount,
     canEditSettlementAccount: isActiveAccount && (isVerificationReady || isVerificationFailed),
     statusDesc
+  }
+}
+
+export function buildMerchantSettlementAccountView(response?: MerchantSettlementAccountResponse | null): MerchantSettlementAccountView {
+  const statusView = getSettlementAccountStatusView(response)
+  const account = response?.account
+  const items: SettlementDisplayItem[] = []
+
+  if (account) {
+    pushDisplayItem(items, '账户类型', getSettlementAccountTypeText(account.account_type))
+    pushDisplayItem(items, '开户银行', account.account_bank)
+    pushDisplayItem(items, '开户支行', account.bank_name)
+    pushDisplayItem(items, '支行编号', account.bank_branch_id)
+    pushDisplayItem(items, '银行账号', account.account_number)
+    pushDisplayItem(items, '校验状态', getSettlementVerifyResultText(account.verify_result))
+    pushDisplayItem(items, '失败原因', account.verify_fail_reason)
+  }
+
+  pushDisplayItem(items, '最新申请单', statusView.latestApplicationNo)
+
+  return {
+    normalizedStatus: statusView.normalizedStatus,
+    statusText: getSettlementAccountStatusText(statusView.normalizedStatus),
+    statusDesc: statusView.statusDesc,
+    tagTheme: getSettlementAccountStatusTheme(statusView.normalizedStatus),
+    latestApplicationNo: statusView.latestApplicationNo,
+    hasAccount: Boolean(account),
+    canViewSettlementAccount: statusView.canViewSettlementAccount,
+    canEditSettlementAccount: statusView.canEditSettlementAccount,
+    items
+  }
+}
+
+export function buildMerchantSettlementApplicationView(
+  response?: SettlementApplicationResponse | null,
+  applicationNo: string = ''
+): MerchantSettlementApplicationView {
+  const normalizedApplicationNo = displayText(applicationNo)
+  if (!response) {
+    return {
+      applicationNo: normalizedApplicationNo,
+      statusText: '同步中',
+      tagTheme: 'default',
+      items: []
+    }
+  }
+
+  const items: SettlementDisplayItem[] = []
+  pushDisplayItem(items, '开户名称', response.account_name)
+  pushDisplayItem(items, '账户类型', getSettlementAccountTypeText(response.account_type))
+  pushDisplayItem(items, '开户银行', response.account_bank)
+  pushDisplayItem(items, '开户支行', response.bank_name)
+  pushDisplayItem(items, '支行编号', response.bank_branch_id)
+  pushDisplayItem(items, '银行账号', response.account_number)
+  pushDisplayItem(items, '审核状态', getSettlementVerifyResultText(response.verify_result))
+  pushDisplayItem(items, '失败原因', response.verify_fail_reason)
+  pushDisplayItem(items, '完成时间', response.verify_finish_time)
+
+  return {
+    applicationNo: normalizedApplicationNo,
+    statusText: getSettlementVerifyResultText(response.verify_result),
+    tagTheme: getSettlementVerifyResultTheme(response.verify_result),
+    items
   }
 }

@@ -29,9 +29,13 @@
   </view>
 
   <view wx:else class="page-content">
-    <t-notice-bar wx:if="{{refreshErrorMessage}}" theme="error" visible="{{true}}" content="{{refreshErrorMessage}}">
-      <text slot="operation" bind:tap="onRefreshStatus">刷新</text>
-    </t-notice-bar>
+    <t-cell-group wx:if="{{refreshErrorMessage}}" theme="card">
+      <t-cell title="状态刷新失败" note="{{refreshErrorMessage}}">
+        <view slot="right-icon">
+          <t-button size="extra-small" theme="primary" variant="text" bind:tap="onRefreshStatus" loading="{{refreshingStatus}}">重试</t-button>
+        </view>
+      </t-cell>
+    </t-cell-group>
 
     <t-cell-group theme="card">
       <t-cell title="当前待办" note="{{workflowView.currentTask.title}}">
@@ -39,6 +43,7 @@
           <t-tag theme="{{workflowView.statusView.tagTheme}}" size="small">{{workflowView.statusView.tagText}}</t-tag>
         </view>
       </t-cell>
+      <t-cell title="处理说明" note="{{workflowView.currentTask.description}}" />
     </t-cell-group>
 
     <view wx:if="{{workflowView.currentTaskQRCodeValue}}" class="qrcode-block">
@@ -81,6 +86,12 @@
         bind:click="onTapSecondaryTask"
       />
     </t-cell-group>
+
+    <view wx:if="{{workflowView.currentTaskQRCodeValue}}" class="qrcode-next-step">
+      <view class="qrcode-next-step__title">保存后继续处理</view>
+      <view class="qrcode-next-step__text">{{workflowView.currentTaskQRCodeHint}}</view>
+      <view class="qrcode-next-step__text">完成后回到本页或开户首页，系统会刷新微信审核状态。</view>
+    </view>
 
     <view class="action-buttons">
       <t-button wx:if="{{workflowView.currentTaskQRCodeValue}}" theme="default" variant="outline" bind:tap="onSaveQRCodeToAlbum" loading="{{savingQRCode}}">保存二维码</t-button>

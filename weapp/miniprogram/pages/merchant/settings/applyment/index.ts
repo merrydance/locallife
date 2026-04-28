@@ -5,6 +5,10 @@ import {
   type MerchantApplymentWorkflowSecondaryTask
 } from '../../../../services/merchant-applyment-workflow'
 import {
+  buildMerchantSettlementAccountView,
+  getMerchantSettlementAccount
+} from '../../../../api/merchant-settlement-account'
+import {
   ensureMerchantApplymentAccess,
   getMerchantConsoleAccessErrorMessage,
   isMerchantConsoleAccessDenied,
@@ -18,13 +22,16 @@ import { getErrorUserMessage } from '../../../../utils/user-facing'
 const APPLYMENT_AUTO_REFRESH_WINDOW_MS = 60 * 1000
 const APPLYMENT_FORCE_REFRESH_STORAGE_KEY = 'merchantApplymentShouldRefresh'
 const SUBMIT_PAGE_PATH = '/pages/merchant/settings/applyment/submit/index'
+const SETTLEMENT_ACCOUNT_PAGE_PATH = '/pages/merchant/settings/applyment/settlement-account/index'
 const EMPTY_WORKFLOW_VIEW = buildMerchantApplymentWorkflowView(null)
+const EMPTY_SETTLEMENT_ACCOUNT_VIEW = buildMerchantSettlementAccountView(null)
 const EMPTY_DISPLAY_STATUS_ITEMS: Array<{ label: string, value: string }> = []
 const TOAST_SELECTOR = '#t-toast'
 
 const getErrorMessage = getErrorUserMessage
 
 let applymentRequestPending = false
+let settlementRequestPending = false
 
 function showResultToast(context: WechatMiniprogram.Page.TrivialInstance, message: string, theme: 'success' | 'warning' | 'error') {
   Toast({
@@ -97,7 +104,11 @@ Page({
     lastLoadedAt: 0,
     statusLoaded: false,
     workflowView: { ...EMPTY_WORKFLOW_VIEW },
+    settlementAccountView: { ...EMPTY_SETTLEMENT_ACCOUNT_VIEW },
     displayStatusItems: EMPTY_DISPLAY_STATUS_ITEMS,
+    settlementLoading: false,
+    settlementLoaded: false,
+    settlementErrorMessage: '',
     refreshingStatus: false
   },
 
@@ -167,7 +178,11 @@ Page({
       lastLoadedAt: 0,
       statusLoaded: false,
       workflowView: { ...EMPTY_WORKFLOW_VIEW },
+      settlementAccountView: { ...EMPTY_SETTLEMENT_ACCOUNT_VIEW },
       displayStatusItems: EMPTY_DISPLAY_STATUS_ITEMS,
+      settlementLoading: false,
+      settlementLoaded: false,
+      settlementErrorMessage: '',
       refreshingStatus: false
     })
 
@@ -239,6 +254,7 @@ Page({
         return
       }
 
+      const isOpened = workflowView.currentStage === 'opened'
       this.setData({
         workflowView,
         displayStatusItems: buildDisplayStatusItems(workflowView),
@@ -248,8 +264,20 @@ Page({
         initialError: false,
         initialErrorMessage: '',
         refreshErrorMessage: '',
+        ...(isOpened
+          ? {}
+          : {
+              settlementAccountView: { ...EMPTY_SETTLEMENT_ACCOUNT_VIEW },
+              settlementLoading: false,
+              settlementLoaded: false,
+              settlementErrorMessage: ''
+            }),
         lastLoadedAt: Date.now()
       })
+
+      if (isOpened) {
+        void this.loadSettlementAccount({ force: true, silent: true })
+      }
     } catch (error: unknown) {
       logger.error('Load merchant applyment page failed', error, 'merchant-applyment-page')
       const message = getErrorMessage(error, '进件状态加载失败，请稍后重试')
@@ -272,6 +300,48 @@ Page({
     } finally {
       applymentRequestPending = false
       wx.stopPullDownRefresh()
+    }
+  },
+
+  async loadSettlementAccount(options?: { force?: boolean, silent?: boolean }) {
+    const { force = false, silent = false } = options || {}
+    if (!this.hasApplymentAccess() || this.data.workflowView.currentStage !== 'opened') {
+      return
+    }
+
+    if (settlementRequestPending) {
+      return
+    }
+
+    if (!force && this.data.settlementLoaded) {
+      return
+    }
+
+    settlementRequestPending = true
+    const hasTrustedData = this.data.settlementLoaded
+
+    this.setData({
+      settlementLoading: true,
+      ...(hasTrustedData || silent ? { settlementErrorMessage: '' } : {})
+    })
+
+    try {
+      const response = await getMerchantSettlementAccount()
+      this.setData({
+        settlementAccountView: buildMerchantSettlementAccountView(response),
+        settlementLoading: false,
+        settlementLoaded: true,
+        settlementErrorMessage: ''
+      })
+    } catch (error: unknown) {
+      logger.error('Load merchant settlement account failed', error, 'merchant-applyment-page')
+      const message = getErrorMessage(error, '结算账户加载失败，请稍后重试')
+      this.setData({
+        settlementLoading: false,
+        settlementErrorMessage: hasTrustedData ? `${message}，当前已保留上次同步结果` : message
+      })
+    } finally {
+      settlementRequestPending = false
     }
   },
 
@@ -318,6 +388,17 @@ Page({
     }
 
     this.navigateByIntent(intent, path)
+  },
+
+  onRetrySettlementAccount() {
+    void this.loadSettlementAccount({ force: true })
+  },
+
+  onOpenSettlementAccountModify() {
+    if (!this.data.settlementAccountView.canEditSettlementAccount) {
+      return
+    }
+    wx.navigateTo({ url: SETTLEMENT_ACCOUNT_PAGE_PATH })
   },
 
   async onRefreshStatus() {

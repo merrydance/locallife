@@ -181,6 +181,7 @@
         "settings/applyment/index",
         "settings/applyment/action/index",
         "settings/applyment/submit/index",
+        "settings/applyment/settlement-account/index",
         "settings/display-config/index",
         "group/application/index",
         "group/join/index",

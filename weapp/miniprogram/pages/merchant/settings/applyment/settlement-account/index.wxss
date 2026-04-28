@@ -21,9 +21,6 @@
   padding: 0 var(--spacer-lg);
 }
 
-.settlement-state {
-  min-height: 180rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.state-block--embedded {
+  min-height: 240rpx;
 }

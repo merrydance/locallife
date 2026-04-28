@@ -28,7 +28,6 @@ let workflowRequestPending = false
 function normalizePreferredTaskType(task?: string): MerchantApplymentTaskType | '' {
   switch (String(task || '').trim()) {
     case 'sign_agreement':
-    case 'merchant_confirmation':
     case 'legal_validation':
     case 'bank_transfer_validation':
       return String(task) as MerchantApplymentTaskType
@@ -346,7 +345,7 @@ Page({
         subtitle: this.data.workflowView.currentTask.description
       })
       hideActionToast(this)
-      showActionToast(this, '二维码已保存到相册', 'success', { duration: 1800 })
+      showActionToast(this, '二维码已保存，请退出小程序后用微信扫一扫从相册识别', 'success', { duration: 2600 })
     } catch (error: unknown) {
       hideActionToast(this)
       if (isPermissionDeniedError(error)) {

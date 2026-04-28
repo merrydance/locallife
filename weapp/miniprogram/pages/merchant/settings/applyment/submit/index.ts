@@ -1,5 +1,7 @@
 import {
   merchantBindBank,
+  type ApplymentStatusResponse,
+  type MerchantBindBankResponse,
   type MerchantBindBankRequest
 } from '../../../../../api/merchant-applyment'
 import {
@@ -55,6 +57,27 @@ function goBackToApplymentStatus() {
 
 function redirectToApplymentEntry() {
   wx.redirectTo({ url: '/pages/merchant/settings/applyment/index' })
+}
+
+function buildStatusResponseFromBindBank(response: MerchantBindBankResponse): ApplymentStatusResponse {
+  return {
+    status: response.status,
+    status_desc: response.status_desc || response.message || '',
+    sign_url: response.sign_url,
+    sign_state: response.sign_state,
+    legal_validation_url: response.legal_validation_url,
+    account_validation: response.account_validation,
+    sub_mch_id: response.sub_mch_id,
+    reject_reason: response.reject_reason
+  }
+}
+
+function resolveSubmittedWorkflowPath(workflowView: typeof EMPTY_WORKFLOW_VIEW) {
+  if (workflowView.currentStage === 'action_required' && workflowView.primaryActionIntent === 'navigate' && workflowView.primaryActionPath) {
+    return workflowView.primaryActionPath
+  }
+
+  return '/pages/merchant/settings/applyment/index'
 }
 
 function showSubmitLoadingToast(context: WechatMiniprogram.Page.TrivialInstance) {
@@ -260,32 +283,33 @@ Page({
     showSubmitLoadingToast(this)
 
     try {
-    const requestPayload: MerchantBindBankRequest = {
-      account_type: e.detail.account_type,
-      account_bank: e.detail.account_bank,
-      account_bank_code: e.detail.account_bank_code,
-      bank_alias: e.detail.bank_alias,
-      bank_alias_code: e.detail.bank_alias_code,
-      need_bank_branch: e.detail.need_bank_branch,
-      bank_address_code: e.detail.bank_address_code,
-      bank_branch_id: e.detail.bank_branch_id,
-      bank_name: e.detail.bank_name,
-      account_number: e.detail.account_number,
-      account_name: String(e.detail.account_name || '').trim(),
-      contact_type: e.detail.contact_type,
-      contact_name: e.detail.contact_name,
-      contact_id_doc_type: e.detail.contact_id_doc_type,
-      contact_id_card_number: e.detail.contact_id_card_number,
-      contact_id_doc_copy_asset_id: e.detail.contact_id_doc_copy_asset_id,
-      contact_id_doc_copy_back_asset_id: e.detail.contact_id_doc_copy_back_asset_id,
-      contact_id_doc_period_begin: e.detail.contact_id_doc_period_begin,
-      contact_id_doc_period_end: e.detail.contact_id_doc_period_end
-    }
+      const requestPayload: MerchantBindBankRequest = {
+        account_type: e.detail.account_type,
+        account_bank: e.detail.account_bank,
+        account_bank_code: e.detail.account_bank_code,
+        bank_alias: e.detail.bank_alias,
+        bank_alias_code: e.detail.bank_alias_code,
+        need_bank_branch: e.detail.need_bank_branch,
+        bank_address_code: e.detail.bank_address_code,
+        bank_branch_id: e.detail.bank_branch_id,
+        bank_name: e.detail.bank_name,
+        account_number: e.detail.account_number,
+        account_name: String(e.detail.account_name || '').trim(),
+        contact_type: e.detail.contact_type,
+        contact_name: e.detail.contact_name,
+        contact_id_doc_type: e.detail.contact_id_doc_type,
+        contact_id_card_number: e.detail.contact_id_card_number,
+        contact_id_doc_copy_asset_id: e.detail.contact_id_doc_copy_asset_id,
+        contact_id_doc_copy_back_asset_id: e.detail.contact_id_doc_copy_back_asset_id,
+        contact_id_doc_period_begin: e.detail.contact_id_doc_period_begin,
+        contact_id_doc_period_end: e.detail.contact_id_doc_period_end
+      }
 
-      await merchantBindBank(requestPayload)
+      const response = await merchantBindBank(requestPayload)
+      const workflowView = buildMerchantApplymentWorkflowView(buildStatusResponseFromBindBank(response))
       hideSubmitToast(this)
       wx.setStorageSync(APPLYMENT_FORCE_REFRESH_STORAGE_KEY, '1')
-      showSubmitResultToast(this, '进件资料已提交', 'success', redirectToApplymentEntry)
+      wx.redirectTo({ url: resolveSubmittedWorkflowPath(workflowView) })
     } catch (error: unknown) {
       logger.error('Submit merchant applyment bind bank failed', error, 'merchant-applyment-submit-page')
       hideSubmitToast(this)

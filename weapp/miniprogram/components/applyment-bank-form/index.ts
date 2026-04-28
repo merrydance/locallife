@@ -250,6 +250,10 @@ function hasSelectedBank(form: ApplymentBindBankDraft): boolean {
   return Boolean(form.bank_alias || form.account_bank)
 }
 
+function canLoadBankList(form: ApplymentBindBankDraft): boolean {
+  return Boolean(form.account_number.trim())
+}
+
 function findSelectedBankIndex(banks: ApplymentBankOption[], form: ApplymentBindBankDraft): number {
   if (!banks.length || !form.bank_alias_code) {
     return 0
@@ -473,11 +477,7 @@ Component({
     },
 
     async preloadSelectableCatalogs() {
-      const form = this.readForm()
-      await Promise.all([
-        this.ensureBanksLoaded(form.account_type),
-        this.ensureProvincesLoaded()
-      ])
+      await this.ensureProvincesLoaded()
     },
 
     getBanksForType(accountType: ApplymentAccountType): ApplymentBankViewOption[] {
@@ -1138,6 +1138,10 @@ Component({
 
     async onOpenBankPicker() {
       const form = this.readForm()
+      if (!canLoadBankList(form)) {
+        return
+      }
+
       await this.ensureBanksLoaded(form.account_type)
       if (this.data.loadingBanks || !(this.data.filteredBanks as ApplymentBankViewOption[]).length) {
         return

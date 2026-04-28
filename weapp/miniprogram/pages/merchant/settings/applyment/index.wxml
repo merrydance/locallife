@@ -29,9 +29,13 @@
   </view>
 
   <view wx:else class="page-content">
-    <t-notice-bar wx:if="{{refreshErrorMessage}}" theme="error" visible="{{true}}" content="{{refreshErrorMessage}}">
-      <text slot="operation" bind:tap="onRefreshStatus">刷新</text>
-    </t-notice-bar>
+    <t-cell-group wx:if="{{refreshErrorMessage}}" theme="card">
+      <t-cell title="状态刷新失败" note="{{refreshErrorMessage}}">
+        <view slot="right-icon">
+          <t-button size="extra-small" theme="primary" variant="text" bind:tap="onRefreshStatus" loading="{{refreshingStatus}}">重试</t-button>
+        </view>
+      </t-cell>
+    </t-cell-group>
 
     <t-cell-group theme="card">
       <t-cell
@@ -82,6 +86,44 @@
         note="{{item.value}}"
       />
     </t-cell-group>
+
+    <block wx:if="{{workflowView.currentStage === 'opened'}}">
+      <t-cell-group theme="card">
+        <t-cell title="结算账户" note="{{settlementAccountView.statusDesc || settlementAccountView.statusText}}">
+          <view slot="right-icon">
+            <t-tag theme="{{settlementAccountView.tagTheme}}" size="small">{{settlementAccountView.statusText}}</t-tag>
+          </view>
+        </t-cell>
+      </t-cell-group>
+
+      <view wx:if="{{settlementLoading && !settlementLoaded}}" class="settlement-state">
+        <t-loading theme="circular" size="40rpx" text="加载结算账户中..." vertical />
+      </view>
+
+      <t-cell-group wx:elif="{{settlementErrorMessage}}" theme="card">
+        <t-cell title="结算账户加载失败" note="{{settlementErrorMessage}}">
+          <view slot="right-icon">
+            <t-button size="extra-small" theme="primary" variant="text" bind:tap="onRetrySettlementAccount" loading="{{settlementLoading}}">重试</t-button>
+          </view>
+        </t-cell>
+      </t-cell-group>
+
+      <t-cell-group wx:elif="{{settlementAccountView.items.length}}" theme="card">
+        <t-cell
+          wx:for="{{settlementAccountView.items}}"
+          wx:key="label"
+          title="{{item.label}}"
+          note="{{item.value}}"
+        />
+      </t-cell-group>
+
+      <t-button
+        wx:if="{{settlementAccountView.canEditSettlementAccount}}"
+        theme="primary"
+        block
+        bind:tap="onOpenSettlementAccountModify"
+      >修改结算账户</t-button>
+    </block>
 
     <t-cell-group wx:if="{{workflowView.secondaryTasks.length}}" theme="card">
       <t-cell
