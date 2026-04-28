@@ -1,4 +1,5 @@
 import RiderService from '../api/rider'
+import type { PaymentWorkflowStatus } from './payment-workflow'
 import {
   PaymentCancelledError,
   getPaymentDetail,
@@ -21,11 +22,7 @@ export type RiderDepositRechargeWorkflowStatus =
   | 'idle'
   | 'creating'
   | 'paying'
-  | 'submitted_pending_confirmation'
-  | 'paid'
-  | 'cancelled'
-  | 'failed'
-  | 'unknown'
+  | PaymentWorkflowStatus
 
 export interface RiderDepositPendingRechargeContext {
   paymentOrderId: number
@@ -125,8 +122,7 @@ export function getRiderDepositRechargeWorkflowStatusView(
         feedbackMessage: '已取消支付，充值单仍保留，可继续支付或稍后确认。',
         feedbackTheme: 'warning'
       }
-    case 'submitted_pending_confirmation':
-    case 'unknown':
+    case 'pending_confirmation':
       return {
         isPaid: false,
         isCancelled: false,
@@ -201,7 +197,7 @@ export async function recoverPendingRiderDepositRecharge(
   })
   savePendingRiderDepositRecharge(nextContext)
 
-  return buildRechargeResultFromPayment('submitted_pending_confirmation', payment, nextContext, false)
+  return buildRechargeResultFromPayment('pending_confirmation', payment, nextContext, false)
 }
 
 export async function recoverStoredRiderDepositRecharge(): Promise<RiderDepositRechargeWorkflowResult | null> {
@@ -265,7 +261,7 @@ async function finalizeRechargeAfterPay(context: RiderDepositPendingRechargeCont
     }
   } catch (_error) {
     return {
-      status: 'unknown',
+      status: 'pending_confirmation',
       paymentOrderId: context.paymentOrderId,
       amount: context.amount,
       shouldRefresh: false,
@@ -316,7 +312,7 @@ export async function continuePendingRiderDepositRecharge(
   pendingRecharge: RiderDepositPendingRechargeContext
 ): Promise<RiderDepositRechargeWorkflowResult> {
   const recoveryResult = await recoverPendingRiderDepositRecharge(pendingRecharge)
-  if (recoveryResult.status !== 'submitted_pending_confirmation') {
+  if (recoveryResult.status !== 'pending_confirmation') {
     return recoveryResult
   }
 
@@ -339,7 +335,7 @@ export async function continuePendingRiderDepositRecharge(
   savePendingRiderDepositRecharge(nextContext)
 
   if (!payment.pay_params) {
-    return buildRechargeResultFromPayment('submitted_pending_confirmation', payment, nextContext, false)
+    return buildRechargeResultFromPayment('pending_confirmation', payment, nextContext, false)
   }
 
   try {

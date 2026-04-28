@@ -1235,3 +1235,27 @@ rg "status: 'unknown'" weapp/miniprogram/api weapp/miniprogram/services
 阶段 0 剩余风险：
 
 - `services/claim-recovery-payment.ts` 仍作为迁移期允许例外保留，后续阶段 4 需要决定迁入通用 payment workflow，或在标准中保留更窄的正式例外说明。
+
+### 2026-04-28 阶段 1：统一支付工作流和结果模型
+
+状态：已落地，待阶段复审。
+
+变更：
+
+1. `weapp/miniprogram/services/payment-workflow.ts` 已作为普通支付和合单支付的统一 workflow owner，覆盖创建、拉起、轮询、查询和结果归类。
+2. `weapp/miniprogram/utils/payment-result-view.ts` 已作为支付结果中文文案和动作视图模型 owner，覆盖 `paid`、`cancelled`、`pending_confirmation`、`create_failed`、`pay_params_missing`、`closed`、`failed`。
+3. `weapp/miniprogram/services/rider-deposit-payment.ts` 的押金充值状态已从专属 `submitted_pending_confirmation` / `unknown` 收敛为通用 `pending_confirmation`，保留押金域自己的余额刷新和 pending context。
+
+当前 grep 基线：
+
+- 主小程序 `weapp/miniprogram` 中未发现 `processPayment(` 调用。
+- 主小程序 `weapp/miniprogram` 中未发现支付流程结果 `status: 'unknown'`。
+- 主小程序 `weapp/miniprogram` 中未发现 `submitted_pending_confirmation`。
+
+已验证：
+
+- `npm run compile` 通过。
+
+阶段 1 剩余风险：
+
+- 押金充值仍是独立 domain workflow，尚未复用普通支付结果页；这是保留的领域边界，后续阶段 4 和阶段 8 再决定是否进一步并入通用 workflow 或保留正式例外。
