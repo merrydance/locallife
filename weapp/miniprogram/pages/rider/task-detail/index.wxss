@@ -31,6 +31,24 @@
   box-shadow: var(--shadow-sm);
 }
 
+.sync-warning-card {
+  display: flex;
+  align-items: center;
+  gap: var(--spacer-xs);
+  margin-bottom: var(--spacer-md);
+  padding: var(--spacer-sm) var(--spacer-md);
+  border-radius: var(--radius-md);
+  background: var(--td-warning-color-1);
+  color: var(--td-text-color-primary);
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+}
+
+.sync-warning-card text {
+  flex: 1;
+  min-width: 0;
+}
+
 /* 进度追踪 */
 .steps-card {
   padding: 40rpx var(--spacer-md);

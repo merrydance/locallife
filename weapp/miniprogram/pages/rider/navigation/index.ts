@@ -15,6 +15,10 @@ interface RiderNavigationOptions {
   id?: string
 }
 
+interface UserMessageError {
+  userMessage?: string
+}
+
 let riderNavigationUnsubscribe: null | (() => void) = null
 
 function formatRelativeTime(timeStr: string): string {
@@ -40,12 +44,18 @@ function toMapPoint(point: DeliveryLocationPoint | null): MapPoint | null {
   }
 }
 
+function getUserMessage(err: unknown, fallback: string) {
+  const userMessage = (err as UserMessageError).userMessage
+  return typeof userMessage === 'string' && userMessage ? userMessage : fallback
+}
+
 Page({
   data: {
     orderId: 0,
     navBarHeight: 88,
     loading: false,
     errorMessage: '',
+    syncWarningMessage: '',
     delivery: null as Delivery | null,
     mapCenter: { latitude: 39.9, longitude: 116.4 },
     mapScale: 13,
@@ -58,6 +68,7 @@ Page({
     pendingText: '',
     locationStatusText: '等待定位',
     locationStatusTheme: resolveStatusTagTheme('neutral') as StatusTagTheme,
+    locationRetrying: false,
     nextStopTitle: '下一站',
     nextStopAddress: '',
     nextStopLatitude: 0,
@@ -79,6 +90,9 @@ Page({
     const { delivery } = this.data
     if (delivery && isRiderDeliveryTrackedStatus(delivery.status)) {
       void riderLiveLocationSession.setActiveDelivery(delivery.id, 'rider_navigation_show')
+    }
+    if (delivery && !this.data.loading && !this.data.locationRetrying) {
+      void this.loadNavigationData()
     }
   },
 
@@ -105,7 +119,7 @@ Page({
       return
     }
 
-    this.setData({ loading: true, errorMessage: '' })
+    this.setData({ loading: !this.data.delivery, errorMessage: '', syncWarningMessage: '' })
 
     try {
       const delivery = await DeliveryService.getDeliveryByOrder(this.data.orderId)
@@ -120,6 +134,7 @@ Page({
 
       this.setData({
         delivery,
+        syncWarningMessage: '',
         routeSummary: routeResult
           ? `预计总路程 ${mapService.formatDistance(routeResult.distance)} · 约 ${mapService.formatDuration(routeResult.duration)}`
           : '已展示配送主线路，可直接打开导航',
@@ -141,7 +156,12 @@ Page({
       this.applyLocationState(riderLiveLocationSession.getState())
     } catch (error) {
       logger.error('Load rider navigation failed', error, 'RiderNavigation')
-      this.setData({ errorMessage: '导航页加载失败，请稍后重试' })
+      const message = getUserMessage(error, '导航页加载失败，请稍后重试')
+      if (this.data.delivery) {
+        this.setData({ syncWarningMessage: `${message}，当前已保留上次导航状态` })
+      } else {
+        this.setData({ errorMessage: message })
+      }
     } finally {
       this.setData({ loading: false })
     }
@@ -274,6 +294,9 @@ Page({
   },
 
   async onRetryLocation() {
+    if (this.data.locationRetrying) return
+
+    this.setData({ locationRetrying: true })
     wx.showLoading({ title: '刷新定位中...' })
     try {
       if (this.data.needsLocationPermission) {
@@ -286,8 +309,13 @@ Page({
         await riderLiveLocationSession.refreshNow('rider_navigation_manual_retry')
         await riderLiveLocationSession.flushNow()
       }
+      this.applyLocationState(riderLiveLocationSession.getState())
+    } catch (err: unknown) {
+      const message = getUserMessage(err, '定位刷新失败，请稍后重试')
+      wx.showToast({ title: message, icon: 'none' })
     } finally {
       wx.hideLoading()
+      this.setData({ locationRetrying: false })
     }
   },
 

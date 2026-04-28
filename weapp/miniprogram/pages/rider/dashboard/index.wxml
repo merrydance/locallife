@@ -68,8 +68,8 @@
             <text class="runtime-status-desc">{{locationStatusText}} · {{locationUpdatedText}}</text>
             <text class="runtime-status-pending" wx:if="{{locationPendingText}}">{{locationPendingText}}</text>
           </view>
-          <t-button wx:if="{{locationNeedsPermission}}" theme="primary" variant="outline" size="small" bindtap="onResolveLocationPermission">开启定位</t-button>
-          <t-button wx:else theme="primary" variant="text" size="small" bindtap="onRetryLocationSync">刷新</t-button>
+          <t-button wx:if="{{locationNeedsPermission}}" theme="primary" variant="outline" size="small" loading="{{locationActionLoading}}" disabled="{{locationActionLoading}}" bindtap="onResolveLocationPermission">开启定位</t-button>
+          <t-button wx:else theme="primary" variant="text" size="small" loading="{{locationActionLoading}}" disabled="{{locationActionLoading}}" bindtap="onRetryLocationSync">刷新</t-button>
         </view>
       </view>
     </t-sticky>
@@ -250,6 +250,8 @@
                 <t-button 
                   theme="primary" 
                   block
+                  loading="{{grabActionLoading}}"
+                  disabled="{{grabActionLoading}}"
                   catchtap="onGrabOrder" 
                   data-order-id="{{item.order_id}}"
                 >立即抢单</t-button>
@@ -374,8 +376,8 @@
                   <text class="location-runtime-pending" wx:if="{{locationPendingText}}">{{locationPendingText}}</text>
                 </view>
                 <view class="location-runtime-actions">
-                  <t-button wx:if="{{locationNeedsPermission}}" theme="primary" variant="outline" size="small" catchtap="onResolveLocationPermission">开启定位</t-button>
-                  <t-button wx:else theme="primary" variant="text" size="small" catchtap="onRetryLocationSync">刷新</t-button>
+                  <t-button wx:if="{{locationNeedsPermission}}" theme="primary" variant="outline" size="small" loading="{{locationActionLoading}}" disabled="{{locationActionLoading}}" catchtap="onResolveLocationPermission">开启定位</t-button>
+                  <t-button wx:else theme="primary" variant="text" size="small" loading="{{locationActionLoading}}" disabled="{{locationActionLoading}}" catchtap="onRetryLocationSync">刷新</t-button>
                 </view>
               </view>
 
@@ -385,10 +387,10 @@
                    <text class="price">¥{{item.rider_earnings / 100}}</text>
                 </view>
                 <view class="action-btns">
-                  <t-button wx:if="{{item.can_start_pickup}}" theme="primary" block data-id="{{item.id}}" data-action="startPickup" catchtap="onUpdateStatus">我已到店</t-button>
-                  <t-button wx:if="{{item.can_confirm_pickup}}" theme="warning" block data-id="{{item.id}}" data-action="confirmPickup" catchtap="onUpdateStatus">确认取餐</t-button>
-                  <t-button wx:if="{{item.can_start_delivery}}" theme="primary" block data-id="{{item.id}}" data-action="startDelivery" catchtap="onUpdateStatus">开始配送</t-button>
-                  <t-button wx:if="{{item.can_confirm_delivery}}" theme="primary" block data-id="{{item.id}}" data-action="confirmDelivery" catchtap="onUpdateStatus">确认送达</t-button>
+                  <t-button wx:if="{{item.can_start_pickup}}" theme="primary" block loading="{{item.is_action_loading}}" disabled="{{item.is_action_loading}}" data-id="{{item.id}}" data-action="startPickup" catchtap="onUpdateStatus">我已到店</t-button>
+                  <t-button wx:if="{{item.can_confirm_pickup}}" theme="warning" block loading="{{item.is_action_loading}}" disabled="{{item.is_action_loading}}" data-id="{{item.id}}" data-action="confirmPickup" catchtap="onUpdateStatus">确认取餐</t-button>
+                  <t-button wx:if="{{item.can_start_delivery}}" theme="primary" block loading="{{item.is_action_loading}}" disabled="{{item.is_action_loading}}" data-id="{{item.id}}" data-action="startDelivery" catchtap="onUpdateStatus">开始配送</t-button>
+                  <t-button wx:if="{{item.can_confirm_delivery}}" theme="primary" block loading="{{item.is_action_loading}}" disabled="{{item.is_action_loading}}" data-id="{{item.id}}" data-action="confirmDelivery" catchtap="onUpdateStatus">确认送达</t-button>
                 </view>
               </view>
             </view>

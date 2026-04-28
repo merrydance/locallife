@@ -967,3 +967,40 @@ Validation:
 - `git diff --check`: pass
 
 No WEAPP-03 blockers remain. The next stage should stay within the documented task sequence and not start `BE-03` or `WEAPP-04` until explicitly selected.
+
+## 16. Stage 3 WEAPP-04 Implementation Review
+
+Date: 2026-04-28
+Status: pass
+
+Implemented:
+
+- Added dashboard-level duplicate submission guards for order grabbing, delivery status actions, and manual location refresh/permission recovery.
+- Strengthened dashboard delivery-action reconciliation so timeout/unknown results refresh the workbench summary before detailed task lists.
+- Added task-detail silent re-entry refresh with preserved trusted task details when refresh fails.
+- Added task-detail duplicate submission guards for fulfillment status actions and manual location retry.
+- Added navigation re-entry refresh with preserved map/panel state when refresh fails, plus guarded location retry failure handling.
+- Updated rider history refresh so reset refresh failures preserve the existing trusted list and surface a local retry state; first-screen failures remain separate from stale-data refresh failures.
+
+Review checklist:
+
+- [x] No platform dispatch, assignment, schedule, rider wallet, income withdrawal, WeChat same-city reporting, freeze, or unfreeze boundary was introduced.
+- [x] Grab and fulfillment actions are guarded against repeated taps before the first request resolves.
+- [x] Unknown-result recovery still reads backend delivery/workbench facts instead of deciding order or task truth in the client.
+- [x] Task detail, navigation, and history pages preserve existing trusted data on re-entry or refresh failure instead of replacing it with empty local state.
+- [x] First-screen failures remain visible and retriable, while stale refresh failures are shown as local sync warnings.
+- [x] TDesign button loading/disabled states are used for in-flight actions; no shared component was added, so no `component-policy.json` is required.
+
+Review fix:
+
+- During review, the dashboard fulfillment action lock was found to be too broad because a page-level loading flag could temporarily disable all active-delivery action buttons. The runtime now tracks delivery-action loading by delivery ID and renders loading/disabled state only on the affected task card.
+
+Validation:
+
+- VS Code diagnostics on touched WEAPP-04 files: pass
+- `npm run compile`: pass
+- `npm run quality:check`: pass
+- `git diff --check`: pass
+- Boundary grep for dispatch, wallet/withdrawal, same-city reporting, freeze, and unfreeze terms in touched rider pages: pass; the only existing match remains the dashboard page title text.
+
+No WEAPP-04 blockers remain. The next stage can proceed to the next selected rider capability task without expanding the WEAPP-04 boundary.

@@ -24,6 +24,24 @@
   box-shadow: var(--shadow-sm);
 }
 
+.history-sync-state {
+  display: flex;
+  align-items: center;
+  gap: var(--spacer-xs);
+  margin-bottom: var(--spacer-md);
+  padding: var(--spacer-sm) var(--spacer-md);
+  border-radius: var(--radius-md);
+  background: var(--td-warning-color-1);
+  color: var(--td-text-color-primary);
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+}
+
+.history-sync-state text {
+  flex: 1;
+  min-width: 0;
+}
+
 .summary-item {
   flex: 1;
   text-align: center;

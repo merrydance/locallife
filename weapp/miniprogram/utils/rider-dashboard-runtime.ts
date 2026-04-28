@@ -39,6 +39,7 @@ export type DashboardDeliveryView = Delivery & {
   can_confirm_pickup: boolean
   can_start_delivery: boolean
   can_confirm_delivery: boolean
+  is_action_loading: boolean
 }
 
 interface DeliveryActionConfig {
@@ -49,6 +50,37 @@ interface DeliveryActionConfig {
 
 function getUserMessage(err: unknown, fallback: string) {
   return getConsoleDashboardErrorMessage('rider', err, fallback)
+}
+
+function withDeliveryActionLoading(
+  deliveries: DashboardDeliveryView[],
+  deliveryId: number,
+  isLoading: boolean
+) {
+  return deliveries.map((delivery) => delivery.id === deliveryId
+    ? { ...delivery, is_action_loading: isLoading }
+    : delivery)
+}
+
+function setDeliveryActionLoadingState(
+  page: RiderDashboardPageContext,
+  deliveryId: number,
+  isLoading: boolean
+) {
+  const loadingIds = new Set<number>(page.data.deliveryActionLoadingIds || [])
+  if (isLoading) {
+    loadingIds.add(deliveryId)
+  } else {
+    loadingIds.delete(deliveryId)
+  }
+
+  const nextLoadingIds = Array.from(loadingIds)
+  const activeDeliveries = withDeliveryActionLoading(page.data.activeDeliveries || [], deliveryId, isLoading)
+  const currentDelivery = page.data.currentDelivery?.id === deliveryId
+    ? { ...page.data.currentDelivery, is_action_loading: isLoading }
+    : page.data.currentDelivery
+
+  page.setData({ deliveryActionLoadingIds: nextLoadingIds, activeDeliveries, currentDelivery })
 }
 
 function buildBannerState(states: Array<{ message: string, canRetry: boolean }>) {
@@ -408,7 +440,8 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
           can_start_pickup: actionState.canStartPickup,
           can_confirm_pickup: actionState.canConfirmPickup,
           can_start_delivery: actionState.canStartDelivery,
-          can_confirm_delivery: actionState.canConfirmDelivery
+          can_confirm_delivery: actionState.canConfirmDelivery,
+          is_action_loading: (this.data.deliveryActionLoadingIds || []).includes(d.id)
         }
       }) as DashboardDeliveryView[]
 
@@ -563,6 +596,10 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
   async onUpdateStatus(e: WechatMiniprogram.TouchEvent) {
     const { id, action } = e.currentTarget.dataset as { id?: number, action?: DeliveryActionType }
     if (!id || !action) return
+    if ((this.data.deliveryActionLoadingIds || []).includes(id)) return
+
+    const delivery = this.data.activeDeliveries.find((item: DashboardDeliveryView) => item.id === id)
+    if (delivery?.is_action_loading) return
 
     const actionMap: Record<DeliveryActionType, DeliveryActionConfig> = {
       startPickup: { method: DeliveryService.startPickup, loading: '正在操作...', source: 'rider_dashboard_start_pickup' },
@@ -574,7 +611,7 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
     const config = actionMap[action]
     if (!config) return
 
-    wx.showLoading({ title: config.loading })
+    setDeliveryActionLoadingState(this, id, true)
     try {
       await this.syncDeliveryLocation(id, config.source)
       await config.method(id)
@@ -589,7 +626,7 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
       const message = getUserMessage(err, '操作失败')
       wx.showToast({ title: message, icon: 'none' })
     } finally {
-      wx.hideLoading()
+      setDeliveryActionLoadingState(this, id, false)
     }
   },
 
@@ -647,6 +684,7 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
         return false
       }
 
+      await this.refreshRiderOverview()
       await this.refreshData()
       return true
     } catch (err: unknown) {
@@ -797,12 +835,15 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
   },
 
   async onGrabOrder(e: WechatMiniprogram.TouchEvent) {
+    if (this.data.grabActionLoading) return
+
     const { orderId } = e.currentTarget.dataset as { orderId?: number }
     if (!orderId) return
 
     const order = this.data.recommendOrders.find((o: RecommendedOrder) => o.order_id === orderId)
     if (!order) return
 
+    this.setData({ grabActionLoading: true })
     wx.showLoading({ title: '校验中...' })
     try {
       const location = await this.getLocation().catch(() => null)
@@ -845,6 +886,7 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
       })
     } finally {
       wx.hideLoading()
+      this.setData({ grabActionLoading: false })
     }
   },
 
@@ -971,6 +1013,9 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
   },
 
   async onRetryLocationSync() {
+    if (this.data.locationActionLoading) return
+
+    this.setData({ locationActionLoading: true })
     wx.showLoading({ title: '刷新定位中...' })
     try {
       if (this.data.locationNeedsPermission) {
@@ -988,10 +1033,14 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
       wx.showToast({ title: message, icon: 'none' })
     } finally {
       wx.hideLoading()
+      this.setData({ locationActionLoading: false })
     }
   },
 
   async onResolveLocationPermission() {
+    if (this.data.locationActionLoading) return
+
+    this.setData({ locationActionLoading: true })
     wx.showLoading({ title: '开启定位中...' })
     try {
       const granted = await riderLiveLocationSession.requestPermissionAndRestart()
@@ -1001,6 +1050,7 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
       }
     } finally {
       wx.hideLoading()
+      this.setData({ locationActionLoading: false })
     }
   }
 }

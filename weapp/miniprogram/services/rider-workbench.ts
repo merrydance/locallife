@@ -106,7 +106,8 @@ function buildDashboardDelivery(item: RiderWorkbenchDeliveryItem): DashboardDeli
     can_start_pickup: item.status === 'assigned',
     can_confirm_pickup: item.status === 'picking',
     can_start_delivery: item.status === 'picked',
-    can_confirm_delivery: item.status === 'delivering'
+    can_confirm_delivery: item.status === 'delivering',
+    is_action_loading: false
   }
 }
 

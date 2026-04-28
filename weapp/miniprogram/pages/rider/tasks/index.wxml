@@ -16,6 +16,12 @@
   </view>
 
   <block wx:else>
+  <view wx:if="{{refreshErrorMessage}}" class="history-sync-state">
+    <t-icon name="error-circle" size="30rpx" />
+    <text>{{refreshErrorMessage}}</text>
+    <t-button theme="primary" variant="text" size="small" bindtap="onRetry">重试</t-button>
+  </view>
+
   <!-- 历史概览 -->
   <view class="history-summary">
     <view class="summary-item">

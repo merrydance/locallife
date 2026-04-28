@@ -32,6 +32,12 @@
 
     <!-- 3. 正常业务数据占位/展示 -->
     <block wx:if="{{delivery}}">
+      <view wx:if="{{syncWarningMessage}}" class="sync-warning-card">
+        <t-icon name="error-circle" size="30rpx" />
+        <text>{{syncWarningMessage}}</text>
+        <t-button theme="primary" variant="text" size="small" bindtap="onRetry">重试</t-button>
+      </view>
+
       <!-- 收入与时间 -->
       <view class="detail-card income-card">
         <view class="info-item">
@@ -139,7 +145,7 @@
         <view class="location-actions">
           <view class="location-actions-main">
             <t-button theme="primary" size="small" bindtap="onGoToNavigation">进入导航页</t-button>
-            <t-button wx:if="{{showLocationAction}}" theme="primary" variant="outline" size="small" bindtap="onRetryLocationSync">
+            <t-button wx:if="{{showLocationAction}}" theme="primary" variant="outline" size="small" loading="{{locationRetrying}}" disabled="{{locationRetrying}}" bindtap="onRetryLocationSync">
               {{locationActionText}}
             </t-button>
           </view>
@@ -180,6 +186,8 @@
           theme="primary"
           size="large"
           block
+          loading="{{actionLoading}}"
+          disabled="{{actionLoading}}"
           bindtap="onUpdateStatus"
         >
           {{delivery.action_label}}

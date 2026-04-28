@@ -41,6 +41,7 @@ Page({
     loading: false,
     loadingMore: false,
     errorMessage: '',
+    refreshErrorMessage: '',
     loadMoreError: '',
     deliveries: [] as DeliveryHistoryView[],
     pageID: 1,
@@ -59,7 +60,7 @@ Page({
 
   async fetchHistory(page: number = 1, reset: boolean = false) {
     if ((reset && this.data.loading) || (!reset && this.data.loadingMore)) return
-    this.setData(reset ? { loading: true } : { loadingMore: true })
+    this.setData(reset ? { loading: true, refreshErrorMessage: '' } : { loadingMore: true })
     
     try {
       const resp = await deliveryTaskManagementService.getDeliveryHistory({
@@ -75,15 +76,20 @@ Page({
             totalEarnings: resp.total_earnings || 0,
           totalCount: resp.completed_total || 0,
           pageID: resp.page_id || page,
-            errorMessage: '',
-            loadMoreError: ''
+          errorMessage: '',
+          refreshErrorMessage: '',
+          loadMoreError: ''
         })
     } catch (err: unknown) {
         logger.error('Fetch delivery history failed', err)
         const userMessage = (err as UserMessageError).userMessage
         const message = typeof userMessage === 'string' && userMessage ? userMessage : '历史任务加载失败，请稍后重试'
         if (reset) {
-          this.setData({ errorMessage: message, loadMoreError: '', deliveries: [], hasMore: true })
+          if (this.data.deliveries.length > 0) {
+            this.setData({ refreshErrorMessage: `${message}，当前已保留上次任务记录`, errorMessage: '', loadMoreError: '' })
+          } else {
+            this.setData({ errorMessage: message, refreshErrorMessage: '', loadMoreError: '', deliveries: [], hasMore: true })
+          }
         } else {
           this.setData({ loadMoreError: message })
         }

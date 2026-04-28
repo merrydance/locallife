@@ -78,7 +78,10 @@ Page({
         orderId: 0,
         delivery: null as DeliveryView | null,
         loading: false,
+        actionLoading: false,
+        locationRetrying: false,
         errorMessage: '',
+        syncWarningMessage: '',
         navBarHeight: 88,
 
         // 状态映射
@@ -123,6 +126,9 @@ Page({
         if (this.data.delivery && isRiderDeliveryTrackedStatus(this.data.delivery.status)) {
             void riderLiveLocationSession.setActiveDelivery(this.data.delivery.id, 'rider_task_detail_show')
         }
+        if (this.data.delivery && !this.data.loading && !this.data.actionLoading) {
+            void this.fetchTaskDetail(true)
+        }
     },
 
     onUnload() {
@@ -132,19 +138,19 @@ Page({
         }
     },
 
-    async fetchTaskDetail() {
+    async fetchTaskDetail(silent = false) {
         if (!this.data.orderId) return
         
-        this.setData({ loading: true })
+        this.setData(silent ? { syncWarningMessage: '' } : { loading: true, syncWarningMessage: '' })
         try {
-            // 使用正确的获取详情接口，而不是抢单接口
             const delivery = await DeliveryService.getDeliveryByOrder(this.data.orderId)
             const deliveryView = this.decorateDelivery(delivery)
             
             this.setData({ 
                 delivery: deliveryView,
                 currentStep: this.mapStatusToStep(delivery.status),
-                errorMessage: ''
+                errorMessage: '',
+                syncWarningMessage: ''
             })
 
             await this.loadLocationMap(deliveryView)
@@ -157,9 +163,15 @@ Page({
         } catch (err: unknown) {
             logger.error('Fetch task detail failed', err)
             const message = getUserMessage(err, '任务详情加载失败，请稍后重试')
-            this.setData({ delivery: null, errorMessage: message })
+            if (silent && this.data.delivery) {
+                this.setData({ syncWarningMessage: `${message}，当前已保留上次任务状态` })
+            } else {
+                this.setData({ delivery: null, errorMessage: message })
+            }
         } finally {
-            this.setData({ loading: false })
+            if (!silent) {
+                this.setData({ loading: false })
+            }
         }
     },
 
@@ -377,6 +389,7 @@ Page({
      * 更新配送状态按钮点击
      */
     async onUpdateStatus() {
+        if (this.data.actionLoading) return
         if (!this.data.delivery) return
         const { id, status } = this.data.delivery
         const actionState = getRiderDeliveryActionState(status)
@@ -385,42 +398,51 @@ Page({
         const method = DELIVERY_ACTION_METHODS[actionState.actionKey]
         const nextExpectedStatus = actionState.expectedStatus
 
+        this.setData({ actionLoading: true })
         wx.showModal({
             title: '状态更新',
             content: `确定已完成 ${actionState.label.replace('我已', '')} 吗？`,
             success: async (res) => {
-                if (res.confirm) {
-                    wx.showLoading({ title: '同步中...' })
-                    try {
-                        await this.syncDeliveryLocation(id, actionState.locationSource)
-                        const updated = await method(id)
-                        const updatedView = this.decorateDelivery(updated)
-                        this.setData({ 
-                            delivery: updatedView,
-                            currentStep: this.mapStatusToStep(updated.status)
-                        })
+                if (!res.confirm) {
+                    this.setData({ actionLoading: false })
+                    return
+                }
 
-                        if (isExpectedDeliveryStatusReached(updated.status, 'delivered')) {
+                try {
+                    wx.showLoading({ title: '同步中...' })
+                    await this.syncDeliveryLocation(id, actionState.locationSource)
+                    const updated = await method(id)
+                    const updatedView = this.decorateDelivery(updated)
+                    this.setData({
+                        delivery: updatedView,
+                        currentStep: this.mapStatusToStep(updated.status),
+                        syncWarningMessage: ''
+                    })
+
+                    if (isExpectedDeliveryStatusReached(updated.status, 'delivered')) {
+                        wx.navigateBack()
+                        return
+                    }
+                } catch (err: unknown) {
+                    const reconciled = await this.reconcileDeliveryState(nextExpectedStatus)
+                    if (reconciled) {
+                        const latestStatus = this.data.delivery?.status
+                        if (latestStatus && isExpectedDeliveryStatusReached(latestStatus, 'delivered')) {
                             wx.navigateBack()
                             return
                         }
-                    } catch (err: unknown) {
-                        const reconciled = await this.reconcileDeliveryState(nextExpectedStatus)
-                        if (reconciled) {
-                            const latestStatus = this.data.delivery?.status
-                            if (latestStatus && isExpectedDeliveryStatusReached(latestStatus, 'delivered')) {
-                                wx.navigateBack()
-                                return
-                            }
-                            return
-                        }
-
-                        const message = getUserMessage(err, '操作失败')
-                        wx.showToast({ title: message, icon: 'none' })
-                    } finally {
-                        wx.hideLoading()
+                        return
                     }
+
+                    const message = getUserMessage(err, '操作失败')
+                    wx.showToast({ title: message, icon: 'none' })
+                } finally {
+                    wx.hideLoading()
+                    this.setData({ actionLoading: false })
                 }
+            },
+            fail: () => {
+                this.setData({ actionLoading: false })
             }
         })
     },
@@ -464,11 +486,13 @@ Page({
     },
 
     async onRetryLocationSync() {
+        if (this.data.locationRetrying) return
         const delivery = this.data.delivery
         if (!delivery || !isRiderDeliveryTrackedStatus(delivery.status)) {
             return
         }
 
+        this.setData({ locationRetrying: true })
         wx.showLoading({ title: '刷新定位中...' })
         try {
             if (this.data.needsLocationPermission) {
@@ -488,6 +512,7 @@ Page({
             wx.showToast({ title: message, icon: 'none' })
         } finally {
             wx.hideLoading()
+            this.setData({ locationRetrying: false })
         }
     },
 
@@ -507,7 +532,7 @@ Page({
     },
 
     onRetry() {
-        this.fetchTaskDetail()
+        this.fetchTaskDetail(!!this.data.delivery)
     },
 
     onBack() {
