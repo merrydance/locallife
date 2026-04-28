@@ -1117,3 +1117,45 @@ Residual risk:
 - Existing notifications do not yet carry a dedicated rider notification category field. The rider-mode classifier therefore prefers structured `related_type` and `extra_data` keys, but still keeps text fallback for legacy or loosely typed messages. A future backend category field would make filtering fully deterministic, but this stage intentionally avoids expanding the backend notification contract.
 
 No WEAPP-07 blockers remain. The next stage can proceed to the next rider capability task without expanding the notification boundary.
+
+## 20. Stage 3 BE-03 Implementation Review
+
+Date: 2026-04-28
+Status: pass
+
+Implemented:
+
+- Added rider-facing persistent notifications for profit-sharing result processing when a profit-sharing order has a rider receiver and rider amount.
+- Reused the existing notification task pipeline instead of adding a new notification API, SQL query, route, or storage contract.
+- For successful rider profit-sharing results, the notification uses `profit_sharing_order` as the related business object and routes through the rider income ledger recovery path.
+- For failed or closed profit-sharing results, the rider notification says the delivery-fee settlement is being checked by the platform and does not expose WeChat/provider failure codes or raw reasons.
+- Marked rider profit-sharing result notifications as preference-bypass critical notifications so financial recovery messages are not hidden by user notification preferences.
+
+Review checklist:
+
+- [x] BE-03 stayed inside the worker notification producer path; no handler, route, SQL, Swagger, or generated code changed.
+- [x] Rider success notifications are created only when `rider_id` is valid and `rider_amount > 0`.
+- [x] Missing rider records or empty rider user IDs are skipped with structured warning logs instead of panicking or exposing internal errors.
+- [x] Failed/closed profit-sharing notifications do not include provider failure reason text in rider-facing content.
+- [x] Failed/closed result handling still enqueues the existing profit-sharing retry even if rider notification enqueue fails; the outbox then marks failed so notification delivery can be retried.
+- [x] Existing merchant profit-sharing result notification behavior remains unchanged.
+
+Review fix:
+
+- During review, the failed/closed branch was found to attempt rider notification before the profit-sharing retry enqueue. The branch now records rider notification errors, continues to enqueue the existing retry task, and only then returns the rider notification error to keep the outbox retryable.
+
+Validation:
+
+- VS Code diagnostics on touched BE-03 files: pass
+- `go test ./worker -run 'TestProcessTaskPaymentDomainOutbox' -count=1`: pass
+- `git diff --check`: pass
+
+Regeneration:
+
+- Not required. No SQL, Swagger annotation, route, interface, or generated source changed.
+
+Residual risk:
+
+- This stage only completed the missing rider profit-sharing notification producer. Dedicated backend category fields for rider notification filtering remain intentionally out of scope; the mini-program still classifies rider notifications from existing `related_type` and `extra_data` fields.
+
+No BE-03 blockers remain. Stage 3 rider notification recovery is now connected from producer to mini-program entry without adding a new notification boundary.

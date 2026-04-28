@@ -3062,6 +3062,12 @@ func (processor *RedisTaskProcessor) processProfitSharingResultPayload(ctx conte
 		if err != nil && requireEnqueueSuccess {
 			return fmt.Errorf("enqueue profit sharing success notification: %w", err)
 		}
+		if err := processor.distributeRiderProfitSharingResultNotification(ctx, profitSharingOrder, "SUCCESS", expiresAt); err != nil {
+			if requireEnqueueSuccess {
+				return err
+			}
+			log.Warn().Err(err).Int64("profit_sharing_order_id", profitSharingOrder.ID).Msg("distribute rider profit sharing success notification failed")
+		}
 
 	case "CLOSED", "FAILED":
 		if processor.distributor == nil && requireEnqueueSuccess {
@@ -3090,6 +3096,14 @@ func (processor *RedisTaskProcessor) processProfitSharingResultPayload(ctx conte
 				"result":      payload.Result,
 			}),
 		})
+		var riderNotificationErr error
+		if processor.distributor != nil {
+			expiresAt := profitSharingResultNotificationExpiresAt(profitSharingOrder)
+			if err := processor.distributeRiderProfitSharingResultNotification(ctx, profitSharingOrder, payload.Result, expiresAt); err != nil {
+				riderNotificationErr = err
+				log.Warn().Err(err).Int64("profit_sharing_order_id", profitSharingOrder.ID).Msg("distribute rider profit sharing failure notification failed")
+			}
+		}
 
 		// 自动重试队列（指数退避延迟，避免微信端短暂异常导致永久失败）
 		if processor.distributor != nil {
@@ -3120,6 +3134,9 @@ func (processor *RedisTaskProcessor) processProfitSharingResultPayload(ctx conte
 				return fmt.Errorf("enqueue profit sharing retry after result failure: %w", err)
 			}
 		}
+		if riderNotificationErr != nil && requireEnqueueSuccess {
+			return riderNotificationErr
+		}
 
 	default:
 		if !requireEnqueueSuccess {
@@ -3132,6 +3149,52 @@ func (processor *RedisTaskProcessor) processProfitSharingResultPayload(ctx conte
 		return fmt.Errorf("unsupported profit sharing result %q", payload.Result)
 	}
 
+	return nil
+}
+
+func (processor *RedisTaskProcessor) distributeRiderProfitSharingResultNotification(ctx context.Context, profitSharingOrder db.ProfitSharingOrder, result string, expiresAt time.Time) error {
+	if processor.distributor == nil || !profitSharingOrder.RiderID.Valid || profitSharingOrder.RiderAmount <= 0 {
+		return nil
+	}
+
+	rider, err := processor.store.GetRider(ctx, profitSharingOrder.RiderID.Int64)
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			log.Warn().Int64("rider_id", profitSharingOrder.RiderID.Int64).Int64("profit_sharing_order_id", profitSharingOrder.ID).Msg("skip rider profit sharing notification: rider not found")
+			return nil
+		}
+		return fmt.Errorf("get rider for rider profit sharing notification: %w", err)
+	}
+	if rider.UserID <= 0 {
+		log.Warn().Int64("rider_id", rider.ID).Int64("profit_sharing_order_id", profitSharingOrder.ID).Msg("skip rider profit sharing notification: rider user id empty")
+		return nil
+	}
+
+	title := "配送费已到账"
+	content := fmt.Sprintf("本单配送费%.2f元已通过微信分账到账，可在收入账本查看。", float64(profitSharingOrder.RiderAmount)/100)
+	if result != "SUCCESS" {
+		title = "配送费结算处理中"
+		content = "本单配送费结算暂未完成，平台正在核对处理，可在收入账本查看状态。"
+	}
+
+	err = processor.distributor.DistributeTaskSendNotification(ctx, &SendNotificationPayload{
+		UserID:            rider.UserID,
+		Type:              "finance",
+		Title:             title,
+		Content:           content,
+		RelatedType:       "profit_sharing_order",
+		RelatedID:         profitSharingOrder.ID,
+		IgnorePreferences: true,
+		ExtraData: map[string]any{
+			"profit_sharing_order_id": profitSharingOrder.ID,
+			"rider_amount":            profitSharingOrder.RiderAmount,
+			"result":                  result,
+		},
+		ExpiresAt: &expiresAt,
+	}, asynq.Unique(profitSharingResultNotificationDedupWindow))
+	if err != nil {
+		return fmt.Errorf("enqueue rider profit sharing notification: %w", err)
+	}
 	return nil
 }
 

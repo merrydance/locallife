@@ -118,6 +118,60 @@ func TestProcessTaskPaymentDomainOutbox_PublishesProfitSharingResultReady(t *tes
 	require.NoError(t, err)
 }
 
+func TestProcessTaskPaymentDomainOutbox_PublishesRiderProfitSharingResultReady(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	distributor := mockwk.NewMockTaskDistributor(ctrl)
+	outbox := buildProfitSharingResultReadyOutbox(t, 907, worker.ProfitSharingResultPayload{
+		ProfitSharingOrderID: 3003,
+		OutOrderNo:           "PS3003",
+		Result:               "SUCCESS",
+		MerchantID:           803,
+	})
+
+	store.EXPECT().ClaimPaymentDomainOutbox(gomock.Any(), gomock.Any()).Return(outbox, nil)
+	store.EXPECT().GetMerchant(gomock.Any(), int64(803)).Return(db.Merchant{ID: 803, OwnerUserID: 9003}, nil)
+	store.EXPECT().GetProfitSharingOrderByOutOrderNo(gomock.Any(), "PS3003").Return(db.ProfitSharingOrder{
+		ID:                 3003,
+		MerchantID:         803,
+		MerchantAmount:     1234,
+		PlatformCommission: 100,
+		OperatorCommission: 50,
+		RiderID:            pgtype.Int8{Int64: 88, Valid: true},
+		RiderAmount:        700,
+	}, nil)
+	store.EXPECT().GetRider(gomock.Any(), int64(88)).Return(db.Rider{ID: 88, UserID: 9103}, nil)
+
+	var payloads []*worker.SendNotificationPayload
+	distributor.EXPECT().DistributeTaskSendNotification(gomock.Any(), gomock.AssignableToTypeOf(&worker.SendNotificationPayload{}), gomock.Any()).DoAndReturn(func(_ context.Context, payload *worker.SendNotificationPayload, opts ...asynq.Option) error {
+		payloads = append(payloads, payload)
+		require.Len(t, opts, 1)
+		return nil
+	}).Times(2)
+	store.EXPECT().MarkPaymentDomainOutboxPublished(gomock.Any(), outbox.ID).Return(db.PaymentDomainOutbox{ID: outbox.ID, Status: db.PaymentDomainOutboxStatusPublished}, nil)
+
+	processor := worker.NewTestTaskProcessor(store, distributor, nil, nil)
+	payload, err := json.Marshal(worker.PaymentDomainOutboxPayload{OutboxID: outbox.ID})
+	require.NoError(t, err)
+
+	err = processor.ProcessTaskPaymentDomainOutbox(context.Background(), asynq.NewTask(worker.TaskProcessPaymentDomainOutbox, payload))
+	require.NoError(t, err)
+	require.Len(t, payloads, 2)
+
+	require.Equal(t, int64(9003), payloads[0].UserID)
+	require.Equal(t, int64(9103), payloads[1].UserID)
+	require.Equal(t, "finance", payloads[1].Type)
+	require.Equal(t, "配送费已到账", payloads[1].Title)
+	require.Equal(t, "profit_sharing_order", payloads[1].RelatedType)
+	require.Equal(t, int64(3003), payloads[1].RelatedID)
+	require.True(t, payloads[1].IgnorePreferences)
+	require.Equal(t, int64(3003), payloads[1].ExtraData["profit_sharing_order_id"])
+	require.Equal(t, int64(700), payloads[1].ExtraData["rider_amount"])
+	require.Equal(t, "SUCCESS", payloads[1].ExtraData["result"])
+}
+
 func TestProcessTaskPaymentDomainOutbox_PublishesFailedProfitSharingResultReady(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -147,6 +201,104 @@ func TestProcessTaskPaymentDomainOutbox_PublishesFailedProfitSharingResultReady(
 		return nil
 	})
 	store.EXPECT().MarkPaymentDomainOutboxPublished(gomock.Any(), outbox.ID).Return(db.PaymentDomainOutbox{ID: outbox.ID, Status: db.PaymentDomainOutboxStatusPublished}, nil)
+
+	processor := worker.NewTestTaskProcessor(store, distributor, nil, nil)
+	payload, err := json.Marshal(worker.PaymentDomainOutboxPayload{OutboxID: outbox.ID})
+	require.NoError(t, err)
+
+	err = processor.ProcessTaskPaymentDomainOutbox(context.Background(), asynq.NewTask(worker.TaskProcessPaymentDomainOutbox, payload))
+	require.NoError(t, err)
+}
+
+func TestProcessTaskPaymentDomainOutbox_PublishesRiderFailedProfitSharingResultReady(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	distributor := mockwk.NewMockTaskDistributor(ctrl)
+	outbox := buildProfitSharingResultReadyOutbox(t, 909, worker.ProfitSharingResultPayload{
+		ProfitSharingOrderID: 3005,
+		OutOrderNo:           "PS3005",
+		Result:               "FAILED",
+		FailReason:           "NO_RELATION",
+		MerchantID:           805,
+	})
+
+	store.EXPECT().ClaimPaymentDomainOutbox(gomock.Any(), gomock.Any()).Return(outbox, nil)
+	store.EXPECT().GetMerchant(gomock.Any(), int64(805)).Return(db.Merchant{ID: 805, OwnerUserID: 9005}, nil)
+	store.EXPECT().GetProfitSharingOrderByOutOrderNo(gomock.Any(), "PS3005").Return(db.ProfitSharingOrder{
+		ID:             3005,
+		MerchantID:     805,
+		PaymentOrderID: 7005,
+		MerchantAmount: 1234,
+		RiderID:        pgtype.Int8{Int64: 89, Valid: true},
+		RiderAmount:    800,
+	}, nil)
+	store.EXPECT().GetRider(gomock.Any(), int64(89)).Return(db.Rider{ID: 89, UserID: 9105}, nil)
+	store.EXPECT().GetPaymentOrder(gomock.Any(), int64(7005)).Return(db.PaymentOrder{ID: 7005, OrderID: pgtype.Int8{Int64: 6005, Valid: true}}, nil)
+	distributor.EXPECT().DistributeTaskSendNotification(gomock.Any(), gomock.AssignableToTypeOf(&worker.SendNotificationPayload{}), gomock.Any()).DoAndReturn(func(_ context.Context, payload *worker.SendNotificationPayload, opts ...asynq.Option) error {
+		require.Len(t, opts, 1)
+		require.Equal(t, int64(9105), payload.UserID)
+		require.Equal(t, "配送费结算处理中", payload.Title)
+		require.NotContains(t, payload.Content, "NO_RELATION")
+		require.True(t, payload.IgnorePreferences)
+		require.Equal(t, int64(3005), payload.ExtraData["profit_sharing_order_id"])
+		require.Equal(t, "FAILED", payload.ExtraData["result"])
+		return nil
+	})
+	distributor.EXPECT().DistributeTaskProcessProfitSharing(gomock.Any(), gomock.AssignableToTypeOf(&worker.ProfitSharingPayload{}), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, payload *worker.ProfitSharingPayload, _ ...asynq.Option) error {
+		require.Equal(t, int64(7005), payload.PaymentOrderID)
+		require.Equal(t, int64(6005), payload.OrderID)
+		return nil
+	})
+	store.EXPECT().MarkPaymentDomainOutboxPublished(gomock.Any(), outbox.ID).Return(db.PaymentDomainOutbox{ID: outbox.ID, Status: db.PaymentDomainOutboxStatusPublished}, nil)
+
+	processor := worker.NewTestTaskProcessor(store, distributor, nil, nil)
+	payload, err := json.Marshal(worker.PaymentDomainOutboxPayload{OutboxID: outbox.ID})
+	require.NoError(t, err)
+
+	err = processor.ProcessTaskPaymentDomainOutbox(context.Background(), asynq.NewTask(worker.TaskProcessPaymentDomainOutbox, payload))
+	require.NoError(t, err)
+}
+
+func TestProcessTaskPaymentDomainOutbox_RiderFailedProfitSharingNotificationFailureStillQueuesRetry(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	distributor := mockwk.NewMockTaskDistributor(ctrl)
+	outbox := buildProfitSharingResultReadyOutbox(t, 910, worker.ProfitSharingResultPayload{
+		ProfitSharingOrderID: 3006,
+		OutOrderNo:           "PS3006",
+		Result:               "FAILED",
+		FailReason:           "NO_RELATION",
+		MerchantID:           806,
+	})
+
+	store.EXPECT().ClaimPaymentDomainOutbox(gomock.Any(), gomock.Any()).Return(outbox, nil)
+	store.EXPECT().GetMerchant(gomock.Any(), int64(806)).Return(db.Merchant{ID: 806, OwnerUserID: 9006}, nil)
+	store.EXPECT().GetProfitSharingOrderByOutOrderNo(gomock.Any(), "PS3006").Return(db.ProfitSharingOrder{
+		ID:             3006,
+		MerchantID:     806,
+		PaymentOrderID: 7006,
+		MerchantAmount: 1234,
+		RiderID:        pgtype.Int8{Int64: 90, Valid: true},
+		RiderAmount:    800,
+	}, nil)
+	store.EXPECT().GetRider(gomock.Any(), int64(90)).Return(db.Rider{ID: 90, UserID: 9106}, nil)
+	store.EXPECT().GetPaymentOrder(gomock.Any(), int64(7006)).Return(db.PaymentOrder{ID: 7006, OrderID: pgtype.Int8{Int64: 6006, Valid: true}}, nil)
+	distributor.EXPECT().DistributeTaskSendNotification(gomock.Any(), gomock.AssignableToTypeOf(&worker.SendNotificationPayload{}), gomock.Any()).Return(errors.New("redis unavailable"))
+	distributor.EXPECT().DistributeTaskProcessProfitSharing(gomock.Any(), gomock.AssignableToTypeOf(&worker.ProfitSharingPayload{}), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, payload *worker.ProfitSharingPayload, _ ...asynq.Option) error {
+		require.Equal(t, int64(7006), payload.PaymentOrderID)
+		require.Equal(t, int64(6006), payload.OrderID)
+		return nil
+	})
+	store.EXPECT().MarkPaymentDomainOutboxFailed(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.MarkPaymentDomainOutboxFailedParams) (db.PaymentDomainOutbox, error) {
+		require.Equal(t, outbox.ID, arg.ID)
+		require.True(t, arg.LastError.Valid)
+		require.Contains(t, arg.LastError.String, "enqueue rider profit sharing notification")
+		return db.PaymentDomainOutbox{ID: outbox.ID, Status: db.PaymentDomainOutboxStatusFailed}, nil
+	})
 
 	processor := worker.NewTestTaskProcessor(store, distributor, nil, nil)
 	payload, err := json.Marshal(worker.PaymentDomainOutboxPayload{OutboxID: outbox.ID})
