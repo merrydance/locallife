@@ -22,7 +22,7 @@ import {
 import Toast, { hideToast } from '../../../miniprogram_npm/tdesign-miniprogram/toast/index'
 import { logger } from '../../../utils/logger'
 import { getStableBarHeights } from '../../../utils/responsive'
-import { decorateDepositRecord, formatFenValue, type DepositRecordView } from '../../../utils/rider-deposit-record-view'
+import { buildDepositBillRecordView, formatFenValue, type DepositRecordView } from '../../../utils/rider-deposit-record-view'
 
 interface AmountInputDataset {
     field?: 'rechargeAmount' | 'withdrawAmount'
@@ -280,7 +280,7 @@ Page({
         this.setData({ loadingMore: !reset && page > 1 })
         try {
             const resp = await RiderService.listDepositRecords({ page, limit: 20 })
-            const list = (resp.deposits || []).map((item) => decorateDepositRecord(item))
+            const list = (resp.deposits || []).map((item) => buildDepositBillRecordView(item)).filter((item): item is DepositRecordView => Boolean(item))
             const pageSize = resp.page_size || 20
             const total = typeof resp.total === 'number' ? resp.total : 0
             this.setData({

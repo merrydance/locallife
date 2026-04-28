@@ -21,6 +21,8 @@ export interface DepositRecordView extends DepositRecord {
 
 const SUCCESS_ICON_COLOR = 'var(--td-success-color)'
 const DEFAULT_ICON_COLOR = 'var(--td-text-color-primary)'
+const WITHDRAW_FREEZE_REMARK = '押金提现冻结'
+const WITHDRAW_FAILED_UNFREEZE_REMARK = '押金退款失败解冻'
 
 const transactionTypeTextMap: Record<string, string> = {
   deposit: '押金充值',
@@ -52,6 +54,10 @@ const transactionAmountSignMap: Record<string, 1 | -1> = {
 
 function getTransactionSign(type: string): 1 | -1 | 0 {
   return transactionAmountSignMap[type] || 0
+}
+
+function isWithdrawFreezeRecord(record: DepositRecord): boolean {
+  return record.type === 'freeze' && record.remark === WITHDRAW_FREEZE_REMARK
 }
 
 export function formatFenValue(amount: number): string {
@@ -97,11 +103,6 @@ export function decorateDepositRecord(record: DepositRecord): DepositRecordView 
       displayRemark = '订单配送中，押金暂时冻结。'
       statusText = '冻结中'
       statusTheme = 'warning'
-    } else if (remark === '押金提现冻结') {
-      displayTypeText = '提现处理中'
-      displayRemark = '提现申请处理中，到账前金额暂不可用。'
-      statusText = '处理中'
-      statusTheme = 'warning'
     }
   }
 
@@ -116,10 +117,10 @@ export function decorateDepositRecord(record: DepositRecord): DepositRecordView 
       displayRemark = '订单取消后，配送冻结已退回可用押金。'
       statusText = '已退回'
       statusTheme = 'success'
-    } else if (remark === '押金退款失败解冻') {
-      displayTypeText = '提现退回'
-      displayRemark = '提现未成功，金额已退回可用押金。'
-      statusText = '已退回'
+    } else if (remark === WITHDRAW_FAILED_UNFREEZE_REMARK) {
+      displayTypeText = '提现失败退回'
+      displayRemark = '微信提现未成功，金额已退回可用押金。'
+      statusText = '提现失败'
       statusTheme = 'default'
     }
   }
@@ -153,4 +154,12 @@ export function decorateDepositRecord(record: DepositRecord): DepositRecordView 
     status_text: statusText,
     status_theme: statusTheme
   }
+}
+
+export function buildDepositBillRecordView(record: DepositRecord): DepositRecordView | null {
+  if (isWithdrawFreezeRecord(record)) {
+    return null
+  }
+
+  return decorateDepositRecord(record)
 }

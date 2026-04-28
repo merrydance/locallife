@@ -22,13 +22,15 @@ WHERE payment_order_id = $1 AND type = 'deposit' LIMIT 1;
 -- name: ListRiderDeposits :many
 SELECT id, rider_id, amount, type, related_order_id, balance_after, remark, created_at, payment_order_id FROM rider_deposits
 WHERE rider_id = $1
+    AND (type <> 'freeze' OR COALESCE(remark, '') <> '押金提现冻结')
 ORDER BY created_at DESC, id DESC
 LIMIT $2 OFFSET $3;
 
 -- name: CountRiderDeposits :one
 SELECT COUNT(*)::bigint
 FROM rider_deposits
-WHERE rider_id = $1;
+WHERE rider_id = $1
+    AND (type <> 'freeze' OR COALESCE(remark, '') <> '押金提现冻结');
 
 -- name: ListRiderDepositsByType :many
 SELECT id, rider_id, amount, type, related_order_id, balance_after, remark, created_at, payment_order_id FROM rider_deposits

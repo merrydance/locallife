@@ -28937,7 +28937,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "分页查询当前骑手的押金变动流水记录，包括充值、提现、冻结、解冻、扣款等",
+                "description": "分页查询当前骑手的押金变动流水记录，包括充值、提现、配送冻结、解冻、扣款等；提现冻结中间流水不作为账单明细返回",
                 "consumes": [
                     "application/json"
                 ],

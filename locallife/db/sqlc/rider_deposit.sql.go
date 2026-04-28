@@ -15,6 +15,7 @@ const countRiderDeposits = `-- name: CountRiderDeposits :one
 SELECT COUNT(*)::bigint
 FROM rider_deposits
 WHERE rider_id = $1
+    AND (type <> 'freeze' OR COALESCE(remark, '') <> '押金提现冻结')
 `
 
 func (q *Queries) CountRiderDeposits(ctx context.Context, riderID int64) (int64, error) {
@@ -339,6 +340,7 @@ func (q *Queries) ListRiderDepositLedgerAnomalies(ctx context.Context, arg ListR
 const listRiderDeposits = `-- name: ListRiderDeposits :many
 SELECT id, rider_id, amount, type, related_order_id, balance_after, remark, created_at, payment_order_id FROM rider_deposits
 WHERE rider_id = $1
+    AND (type <> 'freeze' OR COALESCE(remark, '') <> '押金提现冻结')
 ORDER BY created_at DESC, id DESC
 LIMIT $2 OFFSET $3
 `

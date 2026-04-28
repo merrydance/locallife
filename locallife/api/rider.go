@@ -550,7 +550,7 @@ type listRiderDepositsResponse struct {
 
 // listRiderDeposits godoc
 // @Summary 查询押金流水
-// @Description 分页查询当前骑手的押金变动流水记录，包括充值、提现、冻结、解冻、扣款等
+// @Description 分页查询当前骑手的押金变动流水记录，包括充值、提现、配送冻结、解冻、扣款等；提现冻结中间流水不作为账单明细返回
 // @Tags 骑手
 // @Accept json
 // @Produce json
