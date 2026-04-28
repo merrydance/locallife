@@ -83,6 +83,188 @@ export interface ActiveCredentialSummary {
   resumed_at?: string
 }
 
+export interface OnboardingReviewDisplay {
+  visible: boolean
+  title: string
+  description: string
+  statusText: string
+  statusTheme: StatusTagTheme
+  reasonText: string
+  metaText: string
+  ruleText: string
+}
+
+export interface ActiveCredentialDisplay {
+  key: string
+  label: string
+  statusText: string
+  statusTheme: StatusTagTheme
+  expiryText: string
+  detailText: string
+}
+
+export function buildOnboardingReviewDisplay(
+  summary?: OnboardingReviewSummary | null,
+  applicationStatus?: ApplicationStatus | string
+): OnboardingReviewDisplay {
+  const outcome = String(summary?.outcome || '').trim().toLowerCase()
+  const stage = String(summary?.stage || '').trim().toLowerCase()
+  const status = String(applicationStatus || '').trim().toLowerCase()
+  const hasSummary = Boolean(summary?.run_id || outcome || stage || summary?.reason_code)
+
+  if (!hasSummary && status !== 'submitted') {
+    return emptyOnboardingReviewDisplay()
+  }
+
+  if (outcome === 'approved') {
+    return buildReviewDisplay(summary, {
+      title: '审核通过',
+      description: '资质已核验通过，证照有效期将持续跟踪。',
+      statusText: '已通过',
+      statusTheme: 'success'
+    })
+  }
+
+  if (outcome === 'needs_resubmit') {
+    return buildReviewDisplay(summary, {
+      title: '资料需修改',
+      description: summary?.reason_message || '资料核验未通过，请根据提示修改后重新提交。',
+      statusText: '待修改',
+      statusTheme: 'danger'
+    })
+  }
+
+  if (outcome === 'rejected') {
+    return buildReviewDisplay(summary, {
+      title: '审核未通过',
+      description: summary?.reason_message || '资料未通过平台核验，请修改后重新提交。',
+      statusText: '未通过',
+      statusTheme: 'danger'
+    })
+  }
+
+  if (outcome === 'needs_manual' || stage === 'manual') {
+    return buildReviewDisplay(summary, {
+      title: '人工复核中',
+      description: summary?.reason_message || '系统已转入人工复核，结果更新后会同步到当前页面。',
+      statusText: '复核中',
+      statusTheme: 'warning'
+    })
+  }
+
+  return buildReviewDisplay(summary, {
+    title: '审核已提交',
+    description: '系统已收到申请，审核完成后会更新状态。',
+    statusText: '审核中',
+    statusTheme: 'warning'
+  })
+}
+
+export function buildActiveCredentialDisplays(credentials?: ActiveCredentialSummary[] | null): ActiveCredentialDisplay[] {
+  if (!credentials?.length) {
+    return []
+  }
+
+  return credentials.map((credential) => {
+    const label = credentialDocumentLabel(credential.document_type)
+    const days = credential.days_until_expiry
+    const hasDays = typeof days === 'number' && Number.isFinite(days)
+    const expiresDate = formatDate(credential.expires_at)
+
+    if (credential.suspended) {
+      return {
+        key: credential.document_type,
+        label,
+        statusText: '已暂停',
+        statusTheme: 'danger',
+        expiryText: expiresDate ? `有效期至 ${expiresDate}` : '有效期需复核',
+        detailText: '该资质已暂停，请完成复审后恢复。'
+      }
+    }
+
+    if (hasDays && days < 0) {
+      return {
+        key: credential.document_type,
+        label,
+        statusText: '已过期',
+        statusTheme: 'danger',
+        expiryText: expiresDate ? `已于 ${expiresDate} 到期` : '证照已过期',
+        detailText: '请尽快更新证照并提交复审。'
+      }
+    }
+
+    if (hasDays && days <= 30) {
+      return {
+        key: credential.document_type,
+        label,
+        statusText: '临近到期',
+        statusTheme: 'warning',
+        expiryText: days === 0 ? '今天到期' : `还有 ${days} 天到期`,
+        detailText: '请在到期前更新证照，避免影响服务。'
+      }
+    }
+
+    return {
+      key: credential.document_type,
+      label,
+      statusText: '有效',
+      statusTheme: 'success',
+      expiryText: expiresDate ? `有效期至 ${expiresDate}` : '长期有效',
+      detailText: '资质状态正常。'
+    }
+  })
+}
+
+function emptyOnboardingReviewDisplay(): OnboardingReviewDisplay {
+  return {
+    visible: false,
+    title: '',
+    description: '',
+    statusText: '',
+    statusTheme: 'default',
+    reasonText: '',
+    metaText: '',
+    ruleText: ''
+  }
+}
+
+function buildReviewDisplay(
+  summary: OnboardingReviewSummary | null | undefined,
+  display: Pick<OnboardingReviewDisplay, 'title' | 'description' | 'statusText' | 'statusTheme'>
+): OnboardingReviewDisplay {
+  const ruleCount = summary?.rule_hits?.length || 0
+  return {
+    visible: true,
+    ...display,
+    reasonText: summary?.reason_message && summary.reason_message !== display.description ? summary.reason_message : '',
+    metaText: summary?.created_at ? `提交于 ${formatDateTime(summary.created_at)}` : '',
+    ruleText: ruleCount > 0 ? `已完成 ${ruleCount} 项规则校验` : ''
+  }
+}
+
+function credentialDocumentLabel(documentType: string) {
+  switch (documentType) {
+    case 'business_license':
+      return '营业执照'
+    case 'food_permit':
+      return '食品经营许可证'
+    case 'health_cert':
+      return '健康证'
+    default:
+      return '资质证照'
+  }
+}
+
+function formatDate(value?: string) {
+  if (!value) return ''
+  return value.replace('T', ' ').slice(0, 10)
+}
+
+function formatDateTime(value?: string) {
+  if (!value) return ''
+  return value.replace('T', ' ').slice(0, 16)
+}
+
 export interface MerchantApplicationStatusView {
   statusCode: string
   isDraft: boolean

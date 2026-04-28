@@ -1,0 +1,30 @@
+<view class="onboarding-review-summary">
+  <view wx:if="{{reviewDisplay.visible}}" class="summary-panel">
+    <view class="summary-head">
+      <text class="summary-title">{{reviewDisplay.title}}</text>
+      <t-tag theme="{{reviewDisplay.statusTheme}}" variant="light" size="small">{{reviewDisplay.statusText}}</t-tag>
+    </view>
+    <view class="summary-desc">{{reviewDisplay.description}}</view>
+    <t-cell-group theme="card" wx:if="{{reviewDisplay.reasonText || reviewDisplay.ruleText || reviewDisplay.metaText}}">
+      <t-cell wx:if="{{reviewDisplay.reasonText}}" title="处理说明" description="{{reviewDisplay.reasonText}}" align="top" />
+      <t-cell wx:if="{{reviewDisplay.ruleText}}" title="规则校验" note="{{reviewDisplay.ruleText}}" />
+      <t-cell wx:if="{{reviewDisplay.metaText}}" title="审核记录" note="{{reviewDisplay.metaText}}" />
+    </t-cell-group>
+  </view>
+
+  <view wx:if="{{activeCredentialDisplays.length}}" class="summary-panel">
+    <view class="summary-head">
+      <text class="summary-title">有效证照</text>
+    </view>
+    <view class="credential-list">
+      <view wx:for="{{activeCredentialDisplays}}" wx:key="key" class="credential-row">
+        <view class="credential-main">
+          <text class="credential-title">{{item.label}}</text>
+          <text class="credential-expiry">{{item.expiryText}}</text>
+        </view>
+        <t-tag theme="{{item.statusTheme}}" variant="light" size="small">{{item.statusText}}</t-tag>
+        <text wx:if="{{item.detailText}}" class="credential-detail">{{item.detailText}}</text>
+      </view>
+    </view>
+  </view>
+</view>

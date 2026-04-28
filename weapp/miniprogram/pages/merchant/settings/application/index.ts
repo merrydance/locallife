@@ -1,5 +1,7 @@
 import {
+  buildActiveCredentialDisplays,
   buildMerchantApplicationStatusView,
+  buildOnboardingReviewDisplay,
   type MerchantApplicationDraftResponse,
   getMerchantApplication,
   getMyApplication,
@@ -96,6 +98,8 @@ Page({
     idCardFrontOcrTheme: 'default',
     idCardBackOcrTheme: 'default',
     ocrNoticeMessage: '',
+    reviewDisplay: buildOnboardingReviewDisplay(null, 'draft'),
+    activeCredentialDisplays: buildActiveCredentialDisplays([]),
     licenseUploading: false,
     foodPermitUploading: false,
     idCardFrontUploading: false,
