@@ -10,6 +10,7 @@ import Navigation from '../../../utils/navigation'
 
 type RefundView = RefundOrder & {
     _amountDisplay: string
+    _reasonText: string
     _statusText: string
     _statusClass: string
     _statusTheme: 'success' | 'warning' | 'danger' | 'primary' | 'default'
@@ -252,6 +253,7 @@ Page({
                     return {
                         ...refund,
                         _amountDisplay: (refund.refund_amount / 100).toFixed(2),
+                        _reasonText: refund.refund_reason || '常规退款',
                         _statusText: statusView.text,
                         _statusClass: statusView.className,
                         _statusTheme: statusView.theme

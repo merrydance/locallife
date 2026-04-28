@@ -90,7 +90,7 @@
               <text class="refund-card-amount">- ¥{{item._amountDisplay}}</text>
             </view>
             <view class="refund-card-body">
-              <text class="refund-reason">{{item.reason || '常规退款'}}</text>
+              <text class="refund-reason">{{item._reasonText}}</text>
               <text class="refund-time">{{item.created_at}}</text>
             </view>
             <t-icon name="chevron-right" size="32rpx" color="#DDD" class="arrow" />

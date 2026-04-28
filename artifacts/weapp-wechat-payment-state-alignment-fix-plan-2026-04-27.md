@@ -1340,3 +1340,22 @@ rg "status: 'unknown'" weapp/miniprogram/api weapp/miniprogram/services
 - 阶段 5 未改业务代码；沿用阶段 4 的 `npm run quality:check` 通过结果作为当前基线。
 
 阶段 5 剩余风险：无新增残留。若未来恢复会员线上充值，需要重新定义后端终态真值和页面等待策略后再开启入口。
+
+### 2026-04-28 阶段 6：退款和账单展示
+
+状态：已落地，待阶段复审。
+
+变更：
+
+1. `pages/user_center/refund-detail/index.ts` 已从 `refund_reason`、`out_refund_no`、`refunded_at` 构建展示字段，WXML 不再直接读取旧字段或不存在字段。
+2. 退款详情页在退款非终态时只展示 `t-loading` 等待终态，不把处理中展示成页面级结果。
+3. 分账回退已通过 `utils/profit-sharing-return-view.ts` 映射中文状态、主题、失败原因和完成时间，并且只展示终态回退记录。
+4. `utils/payment-ledger-view.ts` 已把未知支付/退款状态映射为“状态同步中”，不会默认染成成功。
+5. `pages/user_center/payment-detail/index.ts` 的退款列表补齐 `_reasonText`，统一使用 `refund.refund_reason`；WXML 不再读取旧 `reason` 字段。
+
+已验证：
+
+- `npm run compile` 通过。
+- `rg "reason \\|\\||refund.reason|refund_transaction_id|processed_at" weapp/miniprogram/pages/user_center --glob '*.{ts,wxml}'` 复核与支付退款相关的旧字段残留；仅服务中心工单自己的 `reason/processed_at` 仍存在，不属于支付退款字段。
+
+阶段 6 剩余风险：真实退款处理中长时间未回写时，页面会持续等待；这是符合“不中间态停留”的规则，但需要后端退款终态回查可用性保障用户最终能看到结果。
