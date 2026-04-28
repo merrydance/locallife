@@ -289,6 +289,8 @@ Page({
     },
 
     async onClosePayment() {
+        if (this.data.paying) return
+
         wx.showModal({
             title: '关闭支付单',
             content: '关闭后该支付单无法继续支付，如仍需付款需要重新发起。',

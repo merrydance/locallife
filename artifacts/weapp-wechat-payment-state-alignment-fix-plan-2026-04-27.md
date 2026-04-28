@@ -1359,3 +1359,20 @@ rg "status: 'unknown'" weapp/miniprogram/api weapp/miniprogram/services
 - `rg "reason \\|\\||refund.reason|refund_transaction_id|processed_at" weapp/miniprogram/pages/user_center --glob '*.{ts,wxml}'` 复核与支付退款相关的旧字段残留；仅服务中心工单自己的 `reason/processed_at` 仍存在，不属于支付退款字段。
 
 阶段 6 剩余风险：真实退款处理中长时间未回写时，页面会持续等待；这是符合“不中间态停留”的规则，但需要后端退款终态回查可用性保障用户最终能看到结果。
+
+### 2026-04-28 阶段 7：危险动作文案和按钮层级
+
+状态：已落地，待阶段复审。
+
+变更：
+
+1. `pages/user_center/payment-detail/index.wxml` 的关闭动作按钮文案为“关闭支付单”，使用 `theme="danger" variant="outline"`，与“继续支付”主按钮区分。
+2. 弹窗标题为“关闭支付单”，内容明确说明“关闭后该支付单无法继续支付，如仍需付款需要重新发起。”
+3. 关闭按钮在 `paying` 时禁用；`onClosePayment()` 也补充 `paying` guard，避免事件重复触发时关闭正在拉起的支付单。
+4. 关闭入口仅在 `statusView.isPending` 时出现，不对已支付、已关闭、失败等终态展示危险动作。
+
+已验证：
+
+- 定向 grep 复核按钮文案、弹窗文案、`showCloseButton` 和 `disabled="{{paying}}"`。
+
+阶段 7 剩余风险：无新增残留。
