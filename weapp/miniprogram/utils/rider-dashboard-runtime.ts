@@ -1,6 +1,8 @@
 import RiderService, { RiderInfo, RiderStatus } from '../api/rider'
+import RiderWorkbenchService from '../api/rider-workbench'
 import DeliveryService, { RecommendedOrder, Delivery, getDeliveryStatusDisplay } from '../api/delivery'
 import { deliveryTaskManagementService } from '../api/delivery-task-management'
+import { buildRiderWorkbenchDashboardView } from '../services/rider-workbench'
 import { logger } from './logger'
 import { locationService } from './location'
 import { normalizeLocationError, syncRiderDeliveryLocation } from './rider-location'
@@ -177,6 +179,7 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
           this.setData({
             initError: errorState.message,
             initErrorCanRetry: errorState.canRetry,
+            dashboardInlineError: errorState.message,
             hallLoadError: '',
             myLoadError: ''
           })
@@ -192,7 +195,9 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
       }
 
       if (this.data.isOnline) {
-        this.enterOnlineRuntime().catch((err: unknown) => logger.error('Network restore refresh error', err))
+        this.refreshRiderOverview()
+          .then(() => this.enterOnlineRuntime())
+          .catch((err: unknown) => logger.error('Network restore refresh error', err))
       }
     })
   },
@@ -221,6 +226,7 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
       this.setData({
         initError: errorState.message,
         initErrorCanRetry: errorState.canRetry,
+        dashboardInlineError: errorState.message,
         hallLoadError: '',
         myLoadError: '',
         riderInfo: null,
@@ -229,6 +235,7 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
         currentDelivery: null,
         hallTabLabel: '抢单大厅 0',
         myTabLabel: '我的任务 0',
+        workbenchRefreshError: '',
         locationDeliveryId: 0,
         locationStatusText: '',
         locationPendingText: '',
@@ -275,6 +282,8 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
     return {
       riderStatus: status,
       isOnline,
+      onlineStatusLabel: isOnline ? '在线接单' : '休息中',
+      onlineStatusTheme: isOnline ? 'success' : 'default',
       statusText: isOnline ? '正在接单中' : (depositReminderText ? '暂不能上线' : '休息中 - 点击上线'),
       showDepositReminder: !!depositReminderText,
       depositReminderText
@@ -289,28 +298,38 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
   },
 
   async refreshRiderOverview() {
-    const [info, status] = await Promise.all([
+    const [info, workbenchSummary] = await Promise.all([
       RiderService.getMe(),
-      RiderService.getStatus()
+      RiderWorkbenchService.getSummary()
     ])
 
+    const workbench = buildRiderWorkbenchDashboardView(workbenchSummary)
+    const status = workbench.riderStatus
     const statusViewData = this.buildStatusViewData(status, info)
+    const currentDelivery = this.data.currentDelivery || null
+    const tabLabels = this.buildTabLabels(workbench.availableOrderCount, workbench.activeDeliveryCount)
 
     this.setData({
       riderInfo: info,
       initError: '',
       initErrorCanRetry: true,
+      workbenchRefreshError: workbench.unavailableText,
+      dashboardInlineError: workbench.unavailableText,
+      workbench,
+      currentDelivery,
       stats: {
-        todayCount: info.total_orders || 0,
-        todayEarnings: info.total_earnings || 0,
+        todayCount: workbench.todayCompletedDeliveries,
+        todayEarnings: workbenchSummary.income?.total_rider_income || 0,
         creditScore: info.credit_score || 0
       },
+      ...tabLabels,
       ...statusViewData
     })
 
     return {
       info,
       status,
+      workbench,
       ...statusViewData
     }
   },
@@ -404,6 +423,7 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
         isRefresherTriggered: false,
         initError: bannerState.message,
         initErrorCanRetry: bannerState.canRetry,
+        dashboardInlineError: bannerState.message || this.data.workbenchRefreshError,
         hallLoadError,
         myLoadError,
         ...tabLabels
@@ -417,6 +437,7 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
         isRefresherTriggered: false,
         initError: errorState.message,
         initErrorCanRetry: errorState.canRetry,
+        dashboardInlineError: errorState.message,
         hallLoadError: '',
         myLoadError: ''
       })
@@ -557,6 +578,7 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
     try {
       await this.syncDeliveryLocation(id, config.source)
       await config.method(id)
+      await this.refreshRiderOverview()
       await this.refreshData()
     } catch (err: unknown) {
       const reconciled = await this.reconcileDeliveryAction(id, action)
@@ -577,6 +599,10 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
 
   onGoToClaims() {
     wx.navigateTo({ url: '/pages/rider/claims/index' })
+  },
+
+  onGoToIncome() {
+    wx.navigateTo({ url: '/pages/rider/income/index' })
   },
 
   async getLocation(): Promise<WechatMiniprogram.GetLocationSuccessCallbackResult> {
@@ -633,6 +659,7 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
     try {
       await DeliveryService.getDeliveryByOrder(orderId)
       this.setData({ activeTab: 'my' })
+      await this.refreshRiderOverview()
       await this.refreshData()
       return true
     } catch (err: unknown) {
@@ -699,6 +726,7 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
         riderInfo: info,
         initError: '',
         initErrorCanRetry: true,
+        dashboardInlineError: this.data.workbenchRefreshError,
         ...statusViewData
       })
 
@@ -738,7 +766,32 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
 
   async onPullDownRefresh() {
     this.setData({ isRefresherTriggered: true })
-    await this.refreshData()
+    try {
+      const overview = await this.refreshRiderOverview()
+      if (overview.isOnline) {
+        await this.refreshData()
+      } else {
+        this.cleanupWebSocket()
+        await this.syncLocationSession([])
+        this.setData({
+          recommendOrders: [],
+          activeDeliveries: [],
+          currentDelivery: null,
+          hallLoadError: '',
+          myLoadError: '',
+          newOrdersCount: 0,
+          ...this.buildTabLabels(overview.workbench.availableOrderCount, overview.workbench.activeDeliveryCount)
+        })
+      }
+    } catch (err: unknown) {
+      logger.error('Pull down refresh error', err)
+      const errorState = getConsoleDashboardErrorState('rider', err, '骑手工作台刷新失败，请稍后重试。')
+      this.setData({
+        initError: errorState.message,
+        initErrorCanRetry: errorState.canRetry,
+        dashboardInlineError: errorState.message
+      })
+    }
     this.setData({ isRefresherTriggered: false })
     wx.stopPullDownRefresh()
   },
@@ -777,6 +830,7 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
       wx.showLoading({ title: '抢单中...' })
       await DeliveryService.grabOrder(orderId)
       this.setData({ activeTab: 'my' })
+      await this.refreshRiderOverview()
       await this.refreshData()
     } catch (err: unknown) {
       const reconciled = await this.reconcileGrabOrder(orderId)
@@ -815,7 +869,7 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
     this.setData({ activeTab: 'hall' })
   },
 
-  onGoToWallet() {
+  onGoToDeposit() {
     wx.navigateTo({ url: '/pages/rider/deposit/index' })
   },
 
@@ -827,7 +881,7 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
       cancelText: '知道了',
       success: ({ confirm }) => {
         if (confirm) {
-          this.onGoToWallet()
+          this.onGoToDeposit()
         }
       }
     })
@@ -889,12 +943,31 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
     this.refreshData().catch((err: unknown) => logger.error('Manual refresh error', err))
   },
 
-  onRetryLoad() {
+  async onRetryLoad() {
     if (this.data.initError || !this.data.riderInfo || !this.data.riderStatus) {
       this.initData().catch((err: unknown) => logger.error('Retry init error', err))
       return
     }
-    this.refreshData().catch((err: unknown) => logger.error('Retry refresh error', err))
+    try {
+      const overview = await this.refreshRiderOverview()
+      if (overview.isOnline) {
+        await this.refreshData()
+      } else {
+        this.cleanupWebSocket()
+        await this.syncLocationSession([])
+        this.setData({
+          recommendOrders: [],
+          activeDeliveries: [],
+          currentDelivery: null,
+          hallLoadError: '',
+          myLoadError: '',
+          newOrdersCount: 0,
+          ...this.buildTabLabels(overview.workbench.availableOrderCount, overview.workbench.activeDeliveryCount)
+        })
+      }
+    } catch (err: unknown) {
+      logger.error('Retry refresh error', err)
+    }
   },
 
   async onRetryLocationSync() {

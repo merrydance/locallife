@@ -6,7 +6,27 @@ import {
   WsUnsubscribe,
   riderDashboardRuntimeMethods
 } from '../../../utils/rider-dashboard-runtime'
+import { RiderWorkbenchDashboardView } from '../../../services/rider-workbench'
 import { resolveStatusTagTheme } from '../../../utils/status-tag'
+
+const emptyWorkbenchView: RiderWorkbenchDashboardView = {
+  riderStatus: {
+    status: '',
+    is_online: false,
+    online_status: 'offline',
+    active_deliveries: 0,
+    can_go_online: false,
+    can_go_offline: false
+  },
+  metrics: [],
+  risks: [],
+  currentDelivery: null,
+  availableOrderCount: 0,
+  activeDeliveryCount: 0,
+  todayCompletedDeliveries: 0,
+  todayIncomeDisplay: '0.00',
+  unavailableText: ''
+}
 
 Page({
   data: {
@@ -16,17 +36,22 @@ Page({
     onlineSwitchLoading: false,
     initError: '',
     initErrorCanRetry: true,
+    workbenchRefreshError: '',
+    dashboardInlineError: '',
     hallLoadError: '',
     myLoadError: '',
     isRefresherTriggered: false,
     statusText: '休息中 - 点击上线',
     showDepositReminder: false,
     depositReminderText: '',
+    onlineStatusLabel: '休息中',
+    onlineStatusTheme: 'default',
 
     // 骑手基础信息
     riderInfo: null as RiderInfo | null,
     riderStatus: null as RiderStatus | null,
     isOnline: false,
+    workbench: emptyWorkbenchView,
 
     recommendOrders: [] as RecommendedOrder[],
     activeDeliveries: [] as DashboardDeliveryView[],

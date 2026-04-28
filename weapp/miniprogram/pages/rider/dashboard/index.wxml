@@ -1,82 +1,93 @@
 <custom-navbar title="骑手工作台" showBack="{{true}}" />
 
 <view class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px;">
-  <view wx:if="{{initError && !loading}}" class="console-error-banner">
-    <t-notice-bar theme="warning" visible="{{true}}" content="{{initError}}" />
+  <view wx:if="{{loading && !riderInfo}}" class="page-state-card">
+    <t-loading theme="circular" size="40rpx" text="加载工作台中..." layout="vertical" />
+  </view>
+
+  <view wx:elif="{{initError && !riderInfo}}" class="page-state-card">
+    <t-empty icon="error-circle" description="{{initError}}" />
     <t-button wx:if="{{initErrorCanRetry}}" theme="primary" bindtap="onRetryLoad">重新加载</t-button>
   </view>
 
-  <!-- 1. 骑手状态与简报 -->
-  <view class="rider-header-card">
-    <view class="header-top">
-      <view class="rider-profile">
-        <t-icon name="user-circle" size="48rpx" color="rgba(255,255,255,0.8)" />
-        <view class="rider-name">{{riderInfo.real_name || '骑手用户'}}</view>
-        <t-tag size="small" variant="dark" theme="default" shape="round" class="credit-tag">信用分: {{riderInfo.credit_score || 100}}</t-tag>
-      </view>
-      <view class="header-side-status">
-        <text class="header-side-label">当前状态</text>
-        <text class="header-side-value">{{isOnline ? '在线接单' : '休息中'}}</text>
-      </view>
+  <block wx:else>
+    <view wx:if="{{dashboardInlineError}}" class="inline-sync-state">
+      <t-icon name="error-circle" size="32rpx" />
+      <text class="inline-sync-state__text">{{dashboardInlineError}}</text>
+      <t-button wx:if="{{initErrorCanRetry}}" size="small" theme="primary" variant="text" icon="refresh" bindtap="onRetryLoad">重试</t-button>
     </view>
 
-    <view class="stats-grid">
-      <view class="stats-item">
-        <text class="stats-label">今日单数</text>
-        <text class="stats-value">{{stats.todayCount}}</text>
-      </view>
-      <view class="stats-item">
-        <text class="stats-label">预计收入</text>
-        <text class="stats-value">¥{{stats.todayEarnings / 100}}</text>
-      </view>
-    </view>
-  </view>
-
-  <!-- 2. 在线开关 (Sticky) -->
-  <t-sticky offsetTop="{{navBarHeight}}">
-    <view class="status-bar-container">
-      <view class="status-bar {{isOnline ? 'is-online' : 'is-offline'}}">
-        <view class="status-info">
-          <view class="status-dot"></view>
-          <text class="status-text">{{statusText}}</text>
+    <view class="workbench-summary-card">
+      <view class="workbench-status-row">
+        <view class="workbench-rider-main">
+          <t-icon name="user-circle" size="44rpx" />
+          <view class="workbench-rider-text">
+            <text class="workbench-rider-name">{{riderInfo.real_name || '骑手用户'}}</text>
+            <text class="workbench-rider-sub">信用分 {{riderInfo.credit_score || 100}}</text>
+          </view>
         </view>
-        <t-switch
-          value="{{isOnline}}"
-          loading="{{onlineSwitchLoading}}"
-          disabled="{{onlineSwitchLoading}}"
-          bind:change="onToggleOnline"
-          colors="{{['#00897B', 'var(--td-bg-color-component)']}}"
-        />
+        <t-tag size="small" theme="{{onlineStatusTheme}}" variant="light">{{onlineStatusLabel}}</t-tag>
       </view>
 
-      <view class="runtime-status-strip" wx:if="{{locationDeliveryId > 0}}">
-        <view class="runtime-status-main">
-          <text class="runtime-status-title">定位运行中</text>
-          <text class="runtime-status-desc">{{locationStatusText}} · {{locationUpdatedText}}</text>
-          <text class="runtime-status-pending" wx:if="{{locationPendingText}}">{{locationPendingText}}</text>
+      <view class="workbench-metrics-grid">
+        <view wx:for="{{workbench.metrics}}" wx:key="key" class="workbench-metric-item">
+          <text class="workbench-metric-label">{{item.label}}</text>
+          <text class="workbench-metric-value">{{item.value}}</text>
+          <text class="workbench-metric-note">{{item.note}}</text>
         </view>
-        <t-button wx:if="{{locationNeedsPermission}}" theme="primary" variant="outline" size="small" bindtap="onResolveLocationPermission">开启定位</t-button>
-        <t-button wx:else theme="primary" variant="text" size="small" bindtap="onRetryLocationSync">刷新</t-button>
+      </view>
+
+      <view class="workbench-risk-grid">
+        <view wx:for="{{workbench.risks}}" wx:key="key" class="workbench-risk-item {{item.highlightClass}}">
+          <text class="workbench-risk-label">{{item.label}}</text>
+          <text class="workbench-risk-value">{{item.value}}</text>
+          <text class="workbench-risk-note">{{item.note}}</text>
+        </view>
       </view>
     </view>
-  </t-sticky>
 
-  <view wx:if="{{showDepositReminder}}" class="online-reminder-card">
-    <view class="online-reminder-main">
-      <view class="online-reminder-icon">
-        <t-icon name="error-circle-filled" size="40rpx" />
+    <t-sticky offsetTop="{{navBarHeight}}">
+      <view class="status-bar-container">
+        <view class="status-bar {{isOnline ? 'is-online' : 'is-offline'}}">
+          <view class="status-info">
+            <view class="status-dot"></view>
+            <text class="status-text">{{statusText}}</text>
+          </view>
+          <t-switch
+            value="{{isOnline}}"
+            loading="{{onlineSwitchLoading}}"
+            disabled="{{onlineSwitchLoading}}"
+            bind:change="onToggleOnline"
+            colors="{{['#00897B', 'var(--td-bg-color-component)']}}"
+          />
+        </view>
+
+        <view class="runtime-status-strip" wx:if="{{locationDeliveryId > 0}}">
+          <view class="runtime-status-main">
+            <text class="runtime-status-title">定位运行中</text>
+            <text class="runtime-status-desc">{{locationStatusText}} · {{locationUpdatedText}}</text>
+            <text class="runtime-status-pending" wx:if="{{locationPendingText}}">{{locationPendingText}}</text>
+          </view>
+          <t-button wx:if="{{locationNeedsPermission}}" theme="primary" variant="outline" size="small" bindtap="onResolveLocationPermission">开启定位</t-button>
+          <t-button wx:else theme="primary" variant="text" size="small" bindtap="onRetryLocationSync">刷新</t-button>
+        </view>
       </view>
-      <view class="online-reminder-body">
-        <text class="online-reminder-title">当前暂不能上线接单</text>
-        <text class="online-reminder-desc">{{depositReminderText}}</text>
-        <text class="online-reminder-tip">补足押金后回到此页，再打开上线开关即可。</text>
+    </t-sticky>
+
+    <view wx:if="{{showDepositReminder}}" class="online-reminder-card">
+      <view class="online-reminder-main">
+        <view class="online-reminder-icon">
+          <t-icon name="error-circle-filled" size="40rpx" />
+        </view>
+        <view class="online-reminder-body">
+          <text class="online-reminder-title">当前暂不能上线接单</text>
+          <text class="online-reminder-desc">{{depositReminderText}}</text>
+        </view>
       </view>
+      <t-button theme="primary" variant="outline" size="small" bindtap="onGoToDeposit">去充值</t-button>
     </view>
-    <t-button theme="primary" variant="outline" size="small" bindtap="onGoToWallet">去充值</t-button>
-  </view>
 
-  <!-- 3. 任务分类 (Tabs) -->
-  <view class="content-section">
+    <view class="content-section">
     <view class="current-mission-card" wx:if="{{currentDelivery}}">
       <view class="current-mission-header">
         <view>
@@ -122,9 +133,13 @@
     </view>
 
     <view class="tool-shortcuts">
-      <view class="tool-shortcut" bindtap="onGoToWallet">
-        <t-icon name="wallet" size="34rpx" />
-        <text>押金与账单</text>
+      <view class="tool-shortcut" bindtap="onGoToIncome">
+        <t-icon name="money" size="34rpx" />
+        <text>结算账本</text>
+      </view>
+      <view class="tool-shortcut" bindtap="onGoToDeposit">
+        <t-icon name="certificate" size="34rpx" />
+        <text>押金保障</text>
       </view>
       <view class="tool-shortcut" bindtap="onGoToHistory">
         <t-icon name="task-checked" size="34rpx" />
@@ -391,5 +406,6 @@
         </view>
       </t-tab-panel>
     </t-tabs>
-  </view>
+    </view>
+  </block>
 </view>
