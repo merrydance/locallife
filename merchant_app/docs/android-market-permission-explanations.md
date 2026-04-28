@@ -158,7 +158,7 @@
 备注：
 
 - 当前 `AndroidManifest.xml` 中未看到 Android 12+ 常见的 `BLUETOOTH_SCAN`、`BLUETOOTH_CONNECT` 显式声明，上架前建议结合真机测试再复核一次蓝牙权限链路
-- 已在主 `AndroidManifest.xml` 中显式移除 JPush 自动注入的定位权限，避免未使用定位能力却带出定位声明
+- 已明确不接入 JPush，避免聚合 SDK 自动带出未使用的定位或设备权限声明
 
 ## 4. 建议提交给审核的简化版表述
 
@@ -183,5 +183,5 @@
 ## 5. 当前建议结论
 
 - 强业务相关、可正常解释的权限：`INTERNET`、`ACCESS_NETWORK_STATE`、`WAKE_LOCK`、`RECEIVE_BOOT_COMPLETED`、`VIBRATE`、`FOREGROUND_SERVICE`、`USE_FULL_SCREEN_INTENT`、`ACCESS_WIFI_STATE`、`CHANGE_WIFI_STATE`
-- 已完成移除的权限：`READ_PHONE_STATE`、`WRITE_EXTERNAL_STORAGE`、`READ_EXTERNAL_STORAGE`、`REQUEST_INSTALL_PACKAGES`、`QUERY_ALL_PACKAGES`，以及 JPush 自动注入的定位权限
+- 已完成移除的权限：`READ_PHONE_STATE`、`WRITE_EXTERNAL_STORAGE`、`READ_EXTERNAL_STORAGE`、`REQUEST_INSTALL_PACKAGES`、`QUERY_ALL_PACKAGES`，以及聚合推送 SDK 可能自动注入的定位权限
 - 当前剩余权限已聚焦在订单通知、前台在线、网络状态与必要的厂商推送权限

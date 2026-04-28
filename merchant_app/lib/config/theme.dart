@@ -13,6 +13,10 @@ class AppColors {
   static const outlineVariant = Color(0xFFBDCABB);
   static const warningSoft = Color(0xFFFFF1E3);
   static const dangerSoft = Color(0xFFFDE9E8);
+  static const positiveSoft = Color(0xFFE8F5E9);
+  static const positive = Color(0xFF2E7D32);
+  static const warning = Color(0xFFE65100);
+  static const danger = Color(0xFFC62828);
 }
 
 class AppSpacing {
@@ -28,6 +32,7 @@ class AppRadius {
   static const md = 16.0;
   static const lg = 20.0;
   static const xl = 24.0;
+  static const xxl = 32.0;
   static const pill = 999.0;
 }
 

@@ -144,6 +144,14 @@ class _OrderListPageState extends ConsumerState<OrderListPage> {
                 onTap: () => Navigator.pop(context),
               ),
               ListTile(
+                leading: const Icon(Icons.table_restaurant),
+                title: const Text('桌台管理'),
+                onTap: () {
+                  Navigator.pop(context);
+                  context.push('/tables');
+                },
+              ),
+              ListTile(
                 leading: const Icon(Icons.settings),
                 title: const Text('系统设置'),
                 onTap: () {

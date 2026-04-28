@@ -13,6 +13,9 @@ import 'package:merchant_app/features/settings/about_page.dart';
 import 'package:merchant_app/features/settings/agreement_page.dart';
 import 'package:merchant_app/features/printer/bluetooth_printer_page.dart';
 import 'package:merchant_app/features/order/order_detail_page.dart';
+import 'package:merchant_app/features/table/ui/table_grid_screen.dart';
+import 'package:merchant_app/core/push/push_provider.dart';
+import 'package:merchant_app/core/service/order_poller.dart';
 import 'package:merchant_app/models/order.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -44,6 +47,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/login',
         builder: (context, state) => const BindCodePage(),
+      ),
+      GoRoute(
+        path: '/tables',
+        builder: (context, state) => const TableGridScreen(),
       ),
 
       GoRoute(
@@ -97,6 +104,7 @@ class RouterNotifier extends ChangeNotifier {
     final isSettings = currentPath.startsWith('/settings');
     final isPrinter = currentPath == '/printer';
     final isOrderDetail = currentPath == '/order-detail';
+    final isTables = currentPath == '/tables';
     
     debugPrint('Router: Redirect check - Auth: ${authState.isAuthenticated}, Loading: ${authState.isLoading}, Current: $currentPath');
 
@@ -110,7 +118,7 @@ class RouterNotifier extends ChangeNotifier {
         return '/';
       }
 
-      if (currentPath == '/' || isWelcome || isLoggingIn || isSettings || isPrinter) {
+      if (currentPath == '/' || isWelcome || isLoggingIn || isSettings || isPrinter || isTables) {
         return null;
       }
 
@@ -132,6 +140,10 @@ class MerchantApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Keep background managers alive
+    ref.watch(deviceSyncManagerProvider);
+    ref.watch(orderPollerManagerProvider);
+
     final router = ref.watch(routerProvider);
     final authState = ref.watch(authProvider);
     final appTitle = (authState.merchantName != null && authState.merchantName!.trim().isNotEmpty)

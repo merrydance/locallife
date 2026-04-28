@@ -58,11 +58,17 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         multiDexEnabled = true
-        
+
         manifestPlaceholders += mapOf(
-            "JPUSH_PKGNAME" to "com.merrydance.locallife.merchant",
-            "JPUSH_APPKEY" to "54cf8f6007b4b3338548d006",
-            "JPUSH_CHANNEL" to "developer-default"
+            // Xiaomi Push
+            "XIAOMI_APP_ID" to "1000000", // TODO: 替换为实际 ID
+            "XIAOMI_APP_KEY" to "5000000000000", // TODO: 替换为实际 KEY
+            // OPPO Push
+            "OPPO_APP_KEY" to "xxx",
+            "OPPO_APP_SECRET" to "xxx",
+            // VIVO Push
+            "VIVO_APP_ID" to "xxx",
+            "VIVO_APP_KEY" to "xxx"
         )
     }
 
@@ -89,4 +95,16 @@ flutter {
 
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+
+    // 小米推送 (Maven 仓库访问失败，请检查网络或使用本地依赖)
+    // implementation("com.xiaomi.mipush.sdk:mipush:5.0.8-C")
+
+    // 荣耀推送 (Maven)
+    implementation("com.hihonor.mcs:push:7.0.41.301")
+
+    // vivo 推送 (vivo 不提供公共 Maven 仓库，请将 SDK AAR 文件放入 libs/ 目录并使用本地依赖)
+    // implementation("com.vivo.push:sdk:3.0.0.4")
+
+    // OPPO 推送 (由于 OPPO SDK 常规不发 Maven，通常需要放在 libs/ 下)
+    // implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.jar", "*.aar"))))
 }

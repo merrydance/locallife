@@ -17,6 +17,7 @@ class WsClient {
   String? _currentToken;
 
   void Function(PushMessage)? onNewOrder;
+  void Function(Map<String, dynamic>)? onTableStatusChange;
   void Function(bool)? onStatusChange;
 
   WsClient(this._deduplicator);
@@ -93,6 +94,11 @@ class WsClient {
             ])) {
           final pushMsg = PushMessage.fromJson(Map<String, dynamic>.from(payload));
           onNewOrder?.call(pushMsg);
+        }
+      } else if (data['type'] == 'table_status_change') {
+        final payload = data['data'];
+        if (payload is Map<String, dynamic>) {
+          onTableStatusChange?.call(payload);
         }
       }
     } catch (e) {

@@ -7,16 +7,18 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import 'package:merchant_app/core/network/api_client.dart';
-import 'package:merchant_app/core/push/push_manager.dart';
+import 'package:merchant_app/core/push/native_push_manager.dart';
 
 class DeviceSyncService {
-  DeviceSyncService(this._apiClient, this._pushManager);
+  DeviceSyncService(this._apiClient, this._pushManager) {
+    _pushManager.onTokenRegistered = (token, provider) => ensureRegistered();
+  }
 
   static const _lastRegisteredPushTokenKey = 'last_registered_push_token';
   static const _deviceIdKey = 'device_uuid';
 
   final ApiClient _apiClient;
-  final PushManager _pushManager;
+  final NativePushManager _pushManager;
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
 
   Future<void>? _registrationFuture;

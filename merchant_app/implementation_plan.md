@@ -27,7 +27,8 @@
 │       │    websocket/hub.go SendToMerchant()     │
 │       │                                         │
 │       ├──② 推送网关 (新增)                       │
-│       │    push/gateway.go → JPush/厂商 SDK      │
+│       │    push/gateway.go → 厂商原生 SDK (REST) │
+│       │    (小米/vivo/OPPO/荣耀四通道)            │
 │       │    系统级推送，App 被杀也能收到            │
 │       │                                         │
 │       └──③ 数据库标记 (已有)                     │
@@ -120,8 +121,8 @@ merchant_app/
 │   │   │   ├── ws_client.dart        # WebSocket 客户端
 │   │   │   └── connectivity.dart     # 网络状态监听
 │   │   ├── push/
-│   │   │   ├── push_manager.dart     # 推送统一管理
-│   │   │   └── push_handler.dart     # 推送消息处理
+│   │   │   ├── native_push_manager.dart     # 原生推送统一管理 (MethodChannel)
+│   │   │   └── push_handler.dart            # 推送消息处理
 │   │   ├── audio/
 │   │   │   ├── tts_service.dart      # TTS 语音合成
 │   │   │   └── sound_player.dart     # 预录音频播放
@@ -174,7 +175,7 @@ merchant_app/
 | **状态管理** | `flutter_riverpod` | StreamProvider 天然适配 WebSocket 流 |
 | **HTTP** | `dio` | 拦截器、重试、Token 刷新 |
 | **WebSocket** | `web_socket_channel` | Flutter 官方维护 |
-| **厂商推送** | `jpush_flutter` (统一) | 极光封装了华为/小米/OV 厂商通道，一套代码搞定 |
+| **厂商推送** | `MethodChannel` + 原生 SDK | 直连荣耀/小米/OV，链路可控，到达率最高 |
 | **前台服务** | `flutter_foreground_task` | 维护活跃，API 简洁 |
 | **全屏通知** | `flutter_local_notifications` | 支持 Full-Screen Intent |
 | **语音** | `audioplayers` (预录音频) + `flutter_tts` (动态文字) | 预录音频保证音质，TTS 补充动态内容如"订单 1234 号" |
@@ -186,7 +187,7 @@ merchant_app/
 | **权限** | `permission_handler` | 统一请求权限 |
 
 > [!WARNING]
-> **不推荐** `china_push`（不活跃）、`esc_pos_printer`（更新慢）、`ota_update`（功能单一）、`awesome_notifications`（配置复杂且与 jpush 冲突）。
+> **不推荐** `china_push`（不活跃）、`esc_pos_printer`（更新慢）、`ota_update`（功能单一）、`awesome_notifications`（配置复杂且与厂商原生推送责任边界冲突）。
 
 ### 3.3 消息去重机制
 
@@ -355,7 +356,11 @@ func (s *Scheduler) CheckUnacceptedOrders(ctx context.Context) {
 locallife/
 ├── push/                          # [NEW] 推送网关
 │   ├── gateway.go                 # 统一推送入口
-│   ├── jpush_provider.go          # 极光推送实现
+│   ├── huawei_provider.go         # 华为 HMS 推送实现
+│   ├── honor_provider.go          # 荣耀 Push 推送实现
+│   ├── xiaomi_provider.go         # 小米 MiPush 推送实现
+│   ├── oppo_provider.go           # OPPO Push 推送实现
+│   ├── vivo_provider.go           # vivo Push 推送实现
 │   ├── provider.go                # Provider 接口
 │   └── gateway_test.go
 ├── api/
@@ -444,7 +449,8 @@ CREATE TABLE merchant_devices (
     merchant_id   BIGINT       NOT NULL REFERENCES merchants(id),
     user_id       BIGINT       NOT NULL REFERENCES users(id),
     device_id     VARCHAR(255) NOT NULL, -- 设备唯一标识
-    push_token    VARCHAR(512) NOT NULL, -- 推送 token (JPush Registration ID)
+    provider      VARCHAR(32)  NOT NULL, -- huawei/honor/xiaomi/oppo/vivo
+    push_token    VARCHAR(512) NOT NULL, -- 厂商原生推送 token
     device_model  VARCHAR(100),          -- 设备型号 "Xiaomi Redmi Note 12"
     os_version    VARCHAR(50),           -- "Android 13"
     app_version   VARCHAR(20),           -- "1.0.0"
@@ -520,84 +526,49 @@ GET /v1/merchant/orders/pending        # 返回未接单的订单列表
 
 ---
 
-## 五、推送服务选型：极光 JPush
+## 五、推送服务选型：厂商原生推送
 
-### 为什么选极光而不是直接对接各厂商？
+### 当前结论
+
+JPush 已彻底废弃。商户端推送路线改为 Android 原生层直连华为 HMS、小米 MiPush、OPPO Push、vivo Push、荣耀 Push 等厂商通道；后端按设备 `provider` 调用对应厂商 REST API。
+
+### 为什么直接对接各厂商？
 
 | 方案 | 优点 | 缺点 |
 |---|---|---|
-| **直接各厂商 SDK** | 延迟最低、无中间商 | 需要对接 4-5 个 SDK，后端要维护 4 套推送逻辑 |
-| **极光 JPush** | 一套 SDK 覆盖全厂商通道，统一 API | 有少量延迟（<1s 可忽略）；收费 |
-| **个推/信鸽** | 类似极光 | 极光在餐饮行业使用更广 |
+| **直接各厂商 SDK** | 延迟最低、链路可控、没有第三方聚合依赖 | 需要对接多套 SDK 和服务端 API |
+| **聚合推送服务** | 接入快 | 链路不可控、权限和隐私审核复杂、已不符合当前技术路线 |
 
-**推荐：首期用 JPush，节省 70% 的推送对接工作量。**
+**决策：使用厂商原生推送。** Flutter 业务层只依赖 `NativePushManager`，厂商差异由 Android 原生层与后端推送网关消化。
 
-### 极光推送工作流
+### 厂商原生推送工作流
 
 ```
-Go 后端 → JPush REST API → 极光服务器
-                              │
-                    ┌─────────┼─────────┐
-                    │         │         │
-                 华为 HMS  小米 MiPush  OPPO/vivo
-                    │         │         │
-                    └─────────┼─────────┘
-                              │
-                        商户手机系统
-                              │
-                      弹出系统通知
-                     (即使 App 被杀)
+Go 后端 pushGateway
+    │
+    ├── Huawei Push REST API → 华为/鸿蒙系统通知
+    ├── Honor Push REST API  → 荣耀系统通知
+    ├── Xiaomi MiPush API    → 小米系统通知
+    ├── OPPO Push API        → OPPO 系统通知
+    └── vivo Push API        → vivo 系统通知
 ```
 
 ### 后端集成方式
 
 ```go
-// push/jpush_provider.go
-type JPushProvider struct {
-    appKey       string
-    masterSecret string
-    httpClient   *http.Client
+// push/provider.go
+type Provider interface {
+  ProviderName() string
+  Send(ctx context.Context, req PushRequest) (string, error)
 }
 
-func (j *JPushProvider) Send(ctx context.Context, req PushRequest) (string, error) {
-    payload := map[string]any{
-        "platform": "android",
-        "audience": map[string]any{
-            "registration_id": req.DeviceTokens,
-        },
-        "notification": map[string]any{
-            "android": map[string]any{
-                "alert":      req.Content,
-                "title":      req.Title,
-                "channel_id": req.ChannelID,
-                "priority":   2, // HIGH
-                "extras":     req.Extra,
-            },
-        },
-        "options": map[string]any{
-            "third_party_channel": map[string]any{
-                "huawei":  map[string]any{"importance": "NORMAL", "category": "IM"},
-                "xiaomi":  map[string]any{"channel_id": req.ChannelID},
-                "oppo":    map[string]any{"channel_id": req.ChannelID},
-                "vivo":    map[string]any{"classification": 1}, // 即时消息
-            },
-        },
-    }
-
-    body, _ := json.Marshal(payload)
-    httpReq, _ := http.NewRequestWithContext(ctx, "POST",
-        "https://api.jpush.cn/v3/push", bytes.NewReader(body))
-    httpReq.SetBasicAuth(j.appKey, j.masterSecret)
-    httpReq.Header.Set("Content-Type", "application/json")
-
-    resp, err := j.httpClient.Do(httpReq)
-    // ... 处理响应
-}
+// push/gateway.go 根据 merchant_devices.provider 路由到对应 Provider。
+// 每个厂商 Provider 封装自己的鉴权、限流、错误码和重试分类。
 ```
 
   ### vivo 授权模式补充要求
 
-  如果 vivo 开放平台或 JPush 厂商通道配置要求使用“授权模式”开通 vivo 推送，后端还需要补一条服务端回调能力。这不是商户 App 调用的业务接口，而是后端对接 vivo 平台时使用的授权回调地址。
+  如果 vivo 开放平台要求使用“授权模式”开通 vivo 推送，后端还需要补一条服务端回调能力。这不是商户 App 调用的业务接口，而是后端对接 vivo 平台时使用的授权回调地址。
 
   建议约定如下：
 
@@ -706,7 +677,7 @@ flowchart TD
 |---|---|---|
 | 第 1 周 | Flutter 项目骨架 + 绑定码登录 + WebSocket 对接 | 能登录、能连上后端收消息 |
 | 第 2 周 | 语音播报 + 全屏弹窗 + 前台服务 | 锁屏也能弹窗 |
-| 第 3 周 | Go 后端推送网关 + JPush Flutter 端集成 | App 被杀也能收到推送 |
+| 第 3 周 | Go 后端推送网关 + 各厂商原生推送接入 | App 被杀也能收到推送 |
 
 **Phase 1 交付标准：** 新订单来了 → 语音播报 + 全屏弹窗 + 系统推送，三通道均可达。
 
@@ -731,7 +702,7 @@ flowchart TD
 | 风险 | 等级 | 应对措施 |
 |---|---|---|
 | 鸿蒙 NEXT 不支持 APK | 🟡 中 | Phase 1 先忽略，试点时统计商户手机型号分布 |
-| 极光推送延迟 | 🟢 低 | WebSocket 实时通道兜底，正常延迟 < 1s |
+| 厂商推送接入差异 | 🟡 中 | Android 原生层和后端 Provider 分别消化厂商差异，Flutter 只消费统一 payload |
 | 县城 Wi-Fi 不稳定 | 🟡 中 | 心跳检测 + 断线通知 + 轮询兜底 |
 | 商户不会开权限 | 🟡 中 | 地推检查单 + App 内自动检测并引导 |
 | 蓝牙打印机兼容性 | 🟢 低 | MVP 优先用飞鹅云打印，蓝牙打印后续迭代 |
@@ -742,11 +713,11 @@ flowchart TD
 
 > [!IMPORTANT]
 > 请确认以下决策点：
-> 1. **推送服务**：是否同意用极光 JPush？需要注册极光开发者账号并创建应用。免费版有限额（日推送量 100 万条/应用，商户端够用）。
-> 2. **Flutter vs Kotlin 原生**：方案基于 Flutter，如果你团队更熟悉 Kotlin 原生开发，也可以考虑。Flutter 优势是开发速度快，但原生在保活方面控制力更强。
+> 1. **厂商推送账号与资质**：需要分别准备华为/荣耀/小米/OPPO/vivo 推送后台配置与服务端凭据。
+> 2. **Flutter vs Kotlin 原生**：方案基于 Flutter，厂商 SDK 接入放在 Android 原生层。
 > 3. **接单超时时间**：方案设定 60 秒，是否合适？
 > 4. **蓝牙打印**：MVP 阶段是否只做飞鹅云打印，还是也要做蓝牙？
-> 5. **是否需要立刻启动开发**？如果确认方案，我可以开始搭建 Flutter 项目骨架和 Go 后端推送网关模块。
+> 5. **商户功能同步范围**：桌台管理已后加，后续小程序端商户能力会逐步同步到 App，需要为每个同步功能补后端契约和 App 路由约定。
 
 ## Verification Plan
 

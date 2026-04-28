@@ -5,20 +5,25 @@ import 'package:merchant_app/core/service/foreground_service.dart';
 import 'package:merchant_app/core/network/connectivity_provider.dart';
 import 'package:merchant_app/features/auth/auth_provider.dart';
 import 'package:merchant_app/features/order/working_status_provider.dart';
+import 'package:merchant_app/features/table/providers/table_provider.dart';
 
 final wsStatusProvider = StateProvider<bool>((ref) => false);
 
 final wsClientProvider = Provider((ref) {
   final deduplicator = ref.watch(messageDeduplicatorProvider);
   final client = WsClient(deduplicator);
-  
+
   client.onStatusChange = (isConnected) {
     ref.read(wsStatusProvider.notifier).state = isConnected;
   };
-  
+
+  client.onTableStatusChange = (data) {
+    ref.read(tableProvider.notifier).updateTableFromWebSocket(data);
+  };
+
   // Clean up on dispose
   ref.onDispose(() => client.dispose());
-  
+
   return client;
 });
 
@@ -41,6 +46,6 @@ final wsConnectionManagerProvider = Provider((ref) {
     wsClient.disconnect();
     MerchantForegroundService.stop();
   }
-  
+
   return null;
 });

@@ -512,14 +512,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.0.1"
-  jpush_flutter:
-    dependency: "direct main"
-    description:
-      name: jpush_flutter
-      sha256: "52fecc9842bc375d812ab23c7048f40310aaceb8406e06ad37d62e1a08d570bf"
-      url: "https://pub.dev"
-    source: hosted
-    version: "3.4.4"
   json_annotation:
     dependency: transitive
     description:

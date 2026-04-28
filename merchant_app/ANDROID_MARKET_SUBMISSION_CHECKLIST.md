@@ -77,7 +77,7 @@
 
 ## 6. 第三方 SDK 与审核问答准备
 
-当前 Android 构建里已经能看到极光推送占位配置，见 `android/app/build.gradle.kts`。
+当前技术路线已废弃 JPush，Android 构建应只保留各手机厂商原生推送所需配置，见 `android/app/build.gradle.kts`。
 
 建议准备一份第三方 SDK 清单，至少说明：
 

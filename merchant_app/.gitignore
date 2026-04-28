@@ -35,9 +35,11 @@ migrate_working_dir/
 
 # Local analysis scratch outputs
 /analysis.txt
+/analysis_output.txt
 /final_analysis.txt
 /absolute_final_analysis.txt
 /last_check_analysis.txt
+/devtools_options.yaml
 
 # Symbolication related
 app.*.symbols

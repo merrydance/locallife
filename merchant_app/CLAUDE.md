@@ -38,7 +38,7 @@ The app uses a **binding code** authentication scheme. See `.github/standards/fl
 The app receives order notifications through three channels simultaneously:
 
 1. **WebSocket** — real-time, unreliable (network dependent)
-2. **JPush vendor push** — reliable even when app is killed, 1-3s latency
+2. **Native vendor push** — Huawei/Honor/Xiaomi/OPPO/vivo channels, reliable even when app is killed, 1-3s latency
 3. **Polling fallback** — every 30 seconds, GET `/v1/merchant/orders/pending`
 
 All three channels may deliver the same message. **Deduplication by `message_id` is mandatory.** Use `MessageDeduplicator` in `lib/core/service/message_dedup.dart`.
@@ -99,7 +99,7 @@ WebSocket:
 
 - Do not use Provider (use Riverpod instead).
 - Do not skip message deduplication in any delivery path.
-- Do not use `awesome_notifications` (conflicts with JPush).
+- Do not introduce JPush or other push aggregation SDKs; the route is native vendor push.
 - Do not assume WebSocket is always connected.
 - Do not write English user-facing strings.
 - Do not hardcode API URLs; use environment config.

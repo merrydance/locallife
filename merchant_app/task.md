@@ -24,9 +24,9 @@
 - [x] App 专用 refresh_token 有效期 365 天配置
 - [ ] 频率限制：生成 3次/分钟/用户，验证 10次/分钟/IP
 
-### Go 后端 — 推送网关
+### Go 后端 — 厂商原生推送网关
 - [ ] 推送网关接口定义 `push/provider.go`
-- [ ] 极光推送实现 `push/jpush_provider.go`
+- [ ] 华为/荣耀/小米/OPPO/vivo 厂商 Provider 实现
 - [ ] 推送网关统一入口 `push/gateway.go`
 
 ### Go 后端 — 数据库 & API
@@ -54,7 +54,7 @@
 - [x] 全屏接单弹窗 (Full-Screen Intent)
 - [x] 消息去重机制
 - [x] 轮询兜底 (30s)
-- [x] JPush 集成
+- [x] 厂商原生推送原生层接入
 - [x] 接单确认交互
 - [x] 订单列表页
 - [ ] 云打印对接 (飞鹅)

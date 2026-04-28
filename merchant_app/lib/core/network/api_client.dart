@@ -144,6 +144,14 @@ class ApiClient {
     );
   }
 
+  Future<Response> patch(String path, {dynamic data, bool requiresAuth = true}) {
+    return _dio.patch(
+      path,
+      data: data,
+      options: Options(extra: {'requiresAuth': requiresAuth}),
+    );
+  }
+
   Future<Response> delete(String path, {bool requiresAuth = true}) {
     return _dio.delete(
       path,
