@@ -7,18 +7,14 @@
 
   <view wx:elif="{{initialError}}" class="state-block">
     <t-empty description="{{initialErrorMessage || '索赔与申诉加载失败，请重试'}}" />
-    <view class="retry-button" bindtap="onRetry">重新加载</view>
+    <t-button theme="primary" bindtap="onRetry">重新加载</t-button>
   </view>
 
   <block wx:else>
-    <view class="page-head">
-      <view class="tips">索赔记录现在按处理状态分桶；需要查看判定依据、支付追偿或提交申诉，请进入对应索赔详情。</view>
-    </view>
-
-    <view wx:if="{{refreshErrorMessage}}" class="notice-banner">
-      <t-notice-bar theme="error" visible="{{true}}" content="{{refreshErrorMessage}}">
-        <text slot="operation" class="notice-banner-operation" bindtap="onRetryRefresh">重新同步</text>
-      </t-notice-bar>
+    <view wx:if="{{refreshErrorMessage}}" class="sync-state">
+      <t-icon name="error-circle" size="32rpx" />
+      <text class="sync-state__text">{{refreshErrorMessage}}</text>
+      <t-button size="small" theme="primary" variant="text" icon="refresh" bindtap="onRetryRefresh">重试</t-button>
     </view>
 
     <view class="summary-grid">
@@ -76,8 +72,6 @@
             <t-tag size="small" theme="{{item.recoveryStatusTheme}}" variant="light">{{item.recoveryStatusLabel}}</t-tag>
           </view>
 
-          <view class="card-tip">{{item.actionHint}}</view>
-
           <view class="row">
             <text class="label">索赔金额</text>
             <text class="value">{{item.claimAmountText}}</text>
@@ -91,10 +85,6 @@
             <text class="value">{{item.createdAtLabel}}</text>
           </view>
 
-          <view class="desc">
-            <text class="desc-label">索赔说明</text>
-            <text class="desc-value">{{item.description}}</text>
-          </view>
         </view>
 
         <view wx:if="{{loadingMore}}" class="list-footer">
@@ -134,15 +124,6 @@
             <text class="value">{{item.createdAtLabel}}</text>
           </view>
 
-          <view class="desc">
-            <text class="desc-label">申诉理由</text>
-            <text class="desc-value">{{item.reason}}</text>
-          </view>
-
-          <view wx:if="{{item.reviewNotes}}" class="desc appeal-notes">
-            <text class="desc-label">处理说明</text>
-            <text class="desc-value">{{item.reviewNotes}}</text>
-          </view>
         </view>
       </view>
     </block>

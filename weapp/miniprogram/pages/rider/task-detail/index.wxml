@@ -116,7 +116,6 @@
         <view class="location-header">
           <view>
             <view class="location-title">实时定位</view>
-            <view class="location-subtitle">配送中会自动采集当前位置，弱网恢复后会补发轨迹</view>
           </view>
           <t-tag theme="{{locationStatusTheme}}" variant="light" size="small">{{locationStatusText}}</t-tag>
         </view>
@@ -149,7 +148,6 @@
               {{locationActionText}}
             </t-button>
           </view>
-          <text class="location-actions-tip">地图会持续更新骑手位置，也可以进入专用导航页直接到商家或顾客。</text>
         </view>
       </view>
 
@@ -171,14 +169,6 @@
           <t-cell title="备注" note="{{delivery.notes}}" wx:if="{{delivery.notes}}" />
           <t-cell title="下单时间" note="{{delivery.created_at}}" />
         </t-cell-group>
-      </view>
-
-      <view class="detail-card contact-tip-card">
-        <view class="contact-tip-title">预计晚点时请直接联系顾客</view>
-        <view class="contact-tip-desc">骑手端按即时履约处理，不在这里额外提交延时或异常报备。</view>
-        <view class="contact-tip-actions" wx:if="{{delivery.delivery_phone}}">
-          <t-button theme="primary" variant="outline" bindtap="onCallPhone" data-phone="{{delivery.delivery_phone}}">联系顾客</t-button>
-        </view>
       </view>
 
       <view class="detail-actions" wx:if="{{delivery && delivery.can_update_status}}">

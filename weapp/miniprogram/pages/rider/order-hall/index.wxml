@@ -1,0 +1,285 @@
+<custom-navbar title="接单大厅" showBack="{{true}}" />
+
+<view class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px;">
+  <view wx:if="{{loading && !riderInfo}}" class="page-state-card">
+    <t-loading theme="circular" size="40rpx" text="加载中..." layout="vertical" />
+  </view>
+
+  <view wx:elif="{{initError && !riderInfo}}" class="page-state-card">
+    <t-empty icon="error-circle" description="{{initError}}" />
+    <t-button wx:if="{{initErrorCanRetry}}" theme="primary" bindtap="onRetryLoad">重新加载</t-button>
+  </view>
+
+  <block wx:else>
+    <view wx:if="{{dashboardInlineError}}" class="inline-sync-state">
+      <t-icon name="error-circle" size="32rpx" />
+      <text class="inline-sync-state__text">{{dashboardInlineError}}</text>
+      <t-button wx:if="{{initErrorCanRetry}}" size="small" theme="primary" variant="text" icon="refresh" bindtap="onRetryLoad">重试</t-button>
+    </view>
+
+    <t-sticky offsetTop="{{navBarHeight}}">
+      <view class="status-bar-container">
+        <view class="status-bar {{isOnline ? 'is-online' : 'is-offline'}}">
+          <view class="status-info">
+            <view class="status-dot"></view>
+            <text class="status-text">{{statusText}}</text>
+          </view>
+          <t-switch
+            value="{{isOnline}}"
+            loading="{{onlineSwitchLoading}}"
+            disabled="{{onlineSwitchLoading}}"
+            bind:change="onToggleOnline"
+            colors="{{['#00897B', 'var(--td-bg-color-component)']}}"
+          />
+        </view>
+
+        <view class="runtime-status-strip" wx:if="{{locationDeliveryId > 0}}">
+          <view class="runtime-status-main">
+            <text class="runtime-status-title">定位运行中</text>
+            <text class="runtime-status-desc">{{locationStatusText}} · {{locationUpdatedText}}</text>
+            <text class="runtime-status-pending" wx:if="{{locationPendingText}}">{{locationPendingText}}</text>
+          </view>
+          <t-button wx:if="{{locationNeedsPermission}}" theme="primary" variant="outline" size="small" loading="{{locationActionLoading}}" disabled="{{locationActionLoading}}" bindtap="onResolveLocationPermission">开启定位</t-button>
+          <t-button wx:else theme="primary" variant="text" size="small" loading="{{locationActionLoading}}" disabled="{{locationActionLoading}}" bindtap="onRetryLocationSync">刷新</t-button>
+        </view>
+      </view>
+    </t-sticky>
+
+    <view wx:if="{{showDepositReminder}}" class="inline-sync-state">
+      <t-icon name="error-circle-filled" size="32rpx" />
+      <text class="inline-sync-state__text">{{depositReminderText}}</text>
+      <t-button theme="primary" variant="text" size="small" bindtap="onGoToDeposit">去充值</t-button>
+    </view>
+
+    <view class="content-section">
+      <view class="new-orders-bar" wx:if="{{newOrdersCount > 0}}" bindtap="onRefreshHall">
+        <view class="bar-inner">
+          <t-icon name="notification" size="32rpx" />
+          <text class="bar-text">{{newOrdersCount}} 个新单</text>
+          <view class="refresh-btn">刷新 <t-icon name="refresh" size="28rpx" class="refresh-icon" /></view>
+        </view>
+      </view>
+
+      <t-tabs
+        value="{{activeTab}}"
+        bind:change="onTabChange"
+        sticky
+        stickyProps="{{ {offsetTop: navBarHeight + 44} }}"
+        t-class="tabs-container"
+      >
+        <t-tab-panel label="{{hallTabLabel}}" value="hall">
+          <view class="tab-content">
+            <t-skeleton
+              loading="{{loading && recommendOrders.length === 0}}"
+              theme="list"
+              t-class="skeleton-item"
+              rowCol="{{ [1, 1, 1] }}"
+              wx:for="{{[1,2,3]}}"
+              wx:key="*this"
+            />
+
+            <block wx:if="{{recommendOrders.length > 0}}">
+              <view class="order-card" wx:for="{{recommendOrders}}" wx:key="order_id">
+                <view class="order-header">
+                  <view class="earnings-box">
+                    <text class="label">预计收入</text>
+                    <text class="value">¥{{item.rider_earnings / 100}}</text>
+                  </view>
+                  <view class="tags-group">
+                    <t-tag theme="warning" variant="light" size="small">{{item.expires_at_format}}</t-tag>
+                    <t-tag theme="primary" variant="light" size="small">{{item.pickup_distance_km}}km 到店</t-tag>
+                  </view>
+                </view>
+
+                <view class="order-route">
+                  <view class="route-item pickup">
+                    <view class="marker-dot orange"></view>
+                    <view class="addr-box">
+                      <view class="addr-name">{{item.merchant_name || item.pickup_address}}</view>
+                      <view class="addr-desc">{{item.pickup_address}}</view>
+                    </view>
+                    <view class="distance-tag">{{item.pickup_distance_km}} km</view>
+                  </view>
+                  <view class="route-divider">
+                    <view class="line"></view>
+                    <view class="mid-dist">配送 {{item.route_distance_km}} km</view>
+                  </view>
+                  <view class="route-item delivery">
+                    <view class="marker-dot green"></view>
+                    <view class="addr-box">
+                      <view class="addr-name">{{item.delivery_address}}</view>
+                      <view class="addr-desc">{{item.delivery_contact || '顾客'}}</view>
+                    </view>
+                    <view class="arrival-time">
+                      <view class="time-group">
+                        <text class="label">送达前</text>
+                        <text class="time">{{item.estimated_delivery_time || '尽快'}}</text>
+                      </view>
+                    </view>
+                  </view>
+                </view>
+
+                <view class="order-footer">
+                  <view class="deadline-bar {{item.deadline_desc === '已超时' || item.is_very_urgent ? 'urgent' : ''}}">
+                    <t-icon name="time" size="28rpx" class="deadline-icon" />
+                    <text>预计 {{item.estimated_duration}} 分钟 · {{item.distance_km}} km</text>
+                  </view>
+                  <t-button theme="primary" block loading="{{grabActionLoading}}" disabled="{{grabActionLoading}}" data-order-id="{{item.order_id}}" bindtap="onGrabOrder">立即抢单</t-button>
+                </view>
+              </view>
+            </block>
+
+            <t-empty
+              wx:elif="{{hallLoadError && !loading}}"
+              icon="info-circle"
+              description="大厅加载失败"
+            >
+              <t-button theme="primary" variant="outline" bindtap="onRefreshHall">重试</t-button>
+            </t-empty>
+
+            <t-empty
+              wx:elif="{{!loading}}"
+              icon="info-circle"
+              description="{{isOnline ? '暂无可接订单' : '上线后查看订单'}}"
+            >
+              <t-button wx:if="{{isOnline}}" theme="primary" variant="outline" bindtap="onRefreshHall">刷新</t-button>
+            </t-empty>
+          </view>
+        </t-tab-panel>
+
+        <t-tab-panel label="{{myTabLabel}}" value="my">
+          <view class="tab-content">
+            <t-skeleton
+              loading="{{loading && activeDeliveries.length === 0}}"
+              theme="list"
+              t-class="skeleton-item"
+              rowCol="{{ [1, 1, 1] }}"
+              wx:for="{{[1,2]}}"
+              wx:key="*this"
+            />
+
+            <block wx:if="{{activeDeliveries.length > 0}}">
+              <view
+                class="order-card task-card {{item.is_overdue ? 'is-overdue' : ''}}"
+                wx:for="{{activeDeliveries}}"
+                wx:key="id"
+                bindtap="onGoToDetail"
+                data-order-id="{{item.order_id}}"
+              >
+                <view class="order-header">
+                  <view class="status-left">
+                    <t-tag theme="{{item.status_tag_theme}}" variant="dark" size="small">{{item.status_desc}}</t-tag>
+                    <text class="item-count" wx:if="{{item.item_count > 0}}">{{item.item_count}}件商品</text>
+                  </view>
+                  <view class="order-no">#{{item.order_no || item.order_id}}</view>
+                </view>
+
+                <view class="order-route">
+                  <view class="route-item pickup {{item.is_pickup_finished ? 'finished' : ''}}">
+                    <view class="marker-dot orange"></view>
+                    <view class="addr-box">
+                      <view class="addr-name">{{item.merchant_name || item.pickup_address}}</view>
+                      <view class="addr-desc">{{item.pickup_address}}</view>
+                    </view>
+                    <view class="action-group">
+                      <view
+                        catchtap="onOpenLocation"
+                        data-latitude="{{item.pickup_latitude}}"
+                        data-longitude="{{item.pickup_longitude}}"
+                        data-name="{{item.merchant_name || '取货点'}}"
+                        data-address="{{item.pickup_address}}"
+                        data-label="到店导航"
+                      >
+                        <t-icon name="map-location" size="44rpx" class="action-icon" />
+                      </view>
+                      <view catchtap="onCall" data-phone="{{item.pickup_phone}}" wx:if="{{item.pickup_phone}}">
+                        <t-icon name="call" size="44rpx" class="action-icon" />
+                      </view>
+                    </view>
+                  </view>
+
+                  <view class="route-divider">
+                    <view class="line"></view>
+                  </view>
+
+                  <view class="route-item delivery">
+                    <view class="marker-dot green"></view>
+                    <view class="addr-box">
+                      <view class="addr-name">{{item.delivery_address}}</view>
+                      <view class="addr-desc" catchtap="onCall" data-phone="{{item.delivery_phone}}" wx:if="{{item.delivery_phone}}">
+                        <text class="contact-text">{{item.delivery_contact || '客户'}} · {{item.delivery_phone}}</text>
+                      </view>
+                      <view class="addr-desc" wx:else>
+                        <text class="contact-text">{{item.delivery_contact || '客户'}}</text>
+                      </view>
+                    </view>
+                    <view class="action-group">
+                      <view
+                        catchtap="onOpenLocation"
+                        data-latitude="{{item.delivery_latitude}}"
+                        data-longitude="{{item.delivery_longitude}}"
+                        data-name="{{item.delivery_contact || '送达点'}}"
+                        data-address="{{item.delivery_address}}"
+                        data-label="送达导航"
+                      >
+                        <t-icon name="map-location" size="44rpx" class="action-icon" />
+                      </view>
+                      <view catchtap="onCall" data-phone="{{item.delivery_phone}}" wx:if="{{item.delivery_phone}}">
+                        <t-icon name="call" size="44rpx" class="action-icon" />
+                      </view>
+                    </view>
+                  </view>
+                </view>
+
+                <view class="order-notes" wx:if="{{item.notes}}">
+                  <text class="notes-label">备注：</text>
+                  <text class="notes-content">{{item.notes}}</text>
+                </view>
+
+                <view class="location-runtime-card" wx:if="{{item.id === locationDeliveryId}}">
+                  <view class="location-runtime-main">
+                    <view class="location-runtime-header">
+                      <text class="location-runtime-title">实时定位</text>
+                      <t-tag theme="{{locationStatusTheme}}" variant="light" size="small">{{locationStatusText}}</t-tag>
+                    </view>
+                    <text class="location-runtime-meta">{{locationUpdatedText}}</text>
+                    <text class="location-runtime-pending" wx:if="{{locationPendingText}}">{{locationPendingText}}</text>
+                  </view>
+                  <view class="location-runtime-actions">
+                    <t-button wx:if="{{locationNeedsPermission}}" theme="primary" variant="outline" size="small" loading="{{locationActionLoading}}" disabled="{{locationActionLoading}}" catchtap="onResolveLocationPermission">开启定位</t-button>
+                    <t-button wx:else theme="primary" variant="text" size="small" loading="{{locationActionLoading}}" disabled="{{locationActionLoading}}" catchtap="onRetryLocationSync">刷新</t-button>
+                  </view>
+                </view>
+
+                <view class="order-footer">
+                  <view class="earnings-info">
+                    <text class="label">预计总收益</text>
+                    <text class="price">¥{{item.rider_earnings / 100}}</text>
+                  </view>
+                  <view class="action-btns">
+                    <t-button wx:if="{{item.can_start_pickup}}" theme="primary" block loading="{{item.is_action_loading}}" disabled="{{item.is_action_loading}}" data-id="{{item.id}}" data-action="startPickup" catchtap="onUpdateStatus">我已到店</t-button>
+                    <t-button wx:if="{{item.can_confirm_pickup}}" theme="warning" block loading="{{item.is_action_loading}}" disabled="{{item.is_action_loading}}" data-id="{{item.id}}" data-action="confirmPickup" catchtap="onUpdateStatus">确认取餐</t-button>
+                    <t-button wx:if="{{item.can_start_delivery}}" theme="primary" block loading="{{item.is_action_loading}}" disabled="{{item.is_action_loading}}" data-id="{{item.id}}" data-action="startDelivery" catchtap="onUpdateStatus">开始配送</t-button>
+                    <t-button wx:if="{{item.can_confirm_delivery}}" theme="primary" block loading="{{item.is_action_loading}}" disabled="{{item.is_action_loading}}" data-id="{{item.id}}" data-action="confirmDelivery" catchtap="onUpdateStatus">确认送达</t-button>
+                  </view>
+                </view>
+              </view>
+            </block>
+
+            <t-empty
+              wx:elif="{{myLoadError && !loading}}"
+              icon="info-circle"
+              description="任务加载失败"
+            >
+              <t-button theme="primary" variant="outline" bindtap="onRetryLoad">重试</t-button>
+            </t-empty>
+
+            <t-empty wx:elif="{{!loading}}" icon="info-circle" description="当前没有进行中的任务">
+              <t-button theme="primary" bindtap="onSwitchToHall">去接单</t-button>
+            </t-empty>
+          </view>
+        </t-tab-panel>
+      </t-tabs>
+    </view>
+  </block>
+</view>

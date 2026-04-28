@@ -39,9 +39,9 @@
 .summary-section,
 .daily-section,
 .ledger-section {
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   background: var(--td-bg-color-container);
-  box-shadow: var(--shadow-sm);
+  border: 1rpx solid var(--td-border-level-1-color);
 }
 
 .summary-section {
@@ -109,9 +109,9 @@
 .status-item {
   min-width: 0;
   padding: var(--spacer-sm);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   background: var(--td-bg-color-container);
-  box-shadow: var(--shadow-sm);
+  border: 1rpx solid var(--td-border-level-1-color);
 }
 
 .status-item__head {

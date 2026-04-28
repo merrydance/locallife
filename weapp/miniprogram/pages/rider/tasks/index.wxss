@@ -21,7 +21,8 @@
   padding: 40rpx;
   align-items: center;
   margin-bottom: var(--spacer-md);
-  box-shadow: var(--shadow-sm);
+  border-radius: var(--radius-md);
+  border: 1rpx solid var(--td-border-level-1-color);
 }
 
 .history-sync-state {
@@ -68,7 +69,7 @@
   border-radius: var(--radius-md);
   padding: var(--spacer-md);
   margin-bottom: var(--spacer-sm);
-  box-shadow: 0 2rpx 8rpx rgba(0,0,0,0.02);
+  border: 1rpx solid var(--td-border-level-1-color);
 }
 
 .card-header {

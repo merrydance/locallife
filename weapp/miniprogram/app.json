@@ -13,6 +13,7 @@
       "name": "rider",
       "pages": [
         "dashboard/index",
+        "order-hall/index",
         "income/index",
         "claims/index",
         "claims/detail/index",

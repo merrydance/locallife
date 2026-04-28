@@ -7,24 +7,20 @@
 
   <view wx:elif="{{initialError}}" class="state-block">
     <t-empty description="{{initialErrorMessage || '索赔详情加载失败，请重试'}}" />
-    <view class="retry-button" bindtap="onRetry">重新加载</view>
+    <t-button theme="primary" bindtap="onRetry">重新加载</t-button>
   </view>
 
   <view wx:elif="{{detail}}" class="content">
-    <view class="page-head">
-      <view class="head-copy">查看索赔处理进度、责任判定、行为摘要，以及追偿和申诉的最终状态。</view>
+    <view wx:if="{{actionNoticeMessage}}" class="sync-state">
+      <t-icon name="info-circle" size="32rpx" />
+      <text class="sync-state__text">{{actionNoticeMessage}}</text>
+      <t-button wx:if="{{actionNoticeRefreshable}}" size="small" theme="primary" variant="text" icon="refresh" bindtap="onRetryRefresh">刷新</t-button>
     </view>
 
-    <view wx:if="{{actionNoticeMessage}}" class="notice-banner">
-      <t-notice-bar theme="warning" visible="{{true}}" content="{{actionNoticeMessage}}">
-        <text wx:if="{{actionNoticeRefreshable}}" slot="operation" class="notice-banner-operation" bindtap="onRetryRefresh">刷新追偿状态</text>
-      </t-notice-bar>
-    </view>
-
-    <view wx:if="{{refreshErrorMessage}}" class="notice-banner">
-      <t-notice-bar theme="error" visible="{{true}}" content="{{refreshErrorMessage}}">
-        <text slot="operation" class="notice-banner-operation" bindtap="onRetryRefresh">重新同步</text>
-      </t-notice-bar>
+    <view wx:if="{{refreshErrorMessage}}" class="sync-state">
+      <t-icon name="error-circle" size="32rpx" />
+      <text class="sync-state__text">{{refreshErrorMessage}}</text>
+      <t-button size="small" theme="primary" variant="text" icon="refresh" bindtap="onRetryRefresh">重试</t-button>
     </view>
 
     <view class="hero-card">
@@ -217,7 +213,7 @@
       <view class="card-title">提交申诉</view>
       <t-textarea
         value="{{appealReason}}"
-        placeholder="请输入申诉理由，需说明责任判定、赔付金额或证据点的争议"
+        placeholder="请输入申诉理由"
         maxlength="1000"
         indicator
         bindchange="onAppealInput"

@@ -14,56 +14,35 @@
   padding: 140rpx var(--spacer-md);
 }
 
-.retry-button {
-  padding: var(--spacer-sm) var(--spacer-lg);
-  border-radius: var(--radius-round);
-  background: var(--td-brand-color);
-  color: var(--td-text-color-anti);
-  font-size: var(--font-size-sm);
-}
-
-.page-head {
-  display: flex;
-  gap: var(--spacer-sm);
-  align-items: flex-start;
-  margin-bottom: var(--spacer-sm);
-}
-
-.head-copy {
-  flex: 1;
-  background: transparent;
-  border: 0;
-  color: var(--td-text-color-primary);
-  border-radius: 0;
-  padding: 0;
-  font-size: var(--font-size-xs);
-  line-height: 1.6;
-}
-
 .content {
   display: flex;
   flex-direction: column;
   gap: var(--spacer-sm);
 }
 
-.notice-banner {
-  margin-bottom: 0;
+.sync-state {
+  display: flex;
+  align-items: center;
+  gap: var(--spacer-xs);
+  padding: var(--spacer-sm);
+  border-radius: var(--radius-md);
+  background: var(--td-warning-color-1);
+  color: var(--td-text-color-primary);
 }
 
-.notice-banner-operation {
-  font-size: var(--font-size-sm);
-  line-height: 1.6;
-  font-weight: 600;
-  color: var(--td-brand-color);
+.sync-state__text {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
 }
 
 .hero-card {
   background: var(--td-bg-color-container);
   color: var(--td-text-color-primary);
-  border-radius: var(--radius-card);
+  border-radius: var(--radius-md);
   padding: var(--spacer-md);
-  box-shadow: var(--shadow-sm);
-  border: 1px solid var(--td-border-level-1-color);
+  border: 1rpx solid var(--td-border-level-1-color);
 }
 
 .hero-top {
@@ -119,9 +98,9 @@
 
 .card {
   background: var(--td-bg-color-container);
-  border-radius: var(--radius-card);
+  border-radius: var(--radius-md);
   padding: var(--spacer-md);
-  box-shadow: var(--shadow-card);
+  border: 1rpx solid var(--td-border-level-1-color);
 }
 
 .card-title {

@@ -20,11 +20,11 @@
 }
 
 .wallet-card {
-  margin: var(--spacer-md);
+  margin: 0 0 var(--spacer-md);
   padding: 48rpx;
   background: #FFFFFF;
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
+  border-radius: var(--radius-md);
+  border: 1rpx solid var(--td-border-level-1-color);
 }
 
 .balance-main {
@@ -82,17 +82,6 @@
 .wallet-actions {
   display: flex;
   gap: 24rpx;
-}
-
-.wallet-tip {
-  margin: 0 0 24rpx;
-  font-size: var(--font-size-xxs);
-  color: var(--td-text-color-placeholder);
-  line-height: 1.6;
-}
-
-.wallet-tip-secondary {
-  color: var(--td-text-color-secondary);
 }
 
 .status-card-inline {
@@ -177,7 +166,7 @@
 
 /* 历史列表 */
 .history-section {
-  padding: var(--spacer-md);
+  padding: 0;
 }
 
 .loading {
@@ -200,6 +189,7 @@
   background: #FFFFFF;
   padding: var(--spacer-md);
   border-radius: var(--radius-md);
+  border: 1rpx solid var(--td-border-level-1-color);
   display: flex;
   align-items: center;
   margin-bottom: var(--spacer-sm);

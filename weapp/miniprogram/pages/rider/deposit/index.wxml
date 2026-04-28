@@ -42,9 +42,6 @@
           </view>
         </view>
 
-        <view class="wallet-tip">配送收益直接进入微信零钱，本页仅展示押金与账单记录。</view>
-        <view class="wallet-tip wallet-tip-secondary">{{withdrawHint}}</view>
-
         <view wx:if="{{hasPendingRecharge}}" class="status-card-inline status-card-inline--pending">
           <view class="status-card-inline__header">
             <view>
@@ -81,8 +78,8 @@
         </view>
 
         <view class="wallet-actions">
-          <t-button block theme="primary" shape="round" bindtap="onShowRecharge">充值押金</t-button>
-          <t-button block theme="primary" variant="outline" shape="round" disabled="{{!canWithdraw}}" bindtap="onShowWithdraw">申请提现</t-button>
+          <t-button block theme="primary" bindtap="onShowRecharge">充值押金</t-button>
+          <t-button block theme="primary" variant="outline" disabled="{{!canWithdraw}}" bindtap="onShowWithdraw">申请提现</t-button>
         </view>
       </view>
 
@@ -175,8 +172,7 @@
         t-class="amount-input"
       />
       <view wx:if="{{withdrawErrorMessage}}" class="dialog-error-message">{{withdrawErrorMessage}}</view>
-      <view class="dialog-tips">最低提现 1.00 元，存在冻结押金或进行中配送时申请会失败。</view>
-      <view class="dialog-tips">如存在配送冻结或提现处理中金额，需要等待释放后才能再次申请提现。</view>
+      <view class="dialog-tips">最低提现 1.00 元，需无配送冻结和处理中提现。</view>
     </view>
   </t-dialog>
 </view>

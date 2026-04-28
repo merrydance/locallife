@@ -50,7 +50,6 @@ Page({
     onlineStatusLabel: '休息中',
     onlineStatusTheme: 'default',
 
-    // 骑手基础信息
     riderInfo: null as RiderInfo | null,
     riderStatus: null as RiderStatus | null,
     isOnline: false,

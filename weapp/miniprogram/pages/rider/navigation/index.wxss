@@ -24,9 +24,8 @@
   bottom: calc(var(--spacer-sm) + env(safe-area-inset-bottom));
   padding: var(--spacer-md);
   background: var(--td-bg-color-container);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   border: 1rpx solid var(--td-component-border);
-  box-shadow: var(--shadow-sm);
 }
 
 .panel-header {

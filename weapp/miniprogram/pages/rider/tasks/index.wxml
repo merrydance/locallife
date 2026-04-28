@@ -94,7 +94,7 @@
       <text class="load-more-error">{{loadMoreError}}</text>
       <t-button theme="primary" variant="outline" bindtap="onRetryLoadMore">重试加载更多</t-button>
     </view>
-    <view class="no-more" wx:if="{{!hasMore && !loadMoreError}}">到底啦，仅显示最近半年的记录</view>
+    <view class="no-more" wx:if="{{!hasMore && !loadMoreError}}">已显示最近半年的记录</view>
   </view>
   
   <t-empty wx:else icon="order-adjustment" description="暂无历史纪录" />

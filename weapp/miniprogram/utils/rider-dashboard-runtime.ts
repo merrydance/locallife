@@ -177,7 +177,7 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
           recommendOrders: [],
           activeDeliveries: [],
           currentDelivery: null,
-          hallTabLabel: '抢单大厅 0',
+          hallTabLabel: '接单大厅 0',
           myTabLabel: '我的任务 0',
           newOrdersCount: 0,
           hallLoadError: '',
@@ -266,7 +266,7 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
         recommendOrders: [],
         activeDeliveries: [],
         currentDelivery: null,
-        hallTabLabel: '抢单大厅 0',
+        hallTabLabel: '接单大厅 0',
         myTabLabel: '我的任务 0',
         workbenchRefreshError: '',
         locationDeliveryId: 0,
@@ -325,7 +325,7 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
 
   buildTabLabels(hallCount: number, myCount: number) {
     return {
-      hallTabLabel: `抢单大厅 ${hallCount}`,
+      hallTabLabel: `接单大厅 ${hallCount}`,
       myTabLabel: `我的任务 ${myCount}`
     }
   },
@@ -387,7 +387,7 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
         : Promise.resolve([] as RecommendedOrder[])
 
       if (!location) {
-        const errorState = getConsoleDashboardErrorState('rider', '暂时无法获取当前位置，抢单大厅稍后再试', '暂时无法获取当前位置，抢单大厅稍后再试')
+        const errorState = getConsoleDashboardErrorState('rider', '暂时无法获取当前位置，接单大厅稍后再试', '暂时无法获取当前位置，接单大厅稍后再试')
         hallLoadError = errorState.message
         bannerStates.push({ message: errorState.message, canRetry: errorState.canRetry })
       }
@@ -414,7 +414,7 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
         : []
 
       if (!hallOrdersResult.ok && !hallLoadError) {
-        const errorState = getConsoleDashboardErrorState('rider', hallOrdersResult.reason, '抢单大厅加载失败，请重试')
+        const errorState = getConsoleDashboardErrorState('rider', hallOrdersResult.reason, '接单大厅加载失败，请重试')
         hallLoadError = errorState.message
         bannerStates.push({ message: errorState.message, canRetry: errorState.canRetry })
       }
@@ -641,6 +641,10 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
     wx.navigateTo({ url: '/pages/rider/tasks/index' })
   },
 
+  onGoToHall() {
+    wx.navigateTo({ url: '/pages/rider/order-hall/index' })
+  },
+
   onGoToClaims() {
     wx.navigateTo({ url: '/pages/rider/claims/index' })
   },
@@ -783,7 +787,7 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
           recommendOrders: [],
           activeDeliveries: [],
           currentDelivery: null,
-          hallTabLabel: '抢单大厅 0',
+          hallTabLabel: '接单大厅 0',
           myTabLabel: '我的任务 0',
           newOrdersCount: 0,
           hallLoadError: '',
